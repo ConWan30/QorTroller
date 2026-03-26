@@ -63,7 +63,7 @@
   },
   "session_stats": {
     "mean_polling_rate_hz": 947.6,
-    "mean_reports_per_session": 203467.0,
+    "mean_reports_per_session": 0.0,
     "session_cv_mean": 1.526,
     "session_entropy_mean": 1.621,
     "l4_mahal_dist_mean": 2.083,

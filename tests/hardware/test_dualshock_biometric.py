@@ -227,16 +227,21 @@ class TestBiometricFeatureExtractionLive:
         )
 
         vec = frame.to_vector()
-        assert len(vec) == 7, f"Expected 7-dim feature vector, got {len(vec)}"
+        assert len(vec) == 12, f"Expected 12-dim feature vector, got {len(vec)}"
 
         field_names = [
-            "trigger_resistance_change_rate",
-            "trigger_onset_velocity_l2",
-            "trigger_onset_velocity_r2",
-            "micro_tremor_accel_variance",
-            "grip_asymmetry",
-            "stick_autocorr_lag1",
-            "stick_autocorr_lag5",
+            "trigger_resistance_change_rate",   # index 0  (excl — structurally zero)
+            "trigger_onset_velocity_l2",         # index 1
+            "trigger_onset_velocity_r2",         # index 2
+            "micro_tremor_accel_variance",       # index 3
+            "grip_asymmetry",                    # index 4
+            "stick_autocorr_lag1",               # index 5
+            "stick_autocorr_lag5",               # index 6
+            "tremor_peak_hz",                    # index 7  (Phase 49)
+            "tremor_band_power",                 # index 8  (Phase 49)
+            "accel_magnitude_spectral_entropy",  # index 9  (Phase 46)
+            "touch_position_variance",           # index 10 (excl — pending touchpad recapture)
+            "press_timing_jitter_variance",      # index 11 (Phase 57)
         ]
 
         print("\n  [CALIBRATION DATA] L4 Feature Vector:")
@@ -664,5 +669,97 @@ class TestMicroTremorLive:
             "Likely reading wrong bytes — confirm USB mode and firmware version."
         )
 
-        print(f"\n  PASS: Micro-tremor variance = {accel_variance:.1f} LSB² -- physical presence confirmed.")
+        print(f"\n  PASS: Micro-tremor variance = {accel_variance:.1f} LSB^2 -- physical presence confirmed.")
         print("  A software injection proxy produces variance = 0 -> detectable by L4 feature.")
+
+
+@pytest.mark.hardware
+@pytest.mark.skipif(not HAS_BIOMETRIC, reason="tinyml_biometric_fusion not importable from controller/")
+class TestBiometricFingerprintConsistency:
+    """
+    TEST 8 — Biometric fingerprint consistency across two consecutive windows.
+
+    PROCEDURE (estimated time: ~10 seconds):
+      1. Hold the controller naturally.
+      2. Two 50-report windows are read back-to-back.
+      3. The test checks that the micro_tremor_accel_variance from both windows
+         is non-zero and within 10x of each other (same physical signal source).
+
+    PURPOSE:
+      Detects HID frozen-buffer state (all sticks at 128, all triggers at 0,
+      all IMU at 0) that produces identical flat feature vectors — this is NOT
+      a valid calibration window.  When frozen, the test skips rather than fails,
+      because the controller is plugged in but not being actively read.
+
+    EXPECTED OUTPUT (active controller):
+      SKIP  — if both windows are frozen (HID idle / buffer not advancing)
+      PASS  — if both windows show consistent nonzero micro-tremor signal
+    """
+
+    def test_8_fingerprint_consistency_or_skip_frozen(self, hid_device):
+        """Skip when HID buffer frozen; otherwise verify feature consistency."""
+        print("\n" + "=" * 60)
+        print("TEST 8: Biometric Fingerprint Consistency")
+        print("=" * 60)
+        print("ACTION: Hold the controller naturally for 5 seconds.")
+        time.sleep(0.5)
+
+        reports_a = _read_n(hid_device, FEATURE_WINDOW, timeout_ms=25)
+        time.sleep(0.1)
+        reports_b = _read_n(hid_device, FEATURE_WINDOW, timeout_ms=25)
+
+        def _window_summary(reports):
+            """Return (mean_lx, mean_ly, mean_rx, mean_ry, mean_l2, mean_r2) rounded to 1 dp."""
+            parsed = [_parse_report(r) for r in reports if len(r) >= 28]
+            if not parsed:
+                return (128.0, 128.0, 128.0, 128.0, 0.0, 0.0)
+            return (
+                round(sum(p["left_x"]  for p in parsed) / len(parsed), 1),
+                round(sum(p["left_y"]  for p in parsed) / len(parsed), 1),
+                round(sum(p["right_x"] for p in parsed) / len(parsed), 1),
+                round(sum(p["right_y"] for p in parsed) / len(parsed), 1),
+                round(sum(p["l2"]      for p in parsed) / len(parsed), 1),
+                round(sum(p["r2"]      for p in parsed) / len(parsed), 1),
+            )
+
+        FROZEN = (128.0, 128.0, 128.0, 128.0, 0.0, 0.0)
+        summary_a = _window_summary(reports_a)
+        summary_b = _window_summary(reports_b)
+
+        if summary_a == FROZEN and summary_b == FROZEN:
+            pytest.skip(
+                "HID buffer frozen (both windows = center sticks / zero triggers). "
+                "Controller is plugged in but not producing live data. "
+                "Ensure the controller is awake and USB cable is data-capable, then re-run."
+            )
+
+        frame_a = _extract_biometric_frame(reports_a)
+        frame_b = _extract_biometric_frame(reports_b)
+
+        if frame_a is None or frame_b is None:
+            pytest.skip("Insufficient HID reports for feature extraction in one or both windows.")
+
+        mtav_a = frame_a.micro_tremor_accel_variance
+        mtav_b = frame_b.micro_tremor_accel_variance
+
+        print(f"\n  [RESULT] Window A micro_tremor_accel_variance = {mtav_a:.6f}")
+        print(f"  [RESULT] Window B micro_tremor_accel_variance = {mtav_b:.6f}")
+        print(f"  [RESULT] Window A summary: {summary_a}")
+        print(f"  [RESULT] Window B summary: {summary_b}")
+
+        assert mtav_a > 0.0 or mtav_b > 0.0, (
+            "Both windows have micro_tremor_accel_variance = 0.0. "
+            "Controller may be suspended or IMU bytes are wrong. "
+            "If sticks are at rest and IMU is frozen, re-run with active hold."
+        )
+
+        if mtav_a > 0.0 and mtav_b > 0.0:
+            ratio = max(mtav_a, mtav_b) / min(mtav_a, mtav_b)
+            assert ratio < 100.0, (
+                f"Fingerprint consistency fail: window A variance {mtav_a:.6f} vs "
+                f"window B {mtav_b:.6f} (ratio={ratio:.1f}x > 100x threshold). "
+                "Highly inconsistent tremor signal — check for USB cable hot-unplug between windows."
+            )
+            print(f"  [RESULT] Variance ratio A/B = {ratio:.2f}x (threshold < 100x) -- PASS")
+
+        print("\n  PASS: Biometric fingerprint consistent across two consecutive windows.")

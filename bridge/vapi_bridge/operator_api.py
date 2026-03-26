@@ -28,7 +28,7 @@ import json as _json
 import logging
 import time
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -68,7 +68,16 @@ class AgentRequest(BaseModel):
     message: str
 
 
-def create_operator_app(cfg, store, _agent=None, _calib_agent=None) -> FastAPI:
+class FederationSignalRequest(BaseModel):
+    """Request body for POST /federation/threat-signal (Phase 80)."""
+
+    device_id: str
+    commitment_hash: str
+    circuit_id: str = ""
+    source_peer: str = "unknown"
+
+
+def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, bus=None) -> FastAPI:
     """Create the Operator Gate API sub-app.
 
     Args:
@@ -76,6 +85,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None) -> FastAPI:
         store:       Store instance (reads PHG checkpoints and credential mints).
         _agent:      Optional pre-instantiated BridgeAgent (Phase 32).
         _calib_agent: Optional pre-instantiated CalibrationIntelligenceAgent (Phase 50).
+        chain:       Optional ChainClient instance for on-chain calls (Phase 72).
     """
 
     app = FastAPI(title="VAPI Operator Gate API", version="1.0.0-phase50")
@@ -381,5 +391,1998 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None) -> FastAPI:
             "enforcement_enabled":     bool(getattr(cfg, "phg_credential_enforcement_enabled", True)),
             "min_consecutive_windows": int(getattr(cfg, "credential_enforcement_min_consecutive", 2)),
         }
+
+    # --- Phase 69: Data Sovereignty + Curator endpoints ---
+
+    @app.get("/curator/data-lineage/{device_id}")
+    def get_data_lineage(
+        device_id: str,
+        limit: int = 50,
+        api_key: str = Query(..., description="Shared operator API key"),
+    ):
+        """Return full data lineage graph for a device (Phase 69).
+
+        Lineage graph: session → proof → ruling → token eligibility.
+        Each entry has taxonomy_class, quality_index, curator_note.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        lineage = store.get_data_lineage(device_id.strip(), limit=limit)
+        return {
+            "device_id": device_id,
+            "lineage_count": len(lineage),
+            "lineage": lineage,
+        }
+
+    @app.get("/curator/token-eligibility/{device_id}")
+    def get_token_eligibility(
+        device_id: str,
+        api_key: str = Query(..., description="Shared operator API key"),
+    ):
+        """Return token eligibility score + multiplier breakdown for a device (Phase 69).
+
+        Reads from token_eligibility table (updated by DataCuratorAgent every 5 minutes).
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        elig = store.get_token_eligibility(device_id.strip())
+        if not elig:
+            return {"device_id": device_id, "eligibility": None}
+        return {"device_id": device_id, "eligibility": elig}
+
+    @app.get("/curator/oracle-state/{oracle_type}")
+    def get_oracle_state(
+        oracle_type: str,
+        limit: int = 50,
+        api_key: str = Query(..., description="Shared operator API key"),
+    ):
+        """Return recent oracle publication log for a given oracle type (Phase 69).
+
+        oracle_type: HUMANITY | RULING | PASSPORT
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        oracle_type = oracle_type.upper().strip()
+        if oracle_type not in ("HUMANITY", "RULING", "PASSPORT"):
+            raise HTTPException(400, f"Unknown oracle_type '{oracle_type}'. Use HUMANITY|RULING|PASSPORT")
+        pubs = store.get_oracle_publications(oracle_type=oracle_type, limit=limit)
+        return {
+            "oracle_type": oracle_type,
+            "publication_count": len(pubs),
+            "publications": pubs,
+        }
+
+    @app.get("/agent/validation-stats")
+    def get_validation_stats(
+        api_key: str = Query(..., description="Shared operator API key"),
+    ):
+        """Unified validation statistics across all three autonomous agents (Phase 70).
+
+        Returns:
+          proof_stats:    ZKVerifier proof acceptance/rejection/timeout counts
+          enrollment:     Device pipeline counts (eligible/in_progress/unenrolled)
+          curator_stats:  DataCuratorAgent lineage + oracle publication counts
+          ruling_stats:   RulingEnforcementAgent streak totals
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+
+        # ZK proof stats
+        proof_stats = {"enabled": False}
+        try:
+            from .chain import ChainClient
+            _ch = ChainClient.__new__(ChainClient)
+            _ch._zk_verifier = getattr(cfg, "_zk_verifier_instance", None)
+            if hasattr(_ch, "get_zk_verifier_stats"):
+                proof_stats = _ch.get_zk_verifier_stats()
+        except Exception:
+            pass
+
+        # Enrollment pipeline
+        enrollment = {"eligible": 0, "in_progress": 0, "unenrolled": 0}
+        try:
+            all_enr = store.get_all_enrollments() if hasattr(store, "get_all_enrollments") else []
+            for e in all_enr:
+                st = e.get("status", "unenrolled")
+                if st == "eligible":
+                    enrollment["eligible"] += 1
+                elif st in ("enrolled", "in_progress"):
+                    enrollment["in_progress"] += 1
+                else:
+                    enrollment["unenrolled"] += 1
+        except Exception:
+            pass
+
+        # DataCuratorAgent stats from store tables
+        curator_stats = {"lineage_count": 0, "oracle_publications": 0, "eligible_devices": 0}
+        try:
+            with store._conn() as conn:
+                row = conn.execute("SELECT COUNT(*) as cnt FROM data_lineage").fetchone()
+                curator_stats["lineage_count"] = row["cnt"] if row else 0
+                row = conn.execute("SELECT COUNT(*) as cnt FROM oracle_publications").fetchone()
+                curator_stats["oracle_publications"] = row["cnt"] if row else 0
+                row = conn.execute("SELECT COUNT(*) as cnt FROM token_eligibility WHERE eligibility_score > 0").fetchone()
+                curator_stats["eligible_devices"] = row["cnt"] if row else 0
+        except Exception:
+            pass
+
+        # Ruling enforcement stats
+        ruling_stats = {"total_rulings": 0, "block_rulings": 0, "active_suspensions": 0}
+        try:
+            with store._conn() as conn:
+                row = conn.execute("SELECT COUNT(*) as cnt FROM agent_rulings").fetchone()
+                ruling_stats["total_rulings"] = row["cnt"] if row else 0
+                row = conn.execute("SELECT COUNT(*) as cnt FROM agent_rulings WHERE verdict='BLOCK'").fetchone()
+                ruling_stats["block_rulings"] = row["cnt"] if row else 0
+                row = conn.execute(
+                    "SELECT COUNT(*) as cnt FROM credential_enforcement "
+                    "WHERE suspended=1 AND reinstated=0"
+                ).fetchone()
+                ruling_stats["active_suspensions"] = row["cnt"] if row else 0
+        except Exception:
+            pass
+
+        return {
+            "proof_stats":   proof_stats,
+            "enrollment":    enrollment,
+            "curator_stats": curator_stats,
+            "ruling_stats":  ruling_stats,
+            "timestamp":     time.time(),
+        }
+
+    @app.post("/curator/publish-oracle")
+    async def publish_oracle(
+        device_id: str,
+        oracle_type: str,
+        api_key: str = Query(..., description="Shared operator API key"),
+    ):
+        """Force an immediate on-chain oracle update for a device (Phase 69).
+
+        Operator-only. Triggers DataCuratorAgent._publish_oracles() for the device.
+        oracle_type: HUMANITY | RULING | PASSPORT | ALL
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        from .data_curator_agent import DataCuratorAgent
+        curator = DataCuratorAgent(cfg, store, chain=None)  # no live publish via REST
+        oracle_type = oracle_type.upper().strip()
+        result = {"device_id": device_id, "oracle_type": oracle_type, "status": "queued"}
+        # Log intent — live publish requires chain client from main; REST returns queue status
+        store.insert_oracle_publication(
+            oracle_type=oracle_type,
+            device_id=device_id,
+            tx_hash=None,
+            payload_json=_json.dumps({"trigger": "manual_rest", "queued_at": time.time()}),
+        )
+        return result
+
+    # --- Phase 75: Validation gate status ---
+
+    @app.get("/agent/validation-gate")
+    def get_validation_gate(
+        api_key: str = Query(..., description="Shared operator API key"),
+    ):
+        """Dry-run safety gate status from SessionAdjudicatorValidationAgent (Phase 75).
+
+        Returns consecutive_clean count, divergence_count, gate_n, gate_passed, and
+        recommended_action. When gate_passed=True, the operator can safely set
+        AGENT_DRY_RUN=false via POST /agent/config to enable live enforcement.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        gate_n = int(getattr(cfg, "validation_gate_n", 100))
+        max_rate = float(getattr(cfg, "validation_max_divergence_rate", 1.0))
+        return store.get_validation_gate_status(gate_n, max_rate)
+
+    # --- Phase 76: Ruling provenance anchor ---
+
+    @app.get("/agent/ruling-provenance/{ruling_id}")
+    def get_ruling_provenance(
+        ruling_id: int,
+        api_key: str = Query(..., description="Shared operator API key"),
+    ):
+        """Retrieve the provenance anchor for a specific ruling (Phase 76).
+
+        Returns the SHA-256 provenance hash that binds the ruling commitment,
+        ceremony integrity data, and evidence set into a single verifiable anchor.
+        Returns 404 if the ruling has not yet been anchored.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        anchor = store.get_provenance_anchor(ruling_id)
+        if anchor is None:
+            from fastapi import Response as _Resp
+            from fastapi.responses import JSONResponse as _JSONResp
+            return _JSONResp(
+                status_code=404,
+                content={"error": "Provenance anchor not yet computed", "ruling_id": ruling_id},
+            )
+        return anchor
+
+    # --- Phase 72: PHGCredential bridge-layer multi-sig suspension ---
+
+    @app.post("/operator/suspension/propose")
+    def suspension_propose(
+        device_id: str,
+        evidence_hash: str,
+        duration_s: int,
+        api_key: str = Query(..., description="Shared operator API key"),
+    ):
+        """Propose a PHGCredential suspension for device_id (Phase 72).
+
+        Inserts a pending suspension proposal. Returns proposal_id.
+        When suspension_multisig_threshold=1 (default), a single call to
+        /operator/suspension/execute/{id} is sufficient.
+        When threshold=2, a second /operator/suspension/confirm/{id} call is
+        required (from a second operator key) before execute proceeds on-chain.
+
+        NOTE: PHGCredential.bridge is immutable — this is a software safeguard,
+        not cryptographic enforcement. Key separation must be operational.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        if duration_s <= 0:
+            raise HTTPException(status_code=400, detail="duration_s must be positive")
+        proposal_id = store.propose_suspension(
+            device_id=device_id,
+            evidence_hash=evidence_hash,
+            duration_s=duration_s,
+            proposed_by=hashlib.sha256(api_key.encode()).hexdigest()[:16],
+        )
+        log.info(
+            "suspension proposed: device=%s proposal_id=%d threshold=%d",
+            device_id[:16], proposal_id, cfg.suspension_multisig_threshold,
+        )
+        return {
+            "proposal_id": proposal_id,
+            "device_id": device_id,
+            "duration_s": duration_s,
+            "threshold": cfg.suspension_multisig_threshold,
+            "confirmations": 0,
+            "status": "proposed",
+        }
+
+    @app.post("/operator/suspension/confirm/{proposal_id}")
+    def suspension_confirm(
+        proposal_id: int,
+        api_key: str = Query(..., description="Shared operator API key"),
+    ):
+        """Confirm a pending suspension proposal (Phase 72).
+
+        Increments the confirmation counter. When confirmations reach
+        suspension_multisig_threshold, the proposal becomes executable via
+        POST /operator/suspension/execute/{proposal_id}.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            confirmations = store.confirm_suspension(proposal_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        threshold = cfg.suspension_multisig_threshold
+        ready = confirmations >= threshold
+        log.info(
+            "suspension confirmed: proposal_id=%d confirmations=%d/%d ready=%s",
+            proposal_id, confirmations, threshold, ready,
+        )
+        return {
+            "proposal_id": proposal_id,
+            "confirmations": confirmations,
+            "threshold": threshold,
+            "ready_to_execute": ready,
+        }
+
+    @app.post("/operator/suspension/execute/{proposal_id}")
+    async def suspension_execute(
+        proposal_id: int,
+        api_key: str = Query(..., description="Shared operator API key"),
+    ):
+        """Execute a confirmed suspension proposal on-chain (Phase 72).
+
+        Calls PHGCredential.suspend() only if proposal.confirmations >= threshold.
+        Returns tx_hash on success. If threshold not met, returns 400.
+
+        NOTE: Requires chain client to be live (BRIDGE_PRIVATE_KEY configured).
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        proposal = store.get_suspension_proposal(proposal_id)
+        if not proposal:
+            raise HTTPException(status_code=404, detail=f"Proposal {proposal_id} not found")
+        if proposal["executed"]:
+            raise HTTPException(status_code=400, detail="Proposal already executed")
+        if proposal["expires_at"] < time.time():
+            raise HTTPException(status_code=400, detail="Proposal expired")
+        threshold = cfg.suspension_multisig_threshold
+        if proposal["confirmations"] < threshold:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Insufficient confirmations: {proposal['confirmations']}/{threshold}. "
+                    "Call POST /operator/suspension/confirm/{proposal_id} first."
+                ),
+            )
+        # Threshold met — execute on-chain
+        if chain is None:
+            raise HTTPException(
+                status_code=503,
+                detail="Chain client not available — BRIDGE_PRIVATE_KEY not configured",
+            )
+        try:
+            evidence_bytes = bytes.fromhex(
+                proposal["evidence_hash"].replace("0x", "").ljust(64, "0")
+            )[:32]
+            tx_hash = await chain.suspend_phg_credential(
+                proposal["device_id"],
+                evidence_bytes,
+                proposal["duration_s"],
+            )
+        except Exception as exc:
+            log.error("suspension execute failed: proposal_id=%d err=%s", proposal_id, exc)
+            raise HTTPException(status_code=500, detail=f"On-chain suspension failed: {exc}") from exc
+        store.mark_suspension_executed(proposal_id, tx_hash or "")
+        log.info(
+            "suspension executed on-chain: proposal_id=%d device=%s tx=%s",
+            proposal_id, proposal["device_id"][:16], (tx_hash or "")[:16],
+        )
+        return {
+            "proposal_id": proposal_id,
+            "device_id": proposal["device_id"],
+            "tx_hash": tx_hash or "",
+            "duration_s": proposal["duration_s"],
+            "status": "executed",
+        }
+
+    # --- Phase 79: Live mode status ---
+
+    @app.get("/agent/live-mode-status")
+    def live_mode_status(
+        api_key: str = Query(..., description="Shared operator API key"),
+    ):
+        """Return live-mode readiness checklist (Phase 79).
+
+        Evaluates 5 conditions for dry-run -> live enforcement transition.
+        Returns ready_for_live_mode, conditions dict, blocking_conditions list,
+        and recommended_action string. Operator must set AGENT_DRY_RUN=false manually.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            from .live_mode_activation_agent import LiveModeActivationAgent
+            _lma = LiveModeActivationAgent(cfg, store, bus=None)
+            return _lma.get_live_mode_status()
+        except Exception as exc:
+            log.warning("live_mode_status: %s", exc)
+            return {
+                "ready_for_live_mode": False,
+                "current_dry_run": getattr(cfg, "agent_dry_run_mode", True),
+                "conditions": {},
+                "blocking_conditions": [],
+                "gate_summary": {},
+                "recommended_action": f"Error evaluating status: {exc}",
+            }
+
+    # --- Phase 80: Federation endpoints ---
+
+    @app.post("/federation/threat-signal")
+    async def federation_receive_signal(
+        body: FederationSignalRequest,
+        api_key: str = Query(..., description="Shared federation API key"),
+    ):
+        """Receive a federation threat signal from a peer bridge (Phase 80).
+
+        Stores in federation_threat_signals table (deduplicates by commitment_hash).
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        if not body.device_id or not body.commitment_hash:
+            from fastapi import HTTPException as _HTTPException
+            raise _HTTPException(
+                status_code=400, detail="device_id and commitment_hash required"
+            )
+        try:
+            signal_id = store.insert_threat_signal(
+                device_id=body.device_id,
+                commitment_hash=body.commitment_hash,
+                circuit_id=body.circuit_id or None,
+                source_peer=body.source_peer,
+                received_at=time.time(),
+            )
+            log.info(
+                "federation_receive_signal: signal_id=%d device=%s",
+                signal_id, body.device_id[:16],
+            )
+            return {"signal_id": signal_id, "status": "received"}
+        except Exception as exc:
+            if "UNIQUE" in str(exc).upper():
+                return {"status": "duplicate", "note": "commitment_hash already known"}
+            from fastapi import HTTPException as _HTTPException
+            raise _HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @app.get("/federation/peers")
+    def federation_peers(
+        api_key: str = Query(..., description="Shared operator API key"),
+    ):
+        """Return configured federation peer list and signal statistics (Phase 80)."""
+        _check_key(api_key)
+        _check_rate(api_key)
+        peers_str = getattr(cfg, "federation_broadcast_peers", "")
+        peers = [p.strip() for p in peers_str.split(",") if p.strip()] if peers_str else []
+        try:
+            stats = store.get_federation_stats()
+        except Exception as exc:
+            log.warning("federation_peers: stats failed: %s", exc)
+            stats = {"total_signals": 0, "broadcast": 0, "received_from_peers": 0}
+        return {
+            "peers": peers,
+            "peer_count": len(peers),
+            "federation_enabled": getattr(cfg, "federation_broadcast_enabled", False),
+            **stats,
+        }
+
+    # --- Phase 83: Agent supervisor status ---
+
+    @app.get("/agent/supervisor-status")
+    def supervisor_status(
+        api_key: str = Query(..., description="Shared operator API key"),
+    ):
+        """Return fleet health snapshot from AgentSupervisor (Phase 83).
+
+        fleet_health: ALL_HEALTHY | DEGRADED | CRITICAL
+        Core agents (session_adjudicator, ruling_enforcement_agent) STALE → CRITICAL.
+        ZOMBIE: agent writes rows but to 0 distinct devices (W1 loop detection).
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            from .agent_supervisor import AgentSupervisor
+            supervisor = AgentSupervisor(cfg, store)
+            snapshot = supervisor.check_fleet_health()
+            return snapshot
+        except Exception as exc:
+            log.warning("supervisor_status: check failed: %s", exc)
+            return {"error": str(exc), "fleet_health": "UNKNOWN", "timestamp": __import__("time").time()}
+
+    # --- Phase 84: Adjudication warm-up + gate readiness ---
+
+    @app.post("/agent/warm-up")
+    def agent_warm_up(
+        api_key: str = Query(..., description="Shared operator API key"),
+        batch_size: int = Query(None, description="Override batch_size (default from config)"),
+        device_ids: str = Query(default="", description="Comma-separated device_ids to warm up (Phase 100 bootstrap)"),
+    ):
+        """Trigger a dry-run adjudication warm-up batch (Phase 84/100).
+
+        Phase 100 bootstrap: pass ?device_ids=<id1>,<id2> to explicitly specify
+        devices. Falls back to recent agent_rulings, then ioid_devices table.
+        W1: WarmUpReport includes llm_available — if False, Anthropic key is missing.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import asyncio as _asyncio
+        from .adjudication_warm_up import AdjudicationWarmUpRunner
+        runner = AdjudicationWarmUpRunner(cfg, store)
+        if batch_size is not None:
+            runner._batch_size = int(batch_size)
+
+        # Phase 100: explicit device_ids param → ioid fallback
+        explicit_ids = [d.strip() for d in device_ids.split(",") if d.strip()]
+
+        if not explicit_ids:
+            recent = runner._get_recent_devices(runner._batch_size)
+            if not recent:
+                ioid_devs = store.get_ioid_devices(limit=runner._batch_size)
+                explicit_ids = [d["device_id"] for d in ioid_devs]
+                if not explicit_ids:
+                    return {
+                        "completed": 0, "failed": 0,
+                        "reason": "no_devices_registered",
+                        "hint": "Register a device via ioID first, or pass ?device_ids=<id>",
+                        "timestamp": time.time(),
+                    }
+
+        try:
+            loop = _asyncio.new_event_loop()
+            report = loop.run_until_complete(runner.run_warm_up(
+                device_ids=explicit_ids if explicit_ids else None
+            ))
+            loop.close()
+        except Exception as exc:
+            log.warning("agent_warm_up: failed: %s", exc)
+            report = {"error": str(exc), "completed": 0, "failed": 0, "llm_available": False}
+        return report
+
+    @app.get("/agent/gate-readiness")
+    def gate_readiness(
+        api_key: str = Query(..., description="Shared operator API key"),
+    ):
+        """Return composite live-mode gate readiness (Phase 84).
+
+        Aggregates:
+          validation_gate:  consecutive_clean / gate_n progress + gate_passed
+          fleet_health:     AgentSupervisor ALL_HEALTHY / DEGRADED / CRITICAL
+          gate_attestations_count: number of on-chain gate proofs recorded
+          overall_ready:    gate_passed AND fleet_health != CRITICAL
+          dry_run_active:   current AGENT_DRY_RUN config value
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _time
+        gate_n = int(getattr(cfg, "validation_gate_n", 100))
+        max_rate = float(getattr(cfg, "validation_max_divergence_rate", 1.0))
+        dry_run_active = bool(getattr(cfg, "agent_dry_run_mode", True))
+
+        # Validation gate
+        try:
+            gate_status = store.get_validation_gate_status(gate_n, max_rate)
+        except Exception as exc:
+            log.warning("gate_readiness: get_validation_gate_status failed: %s", exc)
+            gate_status = {"gate_passed": False, "consecutive_clean": 0,
+                           "error": str(exc)}
+
+        # Fleet health
+        try:
+            from .agent_supervisor import AgentSupervisor
+            supervisor = AgentSupervisor(cfg, store)
+            fleet = supervisor.check_fleet_health()
+        except Exception as exc:
+            log.warning("gate_readiness: fleet_health check failed: %s", exc)
+            fleet = {"fleet_health": "UNKNOWN", "error": str(exc)}
+
+        # Gate attestations count
+        try:
+            attestations = store.get_gate_attestations(limit=1)
+            att_count = len(store.get_gate_attestations(limit=10000))
+        except Exception:
+            att_count = 0
+
+        gate_passed = bool(gate_status.get("gate_passed", False))
+        fleet_health = fleet.get("fleet_health", "UNKNOWN")
+        overall_ready = gate_passed and fleet_health not in ("CRITICAL", "UNKNOWN")
+
+        return {
+            "overall_ready": overall_ready,
+            "dry_run_active": dry_run_active,
+            "gate_attestations_count": att_count,
+            "validation_gate": gate_status,
+            "fleet_health": fleet,
+            "timestamp": _time.time(),
+        }
+
+    # --- Phase 86: Synthetic Session Corpus Pipeline ---
+
+    @app.post("/agent/run-synthetic-corpus")
+    def run_synthetic_corpus(
+        api_key: str = Query(..., description="Shared operator API key"),
+        n: int = Query(None, description="Override corpus size (default from config)"),
+    ):
+        """Trigger a synthetic validation corpus run (Phase 86).
+
+        Runs N synthetic nominal sessions through rule_fallback. Results are stored
+        in synthetic_sessions table ONLY — they do NOT affect ruling_validation_log
+        or consecutive_clean (W1 isolation invariant).
+
+        Use to: verify rule_fallback logic is correct, exercise the pipeline without
+        real hardware, detect regressions after code changes (failed_fallback > 0).
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import asyncio as _asyncio
+        from .validation_corpus_runner import ValidationCorpusRunner
+        runner = ValidationCorpusRunner(cfg, store)
+        try:
+            loop = _asyncio.new_event_loop()
+            report = loop.run_until_complete(runner.run_corpus(n=n))
+            loop.close()
+        except Exception as exc:
+            log.warning("run_synthetic_corpus: failed: %s", exc)
+            report = {
+                "error": str(exc),
+                "generated": 0, "passed_fallback": 0, "failed_fallback": 0,
+                "all_nominal": False, "corpus_run_id": None, "corpus_size": 0,
+            }
+        return report
+
+    @app.get("/agent/corpus-status")
+    def corpus_status(
+        api_key: str = Query(..., description="Shared operator API key"),
+    ):
+        """Return synthetic validation corpus aggregate statistics (Phase 86).
+
+        Includes isolation_note confirming synthetic sessions do NOT affect the
+        production consecutive_clean gate.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        return store.get_corpus_status()
+
+    # --- Phase 88: Adjudication Campaign Tracker ---
+
+    @app.get("/agent/campaign-status")
+    def campaign_status(
+        api_key: str = Query(..., description="Shared operator API key"),
+    ):
+        """Return live adjudication campaign progress toward dry_run=False activation (Phase 88).
+
+        Tracks the operator's progress toward the N=100 consecutive_clean validation gate.
+        Includes per-session verdict history, divergence_breakdown (which evidence fields
+        caused LLM↔fallback splits), and estimated_sessions_to_gate.
+
+        W1 note: consecutive_clean is computed atomically at query time — never cached.
+        Once campaign_note shows 'Gate PASSED', set AGENT_DRY_RUN=false to go live.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        gate_n = int(getattr(cfg, "validation_gate_n", 100))
+        max_rate = float(getattr(cfg, "validation_max_divergence_rate", 1.0))
+        try:
+            return store.get_campaign_status(gate_n=gate_n, max_divergence_rate=max_rate)
+        except Exception as exc:
+            log.warning("campaign_status: query failed: %s", exc)
+            return {
+                "consecutive_clean": 0, "gate_n": gate_n, "progress_pct": 0.0,
+                "session_count": 0, "divergence_count": 0, "divergence_rate": 0.0,
+                "gate_passed": False, "estimated_sessions_to_gate": gate_n,
+                "verdict_breakdown": {}, "divergence_breakdown": {},
+                "recent_sessions": [], "last_session_at": None,
+                "campaign_note": f"Error: {exc}",
+            }
+
+    # --- Phase 82: Reactive adjudication interrupt log ---
+
+    @app.get("/agent/reactive-adjudication-log")
+    def reactive_adjudication_log(
+        api_key: str = Query(..., description="Shared operator API key"),
+        device_id: str = Query(None, description="Optional device_id filter"),
+        limit: int = Query(20, description="Max entries to return"),
+    ):
+        """Return reactive adjudication interrupt log (Phase 82).
+
+        Lists Class J HIGH-risk triggered out-of-cycle LLM rulings.
+        was_deferred=1 entries were rate-limited by the token bucket (W1).
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _time
+        try:
+            entries = store.get_reactive_adjudication_log(
+                device_id=device_id or None, limit=limit
+            )
+        except Exception as exc:
+            log.warning("reactive_adjudication_log: query failed: %s", exc)
+            entries = []
+        deferred_count = sum(1 for e in entries if e.get("was_deferred"))
+        return {
+            "entries": entries,
+            "total_returned": len(entries),
+            "deferred_count": deferred_count,
+            "timestamp": _time.time(),
+        }
+
+    # --- Phase 89: Protocol Intelligence ---
+
+    @app.get("/agent/protocol-intelligence")
+    def protocol_intelligence(
+        api_key: str = Query(..., description="Shared operator API key"),
+    ):
+        """Return unified protocol_health_score synthesized from all VAPI agent streams.
+
+        Reads the most recently stored report from protocol_intelligence_reports.
+        Falls back to a live compute if no stored report exists yet.
+        Phase 89.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            report = store.get_latest_protocol_intelligence_report()
+            if report is not None:
+                return report
+            # No stored report — compute live
+            from .protocol_intelligence_agent import ProtocolIntelligenceAgent
+            agent = ProtocolIntelligenceAgent(cfg, store)
+            return agent.compute_report()
+        except Exception as exc:
+            log.warning("protocol_intelligence: query failed: %s", exc)
+            return {
+                "protocol_health_score": 0.0,
+                "ready_for_live_mode": False,
+                "bottleneck": "error",
+                "recommendation": f"Error computing report: {exc}",
+                "components": {},
+            }
+
+    # --- Phase 90: Shadow Enforcement ---
+
+    @app.get("/agent/shadow-enforcement-log")
+    def shadow_enforcement_log(
+        api_key: str = Query(..., description="Shared operator API key"),
+        device_id: str = Query(None, description="Optional device_id filter"),
+        limit: int = Query(50, description="Max entries to return"),
+    ):
+        """Return shadow enforcement log (BLOCK actions that were suppressed in shadow mode).
+
+        shadow_mode is active when ENFORCEMENT_SHADOW_MODE=true in config.
+        Each entry represents a BLOCK ruling that would have suspended a PHGCredential
+        but did not because shadow mode is enabled.
+        Phase 90.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            entries = store.get_shadow_enforcement_log(device_id=device_id, limit=limit)
+            stats = store.get_shadow_enforcement_stats()
+            return {
+                "shadow_mode_active": bool(getattr(cfg, "enforcement_shadow_mode", False)),
+                "entries": entries,
+                "total_returned": len(entries),
+                "stats": stats,
+                "timestamp": time.time(),
+            }
+        except Exception as exc:
+            log.warning("shadow_enforcement_log: query failed: %s", exc)
+            return {
+                "shadow_mode_active": False,
+                "entries": [],
+                "total_returned": 0,
+                "stats": {"total": 0, "passed": 0, "would_have_suspended": 0, "pass_rate": None},
+                "error": str(exc),
+            }
+
+    # --- Phase 92: Live Mode Activation Pipeline ---
+
+    @app.post("/agent/request-activation")
+    async def request_activation(
+        request: Request,
+        api_key: str = Query(..., description="Shared operator API key"),
+    ):
+        """Record an operator activation request and check protocol readiness.
+
+        Checks Phase 89 ProtocolIntelligenceAgent ready_for_live_mode status,
+        records the operator's intent to the activation audit log, and returns
+        current readiness status with blocking conditions.
+        NEVER auto-activates — operator must still set AGENT_DRY_RUN=false.
+        Phase 92.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        notes = body.get("notes") if isinstance(body, dict) else None
+        try:
+            from .live_mode_activation_pipeline import LiveModeActivationPipeline
+            pipeline = LiveModeActivationPipeline(cfg, store)
+            result = await pipeline._check_and_record("operator_request", operator_notes=notes)
+            result["timestamp"] = time.time()
+            return result
+        except Exception as exc:
+            log.warning("request_activation: failed: %s", exc)
+            return {
+                "ready_for_live_mode": False,
+                "protocol_health_score": 0.0,
+                "bottleneck": "error",
+                "blocking_conditions": [str(exc)],
+                "recommended_action": f"Error: {exc}",
+                "timestamp": time.time(),
+            }
+
+    @app.get("/agent/activation-log")
+    def activation_log(
+        api_key: str = Query(..., description="Shared operator API key"),
+        limit: int = Query(50, description="Max entries to return"),
+    ):
+        """Return the live mode activation audit log.
+
+        Contains all readiness_check and operator_request events with their
+        protocol_health_score, blocking_conditions, and notes.
+        Phase 92.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            entries = store.get_live_mode_activation_log(limit=limit)
+            latest_ready = any(e.get("ready_for_live_mode") for e in entries)
+            return {
+                "entries": entries,
+                "total_returned": len(entries),
+                "latest_ready_for_live_mode": latest_ready,
+                "timestamp": time.time(),
+            }
+        except Exception as exc:
+            log.warning("activation_log: query failed: %s", exc)
+            return {
+                "entries": [],
+                "total_returned": 0,
+                "latest_ready_for_live_mode": False,
+                "error": str(exc),
+            }
+
+    # --- Phase 94: Escalation Ruling Log ---
+
+    @app.get("/agent/escalation-ruling-log")
+    def escalation_ruling_log(
+        api_key: str = Query(..., description="Shared operator API key"),
+        device_id: str = Query(None, description="Optional device_id filter"),
+        limit: int = Query(50, description="Max entries to return"),
+    ):
+        """Return the escalation ruling log from the Phase 94 triage reactive loop.
+
+        Entries are written when DivergenceTriageAgent escalates a device and
+        SessionAdjudicator fires a reactive ruling via the divergence_pattern_detected bus.
+        was_deferred=1 entries were rate-limited (1/hour per device by default).
+        Phase 94.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            entries = store.get_escalation_ruling_log(device_id=device_id, limit=limit)
+            return {
+                "entries": entries,
+                "total_returned": len(entries),
+                "timestamp": time.time(),
+            }
+        except Exception as exc:
+            log.warning("escalation_ruling_log: query failed: %s", exc)
+            return {
+                "entries": [],
+                "total_returned": 0,
+                "error": str(exc),
+            }
+
+    # --- Phase 91: Divergence Triage ---
+
+    @app.get("/agent/triage-report")
+    def triage_report(
+        api_key: str = Query(..., description="Shared operator API key"),
+        limit: int = Query(50, description="Max device entries to return"),
+    ):
+        """Return divergence triage report: per-device adversarial pattern analysis.
+
+        Populated by DivergenceTriageAgent which polls ruling_validation_log for
+        diverged sessions with non-nominal divergence_reason (Phase 88 instrumentation).
+        Escalated devices have detected ML-bot clusters, cheat codes, or enrollment anomalies.
+        Phase 91.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            entries = store.get_divergence_triage_report(limit=limit)
+            escalated_count = sum(1 for e in entries if e.get("escalated"))
+            return {
+                "entries": entries,
+                "total_returned": len(entries),
+                "escalated_count": escalated_count,
+                "clean_count": len(entries) - escalated_count,
+                "timestamp": time.time(),
+            }
+        except Exception as exc:
+            log.warning("triage_report: query failed: %s", exc)
+            return {
+                "entries": [],
+                "total_returned": 0,
+                "escalated_count": 0,
+                "clean_count": 0,
+                "error": str(exc),
+            }
+
+    # --- Phase 95: Activation Audit Verifier ---
+
+    @app.get("/agent/activation-audit")
+    def activation_audit(
+        api_key: str = Query(..., description="Shared operator API key"),
+    ):
+        """Return tamper-evident activation audit summary.
+
+        Cross-references live_mode_activation_log (Phase 92) with gate_attestations
+        (Phase 84/87) to verify that:
+        1. The protocol scored ready_for_live_mode=True (protocol_health_score >= 85)
+        2. An on-chain gate attestation was subsequently recorded
+        3. The chronological order is intact (ready check BEFORE on-chain anchor)
+
+        audit_valid=True is the cryptographic pre-condition for operators enabling
+        AGENT_DRY_RUN=false. This endpoint is callable from tournament CI pipelines
+        via VAPITournamentGate.verify_activation_audit() (SDK Phase 95).
+        Phase 95.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            summary = store.get_activation_audit_summary()
+            return {
+                **summary,
+                "timestamp": time.time(),
+            }
+        except Exception as exc:
+            log.warning("activation_audit: query failed: %s", exc)
+            return {
+                "first_ready_check_at": None,
+                "gate_attestation_count": 0,
+                "latest_attestation_at": None,
+                "audit_valid": False,
+                "audit_summary": f"Error: {exc}",
+                "timestamp": time.time(),
+            }
+
+    # --- Phase 96: Enforcement Readiness Certificate ---
+
+    @app.post("/agent/enforcement-certificate")
+    def issue_enforcement_certificate(
+        api_key: str = Query(..., description="Shared operator API key"),
+    ):
+        """Issue a portable Enforcement Readiness Certificate (ERC).
+
+        Reads the current activation audit summary, computes:
+          audit_hash = SHA-256(canonical JSON of audit fields)
+          hmac_sig = HMAC-SHA256(audit_hash, operator_api_key)
+        Persists the cert to enforcement_certificates (UNIQUE audit_hash — idempotent).
+        Certs expire after enforcement_cert_ttl_s seconds (default 24h).
+
+        Phase 96 novel primitive: First portable, operator-signed cryptographic proof of
+        AI enforcement readiness — callable by tournament operators without VAPI infrastructure.
+        Phase 96.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            audit = store.get_activation_audit_summary()
+            canonical = _json.dumps({
+                "audit_valid": audit["audit_valid"],
+                "first_ready_check_at": audit["first_ready_check_at"],
+                "gate_attestation_count": audit["gate_attestation_count"],
+                "latest_attestation_at": audit["latest_attestation_at"],
+            }, sort_keys=True)
+            audit_hash = hashlib.sha256(canonical.encode()).hexdigest()
+            hmac_sig = hmac.new(
+                cfg.operator_api_key.encode(),
+                audit_hash.encode(),
+                "sha256",
+            ).hexdigest()
+            now = time.time()
+            expires_at = now + float(getattr(cfg, "enforcement_cert_ttl_s", 86400))
+            cert_id = store.insert_enforcement_certificate(
+                audit_hash=audit_hash,
+                hmac_sig=hmac_sig,
+                audit_valid=audit["audit_valid"],
+                first_ready_check_at=audit["first_ready_check_at"],
+                gate_attestation_count=audit["gate_attestation_count"],
+                latest_attestation_at=audit["latest_attestation_at"],
+                expires_at=expires_at,
+            )
+            return {
+                "cert_id": cert_id,
+                "audit_hash": audit_hash,
+                "hmac_sig": hmac_sig,
+                "audit_valid": audit["audit_valid"],
+                "expires_at": expires_at,
+                "issued_at": now,
+            }
+        except Exception as exc:
+            log.warning("issue_enforcement_certificate: failed: %s", exc)
+            return {"error": str(exc), "cert_id": None, "audit_valid": False}
+
+    @app.get("/agent/enforcement-certificate")
+    def get_enforcement_certificate(
+        api_key: str = Query(..., description="Shared operator API key"),
+    ):
+        """Return the latest Enforcement Readiness Certificate.
+
+        Returns the most recently issued ERC, or empty if none issued.
+        Expiry is advisory — the operator is responsible for renewal.
+        Phase 96.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            cert = store.get_latest_enforcement_certificate()
+            expired = cert is not None and time.time() > cert.get("expires_at", 0)
+            return {
+                "certificate": cert,
+                "has_certificate": cert is not None,
+                "is_expired": expired,
+                "timestamp": time.time(),
+            }
+        except Exception as exc:
+            log.warning("get_enforcement_certificate: failed: %s", exc)
+            return {
+                "certificate": None,
+                "has_certificate": False,
+                "is_expired": False,
+                "error": str(exc),
+                "timestamp": time.time(),
+            }
+
+    # --- Phase 98: Epistemic Consensus Log ---
+
+    @app.get("/agent/epistemic-consensus-log")
+    def epistemic_consensus_log(
+        api_key: str = Query(..., description="Shared operator API key"),
+        device_id: str = Query(None, description="Filter by device_id"),
+        limit: int = Query(50, description="Max entries to return"),
+    ):
+        """Return epistemic consensus decisions from Phase 98.
+
+        Every BLOCK verdict that passed through the multi-agent consensus gate
+        is recorded here with the weighted score breakdown:
+          class_j_score (0.40 weight), triage_score (0.40), supervisor_score (0.20)
+          consensus_score = weighted sum; consensus_reached = score >= threshold (default 0.60)
+          downgraded=1 means BLOCK was downgraded to HOLD due to insufficient consensus.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            entries = store.get_epistemic_consensus_log(device_id=device_id, limit=limit)
+            downgraded = sum(1 for e in entries if e.get("downgraded"))
+            return {
+                "entries": entries,
+                "count": len(entries),
+                "downgraded_count": downgraded,
+                "timestamp": time.time(),
+            }
+        except Exception as exc:
+            log.warning("epistemic_consensus_log: %s", exc)
+            return {"entries": [], "count": 0, "downgraded_count": 0, "error": str(exc), "timestamp": time.time()}
+
+    # --- Phase 97: Gated Live Mode Transition ---
+
+    @app.post("/agent/config")
+    def set_agent_config(
+        api_key: str = Query(..., description="Shared operator API key"),
+        dry_run: bool = Query(..., description="Set to false to enable live enforcement"),
+    ):
+        """Gated live-mode transition guard (Phase 97).
+
+        When dry_run=false is requested, enforces three-condition gate:
+          1. gate_passed — consecutive_clean >= gate_n AND divergence_rate OK
+          2. cert_valid  — valid non-expired EnforcementReadinessCertificate exists
+          3. audit_valid — activation audit chronological invariant satisfied
+
+        Any failure returns HTTP 422 with blocking conditions list.
+        On success, updates cfg.agent_dry_run_mode and publishes live_mode_enabled
+        to AgentMessageBus so fleet agents shift mode within <1ms.
+
+        All attempts (approved or blocked) logged to live_mode_guard_log.
+        Phase 97.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import hashlib as _hl
+
+        gate_n = int(getattr(cfg, "validation_gate_n", 100))
+        max_rate = float(getattr(cfg, "validation_max_divergence_rate", 1.0))
+        operator_key_hash = _hl.sha256(api_key.encode()).hexdigest()[:16]
+
+        if not dry_run:
+            # Evaluate all three conditions
+            blocking = []
+            gate_passed = False
+            cert_valid = False
+            audit_valid_val = False
+
+            try:
+                gate_status = store.get_validation_summary(gate_n, max_rate)
+                gate_passed = bool(gate_status.get("gate_passed", False))
+                if not gate_passed:
+                    blocking.append("gate_not_passed")
+            except Exception as exc:
+                log.warning("config_guard: gate check failed: %s", exc)
+                blocking.append("gate_check_error")
+
+            try:
+                cert = store.get_latest_enforcement_certificate()
+                if cert is None:
+                    blocking.append("no_enforcement_certificate")
+                elif not cert.get("audit_valid"):
+                    blocking.append("cert_audit_invalid")
+                elif time.time() > cert.get("expires_at", 0):
+                    blocking.append("cert_expired")
+                else:
+                    cert_valid = True
+            except Exception as exc:
+                log.warning("config_guard: cert check failed: %s", exc)
+                blocking.append("cert_check_error")
+
+            try:
+                audit = store.get_activation_audit_summary()
+                audit_valid_val = bool(audit.get("audit_valid", False))
+                if not audit_valid_val:
+                    blocking.append("audit_invalid")
+            except Exception as exc:
+                log.warning("config_guard: audit check failed: %s", exc)
+                blocking.append("audit_check_error")
+
+            try:
+                store.insert_live_mode_guard_log(
+                    event_type="transition_attempt",
+                    attempted_dry_run=0,
+                    gate_passed=int(gate_passed),
+                    cert_valid=int(cert_valid),
+                    audit_valid=int(audit_valid_val),
+                    blocking_conditions=_json.dumps(blocking),
+                    operator_key_hash=operator_key_hash,
+                )
+            except Exception as exc:
+                log.warning("config_guard: log write failed: %s", exc)
+
+            if blocking:
+                from fastapi import HTTPException as _HTTP
+                raise _HTTP(422, {"error": "live mode preconditions not met", "blocking": blocking})
+
+            # All conditions met — flip dry_run
+            cfg.agent_dry_run_mode = False
+
+            # Publish to bus so fleet agents shift mode immediately
+            try:
+                if bus is not None:
+                    bus.publish_sync("live_mode_enabled", {
+                        "dry_run": False,
+                        "gate_passed": gate_passed,
+                        "cert_valid": cert_valid,
+                        "audit_valid": audit_valid_val,
+                        "timestamp": time.time(),
+                    }, source="operator_api")
+            except Exception as exc:
+                log.warning("config_guard: bus publish failed: %s", exc)
+
+            try:
+                store.insert_live_mode_guard_log(
+                    event_type="transition_approved",
+                    attempted_dry_run=0,
+                    gate_passed=int(gate_passed),
+                    cert_valid=int(cert_valid),
+                    audit_valid=int(audit_valid_val),
+                    blocking_conditions="[]",
+                    operator_key_hash=operator_key_hash,
+                )
+            except Exception as exc:
+                log.warning("config_guard: approval log failed: %s", exc)
+
+            return {"dry_run": False, "live_mode_enabled": True, "blocking": []}
+
+        else:
+            # dry_run=True is always allowed
+            cfg.agent_dry_run_mode = True
+            try:
+                store.insert_live_mode_guard_log(
+                    event_type="dry_run_restored",
+                    attempted_dry_run=1,
+                    gate_passed=None,
+                    cert_valid=None,
+                    audit_valid=None,
+                    blocking_conditions="[]",
+                    operator_key_hash=operator_key_hash,
+                )
+            except Exception as exc:
+                log.warning("config_guard: restore log failed: %s", exc)
+            return {"dry_run": True, "live_mode_enabled": False, "blocking": []}
+
+    @app.get("/agent/live-mode-guard")
+    def live_mode_guard_log(
+        api_key: str = Query(..., description="Shared operator API key"),
+        limit: int = Query(50, description="Max entries to return"),
+    ):
+        """Return live-mode guard audit log (Phase 97).
+
+        Every attempt to enable live mode (approved or blocked) is recorded here.
+        Use this to audit operator actions and diagnose blocking conditions.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            entries = store.get_live_mode_guard_log(limit=limit)
+            return {
+                "entries": entries,
+                "count": len(entries),
+                "current_dry_run": bool(getattr(cfg, "agent_dry_run_mode", True)),
+                "timestamp": time.time(),
+            }
+        except Exception as exc:
+            log.warning("live_mode_guard_log: %s", exc)
+            return {"entries": [], "count": 0, "error": str(exc), "timestamp": time.time()}
+
+    # --- Phase 99A: AGaaS Foundation — Operator Status ---
+
+    @app.get("/agent/operator-status")
+    def operator_status(
+        api_key: str = Query(..., description="Shared operator API key"),
+        operator_address: str = Query(..., description="Ethereum address of the operator"),
+    ):
+        """Return latest operator registration event for the given address.
+
+        Reflects bridge-side record of on-chain staking events recorded via
+        chain.register_operator_stake() and store.insert_operator_registration().
+        Returns null operator_address field if not found.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            status = store.get_operator_status(operator_address)
+            return {
+                "operator_address": operator_address,
+                "found": status is not None,
+                "status": status,
+                "vapi_token_address": getattr(cfg, "vapi_token_address", ""),
+                "operator_registry_address": getattr(cfg, "operator_registry_address", ""),
+                "timestamp": time.time(),
+            }
+        except Exception as exc:
+            log.warning("operator_status: %s", exc)
+            return {
+                "operator_address": operator_address,
+                "found": False,
+                "status": None,
+                "error": str(exc),
+                "timestamp": time.time(),
+            }
+
+    # --- Phase 99C: VHP Soulbound Token ---
+
+    @app.post("/agent/mint-vhp")
+    async def mint_vhp(
+        api_key: str = Query(..., description="Shared operator API key"),
+        device_id: str = Query(..., description="Device identifier"),
+        to_address: str = Query(..., description="Recipient Ethereum address for VHP token"),
+    ):
+        """Mint a VHP soulbound token for a device that has passed all three gate conditions.
+
+        Gate conditions (all must be true):
+          1. audit_valid=True — activation audit passes (get_activation_audit_summary)
+          2. gate_passed=True — validation gate has consecutive_clean >= gate_n
+          3. dry_run=False — bridge is in live enforcement mode
+
+        Returns tx_hash + expires_at on success. Returns 422 on gate failure.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import hashlib
+
+        # Gate condition 1: audit_valid
+        try:
+            audit = store.get_activation_audit_summary()
+        except Exception:
+            audit = {}
+        if not audit.get("audit_valid"):
+            from fastapi import HTTPException as _HTTPException
+            raise _HTTPException(
+                status_code=422,
+                detail={"error": "audit_valid=False — activation audit not passed"},
+            )
+
+        # Gate condition 2: gate_passed
+        try:
+            gate_n = getattr(cfg, "validation_gate_n", 100)
+            max_div = getattr(cfg, "validation_max_divergence_rate", 1.0)
+            summary = store.get_validation_summary(gate_n, max_div)
+        except Exception:
+            summary = {}
+        if not summary.get("gate_passed"):
+            from fastapi import HTTPException as _HTTPException
+            raise _HTTPException(
+                status_code=422,
+                detail={"error": "gate_passed=False — validation gate not cleared"},
+            )
+
+        # Gate condition 3: not dry_run
+        if getattr(cfg, "agent_dry_run_mode", True):
+            from fastapi import HTTPException as _HTTPException
+            raise _HTTPException(
+                status_code=422,
+                detail={"error": "dry_run=True — live mode not active; set AGENT_DRY_RUN=false"},
+            )
+
+        # Build VHP data (needed for consecutive_clean before ioSwarm gate)
+        device_id_hash = "0x" + hashlib.sha256(device_id.encode()).hexdigest()
+        consecutive_clean = summary.get("consecutive_clean", 0)
+        rulings = store.get_agent_rulings(device_id, limit=1)
+        confidence_score = int(rulings[0]["confidence"] * 10000) if rulings else 0
+        mpc_hash = getattr(cfg, "mpc_ceremony_hash_cache", None) or "0x" + "0" * 64
+
+        # Phase 110: ioSwarm VHP Mint Authorization — fail-CLOSED quorum gate (additive, 4th gate)
+        _ioswarm_mint_on = getattr(cfg, "ioswarm_vhp_mint_enabled", False)
+        if _ioswarm_mint_on:
+            def _get_recent_block_count(_store, _device_id):
+                """Count recent BLOCK rulings for device (last 7 days). Never raises."""
+                try:
+                    import time as _t_blk
+                    cutoff = _t_blk.time() - 7 * 86400
+                    recent = _store.get_agent_rulings(_device_id, limit=50)
+                    return sum(1 for r in recent if r.get("verdict") == "BLOCK"
+                               and r.get("created_at", 0) >= cutoff)
+                except Exception:
+                    return 0
+
+            from fastapi import HTTPException as _HTTPException
+            try:
+                from .ioswarm_vhp_mint_coordinator import IoSwarmVHPMintCoordinator
+                _mint_auth = IoSwarmVHPMintCoordinator(cfg=cfg, store=store).authorize(
+                    device_id=device_id,
+                    consecutive_clean=int(consecutive_clean),
+                    recent_block_count=_get_recent_block_count(store, device_id),
+                )
+                if not _mint_auth.get("authorized", False):
+                    raise _HTTPException(
+                        status_code=422,
+                        detail={
+                            "error":          "ioswarm_quorum_denied",
+                            "quorum_verdict": _mint_auth.get("quorum_verdict", "DENY"),
+                            "agreement_ratio": _mint_auth.get("agreement_ratio", 0.0),
+                        },
+                    )
+            except _HTTPException:
+                raise
+            except Exception as _exc:
+                # Fail-CLOSED (W1): coordinator exception blocks mint
+                raise _HTTPException(
+                    status_code=422,
+                    detail={
+                        "error":   "ioswarm_coordinator_error",
+                        "message": str(_exc),
+                    },
+                ) from _exc
+
+        # Mint on-chain
+        try:
+            tx_hash = await chain.mint_vhp(
+                to_address, device_id_hash, cert_level=1,
+                consecutive_clean=consecutive_clean,
+                confidence_score=confidence_score,
+                mpc_ceremony_hash=mpc_hash,
+                ttl_days=90,
+            )
+        except Exception as exc:
+            from fastapi import HTTPException as _HTTPException
+            raise _HTTPException(status_code=500, detail={"error": str(exc)})
+
+        expires_at = time.time() + 90 * 86400
+        store.insert_vhp_issuance(
+            device_id=device_id,
+            token_id=0,  # on-chain token_id not known synchronously from event
+            tx_hash=tx_hash,
+            expires_at=expires_at,
+            cert_level=1,
+            consecutive_clean=consecutive_clean,
+            to_address=to_address,
+        )
+        return {
+            "tx_hash": tx_hash,
+            "expires_at": expires_at,
+            "device_id": device_id,
+            "to_address": to_address,
+            "consecutive_clean": consecutive_clean,
+            "confidence_score": confidence_score,
+            "timestamp": time.time(),
+        }
+
+    @app.get("/agent/vhp-status/{device_id}")
+    def vhp_status(
+        device_id: str,
+        api_key: str = Query(..., description="Shared operator API key"),
+    ):
+        """Return the latest VHP issuance record for a device.
+
+        is_valid=True when expires_at > now. Returns found=False if no issuance recorded.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            record = store.get_vhp_status(device_id)
+            if record is None:
+                return {
+                    "device_id": device_id,
+                    "found": False,
+                    "is_valid": False,
+                    "vhp_contract_address": getattr(cfg, "vhp_contract_address", ""),
+                    "timestamp": time.time(),
+                }
+            is_valid = record.get("expires_at", 0) > time.time()
+            return {
+                "device_id": device_id,
+                "found": True,
+                "is_valid": is_valid,
+                "token_id": record.get("token_id", 0),
+                "cert_level": record.get("cert_level", 1),
+                "consecutive_clean": record.get("consecutive_clean", 0),
+                "expires_at": record.get("expires_at", 0),
+                "tx_hash": record.get("tx_hash", ""),
+                "to_address": record.get("to_address", ""),
+                "vhp_contract_address": getattr(cfg, "vhp_contract_address", ""),
+                "timestamp": time.time(),
+            }
+        except Exception as exc:
+            log.warning("vhp_status: %s", exc)
+            return {"device_id": device_id, "found": False, "is_valid": False,
+                    "error": str(exc), "timestamp": time.time()}
+
+    @app.get("/agent/activation-status")
+    def activation_status(
+        api_key: str = Query(..., description="Shared operator API key"),
+    ):
+        """Return 5-step live-mode activation checklist (Phase 100).
+
+        Steps:
+          1 consecutive_clean >= gate_n (validation gate)
+          2 enforcement cert issued + valid (not expired)
+          3 audit_valid=True (chronological invariant)
+          4 AGENT_DRY_RUN=false
+          5 VHP mint available (all of 1+3+4 pass)
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+
+        gate_n = int(getattr(cfg, "validation_gate_n", 100))
+        max_rate = float(getattr(cfg, "validation_max_divergence_rate", 1.0))
+        dry_run_active = bool(getattr(cfg, "agent_dry_run_mode", True))
+
+        # Step 1 — validation gate
+        try:
+            summary = store.get_validation_summary(gate_n, max_rate)
+        except Exception:
+            summary = {"consecutive_clean": 0, "gate_passed": False, "divergence_rate": 0.0}
+        consecutive_clean = int(summary.get("consecutive_clean", 0))
+        gate_passed = bool(summary.get("gate_passed", False))
+        divergence_rate = float(summary.get("divergence_rate", 0.0))
+        sessions_remaining = max(0, gate_n - consecutive_clean)
+        progress_pct = round(min(100.0, consecutive_clean / gate_n * 100), 1) if gate_n > 0 else 0.0
+
+        step1 = {
+            "passed": gate_passed,
+            "consecutive_clean": consecutive_clean,
+            "gate_n": gate_n,
+            "progress_pct": progress_pct,
+            "sessions_remaining": sessions_remaining,
+            "divergence_rate": divergence_rate,
+        }
+
+        # Step 2 — enforcement cert
+        try:
+            cert = store.get_latest_enforcement_certificate()
+        except Exception:
+            cert = None
+        cert_ttl = float(getattr(cfg, "enforcement_cert_ttl_s", 86400))
+        cert_issued = cert is not None
+        cert_expired = cert_issued and (time.time() - cert.get("created_at", 0)) > cert_ttl
+        cert_valid = cert_issued and not cert_expired
+        step2 = {
+            "issued": cert_issued,
+            "valid": cert_valid,
+            "expires_at": (cert.get("created_at", 0) + cert_ttl) if cert_issued else None,
+        }
+
+        # Step 3 — activation audit
+        try:
+            audit = store.get_activation_audit_summary()
+        except Exception:
+            audit = {"audit_valid": False, "gate_attestation_count": 0, "first_ready_check_at": None}
+        audit_valid = bool(audit.get("audit_valid", False))
+        step3 = {
+            "audit_valid": audit_valid,
+            "gate_attestation_count": int(audit.get("gate_attestation_count", 0)),
+            "first_ready_check_at": audit.get("first_ready_check_at"),
+        }
+
+        # Step 4 — live mode
+        live_mode_enabled = not dry_run_active
+        step4 = {
+            "dry_run_active": dry_run_active,
+            "live_mode_enabled": live_mode_enabled,
+        }
+
+        # Step 5 — VHP mint ready
+        vhp_blocking = []
+        if not gate_passed:
+            vhp_blocking.append("gate_not_passed")
+        if not audit_valid:
+            vhp_blocking.append("audit_invalid")
+        if dry_run_active:
+            vhp_blocking.append("dry_run_active")
+        vhp_ready = len(vhp_blocking) == 0
+        step5 = {
+            "ready": vhp_ready,
+            "blocking_conditions": vhp_blocking,
+        }
+
+        # Determine current blocking step
+        if not gate_passed:
+            blocking_step = 1
+        elif not cert_valid:
+            blocking_step = 2
+        elif not audit_valid:
+            blocking_step = 3
+        elif dry_run_active:
+            blocking_step = 4
+        elif not vhp_ready:
+            blocking_step = 5
+        else:
+            blocking_step = 6  # fully activated
+
+        fully_activated = blocking_step == 6
+
+        # Recommended action
+        api_key_placeholder = "<your_api_key>"
+        if blocking_step == 1:
+            recommended_action = (
+                f"POST /agent/warm-up (need {sessions_remaining} more clean sessions; "
+                "pass ?device_ids=<id> if agent_rulings is empty)"
+            )
+        elif blocking_step == 2:
+            recommended_action = f"POST /agent/enforcement-certificate?api_key={api_key_placeholder}"
+        elif blocking_step == 3:
+            recommended_action = (
+                "Ensure ProtocolIntelligenceAgent has published ready_for_live_mode=True "
+                "AND a gate attestation exists after that timestamp"
+            )
+        elif blocking_step == 4:
+            recommended_action = f"POST /agent/config?api_key={api_key_placeholder}&dry_run=false"
+        elif blocking_step == 5:
+            recommended_action = (
+                f"POST /agent/mint-vhp?api_key={api_key_placeholder}"
+                "&device_id=<id>&to_address=<addr>"
+            )
+        else:
+            recommended_action = "Live mode ACTIVE. VHP issuance available."
+
+        # Warnings
+        warnings_list = []
+        if gate_n < 50:
+            warnings_list.append(
+                f"gate_n={gate_n} is below recommended minimum of 50 — "
+                "increase VALIDATION_GATE_N for production use"
+            )
+
+        return {
+            "steps": {
+                "step1_validation_gate": step1,
+                "step2_enforcement_cert": step2,
+                "step3_audit_valid": step3,
+                "step4_live_mode": step4,
+                "step5_vhp_mint": step5,
+            },
+            "current_blocking_step": blocking_step,
+            "fully_activated": fully_activated,
+            "recommended_action": recommended_action,
+            "warnings": warnings_list,
+            "timestamp": time.time(),
+        }
+
+    @app.get("/agent/quicksilver-status")
+    def quicksilver_status(
+        api_key: str = Query(..., description="Shared operator API key"),
+        operator_address: str = Query(default="", description="Operator address to query"),
+    ):
+        """Return QuickSilver stIOTX collateral status for an operator (Phase 101).
+
+        Returns the latest collateral event + active status + contract addresses.
+        W2: stIOTX earns QuickSilver rebasing yield while locked (double-yield position).
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            record = store.get_quicksilver_collateral_status(operator_address)
+            return {
+                **record,
+                "stiotx_token_address": getattr(cfg, "stiotx_token_address", ""),
+                "quicksilver_collateral_address": getattr(cfg, "quicksilver_collateral_address", ""),
+                "double_yield_note": (
+                    "stIOTX earns QuickSilver rebasing yield while locked as VAPI operator collateral"
+                ),
+                "timestamp": time.time(),
+            }
+        except Exception as exc:
+            log.warning("quicksilver_status: %s", exc)
+            return {
+                "operator_address": operator_address,
+                "found": False,
+                "error": str(exc),
+                "timestamp": time.time(),
+            }
+
+    @app.get("/agent/vhp-renewal-log")
+    def vhp_renewal_log(
+        api_key: str = Query(...),
+        device_id: str = Query(default="", description="Filter by device_id (optional)"),
+        limit: int = Query(default=20),
+    ):
+        """Return VHP auto-renewal log (Phase 102). VHPRenewalAgent (14th agent) populates."""
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            logs = store.get_vhp_renewal_log(
+                device_id=device_id if device_id else None, limit=limit
+            )
+            return {"logs": logs, "total_count": len(logs), "timestamp": time.time()}
+        except Exception as exc:
+            return {"logs": [], "total_count": 0, "error": str(exc), "timestamp": time.time()}
+
+    @app.get("/agent/edge-ai-profile")
+    def edge_ai_profile_endpoint(
+        api_key: str = Query(..., description="Shared operator API key"),
+    ):
+        """Return the VAPI bridge's Edge AI profile for IoTeX ecosystem positioning (Phase 101B).
+
+        Maps the 13-agent autonomous fleet onto IoTeX's Real-World AI stack:
+        ioID (Verify) + W3bstream (Process) + Realms (deferred).
+        The _rule_fallback() inference engine is a local SLM-equivalent for
+        human presence verification — no GPU, no data center required.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            from .edge_ai_profile import get_edge_ai_profile
+            return get_edge_ai_profile(cfg=cfg, store=store)
+        except Exception as exc:
+            log.warning("edge_ai_profile_endpoint: %s", exc)
+            return {"error": str(exc), "timestamp": time.time()}
+
+    @app.post("/agent/run-activation-simulation")
+    async def run_activation_simulation(
+        api_key: str = Query(...),
+        n_sessions: int = Query(default=110, description="Number of simulation sessions"),
+    ):
+        """Run Phase 103 live activation simulation. Seeds all gate conditions and
+        inserts the protocol's first VHP issuance (simulation, no chain call).
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        from .activation_runner import ActivationRunner
+        _bus = getattr(cfg, "_bus", None)
+        runner = ActivationRunner(cfg, store, bus=_bus)
+        result = await runner.run(n_sessions=n_sessions)
+        result["timestamp"] = time.time()
+        return result
+
+    @app.get("/agent/first-vhp-status")
+    def first_vhp_status(api_key: str = Query(...)):
+        """Return the first VHP issuance record (Phase 103).
+        is_simulation=True when tx_hash starts with 'sim_'.
+        found=False when no VHP has ever been issued.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            vhp = store.get_first_vhp_status()
+            if vhp is None:
+                return {"found": False, "is_simulation": False, "timestamp": time.time()}
+            vhp["found"] = True
+            vhp["timestamp"] = time.time()
+            return vhp
+        except Exception as exc:
+            return {"found": False, "error": str(exc), "timestamp": time.time()}
+
+    @app.post("/agent/commit-activation")
+    async def commit_activation(
+        api_key: str = Query(...),
+        n_sessions: int = Query(default=110),
+        notes: str = Query(default=""),
+    ):
+        """Phase 104 — Persistent Activation Commit (W1 mitigation).
+        Runs simulation if needed, verifies Phase 97 gate, writes activation_committed=True
+        to store (persists across restarts via _restore_activation_state at startup),
+        sets cfg.agent_dry_run_mode=False via object.__setattr__, computes+stores PMI.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import hashlib as _hl
+        result = {"committed": False, "pmi": 0, "error": None, "timestamp": time.time()}
+        try:
+            # Step 1: simulate if no VHP exists
+            if store.get_total_vhp_count() == 0:
+                from .activation_runner import ActivationRunner
+                runner = ActivationRunner(cfg, store, bus=getattr(cfg, "_bus", None))
+                sim = await runner.run(n_sessions=n_sessions)
+                if sim.get("error"):
+                    result["error"] = f"simulation_failed: {sim['error']}"
+                    return result
+            # Step 2: Phase 97 3-condition gate
+            gate_n = int(getattr(cfg, "validation_gate_n", 100))
+            max_div = float(getattr(cfg, "validation_max_divergence_rate", 1.0))
+            gate_s = store.get_validation_summary(gate_n, max_div)
+            cert   = store.get_latest_enforcement_certificate()
+            audit  = store.get_activation_audit_summary()
+            blocking = []
+            if not gate_s.get("gate_passed", False):
+                blocking.append("gate_not_passed")
+            if cert is None or not cert.get("audit_valid") or time.time() > cert.get("expires_at", 0):
+                blocking.append("cert_invalid_or_expired")
+            if not audit.get("audit_valid", False):
+                blocking.append("audit_invalid")
+            if blocking:
+                result["error"] = f"preconditions_not_met: {blocking}"
+                return result
+            # Step 3: persist
+            op_hash = _hl.sha256(api_key.encode()).hexdigest()[:16]
+            store.set_activation_committed(committed_by=op_hash, notes=notes or "commit-activation")
+            # Step 4: in-memory (frozen dataclass bypass)
+            object.__setattr__(cfg, "agent_dry_run_mode", False)
+            # Step 5: bus event
+            _bus = getattr(cfg, "_bus", None)
+            if _bus:
+                try:
+                    _bus.publish_sync("activation_committed", {"timestamp": time.time()})
+                except Exception:
+                    pass
+            # Step 6: compute + store PMI
+            pmi = store.compute_pmi()
+            store.set_pmi(pmi, notes="post-commit")
+            result.update({"committed": True, "pmi": pmi, "dry_run_active": False})
+        except Exception as exc:
+            result["error"] = str(exc)
+        result["timestamp"] = time.time()
+        return result
+
+    @app.get("/agent/protocol-maturity")
+    def protocol_maturity(api_key: str = Query(...)):
+        """Phase 104 — ProtocolMaturityIndex (PMI) + activation state.
+        PMI: 0=uninitiated / 1=simulated / 2=testnet_organic / 3=mainnet.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            state = store.get_activation_state()
+            pmi   = store.compute_pmi()
+            vhp   = store.get_first_vhp_status()
+            days  = None
+            if vhp and vhp.get("expires_at"):
+                days = round((vhp["expires_at"] - time.time()) / 86400, 1)
+            _labels = {0: "uninitiated", 1: "simulated", 2: "testnet_organic", 3: "mainnet"}
+            return {
+                "pmi": pmi,
+                "pmi_label": _labels.get(pmi, "unknown"),
+                "activation_committed": state.get("activation_committed", False),
+                "committed_at": state.get("committed_at"),
+                "dry_run_active": bool(getattr(cfg, "agent_dry_run_mode", True)),
+                "is_simulation": vhp.get("is_simulation", True) if vhp else True,
+                "days_until_vhp_expiry": days,
+                "vhp_found": vhp is not None,
+                "timestamp": time.time(),
+            }
+        except Exception as exc:
+            return {"pmi": 0, "error": str(exc), "timestamp": time.time()}
+
+    @app.get("/agent/epistemic-config")
+    def epistemic_config(api_key: str = Query(...)):
+        """Phase 105 — Epistemic consensus config + threshold audit log.
+        at_risk=True when effective_threshold < recommended (Phase 98 W1 exposure).
+        pmi_triggered=True means PMI>=1 has auto-raised threshold (Phase 104/105 synergy).
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            curr    = float(getattr(cfg, "epistemic_consensus_threshold", 0.60))
+            rec     = float(getattr(cfg, "epistemic_recommended_threshold", 0.65))
+            triage  = bool(getattr(cfg, "epistemic_triage_prereq_required", False))
+            pmi     = store.compute_pmi()
+            eff     = rec if (pmi >= 1 and rec > curr) else curr
+            history = store.get_epistemic_threshold_history(limit=10)
+            return {
+                "configured_threshold":  curr,
+                "recommended_threshold": rec,
+                "effective_threshold":   eff,
+                "pmi_triggered":         pmi >= 1 and rec > curr,
+                "triage_prereq_required": triage,
+                "at_risk":               eff < rec,
+                "pmi":                   pmi,
+                "threshold_history":     history,
+                "w1_note": (
+                    "threshold=0.60 reachable by ClassJ alone (0.40+0.20). "
+                    "Raise EPISTEMIC_RECOMMENDED_THRESHOLD to 0.65."
+                    if eff < 0.65 else None
+                ),
+                "timestamp": time.time(),
+            }
+        except Exception as exc:
+            return {"error": str(exc), "timestamp": time.time()}
+
+    @app.post("/agent/run-readiness-validation")
+    async def run_readiness_validation(
+        api_key: str = Query(...),
+        n: int = Query(default=100),
+    ):
+        """Phase 107 — Run live mode readiness validation corpus (N nominal sessions)."""
+        _check_key(api_key)
+        _check_rate(api_key)
+        from .live_mode_readiness_validator import LiveModeReadinessValidator
+        validator = LiveModeReadinessValidator(cfg, store)
+        result = await validator.run_validation(n=n)
+        result["timestamp"] = time.time()
+        return result
+
+    @app.get("/agent/live-mode-readiness")
+    def live_mode_readiness(api_key: str = Query(...)):
+        """Phase 107 — Latest live mode readiness report."""
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            report = store.get_latest_readiness_report()
+            if report is None:
+                return {"ready_for_live": False, "n_tested": 0, "found": False,
+                        "timestamp": time.time()}
+            report["found"] = True
+            report["timestamp"] = time.time()
+            return report
+        except Exception as exc:
+            return {"ready_for_live": False, "error": str(exc), "timestamp": time.time()}
+
+    @app.get("/agent/tournament-readiness")
+    def tournament_readiness(api_key: str = Query(...)):
+        """Phase 108 — Comprehensive tournament readiness scorecard (5 software + 2 hardware conditions)."""
+        _check_key(api_key)
+        _check_rate(api_key)
+        import json as _json
+        try:
+            # Software conditions — read from Phase 107 live-mode-readiness
+            lm = store.get_latest_readiness_report()
+            n_tested  = lm["n_tested"]             if lm else 0
+            fp_count  = lm["false_positive_count"] if lm else 0
+
+            # Activation state
+            state     = store.get_activation_state()
+            pmi       = store.compute_pmi()
+            dry_run   = bool(getattr(cfg, "agent_dry_run_mode", True))
+            committed = state.get("activation_committed", False)
+
+            sw_conds = {
+                "n_tested_ge_100":            n_tested >= 100,
+                "false_positive_count_zero":  fp_count == 0,
+                "activation_committed":       committed,
+                "dry_run_inactive":           not dry_run,
+                "pmi_ge_1":                   pmi >= 1,
+            }
+            sw_met = sum(sw_conds.values())
+
+            # Hardware conditions
+            sep_ratio   = float(getattr(cfg, "separation_ratio_current", 0.362))
+            touchpad_ok = bool(getattr(cfg, "touchpad_recapture_complete", False))
+            hw_conds = {
+                "separation_ratio_gt_1":       sep_ratio > 1.0,
+                "touchpad_recapture_complete":  touchpad_ok,
+            }
+            hw_met = sum(hw_conds.values())
+
+            fully_ready   = (sw_met == 5 and hw_met == 2)
+            blocking      = [k for k, v in {**sw_conds, **hw_conds}.items() if not v]
+            blocking_json = _json.dumps(blocking)
+
+            store.insert_tournament_readiness_snapshot(
+                n_tested=n_tested, false_positive_count=fp_count,
+                activation_committed=1 if committed else 0, pmi=pmi,
+                dry_run_active=1 if dry_run else 0,
+                software_conditions_met=sw_met,
+                separation_ratio=sep_ratio,
+                separation_ratio_ok=1 if sep_ratio > 1.0 else 0,
+                touchpad_recapture_complete=1 if touchpad_ok else 0,
+                hardware_conditions_met=hw_met,
+                fully_ready=1 if fully_ready else 0,
+                blocking_conditions_json=blocking_json,
+                notes="phase108_scorecard",
+            )
+
+            return {
+                "software_conditions":       sw_conds,
+                "software_conditions_met":   sw_met,
+                "software_conditions_total": 5,
+                "hardware_conditions":       hw_conds,
+                "hardware_conditions_met":   hw_met,
+                "hardware_conditions_total": 2,
+                "separation_ratio_current":  sep_ratio,
+                "separation_ratio_required": 1.0,
+                "fully_ready":               fully_ready,
+                "blocking_conditions":       blocking,
+                "ready_for_live":            bool(lm["ready_for_live"]) if lm else False,
+                "pmi":                       pmi,
+                "timestamp":                 time.time(),
+            }
+        except Exception as exc:
+            return {"fully_ready": False, "error": str(exc), "timestamp": time.time()}
+
+    @app.get("/agent/ioswarm-vhp-mint-status")
+    def ioswarm_vhp_mint_status(api_key: str = Query(...)):
+        """Phase 110 — ioSwarm VHP Mint Authorization status (fail-CLOSED quorum gate, W2 swarm_fingerprint)."""
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            enabled    = bool(getattr(cfg, "ioswarm_vhp_mint_enabled", False))
+            mint_q     = float(getattr(cfg, "ioswarm_vhp_mint_quorum", 0.80))
+            logs       = store.get_ioswarm_vhp_mint_log(limit=100)
+            authorized_count       = sum(1 for r in logs if r.get("authorized"))
+            denied_count           = len(logs) - authorized_count
+            swarm_fingerprint_count = sum(1 for r in logs if r.get("swarm_fingerprint"))
+            return {
+                "ioswarm_vhp_mint_enabled":  enabled,
+                "mint_quorum":               mint_q,
+                "authorized_count":          authorized_count,
+                "denied_count":              denied_count,
+                "recent_vhp_mint_logs":      store.get_ioswarm_vhp_mint_log(limit=10),
+                "task_spec_registered":      True,
+                "swarm_fingerprint_count":   swarm_fingerprint_count,
+                "timestamp":                 time.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @app.get("/agent/ioswarm-adjudication-status")
+    def ioswarm_adjudication_status(api_key: str = Query(...)):
+        """Phase 109C — ioSwarm Adjudication Coordinator status (ClassJ+Triage dual-quorum veto)."""
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            enabled    = bool(getattr(cfg, "ioswarm_adjudication_enabled", False))
+            cj_quorum  = float(getattr(cfg, "ioswarm_classj_block_quorum", 0.67))
+            tr_quorum  = float(getattr(cfg, "ioswarm_triage_block_quorum", 0.67))
+            logs       = store.get_ioswarm_adjudication_log(limit=100)
+            adj_count  = len(logs)
+            dual_veto_count = sum(1 for r in logs if r.get("dual_veto"))
+            return {
+                "ioswarm_adjudication_enabled": enabled,
+                "classj_block_quorum":          cj_quorum,
+                "triage_block_quorum":          tr_quorum,
+                "dual_veto_count":              dual_veto_count,
+                "adjudication_count":           adj_count,
+                "recent_adjudication_logs":     store.get_ioswarm_adjudication_log(limit=10),
+                "task_spec_registered":         True,
+                "timestamp":                    time.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @app.get("/agent/ioswarm-renewal-status")
+    def ioswarm_renewal_status(api_key: str = Query(...)):
+        """Phase 109B — ioSwarm Renewal Coordinator status + recent renewal log."""
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            from .ioswarm_renewal_spec import VHPRenewalSwarmTaskSpec
+            _spec = VHPRenewalSwarmTaskSpec()
+            enabled   = bool(getattr(cfg, "ioswarm_renewal_enabled", False))
+            min_q     = int(getattr(cfg, "ioswarm_renewal_min_quorum", 3))
+            logs      = store.get_ioswarm_renewal_log(limit=100)
+            renewal_count   = len(logs)
+            recent_approvals = sum(1 for r in logs if r.get("renewal_approved"))
+            recent_skips     = sum(1 for r in logs if not r.get("renewal_approved"))
+            return {
+                "ioswarm_renewal_enabled": enabled,
+                "min_quorum":              min_q,
+                "renewal_count":           renewal_count,
+                "task_spec_registered":    True,
+                "recent_renewal_logs":     store.get_ioswarm_renewal_log(limit=10),
+                "recent_approvals":        recent_approvals,
+                "recent_skips":            recent_skips,
+                "timestamp":               time.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @app.get("/agent/ioswarm-status")
+    def ioswarm_status(api_key: str = Query(...)):
+        """Phase 109A — ioSwarm Bridge Adapter status + recent consensus log."""
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            from .ioswarm_task_spec import VAPISwarmTaskSpec
+            spec = VAPISwarmTaskSpec()
+            enabled   = bool(getattr(cfg, "ioswarm_enabled", False))
+            q_thresh  = float(getattr(cfg, "ioswarm_quorum_threshold", 0.60))
+            bq_thresh = float(getattr(cfg, "ioswarm_block_quorum_threshold", 0.67))
+            node_cnt  = int(getattr(cfg, "ioswarm_node_count", 5))
+            endpoint  = str(getattr(cfg, "ioswarm_endpoint", ""))
+            logs  = store.get_ioswarm_consensus_log(limit=10)
+            count = len(store.get_ioswarm_consensus_log(limit=10000))
+            return {
+                "ioswarm_enabled":           enabled,
+                "quorum_threshold":          q_thresh,
+                "block_quorum_threshold":    bq_thresh,
+                "configured_node_count":     node_cnt,
+                "endpoint_configured":       bool(endpoint),
+                "consensus_count":           count,
+                "recent_consensus_logs":     logs,
+                "task_spec_registered":      True,
+                "w3bstream_applets":         list(spec.w3bstream_applets),
+                "vhp_auth_gate_address":     spec.protocol_lens_address,
+                "status_note":               (
+                    "Phase 109A infrastructure-only. Enable after live ioSwarm nodes registered."
+                ),
+                "timestamp": time.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     return app

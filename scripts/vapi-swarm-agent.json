@@ -1,0 +1,45 @@
+{
+  "task_id": "vapi_pitl_adjudication_v1",
+  "task_version": "1.0.0-phase109a",
+  "executor": "vapi_bridge",
+  "status": "phase109a_infrastructure_only",
+  "input_schema": {
+    "device_id": "bytes32",
+    "record_hash": "bytes32",
+    "inference_code": "uint8",
+    "evidence_json": "string"
+  },
+  "output_schema": {
+    "verdict": "string",
+    "confidence": "float",
+    "evidence_hash": "bytes32",
+    "commitment_hash": "bytes32"
+  },
+  "quorum_config": {
+    "general_threshold": 0.6,
+    "block_threshold": 0.67,
+    "tie_resolution": "HOLD",
+    "w1_note": "BLOCK requires block_threshold; ties and insufficient quorum -> HOLD"
+  },
+  "reward_condition": "verdict_matches_quorum AND trailing_false_positive_rate < 0.01 AND consecutive_clean >= 5",
+  "vhp_authorization_gate": {
+    "contract": "VAPIProtocolLens",
+    "method": "isFullyEligible(bytes32)",
+    "address": "0x1972bf756aFE0FFCfaF9842e2FbBb2B084352EAf",
+    "error": "VAPI: human presence required",
+    "vhp_contract": "0xD3B2E259A4B69EF08e263e3A57B2507B7eac3dcF"
+  },
+  "w3bstream_applets": [
+    "validate_poac_record",
+    "process_gsr_packet"
+  ],
+  "chain": {
+    "network": "iotex_testnet",
+    "chain_id": 4690
+  },
+  "phase_notes": {
+    "current": "109A: infrastructure only, not yet registered with live ioSwarm nodes",
+    "next": "109B: VHPRenewalAgent migrated as first task spec",
+    "roadmap": "110: VHP as universal IoTeX DePIN human authorization primitive"
+  }
+}

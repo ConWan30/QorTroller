@@ -756,14 +756,41 @@ class DualSenseReader:
         snap.accel_y = raw_ay / self._accel_scale
         snap.accel_z = raw_az / self._accel_scale
 
-        # Touchpad
-        if ds.state.trackPadTouch0.isActive:
-            snap.touch0_x = ds.state.trackPadTouch0.X
-            snap.touch0_y = ds.state.trackPadTouch0.Y
+        # Touchpad — pydualsense isActive is always False on DualShock Edge (bit 7 of
+        # inReport[33] never clears). Use X/Y movement between frames as active proxy:
+        # when not touching, X/Y freezes at last position; when swiping, X/Y tracks finger.
+        _t0x = ds.state.trackPadTouch0.X
+        _t0y = ds.state.trackPadTouch0.Y
+        # DEBUG: log touch coords every 100 frames to temp file
+        if self.frame_counter % 100 == 0:
+            try:
+                import tempfile, os
+                _dbg = os.path.join(tempfile.gettempdir(), "vapi_touch_debug.txt")
+                with open(_dbg, "a") as _f:
+                    _f.write(f"frame={self.frame_counter} t0x={_t0x} t0y={_t0y} isActive={ds.state.trackPadTouch0.isActive}\n")
+            except Exception:
+                pass
+        _t0_moved = (
+            _t0x != getattr(self, "_last_t0x", -1)
+            or _t0y != getattr(self, "_last_t0y", -1)
+        ) and (_t0x != 0 or _t0y != 0)
+        self._last_t0x = _t0x
+        self._last_t0y = _t0y
+        if ds.state.trackPadTouch0.isActive or _t0_moved:
+            snap.touch0_x = _t0x
+            snap.touch0_y = _t0y
             snap.touch_active |= 0x01
-        if ds.state.trackPadTouch1.isActive:
-            snap.touch1_x = ds.state.trackPadTouch1.X
-            snap.touch1_y = ds.state.trackPadTouch1.Y
+        _t1x = ds.state.trackPadTouch1.X
+        _t1y = ds.state.trackPadTouch1.Y
+        _t1_moved = (
+            _t1x != getattr(self, "_last_t1x", -1)
+            or _t1y != getattr(self, "_last_t1y", -1)
+        ) and (_t1x != 0 or _t1y != 0)
+        self._last_t1x = _t1x
+        self._last_t1y = _t1y
+        if ds.state.trackPadTouch1.isActive or _t1_moved:
+            snap.touch1_x = _t1x
+            snap.touch1_y = _t1y
             snap.touch_active |= 0x02
 
         # Battery — Edge: ds.battery.Level; standard: ds.state.battery.Level

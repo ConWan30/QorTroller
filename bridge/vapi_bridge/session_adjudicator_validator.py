@@ -1,0 +1,244 @@
+"""Phase 75 — SessionAdjudicatorValidationAgent.
+
+Autonomous dry-run gate: cross-validates every SessionAdjudicator LLM ruling
+against the deterministic _rule_fallback() engine. Tracks consecutive_clean count.
+
+When consecutive_clean >= cfg.validation_gate_n (default 100) with zero divergences
+in that window, emits 'dry_run_gate_passed' agent_event — the operator can then safely
+set AGENT_DRY_RUN=false via POST /agent/config.
+
+Divergence criterion: verdicts differ AND |LLM_confidence - fallback_confidence| > threshold.
+
+Design: polls agent_rulings table directly for entries not yet in ruling_validation_log
+(LEFT JOIN). No modification to session_adjudicator.py required.
+
+Never raises — all errors logged, agent continues.
+"""
+
+import asyncio
+import json
+import logging
+import time
+
+log = logging.getLogger(__name__)
+
+_POLL_INTERVAL_S = 300  # 5 minutes
+
+
+def _rule_fallback(evidence: dict) -> tuple:
+    """Deterministic rule-based verdict (mirrors SessionAdjudicator._rule_fallback).
+
+    This is the validation oracle — it must stay in sync with the source truth in
+    session_adjudicator.py. If the rules there change, update here identically.
+    """
+    if evidence.get("hard_cheat_codes"):
+        return "BLOCK", 0.9, "Hard cheat code detected (rule fallback)."
+    if evidence.get("enrollment_status") == "eligible":
+        return "CERTIFY", 0.8, "Enrollment threshold met (rule fallback)."
+    if evidence.get("risk_label") == "critical":
+        return "HOLD", 0.7, "Critical risk trajectory (rule fallback)."
+    if evidence.get("advisory_codes"):
+        return "FLAG", 0.5, "Advisory detection(s) (rule fallback)."
+    return "FLAG", 0.05, "No anomalies detected (rule fallback)."
+
+
+def _extract_divergence_fields(evidence: dict) -> str:
+    """Return JSON summary of non-nominal evidence fields that may explain divergence.
+
+    Called only when divergence=True. Captures which evidence signals are non-standard
+    so operators can understand why the LLM deviated from _rule_fallback.
+    W1 mitigation (Phase 88): without this, divergence reasons are invisible.
+    Returns "{}" for fully nominal evidence (expected baseline for real human sessions).
+    """
+    fields = {}
+    if evidence.get("hard_cheat_codes"):
+        fields["hard_cheat_codes"] = evidence["hard_cheat_codes"]
+    if evidence.get("advisory_codes"):
+        fields["advisory_codes"] = evidence["advisory_codes"]
+    risk = evidence.get("class_j_ml_bot_risk")
+    if risk and risk != "LOW":
+        fields["class_j_ml_bot_risk"] = risk
+    if evidence.get("ml_bot_candidate"):
+        fields["ml_bot_candidate"] = True
+    if evidence.get("ceremony_integrity_failed"):
+        fields["ceremony_integrity_failed"] = True
+    status = evidence.get("enrollment_status")
+    if status and status != "eligible":
+        fields["enrollment_status"] = status
+    if evidence.get("risk_label"):
+        fields["risk_label"] = evidence["risk_label"]
+    return json.dumps(fields) if fields else "{}"
+
+
+class SessionAdjudicatorValidationAgent:
+    """Cross-validates LLM rulings against rule fallback for dry-run gate (Phase 75).
+
+    Polls agent_rulings every 5 minutes for entries not yet in ruling_validation_log.
+    Tracks consecutive_clean toward the validation_gate_n threshold.
+    Once threshold is reached with zero divergences, emits dry_run_gate_passed event.
+    """
+
+    def __init__(self, cfg, store, bus=None) -> None:
+        self._cfg = cfg
+        self._store = store
+        self._bus = bus
+        self._threshold = float(getattr(cfg, "validation_divergence_threshold", 0.3))
+        self._gate_n = int(getattr(cfg, "validation_gate_n", 100))
+        self._gate_already_emitted = False
+
+    async def run_event_consumer(self) -> None:
+        """Background loop — polls for unvalidated rulings every 5 minutes."""
+        log.info(
+            "SessionAdjudicatorValidationAgent started (Phase 75) "
+            "threshold=%.2f gate_n=%d",
+            self._threshold, self._gate_n,
+        )
+        _consecutive_failures = 0
+        while True:
+            try:
+                await asyncio.sleep(_POLL_INTERVAL_S)
+                await self._consume_pending_rulings()
+                _consecutive_failures = 0
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                _consecutive_failures += 1
+                if _consecutive_failures >= 3:
+                    log.error(
+                        "SessionAdjudicatorValidationAgent: %d consecutive failures: %s",
+                        _consecutive_failures, exc,
+                    )
+                else:
+                    log.warning("SessionAdjudicatorValidationAgent: cycle error: %s", exc)
+
+    async def _consume_pending_rulings(self) -> None:
+        """Fetch unvalidated rulings (not yet in ruling_validation_log) and validate each."""
+        try:
+            with self._store._conn() as conn:
+                rows = conn.execute(
+                    "SELECT ar.* FROM agent_rulings ar "
+                    "LEFT JOIN ruling_validation_log rvl ON ar.id = rvl.ruling_id "
+                    "WHERE rvl.id IS NULL "
+                    "ORDER BY ar.created_at ASC LIMIT 50"
+                ).fetchall()
+        except Exception as exc:
+            log.warning("SessionAdjudicatorValidationAgent: query failed: %s", exc)
+            return
+
+        if not rows:
+            return
+
+        log.info(
+            "SessionAdjudicatorValidationAgent: validating %d unvalidated ruling(s)",
+            len(rows),
+        )
+        for row in rows:
+            try:
+                await self._validate_ruling(dict(row))
+            except Exception as exc:
+                log.warning(
+                    "SessionAdjudicatorValidationAgent: validation error ruling_id=%s: %s",
+                    row["id"] if hasattr(row, "__getitem__") else "?", exc,
+                )
+
+    async def _validate_ruling(self, row: dict) -> None:
+        """Cross-validate one ruling and record in ruling_validation_log."""
+        ruling_id = row["id"]
+        llm_verdict = row.get("verdict", "FLAG")
+        llm_confidence = float(row.get("confidence", 0.5))
+        device_id = row.get("device_id", "")
+
+        try:
+            evidence = json.loads(row.get("evidence_json") or "{}")
+        except (json.JSONDecodeError, TypeError):
+            evidence = {}
+
+        fb_verdict, fb_confidence, _ = _rule_fallback(evidence)
+
+        verdicts_differ = llm_verdict != fb_verdict
+        delta_conf = abs(llm_confidence - fb_confidence)
+        divergence = verdicts_differ and (delta_conf > self._threshold)
+
+        if divergence:
+            log.warning(
+                "SessionAdjudicatorValidationAgent: DIVERGENCE ruling_id=%d "
+                "device=%s llm=%s(%.2f) fallback=%s(%.2f) delta=%.2f",
+                ruling_id, device_id[:12],
+                llm_verdict, llm_confidence,
+                fb_verdict, fb_confidence, delta_conf,
+            )
+            self._store.write_agent_event(
+                event_type="validation_divergence",
+                payload=json.dumps({
+                    "ruling_id": ruling_id,
+                    "device_id": device_id,
+                    "llm_verdict": llm_verdict,
+                    "fallback_verdict": fb_verdict,
+                    "delta_confidence": round(delta_conf, 4),
+                }),
+                source="session_adjudicator_validator",
+                target="bridge_agent",
+                device_id=device_id,
+            )
+
+        # Phase 88: extract divergence reason for operator insight (W1 mitigation)
+        divergence_reason = (
+            _extract_divergence_fields(evidence) if divergence else None
+        )
+
+        self._store.insert_validation_record(
+            ruling_id=ruling_id,
+            device_id=device_id,
+            llm_verdict=llm_verdict,
+            fallback_verdict=fb_verdict,
+            llm_confidence=llm_confidence,
+            fallback_confidence=fb_confidence,
+            divergence=int(divergence),
+            divergence_reason=divergence_reason,
+        )
+
+        # Check gate condition (emit once per bridge lifetime)
+        # Phase 78: pass max_divergence_rate so gate logic is consistent with operator_api
+        _max_rate = float(getattr(self._cfg, "validation_max_divergence_rate", 1.0))
+        if not self._gate_already_emitted:
+            summary = self._store.get_validation_summary(self._gate_n, _max_rate)
+            if summary["gate_passed"]:
+                self._gate_already_emitted = True
+                self._store.write_agent_event(
+                    event_type="dry_run_gate_passed",
+                    payload=json.dumps({
+                        "consecutive_clean": summary["consecutive_clean"],
+                        "divergence_count": summary["divergence_count"],
+                        "gate_n": self._gate_n,
+                        "recommendation": (
+                            "Set AGENT_DRY_RUN=false via POST /agent/config "
+                            "to enable live enforcement."
+                        ),
+                    }),
+                    source="session_adjudicator_validator",
+                    target="bridge_agent",
+                    device_id="",
+                )
+                log.info(
+                    "SessionAdjudicatorValidationAgent: DRY-RUN GATE PASSED "
+                    "consecutive_clean=%d — safe to set AGENT_DRY_RUN=false",
+                    summary["consecutive_clean"],
+                )
+                # Phase 79: also publish to bus for LiveModeActivationAgent
+                if self._bus is not None:
+                    import asyncio as _asyncio
+                    try:
+                        _asyncio.ensure_future(self._bus.publish(
+                            "dry_run_gate_passed",
+                            {
+                                "consecutive_clean": summary["consecutive_clean"],
+                                "divergence_count": summary["divergence_count"],
+                                "gate_n": self._gate_n,
+                            },
+                            "session_adjudicator_validator",
+                        ))
+                    except Exception as _bus_exc:
+                        log.debug(
+                            "SessionAdjudicatorValidationAgent: bus publish failed: %s",
+                            _bus_exc,
+                        )

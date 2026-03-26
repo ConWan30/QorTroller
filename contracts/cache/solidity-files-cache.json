@@ -2,8 +2,8 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\BountyMarket.sol": {
-      "lastModificationDate": 1772162061323,
-      "contentHash": "80b9fda5ab1b6f3490f9d2d88e0a1eaf",
+      "lastModificationDate": 1773257856377,
+      "contentHash": "2e6abcf0e570e84b8f0ffd6e2b5f2e8c",
       "sourceName": "contracts/BountyMarket.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -45,8 +45,8 @@
       ]
     },
     "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\PoACVerifier.sol": {
-      "lastModificationDate": 1772771496125,
-      "contentHash": "2f7ae02d0753d5c00bb4de5bd9fefc56",
+      "lastModificationDate": 1773257901041,
+      "contentHash": "80bb5d4c9a032b598a9c5c056a99830c",
       "sourceName": "contracts/PoACVerifier.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -86,8 +86,8 @@
       ]
     },
     "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\DeviceRegistry.sol": {
-      "lastModificationDate": 1771776722384,
-      "contentHash": "200bcd6ac7e6b628e0818755263c1413",
+      "lastModificationDate": 1773257856377,
+      "contentHash": "f37d612edacc164e161808b8dd688185",
       "sourceName": "contracts/DeviceRegistry.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -126,8 +126,8 @@
       ]
     },
     "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\node_modules\\@openzeppelin\\contracts\\utils\\ReentrancyGuard.sol": {
-      "lastModificationDate": 1771463090345,
-      "contentHash": "190613e556d509d9e9a0ea43dc5d891d",
+      "lastModificationDate": 1773257861013,
+      "contentHash": "cd2d6c05f08c57db756caa40f32b6a89",
       "sourceName": "@openzeppelin/contracts/utils/ReentrancyGuard.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -163,8 +163,8 @@
       ]
     },
     "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\node_modules\\@openzeppelin\\contracts\\access\\Ownable.sol": {
-      "lastModificationDate": 1771463090245,
-      "contentHash": "d3c790edc9ccf808a17c5a6cd13614fd",
+      "lastModificationDate": 1773257860812,
+      "contentHash": "f665fc4a91af3170f86727fc49cc091f",
       "sourceName": "@openzeppelin/contracts/access/Ownable.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -202,8 +202,8 @@
       ]
     },
     "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\node_modules\\@openzeppelin\\contracts\\utils\\Context.sol": {
-      "lastModificationDate": 1771463087875,
-      "contentHash": "67bfbc07588eb8683b3fd8f6f909563e",
+      "lastModificationDate": 1773257861009,
+      "contentHash": "2783b901218e982baedae531a748ed8d",
       "sourceName": "@openzeppelin/contracts/utils/Context.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -239,8 +239,8 @@
       ]
     },
     "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\test\\PoACVerifierTestable.sol": {
-      "lastModificationDate": 1771611281636,
-      "contentHash": "e9daf6fa55acc055ed0446ddcfa3750d",
+      "lastModificationDate": 1773257856388,
+      "contentHash": "509cbfb48ecb8ed3271cf22bc05237fb",
       "sourceName": "contracts/test/PoACVerifierTestable.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -278,8 +278,8 @@
       ]
     },
     "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\TeamProofAggregator.sol": {
-      "lastModificationDate": 1771793079381,
-      "contentHash": "846ed9a67ee6af3b77c69d5351d9a563",
+      "lastModificationDate": 1773257856384,
+      "contentHash": "b784bfb7013b71fac9990e5896b70989",
       "sourceName": "contracts/TeamProofAggregator.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -318,8 +318,8 @@
       ]
     },
     "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\SkillOracle.sol": {
-      "lastModificationDate": 1771701717953,
-      "contentHash": "0ab098e366bf6436a36b3d3da320994f",
+      "lastModificationDate": 1773257856384,
+      "contentHash": "e7b0a2a10c8cd45d23d12bb63f747020",
       "sourceName": "contracts/SkillOracle.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -359,8 +359,8 @@
       ]
     },
     "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\ProgressAttestation.sol": {
-      "lastModificationDate": 1771792383417,
-      "contentHash": "4e26ad2b08d5947a5e86312ca8e93f50",
+      "lastModificationDate": 1773257856383,
+      "contentHash": "200dbf4ec2d5a7821c59b8f19d01e958",
       "sourceName": "contracts/ProgressAttestation.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -399,8 +399,8 @@
       ]
     },
     "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\TieredDeviceRegistry.sol": {
-      "lastModificationDate": 1771776725794,
-      "contentHash": "6f2c89e4a6992c3c6f4bf47e52d88b2e",
+      "lastModificationDate": 1773257856387,
+      "contentHash": "6f6d73ecfe746ded20b72fcc1fad3458",
       "sourceName": "contracts/TieredDeviceRegistry.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -438,8 +438,8 @@
       ]
     },
     "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\test\\TieredDeviceRegistryV2Testable.sol": {
-      "lastModificationDate": 1771746189560,
-      "contentHash": "d1bc3498d01a06b5ed828ce96c752946",
+      "lastModificationDate": 1773257856388,
+      "contentHash": "722c3ac1e7fbd2a0f1c4f053ab33515f",
       "sourceName": "contracts/test/TieredDeviceRegistryV2Testable.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -477,8 +477,8 @@
       ]
     },
     "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\TeamProofAggregatorZK.sol": {
-      "lastModificationDate": 1771816951778,
-      "contentHash": "320274111caf592543c59300e77cfbc0",
+      "lastModificationDate": 1773257856385,
+      "contentHash": "8c515d137d4b00d9cdc8a5537d2c379a",
       "sourceName": "contracts/TeamProofAggregatorZK.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -517,8 +517,8 @@
       ]
     },
     "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\TeamProofAggregatorZKTestable.sol": {
-      "lastModificationDate": 1771816962133,
-      "contentHash": "a4a1c3153d6af8a99ab605f01078af5b",
+      "lastModificationDate": 1773257856386,
+      "contentHash": "5d800b79244a6c41cdf8984e605588e1",
       "sourceName": "contracts/TeamProofAggregatorZKTestable.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -556,8 +556,8 @@
       ]
     },
     "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\ITeamProofVerifier.sol": {
-      "lastModificationDate": 1771816896368,
-      "contentHash": "e70abdd46b6af92c8b6f6a87afe153d8",
+      "lastModificationDate": 1773257856381,
+      "contentHash": "ecf23b374594dc48af5780d1bae51501",
       "sourceName": "contracts/ITeamProofVerifier.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -593,8 +593,8 @@
       ]
     },
     "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\test\\MockTeamProofVerifier.sol": {
-      "lastModificationDate": 1771818973506,
-      "contentHash": "3fffcfcff881b96ad67d1e2e49677187",
+      "lastModificationDate": 1773257856388,
+      "contentHash": "1cee8176f14bb9b6abfcf5bfecbf6595",
       "sourceName": "contracts/test/MockTeamProofVerifier.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -632,8 +632,8 @@
       ]
     },
     "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\PHGRegistry.sol": {
-      "lastModificationDate": 1772161661520,
-      "contentHash": "759dfc11151512035ce5787e3277cf7c",
+      "lastModificationDate": 1773257856381,
+      "contentHash": "6b7f0ed957a47a09d820d18edbdca85a",
       "sourceName": "contracts/PHGRegistry.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -669,8 +669,8 @@
       ]
     },
     "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\TournamentGate.sol": {
-      "lastModificationDate": 1771984276198,
-      "contentHash": "db360096a40f2d8e2596bf96a05c618e",
+      "lastModificationDate": 1773257856387,
+      "contentHash": "fd205ae6946b55518472720bdd5e79be",
       "sourceName": "contracts/TournamentGate.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -708,8 +708,8 @@
       ]
     },
     "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\IdentityContinuityRegistry.sol": {
-      "lastModificationDate": 1772107230696,
-      "contentHash": "e279f9b0bc34316d873a2c8c9505372c",
+      "lastModificationDate": 1773257856381,
+      "contentHash": "9bb5bfc3e287a140fa454ba961d1bb52",
       "sourceName": "contracts/IdentityContinuityRegistry.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -747,8 +747,8 @@
       ]
     },
     "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\TournamentGateV2.sol": {
-      "lastModificationDate": 1772161948688,
-      "contentHash": "757b00cada01d12453220f6605c32db9",
+      "lastModificationDate": 1773257856388,
+      "contentHash": "cff8dff82e578e6865088895841e7419",
       "sourceName": "contracts/TournamentGateV2.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -824,8 +824,8 @@
       ]
     },
     "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\FederatedThreatRegistry.sol": {
-      "lastModificationDate": 1772302411406,
-      "contentHash": "4d64ddf8f17fd3472b5a47a7ba5f0de0",
+      "lastModificationDate": 1773976759445,
+      "contentHash": "968c0a340264d9d1fa463d6a0e6422dd",
       "sourceName": "contracts/FederatedThreatRegistry.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -861,8 +861,8 @@
       ]
     },
     "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\PHGCredential.sol": {
-      "lastModificationDate": 1772771473031,
-      "contentHash": "e01126608b57e48147f0fabd5cfa66a1",
+      "lastModificationDate": 1773257901037,
+      "contentHash": "dc9f497e2def0cdf69fe1a36ef9a1b7d",
       "sourceName": "contracts/PHGCredential.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -898,8 +898,8 @@
       ]
     },
     "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\TournamentGateV3.sol": {
-      "lastModificationDate": 1772287804549,
-      "contentHash": "ddecad86291a0582bf0e33fe227fae43",
+      "lastModificationDate": 1773257856388,
+      "contentHash": "bf81e48dc9fdfe4bac07b2e61c34f8bf",
       "sourceName": "contracts/TournamentGateV3.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -938,8 +938,8 @@
       ]
     },
     "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\PitlSessionProofVerifier.sol": {
-      "lastModificationDate": 1772989113303,
-      "contentHash": "f37a72f44fe7230410de35dc416e8250",
+      "lastModificationDate": 1773257901039,
+      "contentHash": "1f022e185a36a1be65df88d60b4c784e",
       "sourceName": "contracts/PitlSessionProofVerifier.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -972,6 +972,1506 @@
       ],
       "artifacts": [
         "PitlSessionProofVerifier"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\PITLTournamentPassport.sol": {
+      "lastModificationDate": 1773593108360,
+      "contentHash": "7e6558e66e453283ea9d24285c367678",
+      "sourceName": "contracts/PITLTournamentPassport.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "IPITLSessionRegistry",
+        "ITournamentPassportVerifier",
+        "IVAPIioIDRegistry",
+        "PITLTournamentPassport"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\TournamentPassportVerifier.sol": {
+      "lastModificationDate": 1773714149515,
+      "contentHash": "ae366d8f2d96017fc2a93be71c1cf2ac",
+      "sourceName": "contracts/TournamentPassportVerifier.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        ">=0.7.0 <0.9.0"
+      ],
+      "artifacts": [
+        "TournamentPassportVerifier"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\VAPIioIDRegistry.sol": {
+      "lastModificationDate": 1773593077971,
+      "contentHash": "73ffecf5d4e8880b902098a250d3f6aa",
+      "sourceName": "contracts/VAPIioIDRegistry.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "VAPIioIDRegistry"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\PITLSessionRegistryV2.sol": {
+      "lastModificationDate": 1773712788698,
+      "contentHash": "f33dbe1500d5220e187c68b58cbcd54c",
+      "sourceName": "contracts/PITLSessionRegistryV2.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "IPITLSessionVerifierV2",
+        "PITLSessionRegistryV2"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\PitlSessionProofVerifierV2.sol": {
+      "lastModificationDate": 1773714046752,
+      "contentHash": "1f4e7a0ec08b7674c8c785a15a252e4b",
+      "sourceName": "contracts/PitlSessionProofVerifierV2.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        ">=0.7.0 <0.9.0"
+      ],
+      "artifacts": [
+        "PitlSessionProofVerifierV2"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\RulingRegistry.sol": {
+      "lastModificationDate": 1773835782758,
+      "contentHash": "28ffc6e3abf4031a09567d1c48a7099e",
+      "sourceName": "contracts/RulingRegistry.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "RulingRegistry"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\CeremonyRegistry.sol": {
+      "lastModificationDate": 1773875923517,
+      "contentHash": "05fe447954eb99979c2e46f778ded78c",
+      "sourceName": "contracts/CeremonyRegistry.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "CeremonyRegistry"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\DataSovereigntyRegistry.sol": {
+      "lastModificationDate": 1773896746557,
+      "contentHash": "478c0ec0f48b90194d79d6d3e3c5d726",
+      "sourceName": "contracts/DataSovereigntyRegistry.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "DataSovereigntyRegistry"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\HumanityOracle.sol": {
+      "lastModificationDate": 1773896768599,
+      "contentHash": "76cadf6e6d6ce6afee439d12a33bfa75",
+      "sourceName": "contracts/HumanityOracle.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "HumanityOracle"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\PassportOracle.sol": {
+      "lastModificationDate": 1773896807370,
+      "contentHash": "cf8aea6b7dd3ad12446370636c91b4e3",
+      "sourceName": "contracts/PassportOracle.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "PassportOracle"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\RulingOracle.sol": {
+      "lastModificationDate": 1773896790128,
+      "contentHash": "e3e83a89161f81b647fc788894498af9",
+      "sourceName": "contracts/RulingOracle.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "RulingOracle"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\VAPIDataMarketplace.sol": {
+      "lastModificationDate": 1773896920846,
+      "contentHash": "50c00a1842533528ad29396821665754",
+      "sourceName": "contracts/VAPIDataMarketplace.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "IDataSovereigntyRegistry",
+        "VAPIDataMarketplace"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\VAPIRewardDistributor.sol": {
+      "lastModificationDate": 1773896856429,
+      "contentHash": "0726023b305dcff006058914df205c58",
+      "sourceName": "contracts/VAPIRewardDistributor.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "IERC20",
+        "VAPIRewardDistributor"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\VAPIGovernanceTimelock.sol": {
+      "lastModificationDate": 1773962605239,
+      "contentHash": "158414dc649c8fa4c06490d649a9f5db",
+      "sourceName": "contracts/VAPIGovernanceTimelock.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "VAPIGovernanceTimelock"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\VAPIProtocolLens.sol": {
+      "lastModificationDate": 1773962598475,
+      "contentHash": "3c4e7ae1f117fef3c406ed96e4d4839c",
+      "sourceName": "contracts/VAPIProtocolLens.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "IHumanityOracle",
+        "IPassportOracle",
+        "IRulingOracle",
+        "IVAPIRewardDistributor",
+        "VAPIProtocolLens"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\test\\MockRevertingRulingOracle.sol": {
+      "lastModificationDate": 1773962639786,
+      "contentHash": "fe7258b19907592851a458d6ac923721",
+      "sourceName": "contracts/test/MockRevertingRulingOracle.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "MockRevertingRulingOracle"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\GateAttestationAnchor.sol": {
+      "lastModificationDate": 1774053453281,
+      "contentHash": "59c519822e6daf8705e7e6cf4b8d8fd3",
+      "sourceName": "contracts/GateAttestationAnchor.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "GateAttestationAnchor"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\node_modules\\@openzeppelin\\contracts\\token\\ERC20\\ERC20.sol": {
+      "lastModificationDate": 1773257860984,
+      "contentHash": "433b9ff827dda3fff384a8bfb61dba87",
+      "sourceName": "@openzeppelin/contracts/token/ERC20/ERC20.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "./IERC20.sol",
+        "./extensions/IERC20Metadata.sol",
+        "../../utils/Context.sol",
+        "../../interfaces/draft-IERC6093.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "ERC20"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\node_modules\\@openzeppelin\\contracts\\interfaces\\draft-IERC6093.sol": {
+      "lastModificationDate": 1773257860962,
+      "contentHash": "74f382a9e878a0ef61ce9973df2e1c7d",
+      "sourceName": "@openzeppelin/contracts/interfaces/draft-IERC6093.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        ">=0.8.4"
+      ],
+      "artifacts": [
+        "IERC1155Errors",
+        "IERC20Errors",
+        "IERC721Errors"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\node_modules\\@openzeppelin\\contracts\\token\\ERC20\\IERC20.sol": {
+      "lastModificationDate": 1773257860986,
+      "contentHash": "a00cf658e29421979ba74ec1db151c1a",
+      "sourceName": "@openzeppelin/contracts/token/ERC20/IERC20.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        ">=0.4.16"
+      ],
+      "artifacts": [
+        "IERC20"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\node_modules\\@openzeppelin\\contracts\\token\\ERC20\\extensions\\IERC20Metadata.sol": {
+      "lastModificationDate": 1773257860991,
+      "contentHash": "7e10cffb8881a54674e96fee07b2649f",
+      "sourceName": "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "../IERC20.sol"
+      ],
+      "versionPragmas": [
+        ">=0.6.2"
+      ],
+      "artifacts": [
+        "IERC20Metadata"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\node_modules\\@openzeppelin\\contracts\\token\\ERC20\\extensions\\ERC20Pausable.sol": {
+      "lastModificationDate": 1773257860988,
+      "contentHash": "9df137d3ca3d147edaf1945d46eeeb9c",
+      "sourceName": "@openzeppelin/contracts/token/ERC20/extensions/ERC20Pausable.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "../ERC20.sol",
+        "../../../utils/Pausable.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "ERC20Pausable"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\node_modules\\@openzeppelin\\contracts\\utils\\Pausable.sol": {
+      "lastModificationDate": 1773257861013,
+      "contentHash": "63dc0763d0f6cbfc5d485ac7488f49cf",
+      "sourceName": "@openzeppelin/contracts/utils/Pausable.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "../utils/Context.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "Pausable"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\VAPIToken.sol": {
+      "lastModificationDate": 1774109715889,
+      "contentHash": "7d2d649a3803aad3ff7d2d5c04554d4f",
+      "sourceName": "contracts/VAPIToken.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts/token/ERC20/extensions/ERC20Pausable.sol",
+        "@openzeppelin/contracts/access/Ownable.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "VAPIToken"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\VAPIOperatorRegistry.sol": {
+      "lastModificationDate": 1774109859006,
+      "contentHash": "33d23dd45768e8cce316559ca41bbd85",
+      "sourceName": "contracts/VAPIOperatorRegistry.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts/utils/ReentrancyGuard.sol",
+        "@openzeppelin/contracts/access/Ownable.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "IVAPIToken",
+        "VAPIOperatorRegistry"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\VAPIHardwareCertRegistry.sol": {
+      "lastModificationDate": 1774109882326,
+      "contentHash": "1570d5e46939dd5d7ecdd786551981be",
+      "sourceName": "contracts/VAPIHardwareCertRegistry.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts/access/Ownable.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "IVAPIHardwareToken",
+        "VAPIHardwareCertRegistry"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\VAPIGSRRegistry.sol": {
+      "lastModificationDate": 1774111064823,
+      "contentHash": "530bc3f1392de3e3e998a3258fb17dae",
+      "sourceName": "contracts/VAPIGSRRegistry.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts/access/Ownable.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "VAPIGSRRegistry"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\VAPIVerifiedHumanProofBridge.sol": {
+      "lastModificationDate": 1774112090050,
+      "contentHash": "dc522cf7eb56cbda10bc7cff2a71f4c5",
+      "sourceName": "contracts/VAPIVerifiedHumanProofBridge.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts/access/Ownable.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "VAPIVerifiedHumanProofBridge"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\VAPIVerifiedHumanProof.sol": {
+      "lastModificationDate": 1774112064040,
+      "contentHash": "987994d84ce2ca4fb8acdf5cc205315e",
+      "sourceName": "contracts/VAPIVerifiedHumanProof.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts/access/Ownable.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "VAPIVerifiedHumanProof"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\VAPIQuickSilverCollateral.sol": {
+      "lastModificationDate": 1774119871530,
+      "contentHash": "0898a82e53c11073bb45369ee183ad91",
+      "sourceName": "contracts/VAPIQuickSilverCollateral.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts/token/ERC20/IERC20.sol",
+        "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol",
+        "@openzeppelin/contracts/access/Ownable.sol",
+        "@openzeppelin/contracts/utils/ReentrancyGuard.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "VAPIQuickSilverCollateral"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\node_modules\\@openzeppelin\\contracts\\token\\ERC20\\utils\\SafeERC20.sol": {
+      "lastModificationDate": 1773257860993,
+      "contentHash": "970401ca7e2ef27ed6738a14a440e09d",
+      "sourceName": "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "../IERC20.sol",
+        "../../../interfaces/IERC1363.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "SafeERC20"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\node_modules\\@openzeppelin\\contracts\\interfaces\\IERC1363.sol": {
+      "lastModificationDate": 1773257860951,
+      "contentHash": "f96044e0027d477621b9f0e5fc8d2c1e",
+      "sourceName": "@openzeppelin/contracts/interfaces/IERC1363.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "./IERC20.sol",
+        "./IERC165.sol"
+      ],
+      "versionPragmas": [
+        ">=0.6.2"
+      ],
+      "artifacts": [
+        "IERC1363"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\node_modules\\@openzeppelin\\contracts\\interfaces\\IERC165.sol": {
+      "lastModificationDate": 1773257860951,
+      "contentHash": "135c199224b230d9d9e86745b871274b",
+      "sourceName": "@openzeppelin/contracts/interfaces/IERC165.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "../utils/introspection/IERC165.sol"
+      ],
+      "versionPragmas": [
+        ">=0.4.16"
+      ],
+      "artifacts": []
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\node_modules\\@openzeppelin\\contracts\\interfaces\\IERC20.sol": {
+      "lastModificationDate": 1773257860953,
+      "contentHash": "b95e9b15fbe03c4924f457d71754234e",
+      "sourceName": "@openzeppelin/contracts/interfaces/IERC20.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "../token/ERC20/IERC20.sol"
+      ],
+      "versionPragmas": [
+        ">=0.4.16"
+      ],
+      "artifacts": []
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\node_modules\\@openzeppelin\\contracts\\utils\\introspection\\IERC165.sol": {
+      "lastModificationDate": 1773257861027,
+      "contentHash": "ff4d1e14b9194d66aa102ea99c561d87",
+      "sourceName": "@openzeppelin/contracts/utils/introspection/IERC165.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        ">=0.4.16"
+      ],
+      "artifacts": [
+        "IERC165"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\test\\MockStIOTX.sol": {
+      "lastModificationDate": 1774119876902,
+      "contentHash": "83d16ec851b5276585e0a9c5bc8d11c3",
+      "sourceName": "contracts/test/MockStIOTX.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts/token/ERC20/ERC20.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "MockStIOTX"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\TournamentGateDemo.sol": {
+      "lastModificationDate": 1774123517390,
+      "contentHash": "2bec3e4c9f8200246732cc341aa4e3fb",
+      "sourceName": "contracts/TournamentGateDemo.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts/access/Ownable.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "IVAPIProtocolLens",
+        "IVAPIVerifiedHumanProof",
+        "TournamentGateDemo"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\MockProtocolLens102.sol": {
+      "lastModificationDate": 1774123520484,
+      "contentHash": "9c0314ee873fab8b5a717ef5aae0c34a",
+      "sourceName": "contracts/MockProtocolLens102.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "MockProtocolLens102"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\MockVHP102.sol": {
+      "lastModificationDate": 1774123523880,
+      "contentHash": "f21192f1f5caf10249fcbd26f31d8c0b",
+      "sourceName": "contracts/MockVHP102.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "MockVHP102"
       ]
     }
   }

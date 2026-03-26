@@ -1,0 +1,54 @@
+{
+  "task_id": "vapi_classj_triage_adjudication_v1",
+  "task_version": "1.0.0-phase109c",
+  "executor": "vapi_bridge",
+  "status": "phase109c_infrastructure_only",
+  "description": "Decentralized ClassJ+Triage adjudication with dual-quorum veto. Phase 109C: N=5 emulator nodes (testnet, code-before-operators). Real ioSwarm nodes use independent hardware stacks in production.",
+  "input_schema": {
+    "device_id": "str \u2014 controller/device identifier",
+    "session_id": "str \u2014 session identifier (empty string valid)",
+    "entropy_variance": "float \u2014 Phase 81 ClassJDetector signal (higher=human-like)",
+    "escalated": "bool \u2014 DivergenceTriageAgent escalation flag",
+    "triage_patterns": "str|null \u2014 colon-sep triage pattern string from Phase 91"
+  },
+  "output_schema": {
+    "classj_quorum_verdict": "str \u2014 BLOCK|FLAG|CLEAR",
+    "classj_agreement_ratio": "float \u2014 fraction of nodes agreeing on verdict",
+    "triage_quorum_verdict": "str \u2014 BLOCK|FLAG|CLEAR",
+    "triage_agreement_ratio": "float \u2014 fraction of nodes agreeing on verdict",
+    "dual_veto": "bool \u2014 True when BOTH classj==BLOCK AND triage==BLOCK",
+    "dual_veto_score": "float \u2014 score override applied when dual_veto==True",
+    "node_count": "int \u2014 number of emulator nodes evaluated"
+  },
+  "quorum_config": {
+    "classj_block_quorum": 0.67,
+    "triage_block_quorum": 0.67,
+    "tie_resolution": "HOLD",
+    "note": "0.67 = enforcement standard (NOT 0.60 renewal standard). Tie resolution HOLD prevents false positives on split verdicts."
+  },
+  "dual_veto_config": {
+    "dual_veto_score": 0.8,
+    "dual_veto_condition": "classj_quorum_verdict == BLOCK AND triage_quorum_verdict == BLOCK",
+    "score_override_formula": "consensus_score = max(consensus_score, 0.80)",
+    "rationale": "W2 novel \u2014 exclusive to VAPI. When ClassJ AND Triage both independently reach BLOCK (67% node agreement each), the joint false-positive probability drops multiplicatively. Score clamped to 0.80 > epistemic threshold 0.60 \u2192 always drives BLOCK verdict. Gives operators mathematical confidence to flip dry_run=False."
+  },
+  "vhp_authorization_gate": {
+    "contract": "VAPIProtocolLens",
+    "address": "0x1972bf756aFE0FFCfaF9842e2FbBb2B084352EAf",
+    "method": "isFullyEligible(operatorDeviceId)",
+    "description": "Operator device must hold valid VHP to submit adjudication tasks"
+  },
+  "fail_open_direction": {
+    "adjudication_errors": "CLEAR (avoid false positives)",
+    "note": "OPPOSITE of VHPRenewal fail-open (which returns approved=True). Adjudication errors lean toward CLEAR to prevent false bans."
+  },
+  "w1_security_boundary": {
+    "testnet_note": "All 5 emulator nodes share same seed/logic \u2014 testnet only (code-before-operators, MockGSRGrip precedent). Evasion of one node evades all nodes simultaneously. This is acceptable for testnet; production ioSwarm nodes use independent hardware stacks (architectural security property, not code-level)."
+  },
+  "w3bstream_applets": [
+    "validate_poac_record",
+    "process_adjudication_result"
+  ],
+  "protocol_lens_address": "0x1972bf756aFE0FFCfaF9842e2FbBb2B084352EAf",
+  "ruling_registry_address": "0xa3A2356C90E642a7c510d0C726EC515EA720c621"
+}

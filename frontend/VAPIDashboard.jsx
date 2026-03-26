@@ -28,21 +28,22 @@ const PITL_LAYERS = [
   { id: "L2B", name: "IMU-Button Coupling",    type: "ADVISORY",   code: "0x31",   signal: "5–80ms precursor window",              status: "ACTIVE",  margin: null,  detail: "IMU micro-disturbance absent before button rising edge → decoupled. Threshold: coupled_fraction < 0.55" },
   { id: "L2C", name: "Stick-IMU Correlation",  type: "ADVISORY",   code: "0x32",   signal: "Pearson cross-corr 10–60ms",           status: "ACTIVE",  margin: null,  detail: "abs(max_causal_corr) of stick velocity vs. gyro_z at causal lags. Threshold < 0.15. abs() mandatory — anti-correlation is physical coupling. Dead-zone stick games (e.g. NCAA CFB 26): right stick stays at 128 → oracle returns None → p_L2C = 0.5 neutral prior. Formula runs as effective 4-signal; l2c_inactive flag emitted in PITL metadata and visible in HUMANITY tile." },
   { id: "L3",  name: "Behavioral ML",          type: "HARD CHEAT", code: "0x29/2A",signal: "9-feature temporal classifier",        status: "ACTIVE",  margin: null,  detail: "30→64→32→6 INT8 net. Targets MACRO (σ² < 1.0ms²) + AIMBOT (jerk > 2.0)" },
-  { id: "L4",  name: "Biometric Fingerprint",  type: "ADVISORY",   code: "0x30",   signal: "12-feature Mahalanobis (Phase 46/57)", status: "ACTIVE",  margin: null,  detail: "Anomaly threshold: 6.726 (mean+3σ, N=74, Phase 46). Continuity: 5.097. Index 9: accel_magnitude_spectral_entropy (bot-vs-human, gravity-invariant, 1000Hz-exclusive). Index 11: press_timing_jitter_variance (Phase 57) — normalised IBI variance; human 0.001–0.05, bot macro <0.00005. Zero-variance features auto-excluded (ZERO_VAR_THRESHOLD=1e-4)." },
+  { id: "L4",  name: "Biometric Fingerprint",  type: "ADVISORY",   code: "0x30",   signal: "13-feature Mahalanobis (Phase 81, 11 active)", status: "ACTIVE",  margin: null,  detail: "Anomaly threshold: 7.009 (mean+3σ, N=74, Phase 57). Continuity: 5.367. Index 9: accel_magnitude_spectral_entropy (bot-vs-human only). Index 11: press_timing_jitter_variance (Phase 57) — normalised IBI variance; human 0.001–0.05, bot macro <0.00005. Index 12: temporal_state_transition_entropy_variance (Phase 81) — Class J GaussianHMM discriminator; human >0.15, ML-bot <0.02. Zero-variance features auto-excluded (ZERO_VAR_THRESHOLD=1e-4)." },
   { id: "L5",  name: "Temporal Rhythm",        type: "ADVISORY",   code: "0x2B",   signal: "4-btn IBI · CV · entropy · 60Hz quant",status: "ACTIVE",  margin: null,  detail: "Phase 39: 4-button priority Cross(1.373)>L2_dig(1.333)>R2(1.176)>Triangle(1.138). Pooled IBI fallback ≥5 samples/button. Fires on ≥2/3: CV<0.08, entropy<1.0bit, quant>0.55. l5_source persisted in PITL metadata." },
   { id: "L6",  name: "Active Haptic C-R",      type: "ADVISORY",   code: "—",      signal: "Motorized trigger resistance",         status: "CALIBRATED", margin: null,  detail: "6 profiles calibrated (Phase 43, N=43 captures, PROFILE_VERSION 2). Per-profile onset_ms/settle_ms thresholds wired. DISABLED — L6_CHALLENGES_ENABLED=false. RIGID_MAX uncalibrated (N=2)." },
 ];
 
 const ADVERSARIAL_DATA = [
-  { attack: "IMU Injection",     detection: 100, n: 10, layer: "L2",      color: "#00ff88" },
-  { attack: "Timing Macro",      detection: 100, n: 10, layer: "L5",      color: "#00ff88" },
-  { attack: "Quant-Masked Bot",  detection: 100, n: 15, layer: "L5",      color: "#00ff88" },
-  { attack: "Warmup Attack",     detection: 60,  n: 10, layer: "L5+Arch", color: "#ff9500" },
-  { attack: "Replay (Chain)",    detection: 20,  n: 5,  layer: "L1",      color: "#ff9500" },
-  { attack: "Bio Transplant",    detection: 0,   n: 5,  layer: "L4",           color: "#ff2d55" },
-  { attack: "Randomized IMU Bot", detection: 0,  n: 5,  layer: "L4+L2B (live)", color: "#ff9500" },
-  { attack: "Threshold-Aware Bot",detection: 100, n: 5, layer: "L4",            color: "#00ff88" },
-  { attack: "Spectral Mimicry",  detection: 0,   n: 5,  layer: "L2B (live)",    color: "#ff9500" },
+  { attack: "IMU Injection",       detection: 100, n: 10, layer: "L2",           color: "#00ff88" },
+  { attack: "Timing Macro",        detection: 100, n: 10, layer: "L5",           color: "#00ff88" },
+  { attack: "Quant-Masked Bot",    detection: 100, n: 15, layer: "L5",           color: "#00ff88" },
+  { attack: "Warmup Attack",       detection: 60,  n: 10, layer: "L5+Arch",      color: "#ff9500" },
+  { attack: "Replay (Chain)",      detection: 20,  n: 5,  layer: "L1",           color: "#ff9500" },
+  { attack: "Bio Transplant",      detection: 0,   n: 5,  layer: "L4",           color: "#ff2d55" },
+  { attack: "Class G (Rand Bot)",  detection: 0,   n: 5,  layer: "L4+L2B(live)", color: "#ff9500" },
+  { attack: "Class H (Thresh-Aw.)",detection: 100, n: 5,  layer: "L4",           color: "#00ff88" },
+  { attack: "Class I (Spectral)",  detection: 0,   n: 5,  layer: "L2B(live)",    color: "#ff9500" },
+  { attack: "Class J (GaussHMM)",  detection: 0,   n: 15, layer: "L4 batch ⚠",  color: "#ff2d55" },
 ];
 
 const HARDWARE_METRICS = [
@@ -59,8 +60,8 @@ const HARDWARE_METRICS = [
 const CALIBRATION = {
   sessions: 74,
   players: 3,
-  l4Anomaly: 6.726,
-  l4Continuity: 5.097,
+  l4Anomaly: 7.009,
+  l4Continuity: 5.367,
   l5CV: 0.08,
   l5Entropy: 1.0,
   l2bCoupled: 0.55,
@@ -90,24 +91,33 @@ const RADAR_DATA = [
   { feature: "Stick Autocorr",  score: 88 },
   { feature: "Tremor FFT",      score: 79 },
   { feature: "Temporal CV",     score: 94 },
-  { feature: "Entropy",         score: 87 },
+  { feature: "IBI Entropy",     score: 87 },
   { feature: "IMU Coupling",    score: 93 },
-  { feature: "Spectral Entropy", score: 72 },  // accel_magnitude_spectral_entropy; Phase 46, N=74, bot-vs-human detection effectiveness
+  { feature: "Spectral Ent",    score: 72 },  // accel_magnitude_spectral_entropy; Phase 46, bot-vs-human
+  { feature: "Jitter Var",      score: 85 },  // press_timing_jitter_variance; Phase 57, index 11
+  { feature: "Entropy Var",     score: 68 },  // temporal_state_transition_entropy_variance; Phase 81, Class J discriminator
 ];
 
 const CONTRACT_STACK = [
-  { name: "PoACVerifier",        addr: "0x26178AD9…", gas: "81,245",  status: "LIVE" },
-  { name: "PHGCredential",       addr: "0x0Af852f5…", gas: "110,000", status: "LIVE" },
-  { name: "TournamentGateV3",    addr: "0x6fEe9F6f…", gas: "~72,000", status: "LIVE" },
-  { name: "PITLSessionRegistry", addr: "0x8da0A497…", gas: "—",       status: "LIVE" },
-  { name: "FederatedThreatReg",  addr: "0xe837FaB5…", gas: "65,000",  status: "LIVE" },
-  { name: "SkillOracle",         addr: "0xABA74481…", gas: "—",       status: "LIVE" },
+  { name: "RulingRegistry",        addr: "0xa3A23562…", gas: "—",       status: "LIVE" },  // Phase 68
+  { name: "CeremonyRegistry",      addr: "0x739B5fae…", gas: "—",       status: "LIVE" },  // Phase 68 MPC
+  { name: "HumanityOracle",        addr: "0x84069312…", gas: "—",       status: "LIVE" },  // Phase 69
+  { name: "RulingOracle",          addr: "0xfA15e1f4…", gas: "—",       status: "LIVE" },  // Phase 69
+  { name: "PassportOracle",        addr: "0x7f8cE7B6…", gas: "—",       status: "LIVE" },  // Phase 69
+  { name: "VAPIRewardDistributor", addr: "0x8ae8B577…", gas: "—",       status: "LIVE" },  // Phase 69
+  { name: "VAPIDataMarketplace",   addr: "0x15D2Ac6d…", gas: "—",       status: "LIVE" },  // Phase 69
+  { name: "DataSovereigntyReg",    addr: "0xd928d953…", gas: "—",       status: "LIVE" },  // Phase 69
+  { name: "VAPIGovernanceTimelock",addr: "0x0a44Ff57…", gas: "—",       status: "LIVE" },  // Phase 70
+  { name: "VAPIProtocolLens",      addr: "0x1972bf75…", gas: "—",       status: "LIVE" },  // Phase 70
+  { name: "FederatedThreatReg",    addr: "—",           gas: "—",       status: "PENDING" }, // Phase 80 deploy
+  // Core contracts: PoACVerifier, PHGCredential, TournamentGateV3,
+  //   VAPIioIDRegistry, PITLTournamentPassport, PITLSessionRegistryV2 + 8 more = 31 total
 ];
 
 const MODE6_DATA = Array.from({ length: 24 }, (_, i) => ({
   cycle: `C${i + 1}`,
-  anomaly:    +(6.726 + (Math.sin(i * 0.4) * 0.3 + (i > 12 ? -0.08 * (i - 12) : 0))).toFixed(3),
-  continuity: +(5.097 + (Math.cos(i * 0.4) * 0.2)).toFixed(3),
+  anomaly:    +(7.009 + (Math.sin(i * 0.4) * 0.3 + (i > 12 ? -0.08 * (i - 12) : 0))).toFixed(3),
+  continuity: +(5.367 + (Math.cos(i * 0.4) * 0.2)).toFixed(3),
 }));
 
 /* ─── UTILITY HOOKS ──────────────────────────────────────────────────────── */
@@ -263,6 +273,162 @@ function useFrameData(enabled) {
   }, [enabled]);
 
   return { accelHistory, latestFrame };
+}
+
+/* ─── PHASE 93: PROTOCOL INTELLIGENCE HOOK ──────────────────────────────── */
+
+function useProtocolIntelligence(enabled) {
+  const [report, setReport] = useState(null);
+  const apiKey = typeof import !== "undefined"
+    ? (typeof import.meta !== "undefined" ? import.meta.env?.VITE_BRIDGE_API_KEY : "") : "";
+
+  useEffect(() => {
+    if (!enabled) return;
+    let active = true;
+
+    async function fetchReport() {
+      try {
+        const url = `${BRIDGE_URL}/operator/agent/protocol-intelligence?api_key=${encodeURIComponent(apiKey || "")}`;
+        const res = await fetch(url);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (active) setReport(data);
+      } catch (_) {}
+    }
+
+    fetchReport();
+    const timer = setInterval(fetchReport, 30000);
+    return () => { active = false; clearInterval(timer); };
+  }, [enabled, apiKey]);
+
+  return report;
+}
+
+/* ─── PHASE 93: PROTOCOL HEALTH PANEL ───────────────────────────────────── */
+
+function ProtocolHealthPanel({ report, triageEscalated }) {
+  if (!report) {
+    return (
+      <div style={{
+        background: "rgba(8,15,20,0.85)", border: "1px solid rgba(255,107,0,0.18)",
+        borderRadius: 2, padding: 20,
+      }}>
+        <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10,
+          color: "#3d5060", letterSpacing: "0.15em" }}>
+          PROTOCOL INTELLIGENCE — AWAITING DATA
+        </div>
+      </div>
+    );
+  }
+
+  const score = Math.round(report.protocol_health_score ?? 0);
+  const ready = !!report.ready_for_live_mode;
+  const bottleneck = report.bottleneck;
+  const scoreColor = score >= 85 ? "#00ff88" : score >= 50 ? "#ff9500" : "#ff2d55";
+
+  // Component breakdown from components_json or components field
+  const comps = report.components || {};
+  const componentBars = [
+    { label: "Gate Progress",       key: "gate_progress",       weight: 35 },
+    { label: "Fleet Health",        key: "fleet_health",        weight: 25 },
+    { label: "Divergence Clarity",  key: "divergence_clarity",  weight: 20 },
+    { label: "Corpus Pass",         key: "corpus_pass",         weight: 10 },
+    { label: "Class J Confidence",  key: "class_j_confidence",  weight: 10 },
+  ].map(c => ({
+    ...c,
+    value: Math.round((comps[c.key] ?? 0) / c.weight * 100),
+    raw: comps[c.key] ?? 0,
+  }));
+
+  return (
+    <div style={{
+      background: "rgba(8,15,20,0.85)", border: "1px solid rgba(255,107,0,0.18)",
+      borderRadius: 2, padding: 20, position: "relative",
+    }}>
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 1,
+        background: "linear-gradient(90deg, transparent, rgba(255,107,0,0.5), transparent)" }} />
+
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 20, marginBottom: 16 }}>
+        {/* Circular gauge */}
+        <div style={{ textAlign: "center", flexShrink: 0 }}>
+          <div style={{
+            width: 72, height: 72, borderRadius: "50%",
+            border: `3px solid ${scoreColor}`,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            boxShadow: `0 0 16px ${scoreColor}40`,
+            background: "rgba(0,0,0,0.4)",
+          }}>
+            <span style={{
+              fontFamily: "'JetBrains Mono', monospace",
+              fontSize: 20, fontWeight: 700, color: scoreColor,
+            }}>{score}</span>
+          </div>
+          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8,
+            color: "#3d5060", marginTop: 4, letterSpacing: "0.1em" }}>HEALTH SCORE</div>
+        </div>
+
+        {/* Status + bottleneck */}
+        <div style={{ flex: 1 }}>
+          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10,
+            color: "#ff6b00", letterSpacing: "0.2em", marginBottom: 8 }}>
+            PROTOCOL INTELLIGENCE
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+            <span style={{
+              padding: "3px 10px", borderRadius: 2, fontSize: 10,
+              fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.08em",
+              background: ready ? "rgba(0,255,136,0.1)" : "rgba(255,45,85,0.1)",
+              border: `1px solid ${ready ? "rgba(0,255,136,0.3)" : "rgba(255,45,85,0.3)"}`,
+              color: ready ? "#00ff88" : "#ff2d55",
+            }}>
+              {ready ? "READY" : "NOT READY"}
+            </span>
+            {triageEscalated > 0 && (
+              <span style={{
+                padding: "3px 10px", borderRadius: 2, fontSize: 10,
+                fontFamily: "'JetBrains Mono', monospace", letterSpacing: "0.08em",
+                background: "rgba(255,45,85,0.1)",
+                border: "1px solid rgba(255,45,85,0.3)",
+                color: "#ff2d55",
+              }}>
+                {triageEscalated} ESCALATED
+              </span>
+            )}
+          </div>
+          {!ready && bottleneck && (
+            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9,
+              color: "#ff9500", letterSpacing: "0.08em" }}>
+              BOTTLENECK: {String(bottleneck).toUpperCase().replace(/_/g, " ")}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Component bars */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {componentBars.map(c => (
+          <div key={c.key} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8,
+              color: "#3d5060", width: 120, flexShrink: 0, letterSpacing: "0.06em" }}>
+              {c.label.toUpperCase()}
+            </span>
+            <div style={{ flex: 1, height: 4, background: "rgba(255,107,0,0.08)",
+              borderRadius: 2, overflow: "hidden" }}>
+              <div style={{
+                height: "100%", width: `${Math.min(c.value, 100)}%`,
+                background: c.value >= 85 ? "#00ff88" : c.value >= 50 ? "#ff9500" : "#ff2d55",
+                borderRadius: 2, transition: "width 0.5s ease",
+              }} />
+            </div>
+            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8,
+              color: "#c4cdd6", width: 28, textAlign: "right" }}>
+              {c.value}%
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 /* ─── SUB-COMPONENTS ─────────────────────────────────────────────────────── */
@@ -485,7 +651,7 @@ function L5ButtonCoverage() {
 function AdversarialMatrix() {
   return (
     <Panel>
-      <SectionLabel>Adversarial Detection Matrix — Real Hardware N=55</SectionLabel>
+      <SectionLabel>Adversarial Detection Matrix — N=74 Human + 15 Class G/H/I + 15 Class J (Phase 81)</SectionLabel>
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {ADVERSARIAL_DATA.map((d) => (
           <div key={d.attack} style={{ display: "grid", gridTemplateColumns: "160px 1fr 60px 80px", gap: 12, alignItems: "center" }}>
@@ -516,7 +682,7 @@ function AdversarialMatrix() {
         marginTop: 16, display: "grid", gridTemplateColumns: "1fr 1fr 1fr",
         gap: 8, borderTop: "1px solid rgba(255,107,0,0.1)", paddingTop: 12,
       }}>
-        {[["#00ff88", "100% — Injection / Macro / Quant"], ["#ff9500", "60% — Warmup (sessions 1–6)"], ["#ff2d55", "0% — Transplant (architectural)"]].map(([color, label]) => (
+        {[["#00ff88", "100% — Injection / Macro / Class H"], ["#ff9500", "0–60% — Class G/I (live detection)"], ["#ff2d55", "0% — Transplant / Class J (ML-bot gap)"]].map(([color, label]) => (
           <div key={label} style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ width: 8, height: 8, borderRadius: 1, background: color, flexShrink: 0 }} />
             <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: "#5a6a74" }}>{label}</span>
@@ -532,7 +698,7 @@ function AdversarialMatrix() {
 function BiometricRadar() {
   return (
     <Panel>
-      <SectionLabel>L4 Biometric Feature Space — 11-Signal Mahalanobis</SectionLabel>
+      <SectionLabel>L4 Biometric Feature Space — 13-Feature Mahalanobis (11 active, Phase 81)</SectionLabel>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, alignItems: "center" }}>
         <div style={{ height: 220 }}>
           <ResponsiveContainer width="100%" height="100%">
@@ -545,8 +711,8 @@ function BiometricRadar() {
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {[
-            ["Anomaly Threshold",  "6.726",  "mean+3σ (N=74)"],
-            ["Continuity Thresh",  "5.097",  "mean+2σ"],
+            ["Anomaly Threshold",  "7.009",  "mean+3σ (N=74, Ph57)"],
+            ["Continuity Thresh",  "5.367",  "mean+2σ (Ph57)"],
             ["Dist Mean",          "1.839",  "across N=74"],
             ["Dist Std",           "1.629",  ""],
             ["Separation Ratio",   "0.362",  "inter-person ⚠"],
@@ -563,7 +729,7 @@ function BiometricRadar() {
         </div>
       </div>
       <div style={{ marginTop: 12, fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: "#3d5060" }}>
-        2 features structurally zero: trigger_resistance_change_rate, touch_position_variance — auto-excluded via ZERO_VAR_THRESHOLD=1e-4. accel_magnitude_spectral_entropy (index 9, Phase 46): active N=74 sessions, mean 4.93 bits, bot-vs-human only — does NOT improve separation ratio 0.362. L4 is intra-player anomaly detector, not inter-player identifier.
+        2 features structurally zero: trigger_resistance_change_rate (index 0), touch_position_variance (index 10) — auto-excluded via ZERO_VAR_THRESHOLD=1e-4. Index 9: accel_magnitude_spectral_entropy bot-vs-human only, does NOT improve separation ratio 0.362. Index 12 (Phase 81): temporal_state_transition_entropy_variance — Class J GaussianHMM ML-bot discriminator (human &gt;0.15 variance, HMM bot &lt;0.02). L4 is intra-player anomaly detector only.
       </div>
     </Panel>
   );
@@ -603,7 +769,7 @@ function LivingCalibration({ chartData }) {
         </ResponsiveContainer>
       </div>
       <div style={{ marginTop: 8, display: "flex", gap: 20 }}>
-        {[["#ff6b00", "Anomaly Threshold (6.726)"], ["#00d4ff", "Continuity Threshold (5.097)"]].map(([c, l]) => (
+        {[["#ff6b00", "Anomaly Threshold (7.009)"], ["#00d4ff", "Continuity Threshold (5.367)"]].map(([c, l]) => (
           <div key={l} style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ width: 16, height: 2, background: c, display: "inline-block" }} />
             <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: "#5a6a74" }}>{l}</span>
@@ -650,7 +816,7 @@ function HardwareMetrics() {
 function ContractStack() {
   return (
     <Panel>
-      <SectionLabel>IoTeX Testnet — 13 Contracts Deployed</SectionLabel>
+      <SectionLabel>IoTeX Testnet — 31 Contracts LIVE (Phase 68–70)</SectionLabel>
       <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
         {CONTRACT_STACK.map((c) => (
           <div key={c.name} style={{
@@ -667,12 +833,14 @@ function ContractStack() {
             </div>
             {c.gas !== "—" && <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: "#5a6a74", textAlign: "right" }}>{c.gas} gas</span>}
             {c.gas === "—" && <span />}
-            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: "#00ff88", textAlign: "right" }}>● {c.status}</span>
+            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9,
+              color: c.status === "LIVE" ? "#00ff88" : c.status === "PENDING" ? "#ff9500" : "#3d5060",
+              textAlign: "right" }}>● {c.status}</span>
           </div>
         ))}
       </div>
       <div style={{ marginTop: 10, fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: "#3d5060" }}>
-        P256 precompile at 0x0100 · batch(10) = $0.00024 · Groth16 verifier active @ 0x07D3ca15…
+        P256 precompile at 0x0100 · IoTeX testnet chain 4690 · Phase 68: RulingRegistry + CeremonyRegistry LIVE · Phase 69: 6 DePIN oracle contracts · Phase 70: Governance + ProtocolLens · isThreatSignaled() tournament gate composable
       </div>
     </Panel>
   );
@@ -749,9 +917,9 @@ function ZKProofStatus() {
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {[
               ["Circuit Constraints", `~${constraints.toLocaleString()}`, "#ff6b00"],
-              ["Powers-of-Tau",       "2^11",                            "#ff9500"],
+              ["Powers-of-Tau",       "2^11 (Hermez)",                   "#ff9500"],
               ["Public Inputs",       "5",                               "#c4cdd6"],
-              ["Ceremony Type",       "SINGLE-CONTRIB ⚠",                "#ff9500"],
+              ["Ceremony Type",       "MPC 3×3 ✓",                       "#00ff88"],
             ].map(([l, v, c]) => (
               <div key={l} style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid rgba(255,255,255,0.04)", paddingBottom: 5 }}>
                 <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: "#5a6a74" }}>{l}</span>
@@ -763,7 +931,7 @@ function ZKProofStatus() {
         <div>
           <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: "#5a6a74", marginBottom: 8 }}>PUBLIC INPUTS (5)</div>
           {[
-            ["featureCommitment", "Poseidon(7)(features[0..6])"],
+            ["featureCommitment", "Poseidon(8)(features[0..6], inferenceCodeFromBody) — Phase 62 C1"],
             ["humanityProbInt",   "prob × 1000 ∈ [0,1000]"],
             ["inferenceResult",   "pub[2]=inferenceCode · C2 circuit bound (Phase 41)"],
             ["nullifierHash",     "Poseidon(deviceIdHash, epoch)"],
@@ -853,7 +1021,7 @@ function OpenItems() {
     { id: "P3", label: "Full Covariance L4 Fingerprinting",  status: "COMPLETE", priority: "—",      detail: "USE_FULL_COVARIANCE flag · EMA NxN cov matrix · Tikhonov regularization λ=0.01 · synthetic separation ratio 9.85 · Phase 41" },
     { id: "P4", label: "ZK Inference Code Binding",          status: "COMPLETE", priority: "—",      detail: "pub[2]=inferenceCode wired · PITLSessionRegistry.sol::submitPITLProof(inferenceCode) · C2 circuit constraint active · Phase 41" },
     { id: "P5", label: "Pro Bot Adversarial Data",           status: "COMPLETE", priority: "—",      detail: "3 white-box attack classes G/H/I (N=5 each, Phase 48) · H: 100% L4 (grip_asym+stick_autocorr) · G/I: 0% batch, detected live (L4+L2B / L2B) · real hardware bot software (aimbot, ML-driven) still untested" },
-    { id: "P6", label: "Multi-Party ZK Ceremony",            status: "PLANNED",  priority: "LOW",    detail: "Hermez Perpetual Powers of Tau MPC · current single-contributor ceremony is dev-only" },
+    { id: "P6", label: "Multi-Party ZK Ceremony",            status: "COMPLETE", priority: "—",      detail: "Phase 67/68 DONE: 3 circuits × 3 contributors · Hermez Perpetual Powers of Tau · IoTeX block #41723255 beacon · CeremonyRegistry LIVE 0x739B5fae… · verifyCeremony() OK all circuits" },
     { id: "P7", label: "Bluetooth Calibration (125–250Hz)",  status: "OPEN",     priority: "LOW",    detail: "All N=74 sessions USB-only · L4/L5 thresholds have no empirical grounding for BT polling rates" },
     { id: "P8", label: "Formal Verification (TLA+)",         status: "FUTURE",   priority: "LOW",    detail: "Chain integrity: linkage, monotonicity, non-repudiation · safety-critical esports deployments" },
     { id: "C1", label: "Multi-Button L5 (Phase 39)",         status: "COMPLETE", priority: "—",      detail: "4-button IBI oracle (Cross>L2_dig>R2>Triangle) + pooled fallback · 8 new tests · 888 bridge tests total (Phase 49)" },
@@ -869,10 +1037,19 @@ function OpenItems() {
     { id: "D1", label: "ZK Tournament Passport (Phase 56)", status: "COMPLETE", priority: "—",      detail: "TournamentPassport.circom (5 public signals) · PITLTournamentPassport.sol (mock mode, SESSION_COUNT=5) · tournament_passports table · generate_tournament_passport BridgeAgent tool #23 · POST /operator/passport endpoint · 5 new tests · bridge 951" },
     { id: "D2", label: "Jitter Variance Feature (Phase 57)", status: "COMPLETE", priority: "—",     detail: "press_timing_jitter_variance index 11 in BiometricFeatureFrame · _BIO_FEATURE_DIM 11→12 · normalised IBI variance: human 0.001–0.05, bot macro <0.00005 · IBI deques (Cross/L2/R2/Triangle, maxlen=50) · behavioral_archaeologist FEATURE_KEYS updated · threshold_calibrator _extract_jitter_variance() · 5 new tests · bridge 956" },
     { id: "D3", label: "Security Hardening (Phase 58)", status: "COMPLETE", priority: "—",          detail: "Operator endpoint auth (x-api-key → 401/503) · sliding-window per-IP rate limiter (60s window, cfg.rate_limit_per_minute) · operator_audit_log table + log_operator_action/get_operator_audit_log · inference_code column in pitl_session_proofs (ZK binding Phase 58A partial) · BridgeAgent tools #24–27: analyze_threshold_impact, predict_evasion_cost, get_anomaly_trend, generate_incident_report · 16 new tests · bridge 972" },
-    { id: "E3", label: "PITLSessionRegistry v2 (Phase 58B)", status: "PLANNED", priority: "HIGH",   detail: "Deploy PITLSessionRegistry v2: nullifierInferenceCodes[nullifier]=inferenceCode on-chain · PITLTournamentPassport rejects CHEAT-coded nullifiers · requires testnet IOTX (wallet funded 2026-03-14) · no new ceremony" },
-    { id: "E4", label: "ZK Inference Binding (Phase 59)", status: "FUTURE", priority: "MEDIUM",     detail: "Circuit constraint: inferenceCode cryptographically derived from sensor commitment preimage · new MPC ceremony required · closes biometric transplant gap for on-chain tournament gating" },
+    { id: "E3", label: "PITLSessionRegistry v2 (Phase 62)",  status: "COMPLETE", priority: "—",     detail: "Phase 62 DONE: PITLSessionRegistryV2 LIVE 0xAfb544c0… · C3 ZK constraint inferenceResult===inferenceCodeFromBody · Poseidon(8) C1 · PitlSessionProofVerifierV2 LIVE 0x5f4e30EB…" },
+    { id: "E4", label: "ZK Inference Binding (Phase 62)",   status: "COMPLETE", priority: "—",      detail: "Phase 62 DONE: C3 circuit constraint active — inferenceCode bound in ZK proof commitment · pub[2]=inferenceCodeFromBody · nPublic=5 preserved · new MPC ceremony run" },
     { id: "E5", label: "My Controller 3D Twin (Phase 59)", status: "COMPLETE", priority: "—",
       detail: "Physics-driven DualShock Edge digital twin · /ws/twin/{device_id} fusion stream · IBI Biometric Heartbeat · PoAC DNA Helix chain timeline · L4 aura · L6-Passive R2 stiffness · ZK passport + ioID DID panel · Phase 58 audit log queries · BridgeAgent tool #28 · +15 tests · bridge 987" },
+    { id: "F0", label: "Data Sovereignty + DePIN (Phase 69)", status: "COMPLETE", priority: "—",    detail: "6 contracts LIVE: HumanityOracle/RulingOracle/PassportOracle/VAPIRewardDistributor/VAPIDataMarketplace/DataSovereigntyRegistry · DataCuratorAgent (7-class taxonomy, eligibility engine) · DePIN multiplier stack: 1.5×→2.0×→2.5×→1.25×→3.0× · 3 SQLite tables · bridge 1158→1186" },
+    { id: "F1", label: "Governance Timelock (Phase 70)",      status: "COMPLETE", priority: "—",    detail: "VAPIGovernanceTimelock LIVE 0x0a44Ff57… (48h queued transitions, co-signer cancel, CEI) · VAPIProtocolLens LIVE 0x1972bf75… (isFullyEligible() pure-view tournament gate, single eth_call)" },
+    { id: "F2", label: "PHGCredential Multi-Sig (Phase 72)", status: "COMPLETE", priority: "—",     detail: "Bridge-layer pending_suspensions propose/confirm/execute flow · SUSPENSION_MULTISIG_THRESHOLD config (default 1, 2=multisig) · 3 REST endpoints · Tournament Condition 3 CLOSED IN CODE (software safeguard, documented)" },
+    { id: "F3", label: "SessionAdjudicator Validation (Ph75)", status: "COMPLETE", priority: "—",  detail: "SessionAdjudicatorValidationAgent: LLM vs _rule_fallback cross-validation, consecutive_clean gate (N=100), dry_run_gate_passed event · CeremonyWatchdogAgent: fingerprint polling, cache invalidation · GET /agent/validation-gate · bridge 1219→1229" },
+    { id: "F4", label: "AgentMessageBus (Phase 79)",          status: "COMPLETE", priority: "—",   detail: "In-process asyncio pub/sub (asyncio.Queue per topic, maxsize=100, fan-out) · ceremony_key_rotated decouples CeremonyWatchdog from SessionAdjudicator module import · dry_run_gate_passed → LiveModeActivationAgent · 5-condition live-mode checklist (advisory only, never auto-activates)" },
+    { id: "F5", label: "Federation Broadcast (Phase 80)",     status: "COMPLETE", priority: "—",   detail: "FederationBroadcastAgent: first purely event-driven agent (no polling) · ruling_block_committed bus → HTTP POST peers (<100ms vs 5-min = 150× speedup) · HMAC-SHA256 auth · FederatedThreatRegistry.sol: isThreatSignaled() tournament gate composability · bridge 1247→1256" },
+    { id: "F6", label: "Class J ML-Bot Detection (Phase 81)", status: "COMPLETE", priority: "—",   detail: "ClassJDetector: temporal_state_transition_entropy_variance (human >0.15, HMM bot <0.02) · per-device deque N=10 entropy windows · assess() never raises · HIGH → bus publish class_j_high_risk_detected · evidence_summary enriched with ml_bot_candidate=True on HIGH · Tool #50 · bridge 1256→1264" },
+    { id: "G0", label: "SessionAdjudicator dry_run=False",    status: "OPEN",     priority: "HIGH", detail: "GATED: requires N≥100 consecutive non-divergent rulings per Phase 75 ValidationAgent gate (GET /agent/validation-gate consecutive_clean tracking) · set AGENT_DRY_RUN=false via POST /agent/config when gate_passed=true" },
+    { id: "G1", label: "Reactive Adjudication (Phase 82 cand)", status: "FUTURE", priority: "MED", detail: "SessionAdjudicator subscribes to class_j_high_risk_detected bus event for immediate out-of-cycle LLM ruling (interrupt-driven) · collapses Class J detection→ruling→enforcement→federation chain from 15+ min to <5s" },
   ];
   const colors  = { OPEN: "#ff9500", PLANNED: "#00d4ff", FUTURE: "#5a6a74", COMPLETE: "#00ff88" };
   const pColors = { HIGH: "#ff2d55", MEDIUM: "#ff9500", LOW: "#5a6a74", "—": "#3d5060" };
@@ -976,16 +1153,36 @@ const AGENT_QUICK_QUERIES = [
 ];
 
 const AGENT_TOOLS = [
+  // Tools #1–17 (Phases 40–49)
   "get_player_profile",           "get_leaderboard",              "get_leaderboard_rank",
   "run_pitl_calibration",         "get_continuity_chain",         "get_recent_records",
   "get_startup_diagnostics",      "get_phg_checkpoints",          "check_eligibility",
   "get_pitl_proof",               "get_behavioral_report",        "get_network_clusters",
   "get_federation_status",        "query_digest",                 "get_detection_policy",
   "get_credential_status",        "get_calibration_status",
-  // Phase 50
+  // Phase 50 (#18–20)
   "get_session_narrative",        "compare_device_fingerprints",  "get_calibration_agent_status",
-  // Phase 51
+  // Phase 51 (#21)
   "get_game_profile",
+  // Phase 55–59 (#22–28)
+  "get_ioid_status",              "generate_tournament_passport", "analyze_threshold_impact",
+  "predict_evasion_cost",         "get_anomaly_trend",            "generate_incident_report",
+  "get_controller_twin_data",
+  // Phase 61–63 (#29–31)
+  "get_session_replay",           "get_enrollment_status",        "get_reflex_baseline",
+  // Phase 65–66 (#32–35)
+  "get_autonomous_rulings",       "request_adjudication",         "get_ruling_streak",
+  "override_ruling",
+  // Phase 68 (#36–40)
+  "get_zkverifier_status",        "get_ceremony_integrity",       "get_dry_run_status",
+  "get_suspension_history",       "get_audit_log",
+  // Phase 70 (#41–45)
+  "get_data_lineage",             "get_token_eligibility",        "get_oracle_state",
+  "compute_reward_score",         "publish_sovereignty_pledge",
+  // Phase 75–76 (#46–47)
+  "get_validation_gate_status",   "get_ruling_provenance",
+  // Phase 79–81 (#48–50)
+  "get_live_mode_status",         "get_federation_stats",         "get_class_j_assessment",
 ];
 
 const CALIB_AGENT_TOOLS = [
@@ -1634,8 +1831,8 @@ function CaptureMonitor({ latestRecord, accelHistory, latestFrame }) {
   const humanityColor = humanityPct == null ? "#5a6a74"
     : humanityPct >= 70 ? "#00ff88" : humanityPct >= 40 ? "#ff9500" : "#ff2d55";
   const l4Color = rec.pitl_l4_distance == null ? "#5a6a74"
-    : rec.pitl_l4_distance > 6.726 ? "#ff2d55"
-    : rec.pitl_l4_distance > 5.097 ? "#ff9500" : "#00ff88";
+    : rec.pitl_l4_distance > 7.009 ? "#ff2d55"
+    : rec.pitl_l4_distance > 5.367 ? "#ff9500" : "#00ff88";
   const l5Color = rec.pitl_l5_cv == null ? "#5a6a74"
     : rec.pitl_l5_cv < 0.08 ? "#ff2d55" : "#00ff88";
 
@@ -1646,7 +1843,7 @@ function CaptureMonitor({ latestRecord, accelHistory, latestFrame }) {
   const humanitySubColor = l2cInactive ? "#ff9500" : "#2a3840";
 
   const scores = [
-    { label: "L4 DIST",  value: rec.pitl_l4_distance != null ? rec.pitl_l4_distance.toFixed(2) : "—",          color: l4Color,       sub: "thresh 6.73",  subColor: "#2a3840" },
+    { label: "L4 DIST",  value: rec.pitl_l4_distance != null ? rec.pitl_l4_distance.toFixed(2) : "—",          color: l4Color,       sub: "thresh 7.009", subColor: "#2a3840" },
     { label: "L5 CV",    value: rec.pitl_l5_cv != null ? rec.pitl_l5_cv.toFixed(3) : "—",                      color: l5Color,       sub: "thresh 0.08",  subColor: "#2a3840" },
     { label: "HUMANITY", value: humanityPct != null ? `${humanityPct}%` : "—",                                  color: humanityColor, sub: humanitySub,    subColor: humanitySubColor },
     { label: "L2B FRAC", value: rec.l2b_coupled_fraction != null ? rec.l2b_coupled_fraction.toFixed(2) : "—",   color: "#ff9500",     sub: "thresh 0.55",  subColor: "#2a3840" },
@@ -1731,6 +1928,688 @@ function CaptureMonitor({ latestRecord, accelHistory, latestFrame }) {
   );
 }
 
+/* ─── ACCORDION PANEL ───────────────────────────────────────────────────── */
+function AccordionPanel({ title, icon = "◈", badge, defaultOpen = false, accentColor = "#ff6b00", children }) {
+  const storageKey = `vapi-acc-${title.slice(0, 20).replace(/\s+/g, "-").toLowerCase()}`;
+  const [open, setOpen] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(storageKey)) ?? defaultOpen; }
+    catch { return defaultOpen; }
+  });
+  const toggle = () => setOpen(v => {
+    const next = !v;
+    try { localStorage.setItem(storageKey, JSON.stringify(next)); } catch {}
+    return next;
+  });
+  return (
+    <div style={{
+      border: `1px solid rgba(255,107,0,0.10)`,
+      borderLeft: `2px solid ${accentColor}`,
+      borderRadius: 4, overflow: "hidden", marginBottom: 8,
+    }}>
+      <button onClick={toggle} style={{
+        width: "100%", display: "flex", alignItems: "center", gap: 10,
+        padding: "10px 20px", background: "rgba(6,11,16,0.92)",
+        border: "none", cursor: "pointer",
+      }}>
+        <span style={{ fontSize: 12, color: accentColor, flexShrink: 0 }}>{icon}</span>
+        <span style={{
+          fontFamily: "'JetBrains Mono', monospace", fontSize: 9, letterSpacing: "0.12em",
+          color: open ? "#c4cdd6" : "#4a5a64", fontWeight: 700, flex: 1, textAlign: "left",
+        }}>{title}</span>
+        {badge && (
+          <span style={{
+            fontFamily: "'JetBrains Mono', monospace", fontSize: 7,
+            color: accentColor, padding: "2px 7px",
+            border: `1px solid ${accentColor}44`, borderRadius: 2,
+          }}>{badge}</span>
+        )}
+        <span style={{
+          fontFamily: "'JetBrains Mono', monospace", fontSize: 11, color: "#3d5060",
+          transform: open ? "rotate(90deg)" : "none", transition: "transform 0.25s ease",
+          display: "inline-block",
+        }}>›</span>
+      </button>
+      <div style={{
+        maxHeight: open ? "6000px" : 0, opacity: open ? 1 : 0, overflow: "hidden",
+        transition: "max-height 0.40s ease, opacity 0.22s ease",
+      }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/* ─── CEREMONY BADGE ─────────────────────────────────────────────────────── */
+function CeremonyBadge({ snapshot }) {
+  const live = !!snapshot?.ceremony_registry_address;
+  return (
+    <span
+      title="Phase 68 MPC Ceremony — 3 circuits × 3 contributors, IoTeX block #41723255 beacon, verifyCeremony() OK"
+      style={{
+        fontFamily: "'JetBrains Mono', monospace", fontSize: 7.5,
+        color: live ? "#00ff88" : "#3d5060",
+        padding: "2px 7px", borderRadius: 2,
+        border: `1px solid ${live ? "rgba(0,255,136,0.35)" : "rgba(61,80,96,0.25)"}`,
+        background: live ? "rgba(0,255,136,0.05)" : "transparent",
+        letterSpacing: "0.06em",
+      }}
+    >
+      MPC {live ? "✓" : "—"}
+    </span>
+  );
+}
+
+/* ─── AGENT FLEET HOOK ────────────────────────────────────────────────────── */
+
+function useAgentFleet(enabled) {
+  const [gate,     setGate]     = useState(null);
+  const [liveMode, setLiveMode] = useState(null);
+  const [federation, setFed]   = useState(null);
+  const [classJ,   setClassJ]  = useState(null);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let active = true;
+
+    async function poll() {
+      const safeFetch = async (url) => {
+        try {
+          const r = await fetch(`${BRIDGE_URL}${url}`, { signal: AbortSignal.timeout(3000) });
+          if (r.ok && active) return r.json();
+        } catch {}
+        return null;
+      };
+      const [g, lm, fed] = await Promise.all([
+        safeFetch("/agent/validation-gate"),
+        safeFetch("/agent/live-mode-status"),
+        safeFetch("/federation/peers"),
+      ]);
+      if (active) {
+        if (g)   setGate(g);
+        if (lm)  setLiveMode(lm);
+        if (fed) setFed(fed);
+      }
+    }
+
+    poll();
+    const t = setInterval(poll, 15000);
+    return () => { active = false; clearInterval(t); };
+  }, [enabled]);
+
+  return { gate, liveMode, federation, classJ };
+}
+
+/* ─── AGENT FLEET PANEL ───────────────────────────────────────────────────── */
+
+function AgentFleetPanel({ gate, liveMode, federation }) {
+  const agents = [
+    { id: "SessionAdjudicator",       phase: 65, role: "LLM ruling (dry_run)", active: true,  color: "#ff9500" },
+    { id: "RulingEnforcementAgent",   phase: 66, role: "streak→on-chain BLOCK", active: true, color: "#ff6b00" },
+    { id: "DataCuratorAgent",         phase: 69, role: "DePIN eligibility poll", active: true, color: "#00d4ff" },
+    { id: "RulingProvenanceAnchor",   phase: 76, role: "SHA-256 cognitive audit", active: true, color: "#00d4ff" },
+    { id: "SessionAdjudicatorValid.", phase: 75, role: "LLM vs rule cross-valid", active: true, color: "#00ff88" },
+    { id: "CeremonyWatchdogAgent",    phase: 75, role: "MPC key fingerprint poll", active: true, color: "#00d4ff" },
+    { id: "LiveModeActivationAgent",  phase: 79, role: "5-condition live-mode gate", active: true, color: "#ff9500" },
+    { id: "FederationBroadcastAgent", phase: 80, role: "event-driven BLOCK broadcast", active: true, color: "#00ff88" },
+    { id: "ClassJDetector",           phase: 81, role: "GaussHMM entropy variance", active: true, color: "#ff6b00" },
+  ];
+
+  const validGate = gate?.gate_passed;
+  const gateClean = gate?.consecutive_clean ?? 0;
+  const gateN     = gate?.gate_n ?? 100;
+  const liveReady = liveMode?.ready_for_live_mode;
+  const blocking  = liveMode?.blocking_conditions ?? [];
+  const dryRun    = liveMode?.current_dry_run !== false;
+  const peerCount = Array.isArray(federation) ? federation.length : 0;
+
+  return (
+    <Panel>
+      <SectionLabel>Agent Fleet — 9 Agents Active · Phase 65–81</SectionLabel>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 14 }}>
+        {agents.map((a) => (
+          <div key={a.id} style={{
+            padding: "8px 10px",
+            background: "rgba(255,255,255,0.02)",
+            border: `1px solid ${a.color}22`,
+            borderRadius: 2,
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 3 }}>
+              <span style={{ width: 5, height: 5, borderRadius: "50%", background: a.color, flexShrink: 0,
+                boxShadow: `0 0 4px ${a.color}` }} />
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: a.color, fontWeight: 700 }}>
+                Ph{a.phase}
+              </span>
+            </div>
+            <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: 11, fontWeight: 600, color: "#c4cdd6" }}>
+              {a.id}
+            </div>
+            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7.5, color: "#3d5060", marginTop: 2 }}>
+              {a.role}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+        {/* Validation Gate */}
+        <div style={{
+          padding: "10px 12px",
+          background: validGate ? "rgba(0,255,136,0.04)" : "rgba(255,107,0,0.04)",
+          border: `1px solid ${validGate ? "rgba(0,255,136,0.2)" : "rgba(255,107,0,0.2)"}`,
+          borderRadius: 2,
+        }}>
+          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: "#3d5060", marginBottom: 4 }}>
+            VALIDATION GATE (Ph75)
+          </div>
+          <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: 18, fontWeight: 700,
+            color: validGate ? "#00ff88" : "#ff9500" }}>
+            {gate ? (validGate ? "PASSED" : "IN PROGRESS") : "POLLING…"}
+          </div>
+          {gate && (
+            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: "#5a6a74", marginTop: 3 }}>
+              {gateClean}/{gateN} clean · {gate.divergence_rate != null ? `rate ${gate.divergence_rate.toFixed(3)}` : "—"}
+            </div>
+          )}
+        </div>
+
+        {/* Live Mode Checklist */}
+        <div style={{
+          padding: "10px 12px",
+          background: liveReady ? "rgba(0,255,136,0.04)" : "rgba(255,149,0,0.04)",
+          border: `1px solid ${liveReady ? "rgba(0,255,136,0.2)" : "rgba(255,149,0,0.2)"}`,
+          borderRadius: 2,
+        }}>
+          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: "#3d5060", marginBottom: 4 }}>
+            LIVE MODE (Ph79)
+          </div>
+          <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: 18, fontWeight: 700,
+            color: dryRun ? "#ff9500" : "#00ff88" }}>
+            {liveMode ? (dryRun ? "DRY RUN" : "LIVE") : "POLLING…"}
+          </div>
+          {blocking.length > 0 && (
+            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, color: "#ff9500", marginTop: 3 }}>
+              ⚠ {blocking[0]?.replace(/_/g, " ")}
+            </div>
+          )}
+          {liveMode && blocking.length === 0 && (
+            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, color: "#5a6a74", marginTop: 3 }}>
+              all conditions met
+            </div>
+          )}
+        </div>
+
+        {/* Federation Status */}
+        <div style={{
+          padding: "10px 12px",
+          background: "rgba(0,212,255,0.04)",
+          border: "1px solid rgba(0,212,255,0.2)",
+          borderRadius: 2,
+        }}>
+          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: "#3d5060", marginBottom: 4 }}>
+            FEDERATION (Ph80)
+          </div>
+          <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: 18, fontWeight: 700, color: "#00d4ff" }}>
+            {peerCount > 0 ? `${peerCount} PEER${peerCount > 1 ? "S" : ""}` : "NO PEERS"}
+          </div>
+          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, color: "#5a6a74", marginTop: 3 }}>
+            {peerCount > 0 ? "HMAC-SHA256 auth" : "federation_broadcast_peers not configured"} · &lt;100ms broadcast
+          </div>
+        </div>
+      </div>
+
+      <div style={{ marginTop: 10, fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: "#3d5060" }}>
+        AgentMessageBus in-process pub/sub (Phase 79) · SQLite agent_events = durable audit log · bus = fast path only ·
+        SET AGENT_DRY_RUN=false when validation_gate_passed=true + all live-mode conditions met
+      </div>
+    </Panel>
+  );
+}
+
+/* ─── CLASS J RISK PANEL ──────────────────────────────────────────────────── */
+
+function ClassJRiskPanel({ snapshot }) {
+  const [assessment, setAssessment] = useState(null);
+  const deviceId = snapshot?.ioid?.device_id ?? null;
+
+  useEffect(() => {
+    if (!deviceId) return;
+    let active = true;
+    async function poll() {
+      try {
+        const r = await fetch(`${BRIDGE_URL}/operator/agent/stream?session_id=classj_poll&message=get_class_j_assessment&device_id=${deviceId}&api_key=`, { signal: AbortSignal.timeout(3000) });
+        // Use REST tool endpoint directly
+      } catch {}
+    }
+    // Simplified: just show placeholder data since no direct REST endpoint for ClassJ assessment
+    // The actual data comes through BridgeAgent tool #50 via /operator/agent/stream SSE
+  }, [deviceId]);
+
+  const RISK_LEVELS = [
+    { level: "LOW",    color: "#00ff88", range: ">0.15 variance",  desc: "Human-consistent rhythmic structure" },
+    { level: "MEDIUM", color: "#ff9500", range: "0.05–0.15",       desc: "Ambiguous — monitoring" },
+    { level: "HIGH",   color: "#ff2d55", range: "≤0.05 variance",  desc: "Class J GaussianHMM signature" },
+  ];
+
+  return (
+    <Panel>
+      <SectionLabel>Class J ML-Bot Risk — Phase 81 · temporal_state_transition_entropy_variance</SectionLabel>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 12 }}>
+        {RISK_LEVELS.map((r) => (
+          <div key={r.level} style={{
+            padding: "10px 12px",
+            background: `${r.color}08`,
+            border: `1px solid ${r.color}25`,
+            borderRadius: 2,
+          }}>
+            <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: 15, fontWeight: 700, color: r.color }}>
+              {r.level}
+            </div>
+            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: "#5a6a74", marginTop: 2 }}>{r.range}</div>
+            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7.5, color: "#3d5060", marginTop: 2 }}>{r.desc}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ padding: "10px 12px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 2 }}>
+        <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: "#5a6a74", marginBottom: 6 }}>
+          DETECTION MECHANISM
+        </div>
+        {[
+          ["GaussianHMM bot",  "Samples from fitted human IMU state distribution → uniform transitions"],
+          ["Human psych.",     "Game events create rhythmic structure → entropy variance >0.15"],
+          ["Discriminator",    "Variance of Shannon entropy across 10×120-frame windows per device"],
+          ["Evidence path",    "HIGH → evidence_summary[ml_bot_candidate=True] → LLM sees flag"],
+          ["Bus event",        "HIGH → bus.publish(class_j_high_risk_detected) → Phase 82 candidate"],
+        ].map(([k, v]) => (
+          <div key={k} style={{ display: "flex", gap: 10, marginBottom: 4 }}>
+            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: "#ff6b00", width: 90, flexShrink: 0 }}>{k}</span>
+            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: "#3d5060" }}>{v}</span>
+          </div>
+        ))}
+      </div>
+      <div style={{ marginTop: 8, fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: "#3d5060" }}>
+        Query via BridgeAgent Tool #50 get_class_j_assessment · per-device deque maxlen=10 windows · assess() never raises · N=15 synthetic Class J sessions validated
+      </div>
+    </Panel>
+  );
+}
+
+/* ─── VERDICT HERO ───────────────────────────────────────────────────────── */
+const HARD_CODES = new Set([0x28, 0x29, 0x2A]);
+const ADV_CODES  = new Set([0x2B, 0x30, 0x31, 0x32]);
+const VERDICT_MAP = {
+  0x20: ["CERTIFIED", "#00ff88"],
+  0x28: ["BLOCKED",   "#ff2d55"], 0x29: ["BLOCKED", "#ff2d55"], 0x2A: ["BLOCKED", "#ff2d55"],
+  0x2B: ["FLAGGED",   "#ff6b00"], 0x30: ["FLAGGED", "#ff6b00"],
+  0x31: ["FLAGGED",   "#ff6b00"], 0x32: ["FLAGGED", "#ff6b00"],
+};
+
+function VerdictHero({ records, snapshot, mode }) {
+  const latest      = records[0] ?? null;
+  const inf         = latest?.inference ?? null;
+  const humanity    = latest?.humanity_prob ?? null;
+  const l4d         = latest?.pitl_l4_distance ?? null;
+  const did         = snapshot?.ioid?.did;
+  const [verdict, vColor] = inf != null
+    ? (VERDICT_MAP[inf] ?? ["FLAGGED", "#ff6b00"])
+    : mode === "LIVE" ? ["AWAITING SIGNAL", "#3d5060"] : ["DEMO MODE", "#ff9500"];
+  const humanPct  = humanity != null ? (humanity * 100).toFixed(1) : null;
+  const humanColor = humanity == null ? "#3d5060"
+    : humanity < 0.40 ? "#ff2d55" : humanity < 0.65 ? "#ff6b00" : "#00ff88";
+  const activeLayers = [
+    latest?.pitl_l4_distance != null,
+    latest?.pitl_l5_entropy  != null,
+    latest?.pitl_l2b_active  != null,
+  ].filter(Boolean).length;
+
+  const [age, setAge] = useState(null);
+  const tsRef = useRef(latest?.timestamp);
+  useEffect(() => { tsRef.current = latest?.timestamp; }, [latest?.timestamp]);
+  useEffect(() => {
+    const tick = () => {
+      const ts = tsRef.current;
+      if (!ts) { setAge(null); return; }
+      const d = (Date.now() - new Date(ts).getTime()) / 1000;
+      setAge(d < 5 ? "JUST NOW" : d < 60 ? `${Math.floor(d)}s AGO` : `${Math.floor(d/60)}m AGO`);
+    };
+    tick();
+    const id = setInterval(tick, 2000);
+    return () => clearInterval(id);
+  }, []);
+
+  const pulseDot = HARD_CODES.has(inf) ? "statusPulse 0.7s ease-in-out infinite"
+    : ADV_CODES.has(inf) ? "statusPulse 2s ease-in-out infinite" : "none";
+
+  return (
+    <div style={{
+      padding: "18px 28px",
+      background: `radial-gradient(ellipse 55% 200% at 0% 50%, ${vColor}0c 0%, transparent 65%), rgba(5,10,15,0.97)`,
+      border: `1px solid ${vColor}28`,
+      borderRadius: 6,
+      display: "flex", alignItems: "center", gap: 28,
+      boxShadow: `0 0 50px ${vColor}06, inset 0 0 0 1px rgba(255,255,255,0.018)`,
+      transition: "border-color 0.9s ease, background 0.9s ease",
+    }}>
+      {/* Verdict */}
+      <div style={{ flexShrink: 0 }}>
+        <div style={{
+          fontSize: 24, fontWeight: 800, letterSpacing: "0.18em",
+          fontFamily: "'Rajdhani', sans-serif", color: vColor,
+          textShadow: `0 0 22px ${vColor}88, 0 0 60px ${vColor}33`,
+          display: "flex", alignItems: "center", gap: 10,
+        }}>
+          <span style={{
+            width: 10, height: 10, borderRadius: "50%", background: vColor,
+            boxShadow: `0 0 8px ${vColor}`, flexShrink: 0,
+            animation: pulseDot,
+          }} />
+          {verdict}
+        </div>
+        <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, color: "#3d5060", marginTop: 4, letterSpacing: "0.1em" }}>
+          VAPI PROTOCOL VERDICT
+        </div>
+      </div>
+
+      <div style={{ width: 1, height: 50, background: `${vColor}20`, flexShrink: 0 }} />
+
+      {/* Humanity */}
+      <div style={{ flexShrink: 0 }}>
+        <div style={{
+          fontSize: 44, fontWeight: 700, fontFamily: "'Rajdhani', sans-serif",
+          color: humanColor, lineHeight: 1, textShadow: `0 0 16px ${humanColor}55`,
+        }}>
+          {humanPct != null ? `${humanPct}%` : "—"}
+        </div>
+        <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, color: "#3d5060", marginTop: 2, letterSpacing: "0.1em" }}>
+          HUMANITY CONFIDENCE
+        </div>
+      </div>
+
+      <div style={{ width: 1, height: 50, background: "rgba(61,80,96,0.25)", flexShrink: 0 }} />
+
+      {/* Layer summary */}
+      <div style={{ flexShrink: 0 }}>
+        <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: 17, fontWeight: 700, color: "#c4cdd6", letterSpacing: "0.06em" }}>
+          {activeLayers} / 9 LAYERS REPORTING
+        </div>
+        <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7.5, color: "#3d5060", marginTop: 4, letterSpacing: "0.08em" }}>
+          L4: {l4d?.toFixed(3) ?? "—"} · {age ?? (mode === "LIVE" ? "WAITING…" : "DEMO DATA")}
+        </div>
+      </div>
+
+      <div style={{ flex: 1 }} />
+
+      {/* Device identity */}
+      <div style={{ flexShrink: 0, textAlign: "right" }}>
+        <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7.5, color: "#3d5060", marginBottom: 6 }}>
+          {did ? did.slice(0, 32) + "…" : (mode === "LIVE" ? "DID RESOLVING…" : "did:io:0xDEMO…")}
+        </div>
+        <div style={{ display: "flex", gap: 5, justifyContent: "flex-end" }}>
+          <span style={{
+            fontFamily: "'JetBrains Mono', monospace", fontSize: 7.5, color: "#00d4ff",
+            padding: "2px 7px", borderRadius: 2,
+            border: "1px solid rgba(0,212,255,0.30)", background: "rgba(0,212,255,0.05)",
+          }}>IoTeX L1</span>
+          <CeremonyBadge snapshot={snapshot} />
+          <span style={{
+            fontFamily: "'JetBrains Mono', monospace", fontSize: 7.5, color: "#3d5060",
+            padding: "2px 7px", borderRadius: 2, border: "1px solid rgba(61,80,96,0.28)",
+          }}>Phase 81</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── HUMANITY RING ──────────────────────────────────────────────────────── */
+function HumanityRing({ records, snapshot }) {
+  const latest   = records[0] ?? null;
+  const humanity = latest?.humanity_prob ?? 0.5;
+  const pct = Math.max(0, Math.min(1, humanity));
+  const W = 260, H = 178, cx = 130, cy = 112, R = 82;
+  const START = 150, SWEEP = 240;
+  const rad = d => d * Math.PI / 180;
+  const pt  = (deg, r = R) => ({
+    x: (cx + r * Math.cos(rad(deg))).toFixed(2),
+    y: (cy + r * Math.sin(rad(deg))).toFixed(2),
+  });
+  const bgS = pt(START), bgE = pt(START + SWEEP);
+  const fillSweep = pct * SWEEP;
+  const fillE = pt(START + fillSweep);
+  const fillLarge = fillSweep > 180 ? 1 : 0;
+  const needlePt  = pt(START + fillSweep, R - 14);
+  const color = pct < 0.40 ? "#ff2d55" : pct < 0.65 ? "#ff6b00" : "#00ff88";
+  const l2cInactive = latest?.l2c_inactive;
+  const sigActive = [
+    latest?.pitl_l4_distance != null,
+    latest?.pitl_l5_entropy  != null,
+    latest?.pitl_l2b_active  != null,
+    !l2cInactive,
+  ].filter(Boolean).length;
+  return (
+    <Panel style={{ padding: 0, overflow: "hidden" }}>
+      <SectionLabel>HUMANITY SCORE</SectionLabel>
+      <div style={{ padding: "2px 12px 6px" }}>
+        <svg width={W} height={H} style={{ display: "block", margin: "0 auto" }}>
+          <path d={`M ${bgS.x} ${bgS.y} A ${R} ${R} 0 1 1 ${bgE.x} ${bgE.y}`}
+            fill="none" stroke="#080f16" strokeWidth={14} strokeLinecap="round" />
+          {[[0, 0.40, "#ff2d55"], [0.40, 0.65, "#ff6b00"], [0.65, 1, "#00ff88"]].map(([f, t, c], i) => {
+            const ss = pt(START + f * SWEEP), se = pt(START + t * SWEEP);
+            const sw = (t - f) * SWEEP;
+            return <path key={i} d={`M ${ss.x} ${ss.y} A ${R} ${R} 0 ${sw>180?1:0} 1 ${se.x} ${se.y}`}
+              fill="none" stroke={c + "38"} strokeWidth={14} strokeLinecap="round" />;
+          })}
+          {pct > 0.003 && (
+            <path d={`M ${bgS.x} ${bgS.y} A ${R} ${R} 0 ${fillLarge} 1 ${fillE.x} ${fillE.y}`}
+              fill="none" stroke={color} strokeWidth={14} strokeLinecap="round" opacity={0.92}
+              style={{ filter: `drop-shadow(0 0 5px ${color}88)` }} />
+          )}
+          <line x1={cx} y1={cy} x2={needlePt.x} y2={needlePt.y} stroke={color} strokeWidth={2.5} strokeLinecap="round" />
+          <circle cx={cx} cy={cy} r={5} fill={color} />
+          <circle cx={cx} cy={cy} r={2} fill="#030507" />
+          <text x={cx} y={cy - 19} textAnchor="middle" fill={color}
+            fontSize="36" fontFamily="Rajdhani, sans-serif" fontWeight="700"
+            style={{ filter: `drop-shadow(0 0 8px ${color}55)` }}>
+            {(pct * 100).toFixed(0)}%
+          </text>
+          <text x={cx} y={cy - 4} textAnchor="middle" fill="#3d5060" fontSize="7"
+            fontFamily="JetBrains Mono, monospace" letterSpacing="2">HUMAN CONFIDENCE</text>
+          <text x={cx} y={cy + 10} textAnchor="middle" fill="#2a3540" fontSize="6.5"
+            fontFamily="JetBrains Mono, monospace">{sigActive} SIGNALS ACTIVE</text>
+        </svg>
+        <div style={{ display: "flex", gap: 5, justifyContent: "center", flexWrap: "wrap", paddingBottom: 4 }}>
+          {[["L4 BIO","28%",latest?.pitl_l4_distance!=null],["L5 RHYTHM","27%",latest?.pitl_l5_entropy!=null],["L2B IMU","15%",latest?.pitl_l2b_active!=null],["L2C STICK","10%",!l2cInactive]].map(([lbl, w, active]) => (
+            <div key={lbl} style={{
+              fontFamily: "'JetBrains Mono', monospace", fontSize: 6.5,
+              color: active ? "#5a6a74" : "#2a3540",
+              padding: "1px 5px", borderRadius: 2,
+              border: `1px solid ${active ? "rgba(61,80,96,0.4)" : "rgba(25,35,45,0.3)"}`,
+            }}>{lbl} {w}</div>
+          ))}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+/* ─── PITL TRAFFIC LIGHTS ────────────────────────────────────────────────── */
+function PITLTrafficLights({ records, snapshot, l2cInactive }) {
+  const latest  = records[0] ?? null;
+  const l4d     = latest?.pitl_l4_distance ?? null;
+  const anomThr = snapshot?.calibration?.anomaly_threshold ?? 7.009;
+  const l5E     = latest?.pitl_l5_entropy;
+  const l5Cv    = latest?.pitl_l5_cv;
+  const l2bActive = latest?.pitl_l2b_active;
+  const getCV = () => {
+    if (l5Cv == null) return null;
+    if (typeof l5Cv === "object" && !Array.isArray(l5Cv)) return l5Cv.r2 ?? l5Cv.cross ?? Object.values(l5Cv)[0] ?? null;
+    return Number(l5Cv);
+  };
+  const cvVal = getCV();
+  const [exp, setExp] = useState(null);
+  const layers = [
+    { id:"L4", name:"BIOMETRIC",    color: l4d==null?"#3d5060":l4d>anomThr?"#ff2d55":"#00ff88",
+      status: l4d==null?"WAIT":l4d>anomThr?"ANOMALY":"NOMINAL",   pulse: l4d!=null&&l4d>anomThr,
+      detail: `Mahalanobis dist ${l4d?.toFixed(3)??"—"} vs threshold ${anomThr.toFixed(3)} (N=74, 12 features, Phase 57).` },
+    { id:"L5", name:"RHYTHM",       color: l5E==null?"#3d5060":l5E<1.0?"#ff2d55":"#00ff88",
+      status: l5E==null?"WAIT":l5E<1.0?"BOT":"HUMAN",             pulse: l5E!=null&&l5E<1.0,
+      detail: `IPI entropy ${l5E?.toFixed(3)??"—"} bits (min 1.0 bit). CV ${cvVal?.toFixed(3)??"—"} (min 0.08). R2>Cross>L2>Triangle priority (ncaa_cfb_26).` },
+    { id:"L2B", name:"IMU COUPLING", color: l2bActive==null?"#3d5060":l2bActive?"#00ff88":"#ff2d55",
+      status: l2bActive==null?"WAIT":l2bActive?"COUPLED":"DECOUPLED", pulse: l2bActive===false,
+      detail: "IMU micro-disturbance must precede button rising edge by 5–80ms. Missing = bot injection (0x31)." },
+    { id:"L2C", name:"STICK CORR",  color: l2cInactive?"#3d5060":"#00d4ff",
+      status: l2cInactive?"INACTIVE":"OK",                         pulse: false,
+      detail: "Pearson cross-corr of stick velocity vs gyro_z at causal lags. INACTIVE in NCAA CFB 26 (dead-zone stick). Weight 0.10 → 0.5 neutral prior." },
+    { id:"L6",  name:"HAPTIC CR",   color: "#3d5060", status:"OFF", pulse: false,
+      detail: "Active trigger challenge-response. DISABLED (L6_CHALLENGES_ENABLED=false). N=43 calibration. RIGID_MAX uncalibrated (needs N≥50)." },
+    { id:"L6B", name:"REFLEX",      color: "#3d5060", status:"OFF", pulse: false,
+      detail: "Sub-perceptual neuromuscular reflex probe. DISABLED (L6B_ENABLED=false). N=0 real calibration data collected." },
+  ];
+  return (
+    <Panel style={{ padding: 0 }}>
+      <SectionLabel>PITL LAYER STATUS</SectionLabel>
+      <div style={{ paddingBottom: 8 }}>
+        {layers.map((l, i) => (
+          <div key={l.id}>
+            <div onClick={() => setExp(exp === l.id ? null : l.id)} style={{
+              display: "flex", alignItems: "center", gap: 10, padding: "8px 18px", cursor: "pointer",
+              background: exp === l.id ? "rgba(255,107,0,0.04)" : "transparent",
+              borderTop: i > 0 ? "1px solid rgba(61,80,96,0.12)" : "none",
+            }}>
+              <span style={{
+                width: 8, height: 8, borderRadius: "50%", background: l.color, flexShrink: 0,
+                boxShadow: l.color !== "#3d5060" ? `0 0 5px ${l.color}88` : "none",
+                animation: l.pulse ? "statusPulse 1.8s ease-in-out infinite" : "none",
+              }} />
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7.5, color: "#3d5060", width: 26, flexShrink: 0 }}>{l.id}</span>
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8.5, color: "#c4cdd6", letterSpacing: "0.05em", flex: 1 }}>{l.name}</span>
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7.5, color: l.color }}>{l.status}</span>
+              <span style={{ color: "#3d5060", fontSize: 9, fontFamily: "'JetBrains Mono', monospace" }}>›</span>
+            </div>
+            {exp === l.id && (
+              <div style={{
+                padding: "5px 18px 8px 62px", fontFamily: "'JetBrains Mono', monospace",
+                fontSize: 7.5, color: "#4a5a64", lineHeight: 1.6,
+                borderBottom: "1px solid rgba(61,80,96,0.12)",
+              }}>{l.detail}</div>
+            )}
+          </div>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+/* ─── PROOF FEED ─────────────────────────────────────────────────────────── */
+const INF_WORD = {
+  0x20:["CERTIFIED","#00ff88"], 0x28:["DRIVER INJECT","#ff2d55"], 0x29:["WALLHACK","#ff2d55"],
+  0x2A:["AIMBOT","#ff2d55"],   0x2B:["TEMPORAL BOT","#ff6b00"],  0x30:["BIO ANOMALY","#ff6b00"],
+  0x31:["IMU DECOUPLED","#00d4ff"], 0x32:["STICK DECOUPLED","#00d4ff"],
+};
+function ProofFeed({ records }) {
+  const shown = records.slice(0, 10);
+  const fmtT = ts => { try { const d=new Date(ts); return `${d.getHours().toString().padStart(2,"0")}:${d.getMinutes().toString().padStart(2,"0")}:${d.getSeconds().toString().padStart(2,"0")}`; } catch { return "—"; }};
+  return (
+    <Panel style={{ padding: 0 }}>
+      <SectionLabel>PoAC PROOF FEED · {shown.length > 0 ? `LAST ${shown.length}` : "AWAITING"}</SectionLabel>
+      {shown.length === 0 ? (
+        <div style={{ padding: "16px 18px", fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: "#3d5060" }}>
+          AWAITING BRIDGE CONNECTION…
+        </div>
+      ) : (
+        <div style={{ paddingBottom: 6 }}>
+          {shown.map((r, i) => {
+            const [word, color] = INF_WORD[r.inference] ?? ["UNKNOWN", "#3d5060"];
+            return (
+              <div key={r.record_hash ?? i} style={{
+                display: "flex", alignItems: "center", gap: 10, padding: "6px 18px",
+                borderTop: i > 0 ? "1px solid rgba(61,80,96,0.09)" : "none",
+                opacity: 1 - i * 0.09,
+                animation: i === 0 ? "fadeIn 0.25s ease" : "none",
+              }} title={`Hash: ${r.record_hash ?? "—"} | L4: ${r.pitl_l4_distance?.toFixed(3) ?? "—"}`}>
+                <span style={{ width: 5, height: 5, borderRadius: "50%", background: color, flexShrink: 0,
+                  boxShadow: i === 0 ? `0 0 5px ${color}` : "none" }} />
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7.5, color: "#3d5060", width: 55, flexShrink: 0 }}>{fmtT(r.timestamp)}</span>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color, flex: 1, letterSpacing: "0.05em" }}>{word}</span>
+                <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, color: "#2a3540" }}>{(r.record_hash ?? "").slice(0, 12)}…</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+/* ─── TOURNAMENT GATE CARD ───────────────────────────────────────────────── */
+function TournamentGateCard({ records, snapshot }) {
+  const latest = records[0] ?? null;
+  const inf    = latest?.inference ?? null;
+  const hardClear  = inf == null ? null : !HARD_CODES.has(inf);
+  const enrolled   = snapshot?.enrollment?.is_enrolled ?? null;
+  const nomSessions = snapshot?.enrollment?.nominal_sessions ?? 0;
+  const passport   = snapshot?.passport?.issued ?? null;
+  const passportOnChain = snapshot?.passport?.on_chain ?? false;
+  const checks = [
+    { label: `Hard cheat codes clear`,
+      pass: hardClear,
+      fail: `Code 0x${inf?.toString(16).toUpperCase()} detected — tournament blocked immediately.` },
+    { label: `Enrollment complete (${nomSessions}/10 NOMINAL sessions)`,
+      pass: enrolled,
+      fail: "Minimum 10 NOMINAL sessions required. Enrollment auto-triggers PHGCredential mint." },
+    { label: `ZK tournament passport${passportOnChain ? " · on-chain ✓" : ""}`,
+      pass: passport,
+      fail: "Run POST /operator/passport to issue Groth16 tournament passport." },
+  ];
+  const anyNull = checks.some(c => c.pass === null);
+  const anyFail = checks.some(c => c.pass === false);
+  const gColor  = anyNull ? "#3d5060" : anyFail ? "#ff2d55" : "#00ff88";
+  const gLabel  = anyNull ? "AWAITING DATA" : anyFail ? "INELIGIBLE" : "ELIGIBLE";
+  return (
+    <Panel style={{ padding: 0 }}>
+      <SectionLabel>TOURNAMENT GATE</SectionLabel>
+      <div style={{ padding: "8px 18px 14px" }}>
+        <div style={{
+          fontSize: 26, fontWeight: 800, fontFamily: "'Rajdhani', sans-serif",
+          color: gColor, letterSpacing: "0.12em",
+          textShadow: !anyNull ? `0 0 18px ${gColor}66` : "none", marginBottom: 10,
+        }}>{gLabel}</div>
+        {checks.map((c, i) => (
+          <div key={i} style={{ marginBottom: 7 }}>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9.5,
+                color: c.pass===null?"#3d5060":c.pass?"#00ff88":"#ff2d55", flexShrink: 0, marginTop: 0 }}>
+                {c.pass===null?"○":c.pass?"☑":"☒"}
+              </span>
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7.5,
+                color: c.pass===null?"#3d5060":c.pass?"#5a6a74":"#c4cdd6" }}>
+                {c.label}
+              </span>
+            </div>
+            {c.pass === false && (
+              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7,
+                color: "#ff6b00", marginLeft: 18, marginTop: 2, lineHeight: 1.55 }}>
+                {c.fail}
+              </div>
+            )}
+          </div>
+        ))}
+        <div style={{
+          marginTop: 10, padding: "6px 10px",
+          border: "1px solid rgba(255,107,0,0.2)", borderRadius: 3,
+          background: "rgba(255,107,0,0.04)",
+        }}>
+          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, color: "#ff6b00", letterSpacing: "0.06em" }}>
+            ⚠ SEPARATION RATIO 0.362 — OPEN GAP
+          </div>
+          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 6.5, color: "#3d5060", marginTop: 2, lineHeight: 1.5 }}>
+            L4 is intra-player only. Biometric transplant: 0% detection. §8.6 whitepaper.
+          </div>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
 /* ─── MAIN APP ────────────────────────────────────────────────────────────── */
 
 export default function VAPIDashboard() {
@@ -1740,14 +2619,20 @@ export default function VAPIDashboard() {
   const latestDeviceId = records[0]?.device_id || '';
   const [agentThinking, setAgentThinking] = useState(false);
 
-  const sessionTarget  = snapshot?.session?.total_sessions  ?? 74;
-  const testTarget     = snapshot?.session?.total_tests     ?? 972;
-  const contractTarget = snapshot?.session?.contracts_live  ?? 15;
+  // Phase 81 agent fleet status (polls when LIVE)
+  const { gate, liveMode, federation } = useAgentFleet(mode === "LIVE");
+
+  // Phase 93: Protocol Intelligence + triage escalation count
+  const protocolReport = useProtocolIntelligence(mode === "LIVE");
+  const triageEscalated = protocolReport?.triage_escalated_count ?? 0;
+
+  // Phase 68+ protocol constants — hardcoded, not pulled from bridge snapshot.
+  // snapshot.session.* returns internal bridge runtime counters, not these values.
   const phase50Stats   = snapshot?.phase50 ?? null;
 
-  const sessionCount  = useCounter(sessionTarget,  1500);
-  const testCount     = useCounter(testTarget,     1800);
-  const contractCount = useCounter(contractTarget, 1200);
+  const sessionCount  = useCounter(74,   1500);   // N=74 calibration corpus (3 players, DualShock Edge)
+  const testCount     = useCounter(1728, 1800);   // bridge 1264 + SDK 63 + Hardhat 404 + hw 28 + E2E 14
+  const contractCount = useCounter(31,   1200);   // ALL 31 contracts LIVE on IoTeX testnet
 
   const l6Status      = snapshot ? (snapshot.l6?.enabled ? "ACTIVE" : "DISABLED") : undefined;
   // L2C dead-zone: derive from most recent WS record (true in NCAA CFB 26, 68/69 sessions).
@@ -1819,7 +2704,7 @@ export default function VAPIDashboard() {
               </span>
             </div>
             <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: "#3d5060", marginTop: 3, letterSpacing: "0.1em" }}>
-              Cryptographic Anti-Cheat Protocol · DualShock Edge CFI-ZCP1 · IoTeX L1 · Whitepaper v3 (Phase 58)
+              Cryptographic Anti-Cheat Protocol · DualShock Edge CFI-ZCP1 · IoTeX L1 · Whitepaper v3 (Phase 81)
             </div>
           </div>
           <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
@@ -1938,88 +2823,103 @@ export default function VAPIDashboard() {
           </div>
         </div>
 
-        {/* ── STAT ROW ────────────────────────────────────────────────────── */}
-        <div style={{ padding: "16px 32px 0", display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 8 }}>
-          <StatBox label="Injection Det. Margin" value="14,000×"  accent="#ff6b00" mono />
-          <StatBox label="False Positive Rate"   value="2.9%"     accent="#00ff88" mono />
-          <StatBox label="Calibration Sessions"  value="N=74"     accent="#00d4ff" mono />
-          <StatBox label="Distinct Players"      value="3"        accent="#ff9500" mono />
-          <StatBox label="Separation Ratio"      value="0.362"    accent="#ff9500" mono sub="⚠ inter-player" />
-          <StatBox label="L5 Cross Coverage"     value="83.8%"    accent="#00ff88" mono sub="62/74 sessions" />
-        </div>
-
-        {/* ── MAIN GRID ───────────────────────────────────────────────────── */}
-        <div style={{ padding: "16px 32px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-          {/* Left column */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <div className="panel-fade" style={{ animationDelay: "0.05s" }}><PITLStack l6Status={l6Status} l2cInactive={l2cInactive} /></div>
-            <div className="panel-fade" style={{ animationDelay: "0.15s" }}><AdversarialMatrix /></div>
-            <div className="panel-fade" style={{ animationDelay: "0.25s" }}><HardwareMetrics /></div>
-            {mode === "LIVE" && (
-              <div className="panel-fade" style={{ animationDelay: "0.32s" }}><LiveRecordFeed records={records} /></div>
-            )}
-          </div>
-          {/* Right column */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <div className="panel-fade" style={{ animationDelay: "0.1s" }}><PoACRecord /></div>
-            <div className="panel-fade" style={{ animationDelay: "0.2s" }}><BiometricRadar /></div>
-            <div className="panel-fade" style={{ animationDelay: "0.3s" }}><LivingCalibration chartData={calibData} /></div>
-          </div>
-        </div>
-
-        {/* ── L5 COVERAGE ROW (Phase 39/40) ───────────────────────────────── */}
-        <div style={{ padding: "0 32px 16px" }}>
-          <div className="panel-fade" style={{ animationDelay: "0.33s" }}><L5ButtonCoverage /></div>
-        </div>
-
-        {/* ── CAPTURE MONITOR (Phase 44, LIVE only) ───────────────────────── */}
-        {mode === "LIVE" && (
-          <div style={{ padding: "0 32px 16px" }}>
-            <div className="panel-fade" style={{ animationDelay: "0.36s" }}>
-              <CaptureMonitor
-                latestRecord={records[0] ?? null}
-                accelHistory={accelHistory}
-                latestFrame={latestFrame}
-              />
-            </div>
-          </div>
-        )}
-
-        {/* ── FULL-WIDTH ROW ───────────────────────────────────────────────── */}
-        <div style={{ padding: "0 32px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
-          <div className="panel-fade" style={{ animationDelay: "0.35s" }}><PHGCredential phgScore={phgScore} /></div>
-          <div className="panel-fade" style={{ animationDelay: "0.4s"  }}><ZKProofStatus /></div>
-          <div className="panel-fade" style={{ animationDelay: "0.45s" }}><ContractStack /></div>
-        </div>
-
-        {/* ── OPEN ITEMS ───────────────────────────────────────────────────── */}
+        {/* ── VERDICT HERO ────────────────────────────────────────────────── */}
         <div style={{ padding: "16px 32px 0" }}>
-          <div className="panel-fade" style={{ animationDelay: "0.5s" }}><OpenItems /></div>
+          <VerdictHero records={records} snapshot={snapshot} mode={mode} />
         </div>
 
-        {/* ── BRIDGEAGENT CHAT PANEL (LIVE mode only) ───────────────────── */}
-        {mode === "LIVE" && (
-          <div style={{ padding: "16px 32px 0" }}>
-            <div className="panel-fade" style={{ animationDelay: "0.55s" }}>
-              <AgentPanel
-                apiKey={import.meta.env.VITE_BRIDGE_API_KEY}
-                onThinkingChange={setAgentThinking}
-              />
-            </div>
-          </div>
-        )}
+        {/* ── INTELLIGENCE CARDS ──────────────────────────────────────────── */}
+        <div style={{ padding: "14px 32px 0", display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 }}>
+          <HumanityRing records={records} snapshot={snapshot} />
+          <PITLTrafficLights records={records} snapshot={snapshot} l2cInactive={l2cInactive} />
+          <ProofFeed records={records} />
+          <TournamentGateCard records={records} snapshot={snapshot} />
+        </div>
 
-        {/* ── CALIBRATION INTELLIGENCE AGENT PANEL (Phase 50, LIVE only) ── */}
-        {mode === "LIVE" && (
-          <div style={{ padding: "16px 32px 32px" }}>
-            <div className="panel-fade" style={{ animationDelay: "0.60s" }}>
-              <CalibAgentPanel
-                apiKey={import.meta.env.VITE_BRIDGE_API_KEY}
-                phase50Stats={phase50Stats}
-              />
+        {/* ── ACCORDION STACK ─────────────────────────────────────────────── */}
+        <div style={{ padding: "14px 32px 32px", display: "flex", flexDirection: "column" }}>
+
+          {mode === "LIVE" && (
+            <AccordionPanel title="AGENT FLEET & ENFORCEMENT" icon="◉" accentColor="#ff6b00" defaultOpen={true} badge="9 AGENTS">
+              <div style={{ display: "flex", flexDirection: "column", gap: 14, padding: "12px 16px" }}>
+                <AgentFleetPanel gate={gate} liveMode={liveMode} federation={federation} />
+              </div>
+            </AccordionPanel>
+          )}
+
+          {mode === "LIVE" && (
+            <AccordionPanel
+              title="PROTOCOL HEALTH SCORE"
+              icon="◉"
+              accentColor="#00ff88"
+              badge={protocolReport ? `${Math.round(protocolReport.protocol_health_score ?? 0)}/100` : "—"}
+            >
+              <div style={{ padding: "12px 16px" }}>
+                <ProtocolHealthPanel report={protocolReport} triageEscalated={triageEscalated} />
+              </div>
+            </AccordionPanel>
+          )}
+
+          {mode === "LIVE" && (
+            <AccordionPanel title="AGENT INTELLIGENCE" icon="◉" accentColor="#ff9500">
+              <div style={{ display: "flex", flexDirection: "column", gap: 14, padding: "12px 16px" }}>
+                <AgentPanel apiKey={import.meta.env.VITE_BRIDGE_API_KEY} onThinkingChange={setAgentThinking} />
+                <CalibAgentPanel apiKey={import.meta.env.VITE_BRIDGE_API_KEY} phase50Stats={phase50Stats} />
+              </div>
+            </AccordionPanel>
+          )}
+
+          {mode === "LIVE" && (
+            <AccordionPanel title="LIVE INPUT MONITOR" icon="◈" accentColor="#00d4ff" defaultOpen={true}>
+              <div style={{ padding: "12px 16px" }}>
+                <CaptureMonitor latestRecord={records[0] ?? null} accelHistory={accelHistory} latestFrame={latestFrame} />
+              </div>
+            </AccordionPanel>
+          )}
+
+          <AccordionPanel title="BIOMETRIC FINGERPRINT" icon="◈" accentColor="#00d4ff">
+            <div style={{ padding: "12px 16px" }}>
+              <BiometricRadar />
             </div>
-          </div>
-        )}
+          </AccordionPanel>
+
+          <AccordionPanel title="ADVERSARIAL DETECTION" icon="◆" accentColor="#ff2d55" badge="CLASS J OPEN">
+            <div style={{ display: "flex", flexDirection: "column", gap: 14, padding: "12px 16px" }}>
+              <AdversarialMatrix />
+              <ClassJRiskPanel snapshot={snapshot} />
+            </div>
+          </AccordionPanel>
+
+          <AccordionPanel title="CALIBRATION STATE" icon="◉" accentColor="#ff9500" badge="⚠ ratio 0.362">
+            <div style={{ display: "flex", flexDirection: "column", gap: 14, padding: "12px 16px" }}>
+              <LivingCalibration chartData={calibData} />
+              <HardwareMetrics />
+              <L5ButtonCoverage />
+            </div>
+          </AccordionPanel>
+
+          <AccordionPanel title="CONTRACT STACK & ZK" icon="⬡" accentColor="#00ff88">
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, padding: "12px 16px" }}>
+              <PHGCredential phgScore={phgScore} />
+              <ZKProofStatus />
+              <ContractStack />
+            </div>
+          </AccordionPanel>
+
+          <AccordionPanel title="FORENSIC WIRE FORMAT" icon="≡" accentColor="#3d5060">
+            <div style={{ display: "flex", flexDirection: "column", gap: 14, padding: "12px 16px" }}>
+              <PoACRecord />
+              <PITLStack l6Status={l6Status} l2cInactive={l2cInactive} />
+            </div>
+          </AccordionPanel>
+
+          <AccordionPanel title="PROJECT STATUS" icon="○" accentColor="#3d5060">
+            <div style={{ padding: "12px 16px" }}>
+              <OpenItems />
+            </div>
+          </AccordionPanel>
+
+        </div>
 
         {/* ── FOOTER ──────────────────────────────────────────────────────── */}
         <div style={{
@@ -2028,10 +2928,10 @@ export default function VAPIDashboard() {
           display: "flex", justifyContent: "space-between", alignItems: "center",
         }}>
           <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: "#3d5060" }}>
-            VAPI Protocol Dashboard · Whitepaper v3 · Phase 58 · IoTeX Testnet
+            VAPI Protocol Dashboard · Whitepaper v3 · Phase 81 · IoTeX Testnet · 31 Contracts LIVE
           </span>
           <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: "#3d5060" }}>
-            228B PoAC wire format FROZEN · 9-layer PITL · Groth16 BN254 · ~1,397 tests
+            228B PoAC wire format FROZEN · 9-layer PITL · Groth16 BN254 · MPC Ceremony LIVE · ~1,728 tests
           </span>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{

@@ -20,6 +20,7 @@ from eth_account import Account
 
 from .codec import PoACRecord
 from .config import Config
+from .zk_verifier import ZKVerifier
 
 log = logging.getLogger(__name__)
 
@@ -966,6 +967,15 @@ class ChainClient:
         else:
             self._tournament_passport = None
 
+        # Phase 68-B: ZKVerifier — local Groth16 pre-verification before chain submission
+        vkey_path = getattr(cfg, "pitl_vkey_path", "")
+        self._zk_verifier: ZKVerifier | None = ZKVerifier(vkey_path) if vkey_path else None
+        self._zk_stats = {"accepted": 0, "rejected": 0, "skipped": 0, "errors": 0}
+        log.info(
+            "ZKVerifier: %s",
+            f"enabled (vkey={vkey_path})" if self._zk_verifier else "disabled (no PITL_VKEY_PATH)",
+        )
+
     @classmethod
     def generate_keystore(cls, output_path: str, password: str) -> str:
         """Encrypt the BRIDGE_PRIVATE_KEY env var to an Ethereum keystore JSON file.
@@ -1626,6 +1636,43 @@ class ChainClient:
         if not registry:
             log.debug("submit_pitl_proof: no PITL registry configured, skipping")
             return ""
+
+        # Phase 68-B: local ZK pre-verification — reject invalid proofs before gas spend
+        if getattr(self, "_zk_verifier", None) is not None:
+            proof_dict = {
+                "pi_a": list(proof_bytes[:96]),
+                "pi_b": list(proof_bytes[96:224]),
+                "pi_c": list(proof_bytes[224:]),
+                "protocol": "groth16",
+                "curve": "bn128",
+            }
+            public_signals = [
+                str(feature_commitment),
+                str(humanity_prob_int),
+                str(inference_code),
+                str(nullifier_hash),
+                str(epoch),
+            ]
+            _zk_stats = getattr(self, "_zk_stats", {"accepted": 0, "rejected": 0, "errors": 0})
+            try:
+                valid = await self._zk_verifier.verify_proof(proof_dict, public_signals)
+            except Exception as exc:
+                log.warning("ZKVerifier: unexpected error — skipping pre-verify: %s", exc)
+                _zk_stats["errors"] += 1
+                valid = True  # fail-open: never silently drop proofs on verifier error
+            if valid:
+                _zk_stats["accepted"] += 1
+            else:
+                _zk_stats["rejected"] += 1
+                log.warning(
+                    "ZKVerifier: rejected proof for device=%s — not submitted", device_id[:16]
+                )
+                raise ValueError(
+                    f"ZK proof invalid: local pre-verification failed for device {device_id[:16]}"
+                )
+        else:
+            getattr(self, "_zk_stats", {"skipped": 0})["skipped"] += 1
+
         device_id_bytes32 = bytes.fromhex(device_id)
         tx_hash = await self._send_tx(
             registry.functions.submitPITLProof,
@@ -1939,3 +1986,660 @@ class ChainClient:
         except Exception as exc:
             log.debug("get_tournament_passport chain call failed (non-fatal): %s", exc)
             return {}
+
+    # --- Phase 66: RulingRegistry on-chain commitment ---
+
+    async def record_ruling_on_chain(
+        self,
+        commitment_hash_bytes: bytes,
+        device_id_hex: str,
+        verdict: str,
+        confidence: float,
+        timestamp_ns: int,
+    ) -> str:
+        """Submit ruling commitment_hash to RulingRegistry.sol (Phase 66).
+
+        Returns tx_hash hex string. Raises RuntimeError when RULING_REGISTRY_ADDRESS
+        is not configured or the transaction reverts.
+        """
+        registry_address = getattr(self._cfg, "ruling_registry_address", "")
+        if not registry_address:
+            raise RuntimeError("RULING_REGISTRY_ADDRESS not configured")
+
+        VERDICT_MAP = {"FLAG": 0, "HOLD": 1, "BLOCK": 2, "CERTIFY": 3, "CLEAR": 4}
+        device_bytes = bytes.fromhex(device_id_hex.replace("0x", ""))
+        device_b32 = device_bytes.ljust(32, b"\x00")[:32]
+
+        ruling_registry_abi = [
+            {
+                "name": "recordRuling",
+                "type": "function",
+                "stateMutability": "nonpayable",
+                "inputs": [
+                    {"name": "commitmentHash", "type": "bytes32"},
+                    {"name": "deviceId",       "type": "bytes32"},
+                    {"name": "verdict",        "type": "uint8"},
+                    {"name": "confidence1000", "type": "uint16"},
+                    {"name": "timestamp",      "type": "uint64"},
+                ],
+                "outputs": [],
+            }
+        ]
+        contract = self._w3.eth.contract(
+            address=self._w3.to_checksum_address(registry_address),
+            abi=ruling_registry_abi,
+        )
+        nonce = await self._w3.eth.get_transaction_count(self._account.address)
+        tx = await contract.functions.recordRuling(
+            commitment_hash_bytes,
+            device_b32,
+            VERDICT_MAP.get(verdict, 0),
+            int(confidence * 1000),
+            timestamp_ns // 1_000_000_000,
+        ).build_transaction({
+            "from":  self._account.address,
+            "nonce": nonce,
+            "gas":   120_000,
+        })
+        signed  = self._account.sign_transaction(tx)
+        tx_hash = await self._w3.eth.send_raw_transaction(signed.rawTransaction)
+        receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+        if receipt.status != 1:
+            raise RuntimeError(f"record_ruling_on_chain: tx reverted {tx_hash.hex()}")
+        log.info("record_ruling_on_chain: tx=%s verdict=%s", tx_hash.hex()[:16], verdict)
+        return tx_hash.hex()
+
+    # --- Phase 67: CeremonyRegistry on-chain commitment ---
+
+    async def record_ceremony_on_chain(
+        self,
+        circuit_name: str,
+        vkey_json_bytes: bytes,
+        beacon_block_hash: bytes,
+        beacon_block_number: int,
+        contributor_hashes: list,
+        ptau_source: str = "hermez-hez_final_15-2021",
+    ) -> str:
+        """Register MPC ceremony in CeremonyRegistry.sol (Phase 67).
+
+        circuitId   = keccak256(circuit_name.encode())
+        vkeyHash    = keccak256(vkey_json_bytes)
+        Raises RuntimeError when CEREMONY_REGISTRY_ADDRESS not configured or tx reverts.
+        Returns tx_hash hex string.
+        """
+        import hashlib
+        registry_address = getattr(self._cfg, "ceremony_registry_address", "")
+        if not registry_address:
+            raise RuntimeError("CEREMONY_REGISTRY_ADDRESS not configured")
+
+        circuit_id_bytes = hashlib.sha3_256(circuit_name.encode()).digest()
+        vkey_hash_bytes  = hashlib.sha3_256(vkey_json_bytes).digest()
+        contrib_bytes32  = [h if isinstance(h, bytes) else bytes.fromhex(h) for h in contributor_hashes]
+
+        ceremony_registry_abi = [{
+            "name": "registerCeremony",
+            "type": "function",
+            "stateMutability": "nonpayable",
+            "inputs": [
+                {"name": "circuitId",          "type": "bytes32"},
+                {"name": "verifyingKeyHash",    "type": "bytes32"},
+                {"name": "beaconBlockHash",     "type": "bytes32"},
+                {"name": "beaconBlockNumber",   "type": "uint64"},
+                {"name": "contributorHashes",   "type": "bytes32[]"},
+                {"name": "ptauSource",          "type": "string"},
+            ],
+            "outputs": [],
+        }]
+        contract = self._w3.eth.contract(
+            address=self._w3.to_checksum_address(registry_address),
+            abi=ceremony_registry_abi,
+        )
+        nonce = await self._w3.eth.get_transaction_count(self._account.address)
+        tx = await contract.functions.registerCeremony(
+            circuit_id_bytes,
+            vkey_hash_bytes,
+            beacon_block_hash,
+            beacon_block_number,
+            contrib_bytes32,
+            ptau_source,
+        ).build_transaction({
+            "from":  self._account.address,
+            "nonce": nonce,
+            "gas":   200_000,
+        })
+        signed  = self._account.sign_transaction(tx)
+        tx_hash = await self._w3.eth.send_raw_transaction(signed.rawTransaction)
+        receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+        if receipt.status != 1:
+            raise RuntimeError(f"record_ceremony_on_chain: tx reverted {tx_hash.hex()}")
+        log.info(
+            "record_ceremony_on_chain: circuit=%s tx=%s",
+            circuit_name, tx_hash.hex()[:16],
+        )
+        return tx_hash.hex()
+
+    def get_zk_verifier_stats(self) -> dict:
+        """Phase 68-B — Return ZKVerifier proof acceptance/rejection/skipped/error counters."""
+        return {
+            "enabled": self._zk_verifier is not None,
+            "vkey_path": self._zk_verifier.vkey_path() if self._zk_verifier else None,
+            **self._zk_stats,
+        }
+
+    # --- Phase 69: Native VAPI Oracle write methods ---
+
+    def _device_b32(self, device_id_hex: str) -> bytes:
+        """Convert hex device_id to padded bytes32."""
+        raw = bytes.fromhex(device_id_hex.replace("0x", ""))
+        return raw.ljust(32, b"\x00")[:32]
+
+    async def update_humanity_oracle(
+        self,
+        device_id_hex: str,
+        inference_code: int,
+        humanity_pct: int,
+        l4_distance_x1000: int,
+        l5_cv_x1000: int,
+    ) -> str:
+        """Publish humanity verdict to HumanityOracle.sol (Phase 69).
+
+        Returns tx_hash hex. Raises RuntimeError if HUMANITY_ORACLE_ADDRESS not set.
+        """
+        addr = getattr(self._cfg, "humanity_oracle_address", "")
+        if not addr:
+            raise RuntimeError("HUMANITY_ORACLE_ADDRESS not configured")
+
+        abi = [{
+            "name": "updateVerdict", "type": "function", "stateMutability": "nonpayable",
+            "inputs": [
+                {"name": "deviceId",          "type": "bytes32"},
+                {"name": "inferenceCode",     "type": "uint8"},
+                {"name": "humanityPct",       "type": "uint16"},
+                {"name": "l4DistanceX1000",   "type": "uint32"},
+                {"name": "l5CvX1000",         "type": "uint32"},
+            ],
+            "outputs": [],
+        }]
+        contract = self._w3.eth.contract(
+            address=self._w3.to_checksum_address(addr), abi=abi
+        )
+        nonce = await self._w3.eth.get_transaction_count(self._account.address)
+        tx = await contract.functions.updateVerdict(
+            self._device_b32(device_id_hex),
+            inference_code & 0xFF,
+            min(humanity_pct, 1000),
+            l4_distance_x1000,
+            l5_cv_x1000,
+        ).build_transaction({"from": self._account.address, "nonce": nonce, "gas": 80_000})
+        signed = self._account.sign_transaction(tx)
+        tx_hash = await self._w3.eth.send_raw_transaction(signed.rawTransaction)
+        receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+        if receipt.status != 1:
+            raise RuntimeError(f"update_humanity_oracle: tx reverted {tx_hash.hex()}")
+        log.info("update_humanity_oracle: tx=%s device=%s", tx_hash.hex()[:16], device_id_hex[:16])
+        return tx_hash.hex()
+
+    async def update_ruling_oracle(
+        self,
+        device_id_hex: str,
+        suspended: bool,
+        flag_streak: int,
+        hold_streak: int,
+        suspended_until: int,
+        last_commitment_hash: bytes,
+    ) -> str:
+        """Publish ruling state to RulingOracle.sol (Phase 69).
+
+        Returns tx_hash hex. Raises RuntimeError if RULING_ORACLE_ADDRESS not set.
+        """
+        addr = getattr(self._cfg, "ruling_oracle_address", "")
+        if not addr:
+            raise RuntimeError("RULING_ORACLE_ADDRESS not configured")
+
+        abi = [{
+            "name": "updateRulingState", "type": "function", "stateMutability": "nonpayable",
+            "inputs": [
+                {"name": "deviceId",            "type": "bytes32"},
+                {"name": "suspended",           "type": "bool"},
+                {"name": "flagStreak",          "type": "uint32"},
+                {"name": "holdStreak",          "type": "uint32"},
+                {"name": "suspendedUntil",      "type": "uint64"},
+                {"name": "lastCommitmentHash",  "type": "bytes32"},
+            ],
+            "outputs": [],
+        }]
+        last_b32 = last_commitment_hash.ljust(32, b"\x00")[:32]
+        contract = self._w3.eth.contract(
+            address=self._w3.to_checksum_address(addr), abi=abi
+        )
+        nonce = await self._w3.eth.get_transaction_count(self._account.address)
+        tx = await contract.functions.updateRulingState(
+            self._device_b32(device_id_hex),
+            suspended,
+            flag_streak,
+            hold_streak,
+            suspended_until,
+            last_b32,
+        ).build_transaction({"from": self._account.address, "nonce": nonce, "gas": 80_000})
+        signed = self._account.sign_transaction(tx)
+        tx_hash = await self._w3.eth.send_raw_transaction(signed.rawTransaction)
+        receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+        if receipt.status != 1:
+            raise RuntimeError(f"update_ruling_oracle: tx reverted {tx_hash.hex()}")
+        log.info("update_ruling_oracle: tx=%s device=%s", tx_hash.hex()[:16], device_id_hex[:16])
+        return tx_hash.hex()
+
+    async def update_passport_oracle(
+        self,
+        device_id_hex: str,
+        issued: bool,
+        on_chain: bool,
+        passport_hash: bytes,
+        session_count: int,
+    ) -> str:
+        """Publish passport state to PassportOracle.sol (Phase 69).
+
+        Returns tx_hash hex. Raises RuntimeError if PASSPORT_ORACLE_ADDRESS not set.
+        """
+        addr = getattr(self._cfg, "passport_oracle_address", "")
+        if not addr:
+            raise RuntimeError("PASSPORT_ORACLE_ADDRESS not configured")
+
+        abi = [{
+            "name": "updatePassportState", "type": "function", "stateMutability": "nonpayable",
+            "inputs": [
+                {"name": "deviceId",      "type": "bytes32"},
+                {"name": "issued",        "type": "bool"},
+                {"name": "onChain",       "type": "bool"},
+                {"name": "passportHash",  "type": "bytes32"},
+                {"name": "sessionCount",  "type": "uint32"},
+            ],
+            "outputs": [],
+        }]
+        p_b32 = passport_hash.ljust(32, b"\x00")[:32]
+        contract = self._w3.eth.contract(
+            address=self._w3.to_checksum_address(addr), abi=abi
+        )
+        nonce = await self._w3.eth.get_transaction_count(self._account.address)
+        tx = await contract.functions.updatePassportState(
+            self._device_b32(device_id_hex),
+            issued,
+            on_chain,
+            p_b32,
+            session_count,
+        ).build_transaction({"from": self._account.address, "nonce": nonce, "gas": 80_000})
+        signed = self._account.sign_transaction(tx)
+        tx_hash = await self._w3.eth.send_raw_transaction(signed.rawTransaction)
+        receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+        if receipt.status != 1:
+            raise RuntimeError(f"update_passport_oracle: tx reverted {tx_hash.hex()}")
+        log.info("update_passport_oracle: tx=%s device=%s", tx_hash.hex()[:16], device_id_hex[:16])
+        return tx_hash.hex()
+
+    async def publish_sovereignty_pledge(self, schema_hash_hex: str) -> str:
+        """Commit the immutable data sovereignty pledge to DataSovereigntyRegistry.sol (Phase 69).
+
+        schema_hash_hex = keccak256(all VAPI data schemas).
+        Returns tx_hash. Raises RuntimeError if DATA_SOVEREIGNTY_REG_ADDRESS not set.
+        """
+        addr = getattr(self._cfg, "data_sovereignty_reg_address", "")
+        if not addr:
+            raise RuntimeError("DATA_SOVEREIGNTY_REG_ADDRESS not configured")
+
+        declaration = (
+            "VAPI (Verified Autonomous Physical Intelligence) asserts full sovereignty over "
+            "all data derived from VAPI-certified DualShock Edge devices. This includes: "
+            "PoAC records (228B), biometric feature vectors, ZK proofs, agent rulings, "
+            "calibration state, and all data produced by the PITL 9-layer stack. "
+            "Data access is exclusively gated to three authorized tiers: MANUFACTURER, "
+            "DEVELOPER, and GAMER. No other entity may use, license, sell, or redistribute "
+            "VAPI-produced data without explicit on-chain authorization recorded in "
+            "VAPIDataMarketplace. This pledge is irrevocable."
+        )
+
+        schema_bytes = bytes.fromhex(schema_hash_hex.replace("0x", "").zfill(64))[:32]
+
+        abi = [{
+            "name": "pledge_", "type": "function", "stateMutability": "nonpayable",
+            "inputs": [
+                {"name": "schemaHash",  "type": "bytes32"},
+                {"name": "declaration", "type": "string"},
+            ],
+            "outputs": [],
+        }]
+        contract = self._w3.eth.contract(
+            address=self._w3.to_checksum_address(addr), abi=abi
+        )
+        nonce = await self._w3.eth.get_transaction_count(self._account.address)
+        tx = await contract.functions.pledge_(
+            schema_bytes, declaration
+        ).build_transaction({"from": self._account.address, "nonce": nonce, "gas": 150_000})
+        signed = self._account.sign_transaction(tx)
+        tx_hash = await self._w3.eth.send_raw_transaction(signed.rawTransaction)
+        receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+        if receipt.status != 1:
+            raise RuntimeError(f"publish_sovereignty_pledge: tx reverted {tx_hash.hex()}")
+        log.info("publish_sovereignty_pledge: tx=%s schema=%s...", tx_hash.hex()[:16], schema_hash_hex[:16])
+        return tx_hash.hex()
+
+    async def record_gate_attestation_on_chain(
+        self,
+        attestation_hash_hex: str,
+        consecutive_clean: int,
+        gate_n: int,
+        divergence_rate: float,
+        timestamp_ns: int,
+    ) -> str:
+        """Publish gate readiness attestation to GateAttestationAnchor.sol (Phase 87).
+
+        attestation_hash_hex — 64-char hex from compute_gate_attestation_hash(); same
+                               value stored in gate_attestations SQLite row.
+        divergence_rate      — float 0.0–1.0; encoded on-chain as uint32 millis
+                               (int(divergence_rate * 1000)) to avoid float storage.
+        timestamp_ns         — nanosecond epoch used when hashing; converted to uint64
+                               seconds for on-chain storage.
+
+        W1 invariant: callers MUST pass the attestation_hash_hex that was previously
+        written to gate_attestations SQLite — never recompute from current config values
+        at call time, as config may drift between SQLite write and chain call.
+
+        Raises RuntimeError if anchor address not configured or tx reverts.
+        Returns tx_hash hex.
+        """
+        addr = getattr(self._cfg, "gate_attestation_anchor_address", None)
+        if not addr:
+            raise RuntimeError(
+                "record_gate_attestation_on_chain: gate_attestation_anchor_address not configured"
+            )
+
+        hash_bytes = bytes.fromhex(attestation_hash_hex.replace("0x", "").zfill(64))[:32]
+        divergence_millis = int(divergence_rate * 1000)
+        timestamp_s = int(timestamp_ns // 1_000_000_000)
+
+        abi = [{
+            "name": "recordGateAttestation", "type": "function", "stateMutability": "nonpayable",
+            "inputs": [
+                {"name": "attestationHash",      "type": "bytes32"},
+                {"name": "consecutiveClean",     "type": "uint32"},
+                {"name": "gateN",                "type": "uint32"},
+                {"name": "divergenceRateMillis", "type": "uint32"},
+                {"name": "timestamp",            "type": "uint64"},
+            ],
+            "outputs": [],
+        }]
+        contract = self._w3.eth.contract(
+            address=self._w3.to_checksum_address(addr), abi=abi
+        )
+        nonce = await self._w3.eth.get_transaction_count(self._account.address)
+        tx = await contract.functions.recordGateAttestation(
+            hash_bytes,
+            int(consecutive_clean),
+            int(gate_n),
+            divergence_millis,
+            timestamp_s,
+        ).build_transaction({"from": self._account.address, "nonce": nonce, "gas": 100_000})
+        signed = self._account.sign_transaction(tx)
+        tx_hash = await self._w3.eth.send_raw_transaction(signed.rawTransaction)
+        receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+        if receipt.status != 1:
+            raise RuntimeError(
+                f"record_gate_attestation_on_chain: tx reverted {tx_hash.hex()}"
+            )
+        log.info(
+            "record_gate_attestation_on_chain: tx=%s hash=%s... clean=%d gate_n=%d millis=%d",
+            tx_hash.hex()[:16], attestation_hash_hex[:16],
+            consecutive_clean, gate_n, divergence_millis,
+        )
+        return tx_hash.hex()
+
+    async def record_gsr_sample_on_chain(
+        self,
+        device_id_bytes32: bytes,
+        arousal_millis: int,
+        correlation_millis: int,
+        timestamp: int,
+    ) -> str:
+        """Publish a GSR biometric sample to VAPIGSRRegistry.sol (Phase 99B).
+
+        device_id_bytes32   — 32-byte device identifier (keccak256 of device_id string)
+        arousal_millis      — sympathetic_arousal_index * 1000 (uint256)
+        correlation_millis  — (correlation + 1.0) * 500, range 0–1000 (uint256)
+        timestamp           — Unix seconds (uint256)
+
+        Only called when cfg.gsr_enabled=True. Raises RuntimeError if address not
+        configured or tx reverts.
+        Returns tx_hash hex.
+        """
+        addr = getattr(self._cfg, "gsr_registry_address", None)
+        if not addr:
+            raise RuntimeError(
+                "record_gsr_sample_on_chain: gsr_registry_address not configured"
+            )
+
+        # Pad to exactly 32 bytes
+        if len(device_id_bytes32) < 32:
+            device_id_bytes32 = device_id_bytes32.ljust(32, b"\x00")
+        device_id_b32 = bytes(device_id_bytes32[:32])
+
+        abi = [{
+            "name": "recordSample", "type": "function", "stateMutability": "nonpayable",
+            "inputs": [
+                {"name": "deviceId",          "type": "bytes32"},
+                {"name": "arousalMillis",      "type": "uint256"},
+                {"name": "correlationMillis",  "type": "uint256"},
+                {"name": "timestamp",          "type": "uint256"},
+            ],
+            "outputs": [],
+        }]
+        contract = self._w3.eth.contract(
+            address=self._w3.to_checksum_address(addr), abi=abi
+        )
+        nonce = await self._w3.eth.get_transaction_count(self._account.address)
+        tx = await contract.functions.recordSample(
+            device_id_b32,
+            int(arousal_millis),
+            int(correlation_millis),
+            int(timestamp),
+        ).build_transaction({"from": self._account.address, "nonce": nonce, "gas": 80_000})
+        signed = self._account.sign_transaction(tx)
+        tx_hash = await self._w3.eth.send_raw_transaction(signed.rawTransaction)
+        receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+        if receipt.status != 1:
+            raise RuntimeError(f"record_gsr_sample_on_chain: tx reverted {tx_hash.hex()}")
+        log.info(
+            "record_gsr_sample_on_chain: tx=%s arousal=%d corr=%d ts=%d",
+            tx_hash.hex()[:16], arousal_millis, correlation_millis, timestamp,
+        )
+        return tx_hash.hex()
+
+    async def mint_vhp(
+        self,
+        to: str,
+        device_id_hash: str,
+        cert_level: int,
+        consecutive_clean: int,
+        confidence_score: int,
+        mpc_ceremony_hash: str,
+        ttl_days: int = 90,
+    ) -> str:
+        """Mint a VHP soulbound token on VAPIVerifiedHumanProof.sol (Phase 99C).
+
+        Args:
+            to: Recipient address (hex string)
+            device_id_hash: SHA-256 of device_id as 0x-prefixed hex string
+            cert_level: 1=controller, 2=controller+GSR
+            consecutive_clean: Number of consecutive clean adjudications
+            confidence_score: 0–10000 basis points (10000 = 100%)
+            mpc_ceremony_hash: MPC ceremony hash as 0x-prefixed hex string
+            ttl_days: Token TTL in days (default 90)
+
+        Returns:
+            tx_hash hex string
+
+        Raises:
+            RuntimeError if VHP_CONTRACT_ADDRESS not configured or tx reverts
+        """
+        import time as _time_c
+        addr = getattr(self._cfg, "vhp_contract_address", "")
+        if not addr:
+            raise RuntimeError("mint_vhp: VHP_CONTRACT_ADDRESS not configured in bridge config")
+
+        # Convert hex strings to bytes32
+        device_id_b32 = bytes.fromhex(device_id_hash.removeprefix("0x").ljust(64, "0"))[:32]
+        ceremony_b32 = bytes.fromhex(mpc_ceremony_hash.removeprefix("0x").ljust(64, "0"))[:32]
+
+        issued_at = int(_time_c.time())
+        expires_at = issued_at + ttl_days * 86400
+
+        # VHPData struct: (bytes32, uint8, uint32, uint32, uint256, uint256, bytes32)
+        abi = [{
+            "name": "mint", "type": "function", "stateMutability": "nonpayable",
+            "inputs": [
+                {"name": "to", "type": "address"},
+                {"name": "data", "type": "tuple", "components": [
+                    {"name": "deviceIdHash",        "type": "bytes32"},
+                    {"name": "certificationLevel",  "type": "uint8"},
+                    {"name": "consecutiveClean",    "type": "uint32"},
+                    {"name": "confidenceScore",     "type": "uint32"},
+                    {"name": "issuedAt",            "type": "uint256"},
+                    {"name": "expiresAt",           "type": "uint256"},
+                    {"name": "mpcCeremonyHash",     "type": "bytes32"},
+                ]},
+            ],
+            "outputs": [{"name": "tokenId", "type": "uint256"}],
+        }]
+        contract = self._w3.eth.contract(
+            address=self._w3.to_checksum_address(addr), abi=abi
+        )
+        vhp_data = (
+            device_id_b32,
+            int(cert_level),
+            int(consecutive_clean),
+            int(confidence_score),
+            issued_at,
+            expires_at,
+            ceremony_b32,
+        )
+        nonce = await self._w3.eth.get_transaction_count(self._account.address)
+        tx = await contract.functions.mint(
+            self._w3.to_checksum_address(to), vhp_data
+        ).build_transaction({"from": self._account.address, "nonce": nonce, "gas": 150_000})
+        signed = self._account.sign_transaction(tx)
+        tx_hash = await self._w3.eth.send_raw_transaction(signed.rawTransaction)
+        receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+        if receipt.status != 1:
+            raise RuntimeError(f"mint_vhp: tx reverted {tx_hash.hex()}")
+        log.info(
+            "mint_vhp: tx=%s to=%s cert_level=%d expires_at=%d",
+            tx_hash.hex()[:16], to[:12], cert_level, expires_at,
+        )
+        return tx_hash.hex()
+
+    async def lock_stiotx_collateral(self, amount_wei: int) -> str:
+        """Lock stIOTX in VAPIQuickSilverCollateral.sol (Phase 101).
+        Returns tx_hash hex. Raises RuntimeError on revert.
+        """
+        addr = getattr(self._cfg, "quicksilver_collateral_address", None)
+        if not addr:
+            raise RuntimeError("quicksilver_collateral_address not configured")
+        abi = [
+            {"name": "lockCollateral", "type": "function",
+             "inputs": [{"name": "amount", "type": "uint256"}],
+             "outputs": [], "stateMutability": "nonpayable"}
+        ]
+        contract = self._w3.eth.contract(
+            address=self._w3.to_checksum_address(addr), abi=abi
+        )
+        nonce = await self._w3.eth.get_transaction_count(self._account.address)
+        tx = await contract.functions.lockCollateral(
+            int(amount_wei)
+        ).build_transaction({"from": self._account.address, "nonce": nonce, "gas": 120_000})
+        signed = self._account.sign_transaction(tx)
+        tx_hash = await self._w3.eth.send_raw_transaction(signed.rawTransaction)
+        receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+        if receipt.status != 1:
+            raise RuntimeError(f"lock_stiotx_collateral: tx reverted {tx_hash.hex()}")
+        log.info("lock_stiotx_collateral: tx=%s amount=%d", tx_hash.hex()[:16], amount_wei)
+        return tx_hash.hex()
+
+    async def unlock_stiotx_collateral(self) -> str:
+        """Request unlock cooldown for stIOTX collateral (Phase 101)."""
+        addr = getattr(self._cfg, "quicksilver_collateral_address", None)
+        if not addr:
+            raise RuntimeError("quicksilver_collateral_address not configured")
+        abi = [
+            {"name": "unlockCollateral", "type": "function",
+             "inputs": [], "outputs": [], "stateMutability": "nonpayable"}
+        ]
+        contract = self._w3.eth.contract(
+            address=self._w3.to_checksum_address(addr), abi=abi
+        )
+        nonce = await self._w3.eth.get_transaction_count(self._account.address)
+        tx = await contract.functions.unlockCollateral(
+        ).build_transaction({"from": self._account.address, "nonce": nonce, "gas": 80_000})
+        signed = self._account.sign_transaction(tx)
+        tx_hash = await self._w3.eth.send_raw_transaction(signed.rawTransaction)
+        receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+        if receipt.status != 1:
+            raise RuntimeError(f"unlock_stiotx_collateral: tx reverted {tx_hash.hex()}")
+        log.info("unlock_stiotx_collateral: tx=%s", tx_hash.hex()[:16])
+        return tx_hash.hex()
+
+    async def is_active_stiotx_collateral(self, operator_address: str) -> bool:
+        """Check if operator has active stIOTX collateral (Phase 101). Never raises."""
+        addr = getattr(self._cfg, "quicksilver_collateral_address", None)
+        if not addr:
+            return False
+        try:
+            from web3 import Web3
+            abi = [
+                {"name": "isActiveCollateral", "type": "function",
+                 "inputs": [{"name": "operator", "type": "address"}],
+                 "outputs": [{"name": "", "type": "bool"}],
+                 "stateMutability": "view"}
+            ]
+            contract = self._w3.eth.contract(
+                address=self._w3.to_checksum_address(addr),
+                abi=abi
+            )
+            return bool(await contract.functions.isActiveCollateral(
+                self._w3.to_checksum_address(operator_address)
+            ).call())
+        except Exception:
+            return False
+
+    async def renew_vhp(self, token_id: int) -> str:
+        """Call VAPIVerifiedHumanProof.renew(tokenId). Extends expiresAt +90 days. 60k gas.
+        Phase 102: VHPRenewalAgent uses this to refresh expiring soulbound tokens.
+        """
+        _ABI = [
+            {
+                "inputs": [{"internalType": "uint256", "name": "tokenId", "type": "uint256"}],
+                "name": "renew",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function",
+            }
+        ]
+        vhp_addr = getattr(self._cfg, "vhp_contract_address", "")
+        if not vhp_addr:
+            raise RuntimeError("renew_vhp: vhp_contract_address not configured")
+        contract = self._w3.eth.contract(
+            address=self._w3.to_checksum_address(vhp_addr),
+            abi=_ABI,
+        )
+        acct = self._w3.eth.account.from_key(self._private_key)
+        nonce = await self._w3.eth.get_transaction_count(acct.address)
+        gas_price = await self._w3.eth.gas_price
+        tx = contract.functions.renew(token_id).build_transaction({
+            "from": acct.address,
+            "nonce": nonce,
+            "gas": 60_000,
+            "gasPrice": gas_price,
+        })
+        signed = acct.sign_transaction(tx)
+        tx_hash = await self._w3.eth.send_raw_transaction(signed.raw_transaction)
+        receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+        if receipt["status"] != 1:
+            raise RuntimeError(f"renew_vhp: tx reverted token_id={token_id}")
+        return tx_hash.hex()

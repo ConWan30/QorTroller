@@ -1,0 +1,15 @@
+{
+  "circuitName": "PitlSessionProof",
+  "circuitId": "0x108708c284fdaa856441f71ec8f2a86bcc71d5bf9b230927dd40ad06204fdce4",
+  "verifyingKeyHash": "0x43cdb88c681172e747de37b69e29e0b0d881b9fbcbac5595e5c039dd712cc9e1",
+  "beaconBlockHash": "0xb92d0544685c708d9ced3c52f74c61087e1851d5bcf55af3ec0b54413284e987",
+  "beaconBlockNumber": 41723255,
+  "contributorHashes": [
+    "72e3062a9f04cab236b24ecc09ffcbf9e52a46eef3367486d8b849a5ee75ace8",
+    "d1bf57c813e5032e2bb9020ec186c4b019c8b1b3f29e15b1d2479b6e84e798be",
+    "2cd4eb102834bb4d900513da23df4ada9ba8ecc1cf39ba0aa465b860a9e3482b"
+  ],
+  "contributorCount": 3,
+  "ptauSource": "hermez-hez_final_15-2021",
+  "timestamp": 1773884987
+}

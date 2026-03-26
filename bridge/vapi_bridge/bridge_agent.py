@@ -689,6 +689,860 @@ _TOOLS = [
             "required": ["device_id"],
         },
     },
+    # Tool #34 — Phase 66
+    {
+        "name": "get_ruling_streak",
+        "description": (
+            "Return the current verdict streak for a device from the ruling_streaks table. "
+            "Shows streak_verdict, current_streak count, escalated_to (if auto-escalated), "
+            "and last_ruling_id. "
+            "Escalation thresholds: FLAG x5 -> HOLD, HOLD x2 -> BLOCK. "
+            "BLOCK streaks trigger PHGCredential.suspend() via RulingEnforcementAgent."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "device_id": {"type": "string", "description": "64-char hex device ID"},
+            },
+            "required": ["device_id"],
+        },
+    },
+    # Tool #35 — Phase 66
+    {
+        "name": "override_ruling",
+        "description": (
+            "Issue an operator CLEAR ruling to reset a device's streak and re-enable "
+            "tournament eligibility. Use when manual review confirms a false positive. "
+            "Inserts a CLEAR agent_ruling with dry_run=False and resets ruling_streaks, "
+            "clearing any escalated_to state."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "device_id": {"type": "string", "description": "64-char hex device ID"},
+                "reason": {
+                    "type": "string",
+                    "description": "Human explanation for the override",
+                },
+            },
+            "required": ["device_id"],
+        },
+    },
+    # Tool #36 — Phase 68
+    {
+        "name": "verify_ceremony_integrity",
+        "description": (
+            "Verify that the embedded PITL verification key matches the on-chain "
+            "CeremonyRegistry commitment. Returns {local_hash, on_chain_match, "
+            "contributor_count, error}. Use to confirm the MPC ceremony is intact "
+            "and at least 2 contributors participated."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "circuit_name": {
+                    "type": "string",
+                    "description": "Circuit name to check (default: PitlSessionProof)",
+                },
+            },
+            "required": [],
+        },
+    },
+    # Tool #37 — Phase 68
+    {
+        "name": "get_suspension_status",
+        "description": (
+            "Return the current PHGCredential suspension state for a device. "
+            "Includes suspended bool, seconds_remaining, and ruling_streak summary."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "device_id": {"type": "string", "description": "64-char hex device ID"},
+            },
+            "required": ["device_id"],
+        },
+    },
+    # Tool #38 — Phase 68
+    {
+        "name": "get_zk_verifier_stats",
+        "description": (
+            "Return ZKVerifier proof acceptance/rejection/timeout/error counters. "
+            "Shows how many proofs were pre-verified locally since bridge startup. "
+            "Use to assess ZK proof validity rates across submissions."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    # Tool #39 — Phase 68
+    {
+        "name": "get_enrollment_pipeline",
+        "description": (
+            "Return a summary of all devices grouped by enrollment state: "
+            "eligible (≥10 NOMINAL sessions, ≥0.60 avg humanity), "
+            "in_progress (enrolled but not yet eligible), "
+            "and unenrolled. Use to monitor onboarding pipeline health."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    # Tool #40 — Phase 68
+    {
+        "name": "request_live_adjudication",
+        "description": (
+            "Request a live (non-dry-run) adjudication ruling for a specific device. "
+            "Operator-gated: requires the operator to have confirmed the session is "
+            "production-ready. Posts a ruling_request event marked live=True. "
+            "The SessionAdjudicator processes it with dry_run=False within 5 minutes."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "device_id": {"type": "string", "description": "64-char hex device ID"},
+                "reason": {
+                    "type": "string",
+                    "description": "Justification for requesting a live ruling",
+                },
+            },
+            "required": ["device_id"],
+        },
+    },
+    # Tool #41 — Phase 70
+    {
+        "name": "get_data_lineage",
+        "description": (
+            "Return the full data lineage graph for a device. "
+            "Lineage links: session → proof → ruling → token eligibility. "
+            "Each entry has taxonomy_class (SESSION_DATA/PROOF_DATA/etc), "
+            "quality_index (0.0–1.0), and curator_note from DataCuratorAgent."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "device_id": {"type": "string", "description": "64-char hex device ID"},
+                "limit": {
+                    "type": "integer",
+                    "description": "Max lineage entries to return (default 50)",
+                },
+            },
+            "required": ["device_id"],
+        },
+    },
+    # Tool #42 — Phase 70
+    {
+        "name": "get_token_eligibility",
+        "description": (
+            "Return token eligibility score and multiplier breakdown for a device. "
+            "Reads from token_eligibility table (updated every 5 min by DataCuratorAgent). "
+            "Includes: nominal_sessions, clean_streak, passport_held, enrollment_complete, "
+            "mpc_verified, gate_passed, total_multiplier, eligibility_score."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "device_id": {"type": "string", "description": "64-char hex device ID"},
+            },
+            "required": ["device_id"],
+        },
+    },
+    # Tool #43 — Phase 70
+    {
+        "name": "get_oracle_state",
+        "description": (
+            "Return the 10 most recent oracle publications for a given oracle type. "
+            "oracle_type must be one of: HUMANITY, RULING, PASSPORT. "
+            "Each entry includes device_id, tx_hash, payload, and published_at timestamp."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "oracle_type": {
+                    "type": "string",
+                    "description": "Oracle type: HUMANITY | RULING | PASSPORT",
+                },
+            },
+            "required": ["oracle_type"],
+        },
+    },
+    # Tool #44 — Phase 70
+    {
+        "name": "compute_reward_score",
+        "description": (
+            "Compute a full DePIN reward score for a device using the DataCuratorAgent "
+            "eligibility engine. Returns multiplier breakdown: passport (1.5×), "
+            "enrollment (2.0×), clean_streak (2.5×), mpc_verified (1.25×), "
+            "gate_passed (3.0×), and the resulting eligibility_score."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "device_id": {"type": "string", "description": "64-char hex device ID"},
+            },
+            "required": ["device_id"],
+        },
+    },
+    # Tool #47 — Phase 76
+    {
+        "name": "get_ruling_provenance",
+        "description": (
+            "Return the cryptographic provenance anchor for a specific ruling. "
+            "The provenance_hash binds three independent evidence streams: the ruling "
+            "commitment_hash (on-chain via RulingRegistry), the ceremony integrity data "
+            "(CeremonyRegistry beacon + contributor count), and the evidence set presented "
+            "to the LLM — into a single SHA-256 fingerprint. This is the first verifiable "
+            "AI cognitive audit trail in competitive gaming: any third party can recompute "
+            "provenance_hash from the stored components and confirm the ruling was not "
+            "post-hoc modified. Returns 404-equivalent dict if not yet anchored."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "ruling_id": {
+                    "type": "integer",
+                    "description": "The agent_rulings.id to retrieve the provenance anchor for",
+                },
+            },
+            "required": ["ruling_id"],
+        },
+    },
+    # Tool #46 — Phase 75
+    {
+        "name": "get_validation_gate_status",
+        "description": (
+            "Return the current dry-run enforcement gate status from "
+            "SessionAdjudicatorValidationAgent. Shows consecutive_clean ruling count, "
+            "divergence count, gate_n threshold, gate_passed flag, and recommended action. "
+            "When gate_passed=True, it is safe to enable live enforcement "
+            "via POST /agent/config with AGENT_DRY_RUN=false."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    # Tool #45 — Phase 70
+    {
+        "name": "publish_sovereignty_pledge",
+        "description": (
+            "OPERATOR ONLY — Queue an on-chain data sovereignty pledge to "
+            "DataSovereigntyRegistry.sol. Posts a sovereignty_pledge_request event "
+            "to agent_events; DataCuratorAgent will process it within 5 minutes. "
+            "The pledge commits the VAPI schema hash to IoTeX L1, declaring VAPI "
+            "ownership of all data from certified DualShock Edge devices."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    # Tool #48 — Phase 79
+    {
+        "name": "get_live_mode_status",
+        "description": (
+            "Get the current live-mode readiness status for the SessionAdjudicator. "
+            "Returns 5-condition checklist (validation_gate_passed, no_recent_operator_overrides, "
+            "no_recent_key_rotation, divergence_rate_within_tolerance, consecutive_clean_met), "
+            "ready_for_live_mode flag, blocking_conditions list, and recommended_action string. "
+            "Use this to evaluate whether it is safe to set AGENT_DRY_RUN=false."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    # Tool #49 — Phase 80
+    {
+        "name": "get_federation_status",
+        "description": (
+            "Get federation broadcast status for Phase 80 FederationBroadcastAgent. "
+            "Returns configured peers, total threat signals broadcast, signals received "
+            "from peers, and federation_enabled flag."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    # Tool #50 — Phase 81
+    {
+        "name": "get_class_j_assessment",
+        "description": (
+            "Get the most recent Class J GaussianHMM ML-bot risk assessment for a device. "
+            "Returns entropy_variance, risk_level (LOW/MEDIUM/HIGH), and window_count. "
+            "HIGH risk (entropy_variance <= 0.05) indicates HMM ML-bot signature — "
+            "pathologically uniform temporal state transitions. Phase 81."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "device_id": {
+                    "type": "string",
+                    "description": "64-character hex device ID",
+                }
+            },
+            "required": ["device_id"],
+        },
+    },
+    # Tool #51 — Phase 82
+    {
+        "name": "get_reactive_adjudication_status",
+        "description": (
+            "Get the reactive adjudication interrupt log — Class J HIGH-risk triggered "
+            "out-of-cycle LLM rulings. was_deferred=true entries were suppressed by the "
+            "token bucket rate limiter (W1 mitigation: max 2 calls/60s). "
+            "Use to audit the reactive Class J → ruling → enforcement chain. Phase 82."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "device_id": {
+                    "type": "string",
+                    "description": "64-character hex device ID (optional — omit for all devices)",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max entries to return (default 20)",
+                },
+            },
+            "required": [],
+        },
+    },
+    # Tool #52 — Phase 83
+    {
+        "name": "get_agent_supervisor_status",
+        "description": (
+            "Get the VAPI agent fleet health status from AgentSupervisor. "
+            "Reports HEALTHY/STALE/UNKNOWN/ZOMBIE per agent, fleet_health "
+            "(ALL_HEALTHY | DEGRADED | CRITICAL), and counts. "
+            "ZOMBIE = agent writing rows but to 0 distinct devices (W1 loop detection). "
+            "CRITICAL if core agents (session_adjudicator, ruling_enforcement_agent) are "
+            "STALE, or ≥3 agents are non-HEALTHY. "
+            "Use to audit AGaaS SLA before accepting tournament rulings. Phase 83."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    # Tool #53 — Phase 84
+    {
+        "name": "get_gate_readiness",
+        "description": (
+            "Get composite live-mode gate readiness status (Phase 84). "
+            "Aggregates: validation_gate (consecutive_clean progress, gate_passed), "
+            "fleet_health (ALL_HEALTHY/DEGRADED/CRITICAL from AgentSupervisor), "
+            "gate_attestations_count (on-chain proofs recorded), and overall_ready. "
+            "overall_ready=true requires gate_passed=true AND fleet_health != CRITICAL. "
+            "Use before setting AGENT_DRY_RUN=false to confirm the fleet is ready. "
+            "W1 note: run POST /agent/warm-up first to verify llm_available=true."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    # Tool #78 — Phase 110
+    {
+        "name": "get_ioswarm_vhp_mint_status",
+        "description": (
+            "Return ioSwarm VHP Mint Authorization status (Phase 110). "
+            "ioswarm_vhp_mint_enabled=False by default — fail-CLOSED quorum gate for VHP mint; "
+            "irreversible soulbound token on-chain — exceptions block mint (opposite of renewal fail-open). "
+            "MINT_QUORUM=0.80 (stricter than BLOCK_QUORUM=0.67; matches DUAL_VETO_SCORE from Phase 109C). "
+            "W2 swarm_fingerprint = SHA-256(node_verdicts_json) stored in ioswarm_vhp_mint_log — "
+            "creates two-era VHP provenance: pre-110 (no fingerprint) vs post-110 (quorum-authorized). "
+            "task_spec_registered=True means vapi_vhp_mint_authorization_v1 spec is "
+            "available in scripts/vapi-vhp-mint-swarm-agent.json. "
+            "Fields: ioswarm_vhp_mint_enabled, mint_quorum, authorized_count, denied_count, "
+            "task_spec_registered, swarm_fingerprint_count, timestamp."
+        ),
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    # Tool #77 — Phase 109C
+    {
+        "name": "get_ioswarm_adjudication_status",
+        "description": (
+            "Return ioSwarm Adjudication Coordinator status (Phase 109C). "
+            "ioswarm_adjudication_enabled=False by default — infrastructure-only; "
+            "decentralizes ClassJ+Triage verdicts to N=5 emulator quorum nodes when enabled. "
+            "W2 Dual-Quorum Veto: dual_veto fires when BOTH classj_quorum AND triage_quorum "
+            "independently reach BLOCK (≥67% agreement each); consensus_score clamped to "
+            "max(score, 0.80) > threshold 0.60 → always drives BLOCK. "
+            "Fail-open: adjudication errors → CLEAR verdicts (avoid false positives). "
+            "task_spec_registered=True means vapi_classj_triage_adjudication_v1 spec is "
+            "available in scripts/vapi-adjudication-swarm-agent.json. "
+            "Fields: ioswarm_adjudication_enabled, classj_block_quorum, triage_block_quorum, "
+            "dual_veto_count, adjudication_count, task_spec_registered, timestamp."
+        ),
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    # Tool #76 — Phase 109B
+    {
+        "name": "get_ioswarm_renewal_status",
+        "description": (
+            "Return ioSwarm Renewal Coordinator status (Phase 109B). "
+            "ioswarm_renewal_enabled=False by default — infrastructure-only; "
+            "ioSwarm quorum guard for VHP renewal is additive and backward-compatible. "
+            "Fail-open design: coordinator errors never block VHP renewal. "
+            "task_spec_registered=True means vapi_vhp_renewal_v1 spec is available "
+            "in scripts/vapi-vhp-renewal-swarm-agent.json. "
+            "W2 integration: nodes read consecutive_clean + recent BLOCK count from "
+            "ioswarm_consensus_log — clean behavior feeds easier renewal. "
+            "Fields: ioswarm_renewal_enabled, min_quorum, renewal_count, "
+            "task_spec_registered, recent_approvals, recent_skips, timestamp."
+        ),
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    # Tool #75 — Phase 109A
+    {
+        "name": "get_ioswarm_status",
+        "description": (
+            "Return ioSwarm Bridge Adapter status (Phase 109A). "
+            "ioswarm_enabled=False by default — infrastructure-only until live ioSwarm "
+            "operator nodes are registered. task_spec_registered=True means the "
+            "vapi_pitl_adjudication_v1 task spec is available in scripts/vapi-swarm-agent.json. "
+            "When enabled, swarm consensus acts as optional 4th epistemic signal "
+            "(weights: ClassJ 0.35 + Triage 0.35 + Supervisor 0.15 + Swarm 0.15). "
+            "Fields: ioswarm_enabled, quorum_threshold, block_quorum_threshold, "
+            "consensus_count, node_count, task_spec_registered, w3bstream_applets, "
+            "vhp_auth_gate_address, timestamp."
+        ),
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    # Tool #74 — Phase 108
+    {
+        "name": "get_tournament_readiness",
+        "description": (
+            "Return comprehensive tournament readiness scorecard (Phase 108). "
+            "fully_ready=True requires ALL 7 conditions: 5 software "
+            "(n_tested>=100, false_positive_count=0, activation_committed, "
+            "dry_run=False, pmi>=1) AND 2 hardware "
+            "(separation_ratio_current>1.0, touchpad_recapture_complete). "
+            "CURRENT STATUS: separation_ratio=0.362 — TOURNAMENT BLOCKER. "
+            "Software P0 gate (Phase 107) is achievable now; hardware requires "
+            "calibration sessions. Use this tool for deployment readiness decisions. "
+            "Fields: software_conditions_met/5, hardware_conditions_met/2, "
+            "separation_ratio_current, fully_ready, blocking_conditions."
+        ),
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    # Tool #73 — Phase 107
+    {
+        "name": "get_live_mode_readiness",
+        "description": (
+            "Return latest live mode readiness report (Phase 107). "
+            "ready_for_live=True requires: n_tested>=100 AND false_positive_count==0 "
+            "AND activation_committed=True AND dry_run_active=False AND pmi>=1. "
+            "This is the P0 gate for tournament deployment (software conditions only). "
+            "Fields: n_tested, false_positive_count, false_positive_rate, "
+            "activation_committed, pmi, dry_run_active, ready_for_live, created_at."
+        ),
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    # Tool #72 — Phase 105
+    {
+        "name": "get_epistemic_config",
+        "description": (
+            "Return epistemic consensus config + threshold audit log (Phase 105). "
+            "at_risk=True when effective_threshold < 0.65 (Phase 98 W1 — ClassJ alone "
+            "can reach 0.60). pmi_triggered=True means PMI>=1 auto-raised threshold "
+            "(Phase 104/105 synergy, W2 mitigation active). "
+            "Fields: configured_threshold, recommended_threshold, effective_threshold, "
+            "pmi_triggered, triage_prereq_required, at_risk, pmi, threshold_history_count, timestamp."
+        ),
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    # Tool #71 — Phase 104
+    {
+        "name": "get_protocol_maturity",
+        "description": (
+            "Return ProtocolMaturityIndex (PMI) and persistent activation state (Phase 104). "
+            "PMI: 0=uninitiated / 1=simulated / 2=testnet_organic / 3=mainnet. "
+            "activation_committed=True means dry_run=False persists across bridge restarts "
+            "(W1 mitigation — startup _restore_activation_state auto-restores live mode). "
+            "Fields: pmi, pmi_label, activation_committed, committed_at, dry_run_active, "
+            "is_simulation, days_until_vhp_expiry, vhp_found, timestamp."
+        ),
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    # Tool #70 — Phase 103
+    {
+        "name": "run_activation_sequence",
+        "description": (
+            "Run the Phase 103 live activation simulation sequence. "
+            "Seeds ruling_validation_log, gate_attestations, enforcement_cert, "
+            "protocol_intelligence_report in correct order, then inserts the first "
+            "VHP issuance (simulation, no chain call). "
+            "Fields: simulation_sessions, gate_passed, cert_created, dry_run_toggled, "
+            "vhp_minted, token_id, tx_hash, fully_activated, elapsed_ms, error."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "n_sessions": {
+                    "type": "integer",
+                    "description": "Simulation sessions to seed (default 110, must exceed gate_n=100).",
+                }
+            },
+            "required": [],
+        },
+    },
+    # Tool #69 — Phase 102
+    {
+        "name": "get_vhp_renewal_log",
+        "description": (
+            "Return VHP auto-renewal log summary (Phase 102). "
+            "VHPRenewalAgent (14th agent) polls every 6 hours and renews VHP soulbound tokens "
+            "expiring within vhp_renewal_warning_days (default 7). "
+            "Fields: renewal_count, last_renewal_at, dry_run_only (all renewals were dry_run), "
+            "lifecycle_warning (True if no VHPs ever issued — W2 liveness beacon), timestamp."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "device_id": {
+                    "type": "string",
+                    "description": "Filter by device_id. Empty = all devices.",
+                }
+            },
+            "required": [],
+        },
+    },
+    # Tool #68 — Phase 101B
+    {
+        "name": "get_edge_ai_profile",
+        "description": (
+            "Return the VAPI bridge's Edge AI profile for IoTeX ecosystem positioning (Phase 101B). "
+            "Maps the 13-agent autonomous fleet onto IoTeX's three-layer Real-World AI stack: "
+            "ioID (Verify — Phase 55 LIVE), W3bstream (Process — Phase 99B LIVE), "
+            "Realms (Perceive — deferred until >= 100k daily PoAC). "
+            "inference_mode: llm_augmented when Anthropic key available, else local_rule_fallback "
+            "(rule_fallback IS a local SLM for human presence verification). "
+            "agent_autonomy_level: full when dry_run=False, advisory when dry_run=True. "
+            "iotex_layer_integration: dict of {ioID, w3bstream, quicksilver, realms} booleans. "
+            "Phase 101B."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    # Tool #67 — Phase 101
+    {
+        "name": "get_quicksilver_collateral_status",
+        "description": (
+            "Return QuickSilver stIOTX collateral status for a VAPI operator (Phase 101). "
+            "Phase 101 introduces stIOTX (IoTeX QuickSilver liquid staking token) as an "
+            "alternative to VAPI token staking — operators earn IoTeX network staking yield "
+            "WHILE their collateral is locked (double-yield position). "
+            "Fields: operator_address, found, latest_event_type (lock/unlock_request/slash), "
+            "amount_wei, events_count, last_event_at, stiotx_token_address, "
+            "quicksilver_collateral_address. "
+            "Returns found=false if no events recorded for this operator. Phase 101."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "operator_address": {
+                    "type": "string",
+                    "description": "Ethereum address of the VAPI operator.",
+                },
+            },
+            "required": ["operator_address"],
+        },
+    },
+    # Tool #66 — Phase 100
+    {
+        "name": "get_activation_status",
+        "description": (
+            "Return 5-step live-mode activation checklist (Phase 100). "
+            "Shows current blocking step, gate progress, audit status, and dry_run state. "
+            "Use to determine the exact next action needed before the first VHP can be minted. "
+            "current_blocking_step: 1=need more clean sessions, 2=need enforcement cert, "
+            "3=need audit_valid, 4=need dry_run=false, 5=need VHP mint, 6=fully activated. "
+            "progress_pct: percentage of gate_n sessions completed (step 1). "
+            "Phase 100."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    # Tool #65 — Phase 99A
+    {
+        "name": "get_operator_status",
+        "description": (
+            "Return the latest staking event for a VAPI bridge operator address. "
+            "Reflects bridge-side record of on-chain VAPIOperatorRegistry interactions. "
+            "Event types: register (stake locked), slash (50% burned/50% claimant), "
+            "deregister_request (30-day cooldown started), deregister (stake returned). "
+            "Fields: operator_address, event_type, stake_amount (VAPI wei), tx_hash, reason, created_at. "
+            "Returns found=false if operator has no recorded events. Phase 99A."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "operator_address": {
+                    "type": "string",
+                    "description": "Ethereum address of the VAPI bridge operator.",
+                },
+            },
+            "required": ["operator_address"],
+        },
+    },
+    # Tool #64 — Phase 98
+    {
+        "name": "get_epistemic_consensus_log",
+        "description": (
+            "Return Phase 98 epistemic consensus decisions. "
+            "Every BLOCK verdict passes through a weighted multi-agent consensus gate before "
+            "irreversible enforcement: ClassJDetector (0.40 weight), DivergenceTriageAgent (0.40), "
+            "AgentSupervisor (0.20). If consensus_score < threshold (default 0.60), "
+            "BLOCK is downgraded to HOLD. downgraded_count shows how often this happened. "
+            "Use to audit the false-positive protection layer for BLOCK enforcement. "
+            "Phase 98."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "device_id": {
+                    "type": "string",
+                    "description": "Filter by device_id (optional).",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max entries to return (default 50).",
+                },
+            },
+            "required": [],
+        },
+    },
+    # Tool #63 — Phase 97
+    {
+        "name": "get_live_mode_guard_log",
+        "description": (
+            "Return the live-mode guard audit log from Phase 97. "
+            "Every attempt to enable live enforcement via POST /agent/config is logged here — "
+            "both approved transitions and blocked attempts with blocking_conditions. "
+            "Fields: event_type (transition_attempt/transition_approved/dry_run_restored), "
+            "gate_passed, cert_valid, audit_valid, blocking_conditions (JSON array), "
+            "operator_key_hash (first 16 chars of SHA-256 of api_key), created_at. "
+            "Use to audit operator actions and diagnose why live-mode activation was blocked. "
+            "Phase 97."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "description": "Max entries to return (default 50).",
+                },
+            },
+            "required": [],
+        },
+    },
+    # Tool #62 — Phase 96
+    {
+        "name": "get_enforcement_certificate",
+        "description": (
+            "Get the latest Enforcement Readiness Certificate (ERC) issued by the operator. "
+            "The ERC is a portable HMAC-SHA256-signed proof of audit_valid=True, cryptographically "
+            "binding the operator API key to the activation audit summary. Tournament operators "
+            "can verify the ERC without VAPI infrastructure. has_certificate=False means no cert "
+            "has been issued yet (run POST /agent/enforcement-certificate first). "
+            "is_expired=True means the cert TTL (default 24h) has elapsed — renew with POST. "
+            "Phase 96."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    # Tool #61 — Phase 95
+    {
+        "name": "get_activation_audit",
+        "description": (
+            "Get the Phase 95 activation audit summary — a tamper-evident cross-reference "
+            "of the live_mode_activation_log (Phase 92) and gate_attestations (Phase 84/87). "
+            "audit_valid=True confirms: (1) the protocol scored ready_for_live_mode=True, "
+            "(2) an on-chain gate attestation subsequently exists, and (3) the chronological "
+            "order is intact. This is the cryptographic pre-condition for setting "
+            "AGENT_DRY_RUN=false. Callable from tournament CI pipelines."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    # Tool #60 — Phase 94
+    {
+        "name": "get_escalation_ruling_log",
+        "description": (
+            "Get the escalation ruling log from the Phase 94 triage reactive loop. "
+            "DivergenceTriageAgent escalates devices via divergence_pattern_detected bus; "
+            "SessionAdjudicator fires reactive rulings for each escalated device "
+            "(rate-limited to 1/hour per device by default, W1 mitigation). "
+            "was_deferred=1 entries were rate-limited and not adjudicated. "
+            "Filters by device_id if provided."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "device_id": {
+                    "type": "string",
+                    "description": "Optional 64-char hex device ID filter.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max entries to return (default 50).",
+                },
+            },
+            "required": [],
+        },
+    },
+    # Tool #59 — Phase 92
+    {
+        "name": "get_activation_log",
+        "description": (
+            "Get the live mode activation audit log (Phase 92). "
+            "Records every readiness_check (5-min automated poll) and "
+            "operator_request (POST /agent/request-activation) event with "
+            "protocol_health_score, blocking_conditions, bottleneck, and operator_notes. "
+            "latest_ready_for_live_mode=true when the most recent entry has "
+            "ready_for_live_mode=1. "
+            "Use this log to audit the activation decision trail before setting "
+            "AGENT_DRY_RUN=false."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "description": "Max entries to return (default 50).",
+                },
+            },
+            "required": [],
+        },
+    },
+    # Tool #58 — Phase 91
+    {
+        "name": "get_triage_report",
+        "description": (
+            "Get the divergence triage report: per-device adversarial pattern analysis (Phase 91). "
+            "DivergenceTriageAgent polls ruling_validation_log divergence_reason fields (Phase 88) "
+            "and detects cross-session clusters: ML-bot (>=2 class_j_HIGH divergences), "
+            "cheat codes (>=1 hard_cheat_codes divergence), enrollment anomaly (>=3 ineligible). "
+            "escalated=1 entries need immediate operator attention. "
+            "clean_count = devices with divergences but no detected adversarial pattern. "
+            "triage_confidence_score = clean_count / total diverged devices (feeds Phase 89 score)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "limit": {
+                    "type": "integer",
+                    "description": "Max device entries to return (default 50).",
+                },
+            },
+            "required": [],
+        },
+    },
+    # Tool #57 — Phase 90
+    {
+        "name": "get_shadow_enforcement_log",
+        "description": (
+            "Get the shadow enforcement log: BLOCK actions suppressed by shadow mode (Phase 90). "
+            "When ENFORCEMENT_SHADOW_MODE=true, every BLOCK verdict is logged here instead of "
+            "calling PHGCredential.suspend(). Review this log to validate false-positive rate "
+            "before activating live enforcement (ENFORCEMENT_SHADOW_MODE=false). "
+            "stats.pass_rate = fraction of shadow sessions that did NOT result in a block. "
+            "Pass rate >= 0.98 across N>=20 sessions is the recommended live-mode precondition."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "device_id": {
+                    "type": "string",
+                    "description": "Optional 64-char hex device ID filter.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max entries to return (default 50).",
+                },
+            },
+            "required": [],
+        },
+    },
+    # Tool #56 — Phase 89
+    {
+        "name": "get_protocol_intelligence",
+        "description": (
+            "Get the unified protocol intelligence report: protocol_health_score (0-100) "
+            "synthesized from all VAPI agent data streams (Phase 89). "
+            "Score = 100*(0.35*gate_progress + 0.25*fleet_health + 0.20*divergence_clarity "
+            "+ 0.10*corpus_pass + 0.10*class_j_confidence) + Phase 90/91 bonuses (max 10). "
+            "ready_for_live_mode=true when score>=85 AND gate_passed AND fleet!=CRITICAL. "
+            "bottleneck = lowest-contributing component (tells operator what to fix next). "
+            "estimated_days_to_gate = remaining sessions / current session velocity. "
+            "This is the single source of truth for operator go/no-go enforcement decisions."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    # Tool #55 — Phase 88
+    {
+        "name": "get_campaign_status",
+        "description": (
+            "Get live adjudication campaign progress toward dry_run=False activation (Phase 88). "
+            "Returns consecutive_clean/gate_n progress, progress_pct, estimated_sessions_to_gate, "
+            "verdict_breakdown (CERTIFY/FLAG/HOLD/BLOCK counts), divergence_breakdown "
+            "(which evidence fields drove LLM↔fallback splits), recent_sessions (last 10), "
+            "and campaign_note (operator-readable narrative). "
+            "W1: consecutive_clean is atomically computed at call time — never stale. "
+            "When gate_passed=true, campaign_note says 'Gate PASSED' — safe to set AGENT_DRY_RUN=false."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    # Tool #54 — Phase 86
+    {
+        "name": "get_corpus_status",
+        "description": (
+            "Get synthetic validation corpus statistics (Phase 86). "
+            "Returns total sessions generated, passed_fallback, failed_fallback, "
+            "run_count, and last_run_at. "
+            "ISOLATION: synthetic sessions do NOT affect consecutive_clean or gate_passed. "
+            "failed_fallback > 0 on a fresh nominal corpus = rule_fallback regression. "
+            "Use POST /agent/run-synthetic-corpus to trigger a corpus run."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
 ]
 
 
@@ -1509,6 +2363,834 @@ class BridgeAgent:
                     device_id=device_id,
                 )
                 return {"status": "queued", "event_id": eid}
+
+            if name == "get_ruling_streak":
+                device_id = inputs.get("device_id", "")
+                if not device_id:
+                    return {"error": "device_id required"}
+                streak = self._store.get_ruling_streak(device_id)
+                return streak if streak else {"device_id": device_id, "current_streak": 0,
+                                              "streak_verdict": "", "escalated_to": None}
+
+            if name == "override_ruling":
+                device_id = inputs.get("device_id", "")
+                reason    = inputs.get("reason", "bridge_agent_override")
+                if not device_id:
+                    return {"error": "device_id required"}
+                ruling_id = self._store.insert_agent_ruling(
+                    device_id=device_id,
+                    verdict="CLEAR",
+                    confidence=1.0,
+                    reasoning=f"Agent override: {reason}",
+                    evidence_json="{}",
+                    commitment_hash="0" * 64,
+                    attestation_hash="",
+                    dry_run=False,
+                    source_agent="bridge_agent",
+                )
+                self._store.upsert_ruling_streak(device_id, "CLEAR", ruling_id)
+                return {"status": "cleared", "ruling_id": ruling_id, "device_id": device_id}
+
+            # --- Phase 68 Tools (#36-40) ---
+
+            if name == "verify_ceremony_integrity":
+                circuit_name = inputs.get("circuit_name", "PitlSessionProof")
+                registry_addr = getattr(self._cfg, "ceremony_registry_address", "")
+                rpc_url = getattr(self._cfg, "iotex_rpc_url", "")
+                try:
+                    from .sdk_compat import _get_vkey_dict
+                    vkey_dict = _get_vkey_dict()
+                except Exception:
+                    vkey_dict = {}
+                try:
+                    from ..sdk.vapi_sdk import VAPIZKProof  # type: ignore[import]
+                except Exception:
+                    try:
+                        import importlib
+                        sdk_mod = importlib.import_module("vapi_sdk")
+                        VAPIZKProof = sdk_mod.VAPIZKProof
+                    except Exception as exc:
+                        return {"error": f"SDK not available: {exc}", "on_chain_match": False}
+                result = VAPIZKProof.verify_ceremony_integrity(
+                    vkey_dict, registry_addr, rpc_url, circuit_name
+                )
+                return result
+
+            if name == "get_suspension_status":
+                device_id = inputs.get("device_id", "")
+                if not device_id:
+                    return {"error": "device_id required"}
+                import time as _time
+                streak = self._store.get_ruling_streak(device_id)
+                now = _time.time()
+                try:
+                    with self._store._conn() as conn:
+                        row = conn.execute(
+                            "SELECT * FROM credential_enforcement WHERE device_id=?"
+                            " ORDER BY rowid DESC LIMIT 1",
+                            (device_id,),
+                        ).fetchone()
+                        susp = dict(row) if row else None
+                except Exception:
+                    susp = None
+                active = bool(
+                    susp
+                    and susp.get("suspended")
+                    and susp.get("suspended_until") is not None
+                    and susp["suspended_until"] > now
+                    and not susp.get("reinstated")
+                )
+                return {
+                    "device_id": device_id,
+                    "suspended": active,
+                    "suspended_until": susp["suspended_until"] if active else None,
+                    "seconds_remaining": max(0.0, susp["suspended_until"] - now) if active else 0.0,
+                    "ruling_streak": streak,
+                }
+
+            if name == "get_zk_verifier_stats":
+                chain = getattr(self, "_chain", None)
+                if chain is None:
+                    return {"error": "chain client not available", "enabled": False}
+                if hasattr(chain, "get_zk_verifier_stats"):
+                    return chain.get_zk_verifier_stats()
+                return {"error": "get_zk_verifier_stats not available on chain client"}
+
+            if name == "get_enrollment_pipeline":
+                try:
+                    all_enrollments = self._store.get_all_enrollments() if hasattr(
+                        self._store, "get_all_enrollments"
+                    ) else []
+                except Exception:
+                    all_enrollments = []
+                pipeline = {"eligible": [], "in_progress": [], "unenrolled": []}
+                for enr in all_enrollments:
+                    status = enr.get("status", "unenrolled")
+                    device_id = enr.get("device_id", "")
+                    entry = {
+                        "device_id": device_id,
+                        "nominal_sessions": enr.get("nominal_sessions", 0),
+                        "avg_humanity": enr.get("avg_humanity", 0.0),
+                    }
+                    if status == "eligible":
+                        pipeline["eligible"].append(entry)
+                    elif status in ("enrolled", "in_progress"):
+                        pipeline["in_progress"].append(entry)
+                    else:
+                        pipeline["unenrolled"].append(entry)
+                return {
+                    "eligible_count": len(pipeline["eligible"]),
+                    "in_progress_count": len(pipeline["in_progress"]),
+                    "unenrolled_count": len(pipeline["unenrolled"]),
+                    "pipeline": pipeline,
+                }
+
+            if name == "request_live_adjudication":
+                device_id = inputs.get("device_id", "")
+                reason    = inputs.get("reason", "bridge_agent_live_request")
+                if not device_id:
+                    return {"error": "device_id required"}
+                eid = self._store.write_agent_event(
+                    event_type="ruling_request",
+                    payload=json.dumps({
+                        "device_id":        device_id,
+                        "attestation_hash": "",
+                        "reason":           reason,
+                        "live":             True,
+                    }),
+                    source="bridge_agent",
+                    target="session_adjudicator",
+                    device_id=device_id,
+                )
+                return {
+                    "status": "queued_live",
+                    "event_id": eid,
+                    "device_id": device_id,
+                    "note": "SessionAdjudicator will process this with dry_run=False within 5 minutes",
+                }
+
+            # --- Phase 70 Tools (#41-45) ---
+
+            if name == "get_data_lineage":
+                device_id = inputs.get("device_id", "")
+                if not device_id:
+                    return {"error": "device_id required"}
+                limit = min(int(inputs.get("limit", 50)), 200)
+                lineage = self._store.get_data_lineage(device_id.strip(), limit=limit)
+                return {
+                    "device_id":     device_id,
+                    "lineage_count": len(lineage),
+                    "lineage":       lineage,
+                }
+
+            if name == "get_token_eligibility":
+                device_id = inputs.get("device_id", "")
+                if not device_id:
+                    return {"error": "device_id required"}
+                elig = self._store.get_token_eligibility(device_id.strip())
+                if not elig:
+                    return {
+                        "device_id":   device_id,
+                        "eligibility": None,
+                        "note": "No eligibility record — DataCuratorAgent hasn't processed this device yet",
+                    }
+                return {"device_id": device_id, "eligibility": elig}
+
+            if name == "get_oracle_state":
+                oracle_type = inputs.get("oracle_type", "").upper().strip()
+                _VALID_ORACLES = {"HUMANITY", "RULING", "PASSPORT"}
+                if oracle_type not in _VALID_ORACLES:
+                    return {
+                        "error": f"Unknown oracle_type '{oracle_type}'. Use: HUMANITY | RULING | PASSPORT",
+                        "valid_types": list(_VALID_ORACLES),
+                    }
+                pubs = self._store.get_oracle_publications(oracle_type=oracle_type, limit=10)
+                return {
+                    "oracle_type":       oracle_type,
+                    "publication_count": len(pubs),
+                    "publications":      pubs,
+                }
+
+            if name == "compute_reward_score":
+                device_id = inputs.get("device_id", "")
+                if not device_id:
+                    return {"error": "device_id required"}
+                try:
+                    from .data_curator_agent import DataCuratorAgent
+                    _curator = DataCuratorAgent(self._cfg, self._store, chain=None)
+                    return _curator.compute_reward_score_sync(device_id.strip())
+                except Exception as exc:
+                    return {"error": str(exc), "device_id": device_id}
+
+            if name == "publish_sovereignty_pledge":
+                # Operator auth: this tool queues an event rather than calling chain directly
+                # (avoids loop.run_until_complete() in sync _execute_tool context — Phase 70)
+                if not getattr(self._cfg, "operator_api_key", ""):
+                    return {"error": "Operator auth required — OPERATOR_API_KEY not configured"}
+                eid = self._store.write_agent_event(
+                    event_type="sovereignty_pledge_request",
+                    payload=json.dumps({
+                        "requested_by": "bridge_agent",
+                        "requested_at": time.time(),
+                    }),
+                    source="bridge_agent",
+                    target="data_curator_agent",
+                    device_id="",
+                )
+                return {
+                    "status":  "queued",
+                    "event_id": eid,
+                    "note": (
+                        "DataCuratorAgent will process this within 5 minutes and commit "
+                        "the schema hash to DataSovereigntyRegistry.sol on IoTeX."
+                    ),
+                }
+
+            # Tool #47 — Phase 76
+            if name == "get_ruling_provenance":
+                ruling_id = int(inputs.get("ruling_id", 0))
+                anchor = self._store.get_provenance_anchor(ruling_id)
+                if anchor is None:
+                    return {
+                        "error": "Provenance anchor not yet computed",
+                        "ruling_id": ruling_id,
+                        "note": "RulingProvenanceAnchorAgent processes anchors every 5 minutes.",
+                    }
+                return anchor
+
+            # Tool #46 — Phase 75 (updated Phase 78: passes max_divergence_rate)
+            if name == "get_validation_gate_status":
+                gate_n = int(getattr(self._cfg, "validation_gate_n", 100))
+                max_rate = float(getattr(self._cfg, "validation_max_divergence_rate", 1.0))
+                return self._store.get_validation_gate_status(gate_n, max_rate)
+
+            # Tool #48 — Phase 79
+            if name == "get_live_mode_status":
+                try:
+                    from .live_mode_activation_agent import LiveModeActivationAgent
+                    _lma = LiveModeActivationAgent(self._cfg, self._store, bus=None)
+                    return _lma.get_live_mode_status()
+                except Exception as exc:
+                    return {"error": str(exc)}
+
+            # Tool #49 — Phase 80
+            if name == "get_federation_status":
+                try:
+                    peers_str = getattr(self._cfg, "federation_broadcast_peers", "")
+                    peers = (
+                        [p.strip() for p in peers_str.split(",") if p.strip()]
+                        if peers_str else []
+                    )
+                    stats = self._store.get_federation_stats()
+                    return {
+                        "federation_enabled": getattr(
+                            self._cfg, "federation_broadcast_enabled", False
+                        ),
+                        "peers": peers,
+                        "peer_count": len(peers),
+                        **stats,
+                    }
+                except Exception as exc:
+                    return {"error": str(exc)}
+
+            # Tool #50 — Phase 81
+            if name == "get_class_j_assessment":
+                device_id = inputs.get("device_id", "")
+                if not device_id:
+                    return {"error": "device_id required"}
+                try:
+                    assessment = self._store.get_class_j_assessment(device_id.strip())
+                    if not assessment:
+                        return {
+                            "device_id": device_id,
+                            "assessment": None,
+                            "note": (
+                                "No Class J assessment yet — ClassJDetector has not "
+                                "processed this device (requires >=2 session windows)"
+                            ),
+                        }
+                    return {"device_id": device_id, "assessment": assessment}
+                except Exception as exc:
+                    return {"error": str(exc), "device_id": device_id}
+
+            # Tool #51 — Phase 82
+            if name == "get_reactive_adjudication_status":
+                device_id = inputs.get("device_id") or None
+                limit = int(inputs.get("limit", 20))
+                try:
+                    entries = self._store.get_reactive_adjudication_log(
+                        device_id=device_id, limit=limit
+                    )
+                    deferred = sum(1 for e in entries if e.get("was_deferred"))
+                    return {
+                        "entries": entries,
+                        "total_returned": len(entries),
+                        "deferred_count": deferred,
+                        "note": (
+                            "was_deferred=1 entries were rate-limited by token bucket "
+                            "(REACTIVE_ADJUDICATION_RATE_LIMIT, default 2/60s — W1 mitigation)"
+                        ),
+                    }
+                except Exception as exc:
+                    return {"error": str(exc)}
+
+            # Tool #52 — Phase 83
+            if name == "get_agent_supervisor_status":
+                try:
+                    from .agent_supervisor import AgentSupervisor
+                    supervisor = AgentSupervisor(self._cfg, self._store)
+                    snapshot = supervisor.check_fleet_health()
+                    return snapshot
+                except Exception as exc:
+                    return {"error": str(exc), "fleet_health": "UNKNOWN"}
+
+            # Tool #53 — Phase 84
+            if name == "get_gate_readiness":
+                import time as _time
+                gate_n = int(getattr(self._cfg, "validation_gate_n", 100))
+                max_rate = float(getattr(self._cfg, "validation_max_divergence_rate", 1.0))
+                dry_run_active = bool(getattr(self._cfg, "agent_dry_run_mode", True))
+                try:
+                    gate_status = self._store.get_validation_gate_status(gate_n, max_rate)
+                except Exception as exc:
+                    gate_status = {"gate_passed": False, "error": str(exc)}
+                try:
+                    from .agent_supervisor import AgentSupervisor
+                    fleet = AgentSupervisor(self._cfg, self._store).check_fleet_health()
+                except Exception as exc:
+                    fleet = {"fleet_health": "UNKNOWN", "error": str(exc)}
+                try:
+                    att_count = len(self._store.get_gate_attestations(limit=10000))
+                except Exception:
+                    att_count = 0
+                gate_passed = bool(gate_status.get("gate_passed", False))
+                fleet_health = fleet.get("fleet_health", "UNKNOWN")
+                overall_ready = gate_passed and fleet_health not in ("CRITICAL", "UNKNOWN")
+                return {
+                    "overall_ready": overall_ready,
+                    "dry_run_active": dry_run_active,
+                    "gate_attestations_count": att_count,
+                    "validation_gate": gate_status,
+                    "fleet_health": fleet,
+                    "timestamp": _time.time(),
+                }
+
+            # Tool #78 — Phase 110
+            if name == "get_ioswarm_vhp_mint_status":
+                import time as _t110
+                try:
+                    _mint_logs = self._store.get_ioswarm_vhp_mint_log(limit=100)
+                    _auth_count = sum(1 for r in _mint_logs if r.get("authorized"))
+                    return {
+                        "ioswarm_vhp_mint_enabled":  bool(getattr(self._cfg, "ioswarm_vhp_mint_enabled", False)),
+                        "mint_quorum":               float(getattr(self._cfg, "ioswarm_vhp_mint_quorum", 0.80)),
+                        "authorized_count":          _auth_count,
+                        "denied_count":              len(_mint_logs) - _auth_count,
+                        "task_spec_registered":      True,
+                        "swarm_fingerprint_count":   sum(1 for r in _mint_logs if r.get("swarm_fingerprint")),
+                        "timestamp":                 _t110.time(),
+                    }
+                except Exception as exc:
+                    return {"ioswarm_vhp_mint_enabled": False, "error": str(exc),
+                            "timestamp": __import__("time").time()}
+
+            # Tool #77 — Phase 109C
+            if name == "get_ioswarm_adjudication_status":
+                import time as _t109c
+                try:
+                    _adj_logs = self._store.get_ioswarm_adjudication_log(limit=100)
+                    return {
+                        "ioswarm_adjudication_enabled": bool(getattr(self._cfg, "ioswarm_adjudication_enabled", False)),
+                        "classj_block_quorum":          float(getattr(self._cfg, "ioswarm_classj_block_quorum", 0.67)),
+                        "triage_block_quorum":          float(getattr(self._cfg, "ioswarm_triage_block_quorum", 0.67)),
+                        "dual_veto_count":              sum(1 for r in _adj_logs if r.get("dual_veto")),
+                        "adjudication_count":           len(_adj_logs),
+                        "task_spec_registered":         True,
+                        "timestamp":                    _t109c.time(),
+                    }
+                except Exception as exc:
+                    return {"ioswarm_adjudication_enabled": False, "error": str(exc),
+                            "timestamp": __import__("time").time()}
+
+            # Tool #76 — Phase 109B
+            if name == "get_ioswarm_renewal_status":
+                import time as _t109b
+                try:
+                    _logs_all = self._store.get_ioswarm_renewal_log(limit=100)
+                    return {
+                        "ioswarm_renewal_enabled": bool(getattr(self._cfg, "ioswarm_renewal_enabled", False)),
+                        "min_quorum":              int(getattr(self._cfg, "ioswarm_renewal_min_quorum", 3)),
+                        "renewal_count":           len(_logs_all),
+                        "task_spec_registered":    True,
+                        "recent_approvals":        sum(1 for r in _logs_all if r.get("renewal_approved")),
+                        "recent_skips":            sum(1 for r in _logs_all if not r.get("renewal_approved")),
+                        "timestamp":               _t109b.time(),
+                    }
+                except Exception as exc:
+                    return {"ioswarm_renewal_enabled": False, "error": str(exc),
+                            "timestamp": __import__("time").time()}
+
+            # Tool #75 — Phase 109A
+            if name == "get_ioswarm_status":
+                import time as _t109
+                try:
+                    from .ioswarm_task_spec import VAPISwarmTaskSpec as _Spec
+                    _spec = _Spec()
+                    _logs = self._store.get_ioswarm_consensus_log(limit=1000)
+                    return {
+                        "ioswarm_enabled":        bool(getattr(self._cfg, "ioswarm_enabled", False)),
+                        "quorum_threshold":       float(getattr(self._cfg, "ioswarm_quorum_threshold", 0.60)),
+                        "block_quorum_threshold": float(getattr(self._cfg, "ioswarm_block_quorum_threshold", 0.67)),
+                        "consensus_count":        len(_logs),
+                        "node_count":             int(getattr(self._cfg, "ioswarm_node_count", 5)),
+                        "task_spec_registered":   True,
+                        "w3bstream_applets":      list(_spec.w3bstream_applets),
+                        "vhp_auth_gate_address":  _spec.protocol_lens_address,
+                        "timestamp":              _t109.time(),
+                    }
+                except Exception as exc:
+                    return {"ioswarm_enabled": False, "error": str(exc),
+                            "timestamp": __import__("time").time()}
+
+            # Tool #74 — Phase 108
+            if name == "get_tournament_readiness":
+                import time as _t108
+                try:
+                    snap = self._store.get_latest_tournament_readiness_snapshot()
+                    sep  = float(getattr(self._cfg, "separation_ratio_current", 0.362))
+                    if snap is None:
+                        return {
+                            "fully_ready": False, "found": False,
+                            "software_conditions_met": 0, "hardware_conditions_met": 0,
+                            "separation_ratio_current": sep,
+                            "timestamp": _t108.time(),
+                        }
+                    snap["found"]      = True
+                    snap["timestamp"]  = _t108.time()
+                    return snap
+                except Exception as exc:
+                    return {"fully_ready": False, "error": str(exc),
+                            "timestamp": __import__("time").time()}
+
+            # Tool #73 — Phase 107
+            if name == "get_live_mode_readiness":
+                import time as _t107
+                try:
+                    report = self._store.get_latest_readiness_report()
+                    if report is None:
+                        return {"ready_for_live": False, "n_tested": 0,
+                                "found": False, "timestamp": _t107.time()}
+                    report["found"] = True
+                    report["timestamp"] = _t107.time()
+                    return report
+                except Exception as exc:
+                    return {"ready_for_live": False, "error": str(exc),
+                            "timestamp": __import__("time").time()}
+
+            # Tool #72 — Phase 105
+            if name == "get_epistemic_config":
+                import time as _t105
+                try:
+                    curr  = float(getattr(self._cfg, "epistemic_consensus_threshold", 0.60))
+                    rec   = float(getattr(self._cfg, "epistemic_recommended_threshold", 0.65))
+                    triage= bool(getattr(self._cfg, "epistemic_triage_prereq_required", False))
+                    pmi   = self._store.compute_pmi()
+                    eff   = rec if (pmi >= 1 and rec > curr) else curr
+                    hist  = self._store.get_epistemic_threshold_history(limit=5)
+                    return {
+                        "configured_threshold": curr, "recommended_threshold": rec,
+                        "effective_threshold": eff, "pmi_triggered": pmi >= 1 and rec > curr,
+                        "triage_prereq_required": triage, "at_risk": eff < rec,
+                        "pmi": pmi, "threshold_history_count": len(hist),
+                        "timestamp": _t105.time(),
+                    }
+                except Exception as exc:
+                    return {"error": str(exc), "timestamp": __import__("time").time()}
+
+            # Tool #71 — Phase 104
+            if name == "get_protocol_maturity":
+                import time as _t104
+                try:
+                    state = self._store.get_activation_state()
+                    pmi   = self._store.compute_pmi()
+                    vhp   = self._store.get_first_vhp_status()
+                    days  = None
+                    if vhp and vhp.get("expires_at"):
+                        days = round((vhp["expires_at"] - _t104.time()) / 86400, 1)
+                    _lbl = {0: "uninitiated", 1: "simulated", 2: "testnet_organic", 3: "mainnet"}
+                    return {
+                        "pmi": pmi, "pmi_label": _lbl.get(pmi, "unknown"),
+                        "activation_committed": state.get("activation_committed", False),
+                        "committed_at": state.get("committed_at"),
+                        "dry_run_active": bool(getattr(self._cfg, "agent_dry_run_mode", True)),
+                        "is_simulation": vhp.get("is_simulation", True) if vhp else True,
+                        "days_until_vhp_expiry": days, "vhp_found": vhp is not None,
+                        "timestamp": _t104.time(),
+                    }
+                except Exception as exc:
+                    return {"pmi": 0, "error": str(exc), "timestamp": __import__("time").time()}
+
+            # Tool #70 — Phase 103
+            if name == "run_activation_sequence":
+                import asyncio as _aio
+                import time as _t103
+                n = int(inputs.get("n_sessions", 110))
+                try:
+                    from .activation_runner import ActivationRunner
+                    _bus = getattr(self._cfg, "_bus", None)
+                    runner = ActivationRunner(self._cfg, self._store, bus=_bus)
+                    result = _aio.get_event_loop().run_until_complete(runner.run(n_sessions=n))
+                    result["timestamp"] = _t103.time()
+                    return result
+                except Exception as exc:
+                    return {
+                        "vhp_minted": False, "fully_activated": False,
+                        "error": str(exc), "timestamp": _t103.time(),
+                    }
+
+            # Tool #69 — Phase 102
+            if name == "get_vhp_renewal_log":
+                import time as _t102
+                device_id = inputs.get("device_id", "") or None
+                try:
+                    logs      = self._store.get_vhp_renewal_log(device_id=device_id, limit=10)
+                    total_vhp = self._store.get_total_vhp_count()
+                    last_at   = logs[0]["created_at"] if logs else None
+                    dry_only  = all(r.get("dry_run") for r in logs) if logs else True
+                    return {
+                        "renewal_count":     len(logs),
+                        "last_renewal_at":   last_at,
+                        "dry_run_only":      dry_only,
+                        "lifecycle_warning": total_vhp == 0,
+                        "timestamp":         _t102.time(),
+                    }
+                except Exception as exc:
+                    return {
+                        "renewal_count":     0,
+                        "lifecycle_warning": True,
+                        "error":             str(exc),
+                        "timestamp":         __import__("time").time(),
+                    }
+
+            # Tool #68 — Phase 101B
+            if name == "get_edge_ai_profile":
+                try:
+                    from .edge_ai_profile import get_edge_ai_profile
+                    return get_edge_ai_profile(cfg=self._cfg, store=self._store)
+                except Exception as exc:
+                    import time as _t101b
+                    return {"error": str(exc), "timestamp": _t101b.time()}
+
+            # Tool #67 — Phase 101
+            if name == "get_quicksilver_collateral_status":
+                import time as _t101
+                operator_address = inputs.get("operator_address", "")
+                try:
+                    record = self._store.get_quicksilver_collateral_status(operator_address)
+                    return {
+                        **record,
+                        "stiotx_token_address": getattr(self._cfg, "stiotx_token_address", ""),
+                        "quicksilver_collateral_address": getattr(
+                            self._cfg, "quicksilver_collateral_address", ""
+                        ),
+                        "timestamp": _t101.time(),
+                    }
+                except Exception as exc:
+                    return {
+                        "operator_address": operator_address,
+                        "found": False,
+                        "error": str(exc),
+                        "timestamp": _t101.time(),
+                    }
+
+            # Tool #66 — Phase 100
+            if name == "get_activation_status":
+                import time as _t100
+                gate_n = int(getattr(self._cfg, "validation_gate_n", 100))
+                max_rate = float(getattr(self._cfg, "validation_max_divergence_rate", 1.0))
+                dry_run_active = bool(getattr(self._cfg, "agent_dry_run_mode", True))
+                try:
+                    summary = self._store.get_validation_summary(gate_n, max_rate)
+                except Exception:
+                    summary = {"consecutive_clean": 0, "gate_passed": False, "divergence_rate": 0.0}
+                consecutive_clean = int(summary.get("consecutive_clean", 0))
+                gate_passed = bool(summary.get("gate_passed", False))
+                progress_pct = round(min(100.0, consecutive_clean / gate_n * 100), 1) if gate_n > 0 else 0.0
+                try:
+                    audit = self._store.get_activation_audit_summary()
+                    audit_valid = bool(audit.get("audit_valid", False))
+                except Exception:
+                    audit_valid = False
+                try:
+                    cert = self._store.get_latest_enforcement_certificate()
+                    cert_ttl = float(getattr(self._cfg, "enforcement_cert_ttl_s", 86400))
+                    cert_valid = cert is not None and (
+                        _t100.time() - cert.get("created_at", 0)
+                    ) <= cert_ttl
+                except Exception:
+                    cert_valid = False
+                if not gate_passed:
+                    blocking_step = 1
+                elif not cert_valid:
+                    blocking_step = 2
+                elif not audit_valid:
+                    blocking_step = 3
+                elif dry_run_active:
+                    blocking_step = 4
+                else:
+                    blocking_step = 6
+                return {
+                    "current_blocking_step": blocking_step,
+                    "fully_activated": blocking_step == 6,
+                    "consecutive_clean": consecutive_clean,
+                    "gate_n": gate_n,
+                    "progress_pct": progress_pct,
+                    "dry_run_active": dry_run_active,
+                    "audit_valid": audit_valid,
+                    "cert_valid": cert_valid,
+                    "timestamp": _t100.time(),
+                }
+
+            # Tool #65 — Phase 99A
+            if name == "get_operator_status":
+                import time as _time99
+                operator_address = inputs.get("operator_address", "")
+                try:
+                    status = self._store.get_operator_status(operator_address)
+                    return {
+                        "operator_address": operator_address,
+                        "found": status is not None,
+                        "status": status,
+                        "vapi_token_address": getattr(self._cfg, "vapi_token_address", ""),
+                        "operator_registry_address": getattr(self._cfg, "operator_registry_address", ""),
+                        "timestamp": _time99.time(),
+                    }
+                except Exception as exc:
+                    return {
+                        "operator_address": operator_address,
+                        "found": False,
+                        "status": None,
+                        "error": str(exc),
+                        "timestamp": _time99.time(),
+                    }
+
+            # Tool #64 — Phase 98
+            if name == "get_epistemic_consensus_log":
+                try:
+                    import time as _t
+                    device_id = inputs.get("device_id")
+                    limit = int(inputs.get("limit", 50))
+                    entries = self._store.get_epistemic_consensus_log(
+                        device_id=device_id, limit=limit
+                    )
+                    downgraded = sum(1 for e in entries if e.get("downgraded"))
+                    return {
+                        "entries": entries,
+                        "count": len(entries),
+                        "downgraded_count": downgraded,
+                        "timestamp": _t.time(),
+                    }
+                except Exception as exc:
+                    return {"entries": [], "count": 0, "downgraded_count": 0, "error": str(exc)}
+
+            # Tool #63 — Phase 97
+            if name == "get_live_mode_guard_log":
+                try:
+                    import time as _t
+                    limit = int(inputs.get("limit", 50))
+                    entries = self._store.get_live_mode_guard_log(limit=limit)
+                    return {
+                        "entries": entries,
+                        "count": len(entries),
+                        "current_dry_run": bool(getattr(self._cfg, "agent_dry_run_mode", True)),
+                        "timestamp": _t.time(),
+                    }
+                except Exception as exc:
+                    return {"entries": [], "count": 0, "error": str(exc)}
+
+            # Tool #62 — Phase 96
+            if name == "get_enforcement_certificate":
+                try:
+                    cert = self._store.get_latest_enforcement_certificate()
+                    import time as _t
+                    expired = cert is not None and _t.time() > cert.get("expires_at", 0)
+                    return {
+                        "certificate": cert,
+                        "has_certificate": cert is not None,
+                        "is_expired": expired,
+                    }
+                except Exception as exc:
+                    return {
+                        "certificate": None,
+                        "has_certificate": False,
+                        "is_expired": False,
+                        "error": str(exc),
+                    }
+
+            # Tool #61 — Phase 95
+            if name == "get_activation_audit":
+                try:
+                    return self._store.get_activation_audit_summary()
+                except Exception as exc:
+                    return {
+                        "first_ready_check_at": None,
+                        "gate_attestation_count": 0,
+                        "latest_attestation_at": None,
+                        "audit_valid": False,
+                        "audit_summary": f"Error: {exc}",
+                    }
+
+            # Tool #60 — Phase 94
+            if name == "get_escalation_ruling_log":
+                device_id = inputs.get("device_id")
+                limit = int(inputs.get("limit", 50))
+                try:
+                    entries = self._store.get_escalation_ruling_log(
+                        device_id=device_id, limit=limit
+                    )
+                    deferred_count = sum(1 for e in entries if e.get("was_deferred"))
+                    return {
+                        "entries": entries,
+                        "total_returned": len(entries),
+                        "deferred_count": deferred_count,
+                    }
+                except Exception as exc:
+                    return {"error": str(exc), "entries": [], "total_returned": 0}
+
+            # Tool #59 — Phase 92
+            if name == "get_activation_log":
+                limit = int(inputs.get("limit", 50))
+                try:
+                    entries = self._store.get_live_mode_activation_log(limit=limit)
+                    latest_ready = any(e.get("ready_for_live_mode") for e in entries)
+                    return {
+                        "entries": entries,
+                        "total_returned": len(entries),
+                        "latest_ready_for_live_mode": latest_ready,
+                    }
+                except Exception as exc:
+                    return {
+                        "error": str(exc),
+                        "entries": [],
+                        "total_returned": 0,
+                        "latest_ready_for_live_mode": False,
+                    }
+
+            # Tool #58 — Phase 91
+            if name == "get_triage_report":
+                limit = int(inputs.get("limit", 50))
+                try:
+                    entries = self._store.get_divergence_triage_report(limit=limit)
+                    escalated_count = sum(1 for e in entries if e.get("escalated"))
+                    return {
+                        "entries": entries,
+                        "total_returned": len(entries),
+                        "escalated_count": escalated_count,
+                        "clean_count": len(entries) - escalated_count,
+                    }
+                except Exception as exc:
+                    return {"error": str(exc), "entries": [], "escalated_count": 0}
+
+            # Tool #57 — Phase 90
+            if name == "get_shadow_enforcement_log":
+                device_id = inputs.get("device_id")
+                limit = int(inputs.get("limit", 50))
+                try:
+                    entries = self._store.get_shadow_enforcement_log(
+                        device_id=device_id, limit=limit
+                    )
+                    stats = self._store.get_shadow_enforcement_stats()
+                    return {
+                        "shadow_mode_active": bool(
+                            getattr(self._cfg, "enforcement_shadow_mode", False)
+                        ),
+                        "entries": entries,
+                        "stats": stats,
+                    }
+                except Exception as exc:
+                    return {"error": str(exc), "shadow_mode_active": False, "entries": []}
+
+            # Tool #56 — Phase 89
+            if name == "get_protocol_intelligence":
+                try:
+                    report = self._store.get_latest_protocol_intelligence_report()
+                    if report is not None:
+                        return report
+                    from .protocol_intelligence_agent import ProtocolIntelligenceAgent
+                    agent = ProtocolIntelligenceAgent(self._cfg, self._store)
+                    return agent.compute_report()
+                except Exception as exc:
+                    return {
+                        "error": str(exc),
+                        "protocol_health_score": 0.0,
+                        "ready_for_live_mode": False,
+                        "bottleneck": "error",
+                        "recommendation": f"Error: {exc}",
+                    }
+
+            # Tool #55 — Phase 88
+            if name == "get_campaign_status":
+                gate_n = int(getattr(self._cfg, "validation_gate_n", 100))
+                max_rate = float(getattr(self._cfg, "validation_max_divergence_rate", 1.0))
+                try:
+                    return self._store.get_campaign_status(
+                        gate_n=gate_n, max_divergence_rate=max_rate
+                    )
+                except Exception as exc:
+                    return {
+                        "error": str(exc), "consecutive_clean": 0,
+                        "gate_n": gate_n, "progress_pct": 0.0,
+                        "session_count": 0, "gate_passed": False,
+                        "campaign_note": f"Error: {exc}",
+                    }
+
+            # Tool #54 — Phase 86
+            if name == "get_corpus_status":
+                try:
+                    status = self._store.get_corpus_status()
+                except Exception as exc:
+                    status = {"error": str(exc), "total": 0, "passed": 0, "failed": 0}
+                return status
 
             return {"error": f"Unknown tool: {name}"}
 
