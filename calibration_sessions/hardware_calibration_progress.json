@@ -1,0 +1,60 @@
+{
+  "last_updated": "2026-03-25T21:05:12Z",
+  "db_path": "C:\\Users\\Contr\\.vapi\\bridge.db",
+  "n_sessions": 51,
+  "n_players": 1,
+  "sessions_with_touch_variance": 8,
+  "touch_variance_mean": 0.015538223697657444,
+  "touch_variance_max": 0.21284821576715568,
+  "touch_variance_nonzero_fraction": 0.1568627450980392,
+  "false_positive_count": 0,
+  "false_positive_rate": 0.0,
+  "separation_ratio_current": 0.362,
+  "separation_ratio_required": 1.0,
+  "players": {
+    "581a836c98b3a1b6...": {
+      "n_sessions": 51,
+      "touch_variance_mean": 0.015538223697657444,
+      "touch_variance_nonzero_count": 8,
+      "touch_variance_max": 0.21284821576715568
+    }
+  },
+  "recent_sessions": [
+    {
+      "device_id": "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8",
+      "touch_position_variance": 0.0,
+      "micro_tremor_accel_variance": 7.52316384526264e-37,
+      "press_timing_jitter_variance": 0.0,
+      "created_at": 1774328486.3157873
+    },
+    {
+      "device_id": "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8",
+      "touch_position_variance": 0.0,
+      "micro_tremor_accel_variance": 7.52316384526264e-37,
+      "press_timing_jitter_variance": 0.0,
+      "created_at": 1774326024.1627972
+    },
+    {
+      "device_id": "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8",
+      "touch_position_variance": 0.0,
+      "micro_tremor_accel_variance": 3.4644216375614846e-07,
+      "press_timing_jitter_variance": 0.0,
+      "created_at": 1774216082.2599382
+    },
+    {
+      "device_id": "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8",
+      "touch_position_variance": 0.1690477022900993,
+      "micro_tremor_accel_variance": 0.007074617867372034,
+      "press_timing_jitter_variance": 0.0,
+      "created_at": 1774209472.1521254
+    },
+    {
+      "device_id": "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8",
+      "touch_position_variance": 0.12482544969629357,
+      "micro_tremor_accel_variance": 0.00012120627976180216,
+      "press_timing_jitter_variance": 0.0,
+      "created_at": 1774204282.9903436
+    }
+  ],
+  "_note": "Auto-written by calibration_agent.py (Phase 109). touch_position_variance must be nonzero to unlock separation ratio improvement."
+}

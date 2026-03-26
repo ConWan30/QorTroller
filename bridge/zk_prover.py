@@ -65,7 +65,7 @@ ZK_ARTIFACTS_DIR = _THIS_DIR / "zk_artifacts"
 # Env-override paths (set by setup.sh instructions or Config)
 _ZK_WASM = os.getenv("VAPI_ZK_WASM_PATH", str(ZK_ARTIFACTS_DIR / "TeamProof.wasm"))
 _ZK_ZKEY = os.getenv("VAPI_ZK_ZKEY_PATH", str(ZK_ARTIFACTS_DIR / "TeamProof_final.zkey"))
-_ZK_VKEY = os.getenv("VAPI_ZK_VKEY_PATH", str(ZK_ARTIFACTS_DIR / "verification_key.json"))
+_ZK_VKEY = os.getenv("VAPI_ZK_VKEY_PATH", str(ZK_ARTIFACTS_DIR / "TeamProof_verification_key.json"))
 
 # Node.js helper script (bundled with the bridge)
 _COMPUTE_INPUTS_JS = ZK_ARTIFACTS_DIR / "compute_inputs.js"

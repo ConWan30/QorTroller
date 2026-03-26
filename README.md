@@ -1,6 +1,9 @@
 # VAPI: Verifiable Controller Input Provenance with Physics-Backed Liveness for Competitive Gaming
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18966169.svg)](https://doi.org/10.5281/zenodo.18966169)
+[![CI — Bridge + SDK](https://github.com/ConWan30/vapi-prototype/actions/workflows/ci.yml/badge.svg?job=bridge)](https://github.com/ConWan30/vapi-prototype/actions/workflows/ci.yml)
+[![CI — Smart Contracts](https://github.com/ConWan30/vapi-prototype/actions/workflows/ci.yml/badge.svg?job=contracts)](https://github.com/ConWan30/vapi-prototype/actions/workflows/ci.yml)
+[![CI — OpenAPI Lint](https://github.com/ConWan30/vapi-prototype/actions/workflows/ci.yml/badge.svg?job=yaml-lint)](https://github.com/ConWan30/vapi-prototype/actions/workflows/ci.yml)
 
 **Authors:** Contravious Battle — Independent Researcher
 

@@ -529,6 +529,682 @@ class Store:
                 CREATE INDEX IF NOT EXISTS idx_agent_rulings_verdict
                 ON agent_rulings(verdict, dry_run, created_at DESC)
             """)
+            # Phase 66: Ruling streaks table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS ruling_streaks (
+                    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_id      TEXT    NOT NULL UNIQUE,
+                    current_streak INTEGER NOT NULL DEFAULT 0,
+                    streak_verdict TEXT    NOT NULL DEFAULT '',
+                    streak_start   REAL    NOT NULL DEFAULT 0.0,
+                    last_verdict   TEXT    NOT NULL DEFAULT '',
+                    last_ruling_id INTEGER NOT NULL DEFAULT 0,
+                    escalated_to   TEXT    DEFAULT NULL,
+                    updated_at     REAL    NOT NULL
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_ruling_streaks_device
+                ON ruling_streaks(device_id)
+            """)
+            # Phase 66: On-chain rulings anchoring table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS on_chain_rulings (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ruling_id       INTEGER NOT NULL,
+                    device_id       TEXT    NOT NULL,
+                    commitment_hash TEXT    NOT NULL,
+                    tx_hash         TEXT    NOT NULL,
+                    block_number    INTEGER DEFAULT NULL,
+                    chain_id        INTEGER NOT NULL DEFAULT 4690,
+                    created_at      REAL    NOT NULL,
+                    FOREIGN KEY (ruling_id) REFERENCES agent_rulings(id)
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_on_chain_rulings_device
+                ON on_chain_rulings(device_id, created_at DESC)
+            """)
+            conn.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_on_chain_rulings_commitment
+                ON on_chain_rulings(commitment_hash)
+            """)
+            # Phase 73: add ceremony_integrity column to agent_rulings (idempotent)
+            try:
+                conn.execute(
+                    "ALTER TABLE agent_rulings ADD COLUMN ceremony_integrity TEXT DEFAULT NULL"
+                )
+            except Exception:
+                pass  # column already exists — safe to ignore
+            # Phase 67: add reinstate columns to credential_enforcement (idempotent)
+            for _col, _typedef in [
+                ("reinstated",    "INTEGER DEFAULT 0"),
+                ("reinstated_at", "REAL    DEFAULT NULL"),
+            ]:
+                try:
+                    conn.execute(
+                        f"ALTER TABLE credential_enforcement ADD COLUMN {_col} {_typedef}"
+                    )
+                except Exception:
+                    pass  # column already exists — safe to ignore
+            # Phase 69: Data Sovereignty + Oracle Publication tables
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS data_lineage (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_id       TEXT NOT NULL,
+                    record_hash     TEXT DEFAULT NULL,
+                    taxonomy_class  TEXT NOT NULL,
+                    quality_index   REAL DEFAULT 0.0,
+                    curator_note    TEXT DEFAULT '',
+                    created_at      REAL NOT NULL
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_data_lineage_device
+                ON data_lineage(device_id, created_at DESC)
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS oracle_publications (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    oracle_type     TEXT NOT NULL,
+                    device_id       TEXT NOT NULL,
+                    tx_hash         TEXT DEFAULT NULL,
+                    payload_json    TEXT DEFAULT '{}',
+                    published_at    REAL NOT NULL
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_oracle_publications_device
+                ON oracle_publications(device_id, oracle_type, published_at DESC)
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS token_eligibility (
+                    device_id           TEXT PRIMARY KEY,
+                    nominal_sessions    INTEGER DEFAULT 0,
+                    clean_streak        INTEGER DEFAULT 0,
+                    passport_held       INTEGER DEFAULT 0,
+                    enrollment_complete INTEGER DEFAULT 0,
+                    mpc_verified        INTEGER DEFAULT 0,
+                    gate_passed         INTEGER DEFAULT 0,
+                    base_multiplier     REAL    DEFAULT 1.0,
+                    total_multiplier    REAL    DEFAULT 1.0,
+                    eligibility_score   REAL    DEFAULT 0.0,
+                    last_computed_at    REAL    NOT NULL
+                )
+            """)
+            # Phase 72: PHGCredential bridge-layer multi-sig suspension proposals
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS pending_suspensions (
+                    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_id     TEXT    NOT NULL,
+                    evidence_hash TEXT    NOT NULL,
+                    duration_s    INTEGER NOT NULL,
+                    proposed_by   TEXT    NOT NULL DEFAULT '',
+                    proposed_at   REAL    NOT NULL,
+                    confirmations INTEGER NOT NULL DEFAULT 0,
+                    executed      INTEGER NOT NULL DEFAULT 0,
+                    executed_at   REAL,
+                    tx_hash       TEXT    DEFAULT '',
+                    expires_at    REAL    NOT NULL
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_pending_suspensions_device
+                ON pending_suspensions(device_id, proposed_at DESC)
+            """)
+            # Phase 75: ruling validation log — cross-checks LLM vs rule-fallback
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS ruling_validation_log (
+                    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ruling_id           INTEGER NOT NULL,
+                    device_id           TEXT    NOT NULL,
+                    llm_verdict         TEXT    NOT NULL,
+                    fallback_verdict    TEXT    NOT NULL,
+                    llm_confidence      REAL    NOT NULL,
+                    fallback_confidence REAL    NOT NULL,
+                    divergence          INTEGER NOT NULL DEFAULT 0,
+                    created_at          REAL    NOT NULL
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_ruling_validation_ruling_id
+                ON ruling_validation_log(ruling_id)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_ruling_validation_created
+                ON ruling_validation_log(created_at DESC)
+            """)
+            # Phase 76: ruling provenance anchor log
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS ruling_provenance_anchors (
+                    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ruling_id        INTEGER NOT NULL,
+                    device_id        TEXT    NOT NULL,
+                    provenance_hash  TEXT    NOT NULL,
+                    ceremony_hash    TEXT    NOT NULL,
+                    evidence_hash    TEXT    NOT NULL,
+                    anchored_at      REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_provenance_ruling_id
+                ON ruling_provenance_anchors(ruling_id)
+            """)
+            conn.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_provenance_ruling_unique
+                ON ruling_provenance_anchors(ruling_id)
+            """)
+            # Phase 79: Live mode transitions
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS live_mode_transitions (
+                    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_type       TEXT NOT NULL,
+                    consecutive_clean INTEGER,
+                    divergence_rate  REAL,
+                    conditions_json  TEXT,
+                    operator_action  TEXT,
+                    created_at       REAL NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            # Phase 80: Federation threat signals
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS federation_threat_signals (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_id       TEXT NOT NULL,
+                    commitment_hash TEXT NOT NULL,
+                    circuit_id      TEXT,
+                    source_peer     TEXT,
+                    broadcast_at    REAL,
+                    received_at     REAL,
+                    created_at      REAL NOT NULL DEFAULT (strftime('%s','now')),
+                    UNIQUE(commitment_hash)
+                )
+            """)
+            # Phase 81: Class J assessments
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS class_j_assessments (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_id       TEXT NOT NULL,
+                    entropy_variance REAL NOT NULL,
+                    risk_level      TEXT NOT NULL,
+                    window_count    INTEGER NOT NULL,
+                    assessed_at     REAL NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_class_j_device
+                ON class_j_assessments(device_id, assessed_at)
+            """)
+            # Phase 82: Reactive adjudication interrupt log
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS reactive_adjudication_log (
+                    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_id        TEXT NOT NULL,
+                    triggered_by     TEXT NOT NULL,
+                    entropy_variance REAL,
+                    verdict          TEXT,
+                    was_deferred     INTEGER NOT NULL DEFAULT 0,
+                    created_at       REAL NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_reactive_adj_device
+                ON reactive_adjudication_log(device_id, created_at DESC)
+            """)
+            # Phase 83: Agent supervisor health log
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS supervisor_health_log (
+                    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                    agent_name       TEXT NOT NULL,
+                    health           TEXT NOT NULL,
+                    last_active_at   REAL,
+                    activity_count   INTEGER NOT NULL DEFAULT 0,
+                    checked_at       REAL NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_supervisor_health_agent
+                ON supervisor_health_log(agent_name, checked_at DESC)
+            """)
+            # Phase 84: Gate attestation anchor log
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS gate_attestations (
+                    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+                    attestation_hash      TEXT NOT NULL UNIQUE,
+                    consecutive_clean     INTEGER NOT NULL,
+                    gate_n                INTEGER NOT NULL,
+                    divergence_rate       REAL NOT NULL,
+                    on_chain_tx           TEXT,
+                    created_at            REAL NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_gate_attestation_created
+                ON gate_attestations(created_at DESC)
+            """)
+            # Phase 97: Live Mode Guard Log (every transition attempt recorded)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS live_mode_guard_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_type TEXT NOT NULL,
+                    attempted_dry_run INTEGER,
+                    gate_passed INTEGER,
+                    cert_valid INTEGER,
+                    audit_valid INTEGER,
+                    blocking_conditions TEXT,
+                    operator_key_hash TEXT,
+                    created_at REAL NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_live_mode_guard_created
+                ON live_mode_guard_log(created_at DESC)
+            """)
+            # Phase 98: Epistemic Consensus Log (multi-agent pre-enforcement consensus)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS epistemic_consensus_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_id TEXT NOT NULL,
+                    ruling_id INTEGER,
+                    proposed_verdict TEXT NOT NULL,
+                    class_j_score REAL,
+                    triage_score REAL,
+                    supervisor_score REAL,
+                    consensus_score REAL NOT NULL,
+                    threshold REAL NOT NULL,
+                    consensus_reached INTEGER NOT NULL DEFAULT 0,
+                    final_verdict TEXT NOT NULL,
+                    downgraded INTEGER NOT NULL DEFAULT 0,
+                    created_at REAL NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_epistemic_device
+                ON epistemic_consensus_log(device_id, created_at DESC)
+            """)
+            # Phase 96: Enforcement Readiness Certificates (portable signed audit proofs)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS enforcement_certificates (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    audit_hash TEXT NOT NULL,
+                    hmac_sig TEXT NOT NULL,
+                    audit_valid INTEGER NOT NULL DEFAULT 0,
+                    first_ready_check_at REAL,
+                    gate_attestation_count INTEGER NOT NULL DEFAULT 0,
+                    latest_attestation_at REAL,
+                    expires_at REAL NOT NULL,
+                    created_at REAL NOT NULL DEFAULT (strftime('%s','now')),
+                    UNIQUE(audit_hash)
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_enforcement_cert_created
+                ON enforcement_certificates(created_at DESC)
+            """)
+            # Phase 99A: Operator registration audit log (bridge-side record of staking events)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS operator_registrations (
+                    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                    operator_address TEXT NOT NULL,
+                    event_type       TEXT NOT NULL,
+                    stake_amount     TEXT,
+                    tx_hash          TEXT,
+                    reason           TEXT,
+                    created_at       REAL NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_operator_reg_address
+                ON operator_registrations(operator_address, created_at DESC)
+            """)
+            # Phase 99B: GSR biometric samples (L7 layer, advisory only, GSR_ENABLED=false default)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS gsr_samples (
+                    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_id        TEXT NOT NULL,
+                    arousal_index    REAL NOT NULL,
+                    correlation      REAL NOT NULL,
+                    conductance_raw  REAL NOT NULL DEFAULT 0.0,
+                    l7_features_json TEXT,
+                    created_at       REAL NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_gsr_device_created
+                ON gsr_samples(device_id, created_at DESC)
+            """)
+            # Phase 99C: VHP issuances (soulbound ERC-4671 VHP token audit log)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS vhp_issuances (
+                    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_id           TEXT NOT NULL,
+                    token_id            INTEGER NOT NULL DEFAULT 0,
+                    tx_hash             TEXT NOT NULL DEFAULT '',
+                    expires_at          REAL NOT NULL,
+                    cert_level          INTEGER NOT NULL DEFAULT 1,
+                    consecutive_clean   INTEGER NOT NULL DEFAULT 0,
+                    to_address          TEXT NOT NULL DEFAULT '',
+                    created_at          REAL NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_vhp_device_created
+                ON vhp_issuances(device_id, created_at DESC)
+            """)
+            # Phase 101: QuickSilver collateral events
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS quicksilver_collateral_events (
+                    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                    operator_address TEXT NOT NULL,
+                    event_type     TEXT NOT NULL,
+                    amount_wei     TEXT NOT NULL DEFAULT '0',
+                    tx_hash        TEXT NOT NULL DEFAULT '',
+                    created_at     REAL NOT NULL
+                )
+            """)
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_qs_collateral_operator "
+                "ON quicksilver_collateral_events(operator_address)"
+            )
+            # Phase 102: VHP renewal log
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS vhp_renewal_log (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_id       TEXT    NOT NULL,
+                    token_id        INTEGER NOT NULL DEFAULT 0,
+                    old_expires_at  REAL    NOT NULL DEFAULT 0,
+                    new_expires_at  REAL    NOT NULL DEFAULT 0,
+                    tx_hash         TEXT    NOT NULL DEFAULT '',
+                    dry_run         INTEGER NOT NULL DEFAULT 0,
+                    created_at      REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_vhp_renewal_device
+                ON vhp_renewal_log(device_id)
+            """)
+            # Phase 103: Activation simulation log
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS activation_simulation_log (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    n_sessions      INTEGER NOT NULL DEFAULT 0,
+                    gate_passed     INTEGER NOT NULL DEFAULT 0,
+                    cert_created    INTEGER NOT NULL DEFAULT 0,
+                    dry_run_toggled INTEGER NOT NULL DEFAULT 0,
+                    vhp_minted      INTEGER NOT NULL DEFAULT 0,
+                    token_id        INTEGER,
+                    tx_hash         TEXT    NOT NULL DEFAULT '',
+                    created_at      REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            # Phase 104: Persistent Activation Commit + PMI
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS activation_state (
+                    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+                    activation_committed INTEGER NOT NULL DEFAULT 0,
+                    pmi                  INTEGER NOT NULL DEFAULT 0,
+                    committed_at         REAL,
+                    committed_by         TEXT    NOT NULL DEFAULT '',
+                    pmi_updated_at       REAL,
+                    notes                TEXT    NOT NULL DEFAULT '',
+                    created_at           REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            # Phase 105: Epistemic Threshold History
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS epistemic_threshold_history (
+                    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                    old_threshold  REAL    NOT NULL,
+                    new_threshold  REAL    NOT NULL,
+                    trigger        TEXT    NOT NULL DEFAULT 'manual',
+                    pmi_at_change  INTEGER NOT NULL DEFAULT 0,
+                    notes          TEXT    NOT NULL DEFAULT '',
+                    created_at     REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            # Phase 107: Live mode readiness reports (W1 isolation — never touches ruling_validation_log)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS live_mode_readiness_reports (
+                    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+                    n_tested              INTEGER NOT NULL DEFAULT 0,
+                    false_positive_count  INTEGER NOT NULL DEFAULT 0,
+                    false_positive_rate   REAL    NOT NULL DEFAULT 0.0,
+                    activation_committed  INTEGER NOT NULL DEFAULT 0,
+                    pmi                   INTEGER NOT NULL DEFAULT 0,
+                    dry_run_active        INTEGER NOT NULL DEFAULT 1,
+                    ready_for_live        INTEGER NOT NULL DEFAULT 0,
+                    notes                 TEXT    NOT NULL DEFAULT '',
+                    created_at            REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            # Phase 108: Tournament readiness snapshots (7-condition AND gate)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS tournament_readiness_snapshots (
+                    id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    n_tested                    INTEGER NOT NULL DEFAULT 0,
+                    false_positive_count        INTEGER NOT NULL DEFAULT 0,
+                    activation_committed        INTEGER NOT NULL DEFAULT 0,
+                    pmi                         INTEGER NOT NULL DEFAULT 0,
+                    dry_run_active              INTEGER NOT NULL DEFAULT 1,
+                    software_conditions_met     INTEGER NOT NULL DEFAULT 0,
+                    separation_ratio            REAL    NOT NULL DEFAULT 0.362,
+                    separation_ratio_ok         INTEGER NOT NULL DEFAULT 0,
+                    touchpad_recapture_complete INTEGER NOT NULL DEFAULT 0,
+                    hardware_conditions_met     INTEGER NOT NULL DEFAULT 0,
+                    fully_ready                 INTEGER NOT NULL DEFAULT 0,
+                    blocking_conditions_json    TEXT    NOT NULL DEFAULT '[]',
+                    notes                       TEXT    NOT NULL DEFAULT '',
+                    created_at                  REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            # Phase 109A: ioSwarm consensus log
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS ioswarm_consensus_log (
+                    id                        INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_id                 TEXT    NOT NULL,
+                    session_id                TEXT,
+                    node_verdicts_json        TEXT    NOT NULL DEFAULT '[]',
+                    quorum_verdict            TEXT,
+                    quorum_reached            INTEGER NOT NULL DEFAULT 0,
+                    block_quorum_met          INTEGER NOT NULL DEFAULT 0,
+                    agreement_ratio           REAL,
+                    node_count                INTEGER NOT NULL DEFAULT 0,
+                    swarm_verdict_score       REAL    NOT NULL DEFAULT 0.0,
+                    hold_escalation_flag      INTEGER NOT NULL DEFAULT 0,
+                    verdict_distribution_json TEXT    NOT NULL DEFAULT '{}',
+                    created_at                REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_ioswarm_consensus_device
+                ON ioswarm_consensus_log (device_id, created_at DESC)
+            """)
+            # Phase 109B: ioSwarm renewal log
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS ioswarm_renewal_log (
+                    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_id          TEXT    NOT NULL,
+                    token_id           INTEGER NOT NULL DEFAULT 0,
+                    quorum_verdict     TEXT,
+                    agreement_ratio    REAL,
+                    node_count         INTEGER NOT NULL DEFAULT 0,
+                    renewal_approved   INTEGER NOT NULL DEFAULT 0,
+                    node_verdicts_json TEXT    NOT NULL DEFAULT '[]',
+                    created_at         REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_ioswarm_renewal_device
+                ON ioswarm_renewal_log (device_id, created_at DESC)
+            """)
+            # Phase 109C: ioSwarm adjudication log (ClassJ+Triage dual-quorum veto)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS ioswarm_adjudication_log (
+                    id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_id              TEXT    NOT NULL,
+                    session_id             TEXT    NOT NULL DEFAULT '',
+                    classj_quorum_verdict  TEXT,
+                    classj_agreement_ratio REAL,
+                    triage_quorum_verdict  TEXT,
+                    triage_agreement_ratio REAL,
+                    dual_veto              INTEGER NOT NULL DEFAULT 0,
+                    node_count             INTEGER NOT NULL DEFAULT 0,
+                    classj_verdicts_json   TEXT    NOT NULL DEFAULT '[]',
+                    triage_verdicts_json   TEXT    NOT NULL DEFAULT '[]',
+                    created_at             REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_ioswarm_adjudication_device
+                ON ioswarm_adjudication_log (device_id, created_at DESC)
+            """)
+            # Phase 110: ioSwarm VHP mint authorization log (fail-CLOSED quorum gate)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS ioswarm_vhp_mint_log (
+                    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_id           TEXT    NOT NULL,
+                    authorized          INTEGER NOT NULL DEFAULT 0,
+                    quorum_verdict      TEXT,
+                    agreement_ratio     REAL,
+                    node_count          INTEGER NOT NULL DEFAULT 0,
+                    consecutive_clean   INTEGER NOT NULL DEFAULT 0,
+                    recent_block_count  INTEGER NOT NULL DEFAULT 0,
+                    node_verdicts_json  TEXT    NOT NULL DEFAULT '[]',
+                    swarm_fingerprint   TEXT,
+                    error_msg           TEXT,
+                    created_at          REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_ioswarm_vhp_mint_device
+                ON ioswarm_vhp_mint_log (device_id, created_at DESC)
+            """)
+            # Phase 109A: add swarm_score column to epistemic_consensus_log (idempotent)
+            try:
+                conn.execute(
+                    "ALTER TABLE epistemic_consensus_log ADD COLUMN swarm_score REAL NOT NULL DEFAULT 0.0"
+                )
+            except Exception:
+                pass  # Column already exists
+            # Phase 86: Synthetic session corpus (isolated — never touches ruling_validation_log)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS synthetic_sessions (
+                    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id           TEXT NOT NULL UNIQUE,
+                    device_id            TEXT NOT NULL,
+                    inference_code       INTEGER NOT NULL DEFAULT 32,
+                    humanity_score       REAL NOT NULL,
+                    fallback_verdict     TEXT NOT NULL,
+                    fallback_confidence  REAL NOT NULL,
+                    passed_fallback      INTEGER NOT NULL DEFAULT 0,
+                    corpus_run_id        TEXT,
+                    created_at           REAL NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_synthetic_session_run
+                ON synthetic_sessions(corpus_run_id, created_at DESC)
+            """)
+            # Phase 88: add divergence_reason column to ruling_validation_log (idempotent)
+            try:
+                conn.execute(
+                    "ALTER TABLE ruling_validation_log ADD COLUMN divergence_reason TEXT"
+                )
+            except Exception:
+                pass  # Column already exists — no-op
+            # Phase 89: Protocol Intelligence Reports
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS protocol_intelligence_reports (
+                    id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+                    protocol_health_score    REAL NOT NULL,
+                    gate_progress_score      REAL NOT NULL DEFAULT 0.0,
+                    fleet_health_score       REAL NOT NULL DEFAULT 0.0,
+                    divergence_clarity_score REAL NOT NULL DEFAULT 0.0,
+                    corpus_pass_score        REAL NOT NULL DEFAULT 0.0,
+                    class_j_confidence_score REAL NOT NULL DEFAULT 0.0,
+                    shadow_pass_score        REAL,
+                    triage_confidence_score  REAL,
+                    ready_for_live_mode      INTEGER NOT NULL DEFAULT 0,
+                    bottleneck               TEXT,
+                    estimated_days_to_gate   REAL,
+                    components_json          TEXT NOT NULL DEFAULT '{}',
+                    recommendation           TEXT NOT NULL DEFAULT '',
+                    created_at               REAL NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_pia_created
+                ON protocol_intelligence_reports(created_at DESC)
+            """)
+            # Phase 90: Shadow Enforcement Log
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS shadow_enforcement_log (
+                    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_id            TEXT NOT NULL,
+                    ruling_id            INTEGER,
+                    verdict              TEXT NOT NULL DEFAULT 'BLOCK',
+                    commitment_hash      TEXT,
+                    would_have_suspended INTEGER NOT NULL DEFAULT 1,
+                    duration_s           INTEGER,
+                    warmup_attack_score  REAL,
+                    created_at           REAL NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_shadow_enf_device
+                ON shadow_enforcement_log(device_id, created_at DESC)
+            """)
+            # Phase 91: Divergence Triage Reports
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS divergence_triage_reports (
+                    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_id               TEXT NOT NULL,
+                    divergence_count        INTEGER NOT NULL DEFAULT 0,
+                    escalated               INTEGER NOT NULL DEFAULT 0,
+                    patterns                TEXT,
+                    ml_bot_high_count       INTEGER NOT NULL DEFAULT 0,
+                    cheat_count             INTEGER NOT NULL DEFAULT 0,
+                    enrollment_anomaly_count INTEGER NOT NULL DEFAULT 0,
+                    assessed_at             REAL NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_triage_device
+                ON divergence_triage_reports(device_id, assessed_at DESC)
+            """)
+            # Phase 92: Live Mode Activation Pipeline audit log
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS live_mode_activation_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_type TEXT NOT NULL,
+                    ready_for_live_mode INTEGER NOT NULL DEFAULT 0,
+                    protocol_health_score REAL,
+                    bottleneck TEXT,
+                    blocking_conditions TEXT,
+                    operator_notes TEXT,
+                    created_at REAL NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_activation_log_created
+                ON live_mode_activation_log(created_at DESC)
+            """)
+            # Phase 94: Escalation ruling log (triage reactive loop)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS escalation_ruling_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_id TEXT NOT NULL,
+                    patterns TEXT,
+                    verdict TEXT,
+                    ruling_id INTEGER,
+                    was_deferred INTEGER NOT NULL DEFAULT 0,
+                    created_at REAL NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_escalation_ruling_device
+                ON escalation_ruling_log(device_id, created_at DESC)
+            """)
             # Bootstrap schema version history (idempotent INSERT OR IGNORE)
             for _ph, _nm in [
                 (21, "pitl_sidecar"), (22, "phg_checkpoints"),
@@ -550,6 +1226,44 @@ class Store:
                 (62, "enrollment_ceremony"),
                 (63, "l6b_reflex_layer"),
                 (65, "autonomous_intelligence_layer"),
+                (66, "ruling_enforcement_pipeline"),
+                (67, "ceremony_hardening"),
+                (69, "data_sovereignty_layer"),
+                (72, "phgcredential_bridge_multisig"),
+                (73, "ceremony_enrichment"),
+                (75, "validation_gate_watchdog"),
+                (76, "ruling_provenance_anchors"),
+                (79, "agent_message_bus_live_mode"),
+                (80, "federation_threat_signals"),
+                (81, "class_j_detection"),
+                (82, "reactive_adjudication_log"),
+                (83, "supervisor_health_log"),
+                (84, "gate_attestation_anchor"),
+                (86, "synthetic_corpus"),
+                (88, "campaign_tracker"),
+                (89, "protocol_intelligence"),
+                (90, "shadow_enforcement"),
+                (91, "divergence_triage"),
+                (92, "live_mode_activation_log"),
+                (94, "escalation_ruling_log"),
+                (95, "activation_audit"),
+                (96, "enforcement_certificates"),
+                (97, "live_mode_guard"),
+                (98, "epistemic_consensus"),
+                (99, "vapi_token"),
+                (992, "gsr_registry"),
+                (993, "vhp_issuances"),
+                (101, "quicksilver_collateral_events"),
+                (102, "vhp_renewal_log"),
+                (103, "activation_simulation"),
+                (104, "activation_state"),
+                (105, "epistemic_threshold_history"),
+                (107, "live_mode_readiness"),
+                (108, "tournament_readiness"),
+                (109, "ioswarm_consensus_log"),
+                (109, "ioswarm_renewal_log"),
+                (109, "ioswarm_adjudication_log"),
+                (110, "ioswarm_vhp_mint_log"),
             ]:
                 conn.execute(
                     "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
@@ -1772,6 +2486,30 @@ class Store:
             ).fetchall()
         return [dict(r) for r in rows]
 
+    def get_expired_suspensions(self) -> list[dict]:
+        """Return suspended rows whose suspension window has elapsed (Phase 67).
+
+        Used by RulingEnforcementAgent._check_expired_suspensions() to auto-reinstate.
+        Only returns rows where suspended=1, suspended_until < now(), reinstated is falsy.
+        """
+        now = time.time()
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM credential_enforcement"
+                " WHERE suspended=1 AND suspended_until IS NOT NULL AND suspended_until < ?"
+                " AND (reinstated IS NULL OR reinstated=0)",
+                (now,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def mark_suspension_reinstated(self, device_id: str) -> None:
+        """Mark a device's credential suspension as reinstated (Phase 67)."""
+        with self._conn() as conn:
+            conn.execute(
+                "UPDATE credential_enforcement SET reinstated=1, reinstated_at=? WHERE device_id=?",
+                (time.time(), device_id),
+            )
+
     # --- Phase 38: Living calibration (Mode 6) ---
 
     def get_nominal_records_for_calibration(self, limit: int = 200) -> list[dict]:
@@ -1808,7 +2546,7 @@ class Store:
     ) -> None:
         """Insert or replace a per-player calibration profile (Phase 38)."""
         import datetime as _dt
-        updated_at = _dt.datetime.utcnow().isoformat() + "Z"
+        updated_at = _dt.datetime.now(_dt.timezone.utc).isoformat().replace("+00:00", "Z")
         with self._conn() as conn:
             conn.execute(
                 """
@@ -2217,6 +2955,19 @@ class Store:
             ).fetchall()
         return [dict(r) for r in rows]
 
+    def get_ioid_devices(self, limit: int = 10) -> list:
+        """Return registered ioID device records. Used for warm-up bootstrap fallback.
+        Returns list of dicts: {device_id, device_address, did, registered_at}
+        Phase 100.
+        """
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT device_id, device_address, did, registered_at "
+                "FROM ioid_devices ORDER BY registered_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
     # --- Phase 56: Tournament Passport ---
 
     def store_tournament_passport(
@@ -2294,19 +3045,25 @@ class Store:
         dry_run: bool = True,
         source_agent: str = "session_adjudicator",
         expires_at: float | None = None,
+        ceremony_integrity: str | None = None,
     ) -> int:
-        """Insert autonomous agent ruling. Returns ruling id."""
+        """Insert autonomous agent ruling. Returns ruling id.
+
+        Phase 73: optional ceremony_integrity — JSON string from
+        VAPIZKProof.verify_ceremony_integrity() stored alongside the ruling for
+        cryptographic provenance tracing.
+        """
         now = time.time()
         with self._conn() as conn:
             cur = conn.execute(
                 "INSERT INTO agent_rulings "
                 "(device_id, verdict, confidence, reasoning, evidence_json, "
                 "attestation_hash, commitment_hash, dry_run, source_agent, "
-                "created_at, expires_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "created_at, expires_at, ceremony_integrity) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (device_id, verdict, confidence, reasoning, evidence_json,
                  attestation_hash, commitment_hash, int(dry_run), source_agent,
-                 now, expires_at),
+                 now, expires_at, ceremony_integrity),
             )
             return cur.lastrowid
 
@@ -2339,3 +3096,2104 @@ class Store:
                 "SELECT * FROM agent_rulings WHERE id=?", (ruling_id,)
             ).fetchone()
         return dict(row) if row else None
+
+    # --- Phase 66: Ruling streaks ---
+
+    def upsert_ruling_streak(self, device_id: str, verdict: str, ruling_id: int) -> dict:
+        """Update streak counter. Resets on verdict change. Returns current streak dict."""
+        now = time.time()
+        with self._conn() as conn:
+            existing = conn.execute(
+                "SELECT * FROM ruling_streaks WHERE device_id=?", (device_id,)
+            ).fetchone()
+            if existing and existing["streak_verdict"] == verdict:
+                new_count = existing["current_streak"] + 1
+                conn.execute(
+                    "UPDATE ruling_streaks SET current_streak=?, last_verdict=?, "
+                    "last_ruling_id=?, updated_at=? WHERE device_id=?",
+                    (new_count, verdict, ruling_id, now, device_id),
+                )
+            else:
+                conn.execute(
+                    "INSERT INTO ruling_streaks (device_id, current_streak, streak_verdict, "
+                    "streak_start, last_verdict, last_ruling_id, updated_at) VALUES (?,?,?,?,?,?,?) "
+                    "ON CONFLICT(device_id) DO UPDATE SET current_streak=excluded.current_streak, "
+                    "streak_verdict=excluded.streak_verdict, streak_start=excluded.streak_start, "
+                    "last_verdict=excluded.last_verdict, last_ruling_id=excluded.last_ruling_id, "
+                    "updated_at=excluded.updated_at",
+                    (device_id, 1, verdict, now, verdict, ruling_id, now),
+                )
+        return self.get_ruling_streak(device_id)
+
+    def get_ruling_streak(self, device_id: str) -> dict | None:
+        """Return current streak for device, or None if no streak recorded."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM ruling_streaks WHERE device_id=?", (device_id,)
+            ).fetchone()
+        return dict(row) if row else None
+
+    def set_streak_escalation(self, device_id: str, escalated_to: str) -> None:
+        """Mark that a streak was auto-escalated to a higher verdict."""
+        with self._conn() as conn:
+            conn.execute(
+                "UPDATE ruling_streaks SET escalated_to=?, updated_at=? WHERE device_id=?",
+                (escalated_to, time.time(), device_id),
+            )
+
+    # --- Phase 66: On-chain ruling anchoring ---
+
+    def insert_on_chain_ruling(
+        self,
+        ruling_id: int,
+        device_id: str,
+        commitment_hash: str,
+        tx_hash: str,
+        block_number: int | None = None,
+        chain_id: int = 4690,
+    ) -> int:
+        """Insert on-chain commitment record. Returns row id."""
+        now = time.time()
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO on_chain_rulings "
+                "(ruling_id, device_id, commitment_hash, tx_hash, block_number, chain_id, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (ruling_id, device_id, commitment_hash, tx_hash, block_number, chain_id, now),
+            )
+            return cur.lastrowid
+
+    def get_on_chain_rulings(self, device_id: str, limit: int = 10) -> list[dict]:
+        """Return on-chain ruling records for device, most recent first."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM on_chain_rulings WHERE device_id=? "
+                "ORDER BY created_at DESC LIMIT ?",
+                (device_id, limit),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_on_chain_ruling_by_commitment(self, commitment_hash: str) -> dict | None:
+        """Return on-chain ruling by commitment_hash, or None if not found."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM on_chain_rulings WHERE commitment_hash=?",
+                (commitment_hash,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    # --- Phase 69: Data Sovereignty Layer — store methods ---
+
+    def list_known_devices(self) -> list[str]:
+        """Return all device_ids known to the store (from devices table)."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT device_id FROM devices ORDER BY last_seen DESC"
+            ).fetchall()
+        return [r["device_id"] for r in rows]
+
+    def get_device_suspension(self, device_id: str) -> dict | None:
+        """Return active suspension state for device from credential_enforcement, or None."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM credential_enforcement WHERE device_id=? "
+                "AND suspended=1 AND (reinstated IS NULL OR reinstated=0) "
+                "ORDER BY created_at DESC LIMIT 1",
+                (device_id,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def upsert_data_lineage(
+        self,
+        device_id: str,
+        taxonomy_class: str,
+        quality_index: float,
+        curator_note: str = "",
+        record_hash: str | None = None,
+    ) -> int:
+        """Insert a data lineage entry. Returns row id."""
+        now = time.time()
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO data_lineage "
+                "(device_id, record_hash, taxonomy_class, quality_index, curator_note, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (device_id, record_hash, taxonomy_class, quality_index, curator_note, now),
+            )
+            return cur.lastrowid
+
+    def get_data_lineage(self, device_id: str, limit: int = 50) -> list[dict]:
+        """Return data lineage graph for device, most recent first."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM data_lineage WHERE device_id=? "
+                "ORDER BY created_at DESC LIMIT ?",
+                (device_id, limit),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def insert_oracle_publication(
+        self,
+        oracle_type: str,
+        device_id: str,
+        tx_hash: str | None,
+        payload_json: str,
+    ) -> int:
+        """Log an oracle publication event. Returns row id."""
+        now = time.time()
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO oracle_publications "
+                "(oracle_type, device_id, tx_hash, payload_json, published_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (oracle_type, device_id, tx_hash, payload_json, now),
+            )
+            return cur.lastrowid
+
+    def get_oracle_publications(
+        self, oracle_type: str | None = None, limit: int = 50
+    ) -> list[dict]:
+        """Return oracle publication log, optionally filtered by oracle_type."""
+        with self._conn() as conn:
+            if oracle_type:
+                rows = conn.execute(
+                    "SELECT * FROM oracle_publications WHERE oracle_type=? "
+                    "ORDER BY published_at DESC LIMIT ?",
+                    (oracle_type, limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM oracle_publications "
+                    "ORDER BY published_at DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+        return [dict(r) for r in rows]
+
+    def upsert_token_eligibility(
+        self,
+        device_id: str,
+        nominal_sessions: int,
+        clean_streak: int,
+        passport_held: bool,
+        enrollment_complete: bool,
+        mpc_verified: bool,
+        gate_passed: bool,
+        base_multiplier: float,
+        total_multiplier: float,
+        eligibility_score: float,
+    ) -> None:
+        """Upsert token eligibility state for a device (Phase 69)."""
+        now = time.time()
+        with self._conn() as conn:
+            conn.execute(
+                "INSERT INTO token_eligibility "
+                "(device_id, nominal_sessions, clean_streak, passport_held, "
+                "enrollment_complete, mpc_verified, gate_passed, base_multiplier, "
+                "total_multiplier, eligibility_score, last_computed_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?) "
+                "ON CONFLICT(device_id) DO UPDATE SET "
+                "nominal_sessions=excluded.nominal_sessions, "
+                "clean_streak=excluded.clean_streak, "
+                "passport_held=excluded.passport_held, "
+                "enrollment_complete=excluded.enrollment_complete, "
+                "mpc_verified=excluded.mpc_verified, "
+                "gate_passed=excluded.gate_passed, "
+                "base_multiplier=excluded.base_multiplier, "
+                "total_multiplier=excluded.total_multiplier, "
+                "eligibility_score=excluded.eligibility_score, "
+                "last_computed_at=excluded.last_computed_at",
+                (
+                    device_id, nominal_sessions, clean_streak,
+                    int(passport_held), int(enrollment_complete),
+                    int(mpc_verified), int(gate_passed),
+                    base_multiplier, total_multiplier, eligibility_score, now,
+                ),
+            )
+
+    def get_token_eligibility(self, device_id: str) -> dict | None:
+        """Return token eligibility state for device, or None."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM token_eligibility WHERE device_id=?",
+                (device_id,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    # --- Phase 72: PHGCredential bridge-layer multi-sig ---
+
+    def propose_suspension(
+        self,
+        device_id: str,
+        evidence_hash: str,
+        duration_s: int,
+        proposed_by: str = "",
+        expires_in_s: float = 86400.0,
+    ) -> int:
+        """Insert a pending suspension proposal. Returns proposal_id.
+
+        The proposal must reach suspension_multisig_threshold confirmations
+        (via confirm_suspension) before execute_suspension_proposal() calls
+        the on-chain PHGCredential.suspend().
+        """
+        now = time.time()
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO pending_suspensions "
+                "(device_id, evidence_hash, duration_s, proposed_by, "
+                "proposed_at, confirmations, executed, expires_at) "
+                "VALUES (?,?,?,?,?,0,0,?)",
+                (device_id, evidence_hash, duration_s, proposed_by,
+                 now, now + expires_in_s),
+            )
+            return cur.lastrowid
+
+    def confirm_suspension(self, proposal_id: int) -> int:
+        """Increment confirmation count for a proposal. Returns new count.
+
+        Raises ValueError if proposal not found, already executed, or expired.
+        """
+        now = time.time()
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM pending_suspensions WHERE id=?", (proposal_id,)
+            ).fetchone()
+            if not row:
+                raise ValueError(f"Proposal {proposal_id} not found")
+            if row["executed"]:
+                raise ValueError(f"Proposal {proposal_id} already executed")
+            if row["expires_at"] < now:
+                raise ValueError(f"Proposal {proposal_id} expired")
+            new_count = row["confirmations"] + 1
+            conn.execute(
+                "UPDATE pending_suspensions SET confirmations=? WHERE id=?",
+                (new_count, proposal_id),
+            )
+            return new_count
+
+    def get_suspension_proposal(self, proposal_id: int) -> dict | None:
+        """Return proposal dict or None if not found."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM pending_suspensions WHERE id=?", (proposal_id,)
+            ).fetchone()
+        return dict(row) if row else None
+
+    def mark_suspension_executed(self, proposal_id: int, tx_hash: str = "") -> None:
+        """Mark a proposal as executed after the on-chain call succeeds."""
+        now = time.time()
+        with self._conn() as conn:
+            conn.execute(
+                "UPDATE pending_suspensions "
+                "SET executed=1, executed_at=?, tx_hash=? WHERE id=?",
+                (now, tx_hash, proposal_id),
+            )
+
+    # --- Phase 75: Ruling validation log ---
+
+    def insert_validation_record(
+        self,
+        ruling_id: int,
+        device_id: str,
+        llm_verdict: str,
+        fallback_verdict: str,
+        llm_confidence: float,
+        fallback_confidence: float,
+        divergence: int,
+        divergence_reason: str | None = None,
+    ) -> int:
+        """Insert a validation comparison record. Returns row id.
+
+        divergence_reason (Phase 88): JSON string of non-nominal evidence fields that
+        may explain why LLM and _rule_fallback disagreed. None for non-diverging records.
+        """
+        now = time.time()
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO ruling_validation_log "
+                "(ruling_id, device_id, llm_verdict, fallback_verdict, "
+                "llm_confidence, fallback_confidence, divergence, divergence_reason, created_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?)",
+                (ruling_id, device_id, llm_verdict, fallback_verdict,
+                 llm_confidence, fallback_confidence, divergence, divergence_reason, now),
+            )
+            return cur.lastrowid
+
+    def get_validation_summary(
+        self, gate_n: int = 100, max_divergence_rate: float = 1.0
+    ) -> dict:
+        """Return validation statistics, consecutive_clean count, and window divergence rate.
+
+        Phase 78: adds divergence_rate and divergence_rate_ok to the summary.
+
+        Both consecutive_clean and divergence_rate are evaluated over the most recent
+        gate_n rulings only (W1 mitigation — pre-gate divergences from early sessions
+        do not permanently block the gate).
+
+        gate_passed = (consecutive_clean >= gate_n) AND (divergence_rate <= max_divergence_rate)
+        """
+        with self._conn() as conn:
+            total_row = conn.execute(
+                "SELECT COUNT(*) as cnt FROM ruling_validation_log"
+            ).fetchone()
+            total = total_row["cnt"] if total_row else 0
+
+            div_row = conn.execute(
+                "SELECT COUNT(*) as cnt FROM ruling_validation_log WHERE divergence=1"
+            ).fetchone()
+            divergence_count = div_row["cnt"] if div_row else 0
+
+            # Walk the most recent gate_n records for both consecutive_clean and window rate
+            window_rows = conn.execute(
+                "SELECT divergence FROM ruling_validation_log "
+                "ORDER BY created_at DESC LIMIT ?",
+                (gate_n,),
+            ).fetchall()
+
+        # consecutive_clean: leading non-divergent streak from most recent
+        consecutive_clean = 0
+        for row in window_rows:
+            if row["divergence"] == 0:
+                consecutive_clean += 1
+            else:
+                break  # streak broken
+
+        # Window divergence rate over the trailing gate_n records
+        window_size = len(window_rows)
+        if window_size > 0:
+            window_divergences = sum(1 for r in window_rows if r["divergence"] == 1)
+            divergence_rate = round(window_divergences / window_size, 4)
+        else:
+            divergence_rate = 0.0
+
+        divergence_rate_ok = divergence_rate <= max_divergence_rate
+        gate_passed = (consecutive_clean >= gate_n) and divergence_rate_ok
+
+        return {
+            "total": total,
+            "divergence_count": divergence_count,
+            "consecutive_clean": consecutive_clean,
+            "gate_n": gate_n,
+            "gate_passed": gate_passed,
+            "divergence_rate": divergence_rate,
+            "divergence_rate_ok": divergence_rate_ok,
+            "max_divergence_rate": max_divergence_rate,
+            "window_size": window_size,
+        }
+
+    def get_validation_gate_status(
+        self, gate_n: int = 100, max_divergence_rate: float = 1.0
+    ) -> dict:
+        """Return validation gate status with recommended operator action (Phase 78)."""
+        summary = self.get_validation_summary(gate_n, max_divergence_rate)
+        if summary["gate_passed"]:
+            action = "Gate passed — safe to set AGENT_DRY_RUN=false via POST /agent/config"
+        elif not summary["divergence_rate_ok"]:
+            action = (
+                f"Divergence rate {summary['divergence_rate']:.1%} exceeds max "
+                f"{max_divergence_rate:.1%} — review recent divergences before enabling enforcement"
+            )
+        elif summary["divergence_count"] > 0:
+            action = (
+                f"Divergences detected ({summary['divergence_count']}) — "
+                "review validation_divergence events before enabling enforcement"
+            )
+        else:
+            remaining = gate_n - summary["consecutive_clean"]
+            action = (
+                f"{remaining} more clean ruling(s) needed before enforcement is safe"
+            )
+        summary["recommended_action"] = action
+        return summary
+
+    def get_campaign_status(
+        self, gate_n: int = 100, max_divergence_rate: float = 1.0
+    ) -> dict:
+        """Return adjudication campaign progress toward dry_run=False activation (Phase 88).
+
+        Reads from ruling_validation_log to compute:
+          - consecutive_clean / gate_n progress (atomically from get_validation_summary)
+          - verdict_breakdown (CERTIFY/FLAG/HOLD/BLOCK counts from LLM verdicts)
+          - divergence_breakdown (divergence_reason → count for diverged rows)
+          - recent_sessions (last 10 validation log rows, newest-first)
+          - estimated_sessions_to_gate (probabilistic: remaining / (1 - divergence_rate))
+          - campaign_note (human-readable operator narrative)
+
+        W1 invariant: consecutive_clean and gate_passed computed atomically via
+        get_validation_summary() — never cached or stale.
+        """
+        import math as _math
+
+        summary = self.get_validation_summary(gate_n, max_divergence_rate)
+        consecutive_clean = summary["consecutive_clean"]
+        session_count = summary["total"]
+        divergence_count = summary["divergence_count"]
+        divergence_rate = summary["divergence_rate"]
+        gate_passed = summary["gate_passed"]
+
+        progress_pct = round(
+            min(100.0, consecutive_clean / gate_n * 100.0), 1
+        ) if gate_n > 0 else 0.0
+
+        remaining = max(0, gate_n - consecutive_clean)
+        if remaining == 0:
+            estimated_sessions_to_gate = 0
+        elif (1.0 - divergence_rate) > 0.01:
+            estimated_sessions_to_gate = int(
+                _math.ceil(remaining / (1.0 - divergence_rate))
+            )
+        else:
+            estimated_sessions_to_gate = 9999  # divergence_rate near 1.0 — gating indefinitely
+
+        with self._conn() as conn:
+            vb_rows = conn.execute(
+                "SELECT llm_verdict, COUNT(*) as cnt FROM ruling_validation_log "
+                "GROUP BY llm_verdict"
+            ).fetchall()
+            verdict_breakdown = {r["llm_verdict"]: r["cnt"] for r in vb_rows}
+
+            div_rows = conn.execute(
+                "SELECT divergence_reason, COUNT(*) as cnt FROM ruling_validation_log "
+                "WHERE divergence=1 AND divergence_reason IS NOT NULL "
+                "GROUP BY divergence_reason"
+            ).fetchall()
+            divergence_breakdown = {r["divergence_reason"]: r["cnt"] for r in div_rows}
+
+            recent_rows = conn.execute(
+                "SELECT ruling_id, device_id, llm_verdict, fallback_verdict, "
+                "divergence, divergence_reason, created_at "
+                "FROM ruling_validation_log ORDER BY created_at DESC LIMIT 10"
+            ).fetchall()
+            recent_sessions = [dict(r) for r in recent_rows]
+
+            last_row = conn.execute(
+                "SELECT MAX(created_at) as last_at FROM ruling_validation_log"
+            ).fetchone()
+            last_session_at = (
+                float(last_row["last_at"])
+                if last_row and last_row["last_at"] else None
+            )
+
+        if gate_passed:
+            note = (
+                f"Gate PASSED — {consecutive_clean}/{gate_n} consecutive clean rulings. "
+                "Safe to set AGENT_DRY_RUN=false via POST /agent/config."
+            )
+        elif session_count == 0:
+            note = (
+                "No real sessions validated yet — start the bridge with controller "
+                "connected and play NCAA CFB 26 to begin accumulating clean rulings."
+            )
+        else:
+            note = (
+                f"Campaign in progress: {consecutive_clean}/{gate_n} consecutive clean "
+                f"(~{estimated_sessions_to_gate} more sessions at current divergence "
+                f"rate {divergence_rate:.1%})."
+            )
+
+        return {
+            "consecutive_clean": consecutive_clean,
+            "gate_n": gate_n,
+            "progress_pct": progress_pct,
+            "session_count": session_count,
+            "divergence_count": divergence_count,
+            "divergence_rate": divergence_rate,
+            "gate_passed": gate_passed,
+            "estimated_sessions_to_gate": estimated_sessions_to_gate,
+            "verdict_breakdown": verdict_breakdown,
+            "divergence_breakdown": divergence_breakdown,
+            "recent_sessions": recent_sessions,
+            "last_session_at": last_session_at,
+            "campaign_note": note,
+        }
+
+    # --- Phase 76: Ruling provenance anchors ---
+
+    def insert_provenance_anchor(
+        self,
+        ruling_id: int,
+        device_id: str,
+        provenance_hash: str,
+        ceremony_hash: str,
+        evidence_hash: str,
+    ) -> int:
+        """Insert a provenance anchor record. Returns row id.
+
+        Uses INSERT OR IGNORE so duplicate anchors for the same ruling_id are silently
+        ignored (the unique index on ruling_id enforces idempotency).
+        """
+        now = time.time()
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO ruling_provenance_anchors "
+                "(ruling_id, device_id, provenance_hash, ceremony_hash, evidence_hash, anchored_at) "
+                "VALUES (?,?,?,?,?,?)",
+                (ruling_id, device_id, provenance_hash, ceremony_hash, evidence_hash, now),
+            )
+            return cur.lastrowid or 0
+
+    def get_provenance_anchor(self, ruling_id: int) -> dict | None:
+        """Return the provenance anchor record for ruling_id, or None if not yet anchored."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM ruling_provenance_anchors WHERE ruling_id=?",
+                (ruling_id,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    # --- Phase 79: Live mode transitions ---
+
+    def insert_live_mode_transition(
+        self,
+        event_type: str,
+        consecutive_clean: int = 0,
+        divergence_rate: float = 0.0,
+        conditions_json: str = "{}",
+        operator_action: str = None,
+    ) -> int:
+        """Record a live mode transition event (Phase 79)."""
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO live_mode_transitions "
+                "(event_type, consecutive_clean, divergence_rate, conditions_json, "
+                "operator_action, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (event_type, consecutive_clean, divergence_rate, conditions_json,
+                 operator_action, time.time()),
+            )
+            return cur.lastrowid
+
+    def count_operator_overrides(self, within_n: int = 100) -> int:
+        """Count manual operator overrides in the most recent within_n rulings window (Phase 79).
+
+        An override is a 'ruling_override' event in agent_events.
+        """
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) as cnt FROM agent_events "
+                "WHERE event_type='ruling_override' "
+                "AND created_at > COALESCE(("
+                "  SELECT MIN(created_at) FROM ("
+                "    SELECT created_at FROM agent_rulings ORDER BY created_at DESC LIMIT ?"
+                "  )"
+                "), 0)",
+                (within_n,),
+            ).fetchone()
+            return int(row["cnt"]) if row else 0
+
+    def count_ceremony_key_rotations(self, within_hours: float = 24.0) -> int:
+        """Count ceremony_key_rotated events within the last within_hours hours (Phase 79)."""
+        cutoff = time.time() - within_hours * 3600
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) as cnt FROM agent_events "
+                "WHERE event_type='ceremony_key_rotated' AND created_at > ?",
+                (cutoff,),
+            ).fetchone()
+            return int(row["cnt"]) if row else 0
+
+    # --- Phase 80: Federation threat signals ---
+
+    def insert_threat_signal(
+        self,
+        device_id: str,
+        commitment_hash: str,
+        circuit_id: str = None,
+        source_peer: str = None,
+        received_at: float = None,
+    ) -> int:
+        """Insert a federation threat signal. Returns row id (Phase 80).
+
+        UNIQUE(commitment_hash) — raises sqlite3.IntegrityError on duplicate.
+        broadcast_at=NULL means unbroadcast (pending delivery to peers).
+        """
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO federation_threat_signals "
+                "(device_id, commitment_hash, circuit_id, source_peer, received_at, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (device_id, commitment_hash, circuit_id, source_peer,
+                 received_at, time.time()),
+            )
+            return cur.lastrowid
+
+    def mark_threat_signal_broadcast(self, signal_id: int) -> None:
+        """Mark a threat signal as broadcast (sets broadcast_at=now) (Phase 80)."""
+        with self._conn() as conn:
+            conn.execute(
+                "UPDATE federation_threat_signals SET broadcast_at=? WHERE id=?",
+                (time.time(), signal_id),
+            )
+
+    def get_unbroadcast_signals(self, limit: int = 50) -> list:
+        """Return locally-originated signals with broadcast_at=NULL (Phase 80)."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM federation_threat_signals "
+                "WHERE broadcast_at IS NULL AND source_peer IS NULL "
+                "ORDER BY created_at ASC LIMIT ?",
+                (limit,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def get_federation_stats(self) -> dict:
+        """Return federation signal statistics (Phase 80)."""
+        with self._conn() as conn:
+            total = conn.execute(
+                "SELECT COUNT(*) as cnt FROM federation_threat_signals"
+            ).fetchone()["cnt"]
+            broadcast = conn.execute(
+                "SELECT COUNT(*) as cnt FROM federation_threat_signals "
+                "WHERE broadcast_at IS NOT NULL"
+            ).fetchone()["cnt"]
+            received = conn.execute(
+                "SELECT COUNT(*) as cnt FROM federation_threat_signals "
+                "WHERE source_peer IS NOT NULL"
+            ).fetchone()["cnt"]
+        return {
+            "total_signals": total,
+            "broadcast": broadcast,
+            "received_from_peers": received,
+            "pending_broadcast": max(0, total - broadcast - received),
+        }
+
+    # --- Phase 81: Class J assessments ---
+
+    def insert_class_j_assessment(
+        self,
+        device_id: str,
+        entropy_variance: float,
+        risk_level: str,
+        window_count: int,
+    ) -> int:
+        """Insert a Class J ML-bot risk assessment (Phase 81). Returns row id."""
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO class_j_assessments "
+                "(device_id, entropy_variance, risk_level, window_count, assessed_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (device_id, entropy_variance, risk_level, window_count, time.time()),
+            )
+            return cur.lastrowid
+
+    def get_class_j_assessment(self, device_id: str) -> dict | None:
+        """Return most recent Class J assessment for device_id (Phase 81)."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM class_j_assessments WHERE device_id=? "
+                "ORDER BY assessed_at DESC LIMIT 1",
+                (device_id,),
+            ).fetchone()
+            return dict(row) if row else None
+
+    # --- Phase 83: Agent supervisor health ---
+
+    def get_agent_activity(
+        self,
+        table: str,
+        ts_col: str,
+        filter_sql: str | None = None,
+        device_col: str | None = None,
+    ) -> dict:
+        """Return last-activity metrics for an agent's table (Phase 83).
+
+        Returns last_active_at, activity_count, and distinct_devices.
+        W1 mitigation: distinct_devices distinguishes genuine agent activity from
+        a zombie writing to a single device in a tight loop.
+        """
+        where = f"WHERE {filter_sql}" if filter_sql else ""
+        with self._conn() as conn:
+            row = conn.execute(
+                f"SELECT MAX({ts_col}), COUNT(*) FROM {table} {where}"
+            ).fetchone()
+            last_active_at = row[0] if row else None
+            activity_count = int(row[1]) if row else 0
+
+            distinct = None
+            if device_col:
+                d_row = conn.execute(
+                    f"SELECT COUNT(DISTINCT {device_col}) FROM {table} {where}"
+                ).fetchone()
+                distinct = int(d_row[0]) if d_row else 0
+
+        return {
+            "last_active_at": last_active_at,
+            "activity_count": activity_count,
+            "distinct_devices": distinct,
+        }
+
+    def insert_supervisor_health_log(
+        self,
+        agent_name: str,
+        health: str,
+        last_active_at: float | None,
+        activity_count: int = 0,
+    ) -> int:
+        """Persist an agent health check result (Phase 83). Returns row id."""
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO supervisor_health_log "
+                "(agent_name, health, last_active_at, activity_count, checked_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (agent_name, health, last_active_at, activity_count, time.time()),
+            )
+            return cur.lastrowid
+
+    def get_latest_supervisor_health(self) -> list[dict]:
+        """Return the most recent health check row per agent (Phase 83)."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT s.*
+                FROM supervisor_health_log s
+                INNER JOIN (
+                    SELECT agent_name, MAX(checked_at) AS max_checked
+                    FROM supervisor_health_log
+                    GROUP BY agent_name
+                ) latest ON s.agent_name = latest.agent_name
+                          AND s.checked_at = latest.max_checked
+                ORDER BY s.agent_name
+                """
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    # --- Phase 82: Reactive adjudication interrupt log ---
+
+    def insert_reactive_adjudication_log(
+        self,
+        device_id: str,
+        triggered_by: str,
+        entropy_variance: float | None,
+        verdict: str | None,
+        was_deferred: bool = False,
+    ) -> int:
+        """Log a reactive adjudication interrupt attempt (Phase 82). Returns row id."""
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO reactive_adjudication_log "
+                "(device_id, triggered_by, entropy_variance, verdict, was_deferred, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (device_id, triggered_by, entropy_variance, verdict,
+                 1 if was_deferred else 0, time.time()),
+            )
+            return cur.lastrowid
+
+    def get_reactive_adjudication_log(
+        self, device_id: str | None = None, limit: int = 20
+    ) -> list[dict]:
+        """Return recent reactive adjudication log entries (Phase 82).
+
+        If device_id is provided, filters to that device only.
+        Returns newest-first, at most limit rows.
+        """
+        with self._conn() as conn:
+            if device_id:
+                rows = conn.execute(
+                    "SELECT * FROM reactive_adjudication_log "
+                    "WHERE device_id=? ORDER BY created_at DESC LIMIT ?",
+                    (device_id, limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM reactive_adjudication_log "
+                    "ORDER BY created_at DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+            return [dict(r) for r in rows]
+
+    # --- Phase 84: Gate attestation anchor ---
+
+    def insert_gate_attestation(
+        self,
+        attestation_hash: str,
+        consecutive_clean: int,
+        gate_n: int,
+        divergence_rate: float,
+        on_chain_tx: str | None = None,
+    ) -> int:
+        """Persist a gate attestation hash (Phase 84). Returns row id.
+
+        INSERT OR IGNORE — idempotent; same attestation_hash is a no-op (no exception).
+        """
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO gate_attestations "
+                "(attestation_hash, consecutive_clean, gate_n, divergence_rate, "
+                " on_chain_tx, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    attestation_hash,
+                    consecutive_clean,
+                    gate_n,
+                    divergence_rate,
+                    on_chain_tx,
+                    time.time(),
+                ),
+            )
+            return cur.lastrowid
+
+    def get_gate_attestations(self, limit: int = 10) -> list[dict]:
+        """Return the most recent gate attestation records (Phase 84), newest-first."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM gate_attestations ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    # --- Phase 86: Synthetic corpus ---
+
+    def insert_synthetic_session(
+        self,
+        session_id: str,
+        device_id: str,
+        inference_code: int,
+        humanity_score: float,
+        fallback_verdict: str,
+        fallback_confidence: float,
+        passed_fallback: int,
+        corpus_run_id: str | None = None,
+    ) -> int:
+        """Insert synthetic session result. INSERT OR IGNORE (idempotent by session_id)."""
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO synthetic_sessions "
+                "(session_id, device_id, inference_code, humanity_score, "
+                " fallback_verdict, fallback_confidence, passed_fallback, corpus_run_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (session_id, device_id, inference_code, humanity_score,
+                 fallback_verdict, fallback_confidence, passed_fallback, corpus_run_id),
+            )
+            conn.commit()
+            return cur.lastrowid or 0
+
+    def get_corpus_status(self) -> dict:
+        """Return synthetic corpus aggregate statistics (Phase 86)."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) as total, "
+                "SUM(passed_fallback) as passed, "
+                "COUNT(DISTINCT corpus_run_id) as run_count, "
+                "MAX(created_at) as last_run_at "
+                "FROM synthetic_sessions"
+            ).fetchone()
+        if not row or not row["total"]:
+            return {
+                "total": 0, "passed": 0, "failed": 0,
+                "run_count": 0, "last_run_at": None,
+                "isolation_note": (
+                    "Synthetic sessions do NOT count toward production gate "
+                    "consecutive_clean (Phase 86 W1 isolation invariant)."
+                ),
+            }
+        total = int(row["total"] or 0)
+        passed = int(row["passed"] or 0)
+        return {
+            "total": total,
+            "passed": passed,
+            "failed": total - passed,
+            "run_count": int(row["run_count"] or 0),
+            "last_run_at": row["last_run_at"],
+            "isolation_note": (
+                "Synthetic sessions do NOT count toward production gate "
+                "consecutive_clean (Phase 86 W1 isolation invariant)."
+            ),
+        }
+    # --- Phase 89: Protocol Intelligence ---
+
+    def insert_protocol_intelligence_report(self, report: dict) -> int:
+        """Insert a protocol intelligence report. Returns row id."""
+        components = report.get("components", {})
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO protocol_intelligence_reports "
+                "(protocol_health_score, gate_progress_score, fleet_health_score, "
+                "divergence_clarity_score, corpus_pass_score, class_j_confidence_score, "
+                "shadow_pass_score, triage_confidence_score, ready_for_live_mode, "
+                "bottleneck, estimated_days_to_gate, components_json, recommendation, created_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    float(report.get("protocol_health_score", 0.0)),
+                    float(components.get("gate_progress", 0.0)) / 35.0
+                    if components.get("gate_progress") is not None else 0.0,
+                    float(components.get("fleet_health", 0.0)) / 25.0
+                    if components.get("fleet_health") is not None else 0.0,
+                    float(components.get("divergence_clarity", 0.0)) / 20.0
+                    if components.get("divergence_clarity") is not None else 0.0,
+                    float(components.get("corpus_pass", 0.0)) / 10.0
+                    if components.get("corpus_pass") is not None else 0.0,
+                    float(components.get("class_j_confidence", 0.0)) / 10.0
+                    if components.get("class_j_confidence") is not None else 0.0,
+                    float(components["shadow_pass"]) / 5.0 if "shadow_pass" in components else None,
+                    float(components["triage_confidence"]) / 5.0
+                    if "triage_confidence" in components else None,
+                    int(bool(report.get("ready_for_live_mode", False))),
+                    report.get("bottleneck"),
+                    report.get("estimated_days_to_gate"),
+                    report.get("components_json", "{}"),
+                    report.get("recommendation", ""),
+                    float(report.get("created_at", time.time())),
+                ),
+            )
+            return cur.lastrowid
+
+    def get_latest_protocol_intelligence_report(self) -> dict | None:
+        """Return the most recent protocol intelligence report, or None."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM protocol_intelligence_reports "
+                "ORDER BY created_at DESC LIMIT 1"
+            ).fetchone()
+        if not row:
+            return None
+        result = dict(row)
+        try:
+            result["components"] = json.loads(result.get("components_json") or "{}")
+        except (json.JSONDecodeError, TypeError):
+            result["components"] = {}
+        return result
+
+    # --- Phase 90: Shadow Enforcement ---
+
+    def insert_shadow_enforcement_log(
+        self,
+        device_id: str,
+        ruling_id,
+        commitment_hash,
+        would_have_suspended: int,
+        duration_s=None,
+        warmup_attack_score=None,
+    ) -> int:
+        """Log a shadow enforcement event (BLOCK in shadow mode)."""
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO shadow_enforcement_log "
+                "(device_id, ruling_id, verdict, commitment_hash, "
+                "would_have_suspended, duration_s, warmup_attack_score) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (
+                    device_id, ruling_id, "BLOCK", commitment_hash,
+                    int(would_have_suspended), duration_s, warmup_attack_score,
+                ),
+            )
+            return cur.lastrowid
+
+    def get_shadow_enforcement_log(self, device_id=None, limit: int = 50) -> list:
+        """Return recent shadow enforcement log entries."""
+        with self._conn() as conn:
+            if device_id:
+                rows = conn.execute(
+                    "SELECT * FROM shadow_enforcement_log WHERE device_id=? "
+                    "ORDER BY created_at DESC LIMIT ?",
+                    (device_id, limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM shadow_enforcement_log "
+                    "ORDER BY created_at DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_shadow_enforcement_stats(self) -> dict:
+        """Return aggregate shadow enforcement statistics."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) as total, "
+                "SUM(CASE WHEN would_have_suspended=0 THEN 1 ELSE 0 END) as passed, "
+                "SUM(would_have_suspended) as would_have_suspended "
+                "FROM shadow_enforcement_log"
+            ).fetchone()
+        total = int(row["total"] or 0)
+        passed = int(row["passed"] or 0)
+        suspended = int(row["would_have_suspended"] or 0)
+        return {
+            "total": total,
+            "passed": passed,
+            "would_have_suspended": suspended,
+            "pass_rate": round(passed / total, 4) if total > 0 else None,
+        }
+
+    # --- Phase 91: Divergence Triage ---
+
+    def insert_divergence_triage_report(
+        self,
+        device_id: str,
+        divergence_count: int,
+        escalated: int,
+        patterns,
+        ml_bot_high_count: int,
+        cheat_count: int,
+        enrollment_anomaly_count: int,
+    ) -> int:
+        """Insert triage report for device."""
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO divergence_triage_reports "
+                "(device_id, divergence_count, escalated, patterns, "
+                "ml_bot_high_count, cheat_count, enrollment_anomaly_count) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (
+                    device_id, int(divergence_count), int(escalated), patterns,
+                    int(ml_bot_high_count), int(cheat_count), int(enrollment_anomaly_count),
+                ),
+            )
+            return cur.lastrowid
+
+    def get_divergence_triage_report(self, limit: int = 50) -> list:
+        """Return most recent triage entry per device, escalated first."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT t.* FROM divergence_triage_reports t "
+                "INNER JOIN (SELECT device_id, MAX(assessed_at) as latest "
+                "FROM divergence_triage_reports GROUP BY device_id) latest "
+                "ON t.device_id=latest.device_id AND t.assessed_at=latest.latest "
+                "ORDER BY t.escalated DESC, t.assessed_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    # --- Phase 92: Live Mode Activation Pipeline ---
+
+    def insert_live_mode_activation_log(
+        self,
+        event_type: str,
+        ready_for_live_mode: int,
+        protocol_health_score: float,
+        bottleneck,
+        blocking_conditions=None,
+        operator_notes=None,
+    ) -> int:
+        """Insert a live mode activation audit entry."""
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO live_mode_activation_log "
+                "(event_type, ready_for_live_mode, protocol_health_score, "
+                "bottleneck, blocking_conditions, operator_notes) "
+                "VALUES (?,?,?,?,?,?)",
+                (
+                    event_type, int(ready_for_live_mode),
+                    float(protocol_health_score) if protocol_health_score is not None else None,
+                    bottleneck, blocking_conditions, operator_notes,
+                ),
+            )
+            return cur.lastrowid
+
+    def get_live_mode_activation_log(self, limit: int = 50) -> list:
+        """Return live mode activation audit entries, newest first."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM live_mode_activation_log "
+                "ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    # --- Phase 94: Escalation Ruling Log ---
+
+    def insert_escalation_ruling_log(
+        self,
+        device_id: str,
+        patterns,
+        verdict,
+        ruling_id,
+        was_deferred: bool,
+    ) -> int:
+        """Insert an escalation ruling log entry."""
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO escalation_ruling_log "
+                "(device_id, patterns, verdict, ruling_id, was_deferred) "
+                "VALUES (?,?,?,?,?)",
+                (device_id, patterns, verdict, ruling_id, int(was_deferred)),
+            )
+            return cur.lastrowid
+
+    def get_escalation_ruling_log(self, device_id=None, limit: int = 50) -> list:
+        """Return escalation ruling log entries."""
+        with self._conn() as conn:
+            if device_id:
+                rows = conn.execute(
+                    "SELECT * FROM escalation_ruling_log WHERE device_id=? "
+                    "ORDER BY created_at DESC LIMIT ?",
+                    (device_id, limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM escalation_ruling_log "
+                    "ORDER BY created_at DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+        return [dict(r) for r in rows]
+
+    # --- Phase 95: Activation Audit Verifier ---
+
+    def get_activation_audit_summary(self) -> dict:
+        """Phase 95: Cross-reference live_mode_activation_log + gate_attestations.
+
+        Returns a tamper-evident audit summary verifying that:
+        - A ready_for_live_mode=True state was recorded BEFORE any on-chain gate attestation
+        - The chronological sequence (ready → on-chain anchor) is preserved
+        - audit_valid=True means the full activation evidence chain is intact
+        """
+        with self._conn() as conn:
+            row1 = conn.execute(
+                "SELECT MIN(created_at) FROM live_mode_activation_log WHERE ready_for_live_mode=1"
+            ).fetchone()
+            first_ready_at = row1[0] if row1 and row1[0] is not None else None
+
+            # Phase 96 W1 fix: only count attestations AFTER first readiness determination.
+            # Pre-readiness infrastructure test anchors must not satisfy the chronological
+            # invariant — they predated the protocol being assessed as ready.
+            row2 = conn.execute(
+                "SELECT COUNT(*), MAX(created_at) FROM gate_attestations "
+                "WHERE created_at >= ?",
+                (first_ready_at or 0,),
+            ).fetchone()
+            count = int(row2[0]) if row2 and row2[0] else 0
+            latest_att = row2[1] if row2 and row2[1] is not None else None
+
+        audit_valid = (
+            first_ready_at is not None
+            and latest_att is not None
+            and first_ready_at <= latest_att
+        )
+
+        if audit_valid:
+            summary = (
+                f"VALID: Protocol scored ready_for_live_mode=True at t={first_ready_at:.0f}, "
+                f"followed by {count} on-chain gate attestation(s). "
+                "Chronological sequence confirmed."
+            )
+        elif first_ready_at is None:
+            summary = "NOT VALID: No ready_for_live_mode=True entry in activation log yet."
+        elif latest_att is None:
+            summary = "NOT VALID: No gate attestations on-chain yet."
+        else:
+            summary = (
+                f"NOT VALID: Gate attestation (t={latest_att:.0f}) predates "
+                f"first ready check (t={first_ready_at:.0f}) — chronological order violated."
+            )
+
+        return {
+            "first_ready_check_at": first_ready_at,
+            "gate_attestation_count": count,
+            "latest_attestation_at": latest_att,
+            "audit_valid": audit_valid,
+            "audit_summary": summary,
+        }
+
+    # --- Phase 96: Enforcement Readiness Certificates ---
+
+    # --- Phase 97: Live Mode Guard Log ---
+
+    def insert_live_mode_guard_log(
+        self,
+        event_type: str,
+        attempted_dry_run: int,
+        gate_passed: bool,
+        cert_valid: bool,
+        audit_valid: bool,
+        blocking_conditions=None,
+        operator_key_hash: str = "",
+    ) -> int:
+        """Log every live mode transition attempt — approved or rejected."""
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO live_mode_guard_log "
+                "(event_type, attempted_dry_run, gate_passed, cert_valid, "
+                "audit_valid, blocking_conditions, operator_key_hash) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (
+                    event_type, attempted_dry_run,
+                    int(gate_passed), int(cert_valid), int(audit_valid),
+                    blocking_conditions, operator_key_hash,
+                ),
+            )
+            return cur.lastrowid
+
+    def get_live_mode_guard_log(self, limit: int = 50) -> list:
+        """Return live mode guard log entries, newest first."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM live_mode_guard_log ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    # --- Phase 98: Epistemic Consensus Log ---
+
+    def insert_epistemic_consensus(
+        self,
+        device_id: str,
+        ruling_id: "int | None",
+        proposed_verdict: str,
+        class_j_score: float,
+        triage_score: float,
+        supervisor_score: float,
+        consensus_score: float,
+        threshold: float,
+        consensus_reached: bool,
+        final_verdict: str,
+        downgraded: bool,
+        swarm_score: float = 0.0,
+    ) -> int:
+        """Persist an epistemic consensus decision. Returns row id.
+
+        Phase 109A: swarm_score column added (idempotent ALTER TABLE in schema init).
+        """
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO epistemic_consensus_log "
+                "(device_id, ruling_id, proposed_verdict, class_j_score, triage_score, "
+                "supervisor_score, consensus_score, threshold, consensus_reached, "
+                "final_verdict, downgraded, swarm_score) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    device_id, ruling_id, proposed_verdict,
+                    class_j_score, triage_score, supervisor_score,
+                    consensus_score, threshold,
+                    int(consensus_reached), final_verdict, int(downgraded), swarm_score,
+                ),
+            )
+            return cur.lastrowid
+
+    def get_epistemic_consensus_log(self, device_id: str | None = None, limit: int = 50) -> list:
+        """Return epistemic consensus log entries, newest first."""
+        with self._conn() as conn:
+            if device_id:
+                rows = conn.execute(
+                    "SELECT * FROM epistemic_consensus_log "
+                    "WHERE device_id=? ORDER BY created_at DESC LIMIT ?",
+                    (device_id, limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM epistemic_consensus_log ORDER BY created_at DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+        return [dict(r) for r in rows]
+
+    # --- Phase 99A: Operator Registration ---
+
+    def insert_operator_registration(
+        self,
+        operator_address: str,
+        event_type: str,
+        stake_amount: str = "",
+        tx_hash: str = "",
+        reason: str = "",
+    ) -> int:
+        """Log an operator staking event (register/slash/deregister). Returns row id."""
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO operator_registrations "
+                "(operator_address, event_type, stake_amount, tx_hash, reason) "
+                "VALUES (?,?,?,?,?)",
+                (operator_address, event_type, stake_amount, tx_hash, reason),
+            )
+            return cur.lastrowid
+
+    def get_operator_status(self, operator_address: str) -> dict | None:
+        """Return the latest registration event for an operator address, or None."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM operator_registrations "
+                "WHERE operator_address=? ORDER BY created_at DESC LIMIT 1",
+                (operator_address,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    # --- Phase 99B: GSR Biometric Samples ---
+
+    def insert_gsr_sample(
+        self,
+        device_id: str,
+        arousal_index: float,
+        correlation: float,
+        conductance_raw: float = 0.0,
+        l7_features_json: str = "",
+    ) -> int:
+        """Persist a GSR biometric sample. Returns row id."""
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO gsr_samples "
+                "(device_id, arousal_index, correlation, conductance_raw, l7_features_json) "
+                "VALUES (?,?,?,?,?)",
+                (device_id, arousal_index, correlation, conductance_raw, l7_features_json),
+            )
+            return cur.lastrowid
+
+    def get_gsr_samples(self, device_id: str, limit: int = 50) -> list:
+        """Return GSR samples for a device, newest first."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM gsr_samples WHERE device_id=? ORDER BY created_at DESC LIMIT ?",
+                (device_id, limit),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    # --- Phase 99C: VHP issuances ---
+
+    def insert_vhp_issuance(
+        self,
+        device_id: str,
+        token_id: int = 0,
+        tx_hash: str = "",
+        expires_at: float = 0.0,
+        cert_level: int = 1,
+        consecutive_clean: int = 0,
+        to_address: str = "",
+    ) -> int:
+        """Persist a VHP token issuance record. Returns row id."""
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO vhp_issuances "
+                "(device_id, token_id, tx_hash, expires_at, cert_level, consecutive_clean, to_address) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (device_id, token_id, tx_hash, expires_at, cert_level, consecutive_clean, to_address),
+            )
+            return cur.lastrowid
+
+    def get_vhp_status(self, device_id: str) -> dict | None:
+        """Return the latest VHP issuance for a device, or None if none found."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM vhp_issuances WHERE device_id=? ORDER BY created_at DESC LIMIT 1",
+                (device_id,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    # ── Phase 102: VHP Renewal Log ────────────────────────────────────────────
+
+    def insert_vhp_renewal(
+        self,
+        device_id: str,
+        token_id: int,
+        old_expires_at: float,
+        new_expires_at: float,
+        tx_hash: str = "",
+        dry_run: bool = False,
+    ) -> int:
+        """Persist a VHP renewal record (Phase 102)."""
+        with self._conn() as conn:
+            cur = conn.execute(
+                """INSERT INTO vhp_renewal_log
+                   (device_id, token_id, old_expires_at, new_expires_at,
+                    tx_hash, dry_run)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (device_id, token_id, old_expires_at, new_expires_at,
+                 tx_hash, int(dry_run)),
+            )
+            return cur.lastrowid
+
+    def get_vhp_renewal_log(
+        self, device_id: str | None = None, limit: int = 20
+    ) -> list[dict]:
+        """Return renewal log entries, optionally filtered by device_id (Phase 102)."""
+        with self._conn() as conn:
+            if device_id:
+                rows = conn.execute(
+                    """SELECT id, device_id, token_id, old_expires_at,
+                              new_expires_at, tx_hash, dry_run, created_at
+                       FROM vhp_renewal_log
+                       WHERE device_id = ?
+                       ORDER BY created_at DESC LIMIT ?""",
+                    (device_id, limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """SELECT id, device_id, token_id, old_expires_at,
+                              new_expires_at, tx_hash, dry_run, created_at
+                       FROM vhp_renewal_log
+                       ORDER BY created_at DESC LIMIT ?""",
+                    (limit,),
+                ).fetchall()
+            return [
+                {
+                    "id": r[0], "device_id": r[1], "token_id": r[2],
+                    "old_expires_at": r[3], "new_expires_at": r[4],
+                    "tx_hash": r[5], "dry_run": bool(r[6]), "created_at": r[7],
+                }
+                for r in rows
+            ]
+
+    def get_expiring_vhps(self, cutoff_ts: float) -> list[dict]:
+        """Return vhp_issuances where now < expires_at < cutoff_ts (Phase 102)."""
+        now = __import__("time").time()
+        with self._conn() as conn:
+            rows = conn.execute(
+                """SELECT device_id, token_id, expires_at
+                   FROM vhp_issuances
+                   WHERE expires_at > ? AND expires_at < ?
+                   ORDER BY expires_at ASC""",
+                (now, cutoff_ts),
+            ).fetchall()
+            return [
+                {"device_id": r[0], "token_id": r[1], "expires_at": r[2]}
+                for r in rows
+            ]
+
+    def get_total_vhp_count(self) -> int:
+        """Return COUNT(*) of all vhp_issuances records (Phase 102)."""
+        with self._conn() as conn:
+            row = conn.execute("SELECT COUNT(*) FROM vhp_issuances").fetchone()
+            return int(row[0]) if row else 0
+
+    def get_first_vhp_status(self) -> dict | None:
+        """Return earliest VHP issuance record + is_valid + is_simulation flags (Phase 103).
+        is_simulation=True when tx_hash starts with 'sim_'.
+        Returns None when no VHP has ever been issued.
+        """
+        import time as _t
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT device_id, token_id, tx_hash, expires_at, cert_level, "
+                "consecutive_clean, to_address, created_at "
+                "FROM vhp_issuances ORDER BY created_at ASC LIMIT 1"
+            ).fetchone()
+        if row is None:
+            return None
+        tx_hash = row[2] or ""
+        expires_at = row[3] or 0.0
+        return {
+            "device_id": row[0],
+            "token_id": row[1],
+            "tx_hash": tx_hash,
+            "expires_at": expires_at,
+            "cert_level": row[4],
+            "consecutive_clean": row[5],
+            "to_address": row[6] or "",
+            "created_at": row[7],
+            "is_valid": expires_at > _t.time(),
+            "is_simulation": tx_hash.startswith("sim_"),
+        }
+
+    def insert_activation_simulation_log(
+        self, n_sessions, gate_passed, cert_created,
+        dry_run_toggled, vhp_minted, token_id=None, tx_hash=""
+    ) -> int:
+        """Persist activation simulation run result (Phase 103)."""
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO activation_simulation_log "
+                "(n_sessions, gate_passed, cert_created, dry_run_toggled, "
+                "vhp_minted, token_id, tx_hash) VALUES (?,?,?,?,?,?,?)",
+                (
+                    int(n_sessions),
+                    1 if gate_passed else 0,
+                    1 if cert_created else 0,
+                    1 if dry_run_toggled else 0,
+                    1 if vhp_minted else 0,
+                    token_id,
+                    tx_hash or "",
+                ),
+            )
+            return cur.lastrowid
+
+    def get_activation_simulation_log(self, limit=10) -> list:
+        """Return recent activation simulation log entries (Phase 103)."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT id, n_sessions, gate_passed, cert_created, dry_run_toggled, "
+                "vhp_minted, token_id, tx_hash, created_at "
+                "FROM activation_simulation_log ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [
+            {
+                "id": r[0], "n_sessions": r[1], "gate_passed": bool(r[2]),
+                "cert_created": bool(r[3]), "dry_run_toggled": bool(r[4]),
+                "vhp_minted": bool(r[5]), "token_id": r[6],
+                "tx_hash": r[7], "created_at": r[8],
+            }
+            for r in rows
+        ]
+
+    def insert_enforcement_certificate(
+        self,
+        audit_hash: str,
+        hmac_sig: str,
+        audit_valid: bool,
+        first_ready_check_at,
+        gate_attestation_count: int,
+        latest_attestation_at,
+        expires_at: float,
+    ) -> int:
+        """Insert an enforcement readiness certificate. UNIQUE(audit_hash) deduplicates."""
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO enforcement_certificates "
+                "(audit_hash, hmac_sig, audit_valid, first_ready_check_at, "
+                "gate_attestation_count, latest_attestation_at, expires_at) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (
+                    audit_hash, hmac_sig, int(audit_valid),
+                    first_ready_check_at, gate_attestation_count,
+                    latest_attestation_at, expires_at,
+                ),
+            )
+            return cur.lastrowid
+
+    def get_latest_enforcement_certificate(self) -> dict | None:
+        """Return the most recently issued enforcement certificate, or None."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM enforcement_certificates ORDER BY created_at DESC LIMIT 1"
+            ).fetchone()
+        return dict(row) if row else None
+
+    # --- Phase 101: QuickSilver Collateral Events ---
+
+    def insert_quicksilver_collateral_event(
+        self,
+        operator_address: str,
+        event_type: str,
+        amount_wei: str = "0",
+        tx_hash: str = "",
+    ) -> int:
+        """Persist a QuickSilver collateral event (Phase 101).
+        event_type: lock / unlock_request / claim_unlock / slash / claim_yield
+        """
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO quicksilver_collateral_events "
+                "(operator_address, event_type, amount_wei, tx_hash, created_at) "
+                "VALUES (?,?,?,?,?)",
+                (operator_address, event_type, amount_wei, tx_hash, time.time()),
+            )
+            return cur.lastrowid
+
+    def get_quicksilver_collateral_status(self, operator_address: str) -> dict:
+        """Return the latest QuickSilver collateral event + history for an operator (Phase 101).
+        Returns {found, latest_event_type, amount_wei, events_count, last_event_at}
+        """
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT event_type, amount_wei, tx_hash, created_at "
+                "FROM quicksilver_collateral_events "
+                "WHERE operator_address = ? ORDER BY created_at DESC LIMIT 1",
+                (operator_address,),
+            ).fetchone()
+            count_row = conn.execute(
+                "SELECT COUNT(*) FROM quicksilver_collateral_events WHERE operator_address = ?",
+                (operator_address,),
+            ).fetchone()
+        count = count_row[0] if count_row else 0
+        if row is None:
+            return {
+                "operator_address": operator_address,
+                "found": False,
+                "latest_event_type": None,
+                "amount_wei": "0",
+                "events_count": 0,
+                "last_event_at": None,
+            }
+        return {
+            "operator_address": operator_address,
+            "found": True,
+            "latest_event_type": row["event_type"],
+            "amount_wei": row["amount_wei"],
+            "tx_hash": row["tx_hash"],
+            "events_count": count,
+            "last_event_at": row["created_at"],
+        }
+
+    # --- Phase 104: Persistent Activation Commit + PMI ---
+
+    def get_activation_state(self) -> dict:
+        """Return canonical activation state (Phase 104). Always returns dict.
+        Defaults: activation_committed=False, pmi=0 when no record exists.
+        """
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT activation_committed, pmi, committed_at, committed_by, "
+                "pmi_updated_at, notes FROM activation_state ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+        if row is None:
+            return {"activation_committed": False, "pmi": 0, "committed_at": None,
+                    "committed_by": "", "pmi_updated_at": None, "notes": ""}
+        return {
+            "activation_committed": bool(row[0]), "pmi": int(row[1]),
+            "committed_at": row[2], "committed_by": row[3],
+            "pmi_updated_at": row[4], "notes": row[5],
+        }
+
+    def set_activation_committed(self, committed_by: str = "operator", notes: str = "") -> int:
+        """Persist activation_committed=True (Phase 104). Append-only audit trail."""
+        import time as _t
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO activation_state "
+                "(activation_committed, pmi, committed_at, committed_by, notes) "
+                "VALUES (1, 1, ?, ?, ?)",
+                (_t.time(), committed_by, notes),
+            )
+            return cur.lastrowid
+
+    def set_pmi(self, pmi: int, notes: str = "") -> int:
+        """Update ProtocolMaturityIndex in store (Phase 104). Appends new row."""
+        import time as _t
+        current = self.get_activation_state()
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO activation_state "
+                "(activation_committed, pmi, committed_at, committed_by, pmi_updated_at, notes) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    1 if current["activation_committed"] else 0,
+                    int(pmi),
+                    current.get("committed_at"),
+                    current.get("committed_by", ""),
+                    _t.time(),
+                    notes,
+                ),
+            )
+            return cur.lastrowid
+
+    def compute_pmi(self) -> int:
+        """Compute ProtocolMaturityIndex from store state (Phase 104).
+        0=uninitiated / 1=simulated / 2=testnet_organic / 3=mainnet(reserved).
+        """
+        try:
+            with self._conn() as conn:
+                row = conn.execute(
+                    "SELECT COUNT(*) FROM activation_simulation_log"
+                ).fetchone()
+            sim_count = int(row[0]) if row else 0
+        except Exception:
+            sim_count = 0
+        if sim_count == 0:
+            return 0
+        vhp = self.get_first_vhp_status()
+        if vhp is None:
+            return 0
+        # W1 expiry guard (Phase 107): PMI=1 must not persist when all VHPs have expired
+        if vhp.get("is_simulation", True) and not vhp.get("is_valid", True):
+            # simulation VHP is expired and no organic VHP exists — uninitiated
+            return 0
+        state = self.get_activation_state()
+        if not vhp.get("is_simulation", True) and state.get("activation_committed", False):
+            return 2
+        return 1
+
+    # --- Phase 105: Epistemic Threshold History ---
+
+    def insert_epistemic_threshold_change(
+        self, old_threshold: float, new_threshold: float,
+        trigger: str = "manual", pmi_at_change: int = 0, notes: str = ""
+    ) -> int:
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO epistemic_threshold_history "
+                "(old_threshold, new_threshold, trigger, pmi_at_change, notes) VALUES (?,?,?,?,?)",
+                (old_threshold, new_threshold, trigger, int(pmi_at_change), notes),
+            )
+            return cur.lastrowid
+
+    def get_epistemic_threshold_history(self, limit: int = 20) -> list:
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT id, old_threshold, new_threshold, trigger, pmi_at_change, notes, created_at "
+                "FROM epistemic_threshold_history ORDER BY created_at DESC LIMIT ?", (limit,)
+            ).fetchall()
+        return [{"id": r[0], "old_threshold": r[1], "new_threshold": r[2],
+                  "trigger": r[3], "pmi_at_change": r[4], "notes": r[5], "created_at": r[6]}
+                for r in rows]
+
+    # --- Phase 107: Live Mode Readiness Reports ---
+
+    def insert_readiness_report(
+        self, n_tested: int, false_positive_count: int, false_positive_rate: float,
+        activation_committed: int, pmi: int, dry_run_active: int,
+        ready_for_live: int, notes: str = ""
+    ) -> int:
+        """Persist live mode readiness validation result (Phase 107)."""
+        import time as _t
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO live_mode_readiness_reports "
+                "(n_tested, false_positive_count, false_positive_rate, activation_committed, "
+                "pmi, dry_run_active, ready_for_live, notes, created_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?)",
+                (n_tested, false_positive_count, false_positive_rate,
+                 activation_committed, pmi, dry_run_active, ready_for_live, notes, _t.time()),
+            )
+            return cur.lastrowid
+
+    def get_latest_readiness_report(self) -> "dict | None":
+        """Return the most recent live mode readiness report (Phase 107). None if none exist."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT id, n_tested, false_positive_count, false_positive_rate, "
+                "activation_committed, pmi, dry_run_active, ready_for_live, notes, created_at "
+                "FROM live_mode_readiness_reports ORDER BY created_at DESC LIMIT 1"
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "id": row[0], "n_tested": row[1], "false_positive_count": row[2],
+            "false_positive_rate": row[3], "activation_committed": bool(row[4]),
+            "pmi": row[5], "dry_run_active": bool(row[6]), "ready_for_live": bool(row[7]),
+            "notes": row[8], "created_at": row[9],
+        }
+
+    # --- Phase 108: Tournament Readiness Snapshots ---
+
+    def insert_tournament_readiness_snapshot(
+        self, n_tested: int, false_positive_count: int,
+        activation_committed: int, pmi: int, dry_run_active: int,
+        software_conditions_met: int, separation_ratio: float,
+        separation_ratio_ok: int, touchpad_recapture_complete: int,
+        hardware_conditions_met: int, fully_ready: int,
+        blocking_conditions_json: str = "[]", notes: str = ""
+    ) -> int:
+        """Persist tournament readiness snapshot (Phase 108)."""
+        import time as _t
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO tournament_readiness_snapshots "
+                "(n_tested, false_positive_count, activation_committed, pmi, dry_run_active, "
+                "software_conditions_met, separation_ratio, separation_ratio_ok, "
+                "touchpad_recapture_complete, hardware_conditions_met, fully_ready, "
+                "blocking_conditions_json, notes, created_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (n_tested, false_positive_count, activation_committed, pmi, dry_run_active,
+                 software_conditions_met, separation_ratio, separation_ratio_ok,
+                 touchpad_recapture_complete, hardware_conditions_met, fully_ready,
+                 blocking_conditions_json, notes, _t.time()),
+            )
+            return cur.lastrowid
+
+    def get_latest_tournament_readiness_snapshot(self) -> "dict | None":
+        """Return most recent tournament readiness snapshot (Phase 108). None if none exist."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT id, n_tested, false_positive_count, activation_committed, pmi, "
+                "dry_run_active, software_conditions_met, separation_ratio, "
+                "separation_ratio_ok, touchpad_recapture_complete, hardware_conditions_met, "
+                "fully_ready, blocking_conditions_json, notes, created_at "
+                "FROM tournament_readiness_snapshots ORDER BY created_at DESC LIMIT 1"
+            ).fetchone()
+        if row is None:
+            return None
+        import json as _j
+        return {
+            "id": row[0], "n_tested": row[1], "false_positive_count": row[2],
+            "activation_committed": bool(row[3]), "pmi": row[4],
+            "dry_run_active": bool(row[5]), "software_conditions_met": row[6],
+            "separation_ratio": row[7], "separation_ratio_ok": bool(row[8]),
+            "touchpad_recapture_complete": bool(row[9]),
+            "hardware_conditions_met": row[10], "fully_ready": bool(row[11]),
+            "blocking_conditions": _j.loads(row[12]), "notes": row[13],
+            "created_at": row[14],
+        }
+
+    # --- Phase 109A: ioSwarm consensus log ---
+
+    def insert_ioswarm_consensus(
+        self,
+        device_id: str,
+        node_verdicts_json: str,
+        quorum_verdict: str,
+        quorum_reached: bool,
+        block_quorum_met: bool,
+        agreement_ratio: float,
+        node_count: int,
+        swarm_verdict_score: float,
+        hold_escalation_flag: bool,
+        verdict_distribution_json: str = "{}",
+        session_id: "str | None" = None,
+    ) -> int:
+        """Insert an ioSwarm consensus result. Returns new row id."""
+        import time as _t
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO ioswarm_consensus_log "
+                "(device_id, session_id, node_verdicts_json, quorum_verdict, quorum_reached, "
+                "block_quorum_met, agreement_ratio, node_count, swarm_verdict_score, "
+                "hold_escalation_flag, verdict_distribution_json, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    device_id, session_id, node_verdicts_json, quorum_verdict,
+                    int(quorum_reached), int(block_quorum_met), agreement_ratio, node_count,
+                    swarm_verdict_score, int(hold_escalation_flag),
+                    verdict_distribution_json, _t.time(),
+                ),
+            )
+            return cur.lastrowid
+
+    def get_ioswarm_consensus_log(
+        self,
+        device_id: "str | None" = None,
+        limit: int = 20,
+    ) -> "list[dict]":
+        """Return ioSwarm consensus log entries, newest first. Optional device_id filter."""
+        import json as _j
+        with self._conn() as conn:
+            if device_id is not None:
+                rows = conn.execute(
+                    "SELECT id, device_id, session_id, node_verdicts_json, quorum_verdict, "
+                    "quorum_reached, block_quorum_met, agreement_ratio, node_count, "
+                    "swarm_verdict_score, hold_escalation_flag, verdict_distribution_json, "
+                    "created_at FROM ioswarm_consensus_log "
+                    "WHERE device_id = ? ORDER BY created_at DESC LIMIT ?",
+                    (device_id, limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT id, device_id, session_id, node_verdicts_json, quorum_verdict, "
+                    "quorum_reached, block_quorum_met, agreement_ratio, node_count, "
+                    "swarm_verdict_score, hold_escalation_flag, verdict_distribution_json, "
+                    "created_at FROM ioswarm_consensus_log "
+                    "ORDER BY created_at DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+        result = []
+        for row in rows:
+            result.append({
+                "id": row[0], "device_id": row[1], "session_id": row[2],
+                "node_verdicts": _j.loads(row[3]),
+                "quorum_verdict": row[4],
+                "quorum_reached": bool(row[5]), "block_quorum_met": bool(row[6]),
+                "agreement_ratio": row[7], "node_count": row[8],
+                "swarm_verdict_score": row[9],
+                "hold_escalation_flag": bool(row[10]),
+                "verdict_distribution": _j.loads(row[11]),
+                "created_at": row[12],
+            })
+        return result
+
+    # --- Phase 109B: ioSwarm renewal log ---
+
+    def insert_ioswarm_renewal(
+        self,
+        device_id: str,
+        token_id: int,
+        quorum_verdict: "str | None",
+        agreement_ratio: float,
+        node_count: int,
+        renewal_approved: int,
+        node_verdicts_json: str = "[]",
+    ) -> int:
+        """Insert ioSwarm renewal evaluation record. Returns new row id."""
+        import time as _t
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO ioswarm_renewal_log "
+                "(device_id, token_id, quorum_verdict, agreement_ratio, node_count, "
+                "renewal_approved, node_verdicts_json, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    device_id,
+                    token_id,
+                    quorum_verdict,
+                    agreement_ratio,
+                    node_count,
+                    renewal_approved,
+                    node_verdicts_json,
+                    _t.time(),
+                ),
+            )
+            return cur.lastrowid
+
+    def get_ioswarm_renewal_log(
+        self,
+        device_id: "str | None" = None,
+        limit: int = 20,
+    ) -> "list[dict]":
+        """Return ioSwarm renewal log entries, newest first. Optional device_id filter."""
+        import json as _j
+        with self._conn() as conn:
+            if device_id is not None:
+                rows = conn.execute(
+                    "SELECT id, device_id, token_id, quorum_verdict, agreement_ratio, "
+                    "node_count, renewal_approved, node_verdicts_json, created_at "
+                    "FROM ioswarm_renewal_log "
+                    "WHERE device_id = ? ORDER BY created_at DESC LIMIT ?",
+                    (device_id, limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT id, device_id, token_id, quorum_verdict, agreement_ratio, "
+                    "node_count, renewal_approved, node_verdicts_json, created_at "
+                    "FROM ioswarm_renewal_log "
+                    "ORDER BY created_at DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+        result = []
+        for row in rows:
+            result.append({
+                "id": row[0],
+                "device_id": row[1],
+                "token_id": row[2],
+                "quorum_verdict": row[3],
+                "agreement_ratio": row[4],
+                "node_count": row[5],
+                "renewal_approved": bool(row[6]),
+                "node_verdicts": _j.loads(row[7]),
+                "created_at": row[8],
+            })
+        return result
+
+    # --- Phase 109C: ioSwarm Adjudication Log ---
+
+    def insert_ioswarm_adjudication(
+        self,
+        device_id: str,
+        session_id: str,
+        classj_quorum_verdict: "str | None",
+        classj_agreement_ratio: float,
+        triage_quorum_verdict: "str | None",
+        triage_agreement_ratio: float,
+        dual_veto: bool,
+        node_count: int,
+        classj_verdicts_json: str = "[]",
+        triage_verdicts_json: str = "[]",
+    ) -> int:
+        """Insert an ioSwarm adjudication record and return the new row ID."""
+        import time as _t
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO ioswarm_adjudication_log "
+                "(device_id, session_id, classj_quorum_verdict, classj_agreement_ratio, "
+                "triage_quorum_verdict, triage_agreement_ratio, dual_veto, node_count, "
+                "classj_verdicts_json, triage_verdicts_json, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    device_id,
+                    session_id or "",
+                    classj_quorum_verdict,
+                    classj_agreement_ratio,
+                    triage_quorum_verdict,
+                    triage_agreement_ratio,
+                    int(bool(dual_veto)),
+                    node_count,
+                    classj_verdicts_json,
+                    triage_verdicts_json,
+                    _t.time(),
+                ),
+            )
+            return cur.lastrowid
+
+    def get_ioswarm_adjudication_log(
+        self,
+        device_id: "str | None" = None,
+        limit: int = 20,
+    ) -> "list[dict]":
+        """Return recent ioSwarm adjudication log entries."""
+        import json as _j
+        with self._conn() as conn:
+            if device_id:
+                rows = conn.execute(
+                    "SELECT id, device_id, session_id, classj_quorum_verdict, "
+                    "classj_agreement_ratio, triage_quorum_verdict, triage_agreement_ratio, "
+                    "dual_veto, node_count, classj_verdicts_json, triage_verdicts_json, created_at "
+                    "FROM ioswarm_adjudication_log "
+                    "WHERE device_id = ? ORDER BY created_at DESC LIMIT ?",
+                    (device_id, limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT id, device_id, session_id, classj_quorum_verdict, "
+                    "classj_agreement_ratio, triage_quorum_verdict, triage_agreement_ratio, "
+                    "dual_veto, node_count, classj_verdicts_json, triage_verdicts_json, created_at "
+                    "FROM ioswarm_adjudication_log "
+                    "ORDER BY created_at DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+        result = []
+        for row in rows:
+            result.append({
+                "id": row[0],
+                "device_id": row[1],
+                "session_id": row[2],
+                "classj_quorum_verdict": row[3],
+                "classj_agreement_ratio": row[4],
+                "triage_quorum_verdict": row[5],
+                "triage_agreement_ratio": row[6],
+                "dual_veto": bool(row[7]),
+                "node_count": row[8],
+                "classj_verdicts": _j.loads(row[9]),
+                "triage_verdicts": _j.loads(row[10]),
+                "created_at": row[11],
+            })
+        return result
+
+    # --- Phase 110: ioSwarm VHP Mint Authorization Log ---
+
+    def insert_ioswarm_vhp_mint(
+        self,
+        device_id: str,
+        authorized: bool,
+        quorum_verdict: str,
+        agreement_ratio: float,
+        node_count: int,
+        consecutive_clean: int,
+        recent_block_count: int,
+        node_verdicts_json: str = "[]",
+        swarm_fingerprint: "str | None" = None,
+        error_msg: "str | None" = None,
+    ) -> int:
+        import time as _t
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO ioswarm_vhp_mint_log "
+                "(device_id, authorized, quorum_verdict, agreement_ratio, node_count, "
+                "consecutive_clean, recent_block_count, node_verdicts_json, swarm_fingerprint, "
+                "error_msg, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    device_id,
+                    int(authorized),
+                    quorum_verdict,
+                    float(agreement_ratio),
+                    int(node_count),
+                    int(consecutive_clean),
+                    int(recent_block_count),
+                    node_verdicts_json,
+                    swarm_fingerprint,
+                    error_msg,
+                    _t.time(),
+                ),
+            )
+            return cur.lastrowid
+
+    def get_ioswarm_vhp_mint_log(
+        self,
+        device_id: "str | None" = None,
+        limit: int = 20,
+    ) -> list[dict]:
+        with self._conn() as conn:
+            if device_id:
+                rows = conn.execute(
+                    "SELECT id, device_id, authorized, quorum_verdict, agreement_ratio, "
+                    "node_count, consecutive_clean, recent_block_count, node_verdicts_json, "
+                    "swarm_fingerprint, error_msg, created_at "
+                    "FROM ioswarm_vhp_mint_log "
+                    "WHERE device_id = ? ORDER BY created_at DESC LIMIT ?",
+                    (device_id, limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT id, device_id, authorized, quorum_verdict, agreement_ratio, "
+                    "node_count, consecutive_clean, recent_block_count, node_verdicts_json, "
+                    "swarm_fingerprint, error_msg, created_at "
+                    "FROM ioswarm_vhp_mint_log "
+                    "ORDER BY created_at DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+        result = []
+        for row in rows:
+            result.append({
+                "id":                  row[0],
+                "device_id":           row[1],
+                "authorized":          bool(row[2]),
+                "quorum_verdict":      row[3],
+                "agreement_ratio":     row[4],
+                "node_count":          row[5],
+                "consecutive_clean":   row[6],
+                "recent_block_count":  row[7],
+                "node_verdicts":       json.loads(row[8]),
+                "swarm_fingerprint":   row[9],
+                "error_msg":           row[10],
+                "created_at":          row[11],
+            })
+        return result
+

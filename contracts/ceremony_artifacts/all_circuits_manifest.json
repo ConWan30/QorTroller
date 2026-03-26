@@ -1,0 +1,47 @@
+[
+  {
+    "circuitName": "PitlSessionProof",
+    "circuitId": "0x108708c284fdaa856441f71ec8f2a86bcc71d5bf9b230927dd40ad06204fdce4",
+    "verifyingKeyHash": "0x43cdb88c681172e747de37b69e29e0b0d881b9fbcbac5595e5c039dd712cc9e1",
+    "beaconBlockHash": "0xb92d0544685c708d9ced3c52f74c61087e1851d5bcf55af3ec0b54413284e987",
+    "beaconBlockNumber": 41723255,
+    "contributorHashes": [
+      "72e3062a9f04cab236b24ecc09ffcbf9e52a46eef3367486d8b849a5ee75ace8",
+      "d1bf57c813e5032e2bb9020ec186c4b019c8b1b3f29e15b1d2479b6e84e798be",
+      "2cd4eb102834bb4d900513da23df4ada9ba8ecc1cf39ba0aa465b860a9e3482b"
+    ],
+    "contributorCount": 3,
+    "ptauSource": "hermez-hez_final_15-2021",
+    "timestamp": 1773884987
+  },
+  {
+    "circuitName": "TeamProof",
+    "circuitId": "0x156e9f417b11aa6a7622cc7204b637cc8bb1c84185bb9c3c268baa7c6dd623cf",
+    "verifyingKeyHash": "0x223ae9dba5635e29188087584f0dbeb76cdba424fc8f0c78f36b9619b4fd00dc",
+    "beaconBlockHash": "0xb92d0544685c708d9ced3c52f74c61087e1851d5bcf55af3ec0b54413284e987",
+    "beaconBlockNumber": 41723255,
+    "contributorHashes": [
+      "2d63e7b637444e4ba1d7f5d012c7facb9ded0aff02367d932350022ccce86b2f",
+      "e1ee3f36231a99c71a0461d73370c6e9b87367f25c856f1d65c1ba832bdfcaf0",
+      "fb03eee4b669cb824a95f2e9c9de2cc23811712bab9d0f1944176d52c8194367"
+    ],
+    "contributorCount": 3,
+    "ptauSource": "hermez-hez_final_15-2021",
+    "timestamp": 1773885033
+  },
+  {
+    "circuitName": "TournamentPassport",
+    "circuitId": "0xc443a94c1ec8b877bb899f88c40d9345d07337bdb2e0a58526c0fe357c2e0c0c",
+    "verifyingKeyHash": "0x5a224e190911ec29f7b7c5b94d518eda972756c3993ef0624eca1600ea73bcfc",
+    "beaconBlockHash": "0xb92d0544685c708d9ced3c52f74c61087e1851d5bcf55af3ec0b54413284e987",
+    "beaconBlockNumber": 41723255,
+    "contributorHashes": [
+      "c8e1d0dec9d3a66e142ee2f6860dd4292ba7ecf4e0c77b1094ca24b2eb3d1528",
+      "8b7c254ce1e6d49b66b062daab987ba7f6fef215b298b7952c49728418feed59",
+      "963a48734bff4c9a607b56aa7bbf2c6785999db9d71ea0212ebae27168ecade3"
+    ],
+    "contributorCount": 3,
+    "ptauSource": "hermez-hez_final_15-2021",
+    "timestamp": 1773885050
+  }
+]

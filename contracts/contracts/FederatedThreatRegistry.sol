@@ -2,140 +2,140 @@
 pragma solidity ^0.8.20;
 
 /**
- * FederatedThreatRegistry — Phase 34
+ * @title FederatedThreatRegistry
+ * @notice Phase 80 — On-chain threat signal registry for cross-bridge BLOCK ruling federation.
  *
- * Lightweight on-chain anchor for cross-bridge confirmed bot-farm cluster hashes.
- * A single authorized bridge address reports cluster fingerprints; when ≥2 distinct
- * reporters have reported the same hash, MultiVenueConfirmed is emitted.
+ * Stores BLOCK ruling signals from the VAPI bridge fleet.
+ * isThreatSignaled(deviceId) is a pure view callable by any tournament gate contract
+ * without gas — same composability pattern as VAPIProtocolLens.isFullyEligible().
  *
- * Privacy: only 32-byte hash values are stored — never raw device IDs.
- * The cluster hash is derived from compute_cluster_hash() in federation_bus.py:
- *   SHA-256(sorted_device_ids.join("|"))[:16 bytes], zero-padded to 32 bytes.
+ * Anti-replay: UNIQUE constraint on commitHash (require !active before insert).
+ * Only the operator may add or revoke signals.
  *
- * Architecture note: In the current single-bridge deployment, `onlyBridge` restricts
- * reporting to the one authorized bridge address. Multi-bridge deployments would
- * require upgrading to a whitelist pattern or separate deploying per bridge.
+ * Replaces Phase 34 cluster-hash reporting design with per-ruling, per-device signals
+ * that align with the RulingRegistry commitment_hash format introduced in Phase 66.
  */
 contract FederatedThreatRegistry {
-    address public immutable bridge;
 
-    // clusterHash => reporter address => has reported
-    mapping(bytes32 => mapping(address => bool)) private _hasReported;
-    // clusterHash => total distinct reporter count
-    mapping(bytes32 => uint256) private _reportCount;
+    address public operator;
 
-    // --------------- Events ---------------
-
-    event ClusterReported(
-        bytes32 indexed clusterHash,
-        address indexed reporter,
-        uint256 reportCount
-    );
-
-    /**
-     * Emitted when ≥2 distinct reporters have confirmed the same cluster hash,
-     * indicating a coordinated bot farm operating across multiple bridge shards.
-     */
-    event MultiVenueConfirmed(bytes32 indexed clusterHash, uint256 confirmedBy);
-
-    // --------------- Errors ---------------
-
-    error OnlyBridge();
-    error AlreadyReported(bytes32 clusterHash, address reporter);
-
-    // --------------- Constructor ---------------
-
-    constructor(address bridge_) {
-        bridge = bridge_;
+    struct ThreatSignal {
+        address deviceId;       // keccak256(device_id) → address cast
+        bytes32 commitHash;
+        bytes32 circuitId;
+        uint256 timestamp;
+        bool active;
     }
 
-    // --------------- Modifiers ---------------
+    // commitHash → ThreatSignal
+    mapping(bytes32 => ThreatSignal) public threatSignals;
 
-    modifier onlyBridge() {
-        if (msg.sender != bridge) revert OnlyBridge();
+    // deviceId (address) → count of active signals
+    mapping(address => uint256) public deviceSignalCount;
+
+    event ThreatSignalAdded(
+        address indexed deviceId,
+        bytes32 indexed commitHash,
+        bytes32 circuitId,
+        uint256 timestamp
+    );
+
+    event ThreatSignalRevoked(
+        bytes32 indexed commitHash,
+        address indexed deviceId
+    );
+
+    event OperatorTransferred(
+        address indexed previousOperator,
+        address indexed newOperator
+    );
+
+    modifier onlyOperator() {
+        require(msg.sender == operator, "FederatedThreatRegistry: caller is not operator");
         _;
     }
 
-    // --------------- State-changing functions ---------------
-
-    /**
-     * Report a cluster hash as confirmed by this bridge.
-     *
-     * Each bridge address may only report a given clusterHash once.
-     * Emits ClusterReported every time; emits MultiVenueConfirmed when
-     * the total reporter count reaches 2 (or more on subsequent reports).
-     *
-     * @param clusterHash 32-byte cluster fingerprint (16 significant bytes, zero-padded).
-     *
-     * @dev FINGERPRINT ENTROPY AND BRUTE-FORCE LIMITATION:
-     *   The cluster fingerprint stored in `clusterHash` is derived off-chain as:
-     *     SHA-256("|".join(sorted(device_ids)))[:16]
-     *   That is, the first 16 hex characters (8 bytes = 64 bits) of the SHA-256 digest,
-     *   zero-padded to fill the 32-byte `bytes32` field. Only 64 bits of entropy are
-     *   meaningful; the remaining 128 bits are always zero.
-     *
-     *   PRIVACY RISK � BRUTE-FORCE REVERSAL IS FEASIBLE AT SMALL SCALE:
-     *   If the total population of device IDs is small (e.g., fewer than 100,000 active
-     *   devices), an adversary with access to the device ID list can enumerate all pairs
-     *   and triples, compute SHA-256 for each, and compare against reported hashes.
-     *   Example: 100,000 devices x 100,000 = 10 billion pairs. At ~500M SHA-256/second
-     *   on consumer hardware, this takes roughly 20 seconds per cluster size. Larger
-     *   cluster sizes (3, 4, 5 devices) grow combinatorially but remain tractable for
-     *   small populations. An operator or malicious insider with access to the full device
-     *   ID list could de-anonymize clusters -- identifying which specific devices were
-     *   flagged as a coordinated bot farm.
-     *
-     *   MITIGATIONS (not yet implemented):
-     *   1. Use the full 32-byte SHA-256 fingerprint (256 bits) instead of truncating to
-     *      16 hex characters. This makes brute-force infeasible regardless of population
-     *      size without changing the contract interface.
-     *   2. Add a per-bridge salt: SHA-256(salt || "|".join(sorted(device_ids))). Salt is
-     *      known only to the bridge operator, preventing cross-bridge correlation attacks
-     *      without a salt-sharing protocol.
-     *   3. Use a keyed hash (HMAC-SHA256) where the key is a bridge-private secret.
-     *   Until these mitigations are adopted, operators should treat reported cluster hashes
-     *   as pseudonymous, not anonymous, when device populations are below ~1M devices.
-     */
-    function reportCluster(bytes32 clusterHash) external onlyBridge {
-        if (_hasReported[clusterHash][msg.sender]) {
-            revert AlreadyReported(clusterHash, msg.sender);
-        }
-        _hasReported[clusterHash][msg.sender] = true;
-        uint256 count = ++_reportCount[clusterHash];
-        emit ClusterReported(clusterHash, msg.sender, count);
-        if (count >= 2) {
-            emit MultiVenueConfirmed(clusterHash, count);
-        }
-    }
-
-    // --------------- View functions ---------------
-
-    /**
-     * Return the number of distinct reporters for a given cluster hash.
-     */
-    function getReportCount(bytes32 clusterHash) external view returns (uint256) {
-        return _reportCount[clusterHash];
+    constructor(address _operator) {
+        require(_operator != address(0), "FederatedThreatRegistry: zero operator");
+        operator = _operator;
+        emit OperatorTransferred(address(0), _operator);
     }
 
     /**
-     * Return true if the cluster has been confirmed by at least minBridges reporters.
+     * @notice Add a threat signal for a device.
+     * @param deviceId   The device address (keccak256 of device_id string cast to address).
+     * @param commitHash The commitment hash of the BLOCK ruling (unique per ruling).
+     * @param circuitId  The ZK circuit identifier (SHA3-256 of circuit name).
      */
-    function isMultiVenueConfirmed(bytes32 clusterHash, uint256 minBridges)
+    function addThreatSignal(
+        address deviceId,
+        bytes32 commitHash,
+        bytes32 circuitId
+    ) external onlyOperator {
+        require(deviceId != address(0), "FederatedThreatRegistry: zero deviceId");
+        require(commitHash != bytes32(0), "FederatedThreatRegistry: zero commitHash");
+        require(
+            !threatSignals[commitHash].active,
+            "FederatedThreatRegistry: commitHash already registered"
+        );
+
+        threatSignals[commitHash] = ThreatSignal({
+            deviceId: deviceId,
+            commitHash: commitHash,
+            circuitId: circuitId,
+            timestamp: block.timestamp,
+            active: true
+        });
+
+        deviceSignalCount[deviceId] += 1;
+
+        emit ThreatSignalAdded(deviceId, commitHash, circuitId, block.timestamp);
+    }
+
+    /**
+     * @notice Revoke an existing threat signal (sets active=false).
+     * @param commitHash The commitment hash to revoke.
+     */
+    function revokeThreatSignal(bytes32 commitHash) external onlyOperator {
+        ThreatSignal storage sig = threatSignals[commitHash];
+        require(sig.active, "FederatedThreatRegistry: signal not active");
+
+        address deviceId = sig.deviceId;
+        sig.active = false;
+
+        if (deviceSignalCount[deviceId] > 0) {
+            deviceSignalCount[deviceId] -= 1;
+        }
+
+        emit ThreatSignalRevoked(commitHash, deviceId);
+    }
+
+    /**
+     * @notice Returns true if the device has at least one active threat signal.
+     * @dev Pure view — callable by tournament gate contracts without gas cost.
+     */
+    function isThreatSignaled(address deviceId) external view returns (bool) {
+        return deviceSignalCount[deviceId] > 0;
+    }
+
+    /**
+     * @notice Returns the full ThreatSignal struct for a given commitHash.
+     */
+    function getThreatSignal(bytes32 commitHash)
         external
         view
-        returns (bool)
+        returns (ThreatSignal memory)
     {
-        return _reportCount[clusterHash] >= minBridges;
+        return threatSignals[commitHash];
     }
 
     /**
-     * Return true if a specific reporter address has already reported this cluster hash.
+     * @notice Transfer operator role to a new address.
      */
-    function hasReported(bytes32 clusterHash, address reporter)
-        external
-        view
-        returns (bool)
-    {
-        return _hasReported[clusterHash][reporter];
+    function transferOperator(address newOperator) external onlyOperator {
+        require(newOperator != address(0), "FederatedThreatRegistry: zero newOperator");
+        address prev = operator;
+        operator = newOperator;
+        emit OperatorTransferred(prev, newOperator);
     }
 }

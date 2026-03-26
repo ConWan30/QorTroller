@@ -266,6 +266,16 @@ class Bridge:
         except Exception as e:
             log.warning("Could not fetch balance: %s", e)
 
+        # Phase 79: Instantiate AgentMessageBus — shared in-process pub/sub
+        # Must be initialized after event loop is running (asyncio.Lock requires running loop)
+        from .agent_message_bus import AgentMessageBus
+        _bus = AgentMessageBus()
+        await _bus._init_lock()
+        log.info("Phase 79: AgentMessageBus initialized (in-process pub/sub)")
+
+        # Phase 104: Restore dry_run=False if activation_committed persisted in store
+        _restore_activation_state(self.cfg, self.store)
+
         # Start batcher
         _t = asyncio.create_task(self.batcher.run())
         _t.add_done_callback(_task_done_handler)
@@ -505,6 +515,274 @@ class Bridge:
             getattr(self.cfg, "credential_suspension_base_days", 7.0),
         )
 
+        # Phase 70: Wire all three autonomous agents into the main event loop.
+        # Each agent runs as an independent asyncio task with _task_done_handler
+        # so a crash in one does not kill the others.
+
+        # DataCuratorAgent — always started; self-guards via cfg.curator_enabled
+        try:
+            from .data_curator_agent import DataCuratorAgent
+            _curator = DataCuratorAgent(self.cfg, self.store, self.chain)
+            _t = asyncio.create_task(_curator.run_poll_loop())
+            _t.set_name("DataCuratorAgent")
+            _t.add_done_callback(_task_done_handler)
+            self._tasks.append(_t)
+            log.info("Phase 70: DataCuratorAgent started (5-min poll, 7-class taxonomy)")
+        except Exception as _dca_exc:
+            log.warning("Phase 70: DataCuratorAgent unavailable: %s", _dca_exc)
+
+        # SessionAdjudicator — guarded by operator_api_key configured
+        if getattr(self.cfg, "operator_api_key", ""):
+            try:
+                from .session_adjudicator import SessionAdjudicator
+                _adjudicator = SessionAdjudicator(self.cfg, self.store, bus=_bus)
+                _t = asyncio.create_task(_adjudicator.run_event_consumer())
+                _t.set_name("SessionAdjudicator")
+                _t.add_done_callback(_task_done_handler)
+                self._tasks.append(_t)
+                log.info(
+                    "Phase 70: SessionAdjudicator started (5-min poll, dry_run=%s)",
+                    getattr(self.cfg, "agent_dry_run_mode", True),
+                )
+            except Exception as _sa_exc:
+                log.warning("Phase 70: SessionAdjudicator unavailable: %s", _sa_exc)
+        else:
+            log.info("Phase 70: SessionAdjudicator skipped (OPERATOR_API_KEY not set)")
+
+        # RulingEnforcementAgent — guarded by ruling_enforcement_enabled
+        if getattr(self.cfg, "ruling_enforcement_enabled", False):
+            try:
+                from .ruling_enforcement_agent import RulingEnforcementAgent
+                _enforcer = RulingEnforcementAgent(self.cfg, self.store, self.chain, bus=_bus)
+                _t = asyncio.create_task(_enforcer.run_event_consumer())
+                _t.set_name("RulingEnforcementAgent")
+                _t.add_done_callback(_task_done_handler)
+                self._tasks.append(_t)
+                log.info("Phase 70: RulingEnforcementAgent started (streak escalation live)")
+            except Exception as _rea_exc:
+                log.warning("Phase 70: RulingEnforcementAgent unavailable: %s", _rea_exc)
+        else:
+            log.info("Phase 70: RulingEnforcementAgent skipped (RULING_ENFORCEMENT_ENABLED not set)")
+
+        # Phase 75: SessionAdjudicatorValidationAgent — always started alongside SessionAdjudicator
+        # Guards dry-run → live enforcement transition via consecutive_clean counter
+        if getattr(self.cfg, "operator_api_key", ""):
+            try:
+                from .session_adjudicator_validator import SessionAdjudicatorValidationAgent
+                _validator = SessionAdjudicatorValidationAgent(self.cfg, self.store, bus=_bus)
+                _t = asyncio.create_task(_validator.run_event_consumer())
+                _t.set_name("SessionAdjudicatorValidationAgent")
+                _t.add_done_callback(_task_done_handler)
+                self._tasks.append(_t)
+                log.info(
+                    "Phase 75: SessionAdjudicatorValidationAgent started "
+                    "(gate_n=%d, divergence_threshold=%.2f)",
+                    getattr(self.cfg, "validation_gate_n", 100),
+                    getattr(self.cfg, "validation_divergence_threshold", 0.3),
+                )
+            except Exception as _sva_exc:
+                log.warning("Phase 75: SessionAdjudicatorValidationAgent unavailable: %s", _sva_exc)
+        else:
+            log.info("Phase 75: SessionAdjudicatorValidationAgent skipped (OPERATOR_API_KEY not set)")
+
+        # Phase 75: CeremonyWatchdogAgent — guarded by ceremony_watchdog_enabled
+        # Polls CeremonyRegistry every 5 min; invalidates SA cache on key rotation (W1 mitigation)
+        if getattr(self.cfg, "ceremony_watchdog_enabled", True):
+            try:
+                from .ceremony_watchdog import CeremonyWatchdogAgent
+                _watchdog = CeremonyWatchdogAgent(self.cfg, self.store, bus=_bus)
+                _t = asyncio.create_task(_watchdog.run_event_consumer())
+                _t.set_name("CeremonyWatchdogAgent")
+                _t.add_done_callback(_task_done_handler)
+                self._tasks.append(_t)
+                log.info(
+                    "Phase 75: CeremonyWatchdogAgent started "
+                    "(registry=%s, poll=300s)",
+                    getattr(self.cfg, "ceremony_registry_address", "not-set")[:10] or "not-set",
+                )
+            except Exception as _cwa_exc:
+                log.warning("Phase 75: CeremonyWatchdogAgent unavailable: %s", _cwa_exc)
+        else:
+            log.info("Phase 75: CeremonyWatchdogAgent skipped (CEREMONY_WATCHDOG_ENABLED=false)")
+
+        # Phase 76: RulingProvenanceAnchorAgent — guarded by ruling_provenance_enabled
+        # Computes SHA-256 provenance anchors binding ruling + ceremony + evidence
+        if getattr(self.cfg, "ruling_provenance_enabled", True):
+            try:
+                from .ruling_provenance_anchor_agent import RulingProvenanceAnchorAgent
+                _provenance = RulingProvenanceAnchorAgent(
+                    self.cfg, self.store,
+                    chain=self.chain if getattr(self.cfg, "ruling_provenance_publish_enabled", False) else None,
+                )
+                _t = asyncio.create_task(_provenance.run_event_consumer())
+                _t.set_name("RulingProvenanceAnchorAgent")
+                _t.add_done_callback(_task_done_handler)
+                self._tasks.append(_t)
+                log.info(
+                    "Phase 76: RulingProvenanceAnchorAgent started "
+                    "(publish_enabled=%s)",
+                    getattr(self.cfg, "ruling_provenance_publish_enabled", False),
+                )
+            except Exception as _rpa_exc:
+                log.warning("Phase 76: RulingProvenanceAnchorAgent unavailable: %s", _rpa_exc)
+        else:
+            log.info("Phase 76: RulingProvenanceAnchorAgent skipped (RULING_PROVENANCE_ENABLED=false)")
+
+        # Phase 79: LiveModeActivationAgent — multi-condition live-mode readiness checker
+        # Subscribes to dry_run_gate_passed via bus; emits advisory when all 5 conditions pass
+        if getattr(self.cfg, "operator_api_key", ""):
+            try:
+                from .live_mode_activation_agent import LiveModeActivationAgent
+                _live_mode = LiveModeActivationAgent(self.cfg, self.store, bus=_bus)
+                _t = asyncio.create_task(_live_mode.run_event_consumer())
+                _t.set_name("LiveModeActivationAgent")
+                _t.add_done_callback(_task_done_handler)
+                self._tasks.append(_t)
+                log.info("Phase 79: LiveModeActivationAgent started (bus-subscribed)")
+            except Exception as _lma_exc:
+                log.warning("Phase 79: LiveModeActivationAgent unavailable: %s", _lma_exc)
+        else:
+            log.info("Phase 79: LiveModeActivationAgent skipped (OPERATOR_API_KEY not set)")
+
+        # Phase 80: FederationBroadcastAgent — event-driven BLOCK ruling broadcaster
+        # First purely event-driven agent in VAPI fleet (no polling loop)
+        if getattr(self.cfg, "federation_broadcast_enabled", False):
+            try:
+                from .federation_broadcast_agent import FederationBroadcastAgent
+                _federation = FederationBroadcastAgent(self.cfg, self.store, bus=_bus)
+                _t = asyncio.create_task(_federation.run_event_consumer())
+                _t.set_name("FederationBroadcastAgent")
+                _t.add_done_callback(_task_done_handler)
+                self._tasks.append(_t)
+                log.info(
+                    "Phase 80: FederationBroadcastAgent started (event-driven, peers=%d)",
+                    len([p for p in getattr(self.cfg, "federation_broadcast_peers", "").split(",") if p.strip()]),
+                )
+            except Exception as _fba_exc:
+                log.warning("Phase 80: FederationBroadcastAgent unavailable: %s", _fba_exc)
+        else:
+            log.info(
+                "Phase 80: FederationBroadcastAgent skipped (FEDERATION_BROADCAST_ENABLED=false)"
+            )
+
+        # Phase 81: ClassJDetector — per-device ML-bot entropy variance detection
+        if getattr(self.cfg, "class_j_detection_enabled", True):
+            try:
+                from .class_j_detector import ClassJDetector
+                _class_j = ClassJDetector(self.cfg, self.store, bus=_bus)
+                _t = asyncio.create_task(_class_j.run_poll_loop())
+                _t.set_name("ClassJDetector")
+                _t.add_done_callback(_task_done_handler)
+                self._tasks.append(_t)
+                log.info(
+                    "Phase 81: ClassJDetector started (5-min poll, n_windows=%d)",
+                    getattr(self.cfg, "class_j_entropy_windows", 10),
+                )
+            except Exception as _cj_exc:
+                log.warning("Phase 81: ClassJDetector unavailable: %s", _cj_exc)
+        else:
+            log.info("Phase 81: ClassJDetector skipped (CLASS_J_DETECTION_ENABLED=false)")
+
+        # Phase 83: AgentSupervisor — fleet health monitor
+        if getattr(self.cfg, "supervisor_enabled", True):
+            try:
+                from .agent_supervisor import AgentSupervisor
+                _supervisor = AgentSupervisor(self.cfg, self.store, bus=_bus)
+                _t = asyncio.create_task(_supervisor.run_supervisor_loop())
+                _t.set_name("AgentSupervisor")
+                _t.add_done_callback(_task_done_handler)
+                self._tasks.append(_t)
+                log.info(
+                    "Phase 83: AgentSupervisor started (stale_threshold=%dmin)",
+                    getattr(self.cfg, "supervisor_stale_threshold_minutes", 15),
+                )
+            except Exception as _sup_exc:
+                log.warning("Phase 83: AgentSupervisor unavailable: %s", _sup_exc)
+        else:
+            log.info("Phase 83: AgentSupervisor skipped (SUPERVISOR_ENABLED=false)")
+
+        # Phase 89: ProtocolIntelligenceAgent — unified protocol_health_score synthesizer
+        if getattr(self.cfg, "protocol_intelligence_enabled", True):
+            try:
+                from .protocol_intelligence_agent import ProtocolIntelligenceAgent
+                _pia = ProtocolIntelligenceAgent(self.cfg, self.store, bus=_bus)
+                _t = asyncio.create_task(_pia.run_event_consumer())
+                _t.set_name("ProtocolIntelligenceAgent")
+                _t.add_done_callback(_task_done_handler)
+                self._tasks.append(_t)
+                log.info("Phase 89: ProtocolIntelligenceAgent started")
+            except Exception as _pia_exc:
+                log.warning("Phase 89: ProtocolIntelligenceAgent unavailable: %s", _pia_exc)
+        else:
+            log.info("Phase 89: ProtocolIntelligenceAgent skipped (PROTOCOL_INTELLIGENCE_ENABLED=false)")
+
+        # Phase 92: LiveModeActivationPipeline — automated readiness audit logger
+        if getattr(self.cfg, "activation_pipeline_enabled", True):
+            try:
+                from .live_mode_activation_pipeline import LiveModeActivationPipeline
+                _activation_pipeline = LiveModeActivationPipeline(self.cfg, self.store, bus=_bus)
+                _t = asyncio.create_task(_activation_pipeline.run_poll_loop())
+                _t.set_name("LiveModeActivationPipeline")
+                _t.add_done_callback(_task_done_handler)
+                self._tasks.append(_t)
+                log.info("Phase 92: LiveModeActivationPipeline started (5-min audit poll)")
+            except Exception as _lap_exc:
+                log.warning("Phase 92: LiveModeActivationPipeline unavailable: %s", _lap_exc)
+        else:
+            log.info("Phase 92: LiveModeActivationPipeline skipped (ACTIVATION_PIPELINE_ENABLED=false)")
+
+        # Phase 91: DivergenceTriageAgent — cross-session adversarial pattern detector
+        if getattr(self.cfg, "divergence_triage_enabled", True):
+            try:
+                from .divergence_triage_agent import DivergenceTriageAgent
+                _triage = DivergenceTriageAgent(self.cfg, self.store, bus=_bus)
+                _t = asyncio.create_task(_triage.run_event_consumer())
+                _t.set_name("DivergenceTriageAgent")
+                _t.add_done_callback(_task_done_handler)
+                self._tasks.append(_t)
+                log.info("Phase 91: DivergenceTriageAgent started")
+            except Exception as _triage_exc:
+                log.warning("Phase 91: DivergenceTriageAgent unavailable: %s", _triage_exc)
+        else:
+            log.info("Phase 91: DivergenceTriageAgent skipped (DIVERGENCE_TRIAGE_ENABLED=false)")
+
+        # Phase 99B: GSRRegistryAgent — physiological biometric layer (gsr_enabled=false default)
+        if getattr(self.cfg, "gsr_enabled", False):
+            try:
+                from .gsr_registry_agent import GSRRegistryAgent
+                _chain = getattr(self, "chain", None)
+                _gsr = GSRRegistryAgent(self.cfg, self.store, chain=_chain, bus=_bus)
+                _gt = asyncio.create_task(_gsr.run_poll_loop())
+                _gt.set_name("GSRRegistryAgent")
+                _gt.add_done_callback(_task_done_handler)
+                self._tasks.append(_gt)
+                log.info("Phase 99B: GSRRegistryAgent started (GSR_ENABLED=true)")
+            except Exception as _gsr_exc:
+                log.warning("Phase 99B: GSRRegistryAgent unavailable: %s", _gsr_exc)
+        else:
+            log.info("Phase 99B: GSRRegistryAgent skipped (GSR_ENABLED=false, default)")
+
+        # Phase 102: VHPRenewalAgent — soulbound token TTL lifecycle manager (14th agent)
+        if getattr(self.cfg, "vhp_renewal_enabled", True):
+            try:
+                from .vhp_renewal_agent import VHPRenewalAgent
+                _chain_ref   = getattr(self, "chain", None)
+                _vhp_renewal = VHPRenewalAgent(
+                    self.cfg, self.store, chain=_chain_ref, bus=_bus
+                )
+                _vt = asyncio.create_task(_vhp_renewal.run_poll_loop())
+                _vt.set_name("VHPRenewalAgent")
+                _vt.add_done_callback(_task_done_handler)
+                self._tasks.append(_vt)
+                log.info(
+                    "Phase 102: VHPRenewalAgent started (poll=6h, warning_days=%s)",
+                    getattr(self.cfg, "vhp_renewal_warning_days", 7),
+                )
+            except Exception as _vhp_exc:
+                log.warning("Phase 102: VHPRenewalAgent unavailable: %s", _vhp_exc)
+        else:
+            log.info("Phase 102: VHPRenewalAgent skipped (VHP_RENEWAL_ENABLED=false)")
+
         log.info("All services started — bridge is operational")
 
         # Wait for shutdown
@@ -518,6 +796,26 @@ class Bridge:
         log.info("Shutdown requested")
         for task in self._tasks:
             task.cancel()
+
+
+def _restore_activation_state(cfg, store) -> None:
+    """Phase 104 W1 mitigation: restore dry_run=False on bridge restart if
+    activation_committed=True in store. Runs BEFORE any agent tasks start.
+    Uses object.__setattr__ because Config is @dataclass(frozen=True).
+    """
+    try:
+        if not getattr(cfg, "activation_auto_restore", True):
+            return
+        state = store.get_activation_state()
+        if state.get("activation_committed", False):
+            object.__setattr__(cfg, "agent_dry_run_mode", False)
+            log.info(
+                "Phase 104: _restore_activation_state: restored dry_run=False "
+                "(committed_at=%s, committed_by=%s)",
+                state.get("committed_at"), state.get("committed_by"),
+            )
+    except Exception as exc:
+        log.warning("Phase 104: _restore_activation_state failed: %s", exc)
 
 
 def main():

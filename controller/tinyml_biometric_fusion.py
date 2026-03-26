@@ -639,8 +639,8 @@ class BiometricFusionClassifier:
     # Phase 46 empirical calibration (N=74 sessions including hw_074–hw_078, 11-feature space,
     # accel_magnitude_spectral_entropy at index 9 replacing touchpad_active_fraction).
     # Source: scripts/threshold_calibrator.py → calibration_profile.json
-    ANOMALY_THRESHOLD: float = float(_os.getenv("L4_ANOMALY_THRESHOLD", "6.726"))
-    CONTINUITY_THRESHOLD: float = float(_os.getenv("L4_CONTINUITY_THRESHOLD", "5.097"))
+    ANOMALY_THRESHOLD: float = float(_os.getenv("L4_ANOMALY_THRESHOLD", "7.009"))
+    CONTINUITY_THRESHOLD: float = float(_os.getenv("L4_CONTINUITY_THRESHOLD", "5.367"))
     CONFIDENCE_MIN: int = 180          # Minimum confidence to report anomaly [0-255]
     CONFIDENCE_SCALE: float = 30.0     # Maps distance above threshold to confidence
     VAR_FLOOR: float = 1e-6            # Prevent division by zero in Mahalanobis

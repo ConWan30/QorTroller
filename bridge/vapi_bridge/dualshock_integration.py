@@ -477,6 +477,14 @@ class DualShockTransport:
                 log.warning("Phase 63: L6b init failed (non-fatal): %s", _l6b_exc)
                 self._l6b_enabled = False
 
+        # Fix D: bounded 1-worker executor for LED/haptic feedback.
+        # asyncio.wait_for can cancel the Future but cannot interrupt the thread —
+        # limiting to max_workers=1 ensures at most one blocked USB write thread exists
+        # at any time, preventing unbounded thread accumulation on repeated timeouts.
+        import concurrent.futures as _cf
+        self._feedback_executor = _cf.ThreadPoolExecutor(max_workers=1,
+                                                          thread_name_prefix="vapi_feedback")
+
     # ------------------------------------------------------------------
     # Phase 38: Per-player effective L4 threshold
     # ------------------------------------------------------------------
@@ -494,7 +502,7 @@ class DualShockTransport:
             self._player_profile_cache.clear()
             self._player_profile_cache_ts = now
         if device_id_hex not in self._player_profile_cache:
-            global_thresh = float(getattr(self._cfg, "l4_anomaly_threshold", 7.019))
+            global_thresh = float(getattr(self._cfg, "l4_anomaly_threshold", 7.009))
             try:
                 profile = self._store.get_player_calibration_profile(device_id_hex)
                 personal_thresh = profile["anomaly_threshold"] if profile else global_thresh
@@ -511,7 +519,7 @@ class DualShockTransport:
         log.info("DualShock transport initialising")
 
         # Import emulator classes (sync, in executor to avoid blocking)
-        ok = await asyncio.get_event_loop().run_in_executor(None, self._init_hardware)
+        ok = await asyncio.get_running_loop().run_in_executor(None, self._init_hardware)
         if not ok:
             log.error("DualShock hardware init failed — transport disabled")
             return
@@ -675,7 +683,16 @@ class DualShockTransport:
 
         self._pubkey_hex = self._pubkey_bytes.hex()
         self._classifier = AntiCheatClassifier()
-        self._reader     = DualSenseReader()
+
+        # Close any previous reader before creating a new one so the HID interface
+        # is released before pydualsense tries to re-open it (restart after crash).
+        if getattr(self, "_reader", None) is not None:
+            try:
+                self._reader.close()
+                log.debug("Previous DualSenseReader closed before reconnect")
+            except Exception as _close_exc:
+                log.debug("Previous reader close failed (non-fatal): %s", _close_exc)
+        self._reader = DualSenseReader()
 
         # Phase 11: Try to import TriggerModes enum for ordinal mapping in set_trigger_effect
         try:
@@ -687,10 +704,17 @@ class DualShockTransport:
             log.debug("pydualsense TriggerModes unavailable; trigger effect tracking via set_trigger_effect only")
 
         connected = self._reader.connect()
+        # Track whether this session is running on real hardware or synthetic sim data.
+        # is_sim_mode=True means ALL frames come from _simulate_input() — not calibration data.
+        self._is_sim_mode = not connected
         if connected:
             log.info("DualSense Edge connected (device_id=%s...)", self._device_id.hex()[:16])
         else:
-            log.warning("DualSense Edge not found — running in simulation mode")
+            log.warning(
+                "DualSense Edge not found — running in simulation mode "
+                "(is_sim_mode=True; L4 calibration updates DISABLED; "
+                "touch_position_variance will be zero)"
+            )
 
         # BT L0: Instantiate physical presence verifier (advisory, non-blocking)
         try:
@@ -865,7 +889,7 @@ class DualShockTransport:
             from vapi_bridge.transports.http import ws_broadcast as _ws_bcast
             import asyncio as _asyncio
             import json as _json
-            _asyncio.get_event_loop().call_soon_threadsafe(
+            _asyncio.get_running_loop().call_soon_threadsafe(
                 lambda: _asyncio.create_task(
                     _ws_bcast(_json.dumps({
                         "type": "controller_registered",
@@ -882,17 +906,48 @@ class DualShockTransport:
     # ------------------------------------------------------------------
     async def _session_loop(self, active_bounties: list[int]):
         """Continuously poll, classify, generate, and dispatch PoAC records."""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
-        while True:
-            t_start = time.monotonic()
-
-            # --- Collect frames for one interval (sync poll in thread) ---
-            frames = await loop.run_in_executor(
-                None, self._poll_frames, self._interval
+        if getattr(self, "_is_sim_mode", False):
+            log.warning(
+                "SESSION LOOP STARTING IN SIMULATION MODE — no real controller connected. "
+                "Records will be synthetic; touch_position_variance=0; "
+                "L4 fingerprint updates disabled. Connect controller and restart to capture real data."
             )
 
+        _loop_iter = 0
+        while True:
+            _loop_iter += 1
+            t_start = time.monotonic()
+            log.info(
+                "_session_loop: iter=%d starting (sim_mode=%s)",
+                _loop_iter, getattr(self, "_is_sim_mode", "?"),
+            )
+
+            # --- Collect frames for one interval (sync poll in thread) ---
+            try:
+                # Timeout = 4× interval. Prevents deadlock if pydualsense HID thread
+                # stalls on USB disconnect (the executor thread would hang forever otherwise).
+                frames = await asyncio.wait_for(
+                    loop.run_in_executor(None, self._poll_frames, self._interval),
+                    timeout=self._interval * 4,
+                )
+            except asyncio.TimeoutError:
+                log.warning(
+                    "_poll_frames timed out after %.1fs — possible USB freeze or disconnect "
+                    "(iter=%d, is_sim_mode=%s)",
+                    self._interval * 4, _loop_iter,
+                    getattr(self, "_is_sim_mode", "?"),
+                )
+                await asyncio.sleep(self._interval)
+                continue
+            except Exception as _poll_exc:
+                log.warning("_poll_frames error (non-fatal, session continues): %s", _poll_exc)
+                await asyncio.sleep(self._interval)
+                continue
+
             if not frames:
+                log.debug("Session loop iter=%d: no frames, sleeping", _loop_iter)
                 await asyncio.sleep(self._interval)
                 continue
 
@@ -983,9 +1038,17 @@ class DualShockTransport:
             _l4_drift_velocity = None
             if self._biometric_classifier is not None and inference not in CHEAT_CODES:
                 # Use persistent extractor instance so _fft_ring accumulates across calls.
-                bio_features = self._bio_extractor.extract(frames)
-                self._biometric_classifier.update_fingerprint(bio_features)
-                bio_result = self._biometric_classifier.classify(bio_features)
+                # NEVER update the fingerprint from sim-mode frames — synthetic sinusoidal
+                # data would corrupt the per-player biometric baseline irreversibly.
+                try:
+                    bio_features = self._bio_extractor.extract(frames)
+                    if not getattr(self, "_is_sim_mode", False):
+                        self._biometric_classifier.update_fingerprint(bio_features)
+                    bio_result = self._biometric_classifier.classify(bio_features)
+                except Exception as _bio_exc:
+                    log.warning("L4 biometric classifier error (non-fatal, session continues): %s", _bio_exc)
+                    bio_features = None
+                    bio_result = None
                 # Phase 36: adaptive policy multiplier feedback from InsightSynthesizer Mode 4
                 # Only applies when baseline classify() found no anomaly (bio_result is None).
                 # NEVER modifies classifier state. NEVER overrides hard cheat codes.
@@ -1066,7 +1129,9 @@ class DualShockTransport:
                 # gradual poisoning attack: the adversary could incrementally shift the
                 # baseline by interleaving anomalous sessions with clean ones, eventually
                 # making the stable track accept anomalous features as "normal."
-                if (inference == INFER_NOMINAL
+                if (bio_features is not None
+                        and inference == INFER_NOMINAL
+                        and not getattr(self, "_is_sim_mode", False)
                         and hasattr(self._biometric_classifier, "update_stable_fingerprint")):
                     self._biometric_classifier.update_stable_fingerprint(bio_features)
                 # Phase 25: capture drift velocity between candidate and stable fingerprint means
@@ -1367,6 +1432,12 @@ class DualShockTransport:
             # --- Generate PoAC record ---
             raw = self._make_record(inference, action, confidence, bounty_id,
                                     battery_mv=frames[-1].battery_mv)
+            if not raw:
+                log.warning(
+                    "_session_loop: iter=%d _make_record returned None — no record dispatched "
+                    "(inference=0x%02x conf=%d)",
+                    _loop_iter, inference, confidence,
+                )
             if raw:
                 await self._dispatch(raw)
                 self._last_raw = raw
@@ -1391,7 +1462,21 @@ class DualShockTransport:
                     self._progress.record(record_hash, inference, confidence)
 
                 # --- LED/haptic feedback ---
-                await loop.run_in_executor(None, self._apply_feedback, inference)
+                # Fix D: timeout prevents USB write hang from freezing the event loop.
+                # pydualsense set_led() can block indefinitely on disconnect; without
+                # this guard the await never resolves and counter=7 never appears.
+                try:
+                    await asyncio.wait_for(
+                        loop.run_in_executor(self._feedback_executor, self._apply_feedback, inference),
+                        timeout=self._interval * 2,
+                    )
+                except asyncio.TimeoutError:
+                    log.warning(
+                        "_apply_feedback timed out after %.1fs (iter=%d) — possible USB write hang",
+                        self._interval * 2, _loop_iter,
+                    )
+                except Exception as _fb_exc:
+                    log.debug("_apply_feedback error (non-fatal): %s", _fb_exc)
 
             # --- Phase 13 E1: maintain trigger mode history for sensor_commitment_v2_bio ---
             if frames:
@@ -1517,42 +1602,45 @@ class DualShockTransport:
             # --- Phase 13 E4: accumulate frames; update EWC world model every N intervals ---
             _e4_cognitive_drift = None
             if self._ewc_model is not None and frames:
-                self._frame_buffer.extend(frames)
-                self._session_count += 1
-                if self._session_count % _EWC_SESSION_INTERVAL == 0 and self._frame_buffer:
-                    session_vec = self._build_ewc_session_vec(self._frame_buffer)
-                    session_label = confidence / 255.0
-                    self._ewc_model.update(session_vec, session_label)
-                    self._recent_session_vecs.append(session_vec)
-                    self._frame_buffer = []
-                    if (self._session_count % _EWC_FISHER_INTERVAL == 0
-                            and len(self._recent_session_vecs) >= 5):
-                        self._ewc_model.compute_fisher(self._recent_session_vecs[-50:])
-                    log.debug(
-                        "EWC update #%d complete",
-                        self._session_count // _EWC_SESSION_INTERVAL,
-                    )
-                    # Phase 25: E4 cognitive drift — compare embedding to previous session
-                    if hasattr(self._ewc_model, "get_embedding"):
-                        try:
-                            import numpy as _np
-                            new_emb = self._ewc_model.get_embedding(session_vec)
-                            prev_emb_list = self._store.get_last_cognitive_embedding(
-                                self._device_id.hex()
-                            )
-                            if prev_emb_list is not None:
-                                prev_arr = _np.array(prev_emb_list, dtype=_np.float32)
-                                _e4_cognitive_drift = float(
-                                    _np.linalg.norm(new_emb - prev_arr)
+                try:
+                    self._frame_buffer.extend(frames)
+                    self._session_count += 1
+                    if self._session_count % _EWC_SESSION_INTERVAL == 0 and self._frame_buffer:
+                        session_vec = self._build_ewc_session_vec(self._frame_buffer)
+                        session_label = confidence / 255.0
+                        self._ewc_model.update(session_vec, session_label)
+                        self._recent_session_vecs.append(session_vec)
+                        self._frame_buffer = []
+                        if (self._session_count % _EWC_FISHER_INTERVAL == 0
+                                and len(self._recent_session_vecs) >= 5):
+                            self._ewc_model.compute_fisher(self._recent_session_vecs[-50:])
+                        log.debug(
+                            "EWC update #%d complete",
+                            self._session_count // _EWC_SESSION_INTERVAL,
+                        )
+                        # Phase 25: E4 cognitive drift — compare embedding to previous session
+                        if hasattr(self._ewc_model, "get_embedding"):
+                            try:
+                                import numpy as _np
+                                new_emb = self._ewc_model.get_embedding(session_vec)
+                                prev_emb_list = self._store.get_last_cognitive_embedding(
+                                    self._device_id.hex()
                                 )
-                                self._drift_history.append(_e4_cognitive_drift)
-                            self._store.store_cognitive_embedding(
-                                self._device_id.hex(),
-                                new_emb.tolist(),
-                                self._session_count,
-                            )
-                        except Exception as _exc:
-                            log.debug("Phase 25: E4 drift computation failed: %s", _exc)
+                                if prev_emb_list is not None:
+                                    prev_arr = _np.array(prev_emb_list, dtype=_np.float32)
+                                    _e4_cognitive_drift = float(
+                                        _np.linalg.norm(new_emb - prev_arr)
+                                    )
+                                    self._drift_history.append(_e4_cognitive_drift)
+                                self._store.store_cognitive_embedding(
+                                    self._device_id.hex(),
+                                    new_emb.tolist(),
+                                    self._session_count,
+                                )
+                            except Exception as _exc:
+                                log.debug("Phase 25: E4 drift computation failed: %s", _exc)
+                except Exception as _ewc_exc:
+                    log.warning("EWC model update error (non-fatal, session continues): %s", _ewc_exc)
 
             # --- Phase C: L6 strategic challenge dispatch ---
             if (self._l6_driver is not None

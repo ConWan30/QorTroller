@@ -7,10 +7,14 @@ on:
     branches: [main, develop]
 
 jobs:
-  # ── Job 1: Smart Contract tests (Hardhat) ──────────────────────────────────
+  # ── Job 1: Smart Contract tests (Hardhat) — Node 18 + 20 matrix ───────────
   contracts:
-    name: Smart Contracts (Hardhat)
+    name: Smart Contracts (Hardhat / Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: ["18", "20"]
     defaults:
       run:
         working-directory: contracts
@@ -19,7 +23,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ matrix.node-version }}
           cache: npm
           cache-dependency-path: contracts/package-lock.json
 
@@ -37,16 +41,20 @@ jobs:
       - name: Run Hardhat tests
         run: npx hardhat test
 
-  # ── Job 2: Bridge + SDK pytest ─────────────────────────────────────────────
+  # ── Job 2: Bridge + SDK pytest — Python 3.11 / 3.12 / 3.13 matrix ─────────
   bridge:
-    name: Bridge + SDK Tests (pytest)
+    name: Bridge + SDK Tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
           cache: pip
           cache-dependency-path: bridge/requirements.txt
 
@@ -70,7 +78,35 @@ jobs:
         run: |
           python -m pytest sdk/tests/ -q
 
-  # ── Job 3: Firmware lint (header guards, C source check) ──────────────────
+  # ── Job 3: OpenAPI YAML lint ────────────────────────────────────────────────
+  yaml-lint:
+    name: OpenAPI YAML Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pyyaml
+        run: pip install pyyaml
+
+      - name: Validate openapi.yaml parses as valid YAML
+        run: |
+          python -c "
+          import yaml, sys
+          with open('sdk/openapi.yaml') as f:
+              doc = yaml.safe_load(f)
+          assert doc.get('openapi'), 'Missing openapi key'
+          assert doc.get('info'), 'Missing info key'
+          assert doc.get('paths'), 'Missing paths key'
+          assert doc.get('components'), 'Missing components key'
+          version = doc['info'].get('version', '')
+          print(f'openapi.yaml valid — version={version} paths={len(doc[\"paths\"])}')
+          "
+
+  # ── Job 4: Firmware lint (header guards, C source check) ──────────────────
   firmware-lint:
     name: Firmware Lint
     runs-on: ubuntu-latest

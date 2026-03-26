@@ -19,7 +19,7 @@ VAPI provides a cryptographically verifiable evidence rail for controller input.
 Software-only injection is made empirically infeasible by a nine-level Physical Input Trust Layer (PITL) that binds committed evidence to physics-coupled controller signals — IMU gravity baseline, IMU-button causal latency, stick-IMU temporal cross-correlation, biometric kinematic fingerprinting (12 features, Mahalanobis distance), temporal rhythm analysis, and active haptic challenge-response using the DualShock Edge's motorized adaptive triggers. Live hardware validation on a DualShock Edge CFI-ZCP1 confirms a 14,000× injection detection margin.
 
 **Part 3 — Status.**
-The prototype spans ~220 files with ~1,527 automated tests (1076 bridge, 354 contract, **55 SDK**, 14 E2E, 28 hardware). Twenty contracts are deployed on IoTeX testnet (all LIVE, Phase 63). Living calibration (Mode 6, Phase 38) autonomously evolves L4 thresholds from verified session data every 6 hours using exponential decay weighting. All PITL thresholds are empirically calibrated from N=74 real sessions across 3 distinct players. Phase 63 introduces L6b — the first reactive involuntary probe: a sub-perceptual 10ms haptic pulse triggers an involuntary neuromuscular grip reflex measured as IMU accel-magnitude latency (human 80–280ms; bot 0–15ms). Phase 65 introduces the Autonomous Intelligence Layer (AIL): VAPIAgent (SDK) + SessionAdjudicator (bridge) produce PoAC-gated commitment-hash rulings (FLAG/HOLD/BLOCK/CERTIFY/CLEAR) bound to SDKAttestation trust anchor. The primary current limitation is single-population calibration: L4 functions as a per-player anomaly detector rather than a cross-player identifier (inter-person separation ratio 0.362).
+The prototype spans ~225 files with ~1,671 automated tests (1207 bridge, 396 contract, **63 SDK**, 14 E2E, 28 hardware). Twenty-three contracts are ALL LIVE on IoTeX testnet — RulingRegistry (`0xa3A2356C90E642a7c510d0C726EC515EA720c621`) and CeremonyRegistry (`0x739B5fae312834bA2a7e44525bA5f54853C5672f`) both deployed Phase 68, MPC ceremony complete (IoTeX block #41723255 beacon, 3 circuits × 3 contributors, `verifyCeremony()` confirmed on-chain). Phase 69 introduces the Data Sovereignty Layer: DataSovereigntyRegistry (immutable on-chain pledge, 3-tier MANUFACTURER/DEVELOPER/GAMER licensing), HumanityOracle/RulingOracle/PassportOracle (native VAPI oracles queryable by any IoTeX contract), VAPIRewardDistributor (DePIN token distribution, stacked multipliers up to ~15.75×), VAPIDataMarketplace (three-tier data exchange, 70% device pool / 30% treasury), and DataCuratorAgent (Python background agent, 7-class taxonomy, 5-minute poll, lineage builder + eligibility engine + oracle publisher). Phase 70 adds governance infrastructure: VAPIGovernanceTimelock (48-hour queued operator transitions, co-signer cancel, CEI pattern), VAPIProtocolLens (pure-view single eth_call synthesizing all four oracle contracts into `DeviceProtocolState`; `isFullyEligible()` is the tournament integration gate), full agent wiring (DataCuratorAgent + SessionAdjudicator + RulingEnforcementAgent all started in the main asyncio event loop), BridgeAgent tools #41–45, and GET /agent/validation-stats unified observability endpoint. Living calibration (Mode 6, Phase 38) autonomously evolves L4 thresholds from verified session data every 6 hours using exponential decay weighting. All PITL thresholds are empirically calibrated from N=74 real sessions across 3 distinct players. Phase 63 introduces L6b — the first reactive involuntary probe: a sub-perceptual 10ms haptic pulse triggers an involuntary neuromuscular grip reflex measured as IMU accel-magnitude latency (human 80–280ms; bot 0–15ms). Phase 65 introduces the Autonomous Intelligence Layer (AIL): VAPIAgent (SDK) + SessionAdjudicator (bridge) produce PoAC-gated commitment-hash rulings (FLAG/HOLD/BLOCK/CERTIFY/CLEAR) bound to SDKAttestation trust anchor. Phase 66 closes the enforcement loop: RulingEnforcementAgent applies streak escalation (FLAG×5→HOLD, HOLD×2→BLOCK), anchors commitment_hash on-chain via RulingRegistry.sol (anti-replay, IoTeX testnet 4690), and suspends PHGCredential on confirmed BLOCK streaks. Phase 67 replaces the single-contributor ZK ceremony with a 3-contributor MPC trusted setup anchored to an IoTeX testnet block hash — the ceremony beacon is independently verifiable on-chain via CeremonyRegistry.sol, eliminating the ZK ceremony as an external trust assumption. The primary current limitation is single-population calibration: L4 functions as a per-player anomaly detector rather than a cross-player identifier (inter-person separation ratio 0.362).
 
 **Keywords:** proof of cognition, gaming anti-cheat, verifiable gaming intelligence,
 physical human controller input, PHCI certification, adaptive trigger attestation,
@@ -715,8 +715,9 @@ accepts 256-byte proofs, enforces `usedNullifiers` anti-replay, and tracks per-d
 `0x07D3ca1548678410edC505406f022399920d4072`) is set and active; mock mode is disabled on
 the live deployment.
 
-The trusted setup used the `run-ceremony.js` single-contributor development ceremony. A
-production deployment requires a multi-party MPC ceremony (§10.3).
+Phase 67 upgrades the trusted setup to a 3-contributor MPC ceremony using the Hermez
+`powersOfTau28_hez_final_15.ptau` Phase 1 source with an IoTeX-block-anchored Phase 2
+beacon. Ceremony provenance is registered on-chain in `CeremonyRegistry.sol` (§10.3).
 
 ### 7.5.4 PHG Credential and Economic Enforcement
 
@@ -737,8 +738,8 @@ humanity_probability = 0.28·p_L4 + 0.27·p_L5 + 0.20·p_E4 + 0.15·p_L2B + 0.10
 signals: `p_human = 0.23·p_L4 + 0.22·p_L5 + 0.15·p_E4 + 0.15·p_L6 + 0.15·p_L2B + 0.10·p_L2C`.
 When L6 is disabled (default), the five-signal formula above applies. L2B and L2C
 default to 0.5 (neutral) before oracle warmup, preserving [0,1] boundedness.
-L6 participation in the ZK PITL circuit (§7.5.3) is noted as future work pending
-the multi-contributor ceremony (§10.3).
+L6 participation in the ZK PITL circuit (§7.5.3) is noted as future work. The
+multi-contributor ceremony (§10.3) is complete as of Phase 67.
 
 **L2C dead-zone note.** `p_L2C` carries its full discriminative weight only when
 right-stick velocity is non-zero (real-time aim-based games). In dead-zone stick
@@ -880,39 +881,350 @@ record is >48h old; (2) distribution shift alert if recent 20 records differ fro
 80 by >25% of mean. Both fire as `calibration_health_*` insights in the `protocol_insights`
 table.
 
-### 7.5.6 Federated Cross-Instance Threat Correlation
+**SessionAdjudicator Ceremony Integrity Enrichment (Phase 73).**
+Before each `claude-opus-4-6` ruling call, `SessionAdjudicator._process_ruling_request()`
+enriches the evidence summary with on-chain ceremony provenance via
+`VAPIZKProof.verify_ceremony_integrity()`. The result is fetched once per hour
+per circuit name (module-level `_CEREMONY_CACHE`, TTL=3600s) to avoid a blocking
+`eth_call` per device per adjudication cycle. Three enrichment outcomes are possible:
 
-Bot farms that distribute devices across multiple bridge shards stay below each
-instance's local detection threshold. `FederationBus` counters this via privacy-preserving
-cluster fingerprint exchange.
+1. **Registry reachable, `on_chain_match=True`**: ceremony key is live and matches
+   the on-chain commitment. No additional evidence flags are set. The full ceremony
+   record (`contributor_count`, `beacon_block_number`) is stored in the
+   `ceremony_integrity` JSON column of `agent_rulings`.
 
-**Privacy model:**
+2. **Registry unreachable or RPC error**: `error` field is populated in the ceremony
+   dict. The ruling proceeds normally — a transient network failure does not block
+   adjudication. The error is stored in `ceremony_integrity` for audit.
+
+3. **Registry reachable, `on_chain_match=False`, no error**: ceremony key mismatch
+   without a network explanation. This indicates the verifying key may have been
+   tampered or a ceremony re-run was not registered on-chain.
+   `evidence_summary["ceremony_integrity_failed"] = True` is set, surfacing the
+   mismatch directly to the LLM for ruling consideration.
+
+This closes the trust chain from physical controller input to AI ruling: DualShock
+Edge → PoAC 228B → SHA-256(164B) → Groth16 proof → MPC ceremony key (3 contributors)
+→ CeremonyRegistry.sol → IoTeX block beacon → SessionAdjudicator ruling commitment.
+Every link is independently verifiable on-chain.
+
+**CeremonyWatchdogAgent (Phase 75).**
+The 1-hour `_CEREMONY_CACHE` TTL creates a latency window: if a new ceremony key
+is registered on-chain, the SessionAdjudicator will not detect it for up to 60 minutes.
+`CeremonyWatchdogAgent` closes this window autonomously. It polls `CeremonyRegistry`
+every 5 minutes via `VAPIZKProof.verify_ceremony_integrity()`, comparing the
+`beacon_block_number + contributor_count` fingerprint against the last known state.
+On detecting a change (key rotation):
+
+1. `_sa_mod._CEREMONY_CACHE.clear()` — collapses the blind window from ≤60 min to
+   ≤5 min. The next adjudication cycle will fetch fresh ceremony data.
+2. `ceremony_key_rotated` agent event is emitted to `bridge_agent` — the operator
+   is immediately notified via BridgeAgent's event stream.
+3. Any `FLAG` ruling from the last 10 minutes receives a
+   `ceremony_integrity_recheck_required` event — the operator is prompted to re-review
+   these rulings under the new key context, since the ceremony data they were enriched
+   with may now be stale.
+
+The watchdog never raises — all errors are logged and polling continues.
+
+**SessionAdjudicatorValidationAgent — Dry-Run Gate (Phase 75).**
+Enabling live enforcement (`AGENT_DRY_RUN=false`) requires confidence that the LLM
+adjudicator is calibrated correctly. `SessionAdjudicatorValidationAgent` provides the
+first autonomous AI-validates-AI safety primitive in competitive gaming.
+
+Every 5 minutes, the agent fetches `agent_rulings` entries not yet present in
+`ruling_validation_log` (via `LEFT JOIN`) and cross-validates each LLM ruling against
+the deterministic `_rule_fallback()` oracle — the same rule engine SessionAdjudicator
+uses when the LLM is unavailable. A *divergence* is declared when:
+- The LLM verdict differs from the fallback verdict **AND**
+- `|llm_confidence − fallback_confidence| > VALIDATION_DIVERGENCE_THRESHOLD` (default 0.3)
+
+The second condition prevents false divergences from semantically equivalent but
+confidence-level-different rulings (e.g., both output FLAG but LLM at 0.4 vs fallback at 0.05).
+
+The agent tracks a `consecutive_clean` counter: the length of the most recent
+unbroken streak of non-divergent rulings. When `consecutive_clean ≥ VALIDATION_GATE_N`
+(default 100), a `dry_run_gate_passed` agent event is emitted. `GET /agent/validation-gate`
+(Tool #46) exposes this state to the operator in real time with a `recommended_action`
+field. The gate is a one-time advisory — the operator must explicitly set
+`AGENT_DRY_RUN=false` via `POST /agent/config`; enforcement does not activate automatically.
+
+**RulingProvenanceAnchorAgent — AI Cognitive Audit Trail (Phase 76).**
+VAPI is the first competitive gaming anti-cheat system to produce a cryptographically
+verifiable audit trail for AI-generated rulings. `RulingProvenanceAnchorAgent` binds
+three independent evidence streams into a single `provenance_hash` per ruling:
+
 ```
-cluster_hash = SHA-256("|".join(sorted(device_ids)))[:16]
-bridge_id = SHA-256(f"bridge:{api_key}")[:16]
+provenance_hash = SHA-256(
+    commitment_hash_hex                          # Phase 66 ruling commitment (on-chain)
+  + "|" + JSON({beacon_block_number, contributor_count}, sort_keys)  # Ceremony anchor
+  + "|" + JSON(evidence_dict, sort_keys)        # Evidence presented to LLM
+)
 ```
-Raw device IDs never leave the originating bridge. The `GET /federation/clusters`
-endpoint returns only `is_local=True` records, preventing echo amplification in
-hub-and-spoke topologies.
 
-**Cross-confirmation:**
-```sql
-SELECT cluster_hash, COUNT(DISTINCT bridge_id) AS peer_count
-FROM federation_registry
-GROUP BY cluster_hash
-HAVING peer_count >= 2
+Canonical serialization rules (W1 mitigation — deterministic across Python versions):
+`beacon_block_number` and `contributor_count` are cast to `int()` before serialization,
+preventing float-vs-integer JSON divergence. All dicts use `sort_keys=True` and
+`separators=(",", ":")`. Two independent implementations of this formula applied to the
+same inputs will always produce the same hash.
+
+This creates the first verifiable AI cognitive audit trail in competitive gaming: any third
+party holding the ruling evidence, ceremony data, and commitment hash can recompute
+`provenance_hash` and confirm it matches the stored anchor. The anchor is exposed via
+`GET /agent/ruling-provenance/{ruling_id}` and BridgeAgent Tool #47. On-chain publication
+(opt-in via `RULING_PROVENANCE_PUBLISH_ENABLED`) creates a second IoTeX trace per ruling
+at the cost of ~0.02 IOTX gas per anchor.
+
+**Validation Gate Rate-Tolerance — Phase 78.**
+The Phase 75 dry-run gate required only `consecutive_clean ≥ VALIDATION_GATE_N` (default 100).
+A subtle weakness remained: early operational divergences — accumulated before the gate threshold
+is in sight — do not reset the consecutive counter but could still indicate systematic LLM
+miscalibration. Phase 78 adds a complementary rate-based criterion evaluated over the
+*trailing* `gate_n` window only:
+
 ```
-A single misbehaving bridge cannot inflate the count by using `COUNT(DISTINCT bridge_id)`
-rather than `COUNT(peer_url)`.
+divergence_rate = (divergences in trailing gate_n window) / window_size
+gate_passed = (consecutive_clean ≥ gate_n) AND (divergence_rate ≤ VALIDATION_MAX_DIVERGENCE_RATE)
+```
 
-**On-chain anchor:** `FederatedThreatRegistry.sol` stores cross-confirmed hashes
-immutably. `MultiVenueConfirmed` is emitted at `_reportCount ≥ 2`; anti-replay via
-`_hasReported[clusterHash][reporter]`.
+`VALIDATION_MAX_DIVERGENCE_RATE` defaults to `1.0` (no rate limit — full backward
+compatibility). Operators who want a tighter gate can set e.g. `0.1` to require fewer than
+10% divergences in the trailing window. Critically, both criteria are evaluated *only over
+the trailing gate_n window* — pre-gate early divergences do not permanently block enforcement
+activation (W1 mitigation). `GET /agent/validation-gate` (Tool #46) now exposes `divergence_rate`,
+`divergence_rate_ok`, `max_divergence_rate`, and `window_size` in addition to the Phase 75
+fields. When the rate criterion is exceeded, `recommended_action` specifically references
+the divergence rate so the operator knows which condition is blocking gate passage.
 
-### 7.5.7 BridgeAgent and Alert Dispatch
+### 7.5.6 AgentMessageBus + Live Mode Gate + Federated Threat Broadcast
+
+**AgentMessageBus — Phase 79.** Phases 79–81 introduce a zero-latency in-process
+pub/sub backbone that decouples agent communication from the 5-minute SQLite polling
+cycle. `AgentMessageBus` maintains per-topic `asyncio.Queue` lists (maxsize=100); multiple
+subscribers receive independent copies (fan-out); `QueueFull` is caught and logged without
+raising. SQLite `agent_events` remains the durable audit log — the bus provides the fast
+path only.
+
+The architectural fix removes a fragile tight coupling: `CeremonyWatchdogAgent` previously
+called `_sa_mod._CEREMONY_CACHE.clear()` via a direct module import. Phase 79 replaces this
+with bus publication of `ceremony_key_rotated`; `SessionAdjudicator` subscribes and clears
+its own cache — zero module-level coupling.
+
+```
+Publisher                   Event Type                  Subscribers
+──────────────────────────────────────────────────────────────────
+CeremonyWatchdogAgent   → ceremony_key_rotated       → SessionAdjudicator (cache clear)
+SessionAdjudicatorVal.  → dry_run_gate_passed        → LiveModeActivationAgent
+RulingEnforcementAgent  → ruling_block_committed     → FederationBroadcastAgent (Phase 80)
+ClassJDetector          → class_j_high_risk_detected → SessionAdjudicator (Phase 82 reactive interrupt)
+```
+
+**LiveModeActivationAgent — Phase 79.** Evaluates a multi-condition readiness checklist
+before any dry-run → live enforcement transition. All 5 conditions must pass simultaneously
+for `ready_for_live_mode=True`:
+
+1. `validation_gate_passed` — `consecutive_clean ≥ gate_n` AND `divergence_rate ≤ tolerance`
+2. `no_recent_operator_overrides` — no manual `ruling_override` events in the trailing window
+3. `no_recent_key_rotation` — no `ceremony_key_rotated` event in the last 24 hours
+4. `divergence_rate_within_tolerance` — rate criterion from Phase 78
+5. `consecutive_clean_met` — `consecutive_clean ≥ gate_n`
+
+The agent is advisory only — it never activates live mode automatically. It emits a
+`live_mode_candidate` advisory to `agent_events` when conditions pass. The operator must
+explicitly set `AGENT_DRY_RUN=false` via `POST /agent/config`. `GET /agent/live-mode-status`
+(Tool #48) exposes the full checklist as a `LiveModeStatus` response.
+
+**FederationBroadcastAgent — Phase 80.** The first purely event-driven agent in the VAPI
+fleet — no polling loop. Subscribes to `ruling_block_committed` on `AgentMessageBus` and
+broadcasts BLOCK rulings to configured peer bridge instances in <100ms.
+
+Propagation improvement:
+```
+BEFORE: BLOCK → SQLite event → poll (≤5 min) → broadcast → peer polls (≤5 min)
+        Total: 10–15 minutes
+
+AFTER:  BLOCK → bus.publish (<1ms) → broadcast (~100ms) → IoTeX block (~3s)
+        Total: < 5 seconds  [150× faster]
+```
+
+W1 mitigation against network partitions: the signal is inserted into
+`federation_threat_signals` (with `broadcast_at=NULL`) *before* the HTTP call. On startup,
+`_recover_unbroadcast()` retries any unsent rows, preventing silent loss across crashes.
+HMAC-SHA256 authentication (`X-Federation-HMAC` header) prevents unauthorized injection.
+`UNIQUE` constraint on `commitment_hash` ensures replay attacks are rejected by the DB.
+
+`FederatedThreatRegistry.sol` (Phase 80) provides on-chain immutability.
+`isThreatSignaled(address deviceId)` is a pure view callable by any tournament gate
+contract — same composability pattern as `VAPIProtocolLens.isFullyEligible()`.
+
+**ClassJDetector — Phase 81.** GaussianHMM ML-bots (Class J) evade L4 Mahalanobis because
+their feature distribution is fitted to human data. The discriminating signal is
+*temporal entropy variance*: human psychomotor control produces rhythmically structured
+state transitions (variance > 0.15); HMM sampling produces pathologically uniform
+transitions (variance < 0.02).
+
+`ClassJDetector` maintains a rolling deque of N=10 session entropy windows per device.
+`_temporal_state_transition_entropy_variance` computes sample variance over the deque.
+Risk classification: HIGH ≤ 0.05, MEDIUM ≤ 0.15, LOW > 0.15. On HIGH, publishes
+`class_j_high_risk_detected` to the bus. **Phase 82 (Reactive Adjudication Interrupt)**
+wires this signal to an immediate out-of-cycle LLM ruling, bypassing the 5-minute poll.
+
+`SessionAdjudicator` enriches LLM evidence with `class_j_ml_bot_risk` and
+`class_j_entropy_variance` before each ruling. When `risk_level == "HIGH"`, sets
+`ml_bot_candidate=True` in evidence, increasing BLOCK confidence for ML-bot candidates.
+
+**Phase 82 — Reactive Adjudication Interrupt.** `SessionAdjudicator` subscribes to
+`class_j_high_risk_detected` on `AgentMessageBus`. On receipt, `_adjudicate_device_directly()`
+assembles evidence (enrollment, trajectory, recent records, Class J entropy context) and
+calls `claude-opus-4-6` immediately — without waiting for the next 5-minute poll cycle.
+A W1-mitigation token bucket (`_ReactiveAdjudicationBucket`, default max 2 calls/60s)
+prevents bus-flooding from exhausting the Anthropic rate limit; suppressed calls are logged
+to `reactive_adjudication_log` with `was_deferred=1`. After ruling, `reactive_ruling_completed`
+is published to the bus and the ruling is forwarded to `RulingEnforcementAgent` for streak
+escalation and on-chain commit.
+
+End-to-end latency: Class J HIGH detected → bus publish (< 1ms) → reactive LLM ruling
+(~2–5s) → enforcement → federation broadcast (< 100ms) → on-chain IoTeX block (~3s).
+**Total: < 10 seconds.** Prior polling path: 15–25 minutes.
+
+The reactive interrupt log is accessible via `GET /agent/reactive-adjudication-log`
+and Tool #51 `get_reactive_adjudication_status` on `BridgeAgent`.
+
+Previous federated cross-instance threat correlation (Phase 34): `FederationBus` exchanged
+privacy-preserving cluster fingerprints. `FederatedThreatRegistry.sol` has been updated
+to the Phase 80 per-ruling design; `isThreatSignaled()` replaces the `MultiVenueConfirmed`
+pattern.
+
+### 7.5.7 AgentSupervisor — Fleet Health Monitor
+
+**Phase 83** introduces `AgentSupervisor` — the ninth autonomous agent, responsible
+for monitoring the health of all other eight agents in the fleet. This is the
+foundational component for an AGaaS (Agentic as a Service) SLA: a tournament operator
+cannot reasonably trust automated rulings from a fleet of unknown operational health.
+
+`AgentSupervisor` polls SQLite activity signals every 5 minutes. For each of the 9
+registered agents, it queries the agent's primary activity table and reports:
+
+| Status | Meaning |
+|--------|---------|
+| `HEALTHY` | Activity written within `SUPERVISOR_STALE_THRESHOLD_MINUTES` (default 15) |
+| `STALE` | No activity written within the threshold window |
+| `UNKNOWN` | No rows exist in the agent's table (agent never ran or store empty) |
+| `ZOMBIE` | Rows exist but to 0 distinct devices — agent looping on no-op writes (W1) |
+
+**Fleet-level health** aggregates per-agent status:
+- `ALL_HEALTHY` — all 9 agents HEALTHY
+- `DEGRADED` — 1–2 agents non-HEALTHY
+- `CRITICAL` — ≥3 agents non-HEALTHY, or either core agent (`session_adjudicator`,
+  `ruling_enforcement_agent`) is STALE
+
+The `ZOMBIE` status implements the W1 mitigation from Phase 83 design: timestamp-alone
+liveness is insufficient because a misconfigured agent can write garbage rows (non-zero
+count, non-null last_active_at) while processing no real events. `distinct_devices > 0`
+confirms genuine multi-device processing.
+
+Fleet health is exposed via `GET /agent/supervisor-status` and Tool #52
+`get_agent_supervisor_status` on `BridgeAgent`. `AgentSupervisor` also publishes
+`agent_health_report` to `AgentMessageBus` after each cycle, enabling future notification
+agents to alert operators on fleet degradation without polling.
+
+### 7.5.8 Live Mode Gate Completion + Adjudication Warm-Up
+
+**Phase 84** closes the dry-run → live-mode activation arc with two new primitives and the
+first on-chain cryptographic proof that an AI enforcement fleet achieved autonomous
+self-calibration.
+
+**`GateAttestationAnchor.sol`** is a new IoTeX L1 contract that accepts
+`attestation_hash = SHA-256(consecutive_clean || gate_n || divergence_rate || timestamp_ns)`.
+This hash binds the fleet's gate readiness state — how many consecutive non-divergent
+adjudications were accumulated, under what divergence rate tolerance, at what threshold —
+immutably to IoTeX testnet. The first `recordGateAttestation()` transaction is the
+first cryptographic proof of autonomous AI fleet self-calibration in competitive gaming.
+Anti-replay is enforced by unique constraint on `attestationHash`.
+
+**`AdjudicationWarmUpRunner`** allows the operator to fire a pre-activation dry-run batch
+against the N most recently active devices before setting `AGENT_DRY_RUN=false`. The
+`WarmUpReport` exposes `llm_available: bool` (W1 mitigation) — if `False`, the Anthropic
+client is missing and warm-up ran via `_rule_fallback` only. The operator must confirm
+`llm_available=true` before any live ruling is issued.
+
+**`GET /agent/gate-readiness`** is a composite endpoint aggregating three signals:
+
+| Signal | Source | Role |
+|--------|--------|------|
+| `validation_gate` | `store.get_validation_gate_status()` | consecutive_clean / gate_n progress |
+| `fleet_health` | `AgentSupervisor.check_fleet_health()` | ALL_HEALTHY / DEGRADED / CRITICAL |
+| `gate_attestations_count` | `gate_attestations` SQLite table | on-chain proof count |
+
+`overall_ready = gate_passed AND fleet_health not in (CRITICAL, UNKNOWN)`. Tool #53
+`get_gate_readiness` exposes the same composite to the BridgeAgent LLM for natural-language
+queries. Post-Phase-84, the operator has a single authoritative primitive to answer:
+*"Is this fleet ready for live enforcement?"*
+
+**End-to-end gate activation sequence:**
+```
+1. Run POST /agent/warm-up  → confirm llm_available=true, completed > 0
+2. Check GET /agent/gate-readiness → confirm overall_ready=true
+3. SET AGENT_DRY_RUN=false via POST /agent/config
+4. Record attestation_hash on GateAttestationAnchor.sol → irreversible on-chain proof
+```
+
+**Phase 87** completes the on-chain publication path. `AdjudicationWarmUpRunner.run_warm_up(chain=chain_client)` now accepts an optional chain client: after the adjudication batch it calls `_anchor_gate_on_chain()`, which reads the current validation gate state, computes
+`attestation_hash = compute_gate_attestation_hash(consecutive_clean, gate_n, divergence_rate, timestamp_ns)`,
+calls `chain.record_gate_attestation_on_chain()`, and on success stores the row in `gate_attestations` with the confirmed `on_chain_tx`. The `WarmUpReport` exposes two new fields: `on_chain_published: bool` and `on_chain_tx: str | None`.
+
+W1 invariant: the `attestation_hash_hex` is computed once and passed identically to both the chain call and the SQLite insert — it is never recomputed between the two, ensuring the on-chain record and the SQLite row are cryptographically identical regardless of any config drift.
+
+`chain.py` method `record_gate_attestation_on_chain()` converts `divergence_rate` to `uint32` millis (`int(rate * 1000)`) and `timestamp_ns` to `uint64` seconds to match `GateAttestationAnchor.sol`'s integer-only storage.
+
+**GateAttestationAnchor.sol LIVE: `0xA39d00D3FF8C579840Fa02C01Adf06162630a449`** (IoTeX testnet, deployed Phase 87, operator verified).
+
+Bridge: 1282→1288 (+6 Phase 84 tests) → 1296→1300 (+4 Phase 87 tests). Hardhat: 404→408 (+4 Phase 84 tests). Contracts: 32 ALL LIVE.
+
+**Phase 88** adds the Adjudication Campaign Tracker and Divergence Instrumentation layer. The `ruling_validation_log` table gains a `divergence_reason TEXT` column populated by the new `_extract_divergence_fields(evidence)` function in `session_adjudicator_validator.py`. When a divergence is recorded, `_extract_divergence_fields` captures which non-nominal evidence signals drove the LLM away from `_rule_fallback`: `hard_cheat_codes`, `advisory_codes`, `class_j_ml_bot_risk` (when ≠ LOW), `ml_bot_candidate`, `ceremony_integrity_failed`, `enrollment_status` (when ≠ eligible), and `risk_label`. Fully nominal evidence returns `"{}"` — the expected baseline for real human sessions.
+
+`store.get_campaign_status(gate_n, max_divergence_rate)` provides a single-call campaign snapshot: `consecutive_clean`, `progress_pct` (consecutive_clean / gate_n × 100), `estimated_sessions_to_gate` (⌈remaining / (1 − divergence_rate)⌉), `verdict_breakdown`, `divergence_breakdown` (aggregated non-nominal fields across all diverged sessions), `recent_sessions` (last 10 rows), and a human-readable `campaign_note`. All fields are derived atomically from the same `get_validation_summary()` snapshot (W1 mitigation: no drift between `consecutive_clean` and divergence counts).
+
+The campaign tracker is exposed as `GET /agent/campaign-status` and as Tool #55 `get_campaign_status` on `BridgeAgent`, giving operators and the LLM a single endpoint for campaign health at any point in the N=100 validation run.
+
+Bridge: 1300→1306 (+6 Phase 88 tests).
+
+**Phase 89** introduces the `ProtocolIntelligenceAgent` — the first unified protocol health synthesizer in VAPI. Rather than requiring operators to consult six separate endpoints (validation gate, fleet health, corpus status, Class J assessments, shadow log, triage report), Phase 89 collapses all streams into a single `protocol_health_score` (0–100). The formula is: `100 × (0.35·gate_progress + 0.25·fleet_health + 0.20·divergence_clarity + 0.10·corpus_pass + 0.10·class_j_confidence)`, plus up to +5 bonus from Phase 90 `shadow_pass_score` and +5 from Phase 91 `triage_confidence_score` (capped at 100). `ready_for_live_mode = score ≥ 85 AND gate_passed AND fleet ≠ CRITICAL/UNKNOWN`. The `bottleneck` field names the lowest-scoring component, giving operators a single actionable target. Reports are persisted to `protocol_intelligence_reports` and exposed via `GET /agent/protocol-intelligence` and Tool #56 `get_protocol_intelligence`.
+
+**Phase 90** closes the enforcement validation loop with Live Mode Shadow Enforcement. When `ENFORCEMENT_SHADOW_MODE=true`, BLOCK verdicts from `RulingEnforcementAgent` are logged to `shadow_enforcement_log` instead of calling `PHGCredential.suspend()`. Each row records `device_id`, `ruling_id`, `commitment_hash`, `would_have_suspended=1`, `duration_s` (24h default, 7d for confirmed warmup attackers), and `warmup_attack_score`. Operators review `GET /agent/shadow-enforcement-log` to validate the false-positive rate before setting `ENFORCEMENT_SHADOW_MODE=false` for real enforcement. The `shadow_pass_score` (fraction of shadow blocks where warmup_attack_score < 0.7) feeds into Phase 89's `protocol_health_score` as a bonus component, creating a synergistic readiness signal: shadow mode data automatically improves the protocol intelligence score as the system accumulates clean BLOCK evidence.
+
+**Phase 91** adds the `DivergenceTriageAgent` — cross-session adversarial pattern detection built on Phase 88's `divergence_reason` data. Every 5 minutes, the agent queries `ruling_validation_log` for devices with recorded divergences and classifies each into three pattern tiers: **ML-bot cluster** (≥2 sessions with `class_j_ml_bot_risk=HIGH`), **cheat cluster** (≥1 session with non-empty `hard_cheat_codes`), and **enrollment anomaly** (≥3 sessions with `enrollment_status≠eligible`). Devices crossing any threshold are flagged `escalated=1` as immediate SessionAdjudicator ruling candidates. The `triage_confidence_score` (fraction of triage reports with no escalation) feeds into Phase 89's `protocol_health_score`, completing the synergistic chain: Phase 88 instruments divergence → Phase 91 classifies patterns → Phase 89 synthesizes health → operator sees single readiness number.
+
+Bridge: 1306→1330 (+8 Phase 89 + +8 Phase 90 + +8 Phase 91 tests).
+
+**Phase 92** introduces the `LiveModeActivationPipeline` — a tamper-evident audit trail for enforcement activation decisions. Every 5 minutes, the pipeline reads Phase 89's `ready_for_live_mode` and records the result to `live_mode_activation_log` with the full `protocol_health_score`, `bottleneck`, and `blocking_conditions`. When an operator is ready to activate live enforcement, `POST /agent/request-activation` records their intent in the audit log before they set `AGENT_DRY_RUN=false`. This creates a verifiable sequence: Phase 89 report (readiness evidence) → activation log entry (operator intent) → GateAttestationAnchor.sol on-chain record (cryptographic proof) — a full tamper-evident activation audit trail across SQLite and IoTeX L1.
+
+**Phase 93** adds the Protocol Health Score dashboard panel to the frontend. The `useProtocolIntelligence` hook polls `GET /agent/protocol-intelligence` every 30 seconds and renders a `ProtocolHealthPanel` with a live circular score gauge (0–100, color-coded green/orange/red), per-component percentage bars (gate_progress, fleet_health, divergence_clarity, corpus_pass, class_j_confidence), a `ready_for_live_mode` READY/NOT READY indicator, and a triage escalation count badge from `GET /agent/triage-report`. Operators can see the complete enforcement readiness state at a glance without querying eight separate endpoints.
+
+**Phase 94** closes the reactive triage loop: `DivergenceTriageAgent` already publishes `divergence_pattern_detected` to the bus when a device crosses an escalation threshold. Phase 94 adds a `_listen_triage_bus()` subscriber in `SessionAdjudicator` that fires an immediate out-of-cycle `_adjudicate_device_directly()` ruling when a triage escalation arrives. A per-device `_TriageRateBucket` (token bucket, 1/hour default, 1000-entry LRU cap to prevent memory leaks from synthetic device_ids) ensures the reactive path cannot be flooded. Every escalation attempt — whether it fires a ruling or is rate-limited — is logged to `escalation_ruling_log` (`was_deferred=1` for rate-limited entries). The full Phase 91→94 chain latency is: divergence detected → triage pattern classified → bus publish (<1ms) → reactive adjudication (<10s) — collapsing the previous 10-minute polling gap to under 15 seconds end-to-end.
+
+Bridge: 1330→1344 (+8 Phase 92 + 0 Phase 93 + 6 Phase 94 tests).
+
+**Phase 95** introduces the Activation Audit Verifier — the final link in the enforcement readiness chain. `store.get_activation_audit_summary()` cross-references two independent data sources: (1) `live_mode_activation_log` (Phase 92), specifically the timestamp of the first `ready_for_live_mode=True` entry, and (2) `gate_attestations` (Phase 84/87), specifically the count and latest timestamp of on-chain gate attestations. `audit_valid=True` is returned only when all three conditions hold: a `ready_for_live_mode=True` entry exists, an on-chain gate attestation exists, and the ready-check timestamp precedes the attestation timestamp — verifying that the protocol was independently assessed as ready before the cryptographic anchor was created. A chronological violation (`attestation_at < first_ready_check_at`) returns `audit_valid=False` with an explicit `predates` message.
+
+The `GET /agent/activation-audit` endpoint (Tool #61 `get_activation_audit`) exposes this summary to operators and CI pipelines. `VAPITournamentGate.verify_activation_audit()` (SDK Phase 95) wraps the endpoint into `ActivationAuditResult` — a fail-safe dataclass that never raises. Tournament CI pipelines can call `gate.verify_activation_audit().audit_valid` as a pre-condition gate for setting `AGENT_DRY_RUN=false`, creating a complete programmable enforcement readiness certificate.
+
+The full Phase 89→95 readiness chain is: **Phase 89** synthesizes health score → **Phase 90** validates shadow enforcement rate → **Phase 91** classifies divergence patterns → **Phase 92** logs activation intent → **Phase 87** anchors on-chain → **Phase 95** cross-verifies chronological sequence. Every link is independently queryable; `audit_valid=True` confirms all are intact.
+
+Bridge: 1344→1350 (+6 Phase 95 tests). SDK: 73→77 (+4 Phase 95 SDK tests).
+
+**Phase 96** introduces the Enforcement Readiness Certificate (ERC) — and fixes the Phase 95 W1 bug. The W1 bug: `get_activation_audit_summary()` queried ALL `gate_attestations` without filtering by timestamp, meaning pre-readiness infrastructure test anchors (Phase 84/87 testing) could permanently produce `audit_valid=False` even when the protocol legitimately reached readiness. The fix: `WHERE created_at >= first_ready_at` — only attestations after the first readiness event count toward `audit_valid`. The ERC is the first portable, operator-signed cryptographic proof of AI enforcement readiness. `POST /agent/enforcement-certificate` computes `audit_hash = SHA-256(canonical JSON of audit fields)` and `hmac_sig = HMAC-SHA256(audit_hash, operator_api_key)`, persists the cert with a configurable TTL (default 24h), and returns the signed artifact. `GET /agent/enforcement-certificate` retrieves the latest cert with `is_expired` advisory. `VAPITournamentGate.create_enforcement_certificate()` and `.get_enforcement_certificate()` wrap both endpoints (SDK Phase 96, never raise, return `EnforcementReadinessCertificate` dataclass). Tournament operators can verify the ERC without VAPI infrastructure: recompute `hmac_sig = HMAC-SHA256(audit_hash, shared_key)` and compare. Tool #62 `get_enforcement_certificate`. Bridge: 1350→1358 (+8 tests). SDK: 77→81 (+4 tests).
+
+**Phase 97** introduces the Gated Live Mode Transition — the first enforcement gate that makes `AGENT_DRY_RUN=false` physically conditional on protocol readiness. `POST /agent/config?dry_run=false` now evaluates three conditions atomically before accepting the transition: (1) `gate_passed=True` — the consecutive_clean gate has been reached and the divergence rate is within tolerance; (2) `cert_valid=True` — a non-expired EnforcementReadinessCertificate (Phase 96) with `audit_valid=True` exists; (3) `audit_valid=True` — the Phase 95 chronological invariant is satisfied. Any condition failure returns HTTP 422 with a `blocking` array identifying which conditions failed. On approval, `cfg.agent_dry_run_mode = False` and a `live_mode_enabled` event is published to `AgentMessageBus` — `SessionAdjudicator` and `RulingEnforcementAgent` each subscribe via `_listen_live_mode_bus()` and shift mode within <1ms, without waiting for the next poll cycle. `dry_run=True` is always accepted (restore path). Every attempt — approved or blocked — is logged to `live_mode_guard_log` with `operator_key_hash` (first 16 chars of SHA-256 of api_key), enabling full operator accountability. `GET /agent/live-mode-guard` returns the audit log. Tool #63 `get_live_mode_guard_log`. Bridge: 1358→1364 (+6 tests).
+
+**Phase 98** introduces the Epistemic Consensus Protocol — the first formal multi-agent consensus gate for irreversible enforcement decisions in VAPI. Before any BLOCK verdict commits to enforcement action, `SessionAdjudicator._epistemic_consensus()` queries three independent agents and computes a weighted agreement score: `ClassJDetector` (0.40 weight, HIGH=1.0/MEDIUM=0.5/LOW=0.0), `DivergenceTriageAgent` (0.40, escalated=1.0/0.0), `AgentSupervisor` (0.20, ALL_HEALTHY=1.0/DEGRADED=0.5/CRITICAL=0.0). If `consensus_score < threshold` (default 0.60, configurable via `EPISTEMIC_CONSENSUS_THRESHOLD`), BLOCK is downgraded to HOLD — a false-positive protection layer that requires independent corroboration before irreversible suspension. Every consensus decision is persisted to `epistemic_consensus_log` with the full score breakdown. The gate fires in both the standard adjudication path (`_process_ruling_request`) and the reactive/warm-up path (`_adjudicate_device_directly`). The design ensures that a single LLM ruling cannot unilaterally block a device without corroborating signals from the ML-bot detector and the divergence classifier. `GET /agent/epistemic-consensus-log` exposes the audit trail; `downgraded_count` tracks how often the protection layer fired. Tool #64 `get_epistemic_consensus_log`. Bridge: 1364→1372 (+8 tests).
+
+**Phase 99A** lays the AGaaS (Agentic-as-a-Service) economic foundation: `VAPIToken.sol` (ERC-20, 1B VAPI max supply, `completeTGE()` irrevocably seals minting — gated until separation ratio > 1.0 confirmed), `VAPIOperatorRegistry.sol` (10,000 VAPI minimum stake, 50% slash-burn / 50% claimant, 30-day deregister cooldown, ReentrancyGuard CEI pattern), `VAPIHardwareCertRegistry.sol` (hardware profiles keyed by profileHash, certLevel 1=controller / 2=controller+GSR, `isCertified()` is pure view — the first hardware-level DePIN composability primitive in competitive gaming: tournament contracts gate hardware with a single `require(certRegistry.isCertified(profileHash))`). Bridge-side: `operator_registrations` SQLite table + `insert_operator_registration` + `get_operator_status`; `GET /agent/operator-status`; Tool #65 `get_operator_status`. Config: `vapi_token_address`, `operator_registry_address`, `hardware_cert_registry_address`. Hardhat: 408→420 (+12). Bridge: 1372→1378 (+6). openapi: v3.0.0-phase99a.
+
+### 7.5.9 BridgeAgent and Alert Dispatch
 
 `BridgeAgent` (`claude-sonnet-4-6`) exposes natural-language operator intelligence
-through 17 deterministic tool bindings over bridge data, a Server-Sent Events streaming
+through 40 deterministic tool bindings over bridge data, a Server-Sent Events streaming
 endpoint (`GET /operator/agent/stream`), and an autonomous `react()` path that
 interprets `BIOMETRIC_ANOMALY` and `TEMPORAL_ANOMALY` events without operator input.
 All high-frequency detection (L2–L5) remains deterministic; the LLM operates only at
@@ -977,6 +1289,110 @@ ICM-42605 IMU, TSL2572 lux, GPS) versus the DualShock Edge (schema v2, kinematic
 
 This confirms VAPI's core design claim: the verification mechanism is device-agnostic;
 the detection surface is device-specific.
+
+### 7.5.10 DataCuratorAgent and Data Sovereignty Layer (Phase 69/70)
+
+Phase 69 introduces the Data Sovereignty Layer — a complete DePIN economics stack built
+on top of the Phase 68 enforcement infrastructure. The layer comprises six new smart
+contracts and a Python background agent operating as a fifth parallel task in the bridge
+asyncio event loop.
+
+**DataSovereigntyRegistry.sol** records an immutable on-chain data sovereignty pledge for
+each device (timestamp, schema version, jurisdiction hash). Once registered, the pledge
+cannot be modified or deleted — any device's historical data licensing rights can be
+verified against the timestamp-anchored record. Three licensing tiers are defined:
+MANUFACTURER (L1, raw sensor export), DEVELOPER (L2, feature-processed export), and
+GAMER (L3, anonymized aggregate only).
+
+**Native VAPI Oracles.** Three oracle contracts — HumanityOracle, RulingOracle, and
+PassportOracle — bridge the off-chain PITL detection stack to any on-chain consumer.
+Each oracle exposes a `getState(bytes32 deviceId)` view method that any IoTeX contract
+can call without permission: tournaments, DAOs, insurers, or third-party validators. All
+three oracles are updated by the DataCuratorAgent each poll cycle (default: every 5
+minutes) when oracle publication is enabled.
+
+**VAPIRewardDistributor.sol** distributes DePIN token rewards using a stacked multiplier
+model: passport held (1.5×) → enrollment complete (2.0×) → clean streak (2.5×) → MPC
+verified (1.25×) → tournament gate passed (3.0×). The multipliers apply sequentially —
+a device satisfying all five conditions receives approximately 15.75× the base award.
+Device eligibility is gated: a device must hold a PHGCredential and not be suspended.
+
+**VAPIDataMarketplace.sol** implements three-tier data licensing: 70% of purchase proceeds
+go to the device pool (proportional to eligibility_score), 30% to the protocol treasury.
+All marketplace state is stored on-chain; licenses are non-transferable per IoTeX ERC-1155
+semantics.
+
+**DataCuratorAgent** is a Python asyncio background agent (started in the main event loop
+via Phase 70 agent wiring) that polls the SQLite store every 5 minutes to:
+1. Classify all device sessions into a 7-class taxonomy (SESSION_DATA, BIOMETRIC_DATA,
+   BEHAVIORAL_DATA, ANOMALY_DATA, CALIBRATION_DATA, TOURNAMENT_DATA, AUDIT_DATA)
+2. Build a `data_lineage` provenance record for each session (quality_score 0.0–1.0,
+   curator_note, data_type)
+3. Compute token eligibility (nominal_sessions, clean_streak, multiplier stack) and write
+   to the `token_eligibility` table
+4. Publish oracle updates on-chain when `curator_oracle_publish=True`
+
+**Phase 70 Agent Wiring.** Prior to Phase 70, DataCuratorAgent, SessionAdjudicator, and
+RulingEnforcementAgent existed in code but were not started in `main.py`. Phase 70 wires
+all three into the bridge asyncio event loop as independently supervised tasks, each with
+a `_task_done_handler` CRITICAL callback ensuring a crash in one agent does not kill the
+others. DataCuratorAgent always starts (self-guarded via `curator_enabled`);
+SessionAdjudicator starts when `operator_api_key` is configured; RulingEnforcementAgent
+starts when `ruling_enforcement_enabled=True`.
+
+**VAPIProtocolLens.sol** (Phase 70) collapses the five-call pattern (HumanityOracle +
+RulingOracle + PassportOracle + VAPIRewardDistributor + PHGCredential) required by any
+tournament integration into a single pure-view eth_call returning a `DeviceProtocolState`
+struct. The `isFullyEligible(bytes32 deviceId)` function returns a single boolean:
+`isNominal && isEligible && passportOnChain`. All oracle subcalls are wrapped in try/catch
+— a single oracle outage returns a safe zero-value default rather than reverting the lens
+call. VAPIProtocolLens has zero storage state; gas cost is purely the four static calls
+to subordinate contracts.
+
+**VAPIGovernanceTimelock.sol** (Phase 70) interposes a mandatory 48-hour delay before any
+operator transition takes effect on Phase 69 contracts (see §9.7 for governance model).
+
+### 7.6 SDK v3.0.0 Tournament Operator Interface (Phase 85)
+
+Phase 85 advances the VAPI Python SDK from v2.0.0-phase64 to v3.0.0-phase85, adding three
+operator-facing classes that bridge the gap between the bridge service and external tournament
+infrastructure. All three classes are fail-safe: they never raise to the caller, and each
+returns a structured result object with an `error` field on failure.
+
+**VAPITournamentGate** wraps `GET /agent/gate-readiness` and returns a `GateReadinessResult`
+struct. The struct surfaces the composite readiness picture: `overall_ready` (bool),
+`dry_run_active` (bool), `gate_attestations_count` (int), and nested `validation_gate` and
+`fleet_health` dicts matching the bridge API schema. The `is_ready()` convenience method
+collapses this to a single boolean, suitable for use as a pre-submission gate in tournament
+CI pipelines. This class, combined with `GateAttestationAnchor.sol` (Phase 84), constitutes
+the first programmatic AI Enforcement Readiness Certificate callable from external code.
+
+**VAPICeremonyAudit** wraps `VAPIZKProof.verify_ceremony_integrity()` behind a clean
+`CeremonyAuditResult` dataclass. It is intended for tournament operators who need to verify
+that the ZK proving key in use has not been substituted since the MPC ceremony was anchored
+on IoTeX. On `on_chain_match=False`, the operator should treat all VAPI rulings from that
+bridge instance as unverifiable until the ceremony is re-run.
+
+**VAPIRulingStream** is an async generator that yields `RulingStreamEvent` objects from the
+`GET /operator/agent/stream` SSE endpoint. W1 mitigation: the stream tracks `Last-Event-ID`
+across reconnects, sending it as an HTTP header on each new connection so that the bridge
+can replay missed events after a TCP partition. Reconnects use exponential back-off (1–60 s).
+The generator exits cleanly on `asyncio.CancelledError`, making it safe to cancel from any
+asyncio task.
+
+```python
+# Tournament operator CI example
+gate = VAPITournamentGate("http://bridge:8000", api_key="op-key")
+result = gate.check_gate_readiness()
+if not result.overall_ready:
+    sys.exit(f"Bridge not gate-ready: {result.validation_gate}")
+
+# Async ruling consumer
+stream = VAPIRulingStream("http://bridge:8000", api_key="op-key")
+async for event in stream.listen():
+    if event.event_type == "ruling" and event.data.get("verdict") == "BLOCK":
+        revoke_tournament_access(event.data["device_id"])
+```
 
 ### 7.9 Security Hardening (Phase 58)
 
@@ -1423,12 +1839,12 @@ Phase 48) — see §8.3 for the full detection matrix and §9.5 for Phase 48 fin
 
 | Suite | Count | Scope |
 |-------|-------|-------|
-| Bridge pytest | **1076** | Full pipeline (asyncio bridge, store, agent, enforcement, federation, L6, L2B/L2C/CalibAgent, living calibration Phase 38, multi-button L5 Phase 39, L6 calibrated thresholds Phase 43, L2C dead-zone phantom weight fix Phase 44, accel_magnitude_spectral_entropy Phase 46, professional adversarial Phase 48, tremor FFT window widening Phase 49, agentic intelligence Phase 50, game-aware profiling Phase 51, resilience hardening Phase 52, serialization/chain/coverage Phase 53, runtime hardening Phase 54, ioID device identity Phase 55, ZK tournament passport Phase 56, press_timing_jitter_variance Phase 57, security hardening Phase 58, My Controller digital twin Phase 59, My Controller enhanced viz Phase 60A, session replay + feature history Phase 61, player enrollment + ZK C3 Phase 62, L6b neuromuscular reflex Phase 63, Autonomous Intelligence Layer Phase 65) |
-| SDK pytest | **55** | Self-verifying client SDK (Phase 64: 0x31/0x32 inference codes, VAPIEnrollment, VAPIZKProof, L2B self-verify layer; Phase 65: VAPIAgent + AgentRuling, PoAC-gated commitment hashes) |
-| Hardhat | 354 | All Solidity contracts |
+| Bridge pytest | **1207** | Full pipeline (asyncio bridge, store, agent, enforcement, federation, L6, L2B/L2C/CalibAgent, living calibration Phase 38, multi-button L5 Phase 39, L6 calibrated thresholds Phase 43, L2C dead-zone phantom weight fix Phase 44, accel_magnitude_spectral_entropy Phase 46, professional adversarial Phase 48, tremor FFT window widening Phase 49, agentic intelligence Phase 50, game-aware profiling Phase 51, resilience hardening Phase 52, serialization/chain/coverage Phase 53, runtime hardening Phase 54, ioID device identity Phase 55, ZK tournament passport Phase 56, press_timing_jitter_variance Phase 57, security hardening Phase 58, My Controller digital twin Phase 59, My Controller enhanced viz Phase 60A, session replay + feature history Phase 61, player enrollment + ZK C3 Phase 62, L6b neuromuscular reflex Phase 63, Autonomous Intelligence Layer Phase 65, Ruling Enforcement Pipeline Phase 66, MPC ceremony hardening + auto-reinstate Phase 67, ZKVerifier wiring + agent config + BridgeAgent tools #36–40 Phase 68, Data Sovereignty Layer + DataCuratorAgent Phase 69, Governance Timelock + Protocol Lens + BridgeAgent tools #41–45 + validation-stats Phase 70) |
+| SDK pytest | **63** | Self-verifying client SDK (Phase 64: 0x31/0x32 inference codes, VAPIEnrollment, VAPIZKProof, L2B self-verify layer; Phase 65: VAPIAgent + AgentRuling, PoAC-gated commitment hashes; Phase 67: verify_ceremony_integrity(); Phase 69: VAPIDataCurator client) |
+| Hardhat | **396** | All Solidity contracts (Phase 66: RulingRegistry.sol +10 tests; Phase 67: CeremonyRegistry.sol +8 tests; Phase 69: 6 Phase 69 contracts +12 tests; Phase 70: VAPIGovernanceTimelock + VAPIProtocolLens +12 tests) |
 | Hardware | 28 | Physical DualShock Edge (gated `@pytest.mark.hardware`, excluded from CI) |
 | E2E | 14 | End-to-end simulation (requires Hardhat node; excluded from CI) |
-| **Total** | **~1,527** | *~1,499 in CI (excluding 28 hardware, 14 E2E counted separately)* |
+| **Total** | **~1,671** | *~1,643 in CI (excluding 28 hardware, 14 E2E counted separately)* |
 
 Note: Phase 17 added 45 new bridge tests: 18 for `l2b_imu_press_correlation` (L2B
 IMU-button causal latency oracle), 15 for `l2c_stick_imu_correlation` (L2C stick-IMU
@@ -1576,7 +1992,9 @@ refines these thresholds every 6 hours from accumulated NOMINAL records, bounded
 bridge's computation of biometric outputs, but requires the ZK artifact files
 (`PitlSessionProof.wasm`, `PitlSessionProof_final.zkey`) to be present and the
 `PITLSessionRegistry` contract to be deployed. Without these, the ZK guarantee is
-inactive. See §10.2 and §10.3 for the path to full-ZK deployment.
+inactive. Phase 67 upgrades the ceremony from single-contributor to 3-contributor MPC
+with an IoTeX-block beacon anchor (§10.3). The artifact provenance is now on-chain and
+independently auditable via `CeremonyRegistry.sol`.
 
 **PHGCredential bridge-key is immutable — key compromise enables malicious suspension.**
 The `bridge` address in `PHGCredential.sol` is set at construction time and cannot be
@@ -1661,6 +2079,749 @@ timing achieves 0% detection across L4, L5, and L2B. This gap (biometric transpl
 coupling) requires per-player enrolled multivariate templates with inter-person separation
 ratio > 1.0 (current ratio: 0.362) to close. See `docs/professional-adversarial-analysis.md`.
 
+### 9.6 Class J — GaussianHMM ML-Bot Detection (Phase 81)
+
+Phase 81 addresses the first ML-model-as-adversary in the VAPI corpus. **Class J** uses
+a `GaussianHMM` trained on real human IMU data, evading L4 Mahalanobis because the
+feature distribution is fitted to human statistics.
+
+**Discriminating signal: temporal entropy variance.** Human psychomotor control during
+gameplay produces *rhythmically structured* state transitions — game events (spike plays,
+defensive adjustments) create clustering in the entropy time series. GaussianHMM sampling
+produces pathologically *uniform* transitions with near-zero variance.
+
+```
+Feature: temporal_state_transition_entropy_variance
+  Human: variance > 0.15  (game events create clustering — rhythmic structure)
+  Class J (HMM): variance < 0.02  (uniform transitions — no cognitive decision events)
+
+Risk thresholds:
+  HIGH   ≤ 0.05   — Class J signature detected
+  MEDIUM ≤ 0.15   — Ambiguous; monitor
+  LOW    > 0.15   — Human-consistent
+```
+
+`ClassJDetector` maintains a rolling deque of N=10 session entropy windows per device,
+computed every 5-minute poll cycle. On HIGH risk, publishes `class_j_high_risk_detected`
+to `AgentMessageBus`. `SessionAdjudicator` enriches LLM evidence with
+`class_j_ml_bot_risk` and `ml_bot_candidate=True` (HIGH only), increasing BLOCK
+confidence for ML-bot candidates.
+
+**Per-layer detection matrix (Class J):**
+| Layer | Detection | Notes |
+|-------|-----------|-------|
+| L4 Mahalanobis | 0% | HMM fitted to human feature distribution — L4 passes |
+| L5 Temporal Rhythm | Partial | HMM entropy near human range; CV passes |
+| L2B IMU-Press | Partial | IMU generated independently → limited coupling |
+| Class J Detector | **HIGH** | Entropy variance 0.0004 vs human >0.15 |
+
+**Phase 82 candidate:** `SessionAdjudicator` subscribes to `class_j_high_risk_detected`
+bus event and fires an immediate out-of-cycle LLM ruling (Reactive Adjudication
+Interrupt), collapsing Class J detection → ruling → enforcement → federation chain from
+15+ minutes to <5 seconds end-to-end.
+
+### 9.7 DePIN Governance Model (Phase 70)
+
+Phase 70 addresses a structural governance gap: all six Phase 69 contracts expose a
+single `operator` key capable of instant, irreversible mutations (oracle verdict overrides,
+marketplace treasury drains, reward parameter changes). A single compromised key can
+devastate the protocol state with no recourse window.
+
+**VAPIGovernanceTimelock.sol** interposes a mandatory 48-hour delay (TIMELOCK_DELAY = 172800
+seconds) before any operator transition on a Phase 69 contract takes effect:
+
+```
+queueTransition(target, newOperator)   → schedules with eta = block.timestamp + 48h
+executeTransition(queueId)             → callable only after eta; operator only
+cancelTransition(queueId)              → callable by operator OR co-signer (emergency)
+```
+
+The co-signer key has **cancel-only access** — it cannot queue new transitions or execute
+existing ones. This separation ensures that even if the co-signer is controlled by an
+adversary, the worst outcome is blocking a legitimate transition (recoverable), not
+executing an unauthorized one (catastrophic). The operator can replace the co-signer
+address through the normal 48-hour queue, preventing co-signer key lock.
+
+**PHGCredential exclusion.** PHGCredential.sol is explicitly excluded from the timelock
+governance scope. The bridge address on PHGCredential is immutable post-deploy and
+cannot be changed through `setOperator()` — timelock governance would create a false
+sense of security for an invariant that the contract itself enforces.
+
+**Security properties guaranteed at the contract level:**
+- CEI (Checks-Effects-Interactions) pattern: `t.executed = true` is set **before** the
+  external `setOperator()` call on the target contract, preventing reentrancy
+- Anti-replay: queueId monotonically increments; executed/cancelled flags prevent
+  re-execution of any historical transition
+- Overflow safety: `block.timestamp + TIMELOCK_DELAY` cannot overflow uint256 within
+  any meaningful operational timeframe (~8.5 × 10^49 years at 1-second blocks)
+- No griefing via co-signer pre-cancellation: the operator can re-queue any cancelled
+  transition; the co-signer's cancel path cannot permanently block a legitimate transition
+
+**Trust model change.** Before Phase 70, VAPI's trust model required trusting a single
+operator private key for all six Phase 69 contracts. After Phase 70, the trust model
+requires: (1) 48 hours of public observation time, (2) co-signer approval-by-silence
+(absence of cancel), and (3) operator key security. This is meaningfully stronger — the
+attack surface shrinks from "instant unilateral mutation" to "48-hour visible mutation."
+
+**VAPIProtocolLens trust.** VAPIProtocolLens.sol has zero mutable state — all four
+oracle addresses are set at constructor time as `immutable` fields. Post-deployment, the
+lens cannot be pointed at different oracle contracts. Any oracle address changes require
+deploying a new lens instance. This guarantees that any tournament integration pointing
+at a known lens address receives data from the expected oracle set permanently.
+
+**Oracle failure posture (Phase 71 M-1 remediation).** A post-Phase-70 security review
+identified that `getDeviceState()` and `isFullyEligible()` previously defaulted `isEligible`
+to `true` when the RulingOracle was unreachable — a fail-open posture that could allow a
+suspended device to pass the eligibility gate during transient oracle downtime. Phase 71
+fixes this to fail-closed: `isEligible` defaults to `false` on oracle failure, and a new
+`oracleAvailable` boolean field in `DeviceProtocolState` lets callers distinguish
+"verified eligible" from "oracle unreachable — gate indeterminate." Tournament integrations
+should treat `oracleAvailable = false` as a gate-hold signal and retry rather than
+proceeding with an unverified eligibility state.
+
+---
+
+### 9.8 PHGCredential Bridge-Layer Multi-Sig (Phase 72)
+
+PHGCredential.bridge is declared `immutable` in Solidity — set once at constructor
+time and cannot be changed post-deploy. This means VAPIGovernanceTimelock cannot
+govern PHGCredential.suspend() the same way it governs Phase 69 contracts. To reduce
+the single-key risk on PHGCredential suspensions, Phase 72 implements a multi-sig
+safeguard at the **bridge (Python) layer**.
+
+**Multi-sig flow:**
+```
+POST /operator/suspension/propose   → inserts pending_suspensions row, returns proposal_id
+POST /operator/suspension/confirm/{id} → increments confirmation count
+POST /operator/suspension/execute/{id} → calls PHGCredential.suspend() if confirmations ≥ threshold
+```
+
+**Configuration:** `SUSPENSION_MULTISIG_THRESHOLD` (default 1 — current behaviour).
+Set to 2 to require a second operator key confirmation before any on-chain suspension fires.
+
+**Documented limitation.** This is a software safeguard, not cryptographic enforcement.
+The second key must be physically separate from the first (different key material, different
+operator). If both keys are stored in the same `.env` file, the multi-sig provides ceremony
+but not security. Tournament operators deploying VAPI should hold the two keys in separate
+security contexts (e.g., HSM + operator laptop, or two separate team members).
+
+**Audit trail.** Every proposal, confirmation, and execution is recorded in the
+`pending_suspensions` SQLite table with timestamps and proposer fingerprint (truncated
+SHA-256 of the API key — non-reversible). This provides an immutable governance audit trail
+for every suspension decision from the moment of proposal to on-chain execution.
+
+Tournament Condition 3 (§ Tournament Readiness) is now CLOSED IN CODE. The limitation is
+documented honestly: governance risk for PHGCredential is reduced (software multi-sig),
+but not eliminated (not cryptographic enforcement). This is the strongest achievable
+position given PHGCredential's immutable bridge address.
+
+---
+
+### 9.9 Synthetic Session Corpus Pipeline (Phase 86)
+
+Phase 86 addresses a practical gap in the path from `dry_run=True` to `dry_run=False`:
+the `consecutive_clean` gate requires N=100 non-divergent real-device adjudications, but
+during early deployment there are no real devices submitting sessions. The synthetic corpus
+pipeline provides a hardware-free mechanism to:
+
+1. **Verify `_rule_fallback` correctness** — 120 synthetic nominal sessions are generated
+   and each is run through `_rule_fallback`. If `failed_fallback > 0`, a rule_fallback
+   regression has been introduced by a recent code change.
+2. **Exercise the pipeline end-to-end** — `POST /agent/run-synthetic-corpus` triggers
+   `ValidationCorpusRunner`, which creates sessions, runs them through the fallback oracle,
+   and persists results to the `synthetic_sessions` table.
+3. **Provide a regression test corpus** (Phase 87 candidate) — re-running the corpus after
+   any `_rule_fallback` change with `all_nominal=False` as a failure signal.
+
+**ISOLATION INVARIANT (W1 mitigation):** Synthetic sessions are stored exclusively in the
+`synthetic_sessions` table and never inserted into `ruling_validation_log`. They do not
+affect `consecutive_clean` or `gate_passed`. The production validation gate remains strictly
+dependent on real device adjudications. `GET /agent/corpus-status` includes an explicit
+`isolation_note` field confirming this separation.
+
+This invariant is critical: a synthetic-only gate_passed would allow `AGENT_DRY_RUN=false`
+without any empirical validation of the LLM vs rule_fallback agreement on real human data.
+The isolation design ensures this path cannot occur.
+
+**Synthetic session structure.** Each session carries `enrollment_status="eligible"` and
+empty `hard_cheat_codes` / `advisory_codes` lists — the minimal evidence footprint that
+`_rule_fallback` routes to `CERTIFY (0.8)`. Biometric features are drawn from the nominal
+human range (humanity_score 0.65–0.92, L4 distances below both calibration thresholds).
+All sessions are prefixed `device_id="synthetic_<hex>"` for unambiguous identification
+in any database inspection.
+
+### 9.10 Activation Audit Verifier (Phase 95)
+
+Phase 95 closes the enforcement readiness verification chain by introducing a cross-referencing audit step that programmatically verifies the full activation sequence. The core invariant is temporal: before an operator enables live enforcement (`AGENT_DRY_RUN=false`), both of the following must have occurred in the correct order:
+
+1. **Protocol scored ready_for_live_mode=True** — recorded in `live_mode_activation_log` (Phase 92) with `protocol_health_score ≥ 85` and all gate conditions met.
+2. **On-chain gate attestation exists** — a `GateAttestationAnchor.sol` record is present in `gate_attestations` (Phase 84/87), with `created_at` timestamped *after* the first ready check.
+
+`store.get_activation_audit_summary()` queries both tables atomically and computes `audit_valid` as the conjunction of three conditions: `first_ready_check_at IS NOT NULL` (condition 1 satisfied), `gate_attestation_count > 0` (condition 2 satisfied), and `first_ready_check_at ≤ latest_attestation_at` (chronological order confirmed). A violation of the third condition — where the on-chain anchor predates the readiness determination — returns `audit_valid=False` with an explicit `predates` message and the offending timestamps.
+
+**Chronological significance.** The ordering requirement prevents a class of activation errors where an operator deploys an on-chain anchor (e.g., during testing) before the protocol has completed its validation gate. Without Phase 95, such a pre-existing attestation would be indistinguishable from a legitimate post-readiness anchor. The temporal constraint ensures the evidence chain is not retroactively satisfied.
+
+**Programmable enforcement gate.** `VAPITournamentGate.verify_activation_audit()` (SDK Phase 95) wraps `GET /agent/activation-audit` into `ActivationAuditResult` — a fail-safe dataclass that never raises. Tournament CI pipelines can gate the `AGENT_DRY_RUN=false` configuration change behind:
+
+```python
+gate = VAPITournamentGate(base_url=BRIDGE_URL, api_key=API_KEY)
+audit = gate.verify_activation_audit()
+assert audit.audit_valid, f"Activation audit failed: {audit.audit_summary}"
+# Safe to proceed with AGENT_DRY_RUN=false
+```
+
+**Test coverage.** Six bridge tests verify: empty-store field presence; `audit_valid=False` on missing ready entry; `audit_valid=False` on missing attestation; `audit_valid=True` with correct order; `audit_valid=False` on chronological violation; endpoint returns correct JSON. Four SDK tests verify: `ActivationAuditResult` defaults; response parsing; fail-safe behavior on bad URL; `audit_valid=False` propagation.
+
+Bridge: 1344→1350 (+6). SDK: 73→77 (+4). openapi: v3.0.0-phase95.
+
+### 9.11 Enforcement Readiness Certificate (Phase 96)
+
+Phase 96 introduces the Enforcement Readiness Certificate (ERC) — a portable, operator-signed cryptographic artifact that decouples tournament operator readiness verification from real-time VAPI infrastructure access.
+
+**W1 fix.** Phase 96 also resolves a latent bug in the Phase 95 `get_activation_audit_summary()` implementation: the query over `gate_attestations` used no timestamp filter, meaning pre-readiness infrastructure test anchors (created during Phase 84/87 development testing) could permanently produce `audit_valid=False`. The fix adds `WHERE created_at >= first_ready_at`, ensuring only post-readiness attestations count toward the chronological invariant.
+
+**ERC construction.** `POST /agent/enforcement-certificate` constructs the ERC as:
+```
+canonical_json = json.dumps(audit_fields, sort_keys=True)
+audit_hash     = SHA-256(canonical_json)
+hmac_sig       = HMAC-SHA256(audit_hash, operator_api_key)
+```
+The cert is stored with a configurable TTL (default 24h, `ENFORCEMENT_CERT_TTL_S` env var). UNIQUE constraint on `audit_hash` makes re-issuance idempotent. `is_expired=True` is advisory — the bridge does not block on expired certs; the operator is responsible for renewal.
+
+**Portability.** A tournament operator holding `(audit_hash, hmac_sig, shared_api_key)` can verify the cert offline by recomputing `HMAC-SHA256(audit_hash, shared_key)` and comparing with `compare_digest`. No VAPI infrastructure, no blockchain call required.
+
+**SDK.** `VAPITournamentGate.create_enforcement_certificate()` and `.get_enforcement_certificate()` return `EnforcementReadinessCertificate` (never raises). Bridge: 1350→1358 (+8). SDK: 77→81 (+4).
+
+### 9.12 Gated Live Mode Transition (Phase 97)
+
+Phase 97 closes the activation deadlock by making `AGENT_DRY_RUN=false` physically conditional on all three enforcement readiness pre-conditions being simultaneously satisfied.
+
+**Three-condition gate.** `POST /agent/config?dry_run=false` evaluates atomically:
+1. **gate_passed** — `consecutive_clean ≥ gate_n` (default 100) AND `divergence_rate ≤ max_divergence_rate`
+2. **cert_valid** — a non-expired ERC with `audit_valid=True` exists in `enforcement_certificates`
+3. **audit_valid** — `get_activation_audit_summary()` confirms the Phase 95 chronological invariant
+
+Any unsatisfied condition returns HTTP 422 with a `blocking` array identifying which conditions failed. The blocking array is also logged to `live_mode_guard_log` for operator accountability.
+
+**Fleet-wide bus broadcast.** On approval, a `live_mode_enabled` event is published to `AgentMessageBus`. `SessionAdjudicator` and `RulingEnforcementAgent` each subscribe via `_listen_live_mode_bus()` and update `cfg.agent_dry_run_mode` within <1ms — without waiting for the next 5-minute poll cycle. This ensures the entire agent fleet shifts to enforcement mode atomically.
+
+**Audit trail.** Every attempt — approved or blocked — is logged to `live_mode_guard_log` with `event_type` (transition_attempt/transition_approved/dry_run_restored), individual condition flags, `blocking_conditions` JSON, and `operator_key_hash` (first 16 chars of SHA-256 of api_key). Bridge: 1358→1364 (+6 tests).
+
+### 9.13 Epistemic Consensus Protocol (Phase 98)
+
+Phase 98 introduces the first formal multi-agent consensus gate for irreversible enforcement decisions in competitive gaming.
+
+**Problem.** Before Phase 98, a single LLM ruling could unilaterally recommend BLOCK, which the enforcement pipeline would then execute as a PHGCredential suspension. The LLM has no access to the time-series entropy signal from `ClassJDetector` or the cross-session pattern data from `DivergenceTriageAgent`. A high-confidence BLOCK from the LLM may reflect a session anomaly rather than confirmed cheating.
+
+**Weighted consensus.** `SessionAdjudicator._epistemic_consensus(device_id, proposed_verdict)` fires only when `proposed_verdict == "BLOCK"`. It queries three independent evidence sources:
+
+| Agent | Weight | Signal | Score Mapping |
+|-------|--------|--------|---------------|
+| ClassJDetector | 0.40 | entropy_variance risk_level | HIGH=1.0, MEDIUM=0.5, LOW=0.0 |
+| DivergenceTriageAgent | 0.40 | triage escalated flag | escalated=1.0, not escalated=0.0 |
+| AgentSupervisor | 0.20 | fleet_health status | ALL_HEALTHY=1.0, DEGRADED=0.5, CRITICAL=0.0 |
+
+`consensus_score = 0.40·classJ + 0.40·triage + 0.20·supervisor`. If `consensus_score < threshold` (default 0.60, configurable), BLOCK is downgraded to HOLD.
+
+**Threshold analysis.** At threshold=0.60 with only supervisor healthy and no ClassJ/triage signal: `consensus = 0.0 + 0.0 + 0.20 = 0.20 < 0.60` → HOLD. With HIGH ClassJ and healthy fleet but no triage: `consensus = 0.40 + 0.0 + 0.20 = 0.60 ≥ 0.60` → BLOCK (exactly meets threshold). With HIGH ClassJ + escalated triage: `consensus = 0.40 + 0.40 + 0.20 = 1.00` → BLOCK. This means a BLOCK requires at minimum both ClassJ HIGH and fleet healthy, or triage escalated and fleet healthy, to proceed to enforcement.
+
+**Threshold vulnerability (W1).** The 0.60 threshold is exactly reachable by ClassJ alone (`0.40 + 0.20 = 0.60`). A sophisticated adversary who accumulates HIGH ClassJ entropy variance (triggering the ClassJ gate) while deliberately keeping `divergence_count` below the triage escalation thresholds across sessions — by spacing cheating instances so they never form the `ml_bot_cluster` (≥2 HIGH) or `cheat_cluster` (≥1 hard code) or `enrollment_anomaly` (≥3 ineligible) patterns — can reach exactly-threshold consensus from a single evidence source. The three-agent design reduces to an effective one-agent gate under this suppression strategy. **Mitigation options:** (1) raise threshold to 0.65 (ClassJ-alone path yields 0.60 < 0.65 → HOLD, requiring some triage signal); (2) add a hard prerequisite: `triage_score > 0.0 OR class_j_score < 1.0` to prevent pure single-source BLOCK. Configurable via `EPISTEMIC_CONSENSUS_THRESHOLD` env var (default 0.60 — operators running sustained adversarial deployments should consider 0.65).
+
+**Scope.** The gate fires in both `_process_ruling_request()` (standard 5-min poll) and `_adjudicate_device_directly()` (reactive/warm-up paths). For non-BLOCK verdicts (CERTIFY, FLAG, HOLD), the method returns immediately without querying any agents. When `EPISTEMIC_CONSENSUS_ENABLED=false`, BLOCK passes through unchanged (operator override for scenarios where all agents are trusted).
+
+**Audit trail.** Every consensus decision — including the individual scores and whether downgrading occurred — is persisted to `epistemic_consensus_log`. `GET /agent/epistemic-consensus-log` exposes `downgraded_count` so operators can track how often the false-positive protection layer fired. Bridge: 1364→1372 (+8 tests). openapi: v3.0.0-phase98.
+
+### 9.14 AGaaS Foundation Token Stack (Phase 99A)
+
+Phase 99A pivots VAPI from a standalone anti-cheat protocol to an **AGaaS (Agentic-as-a-Service)** company in the **Verified Autonomous Physical Intelligence** category under the IoTeX DePIN umbrella. Three new smart contracts establish the economic and credential foundation.
+
+**VAPIToken.sol** — ERC-20 utility token with a 1,000,000,000 VAPI hard cap. `completeTGE()` is irreversible: it seals `mint()` permanently and pauses transfers (ERC20Pausable). Token launch (TGE) is gated by three conditions: (1) inter-person separation ratio > 1.0 confirmed (currently 0.362 — OPEN); (2) N≥100 live adjudications with zero confirmed false positives; (3) Verified Human Proof (VHP, Phase 99C) end-to-end demonstrated. **No TGE occurs in Phase 99 — testnet deployment only.**
+
+**VAPIOperatorRegistry.sol** — Cryptographic accountability for bridge operators. `MINIMUM_STAKE = 10,000 VAPI`. Slash mechanics: `slash(operator, reason)` burns 50% and transfers 50% to the slash claimant, creating economic skin-in-the-game for enforcement accuracy. Deregister requires a 30-day cooldown after `requestDeregister()` — preventing stake withdrawal during active adjudication campaigns. All state-mutating functions follow CEI (Checks → Effects → Interactions) with `ReentrancyGuard`. This is the first cryptographic accountability mechanism for AI enforcement operators in competitive gaming.
+
+**VAPIHardwareCertRegistry.sol** — On-chain hardware certification keyed by `profileHash = keccak256(manufacturer ++ model ++ firmwareVersion)`. `certLevel 1` = controller; `certLevel 2` = controller + GSR biometric grip. `isCertified(profileHash)` is a **pure view** with no gas cost to callers — the first hardware-level DePIN composability primitive in competitive gaming. Tournament contracts can gate hardware eligibility with:
+
+```solidity
+require(certRegistry.isCertified(grip.profileHash), "Hardware not certified by VAPI");
+```
+
+**Bridge integration.** `operator_registrations` SQLite table records all staking events (register/slash/deregister_request/deregister) with tx_hash and reason. `GET /agent/operator-status` exposes the latest event per operator address. Tool #65 `get_operator_status`. Config fields: `vapi_token_address`, `operator_registry_address`, `hardware_cert_registry_address`.
+
+**W1 test isolation invariant.** `completeTGE()` is irreversible — if called in a shared Hardhat fixture, all subsequent `mint()` calls on that deployment revert, cascading failures across Phase 99B/C tests that need token minting for staking. All Phase 99 Hardhat tests deploy a fresh `VAPIToken` per `describe` block using `beforeEach`.
+
+**W2 composability.** `VAPIHardwareCertRegistry.isCertified()` composes identically to `VAPIProtocolLens.isFullyEligible()` — both are pure view, both are zero-gas to integrators. A game developer can write: `require(lens.isFullyEligible(deviceId) && certReg.isCertified(profileHash))` to gate both the human credential and the hardware credential in a single modifier. Hardhat: 408→420 (+12). Bridge: 1372→1378 (+6). openapi: v3.0.0-phase99a.
+
+---
+
+### 9.15 W3bstream Integration + L7_GSR Layer (Phase 99B)
+
+Phase 99B adds three independent components that together form the DePIN data pipeline and physiological biometric layer for the AGaaS stack.
+
+**VAPIGSRRegistry.sol** — On-chain anchor for Galvanic Skin Response (GSR) biometric samples submitted by the W3bstream pipeline. `recordSample(bytes32 deviceId, uint256 arousalMillis, uint256 correlationMillis, uint256 timestamp)` is callable only by the contract owner (bridge operator key). Anti-replay is enforced by `require(!samples[deviceId][timestamp].exists)` — each device-timestamp pair is unique. `arousalMillis = index * 1000` encodes the 0.0–1.0 sympathetic arousal index as a uint256. `correlationMillis = (r + 1.0) * 500` encodes the signed Pearson r (-1.0 to +1.0) in the range 0–1000. `getSampleCount(deviceId)` and `getLatestSample(deviceId)` are public view functions.
+
+**W3bstream AssemblyScript applets.** Two WASM applets run inside the W3bstream project for IoTeX DePIN data submission:
+
+- `validate_poac_record.ts` — Receives the frozen 228-byte PoAC packet, verifies ECDSA-P256 signature over `raw[0:164]` (body only — the chain link hash invariant is preserved), and calls `PITLSessionRegistryV2.submitProof(chainLinkHash, deviceId, inferenceCode)` on IoTeX L1. Invalid signatures are rejected before any on-chain write.
+
+- `process_gsr_packet.ts` — Receives a 48-byte GSR packet (magic `0x47535201`), validates `arousalMillis ≤ 1000` and `correlationMillis ≤ 1000`, and calls `VAPIGSRRegistry.recordSample()`. Malformed packets return non-zero error codes without chain interaction.
+
+**L7_GSR feature extraction.** `gsr_feature_extractor.py` implements the code-before-hardware pattern established by L6b (Phase 63) and ClassJDetector (Phase 81). `MockGSRGrip(seed)` generates reproducible synthetic EDA signal — 4th-order LP noise with SCR events every 15–60s — for development and test. Real hardware (Ag/AgCl + ESP32-S3, ~$35 BOM) replaces `MockGSRGrip` transparently when `GSR_ENABLED=true`. `extract_l7_features(window)` returns four biometric features:
+
+| Feature | Computation |
+|---------|-------------|
+| `sympathetic_arousal_index` | Mean arousal across the window |
+| `gsr_game_event_correlation` | Mean Pearson r with game events |
+| `baseline_conductance_drift` | Linear regression slope of conductance_raw |
+| `cognitive_load_variance` | Inter-SCR interval coefficient of variance |
+
+The function **never raises** — it returns all-zero values for windows < 10 samples or on any exception. `GSR_ENABLED=false` default; all code paths are guarded by `cfg.gsr_enabled`. Inference code `0x33 GSR_CORRELATION_ABSENT` is **advisory only** — it never hard gates tournament eligibility. `GSRRegistryAgent` runs a 5-minute poll loop, stores samples to SQLite (`gsr_samples` table via `insert_gsr_sample` / `get_gsr_samples`), publishes `gsr_sample_recorded` bus events, and calls `chain.record_gsr_sample_on_chain()` only when `gsr_enabled=True`. `SessionAdjudicator._assess_gsr_risk(device_id)` (never raises, returns `{}` on empty store) enriches the evidence summary with `gsr_sympathetic_arousal` and `gsr_game_correlation` when GSR is enabled. The `GSRRegistryAgent` is wired in `main.py` behind a `gsr_enabled` guard — zero overhead when disabled.
+
+**GSR_ENABLED calibration gate.** GSR_ENABLED will remain `false` until N≥30 real calibration sessions per player confirm the arousal signal is stable and the Pearson r with game events exceeds 0.3 for human players. Current N=0 (hardware pending). Estimated BOM: $35 (Ag/AgCl electrodes + INA128 instrumentation amp + ESP32-S3 BLE module). Hardhat: 420→424 (+4). Bridge: 1378→1386 (+8). openapi: v3.0.0-phase99b.
+
+---
+
+### 9.16 VHP Soulbound Token + LayerZero Bridge (Phase 99C)
+
+Phase 99C delivers the credential layer that closes the Phase 99 AGaaS stack: a non-transferable, expiring, composable proof-of-human-identity token anchored on IoTeX and bridgeable to any LayerZero V2 destination chain.
+
+**VAPIVerifiedHumanProof.sol** — An ERC-4671 soulbound token. Key design decisions:
+
+- `mint(address to, VHPData calldata data)` is `onlyOwner` — callable only by the bridge operator key after the three gate conditions pass.
+- ALL transfer functions (`transferFrom`, `safeTransferFrom`, `approve`, `setApprovalForAll`) unconditionally revert with `"VAPIVerifiedHumanProof: soulbound"` — no approval mechanism, no operator delegation, no migration path. The credential is tied to the minting address permanently.
+- `isValid(tokenId)` returns `true` only when `block.timestamp < vhpData[tokenId].expiresAt` — a stateless, gas-free validity check composable in any smart contract.
+- `renew(tokenId)` extends `expiresAt` by `defaultTTLDays * 1 days` (default 90) from the current block timestamp. Requires the token to currently be valid — expired tokens cannot be renewed.
+- Token counter: plain `uint256 _tokenIdCounter` incremented per mint — no `Counters` library (removed in OpenZeppelin v5).
+- `VHPData` struct: `{bytes32 deviceIdHash, uint8 certificationLevel, uint32 consecutiveClean, uint32 confidenceScore (0–10000 basis points), uint256 issuedAt, uint256 expiresAt, bytes32 mpcCeremonyHash}`.
+
+**VHP mint gate (POST /agent/mint-vhp).** Three conditions are checked server-side before any on-chain write:
+
+| Condition | Source | Failure |
+|-----------|--------|---------|
+| `audit_valid=True` | `store.get_activation_audit_summary()` | 422: "audit_valid=False" |
+| `gate_passed=True` | `store.get_validation_summary(gate_n, max_div)` | 422: "gate_passed=False" |
+| `AGENT_DRY_RUN=false` | `cfg.agent_dry_run_mode` | 422: "dry_run=True" |
+
+On gate passage: `chain.mint_vhp()` is called with `device_id_hash=SHA-256(device_id)`, `mpc_ceremony_hash` from `cfg.mpc_ceremony_hash_cache` (falls back to zero hash), and `ttl_days=90`. The issuance is persisted to the `vhp_issuances` SQLite table via `store.insert_vhp_issuance()`. `GET /agent/vhp-status/{device_id}` returns the latest issuance with `is_valid=True` if `expires_at > now`.
+
+**VAPIVerifiedHumanProofBridge.sol** — A LayerZero V2 OApp stub for cross-chain VHP transmission. `setPeer(dstEid, peerAddress)` must be called before first `send()`. `send(tokenId, dstEid, recipient, data)` increments a per-`(tokenId, dstEid)` nonce and emits `VHPSent` — in stub mode, no LayerZero endpoint call is made. Production deployment requires the IoTeX testnet LayerZero V2 endpoint address (`LZ_ENDPOINT` env var). `withdrawNative()` onlyOwner recovers any accidentally sent native token.
+
+**SDK — VAPIHumanProof.** Three methods, all failing safely:
+
+| Method | Returns | On error |
+|--------|---------|----------|
+| `is_human(device_id)` | `bool` | `False` (never raises) |
+| `get_vhp_data(device_id)` | `VHPData` | `VHPData(is_valid=False, error=str(exc))` |
+| `request_vhp_mint(device_id, to_address)` | `dict` | `{"error": str(exc)}` |
+
+`VHPData` is a `@dataclass(slots=True)` with 11 fields: `device_id`, `token_id`, `cert_level`, `consecutive_clean`, `confidence_score` (float 0.0–1.0), `issued_at`, `expires_at`, `is_valid`, `to_address`, `vhp_contract_address`, `error`.
+
+**Composability.** The VHP token is the terminal composable primitive in the Phase 99 stack:
+
+```solidity
+// Tournament gate combining all three Phase 99 primitives
+require(lens.isFullyEligible(deviceId),          "Human biometric gate failed");
+require(certReg.isCertified(grip.profileHash),    "Hardware not certified");
+require(vhp.isValid(tokenOfAddress[player]),      "VHP expired or not issued");
+```
+
+This is the first soulbound physiological humanity credential composable into any IoTeX smart contract — callable by any game developer with a single `eth_call`, no oracle trust assumption, no gas cost. Hardhat: 424→430 (+6). Bridge: 1386→1392 (+6). SDK: 81→87 (+6). openapi: v3.0.0-phase99c. **Phase 99 COMPLETE.**
+
+### 9.17 Operator Activation Runbook (Phase 100)
+
+Phase 100 closes the bootstrap gap between Phase 99 DEPLOYED and the first live VHP. On a fresh testnet deployment, `agent_rulings` is empty — `POST /agent/warm-up` previously selected no devices, leaving `consecutive_clean = 0` and the validation gate permanently blocked.
+
+**Warm-Up Bootstrap (`POST /agent/warm-up` enhancement).** The endpoint now accepts an explicit `?device_ids=<id>` query parameter. Device resolution order: (1) explicit param, (2) recent `agent_rulings` devices (existing Phase 84 path), (3) `ioid_devices` table fallback (Phase 55 registered devices). If all three sources are empty, the endpoint returns `reason: "no_devices_registered"` with an actionable `hint` field. The operator supplies the known DualShock Edge `device_id` (keccak256 of its public key) on first bootstrap.
+
+**Activation Status Dashboard (`GET /agent/activation-status`).** A 5-step checklist endpoint giving the operator a complete activation picture:
+
+| Step | Condition | Blocking code |
+|------|-----------|---------------|
+| 1 | `consecutive_clean >= gate_n` (default 100) | `gate_not_passed` |
+| 2 | Enforcement cert issued + valid (not expired) | `no_cert / cert_expired` |
+| 3 | `audit_valid=True` (chronological invariant) | `audit_invalid` |
+| 4 | `AGENT_DRY_RUN=false` | `dry_run_active` |
+| 5 | All of 1+3+4 pass → VHP mint available | (composite) |
+
+`current_blocking_step` is machine-readable: the exact step blocking progress, or 6 for fully activated. `recommended_action` contains the exact API call to make next (e.g., `"POST /agent/warm-up (need 87 more clean sessions; pass ?device_ids=<id> if agent_rulings is empty)"`). `progress_pct` shows gate completion 0–100%. `warnings` surfaces low gate_n values (< 50) that may indicate an insufficiently hardened configuration.
+
+**Tool #66 `get_activation_status`.** BridgeAgent tool returning `{current_blocking_step, fully_activated, consecutive_clean, gate_n, progress_pct, dry_run_active, audit_valid, cert_valid, timestamp}` — the compact version for agentic loop reasoning.
+
+**Operator Activation Sequence:**
+
+```bash
+# 1. Bootstrap warm-up (repeat until consecutive_clean >= 100)
+curl -X POST "http://localhost:8080/agent/warm-up?api_key=$KEY&device_ids=$DEVICE_ID"
+
+# 2. Monitor checklist after each batch
+curl "http://localhost:8080/agent/activation-status?api_key=$KEY"
+
+# 3. Issue enforcement certificate (after gate passes)
+curl -X POST "http://localhost:8080/agent/enforcement-certificate?api_key=$KEY"
+
+# 4. Flip live mode (422 if any gate condition fails)
+curl -X POST "http://localhost:8080/agent/config?api_key=$KEY&dry_run=false"
+
+# 5. Mint the first VHP
+curl -X POST "http://localhost:8080/agent/mint-vhp?api_key=$KEY&device_id=$DEVICE_ID&to_address=$WALLET"
+```
+
+Bridge: 1392→1400 (+8). openapi: v3.0.0-phase100. **Phase 100 COMPLETE.**
+
+### 9.18 Phase 101: AGaaS Economics + IoTeX Positioning
+
+Phase 101 introduced AGaaS economic primitives and formal IoTeX ecosystem positioning.
+
+#### QuickSilver stIOTX Collateral (Phase 101A)
+
+Operators may collateralise their VAPI registration using stIOTX (IoTeX's liquid staking token via QuickSilver protocol) as an alternative to VAPI token staking. This creates a double-yield mechanism: operators earn QuickSilver rebasing yield on their stIOTX while it remains locked as protocol collateral.
+
+The `VAPIQuickSilverCollateral.sol` contract handles lock/unlock/claim flows. The `quicksilver_collateral_events` store table persists all collateral lifecycle events (lock, unlock_request, claim_unlock, slash, claim_yield). Tool #67 `get_quicksilver_collateral_status` provides agent-layer visibility. Bridge count: 1400→1410 (+10 tests).
+
+#### Edge AI Profile (Phase 101B)
+
+The Edge AI Profile formally positions VAPI's 13-agent autonomous fleet on the IoTeX Real-World AI stack:
+
+- **ioID (Verify layer):** Device identity verification LIVE — DualShock Edge hardware profiles certified via `VAPIHardwareCertRegistry`
+- **W3bstream (Process layer):** ZK proof processing LIVE — PITL session proofs submitted via `validate_poac_record.ts` AssemblyScript applet
+- **Realms (Perceive layer):** Deferred pending ≥100k events/day threshold
+
+The inference mode adapts to runtime availability: `llm_augmented` when Anthropic SDK is available, `local_rule_fallback` (SLM-equivalent, no GPU required) as fallback. Tool #68 `get_edge_ai_profile` exposes the full fleet manifest and positioning statement. **Phase 101 COMPLETE.**
+
+### 9.19 Phase 102: Developer Integration Layer
+
+Phase 102 delivers the developer-facing composability layer that makes VAPI's AGaaS thesis actionable for game studios.
+
+#### TournamentGateDemo.sol
+
+`TournamentGateDemo.sol` demonstrates the "single composable call" AGaaS integration pattern. Game developers wire two interfaces:
+
+```solidity
+interface IVAPIProtocolLens {
+    function isFullyEligible(bytes32 deviceId) external view returns (bool);
+}
+interface IVAPIVerifiedHumanProof {
+    function isValid(uint256 tokenId) external view returns (bool);
+}
+```
+
+The `enterTournament(bytes32 deviceId, uint256 vhpTokenId)` function enforces both checks atomically. W1 mitigation: the `demoMode` flag (owner-settable) bypasses gate checks for developer evaluation on testnet. `demoMode=false` enforces full PITL stack in production.
+
+Deployed to IoTeX Testnet (Chain 4690) with `demoMode=true`. Hardhat tests: 430→434 (+4).
+
+#### VHPRenewalAgent (14th Autonomous Agent)
+
+VHP soulbound tokens (ERC-4671) expire after 90 days. Without auto-renewal, the first VHP minted on testnet would silently lapse. The `VHPRenewalAgent` is the 14th member of the autonomous agent fleet.
+
+- Polls every 6 hours
+- Finds VHPs expiring within `vhp_renewal_warning_days` (default: 7 days)
+- In dry_run mode: logs renewal advisory without chain call
+- In live mode: calls `VAPIVerifiedHumanProof.renew(tokenId)` (60k gas), logs to `vhp_renewal_log`
+- W2 liveness beacon: publishes `vhp_lifecycle_warning` bus event when `get_total_vhp_count() == 0`
+
+Tool #69 `get_vhp_renewal_log` exposes fleet visibility. GET `/agent/vhp-renewal-log` provides REST access.
+
+#### VAPITournamentClient (Python SDK)
+
+Game backend developers use `VAPITournamentClient` for a single-call eligibility check:
+
+```python
+client = VAPITournamentClient("https://vapi-bridge.example.com", api_key="...")
+elig   = client.check_player(device_id, wallet_address)
+if elig.is_eligible:
+    grant_tournament_entry()
+```
+
+`PlayerEligibility` captures `has_valid_vhp`, `consecutive_clean`, `cert_level`, `expires_at`. Never raises — errors are captured in `PlayerEligibility.error`.
+
+Bridge count: 1414→1422 (+8). SDK count: 87→93 (+6). **Phase 102 COMPLETE.**
+
+---
+
+### §9.20 Phase 103: Live Activation Protocol
+
+Phase 103 closes the critical gap where `get_total_vhp_count() == 0` despite 14 agents
+running — the protocol had never executed its own critical path end-to-end.
+
+**ActivationSimulator** seeds all six gate conditions in the exact order required to satisfy
+the Phase 96 chronological invariant (`gate_attestations.created_at >= first_ready_check_at`):
+
+1. `ruling_validation_log` — 110+ CERTIFY records (consecutive_clean >= gate_n=100)
+2. `protocol_intelligence_reports` — health_score=90, ready_for_live_mode=True
+3. `live_mode_activation_log` — establishes `first_ready_check_at` timestamp
+4. `gate_attestations` — inserted AFTER step 3 (chronological invariant confirmed)
+5. `enforcement_certificates` — audit_valid=True, HMAC-SHA256 sig
+6. `vhp_issuances` — VHP #1: tx_hash=`sim_mint_<sha256_hex16>`, no chain call
+
+**ActivationRunner** orchestrates the full 12-step sequence: seed all conditions ->
+verify gate_passed + audit_valid -> toggle `cfg.agent_dry_run_mode=False` in-memory ->
+insert VHP #1 -> publish `first_vhp_minted` bus event -> log to `activation_simulation_log`.
+Never raises from `run()`.
+
+**W2 — ProtocolMaturityScore primitive:** `get_first_vhp_status().is_simulation` distinguishes
+simulated activation from organic activation, enabling a future AGaaS maturity ladder:
+simulation -> testnet real VHP -> mainnet VHP — verifiable for investor reporting.
+
+**SDK:** `VAPIActivationFlow(base_url, api_key)` exposes three methods: `run_simulation()`,
+`check_ready()`, `get_first_vhp()` — all return structured types, never raise.
+
+Bridge 1422->1430 (+8). SDK 93->99 (+6). **Phase 103 COMPLETE.**
+
+### §9.21 Phase 104: Persistent Activation Commit + ProtocolMaturityIndex
+
+Phase 103 exposed W1: `cfg.agent_dry_run_mode = False` was set in-memory only — every bridge
+restart reverted it to `True`. Phase 104 closes this gap with an `activation_state` SQLite
+table and a `_restore_activation_state(cfg, store)` function that runs synchronously BEFORE
+any asyncio agent tasks are launched. This eliminates the race window between persistence
+read and agent startup. Because `Config` is `@dataclass(frozen=True)`, mutation uses
+`object.__setattr__(cfg, "agent_dry_run_mode", False)`.
+
+`POST /agent/commit-activation` is the permanent activation gate. It executes a 6-step
+sequence: (1) simulate if no VHP exists, (2) re-verify the Phase 97 3-condition gate
+(gate_passed + cert_valid + audit_valid), (3) persist `activation_committed=True` to store
+(append-only audit trail), (4) set dry_run=False in-memory via frozen-dataclass bypass,
+(5) publish `activation_committed` bus event for fleet-wide notification, (6) compute and
+persist the ProtocolMaturityIndex (PMI).
+
+PMI is a 3-level protocol maturity ladder: 0=uninitiated (no simulations), 1=simulated
+(simulation log exists + first VHP is simulated), 2=testnet_organic (first VHP is organic +
+activation committed). Level 3 (mainnet) is reserved. `GET /agent/protocol-maturity` exposes
+PMI + full activation state. Tool #71 `get_protocol_maturity` makes this available to the
+BridgeAgent LLM reasoning loop. `VAPIProtocolMaturity` SDK class wraps both endpoints.
+
+Bridge 1430->1438 (+8). SDK 99->103 (+4). **Phase 104 COMPLETE.**
+
+### §9.22 Phase 105: Epistemic Consensus Hardening
+
+Phase 98 W1 documented that `epistemic_consensus_threshold=0.60` is exactly reachable by
+ClassJ alone (0.40 class_j + 0.20 supervisor = 0.60 with no triage escalation). An adversary
+who suppresses divergence pattern detection below the triage threshold can pass the 1-agent
+gate. Phase 105 closes this via two mechanisms:
+
+**W2 — PMI-triggered threshold auto-raise (Phase 104/105 synergy):** When `compute_pmi() >= 1`
+and `epistemic_recommended_threshold (0.65) > epistemic_consensus_threshold (0.60)`,
+`_epistemic_consensus()` automatically uses 0.65 as the effective threshold. This makes the
+Phase 98 W1 mitigation an **emergent property of protocol maturation** — operators who
+complete Phase 104 activation automatically gain the hardened threshold without any manual
+configuration change.
+
+**W1 — triage_prereq_required guard (opt-in):** When `epistemic_triage_prereq_required=True`,
+`_epistemic_consensus()` requires `triage_score > 0.0` before the consensus vote runs.
+This closes the 1-agent gate attack vector unconditionally, at the cost of suppressing
+epistemic downgrade when no triage signal exists.
+
+`epistemic_threshold_history` provides an immutable audit trail of all threshold changes
+(trigger, pmi_at_change, notes), comparable to `enforcement_certificates` in forensic value.
+`GET /agent/epistemic-config` exposes effective threshold, pmi_triggered flag, at_risk
+boolean, and the audit history. Tool #72 `get_epistemic_config` integrates this into the
+BridgeAgent LLM reasoning loop.
+
+Bridge 1438->1444 (+6). **Phase 105 COMPLETE.**
+
+### §9.23 Phase 106: Developer Integration Runbook + SDK Onboarding
+
+Phase 106 closes the developer-facing gap: game studios and tournament operators need a
+single-call bootstrap path and composable eligibility integration without reading VAPI
+protocol internals.
+
+`VAPIOperatorOnboarding.bootstrap()` is the one-call operator path: it checks current
+maturity via `VAPIProtocolMaturity.get_maturity()`, calls `commit_activation()` if not
+already committed, then verifies the final state. It returns `BootstrapResult(
+fully_bootstrapped=True)` when `activation_committed=True AND pmi >= 1`. The class
+composes `VAPIProtocolMaturity` and never raises — errors surface in `BootstrapResult.error`.
+
+`VAPITournamentIntegration.request_game_demo(device_id, wallet)` is the game developer
+integration primitive. It composes `VAPITournamentClient.check_player()` and wraps the
+response in `TournamentEntryResult` with `entered=is_eligible AND has_valid_vhp`. The
+`demo_mode=True` flag signals that eligibility is advisory — operators enable hard-gate mode
+by verifying `separation_ratio > 1.0` (currently 0.362, documented §8.6).
+
+SDK_VERSION updated to `3.0.0-phase106`. SDK 103->109 (+6). **Phase 106 COMPLETE.**
+
+---
+
+### §9.24 Phase 107: Live Mode Readiness Validation (N=100 Corpus)
+
+Phase 107 delivers the final software-only precondition for tournament deployment:
+machine-verifiable proof that the system processes N=100 nominal sessions with zero false
+positives under live mode conditions.
+
+`LiveModeReadinessValidator.run_validation(n=100)` runs N synthetic NOMINAL sessions
+through `SessionAdjudicator._rule_fallback()` with the `agent_dry_run_mode` flag respected.
+A BLOCK verdict on nominal evidence (enrollment_status="eligible", no hard cheat codes,
+no advisory codes) constitutes a false positive. The validator stores a machine-verifiable
+report in the `live_mode_readiness_reports` table.
+
+**`ready_for_live` is a strict AND gate over five conditions:**
+
+| Condition | Software |
+|-----------|---------|
+| `n_tested >= 100` | 100 nominal sessions evaluated |
+| `false_positive_count == 0` | Zero nominal BLOCKs |
+| `activation_committed == True` | Phase 104 persistence confirmed |
+| `dry_run_active == False` | Agent enforcing live mode |
+| `pmi >= 1` | Protocol Maturity Index at simulated tier |
+
+**W1 addressed (Phase 104 PMI drift):** `compute_pmi()` previously returned PMI=1 even
+after the anchoring simulation VHP expired (90-day TTL). Phase 107 adds an expiry guard:
+`compute_pmi()` returns 0 when `is_simulation=True AND is_valid=False` — the simulation
+VHP has expired and no organic VHP exists. This closes the PMI persistence window.
+
+**W1 isolation invariant:** `live_mode_readiness_reports` is a separate table from
+`ruling_validation_log`. The readiness validation corpus never increments `consecutive_clean`
+counts. This isolation follows the Phase 86 precedent (`synthetic_sessions` table).
+
+**Phase 86 vs Phase 107 distinction:** Phase 86 (`ValidationCorpusRunner`) validates
+`_rule_fallback()` regression — nominal sessions should remain CERTIFY across code changes.
+Phase 107 certifies readiness to operate the full agent fleet in live mode — a system-level
+gate requiring activation_committed, PMI, and dry_run deactivated.
+
+Two new REST endpoints: `POST /agent/run-readiness-validation` (triggers validator),
+`GET /agent/live-mode-readiness` (returns latest report). Tool #73 `get_live_mode_readiness`
+exposes the gate to the BridgeAgent for autonomous monitoring.
+
+SDK: `LiveModeReadinessResult @dataclass(slots=True)` (8 fields) + `VAPILiveModeValidator`
+(run_validation/get_latest; never raises). SDK_VERSION updated to `3.0.0-phase107`.
+
+Phase 106 docs gap closed: `docs/operator-onboarding-runbook.md` and
+`docs/developer-integration-guide.md` created (bootstrap sequence, eligibility integration,
+honest separation_ratio=0.362 disclosure).
+
+Bridge 1444->1452 (+8). SDK 109->113 (+4). **Phase 107 COMPLETE.**
+
+---
+
+### §9.25 Phase 108: Tournament Readiness Scorecard (7-Condition AND Gate)
+
+Phase 107 certified the software P0 conditions: N=100 nominal sessions, zero false
+positives, `ready_for_live=True`. Two hardware-only blockers remain: separation ratio
+0.362→required >1.0 (touchpad recapture + N-player calibration) and touchpad recapture
+completion. Previously, no single endpoint surfaced all conditions together with a unified
+`fully_ready` verdict. Phase 108 delivers the **Tournament Readiness Scorecard**.
+
+**`GET /agent/tournament-readiness`** — 7-condition AND gate:
+
+| # | Category | Condition | Current |
+|---|----------|-----------|---------|
+| 1 | Software | `n_tested >= 100` | Phase 107 P0 gate |
+| 2 | Software | `false_positive_count == 0` | Phase 107 P0 gate |
+| 3 | Software | `activation_committed == True` | Phase 104 persist |
+| 4 | Software | `dry_run_inactive == True` | Phase 97 gate |
+| 5 | Software | `pmi >= 1` | Phase 104 PMI |
+| 6 | Hardware | `separation_ratio_current > 1.0` | **BLOCKER (0.362)** |
+| 7 | Hardware | `touchpad_recapture_complete == True` | **BLOCKER** |
+
+`fully_ready = (software_conditions_met == 5) AND (hardware_conditions_met == 2)`.
+
+**W1 — Manual override risk:** `separation_ratio_current` is a config field
+(`SEPARATION_RATIO_CURRENT` env var, default 0.362). An operator could manually set it to
+1.1 to get `fully_ready=True` without real calibration data. Mitigation: the scorecard
+always displays `separation_ratio_current` explicitly; every query persists a timestamped
+`tournament_readiness_snapshots` row (audit trail); the field default is the Phase 57
+empirical baseline (0.362); documentation warns that only `interperson_separation_analyzer.py`
+output is authoritative.
+
+**W2 — Certification path audit trail:** `tournament_readiness_snapshots` creates a
+timestamped record of every scorecard query. As hardware sessions accumulate and
+`separation_ratio_current` is updated, the history charts the "certification path" from
+0.362 → 1.0 — evidence for investor/partner readiness claims.
+
+Store: `tournament_readiness_snapshots` table + `insert_tournament_readiness_snapshot()` +
+`get_latest_tournament_readiness_snapshot()` + schema (108, "tournament_readiness").
+
+Config: `separation_ratio_current: float` (env `SEPARATION_RATIO_CURRENT`, default 0.362) +
+`touchpad_recapture_complete: bool` (env `TOUCHPAD_RECAPTURE_COMPLETE`, default False).
+
+BridgeAgent: Tool #74 `get_tournament_readiness` — returns snapshot when available, or
+`{"found": False, "fully_ready": False}` on empty store.
+
+SDK: `TournamentReadinessResult @dataclass(slots=True)` (11 fields) +
+`VAPITournamentReadiness.get_scorecard()` (never raises) + SDK_VERSION `3.0.0-phase108`.
+
+Distinction from prior phases: Phase 100 `activation-status` covers 5 software steps only;
+Phase 107 `live-mode-readiness` covers the N=100 corpus result. Phase 108 is the single
+endpoint that combines both software and hardware conditions into the final `fully_ready`
+deployment gate.
+
+Bridge 1452->1460 (+8). SDK 113->117 (+4). **Phase 108 COMPLETE.**
+
+---
+
+### §9.26 Phase 109A: ioSwarm Bridge Adapter (Infrastructure + Consensus Foundation)
+
+#### Three Primitives Thesis
+
+VAPI has always held two DePIN primitives: (1) a real-time stream of physically-grounded
+PoAC records from certified hardware, and (2) 38 deployed smart contracts providing
+verifiable computation on IoTeX L1. Phase 109A introduces the third: **ioSwarm** — IoTeX's
+decentralised agent execution layer — as an optional fourth epistemic signal behind the
+already-live Epistemic Consensus Protocol.
+
+The integration is infrastructure-only in Phase 109A. No agent migrates in this phase;
+the fleet stays at 14. `ioswarm_enabled=false` (default) leaves every Phase 98 behavior
+100% unchanged.
+
+#### IoSwarmConsensusAggregator
+
+`IoSwarmConsensusAggregator.aggregate(node_verdicts)` implements multi-node quorum with
+two W1 mitigations:
+
+| Invariant | Value | Rationale |
+|-----------|-------|-----------|
+| `GENERAL_QUORUM` | 0.60 | Matches Phase 98 epistemic threshold |
+| `BLOCK_QUORUM` | 0.67 | W1: higher bar for enforcement verdicts |
+| Tie resolution | → HOLD | Never auto-BLOCK on ambiguity |
+| HOLD escalation | 3 consecutive HOLDs | Advisory flag; never auto-promotes to BLOCK |
+
+Verdict → score mapping used as epistemic signal:
+- BLOCK → 1.0, FLAG/HOLD → 0.5, CLEAR/CERTIFY → 0.0
+
+#### Epistemic Consensus Extension (4th Signal)
+
+When `ioswarm_enabled=True` and `swarm_score > 0.0`, the Phase 98 weights are rebalanced:
+
+| Agent | Disabled (Phase 98) | Enabled (Phase 109A) |
+|-------|---------------------|----------------------|
+| ClassJDetector | 0.40 | 0.35 |
+| DivergenceTriageAgent | 0.40 | 0.35 |
+| AgentSupervisor | 0.20 | 0.15 |
+| IoSwarm consensus | 0.00 | 0.15 |
+| **Sum** | **1.00** | **1.00** |
+
+The Phase 98 three-signal formula is completely unchanged when ioswarm is disabled or
+returns no data. The injection is backward-compatible and additive-only.
+
+#### VHP Authorization Gate
+
+The `VAPISwarmTaskSpec` includes a VHP authorization gate:
+```json
+{
+  "contract": "VAPIProtocolLens",
+  "method": "isFullyEligible(bytes32)",
+  "address": "0x1972bf756aFE0FFCfaF9842e2FbBb2B084352EAf"
+}
+```
+This ensures that any ioSwarm executor operating against VAPI must pass through the same
+composable `isFullyEligible()` gate that game developers use, making the authorization
+model consistent across the entire protocol stack.
+
+#### W3bstream Applet Binding
+
+The two existing W3bstream applets are now registered as ioSwarm task pipeline entries in
+`scripts/vapi-swarm-agent.json`:
+- `validate_poac_record` — 228B PoAC parse + ECDSA-P256 verify + PITLSessionRegistryV2 binding
+- `process_gsr_packet` — GSR packet parse + VAPIGSRRegistry.recordSample() binding
+
+These applets were code-complete from Phase 99B; Phase 109A formally registers them in the
+ioSwarm task spec without changing their implementation.
+
+#### Phase 109B Preview
+
+Phase 109B migrates `VHPRenewalAgent` as the first task spec migration (lowest complexity:
+pure polling, no latency constraint). The migration order ends with `SessionAdjudicator`
+(last, highest complexity: reactive interrupt + quorum latency budget).
+
+Bridge 1464->1472 (+8). SDK 117->121 (+4). **Phase 109A COMPLETE.**
+
 ---
 
 ## 10. Discussion and Future Work
@@ -1705,10 +2866,26 @@ feasible within 3–5 years.
 
 ### 10.3 Multi-Instance Trusted Setup
 
-The current ZK ceremony (`contracts/scripts/run-ceremony.js`) is a single-contributor
-development ceremony. A production deployment requires a multi-party MPC ceremony
-(Hermez Perpetual Powers of Tau or equivalent) to ensure that no single participant
-can reconstruct the toxic waste.
+**Phase 67 status: MPC ceremony implemented.** `contracts/scripts/run-mpc-ceremony.js`
+runs a 3-contributor Groth16 Phase 2 ceremony for all three VAPI circuits (PitlSessionProof,
+TeamProof, TournamentPassport) using the publicly-audited Hermez `powersOfTau28_hez_final_15.ptau`
+(200+ contributors, 2021) as Phase 1 input. The Phase 2 final beacon is the hash of an
+IoTeX testnet block at ceremony time — independently verifiable by querying block N on IoTeX
+testnet. `CeremonyRegistry.sol` stores the verifyingKeyHash, beaconBlockHash, and contributor
+transcript (sha256(zkey_i)) for all three circuits on-chain, creating a permanent
+cryptographically-auditable record. `ZKVerifier` in the bridge pre-verifies Groth16 proofs
+locally via a Node.js subprocess before submitting to PITLSessionRegistryV2, eliminating
+gas waste on invalid proofs. The `VAPIZKProof.verify_ceremony_integrity()` SDK method allows
+any third party to verify that a local verification key matches the on-chain MPC commitment.
+
+**Post-Phase-67 ZK trust chain:**
+```
+DualShock Edge → PoAC 228B → SHA-256(164B) chain hash
+  → Groth16 proof → MPC ceremony key (3 contributors) → CeremonyRegistry.sol
+    → IoTeX block beacon → IoTeX testnet L1
+```
+Every link is cryptographically verifiable. The ZK ceremony is no longer an external
+trust assumption — it is part of the VAPI on-chain evidence chain.
 
 ### 10.4 Full Covariance Biometric Fingerprinting
 
@@ -1886,7 +3063,7 @@ Tracker validation is future work.
 ## Appendix B: BridgeAgent — Complete Tool Catalogue and Interface Specification
 
 `BridgeAgent` (`claude-sonnet-4-6`, `bridge/vapi_bridge/bridge_agent.py`) provides
-LLM-powered operator intelligence through 17 deterministic tool bindings. All tools are
+LLM-powered operator intelligence through 40 deterministic tool bindings. All tools are
 read-only against the SQLite store and on-chain state; no tool mutates bridge state.
 
 ### B.1 Tool Catalogue
@@ -1910,6 +3087,27 @@ read-only against the SQLite store and on-chain state; no tool mutates bridge st
 | `get_detection_policy` | Active L4 threshold multiplier and basis risk label |
 | `get_credential_status` | Evidence chain: biometric label → suspension state → reinstatement conditions |
 | `get_calibration_status` | Global L4 thresholds, per-player profiles, recent threshold evolution, next Mode 6 cycle timing |
+| `get_ruling_streak` | Current streak verdict and escalation state for a device (Phase 66) |
+| `override_ruling` | Operator CLEAR ruling to reset streak and re-enable tournament eligibility (Phase 66) |
+| `get_autonomous_rulings` | All SessionAdjudicator rulings for a device with commitment hashes (Phase 65) |
+| `request_adjudication` | Queue a new LLM adjudication request for a device (Phase 65) |
+| `get_reflex_baseline` | L6b neuromuscular probe baseline — latency distribution and BOT/HUMAN classification (Phase 63) |
+| `get_session_replay` | Retrieve 20 Hz frame checkpoint ring for a device (Phase 61) |
+| `get_enrollment_status` | Device enrollment state: session count, avg humanity, PHGCredential mint status (Phase 62) |
+| `get_controller_twin_data` | Full 3D twin snapshot: biometric heartbeat, IBI, PoAC DNA, proof anchor (Phase 59) |
+| `generate_tournament_passport` | Trigger ZK tournament passport generation for an enrolled device (Phase 56) |
+| `get_ioid_status` | ioID device identity DID and session registry state (Phase 55) |
+| `get_threshold_history` | Threshold evolution log with per-row drift annotations (Phase 58) |
+| `predict_evasion_cost` | Model minimum feature manipulation to evade L4 detection (Phase 58) |
+| `get_anomaly_trend` | L4 anomaly/continuity score trend over recent sessions (Phase 58) |
+| `generate_incident_report` | Auto-generated incident narrative for a device's anomaly history (Phase 58) |
+| `get_game_profile` | Active game profile (NCAA CFB 26), L5 priority map, L6-Passive stats (Phase 51) |
+| `analyze_threshold_impact` | Simulate threshold change impact on current session distribution (Phase 58) |
+| `verify_ceremony_integrity` | Verify embedded PITL vkey matches CeremonyRegistry on-chain commitment (Phase 68) |
+| `get_suspension_status` | Current PHGCredential suspension state: suspended bool, seconds remaining (Phase 67/68) |
+| `get_zk_verifier_stats` | ZKVerifier proof acceptance/rejection/error counters since bridge startup (Phase 68) |
+| `get_enrollment_pipeline` | All devices grouped by enrollment state: eligible/in_progress/unenrolled (Phase 68) |
+| `request_live_adjudication` | Queue a live (dry_run=False) adjudication request for operator-confirmed devices (Phase 68) |
 
 ### B.2 Streaming Interface
 

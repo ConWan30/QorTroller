@@ -558,7 +558,7 @@ def create_app(cfg: Config, store: Store, on_record) -> FastAPI:
                     if row.get("threshold_type") in ("global_mode6", "agent_triggered"):
                         _ts = row.get("created_at", 0.0) or 0.0
                         _label = (
-                            _dt.datetime.utcfromtimestamp(float(_ts)).strftime("%m-%d %H:%M")
+                            _dt.datetime.fromtimestamp(float(_ts), _dt.timezone.utc).strftime("%m-%d %H:%M")
                             if _ts else f"C{len(_formatted) + 1}"
                         )
                         _anm = float(row.get("new_value") or l4_anomaly)
@@ -657,7 +657,7 @@ def create_app(cfg: Config, store: Store, on_record) -> FastAPI:
                 )
                 if _last_ts:
                     hardware_block["last_seen_ts"] = (
-                        _dt.datetime.utcfromtimestamp(float(_last_ts)).isoformat() + "Z"
+                        _dt.datetime.fromtimestamp(float(_last_ts), _dt.timezone.utc).isoformat().replace("+00:00", "Z")
                     )
                 hardware_block["controller_connected"] = True
         except Exception as _hw_exc:
@@ -681,7 +681,7 @@ def create_app(cfg: Config, store: Store, on_record) -> FastAPI:
                 _ts0 = _th_all[0].get("created_at", 0.0) or 0.0
                 if _ts0:
                     phase50_block["last_threshold_update_ts"] = (
-                        _dt.datetime.utcfromtimestamp(float(_ts0)).isoformat() + "Z"
+                        _dt.datetime.fromtimestamp(float(_ts0), _dt.timezone.utc).isoformat().replace("+00:00", "Z")
                     )
         except Exception:
             pass
@@ -889,6 +889,126 @@ def create_app(cfg: Config, store: Store, on_record) -> FastAPI:
             log.warning("/agent/interpret: LLM unavailable: %s", exc)
             interpretation = {"status": "unavailable"}
         return {**data, "agent_interpretation": interpretation}
+
+    @app.post("/agent/override")
+    async def agent_override(request: Request):
+        """Operator override — insert CLEAR ruling and reset streak (Phase 66).
+
+        Requires operator auth (x-api-key header). Body: {device_id, reason}.
+        Inserts a CLEAR agent_ruling with dry_run=False and resets ruling_streaks,
+        re-enabling tournament eligibility for the device.
+        """
+        client_ip = request.client.host if request.client else "unknown"
+        if not _check_rate_limit(client_ip, cfg.rate_limit_per_minute):
+            return JSONResponse({"error": "rate_limit_exceeded"}, status_code=429)
+        x_api_key = request.headers.get("x-api-key", "")
+        if not cfg.operator_api_key:
+            return JSONResponse({"error": "operator_api_key not configured"}, status_code=503)
+        if x_api_key != cfg.operator_api_key:
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        body      = await request.json()
+        device_id = body.get("device_id", "")
+        reason    = body.get("reason", "operator_override")
+        if not device_id:
+            raise HTTPException(status_code=400, detail="device_id required")
+        ruling_id = store.insert_agent_ruling(
+            device_id=device_id,
+            verdict="CLEAR",
+            confidence=1.0,
+            reasoning=f"Operator override: {reason}",
+            evidence_json="{}",
+            commitment_hash="0" * 64,
+            attestation_hash="",
+            dry_run=False,
+            source_agent="operator_override",
+        )
+        store.upsert_ruling_streak(device_id, "CLEAR", ruling_id)
+        store.write_agent_event(
+            event_type="ruling_enforced",
+            payload=json.dumps({
+                "device_id": device_id,
+                "verdict": "CLEAR",
+                "ruling_id": ruling_id,
+                "reason": reason,
+            }),
+            source="http_api",
+            target="bridge_agent",
+            device_id=device_id,
+        )
+        log.info("/agent/override: CLEAR ruling %s for device %s", ruling_id, device_id[:12])
+        return {"status": "overridden", "ruling_id": ruling_id, "device_id": device_id}
+
+    @app.post("/agent/config")
+    async def agent_config(request: Request):
+        """Phase 68-C — Toggle SessionAdjudicator dry_run mode at runtime (operator auth).
+
+        Body: {"dry_run": bool}
+        Requires operator x-api-key. Returns updated config state.
+        Setting dry_run=false enables live enforcement (rulings feed RulingEnforcementAgent).
+        The new dry_run value is written to the operator_audit_log and agent_events table so
+        the SessionAdjudicator background loop picks it up within the next 5-minute cycle.
+        """
+        client_ip = request.client.host if request.client else "unknown"
+        if not _check_rate_limit(client_ip, cfg.rate_limit_per_minute):
+            return JSONResponse({"error": "rate_limit_exceeded"}, status_code=429)
+        x_api_key = request.headers.get("x-api-key", "")
+        if not cfg.operator_api_key:
+            return JSONResponse({"error": "operator_api_key not configured"}, status_code=503)
+        if x_api_key != cfg.operator_api_key:
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
+        body = await request.json()
+        if "dry_run" not in body:
+            raise HTTPException(status_code=400, detail="dry_run field required")
+        dry_run = bool(body["dry_run"])
+        log.info("/agent/config: dry_run set to %s by operator", dry_run)
+        store.log_operator_action(
+            action="set_agent_dry_run",
+            operator_key_hash=_hashlib.sha256(x_api_key.encode()).hexdigest()[:16],
+            payload=f"dry_run={dry_run}",
+        )
+        store.write_agent_event(
+            event_type="config_update",
+            payload=f'{{"dry_run": {str(dry_run).lower()}}}',
+            source="http_api",
+            target="session_adjudicator",
+            device_id="",
+        )
+        return {"dry_run": dry_run, "status": "updated"}
+
+    @app.get("/agent/suspension-status/{device_id}")
+    async def agent_suspension_status(device_id: str, request: Request):
+        """Phase 67 — Current credential suspension state for a device.
+
+        Returns {suspended: bool, suspended_until: float|null, seconds_remaining: float,
+        ruling_streak: dict|null}. Rate-limited; no operator auth required (read-only).
+        """
+        client_ip = request.client.host if request.client else "unknown"
+        if not _check_rate_limit(client_ip, cfg.rate_limit_per_minute):
+            return JSONResponse({"error": "rate_limit_exceeded"}, status_code=429)
+        streak = store.get_ruling_streak(device_id)
+        now    = time.time()
+        susp   = None
+        with store._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM credential_enforcement WHERE device_id=? ORDER BY rowid DESC LIMIT 1",
+                (device_id,),
+            ).fetchone()
+            if row:
+                susp = dict(row)
+        active = bool(
+            susp
+            and susp.get("suspended")
+            and susp.get("suspended_until") is not None
+            and susp["suspended_until"] > now
+            and not susp.get("reinstated")
+        )
+        return {
+            "device_id":         device_id,
+            "suspended":         active,
+            "suspended_until":   susp["suspended_until"] if active else None,
+            "seconds_remaining": max(0.0, susp["suspended_until"] - now) if active else 0.0,
+            "ruling_streak":     streak,
+        }
 
     # --- Dashboards ---
 

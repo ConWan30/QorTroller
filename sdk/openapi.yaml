@@ -2,7 +2,7 @@ openapi: "3.0.3"
 
 info:
   title: VAPI — Self-Verifying Integration SDK REST API
-  version: "2.0.0-phase64"
+  version: "3.0.0-phase110"
   description: |
     The VAPI REST API exposes Proof of Authentic Controller (PoAC) submission,
     on-chain verification, device PHCI certification, SDK self-attestation,
@@ -85,7 +85,15 @@ tags:
   - name: BridgeAgent
     description: "Conversational AI agent for natural-language protocol queries — wraps bridge data as Claude tools. Phase 30 adds synchronous ask(); Phase 31 adds SSE streaming, SQLite session persistence, react(), and 3 new tools; Phase 36 adds get_detection_policy (17th tool); Phase 37 adds get_credential_status (18th tool): complete evidence chain from biometric anomaly to trajectory label to enforcement action."
   - name: Federation
-    description: Cross-bridge cluster intelligence — privacy-preserving fingerprint sharing with peer VAPI bridge instances. Phase 34 adds FederationBus background task and get_federation_status agent tool (15 tools total).
+    description: >-
+      Cross-bridge threat signal broadcast — event-driven BLOCK ruling federation to peer
+      VAPI bridge instances. Phase 80 introduces FederationBroadcastAgent (first purely
+      event-driven agent, no polling loop), HMAC-SHA256 authenticated POST
+      /federation/threat-signal receiver, GET /federation/peers, and
+      FederatedThreatRegistry.sol on-chain threat signal anchor with
+      isThreatSignaled() tournament gate composability. <100ms peer delivery
+      vs 5-min polling lag (150x speedup). Phase 34 introduced cluster-hash
+      fingerprint sharing via FederationBus.
   - name: Synthesis
     description: Longitudinal insight synthesis — rolling 24h/7d/30d digests and per-device risk trajectory labels (stable/warming/critical/cleared). Phase 35 adds InsightSynthesizer background task and query_digest agent tool (16 tools total).
   - name: AdaptiveFeedback
@@ -97,6 +105,20 @@ tags:
       rulings, on-demand adjudication requests, and agentic data interpretation overlay.
       All rulings carry a commitment_hash binding verdict to evidence and SDKAttestation
       trust anchor. BLOCK/CERTIFY require SDKAttestation.all_layers_active=True."
+  - name: Curator
+    description: "Data Curator Layer — Phase 69/70. DataCuratorAgent 7-class taxonomy,
+      data lineage provenance, token eligibility with DePIN multiplier stack
+      (passport 1.5×→enrollment 2.0×→streak 2.5×→MPC 1.25×→gate 3.0×), oracle state
+      queries (HumanityOracle/RulingOracle/PassportOracle), and sovereignty pledge
+      publication. BridgeAgent tools #41–45. GET /agent/validation-stats unified
+      observability endpoint aggregates proof counts, enrollment pipeline, curator
+      lineage, and ruling enforcement state."
+  - name: Governance
+    description: "PHGCredential bridge-layer governance — Phase 72. Multi-sig suspension
+      proposals for PHGCredential.suspend() with configurable confirmation threshold
+      (SUSPENSION_MULTISIG_THRESHOLD env var, default 1). PHGCredential.bridge is
+      immutable post-deploy; this is a software safeguard requiring operational key
+      separation. Three-step flow: propose → confirm (N times) → execute on-chain."
 
 paths:
 
@@ -902,6 +924,109 @@ paths:
               schema:
                 $ref: "#/components/schemas/InterpretResponse"
 
+  /agent/override:
+    post:
+      tags: [Agent]
+      summary: "Phase 66 — Operator override: clear ruling streak and re-enable eligibility"
+      description: |
+        Operator-authenticated endpoint. Issues a CLEAR ruling for the specified device,
+        resets the ruling streak to zero, and emits a `ruling_enforced` agent event.
+        Use when manual review confirms a false positive BLOCK verdict.
+        Requires x-api-key header matching OPERATOR_API_KEY.
+      security:
+        - OperatorApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OverrideRequest"
+      responses:
+        "200":
+          description: Streak cleared, CLEAR ruling recorded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OverrideResponse"
+        "400":
+          description: Missing device_id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Invalid or missing operator API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /agent/suspension-status/{device_id}:
+    get:
+      tags: [Agent]
+      summary: "Phase 67 — Current PHGCredential suspension state for a device"
+      description: |
+        Returns whether a device is currently under an active PHGCredential suspension
+        (result of a BLOCK ruling streak), including time remaining and current ruling
+        streak. Auto-reinstated by the bridge once `suspended_until` passes.
+      parameters:
+        - name: device_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: "keccak256(devicePubkey) — same as used in PITL records"
+      responses:
+        "200":
+          description: Suspension status for the device
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuspensionStatus"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /agent/config:
+    post:
+      tags: [Agent]
+      summary: "Phase 68 — Toggle SessionAdjudicator dry_run mode at runtime"
+      description: |
+        Operator-authenticated endpoint to switch the SessionAdjudicator between
+        advisory (dry_run=true) and live enforcement (dry_run=false) modes at runtime.
+        Setting dry_run=false enables live rulings that feed RulingEnforcementAgent.
+        Requires x-api-key header matching OPERATOR_API_KEY.
+      security:
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentConfig"
+      responses:
+        "200":
+          description: Updated agent configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentConfig"
+        "400":
+          description: Missing dry_run field
+        "401":
+          description: Invalid or missing x-api-key
+        "429":
+          description: Rate limit exceeded
+
   # ---------------------------------------------------------------------------
   # Operator Gate (Phase 29 — HMAC-signed eligibility for tournament operators)
   # ---------------------------------------------------------------------------
@@ -1350,6 +1475,1565 @@ paths:
                 # HELP vapi_critical_devices Devices labeled critical by InsightSynthesizer
                 # TYPE vapi_critical_devices gauge
                 vapi_critical_devices 3
+
+# =============================================================================
+# Phase 70 — Curator + Validation Stats Endpoints
+# =============================================================================
+
+  /agent/validation-stats:
+    get:
+      summary: Get unified validation statistics
+      description: "Aggregated protocol observability: proof counts, enrollment pipeline
+        state, data curator lineage metrics, and ruling enforcement state. Phase 70."
+      tags: [Curator]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Operator API key
+      responses:
+        "200":
+          description: Validation statistics snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationStats"
+        "401":
+          description: Unauthorized — invalid or missing api_key
+
+  /curator/data-lineage:
+    get:
+      summary: Get data lineage records for a device
+      description: "Returns data provenance records for a device. Each record includes
+        data_type, quality_score, curator_note, and timestamp. Phase 69/70."
+      tags: [Curator]
+      parameters:
+        - name: device_id
+          in: query
+          required: true
+          schema:
+            type: string
+          description: 64-hex device ID
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Data lineage list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  device_id:
+                    type: string
+                  lineage_count:
+                    type: integer
+                  lineage:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        data_type:
+                          type: string
+                        quality_score:
+                          type: number
+                        curator_note:
+                          type: string
+                        created_at:
+                          type: number
+
+  /curator/token-eligibility:
+    get:
+      summary: Get DePIN token eligibility state for a device
+      description: "Returns token eligibility with multiplier breakdown. Multiplier
+        stack: passport 1.5× → enrollment 2.0× → streak 2.5× → MPC 1.25× → gate
+        3.0×. Maximum combined multiplier: ~15.75×. Phase 69/70."
+      tags: [Curator]
+      parameters:
+        - name: device_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Token eligibility state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  device_id:
+                    type: string
+                  eligibility:
+                    type: object
+                    nullable: true
+                    properties:
+                      nominal_sessions:
+                        type: integer
+                      clean_streak:
+                        type: integer
+                      passport_held:
+                        type: boolean
+                      enrollment_complete:
+                        type: boolean
+                      mpc_verified:
+                        type: boolean
+                      gate_passed:
+                        type: boolean
+                      base_multiplier:
+                        type: number
+                      total_multiplier:
+                        type: number
+                      eligibility_score:
+                        type: number
+
+  /curator/oracle-state:
+    get:
+      summary: Get oracle publication state for a given oracle type
+      description: "Returns recent on-chain oracle publications. oracle_type must be
+        one of: HUMANITY, RULING, PASSPORT. Phase 69/70."
+      tags: [Curator]
+      parameters:
+        - name: oracle_type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [HUMANITY, RULING, PASSPORT]
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Oracle state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  oracle_type:
+                    type: string
+                  publications:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        device_id:
+                          type: string
+                        tx_hash:
+                          type: string
+                        payload_json:
+                          type: string
+                        created_at:
+                          type: number
+        "400":
+          description: Invalid oracle_type
+
+# =============================================================================
+# Phase 72 — PHGCredential Bridge-Layer Multi-Sig
+# =============================================================================
+
+  /operator/suspension/propose:
+    post:
+      summary: Propose a PHGCredential suspension
+      description: |
+        Propose a PHGCredential suspension for a device. Returns proposal_id.
+        When SUSPENSION_MULTISIG_THRESHOLD=1 (default), a single call to
+        /execute/{proposal_id} is sufficient. When threshold=2, a second
+        /confirm/{proposal_id} call is required before execute proceeds.
+        NOTE: PHGCredential.bridge is immutable post-deploy — this is a
+        software safeguard, not cryptographic enforcement.
+      tags: [Governance]
+      parameters:
+        - name: device_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: evidence_hash
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: duration_s
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Proposal created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuspensionProposal"
+        "400":
+          description: Invalid parameters
+        "401":
+          description: Unauthorized
+
+  /operator/suspension/confirm/{proposal_id}:
+    post:
+      summary: Confirm a pending suspension proposal
+      description: |
+        Increment the confirmation counter for a proposal. When confirmations
+        reach SUSPENSION_MULTISIG_THRESHOLD, the proposal becomes executable.
+      tags: [Governance]
+      parameters:
+        - name: proposal_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Confirmation recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  proposal_id:
+                    type: integer
+                  confirmations:
+                    type: integer
+                  threshold:
+                    type: integer
+                  ready_to_execute:
+                    type: boolean
+        "400":
+          description: Proposal not found, expired, or already executed
+        "401":
+          description: Unauthorized
+
+  /operator/suspension/execute/{proposal_id}:
+    post:
+      summary: Execute a confirmed suspension proposal on-chain
+      description: |
+        Execute the on-chain PHGCredential.suspend() call if proposal.confirmations
+        >= SUSPENSION_MULTISIG_THRESHOLD. Returns tx_hash on success.
+      tags: [Governance]
+      parameters:
+        - name: proposal_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Suspension executed on-chain
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  proposal_id:
+                    type: integer
+                  device_id:
+                    type: string
+                  tx_hash:
+                    type: string
+                  duration_s:
+                    type: integer
+                  status:
+                    type: string
+                    example: executed
+        "400":
+          description: Proposal not found, expired, executed, or threshold not met
+        "401":
+          description: Unauthorized
+        "503":
+          description: Chain client not configured
+
+# =============================================================================
+# Phase 76 — Ruling Provenance Anchor Endpoint
+# =============================================================================
+
+  /agent/ruling-provenance/{ruling_id}:
+    get:
+      summary: Get cryptographic provenance anchor for a ruling
+      description: |
+        Returns the SHA-256 provenance anchor that binds three independent evidence streams:
+
+        1. **commitment_hash** — Phase 66 ruling commitment hash (published on RulingRegistry.sol)
+        2. **ceremony_hash** — SHA-256 of canonical ceremony data (beacon_block_number + contributor_count)
+        3. **evidence_hash** — SHA-256 of the evidence set presented to the LLM (sort_keys=True)
+
+        The composite **provenance_hash** = SHA-256(commitment_hash|ceremony_canonical|evidence_canonical)
+        allows any third party to independently verify that the AI ruling was not post-hoc modified:
+        recompute from the stored components and compare to provenance_hash.
+
+        Returns 404 JSON if the ruling has not yet been anchored (RulingProvenanceAnchorAgent
+        processes every 5 minutes). Phase 76.
+      tags: [Agent]
+      parameters:
+        - name: ruling_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Provenance anchor record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RulingProvenance"
+        "401":
+          description: Unauthorized — invalid or missing api_key
+        "404":
+          description: Ruling not yet anchored
+
+# =============================================================================
+# Phase 75 — Validation Gate Endpoint
+# =============================================================================
+
+  /agent/validation-gate:
+    get:
+      summary: Get dry-run enforcement gate status
+      description: |
+        Returns the current state of the SessionAdjudicatorValidationAgent gate.
+        Shows consecutive_clean ruling count, divergence count, gate_n threshold,
+        gate_passed flag, and recommended action.
+
+        When gate_passed=True, it is safe to enable live enforcement via
+        POST /agent/config with AGENT_DRY_RUN=false.
+
+        Divergence criterion: LLM verdict differs from rule fallback AND
+        |llm_confidence - fallback_confidence| > VALIDATION_DIVERGENCE_THRESHOLD (default 0.3).
+        Phase 75.
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Validation gate status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationGate"
+        "401":
+          description: Unauthorized — invalid or missing api_key
+
+  /agent/live-mode-status:
+    get:
+      summary: Get live-mode activation readiness status
+      description: |
+        Returns the multi-condition readiness checklist evaluated by
+        LiveModeActivationAgent. All 5 conditions must pass for
+        ready_for_live_mode=true.
+
+        Conditions: validation_gate_passed, no_recent_operator_overrides,
+        no_recent_key_rotation, divergence_rate_within_tolerance,
+        consecutive_clean_met.
+
+        ADVISORY ONLY — does not automatically activate live mode.
+        Operator must explicitly POST /agent/config with AGENT_DRY_RUN=false.
+        Phase 79.
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Live-mode activation status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LiveModeStatus"
+        "401":
+          description: Unauthorized — invalid or missing api_key
+
+  /agent/supervisor-status:
+    get:
+      summary: Get VAPI agent fleet health status
+      description: |
+        Returns real-time health snapshot from AgentSupervisor (Phase 83).
+
+        Per-agent health:
+          HEALTHY  — activity within stale_threshold_minutes
+          STALE    — no activity within stale_threshold_minutes
+          UNKNOWN  — no rows in agent's activity table
+          ZOMBIE   — rows written but to 0 distinct devices (W1: loop detection)
+
+        fleet_health:
+          ALL_HEALTHY — all 9 agents HEALTHY
+          DEGRADED    — 1–2 agents non-HEALTHY
+          CRITICAL    — ≥3 agents non-HEALTHY, OR core agents
+                        (session_adjudicator, ruling_enforcement_agent) STALE
+
+        Core agents STALE immediately elevates to CRITICAL — these agents are
+        the minimum viable set for meaningful tournament enforcement.
+        Phase 83.
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Fleet health snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentSupervisorStatus"
+        "401":
+          description: Unauthorized — invalid or missing api_key
+
+  /agent/warm-up:
+    post:
+      summary: Trigger adjudication warm-up batch
+      description: >-
+        Phase 84/100 — Pre-warm the LLM via dry-run adjudications.
+        Pass ?device_ids=<id1>,<id2> to explicitly specify devices (Phase 100 bootstrap).
+        Falls back to recent agent_rulings, then ioid_devices table.
+        llm_available=false means warm-up ran on rule fallback logic only.
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: batch_size
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 5
+        - name: device_ids
+          in: query
+          required: false
+          description: Comma-separated device_ids to warm up (Phase 100 bootstrap).
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Warm-up report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WarmUpReport"
+        "401":
+          description: Unauthorized
+
+  /agent/gate-readiness:
+    get:
+      summary: Get composite live-mode gate readiness
+      description: |
+        Aggregates validation_gate + fleet_health into a composite gate readiness
+        snapshot (Phase 84). overall_ready=true requires both gate_passed=true AND
+        fleet_health != CRITICAL.
+
+        validation_gate:  consecutive_clean / gate_n progress + gate_passed
+        fleet_health:     AgentSupervisor ALL_HEALTHY / DEGRADED / CRITICAL
+        gate_attestations_count: number of on-chain gate proofs in gate_attestations table
+        overall_ready:    gate_passed AND fleet_health not in (CRITICAL, UNKNOWN)
+        dry_run_active:   current AGENT_DRY_RUN config value
+
+        Tool #53 get_gate_readiness exposes this same data to the BridgeAgent LLM.
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Gate readiness snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GateReadiness"
+        "401":
+          description: Unauthorized
+
+  /agent/reactive-adjudication-log:
+    get:
+      summary: Get reactive adjudication interrupt log
+      description: |
+        Returns the log of Class J HIGH-risk triggered out-of-cycle LLM rulings
+        (Reactive Adjudication Interrupt, Phase 82).
+
+        was_deferred=true entries were rate-limited by the token bucket (W1 mitigation:
+        max REACTIVE_ADJUDICATION_RATE_LIMIT calls per REACTIVE_ADJUDICATION_WINDOW_SECONDS,
+        default 2/60s). These indicate Class J HIGH events that arrived faster than the
+        LLM rate limit allows; they are logged but no ruling was issued.
+
+        The reactive path collapses Class J detection → ruling → enforcement from
+        15+ minutes (polling) to <5 seconds end-to-end.
+        Phase 82.
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: device_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Optional 64-character hex device ID filter
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+          description: Max entries to return
+      responses:
+        "200":
+          description: Reactive adjudication interrupt log
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReactiveAdjudicationLog"
+        "401":
+          description: Unauthorized — invalid or missing api_key
+
+  /agent/campaign-status:
+    get:
+      summary: Get adjudication campaign tracker status
+      description: |
+        Returns the full campaign tracker snapshot: consecutive_clean streak toward
+        the N=100 validation gate, divergence breakdown by reason, verdict distribution,
+        recent sessions, and estimated sessions remaining to gate passage.
+
+        This endpoint aggregates ruling_validation_log in a single atomic read. All
+        campaign metrics are derived from the same get_validation_summary() snapshot
+        (W1 mitigation: no drift between consecutive_clean and divergence counts).
+
+        divergence_breakdown groups non-nominal evidence fields extracted by
+        _extract_divergence_fields(). Empty divergence_breakdown means all divergences
+        have nominal evidence — a healthy signal pre-gate.
+
+        estimated_sessions_to_gate = ceil(remaining / (1 - divergence_rate)).
+        Returns null when divergence_rate == 1.0 (100% divergence rate).
+        Phase 88.
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Campaign tracker snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignStatus"
+        "401":
+          description: Unauthorized — invalid or missing api_key
+
+  /agent/protocol-intelligence:
+    get:
+      summary: Get Protocol Intelligence Report
+      description: |
+        Returns the latest ProtocolIntelligenceAgent composite score (Phase 89).
+        Synthesizes gate_progress, fleet_health, divergence_clarity, corpus_pass,
+        and class_j_confidence into a single protocol_health_score (0–100).
+        Phase 90 shadow_pass_score and Phase 91 triage_confidence_score feed in
+        as optional bonus components (up to +5 each, capped at 100).
+        ready_for_live_mode = score >= 85.0 AND gate_passed AND fleet != CRITICAL.
+        If no stored report exists, computes live from current store state.
+        Phase 89.
+      tags: [Agent]
+      parameters:
+        - in: header
+          name: x-api-key
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Protocol intelligence report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProtocolIntelligenceReport"
+        "401":
+          description: Unauthorized
+
+  /agent/shadow-enforcement-log:
+    get:
+      summary: Get Shadow Enforcement Log
+      description: |
+        Returns shadow enforcement log entries — BLOCK actions that would have
+        suspended PHGCredential but were logged instead (ENFORCEMENT_SHADOW_MODE=true).
+        Operators review this endpoint to validate false-positive rate before setting
+        ENFORCEMENT_SHADOW_MODE=false for real enforcement. Phase 90.
+      tags: [Agent]
+      parameters:
+        - in: header
+          name: x-api-key
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: device_id
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            default: 50
+      responses:
+        "200":
+          description: Shadow enforcement log entries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShadowEnforcementLog"
+        "401":
+          description: Unauthorized
+
+  /agent/triage-report:
+    get:
+      summary: Get Divergence Triage Report
+      description: |
+        Returns per-device divergence triage entries from DivergenceTriageAgent (Phase 91).
+        Each entry includes detected adversarial patterns: ml_bot_cluster (>=2 Class J HIGH),
+        cheat_cluster (>=1 hard cheat code), enrollment_anomaly (>=3 enrollment mismatches).
+        escalated=true devices are candidates for immediate SessionAdjudicator ruling.
+        Phase 91.
+      tags: [Agent]
+      parameters:
+        - in: header
+          name: x-api-key
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            default: 50
+      responses:
+        "200":
+          description: Divergence triage report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TriageReport"
+        "401":
+          description: Unauthorized
+
+  /agent/request-activation:
+    post:
+      summary: Record operator activation request
+      description: |
+        Records an operator intent to activate live mode enforcement. Checks Phase 89
+        ProtocolIntelligenceAgent ready_for_live_mode status, stores the request in
+        the activation audit log, and returns readiness status with blocking conditions.
+        NEVER auto-activates — operator must still set AGENT_DRY_RUN=false via
+        POST /agent/config. Phase 92.
+      tags: [Agent]
+      parameters:
+        - in: query
+          name: api_key
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                notes:
+                  type: string
+                  description: Optional operator notes to record with the activation request.
+      responses:
+        "200":
+          description: Activation readiness check result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActivationReadiness"
+        "401":
+          description: Unauthorized
+
+  /agent/activation-log:
+    get:
+      summary: Get live mode activation audit log
+      description: |
+        Returns all readiness_check and operator_request events from the
+        live mode activation audit trail (Phase 92). Each entry includes
+        protocol_health_score, blocking_conditions, and any operator notes.
+        Ordered by created_at DESC.
+      tags: [Agent]
+      parameters:
+        - in: query
+          name: api_key
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            default: 50
+      responses:
+        "200":
+          description: Activation audit log
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActivationLog"
+        "401":
+          description: Unauthorized
+
+  /agent/escalation-ruling-log:
+    get:
+      summary: Get triage reactive escalation ruling log
+      description: |
+        Returns entries from the Phase 94 triage reactive loop. Each entry is written
+        when DivergenceTriageAgent escalates a device and SessionAdjudicator fires an
+        immediate ruling via the divergence_pattern_detected bus event.
+        was_deferred=1 entries were rate-limited (1/device/hour default).
+        Phase 94.
+      tags: [Agent]
+      parameters:
+        - in: query
+          name: api_key
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: device_id
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            default: 50
+      responses:
+        "200":
+          description: Escalation ruling log entries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EscalationRulingLog"
+        "401":
+          description: Unauthorized
+
+  /agent/enforcement-certificate:
+    post:
+      summary: Issue a portable Enforcement Readiness Certificate
+      description: |
+        Phase 96 — Computes audit_hash = SHA-256(canonical JSON of activation audit fields),
+        hmac_sig = HMAC-SHA256(audit_hash, operator_api_key). Persists the cert (UNIQUE audit_hash
+        — idempotent). Certs expire after enforcement_cert_ttl_s (default 24h).
+        First portable, operator-signed cryptographic proof of AI enforcement readiness.
+        Phase 96.
+      tags: [Agent]
+      parameters:
+        - in: query
+          name: api_key
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Enforcement Readiness Certificate issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnforcementCertificate"
+        "401":
+          description: Unauthorized
+    get:
+      summary: Get the latest Enforcement Readiness Certificate
+      description: |
+        Returns the most recently issued ERC, or has_certificate=false if none issued yet.
+        is_expired=true is advisory — operator is responsible for renewal.
+        Phase 96.
+      tags: [Agent]
+      parameters:
+        - in: query
+          name: api_key
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ERC status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnforcementCertificateStatus"
+        "401":
+          description: Unauthorized
+
+  /agent/config:
+    post:
+      summary: Gated live-mode transition (Phase 97)
+      description: |
+        Phase 97 — When dry_run=false is requested, enforces three-condition gate:
+          gate_passed: consecutive_clean >= gate_n AND divergence_rate OK
+          cert_valid: valid non-expired EnforcementReadinessCertificate exists
+          audit_valid: activation audit chronological invariant satisfied
+        Any failure returns HTTP 422 with blocking conditions array.
+        On success, flips cfg.agent_dry_run_mode and publishes live_mode_enabled to bus.
+        All attempts logged to live_mode_guard_log. Phase 97.
+      tags: [Agent]
+      parameters:
+        - in: query
+          name: api_key
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: dry_run
+          required: true
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Config updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  dry_run:
+                    type: boolean
+                  live_mode_enabled:
+                    type: boolean
+                  blocking:
+                    type: array
+                    items:
+                      type: string
+        "401":
+          description: Unauthorized
+        "422":
+          description: Live mode preconditions not met
+
+  /agent/live-mode-guard:
+    get:
+      summary: Live-mode guard audit log (Phase 97)
+      description: |
+        Every attempt to enable live mode via POST /agent/config is recorded here.
+        Includes approved transitions and blocked attempts with blocking_conditions.
+        Phase 97.
+      tags: [Agent]
+      parameters:
+        - in: query
+          name: api_key
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+      responses:
+        "200":
+          description: Guard log entries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LiveModeGuardLog"
+        "401":
+          description: Unauthorized
+
+  /agent/operator-status:
+    get:
+      summary: Get VAPI bridge operator staking status (Phase 99A)
+      description: |
+        Phase 99A — AGaaS Foundation. Returns the latest on-chain staking event
+        recorded for a VAPI bridge operator address in VAPIOperatorRegistry.sol.
+        Event types: register (stake locked), slash (50% burned / 50% claimant),
+        deregister_request (30-day cooldown initiated), deregister (stake returned).
+        Returns found=false if the operator has no recorded events.
+      tags: [Agent]
+      parameters:
+        - in: query
+          name: api_key
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: operator_address
+          required: true
+          schema:
+            type: string
+          description: Ethereum address of the VAPI bridge operator
+      responses:
+        "200":
+          description: Operator status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperatorStatus"
+        "401":
+          description: Unauthorized
+
+  /agent/mint-vhp:
+    post:
+      summary: Mint a VHP soulbound token (Phase 99C)
+      description: |
+        Phase 99C — Verified Human Proof (VHP). Mints a soulbound ERC-4671 token
+        on VAPIVerifiedHumanProof.sol for a device that has passed all three gate conditions:
+          1. audit_valid=True (activation audit chronological invariant)
+          2. gate_passed=True (consecutive_clean >= validation_gate_n)
+          3. AGENT_DRY_RUN=false (live enforcement mode active)
+        Returns tx_hash + expires_at on success. Returns 422 with error detail on gate failure.
+        GSR cert_level=2 requires GSR_ENABLED=true and N>=30 calibration sessions.
+      tags: [Agent]
+      parameters:
+        - in: query
+          name: api_key
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: device_id
+          required: true
+          schema:
+            type: string
+          description: Device identifier
+        - in: query
+          name: to_address
+          required: true
+          schema:
+            type: string
+          description: Recipient Ethereum address for the VHP token
+      responses:
+        "200":
+          description: VHP mint successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VHPMintResult"
+        "401":
+          description: Unauthorized
+        "422":
+          description: Gate condition not met (audit_valid/gate_passed/dry_run)
+
+  /agent/vhp-status/{device_id}:
+    get:
+      summary: Get VHP token status for a device (Phase 99C)
+      description: |
+        Phase 99C — Returns the latest VHP issuance record for a device from the bridge SQLite store.
+        is_valid=True when expires_at > now. found=False if no VHP has been minted for this device.
+        vhp_contract_address reflects the configured VAPIVerifiedHumanProof.sol address.
+      tags: [Agent]
+      parameters:
+        - in: path
+          name: device_id
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: api_key
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: VHP status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VHPStatus"
+        "401":
+          description: Unauthorized
+
+  /agent/epistemic-consensus-log:
+    get:
+      summary: Epistemic consensus decisions log (Phase 98)
+      description: |
+        Phase 98 — Multi-agent weighted consensus gate before irreversible BLOCK enforcement.
+        ClassJDetector (0.40) + DivergenceTriageAgent (0.40) + AgentSupervisor (0.20).
+        consensus_score < threshold (default 0.60) downgrades BLOCK to HOLD.
+        downgraded_count shows how often the false-positive protection layer fired.
+        Phase 98.
+      tags: [Agent]
+      parameters:
+        - in: query
+          name: api_key
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: device_id
+          schema:
+            type: string
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+      responses:
+        "200":
+          description: Consensus log
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EpistemicConsensusLog"
+        "401":
+          description: Unauthorized
+
+  /agent/activation-audit:
+    get:
+      summary: Get tamper-evident activation audit summary
+      description: |
+        Phase 95 — Cross-references live_mode_activation_log (Phase 92) with gate_attestations
+        (Phase 84/87) to produce a tamper-evident audit trail verifying the full activation
+        sequence. audit_valid=True confirms: (1) protocol scored ready_for_live_mode=True,
+        (2) an on-chain GateAttestationAnchor.sol entry subsequently exists, and (3) the
+        chronological order is intact (ready check BEFORE on-chain anchor).
+        This is the cryptographic pre-condition for enabling AGENT_DRY_RUN=false.
+        Callable from tournament CI pipelines via VAPITournamentGate.verify_activation_audit().
+        Phase 95.
+      tags: [Agent]
+      parameters:
+        - in: query
+          name: api_key
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Activation audit summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActivationAuditReport"
+        "401":
+          description: Unauthorized
+
+  /federation/threat-signal:
+    post:
+      summary: Receive a peer threat signal broadcast
+      description: |
+        Endpoint called by peer bridge instances to broadcast BLOCK ruling
+        commitment hashes via HMAC-authenticated federation protocol.
+        Authenticated via X-Federation-HMAC header (HMAC-SHA256 of JSON body).
+        Duplicate commitment_hash is silently accepted (idempotent).
+        Phase 80.
+      tags: [Federation]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ThreatSignalPayload"
+      responses:
+        "200":
+          description: Signal received and stored
+        "401":
+          description: Unauthorized — invalid HMAC or missing api_key
+        "422":
+          description: Validation error
+
+  /federation/peers:
+    get:
+      summary: Get federation peer list and signal statistics
+      description: |
+        Returns the configured peer list and federation threat signal counts.
+        Phase 80.
+      tags: [Federation]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Federation status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FederationStatus"
+        "401":
+          description: Unauthorized
+
+  /agent/activation-status:
+    get:
+      tags: [Agent]
+      summary: Get 5-step live-mode activation checklist
+      description: >-
+        Phase 100 — Returns the current activation checklist with
+        current_blocking_step (1-6), progress_pct, recommended_action,
+        and per-step status. current_blocking_step=6 means fully activated.
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ActivationStatus
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActivationStatus"
+        "401":
+          description: Unauthorized
+
+  /agent/quicksilver-status:
+    get:
+      summary: QuickSilver stIOTX collateral status (Phase 101)
+      operationId: getQuicksilverStatus
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: operator_address
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by operator address
+      responses:
+        '200':
+          description: QuickSilver stIOTX collateral status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuickSilverStatus'
+        '403':
+          $ref: '#/components/responses/Unauthorized'
+  /agent/edge-ai-profile:
+    get:
+      summary: Edge AI profile for IoTeX ecosystem positioning (Phase 101)
+      operationId: getEdgeAiProfile
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Edge AI profile with agent fleet and IoTeX layer integration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EdgeAIProfile'
+        '403':
+          $ref: '#/components/responses/Unauthorized'
+  /agent/vhp-renewal-log:
+    get:
+      summary: VHP auto-renewal log (Phase 102)
+      operationId: getVhpRenewalLog
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: device_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter by device_id (optional)
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: VHP renewal log entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VHPRenewalLog'
+        '403':
+          $ref: '#/components/responses/Unauthorized'
+
+  /agent/run-activation-simulation:
+    post:
+      summary: Run Phase 103 live activation simulation
+      description: >
+        Seeds all gate conditions and inserts the protocol's first VHP issuance
+        (simulation, no chain call). Sets cfg.agent_dry_run_mode=False in-memory.
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: n_sessions
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 110
+          description: Number of simulation sessions to seed (must exceed gate_n=100)
+      responses:
+        "200":
+          description: Simulation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SimulationResult"
+        "403":
+          description: Forbidden
+
+  /agent/first-vhp-status:
+    get:
+      summary: Return the first VHP issuance record
+      description: >
+        is_simulation=True when tx_hash starts with 'sim_' (Phase 103 activation).
+        found=False when no VHP has ever been issued.
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: First VHP status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FirstVHPStatus"
+        "403":
+          description: Forbidden
+
+  /agent/commit-activation:
+    post:
+      summary: Persistent Activation Commit (Phase 104 W1 mitigation)
+      description: >
+        Runs simulation if no VHP exists, verifies Phase 97 gate, writes
+        activation_committed=True to store (persists across restarts), sets
+        cfg.agent_dry_run_mode=False, computes and stores PMI.
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: n_sessions
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 110
+        - name: notes
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Commit activation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommitActivationResult"
+        "403":
+          description: Forbidden
+
+  /agent/protocol-maturity:
+    get:
+      summary: ProtocolMaturityIndex (PMI) + activation state (Phase 104)
+      description: >
+        PMI: 0=uninitiated / 1=simulated / 2=testnet_organic / 3=mainnet.
+        activation_committed=True means dry_run=False persists across restarts.
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Protocol maturity status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProtocolMaturityStatus"
+        "403":
+          description: Forbidden
+
+  /agent/run-readiness-validation:
+    post:
+      summary: Run live mode readiness validation corpus (Phase 107)
+      description: >
+        Runs N synthetic NOMINAL sessions through SessionAdjudicator._rule_fallback().
+        A BLOCK on a nominal session = false positive.
+        ready_for_live=True requires: n_tested>=100 AND false_positive_count==0 AND
+        activation_committed AND NOT dry_run_active AND pmi>=1.
+        W1 isolation: results go to live_mode_readiness_reports table only.
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: n
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 100
+      responses:
+        "200":
+          description: Readiness validation report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessReport"
+        "403":
+          description: Forbidden
+
+  /agent/live-mode-readiness:
+    get:
+      summary: Latest live mode readiness report (Phase 107)
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Latest readiness status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessStatus"
+        "403":
+          description: Forbidden
+
+  /agent/ioswarm-vhp-mint-status:
+    get:
+      summary: ioSwarm VHP Mint Authorization status (Phase 110)
+      description: >
+        Returns ioSwarm VHP Mint Authorization quorum status. ioswarm_vhp_mint_enabled=false
+        by default (backward-compatible). Fail-CLOSED: exceptions block mint (opposite of
+        renewal fail-open). MINT_QUORUM=0.80 — stricter than BLOCK_QUORUM=0.67; irreversible
+        soulbound token on-chain. W2 swarm_fingerprint = SHA-256(node_verdicts_json) stored
+        in ioswarm_vhp_mint_log — creates two-era VHP provenance.
+        task_spec_registered=True means vapi_vhp_mint_authorization_v1 spec is available.
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ioSwarm VHP mint authorization status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IoSwarmVHPMintStatus"
+        "403":
+          description: Forbidden
+
+  /agent/ioswarm-adjudication-status:
+    get:
+      summary: ioSwarm Adjudication Coordinator status (Phase 109C)
+      description: >
+        Returns ioSwarm ClassJ+Triage adjudication quorum status. ioswarm_adjudication_enabled=false
+        by default (backward-compatible). W2 Dual-Quorum Veto: dual_veto_count increments when
+        BOTH classj AND triage quorums independently return BLOCK (≥67% agreement each).
+        Fail-open: adjudication errors return CLEAR verdicts (opposite of renewal fail-open).
+        task_spec_registered=True means vapi_classj_triage_adjudication_v1 spec is available.
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ioSwarm adjudication status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IoSwarmAdjudicationStatus"
+        "403":
+          description: Forbidden
+
+  /agent/ioswarm-renewal-status:
+    get:
+      summary: ioSwarm Renewal Coordinator status (Phase 109B)
+      description: >
+        Returns ioSwarm renewal quorum infrastructure status. ioswarm_renewal_enabled=false
+        by default (backward-compatible). Fail-open design: coordinator errors never block
+        VHP renewal. task_spec_registered=True means vapi_vhp_renewal_v1 spec is available.
+        renewal_count tracks historical quorum evaluations stored in ioswarm_renewal_log.
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ioSwarm renewal status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IoSwarmRenewalStatus"
+        "403":
+          description: Forbidden
+
+  /agent/ioswarm-status:
+    get:
+      summary: ioSwarm Bridge Adapter status (Phase 109A)
+      description: >
+        Returns ioSwarm consensus infrastructure status. ioswarm_enabled=false by default
+        (infrastructure-only until live ioSwarm operator nodes registered).
+        task_spec_registered=True means vapi_pitl_adjudication_v1 spec is available.
+        consensus_count tracks historical quorum decisions stored in ioswarm_consensus_log.
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ioSwarm status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IoSwarmStatus"
+        "403":
+          description: Forbidden
+
+  /agent/tournament-readiness:
+    get:
+      summary: Comprehensive tournament readiness scorecard (Phase 108)
+      description: >
+        7-condition AND gate: 5 software (n_tested>=100, false_positive_count=0,
+        activation_committed, dry_run_inactive, pmi>=1) + 2 hardware
+        (separation_ratio_current>1.0, touchpad_recapture_complete).
+        fully_ready=True only when all 7 pass. Current hardware blocker:
+        separation_ratio_current=0.362 (required >1.0).
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Tournament readiness scorecard
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TournamentReadiness"
+        "403":
+          description: Forbidden
+
+  /agent/epistemic-config:
+    get:
+      summary: Epistemic consensus config + threshold audit log (Phase 105)
+      description: >
+        at_risk=True when effective_threshold < recommended (Phase 98 W1 exposure).
+        pmi_triggered=True means PMI>=1 auto-raised threshold (Phase 104/105 synergy).
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Epistemic consensus configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EpistemicConfig"
+        "403":
+          description: Forbidden
 
 # =============================================================================
 # Components
@@ -2577,6 +4261,1831 @@ components:
               type: string
               description: "Set to 'unavailable' when LLM is offline"
       additionalProperties: true
+
+    RulingStreak:
+      type: object
+      description: "Phase 66 — current verdict streak for a device"
+      properties:
+        device_id:         { type: string, description: "64-char hex device identifier" }
+        current_streak:    { type: integer, description: "Consecutive rulings with streak_verdict" }
+        streak_verdict:    { type: string, enum: [FLAG, HOLD, BLOCK, CERTIFY, CLEAR] }
+        streak_start:      { type: number, description: "Unix timestamp when streak began" }
+        last_verdict:      { type: string, enum: [FLAG, HOLD, BLOCK, CERTIFY, CLEAR] }
+        last_ruling_id:    { type: integer }
+        escalated_to:      { type: string, nullable: true, description: "Auto-escalation target (HOLD or BLOCK)" }
+        updated_at:        { type: number, description: "Unix timestamp of last update" }
+
+    OnChainRuling:
+      type: object
+      description: "Phase 66 — on-chain ruling commitment record"
+      properties:
+        id:                { type: integer }
+        ruling_id:         { type: integer }
+        device_id:         { type: string }
+        commitment_hash:   { type: string, description: "SHA-256 hex from Phase 65 formula" }
+        tx_hash:           { type: string, description: "IoTeX testnet transaction hash" }
+        block_number:      { type: integer, nullable: true }
+        chain_id:          { type: integer, example: 4690 }
+        created_at:        { type: number, description: "Unix timestamp" }
+
+    OverrideRequest:
+      type: object
+      required: [device_id]
+      properties:
+        device_id:
+          type: string
+          description: "64-char hex device ID to clear"
+        reason:
+          type: string
+          description: "Human-readable reason for override (operator audit log)"
+          example: "manual_review_false_positive"
+
+    OverrideResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [overridden]
+        ruling_id:
+          type: integer
+          description: "ID of the inserted CLEAR agent_ruling"
+        device_id:
+          type: string
+
+    SuspensionStatus:
+      type: object
+      description: "Phase 67 — PHGCredential suspension state for a device"
+      properties:
+        device_id:
+          type: string
+          description: "keccak256(devicePubkey)"
+        suspended:
+          type: boolean
+          description: "True if an active suspension exists and has not yet expired"
+        suspended_until:
+          type: number
+          nullable: true
+          description: "Unix epoch (float) when the suspension expires; null if not suspended"
+        seconds_remaining:
+          type: number
+          description: "Seconds until auto-reinstatement; 0.0 if not suspended"
+        ruling_streak:
+          type: object
+          nullable: true
+          description: "Current ruling streak entry (null if no streak recorded)"
+          properties:
+            device_id:
+              type: string
+            verdict:
+              type: string
+              enum: [FLAG, HOLD, BLOCK, CLEAR]
+            streak_count:
+              type: integer
+            updated_at:
+              type: number
+
+    ValidationStats:
+      type: object
+      description: "Phase 70 — Unified validation observability snapshot. Aggregates
+        proof counts, enrollment pipeline state, data curator lineage, and ruling
+        enforcement statistics into one operator endpoint."
+      properties:
+        timestamp:
+          type: number
+          description: "Unix epoch when snapshot was taken"
+        proof_stats:
+          type: object
+          properties:
+            total_proofs:
+              type: integer
+            proofs_last_24h:
+              type: integer
+            nominal_proofs:
+              type: integer
+            anomaly_proofs:
+              type: integer
+        enrollment:
+          type: object
+          properties:
+            eligible:
+              type: integer
+              description: "Devices with enrollment_state='credentialed'"
+            in_progress:
+              type: integer
+              description: "Devices with enrollment_state='in_progress'"
+            unenrolled:
+              type: integer
+        curator_stats:
+          type: object
+          properties:
+            lineage_count:
+              type: integer
+            oracle_publications:
+              type: integer
+            eligible_devices:
+              type: integer
+        ruling_stats:
+          type: object
+          properties:
+            total_rulings:
+              type: integer
+            block_rulings:
+              type: integer
+            active_suspensions:
+              type: integer
+
+    AgentConfig:
+      type: object
+      description: "Phase 68 — SessionAdjudicator runtime configuration"
+      required: [dry_run]
+      properties:
+        dry_run:
+          type: boolean
+          description: |
+            When true (default), SessionAdjudicator rulings are advisory only and do not
+            trigger RulingEnforcementAgent escalation. Set to false to enable live enforcement.
+            Requires ≥100 validated sessions before setting false in production.
+        status:
+          type: string
+          description: "Confirmation string (e.g. 'updated') — present in responses only"
+
+    SuspensionProposal:
+      type: object
+      description: "Phase 72 — PHGCredential bridge-layer multi-sig suspension proposal.
+        PHGCredential.bridge is immutable post-deploy; this is a software safeguard.
+        Proposal expires after 24h. Execute only when confirmations >= threshold."
+      properties:
+        proposal_id:
+          type: integer
+          description: Auto-increment ID for the proposal
+        device_id:
+          type: string
+          description: Target device ID
+        evidence_hash:
+          type: string
+          description: SHA-256 commitment hash of the ruling evidence
+        duration_s:
+          type: integer
+          description: Suspension duration in seconds
+        proposed_by:
+          type: string
+          description: Truncated SHA-256 of the proposing API key (non-reversible)
+        proposed_at:
+          type: number
+          description: Unix timestamp of proposal
+        confirmations:
+          type: integer
+          description: Number of operator confirmations received
+        threshold:
+          type: integer
+          description: SUSPENSION_MULTISIG_THRESHOLD value at response time
+        executed:
+          type: boolean
+          description: True if on-chain suspension has been executed
+        tx_hash:
+          type: string
+          description: IoTeX transaction hash (set after execution)
+        expires_at:
+          type: number
+          description: Proposal expiry unix timestamp (proposed_at + 86400)
+        status:
+          type: string
+          enum: [proposed, confirmed, executed, expired]
+
+    RulingProvenance:
+      type: object
+      description: "Phase 76 — Cryptographic provenance anchor for an agent ruling.
+        Binds the ruling commitment (on-chain), ceremony integrity data (CeremonyRegistry),
+        and evidence set (presented to LLM) into a single verifiable SHA-256 fingerprint.
+        Any third party can recompute provenance_hash from the stored components."
+      properties:
+        id:
+          type: integer
+          description: Auto-increment anchor record ID
+        ruling_id:
+          type: integer
+          description: The agent_rulings.id this anchor corresponds to
+        device_id:
+          type: string
+          description: Device ID of the ruling subject
+        provenance_hash:
+          type: string
+          description: >-
+            SHA-256(commitment_hash|ceremony_canonical|evidence_canonical).
+            The canonical composite audit fingerprint. 64 hex characters.
+        ceremony_hash:
+          type: string
+          description: >-
+            SHA-256 of canonical ceremony data
+            {"beacon_block_number":N,"contributor_count":N} with sort_keys=True.
+        evidence_hash:
+          type: string
+          description: SHA-256 of evidence_json with sort_keys=True. 64 hex characters.
+        anchored_at:
+          type: number
+          description: Unix timestamp when the anchor was computed.
+
+    ValidationGate:
+      type: object
+      description: "Phase 75+78 — SessionAdjudicatorValidationAgent gate status.
+        Tracks consecutive LLM rulings that agree with the deterministic rule
+        fallback oracle. Phase 78 adds max_divergence_rate rate-tolerance criterion.
+        gate_passed = (consecutive_clean >= gate_n) AND (divergence_rate <= max_divergence_rate).
+        Both criteria evaluated over the trailing gate_n window only — pre-gate
+        early divergences do not permanently block enforcement activation."
+      properties:
+        total:
+          type: integer
+          description: Total number of rulings validated since bridge start
+        divergence_count:
+          type: integer
+          description: Total ruling divergences (LLM vs fallback) detected
+        consecutive_clean:
+          type: integer
+          description: Clean rulings in the most recent unbroken streak
+        gate_n:
+          type: integer
+          description: Required consecutive_clean to pass the gate (VALIDATION_GATE_N)
+        gate_passed:
+          type: boolean
+          description: >-
+            True when consecutive_clean >= gate_n AND divergence_rate <= max_divergence_rate.
+            Phase 78: both criteria must be satisfied simultaneously.
+        divergence_rate:
+          type: number
+          format: float
+          description: >-
+            Fraction of rulings in the trailing gate_n window that were divergent.
+            divergences_in_window / window_size. Phase 78.
+        divergence_rate_ok:
+          type: boolean
+          description: >-
+            True when divergence_rate <= max_divergence_rate. Phase 78.
+        max_divergence_rate:
+          type: number
+          format: float
+          description: >-
+            Operator-configured maximum tolerable divergence rate
+            (VALIDATION_MAX_DIVERGENCE_RATE env var, default 1.0 = no rate limit).
+            Phase 78.
+        window_size:
+          type: integer
+          description: >-
+            Actual number of records in the trailing gate_n window used to
+            compute divergence_rate. May be less than gate_n early in operation.
+            Phase 78.
+        recommended_action:
+          type: string
+          description: >-
+            Human-readable recommendation: "Safe to enable live enforcement via
+            POST /agent/config AGENT_DRY_RUN=false", or guidance on how many
+            more clean rulings are needed, or rate exceeded message. Phase 78.
+
+    LiveModeStatus:
+      type: object
+      description: >-
+        Multi-condition readiness status for dry-run → live enforcement
+        transition, evaluated by LiveModeActivationAgent. Phase 79.
+      required: [ready_for_live_mode, current_dry_run, conditions,
+                 blocking_conditions, gate_summary, recommended_action]
+      properties:
+        ready_for_live_mode:
+          type: boolean
+          description: True only when all 5 conditions pass simultaneously.
+        current_dry_run:
+          type: boolean
+          description: Current value of agent_dry_run_mode config flag.
+        conditions:
+          type: object
+          description: Boolean status of each readiness condition.
+          properties:
+            validation_gate_passed:
+              type: boolean
+            no_recent_operator_overrides:
+              type: boolean
+            no_recent_key_rotation:
+              type: boolean
+            divergence_rate_within_tolerance:
+              type: boolean
+            consecutive_clean_met:
+              type: boolean
+        blocking_conditions:
+          type: array
+          items:
+            type: string
+          description: Names of conditions currently blocking live mode.
+        gate_summary:
+          type: object
+          description: >-
+            Summary of validation gate metrics: consecutive_clean,
+            divergence_rate, gate_passed.
+          additionalProperties: true
+        recommended_action:
+          type: string
+          description: Human-readable advisory on what to do next.
+
+    ThreatSignalPayload:
+      type: object
+      description: >-
+        Federation threat signal broadcast payload from a peer bridge. Phase 80.
+      required: [device_id, commitment_hash]
+      properties:
+        device_id:
+          type: string
+          description: Device identifier (opaque string, not stored in full on-chain).
+        commitment_hash:
+          type: string
+          description: SHA-256 BLOCK ruling commitment hash (64 hex chars).
+        circuit_id:
+          type: string
+          description: ZK circuit identifier (SHA3-256 of circuit name, 64 hex chars).
+        source_peer:
+          type: string
+          description: URL of originating bridge peer.
+
+    FederationStatus:
+      type: object
+      description: >-
+        Federation broadcast agent status and signal statistics. Phase 80.
+      required: [peers, stats]
+      properties:
+        peers:
+          type: array
+          items:
+            type: string
+          description: Configured peer bridge URLs.
+        stats:
+          type: object
+          description: Signal count statistics.
+          properties:
+            total_signals:
+              type: integer
+            pending_broadcast:
+              type: integer
+              description: Locally-originated signals not yet broadcast to peers.
+            received_from_peers:
+              type: integer
+              description: Signals received from peer bridges.
+            broadcast:
+              type: integer
+              description: Signals successfully broadcast to at least one peer.
+
+    ClassJAssessment:
+      type: object
+      description: >-
+        Per-device GaussianHMM ML-bot risk assessment from ClassJDetector.
+        Discriminating signal: temporal_state_transition_entropy_variance.
+        LOW = human-consistent (>0.15), MEDIUM = ambiguous (0.05-0.15),
+        HIGH = Class J signature (<=0.05). Phase 81.
+      required: [device_id, entropy_variance, risk_level, window_count]
+      properties:
+        device_id:
+          type: string
+        entropy_variance:
+          type: number
+          format: float
+          description: >-
+            Sample variance of Shannon entropy across N windows.
+            Human: >0.15 (rhythmic game events). Class J HMM: <0.02 (uniform).
+        risk_level:
+          type: string
+          enum: [LOW, MEDIUM, HIGH]
+        window_count:
+          type: integer
+          description: Number of session entropy windows used in assessment.
+        assessed_at:
+          type: number
+          format: float
+          description: Unix timestamp of most recent assessment.
+        note:
+          type: string
+          nullable: true
+          description: Present when insufficient windows are available.
+
+    AgentSupervisorStatus:
+      type: object
+      description: >-
+        VAPI agent fleet health snapshot from AgentSupervisor (Phase 83).
+        Reports HEALTHY/STALE/UNKNOWN/ZOMBIE per agent + fleet-level health.
+      required: [agents, fleet_health, healthy_count, stale_count, unknown_count]
+      properties:
+        agents:
+          type: object
+          description: Per-agent health results keyed by agent_name.
+          additionalProperties:
+            $ref: "#/components/schemas/AgentHealthResult"
+        fleet_health:
+          type: string
+          enum: [ALL_HEALTHY, DEGRADED, CRITICAL, UNKNOWN]
+          description: >-
+            ALL_HEALTHY: all 9 agents HEALTHY.
+            DEGRADED: 1–2 agents non-HEALTHY.
+            CRITICAL: ≥3 non-HEALTHY, or core agent (session_adjudicator,
+            ruling_enforcement_agent) is STALE.
+        healthy_count:
+          type: integer
+        stale_count:
+          type: integer
+        unknown_count:
+          type: integer
+        zombie_count:
+          type: integer
+          description: Agents writing rows but to 0 distinct devices (W1 loop detection).
+        stale_threshold_minutes:
+          type: number
+          format: float
+        timestamp:
+          type: number
+          format: float
+
+    AgentHealthResult:
+      type: object
+      description: Per-agent health check result (Phase 83).
+      properties:
+        health:
+          type: string
+          enum: [HEALTHY, STALE, UNKNOWN, ZOMBIE]
+        last_active_at:
+          type: number
+          format: float
+          nullable: true
+          description: Unix timestamp of most recent row in agent's activity table.
+        activity_count:
+          type: integer
+          description: Total rows in agent's activity table.
+        distinct_devices:
+          type: integer
+          nullable: true
+          description: Distinct device_ids processed. Null for agents with no device scope.
+
+    WarmUpReport:
+      type: object
+      description: >-
+        Result of a POST /agent/warm-up batch (Phase 84).
+        llm_available=false means Anthropic key is missing — adjudications ran via
+        _rule_fallback only. Operator must confirm llm_available=true before going live.
+      properties:
+        completed:
+          type: integer
+          description: Devices successfully adjudicated.
+        failed:
+          type: integer
+          description: Devices that failed or timed out.
+        llm_available:
+          type: boolean
+          description: >-
+            True if Anthropic client was importable (W1 — llm used in warm-up).
+            False means warm-up ran on rule fallback logic only.
+        fallback_count:
+          type: integer
+          description: Number of adjudications that used rule fallback (llm_available=false).
+        duration_ms:
+          type: number
+          format: float
+          description: Total batch duration in milliseconds.
+        device_ids_attempted:
+          type: array
+          items:
+            type: string
+        batch_size:
+          type: integer
+
+    GateReadiness:
+      type: object
+      description: >-
+        Composite live-mode gate readiness snapshot (Phase 84).
+        overall_ready=true requires gate_passed AND fleet_health != CRITICAL.
+      properties:
+        overall_ready:
+          type: boolean
+          description: >-
+            True when validation gate is passed AND fleet health is not CRITICAL or UNKNOWN.
+            Set AGENT_DRY_RUN=false only when this is true.
+        dry_run_active:
+          type: boolean
+          description: Current value of AGENT_DRY_RUN config.
+        gate_attestations_count:
+          type: integer
+          description: Number of gate attestation hashes stored (on-chain proofs count).
+        validation_gate:
+          type: object
+          description: Validation gate status (from get_validation_gate_status).
+          additionalProperties: true
+        fleet_health:
+          type: object
+          description: Fleet health snapshot (from AgentSupervisor.check_fleet_health).
+          additionalProperties: true
+        timestamp:
+          type: number
+          format: float
+
+    GateReadinessResult:
+      type: object
+      description: >-
+        SDK VAPITournamentGate.check_gate_readiness() response (Phase 85).
+        Never raises — error field is non-null on failure.
+      properties:
+        overall_ready:
+          type: boolean
+        dry_run_active:
+          type: boolean
+        gate_attestations_count:
+          type: integer
+        validation_gate:
+          type: object
+          additionalProperties: true
+        fleet_health:
+          type: object
+          additionalProperties: true
+        timestamp:
+          type: number
+          format: float
+        error:
+          type: string
+          nullable: true
+
+    CeremonyAuditResult:
+      type: object
+      description: >-
+        SDK VAPICeremonyAudit.audit() response (Phase 85).
+        on_chain_match=false means the local vkey hash diverged from CeremonyRegistry.
+      properties:
+        local_hash:
+          type: string
+          description: SHA3-256 of the local vkey JSON (hex).
+        on_chain_match:
+          type: boolean
+        contributor_count:
+          type: integer
+        beacon_block_number:
+          type: integer
+        circuit_name:
+          type: string
+        registry_address:
+          type: string
+        error:
+          type: string
+          nullable: true
+
+    RulingStreamEvent:
+      type: object
+      description: >-
+        Single SSE event from VAPIRulingStream.listen() async generator (Phase 85).
+      properties:
+        event_id:
+          type: string
+        event_type:
+          type: string
+          description: SSE event field value (e.g. "ruling", "health", "message").
+        data:
+          type: object
+          additionalProperties: true
+
+    CorpusReport:
+      type: object
+      description: >-
+        Synthetic validation corpus run result (Phase 86).
+        ISOLATION: synthetic sessions do NOT count toward consecutive_clean or gate_passed.
+      properties:
+        generated:
+          type: integer
+          description: Number of synthetic sessions generated.
+        passed_fallback:
+          type: integer
+          description: Sessions where rule_fallback returned CERTIFY.
+        failed_fallback:
+          type: integer
+          description: Sessions where rule_fallback did NOT return CERTIFY (regression indicator).
+        all_nominal:
+          type: boolean
+          description: True when all sessions passed fallback.
+        duration_ms:
+          type: number
+          format: float
+        corpus_run_id:
+          type: string
+        corpus_size:
+          type: integer
+        error:
+          type: string
+          nullable: true
+
+    CorpusStatus:
+      type: object
+      description: >-
+        Synthetic validation corpus aggregate statistics (Phase 86).
+      properties:
+        total:
+          type: integer
+        passed:
+          type: integer
+        failed:
+          type: integer
+        run_count:
+          type: integer
+        last_run_at:
+          type: number
+          format: float
+          nullable: true
+        isolation_note:
+          type: string
+          description: >-
+            Confirms synthetic sessions do NOT affect production consecutive_clean gate.
+
+    CampaignStatus:
+      type: object
+      description: >-
+        Adjudication campaign tracker snapshot toward the N=100 validation gate (Phase 88).
+        All fields are derived atomically from ruling_validation_log via get_validation_summary().
+      required:
+        - consecutive_clean
+        - gate_n
+        - progress_pct
+        - session_count
+        - divergence_count
+        - divergence_rate
+        - gate_passed
+        - estimated_sessions_to_gate
+        - verdict_breakdown
+        - divergence_breakdown
+        - recent_sessions
+        - campaign_note
+      properties:
+        consecutive_clean:
+          type: integer
+          description: Current unbroken run of non-diverged sessions.
+        gate_n:
+          type: integer
+          description: Target gate threshold (default 100).
+        progress_pct:
+          type: number
+          format: float
+          description: consecutive_clean / gate_n × 100.
+        session_count:
+          type: integer
+          description: Total sessions in ruling_validation_log.
+        divergence_count:
+          type: integer
+          description: Total diverged sessions.
+        divergence_rate:
+          type: number
+          format: float
+          description: divergence_count / session_count (0.0 when session_count=0).
+        gate_passed:
+          type: boolean
+          description: True when consecutive_clean >= gate_n AND divergence_rate within tolerance.
+        estimated_sessions_to_gate:
+          type: integer
+          nullable: true
+          description: >-
+            Projected sessions remaining to reach gate_n clean streak.
+            ceil(remaining / (1 - divergence_rate)). Null when divergence_rate == 1.0.
+        verdict_breakdown:
+          type: object
+          description: Count of each verdict value in ruling_validation_log.
+          additionalProperties:
+            type: integer
+        divergence_breakdown:
+          type: object
+          description: >-
+            Aggregated non-nominal evidence fields from diverged sessions (Phase 88
+            _extract_divergence_fields instrumentation). Empty when all divergences
+            have fully nominal evidence.
+          additionalProperties: {}
+        recent_sessions:
+          type: array
+          description: Up to 10 most recent ruling_validation_log rows.
+          items:
+            type: object
+        last_session_at:
+          type: number
+          format: float
+          nullable: true
+          description: created_at timestamp of the most recent session.
+        campaign_note:
+          type: string
+          description: >-
+            Human-readable progress description. States gate progress or
+            "No real sessions yet — run the bridge with a real device to accumulate
+            consecutive_clean toward N=100".
+
+    ProtocolIntelligenceReport:
+      type: object
+      description: >-
+        Composite protocol health assessment synthesizing all agent data streams
+        into a single score (Phase 89). Synergistically integrates Phase 90 shadow
+        enforcement pass rate and Phase 91 triage confidence as bonus components.
+      required:
+        - protocol_health_score
+        - ready_for_live_mode
+        - gate_progress_score
+        - fleet_health_score
+        - divergence_clarity_score
+        - corpus_pass_score
+        - class_j_confidence_score
+        - bottleneck
+        - recommendation
+        - components
+      properties:
+        protocol_health_score:
+          type: number
+          format: float
+          description: >-
+            Composite score 0–100. Formula:
+            100 * (0.35*gate_progress + 0.25*fleet_health + 0.20*divergence_clarity
+            + 0.10*corpus_pass + 0.10*class_j_confidence)
+            + up to 5 bonus from shadow_pass_score (Phase 90)
+            + up to 5 bonus from triage_confidence_score (Phase 91), capped at 100.
+        ready_for_live_mode:
+          type: boolean
+          description: >-
+            True when protocol_health_score >= 85.0 AND gate_passed AND
+            fleet_health not in (CRITICAL, UNKNOWN).
+        gate_progress_score:
+          type: number
+          format: float
+          description: Component 0–1. consecutive_clean / gate_n.
+        fleet_health_score:
+          type: number
+          format: float
+          description: Component 0–1. 1.0=ALL_HEALTHY, 0.5=DEGRADED, 0.0=CRITICAL.
+        divergence_clarity_score:
+          type: number
+          format: float
+          description: Component 0–1. 1 - (unexplained_divergences / total_diverged). 0.5 when no data.
+        corpus_pass_score:
+          type: number
+          format: float
+          description: Component 0–1. Synthetic corpus pass rate. 0.5 neutral when no corpus run.
+        class_j_confidence_score:
+          type: number
+          format: float
+          description: Component 0–1. Fraction of Class J assessments at LOW risk. 0.5 when no data.
+        shadow_pass_score:
+          type: number
+          format: float
+          nullable: true
+          description: Phase 90 bonus component 0–1. Null when no shadow log entries.
+        triage_confidence_score:
+          type: number
+          format: float
+          nullable: true
+          description: Phase 91 bonus component 0–1. Null when no triage reports.
+        bottleneck:
+          type: string
+          nullable: true
+          description: Name of the lowest-scoring component, or null when score >= 85.
+        estimated_days_to_gate:
+          type: number
+          format: float
+          nullable: true
+          description: Projection based on recent session velocity. Null when not computable.
+        components:
+          type: object
+          description: Full breakdown of all scored components.
+          additionalProperties: {}
+        recommendation:
+          type: string
+          description: Human-readable next action.
+
+    ShadowEnforcementLog:
+      type: object
+      description: >-
+        Shadow enforcement log entries and aggregate stats (Phase 90).
+        Entries represent BLOCK actions that were logged instead of executed
+        when ENFORCEMENT_SHADOW_MODE=true. Used by operators to validate the
+        false-positive rate before enabling real enforcement.
+      required:
+        - shadow_mode_active
+        - entries
+        - total_returned
+        - stats
+      properties:
+        shadow_mode_active:
+          type: boolean
+          description: True when ENFORCEMENT_SHADOW_MODE=true in current config.
+        entries:
+          type: array
+          description: Shadow enforcement log rows (most recent first).
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              device_id:
+                type: string
+              ruling_id:
+                type: integer
+                nullable: true
+              verdict:
+                type: string
+              commitment_hash:
+                type: string
+                nullable: true
+              would_have_suspended:
+                type: integer
+              duration_s:
+                type: integer
+                nullable: true
+              warmup_attack_score:
+                type: number
+                format: float
+                nullable: true
+              created_at:
+                type: number
+                format: float
+        total_returned:
+          type: integer
+        stats:
+          type: object
+          description: Aggregate stats — total_shadow_blocks, unique_devices, avg_duration_s, shadow_pass_rate.
+          additionalProperties: {}
+
+    TriageReport:
+      type: object
+      description: >-
+        Per-device divergence triage results from DivergenceTriageAgent (Phase 91).
+        Detects cross-session adversarial patterns from divergence_reason JSON in
+        ruling_validation_log. Escalated devices are candidates for immediate ruling.
+      required:
+        - entries
+        - total_returned
+        - escalated_count
+        - clean_count
+      properties:
+        entries:
+          type: array
+          description: Triage report rows per device.
+          items:
+            type: object
+            properties:
+              device_id:
+                type: string
+              divergence_count:
+                type: integer
+              escalated:
+                type: integer
+                description: 1 if any adversarial pattern threshold was crossed.
+              patterns:
+                type: string
+                nullable: true
+                description: Comma-separated detected pattern names (ml_bot_cluster, cheat_cluster, enrollment_anomaly).
+              ml_bot_high_count:
+                type: integer
+              cheat_count:
+                type: integer
+              enrollment_anomaly_count:
+                type: integer
+              assessed_at:
+                type: number
+                format: float
+        total_returned:
+          type: integer
+        escalated_count:
+          type: integer
+          description: Count of entries with escalated=1.
+        clean_count:
+          type: integer
+          description: Count of entries with escalated=0.
+
+    ActivationReadiness:
+      type: object
+      description: >-
+        Phase 92 — Activation readiness check result returned by POST /agent/request-activation.
+        Reflects current Phase 89 protocol_health_score and blocking conditions.
+        NEVER auto-activates — operator must set AGENT_DRY_RUN=false explicitly.
+      required:
+        - ready_for_live_mode
+        - protocol_health_score
+        - blocking_conditions
+        - recommended_action
+      properties:
+        ready_for_live_mode:
+          type: boolean
+          description: True when score>=85, gate_passed, and fleet!=CRITICAL.
+        protocol_health_score:
+          type: number
+          format: float
+          description: Current Phase 89 composite score (0–100).
+        bottleneck:
+          type: string
+          nullable: true
+          description: Name of lowest-scoring component, or null when ready.
+        blocking_conditions:
+          type: array
+          items:
+            type: string
+          description: List of conditions preventing live mode activation.
+        recommended_action:
+          type: string
+          description: Human-readable next step.
+        timestamp:
+          type: number
+          format: float
+
+    ActivationLog:
+      type: object
+      description: >-
+        Phase 92 — Live mode activation audit trail. Contains all readiness_check
+        and operator_request events with protocol health context and operator notes.
+      required:
+        - entries
+        - total_returned
+        - latest_ready_for_live_mode
+      properties:
+        entries:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              event_type:
+                type: string
+                description: "'readiness_check' | 'operator_request'"
+              ready_for_live_mode:
+                type: integer
+                description: 1=ready, 0=not ready.
+              protocol_health_score:
+                type: number
+                format: float
+                nullable: true
+              bottleneck:
+                type: string
+                nullable: true
+              blocking_conditions:
+                type: string
+                nullable: true
+                description: JSON-encoded list.
+              operator_notes:
+                type: string
+                nullable: true
+              created_at:
+                type: number
+                format: float
+        total_returned:
+          type: integer
+        latest_ready_for_live_mode:
+          type: boolean
+
+    EscalationRulingLog:
+      type: object
+      description: >-
+        Phase 94 — Triage reactive ruling log. Entries written when DivergenceTriageAgent
+        escalates a device via divergence_pattern_detected bus and SessionAdjudicator fires
+        an immediate out-of-cycle ruling. was_deferred=1 entries are rate-limited (1/hour default).
+      required:
+        - entries
+        - total_returned
+      properties:
+        entries:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              device_id:
+                type: string
+              patterns:
+                type: string
+                nullable: true
+                description: Comma-separated detected pattern names.
+              verdict:
+                type: string
+                nullable: true
+                description: CERTIFY/FLAG/HOLD/BLOCK or null if deferred.
+              ruling_id:
+                type: integer
+                nullable: true
+              was_deferred:
+                type: integer
+                description: 1 if rate-limited, 0 if ruling was fired.
+              created_at:
+                type: number
+                format: float
+        total_returned:
+          type: integer
+
+    EnforcementCertificate:
+      type: object
+      description: >-
+        Phase 96 — Portable HMAC-SHA256-signed proof of AI enforcement readiness.
+        audit_hash = SHA-256(canonical JSON of audit fields). hmac_sig = HMAC-SHA256(audit_hash, operator_api_key).
+        Tournament operators can verify readiness without VAPI infrastructure.
+      properties:
+        cert_id:
+          type: integer
+          nullable: true
+        audit_hash:
+          type: string
+          description: SHA-256 of canonical audit state JSON.
+        hmac_sig:
+          type: string
+          description: HMAC-SHA256 of audit_hash signed with operator_api_key.
+        audit_valid:
+          type: boolean
+        expires_at:
+          type: number
+          format: float
+        issued_at:
+          type: number
+          format: float
+
+    EnforcementCertificateStatus:
+      type: object
+      description: Phase 96 — Latest ERC status (wrapper around certificate).
+      properties:
+        certificate:
+          nullable: true
+          description: Full certificate dict or null if none issued.
+        has_certificate:
+          type: boolean
+        is_expired:
+          type: boolean
+        timestamp:
+          type: number
+          format: float
+
+    LiveModeGuardLog:
+      type: object
+      description: >-
+        Phase 97 — Audit log of every live-mode transition attempt via POST /agent/config.
+        Includes approved transitions and blocked attempts with blocking_conditions list.
+      properties:
+        entries:
+          type: array
+          items:
+            type: object
+            properties:
+              event_type:
+                type: string
+                description: transition_attempt | transition_approved | dry_run_restored
+              gate_passed:
+                type: integer
+                nullable: true
+              cert_valid:
+                type: integer
+                nullable: true
+              audit_valid:
+                type: integer
+                nullable: true
+              blocking_conditions:
+                type: string
+                description: JSON array of blocking condition names.
+              operator_key_hash:
+                type: string
+              created_at:
+                type: number
+                format: float
+        count:
+          type: integer
+        current_dry_run:
+          type: boolean
+        timestamp:
+          type: number
+          format: float
+
+    OperatorStatus:
+      type: object
+      description: >-
+        Phase 99A — AGaaS Foundation operator staking status.
+        Reflects bridge-side record of VAPIOperatorRegistry.sol events.
+        MINIMUM_STAKE=10,000 VAPI; slash burns 50%, sends 50% to claimant;
+        deregister requires 30-day cooldown after requestDeregister().
+      properties:
+        operator_address:
+          type: string
+          description: Ethereum address queried
+        found:
+          type: boolean
+          description: True if operator has at least one recorded event
+        status:
+          type: object
+          nullable: true
+          description: Latest registration event row (null if not found)
+          properties:
+            operator_address:
+              type: string
+            event_type:
+              type: string
+              enum: [register, slash, deregister_request, deregister]
+            stake_amount:
+              type: string
+              description: VAPI token amount in wei (string to avoid precision loss)
+            tx_hash:
+              type: string
+            reason:
+              type: string
+            created_at:
+              type: number
+              format: float
+        vapi_token_address:
+          type: string
+          description: VAPIToken.sol address from bridge config
+        operator_registry_address:
+          type: string
+          description: VAPIOperatorRegistry.sol address from bridge config
+        timestamp:
+          type: number
+          format: float
+
+    VHPMintResult:
+      type: object
+      description: >-
+        Phase 99C — Result of a successful POST /agent/mint-vhp call.
+        tx_hash is the on-chain mint transaction. expires_at is 90 days from issuance.
+      properties:
+        tx_hash:
+          type: string
+          description: On-chain transaction hash for the VHP mint
+        expires_at:
+          type: number
+          format: float
+          description: Unix timestamp when the VHP token expires (now + 90 days)
+        device_id:
+          type: string
+        to_address:
+          type: string
+        consecutive_clean:
+          type: integer
+        confidence_score:
+          type: integer
+          description: Basis points (0–10000)
+        timestamp:
+          type: number
+          format: float
+
+    VHPStatus:
+      type: object
+      description: >-
+        Phase 99C — VHP token status from bridge SQLite store.
+        is_valid=True when expires_at > now and found=True.
+        found=False if no VHP has been minted for this device.
+      properties:
+        device_id:
+          type: string
+        found:
+          type: boolean
+        is_valid:
+          type: boolean
+          description: True if token exists and has not expired
+        token_id:
+          type: integer
+        cert_level:
+          type: integer
+          enum: [1, 2]
+          description: "1=controller, 2=controller+GSR"
+        consecutive_clean:
+          type: integer
+        expires_at:
+          type: number
+          format: float
+        tx_hash:
+          type: string
+        to_address:
+          type: string
+        vhp_contract_address:
+          type: string
+          description: VAPIVerifiedHumanProof.sol address from bridge config
+        timestamp:
+          type: number
+          format: float
+
+    GSRSample:
+      type: object
+      description: >-
+        Phase 99B — L7 Galvanic Skin Response biometric sample.
+        GSR_ENABLED=false default (advisory layer, code-before-hardware precedent).
+        arousal_index: 0.0–1.0 normalized SCR amplitude.
+        correlation: Pearson r with game events (-1.0 to 1.0).
+        conductance_raw: raw skin conductance in μS.
+        l7_features: {sympathetic_arousal_index, gsr_game_event_correlation,
+          baseline_conductance_drift, cognitive_load_variance}.
+        Inference code 0x33 GSR_CORRELATION_ABSENT is ADVISORY ONLY — never hard gates.
+      properties:
+        device_id:
+          type: string
+          description: Device identifier (keccak256-derived in on-chain path)
+        arousal_index:
+          type: number
+          format: float
+          description: Sympathetic arousal index 0.0–1.0 (SCR normalized amplitude)
+        correlation:
+          type: number
+          format: float
+          description: Pearson r correlation with game events (-1.0 to 1.0)
+        conductance_raw:
+          type: number
+          format: float
+          description: Raw skin conductance in μS (microsiemens)
+        l7_features_json:
+          type: string
+          description: >-
+            JSON-encoded L7 feature dict: {sympathetic_arousal_index (float),
+            gsr_game_event_correlation (float), baseline_conductance_drift (float),
+            cognitive_load_variance (float)}
+        created_at:
+          type: number
+          format: float
+          description: Unix timestamp of sample insertion
+
+    EpistemicConsensusLog:
+      type: object
+      description: >-
+        Phase 98 — Multi-agent consensus log. Before irreversible BLOCK enforcement,
+        three agents vote: ClassJDetector (0.40), DivergenceTriageAgent (0.40), AgentSupervisor (0.20).
+        consensus_score < 0.60 downgrades BLOCK to HOLD. downgraded=1 tracks false-positive protection.
+      properties:
+        entries:
+          type: array
+          items:
+            type: object
+            properties:
+              device_id:
+                type: string
+              proposed_verdict:
+                type: string
+              class_j_score:
+                type: number
+                format: float
+              triage_score:
+                type: number
+                format: float
+              supervisor_score:
+                type: number
+                format: float
+              consensus_score:
+                type: number
+                format: float
+              threshold:
+                type: number
+                format: float
+              consensus_reached:
+                type: integer
+              final_verdict:
+                type: string
+              downgraded:
+                type: integer
+              created_at:
+                type: number
+                format: float
+        count:
+          type: integer
+        downgraded_count:
+          type: integer
+        timestamp:
+          type: number
+          format: float
+
+    ActivationAuditReport:
+      type: object
+      description: >-
+        Phase 95 — Tamper-evident activation audit summary. Verifies the full
+        cryptographic activation sequence: protocol scored ready_for_live_mode=True
+        in live_mode_activation_log, followed by on-chain gate attestation.
+        audit_valid=True is the pre-condition for AGENT_DRY_RUN=false.
+      required:
+        - audit_valid
+        - gate_attestation_count
+        - audit_summary
+        - timestamp
+      properties:
+        audit_valid:
+          type: boolean
+          description: True if chronological sequence is intact and both conditions met.
+        first_ready_check_at:
+          type: number
+          format: float
+          nullable: true
+          description: Unix timestamp of first ready_for_live_mode=True activation log entry.
+        gate_attestation_count:
+          type: integer
+          description: Number of on-chain gate attestations in gate_attestations table.
+        latest_attestation_at:
+          type: number
+          format: float
+          nullable: true
+          description: Unix timestamp of most recent gate attestation.
+        audit_summary:
+          type: string
+          description: Human-readable description of the audit outcome.
+        timestamp:
+          type: number
+          format: float
+          description: Time of this audit query.
+
+    ReactiveAdjudicationLog:
+      type: object
+      description: >-
+        Log of Class J HIGH-risk triggered out-of-cycle LLM rulings (Phase 82).
+        was_deferred=true entries were suppressed by the token bucket rate limiter.
+      required: [entries, total_returned, deferred_count]
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReactiveAdjudicationEntry"
+        total_returned:
+          type: integer
+        deferred_count:
+          type: integer
+          description: Number of entries where was_deferred=true (rate-limited).
+        timestamp:
+          type: number
+          format: float
+
+    ReactiveAdjudicationEntry:
+      type: object
+      description: Single reactive adjudication interrupt log entry (Phase 82).
+      properties:
+        id:
+          type: integer
+        device_id:
+          type: string
+        triggered_by:
+          type: string
+          description: Bus event type that triggered this entry (class_j_high_risk_detected).
+        entropy_variance:
+          type: number
+          format: float
+          nullable: true
+        verdict:
+          type: string
+          nullable: true
+          enum: [FLAG, HOLD, BLOCK, CERTIFY, CLEAR]
+          description: LLM ruling verdict. Null if was_deferred=true.
+        was_deferred:
+          type: integer
+          enum: [0, 1]
+          description: >-
+            1 if this interrupt was suppressed by the token bucket rate limiter
+            (W1 mitigation). No ruling was issued for deferred entries.
+        created_at:
+          type: number
+          format: float
+
+    ActivationStatus:
+      type: object
+      description: >-
+        Phase 100 — 5-step live-mode activation checklist.
+        current_blocking_step: 1=need clean sessions, 2=need enforcement cert,
+        3=need audit_valid, 4=need dry_run=false, 5=VHP blocking, 6=fully activated.
+      required: [steps, current_blocking_step, fully_activated, recommended_action, warnings, timestamp]
+      properties:
+        steps:
+          type: object
+          properties:
+            step1_validation_gate:
+              type: object
+              properties:
+                passed:
+                  type: boolean
+                consecutive_clean:
+                  type: integer
+                gate_n:
+                  type: integer
+                progress_pct:
+                  type: number
+                  format: float
+                sessions_remaining:
+                  type: integer
+                divergence_rate:
+                  type: number
+                  format: float
+            step2_enforcement_cert:
+              type: object
+              properties:
+                issued:
+                  type: boolean
+                valid:
+                  type: boolean
+                expires_at:
+                  type: number
+                  format: float
+                  nullable: true
+            step3_audit_valid:
+              type: object
+              properties:
+                audit_valid:
+                  type: boolean
+                gate_attestation_count:
+                  type: integer
+                first_ready_check_at:
+                  type: number
+                  format: float
+                  nullable: true
+            step4_live_mode:
+              type: object
+              properties:
+                dry_run_active:
+                  type: boolean
+                live_mode_enabled:
+                  type: boolean
+            step5_vhp_mint:
+              type: object
+              properties:
+                ready:
+                  type: boolean
+                blocking_conditions:
+                  type: array
+                  items:
+                    type: string
+        current_blocking_step:
+          type: integer
+          description: Which step is currently blocking activation (1-5); 6 = fully activated.
+        fully_activated:
+          type: boolean
+        recommended_action:
+          type: string
+          description: Exact API call to make next.
+        warnings:
+          type: array
+          items:
+            type: string
+        timestamp:
+          type: number
+          format: float
+
+    QuickSilverStatus:
+      type: object
+      properties:
+        operator_address:
+          type: string
+        found:
+          type: boolean
+        latest_event_type:
+          type: string
+          description: lock / unlock_request / claim_unlock / slash / claim_yield
+        amount_wei:
+          type: string
+        events_count:
+          type: integer
+        last_event_at:
+          type: number
+        timestamp:
+          type: number
+    EdgeAIProfile:
+      type: object
+      properties:
+        protocol:
+          type: string
+        category:
+          type: string
+        depin_category:
+          type: string
+        agent_fleet_size:
+          type: integer
+        agent_fleet:
+          type: array
+          items:
+            type: string
+        inference_mode:
+          type: string
+        iotex_layer_integration:
+          type: object
+        composable_gate:
+          type: string
+        soulbound_credential:
+          type: string
+        cross_chain_bridge:
+          type: string
+        positioning:
+          type: string
+        timestamp:
+          type: number
+    VHPRenewalLog:
+      type: object
+      properties:
+        logs:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              device_id:
+                type: string
+              token_id:
+                type: integer
+              old_expires_at:
+                type: number
+              new_expires_at:
+                type: number
+              tx_hash:
+                type: string
+              dry_run:
+                type: boolean
+              created_at:
+                type: number
+        total_count:
+          type: integer
+        timestamp:
+          type: number
+
+    SimulationResult:
+      type: object
+      properties:
+        simulation_sessions:
+          type: integer
+        gate_passed:
+          type: boolean
+        cert_created:
+          type: boolean
+        dry_run_toggled:
+          type: boolean
+        vhp_minted:
+          type: boolean
+        token_id:
+          type: integer
+          nullable: true
+        tx_hash:
+          type: string
+        fully_activated:
+          type: boolean
+        elapsed_ms:
+          type: integer
+        error:
+          type: string
+          nullable: true
+        timestamp:
+          type: number
+
+    FirstVHPStatus:
+      type: object
+      properties:
+        found:
+          type: boolean
+        is_simulation:
+          type: boolean
+        device_id:
+          type: string
+        token_id:
+          type: integer
+        tx_hash:
+          type: string
+        expires_at:
+          type: number
+        is_valid:
+          type: boolean
+        timestamp:
+          type: number
+
+    CommitActivationResult:
+      type: object
+      properties:
+        committed:
+          type: boolean
+        pmi:
+          type: integer
+        dry_run_active:
+          type: boolean
+        error:
+          type: string
+          nullable: true
+        timestamp:
+          type: number
+
+    ProtocolMaturityStatus:
+      type: object
+      properties:
+        pmi:
+          type: integer
+          description: "0=uninitiated / 1=simulated / 2=testnet_organic / 3=mainnet"
+        pmi_label:
+          type: string
+        activation_committed:
+          type: boolean
+        committed_at:
+          type: number
+          nullable: true
+        dry_run_active:
+          type: boolean
+        is_simulation:
+          type: boolean
+        days_until_vhp_expiry:
+          type: number
+          nullable: true
+        vhp_found:
+          type: boolean
+        timestamp:
+          type: number
+
+    EpistemicConfig:
+      type: object
+      properties:
+        configured_threshold:
+          type: number
+        recommended_threshold:
+          type: number
+        effective_threshold:
+          type: number
+        pmi_triggered:
+          type: boolean
+        triage_prereq_required:
+          type: boolean
+        at_risk:
+          type: boolean
+        pmi:
+          type: integer
+        threshold_history:
+          type: array
+          items:
+            type: object
+        w1_note:
+          type: string
+          nullable: true
+        timestamp:
+          type: number
+
+    ReadinessReport:
+      type: object
+      properties:
+        n_tested:
+          type: integer
+        false_positive_count:
+          type: integer
+        false_positive_rate:
+          type: number
+        activation_committed:
+          type: boolean
+        pmi:
+          type: integer
+        dry_run_active:
+          type: boolean
+        ready_for_live:
+          type: boolean
+        duration_ms:
+          type: number
+        error:
+          type: string
+          nullable: true
+        timestamp:
+          type: number
+
+    ReadinessStatus:
+      type: object
+      properties:
+        n_tested:
+          type: integer
+        false_positive_count:
+          type: integer
+        false_positive_rate:
+          type: number
+        activation_committed:
+          type: boolean
+        pmi:
+          type: integer
+        dry_run_active:
+          type: boolean
+        ready_for_live:
+          type: boolean
+        found:
+          type: boolean
+        error:
+          type: string
+          nullable: true
+        timestamp:
+          type: number
+
+    IoSwarmVHPMintStatus:
+      type: object
+      description: "Phase 110 ioSwarm VHP Mint Authorization status (fail-CLOSED quorum gate)"
+      properties:
+        ioswarm_vhp_mint_enabled:
+          type: boolean
+        mint_quorum:
+          type: number
+        authorized_count:
+          type: integer
+        denied_count:
+          type: integer
+        task_spec_registered:
+          type: boolean
+        swarm_fingerprint_count:
+          type: integer
+        timestamp:
+          type: number
+
+    IoSwarmAdjudicationStatus:
+      type: object
+      description: "Phase 109C ioSwarm ClassJ+Triage Adjudication Coordinator status"
+      properties:
+        ioswarm_adjudication_enabled:
+          type: boolean
+        classj_block_quorum:
+          type: number
+        triage_block_quorum:
+          type: number
+        dual_veto_count:
+          type: integer
+        adjudication_count:
+          type: integer
+        task_spec_registered:
+          type: boolean
+        timestamp:
+          type: number
+
+    IoSwarmRenewalStatus:
+      type: object
+      description: "Phase 109B ioSwarm Renewal Coordinator status"
+      properties:
+        ioswarm_renewal_enabled:
+          type: boolean
+        min_quorum:
+          type: integer
+        renewal_count:
+          type: integer
+        task_spec_registered:
+          type: boolean
+        recent_approvals:
+          type: integer
+        recent_skips:
+          type: integer
+        timestamp:
+          type: number
+
+    IoSwarmStatus:
+      type: object
+      description: "Phase 109A ioSwarm Bridge Adapter status"
+      properties:
+        ioswarm_enabled:
+          type: boolean
+        quorum_threshold:
+          type: number
+        block_quorum_threshold:
+          type: number
+        consensus_count:
+          type: integer
+        configured_node_count:
+          type: integer
+        task_spec_registered:
+          type: boolean
+        w3bstream_applets:
+          type: array
+          items:
+            type: string
+        vhp_auth_gate_address:
+          type: string
+        status_note:
+          type: string
+        timestamp:
+          type: number
+
+    TournamentReadiness:
+      type: object
+      properties:
+        software_conditions:
+          type: object
+          description: "5 boolean software conditions"
+          properties:
+            n_tested_ge_100:
+              type: boolean
+            false_positive_count_zero:
+              type: boolean
+            activation_committed:
+              type: boolean
+            dry_run_inactive:
+              type: boolean
+            pmi_ge_1:
+              type: boolean
+        software_conditions_met:
+          type: integer
+        software_conditions_total:
+          type: integer
+        hardware_conditions:
+          type: object
+          description: "2 boolean hardware conditions"
+          properties:
+            separation_ratio_gt_1:
+              type: boolean
+            touchpad_recapture_complete:
+              type: boolean
+        hardware_conditions_met:
+          type: integer
+        hardware_conditions_total:
+          type: integer
+        separation_ratio_current:
+          type: number
+          description: "Current inter-person separation ratio (baseline 0.362, required >1.0)"
+        separation_ratio_required:
+          type: number
+        fully_ready:
+          type: boolean
+          description: "True only when all 7 conditions pass (currently always False — hardware blocker)"
+        blocking_conditions:
+          type: array
+          items:
+            type: string
+        ready_for_live:
+          type: boolean
+        pmi:
+          type: integer
+        error:
+          type: string
+          nullable: true
+        timestamp:
+          type: number
 
     Error:
       type: object

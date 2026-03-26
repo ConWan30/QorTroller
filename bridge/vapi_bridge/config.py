@@ -461,6 +461,467 @@ class Config:
     )
     """Minimum average humanity probability (across NOMINAL sessions) for enrollment."""
 
+    # --- Phase 66: Ruling Enforcement Pipeline ---
+    ruling_enforcement_enabled: bool = field(
+        default_factory=lambda: _env_bool("RULING_ENFORCEMENT_ENABLED", True)
+    )
+    """Enable RulingEnforcementAgent background loop (Phase 66)."""
+    ruling_streak_block_threshold: int = field(
+        default_factory=lambda: _env_int("RULING_STREAK_BLOCK_THRESHOLD", 3)
+    )
+    """Consecutive BLOCK rulings before credential suspension fires."""
+    ruling_registry_address: str = field(
+        default_factory=lambda: _env("RULING_REGISTRY_ADDRESS", "")
+    )
+    """RulingRegistry.sol contract address (Phase 66). Empty = on-chain anchoring disabled."""
+    ceremony_registry_address: str = field(
+        default_factory=lambda: _env("CEREMONY_REGISTRY_ADDRESS", "")
+    )
+    """CeremonyRegistry.sol contract address (Phase 67). Empty = ceremony verification disabled."""
+
+    # --- Phase 68-B: ZKVerifier local pre-verification ---
+    pitl_vkey_path: str = field(
+        default_factory=lambda: _env(
+            "PITL_VKEY_PATH",
+            "bridge/zk_artifacts/PitlSession_verification_key.json",
+        )
+    )
+    """Path to PitlSessionProof verification_key.json for local Groth16 pre-verify (Phase 68)."""
+
+    # --- Phase 68-C: SessionAdjudicator live mode ---
+    agent_dry_run_mode: bool = field(
+        default_factory=lambda: _env("AGENT_DRY_RUN", "true").lower() in ("1", "true", "yes")
+    )
+    """When True (default), SessionAdjudicator rulings are advisory only (dry_run=True).
+    Set AGENT_DRY_RUN=false to enable live enforcement. Requires prior validation on ≥100 sessions."""
+
+    # Phase 69 — Data Sovereignty Layer + DePIN Tokenomics
+    curator_enabled: bool = field(
+        default_factory=lambda: _env("CURATOR_ENABLED", "true").lower() in ("1", "true", "yes")
+    )
+    """Enable DataCuratorAgent poll loop (default: True). Set CURATOR_ENABLED=false to disable."""
+
+    curator_oracle_publish: bool = field(
+        default_factory=lambda: _env("CURATOR_ORACLE_PUBLISH", "false").lower() in ("1", "true", "yes")
+    )
+    """When True, DataCuratorAgent publishes oracle updates to IoTeX on-chain.
+    Requires HUMANITY_ORACLE_ADDRESS + RULING_ORACLE_ADDRESS + PASSPORT_ORACLE_ADDRESS.
+    Default: false (dry-run until addresses configured)."""
+
+    humanity_oracle_address: str = field(
+        default_factory=lambda: _env("HUMANITY_ORACLE_ADDRESS", "")
+    )
+    """HumanityOracle.sol contract address on IoTeX testnet (Phase 69)."""
+
+    ruling_oracle_address: str = field(
+        default_factory=lambda: _env("RULING_ORACLE_ADDRESS", "")
+    )
+    """RulingOracle.sol contract address on IoTeX testnet (Phase 69)."""
+
+    passport_oracle_address: str = field(
+        default_factory=lambda: _env("PASSPORT_ORACLE_ADDRESS", "")
+    )
+    """PassportOracle.sol contract address on IoTeX testnet (Phase 69)."""
+
+    data_sovereignty_reg_address: str = field(
+        default_factory=lambda: _env("DATA_SOVEREIGNTY_REG_ADDRESS", "")
+    )
+    """DataSovereigntyRegistry.sol contract address on IoTeX testnet (Phase 69)."""
+
+    reward_distributor_address: str = field(
+        default_factory=lambda: _env("REWARD_DISTRIBUTOR_ADDRESS", "")
+    )
+    """VAPIRewardDistributor.sol contract address on IoTeX testnet (Phase 69)."""
+
+    data_marketplace_address: str = field(
+        default_factory=lambda: _env("DATA_MARKETPLACE_ADDRESS", "")
+    )
+    """VAPIDataMarketplace.sol contract address on IoTeX testnet (Phase 69)."""
+
+    governance_timelock_address: str = field(
+        default_factory=lambda: _env("GOVERNANCE_TIMELOCK_ADDRESS", "")
+    )
+    """VAPIGovernanceTimelock.sol contract address on IoTeX testnet (Phase 70)."""
+
+    protocol_lens_address: str = field(
+        default_factory=lambda: _env("PROTOCOL_LENS_ADDRESS", "")
+    )
+    """VAPIProtocolLens.sol contract address on IoTeX testnet (Phase 70)."""
+
+    # --- Phase 72: PHGCredential bridge-layer multi-sig ---
+    suspension_multisig_threshold: int = field(
+        default_factory=lambda: int(_env("SUSPENSION_MULTISIG_THRESHOLD", "1"))
+    )
+    """Number of confirmations required before a suspension proposal is executed on-chain.
+    Default 1 = current behaviour (immediate execution).
+    Set SUSPENSION_MULTISIG_THRESHOLD=2 to require a second operator confirmation.
+    NOTE: PHGCredential.bridge is immutable post-deploy — this is a software safeguard,
+    not cryptographic enforcement. Key separation must be operational, not just config."""
+
+    # --- Phase 75: Validation gate + Ceremony Watchdog ---
+    validation_divergence_threshold: float = field(
+        default_factory=lambda: float(_env("VALIDATION_DIVERGENCE_THRESHOLD", "0.3"))
+    )
+    """Confidence delta above which a verdict mismatch is counted as a divergence.
+    Default 0.3 — LLM and fallback must agree within 30% confidence or produce the same verdict."""
+
+    validation_gate_n: int = field(
+        default_factory=lambda: int(_env("VALIDATION_GATE_N", "100"))
+    )
+    """Number of consecutive clean (non-divergent) rulings required before the
+    SessionAdjudicatorValidationAgent emits dry_run_gate_passed. Default 100."""
+
+    validation_max_divergence_rate: float = field(
+        default_factory=lambda: float(_env("VALIDATION_MAX_DIVERGENCE_RATE", "1.0"))
+    )
+    """Maximum allowed divergence rate in the trailing gate_n window before gate blocks.
+    Default 1.0 (disabled — any rate passes). Set to e.g. 0.05 for ≤5% divergences
+    over the last gate_n rulings. Evaluated alongside consecutive_clean (Phase 78).
+    W1 mitigation: rate is computed over the trailing gate_n window only — pre-gate
+    divergences from early sessions do not permanently block the gate."""
+
+    ceremony_watchdog_enabled: bool = field(
+        default_factory=lambda: _env_bool("CEREMONY_WATCHDOG_ENABLED", True)
+    )
+    """Enable CeremonyWatchdogAgent (Phase 75). Polls CeremonyRegistry every 5 minutes.
+    On key rotation: invalidates _CEREMONY_CACHE and emits ceremony_key_rotated event."""
+
+    # --- Phase 76: Ruling provenance anchors ---
+    ruling_provenance_enabled: bool = field(
+        default_factory=lambda: _env_bool("RULING_PROVENANCE_ENABLED", True)
+    )
+    """Enable RulingProvenanceAnchorAgent (Phase 76). Computes provenance hashes for all
+    rulings and stores them in ruling_provenance_anchors table. Local-only by default."""
+
+    ruling_provenance_publish_enabled: bool = field(
+        default_factory=lambda: _env_bool("RULING_PROVENANCE_PUBLISH_ENABLED", False)
+    )
+    """Enable on-chain publication of provenance hashes via RulingRegistry.sol (Phase 76).
+    Default False — costs gas per ruling. Only enable for live (dry_run=False) rulings.
+    Requires RULING_ENFORCEMENT_ENABLED=true and a configured chain client."""
+
+    # --- Phase 79: Live mode activation ---
+    live_mode_auto_candidate: bool = field(
+        default_factory=lambda: _env_bool("LIVE_MODE_AUTO_CANDIDATE", False)
+    )
+    """Enable live mode auto-candidate advisory (Phase 79). When True, LiveModeActivationAgent
+    emits live_mode_candidate events when all 5 checklist conditions pass.
+    Operator must still manually set AGENT_DRY_RUN=false."""
+
+    # --- Phase 80: Federation broadcast ---
+    federation_broadcast_enabled: bool = field(
+        default_factory=lambda: _env_bool("FEDERATION_BROADCAST_ENABLED", False)
+    )
+    """Enable FederationBroadcastAgent (Phase 80). Broadcasts BLOCK rulings to peer bridges.
+    Requires FEDERATION_BROADCAST_PEERS and FEDERATION_BROADCAST_API_KEY."""
+
+    federation_broadcast_peers: str = field(
+        default_factory=lambda: _env("FEDERATION_BROADCAST_PEERS", "")
+    )
+    """Comma-separated list of peer bridge base URLs for federation broadcast (Phase 80).
+    Example: http://peer1:8080,http://peer2:8080"""
+
+    federation_broadcast_api_key: str = field(
+        default_factory=lambda: _env("FEDERATION_BROADCAST_API_KEY", "")
+    )
+    """Shared HMAC-SHA256 key for federation broadcast authentication (Phase 80)."""
+
+    # --- Phase 81: Class J ML-bot detection ---
+    class_j_detection_enabled: bool = field(
+        default_factory=lambda: _env_bool("CLASS_J_DETECTION_ENABLED", True)
+    )
+    """Enable ClassJDetector ML-bot detection via temporal entropy variance (Phase 81).
+    Tracks entropy variance per device; HIGH risk published to bus for SessionAdjudicator."""
+
+    class_j_entropy_windows: int = field(
+        default_factory=lambda: int(_env("CLASS_J_ENTROPY_WINDOWS", "10"))
+    )
+    """Number of session entropy windows to maintain per device for Class J detection (Phase 81).
+    Variance computed over these windows; >= 2 required for assessment."""
+
+    # --- Phase 82: Reactive Adjudication Interrupt rate limiting ---
+    reactive_adjudication_rate_limit: int = field(
+        default_factory=lambda: int(_env("REACTIVE_ADJUDICATION_RATE_LIMIT", "2"))
+    )
+    """Max reactive LLM calls per window (Phase 82 W1 mitigation). Default 2."""
+
+    reactive_adjudication_window_seconds: int = field(
+        default_factory=lambda: int(_env("REACTIVE_ADJUDICATION_WINDOW_SECONDS", "60"))
+    )
+    """Token-bucket window duration in seconds for reactive adjudication (Phase 82). Default 60."""
+
+    # --- Phase 83: Agent Supervisor ---
+    supervisor_enabled: bool = field(
+        default_factory=lambda: _env_bool("SUPERVISOR_ENABLED", True)
+    )
+    """Enable AgentSupervisor fleet health monitor (Phase 83). Default True."""
+
+    supervisor_stale_threshold_minutes: int = field(
+        default_factory=lambda: int(_env("SUPERVISOR_STALE_THRESHOLD_MINUTES", "15"))
+    )
+    """Minutes of inactivity before an agent is marked STALE (Phase 83). Default 15."""
+
+    # --- Phase 84: Live Mode Gate Completion ---
+    gate_attestation_anchor_address: str = field(
+        default_factory=lambda: _env("GATE_ATTESTATION_ANCHOR_ADDRESS", "")
+    )
+    """GateAttestationAnchor.sol contract address on IoTeX testnet (Phase 84)."""
+
+    warm_up_batch_size: int = field(
+        default_factory=lambda: int(_env("WARM_UP_BATCH_SIZE", "5"))
+    )
+    """Max devices to adjudicate per AdjudicationWarmUpRunner batch (Phase 84). Default 5."""
+
+    # --- Phase 86: Synthetic Session Corpus Pipeline ---
+    synthetic_corpus_enabled: bool = field(
+        default_factory=lambda: _env("SYNTHETIC_CORPUS_ENABLED", "false").lower() == "true"
+    )
+    """Enable the synthetic validation corpus pipeline (Phase 86). Default false."""
+
+    synthetic_corpus_size: int = field(
+        default_factory=lambda: int(_env("SYNTHETIC_CORPUS_SIZE", "120"))
+    )
+    """Number of synthetic sessions per corpus run (Phase 86). Default 120 = gate_n target."""
+
+    # --- Phase 89: Protocol Intelligence Synthesis Agent ---
+    protocol_intelligence_enabled: bool = field(
+        default_factory=lambda: _env("PROTOCOL_INTELLIGENCE_ENABLED", "true").lower()
+        not in ("0", "false", "no")
+    )
+    """Enable ProtocolIntelligenceAgent (Phase 89). Default true."""
+
+    # --- Phase 90: Shadow Enforcement Mode ---
+    enforcement_shadow_mode: bool = field(
+        default_factory=lambda: _env("ENFORCEMENT_SHADOW_MODE", "false").lower()
+        in ("1", "true", "yes")
+    )
+    """Shadow enforcement: log BLOCK actions without calling PHGCredential.suspend() (Phase 90).
+    Enables safe dry run of the enforcement pipeline against real sessions before go-live.
+    Set ENFORCEMENT_SHADOW_MODE=true to activate. Default false."""
+
+    # --- Phase 91: Divergence Triage Agent ---
+    divergence_triage_enabled: bool = field(
+        default_factory=lambda: _env("DIVERGENCE_TRIAGE_ENABLED", "true").lower()
+        not in ("0", "false", "no")
+    )
+    """Enable DivergenceTriageAgent (Phase 91). Default true."""
+
+    # --- Phase 92: Live Mode Activation Pipeline ---
+    activation_pipeline_enabled: bool = field(
+        default_factory=lambda: _env("ACTIVATION_PIPELINE_ENABLED", "true").lower()
+        not in ("0", "false", "no")
+    )
+    """Enable LiveModeActivationPipeline audit logging (Phase 92). Default true."""
+
+    # --- Phase 94: Class J Reactive Triage Loop ---
+    triage_reactive_rate_limit: int = field(
+        default_factory=lambda: int(_env("TRIAGE_REACTIVE_RATE_LIMIT", "1"))
+    )
+    """Max triage reactive adjudications per per-device window (Phase 94). Default 1."""
+
+    triage_reactive_window_seconds: float = field(
+        default_factory=lambda: float(_env("TRIAGE_REACTIVE_WINDOW_SECONDS", "3600.0"))
+    )
+    """Per-device token bucket window for triage reactive adjudications (Phase 94). Default 3600s."""
+
+    enforcement_cert_ttl_s: int = field(
+        default_factory=lambda: int(_env("ENFORCEMENT_CERT_TTL_S", "86400"))
+    )
+    """Enforcement Readiness Certificate TTL in seconds (Phase 96). Default 86400 (24h)."""
+
+    epistemic_consensus_enabled: bool = field(
+        default_factory=lambda: _env_bool("EPISTEMIC_CONSENSUS_ENABLED", "true")
+    )
+    """Enable multi-agent consensus check before live BLOCK execution (Phase 98). Default True."""
+
+    epistemic_consensus_threshold: float = field(
+        default_factory=lambda: float(_env("EPISTEMIC_CONSENSUS_THRESHOLD", "0.60"))
+    )
+    """Minimum consensus score for BLOCK execution in live mode (Phase 98). Default 0.60.
+
+    W1 VULNERABILITY: threshold=0.60 is exactly reachable by ClassJDetector alone
+    (class_j=0.40 + supervisor=0.20 = 0.60). An adversary who suppresses triage
+    escalation across sessions reduces the 3-agent design to a 1-agent gate.
+    Operators in sustained adversarial deployments should raise this to 0.65.
+    """
+
+    # --- Phase 99A: AGaaS Foundation Token Stack ---
+    vapi_token_address: str = field(
+        default_factory=lambda: _env("VAPI_TOKEN_ADDRESS", "")
+    )
+    """VAPIToken.sol ERC-20 utility token address (IoTeX testnet). Empty until Phase 99A deploys."""
+
+    operator_registry_address: str = field(
+        default_factory=lambda: _env("OPERATOR_REGISTRY_ADDRESS", "")
+    )
+    """VAPIOperatorRegistry.sol staking/slashing address. Empty until Phase 99A deploys."""
+
+    hardware_cert_registry_address: str = field(
+        default_factory=lambda: _env("HARDWARE_CERT_REGISTRY_ADDRESS", "")
+    )
+    """VAPIHardwareCertRegistry.sol hardware certification address. Empty until Phase 99A deploys."""
+
+    # --- Phase 99B: GSR Biometric Layer ---
+    gsr_enabled: bool = field(
+        default_factory=lambda: _env_bool("GSR_ENABLED", False)
+    )
+    """Enable L7 GSR biometric layer (Phase 99B). Default False.
+
+    GSR_ENABLED=false is the correct default until N≥30 real calibration sessions per
+    player are collected. Current N=0 real sessions. Hardware BOM: ~$30–45 (Ag/AgCl
+    + ESP32-S3 + INA128). MockGSRGrip is always available for code-path testing.
+    """
+
+    gsr_sample_interval_s: int = field(
+        default_factory=lambda: _env_int("GSR_SAMPLE_INTERVAL_S", 30)
+    )
+    """GSR sample collection interval in seconds (Phase 99B). Default 30s."""
+
+    gsr_registry_address: str = field(
+        default_factory=lambda: _env("GSR_REGISTRY_ADDRESS", "")
+    )
+    """VAPIGSRRegistry.sol address (Phase 99B). Empty until Phase 99B deploys."""
+
+    w3bstream_project_id: str = field(
+        default_factory=lambda: _env("W3BSTREAM_PROJECT_ID", "")
+    )
+    """W3bstream project ID for PoAC + GSR packet validation applets (Phase 99B)."""
+
+    # --- Phase 99C: VHP Soulbound Token + LayerZero Bridge ---
+    vhp_contract_address: str = field(
+        default_factory=lambda: _env("VHP_CONTRACT_ADDRESS", "")
+    )
+    """VAPIVerifiedHumanProof.sol address (Phase 99C). Empty until Phase 99C deploys."""
+
+    layerzero_endpoint_address: str = field(
+        default_factory=lambda: _env("LAYERZERO_ENDPOINT_ADDRESS", "")
+    )
+    """LayerZero V2 endpoint address used by VAPIVerifiedHumanProofBridge (Phase 99C)."""
+
+    # Phase 101: QuickSilver stIOTX collateral
+    stiotx_token_address: str = field(
+        default_factory=lambda: _env("STIOTX_TOKEN_ADDRESS", "")
+    )
+    """stIOTX (QuickSilver liquid staking token) ERC-20 address (Phase 101)."""
+
+    quicksilver_collateral_address: str = field(
+        default_factory=lambda: _env("QUICKSILVER_COLLATERAL_ADDRESS", "")
+    )
+    """VAPIQuickSilverCollateral.sol contract address (Phase 101). Empty until Phase 101 deploys."""
+
+    # Phase 102: VHP Renewal Agent
+    vhp_renewal_enabled: bool = field(
+        default_factory=lambda: _env_bool("VHP_RENEWAL_ENABLED", True)
+    )
+    """Enable VHPRenewalAgent (14th agent). Polls every 6h to renew expiring VHP tokens."""
+
+    vhp_renewal_warning_days: int = field(
+        default_factory=lambda: _env_int("VHP_RENEWAL_WARNING_DAYS", 7)
+    )
+    """Renew VHPs expiring within this many days (Phase 102)."""
+
+    # Phase 104 — Persistent Activation + PMI
+    protocol_maturity_enabled: bool = field(
+        default_factory=lambda: _env_bool("PROTOCOL_MATURITY_ENABLED", True)
+    )
+    """Enable ProtocolMaturityIndex tracking (Phase 104)."""
+
+    activation_auto_restore: bool = field(
+        default_factory=lambda: _env_bool("ACTIVATION_AUTO_RESTORE", True)
+    )
+    """Auto-restore dry_run=False on bridge restart if activation_committed=True (Phase 104 W1 mitigation)."""
+
+    # Phase 105 — Epistemic Consensus Hardening
+    epistemic_recommended_threshold: float = field(
+        default_factory=lambda: float(_env("EPISTEMIC_RECOMMENDED_THRESHOLD", "0.65"))
+    )
+    """Recommended epistemic threshold (Phase 105). Auto-applied when PMI>=1 (Phase 104/105 synergy)."""
+
+    epistemic_triage_prereq_required: bool = field(
+        default_factory=lambda: _env_bool("EPISTEMIC_TRIAGE_PREREQ_REQUIRED", False)
+    )
+    """Require triage_score > 0.0 before epistemic vote runs (Phase 105 W1 mitigation, opt-in)."""
+
+    # --- Phase 108: Tournament Readiness Hardware Conditions ---
+    separation_ratio_current: float = field(
+        default_factory=lambda: float(_env("SEPARATION_RATIO_CURRENT", "0.362"))
+    )
+    """Inter-person L4 separation ratio. Phase 57 N=74 empirical baseline=0.362.
+    Update ONLY after running scripts/interperson_separation_analyzer.py against real
+    calibration sessions. Required >1.0 for tournament deployment."""
+
+    touchpad_recapture_complete: bool = field(
+        default_factory=lambda: _env_bool("TOUCHPAD_RECAPTURE_COMPLETE", False)
+    )
+    """Post-Phase-17 touchpad recapture complete (requires hardware + gameplay).
+    Set True only after touch_position_variance calibration sessions confirm
+    non-zero variance across all players."""
+
+    # --- Phase 109A: ioSwarm Bridge Adapter ---
+    ioswarm_enabled: bool = field(
+        default_factory=lambda: _env_bool("IOSWARM_ENABLED", False)
+    )
+    """ioSwarm consensus integration enabled. Default False — infrastructure-only
+    until live ioSwarm operator nodes are registered. NEVER enable without live nodes."""
+
+    ioswarm_quorum_threshold: float = field(
+        default_factory=lambda: float(os.environ.get("IOSWARM_QUORUM_THRESHOLD", "0.60"))
+    )
+    """General quorum threshold for non-BLOCK verdicts (Phase 109A default 0.60)."""
+
+    ioswarm_block_quorum_threshold: float = field(
+        default_factory=lambda: float(os.environ.get("IOSWARM_BLOCK_QUORUM_THRESHOLD", "0.67"))
+    )
+    """Block-specific quorum threshold — W1 mitigation. Must stay >= ioswarm_quorum_threshold."""
+
+    ioswarm_node_count: int = field(
+        default_factory=lambda: int(os.environ.get("IOSWARM_NODE_COUNT", "5"))
+    )
+    """Expected number of ioSwarm executor nodes (informational; quorum uses actual verdicts)."""
+
+    ioswarm_endpoint: str = field(
+        default_factory=lambda: os.environ.get("IOSWARM_ENDPOINT", "")
+    )
+    """ioSwarm API endpoint for task submission (empty = not configured)."""
+
+    # Phase 109B — ioSwarm Renewal Coordinator
+    ioswarm_renewal_enabled: bool = field(
+        default_factory=lambda: _env_bool("IOSWARM_RENEWAL_ENABLED", False)
+    )
+    """Enable ioSwarm quorum guard for VHP renewal (Phase 109B). Default False (fail-open)."""
+
+    ioswarm_renewal_min_quorum: int = field(
+        default_factory=lambda: _env_int("IOSWARM_RENEWAL_MIN_QUORUM", 3)
+    )
+    """Minimum ioSwarm node count for renewal quorum (informational). Default 3."""
+
+    # Phase 109C — ioSwarm Adjudication Coordinator
+    ioswarm_adjudication_enabled: bool = field(
+        default_factory=lambda: _env_bool("IOSWARM_ADJUDICATION_ENABLED", False)
+    )
+    """Enable ioSwarm quorum for ClassJ+Triage adjudication (Phase 109C). Default False."""
+
+    ioswarm_classj_block_quorum: float = field(
+        default_factory=lambda: float(os.environ.get("IOSWARM_CLASSJ_BLOCK_QUORUM", "0.67"))
+    )
+    """ClassJ block quorum threshold (enforcement standard; NOT 0.60 renewal). Default 0.67."""
+
+    ioswarm_triage_block_quorum: float = field(
+        default_factory=lambda: float(os.environ.get("IOSWARM_TRIAGE_BLOCK_QUORUM", "0.67"))
+    )
+    """Triage block quorum threshold (enforcement standard). Default 0.67."""
+
+    # Phase 110 — ioSwarm VHP Mint Coordinator
+    ioswarm_vhp_mint_enabled: bool = field(
+        default_factory=lambda: _env_bool("IOSWARM_VHP_MINT_ENABLED", False)
+    )
+    """Enable ioSwarm quorum gate for VHP mint (fail-CLOSED). Default False."""
+
+    ioswarm_vhp_mint_quorum: float = field(
+        default_factory=lambda: float(os.environ.get("IOSWARM_VHP_MINT_QUORUM", "0.80"))
+    )
+    """VHP mint authorization quorum threshold (stricter than BLOCK_QUORUM=0.67). Default 0.80."""
+
     def validate(self) -> list[str]:
         """Return list of configuration errors (empty = valid)."""
         errors = []

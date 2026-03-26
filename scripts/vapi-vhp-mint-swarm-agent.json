@@ -1,0 +1,32 @@
+{
+  "task_id": "vapi_vhp_mint_authorization_v1",
+  "task_version": "1.0.0-phase110",
+  "executor": "vapi_bridge",
+  "status": "phase110_infrastructure_only",
+  "quorum_config": {
+    "threshold": 0.8,
+    "fail_direction": "CLOSED",
+    "note": "AUTHORIZE requires >=80% node agreement; exceptions block mint"
+  },
+  "w2_provenance": {
+    "swarm_fingerprint": "SHA-256(node_verdicts_json)",
+    "audit_trail": "two-era VHP: pre-110 (no fingerprint) vs post-110 (quorum-authorized)"
+  },
+  "input_schema": {
+    "device_id": "str \u2014 device identifier",
+    "consecutive_clean": "int \u2014 session streak length",
+    "recent_block_count": "int \u2014 number of recent BLOCK enforcement rulings"
+  },
+  "output_schema": {
+    "authorized": "bool \u2014 True if >= 80% nodes AUTHORIZE",
+    "quorum_verdict": "str \u2014 AUTHORIZE | DENY (majority)",
+    "agreement_ratio": "float \u2014 fraction of AUTHORIZE nodes",
+    "swarm_fingerprint": "str \u2014 SHA-256 of node_verdicts_json (W2)"
+  },
+  "vhp_authorization_gate": {
+    "contract": "VAPIProtocolLens",
+    "address": "0x1972bf756aFE0FFCfaF9842e2FbBb2B084352EAf",
+    "method": "isFullyEligible(operatorDeviceId)",
+    "vhp_contract": "0xD3B2E259A4B69EF08e263e3A57B2507B7eac3dcF"
+  }
+}
