@@ -1,0 +1,39 @@
+---PROPOSAL_START---
+[DESCRIPTION]
+Add WIF-009 (separation ratio free-form plateau trap) to the WHAT_IF corpus — documents the empirically confirmed plateau at ~0.417 pooled from the N=127 three-player full-corpus analysis (2026-03-29), explains why free-form gameplay sessions alone cannot reach the separation ratio > 1.0 tournament gate, and introduces velocity-based corpus capture guidance via SeparationRatioMonitorAgent + IoSwarm quorum validation as a Phase 138 candidate.
+
+[SKILL_MD_DELTA]
+ADD to section "WHAT_IF Corpus — Validated Pairs" (after WIF-008 W2 block, before W3 meta-risks note):
+
+**WIF-009 — Separation Ratio Free-Form Plateau Trap (Phase 138)**
+W1 — The N=127 three-player pooled separation ratio (0.417, 2026-03-29) is LOWER than the N=74 P1-dominated run (0.474) and shows a diminishing-returns plateau: adding 53 sessions (+72% data) improved the interperson Mahalanobis ratio by only +0.055 (+15.2%). Free-form gameplay sessions accumulate intra-player variance (denominator) faster than inter-player distances grow (numerator) once the corpus is balanced across players; the cov_inv eigenspace saturates on shared gameplay mechanics rather than individual biometric signatures. The current 0.362 diagonal / 0.417 pooled trajectory confirms the plateau regime — SeparationRatioMonitorAgent (agent #15) will never fire separation_ratio_breakthrough from free-form data alone.
+  Implication: The TOURNAMENT BLOCKER (separation ratio 0.362/0.417 vs target >1.0) cannot be resolved by adding more free-form sessions. Without structured biometric probe sessions (touchpad_corners, resting grip) for all 3 players, the ratio asymptotes below 0.5 indefinitely. Token launch sequencing (non-negotiable: ratio > 1.0 required) is blocked until structured probe data activates touchpad_spatial_entropy as primary discriminator.
+  Mitigation: Phase 137B (--session-type touchpad_corners filter; all 3 players require ≥10 touchpad_corners sessions: P1=3 complete, P2=4 complete, P3=pending). Stop accumulating free-form sessions until touchpad_corners balanced analysis is run. Predicted +0.3–0.5 separation ratio units when touchpad_spatial_entropy transitions from near-zero to activated discriminator.
+
+W2 — Separation ratio velocity monitoring as adaptive corpus capture guidance — SeparationRatioMonitorAgent extended to compute marginal_ratio_gain per session batch; when velocity < PLATEAU_THRESHOLD (0.001/session), agent publishes corpus_capture_mode_advisory event recommending structured probe mode, validated by IoSwarm quorum (BLOCK_QUORUM=0.67) before surfacing to operator. Operator receives actionable switching signal before corpus becomes too large to diagnose. VHP MINT_QUORUM=0.80 gate validates advisory before token-launch-adjacent decisions, preventing false plateau detection from outlier batch.
+  Mechanism: SeparationRatioMonitorAgent._compute_velocity() queries last 3 separation_ratio_snapshots (store.get_separation_ratio_status), fits linear slope; slope < 0.001/session triggers advisory. IoSwarmConsensusAggregator (BLOCK_QUORUM=0.67) confirms below-plateau signal from ≥4/5 ioSwarm nodes before advisory fires. AdjudicationRegistry.sol stores corpus_capture_mode_records as advisory evidence trail for tournament operator audit.
+  Phase candidate: Phase 138 — velocity monitor + corpus_capture_mode_advisory + ioSwarm quorum validation of capture guidance; ~3h effort.
+  Exclusive because: Requires VAPI per-session Mahalanobis separation measurement infrastructure (SeparationRatioMonitorAgent + separation_ratio_snapshots table) + IoSwarmConsensusAggregator BLOCK_QUORUM quorum validation layer + AdjudicationRegistry on-chain evidence trail. No competing gaming DePIN protocol has adaptive corpus guidance anchored in decentralized quorum validation.
+
+UPDATE in section "Mode: ANALYSIS" — Cite exact values line:
+REPLACE "separation ratio 0.362 (diagonal)/0.474 pooled" WITH "separation ratio 0.362 (diagonal)/0.417 pooled (N=127, 3-player, 2026-03-29)"
+
+UPDATE in section "Protocol Invariants (FROZEN)":
+REPLACE "Inter-person separation ratio: **0.474** pooled (battery-stratified ~0.60–0.65)" WITH "Inter-person separation ratio: **0.417** pooled (N=127, 3-player, 2026-03-29); prior: 0.474 (N=74, P1-dominated Phase 121)"
+
+UPDATE in section "Pre-Execution Invariant Checklist" item 11:
+REPLACE "Inter-person separation ratio 0.362 (diagonal) / 0.474 pooled (Phase 121)" WITH "Inter-person separation ratio 0.362 (diagonal, Phase 121) / 0.417 pooled (N=127, 2026-03-29)"
+
+UPDATE in section "Session Startup Protocol" — Reference state:
+REPLACE "Separation ratio: **0.474** pooled (hw_*+terminal_cal; battery-stratified ~0.60–0.65)" WITH "Separation ratio: **0.417** pooled (N=127, 3-player, all terminal_cal, 2026-03-29)"
+
+[WHAT_IF]
+W1 — The N=127 interperson separation analysis (2026-03-29) confirms a free-form plateau: 0.362 diagonal / 0.417 pooled — adding 53 sessions improved the ratio by only +0.055 (+15.2%). The Tikhonov-regularized covariance eigenspace saturates on shared gameplay mechanics once balanced across all 3 players; free-form intra-player variance grows faster than inter-player Mahalanobis distances. SeparationRatioMonitorAgent will never fire separation_ratio_breakthrough from free-form corpus growth alone. TOURNAMENT BLOCKER remains in effect; token launch remains non-negotiable blocked (ratio > 1.0 required).
+  Implication: Continued free-form session capture is counterproductive — the 0.417 plateau confirms the mechanism. Only structured biometric probe sessions (touchpad_corners: P1=3, P2=4, P3=pending) can break the plateau by concentrating touchpad_spatial_entropy variance in the inter-player dimension. The separation ratio 0.362 baseline remains the defensible tournament audit value until structured-probe balanced analysis is run.
+  Mitigation: Phase 137B touchpad filter + complete P3 touchpad_corners capture. Stop free-form captures until touchpad_corners ≥10/player for all enrolled players. Then run --balance-corpus (Phase 137A) + --session-type touchpad_corners to measure isolated contribution.
+
+W2 — Separation ratio velocity monitoring + IoSwarm quorum advisory for corpus capture mode switching. When SeparationRatioMonitorAgent detects marginal_ratio_gain < 0.001/session (plateau), it publishes corpus_capture_mode_advisory validated by IoSwarm BLOCK_QUORUM=0.67 before operator sees it. VHP MINT_QUORUM=0.80 gates any token-launch-adjacent action triggered by this advisory. AdjudicationRegistry records advisory as tamper-evident evidence. First adaptive DePIN corpus guidance system with quorum validation — no competing protocol has this feedback loop.
+  Mechanism: velocity = (r_n - r_{n-3}) / (n_sessions_n - n_sessions_{n-3}) from last 3 snapshots; if velocity < PLATEAU_THRESHOLD, IoSwarm nodes evaluate independently (each node checks its local snapshot copy); quorum≥0.67 fires advisory event.
+  Phase candidate: Phase 138, ~3h effort.
+  Exclusive because: Requires SeparationRatioMonitorAgent + separation_ratio_snapshots table + IoSwarmConsensusAggregator (BLOCK_QUORUM=0.67) + AdjudicationRegistry on-chain trail. No other DePIN gaming protocol has graduated biometric separability evidence with quorum-validated corpus guidance.
+---PROPOSAL_END---

@@ -1,9 +1,5 @@
 [
   {
-    "ts": "2026-03-28T21:08:55Z",
-    "event": "milestone: Session 68: touch_variance=0.2193"
-  },
-  {
     "ts": "2026-03-28T21:19:35Z",
     "event": "milestone: Session 69: touch_variance=0.2193"
   },
@@ -198,5 +194,9 @@
   {
     "ts": "2026-03-29T20:40:49Z",
     "event": "milestone: Session 105: touch_variance=0.2193"
+  },
+  {
+    "ts": "2026-03-29T20:52:17Z",
+    "event": "milestone: Session 106: touch_variance=0.2193"
   }
 ]

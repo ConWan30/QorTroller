@@ -649,15 +649,22 @@ Chain link hash = SHA-256(raw[0:164]) — 164-byte body only, NOT full 228 bytes
 Hard codes {0x28, 0x29, 0x2A} block tournament eligibility.
 L2C returns None in dead-zone stick games (NCAA CFB 26) — 0.10 weight resolves to 0.5 neutral prior.
 
-## Calibration Corpus State (2026-03-29)
+## Calibration Corpus State (2026-03-29) — N=127 ANALYSIS COMPLETE
 
-- Total session files: N≥127 (127 found by terminal analysis runner 2026-03-29)
-  - Player 1: ~104 sessions (hw_005–hw_078 original + terminal_cal_P1 additional)
-  - Player 2: 20 sessions captured 2026-03-29 (terminal_cal_P2; includes touchpad_corners_20260329T203046Z.json — FIRST structured touchpad data for P2)
-  - Player 3: remaining sessions
-- Corpus imbalance: P1-dominant; balanced-corpus analysis pending (WIF-007)
-- Touchpad coverage: 22% across P1 sessions; P2 touchpad_corners NOW CAPTURED; P3 pending
-- Separation ratio: 0.362 (stored; computed on old corpus — re-run analysis after P2/P3 balanced)
+- Total session files: N=127 (all 3 players; analysis complete 2026-03-29)
+  - Player 1: ~104 sessions (hw_005–hw_078 + terminal_cal_P1; 3 touchpad_corners sessions)
+  - Player 2: 20 sessions captured 2026-03-29 (terminal_cal_P2; 4 touchpad_corners sessions inc. touchpad_corners_20260329T203046Z.json)
+  - Player 3: all terminal sessions complete (terminal_cal_P3; touchpad_corners status: pending confirmation)
+  - Player 4 terminal dir found: terminal_cal_P4 (discovered in analysis; status unknown)
+- Separation ratio: **0.417 pooled** (N=127, 3-player full analysis 2026-03-29); prior: 0.362 (diagonal, N=74, Phase 121)
+  - Classification rate: 30.8% — NO SEPARATION; TOURNAMENT BLOCKER persists
+  - Plateau confirmed: +53 sessions (+72% data) improved ratio by only +0.055 (+15.2%) — WIF-009 plateau regime
+  - Free-form gameplay cannot reach ratio >1.0; structured touchpad_corners sessions required (Phase 137B)
+- N=127 recommended thresholds (NOT YET APPLIED — pending threshold_calibrator.py run):
+  - anomaly: 6.613 (current stored: 7.009, Phase 57, N=74, 12-feature)
+  - continuity: 5.143 (current stored: 5.367, Phase 57, N=74, 12-feature)
+  - Note: N=127 run uses 13-feature space (touchpad_spatial_entropy index 12 added Phase 121); applying these would resolve L4 staleness (live_dim=13 vs calib_dim=12)
+- Touchpad coverage: P1=3 touchpad_corners, P2=4 touchpad_corners; P3=pending; 22% avg free-form coverage
 
 ## L4 Calibration State (Phase 57, N=74)
 
