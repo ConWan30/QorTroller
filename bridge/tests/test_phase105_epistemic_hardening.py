@@ -60,6 +60,7 @@ def _make_cfg(**kwargs):
     # Phase 109A/109B/109C: prevent MagicMock truthy attr from routing to ioSwarm branches
     cfg.ioswarm_enabled = False
     cfg.ioswarm_adjudication_enabled = False
+    cfg.poad_registry_enabled = False  # Phase 111: prevent MagicMock truthy attr from routing to Step D
     for k, v in kwargs.items():
         setattr(cfg, k, v)
     return cfg

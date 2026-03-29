@@ -1079,6 +1079,333 @@ class Store:
                 CREATE INDEX IF NOT EXISTS idx_ioswarm_vhp_mint_device
                 ON ioswarm_vhp_mint_log (device_id, created_at DESC)
             """)
+            # Phase 111 — PoAd Registry
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS poad_registry_log (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_id       TEXT    NOT NULL,
+                    poad_hash       TEXT    NOT NULL,
+                    dual_veto       INTEGER NOT NULL DEFAULT 0,
+                    classj_verdict  TEXT,
+                    triage_verdict  TEXT,
+                    ts_ns           INTEGER NOT NULL DEFAULT 0,
+                    on_chain_tx     TEXT,
+                    created_at      REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_poad_registry_hash
+                ON poad_registry_log (poad_hash)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_poad_registry_device
+                ON poad_registry_log (device_id, created_at DESC)
+            """)
+            # Phase 113 — Dual-Primitive Eligibility Checks
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS dual_eligibility_checks (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_id   TEXT    NOT NULL,
+                    poad_hash   TEXT    NOT NULL,
+                    eligible    INTEGER NOT NULL DEFAULT 0,
+                    poac_valid  INTEGER NOT NULL DEFAULT 0,
+                    poad_valid  INTEGER NOT NULL DEFAULT 0,
+                    created_at  REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_dual_eligibility_device
+                ON dual_eligibility_checks (device_id, created_at DESC)
+            """)
+            # Phase 114 — VHP Mint Dual-Primitive Gate log
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS vhp_dual_gate_log (
+                    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_id         TEXT    NOT NULL,
+                    poad_hash         TEXT    NOT NULL DEFAULT '',
+                    eligible          INTEGER NOT NULL DEFAULT 0,
+                    poac_valid        INTEGER NOT NULL DEFAULT 0,
+                    poad_valid        INTEGER NOT NULL DEFAULT 0,
+                    mint_allowed      INTEGER NOT NULL DEFAULT 0,
+                    poad_age_seconds  REAL    NOT NULL DEFAULT -1,
+                    epoch_window_ok   INTEGER NOT NULL DEFAULT 1,
+                    created_at        REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_vhp_dual_gate_device
+                ON vhp_dual_gate_log (device_id, created_at DESC)
+            """)
+            # Phase 118 — Per-Device Epoch Window Overrides
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS per_device_epoch_overrides (
+                    id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_id              TEXT    NOT NULL UNIQUE,
+                    override_window_seconds REAL   NOT NULL,
+                    reason                 TEXT    NOT NULL DEFAULT '',
+                    max_uses               INTEGER DEFAULT NULL,
+                    use_count              INTEGER NOT NULL DEFAULT 0,
+                    expires_at             REAL    DEFAULT NULL,
+                    created_at             REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            # Phase 119: add lifecycle columns to per_device_epoch_overrides (idempotent)
+            for _col119, _def119 in [
+                ("max_uses",   "INTEGER DEFAULT NULL"),
+                ("use_count",  "INTEGER NOT NULL DEFAULT 0"),
+                ("expires_at", "REAL DEFAULT NULL"),
+            ]:
+                try:
+                    conn.execute(
+                        f"ALTER TABLE per_device_epoch_overrides ADD COLUMN {_col119} {_def119}"
+                    )
+                except Exception:
+                    pass  # Column already exists
+            # Phase 115: add epoch-window columns to vhp_dual_gate_log (idempotent)
+            for _col115, _def115 in [
+                ("poad_age_seconds", "REAL NOT NULL DEFAULT -1"),
+                ("epoch_window_ok",  "INTEGER NOT NULL DEFAULT 1"),
+            ]:
+                try:
+                    conn.execute(
+                        f"ALTER TABLE vhp_dual_gate_log ADD COLUMN {_col115} {_def115}"
+                    )
+                except Exception:
+                    pass  # Column already exists
+            # Phase 120 — Bluetooth Transport Foundation
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS bt_transport_log (
+                    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_address    TEXT    NOT NULL DEFAULT '',
+                    sampling_rate_hz  INTEGER NOT NULL DEFAULT 250,
+                    frames_received   INTEGER NOT NULL DEFAULT 0,
+                    frames_dropped    INTEGER NOT NULL DEFAULT 0,
+                    avg_interval_ms   REAL    NOT NULL DEFAULT 0.0,
+                    session_start_ts  REAL    NOT NULL DEFAULT 0.0,
+                    session_end_ts    REAL    NOT NULL DEFAULT 0.0,
+                    created_at        REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_bt_transport_created
+                ON bt_transport_log (created_at DESC)
+            """)
+            # Phase 121: separation_ratio_snapshots — observability-only, no behavior change
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS separation_ratio_snapshots (
+                    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                    pooled_ratio     REAL    NOT NULL DEFAULT 0.0,
+                    bt_strat_ratio   REAL    NOT NULL DEFAULT -1.0,
+                    n_sessions       INTEGER NOT NULL DEFAULT 0,
+                    n_players        INTEGER NOT NULL DEFAULT 0,
+                    active_features  INTEGER NOT NULL DEFAULT 0,
+                    tournament_ready INTEGER NOT NULL DEFAULT 0,
+                    created_at       REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            # Phase 122: confidence_multiplier_log — logs confidence_score adjustments
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS confidence_multiplier_log (
+                    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_id      TEXT    NOT NULL,
+                    original_score INTEGER NOT NULL DEFAULT 0,
+                    multiplier     REAL    NOT NULL DEFAULT 1.0,
+                    final_score    INTEGER NOT NULL DEFAULT 0,
+                    bt_strat_ratio REAL    NOT NULL DEFAULT -1.0,
+                    created_at     REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            # Phase 123: l4_calibration_log — records calibration runs and staleness
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS l4_calibration_log (
+                    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+                    feature_dim           INTEGER NOT NULL DEFAULT 0,
+                    n_sessions            INTEGER NOT NULL DEFAULT 0,
+                    anomaly_threshold     REAL    NOT NULL DEFAULT 0.0,
+                    continuity_threshold  REAL    NOT NULL DEFAULT 0.0,
+                    calibration_timestamp REAL    NOT NULL DEFAULT 0.0,
+                    stale_flag            INTEGER NOT NULL DEFAULT 1,
+                    created_at            REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            # Phase 124: l4_threshold_tracks — per-battery calibrated L4 threshold pairs
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS l4_threshold_tracks (
+                    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+                    battery_type         TEXT    NOT NULL,
+                    anomaly_threshold    REAL    NOT NULL DEFAULT 7.009,
+                    continuity_threshold REAL    NOT NULL DEFAULT 5.367,
+                    n_sessions           INTEGER NOT NULL DEFAULT 0,
+                    calibrated_at        REAL    NOT NULL DEFAULT 0.0,
+                    active               INTEGER NOT NULL DEFAULT 1,
+                    created_at           REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            # Phase 125: l4_battery_calibration_runs — audit log of per-battery calibration applies
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS l4_battery_calibration_runs (
+                    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+                    battery_type            TEXT    NOT NULL,
+                    anomaly_threshold       REAL    NOT NULL,
+                    continuity_threshold    REAL    NOT NULL,
+                    n_sessions              INTEGER NOT NULL DEFAULT 0,
+                    calibration_feature_dim INTEGER NOT NULL DEFAULT 13,
+                    notes                   TEXT,
+                    created_at              REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            # Phase 126: l4_threshold_router_log — logs each threshold lookup
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS l4_threshold_router_log (
+                    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                    battery_type     TEXT    NOT NULL DEFAULT 'unknown',
+                    threshold_source TEXT    NOT NULL DEFAULT 'global_fallback',
+                    anomaly_used     REAL    NOT NULL DEFAULT 7.009,
+                    continuity_used  REAL    NOT NULL DEFAULT 5.367,
+                    created_at       REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            # Phase 127: tournament_preflight_log — persists preflight runs for audit trail
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS tournament_preflight_log (
+                    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                    separation_ok       INTEGER NOT NULL DEFAULT 0,
+                    l4_ok               INTEGER NOT NULL DEFAULT 0,
+                    gate_ok             INTEGER NOT NULL DEFAULT 0,
+                    cert_ok             INTEGER NOT NULL DEFAULT 0,
+                    audit_ok            INTEGER NOT NULL DEFAULT 0,
+                    dual_gate_warned    INTEGER NOT NULL DEFAULT 0,
+                    epoch_window_warned INTEGER NOT NULL DEFAULT 0,
+                    ioswarm_warned      INTEGER NOT NULL DEFAULT 0,
+                    overall_pass        INTEGER NOT NULL DEFAULT 0,
+                    conditions_json     TEXT    NOT NULL DEFAULT '{}',
+                    created_at          REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            # Phase 129: separation_ratio_breakthrough_log — records crossing of ratio >= 1.0
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS separation_ratio_breakthrough_log (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    before_ratio    REAL    NOT NULL DEFAULT 0.0,
+                    after_ratio     REAL    NOT NULL DEFAULT 0.0,
+                    n_players       INTEGER NOT NULL DEFAULT 0,
+                    feature_count   INTEGER NOT NULL DEFAULT 0,
+                    breakthrough_at REAL    NOT NULL DEFAULT 0.0,
+                    created_at      REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            # Phase 130A: swarm_quorum_validation_log — WIF-001 quorum validation audit trail
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS swarm_quorum_validation_log (
+                    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                    node_count       INTEGER NOT NULL DEFAULT 0,
+                    distinct_stakers INTEGER NOT NULL DEFAULT 0,
+                    quorum_valid     INTEGER NOT NULL DEFAULT 0,
+                    gate_address     TEXT    NOT NULL DEFAULT '',
+                    created_at       REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            # Phase 131: ioswarm_node_registry — live ioSwarm HTTP node registry
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS ioswarm_node_registry (
+                    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                    node_url         TEXT    NOT NULL,
+                    staker_address   TEXT    NOT NULL DEFAULT '',
+                    active           INTEGER NOT NULL DEFAULT 1,
+                    last_seen_ts     REAL    NOT NULL DEFAULT 0.0,
+                    node_version     TEXT    NOT NULL DEFAULT '',
+                    registered_at    REAL    NOT NULL DEFAULT 0.0,
+                    created_at       REAL    NOT NULL DEFAULT (unixepoch('now'))
+                )
+            """)
+            conn.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_ioswarm_node_url
+                ON ioswarm_node_registry(node_url)
+            """)
+            # Phase 131B: usb_reconnect_log — USB stability monitor for PS5 coexistence
+            # Root cause: DualShock Edge USB+BT simultaneous connection; HID output writes
+            # (_apply_feedback LED/haptic) trigger brief USB drops → PS5 shows reconnect
+            # notification. ps5_compat_mode suppresses all HID writes (read-only mode).
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS usb_reconnect_log (
+                    id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_address           TEXT    NOT NULL DEFAULT '',
+                    disconnect_reason        TEXT    NOT NULL DEFAULT '',
+                    consecutive_fb_timeouts  INTEGER NOT NULL DEFAULT 0,
+                    ps5_compat_mode_active   INTEGER NOT NULL DEFAULT 0,
+                    session_id               TEXT    NOT NULL DEFAULT '',
+                    created_at               REAL    NOT NULL DEFAULT (unixepoch('now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_usb_reconnect_created
+                ON usb_reconnect_log(created_at DESC)
+            """)
+            # Phase 135: tournament_activation_chain_log — TournamentActivationChainAgent records
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS tournament_activation_chain_log (
+                    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_type            TEXT    NOT NULL DEFAULT 'breakthrough_received',
+                    separation_ratio      REAL    NOT NULL DEFAULT 0.0,
+                    n_players             INTEGER NOT NULL DEFAULT 0,
+                    gate_open_notified    INTEGER NOT NULL DEFAULT 0,
+                    auto_activate_blocked INTEGER NOT NULL DEFAULT 1,
+                    operator_action_required INTEGER NOT NULL DEFAULT 1,
+                    notes                 TEXT,
+                    created_at            REAL    NOT NULL DEFAULT (unixepoch('now'))
+                )
+            """)
+            # Phase 134: l4_recalibration_jobs — automated L4 recalibration pipeline jobs
+            # status: "running" | "complete" | "failed"
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS l4_recalibration_jobs (
+                    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+                    started_at           REAL    NOT NULL DEFAULT 0.0,
+                    completed_at         REAL,
+                    sessions_processed   INTEGER NOT NULL DEFAULT 0,
+                    anomaly_result       REAL    NOT NULL DEFAULT 0.0,
+                    continuity_result    REAL    NOT NULL DEFAULT 0.0,
+                    status               TEXT    NOT NULL DEFAULT 'running',
+                    error                TEXT,
+                    created_at           REAL    NOT NULL DEFAULT (unixepoch('now'))
+                )
+            """)
+            # Phase 133: ioswarm_poad_anchor_log — Swarm PoAd auto-anchor records
+            # anchor_status: "pending" | "anchored" | "failed" | "skipped_disabled"
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS ioswarm_poad_anchor_log (
+                    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_id        TEXT    NOT NULL DEFAULT '',
+                    session_id       TEXT    NOT NULL DEFAULT '',
+                    dual_veto        INTEGER NOT NULL DEFAULT 0,
+                    swarm_fingerprint TEXT   NOT NULL DEFAULT '',
+                    poad_hash        TEXT    NOT NULL DEFAULT '',
+                    on_chain_tx      TEXT,
+                    anchor_status    TEXT    NOT NULL DEFAULT 'pending',
+                    created_at       REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_ioswarm_poad_anchor_device
+                ON ioswarm_poad_anchor_log(device_id, created_at DESC)
+            """)
+            # Phase 132: ioswarm_node_health_log — live node health polling records
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS ioswarm_node_health_log (
+                    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                    node_url         TEXT    NOT NULL DEFAULT '',
+                    healthy          INTEGER NOT NULL DEFAULT 0,
+                    latency_ms       REAL    NOT NULL DEFAULT -1.0,
+                    staker_address   TEXT    NOT NULL DEFAULT '',
+                    error_msg        TEXT    NOT NULL DEFAULT '',
+                    polled_at        REAL    NOT NULL DEFAULT 0.0,
+                    created_at       REAL    NOT NULL DEFAULT (unixepoch('now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_ioswarm_health_url
+                ON ioswarm_node_health_log(node_url, polled_at DESC)
+            """)
             # Phase 109A: add swarm_score column to epistemic_consensus_log (idempotent)
             try:
                 conn.execute(
@@ -1264,6 +1591,32 @@ class Store:
                 (109, "ioswarm_renewal_log"),
                 (109, "ioswarm_adjudication_log"),
                 (110, "ioswarm_vhp_mint_log"),
+                (111, "poad_registry_log"),
+                (112, "poad_anchor"),
+                (113, "dual_primitive_gate"),
+                (114, "vhp_dual_gate"),
+                (115, "epoch_window"),
+                (116, "epoch_window_analytics"),
+                (117, "epoch_window_device_heatmap"),
+                (118, "epoch_window_device_overrides"),
+                (119, "epoch_override_lifecycle"),
+                (120, "bt_transport"),
+                (121, "separation_ratio"),
+                (122, "confidence_multiplier"),
+                (123, "l4_calibration_staleness"),
+                (124, "l4_threshold_tracks"),
+                (125, "per_battery_calibration"),
+                (126, "l4_router"),
+                (127, "tournament_preflight"),
+                (128, "intelligence_dashboard"),
+                (129, "separation_breakthrough"),
+                (130, "swarm_operator_gate"),
+                (131, "ioswarm_node_registry"),
+                (132, "ioswarm_node_health"),
+                (133, "ioswarm_poad_anchor"),
+                (134, "l4_recalibration_jobs"),
+                (135, "tournament_activation_chain"),
+                (1315, "usb_reconnect"),
             ]:
                 conn.execute(
                     "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
@@ -5197,3 +5550,1272 @@ class Store:
             })
         return result
 
+    # --- Phase 111: PoAd Registry ---
+
+    def insert_poad_registry(
+        self,
+        device_id: str,
+        poad_hash: str,
+        dual_veto: bool,
+        classj_verdict: "str | None",
+        triage_verdict: "str | None",
+        ts_ns: int,
+        on_chain_tx: "str | None" = None,
+    ) -> int:
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO poad_registry_log "
+                "(device_id, poad_hash, dual_veto, classj_verdict, triage_verdict, ts_ns, on_chain_tx) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (device_id, poad_hash, int(dual_veto), classj_verdict, triage_verdict,
+                 ts_ns, on_chain_tx),
+            )
+            return cur.lastrowid
+
+    def get_poad_registry_log(
+        self,
+        device_id: "str | None" = None,
+        limit: int = 20,
+    ) -> "list[dict]":
+        with self._conn() as conn:
+            if device_id:
+                rows = conn.execute(
+                    "SELECT id, device_id, poad_hash, dual_veto, classj_verdict, "
+                    "triage_verdict, ts_ns, on_chain_tx, created_at "
+                    "FROM poad_registry_log WHERE device_id = ? "
+                    "ORDER BY created_at DESC LIMIT ?",
+                    (device_id, limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT id, device_id, poad_hash, dual_veto, classj_verdict, "
+                    "triage_verdict, ts_ns, on_chain_tx, created_at "
+                    "FROM poad_registry_log ORDER BY created_at DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+        result = []
+        for row in rows:
+            result.append({
+                "id":              row[0],
+                "device_id":       row[1],
+                "poad_hash":       row[2],
+                "dual_veto":       bool(row[3]),
+                "classj_verdict":  row[4],
+                "triage_verdict":  row[5],
+                "ts_ns":           row[6],
+                "on_chain_tx":     row[7],
+                "created_at":      row[8],
+            })
+        return result
+
+    def update_poad_on_chain_tx(self, poad_hash: str, on_chain_tx: str) -> None:
+        with self._conn() as conn:
+            conn.execute(
+                "UPDATE poad_registry_log SET on_chain_tx = ? WHERE poad_hash = ?",
+                (on_chain_tx, poad_hash),
+            )
+
+    def get_unanchored_poad_entries(self, limit: int = 10) -> "list[dict]":
+        """Return poad_registry_log rows with on_chain_tx IS NULL, oldest first."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT id, device_id, poad_hash, dual_veto, classj_verdict, "
+                "triage_verdict, ts_ns FROM poad_registry_log "
+                "WHERE on_chain_tx IS NULL ORDER BY created_at ASC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [
+            {"id": r[0], "device_id": r[1], "poad_hash": r[2], "dual_veto": bool(r[3]),
+             "classj_verdict": r[4], "triage_verdict": r[5], "ts_ns": r[6]}
+            for r in rows
+        ]
+
+    # --- Phase 113: Dual-Primitive Gate ---
+
+    def insert_dual_eligibility_check(
+        self,
+        device_id: str,
+        poad_hash: str,
+        eligible: bool,
+        poac_valid: bool,
+        poad_valid: bool,
+    ) -> int:
+        """Insert a dual-primitive eligibility check result (Phase 113)."""
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO dual_eligibility_checks "
+                "(device_id, poad_hash, eligible, poac_valid, poad_valid) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (device_id, poad_hash, int(eligible), int(poac_valid), int(poad_valid)),
+            )
+            return cur.lastrowid
+
+    def get_dual_eligibility_history(self, device_id: "str | None" = None, limit: int = 100) -> "list[dict]":
+        """Return dual_eligibility_checks rows, newest first. Optionally filter by device_id."""
+        with self._conn() as conn:
+            if device_id:
+                rows = conn.execute(
+                    "SELECT id, device_id, poad_hash, eligible, poac_valid, poad_valid, created_at "
+                    "FROM dual_eligibility_checks WHERE device_id = ? "
+                    "ORDER BY id DESC LIMIT ?",
+                    (device_id, limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT id, device_id, poad_hash, eligible, poac_valid, poad_valid, created_at "
+                    "FROM dual_eligibility_checks ORDER BY id DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+        return [
+            {"id": r[0], "device_id": r[1], "poad_hash": r[2],
+             "eligible": bool(r[3]), "poac_valid": bool(r[4]), "poad_valid": bool(r[5]),
+             "created_at": r[6]}
+            for r in rows
+        ]
+
+    # --- Phase 116 — Epoch-Window Analytics ---
+
+    def get_epoch_window_analytics(self, limit: int = 1000) -> dict:
+        """Return analytics over poad_age_seconds from vhp_dual_gate_log.
+
+        Returns: dict with total_gate5_checks, staleness_blocked_count, checked_count
+        (rows with poad_age_seconds >= 0), p50/p95/p99 age in seconds, max_age_seconds,
+        recommended_window_seconds (2× p95 or 86400 if <10 samples).
+        """
+        with self._conn() as conn:
+            total = conn.execute(
+                "SELECT COUNT(*) FROM vhp_dual_gate_log LIMIT ?", (limit,)
+            ).fetchone()[0]
+            blocked = conn.execute(
+                "SELECT COUNT(*) FROM vhp_dual_gate_log WHERE epoch_window_ok = 0"
+            ).fetchone()[0]
+            rows = conn.execute(
+                "SELECT poad_age_seconds FROM vhp_dual_gate_log "
+                "WHERE poad_age_seconds >= 0 ORDER BY poad_age_seconds ASC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        ages = [r[0] for r in rows]
+        n = len(ages)
+
+        def _pct(lst, p):
+            if not lst:
+                return -1.0
+            idx = int(len(lst) * p / 100.0)
+            idx = min(idx, len(lst) - 1)
+            return lst[idx]
+
+        p50  = _pct(ages, 50)
+        p95  = _pct(ages, 95)
+        p99  = _pct(ages, 99)
+        maxv = max(ages) if ages else -1.0
+        # Recommend 2× p95, floored at 3600s (1h), capped at 604800s (7d)
+        # Falls back to 86400 if fewer than 10 samples
+        if n >= 10 and p95 > 0:
+            rec = max(3600.0, min(604800.0, p95 * 2.0))
+        else:
+            rec = 86400.0
+        return {
+            "total_gate5_checks":      total,
+            "staleness_blocked_count": blocked,
+            "checked_count":           n,
+            "p50_age_seconds":         p50,
+            "p95_age_seconds":         p95,
+            "p99_age_seconds":         p99,
+            "max_age_seconds":         maxv,
+            "recommended_window_seconds": rec,
+        }
+
+    # --- Phase 117 — Per-Device Epoch Freshness Heatmap ---
+
+    def get_epoch_window_analytics_by_device(
+        self, limit_per_device: int = 100, top_n: int = 20
+    ) -> "list[dict]":
+        """Return per-device epoch freshness analytics sorted by p95 DESC (worst first).
+
+        Each entry: device_id, check_count, blocked_count, p50_age_seconds,
+        p95_age_seconds, last_check_ts.
+        Only devices with at least 1 checked entry (poad_age_seconds >= 0) are included.
+        """
+        with self._conn() as conn:
+            device_rows = conn.execute(
+                "SELECT DISTINCT device_id FROM vhp_dual_gate_log "
+                "WHERE poad_age_seconds >= 0"
+            ).fetchall()
+
+        def _pct(lst, p):
+            if not lst:
+                return -1.0
+            idx = min(int(len(lst) * p / 100.0), len(lst) - 1)
+            return lst[idx]
+
+        results = []
+        for dr in device_rows:
+            dev = dr[0]
+            with self._conn() as conn:
+                age_rows = conn.execute(
+                    "SELECT poad_age_seconds, created_at FROM vhp_dual_gate_log "
+                    "WHERE device_id = ? AND poad_age_seconds >= 0 "
+                    "ORDER BY poad_age_seconds ASC LIMIT ?",
+                    (dev, limit_per_device),
+                ).fetchall()
+                blocked = conn.execute(
+                    "SELECT COUNT(*) FROM vhp_dual_gate_log "
+                    "WHERE device_id = ? AND epoch_window_ok = 0",
+                    (dev,),
+                ).fetchone()[0]
+                last_ts = conn.execute(
+                    "SELECT MAX(created_at) FROM vhp_dual_gate_log WHERE device_id = ?",
+                    (dev,),
+                ).fetchone()[0]
+            ages = [r[0] for r in age_rows]
+            results.append({
+                "device_id":       dev,
+                "check_count":     len(ages),
+                "blocked_count":   blocked,
+                "p50_age_seconds": _pct(ages, 50),
+                "p95_age_seconds": _pct(ages, 95),
+                "last_check_ts":   last_ts or 0.0,
+            })
+
+        # Sort by p95 DESC — worst offenders first
+        results.sort(key=lambda x: x["p95_age_seconds"], reverse=True)
+        return results[:top_n]
+
+    # --- Phase 118 — Per-Device Epoch Window Overrides ---
+
+    def insert_device_epoch_override(
+        self,
+        device_id: str,
+        window_seconds: float,
+        reason: str = "",
+        max_uses: "int | None" = None,
+        expires_at: "float | None" = None,
+    ) -> int:
+        """Upsert a per-device epoch window override (Phase 118/119).
+
+        INSERT OR REPLACE so subsequent calls update the override for the same device_id.
+        Phase 119: max_uses (auto-expire after N successful Gate-5 checks) and
+        expires_at (absolute time-based expiry) are optional; None = infinite/never.
+        Returns the rowid of the inserted/replaced row.
+        """
+        import time as _t118
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT OR REPLACE INTO per_device_epoch_overrides "
+                "(device_id, override_window_seconds, reason, max_uses, use_count, expires_at, created_at) "
+                "VALUES (?, ?, ?, ?, 0, ?, ?)",
+                (device_id, float(window_seconds), reason, max_uses, expires_at, _t118.time()),
+            )
+            return cur.lastrowid
+
+    def get_device_epoch_override(self, device_id: str) -> "float | None":
+        """Return per-device epoch override window in seconds, or None if not set (Phase 118).
+
+        Phase 119: also returns None if the override has expired (expires_at exceeded).
+        Expired overrides are deleted on read.
+        """
+        import time as _t119g
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT override_window_seconds, expires_at FROM per_device_epoch_overrides "
+                "WHERE device_id = ?",
+                (device_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            window, expires_at = row
+            # Phase 119: check time-based expiry
+            if expires_at is not None and _t119g.time() > expires_at:
+                conn.execute(
+                    "DELETE FROM per_device_epoch_overrides WHERE device_id = ?",
+                    (device_id,),
+                )
+                return None
+        return float(window)
+
+    def get_all_device_epoch_overrides(self) -> "list[dict]":
+        """Return all per-device epoch window overrides (Phase 118)."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT device_id, override_window_seconds, reason, created_at "
+                "FROM per_device_epoch_overrides ORDER BY created_at DESC"
+            ).fetchall()
+        return [
+            {
+                "device_id": r[0],
+                "override_window_seconds": r[1],
+                "reason": r[2],
+                "created_at": r[3],
+            }
+            for r in rows
+        ]
+
+    # --- Phase 119 — Override Lifecycle Management ---
+
+    def delete_device_epoch_override(self, device_id: str) -> bool:
+        """Revoke a per-device epoch window override (Phase 119).
+
+        Returns True if a row was deleted, False if no override was set for device_id.
+        """
+        with self._conn() as conn:
+            cur = conn.execute(
+                "DELETE FROM per_device_epoch_overrides WHERE device_id = ?",
+                (device_id,),
+            )
+            return cur.rowcount > 0
+
+    def increment_override_use_count(self, device_id: str) -> bool:
+        """Increment use_count for a per-device override after a successful Gate-5 pass.
+
+        Phase 119 W2: auto-graduation — when use_count reaches max_uses, the override
+        self-deletes, restoring standard fleet policy for that device.
+        Also checks time-based expiry (expires_at).
+
+        Returns True if the override was consumed/expired and deleted, False otherwise.
+        Non-blocking: returns False on any error (Gate-5 must not fail on this call).
+        """
+        import time as _t119i
+        try:
+            with self._conn() as conn:
+                row = conn.execute(
+                    "SELECT use_count, max_uses, expires_at "
+                    "FROM per_device_epoch_overrides WHERE device_id = ?",
+                    (device_id,),
+                ).fetchone()
+                if row is None:
+                    return False
+                use_count, max_uses, expires_at = row
+                # Time-based expiry check
+                if expires_at is not None and _t119i.time() > expires_at:
+                    conn.execute(
+                        "DELETE FROM per_device_epoch_overrides WHERE device_id = ?",
+                        (device_id,),
+                    )
+                    return True
+                # Increment use_count
+                new_count = use_count + 1
+                # max_uses check (None = infinite)
+                if max_uses is not None and new_count >= max_uses:
+                    conn.execute(
+                        "DELETE FROM per_device_epoch_overrides WHERE device_id = ?",
+                        (device_id,),
+                    )
+                    return True
+                conn.execute(
+                    "UPDATE per_device_epoch_overrides SET use_count = ? WHERE device_id = ?",
+                    (new_count, device_id),
+                )
+                return False
+        except Exception:
+            return False
+
+    def get_override_lifecycle_status(self) -> "list[dict]":
+        """Return all overrides with full lifecycle fields (Phase 119).
+
+        Includes max_uses, use_count, expires_at so operators can audit
+        which overrides are ephemeral vs permanent.
+        """
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT device_id, override_window_seconds, reason, "
+                "max_uses, use_count, expires_at, created_at "
+                "FROM per_device_epoch_overrides ORDER BY created_at DESC"
+            ).fetchall()
+        return [
+            {
+                "device_id":              r[0],
+                "override_window_seconds": r[1],
+                "reason":                 r[2],
+                "max_uses":               r[3],
+                "use_count":              r[4],
+                "expires_at":             r[5],
+                "created_at":             r[6],
+            }
+            for r in rows
+        ]
+
+    # --- Phase 114 — VHP Mint Dual-Primitive Gate ---
+
+    def get_latest_poad_hash_for_device(self, device_id: str) -> "str | None":
+        """Return the most recent poad_hash from poad_registry_log for device_id, or None."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT poad_hash FROM poad_registry_log "
+                "WHERE device_id = ? ORDER BY id DESC LIMIT 1",
+                (device_id,),
+            ).fetchone()
+        return row[0] if row else None
+
+    def get_poad_ts_ns_for_device(self, device_id: str) -> "int | None":
+        """Return ts_ns of the most recent poad_registry_log entry for device_id, or None."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT ts_ns FROM poad_registry_log "
+                "WHERE device_id = ? ORDER BY id DESC LIMIT 1",
+                (device_id,),
+            ).fetchone()
+        return int(row[0]) if row and row[0] is not None else None
+
+    def insert_vhp_dual_gate_log(
+        self,
+        device_id: str,
+        poad_hash: str,
+        eligible: bool,
+        poac_valid: bool,
+        poad_valid: bool,
+        mint_allowed: bool,
+        poad_age_seconds: float = -1.0,
+        epoch_window_ok: bool = True,
+    ) -> int:
+        import time as _t
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO vhp_dual_gate_log "
+                "(device_id, poad_hash, eligible, poac_valid, poad_valid, mint_allowed, "
+                "poad_age_seconds, epoch_window_ok, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (device_id, poad_hash, int(eligible), int(poac_valid),
+                 int(poad_valid), int(mint_allowed),
+                 float(poad_age_seconds), int(epoch_window_ok), _t.time()),
+            )
+            return cur.lastrowid
+
+    def get_vhp_dual_gate_log(
+        self, device_id: "str | None" = None, limit: int = 20
+    ) -> "list[dict]":
+        """Return vhp_dual_gate_log rows, newest first. Optionally filter by device_id."""
+        with self._conn() as conn:
+            if device_id:
+                rows = conn.execute(
+                    "SELECT id, device_id, poad_hash, eligible, poac_valid, poad_valid, "
+                    "mint_allowed, poad_age_seconds, epoch_window_ok, created_at "
+                    "FROM vhp_dual_gate_log "
+                    "WHERE device_id = ? ORDER BY id DESC LIMIT ?",
+                    (device_id, limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT id, device_id, poad_hash, eligible, poac_valid, poad_valid, "
+                    "mint_allowed, poad_age_seconds, epoch_window_ok, created_at "
+                    "FROM vhp_dual_gate_log "
+                    "ORDER BY id DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+        return [
+            {"id": r[0], "device_id": r[1], "poad_hash": r[2],
+             "eligible": bool(r[3]), "poac_valid": bool(r[4]),
+             "poad_valid": bool(r[5]), "mint_allowed": bool(r[6]),
+             "poad_age_seconds": r[7], "epoch_window_ok": bool(r[8]),
+             "created_at": r[9]}
+            for r in rows
+        ]
+
+    # --- Phase 120 — Bluetooth Transport Foundation ---
+
+    def insert_bt_transport_log(
+        self,
+        device_address: str,
+        sampling_rate_hz: int,
+        frames_received: int,
+        frames_dropped: int,
+        avg_interval_ms: float,
+        session_start_ts: float,
+        session_end_ts: float,
+    ) -> int:
+        """Insert a BT transport session log entry (Phase 120). Returns row id."""
+        import time as _t120
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO bt_transport_log "
+                "(device_address, sampling_rate_hz, frames_received, frames_dropped, "
+                "avg_interval_ms, session_start_ts, session_end_ts, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (device_address, sampling_rate_hz, frames_received, frames_dropped,
+                 avg_interval_ms, session_start_ts, session_end_ts, _t120.time()),
+            )
+            return cur.lastrowid
+
+    def get_bt_transport_status(self, limit: int = 10) -> "list[dict]":
+        """Return most recent BT transport session logs, newest first (Phase 120)."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT id, device_address, sampling_rate_hz, frames_received, "
+                "frames_dropped, avg_interval_ms, session_start_ts, session_end_ts, created_at "
+                "FROM bt_transport_log ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [
+            {
+                "id":               r[0],
+                "device_address":   r[1],
+                "sampling_rate_hz": r[2],
+                "frames_received":  r[3],
+                "frames_dropped":   r[4],
+                "avg_interval_ms":  r[5],
+                "session_start_ts": r[6],
+                "session_end_ts":   r[7],
+                "created_at":       r[8],
+            }
+            for r in rows
+        ]
+
+    # --- Phase 123: l4_calibration_log ---
+
+    def insert_l4_calibration_log(
+        self,
+        feature_dim: int,
+        n_sessions: int,
+        anomaly_threshold: float,
+        continuity_threshold: float,
+        calibration_timestamp: float,
+        stale_flag: bool,
+    ) -> int:
+        """Record a threshold calibration run or staleness snapshot (Phase 123)."""
+        import time as _t123
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO l4_calibration_log "
+                "(feature_dim, n_sessions, anomaly_threshold, continuity_threshold, "
+                "calibration_timestamp, stale_flag, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (feature_dim, n_sessions, float(anomaly_threshold),
+                 float(continuity_threshold), float(calibration_timestamp),
+                 int(stale_flag), _t123.time()),
+            )
+            return cur.lastrowid
+
+    def get_l4_calibration_log(self, limit: int = 10) -> "list[dict]":
+        """Return recent L4 calibration log entries, newest first (Phase 123)."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT id, feature_dim, n_sessions, anomaly_threshold, "
+                "continuity_threshold, calibration_timestamp, stale_flag, created_at "
+                "FROM l4_calibration_log ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [
+            {
+                "id":                    r[0],
+                "feature_dim":           r[1],
+                "n_sessions":            r[2],
+                "anomaly_threshold":     r[3],
+                "continuity_threshold":  r[4],
+                "calibration_timestamp": r[5],
+                "stale_flag":            bool(r[6]),
+                "created_at":            r[7],
+            }
+            for r in rows
+        ]
+
+    # --- Phase 124: l4_threshold_tracks ---
+
+    def insert_l4_threshold_track(
+        self,
+        battery_type: str,
+        anomaly_threshold: float,
+        continuity_threshold: float,
+        n_sessions: int,
+        calibrated_at: float,
+        active: bool = True,
+    ) -> int:
+        """Insert a per-battery L4 threshold track (Phase 124).
+
+        Bounds enforced: anomaly [5.0, 15.0]; continuity [3.0, 10.0].
+        Raises ValueError on out-of-bounds to prevent threshold pollution (W1).
+        """
+        if not (5.0 <= anomaly_threshold <= 15.0):
+            raise ValueError(
+                f"anomaly_threshold {anomaly_threshold} out of range [5.0, 15.0]"
+            )
+        if not (3.0 <= continuity_threshold <= 10.0):
+            raise ValueError(
+                f"continuity_threshold {continuity_threshold} out of range [3.0, 10.0]"
+            )
+        import time as _t124
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO l4_threshold_tracks "
+                "(battery_type, anomaly_threshold, continuity_threshold, n_sessions, "
+                "calibrated_at, active, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (battery_type, float(anomaly_threshold), float(continuity_threshold),
+                 int(n_sessions), float(calibrated_at), int(active), _t124.time()),
+            )
+            return cur.lastrowid
+
+    def get_l4_threshold_tracks(
+        self, battery_type: "str | None" = None, active_only: bool = False
+    ) -> "list[dict]":
+        """Return L4 threshold tracks, newest first (Phase 124)."""
+        conditions = []
+        params: list = []
+        if battery_type is not None:
+            conditions.append("battery_type = ?")
+            params.append(battery_type)
+        if active_only:
+            conditions.append("active = 1")
+        where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+        with self._conn() as conn:
+            rows = conn.execute(
+                f"SELECT id, battery_type, anomaly_threshold, continuity_threshold, "
+                f"n_sessions, calibrated_at, active, created_at "
+                f"FROM l4_threshold_tracks {where} ORDER BY id DESC",
+                params,
+            ).fetchall()
+        return [
+            {
+                "id":                   r[0],
+                "battery_type":         r[1],
+                "anomaly_threshold":    r[2],
+                "continuity_threshold": r[3],
+                "n_sessions":           r[4],
+                "calibrated_at":        r[5],
+                "active":               bool(r[6]),
+                "created_at":           r[7],
+            }
+            for r in rows
+        ]
+
+    # --- Phase 121: separation_ratio_snapshots ---
+
+    def insert_separation_ratio_snapshot(
+        self,
+        pooled_ratio: float,
+        bt_strat_ratio: float,
+        n_sessions: int,
+        n_players: int,
+        active_features: int,
+        tournament_ready: bool,
+    ) -> int:
+        """Insert a separation ratio snapshot (Phase 121 — observability only)."""
+        import time as _t121
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO separation_ratio_snapshots "
+                "(pooled_ratio, bt_strat_ratio, n_sessions, n_players, active_features, "
+                "tournament_ready, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (pooled_ratio, bt_strat_ratio, n_sessions, n_players, active_features,
+                 int(tournament_ready), _t121.time()),
+            )
+            return cur.lastrowid
+
+    def get_separation_ratio_status(self, limit: int = 1) -> "list[dict]":
+        """Return most recent separation ratio snapshots, newest first (Phase 121)."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT id, pooled_ratio, bt_strat_ratio, n_sessions, n_players, "
+                "active_features, tournament_ready, created_at "
+                "FROM separation_ratio_snapshots ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [
+            {
+                "id":               r[0],
+                "pooled_ratio":     r[1],
+                "bt_strat_ratio":   r[2],
+                "n_sessions":       r[3],
+                "n_players":        r[4],
+                "active_features":  r[5],
+                "tournament_ready": bool(r[6]),
+                "created_at":       r[7],
+            }
+            for r in rows
+        ]
+
+    # --- Phase 122: confidence_multiplier_log ---
+
+    def insert_confidence_multiplier_log(
+        self,
+        device_id: str,
+        original_score: int,
+        multiplier: float,
+        final_score: int,
+        bt_strat_ratio: float,
+    ) -> int:
+        """Log a confidence_score multiplier application (Phase 122). Non-blocking callers."""
+        import time as _t122
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO confidence_multiplier_log "
+                "(device_id, original_score, multiplier, final_score, bt_strat_ratio, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (device_id, original_score, float(multiplier), final_score,
+                 float(bt_strat_ratio), _t122.time()),
+            )
+            return cur.lastrowid
+
+    def get_confidence_multiplier_log(
+        self,
+        device_id: "str | None" = None,
+        limit: int = 10,
+    ) -> "list[dict]":
+        """Return recent confidence multiplier log entries, newest first (Phase 122)."""
+        with self._conn() as conn:
+            if device_id is not None:
+                rows = conn.execute(
+                    "SELECT id, device_id, original_score, multiplier, final_score, "
+                    "bt_strat_ratio, created_at FROM confidence_multiplier_log "
+                    "WHERE device_id=? ORDER BY id DESC LIMIT ?",
+                    (device_id, limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT id, device_id, original_score, multiplier, final_score, "
+                    "bt_strat_ratio, created_at FROM confidence_multiplier_log "
+                    "ORDER BY id DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+        return [
+            {
+                "id":             r[0],
+                "device_id":      r[1],
+                "original_score": r[2],
+                "multiplier":     r[3],
+                "final_score":    r[4],
+                "bt_strat_ratio": r[5],
+                "created_at":     r[6],
+            }
+            for r in rows
+        ]
+
+    # --- Phase 125: Per-Battery L4 Calibration Runs ---
+
+    def insert_l4_battery_calibration_run(
+        self,
+        battery_type: str,
+        anomaly_threshold: float,
+        continuity_threshold: float,
+        n_sessions: int,
+        calibration_feature_dim: int = 13,
+        notes: "str | None" = None,
+    ) -> int:
+        """Insert a per-battery L4 calibration run audit record (Phase 125).
+
+        Records each apply operation for traceability.
+        Returns the new row id.
+        """
+        with self._conn() as conn:
+            cur = conn.execute(
+                """INSERT INTO l4_battery_calibration_runs
+                   (battery_type, anomaly_threshold, continuity_threshold,
+                    n_sessions, calibration_feature_dim, notes, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    battery_type,
+                    float(anomaly_threshold),
+                    float(continuity_threshold),
+                    int(n_sessions),
+                    int(calibration_feature_dim),
+                    notes,
+                    time.time(),
+                ),
+            )
+            return cur.lastrowid
+
+    def get_l4_battery_calibration_runs(self, limit: int = 10) -> "list[dict]":
+        """Return recent per-battery L4 calibration run records, newest first (Phase 125)."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                """SELECT id, battery_type, anomaly_threshold, continuity_threshold,
+                          n_sessions, calibration_feature_dim, notes, created_at
+                   FROM l4_battery_calibration_runs
+                   ORDER BY id DESC
+                   LIMIT ?""",
+                (limit,),
+            ).fetchall()
+        return [
+            {
+                "id":                      r[0],
+                "battery_type":            r[1],
+                "anomaly_threshold":       r[2],
+                "continuity_threshold":    r[3],
+                "n_sessions":              r[4],
+                "calibration_feature_dim": r[5],
+                "notes":                   r[6],
+                "created_at":              r[7],
+            }
+            for r in rows
+        ]
+
+    # --- Phase 126: L4 Threshold Router Log ---
+
+    def insert_l4_router_log(
+        self,
+        battery_type: str = "unknown",
+        threshold_source: str = "global_fallback",
+        anomaly_used: float = 7.009,
+        continuity_used: float = 5.367,
+    ) -> int:
+        """Insert a threshold router lookup entry (Phase 126)."""
+        with self._conn() as conn:
+            cur = conn.execute(
+                """INSERT INTO l4_threshold_router_log
+                   (battery_type, threshold_source, anomaly_used, continuity_used, created_at)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (battery_type, threshold_source, float(anomaly_used), float(continuity_used),
+                 time.time()),
+            )
+            return cur.lastrowid
+
+    def get_l4_router_log(self, limit: int = 50) -> "list[dict]":
+        """Return recent L4 threshold router lookup entries, newest first (Phase 126)."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                """SELECT id, battery_type, threshold_source, anomaly_used,
+                          continuity_used, created_at
+                   FROM l4_threshold_router_log
+                   ORDER BY id DESC
+                   LIMIT ?""",
+                (limit,),
+            ).fetchall()
+        return [
+            {
+                "id":               r[0],
+                "battery_type":     r[1],
+                "threshold_source": r[2],
+                "anomaly_used":     r[3],
+                "continuity_used":  r[4],
+                "created_at":       r[5],
+            }
+            for r in rows
+        ]
+
+    # --- Phase 127: Tournament Preflight Log ---
+
+    def insert_tournament_preflight_log(
+        self,
+        separation_ok: bool,
+        l4_ok: bool,
+        gate_ok: bool,
+        cert_ok: bool,
+        audit_ok: bool,
+        dual_gate_warned: bool = False,
+        epoch_window_warned: bool = False,
+        ioswarm_warned: bool = False,
+        overall_pass: bool = False,
+        conditions_json: str = "{}",
+    ) -> int:
+        """Insert a tournament preflight run record (Phase 127).
+
+        Returns the new row id.
+        """
+        with self._conn() as conn:
+            cur = conn.execute(
+                """INSERT INTO tournament_preflight_log
+                   (separation_ok, l4_ok, gate_ok, cert_ok, audit_ok,
+                    dual_gate_warned, epoch_window_warned, ioswarm_warned,
+                    overall_pass, conditions_json, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    int(separation_ok), int(l4_ok), int(gate_ok),
+                    int(cert_ok), int(audit_ok),
+                    int(dual_gate_warned), int(epoch_window_warned), int(ioswarm_warned),
+                    int(overall_pass), conditions_json,
+                    time.time(),
+                ),
+            )
+            return cur.lastrowid
+
+    def get_tournament_preflight_status(self, limit: int = 5) -> "list[dict]":
+        """Return recent tournament preflight run records, newest first (Phase 127)."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                """SELECT id, separation_ok, l4_ok, gate_ok, cert_ok, audit_ok,
+                          dual_gate_warned, epoch_window_warned, ioswarm_warned,
+                          overall_pass, conditions_json, created_at
+                   FROM tournament_preflight_log
+                   ORDER BY id DESC
+                   LIMIT ?""",
+                (limit,),
+            ).fetchall()
+        return [
+            {
+                "id":                    r[0],
+                "separation_ok":         bool(r[1]),
+                "l4_ok":                 bool(r[2]),
+                "gate_ok":               bool(r[3]),
+                "cert_ok":               bool(r[4]),
+                "audit_ok":              bool(r[5]),
+                "dual_gate_warned":      bool(r[6]),
+                "epoch_window_warned":   bool(r[7]),
+                "ioswarm_warned":        bool(r[8]),
+                "overall_pass":          bool(r[9]),
+                "conditions_json":       r[10],
+                "created_at":            r[11],
+            }
+            for r in rows
+        ]
+
+    # --- Phase 128: Tournament Readiness Score (uses existing protocol_intelligence_reports) ---
+
+    def insert_readiness_score(
+        self,
+        score: float,
+        breakdown_json: str,
+        conditions_met: int,
+    ) -> int:
+        """Insert a tournament readiness score into protocol_intelligence_reports (Phase 128).
+
+        Stores: score in protocol_health_score, breakdown in components_json,
+        conditions_met count in recommendation, ready_for_live_mode=score>=0.90.
+        Returns row id.
+        """
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO protocol_intelligence_reports "
+                "(protocol_health_score, components_json, recommendation, "
+                "ready_for_live_mode, created_at) "
+                "VALUES (?,?,?,?,?)",
+                (
+                    float(score),
+                    breakdown_json,
+                    str(conditions_met),
+                    int(score >= 0.90),
+                    time.time(),
+                ),
+            )
+            return cur.lastrowid
+
+    def get_readiness_scores(self, limit: int = 10) -> "list[dict]":
+        """Return recent tournament readiness score reports, newest first (Phase 128)."""
+        import json as _json
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT id, protocol_health_score AS score, components_json, "
+                "recommendation AS conditions_met_str, ready_for_live_mode, created_at "
+                "FROM protocol_intelligence_reports "
+                "ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        result = []
+        for row in rows:
+            d = dict(row)
+            try:
+                d["breakdown"] = _json.loads(d.get("components_json") or "{}")
+            except (ValueError, TypeError):
+                d["breakdown"] = {}
+            try:
+                d["conditions_met"] = int(d.get("conditions_met_str") or "0")
+            except (ValueError, TypeError):
+                d["conditions_met"] = 0
+            result.append(d)
+        return result
+
+    # --- Phase 129: Separation Ratio Breakthrough Log ---
+
+    def insert_separation_ratio_breakthrough(
+        self,
+        before_ratio: float,
+        after_ratio: float,
+        n_players: int,
+        feature_count: int,
+    ) -> int:
+        """Insert a separation ratio breakthrough event (Phase 129)."""
+        now = time.time()
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO separation_ratio_breakthrough_log "
+                "(before_ratio, after_ratio, n_players, feature_count, breakthrough_at, created_at) "
+                "VALUES (?,?,?,?,?,?)",
+                (float(before_ratio), float(after_ratio), int(n_players),
+                 int(feature_count), now, now),
+            )
+            return cur.lastrowid
+
+    def get_separation_ratio_breakthrough(self, limit: int = 5) -> "list[dict]":
+        """Return recent breakthrough log entries, newest first (Phase 129)."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT id, before_ratio, after_ratio, n_players, feature_count, "
+                "breakthrough_at, created_at "
+                "FROM separation_ratio_breakthrough_log "
+                "ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    # --- Phase 130A: VAPISwarmOperatorGate validation log ---
+
+    def insert_swarm_quorum_validation(
+        self,
+        node_count: int,
+        distinct_stakers: int,
+        quorum_valid: bool,
+        gate_address: str = "",
+    ) -> int:
+        """Insert a swarm quorum validation result (Phase 130A)."""
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO swarm_quorum_validation_log "
+                "(node_count, distinct_stakers, quorum_valid, gate_address, created_at) "
+                "VALUES (?,?,?,?,?)",
+                (int(node_count), int(distinct_stakers),
+                 1 if quorum_valid else 0, str(gate_address), time.time()),
+            )
+            return cur.lastrowid
+
+    def get_swarm_quorum_validation_log(self, limit: int = 10) -> "list[dict]":
+        """Return recent swarm quorum validation entries, newest first (Phase 130A)."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT id, node_count, distinct_stakers, quorum_valid, gate_address, created_at "
+                "FROM swarm_quorum_validation_log "
+                "ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def insert_ioswarm_node_registry(self, node_url: str, staker_address: str = "", active: bool = True, node_version: str = "") -> int:
+        """Phase 131: Register an ioSwarm live node URL."""
+        with self._conn() as con:
+            cur = con.execute(
+                "INSERT OR IGNORE INTO ioswarm_node_registry "
+                "(node_url, staker_address, active, node_version, registered_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (node_url, staker_address, int(active), node_version, __import__("time").time()),
+            )
+            return cur.lastrowid or 0
+
+    def get_ioswarm_node_registry(self, active_only: bool = False) -> list:
+        """Phase 131: Return registered ioSwarm node entries."""
+        query = "SELECT * FROM ioswarm_node_registry"
+        if active_only:
+            query += " WHERE active=1"
+        query += " ORDER BY registered_at ASC"
+        with self._conn() as con:
+            rows = con.execute(query).fetchall()
+        return [dict(r) for r in rows]
+
+    def update_ioswarm_node_last_seen(self, node_url: str, ts: float, staker_address: str = "") -> None:
+        """Phase 131: Update last_seen_ts for a registered ioSwarm node."""
+        with self._conn() as con:
+            if staker_address:
+                con.execute(
+                    "UPDATE ioswarm_node_registry SET last_seen_ts=?, staker_address=? WHERE node_url=?",
+                    (ts, staker_address, node_url),
+                )
+            else:
+                con.execute(
+                    "UPDATE ioswarm_node_registry SET last_seen_ts=? WHERE node_url=?",
+                    (ts, node_url),
+                )
+
+    # ------------------------------------------------------------------
+    # Phase 132: IoSwarm Node Health Log
+    # ------------------------------------------------------------------
+
+    def insert_ioswarm_node_health(
+        self,
+        node_url: str,
+        healthy: bool,
+        latency_ms: float,
+        staker_address: str = "",
+        error_msg: str = "",
+    ) -> int:
+        """Phase 132: Record a health poll result for a live ioSwarm node."""
+        polled_at = time.time()
+        with self._conn() as con:
+            cur = con.execute(
+                "INSERT INTO ioswarm_node_health_log "
+                "(node_url, healthy, latency_ms, staker_address, error_msg, polled_at, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (node_url, int(healthy), latency_ms, staker_address, error_msg, polled_at, polled_at),
+            )
+            return cur.lastrowid
+
+    def get_ioswarm_node_health(self, node_url: str | None = None, limit: int = 50) -> list:
+        """Phase 132: Retrieve recent health poll records, optionally filtered by node_url."""
+        with self._conn() as con:
+            if node_url:
+                rows = con.execute(
+                    "SELECT * FROM ioswarm_node_health_log WHERE node_url=? "
+                    "ORDER BY polled_at DESC LIMIT ?",
+                    (node_url, limit),
+                ).fetchall()
+            else:
+                rows = con.execute(
+                    "SELECT * FROM ioswarm_node_health_log ORDER BY polled_at DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+        return [dict(r) for r in rows]
+
+    # ------------------------------------------------------------------
+    # Phase 133: IoSwarm PoAd Auto-Anchor
+    # ------------------------------------------------------------------
+
+    def insert_ioswarm_poad_anchor(
+        self,
+        device_id: str,
+        session_id: str = "",
+        dual_veto: bool = False,
+        swarm_fingerprint: str = "",
+        poad_hash: str = "",
+        on_chain_tx: str | None = None,
+        anchor_status: str = "pending",
+    ) -> int:
+        """Phase 133: Insert a PoAd auto-anchor record."""
+        with self._conn() as conn:
+            cur = conn.execute(
+                """INSERT INTO ioswarm_poad_anchor_log
+                   (device_id, session_id, dual_veto, swarm_fingerprint,
+                    poad_hash, on_chain_tx, anchor_status, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (device_id, session_id, int(dual_veto), swarm_fingerprint,
+                 poad_hash, on_chain_tx, anchor_status, time.time()),
+            )
+            return cur.lastrowid
+
+    def update_ioswarm_poad_anchor_tx(
+        self,
+        anchor_id: int,
+        on_chain_tx: str,
+        anchor_status: str,
+    ) -> None:
+        """Phase 133: Update an anchor record's tx hash and status."""
+        with self._conn() as conn:
+            conn.execute(
+                "UPDATE ioswarm_poad_anchor_log SET on_chain_tx=?, anchor_status=? WHERE id=?",
+                (on_chain_tx, anchor_status, anchor_id),
+            )
+
+    def get_ioswarm_poad_anchor_log(self, limit: int = 50) -> list:
+        """Phase 133: Retrieve recent PoAd anchor records, newest first."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM ioswarm_poad_anchor_log ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    # ------------------------------------------------------------------
+    # Phase 131B: USB Stability Monitor — PS5 coexistence logging
+    # ------------------------------------------------------------------
+
+    def insert_usb_reconnect_log(
+        self,
+        device_address: str = "",
+        disconnect_reason: str = "",
+        consecutive_fb_timeouts: int = 0,
+        ps5_compat_mode_active: bool = False,
+        session_id: str = "",
+    ) -> int:
+        """Phase 131B: Log a USB disconnect/instability event from the HID feedback path.
+
+        Called when _consecutive_fb_timeouts exceeds the auto-log threshold, indicating
+        the HID output write path (LED/haptic) is causing USB instability — the root cause
+        of the PS5 reconnect notification. VAPI-exclusive: only VAPI writes HID output
+        to a DualShock Edge while simultaneously maintaining a live biometric PoAC stream.
+        """
+        import time as _t
+        with self._conn() as con:
+            cur = con.execute(
+                "INSERT INTO usb_reconnect_log "
+                "(device_address, disconnect_reason, consecutive_fb_timeouts, "
+                "ps5_compat_mode_active, session_id, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    device_address,
+                    disconnect_reason,
+                    consecutive_fb_timeouts,
+                    int(ps5_compat_mode_active),
+                    session_id,
+                    _t.time(),
+                ),
+            )
+            return cur.lastrowid or 0
+
+    def get_usb_stability_status(self, limit: int = 50) -> dict:
+        """Phase 131B: Return USB stability summary for /agent/usb-stability-status.
+
+        Returns disconnect_count, last_disconnect_ts, and recent log entries. Used by
+        the operator to diagnose PS5 coexistence issues and decide whether to enable
+        ps5_compat_mode (suppresses all HID output writes, eliminating USB drops at
+        the cost of no LED/haptic feedback during gameplay).
+        """
+        with self._conn() as con:
+            rows = con.execute(
+                "SELECT * FROM usb_reconnect_log ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        entries = [dict(r) for r in rows]
+        last_ts = entries[0]["created_at"] if entries else 0.0
+        return {
+            "disconnect_count": len(entries),
+            "last_disconnect_ts": last_ts,
+            "entries": entries,
+        }
+
+    # ---------------------------------------------------------------------------
+    # Phase 134 — L4 Recalibration Jobs
+    # ---------------------------------------------------------------------------
+
+    def insert_l4_recalibration_job(self, started_at: float) -> int:
+        """Insert a new recalibration job with status='running'. Returns row id."""
+        with self._conn() as con:
+            cur = con.execute(
+                "INSERT INTO l4_recalibration_jobs (started_at, status, created_at)"
+                " VALUES (?, 'running', ?)",
+                (started_at, time.time()),
+            )
+            return cur.lastrowid
+
+    def update_l4_recalibration_job(
+        self,
+        job_id: int,
+        status: str,
+        sessions_processed: int,
+        anomaly_result: float,
+        continuity_result: float,
+        completed_at: float,
+        error: str | None = None,
+    ) -> None:
+        """Update a recalibration job record (Phase 134)."""
+        with self._conn() as con:
+            con.execute(
+                "UPDATE l4_recalibration_jobs"
+                " SET status=?, sessions_processed=?, anomaly_result=?,"
+                "     continuity_result=?, completed_at=?, error=?"
+                " WHERE id=?",
+                (status, sessions_processed, anomaly_result,
+                 continuity_result, completed_at, error, job_id),
+            )
+
+    def get_l4_recalibration_jobs(self, limit: int = 10) -> list:
+        """Return the most recent L4 recalibration jobs ordered by id DESC (Phase 134)."""
+        with self._conn() as con:
+            rows = con.execute(
+                "SELECT * FROM l4_recalibration_jobs ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    # Phase 135 — Tournament Activation Chain Log
+    # -------------------------------------------------------------------------
+
+    def insert_tournament_activation_chain(
+        self,
+        event_type: str,
+        separation_ratio: float,
+        n_players: int,
+        gate_open_notified: bool = False,
+        notes: str | None = None,
+    ) -> int:
+        """Insert a tournament activation chain event (Phase 135)."""
+        with self._conn() as con:
+            cur = con.execute(
+                "INSERT INTO tournament_activation_chain_log "
+                "(event_type, separation_ratio, n_players, gate_open_notified, "
+                " auto_activate_blocked, operator_action_required, notes, created_at)"
+                " VALUES (?,?,?,?,1,1,?,?)",
+                (event_type, separation_ratio, n_players,
+                 1 if gate_open_notified else 0,
+                 notes, time.time()),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def get_tournament_activation_chain(self, limit: int = 10) -> list:
+        """Return tournament activation chain log entries ordered by id DESC (Phase 135)."""
+        with self._conn() as con:
+            rows = con.execute(
+                "SELECT * FROM tournament_activation_chain_log ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [dict(r) for r in rows]

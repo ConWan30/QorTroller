@@ -99,6 +99,13 @@ _AGENT_CHECKS: dict[str, dict] = {
         "filter": "source = 'ceremony_watchdog_agent'",
         "device_col": None,
     },
+    # Phase 136: ControllerHardwareIntelligenceAgent
+    "controller_hardware_intelligence_agent": {
+        "table": "controller_detection_log",
+        "ts_col": "detected_at",
+        "filter": None,
+        "device_col": "controller_id",
+    },
 }
 
 

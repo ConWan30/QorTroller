@@ -899,6 +899,44 @@ def compute_thresholds(sessions: list) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Per-battery calibration (Phase 125)
+# ---------------------------------------------------------------------------
+
+_BATTERY_TYPES = ("touchpad", "trigger", "button", "gameplay", "resting_grip")
+
+
+def _detect_battery(session: dict) -> str:
+    """Return battery_type from session metadata, or 'unknown' if not tagged."""
+    meta = session.get("metadata", {})
+    return str(meta.get("battery_type") or meta.get("battery") or "unknown")
+
+
+def _calibrate_battery(sessions: list, battery_type: str) -> dict:
+    """
+    Filter sessions to those matching battery_type and run compute_thresholds().
+    Returns the calibration profile dict with battery_type injected at the top level.
+    Raises ValueError if no sessions match (Phase 125 bounds enforcement propagates
+    to the caller — operator API converts to HTTP 422).
+    """
+    if battery_type == "all":
+        filtered = sessions
+    else:
+        filtered = [s for s in sessions if _detect_battery(s) == battery_type]
+
+    if not filtered:
+        raise ValueError(
+            f"No sessions with battery_type='{battery_type}' found in the provided corpus "
+            f"(total sessions: {len(sessions)}). "
+            "Tag sessions via terminal_calibration_runner.py --battery or ensure metadata.battery_type is set."
+        )
+
+    profile = compute_thresholds(filtered)
+    profile["battery_type"] = battery_type
+    profile["n_sessions_battery_filtered"] = len(filtered)
+    return profile
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -912,12 +950,24 @@ def main() -> int:
             "  python scripts/threshold_calibrator.py sessions/*.json\n"
             "  python scripts/threshold_calibrator.py sessions/s1.json sessions/s2.json "
             "--output calibration_profile.json\n"
+            "  python scripts/threshold_calibrator.py sessions/*.json --battery touchpad\n"
+            "  python scripts/threshold_calibrator.py sessions/*.json --battery all\n"
         ),
     )
     p.add_argument("sessions", nargs="+",
                    help="Session JSON files produced by capture_session.py")
     p.add_argument("--output", default="calibration_profile.json",
                    help="Output profile path (default: calibration_profile.json)")
+    p.add_argument(
+        "--battery",
+        choices=list(_BATTERY_TYPES) + ["all"],
+        default=None,
+        help=(
+            "Filter sessions by battery type and produce per-battery thresholds "
+            "(Phase 125). Choices: touchpad, trigger, button, gameplay, resting_grip, all. "
+            "Requires sessions tagged with metadata.battery_type via terminal_calibration_runner.py."
+        ),
+    )
     args = p.parse_args()
 
     # Expand globs (for shells that don't expand them)
@@ -955,8 +1005,19 @@ def main() -> int:
         print(f"\nWARNING: Only {n} sessions loaded. "
               "Minimum N=10 required for reliable thresholds; N=50 for production.")
 
-    print(f"\nComputing thresholds from {n} session(s)...")
-    profile = compute_thresholds(sessions)
+    if args.battery is not None:
+        print(f"\nFiltering sessions by battery_type='{args.battery}'...")
+        try:
+            profile = _calibrate_battery(sessions, args.battery)
+        except ValueError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
+        n_filtered = profile.get("n_sessions_battery_filtered", n)
+        print(f"Computing thresholds from {n_filtered} matching session(s) "
+              f"(battery_type='{args.battery}')...")
+    else:
+        print(f"\nComputing thresholds from {n} session(s)...")
+        profile = compute_thresholds(sessions)
 
     # Save profile
     with open(args.output, "w", encoding="utf-8") as f:
@@ -964,8 +1025,10 @@ def main() -> int:
 
     # Print summary
     thresholds = profile["thresholds"]
+    _n_used = profile.get("n_sessions_battery_filtered", n)
+    _bat_tag = f" [battery={profile['battery_type']}]" if "battery_type" in profile else ""
     print(f"\n{'='*60}")
-    print(f"Calibration Profile — {n} sessions ({profile['confidence_level']} confidence)")
+    print(f"Calibration Profile — {_n_used} sessions ({profile['confidence_level']} confidence){_bat_tag}")
     print(f"{'='*60}")
     print(f"{'Threshold':<40} {'Recommended':>12} {'Current':>10}")
     print(f"{'-'*40} {'-'*12} {'-'*10}")

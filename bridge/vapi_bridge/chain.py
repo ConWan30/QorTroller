@@ -2452,6 +2452,111 @@ class ChainClient:
         )
         return tx_hash.hex()
 
+    async def record_adjudication(
+        self,
+        device_id: str,
+        poad_hash_hex: str,
+        dual_veto: bool,
+    ) -> str:
+        """Anchor a PoAd hash in AdjudicationRegistry.sol (Phase 112).
+        device_id     — string device identifier; hashed to bytes32 via sha256
+        poad_hash_hex — 64-char hex string (SHA-256 of sorted verdict bundle)
+        dual_veto     — True if both ClassJ and Triage reached BLOCK quorum
+        Raises RuntimeError if address not configured or tx reverts. Returns tx_hash hex.
+        """
+        addr = getattr(self._cfg, "adjudication_registry_address", "")
+        if not addr:
+            raise RuntimeError("record_adjudication: adjudication_registry_address not configured")
+        import hashlib as _hl
+        device_id_bytes32 = _hl.sha256(device_id.encode()).digest()   # 32 bytes
+        poad_hash_bytes32 = bytes.fromhex(poad_hash_hex)              # 32 bytes
+        _ABI = [{
+            "name": "recordAdjudication", "type": "function",
+            "stateMutability": "nonpayable",
+            "inputs": [
+                {"name": "deviceIdHash", "type": "bytes32"},
+                {"name": "poadHash",     "type": "bytes32"},
+                {"name": "dualVeto",     "type": "bool"},
+            ],
+            "outputs": [],
+        }]
+        contract = self._w3.eth.contract(
+            address=self._w3.to_checksum_address(addr), abi=_ABI
+        )
+        nonce = await self._w3.eth.get_transaction_count(self._account.address)
+        tx = await contract.functions.recordAdjudication(
+            device_id_bytes32, poad_hash_bytes32, dual_veto,
+        ).build_transaction({"from": self._account.address, "nonce": nonce, "gas": 80_000})
+        signed = self._account.sign_transaction(tx)
+        tx_hash = await self._w3.eth.send_raw_transaction(signed.rawTransaction)
+        receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+        if receipt.status != 1:
+            raise RuntimeError(f"record_adjudication: tx reverted {tx_hash.hex()}")
+        log.info("record_adjudication: tx=%s device=%s poad=%s",
+                 tx_hash.hex()[:16], device_id[:16], poad_hash_hex[:16])
+        return tx_hash.hex()
+
+    async def is_dual_eligible(
+        self,
+        device_id_hash_hex: str,
+        poad_hash_hex: str,
+    ) -> dict:
+        """Query VAPIDualPrimitiveGate.isDualEligible() — Phase 113 view call (no gas).
+        device_id_hash_hex — 64-char hex (sha256(device_id.encode()).hexdigest())
+        poad_hash_hex      — 64-char hex (Phase 111 poad_registry_log.poad_hash)
+        Returns {"eligible": bool, "poac_valid": bool, "poad_valid": bool}.
+        Raises RuntimeError if dual_primitive_gate_address not configured.
+        """
+        addr = getattr(self._cfg, "dual_primitive_gate_address", "")
+        if not addr:
+            raise RuntimeError("is_dual_eligible: dual_primitive_gate_address not configured")
+        _ABI = [{
+            "name": "isDualEligible", "type": "function",
+            "stateMutability": "view",
+            "inputs": [
+                {"name": "deviceIdHash", "type": "bytes32"},
+                {"name": "poadHash",     "type": "bytes32"},
+            ],
+            "outputs": [
+                {"name": "eligible",   "type": "bool"},
+                {"name": "poac_valid", "type": "bool"},
+                {"name": "poad_valid", "type": "bool"},
+            ],
+        }]
+        contract = self._w3.eth.contract(
+            address=self._w3.to_checksum_address(addr), abi=_ABI
+        )
+        device_id_bytes32 = bytes.fromhex(device_id_hash_hex)
+        poad_hash_bytes32 = bytes.fromhex(poad_hash_hex)
+        result = await contract.functions.isDualEligible(
+            device_id_bytes32, poad_hash_bytes32
+        ).call()
+        log.debug("is_dual_eligible: device=%s poad=%s eligible=%s",
+                  device_id_hash_hex[:16], poad_hash_hex[:16], result[0])
+        return {
+            "eligible":   bool(result[0]),
+            "poac_valid": bool(result[1]),
+            "poad_valid": bool(result[2]),
+        }
+
+    async def is_swarm_quorum_valid(self, node_addresses: list[str]) -> bool:
+        """View call (no gas). Calls VAPISwarmOperatorGate.isQuorumValid(address[]).
+        Raises RuntimeError if swarm_operator_gate_address not configured. Phase 130A."""
+        gate_addr = getattr(self._cfg, "swarm_operator_gate_address", "")
+        if not gate_addr:
+            raise RuntimeError("is_swarm_quorum_valid: swarm_operator_gate_address not configured")
+        _ABI = [{
+            "name": "isQuorumValid", "type": "function",
+            "stateMutability": "view",
+            "inputs": [{"name": "nodes", "type": "address[]"}],
+            "outputs": [{"type": "bool"}],
+        }]
+        contract = self._w3.eth.contract(
+            address=self._w3.to_checksum_address(gate_addr), abi=_ABI
+        )
+        result = await contract.functions.isQuorumValid(node_addresses).call()
+        return bool(result)
+
     async def mint_vhp(
         self,
         to: str,

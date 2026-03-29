@@ -45,9 +45,10 @@ class IoSwarmVHPMintCoordinator:
         Optional injected IoSwarmVHPMintEmulator (default: IoSwarmVHPMintEmulator(n=5, seed=110)).
     """
 
-    def __init__(self, cfg, store, mint_emulator=None) -> None:
+    def __init__(self, cfg, store, mint_emulator=None, live_client=None) -> None:
         self._cfg = cfg
         self._store = store
+        self._live_client = live_client
 
         if mint_emulator is None:
             from .ioswarm_vhp_mint_emulator import IoSwarmVHPMintEmulator

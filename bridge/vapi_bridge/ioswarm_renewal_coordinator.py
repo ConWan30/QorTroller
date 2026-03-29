@@ -21,9 +21,10 @@ class IoSwarmRenewalCoordinator:
     Uses IoSwarmNodeEmulator by default (code-before-operators; Phase 109B).
     """
 
-    def __init__(self, cfg, store, emulator=None) -> None:
+    def __init__(self, cfg, store, emulator=None, live_client=None) -> None:
         self._cfg = cfg
         self._store = store
+        self._live_client = live_client
         if emulator is None:
             from .ioswarm_node_emulator import IoSwarmNodeEmulator
             n = int(getattr(cfg, "ioswarm_node_count", 5))

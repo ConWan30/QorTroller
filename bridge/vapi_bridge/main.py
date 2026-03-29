@@ -783,6 +783,49 @@ class Bridge:
         else:
             log.info("Phase 102: VHPRenewalAgent skipped (VHP_RENEWAL_ENABLED=false)")
 
+        # Phase 112: PoAdAnchorAgent — on-chain anchoring of PoAd hashes
+        if getattr(self.cfg, "poad_on_chain_enabled", False):
+            try:
+                from .poad_anchor_agent import PoAdAnchorAgent
+                _chain_ref2   = getattr(self, "chain", None)
+                _poad_anchor  = PoAdAnchorAgent(cfg=self.cfg, store=self.store, chain=_chain_ref2)
+                _pat = asyncio.create_task(_poad_anchor.run_poll_loop())
+                _pat.set_name("PoAdAnchorAgent")
+                _pat.add_done_callback(_task_done_handler)
+                self._tasks.append(_pat)
+                log.info("Phase 112: PoAdAnchorAgent started (poll=%ds)", 60)
+            except Exception as _poad_exc:
+                log.warning("Phase 112: PoAdAnchorAgent unavailable: %s", _poad_exc)
+        else:
+            log.info("Phase 112: PoAdAnchorAgent skipped (POAD_ON_CHAIN_ENABLED=false, default)")
+
+        # Phase 129: SeparationRatioMonitorAgent — agent #15
+        # separation_ratio_monitor_enabled is not in config (always-on infrastructure)
+        try:
+            from .separation_ratio_monitor_agent import SeparationRatioMonitorAgent
+            _srm = SeparationRatioMonitorAgent(self.cfg, self.store, bus=_bus)
+            _srmt = asyncio.ensure_future(_srm.run_poll_loop())
+            _srmt.set_name("SeparationRatioMonitorAgent")
+            self._tasks.append(_srmt)
+            log.info("Phase 129: SeparationRatioMonitorAgent started (poll=300s)")
+        except Exception as _srm_exc:
+            log.warning("Phase 129: SeparationRatioMonitorAgent unavailable: %s", _srm_exc)
+
+        # Phase 135: TournamentActivationChainAgent — agent #16
+        # auto_activate_on_breakthrough=False PERMANENT INVARIANT
+        try:
+            from .tournament_activation_chain_agent import TournamentActivationChainAgent
+            _taca = TournamentActivationChainAgent(self.cfg, self.store, bus=_bus)
+            _tacat = asyncio.ensure_future(_taca.run_event_consumer())
+            _tacat.set_name("TournamentActivationChainAgent")
+            self._tasks.append(_tacat)
+            log.info(
+                "Phase 135: TournamentActivationChainAgent started (agent #16; "
+                "auto_activate_on_breakthrough=False PERMANENT)"
+            )
+        except Exception as _taca_exc:
+            log.warning("Phase 135: TournamentActivationChainAgent unavailable: %s", _taca_exc)
+
         log.info("All services started — bridge is operational")
 
         # Wait for shutdown

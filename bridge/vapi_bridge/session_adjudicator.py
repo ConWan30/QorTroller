@@ -271,6 +271,13 @@ class SessionAdjudicator:
         log.info("SessionAdjudicator: ruling %s -> %s (%.2f) for %s",
                  ruling_id, verdict, confidence, device_id[:12])
 
+        # Phase 134: trigger async separation snapshot after each live session
+        if getattr(self._cfg, "auto_separation_snapshot_enabled", False):
+            import asyncio as _aio
+            _aio.ensure_future(
+                _async_write_separation_snapshot(self._cfg, self._store)
+            )
+
     async def _listen_ceremony_bus(self) -> None:
         """Phase 79 — Subscribe to ceremony_key_rotated bus events and clear own cache.
 
@@ -408,6 +415,7 @@ class SessionAdjudicator:
         # Phase 109C: ioSwarm Adjudication Quorum — replaces single-agent ClassJ + Triage verdicts
         # when ioswarm_adjudication_enabled=True.  Fail-open (errors→CLEAR) to avoid false positives.
         _dual_veto = False
+        _adj_result = None  # Phase 111: capture for PoAd hash computation (Step D)
         _ioswarm_adj_on = getattr(self._cfg, "ioswarm_adjudication_enabled", False)
         if _ioswarm_adj_on:
             try:
@@ -415,8 +423,10 @@ class SessionAdjudicator:
                     IoSwarmAdjudicationCoordinator,
                     DUAL_VETO_SCORE,
                 )
+                from .ioswarm_live_node_client import IoSwarmLiveNodeClient as _ILNC131a
+                _live_client_a = _ILNC131a(cfg=self._cfg, store=self._store)
                 _adj_result = IoSwarmAdjudicationCoordinator(
-                    cfg=self._cfg, store=self._store
+                    cfg=self._cfg, store=self._store, live_client=_live_client_a
                 ).evaluate(
                     device_id=device_id,
                     session_id="",
@@ -468,6 +478,39 @@ class SessionAdjudicator:
                 "device=%s → consensus_score clamped to %.3f",
                 device_id[:12], consensus_score,
             )
+
+        # ─── Phase 111 Step D: PoAd hash computation and local registry ──────────────
+        _poad_on = getattr(self._cfg, "poad_registry_enabled", False)
+        if _ioswarm_adj_on and _poad_on and _adj_result is not None:
+            try:
+                import hashlib as _hl111, json as _jj111, time as _tt111
+                _adj_payload = _jj111.dumps({
+                    "classj_verdicts": sorted(
+                        _adj_result.get("classj_node_verdicts", []),
+                        key=lambda x: x.get("node_id", "")
+                    ),
+                    "triage_verdicts": sorted(
+                        _adj_result.get("triage_node_verdicts", []),
+                        key=lambda x: x.get("node_id", "")
+                    ),
+                    "classj_quorum": _adj_result.get("classj_quorum_verdict", "CLEAR"),
+                    "triage_quorum": _adj_result.get("triage_quorum_verdict", "CLEAR"),
+                    "ts_ns": int(_tt111.time_ns()),
+                }, sort_keys=True)
+                _poad_hash = _hl111.sha256(_adj_payload.encode()).hexdigest()
+                self._store.insert_poad_registry(
+                    device_id=device_id,
+                    poad_hash=_poad_hash,
+                    dual_veto=_dual_veto,
+                    classj_verdict=_adj_result.get("classj_quorum_verdict", "CLEAR"),
+                    triage_verdict=_adj_result.get("triage_quorum_verdict", "CLEAR"),
+                    ts_ns=int(_tt111.time_ns()),
+                )
+            except Exception as _poad_exc:
+                log.debug(
+                    "SessionAdjudicator: PoAd registry error (non-blocking): %s", _poad_exc
+                )
+        # ─── End Phase 111 Step D ─────────────────────────────────────────────────────
 
         consensus_reached = consensus_score >= threshold
         final_verdict = "BLOCK" if consensus_reached else "HOLD"
@@ -934,3 +977,39 @@ class SessionAdjudicator:
                 "SessionAdjudicator: _reactive_interrupt_triage failed for device=%s: %s",
                 device_id[:12], exc,
             )
+
+
+# ---------------------------------------------------------------------------
+# Phase 134 — Live separation snapshot helper (module-level)
+# ---------------------------------------------------------------------------
+
+async def _async_write_separation_snapshot(cfg, store) -> None:
+    """Run analyze_interperson_separation.py as subprocess after each live session.
+
+    Non-blocking: called via asyncio.ensure_future; never raises; failure logged DEBUG.
+    Writes to separation_ratio_snapshots so SeparationRatioMonitorAgent (agent #15) has
+    fresh data without requiring a manual analysis run.
+    """
+    import subprocess
+    import sys
+    import os
+    try:
+        script = os.path.join(
+            os.path.dirname(__file__), "..", "..", "scripts",
+            "analyze_interperson_separation.py"
+        )
+        db_path = getattr(cfg, "db_path", os.path.expanduser("~/.vapi/bridge.db"))
+        cmd = [
+            sys.executable, script,
+            "--battery-stratified", "--full-covariance",
+            "--write-snapshot", "--db", db_path,
+        ]
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        await asyncio.wait_for(proc.wait(), timeout=120.0)
+        log.debug("Phase134: separation snapshot written (exit=%s)", proc.returncode)
+    except Exception as exc:
+        log.debug("Phase134: separation snapshot subprocess failed: %s", exc)

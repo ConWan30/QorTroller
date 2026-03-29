@@ -18,6 +18,17 @@ try:
 except ImportError:
     HAS_NUMPY = False
 
+# Phase 126: named calibration constants (replace magic numbers; values unchanged).
+# _WARMUP_COEFF: scales the product of drift_slope × humanity_slope into sigmoid input range.
+# Derived from synthetic test patterns (Phase 26); target F1 > 0.85 at 500+ labeled sessions.
+# See behavioral_archaeologist.py _analyze_device() for the mathematical rationale.
+_WARMUP_COEFF: int = 20_000
+
+# _BURST_CV_DIVISOR: maps inter-checkpoint CV to burst farming score ∈ [0, 1].
+# CV=1.0 (meaningfully bursty) → 0.5; CV=2.0 → capped 1.0.
+# Empirically chosen from synthetic patterns; calibrate when real hardware data available.
+_BURST_CV_DIVISOR: float = 2.0
+
 FEATURE_KEYS = [
     "trigger_resistance_change_rate",
     "trigger_onset_velocity_l2",
@@ -29,6 +40,9 @@ FEATURE_KEYS = [
     # Phase 57: press_timing_jitter_variance — 10th active feature (was 9)
     # Normalised IBI variance; human physiological jitter 0.001–0.05; bot < 0.00005.
     "press_timing_jitter_variance",
+    # Phase 121: touchpad_spatial_entropy — index 12; 8×8 Shannon entropy of contact heatmap.
+    # Max ≈ 6.0 bits (uniform); low = concentrated anatomical grip zone.
+    "touchpad_spatial_entropy",
 ]
 
 
@@ -139,11 +153,11 @@ class BehavioralArchaeologist:
             #                            sigmoid(0.002 - 1.0) = sigma(-0.998) ~= 0.27 (below threshold)
             # This value is derived from synthetic test patterns and has NOT been empirically
             # calibrated against real controller session data.
-            # TODO: Calibrate 20000 against real-hardware session data (target: F1 > 0.85 at
-            # warmup attack detection on 500+ labeled sessions). Consider replacing the product
-            # formula with a geometric mean or log-domain computation for better numerical
-            # stability across a wider range of slope magnitudes.
-            warmup_raw = drift_slope * humanity_slope * 20000
+            # Calibration target: F1 > 0.85 at warmup attack detection on 500+ labeled sessions.
+            # Consider replacing the product formula with a geometric mean or log-domain
+            # computation for better numerical stability across a wider range of slope magnitudes.
+            # Named constant _WARMUP_COEFF defined at module level (Phase 126).
+            warmup_raw = drift_slope * humanity_slope * _WARMUP_COEFF
         else:
             warmup_raw = 0.0
         warmup_attack_score = _sigmoid(warmup_raw - 1.0)
@@ -204,11 +218,11 @@ class BehavioralArchaeologist:
         # the capped maximum of 1.0. The divisor 2.0 is empirically arbitrary — it was
         # chosen to give a mid-range score for moderately bursty patterns without
         # immediately saturating at 1.0.
-        # TODO: Calibrate the divisor (currently 2.0) against real-hardware checkpoint
-        # data from human players vs. known burst-farming bots. The CV distribution for
-        # human players on real hardware is unknown. A lower divisor (e.g., 1.5) would
-        # make the detector more sensitive; a higher divisor (e.g., 3.0) more conservative.
-        return min(1.0, cv / 2.0)
+        # Calibration target: compare CV distribution for human players vs. known
+        # burst-farming bots on real hardware. A lower divisor (e.g., 1.5) increases
+        # sensitivity; a higher divisor (e.g., 3.0) is more conservative.
+        # Named constant _BURST_CV_DIVISOR defined at module level (Phase 126).
+        return min(1.0, cv / _BURST_CV_DIVISOR)
 
     def get_population_report(self) -> list[BehavioralReport]:
         """Analyze all fingerprinted devices."""

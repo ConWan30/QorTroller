@@ -42,6 +42,8 @@ class Batcher:
         self._running = False
         # Counter for records dropped when queue is full (exposed via status/metrics)
         self._dropped_records: int = 0
+        # Phase 130A: suppress repeated P256 dead-letter warnings (testnet infra limitation)
+        self._p256_unavailable: bool = False
 
     async def enqueue(self, record: PoACRecord, raw_data: bytes):
         """Add a validated record to the batch queue.
@@ -268,11 +270,17 @@ class Batcher:
             # not available via this RPC endpoint. Dead-letter immediately — retrying
             # won't help; this is a testnet infrastructure limitation, not a transient error.
             if "f46a06ea" in err_str:
-                log.warning(
-                    "Batch dead-lettered: IoTeX testnet P256 precompile unavailable "
-                    "(0xf46a06ea). On-chain submission disabled for this session. "
-                    "Local PITL pipeline unaffected."
-                )
+                # Phase 130A: log WARNING only on first occurrence per session;
+                # subsequent occurrences are DEBUG to avoid log spam.
+                if not self._p256_unavailable:
+                    log.warning(
+                        "Batch dead-lettered: IoTeX testnet P256 precompile unavailable "
+                        "(0xf46a06ea). On-chain submission disabled for this session. "
+                        "Local PITL pipeline unaffected."
+                    )
+                    self._p256_unavailable = True
+                else:
+                    log.debug("Batch dead-lettered: P256 precompile unavailable (suppressed repeat)")
                 self._store.update_submission(
                     sub_id, status=STATUS_DEAD_LETTER, error="P256PrecompileEmptyReturn (testnet)"
                 )

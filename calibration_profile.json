@@ -1,93 +1,93 @@
 {
   "calibration_version": "1.0",
-  "n_sessions": 74,
+  "n_sessions": 84,
   "confidence_level": "high",
-  "confidence_note": "N=74 sessions \u2014 thresholds suitable for production validation.",
+  "confidence_note": "N=84 sessions \u2014 thresholds suitable for production validation.",
   "hardware_note": "All thresholds derived from real DualShock Edge hardware data. Replace bridge magic numbers with these values after validating false-positive rate at each skill tier.",
   "thresholds": {
     "l4_mahalanobis_anomaly": {
-      "recommended": 7.009,
+      "recommended": 6.465,
       "current_magic_number": 3.0,
       "derivation": "mean + 3\u03c3 of per-session Mahalanobis distance from population centroid (7-proxy biometric feature space; ~99.7th percentile assuming Gaussian). Feature space: onset_l2, onset_r2, tremor_var, grip_asym, autocorr_lag1, autocorr_lag5, press_timing_jitter_variance.",
       "unit": "Mahalanobis distance (dimensionless)",
-      "dist_mean": 2.083,
-      "dist_std": 1.642,
-      "n_fingerprints": 74,
+      "dist_mean": 2.246,
+      "dist_std": 1.406,
+      "n_fingerprints": 84,
       "ci95": [
-        1.709,
-        2.458
+        1.946,
+        2.547
       ]
     },
     "l4_mahalanobis_continuity": {
-      "recommended": 5.367,
+      "recommended": 5.059,
       "current_magic_number": 2.0,
       "derivation": "mean + 2\u03c3 of per-session Mahalanobis distance from population centroid (6-proxy biometric feature space; ~95th percentile assuming Gaussian).",
       "unit": "Mahalanobis distance (dimensionless)",
       "ci95": [
-        1.709,
-        2.458
+        1.946,
+        2.547
       ]
     },
     "l5_cv_threshold": {
-      "recommended": 1.1059,
+      "recommended": 0.4035,
       "current_magic_number": 0.08,
-      "derivation": "10th percentile of per-session inter-press interval CVs. Button priority: Cross > L2_dig > R2 > Triangle; pooled fallback when no single button has >= 20 presses. Sessions used: 63 / 74 (excluded 11, pooled-rescued 0).",
+      "derivation": "10th percentile of per-session inter-press interval CVs. Button priority: Cross > L2_dig > R2 > Triangle; pooled fallback when no single button has >= 20 presses. Sessions used: 73 / 84 (excluded 11, pooled-rescued 0).",
       "unit": "coefficient of variation (dimensionless)",
       "ci95": [
-        1.4194,
-        1.6325
+        1.2333,
+        1.4958
       ]
     },
     "l5_entropy_threshold": {
-      "recommended": 0.961,
+      "recommended": 1.062,
       "current_magic_number": 1.5,
-      "derivation": "10th percentile of per-session inter-press interval entropy (10-bin histogram). Sessions used: 63 / 74.",
+      "derivation": "10th percentile of per-session inter-press interval entropy (10-bin histogram). Sessions used: 73 / 84.",
       "unit": "bits",
       "ci95": [
-        1.5,
-        1.743
+        1.642,
+        1.926
       ]
     },
     "stick_noise_floor_lsb": {
-      "recommended": 18.2,
+      "recommended": 18.41,
       "current_magic_number": 5.0,
       "derivation": "mean of per-axis std across all sessions",
       "unit": "LSB (raw ADC counts, range 0\u2013255)"
     },
     "imu_gyro_noise_floor_lsb": {
-      "recommended": 327.13,
+      "recommended": 324.81,
       "current_magic_number": 50.0,
       "derivation": "95th percentile of per-axis gyro std across sessions",
       "unit": "LSB (raw ADC counts)"
     }
   },
   "session_stats": {
-    "mean_polling_rate_hz": 947.6,
+    "mean_polling_rate_hz": 846.7,
     "mean_reports_per_session": 0.0,
-    "session_cv_mean": 1.526,
-    "session_entropy_mean": 1.621,
-    "l4_mahal_dist_mean": 2.083,
-    "l4_mahal_dist_std": 1.642,
-    "l4_fingerprints_extracted": 74,
+    "session_cv_mean": 1.3645,
+    "session_entropy_mean": 1.784,
+    "l4_mahal_dist_mean": 2.246,
+    "l4_mahal_dist_std": 1.406,
+    "l4_fingerprints_extracted": 84,
     "l5_button_coverage": {
       "cross": {
         "n_sessions_sufficient": 62,
-        "mean_press_count": 83.9,
+        "mean_press_count": 73.9,
         "mean_cv": 1.5234
       },
       "l2_dig": {
         "n_sessions_sufficient": 14,
-        "mean_press_count": 12.0,
+        "mean_press_count": 10.6,
         "mean_cv": 1.6572
       },
       "r2": {
-        "n_sessions_sufficient": 52,
-        "mean_press_count": 27.2,
-        "mean_cv": 1.1807
+        "n_sessions_sufficient": 62,
+        "mean_press_count": 35.9,
+        "mean_cv": 1.0463
       },
       "triangle": {
         "n_sessions_sufficient": 14,
-        "mean_press_count": 12.5,
+        "mean_press_count": 11.0,
         "mean_cv": 1.3604
       },
       "pooled_only_gain": 0,

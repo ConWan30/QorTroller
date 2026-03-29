@@ -78,7 +78,7 @@ for _d in [str(_CONTROLLER_DIR), str(_BRIDGE_DIR)]:
 # Protocol constants (PoAC spec — immutable)
 # ---------------------------------------------------------------------------
 
-SDK_VERSION       = "3.0.0-phase110"
+SDK_VERSION       = "3.0.0-phase135"
 POAC_RECORD_SIZE  = 228
 POAC_BODY_SIZE    = 164
 POAC_SIG_SIZE     = 64
@@ -2104,6 +2104,462 @@ class VAPISwarmVHPMint:
 
 
 @dataclass(slots=True)
+class PoAdRegistryResult:
+    """Result from VAPIPoAdRegistry.get_poad_status() (Phase 111).
+
+    W2 composability: Phase 113 tournaments require BOTH isFullyEligible() (PoAC)
+    AND isRecorded(poadHash) (PoAd) — no single-operator system can replicate.
+    task_spec_registered=True means AdjudicationRegistry.sol is deployed (Phase 111).
+    """
+
+    poad_registry_enabled:           bool
+    total_poad_count:                 int
+    dual_veto_poad_count:             int
+    on_chain_anchor_count:            int
+    adjudication_registry_address:    str
+    task_spec_registered:             bool
+    is_composable:                    bool
+    error:                            "str | None" = None  # 8 slots total
+
+
+class VAPIPoAdRegistry:
+    """SDK for GET /agent/adjudication-registry-status (Phase 111). Never raises."""
+
+    def __init__(self, base_url: str, api_key: str) -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_poad_status(self) -> PoAdRegistryResult:
+        """Return PoAd Registry status. On error: enabled=False, counts=0, is_composable=False."""
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/agent/adjudication-registry-status?api_key={self._key}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                data = _j.loads(resp.read())
+            return PoAdRegistryResult(
+                poad_registry_enabled=bool(data.get("poad_registry_enabled", False)),
+                total_poad_count=int(data.get("total_poad_count", 0)),
+                dual_veto_poad_count=int(data.get("dual_veto_poad_count", 0)),
+                on_chain_anchor_count=int(data.get("on_chain_anchor_count", 0)),
+                adjudication_registry_address=str(data.get("adjudication_registry_address", "")),
+                task_spec_registered=True,
+                is_composable=bool(data.get("is_composable", False)),
+            )
+        except Exception as exc:
+            return PoAdRegistryResult(
+                poad_registry_enabled=False,
+                total_poad_count=0,
+                dual_veto_poad_count=0,
+                on_chain_anchor_count=0,
+                adjudication_registry_address="",
+                task_spec_registered=True,
+                is_composable=False,
+                error=str(exc),
+            )
+
+
+@dataclass(slots=True)
+class PoAdAnchorResult:
+    """Result from VAPIPoAdAnchor.get_anchor_status() (Phase 112).
+
+    poad_on_chain_enabled=False by default — zero behavior change until enabled.
+    anchored_count: entries in poad_registry_log with on_chain_tx IS NOT NULL.
+    pending_count: entries with on_chain_tx IS NULL.
+    """
+    poad_on_chain_enabled:         bool
+    anchored_count:                int
+    pending_count:                 int
+    last_anchor_tx:                "str | None"
+    adjudication_registry_address: str
+    error:                         "str | None" = None  # 6 slots total
+
+
+class VAPIPoAdAnchor:
+    """SDK for GET /agent/poad-anchor-status (Phase 112). Never raises."""
+
+    def __init__(self, base_url: str, api_key: str) -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_anchor_status(self) -> PoAdAnchorResult:
+        """Return PoAd on-chain anchor status. On error: enabled=False, counts=0."""
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/agent/poad-anchor-status?api_key={self._key}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                data = _j.loads(resp.read())
+            return PoAdAnchorResult(
+                poad_on_chain_enabled=bool(data.get("poad_on_chain_enabled", False)),
+                anchored_count=int(data.get("anchored_count", 0)),
+                pending_count=int(data.get("pending_count", 0)),
+                last_anchor_tx=data.get("last_anchor_tx"),
+                adjudication_registry_address=str(data.get("adjudication_registry_address", "")),
+            )
+        except Exception as exc:
+            return PoAdAnchorResult(
+                poad_on_chain_enabled=False,
+                anchored_count=0,
+                pending_count=0,
+                last_anchor_tx=None,
+                adjudication_registry_address="",
+                error=str(exc),
+            )
+
+
+@dataclass(slots=True)
+class DualPrimitiveGateResult:
+    """Result from VAPIDualPrimitiveGate.check_eligibility() (Phase 113).
+
+    eligible=True ONLY when both poac_valid AND poad_valid are True.
+    poac_valid: VAPIProtocolLens.isFullyEligible() returned true.
+    poad_valid: AdjudicationRegistry.isRecorded(poadHash) returned true.
+    dual_primitive_gate_enabled=False by default — infrastructure-only until gate deployed.
+    """
+    eligible:                    bool
+    poac_valid:                  bool
+    poad_valid:                  bool
+    device_id:                   str
+    timestamp:                   float
+    error:                       "str | None" = None  # 6 slots total
+
+
+class VAPIDualPrimitiveGate:
+    """SDK for POST /agent/check-dual-eligibility and GET /agent/dual-primitive-status
+    (Phase 113). Never raises — returns error in result on failure.
+    """
+
+    def __init__(self, base_url: str, api_key: str) -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def check_eligibility(self, device_id: str, poad_hash: str) -> DualPrimitiveGateResult:
+        """POST /agent/check-dual-eligibility. 10s timeout.
+        On error: eligible=False, poac_valid=False, poad_valid=False, error=<message>.
+        """
+        import urllib.request as _ur, urllib.error as _ue, json as _j
+        try:
+            url  = f"{self._base}/agent/check-dual-eligibility?api_key={self._key}"
+            data = _j.dumps({"device_id": device_id, "poad_hash": poad_hash}).encode()
+            req  = _ur.Request(url, data=data, headers={"Content-Type": "application/json"})
+            with _ur.urlopen(req, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return DualPrimitiveGateResult(
+                eligible=bool(body.get("eligible", False)),
+                poac_valid=bool(body.get("poac_valid", False)),
+                poad_valid=bool(body.get("poad_valid", False)),
+                device_id=str(body.get("device_id", device_id)),
+                timestamp=float(body.get("timestamp", 0.0)),
+            )
+        except Exception as exc:
+            return DualPrimitiveGateResult(
+                eligible=False,
+                poac_valid=False,
+                poad_valid=False,
+                device_id=device_id,
+                timestamp=0.0,
+                error=str(exc),
+            )
+
+
+@dataclass(slots=True)
+class VHPDualGateResult:
+    """Single entry from GET /agent/vhp-dual-gate-log (Phase 114).
+
+    Records each time the 5th dual-primitive gate was evaluated during a VHP mint attempt.
+    mint_allowed=True means the device passed the gate (eligible=True).
+    dual_primitive_gate_enabled=False by default — infrastructure-only until gate deployed.
+    """
+    device_id:    str
+    eligible:     bool
+    poac_valid:   bool
+    poad_valid:   bool
+    mint_allowed: bool
+    error:        "str | None" = None  # 6 slots total
+
+
+class VAPIVHPDualGate:
+    """SDK for GET /agent/vhp-dual-gate-log (Phase 114). Never raises."""
+
+    def __init__(self, base_url: str, api_key: str) -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_gate_log(
+        self,
+        device_id: "str | None" = None,
+        limit: int = 10,
+    ) -> "list[VHPDualGateResult]":
+        """GET /agent/vhp-dual-gate-log. 10s timeout.
+        On error: returns list with one VHPDualGateResult(error=<msg>, all False).
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            qs = f"api_key={self._key}&limit={limit}"
+            if device_id:
+                qs += f"&device_id={device_id}"
+            url = f"{self._base}/agent/vhp-dual-gate-log?{qs}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return [
+                VHPDualGateResult(
+                    device_id=str(r.get("device_id", "")),
+                    eligible=bool(r.get("eligible", False)),
+                    poac_valid=bool(r.get("poac_valid", False)),
+                    poad_valid=bool(r.get("poad_valid", False)),
+                    mint_allowed=bool(r.get("mint_allowed", False)),
+                )
+                for r in body.get("recent_logs", [])
+            ]
+        except Exception as exc:
+            return [VHPDualGateResult(
+                device_id="", eligible=False, poac_valid=False,
+                poad_valid=False, mint_allowed=False, error=str(exc),
+            )]
+
+
+@dataclass(slots=True)
+class EpochWindowAnalyticsResult:
+    """Result from VAPIEpochWindowAnalytics.get_analytics() (Phase 116).
+
+    Provides age-distribution analytics over Gate-5 poad_age_seconds values.
+    recommended_window_seconds = 2 × p95, floored 3600s, capped 604800s.
+    Falls back to 86400 when fewer than 10 checked samples.
+    """
+    epoch_window_enabled:        bool
+    epoch_window_seconds:        float
+    total_gate5_checks:          int
+    staleness_blocked_count:     int
+    p50_age_seconds:             float
+    p95_age_seconds:             float
+    recommended_window_seconds:  float
+    error:                       "str | None" = None  # 8 slots total
+
+
+class VAPIEpochWindowAnalytics:
+    """SDK for GET /agent/epoch-window-analytics (Phase 116). Never raises."""
+
+    def __init__(self, base_url: str, api_key: str) -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_analytics(self, limit: int = 1000) -> EpochWindowAnalyticsResult:
+        """GET /agent/epoch-window-analytics. 10s timeout.
+        On error: returns EpochWindowAnalyticsResult with error set and safe defaults.
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/agent/epoch-window-analytics?api_key={self._key}&limit={limit}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return EpochWindowAnalyticsResult(
+                epoch_window_enabled=bool(body.get("epoch_window_enabled", False)),
+                epoch_window_seconds=float(body.get("epoch_window_seconds", 86400.0)),
+                total_gate5_checks=int(body.get("total_gate5_checks", 0)),
+                staleness_blocked_count=int(body.get("staleness_blocked_count", 0)),
+                p50_age_seconds=float(body.get("p50_age_seconds", -1.0)),
+                p95_age_seconds=float(body.get("p95_age_seconds", -1.0)),
+                recommended_window_seconds=float(body.get("recommended_window_seconds", 86400.0)),
+            )
+        except Exception as exc:
+            return EpochWindowAnalyticsResult(
+                epoch_window_enabled=False,
+                epoch_window_seconds=86400.0,
+                total_gate5_checks=0,
+                staleness_blocked_count=0,
+                p50_age_seconds=-1.0,
+                p95_age_seconds=-1.0,
+                recommended_window_seconds=86400.0,
+                error=str(exc),
+            )
+
+
+@dataclass(slots=True)
+class EpochWindowDeviceEntry:
+    """Single device entry from VAPIEpochWindowHeatmap.get_heatmap() (Phase 117).
+
+    Represents per-device epoch freshness analytics sorted by p95 DESC (worst first).
+    """
+    device_id:       str
+    check_count:     int
+    blocked_count:   int
+    p50_age_seconds: float
+    p95_age_seconds: float
+    last_check_ts:   float  # 6 slots total
+
+
+class VAPIEpochWindowHeatmap:
+    """SDK for GET /agent/epoch-window-device-heatmap (Phase 117). Never raises."""
+
+    def __init__(self, base_url: str, api_key: str) -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_heatmap(
+        self, limit_per_device: int = 100, top_n: int = 20
+    ) -> "list[EpochWindowDeviceEntry]":
+        """GET /agent/epoch-window-device-heatmap. 10s timeout.
+        On error: returns list with one EpochWindowDeviceEntry with error-safe defaults.
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            url = (
+                f"{self._base}/agent/epoch-window-device-heatmap"
+                f"?api_key={self._key}"
+                f"&limit_per_device={limit_per_device}"
+                f"&top_n={top_n}"
+            )
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return [
+                EpochWindowDeviceEntry(
+                    device_id=str(d.get("device_id", "")),
+                    check_count=int(d.get("check_count", 0)),
+                    blocked_count=int(d.get("blocked_count", 0)),
+                    p50_age_seconds=float(d.get("p50_age_seconds", -1.0)),
+                    p95_age_seconds=float(d.get("p95_age_seconds", -1.0)),
+                    last_check_ts=float(d.get("last_check_ts", 0.0)),
+                )
+                for d in body.get("devices", [])
+            ]
+        except Exception as exc:
+            return [EpochWindowDeviceEntry(
+                device_id="", check_count=0, blocked_count=0,
+                p50_age_seconds=-1.0, p95_age_seconds=-1.0,
+                last_check_ts=0.0,
+            )]
+
+
+@dataclass(slots=True)
+class EpochWindowAutoTuneResult:
+    """Result from VAPIEpochWindowAutoTune.get_auto_tune() (Phase 118).
+
+    Advises operators on window tuning + lists devices needing per-device overrides.
+    W1 mitigation: cold-start devices surface as override_candidates instead of
+    causing false-positive blocks at gate activation.
+    """
+    epoch_window_enabled:      bool
+    current_window_seconds:    float
+    recommended_window_seconds: float
+    fleet_p95_age_seconds:     float
+    override_count:            int
+    override_candidates:       list  # list of dicts from get_epoch_window_analytics_by_device
+    error:                     "str | None" = None  # 7 slots
+
+
+class VAPIEpochWindowAutoTune:
+    """SDK for GET /agent/epoch-window-auto-tune (Phase 118). Never raises."""
+
+    def __init__(self, base_url: str, api_key: str) -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_auto_tune(self, top_n_overrides: int = 5) -> EpochWindowAutoTuneResult:
+        """GET /agent/epoch-window-auto-tune. 10s timeout.
+        On error: returns EpochWindowAutoTuneResult with error set and safe defaults.
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            url = (
+                f"{self._base}/agent/epoch-window-auto-tune"
+                f"?api_key={self._key}"
+                f"&top_n_overrides={top_n_overrides}"
+            )
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return EpochWindowAutoTuneResult(
+                epoch_window_enabled=bool(body.get("epoch_window_enabled", False)),
+                current_window_seconds=float(body.get("current_window_seconds", 86400.0)),
+                recommended_window_seconds=float(body.get("recommended_window_seconds", 86400.0)),
+                fleet_p95_age_seconds=float(body.get("fleet_p95_age_seconds", -1.0)),
+                override_count=int(body.get("override_count", 0)),
+                override_candidates=list(body.get("override_candidates", [])),
+            )
+        except Exception as exc:
+            return EpochWindowAutoTuneResult(
+                epoch_window_enabled=False,
+                current_window_seconds=86400.0,
+                recommended_window_seconds=86400.0,
+                fleet_p95_age_seconds=-1.0,
+                override_count=0,
+                override_candidates=[],
+                error=str(exc),
+            )
+
+
+@dataclass(slots=True)
+class EpochWindowOverrideStatus:
+    """Result from VAPIEpochWindowOverrideManager.get_override_status() (Phase 119).
+
+    Lists all per-device overrides with full lifecycle fields so operators can audit
+    which are ephemeral (max_uses set) vs permanent (max_uses=None).
+    override_count: total overrides currently active.
+    overrides_with_max_uses: count with auto-expiry use-count configured.
+    overrides: raw list of dicts from get_override_lifecycle_status().
+    epoch_window_enabled: current fleet gate state.
+    """
+    override_count:           int
+    overrides_with_max_uses:  int
+    overrides:                list
+    epoch_window_enabled:     bool
+    timestamp:                float
+    error:                    "str | None" = None  # 6 slots
+
+
+class VAPIEpochWindowOverrideManager:
+    """SDK for GET /agent/epoch-window-override-status and DELETE /agent/epoch-window-override
+    (Phase 119). Never raises.
+    """
+
+    def __init__(self, base_url: str, api_key: str) -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_override_status(self) -> EpochWindowOverrideStatus:
+        """GET /agent/epoch-window-override-status. 10s timeout.
+        On error: returns EpochWindowOverrideStatus with error set and safe defaults.
+        """
+        import urllib.request as _ur, json as _j, time as _t
+        try:
+            url = f"{self._base}/agent/epoch-window-override-status?api_key={self._key}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return EpochWindowOverrideStatus(
+                override_count=int(body.get("override_count", 0)),
+                overrides_with_max_uses=int(body.get("overrides_with_max_uses", 0)),
+                overrides=list(body.get("overrides", [])),
+                epoch_window_enabled=bool(body.get("epoch_window_enabled", False)),
+                timestamp=float(body.get("timestamp", _t.time())),
+            )
+        except Exception as exc:
+            import time as _t2
+            return EpochWindowOverrideStatus(
+                override_count=0,
+                overrides_with_max_uses=0,
+                overrides=[],
+                epoch_window_enabled=False,
+                timestamp=_t2.time(),
+                error=str(exc),
+            )
+
+    def revoke_override(self, device_id: str) -> "dict":
+        """DELETE /agent/epoch-window-override?device_id=X. 10s timeout.
+        On error: returns dict with revoked=False and error key. Never raises.
+        """
+        import urllib.request as _ur, json as _j, time as _t
+        try:
+            url = (
+                f"{self._base}/agent/epoch-window-override"
+                f"?api_key={self._key}"
+                f"&device_id={device_id}"
+            )
+            req = _ur.Request(url, method="DELETE")
+            with _ur.urlopen(req, timeout=10) as resp:  # noqa: S310
+                return _j.loads(resp.read())
+        except Exception as exc:
+            return {"device_id": device_id, "revoked": False, "error": str(exc)}
+
+
+@dataclass(slots=True)
 class IoSwarmAdjudicationResult:
     """Result from VAPISwarmAdjudication.get_adjudication_status() (Phase 109C).
 
@@ -2216,5 +2672,999 @@ class VAPISwarmStatus:
                 task_spec_registered=True,
                 w3bstream_applets=[],
                 vhp_auth_gate_address="",
+                error=str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Phase 120 — Bluetooth Transport Foundation
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class BTTransportResult:
+    """Status from GET /agent/bt-transport-status (Phase 120).
+
+    bt_transport_enabled=False by default (infrastructure-only until BT threshold
+    track is calibrated against 250 Hz BLE sessions).
+
+    W1 INVARIANT: USB L4 thresholds (7.009/5.367) must NOT be applied to BT frames.
+    BT sessions are tagged transport_type=0x02 (TRANSPORT_TYPE_BLE).
+    """
+    bt_transport_enabled: bool
+    device_address:       str
+    sampling_rate_hz:     int
+    frames_received:      int
+    frames_dropped:       int
+    error:                "str | None" = None  # 6 slots total
+
+
+class VAPIBTTransport:
+    """SDK for GET /agent/bt-transport-status (Phase 120). Never raises.
+
+    Usage::
+
+        bt = VAPIBTTransport("http://localhost:8080", api_key="operator-key")
+        status = bt.get_transport_status()
+        if not status.bt_transport_enabled:
+            print("BT transport infrastructure-only — enable after BT threshold calibration")
+    """
+
+    def __init__(self, base_url: str, api_key: str) -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_transport_status(self, limit: int = 10) -> BTTransportResult:
+        """GET /agent/bt-transport-status. 10s timeout. Never raises.
+
+        On error: returns BTTransportResult with error field set and all counts=0.
+        """
+        import urllib.request as _ur, urllib.error as _ue, json as _j
+        try:
+            url = f"{self._base}/agent/bt-transport-status?api_key={self._key}&limit={limit}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return BTTransportResult(
+                bt_transport_enabled=bool(body.get("bt_transport_enabled", False)),
+                device_address=str(body.get("device_address", "")),
+                sampling_rate_hz=int(body.get("sampling_rate_hz", 250)),
+                frames_received=int(body.get("frames_received", 0)),
+                frames_dropped=int(body.get("frames_dropped", 0)),
+            )
+        except Exception as exc:
+            return BTTransportResult(
+                bt_transport_enabled=False,
+                device_address="",
+                sampling_rate_hz=250,
+                frames_received=0,
+                frames_dropped=0,
+                error=str(exc),
+            )
+
+@dataclass(slots=True)
+class SeparationRatioResult:
+    """Biometric inter-person separation ratio status (Phase 121).
+
+    pooled_ratio: measured across all sessions (currently 0.474).
+    battery_stratified_ratio: same-battery pairwise estimate (-1.0 if unavailable).
+    tournament_blocker: True when pooled_ratio < 1.0.
+    gap_to_target: 1.0 - pooled_ratio (0.0 when tournament_ready=True).
+    tournament_ready: True only when pooled_ratio >= 1.0.
+    """
+    pooled_ratio:             float
+    battery_stratified_ratio: float
+    tournament_blocker:       bool
+    gap_to_target:            float
+    tournament_ready:         bool
+    error: "str | None" = None  # 6 slots total
+
+
+class VAPISeparationStatus:
+    """SDK for GET /agent/separation-ratio-status (Phase 121). Never raises.
+
+    Usage::
+
+        sep = VAPISeparationStatus("http://localhost:8080", api_key="operator-key")
+        result = sep.get_status()
+        if result.tournament_blocker:
+            print(f"Separation ratio {result.pooled_ratio:.3f} — gap to 1.0: {result.gap_to_target:.3f}")
+    """
+
+    def __init__(self, base_url: str, api_key: str) -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self) -> SeparationRatioResult:
+        """GET /agent/separation-ratio-status. 10s timeout. Never raises.
+
+        On error: returns SeparationRatioResult with error field set and
+        tournament_blocker=True, tournament_ready=False.
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/agent/separation-ratio-status?api_key={self._key}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return SeparationRatioResult(
+                pooled_ratio=float(body.get("pooled_ratio", 0.0)),
+                battery_stratified_ratio=float(body.get("battery_stratified_ratio", -1.0)),
+                tournament_blocker=bool(body.get("tournament_blocker", True)),
+                gap_to_target=float(body.get("gap_to_target", 1.0)),
+                tournament_ready=bool(body.get("tournament_ready", False)),
+            )
+        except Exception as exc:
+            return SeparationRatioResult(
+                pooled_ratio=0.0,
+                battery_stratified_ratio=-1.0,
+                tournament_blocker=True,
+                gap_to_target=1.0,
+                tournament_ready=False,
+                error=str(exc),
+            )
+
+
+@dataclass(slots=True)
+class ConfidenceMultiplierResult:
+    """VHP confidence_score separation ratio multiplier status (Phase 122).
+
+    multiplier_enabled: True when confidence_multiplier_enabled=True in cfg.
+    current_bt_strat_ratio: most recent battery-stratified separation ratio (-1.0 if none).
+    effective_multiplier: min(1.0, bt_strat_ratio) clamped to floor (1.0 if ratio unavailable).
+    floor: minimum multiplier floor from cfg.confidence_multiplier_floor.
+    log_count: number of recent multiplier applications returned.
+    error: set on HTTP/network failure; all other fields safe to read.
+    """
+    multiplier_enabled:     bool
+    current_bt_strat_ratio: float
+    effective_multiplier:   float
+    floor:                  float
+    log_count:              int
+    error: "str | None" = None  # 6 slots total
+
+
+class VAPIConfidenceMultiplier:
+    """SDK for GET /agent/confidence-score-multiplier-status (Phase 122). Never raises.
+
+    Usage::
+
+        cm = VAPIConfidenceMultiplier("http://localhost:8080", api_key="operator-key")
+        result = cm.get_status()
+        if result.multiplier_enabled:
+            print(f"Effective multiplier: {result.effective_multiplier:.3f} "
+                  f"(bt_strat_ratio={result.current_bt_strat_ratio:.3f})")
+    """
+
+    def __init__(self, base_url: str, api_key: str) -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self) -> ConfidenceMultiplierResult:
+        """GET /agent/confidence-score-multiplier-status. 10s timeout. Never raises.
+
+        On error: returns ConfidenceMultiplierResult with error field set,
+        multiplier_enabled=False, effective_multiplier=1.0.
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            url = (
+                f"{self._base}/agent/confidence-score-multiplier-status"
+                f"?api_key={self._key}"
+            )
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return ConfidenceMultiplierResult(
+                multiplier_enabled=bool(body.get("multiplier_enabled", False)),
+                current_bt_strat_ratio=float(body.get("current_bt_strat_ratio", -1.0)),
+                effective_multiplier=float(body.get("effective_multiplier", 1.0)),
+                floor=float(body.get("floor", 0.0)),
+                log_count=int(body.get("log_count", 0)),
+            )
+        except Exception as exc:
+            return ConfidenceMultiplierResult(
+                multiplier_enabled=False,
+                current_bt_strat_ratio=-1.0,
+                effective_multiplier=1.0,
+                floor=0.0,
+                log_count=0,
+                error=str(exc),
+            )
+
+
+@dataclass(slots=True)
+class CalibrationStatusResult:
+    """L4 Mahalanobis threshold calibration staleness status (Phase 123).
+
+    current_feature_dim: live _BIO_FEATURE_DIM (13 from Phase 121).
+    calibration_feature_dim: dimension used in last threshold_calibrator.py run (12, Phase 57).
+    stale: True when current_feature_dim != calibration_feature_dim.
+    anomaly_threshold: current L4 anomaly threshold (7.009 from Phase 57).
+    continuity_threshold: current L4 continuity threshold (5.367 from Phase 57).
+    error: set on HTTP/network failure; all other fields safe to read with defaults.
+    """
+    current_feature_dim:     int
+    calibration_feature_dim: int
+    stale:                   bool
+    anomaly_threshold:       float
+    continuity_threshold:    float
+    error: "str | None" = None  # 6 slots total
+
+
+class VAPICalibrationStatus:
+    """SDK for GET /agent/l4-calibration-status (Phase 123). Never raises.
+
+    Usage::
+
+        cs = VAPICalibrationStatus("http://localhost:8080", api_key="operator-key")
+        result = cs.get_status()
+        if result.stale:
+            print(f"L4 thresholds stale: calibrated on {result.calibration_feature_dim}-feature, "
+                  f"live is {result.current_feature_dim}-feature.")
+    """
+
+    def __init__(self, base_url: str, api_key: str) -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self) -> CalibrationStatusResult:
+        """GET /agent/l4-calibration-status. 10s timeout. Never raises.
+
+        On error: returns CalibrationStatusResult with error field set,
+        stale=True (conservative: assume stale when uncertain).
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/agent/l4-calibration-status?api_key={self._key}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return CalibrationStatusResult(
+                current_feature_dim=int(body.get("current_feature_dim", 13)),
+                calibration_feature_dim=int(body.get("calibration_feature_dim", 12)),
+                stale=bool(body.get("stale", True)),
+                anomaly_threshold=float(body.get("anomaly_threshold", 7.009)),
+                continuity_threshold=float(body.get("continuity_threshold", 5.367)),
+            )
+        except Exception as exc:
+            return CalibrationStatusResult(
+                current_feature_dim=13,
+                calibration_feature_dim=12,
+                stale=True,
+                anomaly_threshold=7.009,
+                continuity_threshold=5.367,
+                error=str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Phase 124 — L4 Per-Battery Threshold Track Registry
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class L4ThresholdTrackResult:
+    """L4 per-battery threshold track registry status (Phase 124).
+
+    l4_battery_threshold_enabled: registry enabled flag.
+    track_count: total registered tracks.
+    active_count: tracks with active=True.
+    battery_types_tracked: distinct battery types with registered tracks.
+    """
+    l4_battery_threshold_enabled: bool
+    track_count:                   int
+    active_count:                  int
+    battery_types_tracked:         "list[str]"
+    error: "str | None" = None  # 5 slots total
+
+
+class VAPIL4ThresholdTracks:
+    """SDK for GET /agent/l4-threshold-tracks (Phase 124). Never raises.
+
+    Usage::
+
+        lt = VAPIL4ThresholdTracks("http://localhost:8080", api_key="operator-key")
+        result = lt.get_tracks()
+        print(f"{result.track_count} tracks, {result.active_count} active")
+        print(f"Battery types: {result.battery_types_tracked}")
+    """
+
+    def __init__(self, base_url: str, api_key: str) -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_tracks(
+        self,
+        battery_type: "str | None" = None,
+        active_only: bool = False,
+    ) -> L4ThresholdTrackResult:
+        """GET /agent/l4-threshold-tracks. 10s timeout. Never raises.
+
+        On error: returns L4ThresholdTrackResult with error field set,
+        track_count=0, l4_battery_threshold_enabled=False.
+        """
+        import urllib.request as _ur, json as _j, urllib.parse as _up
+        try:
+            params = {"api_key": self._key}
+            if battery_type is not None:
+                params["battery_type"] = battery_type
+            if active_only:
+                params["active_only"] = "true"
+            qs = _up.urlencode(params)
+            url = f"{self._base}/agent/l4-threshold-tracks?{qs}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return L4ThresholdTrackResult(
+                l4_battery_threshold_enabled=bool(body.get("l4_battery_threshold_enabled", False)),
+                track_count=int(body.get("track_count", 0)),
+                active_count=int(body.get("active_count", 0)),
+                battery_types_tracked=list(body.get("battery_types_tracked", [])),
+            )
+        except Exception as exc:
+            return L4ThresholdTrackResult(
+                l4_battery_threshold_enabled=False,
+                track_count=0,
+                active_count=0,
+                battery_types_tracked=[],
+                error=str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Phase 125 — Per-Battery Calibration Apply
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class CalibrationApplyResult:
+    battery_type: str = ""
+    anomaly_threshold: float = 0.0
+    continuity_threshold: float = 0.0
+    n_sessions: int = 0
+    error: "str | None" = None
+
+
+class VAPICalibrationApply:
+    """
+    POST /agent/apply-l4-battery-calibration — apply per-battery L4 threshold calibration.
+    Never raises; error path returns CalibrationApplyResult with error != None.
+    """
+
+    def __init__(self, base_url: str, api_key: str) -> None:
+        self._base = base_url.rstrip("/")
+        self._key = api_key
+
+    def apply(
+        self,
+        battery_type: str,
+        anomaly_threshold: float,
+        continuity_threshold: float,
+        n_sessions: int = 0,
+        calibration_feature_dim: "int | None" = None,
+        notes: "str | None" = None,
+    ) -> CalibrationApplyResult:
+        import urllib.request as _ur, json as _j, urllib.parse as _up
+        try:
+            params: dict = {
+                "api_key": self._key,
+                "battery_type": battery_type,
+                "anomaly_threshold": str(anomaly_threshold),
+                "continuity_threshold": str(continuity_threshold),
+                "n_sessions": str(n_sessions),
+            }
+            if calibration_feature_dim is not None:
+                params["calibration_feature_dim"] = str(calibration_feature_dim)
+            if notes is not None:
+                params["notes"] = notes
+            qs = _up.urlencode(params)
+            url = f"{self._base}/agent/apply-l4-battery-calibration?{qs}"
+            req = _ur.Request(url, method="POST")
+            with _ur.urlopen(req, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return CalibrationApplyResult(
+                battery_type=str(body.get("battery_type", battery_type)),
+                anomaly_threshold=float(body.get("anomaly_threshold", anomaly_threshold)),
+                continuity_threshold=float(body.get("continuity_threshold", continuity_threshold)),
+                n_sessions=int(body.get("n_sessions", n_sessions)),
+            )
+        except Exception as exc:
+            return CalibrationApplyResult(
+                battery_type="",
+                anomaly_threshold=0.0,
+                continuity_threshold=0.0,
+                n_sessions=0,
+                error=str(exc),
+            )
+
+
+@dataclass(slots=True)
+class L4RouterStatusResult:
+    l4_battery_threshold_enabled: bool = False
+    total_lookups: int = 0
+    per_battery_lookups: int = 0
+    global_fallback_count: int = 0
+    last_battery_type: str = ""
+    error: "str | None" = None
+
+
+class VAPIL4RouterStatus:
+    """
+    GET /agent/l4-router-status - L4 per-battery threshold router status (Phase 126).
+    Never raises; error path returns L4RouterStatusResult with error != None.
+    """
+
+    def __init__(self, base_url: str, api_key: str = ""):
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self) -> L4RouterStatusResult:
+        import urllib.request as _ur, json as _j, urllib.parse as _up
+        try:
+            params = _up.urlencode({"api_key": self._key})
+            url = f"{self._base}/agent/l4-router-status?{params}"
+            req = _ur.Request(url)
+            with _ur.urlopen(req, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return L4RouterStatusResult(
+                l4_battery_threshold_enabled=bool(body.get("l4_battery_threshold_enabled", False)),
+                total_lookups=int(body.get("total_lookups", 0)),
+                per_battery_lookups=int(body.get("per_battery_lookups", 0)),
+                global_fallback_count=int(body.get("global_fallback_count", 0)),
+                last_battery_type=str(body.get("last_battery_type", "")),
+            )
+        except Exception as exc:
+            return L4RouterStatusResult(
+                l4_battery_threshold_enabled=False,
+                total_lookups=0,
+                per_battery_lookups=0,
+                global_fallback_count=0,
+                last_battery_type="",
+                error=str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Phase 127 — Tournament Preflight SDK
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class TournamentPreflightResult:
+    separation_ok: bool = False
+    l4_ok: bool = False
+    gate_ok: bool = False
+    cert_ok: bool = False
+    audit_ok: bool = False
+    overall_pass: bool = False
+    conditions_detail: "dict" = None   # type: ignore[assignment]
+    error: "str | None" = None
+
+    def __post_init__(self):
+        if self.conditions_detail is None:
+            object.__setattr__(self, "conditions_detail", {})
+
+
+class VAPITournamentPreflight:
+    """
+    POST /agent/run-tournament-preflight — run preflight and return result (Phase 127).
+    GET  /agent/tournament-preflight-status — return latest preflight status.
+    Never raises; error path returns TournamentPreflightResult with error != None.
+    """
+
+    def __init__(self, base_url: str, api_key: str = ""):
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def run_preflight(self) -> TournamentPreflightResult:
+        import urllib.request as _ur, json as _j, urllib.parse as _up
+        try:
+            params = _up.urlencode({"api_key": self._key})
+            url = f"{self._base}/agent/run-tournament-preflight?{params}"
+            req = _ur.Request(url, method="POST")
+            with _ur.urlopen(req, timeout=15) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return TournamentPreflightResult(
+                separation_ok=bool(body.get("separation_ok", False)),
+                l4_ok=bool(body.get("l4_ok", False)),
+                gate_ok=bool(body.get("gate_ok", False)),
+                cert_ok=bool(body.get("cert_ok", False)),
+                audit_ok=bool(body.get("audit_ok", False)),
+                overall_pass=bool(body.get("overall_pass", False)),
+                conditions_detail=body.get("conditions", {}),
+            )
+        except Exception as exc:
+            return TournamentPreflightResult(
+                separation_ok=False, l4_ok=False, gate_ok=False,
+                cert_ok=False, audit_ok=False, overall_pass=False,
+                conditions_detail={}, error=str(exc),
+            )
+
+    def get_status(self) -> TournamentPreflightResult:
+        import urllib.request as _ur, json as _j, urllib.parse as _up
+        try:
+            params = _up.urlencode({"api_key": self._key})
+            url = f"{self._base}/agent/tournament-preflight-status?{params}"
+            req = _ur.Request(url)
+            with _ur.urlopen(req, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return TournamentPreflightResult(
+                separation_ok=bool(body.get("separation_ok", False)),
+                l4_ok=bool(body.get("l4_ok", False)),
+                gate_ok=bool(body.get("gate_ok", False)),
+                cert_ok=bool(body.get("cert_ok", False)),
+                audit_ok=bool(body.get("audit_ok", False)),
+                overall_pass=bool(body.get("overall_pass", False)),
+                conditions_detail=body.get("conditions", {}),
+            )
+        except Exception as exc:
+            return TournamentPreflightResult(
+                separation_ok=False, l4_ok=False, gate_ok=False,
+                cert_ok=False, audit_ok=False, overall_pass=False,
+                conditions_detail={}, error=str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Phase 128 — Tournament Readiness Score
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class TournamentReadinessScore:
+    """Result from GET /agent/tournament-readiness-score (Phase 128).
+
+    score: weighted composite 0.0–1.0; conditions_met: count of fully-passing signals (0–6).
+    """
+    score: float = 0.0
+    separation_score: float = 0.0
+    l4_score: float = 0.0
+    dual_gate_score: float = 0.0
+    epoch_score: float = 0.0
+    ioswarm_score: float = 0.0
+    dry_run_score: float = 0.0
+    error: "str | None" = None
+
+
+class VAPITournamentReadinessScore:
+    """SDK client for the Phase 128 Tournament Readiness Score endpoint.
+
+    Never raises; error path returns TournamentReadinessScore with error != None.
+    """
+
+    def __init__(self, base_url: str, api_key: str = "", timeout: int = 10):
+        self._base_url = base_url.rstrip("/")
+        self._api_key  = api_key
+        self._timeout  = timeout
+
+    def get_score(self) -> TournamentReadinessScore:
+        """Call GET /agent/tournament-readiness-score.  Returns TournamentReadinessScore."""
+        import urllib.request as _ur
+        import urllib.parse  as _up
+        import json          as _j
+        try:
+            params = _up.urlencode({"api_key": self._api_key})
+            url    = f"{self._base_url}/agent/tournament-readiness-score?{params}"
+            req    = _ur.Request(url)
+            with _ur.urlopen(req, timeout=self._timeout) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return TournamentReadinessScore(
+                score=float(body.get("score", 0.0)),
+                separation_score=float(body.get("separation_score", 0.0)),
+                l4_score=float(body.get("l4_score", 0.0)),
+                dual_gate_score=float(body.get("dual_gate_score", 0.0)),
+                epoch_score=float(body.get("epoch_score", 0.0)),
+                ioswarm_score=float(body.get("ioswarm_score", 0.0)),
+                dry_run_score=float(body.get("dry_run_score", 0.0)),
+            )
+        except Exception as exc:
+            return TournamentReadinessScore(error=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Phase 129 — Separation Ratio Breakthrough Monitor SDK
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class SeparationBreakthroughResult:
+    """Result from GET /agent/separation-ratio-breakthrough (Phase 129).
+
+    breakthrough_detected: True if pooled_ratio has crossed >= 1.0 on 2 consecutive
+    monitoring snapshots (W1 mitigation: single-outlier false positive prevention).
+    """
+    breakthrough_detected: bool = False
+    breakthrough_ratio:    float = 0.0
+    breakthrough_ts:       float = 0.0
+    n_players:             int = 0
+    error: "str | None" = None
+
+
+class VAPISeparationBreakthrough:
+    """SDK client for the Phase 129 Separation Ratio Breakthrough endpoint.
+
+    Never raises; error path returns SeparationBreakthroughResult with error != None.
+    """
+
+    def __init__(self, base_url: str, api_key: str = "", timeout: int = 10):
+        self._base_url = base_url.rstrip("/")
+        self._api_key  = api_key
+        self._timeout  = timeout
+
+    def get_breakthrough(self) -> SeparationBreakthroughResult:
+        """Call GET /agent/separation-ratio-breakthrough. Returns SeparationBreakthroughResult."""
+        import urllib.request as _ur
+        import urllib.parse   as _up
+        import json           as _j
+        try:
+            params = _up.urlencode({"api_key": self._api_key})
+            url    = f"{self._base_url}/agent/separation-ratio-breakthrough?{params}"
+            req    = _ur.Request(url)
+            with _ur.urlopen(req, timeout=self._timeout) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return SeparationBreakthroughResult(
+                breakthrough_detected=bool(body.get("breakthrough_detected", False)),
+                breakthrough_ratio=float(body.get("breakthrough_ratio", 0.0)),
+                breakthrough_ts=float(body.get("breakthrough_ts", 0.0)),
+                n_players=int(body.get("n_players", 0)),
+            )
+        except Exception as exc:
+            return SeparationBreakthroughResult(error=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Phase 130A — VAPISwarmOperatorGate SDK (WIF-001 mitigation)
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class SwarmOperatorGateResult:
+    """Result from GET /agent/swarm-operator-gate-status (Phase 130A).
+
+    gate_configured: True when SWARM_OPERATOR_GATE_ADDRESS is set in bridge config.
+    valid: Whether the last quorum validation passed.
+    node_count: Number of nodes in the last validation.
+    timestamp: Unix timestamp of last validation.
+    error: Non-None string on failure; None on success.
+    """
+    gate_configured: bool = False
+    valid:           bool = False
+    node_count:      int  = 0
+    timestamp:       float = 0.0
+    error: "str | None" = None
+
+
+class VAPISwarmOperatorGate:
+    """SDK client for the Phase 130A VAPISwarmOperatorGate status endpoint.
+
+    Never raises; error path returns SwarmOperatorGateResult with error != None.
+    """
+
+    def __init__(self, base_url: str, api_key: str, timeout: int = 10):
+        self._base_url = base_url.rstrip("/")
+        self._api_key  = api_key
+        self._timeout  = timeout
+
+    def get_gate_status(self) -> SwarmOperatorGateResult:
+        """Call GET /agent/swarm-operator-gate-status. Returns SwarmOperatorGateResult."""
+        import urllib.request as _ur
+        import urllib.parse   as _up
+        import json           as _j
+        try:
+            params = _up.urlencode({"api_key": self._api_key})
+            url    = f"{self._base_url}/agent/swarm-operator-gate-status?{params}"
+            req    = _ur.Request(url)
+            with _ur.urlopen(req, timeout=self._timeout) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return SwarmOperatorGateResult(
+                gate_configured=bool(body.get("gate_configured", False)),
+                valid=bool(body.get("last_valid", False)),
+                node_count=int(body.get("last_node_count", 0)),
+                timestamp=float(body.get("timestamp", 0.0)),
+            )
+        except Exception as exc:
+            return SwarmOperatorGateResult(
+                gate_configured=False,
+                valid=False,
+                node_count=0,
+                timestamp=0.0,
+                error=str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Phase 131 — IoSwarm Live Node Registry SDK
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class IoSwarmNodeRegistryResult:
+    """Result from GET /agent/ioswarm-node-registry-status (Phase 131).
+
+    live_nodes: Number of active registered live ioSwarm nodes.
+    emulator_mode: True when no live node URLs are configured.
+    registry_count: Total rows in the ioswarm_node_registry table.
+    node_timeout_s: Per-node HTTP timeout in seconds.
+    last_quorum_ts: Unix timestamp of last swarm quorum validation.
+    error: Non-None string on failure; None on success.
+    """
+    live_nodes:      int   = 0
+    emulator_mode:   bool  = True
+    registry_count:  int   = 0
+    node_timeout_s:  float = 5.0
+    last_quorum_ts:  float = 0.0
+    error: "str | None" = None
+
+
+class VAPIIoSwarmNodeRegistry:
+    """SDK client for the Phase 131 IoSwarm live-node registry status endpoint.
+
+    Never raises; error path returns IoSwarmNodeRegistryResult with error != None.
+    """
+
+    def __init__(self, base_url: str, api_key: str, timeout: int = 10):
+        self._base_url = base_url.rstrip("/")
+        self._api_key  = api_key
+        self._timeout  = timeout
+
+    def get_registry_status(self) -> IoSwarmNodeRegistryResult:
+        """Call GET /agent/ioswarm-node-registry-status. Returns IoSwarmNodeRegistryResult."""
+        import urllib.request as _ur
+        import urllib.parse   as _up
+        import json           as _j
+        try:
+            params = _up.urlencode({"api_key": self._api_key})
+            url    = f"{self._base_url}/agent/ioswarm-node-registry-status?{params}"
+            req    = _ur.Request(url)
+            with _ur.urlopen(req, timeout=self._timeout) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return IoSwarmNodeRegistryResult(
+                live_nodes=int(body.get("live_nodes", 0)),
+                emulator_mode=bool(body.get("emulator_mode", True)),
+                registry_count=int(body.get("registry_count", 0)),
+                node_timeout_s=float(body.get("node_timeout_s", 5.0)),
+                last_quorum_ts=float(body.get("last_quorum_ts", 0.0)),
+            )
+        except Exception as exc:
+            return IoSwarmNodeRegistryResult(
+                live_nodes=0,
+                emulator_mode=True,
+                registry_count=0,
+                node_timeout_s=5.0,
+                last_quorum_ts=0.0,
+                error=str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Phase 132 — IoSwarm Node Health
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class IoSwarmNodeHealthResult:
+    """Result from GET /agent/ioswarm-node-health (Phase 132)."""
+    nodes_configured:  int   = 0
+    nodes_healthy:     int   = 0
+    emulator_mode:     bool  = True
+    avg_latency_ms:    float = -1.0
+    health_log_count:  int   = 0
+    error:             str | None = None
+
+
+class VAPIIoSwarmNodeHealth:
+    """SDK client for IoSwarm node health endpoint (Phase 132).
+
+    Never raises; error path returns IoSwarmNodeHealthResult with error != None.
+    """
+
+    def __init__(self, base_url: str = "http://localhost:8000", api_key: str = ""):
+        self._base = base_url.rstrip("/")
+        self._key = api_key
+
+    def get_node_health(self) -> IoSwarmNodeHealthResult:
+        """Call GET /agent/ioswarm-node-health. Returns IoSwarmNodeHealthResult."""
+        import urllib.request as _ur
+        import json as _j
+        try:
+            url = f"{self._base}/agent/ioswarm-node-health?api_key={self._key}"
+            with _ur.urlopen(url, timeout=10) as resp:
+                data = _j.loads(resp.read())
+            return IoSwarmNodeHealthResult(
+                nodes_configured=int(data.get("nodes_configured", 0)),
+                nodes_healthy=int(data.get("nodes_healthy", 0)),
+                emulator_mode=bool(data.get("emulator_mode", True)),
+                avg_latency_ms=float(data.get("avg_latency_ms", -1.0)),
+                health_log_count=int(data.get("health_log_count", 0)),
+                error=None,
+            )
+        except Exception as exc:
+            return IoSwarmNodeHealthResult(
+                nodes_configured=0,
+                nodes_healthy=0,
+                emulator_mode=True,
+                avg_latency_ms=-1.0,
+                health_log_count=0,
+                error=str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Phase 133 — IoSwarm PoAd Auto-Anchor
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class IoSwarmPoAdAnchorResult:
+    """Result from GET /agent/ioswarm-poad-anchor-status (Phase 133)."""
+    poad_auto_anchor_enabled: bool     = False
+    anchored_count:           int      = 0
+    pending_count:            int      = 0
+    dual_veto_count:          int      = 0
+    anchor_failure_count:     int      = 0
+    error:                    str | None = None
+
+
+class VAPIIoSwarmPoAdAnchor:
+    """SDK client for IoSwarm PoAd auto-anchor status endpoint (Phase 133).
+
+    Never raises; error path returns IoSwarmPoAdAnchorResult with error != None.
+    """
+
+    def __init__(self, base_url: str = "http://localhost:8000", api_key: str = ""):
+        self._base = base_url.rstrip("/")
+        self._key = api_key
+
+    def get_anchor_status(self) -> IoSwarmPoAdAnchorResult:
+        """Call GET /agent/ioswarm-poad-anchor-status. Returns IoSwarmPoAdAnchorResult."""
+        import urllib.request as _ur
+        import json as _j
+        try:
+            url = f"{self._base}/agent/ioswarm-poad-anchor-status?api_key={self._key}"
+            with _ur.urlopen(url, timeout=10) as resp:
+                data = _j.loads(resp.read())
+            return IoSwarmPoAdAnchorResult(
+                poad_auto_anchor_enabled=bool(data.get("poad_auto_anchor_enabled", False)),
+                anchored_count=int(data.get("anchored_count", 0)),
+                pending_count=int(data.get("pending_count", 0)),
+                dual_veto_count=int(data.get("dual_veto_count", 0)),
+                anchor_failure_count=int(data.get("anchor_failure_count", 0)),
+                error=None,
+            )
+        except Exception as exc:
+            return IoSwarmPoAdAnchorResult(
+                poad_auto_anchor_enabled=False,
+                anchored_count=0,
+                pending_count=0,
+                dual_veto_count=0,
+                anchor_failure_count=0,
+                error=str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Phase 134 — L4 Recalibration SDK
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class L4RecalibrationResult:
+    """Result from VAPIL4Recalibration.get_status() or trigger_recalibration()."""
+    in_progress: bool = False
+    sessions_processed: int = 0
+    new_anomaly_threshold: float = 7.009
+    new_continuity_threshold: float = 5.367
+    stale: bool = True
+    last_run_ts: float = 0.0
+    error: str | None = None
+
+
+class VAPIL4Recalibration:
+    """SDK client for L4 recalibration pipeline status and trigger (Phase 134).
+
+    Never raises; error path returns L4RecalibrationResult with error != None.
+    """
+
+    def __init__(self, base_url: str = "http://localhost:8000", api_key: str = ""):
+        self._base = base_url.rstrip("/")
+        self._key = api_key
+
+    def get_status(self) -> L4RecalibrationResult:
+        """Call GET /agent/l4-recalibration-status. Returns L4RecalibrationResult."""
+        import urllib.request as _ur
+        import json as _j
+        try:
+            url = f"{self._base}/agent/l4-recalibration-status?api_key={self._key}"
+            with _ur.urlopen(url, timeout=10) as resp:
+                data = _j.loads(resp.read())
+            return L4RecalibrationResult(
+                in_progress=bool(data.get("in_progress", False)),
+                sessions_processed=int(data.get("sessions_processed", 0)),
+                new_anomaly_threshold=float(data.get("new_anomaly_threshold", 7.009)),
+                new_continuity_threshold=float(data.get("new_continuity_threshold", 5.367)),
+                stale=bool(data.get("stale", True)),
+                last_run_ts=float(data.get("last_run_ts", 0.0)),
+                error=None,
+            )
+        except Exception as exc:
+            return L4RecalibrationResult(
+                in_progress=False,
+                sessions_processed=0,
+                new_anomaly_threshold=7.009,
+                new_continuity_threshold=5.367,
+                stale=True,
+                last_run_ts=0.0,
+                error=str(exc),
+            )
+
+    def trigger_recalibration(self) -> L4RecalibrationResult:
+        """Call POST /agent/run-l4-recalibration. Returns L4RecalibrationResult."""
+        import urllib.request as _ur
+        import urllib.parse as _up
+        import json as _j
+        try:
+            url = f"{self._base}/agent/run-l4-recalibration?api_key={self._key}"
+            req = _ur.Request(url, data=b"", method="POST")
+            with _ur.urlopen(req, timeout=10) as resp:
+                data = _j.loads(resp.read())
+            return L4RecalibrationResult(
+                in_progress=bool(data.get("started", False)),
+                sessions_processed=0,
+                new_anomaly_threshold=7.009,
+                new_continuity_threshold=5.367,
+                stale=True,
+                last_run_ts=float(data.get("timestamp", 0.0)),
+                error=None,
+            )
+        except Exception as exc:
+            return L4RecalibrationResult(
+                in_progress=False,
+                sessions_processed=0,
+                new_anomaly_threshold=7.009,
+                new_continuity_threshold=5.367,
+                stale=True,
+                last_run_ts=0.0,
+                error=str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Phase 135 — Tournament Activation Chain SDK
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class TournamentActivationChainResult:
+    """Result from VAPITournamentActivationChain.get_status()."""
+    gate_open_notified: bool = False
+    auto_activate_on_breakthrough: bool = False  # PERMANENT INVARIANT
+    operator_action_required: bool = True
+    last_ratio: float = 0.0
+    last_notification_ts: float = 0.0
+    notification_count: int = 0
+    error: str | None = None
+
+
+class VAPITournamentActivationChain:
+    """SDK client for TournamentActivationChainAgent status endpoint (Phase 135).
+
+    INVARIANT: auto_activate_on_breakthrough is PERMANENTLY False.
+    Tournament activation ALWAYS requires explicit operator action.
+    Never raises; error path returns TournamentActivationChainResult with error != None.
+    """
+
+    def __init__(self, base_url: str = "http://localhost:8000", api_key: str = ""):
+        self._base = base_url.rstrip("/")
+        self._key = api_key
+
+    def get_status(self) -> TournamentActivationChainResult:
+        """Call GET /agent/tournament-activation-chain. Returns TournamentActivationChainResult."""
+        import urllib.request as _ur
+        import json as _j
+        try:
+            url = f"{self._base}/agent/tournament-activation-chain?api_key={self._key}"
+            with _ur.urlopen(url, timeout=10) as resp:
+                data = _j.loads(resp.read())
+            return TournamentActivationChainResult(
+                gate_open_notified=bool(data.get("gate_open_notified", False)),
+                auto_activate_on_breakthrough=False,  # PERMANENT INVARIANT
+                operator_action_required=bool(data.get("operator_action_required", True)),
+                last_ratio=float(data.get("last_ratio", 0.0)),
+                last_notification_ts=float(data.get("last_notification_ts", 0.0)),
+                notification_count=int(data.get("notification_count", 0)),
+                error=None,
+            )
+        except Exception as exc:
+            return TournamentActivationChainResult(
+                gate_open_notified=False,
+                auto_activate_on_breakthrough=False,
+                operator_action_required=True,
+                last_ratio=0.0,
+                last_notification_ts=0.0,
+                notification_count=0,
                 error=str(exc),
             )

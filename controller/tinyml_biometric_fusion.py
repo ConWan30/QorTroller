@@ -177,6 +177,16 @@ class BiometricFeatureFrame:
     Requires >= 4 intervals; returns 0.0 when insufficient data (Phase 57).
     """
 
+    touchpad_spatial_entropy: float = 0.0
+    """
+    Shannon entropy of an 8×8 binned contact-heatmap of touch0_x / touch0_y
+    positions during active-touch frames (Phase 121).
+    Max = log2(64) ≈ 6.0 bits (uniform contact across all 64 cells).
+    High entropy = wide anatomical sweep; low entropy = concentrated contact zone.
+    Returns 0.0 if fewer than 32 active-touch frames in the ring buffer.
+    Adds 2-D spatial signal that touch_position_variance (1-D, X only) cannot capture.
+    """
+
     def to_vector(self) -> np.ndarray:
         return np.array([
             self.trigger_resistance_change_rate,
@@ -191,6 +201,7 @@ class BiometricFeatureFrame:
             self.accel_magnitude_spectral_entropy,  # index 9 (was touchpad_active_fraction)
             self.touch_position_variance,            # index 10
             self.press_timing_jitter_variance,       # index 11 (Phase 57)
+            self.touchpad_spatial_entropy,           # index 12 (Phase 121)
         ], dtype=np.float32)
 
 # ---------------------------------------------------------------------------
@@ -221,11 +232,11 @@ class _InputSnapshotLike:
 # Biometric feature extractor
 # ---------------------------------------------------------------------------
 
-_BIO_FEATURE_DIM = 12  # Phase 57: +press_timing_jitter_variance at index 11
+_BIO_FEATURE_DIM = 13  # Phase 121: +touchpad_spatial_entropy at index 12
 
 class BiometricFeatureExtractor:
     """
-    Extracts 12 biometric features from a sequence of InputSnapshot objects.
+    Extracts 13 biometric features from a sequence of InputSnapshot objects.
 
     Stateful: maintains a separate 1025-position ring buffer for right-stick X
     positions so that the tremor FFT (features 8-9) can accumulate across
@@ -238,6 +249,7 @@ class BiometricFeatureExtractor:
     samples and activating the FFT immediately.
 
     Phase 57: index 11 is press_timing_jitter_variance — IBI normalised variance.
+    Phase 121: index 12 is touchpad_spatial_entropy — 8×8 contact heatmap Shannon entropy.
     """
 
     _FFT_RING_MAXLEN: int = 1025  # positions; yields up to 1024 velocity samples (0.977 Hz/bin)
@@ -258,6 +270,9 @@ class BiometricFeatureExtractor:
         # Ring buffer for accel magnitude used by spectral entropy (feature index 9).
         # 1024 samples → 513 frequency bins at 0.977 Hz/bin at 1000 Hz.
         self._accel_mag_ring: deque[float] = deque(maxlen=1024)
+
+        # Phase 121: touchpad spatial entropy ring buffer (XY pairs, maxlen=1024).
+        self._touchpad_xy_ring: "deque[tuple[int, int]]" = deque(maxlen=1024)
 
         # Phase 57: IBI tracking deques for press_timing_jitter_variance.
         # Track last-press timestamps for each button (ms) for jitter computation.
@@ -309,6 +324,36 @@ class BiometricFeatureExtractor:
         normalised = arr / mean_ibi
         return float(np.var(normalised))
 
+    @staticmethod
+    def _touchpad_spatial_entropy(
+        xy_ring: "deque[tuple[int, int]]",
+        grid_size: int = 8,
+        x_max: float = 1920.0,
+        y_max: float = 1079.0,
+        min_frames: int = 32,
+    ) -> float:
+        """Shannon entropy of an 8×8 contact heatmap (Phase 121).
+
+        Max = log2(64) ≈ 6.0 bits (uniform contact across all cells).
+        Players with anatomically-distinct grip posture produce distinct
+        spatial entropy signatures: high-entropy = wide contact sweep,
+        low-entropy = concentrated contact zone.
+        Returns 0.0 if fewer than min_frames active-touch frames.
+        """
+        if len(xy_ring) < min_frames:
+            return 0.0
+        grid = np.zeros((grid_size, grid_size), dtype=np.int32)
+        for (x, y) in xy_ring:
+            xi = min(grid_size - 1, int(x / x_max * grid_size))
+            yi = min(grid_size - 1, int(y / y_max * grid_size))
+            grid[yi, xi] += 1
+        total = int(grid.sum())
+        if total == 0:
+            return 0.0
+        probs = grid.flatten().astype(np.float64) / total
+        probs = probs[probs > 0]
+        return float(-np.sum(probs * np.log2(probs)))
+
     def extract(
         self,
         snapshots: Sequence[object],
@@ -328,7 +373,7 @@ class BiometricFeatureExtractor:
                     FFT activates immediately from the single large window.
 
         Returns:
-            BiometricFeatureFrame with 11 features.
+            BiometricFeatureFrame with 13 features.
         """
         snaps = list(snapshots)[-window_frames:]
         n = len(snaps)
@@ -461,6 +506,14 @@ class BiometricFeatureExtractor:
         ]
         touch_position_variance = float(np.var(touch_xs)) if len(touch_xs) >= 3 else 0.0
 
+        # Touchpad spatial entropy — 8×8 contact heatmap (Phase 121)
+        for s in snaps:
+            if bool(getattr(s, "touch_active", False)):
+                self._touchpad_xy_ring.append(
+                    (int(getattr(s, "touch0_x", 0)), int(getattr(s, "touch0_y", 0)))
+                )
+        touchpad_spatial_entropy = self._touchpad_spatial_entropy(self._touchpad_xy_ring)
+
         # Phase 57: press_timing_jitter_variance (index 11)
         # Update IBI deques from this window's snapshots.
         for s in snaps:
@@ -547,8 +600,9 @@ class BiometricFeatureExtractor:
             tremor_peak_hz=tremor_peak_hz,
             tremor_band_power=tremor_band_power,
             accel_magnitude_spectral_entropy=accel_magnitude_spectral_entropy,  # index 9
-            touch_position_variance=touch_position_variance,                      # index 10
-            press_timing_jitter_variance=press_timing_jitter_variance,            # index 11
+            touch_position_variance=touch_position_variance,                     # index 10
+            press_timing_jitter_variance=press_timing_jitter_variance,           # index 11
+            touchpad_spatial_entropy=touchpad_spatial_entropy,                   # index 12 (Phase 121)
         )
 
     def get_ibi_snapshot(self, last_n: int = 20) -> dict:

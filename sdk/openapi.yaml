@@ -2,7 +2,7 @@ openapi: "3.0.3"
 
 info:
   title: VAPI — Self-Verifying Integration SDK REST API
-  version: "3.0.0-phase110"
+  version: "3.0.0-phase135"
   description: |
     The VAPI REST API exposes Proof of Authentic Controller (PoAC) submission,
     on-chain verification, device PHCI certification, SDK self-attestation,
@@ -2880,6 +2880,896 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReadinessStatus"
+        "403":
+          description: Forbidden
+
+  /agent/l4-router-status:
+    get:
+      summary: L4 per-battery threshold router status (Phase 126)
+      description: >
+        Returns lookup statistics from l4_threshold_router_log.
+        When l4_battery_threshold_enabled=True, per-battery thresholds are selected
+        from l4_threshold_tracks; falls back to global 7.009/5.367.
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/L4RouterStatus"
+        "403":
+          description: Forbidden
+
+  /agent/run-tournament-preflight:
+    post:
+      summary: Run tournament pre-launch preflight checks (Phase 127)
+      description: >
+        Evaluates 5 P0 conditions (BLOCK activation if any fail): separation_ratio>=1.0,
+        L4 calibration fresh, gate_passed, cert_valid, audit_valid.
+        Also evaluates 3 P1 warnings. Persists result to tournament_preflight_log.
+        POST /agent/commit-activation reads latest preflight to enforce P0 gates.
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Preflight result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TournamentPreflightResult"
+        "403":
+          description: Forbidden
+
+  /agent/tournament-preflight-status:
+    get:
+      summary: Latest tournament preflight status (Phase 127)
+      description: >
+        Returns the most recent entry from tournament_preflight_log.
+        found=false when no preflight has been run yet.
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Preflight status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TournamentPreflightResult"
+        "403":
+          description: Forbidden
+
+  /agent/tournament-readiness-score:
+    get:
+      summary: Tournament readiness score — weighted composite (Phase 128)
+      description: >
+        Computes a 0.0–1.0 tournament_readiness_score from 6 weighted signals:
+        separation_ratio (0.30), L4 freshness (0.20), dual-gate (0.15),
+        epoch window p95 (0.15), ioSwarm (0.10), dry_run state (0.10).
+        Persists result to protocol_intelligence_reports. Score >= 0.90 = READY.
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Tournament readiness score
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TournamentReadinessScore"
+        "403":
+          description: Forbidden
+
+  /agent/separation-ratio-breakthrough:
+    get:
+      summary: Separation ratio breakthrough status (Phase 129)
+      description: >
+        Returns the latest separation ratio breakthrough event.
+        A breakthrough is recorded when pooled_ratio crosses >= 1.0 from below
+        on 2 consecutive SeparationRatioMonitorAgent snapshots (W1 mitigation:
+        single-outlier false positive prevention). breakthrough_detected=False
+        means the protocol has not yet achieved inter-person separation >= 1.0.
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Separation ratio breakthrough result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SeparationBreakthroughResult"
+        "403":
+          description: Forbidden
+
+  /agent/swarm-operator-gate-status:
+    get:
+      summary: VAPISwarmOperatorGate status (Phase 130A)
+      description: >
+        Returns the WIF-001 mitigation gate status. Reports whether
+        VAPISwarmOperatorGate.sol is configured, total quorum validations,
+        last validation result and node count. Deploy deferred until wallet
+        >= 0.40 IOTX.
+      parameters:
+        - name: api_key
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Gate status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SwarmOperatorGateStatus"
+        "403":
+          description: Forbidden
+
+  /agent/ioswarm-node-registry-status:
+    get:
+      summary: IoSwarm live-node registry status (Phase 131)
+      description: >
+        Returns live ioSwarm node registry status. When ioswarm_node_urls is empty,
+        emulator_mode=True and all coordinators use the deterministic emulator
+        (zero behavior change). When live nodes are configured, dispatches to HTTP
+        nodes with per-node asyncio.wait_for timeout.
+      tags: [Agent]
+      parameters:
+        - in: query
+          name: api_key
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: IoSwarm node registry status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IoSwarmNodeRegistryStatus"
+        "403":
+          description: Forbidden
+
+  /agent/tournament-activation-chain:
+    get:
+      summary: TournamentActivationChainAgent status (Phase 135)
+      description: >
+        Returns TournamentActivationChainAgent (agent #16) status. Subscribes to
+        separation_ratio_breakthrough bus event. INVARIANT: auto_activate_on_breakthrough=False
+        PERMANENTLY — tournament activation always requires explicit operator action via
+        POST /agent/commit-activation. Current ratio 0.474 — TOURNAMENT BLOCKER.
+      parameters:
+        - name: api_key
+          in: query
+          schema:
+            type: string
+          description: Operator API key
+      responses:
+        "200":
+          description: Tournament activation chain status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TournamentActivationChainStatus"
+        "403":
+          description: Forbidden
+
+  /agent/run-l4-recalibration:
+    post:
+      summary: Trigger L4 recalibration background job (Phase 134)
+      description: >
+        Starts a background recalibrate_l4_pipeline.py job. Returns 409 if a job is already
+        running (< 10 min old). Returns {job_id, started, timestamp}.
+      parameters:
+        - name: api_key
+          in: query
+          schema:
+            type: string
+          description: Operator API key
+      responses:
+        "200":
+          description: Job started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  job_id:
+                    type: integer
+                  started:
+                    type: boolean
+                  timestamp:
+                    type: number
+        "409":
+          description: Already running
+        "403":
+          description: Forbidden
+
+  /agent/l4-recalibration-status:
+    get:
+      summary: L4 recalibration pipeline status (Phase 134)
+      description: >
+        Returns status of the most recent L4 recalibration job.
+        stale=True when live_feature_dim != calibration_feature_dim.
+      parameters:
+        - name: api_key
+          in: query
+          schema:
+            type: string
+          description: Operator API key
+      responses:
+        "200":
+          description: L4 recalibration status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/L4RecalibrationStatus"
+        "403":
+          description: Forbidden
+
+  /agent/auto-separation-snapshot-status:
+    get:
+      summary: Auto-separation snapshot trigger status (Phase 134)
+      description: >
+        Returns status of the automatic separation snapshot trigger after each live session.
+        auto_separation_snapshot_enabled=False default.
+      parameters:
+        - name: api_key
+          in: query
+          schema:
+            type: string
+          description: Operator API key
+      responses:
+        "200":
+          description: Auto-snapshot status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutoSeparationSnapshotStatus"
+        "403":
+          description: Forbidden
+
+  /agent/ioswarm-poad-anchor-status:
+    get:
+      summary: IoSwarm PoAd auto-anchor status (Phase 133)
+      description: >
+        Returns the current state of swarm PoAd auto-anchoring. When ioswarm_poad_auto_anchor_enabled=True
+        and dual_veto fires, a SHA-256 swarm fingerprint is anchored on-chain in AdjudicationRegistry.
+        Default disabled (infrastructure-first, zero behavior change).
+      parameters:
+        - name: api_key
+          in: query
+          schema:
+            type: string
+          description: Operator API key
+      responses:
+        "200":
+          description: IoSwarm PoAd anchor status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IoSwarmPoAdAnchorStatus"
+        "403":
+          description: Forbidden
+
+  /agent/ioswarm-node-health:
+    get:
+      summary: IoSwarm live node health status (Phase 132)
+      description: >
+        Returns health poll results for all configured live ioSwarm nodes.
+        When ioswarm_node_urls is empty, emulator_mode=True with all zeros.
+        Phase 132 adds HMAC auth and a standalone node server for operators.
+      parameters:
+        - name: api_key
+          in: query
+          schema:
+            type: string
+          description: Operator API key
+      responses:
+        "200":
+          description: IoSwarm node health status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IoSwarmNodeHealthStatus"
+        "403":
+          description: Forbidden
+
+  /agent/l4-threshold-tracks:
+    get:
+      summary: L4 per-battery threshold track registry (Phase 124)
+      description: >
+        Returns registered per-battery L4 threshold pairs. Operators insert tracks
+        after running threshold_calibrator.py per battery type on 13-feature corpus.
+        Default global thresholds anomaly=7.009/continuity=5.367 (Phase 57) apply
+        when no per-battery track is active.
+        W1 protection: insert bounds enforced [5.0–15.0] anomaly / [3.0–10.0] continuity.
+        W2: battery-adaptive VHP confidence score (per-battery bt_strat_ratio × threshold
+        quality) — Phase 125 candidate.
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema: {type: string}
+        - name: battery_type
+          in: query
+          required: false
+          schema: {type: string}
+          description: Optional filter by battery type (touchpad/trigger/button/gameplay)
+        - name: active_only
+          in: query
+          required: false
+          schema: {type: boolean}
+          description: If true, return only active=1 tracks
+      responses:
+        "200":
+          description: L4 threshold track registry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/L4ThresholdTracksStatus"
+        "403":
+          description: Forbidden
+
+  /agent/l4-threshold-track:
+    post:
+      summary: Insert a per-battery L4 threshold track (Phase 124)
+      description: >
+        Register calibrated per-battery L4 thresholds after running threshold_calibrator.py.
+        Bounds enforced: anomaly [5.0, 15.0]; continuity [3.0, 10.0].
+        Returns 422 if bounds violated (W1 threshold pollution protection).
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema: {type: string}
+        - name: battery_type
+          in: query
+          required: true
+          schema: {type: string}
+        - name: anomaly_threshold
+          in: query
+          required: true
+          schema: {type: number}
+        - name: continuity_threshold
+          in: query
+          required: true
+          schema: {type: number}
+        - name: n_sessions
+          in: query
+          required: false
+          schema: {type: integer}
+        - name: calibrated_at
+          in: query
+          required: false
+          schema: {type: number}
+      responses:
+        "200":
+          description: Track inserted
+          content:
+            application/json:
+              schema:
+                type: object
+        "403":
+          description: Forbidden
+        "422":
+          description: Threshold bounds violation
+
+  /agent/apply-l4-battery-calibration:
+    post:
+      summary: Apply per-battery L4 threshold calibration result (Phase 125)
+      description: >
+        Accepts threshold_calibrator.py --battery output and atomically:
+        (1) inserts a bounded l4_threshold_tracks row,
+        (2) logs the calibration run to l4_battery_calibration_runs,
+        (3) updates calibration_feature_dim in-process to clear the staleness flag.
+        Bounds enforced: anomaly [5.0, 15.0]; continuity [3.0, 10.0].
+        Returns 422 on bounds violation. Clears stale=True when calibration_feature_dim == live_feature_dim.
+        W1: staleness flag (Phase 123) cleared only when cal_dim matches live_feature_dim=13.
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema: {type: string}
+        - name: battery_type
+          in: query
+          required: true
+          schema: {type: string}
+          description: Battery type (touchpad/trigger/button/gameplay/resting_grip)
+        - name: anomaly_threshold
+          in: query
+          required: true
+          schema: {type: number}
+        - name: continuity_threshold
+          in: query
+          required: true
+          schema: {type: number}
+        - name: n_sessions
+          in: query
+          required: false
+          schema: {type: integer}
+        - name: calibration_feature_dim
+          in: query
+          required: false
+          schema: {type: integer}
+          description: Feature dimension used during calibration (default 13 = live_feature_dim)
+        - name: notes
+          in: query
+          required: false
+          schema: {type: string}
+      responses:
+        "200":
+          description: Calibration applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/L4BatteryCalibrationApply"
+        "403":
+          description: Forbidden
+        "422":
+          description: Threshold bounds violation
+
+  /agent/l4-calibration-status:
+    get:
+      summary: L4 Mahalanobis threshold calibration staleness monitor (Phase 123)
+      description: >
+        Reports whether L4 thresholds (anomaly=7.009, continuity=5.367, Phase 57, N=74)
+        were calibrated on the same feature dimension as the live bridge uses.
+        Phase 57: calibration_feature_dim=12. Phase 121: live_feature_dim=13.
+        stale=True when live_feature_dim != calibration_feature_dim.
+        Impact is bounded: touchpad_spatial_entropy (index 12) is zero-variance in
+        hw_* corpus (auto-excluded from Mahalanobis computation).
+        Recalibration path: scripts/threshold_calibrator.py → set CALIBRATION_FEATURE_DIM=13.
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: L4 calibration staleness status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/L4CalibrationStatus"
+        "403":
+          description: Forbidden
+
+  /agent/confidence-score-multiplier-status:
+    get:
+      summary: VHP confidence_score separation ratio multiplier status (Phase 122)
+      description: >
+        When multiplier_enabled=True, confidence_score minted on-chain is scaled by
+        min(1.0, bt_strat_ratio) — ensures VHP credential reflects actual biometric
+        identity-discrimination confidence. bt_strat_ratio=0.62 → confidence_score
+        9000 → 5580 on-chain. floor config field sets minimum multiplier.
+        Infrastructure-first: multiplier_enabled=False default (zero behavior change).
+        W2 for Phase 123: per-battery L4 threshold tracks via bt_strat_ratio analytics.
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Confidence multiplier status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConfidenceMultiplierStatus"
+        "403":
+          description: Forbidden
+
+  /agent/separation-ratio-status:
+    get:
+      summary: Biometric inter-person separation ratio status (Phase 121)
+      description: >
+        TOURNAMENT BLOCKER tracker. pooled_ratio must exceed 1.0 for live deployment.
+        Current: ~0.474 pooled / ~0.60-0.65 battery-stratified (touchpad sessions).
+        touchpad_spatial_entropy (feature index 12, 8x8 Shannon entropy) added to improve
+        inter-person separation. L4 threshold recalibration deferred to Phase 122.
+        W1: ring buffer cross-session contamination mitigated (fresh extractor per session).
+        W2: battery-stratified ratio as VHP confidence_score multiplier (Phase 122 candidate).
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Separation ratio status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SeparationRatioStatus"
+        "403":
+          description: Forbidden
+
+  /agent/bt-transport-status:
+    get:
+      summary: BLE transport foundation status (Phase 120)
+      description: >
+        DualShock Edge BLE transport at 250 Hz (vs USB 1000 Hz).
+        bt_transport_enabled=False default (infrastructure-only until BT threshold track
+        calibrated against 250 Hz BLE sessions).
+        W1 INVARIANT: USB L4 thresholds (7.009/5.367) must NOT be applied to BT frames.
+        BT sessions tagged transport_type=0x02 (TRANSPORT_TYPE_BLE).
+        W2: BT transport + ESP32-S3 GSR grip enables Verified Human Channel (VHC) —
+        decentralized BLE mesh presence proof (Phase 121 candidate).
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema: {type: string}
+        - name: limit
+          in: query
+          required: false
+          schema: {type: integer, default: 10}
+      responses:
+        "200":
+          description: BT transport status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BTTransportStatus"
+        "403":
+          description: Forbidden
+
+  /agent/epoch-window-override-status:
+    get:
+      summary: List per-device epoch overrides with lifecycle fields (Phase 119)
+      description: >
+        Returns all per-device epoch window overrides with max_uses, use_count, expires_at
+        so operators can audit ephemeral (auto-graduating) vs permanent overrides.
+        W1 mitigation: stale permanent overrides are visible and revocable.
+        W2: overrides with max_uses self-delete after N successful Gate-5 passes.
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Override lifecycle status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EpochWindowOverrideLifecycle"
+        "403":
+          description: Forbidden
+
+  /agent/epoch-window-override:
+    delete:
+      summary: Revoke a per-device epoch window override (Phase 119)
+      description: >
+        Deletes the per-device override for the given device_id.
+        Subsequent Gate-5 evaluations for this device revert to global epoch_window_seconds.
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema: {type: string}
+        - name: device_id
+          in: query
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Override revoked
+          content:
+            application/json:
+              schema:
+                type: object
+        "403":
+          description: Forbidden
+    post:
+      summary: Set a per-device epoch window override (Phase 118)
+      description: >
+        Upserts a per-device override in per_device_epoch_overrides.
+        Gate-5 uses override_window_seconds for this device instead of global
+        epoch_window_seconds. Use for cold-start or high-latency adjudication nodes.
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema: {type: string}
+        - name: device_id
+          in: query
+          required: true
+          schema: {type: string}
+        - name: window_seconds
+          in: query
+          required: true
+          schema: {type: number}
+        - name: reason
+          in: query
+          required: false
+          schema: {type: string, default: ""}
+      responses:
+        "200":
+          description: Override upserted
+          content:
+            application/json:
+              schema:
+                type: object
+        "403":
+          description: Forbidden
+
+  /agent/epoch-window-auto-tune:
+    get:
+      summary: Epoch-window auto-tune advisor (Phase 118)
+      description: >
+        Compares fleet p95 against current window, recommends global window adjustment,
+        and surfaces top devices needing per-device overrides (cold-start W1 mitigation).
+        W1: cold-start devices show artificially large p95; auto-tune identifies them
+        so operators set generous overrides instead of triggering false-positive blocks.
+        epoch_window_enabled=False by default (infrastructure-first).
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema: {type: string}
+        - name: top_n_overrides
+          in: query
+          required: false
+          schema: {type: integer, default: 5}
+      responses:
+        "200":
+          description: Epoch-window auto-tune advisor results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EpochWindowAutoTune"
+        "403":
+          description: Forbidden
+
+  /agent/epoch-window-device-heatmap:
+    get:
+      summary: Per-device epoch freshness heatmap sorted by p95 DESC (Phase 117)
+      description: >
+        Identifies which devices have the stalest PoAd anchors in Gate-5 logs.
+        Sorted by p95 DESC — worst offenders first.
+        W1: operator can identify misbehaving devices before enabling epoch_window_enabled=True.
+        W2: per-device data feeds recommended per-device epoch windows (Phase 118 candidate).
+        epoch_window_enabled=False by default (infrastructure-first).
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema: {type: string}
+        - name: limit_per_device
+          in: query
+          required: false
+          schema: {type: integer, default: 100}
+        - name: top_n
+          in: query
+          required: false
+          schema: {type: integer, default: 20}
+      responses:
+        "200":
+          description: Per-device epoch freshness heatmap
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EpochWindowDeviceHeatmap"
+        "403":
+          description: Forbidden
+
+  /agent/epoch-window-analytics:
+    get:
+      summary: Epoch-window analytics over Gate-5 poad_age_seconds (Phase 116)
+      description: >
+        Returns p50/p95/p99 age distribution for vhp_dual_gate_log.poad_age_seconds.
+        Provides recommended_window_seconds (2× p95) for tuning EPOCH_WINDOW_SECONDS.
+        epoch_window_enabled=False by default (infrastructure-first).
+        W1: detects misconfigured epoch window before VHP minting goes live.
+        W2: cross-phase triple-primitive proof analytics (PoAC + PoAd + time-window).
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema: {type: string}
+        - name: limit
+          in: query
+          required: false
+          schema: {type: integer, default: 1000}
+      responses:
+        "200":
+          description: Epoch window analytics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EpochWindowAnalyticsStatus"
+        "403":
+          description: Forbidden
+
+  /agent/vhp-dual-gate-log:
+    get:
+      summary: VHP mint dual-primitive gate log (Phase 114)
+      description: >
+        5th gate in POST /agent/mint-vhp. dual_primitive_gate_enabled=False by default
+        (infrastructure-first). When enabled, requires BOTH PoAC (isFullyEligible) AND
+        PoAd (isRecorded) before VHP can be minted.
+        W1: closes VHP mint without PoAd anchor risk.
+        W2: enables time-windowed dual-primitive proof (Phase 115 candidate).
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema: {type: string}
+        - name: device_id
+          in: query
+          required: false
+          schema: {type: string}
+        - name: limit
+          in: query
+          required: false
+          schema: {type: integer, default: 20}
+      responses:
+        "200":
+          description: VHP dual gate log
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VHPDualGateStatus"
+        "403":
+          description: Forbidden
+
+  /agent/dual-primitive-status:
+    get:
+      summary: Dual-primitive gate status (Phase 113)
+      description: >
+        VAPIDualPrimitiveGate status. dual_primitive_gate_enabled=False by default (infrastructure-first).
+        Returns configuration and aggregate check history for the PoAC+PoAd dual composability gate.
+        W2: first on-chain dual-proof tournament gate — requires both isFullyEligible() (PoAC) AND
+        isRecorded(poadHash) (PoAd). Exclusive to VAPI.
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Dual-primitive gate status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DualPrimitiveStatus"
+        "403":
+          description: Forbidden
+
+  /agent/check-dual-eligibility:
+    post:
+      summary: Check dual-primitive eligibility for a device+poad pair (Phase 113)
+      description: >
+        Query VAPIDualPrimitiveGate.isDualEligible(deviceIdHash, poadHash) on-chain.
+        Returns eligible=true only when both PoAC (isFullyEligible) AND PoAd (isRecorded) are satisfied.
+        Records result in dual_eligibility_checks store table.
+        Requires dual_primitive_gate_enabled=True and VAPIDualPrimitiveGate contract deployed.
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                device_id:
+                  type: string
+                  description: Device identifier string
+                poad_hash:
+                  type: string
+                  description: 64-char hex PoAd hash from poad_registry_log.poad_hash
+              required: [device_id, poad_hash]
+      responses:
+        "200":
+          description: Dual-primitive eligibility result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  eligible:   {type: boolean}
+                  poac_valid: {type: boolean}
+                  poad_valid: {type: boolean}
+                  device_id:  {type: string}
+                  timestamp:  {type: number}
+                  error:
+                    type: string
+                    nullable: true
+        "403":
+          description: Forbidden
+
+  /agent/poad-anchor-status:
+    get:
+      summary: PoAd on-chain anchor status (Phase 112)
+      description: >
+        PoAd on-chain anchor status. poad_on_chain_enabled=False by default (infrastructure-first).
+        PoAdAnchorAgent polls poad_registry_log for unanchored entries and calls
+        chain.record_adjudication(). W1: block.number stored in AdjudicationRegistry.sol
+        enables downstream ts_ns cross-check. W2: dual-primitive composability gate enabled
+        once Phase 113 tournament contracts require isFullyEligible() AND isRecorded(poadHash).
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: PoAd anchor status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PoAdAnchorStatus"
+        "403":
+          description: Forbidden
+
+  /agent/adjudication-registry-status:
+    get:
+      summary: PoAd Registry status (Phase 111)
+      description: >
+        Local PoAd Registry status. poad_registry_enabled=False by default (infrastructure-only).
+        On-chain anchoring via AdjudicationRegistry.sol deferred to Phase 112.
+        W2 composability: Phase 113 tournaments require isFullyEligible() AND isRecorded(poadHash).
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: PoAd Registry status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PoAdRegistryStatus"
         "403":
           description: Forbidden
 
@@ -5948,6 +6838,496 @@ components:
         timestamp:
           type: number
 
+    L4RouterStatus:
+      type: object
+      description: "Phase 126 L4 per-battery threshold router status"
+      properties:
+        l4_battery_threshold_enabled:
+          type: boolean
+        total_lookups:
+          type: integer
+        per_battery_lookups:
+          type: integer
+        global_fallback_count:
+          type: integer
+        last_battery_type:
+          type: string
+        last_source:
+          type: string
+        timestamp:
+          type: number
+
+    TournamentPreflightResult:
+      type: object
+      description: "Phase 127 tournament pre-launch preflight result"
+      properties:
+        run_id:
+          type: integer
+        separation_ok:
+          type: boolean
+        l4_ok:
+          type: boolean
+        gate_ok:
+          type: boolean
+        cert_ok:
+          type: boolean
+        audit_ok:
+          type: boolean
+        dual_gate_warned:
+          type: boolean
+        epoch_window_warned:
+          type: boolean
+        ioswarm_warned:
+          type: boolean
+        overall_pass:
+          type: boolean
+        conditions:
+          type: object
+        found:
+          type: boolean
+        timestamp:
+          type: number
+
+    TournamentReadinessScore:
+      type: object
+      description: "Phase 128 tournament readiness score — 6-signal weighted composite"
+      properties:
+        score:
+          type: number
+          description: "0.0–1.0 weighted composite; >= 0.90 = READY"
+        separation_score:
+          type: number
+        l4_score:
+          type: number
+        dual_gate_score:
+          type: number
+        epoch_score:
+          type: number
+        ioswarm_score:
+          type: number
+        dry_run_score:
+          type: number
+        conditions_met:
+          type: integer
+        timestamp:
+          type: number
+
+    IoSwarmNodeRegistryStatus:
+      type: object
+      description: >
+        Phase 131 IoSwarm live-node registry status. emulator_mode=True when
+        ioswarm_node_urls is empty (default; zero behavior change).
+      properties:
+        live_nodes:
+          type: integer
+          description: "Active registered live ioSwarm nodes"
+        emulator_mode:
+          type: boolean
+          description: "True when no live node URLs are configured"
+        node_urls:
+          type: string
+          description: "Comma-separated list of configured node URLs"
+        node_timeout_s:
+          type: number
+          description: "Per-node HTTP timeout in seconds"
+        registry_count:
+          type: integer
+          description: "Total rows in ioswarm_node_registry table"
+        last_quorum_ts:
+          type: number
+          description: "Unix timestamp of last swarm quorum validation"
+        timestamp:
+          type: number
+          description: "Unix timestamp of response"
+
+    IoSwarmNodeHealthStatus:
+      type: object
+      description: >
+        Phase 132 IoSwarm live-node health status. nodes_healthy and avg_latency_ms
+        are computed from recent polls (last 300s). emulator_mode=True when no live
+        node URLs are configured.
+      properties:
+        nodes_configured:
+          type: integer
+          description: "Number of node URLs in ioswarm_node_urls config"
+        nodes_healthy:
+          type: integer
+          description: "Nodes that responded healthy in the last poll window"
+        emulator_mode:
+          type: boolean
+          description: "True when no live node URLs are configured"
+        avg_latency_ms:
+          type: number
+          description: "Average response latency across healthy nodes (-1 if none)"
+        health_log_count:
+          type: integer
+          description: "Total rows in ioswarm_node_health_log table"
+        timestamp:
+          type: number
+          description: "Unix timestamp of response"
+
+    IoSwarmPoAdAnchorStatus:
+      type: object
+      description: >
+        Phase 133 IoSwarm PoAd auto-anchor status. When poad_auto_anchor_enabled=True and
+        dual_veto fires from IoSwarmAdjudicationCoordinator, a SHA-256 swarm fingerprint
+        (computed from classj_nodes + triage_nodes) is anchored on-chain in AdjudicationRegistry.
+        Novel composability: first protocol linking distributed AI-consensus to composable on-chain gaming proof.
+      properties:
+        poad_auto_anchor_enabled:
+          type: boolean
+          description: "True when IOSWARM_POAD_AUTO_ANCHOR_ENABLED=true in config"
+        anchored_count:
+          type: integer
+          description: "Number of anchor records with anchor_status=anchored"
+        pending_count:
+          type: integer
+          description: "Number of anchor records with anchor_status=pending"
+        last_anchor_tx:
+          type: string
+          nullable: true
+          description: "Most recent on-chain tx hash, or null if none"
+        dual_veto_count:
+          type: integer
+          description: "Total dual_veto=True anchor records"
+        anchor_failure_count:
+          type: integer
+          description: "Number of anchor records with anchor_status=failed"
+        timestamp:
+          type: number
+          description: "Unix timestamp of response"
+
+    SwarmOperatorGateStatus:
+      type: object
+      description: >
+        Phase 130A VAPISwarmOperatorGate.sol status (WIF-001 mitigation).
+        gate_configured=True when SWARM_OPERATOR_GATE_ADDRESS is set.
+        Deploy deferred until wallet >= 0.40 IOTX.
+      properties:
+        swarm_gate_address:
+          type: string
+          description: "IoTeX address of VAPISwarmOperatorGate.sol (empty when not deployed)"
+        gate_configured:
+          type: boolean
+          description: "True when swarm_operator_gate_address is non-empty"
+        total_validations:
+          type: integer
+          description: "Total quorum validation events logged"
+        last_valid:
+          type: boolean
+          description: "Whether the most recent quorum validation passed"
+        last_node_count:
+          type: integer
+          description: "Node count of the most recent quorum validation"
+        timestamp:
+          type: number
+          description: "Unix timestamp of response"
+
+    SeparationBreakthroughResult:
+      type: object
+      description: >
+        Phase 129 separation ratio breakthrough. breakthrough_detected=True when
+        pooled_ratio has crossed >= 1.0 on 2 consecutive monitoring snapshots.
+      properties:
+        breakthrough_detected:
+          type: boolean
+          description: "True if 2 consecutive snapshots had pooled_ratio >= 1.0"
+        breakthrough_ratio:
+          type: number
+          description: "pooled_ratio at time of breakthrough"
+        breakthrough_ts:
+          type: number
+          description: "Unix timestamp of breakthrough event"
+        n_players:
+          type: integer
+          description: "Player count at time of breakthrough"
+        error:
+          type: string
+          nullable: true
+        timestamp:
+          type: number
+
+    L4BatteryCalibrationApply:
+      type: object
+      description: "Phase 125 per-battery L4 threshold calibration apply result"
+      properties:
+        track_id:
+          type: integer
+        run_id:
+          type: integer
+        battery_type:
+          type: string
+        anomaly_threshold:
+          type: number
+        continuity_threshold:
+          type: number
+        n_sessions:
+          type: integer
+        calibration_feature_dim:
+          type: integer
+        stale:
+          type: boolean
+        timestamp:
+          type: number
+
+    L4ThresholdTracksStatus:
+      type: object
+      description: "Phase 124 L4 per-battery threshold track registry status"
+      properties:
+        l4_battery_threshold_enabled:
+          type: boolean
+        track_count:
+          type: integer
+        active_count:
+          type: integer
+        battery_types_tracked:
+          type: array
+          items:
+            type: string
+        tracks:
+          type: array
+          items:
+            type: object
+        timestamp:
+          type: number
+
+    L4CalibrationStatus:
+      type: object
+      description: "Phase 123 L4 Mahalanobis threshold calibration staleness status"
+      properties:
+        current_feature_dim:
+          type: integer
+        calibration_feature_dim:
+          type: integer
+        stale:
+          type: boolean
+        anomaly_threshold:
+          type: number
+        continuity_threshold:
+          type: number
+        calibration_n_sessions:
+          type: integer
+        calibration_timestamp:
+          type: number
+        timestamp:
+          type: number
+
+    ConfidenceMultiplierStatus:
+      type: object
+      description: "Phase 122 VHP confidence_score separation ratio multiplier status"
+      properties:
+        multiplier_enabled:
+          type: boolean
+        current_bt_strat_ratio:
+          type: number
+        effective_multiplier:
+          type: number
+        floor:
+          type: number
+        log_count:
+          type: integer
+        recent_applications:
+          type: array
+          items:
+            type: object
+        timestamp:
+          type: number
+
+    SeparationRatioStatus:
+      type: object
+      description: "Phase 121 biometric inter-person separation ratio status (tournament blocker tracker)"
+      properties:
+        pooled_ratio:
+          type: number
+        battery_stratified_ratio:
+          type: number
+        tournament_blocker:
+          type: boolean
+        target_ratio:
+          type: number
+        gap_to_target:
+          type: number
+        tournament_ready:
+          type: boolean
+        timestamp:
+          type: number
+
+    BTTransportStatus:
+      type: object
+      description: "Phase 120 BLE transport foundation status — DualShock Edge at 250 Hz"
+      properties:
+        bt_transport_enabled:
+          type: boolean
+        device_address:
+          type: string
+        sampling_rate_hz:
+          type: integer
+        frames_received:
+          type: integer
+        frames_dropped:
+          type: integer
+        avg_interval_ms:
+          type: number
+        recent_sessions:
+          type: array
+          items:
+            type: object
+        timestamp:
+          type: number
+
+    EpochWindowOverrideLifecycle:
+      type: object
+      description: "Phase 119 per-device epoch override lifecycle status"
+      properties:
+        override_count:
+          type: integer
+        overrides_with_max_uses:
+          type: integer
+        overrides:
+          type: array
+          items:
+            type: object
+        epoch_window_enabled:
+          type: boolean
+        timestamp:
+          type: number
+
+    EpochWindowAutoTune:
+      type: object
+      description: "Phase 118 epoch-window auto-tune advisor results"
+      properties:
+        epoch_window_enabled:
+          type: boolean
+        current_window_seconds:
+          type: number
+        recommended_window_seconds:
+          type: number
+        fleet_p95_age_seconds:
+          type: number
+        override_count:
+          type: integer
+        override_candidates:
+          type: array
+          items:
+            type: object
+        timestamp:
+          type: number
+
+    EpochWindowDeviceHeatmap:
+      type: object
+      description: "Phase 117 per-device epoch freshness heatmap sorted by p95 DESC"
+      properties:
+        epoch_window_enabled:
+          type: boolean
+        epoch_window_seconds:
+          type: number
+        total_devices:
+          type: integer
+        devices:
+          type: array
+          items:
+            type: object
+        timestamp:
+          type: number
+
+    EpochWindowAnalyticsStatus:
+      type: object
+      description: "Phase 116 epoch-window analytics over Gate-5 poad_age_seconds"
+      properties:
+        epoch_window_enabled:
+          type: boolean
+        epoch_window_seconds:
+          type: number
+        total_gate5_checks:
+          type: integer
+        staleness_blocked_count:
+          type: integer
+        checked_count:
+          type: integer
+        p50_age_seconds:
+          type: number
+        p95_age_seconds:
+          type: number
+        p99_age_seconds:
+          type: number
+        max_age_seconds:
+          type: number
+        recommended_window_seconds:
+          type: number
+        timestamp:
+          type: number
+    VHPDualGateStatus:
+      type: object
+      description: "Phase 114 VHP mint dual-primitive gate log (5th gate in /agent/mint-vhp)"
+      properties:
+        dual_primitive_gate_enabled:
+          type: boolean
+        total_checks:
+          type: integer
+        eligible_count:
+          type: integer
+        mint_allowed_count:
+          type: integer
+        recent_logs:
+          type: array
+          items:
+            type: object
+        timestamp:
+          type: number
+
+    DualPrimitiveStatus:
+      type: object
+      description: "Phase 113 VAPIDualPrimitiveGate status (PoAC + PoAd dual-primitive composability)"
+      properties:
+        dual_primitive_gate_enabled:
+          type: boolean
+        dual_primitive_gate_address:
+          type: string
+        protocol_lens_address:
+          type: string
+        adjudication_registry_address:
+          type: string
+        checks_total:
+          type: integer
+        checks_eligible:
+          type: integer
+        last_check_device_id:
+          type: string
+          nullable: true
+        timestamp:
+          type: number
+
+    PoAdAnchorStatus:
+      type: object
+      description: "Phase 112 PoAd on-chain anchor status (PoAdAnchorAgent + poad_registry_log)"
+      properties:
+        poad_on_chain_enabled:
+          type: boolean
+        anchored_count:
+          type: integer
+        pending_count:
+          type: integer
+        last_anchor_tx:
+          type: string
+          nullable: true
+        adjudication_registry_address:
+          type: string
+        timestamp:
+          type: number
+
+    PoAdRegistryStatus:
+      type: object
+      description: "Phase 111 PoAd Registry status (local log; on-chain anchoring Phase 112)"
+      properties:
+        poad_registry_enabled:          {type: boolean}
+        total_poad_count:               {type: integer}
+        dual_veto_poad_count:           {type: integer}
+        on_chain_anchor_count:          {type: integer}
+        recent_poad_logs:               {type: array, items: {type: object}}
+        adjudication_registry_address:  {type: string}
+        is_composable:                  {type: boolean}
+        timestamp:                      {type: number}
+
     IoSwarmVHPMintStatus:
       type: object
       description: "Phase 110 ioSwarm VHP Mint Authorization status (fail-CLOSED quorum gate)"
@@ -6138,3 +7518,85 @@ webhooks:
       responses:
         "200":
           description: Webhook acknowledged
+
+    L4RecalibrationStatus:
+      type: object
+      description: >
+        Phase 134 L4 recalibration pipeline status. stale=True when live_feature_dim != calibration_feature_dim
+        (13 vs 12). Run recalibrate_l4_pipeline.py --db ~/.vapi/bridge.db to clear staleness.
+      properties:
+        in_progress:
+          type: boolean
+          description: "True if a recalibration job is currently running"
+        last_run_ts:
+          type: number
+          description: "Unix timestamp of last completed run (0.0 if never run)"
+        sessions_processed:
+          type: integer
+          description: "Number of calibration sessions used in last run"
+        new_anomaly_threshold:
+          type: number
+          description: "Anomaly threshold from last run (or current config value)"
+        new_continuity_threshold:
+          type: number
+          description: "Continuity threshold from last run (or current config value)"
+        stale:
+          type: boolean
+          description: "True when live_feature_dim != calibration_feature_dim"
+        timestamp:
+          type: number
+          description: "Unix timestamp of response"
+
+    AutoSeparationSnapshotStatus:
+      type: object
+      description: >
+        Phase 134 auto-separation snapshot trigger. When auto_separation_snapshot_enabled=True,
+        analyze_interperson_separation.py runs as a subprocess after each live session ruling,
+        writing a fresh snapshot to separation_ratio_snapshots table for SeparationRatioMonitorAgent.
+      properties:
+        auto_separation_snapshot_enabled:
+          type: boolean
+          description: "True when AUTO_SEPARATION_SNAPSHOT_ENABLED=true in config"
+        snapshot_count:
+          type: integer
+          description: "Total snapshots in separation_ratio_snapshots table"
+        last_snapshot_ts:
+          type: number
+          description: "created_at of most recent snapshot (0.0 if none)"
+        last_snapshot_ratio:
+          type: number
+          description: "pooled_ratio of most recent snapshot (0.0 if none)"
+        timestamp:
+          type: number
+          description: "Unix timestamp of response"
+
+    TournamentActivationChainStatus:
+      type: object
+      description: >
+        Phase 135 TournamentActivationChainAgent (agent #16) status.
+        Subscribes to separation_ratio_breakthrough bus event (SeparationRatioMonitorAgent).
+        INVARIANT: auto_activate_on_breakthrough=False PERMANENTLY.
+        Tournament activation requires explicit operator action.
+        Current separation ratio 0.474 — TOURNAMENT BLOCKER (target >= 1.0).
+      properties:
+        gate_open_notified:
+          type: boolean
+          description: "True if separation_ratio_breakthrough was received and notification fired"
+        auto_activate_on_breakthrough:
+          type: boolean
+          description: "PERMANENT False — auto-activation is never permitted"
+        operator_action_required:
+          type: boolean
+          description: "Always True — operator must use POST /agent/commit-activation"
+        last_ratio:
+          type: number
+          description: "Separation ratio at time of notification (0.0 if no notification yet)"
+        last_notification_ts:
+          type: number
+          description: "Unix timestamp of last notification (0.0 if none)"
+        notification_count:
+          type: integer
+          description: "Total entries in tournament_activation_chain_log"
+        timestamp:
+          type: number
+          description: "Unix timestamp of response"

@@ -1,9 +1,9 @@
 {
   "analysis_version": "2.0",
-  "n_sessions_included": 64,
+  "n_sessions_included": 114,
   "n_sessions_excluded": 5,
-  "n_features": 11,
-  "n_active_features": 8,
+  "n_features": 13,
+  "n_active_features": 11,
   "feature_names": [
     "trigger_resistance_change_rate",
     "trigger_onset_velocity_l2",
@@ -14,8 +14,10 @@
     "stick_autocorr_lag5",
     "tremor_peak_hz",
     "tremor_band_power",
-    "touchpad_active_fraction",
-    "touch_position_variance"
+    "accel_magnitude_spectral_entropy",
+    "touch_position_variance",
+    "press_timing_jitter_variance",
+    "touchpad_spatial_entropy"
   ],
   "active_feature_names": [
     "trigger_onset_velocity_l2",
@@ -25,140 +27,224 @@
     "stick_autocorr_lag1",
     "stick_autocorr_lag5",
     "tremor_peak_hz",
-    "tremor_band_power"
+    "tremor_band_power",
+    "accel_magnitude_spectral_entropy",
+    "touch_position_variance",
+    "touchpad_spatial_entropy"
   ],
   "excluded_feature_names": [
     "trigger_resistance_change_rate",
-    "touchpad_active_fraction",
-    "touch_position_variance"
+    "press_timing_jitter_variance"
   ],
-  "window_size": 1024,
+  "window_size": 1025,
   "extractor_mode": "live",
   "player_session_counts": {
-    "Player 1": 38,
-    "Player 2": 14,
-    "Player 3": 12
+    "Player 1": 53,
+    "Player 2": 31,
+    "Player 3": 27,
+    "Player 4": 3
   },
-  "separation_ratio": 0.36165614861754947,
-  "overall_intra_mean": 0.6346681280699142,
-  "overall_inter_mean": 0.22953163084807482,
+  "separation_ratio": 0.4097183129905137,
+  "overall_intra_mean": 0.6780138076636746,
+  "overall_inter_mean": 0.2777946734602354,
   "conclusion": "NO SEPARATION \u2014 fingerprint does not distinguish between players",
   "intra_player_stats": {
     "Player 1": {
-      "n_sessions": 38,
+      "n_sessions": 53,
       "distances": [
-        1.834003847011667,
-        0.46372231826782284,
-        0.1929289892471082,
-        4.289782648278842,
-        0.050652953308177616,
-        0.07269472200314699,
-        1.6443166473101127,
-        0.40557291189730493,
-        0.8088544968666416,
-        0.16276534354288524,
-        0.005942410819809846,
-        0.6041768468350399,
-        0.057356961604065906,
-        0.27626614282251577,
-        0.26727547115878636,
-        0.4790650732775544,
-        1.7320955513510945,
-        1.9891512216444895,
-        0.6617343296188256,
-        0.019023460496288218,
-        0.6052000048024792,
-        0.25531282872589683,
-        0.32843737401827244,
-        0.41801560156399253,
-        0.8863800332421617,
-        0.15347656245990896,
-        1.0264004532063595,
-        0.1272751642771041,
-        1.7460139672761577,
-        0.031659005477826796,
-        0.3113315902895752,
-        1.2859061759470682,
-        0.14053178453258888,
-        1.8653083262006698,
-        0.37891651839718504,
-        0.6201633677167747,
-        0.6153821392657811,
-        0.40344567196139997
+        1.4898775895894243,
+        0.29637499934732664,
+        0.03831665015071001,
+        4.356136664483218,
+        0.12478255194662825,
+        0.030938338338045237,
+        1.3241772439553998,
+        0.19903064011256016,
+        0.2844455127879294,
+        0.09586558932757153,
+        0.25139141415271327,
+        0.1417059457858342,
+        0.1483336357849065,
+        0.10333173740264653,
+        0.23681293375388363,
+        0.2855702642176329,
+        1.4024619764819515,
+        1.3813108193600232,
+        0.44757033342398417,
+        0.1536444154358132,
+        1.4557278707585148,
+        0.22056000471253145,
+        0.1894930776547605,
+        0.014830661758243739,
+        0.6838718959432323,
+        0.20331589899217972,
+        0.7772939620017082,
+        0.21496385341231677,
+        1.861671705745082,
+        0.05280711905530429,
+        0.1514554338209428,
+        1.0087159206158902,
+        0.04600006176131244,
+        1.394828273756545,
+        0.23382734061033467,
+        0.4216001636092528,
+        0.4923423604791514,
+        0.08704899115109692,
+        4.4146364398715665,
+        0.4831975485034144,
+        1.4719267496550992,
+        1.3421048914374638,
+        0.901171212952739,
+        1.4091655753576882,
+        0.29160608238734276,
+        1.2144513498430056,
+        1.1756793174626188,
+        0.889875077449868,
+        0.5939819468795885,
+        0.8803705556770746,
+        0.2186954395756991,
+        0.05776051930480467,
+        0.6412307969386477
       ],
-      "mean": 0.7162247083348258,
-      "std": 0.8300968621302633,
-      "median": 0.41179425673064873,
-      "min": 0.005942410819809846,
-      "max": 4.289782648278842
+      "mean": 0.7224205161315702,
+      "std": 0.8901101670422137,
+      "median": 0.29637499934732664,
+      "min": 0.014830661758243739,
+      "max": 4.4146364398715665
     },
     "Player 2": {
-      "n_sessions": 14,
+      "n_sessions": 31,
       "distances": [
-        0.846651660801307,
-        0.4417046203195991,
-        0.8136954536973414,
-        1.4713186959354556,
-        0.09371548286518756,
-        0.5460861741256423,
-        0.1165773698482009,
-        2.6360928252411755,
-        0.515139716590692,
-        0.14262829923311515,
-        0.1567981442003842,
-        0.7693661973810767,
-        0.2800255730925648,
-        0.42006515597315797
+        1.2093531527834402,
+        0.7342112826330697,
+        0.18102169714388774,
+        0.873784793158392,
+        0.33436051331191186,
+        0.6130331186497738,
+        0.2265094534727661,
+        2.3471746238179514,
+        0.12297453981819546,
+        0.331178198301636,
+        0.14582286511565432,
+        0.24873934006952872,
+        0.3739895237297029,
+        0.5061503688130914,
+        0.7519525862374267,
+        0.9081599690479528,
+        0.7994511028175668,
+        1.057517063732213,
+        1.134063317915819,
+        1.6918064091748664,
+        0.9571278301805811,
+        0.47123076435726247,
+        0.39757962782370804,
+        0.13709840485349623,
+        0.4256497510505691,
+        0.3950517403980614,
+        0.9562792661469042,
+        1.8176033191443428,
+        0.09667483827376475,
+        1.1126107826405047,
+        0.21872981925553883
       ],
-      "mean": 0.6607046692360644,
-      "std": 0.6575946944882438,
-      "median": 0.47842216845514557,
-      "min": 0.09371548286518756,
-      "max": 2.6360928252411755
+      "mean": 0.6960287117377284,
+      "std": 0.5356134626215244,
+      "median": 0.5061503688130914,
+      "min": 0.09667483827376475,
+      "max": 2.3471746238179514
     },
     "Player 3": {
-      "n_sessions": 12,
+      "n_sessions": 27,
       "distances": [
-        2.0482769638959697,
-        0.1780050881541637,
-        0.7442848934571963,
-        0.2753781476299252,
-        0.8349975273289514,
-        0.16593152401469702,
-        0.018494534052285967,
-        0.32920708730762627,
-        0.4415160282835984,
-        0.1605916101787667,
-        0.39442179257467175,
-        0.7337948827883767
+        1.6570922058129227,
+        0.6142987203510598,
+        0.6409415711029763,
+        0.4180823666115967,
+        0.9711738634216034,
+        0.3475463503959667,
+        0.30490112820325566,
+        0.2699145215308899,
+        0.13129106107427224,
+        0.12369228732252466,
+        0.951222895313483,
+        0.24692264551120843,
+        1.0260822202247903,
+        0.34622387122825354,
+        0.2810329957487272,
+        1.0351002131966918,
+        1.0357897922680366,
+        0.2639120965143688,
+        0.6860097539979936,
+        0.2933030072743683,
+        0.9578104151860651,
+        1.2038398082849915,
+        0.7031314283635121,
+        0.5572348475494748,
+        0.17424518552759669,
+        0.7709667660732796,
+        1.8495704411345888
       ],
-      "mean": 0.5270750066388524,
-      "std": 0.5221305513600205,
-      "median": 0.36181443994114904,
-      "min": 0.018494534052285967,
-      "max": 2.0482769638959697
+      "mean": 0.6615308318231296,
+      "std": 0.4455826092357021,
+      "median": 0.6142987203510598,
+      "min": 0.12369228732252466,
+      "max": 1.8495704411345888
+    },
+    "Player 4": {
+      "n_sessions": 3,
+      "distances": [
+        0.44148297002877324,
+        0.9480980091442576,
+        0.5066445337137788
+      ],
+      "mean": 0.6320751709622698,
+      "std": 0.22503974913322589,
+      "median": 0.5066445337137788,
+      "min": 0.44148297002877324,
+      "max": 0.9480980091442576
     }
   },
   "inter_player_stats": {
     "Player 1 vs Player 2": {
-      "distance": 0.05110831427863656,
+      "distance": 0.35752035145819355,
       "players": [
         "Player 1",
         "Player 2"
       ]
     },
     "Player 1 vs Player 3": {
-      "distance": 0.34280355387812156,
+      "distance": 0.4649343905264951,
       "players": [
         "Player 1",
         "Player 3"
       ]
     },
+    "Player 1 vs Player 4": {
+      "distance": 0.49020895103600803,
+      "players": [
+        "Player 1",
+        "Player 4"
+      ]
+    },
     "Player 2 vs Player 3": {
-      "distance": 0.2946830243874664,
+      "distance": 0.10925991514643894,
       "players": [
         "Player 2",
         "Player 3"
+      ]
+    },
+    "Player 2 vs Player 4": {
+      "distance": 0.15992658235902654,
+      "players": [
+        "Player 2",
+        "Player 4"
+      ]
+    },
+    "Player 3 vs Player 4": {
+      "distance": 0.08491785023525052,
+      "players": [
+        "Player 3",
+        "Player 4"
       ]
     }
   },
@@ -166,398 +252,722 @@
     "players": [
       "Player 1",
       "Player 2",
-      "Player 3"
+      "Player 3",
+      "Player 4"
     ],
     "values": [
       [
         0.0,
-        0.05110831427863656,
-        0.34280355387812156
+        0.35752035145819355,
+        0.4649343905264951,
+        0.49020895103600803
       ],
       [
-        0.05110831427863656,
+        0.35752035145819355,
         0.0,
-        0.2946830243874664
+        0.10925991514643894,
+        0.15992658235902654
       ],
       [
-        0.34280355387812156,
-        0.2946830243874664,
+        0.4649343905264951,
+        0.10925991514643894,
+        0.0,
+        0.08491785023525052
+      ],
+      [
+        0.49020895103600803,
+        0.15992658235902654,
+        0.08491785023525052,
         0.0
       ]
     ]
   },
   "player_mean_vectors": {
     "Player 1": [
-      0.0010483237629186962,
-      0.004081091215343368,
-      8766.939628416028,
-      1.0406574235040196,
-      0.1464493948598414,
-      0.13155446638887527,
-      0.7075429595836493,
-      0.003696876651523426
+      0.0011025998517986343,
+      0.003242634365981517,
+      8189.266891187021,
+      1.0480868113692376,
+      0.11215899456148049,
+      0.10053454743540262,
+      0.7348607551494147,
+      0.0028588559204611704,
+      4.793553676229059,
+      0.006566822854780754,
+      0.36325819486239713
     ],
     "Player 2": [
-      0.0008641659706346181,
-      0.0027963908481705066,
-      8526.83855516757,
-      1.03300351639681,
-      0.13026616097911564,
-      0.11437518339609377,
-      1.017449929522908,
-      0.00452661323631135
+      0.0006687453053357175,
+      0.005536850269057861,
+      6275.015466371078,
+      1.0368474051688126,
+      0.06486156868972036,
+      0.05733253685841576,
+      4.311838521758481,
+      0.0024306477101621693,
+      4.923686812407681,
+      0.00844678189810827,
+      0.5711621612489762
     ],
     "Player 3": [
-      0.000852066483832343,
-      0.002656934772895598,
-      7276.6081865441965,
-      1.0249272090867672,
-      0.11449444306839988,
-      0.09834247112260082,
-      7.795122269777283,
-      0.003991935086693616
+      0.0009936619323207875,
+      0.0020361830485206775,
+      5685.5481385082085,
+      1.0829509680607348,
+      0.054750656606553684,
+      0.047087762621263525,
+      4.206714125325667,
+      0.0019657669791874857,
+      4.707437690188813,
+      0.003996615560202799,
+      0.35165325184821805
+    ],
+    "Player 4": [
+      0.0,
+      0.0,
+      5545.499427385046,
+      1.0,
+      0.004038608396834458,
+      0.002855676531452059,
+      0.0,
+      0.0,
+      4.413386102954277,
+      0.01925904068003303,
+      1.597066322499847
     ]
   },
   "feature_player_means": {
     "trigger_resistance_change_rate": {
       "Player 1": 0.0,
       "Player 2": 0.0,
-      "Player 3": 0.0
+      "Player 3": 0.0,
+      "Player 4": 0.0
     },
     "trigger_onset_velocity_l2": {
-      "Player 1": 0.001048323762918696,
-      "Player 2": 0.000864165970634618,
-      "Player 3": 0.000852066483832343
+      "Player 1": 0.0011025998517986341,
+      "Player 2": 0.0006687453053357174,
+      "Player 3": 0.0009936619323207875,
+      "Player 4": 0.0
     },
     "trigger_onset_velocity_r2": {
-      "Player 1": 0.004081091215343368,
-      "Player 2": 0.0027963908481705066,
-      "Player 3": 0.002656934772895598
+      "Player 1": 0.0032426343659815175,
+      "Player 2": 0.005536850269057861,
+      "Player 3": 0.0020361830485206775,
+      "Player 4": 0.0
     },
     "micro_tremor_accel_variance": {
-      "Player 1": 8766.939628416027,
-      "Player 2": 8526.83855516757,
-      "Player 3": 7276.608186544196
+      "Player 1": 8189.2668911870205,
+      "Player 2": 6275.015466371078,
+      "Player 3": 5685.5481385082085,
+      "Player 4": 5545.499427385046
     },
     "grip_asymmetry": {
-      "Player 1": 1.0406574235040196,
-      "Player 2": 1.03300351639681,
-      "Player 3": 1.0249272090867672
+      "Player 1": 1.0480868113692376,
+      "Player 2": 1.0368474051688128,
+      "Player 3": 1.0829509680607348,
+      "Player 4": 1.0
     },
     "stick_autocorr_lag1": {
-      "Player 1": 0.1464493948598414,
-      "Player 2": 0.13026616097911567,
-      "Player 3": 0.11449444306839988
+      "Player 1": 0.11215899456148051,
+      "Player 2": 0.06486156868972034,
+      "Player 3": 0.05475065660655369,
+      "Player 4": 0.004038608396834458
     },
     "stick_autocorr_lag5": {
-      "Player 1": 0.13155446638887527,
-      "Player 2": 0.11437518339609377,
-      "Player 3": 0.09834247112260082
+      "Player 1": 0.10053454743540262,
+      "Player 2": 0.05733253685841578,
+      "Player 3": 0.04708776262126353,
+      "Player 4": 0.002855676531452059
     },
     "tremor_peak_hz": {
-      "Player 1": 0.7075429595836494,
-      "Player 2": 1.017449929522908,
-      "Player 3": 7.795122269777283
+      "Player 1": 0.734860755149415,
+      "Player 2": 4.311838521758481,
+      "Player 3": 4.206714125325667,
+      "Player 4": 0.0
     },
     "tremor_band_power": {
-      "Player 1": 0.003696876651523426,
-      "Player 2": 0.00452661323631135,
-      "Player 3": 0.003991935086693616
+      "Player 1": 0.0028588559204611704,
+      "Player 2": 0.0024306477101621693,
+      "Player 3": 0.0019657669791874857,
+      "Player 4": 0.0
     },
-    "touchpad_active_fraction": {
-      "Player 1": 0.0,
-      "Player 2": 0.0,
-      "Player 3": 0.0
+    "accel_magnitude_spectral_entropy": {
+      "Player 1": 4.793553676229059,
+      "Player 2": 4.923686812407682,
+      "Player 3": 4.707437690188813,
+      "Player 4": 4.413386102954277
     },
     "touch_position_variance": {
+      "Player 1": 0.006566822854780754,
+      "Player 2": 0.00844678189810827,
+      "Player 3": 0.003996615560202799,
+      "Player 4": 0.01925904068003303
+    },
+    "press_timing_jitter_variance": {
       "Player 1": 0.0,
       "Player 2": 0.0,
-      "Player 3": 0.0
+      "Player 3": 0.0,
+      "Player 4": 0.0
+    },
+    "touchpad_spatial_entropy": {
+      "Player 1": 0.36325819486239713,
+      "Player 2": 0.5711621612489762,
+      "Player 3": 0.35165325184821805,
+      "Player 4": 1.597066322499847
     }
   },
   "feature_player_stds": {
     "trigger_resistance_change_rate": {
       "Player 1": 0.0,
       "Player 2": 0.0,
-      "Player 3": 0.0
+      "Player 3": 0.0,
+      "Player 4": 0.0
     },
     "trigger_onset_velocity_l2": {
-      "Player 1": 0.001017484267693368,
-      "Player 2": 0.000797797001694113,
-      "Player 3": 0.0006365828468639222
+      "Player 1": 0.0021326118363435417,
+      "Player 2": 0.0016125524887968944,
+      "Player 3": 0.0021613646537902344,
+      "Player 4": 0.0
     },
     "trigger_onset_velocity_r2": {
-      "Player 1": 0.004585386119943127,
-      "Player 2": 0.0020928141879290973,
-      "Player 3": 0.0021199895568226154
+      "Player 1": 0.004652027494772325,
+      "Player 2": 0.022366126453273207,
+      "Player 3": 0.0028240714697518603,
+      "Player 4": 0.0
     },
     "micro_tremor_accel_variance": {
-      "Player 1": 5160.816303829783,
-      "Player 2": 4386.223459856971,
-      "Player 3": 2846.575635187516
+      "Player 1": 6197.477523234471,
+      "Player 2": 4551.894793221246,
+      "Player 3": 4068.3684957443857,
+      "Player 4": 3625.6607782493033
     },
     "grip_asymmetry": {
-      "Player 1": 0.06125551003626649,
-      "Player 2": 0.028928796996689897,
-      "Player 3": 0.029338121355491947
+      "Player 1": 0.1411420578108753,
+      "Player 2": 0.11188275413013071,
+      "Player 3": 0.2589039602338749,
+      "Player 4": 0.0
     },
     "stick_autocorr_lag1": {
-      "Player 1": 0.06464858282334342,
-      "Player 2": 0.07206528533970345,
-      "Player 3": 0.06495637775461359
+      "Player 1": 0.08344611715562708,
+      "Player 2": 0.08006402793458674,
+      "Player 3": 0.07090884556326416,
+      "Player 4": 0.005711454767917153
     },
     "stick_autocorr_lag5": {
-      "Player 1": 0.058317468632686886,
-      "Player 2": 0.06255532969964361,
-      "Player 3": 0.05588135908135161
+      "Player 1": 0.07672637934867296,
+      "Player 2": 0.07086073447765333,
+      "Player 3": 0.06145337135297051,
+      "Player 4": 0.004038536480530061
     },
     "tremor_peak_hz": {
-      "Player 1": 1.103222425543136,
-      "Player 2": 1.1592189026163444,
-      "Player 3": 21.726551267170052
+      "Player 1": 1.3164836209416573,
+      "Player 2": 14.211974473546277,
+      "Player 3": 14.932053934055894,
+      "Player 4": 0.0
     },
     "tremor_band_power": {
-      "Player 1": 0.0032085877305957646,
-      "Player 2": 0.002984138774071733,
-      "Player 3": 0.00243268156948924
+      "Player 1": 0.0032137462795907546,
+      "Player 2": 0.003089977006773115,
+      "Player 3": 0.0025912585752704428,
+      "Player 4": 0.0
     },
-    "touchpad_active_fraction": {
-      "Player 1": 0.0,
-      "Player 2": 0.0,
-      "Player 3": 0.0
+    "accel_magnitude_spectral_entropy": {
+      "Player 1": 0.6995118402751954,
+      "Player 2": 1.0445608645822044,
+      "Player 3": 1.234897769566937,
+      "Player 4": 0.30486872381212354
     },
     "touch_position_variance": {
+      "Player 1": 0.015994495726199712,
+      "Player 2": 0.017220000208341968,
+      "Player 3": 0.008834289694879554,
+      "Player 4": 0.015207236540051293
+    },
+    "press_timing_jitter_variance": {
       "Player 1": 0.0,
       "Player 2": 0.0,
-      "Player 3": 0.0
+      "Player 3": 0.0,
+      "Player 4": 0.0
+    },
+    "touchpad_spatial_entropy": {
+      "Player 1": 0.8695885258585319,
+      "Player 2": 1.0967777801717853,
+      "Player 3": 0.7789527685068568,
+      "Player 4": 1.3246982080732508
     }
   },
   "classification": {
-    "accuracy": 0.421875,
-    "correct": 27,
-    "total": 64,
+    "accuracy": 0.3157894736842105,
+    "correct": 36,
+    "total": 114,
     "misclassified": [
       {
         "session": "hw_005",
         "true_player": "Player 1",
-        "pred_player": "Player 3",
-        "best_dist": 1.5302242099015197
+        "pred_player": "Player 4",
+        "best_dist": 1.0011708612559662
       },
       {
         "session": "hw_006",
         "true_player": "Player 1",
-        "pred_player": "Player 3",
-        "best_dist": 0.17085100819253582
-      },
-      {
-        "session": "hw_007",
-        "true_player": "Player 1",
         "pred_player": "Player 2",
-        "best_dist": 0.14274794787872958
-      },
-      {
-        "session": "hw_010",
-        "true_player": "Player 1",
-        "pred_player": "Player 2",
-        "best_dist": 0.02649770768574584
+        "best_dist": 0.08186550152425497
       },
       {
         "session": "hw_011",
         "true_player": "Player 1",
-        "pred_player": "Player 3",
-        "best_dist": 1.3444248411736646
-      },
-      {
-        "session": "hw_018",
-        "true_player": "Player 1",
-        "pred_player": "Player 3",
-        "best_dist": 0.09690640266565782
+        "pred_player": "Player 4",
+        "best_dist": 0.835270733204287
       },
       {
         "session": "hw_019",
         "true_player": "Player 1",
-        "pred_player": "Player 3",
-        "best_dist": 0.156569696005666
+        "pred_player": "Player 2",
+        "best_dist": 0.134157694116274
       },
       {
         "session": "hw_021",
         "true_player": "Player 1",
-        "pred_player": "Player 3",
-        "best_dist": 1.4316077888107501
+        "pred_player": "Player 4",
+        "best_dist": 0.9142479315980945
       },
       {
         "session": "hw_023",
         "true_player": "Player 1",
-        "pred_player": "Player 3",
-        "best_dist": 0.38579261057966174
+        "pred_player": "Player 4",
+        "best_dist": 0.05197893908085132
       },
       {
         "session": "hw_027",
         "true_player": "Player 1",
-        "pred_player": "Player 3",
-        "best_dist": 0.15949913478080785
-      },
-      {
-        "session": "hw_028",
-        "true_player": "Player 1",
-        "pred_player": "Player 3",
-        "best_dist": 0.18856296032106176
+        "pred_player": "Player 2",
+        "best_dist": 0.17897007077118418
       },
       {
         "session": "hw_029",
         "true_player": "Player 1",
-        "pred_player": "Player 3",
-        "best_dist": 0.5975311474026627
+        "pred_player": "Player 4",
+        "best_dist": 0.19689218015199098
       },
       {
         "session": "hw_031",
         "true_player": "Player 1",
-        "pred_player": "Player 3",
-        "best_dist": 0.7201753973935472
-      },
-      {
-        "session": "hw_034",
-        "true_player": "Player 1",
-        "pred_player": "Player 2",
-        "best_dist": 0.025981866624265212
-      },
-      {
-        "session": "hw_035",
-        "true_player": "Player 1",
-        "pred_player": "Player 3",
-        "best_dist": 0.1561860276019161
+        "pred_player": "Player 4",
+        "best_dist": 0.295186315013472
       },
       {
         "session": "hw_036",
         "true_player": "Player 1",
-        "pred_player": "Player 3",
-        "best_dist": 0.9883167525017748
-      },
-      {
-        "session": "hw_037",
-        "true_player": "Player 1",
-        "pred_player": "Player 2",
-        "best_dist": 0.09083201683083306
+        "pred_player": "Player 4",
+        "best_dist": 0.5202678009983116
       },
       {
         "session": "hw_039",
         "true_player": "Player 1",
-        "pred_player": "Player 3",
-        "best_dist": 0.1740785486573761
+        "pred_player": "Player 2",
+        "best_dist": 0.14114904200711978
       },
       {
         "session": "hw_040",
         "true_player": "Player 1",
-        "pred_player": "Player 3",
-        "best_dist": 0.35005665964645216
+        "pred_player": "Player 4",
+        "best_dist": 0.07437525767755765
       },
       {
         "session": "hw_041",
         "true_player": "Player 1",
-        "pred_player": "Player 3",
-        "best_dist": 0.318987710128911
-      },
-      {
-        "session": "hw_042",
-        "true_player": "Player 1",
-        "pred_player": "Player 3",
-        "best_dist": 0.18589691603998498
+        "pred_player": "Player 4",
+        "best_dist": 0.03476755973312521
       },
       {
         "session": "hw_045",
         "true_player": "Player 2",
         "pred_player": "Player 1",
-        "best_dist": 0.7960468863080612
+        "best_dist": 0.8558624087438446
       },
       {
         "session": "hw_046",
         "true_player": "Player 2",
         "pred_player": "Player 1",
-        "best_dist": 0.39260965336507286
+        "best_dist": 0.382767797474492
       },
       {
         "session": "hw_047",
         "true_player": "Player 2",
         "pred_player": "Player 3",
-        "best_dist": 0.5630795158206836
+        "best_dist": 0.07194743357851442
       },
       {
         "session": "hw_048",
         "true_player": "Player 2",
-        "pred_player": "Player 3",
-        "best_dist": 1.2230198059244253
+        "pred_player": "Player 4",
+        "best_dist": 0.7333265605228643
+      },
+      {
+        "session": "hw_049",
+        "true_player": "Player 2",
+        "pred_player": "Player 1",
+        "best_dist": 0.03237107311472981
       },
       {
         "session": "hw_050",
         "true_player": "Player 2",
-        "pred_player": "Player 3",
-        "best_dist": 0.3272062513650333
+        "pred_player": "Player 4",
+        "best_dist": 0.4720329228027176
+      },
+      {
+        "session": "hw_051",
+        "true_player": "Player 2",
+        "pred_player": "Player 1",
+        "best_dist": 0.13168378882568643
       },
       {
         "session": "hw_052",
         "true_player": "Player 2",
         "pred_player": "Player 1",
-        "best_dist": 2.585368015552082
+        "best_dist": 1.994558391398618
       },
       {
         "session": "hw_053",
         "true_player": "Player 2",
-        "pred_player": "Player 3",
-        "best_dist": 0.2995638548162051
+        "pred_player": "Player 4",
+        "best_dist": 0.049823074123108595
+      },
+      {
+        "session": "hw_054",
+        "true_player": "Player 2",
+        "pred_player": "Player 1",
+        "best_dist": 0.028908405721690695
       },
       {
         "session": "hw_056",
         "true_player": "Player 2",
-        "pred_player": "Player 3",
-        "best_dist": 0.5335325682291089
+        "pred_player": "Player 4",
+        "best_dist": 0.10455647630621563
       },
       {
         "session": "hw_057",
         "true_player": "Player 2",
         "pred_player": "Player 1",
-        "best_dist": 0.22904338708149605
+        "best_dist": 0.034013262101648956
       },
       {
         "session": "hw_058",
         "true_player": "Player 2",
         "pred_player": "Player 1",
-        "best_dist": 0.36969997830269175
+        "best_dist": 0.1537623637458868
       },
       {
         "session": "hw_060",
         "true_player": "Player 3",
-        "pred_player": "Player 2",
-        "best_dist": 0.1630632688284542
+        "pred_player": "Player 1",
+        "best_dist": 0.1516637110985303
       },
       {
         "session": "hw_061",
         "true_player": "Player 3",
         "pred_player": "Player 1",
-        "best_dist": 0.4180358251412387
+        "best_dist": 0.17655830403142767
       },
       {
         "session": "hw_062",
         "true_player": "Player 3",
-        "pred_player": "Player 2",
-        "best_dist": 0.037761605305266115
+        "pred_player": "Player 1",
+        "best_dist": 0.0515255198704175
       },
       {
         "session": "hw_063",
         "true_player": "Player 3",
         "pred_player": "Player 1",
-        "best_dist": 0.5107530862013854
+        "best_dist": 0.5079434961516817
+      },
+      {
+        "session": "hw_064",
+        "true_player": "Player 3",
+        "pred_player": "Player 1",
+        "best_dist": 0.12271515472674457
+      },
+      {
+        "session": "hw_065",
+        "true_player": "Player 3",
+        "pred_player": "Player 1",
+        "best_dist": 0.1886826853635135
       },
       {
         "session": "hw_066",
         "true_player": "Player 3",
-        "pred_player": "Player 1",
-        "best_dist": 0.029880889971802833
+        "pred_player": "Player 2",
+        "best_dist": 0.16300045857611414
+      },
+      {
+        "session": "hw_068",
+        "true_player": "Player 3",
+        "pred_player": "Player 4",
+        "best_dist": 0.1041008557376741
+      },
+      {
+        "session": "hw_070",
+        "true_player": "Player 3",
+        "pred_player": "Player 2",
+        "best_dist": 0.07206467886634302
       },
       {
         "session": "hw_071",
         "true_player": "Player 3",
         "pred_player": "Player 1",
-        "best_dist": 0.05303342581974389
+        "best_dist": 0.48798888018547243
+      },
+      {
+        "session": "hw_072",
+        "true_player": "Player 3",
+        "pred_player": "Player 4",
+        "best_dist": 0.2098212837942767
+      },
+      {
+        "session": "terminal_cal_P1/natural_grip_20260326T234127Z",
+        "true_player": "Player 1",
+        "pred_player": "Player 4",
+        "best_dist": 0.03315450750800408
+      },
+      {
+        "session": "terminal_cal_P1/resting_baseline_20260326T233432Z",
+        "true_player": "Player 1",
+        "pred_player": "Player 4",
+        "best_dist": 0.9836176517805233
+      },
+      {
+        "session": "terminal_cal_P1/spectral_accel_20260327T011014Z",
+        "true_player": "Player 1",
+        "pred_player": "Player 4",
+        "best_dist": 0.8540562916767495
+      },
+      {
+        "session": "terminal_cal_P1/stick_sweeps_20260327T000958Z",
+        "true_player": "Player 1",
+        "pred_player": "Player 4",
+        "best_dist": 0.41274035128437747
+      },
+      {
+        "session": "terminal_cal_P1/touchpad_corners_20260327T031241Z",
+        "true_player": "Player 1",
+        "pred_player": "Player 4",
+        "best_dist": 0.9195050407754055
+      },
+      {
+        "session": "terminal_cal_P1/touchpad_corners_20260327T230404Z",
+        "true_player": "Player 1",
+        "pred_player": "Player 2",
+        "best_dist": 0.10405293256459835
+      },
+      {
+        "session": "terminal_cal_P1/touchpad_corners_20260328T142201Z",
+        "true_player": "Player 1",
+        "pred_player": "Player 4",
+        "best_dist": 0.7246404592532956
+      },
+      {
+        "session": "terminal_cal_P1/touchpad_freeform_20260327T030955Z",
+        "true_player": "Player 1",
+        "pred_player": "Player 4",
+        "best_dist": 0.6875430138279284
+      },
+      {
+        "session": "terminal_cal_P1/touchpad_freeform_20260328T141850Z",
+        "true_player": "Player 1",
+        "pred_player": "Player 4",
+        "best_dist": 0.13060299546262366
+      },
+      {
+        "session": "terminal_cal_P1/touchpad_swipes_20260327T030742Z",
+        "true_player": "Player 1",
+        "pred_player": "Player 4",
+        "best_dist": 0.3912458916954314
+      },
+      {
+        "session": "terminal_cal_P2/button_sequence_20260327T021315Z",
+        "true_player": "Player 2",
+        "pred_player": "Player 3",
+        "best_dist": 0.6481837178184287
+      },
+      {
+        "session": "terminal_cal_P2/natural_grip_20260327T015604Z",
+        "true_player": "Player 2",
+        "pred_player": "Player 4",
+        "best_dist": 0.772089567424356
+      },
+      {
+        "session": "terminal_cal_P2/natural_grip_20260329T032252Z",
+        "true_player": "Player 2",
+        "pred_player": "Player 4",
+        "best_dist": 0.6581616014945973
+      },
+      {
+        "session": "terminal_cal_P2/resting_baseline_20260327T015045Z",
+        "true_player": "Player 2",
+        "pred_player": "Player 4",
+        "best_dist": 0.9175708612703274
+      },
+      {
+        "session": "terminal_cal_P2/resting_baseline_20260329T031701Z",
+        "true_player": "Player 2",
+        "pred_player": "Player 4",
+        "best_dist": 0.9945442475719294
+      },
+      {
+        "session": "terminal_cal_P2/spectral_accel_20260327T022944Z",
+        "true_player": "Player 2",
+        "pred_player": "Player 3",
+        "best_dist": 1.6320263629997431
+      },
+      {
+        "session": "terminal_cal_P2/stick_sweeps_20260327T022131Z",
+        "true_player": "Player 2",
+        "pred_player": "Player 4",
+        "best_dist": 0.8364337904787387
+      },
+      {
+        "session": "terminal_cal_P2/touchpad_corners_20260328T003556Z",
+        "true_player": "Player 2",
+        "pred_player": "Player 1",
+        "best_dist": 0.1151960267517815
+      },
+      {
+        "session": "terminal_cal_P2/touchpad_corners_20260328T153820Z",
+        "true_player": "Player 2",
+        "pred_player": "Player 1",
+        "best_dist": 0.050270950090820825
+      },
+      {
+        "session": "terminal_cal_P2/touchpad_freeform_20260328T003347Z",
+        "true_player": "Player 2",
+        "pred_player": "Player 1",
+        "best_dist": 0.10124412591555623
+      },
+      {
+        "session": "terminal_cal_P2/touchpad_freeform_20260328T153604Z",
+        "true_player": "Player 2",
+        "pred_player": "Player 4",
+        "best_dist": 0.2533731871364484
+      },
+      {
+        "session": "terminal_cal_P2/touchpad_freeform_20260329T005231Z",
+        "true_player": "Player 2",
+        "pred_player": "Player 1",
+        "best_dist": 0.6033019258555474
+      },
+      {
+        "session": "terminal_cal_P2/touchpad_swipes_20260328T003136Z",
+        "true_player": "Player 2",
+        "pred_player": "Player 1",
+        "best_dist": 1.4644378938620066
+      },
+      {
+        "session": "terminal_cal_P2/touchpad_swipes_20260328T153354Z",
+        "true_player": "Player 2",
+        "pred_player": "Player 4",
+        "best_dist": 0.08570696842989148
+      },
+      {
+        "session": "terminal_cal_P2/touchpad_swipes_20260329T005021Z",
+        "true_player": "Player 2",
+        "pred_player": "Player 4",
+        "best_dist": 0.9728958473304379
+      },
+      {
+        "session": "terminal_cal_P2/trigger_rhythm_20260327T020442Z",
+        "true_player": "Player 2",
+        "pred_player": "Player 3",
+        "best_dist": 0.11189940978351046
+      },
+      {
+        "session": "terminal_cal_P3/button_sequence_20260328T014042Z",
+        "true_player": "Player 3",
+        "pred_player": "Player 4",
+        "best_dist": 0.9958276800387683
+      },
+      {
+        "session": "terminal_cal_P3/natural_grip_20260328T005708Z",
+        "true_player": "Player 3",
+        "pred_player": "Player 4",
+        "best_dist": 0.3178451040710368
+      },
+      {
+        "session": "terminal_cal_P3/resting_baseline_20260328T003917Z",
+        "true_player": "Player 3",
+        "pred_player": "Player 4",
+        "best_dist": 1.0042830887485032
+      },
+      {
+        "session": "terminal_cal_P3/resting_baseline_20260328T011813Z",
+        "true_player": "Player 3",
+        "pred_player": "Player 4",
+        "best_dist": 1.0049751770280149
+      },
+      {
+        "session": "terminal_cal_P3/spectral_accel_20260328T015847Z",
+        "true_player": "Player 3",
+        "pred_player": "Player 4",
+        "best_dist": 0.22534585158841128
+      },
+      {
+        "session": "terminal_cal_P3/stick_sweeps_20260328T014814Z",
+        "true_player": "Player 3",
+        "pred_player": "Player 4",
+        "best_dist": 0.6710607060156513
+      },
+      {
+        "session": "terminal_cal_P3/touchpad_corners_20260327T232204Z",
+        "true_player": "Player 3",
+        "pred_player": "Player 4",
+        "best_dist": 0.25428529121938004
+      },
+      {
+        "session": "terminal_cal_P3/touchpad_corners_20260328T161059Z",
+        "true_player": "Player 3",
+        "pred_player": "Player 4",
+        "best_dist": 0.9255457060829949
+      },
+      {
+        "session": "terminal_cal_P3/touchpad_freeform_20260327T231922Z",
+        "true_player": "Player 3",
+        "pred_player": "Player 1",
+        "best_dist": 0.7416150887408363
+      },
+      {
+        "session": "terminal_cal_P3/touchpad_freeform_20260328T160809Z",
+        "true_player": "Player 3",
+        "pred_player": "Player 1",
+        "best_dist": 0.24440066907390182
+      },
+      {
+        "session": "terminal_cal_P3/touchpad_swipes_20260327T231705Z",
+        "true_player": "Player 3",
+        "pred_player": "Player 4",
+        "best_dist": 0.5235276834336473
+      },
+      {
+        "session": "terminal_cal_P3/touchpad_swipes_20260328T160459Z",
+        "true_player": "Player 3",
+        "pred_player": "Player 2",
+        "best_dist": 0.09314978121698825
+      },
+      {
+        "session": "terminal_cal_P3/trigger_rhythm_20260328T011017Z",
+        "true_player": "Player 3",
+        "pred_player": "Player 4",
+        "best_dist": 0.7389717814887541
+      },
+      {
+        "session": "terminal_cal_P3/trigger_rhythm_20260328T013207Z",
+        "true_player": "Player 3",
+        "pred_player": "Player 1",
+        "best_dist": 1.3888820329506106
+      },
+      {
+        "session": "terminal_cal_P4/touchpad_freeform_20260329T032705Z",
+        "true_player": "Player 4",
+        "pred_player": "Player 1",
+        "best_dist": 0.46200780146917414
       }
     ]
   },
@@ -597,14 +1007,16 @@
       "polling_rate_hz": 1000.04,
       "mean_vector": [
         0.0,
-        0.004498837612055499,
-        0.02863212898052458,
-        130.81335659684805,
-        1.355386705234133,
-        0.20732029989875597,
-        0.21022699927461558,
-        1.3482994868837554,
-        0.01932995393872261,
+        0.004500108032390989,
+        0.03001761312821302,
+        131.0156839304957,
+        1.4882107644245541,
+        0.2059521528667417,
+        0.20907726524205045,
+        1.3469827586206897,
+        0.01907329746232978,
+        4.795742084240091,
+        0.0,
         0.0,
         0.0
       ]
@@ -617,14 +1029,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.0014565489999949933,
-        0.0064614025210695605,
-        6590.868060629708,
-        1.0427583268710545,
-        0.15955922067165373,
-        0.14588644589696612,
-        3.8206954738071985,
-        0.005489675240325076,
+        0.0012993240462882178,
+        0.004917885605245829,
+        6659.4855267116,
+        1.0569390286718097,
+        0.16034423266138348,
+        0.14746677262442454,
+        6.149553571428571,
+        0.006651750680591379,
+        4.077872814450945,
+        0.0,
         0.0,
         0.0
       ]
@@ -637,14 +1051,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.002343198707593339,
-        0.003760772233030626,
-        7860.965321088518,
-        1.0550296364511762,
-        0.15988477911267962,
-        0.13358678698539733,
-        0.3630777849469866,
-        0.0041602938090051925,
+        0.0018903412323977265,
+        0.004231246672570705,
+        7994.370174538749,
+        1.0473989626339504,
+        0.15657868930271693,
+        0.13287927180528641,
+        0.3013392857142857,
+        0.003773711281163352,
+        4.4568815456117905,
+        0.0,
         0.0,
         0.0
       ]
@@ -657,14 +1073,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.0005628481294427599,
-        0.006896680276840925,
-        28962.94155883789,
-        1.0225413267953056,
-        0.16753446459770202,
-        0.16174462463174547,
-        0.23460411071777343,
-        0.0040641530816044125,
+        0.0006179492654544966,
+        0.006597494163683482,
+        31746.32326424735,
+        1.0176438624518258,
+        0.1693062423808234,
+        0.16392945987837657,
+        0.29575892857142855,
+        0.004749795964785985,
+        5.007394561767578,
+        0.0,
         0.0,
         0.0
       ]
@@ -677,14 +1095,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.0016549059988132545,
-        0.002645226043782064,
-        9005.31741507394,
-        1.032848950454167,
-        0.1575409861973354,
-        0.14024367604936872,
-        0.46362240382603237,
-        0.004573072429214205,
+        0.0016365039641303676,
+        0.0025158987673265594,
+        8863.34623587472,
+        1.032905375957489,
+        0.14972875424793788,
+        0.13502230601651327,
+        0.43526785714285715,
+        0.00449253611266613,
+        4.641169178145272,
+        0.0,
         0.0,
         0.0
       ]
@@ -697,14 +1117,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.0010937068212245192,
-        0.010666079172598463,
-        8429.494140777588,
-        1.0582771968841553,
-        0.16190916061401367,
-        0.14860391105924334,
-        0.26811898367745535,
-        0.002168674490281514,
+        0.0008341840228864125,
+        0.00648817988378661,
+        8034.565212380546,
+        1.0540596127510071,
+        0.1658841779402324,
+        0.1481791365998132,
+        0.3515625,
+        0.0022466401755809784,
+        4.508385316303798,
+        0.0,
         0.0,
         0.0
       ]
@@ -719,11 +1141,13 @@
         0.0,
         0.0,
         0.0,
-        1030.0362654465896,
+        1032.0096412071814,
         1.0,
         0.0,
         0.0,
         0.0,
+        0.0,
+        5.166255767528828,
         0.0,
         0.0,
         0.0
@@ -737,14 +1161,16 @@
       "polling_rate_hz": 1000.0,
       "mean_vector": [
         0.0,
-        0.0009052793521966253,
-        0.003684217283236129,
-        10677.787303750174,
+        0.0009572485887578556,
+        0.002446632095213447,
+        9264.797905208043,
         1.0710759170566286,
-        0.1862584124292646,
-        0.16890687035662788,
-        0.22901829310825894,
-        0.003463666002665247,
+        0.1782984104326793,
+        0.1604597202369145,
+        0.24553571428571427,
+        0.0032264819954122815,
+        5.1795109844207765,
+        0.0,
         0.0,
         0.0
       ]
@@ -757,14 +1183,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.00023090544821960585,
-        0.007429086033787046,
-        12577.146424560548,
-        0.9982443005698067,
-        0.10387014491217476,
-        0.09015547059875514,
-        0.022343248639787948,
-        0.0007475333554404122,
+        0.000870491699980838,
+        0.00452541830550347,
+        9727.612677437919,
+        0.9960272673198155,
+        0.10560429862567357,
+        0.09101170121825167,
+        0.022321428571428572,
+        0.000745329601424081,
+        5.092020974840437,
+        0.0,
         0.0,
         0.0
       ]
@@ -777,14 +1205,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.0007073721848428249,
-        0.003231471340571131,
-        9533.734605429514,
-        1.015032611659595,
-        0.15930277769054685,
-        0.1475290460991008,
-        0.1284736796787807,
-        0.001371301348720278,
+        0.001353794876486063,
+        0.0030741669264222893,
+        8702.830588531495,
+        1.0096279817819596,
+        0.1524252304009029,
+        0.140750317381961,
+        0.16741071428571427,
+        0.0019352404986109051,
+        5.295823300225394,
+        0.0,
         0.0,
         0.0
       ]
@@ -797,14 +1227,16 @@
       "polling_rate_hz": 999.8,
       "mean_vector": [
         0.0,
-        0.001513958977801459,
-        0.004639709267233099,
-        8741.05082737514,
-        1.1038382918494087,
-        0.17600683016436441,
-        0.1585617731298719,
-        0.6423683929443359,
-        0.0030849120167217086,
+        0.0016094786673784257,
+        0.00449455911559718,
+        9548.62752066476,
+        1.0770607856341772,
+        0.16735817858151028,
+        0.14819391586684755,
+        0.5691964285714286,
+        0.003335766824228423,
+        4.846889565331595,
+        0.0,
         0.0,
         0.0
       ]
@@ -817,14 +1249,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.00492842270593558,
-        0.004359016857509102,
-        11591.299594247,
-        1.0346435734203883,
-        0.21938896817820414,
-        0.19738802765096936,
-        3.021924362182617,
-        0.004222278339522226,
+        0.007340608412133796,
+        0.009657092663858618,
+        8912.283925127302,
+        1.0289720912490572,
+        0.22371923514774866,
+        0.19952724703720637,
+        3.0245535714285716,
+        0.004210537605519806,
+        4.648903324944633,
+        0.0,
         0.0,
         0.0
       ]
@@ -837,14 +1271,16 @@
       "polling_rate_hz": 1000.0,
       "mean_vector": [
         0.0,
-        0.0014076290652155876,
-        0.0028806173828031336,
-        9032.892657601493,
-        1.0236107318741934,
-        0.19125227400234768,
-        0.17300713760512215,
-        0.08937299455915179,
-        0.0018169377105576652,
+        0.001221581231802702,
+        0.0030885045735963754,
+        7392.97575818743,
+        1.0247534108161926,
+        0.19703338130377232,
+        0.18357239382607596,
+        0.08928571428571429,
+        0.0018146673696381706,
+        4.756236600194659,
+        0.0,
         0.0,
         0.0
       ]
@@ -857,14 +1293,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.001236961976225887,
-        0.002975353010530983,
-        7483.20154876709,
-        1.1332150173187256,
-        0.21713273005826134,
-        0.19263626551521676,
-        3.541404789515904,
-        0.008974794438108802,
+        0.0013596258551946709,
+        0.0033304809592664244,
+        8659.750014316014,
+        1.0604600923401968,
+        0.20821791103907994,
+        0.1861849514075688,
+        3.6049107142857144,
+        0.01133857008734984,
+        4.870901121412005,
+        0.0,
         0.0,
         0.0
       ]
@@ -877,14 +1315,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.0023654442892542906,
-        0.0005488402955234051,
-        7509.698850108555,
+        0.0024412620307079384,
+        0.0008055772126785346,
+        6910.129761450631,
         1.0094200281585965,
-        0.07572141936847142,
-        0.0667056154353278,
-        0.5362379564557757,
-        0.0038525632343121936,
+        0.07166070086615427,
+        0.062347773909568784,
+        0.5357142857142857,
+        0.003849883334977286,
+        4.900404026848929,
+        0.0,
         0.0,
         0.0
       ]
@@ -897,14 +1337,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.0007169639691710472,
-        0.00269132972029703,
-        11023.586465715682,
-        0.99763074023383,
-        0.1444420919620565,
-        0.12500940757138387,
-        0.3183912931169782,
-        0.0036475093556301934,
+        0.000569483262619802,
+        0.0022111616044172217,
+        9734.04875,
+        0.9987986442020961,
+        0.1489701271908624,
+        0.1295134563956942,
+        0.234375,
+        0.0036019642438207353,
+        4.869762656348092,
+        0.0,
         0.0,
         0.0
       ]
@@ -917,13 +1359,15 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.0002284793316253594,
-        0.0002911902671413762,
-        616.8001346697126,
+        0.00024979048009429657,
+        0.000293688526643174,
+        612.3748542131697,
         0.998912558555603,
-        0.03051446999822344,
-        0.02941204718181065,
+        0.030518023456845966,
+        0.02940421155520848,
         0.0,
+        0.0,
+        7.376209650039673,
         0.0,
         0.0,
         0.0
@@ -937,14 +1381,16 @@
       "polling_rate_hz": 999.98,
       "mean_vector": [
         0.0,
-        0.0005924893117376736,
-        0.003928321405713048,
-        18133.045407409667,
-        1.0725653617722648,
-        0.18453033549445017,
-        0.17374382610432804,
-        0.17874598911830358,
-        0.0034430642426013947,
+        0.0005482824306402887,
+        0.004669575454401119,
+        15660.19419141497,
+        1.0702752035004752,
+        0.17708405979909003,
+        0.16587212382948824,
+        0.16741071428571427,
+        0.003417452382189887,
+        5.209524938038418,
+        0.0,
         0.0,
         0.0
       ]
@@ -957,14 +1403,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.0006163362280598709,
-        0.00389852335942643,
-        5654.656094447545,
-        1.014100222502436,
-        0.0803210547459977,
-        0.07499880360705512,
-        0.19550342559814454,
-        0.0055101124197244646,
+        0.0005015255058450358,
+        0.00356869211686509,
+        5771.952487618582,
+        1.0122068239961353,
+        0.07648328246083111,
+        0.07303493465696062,
+        0.18415178571428573,
+        0.005172328443399497,
+        4.794518347467695,
+        0.0,
         0.0,
         0.0
       ]
@@ -977,14 +1425,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.0008732052626354354,
-        0.001374557593039104,
-        8697.220306723459,
-        1.0068884154728481,
-        0.1276900971361569,
-        0.1157424680675779,
-        0.1675743647984096,
-        0.004534960900034224,
+        0.0008358014774109636,
+        0.00163992527872324,
+        9019.443030286517,
+        1.0009144500323703,
+        0.12017154682826783,
+        0.10834756110063089,
+        0.15625,
+        0.00467290569628988,
+        4.8347358199528285,
+        0.0,
         0.0,
         0.0
       ]
@@ -997,14 +1447,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.00043438140036804337,
-        0.002276642963822399,
-        11618.074221191406,
-        0.9998239672183991,
-        0.15771271160670688,
-        0.14089232721499034,
-        0.10054461887904576,
-        0.00224684439599514,
+        0.0003444491167153631,
+        0.002413979984287705,
+        16062.891787283761,
+        1.000243649823325,
+        0.1600026019981929,
+        0.14322063901594706,
+        0.14508928571428573,
+        0.0024759157853467125,
+        4.840806008747646,
+        0.0,
         0.0,
         0.0
       ]
@@ -1017,14 +1469,16 @@
       "polling_rate_hz": 1000.0,
       "mean_vector": [
         0.0,
-        0.0008466683541025435,
-        0.0038338485759283813,
-        9970.136438162668,
-        1.023479025363922,
-        0.20802614058767047,
-        0.1803708406005587,
-        0.09495880671909877,
-        0.002429319279534476,
+        0.0010263606985764845,
+        0.003628505212920053,
+        9381.948909301758,
+        1.0259967269216266,
+        0.22202742338180542,
+        0.19468307733535767,
+        0.09486607142857142,
+        0.0024223842791148593,
+        4.872947819573539,
+        0.0,
         0.0,
         0.0
       ]
@@ -1037,14 +1491,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.0003722280450165272,
-        0.002944253696394818,
-        7224.286617638724,
+        0.00032856094783970287,
+        0.002575085431869541,
+        7168.579629701887,
         0.9954334333964756,
-        0.21012896656990052,
-        0.18783358978373663,
-        0.1675743647984096,
-        0.0022050467133522033,
+        0.21253179184028081,
+        0.18908098191022873,
+        0.21763392857142858,
+        0.00244143973503794,
+        4.951641384533473,
+        0.0,
         0.0,
         0.0
       ]
@@ -1057,14 +1513,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.0010460594056972436,
-        0.0024987873435020447,
-        6801.0545296696255,
-        1.081143033845084,
-        0.10284984721536083,
-        0.09316310771874019,
-        0.36307779039655413,
-        0.005682292969099113,
+        0.0010848409176937171,
+        0.002328915534807103,
+        8202.029328602383,
+        1.0832457978384835,
+        0.10695135759455818,
+        0.09658547571727208,
+        0.3515625,
+        0.005276308458830629,
+        4.196273774419512,
+        0.0,
         0.0,
         0.0
       ]
@@ -1077,14 +1535,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.0012256828269788197,
-        0.0023234978344823633,
-        4596.650600760324,
-        1.0622866433007376,
-        0.016542136669158936,
-        0.015620717661721366,
-        0.2681189782278878,
-        0.002172371425798961,
+        0.0010106020101479122,
+        0.0019480323951159204,
+        4493.475358014788,
+        1.060140060016087,
+        0.019335169792175293,
+        0.018234072072165354,
+        0.2622767857142857,
+        0.0027142350588526044,
+        4.9695774943487985,
+        0.0,
         0.0,
         0.0
       ]
@@ -1098,13 +1558,15 @@
       "mean_vector": [
         0.0,
         0.00027592982298561505,
-        0.0008160589023360184,
-        9482.81445879255,
+        0.000680583728743451,
+        9279.163609095982,
         1.0062888618877956,
-        0.0300516676902771,
-        0.028715449060712543,
-        1.4020388630458287,
-        0.0019290319138339587,
+        0.030023195232663835,
+        0.028445850270135062,
+        1.7857142857142858,
+        0.001949797198176384,
+        4.60120701789856,
+        0.0,
         0.0,
         0.0
       ]
@@ -1117,14 +1579,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.0004195659075464521,
-        0.0036632481164165904,
-        3930.168839013236,
-        1.0079864655222213,
-        0.2556775074445509,
-        0.23171162375382015,
-        3.6419495010375975,
-        0.006580586309677788,
+        0.0004066197228218828,
+        0.003773852429751839,
+        3985.2502272360666,
+        1.0078354099818638,
+        0.25832603539739335,
+        0.23586415120533535,
+        3.6439732142857144,
+        0.007155564656215055,
+        4.785320412772043,
+        0.0,
         0.0,
         0.0
       ]
@@ -1137,14 +1601,16 @@
       "polling_rate_hz": 1000.02,
       "mean_vector": [
         0.0,
-        0.00076675380180989,
-        0.003803836208369051,
-        9366.51348236084,
-        1.0359165120124816,
-        0.18585849787507738,
-        0.16848311560494558,
-        0.2513615471976144,
-        0.0022132555900939875,
+        0.0007687448710203171,
+        0.003445701136120728,
+        9351.5671900286,
+        1.0285255318880082,
+        0.18930083547319684,
+        0.17111925389085497,
+        0.390625,
+        0.003585870462868895,
+        5.012452329908099,
+        0.0,
         0.0,
         0.0
       ]
@@ -1157,14 +1623,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.0005142266862094402,
-        0.0062495088657098154,
-        16988.22405506679,
-        0.9998014119693212,
-        0.19098518882478988,
-        0.1655512094923428,
-        0.24018992287772042,
-        0.002300716473587922,
+        0.0004878083270575319,
+        0.006929320514734302,
+        18257.66927745274,
+        0.9994827154704503,
+        0.19874256192573478,
+        0.17428736187118504,
+        0.24553571428571427,
+        0.0023360028490424156,
+        5.052877781731742,
+        0.0,
         0.0,
         0.0
       ]
@@ -1177,14 +1645,16 @@
       "polling_rate_hz": 1000.0,
       "mean_vector": [
         0.0,
-        0.0007853697825755392,
-        0.005331089962273836,
-        8626.92299974169,
-        1.0042873299973352,
-        0.2056310121502195,
-        0.18296775715691702,
-        0.2569473593575614,
-        0.005438240170478821,
+        0.0007625198523913111,
+        0.004704184625297785,
+        8469.603839312962,
+        1.0111385020187922,
+        0.19461238418306623,
+        0.17401490488222668,
+        0.3013392857142857,
+        0.004927976770060403,
+        5.027537937164307,
+        0.0,
         0.0,
         0.0
       ]
@@ -1197,14 +1667,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.0005302058346569539,
-        0.0016410555158342633,
-        7303.996623709542,
+        0.0005299336010856288,
+        0.0019364480062254838,
+        7374.132815115792,
         1.023456803730556,
-        0.12292822190693446,
-        0.11121634195957865,
-        0.27370479583740237,
-        0.003524237402847835,
+        0.12577410646847317,
+        0.10947963118553161,
+        0.2734375,
+        0.003549361675977707,
+        4.685924701009478,
+        0.0,
         0.0,
         0.0
       ]
@@ -1217,14 +1689,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.001240896066384656,
-        0.0021218728061233247,
-        2715.1710695975166,
-        1.0653334185055323,
-        0.11191723768067147,
-        0.10007005444062608,
-        0.3910068511962891,
-        0.004697414077818394,
+        0.0015748928194599492,
+        0.002836346235126257,
+        2736.1047816794257,
+        1.1201648691722326,
+        0.11114470143004188,
+        0.09896979038337511,
+        0.40736607142857145,
+        0.0041183319315314295,
+        5.072534549576895,
+        0.0,
         0.0,
         0.0
       ]
@@ -1237,14 +1711,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.0007854396610387734,
-        0.00201072900689074,
-        8108.585603397914,
+        0.0007808516493865422,
+        0.002065312604286841,
+        8432.234857918875,
         1.0118215366772243,
-        0.20821403563022614,
-        0.17662715865033013,
-        0.2960480444771903,
-        0.004916943013668061,
+        0.21266889665807998,
+        0.18069175805364338,
+        0.29575892857142855,
+        0.004907940860305514,
+        4.952158358437674,
+        0.0,
         0.0,
         0.0
       ]
@@ -1257,14 +1733,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.0009462715685367584,
-        0.006133470090904406,
-        17549.545576193672,
-        1.0707074696677072,
-        0.16910354699407304,
-        0.15186275950499944,
-        0.30163385663713727,
-        0.003189209635768618,
+        0.0010126981564930507,
+        0.004903761414544923,
+        15733.080138658795,
+        1.0854833289555141,
+        0.17031091485704694,
+        0.15110424309968948,
+        0.29575892857142855,
+        0.0033088122414691107,
+        4.923933623177665,
+        0.0,
         0.0,
         0.0
       ]
@@ -1277,14 +1755,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.00020484539281044687,
-        0.0023058613735650268,
-        6987.024108472551,
+        0.00019617968371936253,
+        0.002231468358742339,
+        6929.350594155448,
         1.0691126932416644,
-        0.11550719244139535,
-        0.1007859069108963,
-        0.10054461887904576,
-        0.001782960593700409,
+        0.11510508928980147,
+        0.10110331450189863,
+        0.10044642857142858,
+        0.0017783746974808828,
+        4.658703100340707,
+        0.0,
         0.0,
         0.0
       ]
@@ -1299,11 +1779,13 @@
         0.0,
         0.0,
         0.0,
-        5851.721068594797,
+        5914.3828528267995,
         1.0,
         0.0,
         0.0,
         0.0,
+        0.0,
+        4.27560847895486,
         0.0,
         0.0,
         0.0
@@ -1317,14 +1799,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.000790471224380391,
-        0.003966726495751313,
-        5868.4434260341095,
-        1.0240378451347352,
-        0.16106953152588435,
-        0.13238560610051667,
-        3.105711577279227,
-        0.004361258862274034,
+        0.0015805684562240328,
+        0.003938810245266982,
+        5526.576353672573,
+        1.0170767271518708,
+        0.16730849568332945,
+        0.14456557250448634,
+        0.9486607142857143,
+        0.0045546395970242366,
+        4.643156480789185,
+        0.0,
         0.0,
         0.0
       ]
@@ -1337,14 +1821,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.0007178128377667495,
-        0.002166455380086388,
-        6871.815822154454,
-        1.0180457285472324,
-        0.20269304462841578,
-        0.17672295434134347,
-        0.061443933759416855,
-        0.0003561275771686009,
+        0.0006509703850107534,
+        0.0021973380552870888,
+        8656.24370615278,
+        1.0153939259052276,
+        0.18931387901306151,
+        0.1617957119005067,
+        0.06138392857142857,
+        0.00035630362374441965,
+        4.831986135755266,
+        0.0,
         0.0,
         0.0
       ]
@@ -1357,14 +1843,16 @@
       "polling_rate_hz": 999.99,
       "mean_vector": [
         0.0,
-        0.0027687240037939523,
-        0.003297774564500337,
-        12510.388166845662,
-        1.0792613793929962,
-        0.1454654086942542,
-        0.12461719126121638,
-        1.4093654449671915,
-        0.003733039075310967,
+        0.0030964361982139415,
+        0.004057383459788582,
+        12817.76130635771,
+        1.1125182727836582,
+        0.14857994816074632,
+        0.1316830290557995,
+        0.5618578767123288,
+        0.003992869014762444,
+        4.632655025345006,
+        0.0,
         0.0,
         0.0
       ]
@@ -1377,14 +1865,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.0023115278342866327,
-        0.007844371100798352,
-        10572.449960800066,
-        1.0945874685294008,
-        0.2164068412903237,
-        0.18907576113020721,
-        3.960283292482977,
-        0.009104579148897007,
+        0.0016840964121973678,
+        0.004523754652513013,
+        10247.183133491098,
+        1.1604063429244578,
+        0.2197235143450025,
+        0.19414254570936415,
+        2.2942529965753424,
+        0.009812784202999678,
+        4.565491272978587,
+        0.0,
         0.0,
         0.0
       ]
@@ -1397,14 +1887,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.0010236468650910951,
-        0.0037927664991799894,
-        4692.150349107507,
-        1.0679784549833977,
-        0.241141543302634,
-        0.21168766081435222,
-        2.905770079730308,
-        0.009618571688979624,
+        0.0014786000175350538,
+        0.003924713522667856,
+        5298.78066632519,
+        1.065988808257939,
+        0.23448196385208875,
+        0.21243212759903032,
+        4.25072238869863,
+        0.011055399610123546,
+        4.651143157318847,
+        0.0,
         0.0,
         0.0
       ]
@@ -1413,17 +1905,19 @@
       "session": "hw_048",
       "player": "Player 2",
       "report_count": 202865,
-      "n_windows": 198,
+      "n_windows": 197,
       "polling_rate_hz": 1000.0,
       "mean_vector": [
         0.0,
         0.0,
         0.0,
-        1606.1524236659811,
+        1586.5232208174498,
         1.0,
         0.0,
         0.0,
         0.0,
+        0.0,
+        6.137122919716811,
         0.0,
         0.0,
         0.0
@@ -1438,13 +1932,15 @@
       "mean_vector": [
         0.0,
         0.0,
-        1.9761156418348014e-05,
-        8101.081383025809,
+        4.762015943351674e-05,
+        8047.298925726381,
         1.0,
-        0.0061959155056982825,
-        0.007570248454400938,
-        0.03682427536951353,
-        0.0008771074553058572,
+        0.006300993442331275,
+        0.007213512052820154,
+        0.036788313356164386,
+        0.000876030591252732,
+        4.202979595285573,
+        0.0,
         0.0,
         0.0
       ]
@@ -1457,14 +1953,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.0004608894934341924,
-        0.0010509267959692707,
-        5961.054362741235,
-        1.0286196080380923,
-        0.0796934539222554,
-        0.07346225676624334,
-        0.22094565221708115,
-        0.004111480510040914,
+        0.0007013639750928707,
+        0.0011361122341852074,
+        3002.878387150699,
+        1.0268907946062416,
+        0.0783081922731171,
+        0.07348475860406274,
+        0.1638752140410959,
+        0.003749321865504735,
+        6.150033807917817,
+        0.0,
         0.0,
         0.0
       ]
@@ -1477,14 +1975,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.0006930973119268271,
-        0.0025438045148342236,
-        7979.892949182693,
-        1.0454618010210663,
-        0.1903636086579055,
-        0.16954659864510577,
-        1.8043894310520119,
-        0.008146637907149652,
+        0.000691104552721324,
+        0.0021440189838894223,
+        7483.251402116802,
+        1.0428234432658103,
+        0.19273431292951923,
+        0.16772102431891717,
+        1.8695151969178083,
+        0.007209947249813847,
+        4.548630718499014,
+        0.0,
         0.0,
         0.0
       ]
@@ -1497,14 +1997,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.0004588734192697153,
-        0.0037624010073072085,
-        20938.987771752763,
-        1.0225771159852204,
-        0.19409301220949687,
-        0.17134160956699554,
-        0.3515044467089927,
-        0.003264397426591293,
+        0.0004762718533739856,
+        0.0026958290111171465,
+        18975.74399247888,
+        1.024936275122917,
+        0.18912735168043882,
+        0.17096409395541232,
+        0.4414597602739726,
+        0.0028208974766391905,
+        4.542813799969138,
+        0.0,
         0.0,
         0.0
       ]
@@ -1517,14 +2019,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.0002957703434058452,
-        0.002585173050286121,
-        6106.163191233596,
-        1.0119131334023932,
-        0.12246200761180498,
-        0.1003429996302632,
-        0.3046371871477937,
-        0.0037883747247851466,
+        0.00032204201712898197,
+        0.0020041144867619016,
+        5757.609610805773,
+        1.0111039527883268,
+        0.12203674798525155,
+        0.10122818928865766,
+        0.3444723886986301,
+        0.00446274929539594,
+        4.270181670580825,
+        0.0,
         0.0,
         0.0
       ]
@@ -1537,14 +2041,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.0009258326050531986,
-        0.00334027882072156,
-        7857.308216563642,
-        1.007824368774891,
-        0.1817987898543273,
-        0.16060501599862967,
-        0.7398331622554831,
-        0.008469351867137298,
+        0.0005986416849550115,
+        0.0031750759010981413,
+        8040.672513189381,
+        1.0121666129729519,
+        0.19396151718364596,
+        0.1691501244953642,
+        0.5752354452054794,
+        0.008121570986886956,
+        5.019576134747022,
+        0.0,
         0.0,
         0.0
       ]
@@ -1557,14 +2063,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.00022341539662280312,
-        0.0003410423786876953,
-        7794.6527291846605,
-        1.0132529406923136,
-        0.059534323031771676,
-        0.056352196337833796,
-        0.3581997662374418,
-        0.00182929490246389,
+        0.00022063541468488027,
+        0.0003681357787309648,
+        6970.936674085382,
+        1.0132972773623794,
+        0.058060496841391473,
+        0.05436191080163603,
+        0.3545055650684932,
+        0.0019975391867226118,
+        4.297212621937059,
+        0.0,
         0.0,
         0.0
       ]
@@ -1577,14 +2085,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.00047224502187630496,
-        0.0016684767739107347,
-        4909.12118004936,
-        1.0488309429524696,
-        0.10048718867848998,
-        0.0890788269573695,
-        0.2979418610873288,
-        0.003846534157860769,
+        0.0004569581751265142,
+        0.0013514398198498235,
+        5004.238630640996,
+        1.0329860848923251,
+        0.09192865959381404,
+        0.0803222033571554,
+        0.3210616438356164,
+        0.003870762106388399,
+        4.805844642528116,
+        0.0,
         0.0,
         0.0
       ]
@@ -1597,14 +2107,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.000956923721600579,
-        0.005425958015496702,
-        9846.344242670764,
-        1.0143421752607986,
-        0.11829861432109794,
-        0.10562198152382897,
-        0.15734008566973962,
-        0.0023978265155464003,
+        0.000895605779776018,
+        0.0018558412429889384,
+        8288.990010379111,
+        1.017701491611461,
+        0.10444538060524693,
+        0.09143225664961828,
+        1.8427600599315068,
+        0.002777833326509197,
+        5.787696684060031,
+        0.0,
         0.0,
         0.0
       ]
@@ -1617,14 +2129,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.0015073775725235065,
-        0.003476737196276551,
-        10499.992845522214,
-        1.0273998405223024,
-        0.16778554662755907,
-        0.14195022045886654,
-        1.6972643283948505,
-        0.004185389928290085,
+        0.0014459315626818227,
+        0.0023418330979750376,
+        9009.030985518677,
+        1.0031000568646273,
+        0.1671471123723951,
+        0.14114751877288703,
+        1.749117080479452,
+        0.004265845679894906,
+        5.205553955411258,
+        0.0,
         0.0,
         0.0
       ]
@@ -1639,12 +2153,14 @@
         0.0,
         0.0,
         0.0,
-        322.7426062689887,
+        322.4897003173828,
         1.0,
         0.0,
         0.0,
-        79.50472344292535,
-        0.0007793095687197314,
+        79.42708333333333,
+        0.0007783929920858807,
+        6.273131847381592,
+        0.0,
         0.0,
         0.0
       ]
@@ -1657,14 +2173,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.0008160427279693827,
-        0.008437545498042074,
-        7762.467865369092,
-        0.9990766732251808,
-        0.13038639729357746,
-        0.10983760256881583,
-        0.579145415188515,
-        0.005792518576913297,
+        0.0006465013234633698,
+        0.005920929917172618,
+        9004.455417920466,
+        0.9983323692050698,
+        0.13226994800649278,
+        0.11044258991741154,
+        1.180570419520548,
+        0.005970737187204602,
+        5.2303095027192,
+        0.0,
         0.0,
         0.0
       ]
@@ -1677,14 +2195,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.0006430693024973551,
-        0.0022349617211148143,
-        10736.47441570073,
-        1.0386265022297427,
-        0.17435395493082803,
-        0.1443893442772431,
-        0.23098863314275872,
-        0.0022846094702612865,
+        0.00046307950484732245,
+        0.002350271408356828,
+        9143.840062886069,
+        1.0123620084295535,
+        0.17570066064187925,
+        0.14725944838703495,
+        0.2307630565068493,
+        0.002325221003122526,
+        4.757895028754456,
+        0.0,
         0.0,
         0.0
       ]
@@ -1697,14 +2217,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.0006752911419288753,
-        0.004416193593012756,
-        8373.091436111763,
-        1.0437251715219185,
-        0.14443453610555768,
-        0.12478701282956012,
-        0.1774260507871027,
-        0.002342912642770026,
+        0.0007169839355150518,
+        0.0032725655011296884,
+        7925.243122244535,
+        1.0362551161279416,
+        0.1564645244140331,
+        0.13500955634533543,
+        0.19063035102739725,
+        0.0019912886025052366,
+        5.3168855901450325,
+        0.0,
         0.0,
         0.0
       ]
@@ -1717,14 +2239,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.0009140263738952679,
-        0.004377798060886562,
-        11172.886199614773,
-        1.109348757626259,
-        0.12437663160978932,
-        0.10359153248710966,
-        0.2778558959699657,
-        0.00405280521675332,
+        0.0007255896064771773,
+        0.00681941572430046,
+        10937.11371893752,
+        1.0717083615799472,
+        0.1414032438642358,
+        0.11917699189627007,
+        0.2106967037671233,
+        0.003986399977991026,
+        4.571927491116197,
+        0.0,
         0.0,
         0.0
       ]
@@ -1738,12 +2262,14 @@
       "mean_vector": [
         0.0,
         6.000281069172572e-05,
-        0.001121575232875878,
-        7484.20246060907,
+        0.0011829796298215651,
+        7534.150251094609,
         1.0198554682405028,
-        0.012725271488705727,
-        0.011742083687488346,
+        0.01326476854004272,
+        0.012527992770279923,
         0.0,
+        0.0,
+        4.505701454943174,
         0.0,
         0.0,
         0.0
@@ -1757,14 +2283,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.0016477071099646695,
-        0.001776636179460034,
-        7359.863833440493,
-        1.0240550298396855,
-        0.19201926090945937,
-        0.1732101884402641,
-        7.994215132438973,
-        0.008375744845667114,
+        0.002037638406052369,
+        0.007403748819591758,
+        7312.036471771868,
+        1.0208008159972626,
+        0.18583248729166918,
+        0.1680981888346476,
+        6.374411386986301,
+        0.008060295833274722,
+        4.640096775472981,
+        0.0,
         0.0,
         0.0
       ]
@@ -1777,14 +2305,16 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.002369223416093992,
-        0.0015761083141862325,
-        8750.694408704157,
+        0.0024395665881058125,
+        0.00706881035297905,
+        7139.8708289682045,
         1.032673546100316,
-        0.18089991583399576,
-        0.15885887192944959,
-        2.142503212576043,
-        0.007379951823043496,
+        0.18242009456129107,
+        0.16478385628290373,
+        2.3343857020547945,
+        0.00860373494183415,
+        4.710660000369973,
+        0.0,
         0.0,
         0.0
       ]
@@ -1797,14 +2327,16 @@
       "polling_rate_hz": 999.91,
       "mean_vector": [
         0.0,
-        0.00023722067979253727,
-        0.0017632205957827502,
-        5308.331002059048,
-        1.0152667060698548,
-        0.03110609545487247,
-        0.028745389913451182,
-        1.8612996715388885,
-        0.005494054639711976,
+        0.00015547413264133342,
+        0.0010852611811882624,
+        5030.077776863151,
+        1.0384573109754145,
+        0.030707055064913346,
+        0.02766830736949836,
+        1.789249785958904,
+        0.00428515314826206,
+        4.0056411815832735,
+        0.0,
         0.0,
         0.0
       ]
@@ -1817,14 +2349,16 @@
       "polling_rate_hz": 1000.0,
       "mean_vector": [
         0.0,
-        0.0007292343150467089,
-        0.0020372832356633183,
-        7095.665492724066,
-        1.0116382188176456,
-        0.1358948176063291,
-        0.1212012223286988,
-        0.38163339928404927,
-        0.0043263755840797944,
+        0.000739173234874153,
+        0.001607004392011831,
+        6254.709404200724,
+        1.0074350042141056,
+        0.1313966190927241,
+        0.11548414915698031,
+        0.4347709760273973,
+        0.004807415297127342,
+        4.399407786457506,
+        0.0,
         0.0,
         0.0
       ]
@@ -1837,14 +2371,16 @@
       "polling_rate_hz": 1000.0,
       "mean_vector": [
         0.0,
-        0.000997507037301484,
-        0.002796614985938554,
-        9014.088052259733,
-        1.0013311902596935,
-        0.17039313647028517,
-        0.13836915821653523,
-        0.21090266802539565,
-        0.004633139876317079,
+        0.0010319618501840797,
+        0.002268702475902663,
+        10829.001651679,
+        1.0004600183527967,
+        0.16569437826537106,
+        0.1333994208388541,
+        0.24079623287671234,
+        0.004572688404164494,
+        4.437243670633395,
+        0.0,
         0.0,
         0.0
       ]
@@ -1857,99 +2393,1265 @@
       "polling_rate_hz": 1000.01,
       "mean_vector": [
         0.0,
-        0.0011354728908061164,
-        0.0013452798577842035,
-        3938.7904656684564,
-        1.0035292451104072,
-        0.0773432991173986,
-        0.06537724679259405,
-        0.18077371545033913,
-        0.0024417987960862787,
+        0.0012138381086876744,
+        0.0009609900115134373,
+        4429.324734335077,
+        1.0089499356403744,
+        0.07716462250849972,
+        0.06618346997268804,
+        0.1839415667808219,
+        0.0025153461563056463,
+        5.756031110270382,
+        0.0,
         0.0,
         0.0
+      ]
+    },
+    {
+      "session": "terminal_cal_P1/button_sequence_20260326T235727Z",
+      "player": "Player 1",
+      "report_count": 419982,
+      "n_windows": 409,
+      "polling_rate_hz": 999.96,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.002660856671030189,
+        32063.34812112076,
+        1.0,
+        0.0,
+        0.0,
+        0.031039883863080684,
+        0.00027436398716602467,
+        5.471247235253854,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "session": "terminal_cal_P1/natural_grip_20260326T234127Z",
+      "player": "Player 1",
+      "report_count": 419968,
+      "n_windows": 409,
+      "polling_rate_hz": 999.92,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0005808137083986277,
+        5580.458153666377,
+        1.0,
+        0.0007982133070239228,
+        0.0004667842665045069,
+        0.3772539731051345,
+        1.8297473747456277e-05,
+        3.781097761721949,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "session": "terminal_cal_P1/resting_baseline_20260326T233432Z",
+      "player": "Player 1",
+      "report_count": 299975,
+      "n_windows": 292,
+      "polling_rate_hz": 999.91,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        236.62040436104553,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        7.408425090247637,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "session": "terminal_cal_P1/spectral_accel_20260327T011014Z",
+      "player": "Player 1",
+      "report_count": 419957,
+      "n_windows": 409,
+      "polling_rate_hz": 999.9,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.001729812336434362,
+        929.4165558010558,
+        1.0,
+        0.0,
+        0.0,
+        2.6956945293398533,
+        0.00039667714145808755,
+        3.2193574648906083,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "session": "terminal_cal_P1/stick_sweeps_20260327T000958Z",
+      "player": "Player 1",
+      "report_count": 419990,
+      "n_windows": 409,
+      "polling_rate_hz": 999.98,
+      "mean_vector": [
+        0.0,
+        0.001139304384334163,
+        0.0,
+        3319.2752725092882,
+        1.0,
+        0.2483531419087593,
+        0.24634017022941399,
+        0.09311965158924206,
+        0.00043058099537122366,
+        4.597422018027831,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "session": "terminal_cal_P1/touchpad_corners_20260327T031241Z",
+      "player": "Player 1",
+      "report_count": 60002,
+      "n_windows": 58,
+      "polling_rate_hz": 1000.02,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        573.3536305920832,
+        1.0,
+        0.035414394119690204,
+        0.017768201498507427,
+        0.0,
+        0.0,
+        4.750127159315964,
+        0.03493320197881154,
+        0.0,
+        1.5758205605991955
+      ]
+    },
+    {
+      "session": "terminal_cal_P1/touchpad_corners_20260327T230404Z",
+      "player": "Player 1",
+      "report_count": 60001,
+      "n_windows": 58,
+      "polling_rate_hz": 1000.01,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        6626.347675191945,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        3.9949126736871126,
+        0.04049142953855841,
+        0.0,
+        1.8688811125426457
+      ]
+    },
+    {
+      "session": "terminal_cal_P1/touchpad_corners_20260328T142201Z",
+      "player": "Player 1",
+      "report_count": 60002,
+      "n_windows": 58,
+      "polling_rate_hz": 1000.02,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        1627.309901270373,
+        1.0,
+        0.03219704073050927,
+        0.019816787548138405,
+        0.1515355603448276,
+        0.002249326428462719,
+        3.751405189777243,
+        0.06411600278875869,
+        0.0,
+        1.7987321363440876
+      ]
+    },
+    {
+      "session": "terminal_cal_P1/touchpad_freeform_20260327T030955Z",
+      "player": "Player 1",
+      "report_count": 120002,
+      "n_windows": 117,
+      "polling_rate_hz": 1000.01,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        1834.292600778433,
+        1.0,
+        0.037304708336153604,
+        0.03283030749895634,
+        3.5139556623931623,
+        0.0012820186969052013,
+        4.048873748534765,
+        0.047863266819841266,
+        0.0,
+        3.1549807282594533
+      ]
+    },
+    {
+      "session": "terminal_cal_P1/touchpad_freeform_20260327T230136Z",
+      "player": "Player 1",
+      "report_count": 120002,
+      "n_windows": 117,
+      "polling_rate_hz": 1000.01,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        12995.06083600949,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        4.049221203877376,
+        0.03283785922556288,
+        0.0,
+        3.1414291603952393
+      ]
+    },
+    {
+      "session": "terminal_cal_P1/touchpad_freeform_20260328T141850Z",
+      "player": "Player 1",
+      "report_count": 120002,
+      "n_windows": 117,
+      "polling_rate_hz": 1000.01,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        4999.322641030336,
+        1.0,
+        0.004524872853205754,
+        0.0032596178034431916,
+        4.382011217948718,
+        0.0006999794202737319,
+        4.017237585833949,
+        0.062370846606256816,
+        0.0,
+        3.3705613957001614
+      ]
+    },
+    {
+      "session": "terminal_cal_P1/touchpad_swipes_20260327T030742Z",
+      "player": "Player 1",
+      "report_count": 120002,
+      "n_windows": 117,
+      "polling_rate_hz": 999.8,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        3432.5341219127686,
+        1.0,
+        0.010113121862085456,
+        0.004434255580616812,
+        0.0,
+        0.0,
+        5.3281408701187525,
+        0.011282404467072875,
+        0.0,
+        0.9586288267985369
+      ]
+    },
+    {
+      "session": "terminal_cal_P1/touchpad_swipes_20260327T225535Z",
+      "player": "Player 1",
+      "report_count": 120002,
+      "n_windows": 117,
+      "polling_rate_hz": 1000.01,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        9360.45391713656,
+        1.0,
+        0.004670317865844466,
+        0.0035415307069436098,
+        0.0,
+        0.0,
+        3.9473198886610503,
+        0.030305023890595095,
+        0.0,
+        1.821082464650146
+      ]
+    },
+    {
+      "session": "terminal_cal_P1/touchpad_swipes_20260328T141624Z",
+      "player": "Player 1",
+      "report_count": 120002,
+      "n_windows": 117,
+      "polling_rate_hz": 1000.01,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        8465.277520204201,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        4.230776546347855,
+        0.023841575987922466,
+        0.0,
+        1.562567942417585
+      ]
+    },
+    {
+      "session": "terminal_cal_P1/trigger_rhythm_20260326T234937Z",
+      "player": "Player 1",
+      "report_count": 419983,
+      "n_windows": 409,
+      "polling_rate_hz": 999.96,
+      "mean_vector": [
+        0.0,
+        0.013838571639763405,
+        0.015776699714016507,
+        11655.651421768449,
+        1.932097566958453,
+        0.022232825023037882,
+        0.011853048555133978,
+        0.0,
+        0.0,
+        5.778990436591263,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "session": "terminal_cal_P2/button_sequence_20260327T021315Z",
+      "player": "Player 2",
+      "report_count": 419977,
+      "n_windows": 409,
+      "polling_rate_hz": 999.94,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.12740414948510073,
+        2316.194398185152,
+        1.0,
+        0.0028629141215298754,
+        0.002167789670832291,
+        15.328927261613693,
+        8.646315099433245e-05,
+        6.091449257797017,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "session": "terminal_cal_P2/natural_grip_20260327T015604Z",
+      "player": "Player 2",
+      "report_count": 419920,
+      "n_windows": 409,
+      "polling_rate_hz": 999.81,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        1372.2701503222029,
+        1.0,
+        0.0,
+        0.0,
+        2.841343215158924,
+        7.118045652403626e-05,
+        4.569558561576899,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "session": "terminal_cal_P2/natural_grip_20260329T032252Z",
+      "player": "Player 2",
+      "report_count": 21162,
+      "n_windows": 20,
+      "polling_rate_hz": 999.99,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        1990.6133117675781,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        3.8655080080032347,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "session": "terminal_cal_P2/resting_baseline_20260327T015045Z",
+      "player": "Player 2",
+      "report_count": 300002,
+      "n_windows": 292,
+      "polling_rate_hz": 999.88,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        589.9547750394638,
+        1.0,
+        0.0017791996671728892,
+        0.0010680237861528789,
+        0.010033176369863013,
+        0.000187296586187735,
+        6.46433493290862,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "session": "terminal_cal_P2/resting_baseline_20260329T031701Z",
+      "player": "Player 2",
+      "report_count": 299940,
+      "n_windows": 292,
+      "polling_rate_hz": 999.75,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        178.7266070483482,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        7.645375375061819,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "session": "terminal_cal_P2/spectral_accel_20260327T022944Z",
+      "player": "Player 2",
+      "report_count": 419881,
+      "n_windows": 409,
+      "polling_rate_hz": 999.72,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        652.3415868334782,
+        1.0,
+        0.0,
+        0.0,
+        80.020820599022,
+        0.0011016531502407545,
+        3.65490768299709,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "session": "terminal_cal_P2/stick_sweeps_20260327T022131Z",
+      "player": "Player 2",
+      "report_count": 419997,
+      "n_windows": 409,
+      "polling_rate_hz": 999.99,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        1117.3689120416245,
+        1.0,
+        0.13763803614629092,
+        0.12640480002761798,
+        11.06213707212714,
+        0.0059264723984770815,
+        5.36713389895656,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "session": "terminal_cal_P2/touchpad_corners_20260328T003556Z",
+      "player": "Player 2",
+      "report_count": 60002,
+      "n_windows": 58,
+      "polling_rate_hz": 1000.02,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        8802.109600428877,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        4.185143643412097,
+        0.0202593462439393,
+        0.0,
+        1.191514399031113
+      ]
+    },
+    {
+      "session": "terminal_cal_P2/touchpad_corners_20260328T153820Z",
+      "player": "Player 2",
+      "report_count": 60002,
+      "n_windows": 58,
+      "polling_rate_hz": 1000.03,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        8393.251023868035,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        3.987216883692248,
+        0.03893533888850502,
+        0.0,
+        1.8325338055347573
+      ]
+    },
+    {
+      "session": "terminal_cal_P2/touchpad_corners_20260329T010156Z",
+      "player": "Player 2",
+      "report_count": 60002,
+      "n_windows": 58,
+      "polling_rate_hz": 1000.02,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        6880.510823545785,
+        1.0,
+        0.008184305552778572,
+        0.004799491886434884,
+        0.1515355603448276,
+        0.0009322703398507217,
+        4.065271299460838,
+        0.0655712526169172,
+        0.0,
+        2.240187231836648
+      ]
+    },
+    {
+      "session": "terminal_cal_P2/touchpad_freeform_20260328T003347Z",
+      "player": "Player 2",
+      "report_count": 120002,
+      "n_windows": 117,
+      "polling_rate_hz": 1000.01,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        8566.553574782152,
+        1.0,
+        0.003466651480422061,
+        0.0025981379370404105,
+        3.714276175213675,
+        0.0007713746844639635,
+        4.697971973663721,
+        0.017782608996857848,
+        0.0,
+        2.88145408518294
+      ]
+    },
+    {
+      "session": "terminal_cal_P2/touchpad_freeform_20260328T153604Z",
+      "player": "Player 2",
+      "report_count": 120002,
+      "n_windows": 117,
+      "polling_rate_hz": 1000.02,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.003507663042117388,
+        4190.332328062791,
+        1.0,
+        0.0,
+        0.0,
+        1.4105902777777777,
+        0.001134927758676374,
+        3.9284865020686746,
+        0.04402953266906433,
+        0.0,
+        3.4088835909835296
+      ]
+    },
+    {
+      "session": "terminal_cal_P2/touchpad_freeform_20260329T005231Z",
+      "player": "Player 2",
+      "report_count": 120002,
+      "n_windows": 117,
+      "polling_rate_hz": 1000.01,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        11433.115278977613,
+        1.0,
+        0.04994133114814758,
+        0.04498710464208554,
+        0.0,
+        0.0,
+        3.971660925791814,
+        0.05165584854638347,
+        0.0,
+        3.9431668306008363
+      ]
+    },
+    {
+      "session": "terminal_cal_P2/touchpad_swipes_20260328T003136Z",
+      "player": "Player 2",
+      "report_count": 120003,
+      "n_windows": 117,
+      "polling_rate_hz": 999.69,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        16110.033505822857,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        3.7641055634898,
+        0.0026761984077843873,
+        0.0,
+        0.7116151567962434
+      ]
+    },
+    {
+      "session": "terminal_cal_P2/touchpad_swipes_20260328T153354Z",
+      "player": "Player 2",
+      "report_count": 120001,
+      "n_windows": 117,
+      "polling_rate_hz": 1000.0,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        6005.962911198282,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        4.004669511420095,
+        0.014253426005385188,
+        0.0,
+        1.2528230257523365
+      ]
+    },
+    {
+      "session": "terminal_cal_P2/touchpad_swipes_20260329T005021Z",
+      "player": "Player 2",
+      "report_count": 120002,
+      "n_windows": 117,
+      "polling_rate_hz": 1000.01,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        293.8798112787752,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        7.378381672068539,
+        0.006686686466519649,
+        0.0,
+        0.24384887299985966
+      ]
+    },
+    {
+      "session": "terminal_cal_P2/trigger_rhythm_20260327T020442Z",
+      "player": "Player 2",
+      "report_count": 419982,
+      "n_windows": 409,
+      "polling_rate_hz": 999.96,
+      "mean_vector": [
+        0.0,
+        0.008663416821919472,
+        0.011104673462576053,
+        5101.361399216873,
+        1.6183501467800956,
+        0.0,
+        0.0,
+        4.321706907090465,
+        0.00012488989671806107,
+        6.176179485973927,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "session": "terminal_cal_P3/button_sequence_20260328T014042Z",
+      "player": "Player 3",
+      "report_count": 419979,
+      "n_windows": 409,
+      "polling_rate_hz": 999.95,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        160.72355605221028,
+        1.0,
+        0.0,
+        0.0,
+        0.7139173288508558,
+        0.0002723450312495669,
+        4.522847419846029,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "session": "terminal_cal_P3/natural_grip_20260328T005708Z",
+      "player": "Player 3",
+      "report_count": 419868,
+      "n_windows": 409,
+      "polling_rate_hz": 999.68,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        3837.058849400005,
+        1.0,
+        0.0013180541234377836,
+        0.0007203418060153504,
+        1.860005348410758,
+        8.842684977521668e-06,
+        4.3262781543078805,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "session": "terminal_cal_P3/natural_grip_20260328T012401Z",
+      "player": "Player 3",
+      "report_count": 419891,
+      "n_windows": 409,
+      "polling_rate_hz": 999.74,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        4194.619377140894,
+        1.0,
+        0.001787994412163359,
+        0.0005760512754211798,
+        7.7313187652811735,
+        9.927145273025379e-05,
+        4.080939809238415,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "session": "terminal_cal_P3/resting_baseline_20260328T003917Z",
+      "player": "Player 3",
+      "report_count": 299971,
+      "n_windows": 292,
+      "polling_rate_hz": 999.9,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        127.35113355558212,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        7.882876187154691,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "session": "terminal_cal_P3/resting_baseline_20260328T011813Z",
+      "player": "Player 3",
+      "report_count": 300002,
+      "n_windows": 292,
+      "polling_rate_hz": 999.87,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        123.65643801754469,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        7.89216604624709,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "session": "terminal_cal_P3/spectral_accel_20260328T015847Z",
+      "player": "Player 3",
+      "report_count": 419961,
+      "n_windows": 409,
+      "polling_rate_hz": 999.91,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        4341.333050669551,
+        1.0,
+        0.0006705133431115185,
+        0.0004423372538573585,
+        0.0,
+        0.0,
+        3.46884029302154,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "session": "terminal_cal_P3/stick_sweeps_20260328T014814Z",
+      "player": "Player 3",
+      "report_count": 419949,
+      "n_windows": 409,
+      "polling_rate_hz": 999.88,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        1983.098183312451,
+        1.0,
+        0.06190051855223395,
+        0.05979740437493639,
+        8.34017802567237,
+        0.003959719543517031,
+        4.888778446938997,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "session": "terminal_cal_P3/touchpad_corners_20260327T232204Z",
+      "player": "Player 3",
+      "report_count": 60002,
+      "n_windows": 58,
+      "polling_rate_hz": 1000.02,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        4172.073916205044,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        4.174230526233542,
+        0.016516090570352426,
+        0.0,
+        0.9851257613506811
+      ]
+    },
+    {
+      "session": "terminal_cal_P3/touchpad_corners_20260328T161059Z",
+      "player": "Player 3",
+      "report_count": 60002,
+      "n_windows": 58,
+      "polling_rate_hz": 1000.03,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        544.0922226741396,
+        1.0,
+        0.020272245694851053,
+        0.009799484291981006,
+        0.0,
+        0.0,
+        2.686186375289128,
+        0.025383769935242998,
+        0.0,
+        1.5302456989884377
+      ]
+    },
+    {
+      "session": "terminal_cal_P3/touchpad_freeform_20260327T231922Z",
+      "player": "Player 3",
+      "report_count": 120002,
+      "n_windows": 117,
+      "polling_rate_hz": 1000.01,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        12192.918687347674,
+        1.0,
+        0.0,
+        0.0,
+        0.10016025641025642,
+        0.000802085237402437,
+        3.870679609795921,
+        0.021804633445373107,
+        0.0,
+        2.8458574638407454
+      ]
+    },
+    {
+      "session": "terminal_cal_P3/touchpad_freeform_20260328T160809Z",
+      "player": "Player 3",
+      "report_count": 120003,
+      "n_windows": 117,
+      "polling_rate_hz": 1000.02,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        9466.566619840443,
+        1.0,
+        0.0,
+        0.0,
+        0.04173344017094017,
+        2.205507973065743e-05,
+        2.2266873899433346,
+        0.03197834211921592,
+        0.0,
+        2.664807588626177
+      ]
+    },
+    {
+      "session": "terminal_cal_P3/touchpad_swipes_20260327T231705Z",
+      "player": "Player 3",
+      "report_count": 120002,
+      "n_windows": 117,
+      "polling_rate_hz": 999.68,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        2716.8707476232807,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        4.185155187916552,
+        0.0011850551133120101,
+        0.0,
+        0.47845229625892943
+      ]
+    },
+    {
+      "session": "terminal_cal_P3/touchpad_swipes_20260328T160459Z",
+      "player": "Player 3",
+      "report_count": 120002,
+      "n_windows": 117,
+      "polling_rate_hz": 1000.01,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        6542.274094410432,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        3.919443760162745,
+        0.011040728941979123,
+        0.0,
+        0.9901489908369179
+      ]
+    },
+    {
+      "session": "terminal_cal_P3/trigger_rhythm_20260328T011017Z",
+      "player": "Player 3",
+      "report_count": 80058,
+      "n_windows": 78,
+      "polling_rate_hz": 1000.0,
+      "mean_vector": [
+        0.0,
+        0.008038853742898656,
+        0.007978935427486133,
+        1553.999149224697,
+        2.0149658903097496,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        4.375288526217143,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "session": "terminal_cal_P3/trigger_rhythm_20260328T013207Z",
+      "player": "Player 3",
+      "report_count": 419971,
+      "n_windows": 409,
+      "polling_rate_hz": 999.93,
+      "mean_vector": [
+        0.0,
+        0.008560208928222542,
+        0.007057327468603995,
+        15690.850573029087,
+        1.977420292466806,
+        0.0,
+        0.0,
+        2.196668704156479,
+        1.4715864576973149e-05,
+        5.995488462937781,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "session": "terminal_cal_P4/touchpad_corners_20260329T032924Z",
+      "player": "Player 4",
+      "report_count": 60002,
+      "n_windows": 58,
+      "polling_rate_hz": 1000.03,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        3160.524128880994,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        4.54653472735964,
+        0.0067873179283698595,
+        0.0,
+        0.53583713029993
+      ]
+    },
+    {
+      "session": "terminal_cal_P4/touchpad_freeform_20260329T032705Z",
+      "player": "Player 4",
+      "report_count": 120002,
+      "n_windows": 117,
+      "polling_rate_hz": 1000.01,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        10668.895844027527,
+        1.0,
+        0.012115825190503374,
+        0.008567029594356177,
+        0.0,
+        0.0,
+        3.9916766178913607,
+        0.04066830521671954,
+        0.0,
+        3.4646859540898576
+      ]
+    },
+    {
+      "session": "terminal_cal_P4/touchpad_swipes_20260329T032458Z",
+      "player": "Player 4",
+      "report_count": 120002,
+      "n_windows": 117,
+      "polling_rate_hz": 1000.01,
+      "mean_vector": [
+        0.0,
+        0.0,
+        0.0,
+        2807.0783092466177,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        4.701946963611831,
+        0.010321498895009691,
+        0.0,
+        0.7906758831097529
       ]
     }
   ],
   "global_covariance": [
     [
-      2220.7745826681485,
-      1.8667277114248265e-06,
-      0.05663366818153964,
-      2.7530208226696647e-05,
-      2.6717477678932818e-05,
-      2.4872002400060787e-05,
-      -0.0007294662842594185,
-      1.6378762442832805e-06
+      2927.9334289586436,
+      4.12619760557862e-06,
+      1.28776852118068,
+      0.00030040985259918154,
+      2.381557408040498e-05,
+      2.144965179838503e-05,
+      -0.0010436664082247703,
+      9.939997444845226e-07,
+      0.00029409185388350114,
+      -6.381733760541177e-06,
+      -0.0004216587300309789
     ],
     [
-      1.8667277114248265e-06,
-      2220.7745967757733,
-      1.5720649741061061,
-      0.00014914176155569005,
-      0.00010672987503240862,
-      0.000105669760577566,
-      -0.003865036638292829,
-      7.579737920514217e-06
+      4.12619760557862e-06,
+      2927.9335762366823,
+      -1.2900380562864793,
+      0.00033213623838063583,
+      4.861434635828309e-05,
+      4.8989976262719714e-05,
+      0.011531165478090381,
+      4.2554001299046895e-06,
+      0.0017580957991121795,
+      -2.2624210199870353e-05,
+      -0.0014793316081930978
     ],
     [
-      0.05663366818153964,
-      1.5720649741061061,
-      22209868.02812793,
-      -22.247298025531965,
-      120.64510351136101,
-      107.72463520939051,
-      -10762.863772726845,
-      -1.5508950563445658
+      1.28776852118068,
+      -1.2900380562864793,
+      29282147.591229945,
+      55.59331899562829,
+      141.45602060385363,
+      126.42888442044274,
+      -11226.130289286724,
+      1.52209031212125,
+      -768.0454935557265,
+      -4.11624579406634,
+      107.33647894514543
     ],
     [
-      2.7530208226696647e-05,
-      0.00014914176155569005,
-      -22.247298025531965,
-      2220.777233422214,
-      0.001016503066437403,
-      0.0010422152490600833,
-      -0.032288330380094356,
-      0.00010745634716465944
+      0.00030040985259918154,
+      0.00033213623838063583,
+      55.59331899562829,
+      2927.9625896979633,
+      -0.0006840002274290093,
+      -0.0005508823225013447,
+      -0.06401031809377083,
+      3.626193408721279e-05,
+      0.02139098097245746,
+      -0.0003570562902509818,
+      -0.023591692719571292
     ],
     [
-      2.6717477678932818e-05,
-      0.00010672987503240862,
-      120.64510351136101,
-      0.001016503066437403,
-      2220.7792209240392,
-      0.004119409590135767,
-      -0.13697074001896767,
-      0.0001060428702885462
+      2.381557408040498e-05,
+      4.861434635828309e-05,
+      141.45602060385363,
+      -0.0006840002274290093,
+      2927.940496947913,
+      0.00636506581078735,
+      -0.10390946478427673,
+      0.00018339799524269885,
+      0.0015515200050595518,
+      -0.00048186346305660615,
+      -0.03259090483782438
     ],
     [
-      2.4872002400060787e-05,
-      0.000105669760577566,
-      107.72463520939051,
-      0.0010422152490600833,
-      0.004119409590135767,
-      2220.778271966282,
-      -0.1212716597903056,
-      9.986027817813195e-05
+      2.144965179838503e-05,
+      4.8989976262719714e-05,
+      126.42888442044274,
+      -0.0005508823225013447,
+      0.00636506581078735,
+      2927.9391800445924,
+      -0.0907139546994359,
+      0.00016768057289590787,
+      0.0016439415249398675,
+      -0.00044198656758497886,
+      -0.02955940129700243
     ],
     [
-      -0.0007294662842594185,
-      -0.003865036638292829,
-      -10762.863772726845,
-      -0.032288330380094356,
-      -0.13697074001896767,
-      -0.1212716597903056,
-      2319.32819191776,
-      -0.0016886871938759055
+      -0.0010436664082247703,
+      0.011531165478090381,
+      -11226.130289286724,
+      -0.06401031809377083,
+      -0.10390946478427673,
+      -0.0907139546994359,
+      3040.6556769863505,
+      -0.0005117319217432833,
+      0.3074478764567698,
+      -0.011984539631463289,
+      -0.7634804750060302
     ],
     [
-      1.6378762442832805e-06,
-      7.579737920514217e-06,
-      -1.5508950563445658,
-      0.00010745634716465944,
-      0.0001060428702885462,
-      9.986027817813195e-05,
-      -0.0016886871938759055,
-      2220.7745912446667
+      9.939997444845226e-07,
+      4.2554001299046895e-06,
+      1.52209031212125,
+      3.626193408721279e-05,
+      0.00018339799524269885,
+      0.00016768057289590787,
+      -0.0005117319217432833,
+      2927.9334343010787,
+      -6.367987109007708e-05,
+      -1.3383226090394718e-05,
+      -0.0009280333909897291
+    ],
+    [
+      0.00029409185388350114,
+      0.0017580957991121795,
+      -768.0454935557265,
+      0.02139098097245746,
+      0.0015515200050595518,
+      0.0016439415249398675,
+      0.3074478764567698,
+      -6.367987109007708e-05,
+      2928.839329052187,
+      -0.00555792168337662,
+      -0.3693304919870406
+    ],
+    [
+      -6.381733760541177e-06,
+      -2.2624210199870353e-05,
+      -4.11624579406634,
+      -0.0003570562902509818,
+      -0.00048186346305660615,
+      -0.00044198656758497886,
+      -0.011984539631463289,
+      -1.3383226090394718e-05,
+      -0.00555792168337662,
+      2927.9336578318503,
+      0.013278229349129759
+    ],
+    [
+      -0.0004216587300309789,
+      -0.0014793316081930978,
+      107.33647894514543,
+      -0.023591692719571292,
+      -0.03259090483782438,
+      -0.02955940129700243,
+      -0.7634804750060302,
+      -0.0009280333909897291,
+      -0.3693304919870406,
+      0.013278229349129759,
+      2928.854467382364
     ]
-  ]
+  ],
+  "battery_stratified_results": {}
 }

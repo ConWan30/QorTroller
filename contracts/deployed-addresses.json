@@ -72,5 +72,13 @@
   "VAPIVerifiedHumanProof": "0xD3B2E259A4B69EF08e263e3A57B2507B7eac3dcF",
   "VAPIVerifiedHumanProofBridge": "0xEb0b6a62b0cd765878250eae3CfFE4a3b67Dd8D8",
   "_phase99c_note": "Phase 99C: VHP ERC-4671 soulbound + LayerZero V2 OApp — first cross-chain physiological humanity credential",
-  "_phase99c_status": "LIVE (testnet)"
+  "_phase99c_status": "LIVE (testnet)",
+  "AdjudicationRegistry": "0x44CF981f46a52ADE56476Ce894255954a7776fb4",
+  "_phase111_note": "Phase 111: AdjudicationRegistry — PoAd hash anchor; on-chain anchoring from bridge deferred to Phase 112",
+  "_phase111_status": "LIVE (testnet)",
+  "_phase112_note": "Phase 112: PoAdAnchorAgent activated — bridge polls poad_registry_log and calls chain.record_adjudication(); poad_on_chain_enabled=False default",
+  "_phase112_status": "CODE COMPLETE (POAD_ON_CHAIN_ENABLED=true + real AdjudicationRegistry address required to activate)",
+  "VAPIDualPrimitiveGate": "0xd7b1465Aad8F815C67b24681c9c022CED24FB876",
+  "_phase113_note": "Phase 113: VAPIDualPrimitiveGate — dual-primitive composability gate (PoAC + PoAd)",
+  "_phase113_status": "LIVE (testnet)"
 }
