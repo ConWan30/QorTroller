@@ -649,6 +649,16 @@ Chain link hash = SHA-256(raw[0:164]) — 164-byte body only, NOT full 228 bytes
 Hard codes {0x28, 0x29, 0x2A} block tournament eligibility.
 L2C returns None in dead-zone stick games (NCAA CFB 26) — 0.10 weight resolves to 0.5 neutral prior.
 
+## Calibration Corpus State (2026-03-29)
+
+- Total session files: N≥127 (127 found by terminal analysis runner 2026-03-29)
+  - Player 1: ~104 sessions (hw_005–hw_078 original + terminal_cal_P1 additional)
+  - Player 2: 20 sessions captured 2026-03-29 (terminal_cal_P2; includes touchpad_corners_20260329T203046Z.json — FIRST structured touchpad data for P2)
+  - Player 3: remaining sessions
+- Corpus imbalance: P1-dominant; balanced-corpus analysis pending (WIF-007)
+- Touchpad coverage: 22% across P1 sessions; P2 touchpad_corners NOW CAPTURED; P3 pending
+- Separation ratio: 0.362 (stored; computed on old corpus — re-run analysis after P2/P3 balanced)
+
 ## L4 Calibration State (Phase 57, N=74)
 
 - Calibration corpus: hw_005–hw_078 (N=74 including newer tremor/touchpad sessions)
