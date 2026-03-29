@@ -1694,7 +1694,9 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             from fastapi import HTTPException as _HTTPException
             try:
                 from .ioswarm_vhp_mint_coordinator import IoSwarmVHPMintCoordinator
-                _mint_auth = IoSwarmVHPMintCoordinator(cfg=cfg, store=store).authorize(
+                from .ioswarm_live_node_client import IoSwarmLiveNodeClient as _ILNC131m
+                _live_client_m = _ILNC131m(cfg=cfg, store=store)
+                _mint_auth = IoSwarmVHPMintCoordinator(cfg=cfg, store=store, live_client=_live_client_m).authorize(
                     device_id=device_id,
                     consecutive_clean=int(consecutive_clean),
                     recent_block_count=_get_recent_block_count(store, device_id),
@@ -1719,6 +1721,101 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                         "message": str(_exc),
                     },
                 ) from _exc
+
+        # Gate condition 5: dual-primitive eligibility (only when enabled)
+        if getattr(cfg, "dual_primitive_gate_enabled", False):
+            import hashlib as _hl114
+            import time as _time115
+            _poad_hash_114 = store.get_latest_poad_hash_for_device(device_id)
+            if not _poad_hash_114:
+                from fastapi import HTTPException as _HTTPException
+                raise _HTTPException(
+                    status_code=422,
+                    detail={"error": "dual_primitive_gate: no PoAd hash found for device — run adjudication first"},
+                )
+            _device_hash_114 = _hl114.sha256(device_id.encode()).hexdigest()
+            try:
+                _dual = await chain.is_dual_eligible(_device_hash_114, _poad_hash_114)
+            except Exception as _exc_dual:
+                _dual = {"eligible": False, "poac_valid": False, "poad_valid": False}
+            # Phase 115: epoch-window staleness check (sub-check of gate 5)
+            # Phase 118: per-device override takes precedence over global window
+            _poad_age_s = -1.0
+            _epoch_ok = True
+            if getattr(cfg, "epoch_window_enabled", False):
+                _ts_ns = store.get_poad_ts_ns_for_device(device_id)
+                if _ts_ns is not None:
+                    _poad_age_s = (_time115.time_ns() - _ts_ns) / 1e9
+                    _dev_override = store.get_device_epoch_override(device_id)
+                    _epoch_win = _dev_override if _dev_override is not None else float(getattr(cfg, "epoch_window_seconds", 86400))
+                    _epoch_ok = _poad_age_s <= _epoch_win
+                    # Phase 119: increment use_count when override is active + gate passes
+                    if _dev_override is not None and _epoch_ok:
+                        try:
+                            store.increment_override_use_count(device_id)
+                        except Exception:
+                            pass  # non-blocking
+                else:
+                    _epoch_ok = False
+                    _poad_age_s = -1.0
+            store.insert_vhp_dual_gate_log(
+                device_id=device_id,
+                poad_hash=_poad_hash_114,
+                eligible=_dual["eligible"],
+                poac_valid=_dual["poac_valid"],
+                poad_valid=_dual["poad_valid"],
+                mint_allowed=_dual["eligible"] and _epoch_ok,
+                poad_age_seconds=_poad_age_s,
+                epoch_window_ok=_epoch_ok,
+            )
+            if not _dual["eligible"]:
+                from fastapi import HTTPException as _HTTPException
+                raise _HTTPException(
+                    status_code=422,
+                    detail={
+                        "error":      "dual_primitive_gate: not eligible",
+                        "poac_valid": _dual["poac_valid"],
+                        "poad_valid": _dual["poad_valid"],
+                    },
+                )
+            if not _epoch_ok:
+                from fastapi import HTTPException as _HTTPException
+                raise _HTTPException(
+                    status_code=422,
+                    detail={
+                        "error":           "epoch_window: PoAd too old",
+                        "poad_age_seconds": _poad_age_s,
+                        "epoch_window_seconds": float(getattr(cfg, "epoch_window_seconds", 86400)),
+                    },
+                )
+
+        # Phase 122: confidence_score multiplier from battery-stratified separation ratio
+        _multiplier_enabled = getattr(cfg, "confidence_multiplier_enabled", False)
+        _original_score = confidence_score
+        _multiplier = 1.0
+        _bt_strat_ratio_122 = -1.0
+        if _multiplier_enabled:
+            try:
+                _snaps122 = store.get_separation_ratio_status(limit=1)
+                _bt_strat_ratio_122 = (
+                    _snaps122[0].get("bt_strat_ratio", -1.0) if _snaps122 else -1.0
+                )
+                if _bt_strat_ratio_122 >= 0:
+                    _floor122 = float(getattr(cfg, "confidence_multiplier_floor", 0.0))
+                    _multiplier = max(_floor122, min(1.0, _bt_strat_ratio_122))
+                    confidence_score = max(0, int(_original_score * _multiplier))
+                    try:
+                        store.insert_confidence_multiplier_log(
+                            device_id=device_id,
+                            original_score=_original_score,
+                            multiplier=_multiplier,
+                            final_score=confidence_score,
+                            bt_strat_ratio=_bt_strat_ratio_122,
+                        )
+                    except Exception:
+                        pass  # non-blocking
+            except Exception:
+                pass  # non-blocking — multiplier failure must not block mint
 
         # Mint on-chain
         try:
@@ -1750,6 +1847,8 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "to_address": to_address,
             "consecutive_clean": consecutive_clean,
             "confidence_score": confidence_score,
+            "pre_multiplier_score": _original_score,
+            "confidence_multiplier": round(_multiplier, 4),
             "timestamp": time.time(),
         }
 
@@ -2088,6 +2187,21 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             if blocking:
                 result["error"] = f"preconditions_not_met: {blocking}"
                 return result
+            # Phase 127: Check P0 preflight conditions before activation
+            _preflight_logs = store.get_tournament_preflight_status(limit=1)
+            if _preflight_logs:
+                _latest_pf = _preflight_logs[0]
+                _p0_fails = []
+                if not _latest_pf.get("separation_ok", False):
+                    _p0_fails.append("separation_ratio_below_1.0")
+                if not _latest_pf.get("l4_ok", False):
+                    _p0_fails.append("l4_calibration_stale")
+                if _p0_fails:
+                    result["error"] = (
+                        f"preflight_p0_blocked: {_p0_fails}. "
+                        f"Run POST /agent/run-tournament-preflight first."
+                    )
+                    return result
             # Step 3: persist
             op_hash = _hl.sha256(api_key.encode()).hexdigest()[:16]
             store.set_activation_committed(committed_by=op_hash, notes=notes or "commit-activation")
@@ -2274,6 +2388,688 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         except Exception as exc:
             return {"fully_ready": False, "error": str(exc), "timestamp": time.time()}
 
+    # --- Phase 125: Per-Battery L4 Calibration Apply ---
+
+    @app.post("/agent/apply-l4-battery-calibration")
+    def apply_l4_battery_calibration(
+        api_key: str = Query(...),
+        battery_type: str = Query(..., description="Battery type (touchpad/trigger/button/gameplay)"),
+        anomaly_threshold: float = Query(..., description="L4 anomaly threshold [5.0, 15.0]"),
+        continuity_threshold: float = Query(..., description="L4 continuity threshold [3.0, 10.0]"),
+        n_sessions: int = Query(default=0, description="Number of calibration sessions used"),
+        calibration_feature_dim: "int | None" = Query(
+            default=None,
+            description="Feature dimension used for calibration (default: live_feature_dim)",
+        ),
+        notes: "str | None" = Query(default=None),
+    ):
+        """Phase 125 — Apply a per-battery L4 calibration result.
+
+        Inserts a track into l4_threshold_tracks (bounds enforced: anomaly [5.0, 15.0],
+        continuity [3.0, 10.0]) and logs the calibration run for audit traceability.
+
+        Also updates calibration_feature_dim in config to match live_feature_dim,
+        clearing the Phase 123 staleness flag when calibration_feature_dim == live_feature_dim.
+
+        Returns 422 if threshold bounds are violated (W1 threshold pollution protection).
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            live_dim = int(getattr(cfg, "live_feature_dim", 13))
+            cal_dim  = int(calibration_feature_dim) if calibration_feature_dim is not None else live_dim
+            import time as _t125
+            row_id = store.insert_l4_threshold_track(
+                battery_type=battery_type,
+                anomaly_threshold=anomaly_threshold,
+                continuity_threshold=continuity_threshold,
+                n_sessions=n_sessions,
+                calibrated_at=_t125.time(),
+                active=True,
+            )
+            run_id = store.insert_l4_battery_calibration_run(
+                battery_type=battery_type,
+                anomaly_threshold=anomaly_threshold,
+                continuity_threshold=continuity_threshold,
+                n_sessions=n_sessions,
+                calibration_feature_dim=cal_dim,
+                notes=notes,
+            )
+            # Update calibration_feature_dim in config to clear staleness flag
+            object.__setattr__(cfg, "calibration_feature_dim", cal_dim)
+            stale = int(getattr(cfg, "live_feature_dim", 13)) != cal_dim
+            return {
+                "track_id":               row_id,
+                "run_id":                 run_id,
+                "battery_type":           battery_type,
+                "anomaly_threshold":      round(anomaly_threshold, 4),
+                "continuity_threshold":   round(continuity_threshold, 4),
+                "n_sessions":             n_sessions,
+                "calibration_feature_dim": cal_dim,
+                "stale":                  stale,
+                "timestamp":              _t125.time(),
+            }
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # --- Phase 126: L4 Threshold Router Status ---
+
+    @app.get("/agent/l4-router-status")
+    def l4_router_status(api_key: str = Query(...)):
+        """Phase 126 — L4 per-battery threshold router status.
+
+        Returns lookup statistics from l4_threshold_router_log.
+        When l4_battery_threshold_enabled=True, the router selects per-battery
+        anomaly/continuity thresholds from l4_threshold_tracks for each session;
+        falls back to global 7.009/5.367 when no active track matches.
+
+        BehavioralArchaeologist Phase 126 constants: _WARMUP_COEFF=20_000 and
+        _BURST_CV_DIVISOR=2.0 are now named constants (previously inline magic numbers).
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t126
+        try:
+            enabled = bool(getattr(cfg, "l4_battery_threshold_enabled", False))
+            logs = store.get_l4_router_log(limit=1000)
+            total_lookups = len(logs)
+            per_battery_lookups = sum(
+                1 for e in logs if e.get("threshold_source") == "per_battery"
+            )
+            global_fallback_count = total_lookups - per_battery_lookups
+            last_battery_type = logs[0]["battery_type"] if logs else ""
+            last_source = logs[0]["threshold_source"] if logs else ""
+            return {
+                "l4_battery_threshold_enabled": enabled,
+                "total_lookups":                total_lookups,
+                "per_battery_lookups":          per_battery_lookups,
+                "global_fallback_count":        global_fallback_count,
+                "last_battery_type":            last_battery_type,
+                "last_source":                  last_source,
+                "timestamp":                    _t126.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # --- Phase 124: L4 Per-Battery Threshold Track Registry ---
+
+    @app.get("/agent/l4-threshold-tracks")
+    def l4_threshold_tracks(
+        api_key: str = Query(...),
+        battery_type: "str | None" = Query(default=None),
+        active_only: bool = Query(default=False),
+    ):
+        """Phase 124 — L4 per-battery threshold track registry.
+
+        Returns registered per-battery L4 threshold pairs. Operators insert tracks
+        after running threshold_calibrator.py per battery type against 13-feature corpus
+        (Phase 123 recalibration prerequisite). Default thresholds 7.009/5.367 (Phase 57)
+        apply globally when no per-battery track is active.
+
+        W1 mitigation: insert_l4_threshold_track enforces bounds [5.0–15.0] anomaly /
+        [3.0–10.0] continuity to prevent threshold pollution attacks.
+        W2: battery-adaptive VHP confidence score (per-battery bt_strat_ratio × per-battery
+        threshold quality) — Phase 125 candidate.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            enabled = bool(getattr(cfg, "l4_battery_threshold_enabled", False))
+            tracks = store.get_l4_threshold_tracks(
+                battery_type=battery_type, active_only=active_only
+            )
+            return {
+                "l4_battery_threshold_enabled": enabled,
+                "track_count":                  len(tracks),
+                "active_count":                 sum(1 for t in tracks if t["active"]),
+                "battery_types_tracked":        list({t["battery_type"] for t in tracks}),
+                "tracks":                       tracks,
+                "timestamp":                    time.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @app.post("/agent/l4-threshold-track")
+    def insert_l4_threshold_track(
+        api_key: str = Query(...),
+        battery_type: str = Query(...),
+        anomaly_threshold: float = Query(...),
+        continuity_threshold: float = Query(...),
+        n_sessions: int = Query(default=0),
+        calibrated_at: float = Query(default=0.0),
+    ):
+        """Phase 124 — Insert a per-battery L4 threshold track.
+
+        Bounds enforced: anomaly [5.0, 15.0]; continuity [3.0, 10.0].
+        Returns 422 if bounds violated (W1 threshold pollution protection).
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            row_id = store.insert_l4_threshold_track(
+                battery_type=battery_type,
+                anomaly_threshold=anomaly_threshold,
+                continuity_threshold=continuity_threshold,
+                n_sessions=n_sessions,
+                calibrated_at=calibrated_at,
+            )
+            return {
+                "id":                   row_id,
+                "battery_type":         battery_type,
+                "anomaly_threshold":    round(anomaly_threshold, 4),
+                "continuity_threshold": round(continuity_threshold, 4),
+                "n_sessions":           n_sessions,
+                "timestamp":            time.time(),
+            }
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # --- Phase 123: L4 Calibration Staleness Monitor ---
+
+    @app.get("/agent/l4-calibration-status")
+    def l4_calibration_status(api_key: str = Query(...)):
+        """Phase 123 — L4 Mahalanobis threshold calibration staleness monitor.
+
+        Reports whether the L4 thresholds (anomaly=7.009, continuity=5.367, Phase 57)
+        were calibrated on the same feature dimension as the live bridge uses.
+        Phase 57: calibration_feature_dim=12, N=74.
+        Phase 121: live_feature_dim=13 (_BIO_FEATURE_DIM expanded +touchpad_spatial_entropy).
+        stale=True when live_feature_dim != calibration_feature_dim.
+
+        W1 (Phase 123): Thresholds calibrated on 12-feature space are technically stale
+        against a 13-feature live system. Impact is bounded: index 12 is zero-variance
+        in hw_* sessions (auto-excluded from Mahalanobis), but touchpad-active sessions
+        will show drift once touchpad calibration sessions are collected.
+
+        Recalibration path: python scripts/threshold_calibrator.py sessions/*.json
+        then update CALIBRATION_FEATURE_DIM=13 + CALIBRATION_N_SESSIONS in env.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            live_dim   = int(getattr(cfg, "live_feature_dim", 13))
+            calib_dim  = int(getattr(cfg, "calibration_feature_dim", 12))
+            n_sessions = int(getattr(cfg, "calibration_n_sessions", 74))
+            calib_ts   = float(getattr(cfg, "calibration_timestamp", 0.0))
+            anomaly    = float(getattr(cfg, "l4_anomaly_threshold", 7.009))
+            continuity = float(getattr(cfg, "l4_continuity_threshold", 5.367))
+            stale      = live_dim != calib_dim
+            return {
+                "current_feature_dim":    live_dim,
+                "calibration_feature_dim": calib_dim,
+                "stale":                  stale,
+                "anomaly_threshold":      round(anomaly, 4),
+                "continuity_threshold":   round(continuity, 4),
+                "calibration_n_sessions": n_sessions,
+                "calibration_timestamp":  calib_ts,
+                "timestamp":              time.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # --- Phase 122: VHP Confidence Score Separation Ratio Multiplier Status ---
+
+    @app.get("/agent/confidence-score-multiplier-status")
+    def confidence_score_multiplier_status(api_key: str = Query(...)):
+        """Phase 122 — VHP confidence_score separation ratio multiplier status.
+
+        When confidence_multiplier_enabled=True, the confidence_score passed to
+        chain.mint_vhp() is multiplied by min(1.0, bt_strat_ratio) before minting.
+        This ensures the on-chain credential reflects actual identity-discrimination
+        confidence: a separation ratio of 0.60 downscales confidence_score to 60%
+        of its raw value, signaling the biometric uncertainty to downstream contracts.
+
+        Infrastructure-first: multiplier_enabled=False default (zero behavior change).
+        W2 for Phase 123: per-battery threshold tracks using bt_strat_ratio analytics.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            enabled = bool(getattr(cfg, "confidence_multiplier_enabled", False))
+            floor = float(getattr(cfg, "confidence_multiplier_floor", 0.0))
+            snaps = store.get_separation_ratio_status(limit=1)
+            bt_strat_ratio = snaps[0].get("bt_strat_ratio", -1.0) if snaps else -1.0
+            effective_multiplier = (
+                max(floor, min(1.0, bt_strat_ratio)) if bt_strat_ratio >= 0 else 1.0
+            )
+            log = store.get_confidence_multiplier_log(limit=5)
+            return {
+                "multiplier_enabled":    enabled,
+                "current_bt_strat_ratio": round(bt_strat_ratio, 4),
+                "effective_multiplier":  round(effective_multiplier, 4),
+                "floor":                 floor,
+                "log_count":             len(log),
+                "recent_applications":   log,
+                "timestamp":             time.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # --- Phase 121: Biometric Inter-Person Separation Ratio Status ---
+
+    @app.get("/agent/separation-ratio-status")
+    def separation_ratio_status(api_key: str = Query(...)):
+        """Phase 121 — Biometric inter-person separation ratio status.
+
+        Tournament deployment requires ratio > 1.0 (current: ~0.474 pooled).
+        Reads separation_ratio_current config field (Phase 108) and most recent
+        separation_ratio_snapshots entry. touchpad_spatial_entropy (Phase 121
+        feature index 12) improves separation by adding anatomical grip signature.
+        L4 threshold recalibration deferred to Phase 122.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            pooled = float(getattr(cfg, "separation_ratio_current", 0.362))
+            snapshots = store.get_separation_ratio_status(limit=1)
+            bt_strat = snapshots[0].get("bt_strat_ratio", -1.0) if snapshots else -1.0
+            tournament_ready = pooled >= 1.0
+            return {
+                "pooled_ratio":             round(pooled, 4),
+                "battery_stratified_ratio": round(bt_strat, 4) if bt_strat >= 0 else -1.0,
+                "tournament_blocker":       not tournament_ready,
+                "target_ratio":             1.0,
+                "gap_to_target":            round(max(0.0, 1.0 - pooled), 4),
+                "tournament_ready":         tournament_ready,
+                "timestamp":                time.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # --- Phase 120: Bluetooth Transport Foundation ---
+
+    @app.get("/agent/bt-transport-status")
+    def bt_transport_status(
+        api_key: str = Query(...),
+        limit: int = Query(10),
+    ):
+        """Phase 120 — BLE transport foundation status for DualShock Edge at 250 Hz.
+
+        Returns bt_transport_enabled, device_address, sampling_rate_hz, frames_received,
+        frames_dropped, avg_interval_ms, and recent session logs.
+
+        W1 INVARIANT: BT sessions must NOT use USB L4 thresholds (7.009/5.367).
+        bt_transport_enabled=False default (infrastructure-only until BT threshold track
+        calibrated).
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            enabled   = bool(getattr(cfg, "bt_transport_enabled", False))
+            address   = str(getattr(cfg, "bt_device_address", ""))
+            rate_hz   = int(getattr(cfg, "bt_sampling_rate_hz", 250))
+            logs      = store.get_bt_transport_status(limit=limit)
+            total_rx  = sum(r.get("frames_received", 0) for r in logs)
+            total_drop = sum(r.get("frames_dropped", 0) for r in logs)
+            avg_ms    = (
+                sum(r.get("avg_interval_ms", 0.0) for r in logs) / len(logs)
+                if logs else 0.0
+            )
+            return {
+                "bt_transport_enabled": enabled,
+                "device_address":       address,
+                "sampling_rate_hz":     rate_hz,
+                "frames_received":      total_rx,
+                "frames_dropped":       total_drop,
+                "avg_interval_ms":      round(avg_ms, 3),
+                "recent_sessions":      logs,
+                "timestamp":            time.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # --- Phase 119: Override Lifecycle Management ---
+
+    @app.get("/agent/epoch-window-override-status")
+    def epoch_window_override_status(api_key: str = Query(...)):
+        """Phase 119 — List all per-device epoch overrides with lifecycle fields.
+
+        Returns override_count, overrides_with_max_uses, and the full lifecycle list
+        (including max_uses, use_count, expires_at) so operators can audit which
+        overrides are ephemeral (auto-graduating) vs permanent.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            overrides = store.get_override_lifecycle_status()
+            with_max_uses = sum(1 for o in overrides if o.get("max_uses") is not None)
+            return {
+                "override_count":           len(overrides),
+                "overrides_with_max_uses":  with_max_uses,
+                "overrides":                overrides,
+                "epoch_window_enabled":     bool(getattr(cfg, "epoch_window_enabled", False)),
+                "timestamp":                time.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @app.delete("/agent/epoch-window-override")
+    def revoke_epoch_window_override(
+        api_key: str = Query(...),
+        device_id: str = Query(...),
+    ):
+        """Phase 119 — Revoke a per-device epoch window override.
+
+        Deletes the override for the given device_id. Subsequent Gate-5 evaluations
+        for this device revert to the global cfg.epoch_window_seconds.
+        Returns revoked=True if a row was deleted, revoked=False if none existed.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            revoked = store.delete_device_epoch_override(device_id)
+            return {
+                "device_id": device_id,
+                "revoked":   revoked,
+                "timestamp": time.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # --- Phase 118: Per-Device Epoch Window Overrides + Auto-Tune ---
+
+    @app.get("/agent/epoch-window-auto-tune")
+    def epoch_window_auto_tune(
+        api_key: str = Query(...),
+        top_n_overrides: int = Query(5),
+    ):
+        """Phase 118 — Epoch-window auto-tune advisor.
+
+        Analyzes fleet p95 distribution, recommends global fleet window,
+        and identifies top devices that need per-device overrides.
+        W1: cold-start devices (first check) show artificially large p95 —
+            auto-tune identifies them so operators can set generous overrides
+            instead of blocking them at gate activation.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            _analytics = store.get_epoch_window_analytics()
+            _devices = store.get_epoch_window_analytics_by_device()
+            _overrides = store.get_all_device_epoch_overrides()
+            _override_ids = {o["device_id"] for o in _overrides}
+            # Eligible devices: no override yet, high p95
+            _candidates = [
+                d for d in _devices if d["device_id"] not in _override_ids
+            ][:top_n_overrides]
+            return {
+                "epoch_window_enabled":      bool(getattr(cfg, "epoch_window_enabled", False)),
+                "current_window_seconds":    float(getattr(cfg, "epoch_window_seconds", 86400.0)),
+                "recommended_window_seconds": _analytics.get("recommended_window_seconds", 86400.0),
+                "fleet_p95_age_seconds":     _analytics.get("p95_age_seconds", -1.0),
+                "override_count":            len(_overrides),
+                "override_candidates":       _candidates,
+                "timestamp":                 time.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @app.post("/agent/epoch-window-override")
+    def set_epoch_window_override(
+        api_key: str = Query(...),
+        device_id: str = Query(...),
+        window_seconds: float = Query(...),
+        reason: str = Query(""),
+    ):
+        """Phase 118 — Set a per-device epoch window override.
+
+        Upserts an entry in per_device_epoch_overrides; subsequent Gate-5
+        evaluations for this device use override_window_seconds instead of
+        the global cfg.epoch_window_seconds.
+        Useful for cold-start devices or high-latency adjudication nodes.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            row_id = store.insert_device_epoch_override(
+                device_id=device_id,
+                window_seconds=window_seconds,
+                reason=reason,
+            )
+            return {
+                "device_id":              device_id,
+                "override_window_seconds": window_seconds,
+                "reason":                 reason,
+                "row_id":                 row_id,
+                "timestamp":              time.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # --- Phase 117: Per-Device Epoch Freshness Heatmap ---
+
+    @app.get("/agent/epoch-window-device-heatmap")
+    def epoch_window_device_heatmap_status(
+        api_key: str = Query(...),
+        limit_per_device: int = Query(100),
+        top_n: int = Query(20),
+    ):
+        """Phase 117 — Per-device epoch freshness heatmap sorted by p95 DESC.
+        Identifies which devices have the stalest PoAd anchors.
+        epoch_window_enabled=False by default (infrastructure-first).
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            devices = store.get_epoch_window_analytics_by_device(
+                limit_per_device=limit_per_device, top_n=top_n
+            )
+            return {
+                "epoch_window_enabled": bool(getattr(cfg, "epoch_window_enabled", False)),
+                "epoch_window_seconds": float(getattr(cfg, "epoch_window_seconds", 86400.0)),
+                "total_devices":        len(devices),
+                "devices":              devices,
+                "timestamp":            time.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # --- Phase 116: Epoch-Window Analytics ---
+
+    @app.get("/agent/epoch-window-analytics")
+    def epoch_window_analytics_status(
+        api_key: str = Query(...),
+        limit: int = Query(1000),
+    ):
+        """Phase 116 — Epoch-window analytics over Gate-5 poad_age_seconds.
+        Provides p50/p95/p99 age distribution + recommended epoch_window_seconds.
+        epoch_window_enabled=False by default (infrastructure-first).
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            analytics = store.get_epoch_window_analytics(limit=limit)
+            return {
+                "epoch_window_enabled":   bool(getattr(cfg, "epoch_window_enabled", False)),
+                "epoch_window_seconds":   float(getattr(cfg, "epoch_window_seconds", 86400.0)),
+                **analytics,
+                "timestamp": time.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # --- Phase 114: VHP Mint Dual-Primitive Gate log ---
+
+    @app.get("/agent/vhp-dual-gate-log")
+    def vhp_dual_gate_log_status(
+        api_key: str = Query(...),
+        device_id: "str | None" = Query(None),
+        limit: int = Query(20),
+    ):
+        """Phase 114 — VHP mint dual-primitive gate log (5th gate in /agent/mint-vhp).
+        dual_primitive_gate_enabled=False by default (infrastructure-first).
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            enabled = bool(getattr(cfg, "dual_primitive_gate_enabled", False))
+            logs    = store.get_vhp_dual_gate_log(device_id=device_id, limit=limit)
+            return {
+                "dual_primitive_gate_enabled": enabled,
+                "total_checks":      len(logs),
+                "eligible_count":    sum(1 for r in logs if r.get("eligible")),
+                "mint_allowed_count": sum(1 for r in logs if r.get("mint_allowed")),
+                "recent_logs":       logs,
+                "timestamp":         time.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # --- Phase 113: Dual-Primitive Composability Gate ---
+
+    @app.get("/agent/dual-primitive-status")
+    def dual_primitive_status(api_key: str = Query(...)):
+        """Phase 113 — VAPIDualPrimitiveGate status (PoAC + PoAd dual-primitive check)."""
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            enabled = bool(getattr(cfg, "dual_primitive_gate_enabled", False))
+            addr    = getattr(cfg, "dual_primitive_gate_address", "")
+            lens_addr = getattr(cfg, "protocol_lens_address",
+                                "0x1972bf756aFE0FFCfaF9842e2FbBb2B084352EAf")
+            adj_addr  = getattr(cfg, "adjudication_registry_address", "")
+            checks    = store.get_dual_eligibility_history(limit=100)
+            total     = len(checks)
+            eligible_count = sum(1 for c in checks if c.get("eligible"))
+            last_device = checks[0]["device_id"] if checks else None
+            return {
+                "dual_primitive_gate_enabled":   enabled,
+                "dual_primitive_gate_address":   addr,
+                "protocol_lens_address":         lens_addr,
+                "adjudication_registry_address": adj_addr,
+                "checks_total":                  total,
+                "checks_eligible":               eligible_count,
+                "last_check_device_id":          last_device,
+                "timestamp":                     time.time(),
+            }
+        except Exception:
+            return {
+                "dual_primitive_gate_enabled": False,
+                "dual_primitive_gate_address": "",
+                "protocol_lens_address": "",
+                "adjudication_registry_address": "",
+                "checks_total": 0,
+                "checks_eligible": 0,
+                "last_check_device_id": None,
+                "timestamp": time.time(),
+            }
+
+    @app.post("/agent/check-dual-eligibility")
+    async def check_dual_eligibility(
+        body: dict,
+        api_key: str = Query(...),
+    ):
+        """Phase 113 — Check dual-primitive eligibility (PoAC + PoAd) for a device+poad pair."""
+        _check_key(api_key)
+        _check_rate(api_key)
+        if not getattr(cfg, "dual_primitive_gate_enabled", False):
+            return {
+                "eligible": False, "poac_valid": False, "poad_valid": False,
+                "device_id": body.get("device_id", ""),
+                "error": "dual_primitive_gate disabled",
+                "timestamp": time.time(),
+            }
+        try:
+            import hashlib as _hl
+            device_id = body["device_id"]
+            poad_hash = body["poad_hash"]
+            device_id_hash_hex = _hl.sha256(device_id.encode()).hexdigest()
+            result = await chain.is_dual_eligible(device_id_hash_hex, poad_hash)
+            store.insert_dual_eligibility_check(
+                device_id=device_id,
+                poad_hash=poad_hash,
+                eligible=result["eligible"],
+                poac_valid=result["poac_valid"],
+                poad_valid=result["poad_valid"],
+            )
+            return {
+                "eligible":   result["eligible"],
+                "poac_valid": result["poac_valid"],
+                "poad_valid": result["poad_valid"],
+                "device_id":  device_id,
+                "timestamp":  time.time(),
+            }
+        except Exception as exc:
+            return {
+                "eligible": False, "poac_valid": False, "poad_valid": False,
+                "device_id": body.get("device_id", ""),
+                "error": str(exc),
+                "timestamp": time.time(),
+            }
+
+    @app.get("/agent/poad-anchor-status")
+    def poad_anchor_status(api_key: str = Query(...)):
+        """Phase 112 — PoAd on-chain anchor status (PoAdAnchorAgent + poad_registry_log)."""
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            enabled = bool(getattr(cfg, "poad_on_chain_enabled", False))
+            addr    = getattr(cfg, "adjudication_registry_address", "")
+            logs    = store.get_poad_registry_log(limit=100)
+            anchored_count = sum(1 for r in logs if r.get("on_chain_tx"))
+            pending_count  = sum(1 for r in logs if not r.get("on_chain_tx"))
+            last_tx = next(
+                (r["on_chain_tx"] for r in reversed(logs) if r.get("on_chain_tx")),
+                None,
+            )
+            return {
+                "poad_on_chain_enabled":           enabled,
+                "anchored_count":                  anchored_count,
+                "pending_count":                   pending_count,
+                "last_anchor_tx":                  last_tx,
+                "adjudication_registry_address":   addr,
+                "timestamp":                       time.time(),
+            }
+        except Exception as exc:
+            return {
+                "poad_on_chain_enabled": False,
+                "anchored_count": 0,
+                "pending_count": 0,
+                "last_anchor_tx": None,
+                "adjudication_registry_address": "",
+                "timestamp": time.time(),
+            }
+
+    @app.get("/agent/adjudication-registry-status")
+    def adjudication_registry_status(api_key: str = Query(...)):
+        """Phase 111 — PoAd Registry status (local poad_registry_log; on-chain anchoring Phase 112)."""
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            enabled  = bool(getattr(cfg, "poad_registry_enabled", False))
+            addr     = getattr(cfg, "adjudication_registry_address", "")
+            logs     = store.get_poad_registry_log(limit=100)
+            total    = len(logs)
+            dv_count = sum(1 for r in logs if r.get("dual_veto"))
+            chain_count = sum(1 for r in logs if r.get("on_chain_tx"))
+            composable  = bool(addr and enabled)
+            return {
+                "poad_registry_enabled":       enabled,
+                "total_poad_count":            total,
+                "dual_veto_poad_count":        dv_count,
+                "on_chain_anchor_count":       chain_count,
+                "recent_poad_logs":            store.get_poad_registry_log(limit=10),
+                "adjudication_registry_address": addr,
+                "is_composable":               composable,
+                "timestamp":                   time.time(),
+            }
+        except Exception as exc:
+            return {
+                "poad_registry_enabled": False,
+                "total_poad_count": 0,
+                "dual_veto_poad_count": 0,
+                "on_chain_anchor_count": 0,
+                "recent_poad_logs": [],
+                "adjudication_registry_address": "",
+                "is_composable": False,
+                "timestamp": time.time(),
+                "error": str(exc),
+            }
+
     @app.get("/agent/ioswarm-vhp-mint-status")
     def ioswarm_vhp_mint_status(api_key: str = Query(...)):
         """Phase 110 — ioSwarm VHP Mint Authorization status (fail-CLOSED quorum gate, W2 swarm_fingerprint)."""
@@ -2381,6 +3177,583 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                     "Phase 109A infrastructure-only. Enable after live ioSwarm nodes registered."
                 ),
                 "timestamp": time.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # --- Phase 127: Tournament Pre-Launch Preflight ---
+
+    def _run_preflight_checks() -> dict:
+        """Internal helper: evaluate all 8 preflight conditions and return result dict."""
+        import json as _json127
+
+        # P0: separation_ratio ≥ 1.0
+        sep_ratio = float(getattr(cfg, "separation_ratio_current", 0.0))
+        _snap = store.get_separation_ratio_status(limit=1)
+        if _snap:
+            sep_ratio = float(_snap[0].get("pooled_ratio", sep_ratio))
+        separation_ok = sep_ratio >= 1.0
+
+        # P0: L4 staleness cleared (live_feature_dim == calibration_feature_dim)
+        live_dim  = int(getattr(cfg, "live_feature_dim", 13))
+        calib_dim = int(getattr(cfg, "calibration_feature_dim", 12))
+        l4_ok = (live_dim == calib_dim)
+
+        # P0: gate_passed (consecutive_clean ≥ gate_n)
+        gate_n   = int(getattr(cfg, "validation_gate_n", 100))
+        max_div  = float(getattr(cfg, "validation_max_divergence_rate", 1.0))
+        gate_s   = store.get_validation_summary(gate_n, max_div)
+        gate_ok  = bool(gate_s.get("gate_passed", False))
+
+        # P0: cert_valid
+        cert     = store.get_latest_enforcement_certificate()
+        cert_ok  = bool(
+            cert is not None
+            and cert.get("audit_valid")
+            and time.time() <= cert.get("expires_at", 0)
+        )
+
+        # P0: audit_valid
+        audit    = store.get_activation_audit_summary()
+        audit_ok = bool(audit.get("audit_valid", False))
+
+        # P1 warnings
+        dual_gate_warned    = not bool(getattr(cfg, "dual_primitive_gate_enabled", False))
+        epoch_window_warned = not bool(getattr(cfg, "epoch_window_enabled", False))
+        ioswarm_warned      = not bool(getattr(cfg, "ioswarm_vhp_mint_enabled", False))
+
+        overall_pass = separation_ok and l4_ok and gate_ok and cert_ok and audit_ok
+
+        conditions = {
+            "separation_ratio": sep_ratio,
+            "separation_ok": separation_ok,
+            "l4_live_dim": live_dim,
+            "l4_calib_dim": calib_dim,
+            "l4_ok": l4_ok,
+            "consecutive_clean": gate_s.get("consecutive_clean", 0),
+            "gate_ok": gate_ok,
+            "cert_ok": cert_ok,
+            "audit_ok": audit_ok,
+            "dual_primitive_gate_enabled": not dual_gate_warned,
+            "epoch_window_enabled": not epoch_window_warned,
+            "ioswarm_vhp_mint_enabled": not ioswarm_warned,
+            "overall_pass": overall_pass,
+        }
+        row_id = store.insert_tournament_preflight_log(
+            separation_ok=separation_ok,
+            l4_ok=l4_ok,
+            gate_ok=gate_ok,
+            cert_ok=cert_ok,
+            audit_ok=audit_ok,
+            dual_gate_warned=dual_gate_warned,
+            epoch_window_warned=epoch_window_warned,
+            ioswarm_warned=ioswarm_warned,
+            overall_pass=overall_pass,
+            conditions_json=_json127.dumps(conditions),
+        )
+        return {
+            "run_id":               row_id,
+            "separation_ok":        separation_ok,
+            "l4_ok":                l4_ok,
+            "gate_ok":              gate_ok,
+            "cert_ok":              cert_ok,
+            "audit_ok":             audit_ok,
+            "dual_gate_warned":     dual_gate_warned,
+            "epoch_window_warned":  epoch_window_warned,
+            "ioswarm_warned":       ioswarm_warned,
+            "overall_pass":         overall_pass,
+            "conditions":           conditions,
+            "timestamp":            time.time(),
+        }
+
+    @app.post("/agent/run-tournament-preflight")
+    def run_tournament_preflight(api_key: str = Query(...)):
+        """Phase 127 — Run tournament pre-launch preflight checks.
+
+        Evaluates 5 P0 conditions (BLOCK activation if failed) and 3 P1 warnings.
+        Persists result to tournament_preflight_log for audit trail.
+        POST /agent/commit-activation reads the latest preflight to enforce P0 gates.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            return _run_preflight_checks()
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @app.get("/agent/tournament-preflight-status")
+    def tournament_preflight_status(api_key: str = Query(...)):
+        """Phase 127 — Return latest tournament preflight result.
+
+        Returns the most recent preflight run from tournament_preflight_log.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            logs = store.get_tournament_preflight_status(limit=1)
+            if logs:
+                import json as _json127b
+                latest = logs[0]
+                try:
+                    cond = _json127b.loads(latest.get("conditions_json", "{}"))
+                except Exception:
+                    cond = {}
+                return {
+                    "found":               True,
+                    "run_id":              latest["id"],
+                    "separation_ok":       latest["separation_ok"],
+                    "l4_ok":               latest["l4_ok"],
+                    "gate_ok":             latest["gate_ok"],
+                    "cert_ok":             latest["cert_ok"],
+                    "audit_ok":            latest["audit_ok"],
+                    "dual_gate_warned":    latest["dual_gate_warned"],
+                    "epoch_window_warned": latest["epoch_window_warned"],
+                    "ioswarm_warned":      latest["ioswarm_warned"],
+                    "overall_pass":        latest["overall_pass"],
+                    "conditions":          cond,
+                    "created_at":          latest["created_at"],
+                    "timestamp":           time.time(),
+                }
+            return {
+                "found": False, "overall_pass": False,
+                "separation_ok": False, "l4_ok": False,
+                "gate_ok": False, "cert_ok": False, "audit_ok": False,
+                "timestamp": time.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @app.get("/agent/tournament-readiness-score")
+    def tournament_readiness_score(api_key: str = Query(...)):
+        """Phase 128 — Compute the tournament readiness score synthesizing 6 signals.
+
+        Returns 9 keys:
+          score (0.0-1.0 weighted composite), separation_score, l4_score,
+          dual_gate_score, epoch_score, ioswarm_score, dry_run_score,
+          conditions_met, timestamp
+
+        Weights: separation=0.30, l4=0.20, dual_gate=0.15, epoch=0.15,
+                 ioswarm=0.10, dry_run=0.10
+
+        Persists result to protocol_intelligence_reports table for audit trail.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import json as _json128
+        try:
+            # 1. separation_score: min(1.0, pooled_ratio / 1.0)
+            pooled_ratio = float(getattr(cfg, "separation_ratio_current", 0.0))
+            separation_score = min(1.0, pooled_ratio)
+
+            # 2. l4_score: 1.0 if not stale (live_dim == calib_dim) else 0.0
+            live_dim = int(getattr(cfg, "live_feature_dim", 13))
+            calib_dim = int(getattr(cfg, "calibration_feature_dim", 12))
+            l4_score = 1.0 if live_dim == calib_dim else 0.0
+
+            # 3. dual_gate_score: 1.0 if >=1 eligible mint in last 24h else 0.5 if gate enabled else 0.0
+            dual_gate_enabled = bool(getattr(cfg, "dual_primitive_gate_enabled", False))
+            try:
+                gate_logs = store.get_vhp_dual_gate_log(limit=100)
+                _now = time.time()
+                _window_s = 86400.0
+                _recent_eligible = [
+                    lg for lg in gate_logs
+                    if lg.get("eligible") and (_now - float(lg.get("created_at", 0))) < _window_s
+                ]
+                if _recent_eligible:
+                    dual_gate_score = 1.0
+                elif dual_gate_enabled:
+                    dual_gate_score = 0.5
+                else:
+                    dual_gate_score = 0.0
+            except Exception:
+                dual_gate_score = 0.5 if dual_gate_enabled else 0.0
+
+            # 4. epoch_score: based on p95 vs window_seconds
+            epoch_window_enabled = bool(getattr(cfg, "epoch_window_enabled", False))
+            epoch_window_seconds = float(getattr(cfg, "epoch_window_seconds", 86400.0))
+            try:
+                epoch_analytics = store.get_epoch_window_analytics(limit=1000)
+                p95 = float(epoch_analytics.get("p95_age_seconds", 0.0))
+                if p95 <= 0 or epoch_analytics.get("checked_count", 0) == 0:
+                    epoch_score = 0.5 if epoch_window_enabled else 0.0
+                elif p95 < epoch_window_seconds:
+                    epoch_score = 1.0
+                else:
+                    epoch_score = max(0.0, 1.0 - p95 / epoch_window_seconds)
+            except Exception:
+                epoch_score = 0.5 if epoch_window_enabled else 0.0
+
+            # 5. ioswarm_score: 1.0 if ioswarm enabled and last mint log has quorum else 0.5 if enabled else 0.0
+            ioswarm_mint_enabled = bool(getattr(cfg, "ioswarm_vhp_mint_enabled", False))
+            if ioswarm_mint_enabled:
+                try:
+                    mint_logs = store.get_ioswarm_vhp_mint_log(limit=1)
+                    if mint_logs and mint_logs[0].get("authorized"):
+                        ioswarm_score = 1.0
+                    else:
+                        ioswarm_score = 0.5
+                except Exception:
+                    ioswarm_score = 0.5
+            else:
+                ioswarm_score = 0.0
+
+            # 6. dry_run_score: 1.0 if dry_run=False else 0.0
+            dry_run_active = bool(getattr(cfg, "agent_dry_run_mode", True))
+            dry_run_score = 0.0 if dry_run_active else 1.0
+
+            # Weighted composite
+            score = (
+                0.30 * separation_score
+                + 0.20 * l4_score
+                + 0.15 * dual_gate_score
+                + 0.15 * epoch_score
+                + 0.10 * ioswarm_score
+                + 0.10 * dry_run_score
+            )
+            score = round(min(1.0, max(0.0, score)), 4)
+
+            conditions_met = sum([
+                separation_score >= 1.0,
+                l4_score >= 1.0,
+                dual_gate_score >= 1.0,
+                epoch_score >= 1.0,
+                ioswarm_score >= 1.0,
+                dry_run_score >= 1.0,
+            ])
+
+            breakdown = {
+                "separation_score": separation_score,
+                "l4_score": l4_score,
+                "dual_gate_score": dual_gate_score,
+                "epoch_score": epoch_score,
+                "ioswarm_score": ioswarm_score,
+                "dry_run_score": dry_run_score,
+            }
+
+            # Persist to protocol_intelligence_reports
+            try:
+                store.insert_readiness_score(
+                    score=score,
+                    breakdown_json=_json128.dumps(breakdown),
+                    conditions_met=conditions_met,
+                )
+            except Exception:
+                pass  # Non-blocking — never fail the endpoint due to persistence error
+
+            return {
+                "score":            score,
+                "separation_score": separation_score,
+                "l4_score":         l4_score,
+                "dual_gate_score":  dual_gate_score,
+                "epoch_score":      epoch_score,
+                "ioswarm_score":    ioswarm_score,
+                "dry_run_score":    dry_run_score,
+                "conditions_met":   conditions_met,
+                "timestamp":        time.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # ------------------------------------------------------------------
+    # Phase 129 — GET /agent/separation-ratio-breakthrough
+    # ------------------------------------------------------------------
+    @app.get("/agent/separation-ratio-breakthrough")
+    async def get_separation_ratio_breakthrough_endpoint(api_key: str = ""):
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t129
+        try:
+            rows = store.get_separation_ratio_breakthrough(limit=5)
+            if rows:
+                latest = rows[0]
+                return {
+                    "breakthrough_detected": True,
+                    "breakthrough_ratio":    float(latest.get("after_ratio", 0.0)),
+                    "breakthrough_ts":       float(latest.get("breakthrough_at", 0.0)),
+                    "n_players":             int(latest.get("n_players", 0)),
+                    "error":                 None,
+                    "timestamp":             _t129.time(),
+                }
+            return {
+                "breakthrough_detected": False,
+                "breakthrough_ratio":    0.0,
+                "breakthrough_ts":       0.0,
+                "n_players":             0,
+                "error":                 None,
+                "timestamp":             _t129.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # ------------------------------------------------------------------
+    # Phase 130A — GET /agent/swarm-operator-gate-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/swarm-operator-gate-status")
+    async def get_swarm_operator_gate_status_endpoint(api_key: str = ""):
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t130
+        try:
+            gate_addr = getattr(cfg, "swarm_operator_gate_address", "")
+            rows = store.get_swarm_quorum_validation_log(limit=1)
+            last_valid = False
+            last_node_count = 0
+            total_validations = 0
+            if rows:
+                last_row = rows[0]
+                last_valid = bool(last_row.get("quorum_valid", 0))
+                last_node_count = int(last_row.get("node_count", 0))
+            all_rows = store.get_swarm_quorum_validation_log(limit=10000)
+            total_validations = len(all_rows)
+            return {
+                "swarm_gate_address":  gate_addr,
+                "gate_configured":     bool(gate_addr),
+                "total_validations":   total_validations,
+                "last_valid":          last_valid,
+                "last_node_count":     last_node_count,
+                "timestamp":           _t130.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 131B — GET /agent/usb-stability-status
+    # ------------------------------------------------------------------
+    # VAPI-exclusive: DualShock Edge is the only consumer controller that
+    # simultaneously produces a live 228-byte biometric PoAC stream (USB reads)
+    # AND writes HID output reports (LED/haptic). When paired to PS5 via BT,
+    # those HID writes cause USB micro-drops → PS5 shows reconnect notification.
+    # This endpoint exposes the USB instability log and ps5_compat_mode state.
+    # ------------------------------------------------------------------
+    @app.get("/agent/usb-stability-status")
+    async def get_usb_stability_status_endpoint(api_key: str = ""):
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t131b
+        try:
+            summary = store.get_usb_stability_status(limit=100)
+            ps5_compat = bool(getattr(cfg, "ps5_compat_mode", False))
+            return {
+                "disconnect_count":    summary["disconnect_count"],
+                "last_disconnect_ts":  summary["last_disconnect_ts"],
+                "ps5_compat_mode":     ps5_compat,
+                "consecutive_fb_timeouts_threshold": 6,  # _FEEDBACK_SKIP_THRESHOLD * 2
+                "timestamp":           _t131b.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 132 — GET /agent/ioswarm-node-health
+    # ------------------------------------------------------------------
+    @app.get("/agent/ioswarm-node-health")
+    async def get_ioswarm_node_health_endpoint(api_key: str = ""):
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t132
+        try:
+            from .ioswarm_live_node_client import IoSwarmLiveNodeClient
+            _client132 = IoSwarmLiveNodeClient(cfg=cfg, store=store)
+            _emulator_mode = _client132.is_emulator_mode()
+            _node_urls_raw = getattr(cfg, "ioswarm_node_urls", "") or ""
+            _urls = [u.strip() for u in _node_urls_raw.split(",") if u.strip()]
+            _nodes_configured = len(_urls)
+            _health_log = store.get_ioswarm_node_health(limit=50)
+            _recent = [e for e in _health_log if _t132.time() - e.get("polled_at", 0) < 300]
+            _nodes_healthy = sum(1 for e in _recent if e.get("healthy"))
+            _latencies = [e.get("latency_ms", -1) for e in _recent if e.get("latency_ms", -1) >= 0]
+            _avg_latency = (sum(_latencies) / len(_latencies)) if _latencies else -1.0
+            return {
+                "nodes_configured":  _nodes_configured,
+                "nodes_healthy":     _nodes_healthy,
+                "emulator_mode":     _emulator_mode,
+                "avg_latency_ms":    round(_avg_latency, 2),
+                "health_log_count":  len(_health_log),
+                "timestamp":         _t132.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 135 — GET /agent/tournament-activation-chain
+    # ------------------------------------------------------------------
+    @app.get("/agent/tournament-activation-chain")
+    async def get_tournament_activation_chain_endpoint(api_key: str = ""):
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t135
+        try:
+            _log135 = store.get_tournament_activation_chain(limit=10)
+            _gate_open = any(e.get("gate_open_notified") for e in _log135)
+            _last_ratio = _log135[0].get("separation_ratio", 0.0) if _log135 else 0.0
+            _last_ts = _log135[0].get("created_at", 0.0) if _log135 else 0.0
+            return {
+                "gate_open_notified": _gate_open,
+                "auto_activate_on_breakthrough": False,  # PERMANENT INVARIANT
+                "operator_action_required": True,
+                "last_ratio": _last_ratio,
+                "last_notification_ts": _last_ts,
+                "notification_count": len(_log135),
+                "timestamp": _t135.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 134 — POST /agent/run-l4-recalibration
+    # ------------------------------------------------------------------
+    @app.post("/agent/run-l4-recalibration")
+    async def run_l4_recalibration_endpoint(api_key: str = ""):
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t134a
+        try:
+            _jobs = store.get_l4_recalibration_jobs(limit=1)
+            if _jobs and _jobs[0].get("status") == "running":
+                _age = _t134a.time() - _jobs[0].get("started_at", 0.0)
+                if _age < 600:
+                    raise HTTPException(status_code=409, detail="recalibration_already_running")
+            _job_id = store.insert_l4_recalibration_job(started_at=_t134a.time())
+            import asyncio as _aio134
+            import subprocess as _sp134
+            import sys as _sys134
+            import os as _os134
+            async def _run_bg():
+                try:
+                    _script = _os134.path.join(
+                        _os134.path.dirname(__file__), "..", "..", "scripts",
+                        "recalibrate_l4_pipeline.py"
+                    )
+                    _db = getattr(cfg, "db_path", _os134.path.expanduser("~/.vapi/bridge.db"))
+                    _proc = await _aio134.create_subprocess_exec(
+                        _sys134.executable, _script, "--db", _db,
+                        stdout=_aio134.subprocess.DEVNULL, stderr=_aio134.subprocess.DEVNULL,
+                    )
+                    await _aio134.wait_for(_proc.wait(), timeout=300.0)
+                except Exception as _exc:
+                    store.update_l4_recalibration_job(
+                        job_id=_job_id, status="failed",
+                        sessions_processed=0, anomaly_result=0.0, continuity_result=0.0,
+                        completed_at=_t134a.time(), error=str(_exc),
+                    )
+            _aio134.ensure_future(_run_bg())
+            return {"job_id": _job_id, "started": True, "timestamp": _t134a.time()}
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 134 — GET /agent/l4-recalibration-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/l4-recalibration-status")
+    async def get_l4_recalibration_status_endpoint(api_key: str = ""):
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t134b
+        try:
+            _jobs = store.get_l4_recalibration_jobs(limit=1)
+            _stale = (
+                getattr(cfg, "live_feature_dim", 13)
+                != getattr(cfg, "calibration_feature_dim", 12)
+            )
+            if not _jobs:
+                return {
+                    "in_progress": False,
+                    "last_run_ts": 0.0,
+                    "sessions_processed": 0,
+                    "new_anomaly_threshold": getattr(cfg, "l4_anomaly_threshold", 7.009),
+                    "new_continuity_threshold": getattr(cfg, "l4_continuity_threshold", 5.367),
+                    "stale": _stale,
+                    "timestamp": _t134b.time(),
+                }
+            _j = _jobs[0]
+            return {
+                "in_progress": _j.get("status") == "running",
+                "last_run_ts": _j.get("completed_at") or _j.get("started_at", 0.0),
+                "sessions_processed": _j.get("sessions_processed", 0),
+                "new_anomaly_threshold": _j.get("anomaly_result") or getattr(cfg, "l4_anomaly_threshold", 7.009),
+                "new_continuity_threshold": _j.get("continuity_result") or getattr(cfg, "l4_continuity_threshold", 5.367),
+                "stale": _stale,
+                "timestamp": _t134b.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 134 — GET /agent/auto-separation-snapshot-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/auto-separation-snapshot-status")
+    async def get_auto_separation_snapshot_status_endpoint(api_key: str = ""):
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t134c
+        try:
+            _enabled = bool(getattr(cfg, "auto_separation_snapshot_enabled", False))
+            _snaps = store.get_separation_ratio_status(limit=10)
+            _count = len(_snaps)
+            _last_ts = _snaps[0].get("created_at", 0.0) if _snaps else 0.0
+            _last_ratio = _snaps[0].get("pooled_ratio", 0.0) if _snaps else 0.0
+            return {
+                "auto_separation_snapshot_enabled": _enabled,
+                "snapshot_count": _count,
+                "last_snapshot_ts": _last_ts,
+                "last_snapshot_ratio": _last_ratio,
+                "timestamp": _t134c.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 133 — GET /agent/ioswarm-poad-anchor-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/ioswarm-poad-anchor-status")
+    async def get_ioswarm_poad_anchor_status_endpoint(api_key: str = ""):
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t133
+        try:
+            _enabled = bool(getattr(cfg, "ioswarm_poad_auto_anchor_enabled", False))
+            _log = store.get_ioswarm_poad_anchor_log(limit=50)
+            _anchored = sum(1 for e in _log if e.get("anchor_status") == "anchored")
+            _pending  = sum(1 for e in _log if e.get("anchor_status") == "pending")
+            _dual_veto_count = sum(1 for e in _log if e.get("dual_veto"))
+            _failed   = sum(1 for e in _log if e.get("anchor_status") == "failed")
+            _last_tx  = next((e.get("on_chain_tx") for e in _log if e.get("on_chain_tx")), None)
+            return {
+                "poad_auto_anchor_enabled": _enabled,
+                "anchored_count":           _anchored,
+                "pending_count":            _pending,
+                "last_anchor_tx":           _last_tx,
+                "dual_veto_count":          _dual_veto_count,
+                "anchor_failure_count":     _failed,
+                "timestamp":                _t133.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 131 — GET /agent/ioswarm-node-registry-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/ioswarm-node-registry-status")
+    async def get_ioswarm_node_registry_status_endpoint(api_key: str = ""):
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t131
+        try:
+            from .ioswarm_live_node_client import IoSwarmLiveNodeClient
+            client = IoSwarmLiveNodeClient(cfg=cfg, store=store)
+            node_urls_raw = getattr(cfg, "ioswarm_node_urls", "") or ""
+            node_urls_list = [u.strip() for u in node_urls_raw.split(",") if u.strip()]
+            emulator_mode = client.is_emulator_mode()
+            node_timeout_s = float(getattr(cfg, "ioswarm_node_timeout_seconds", 5.0))
+            registry_rows = store.get_ioswarm_node_registry(active_only=False)
+            active_rows = [r for r in registry_rows if r.get("active")]
+            last_quorum_ts = 0.0
+            recent_quorum = store.get_swarm_quorum_validation_log(limit=1)
+            if recent_quorum:
+                last_quorum_ts = float(recent_quorum[0].get("created_at", 0.0))
+            return {
+                "live_nodes":     len(active_rows),
+                "emulator_mode":  emulator_mode,
+                "node_urls":      node_urls_raw,
+                "node_timeout_s": node_timeout_s,
+                "registry_count": len(registry_rows),
+                "last_quorum_ts": last_quorum_ts,
+                "timestamp":      _t131.time(),
             }
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc

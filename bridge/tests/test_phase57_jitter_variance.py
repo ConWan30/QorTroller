@@ -155,10 +155,10 @@ class TestFeatureVector12Elements(unittest.TestCase):
         # Must be a BiometricFeatureFrame
         self.assertIsInstance(frame, BiometricFeatureFrame)
 
-        # to_vector() must return 12 elements
+        # to_vector() must return 13 elements (Phase 121 added touchpad_spatial_entropy)
         vec = frame.to_vector()
-        self.assertEqual(len(vec), 12,
-                         f"Expected 12-element feature vector, got {len(vec)}")
+        self.assertEqual(len(vec), 13,
+                         f"Expected 13-element feature vector, got {len(vec)}")
 
         # press_timing_jitter_variance is the 12th element (index 11)
         self.assertIsNotNone(frame.press_timing_jitter_variance)

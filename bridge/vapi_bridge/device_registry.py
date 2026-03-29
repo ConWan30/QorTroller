@@ -1,5 +1,5 @@
 """
-VAPI Phase 19 — Device Profile Registry
+VAPI Phase 19 + 136 — Device Profile Registry with Controller Intelligence
 
 DeviceProfileRegistry resolves the active DeviceProfile for the current
 bridge session. Resolution priority:
@@ -7,6 +7,12 @@ bridge session. Resolution priority:
     1. Explicit override via cfg.device_profile_id (env: DEVICE_PROFILE_ID)
     2. Auto-detect from connected USB HID devices (VID/PID matching)
     3. Default fallback: sony_dualshock_edge_v1
+
+Phase 136 Enhancement:
+- Integration with ControllerHardwareIntelligenceAgent (Agent #17)
+- Capability matrix enrichment for multi-controller support
+- PITL layer availability mapping
+- Tier eligibility determination
 
 The registry is instantiated once in DualShockTransport._init_hardware() and
 held as self._device_profile. The bridge's sensor_commitment size and
@@ -22,9 +28,21 @@ from __future__ import annotations
 import logging
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Dict, Any, List
 
 log = logging.getLogger(__name__)
+
+# Phase 136: Import ControllerHardwareIntelligenceAgent for capability enrichment
+try:
+    from .controller_hardware_intelligence_agent import (
+        ControllerHardwareIntelligenceAgent,
+        ControllerProfile,
+        TournamentTier,
+    )
+    _CONTROLLER_INTELLIGENCE_AVAILABLE = True
+except ImportError:
+    _CONTROLLER_INTELLIGENCE_AVAILABLE = False
+    log.debug("ControllerHardwareIntelligenceAgent not available (Phase 136 pending)")
 
 # ---------------------------------------------------------------------------
 # Registry class
@@ -34,6 +52,9 @@ class DeviceProfileRegistry:
     """
     Loads DeviceProfile objects from controller/profiles/ and resolves the
     active profile for the current session.
+    
+    Phase 136: Extended with ControllerHardwareIntelligenceAgent integration
+    for multi-controller capability matrix support.
 
     Parameters
     ----------
@@ -62,6 +83,15 @@ class DeviceProfileRegistry:
             raise RuntimeError(
                 f"Cannot import controller profiles from {controller_dir}: {exc}"
             ) from exc
+        
+        # Phase 136: Initialize ControllerHardwareIntelligenceAgent
+        self._controller_intelligence: Optional[ControllerHardwareIntelligenceAgent] = None
+        if _CONTROLLER_INTELLIGENCE_AVAILABLE:
+            try:
+                self._controller_intelligence = ControllerHardwareIntelligenceAgent()
+                log.debug("ControllerHardwareIntelligenceAgent initialized (Phase 136)")
+            except Exception as exc:
+                log.warning("Failed to initialize ControllerHardwareIntelligenceAgent: %s", exc)
 
     # ------------------------------------------------------------------
     # Public interface
@@ -77,6 +107,9 @@ class DeviceProfileRegistry:
             2. Auto-detect from connected USB HID devices.
                Enumerates hid.enumerate() and matches VID/PID against the index.
             3. Default: sony_dualshock_edge_v1 (the primary PHCI-certified device).
+
+        Phase 136: Profile enriched with capability matrix from 
+        ControllerHardwareIntelligenceAgent.
 
         Parameters
         ----------
@@ -98,7 +131,9 @@ class DeviceProfileRegistry:
                     "Device profile (explicit override): %s (PHCI=%s)",
                     profile.display_name, profile.phci_tier.name,
                 )
-                return profile
+                # Phase 136: Enrich with capability matrix
+                enriched = self._enrich_profile(profile)
+                return enriched
             except KeyError:
                 log.warning(
                     "DEVICE_PROFILE_ID=%r not found — falling back to auto-detect",
@@ -113,7 +148,9 @@ class DeviceProfileRegistry:
                     "Device profile (auto-detected VID/PID): %s (PHCI=%s)",
                     detected.display_name, detected.phci_tier.name,
                 )
-                return detected
+                # Phase 136: Enrich with capability matrix
+                enriched = self._enrich_profile(detected)
+                return enriched
 
         # Priority 3: default to DualSense Edge
         default = self._get_profile("sony_dualshock_edge_v1")
@@ -121,7 +158,114 @@ class DeviceProfileRegistry:
             "Device profile (default): %s (PHCI=%s)",
             default.display_name, default.phci_tier.name,
         )
-        return default
+        # Phase 136: Enrich with capability matrix
+        enriched = self._enrich_profile(default)
+        return enriched
+    
+    def _enrich_profile(self, base_profile: "DeviceProfile") -> "DeviceProfile":
+        """
+        Phase 136: Enrich base DeviceProfile with capability matrix from
+        ControllerHardwareIntelligenceAgent.
+        
+        Adds:
+        - PITL layer availability
+        - Tier eligibility flags
+        - Feature capabilities
+        - Calibration configuration
+        
+        Args:
+            base_profile: Base DeviceProfile from controller/profiles/
+            
+        Returns:
+            Enriched DeviceProfile with capability matrix
+        """
+        if not self._controller_intelligence:
+            # Agent not available, return base profile
+            return base_profile
+        
+        try:
+            # Look up canonical profile by VID/PID
+            canonical = None
+            for cp in self._controller_intelligence.get_all_profiles().values():
+                if cp.usb_vid == getattr(base_profile, 'vid', None) and \
+                   cp.usb_pid == getattr(base_profile, 'pid', None):
+                    canonical = cp
+                    break
+            
+            if not canonical:
+                # No matching canonical profile, return base
+                return base_profile
+            
+            # Enrich base profile with canonical capabilities
+            # Note: This uses dynamic attribute attachment for backwards compatibility
+            # In production, DeviceProfile dataclass would be extended
+            
+            # Attach capability matrix
+            base_profile._vapi_capability_matrix = {
+                "controller_type": canonical.controller_type.value,
+                "pitl_layers": self._controller_intelligence._get_available_pitl_layers(canonical),
+                "tier_eligibility": self._controller_intelligence._compute_tier_eligibility(canonical),
+                "l4_feature_count": canonical.l4_feature_count,
+                "l4_feature_mask": canonical.l4_feature_mask,
+                "battery_types": canonical.battery_types,
+                "capabilities": {
+                    "touchpad": canonical.capabilities.touchpad,
+                    "triggers": canonical.capabilities.triggers,
+                    "gyroscope": canonical.capabilities.gyroscope,
+                    "accelerometer": canonical.capabilities.accelerometer,
+                },
+            }
+            
+            log.debug("Enriched profile %s with capability matrix (Phase 136)", 
+                     base_profile.profile_id)
+            
+        except Exception as exc:
+            log.debug("Failed to enrich profile: %s", exc)
+        
+        return base_profile
+    
+    def get_profile_with_intelligence(self, profile_id: str) -> Optional[ControllerProfile]:
+        """
+        Phase 136: Get controller profile with full intelligence from 
+        ControllerHardwareIntelligenceAgent.
+        
+        Args:
+            profile_id: Profile identifier
+            
+        Returns:
+            ControllerProfile with capability matrix, or None if not available
+        """
+        if not self._controller_intelligence:
+            return None
+        
+        return self._controller_intelligence.get_controller_profile(profile_id)
+    
+    def get_tier_eligibility(self, base_profile: "DeviceProfile") -> Dict[str, Any]:
+        """
+        Phase 136: Get tier eligibility for a controller profile.
+        
+        Args:
+            base_profile: DeviceProfile to check
+            
+        Returns:
+            Tier eligibility dictionary
+        """
+        if not self._controller_intelligence:
+            # Fallback: assume Standard tier only if PHCI not certified
+            return {
+                "standard": True,
+                "attested": getattr(base_profile, 'phci_tier', None) == 'ATTESTED',
+                "available_layers": ["L0", "L1", "L2", "L3", "L5"],
+            }
+        
+        # Find canonical profile
+        for cp in self._controller_intelligence.get_all_profiles().values():
+            if cp.usb_vid == getattr(base_profile, 'vid', None) and \
+               cp.usb_pid == getattr(base_profile, 'pid', None):
+                return self._controller_intelligence._compute_tier_eligibility(cp)
+        
+        # Unknown profile, assume Standard tier
+        return {"standard": True, "attested": False, "available_layers": []}
 
     def get_profile(self, profile_id: str) -> "DeviceProfile":
         """Return a DeviceProfile by profile_id. Raises KeyError if not found."""
@@ -130,6 +274,18 @@ class DeviceProfileRegistry:
     def all_profiles(self) -> list:
         """Return all registered DeviceProfile objects."""
         return self._all_profiles()
+    
+    def all_profiles_with_intelligence(self) -> Dict[str, ControllerProfile]:
+        """
+        Phase 136: Return all canonical controller profiles with intelligence.
+        
+        Returns:
+            Dictionary of profile_id -> ControllerProfile
+        """
+        if not self._controller_intelligence:
+            return {}
+        
+        return self._controller_intelligence.get_all_profiles()
 
     # ------------------------------------------------------------------
     # HID auto-detection

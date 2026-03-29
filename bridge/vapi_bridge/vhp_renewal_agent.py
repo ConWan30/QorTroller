@@ -79,7 +79,9 @@ class VHPRenewalAgent:
             if _ioswarm_renewal_on:
                 try:
                     from .ioswarm_renewal_coordinator import IoSwarmRenewalCoordinator
-                    _coord = IoSwarmRenewalCoordinator(cfg=self._cfg, store=self._store)
+                    from .ioswarm_live_node_client import IoSwarmLiveNodeClient as _ILNC131r
+                    _live_client_r = _ILNC131r(cfg=self._cfg, store=self._store)
+                    _coord = IoSwarmRenewalCoordinator(cfg=self._cfg, store=self._store, live_client=_live_client_r)
                     _result = _coord.evaluate_renewal(
                         device_id=vhp["device_id"],
                         token_id=vhp["token_id"],

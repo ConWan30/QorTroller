@@ -14,6 +14,8 @@ Emulators: IoSwarmClassJEmulator + IoSwarmTriageEmulator (Phase 109C).
 """
 from __future__ import annotations
 
+import asyncio
+import hashlib
 import json
 import logging
 import time
@@ -57,9 +59,13 @@ class IoSwarmAdjudicationCoordinator:
         store,
         classj_emulator=None,
         triage_emulator=None,
+        live_client=None,
+        chain=None,
     ) -> None:
         self._cfg = cfg
         self._store = store
+        self._live_client = live_client
+        self._chain = chain
 
         if classj_emulator is None:
             from .ioswarm_classj_emulator import IoSwarmClassJEmulator
@@ -165,6 +171,21 @@ class IoSwarmAdjudicationCoordinator:
                     "classj=%s(%.2f) triage=%s(%.2f) → score_override≥%.2f",
                     device_id, cj_verdict, cj_agreement, tr_verdict, tr_agreement, DUAL_VETO_SCORE,
                 )
+                # Phase 133: auto-anchor PoAd when dual_veto fires (if enabled)
+                if getattr(self._cfg, "ioswarm_poad_auto_anchor_enabled", False):
+                    swarm_fingerprint = hashlib.sha256(
+                        json.dumps(
+                            {"classj_nodes": classj_nodes, "triage_nodes": triage_nodes},
+                            sort_keys=True,
+                        ).encode()
+                    ).hexdigest()
+                    try:
+                        asyncio.ensure_future(
+                            self._async_anchor_poad(device_id, session_id or "", swarm_fingerprint)
+                        )
+                    except RuntimeError:
+                        # No event loop (test context) — skip silently
+                        pass
 
             return result
 
@@ -183,3 +204,54 @@ class IoSwarmAdjudicationCoordinator:
                 "node_count": 0,
                 "error": str(exc),
             }
+
+    async def _async_anchor_poad(
+        self,
+        device_id: str,
+        session_id: str,
+        swarm_fingerprint: str,
+    ) -> None:
+        """Phase 133: Non-blocking PoAd on-chain anchor after dual-quorum veto.
+
+        Inserts a pending log entry, attempts chain.record_adjudication(), updates status.
+        Never raises — failure logged at DEBUG, never propagates to caller.
+        """
+        anchor_id = None
+        poad_hash = hashlib.sha256(
+            f"{device_id}:{session_id}:{swarm_fingerprint}:{time.time_ns()}".encode()
+        ).hexdigest()
+        try:
+            anchor_id = self._store.insert_ioswarm_poad_anchor(
+                device_id=device_id,
+                session_id=session_id,
+                dual_veto=True,
+                swarm_fingerprint=swarm_fingerprint,
+                poad_hash=poad_hash,
+                anchor_status="pending",
+            )
+        except Exception as store_exc:
+            log.debug("Phase133 _async_anchor_poad: store insert error (non-fatal): %s", store_exc)
+            return
+
+        if self._chain is None:
+            # No chain configured — mark skipped_disabled
+            try:
+                self._store.update_ioswarm_poad_anchor_tx(anchor_id, "", "skipped_disabled")
+            except Exception:
+                pass
+            return
+
+        try:
+            tx_hash = await self._chain.record_adjudication(
+                device_id=device_id,
+                poad_hash_hex=poad_hash,
+                dual_veto=True,
+            )
+            self._store.update_ioswarm_poad_anchor_tx(anchor_id, tx_hash or "", "anchored")
+            log.info("Phase133 PoAd anchored on-chain: device=%s tx=%s", device_id, tx_hash)
+        except Exception as exc:
+            log.debug("Phase133 _async_anchor_poad: chain anchor failed (non-fatal): %s", exc)
+            try:
+                self._store.update_ioswarm_poad_anchor_tx(anchor_id, "", "failed")
+            except Exception:
+                pass

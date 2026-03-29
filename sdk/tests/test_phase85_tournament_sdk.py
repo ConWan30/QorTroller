@@ -49,8 +49,8 @@ def _run(coro):
 class TestSDKVersion(unittest.TestCase):
 
     def test_1_sdk_version_is_3_0_0(self):
-        """SDK_VERSION must be 3.0.0-phase109b after Phase 109B bump."""
-        self.assertEqual(SDK_VERSION, "3.0.0-phase110")
+        """SDK_VERSION must be 3.0.0-phase135 after Phase 135 bump."""
+        self.assertEqual(SDK_VERSION, "3.0.0-phase135")
 
 
 # ---------------------------------------------------------------------------

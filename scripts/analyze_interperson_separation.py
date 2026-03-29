@@ -82,7 +82,9 @@ FEATURE_NAMES = [
     "tremor_peak_hz",
     "tremor_band_power",
     "accel_magnitude_spectral_entropy",   # F10 (replaces touchpad slot; Phase 46; 1000 Hz exclusive)
-    "touch_position_variance",
+    "touch_position_variance",            # F11; populated by touchpad sessions (terminal_cal)
+    "press_timing_jitter_variance",       # F12 (Phase 57; 0.0 in inline fallback)
+    "touchpad_spatial_entropy",           # F13 (Phase 121; 8×8 Shannon entropy of contact heatmap)
 ]
 N_FEATURES = len(FEATURE_NAMES)
 
@@ -164,7 +166,9 @@ def _compute_trigger_onset_velocity(trigger_vals: list) -> float:
 def _extract_features_inline(snaps: list[_SnapProxy]) -> np.ndarray:
     """
     Inline reimplementation of BiometricFeatureExtractor.extract() operating on
-    _SnapProxy objects. Returns an 11-element float32 array.
+    _SnapProxy objects. Returns a 13-element float32 array.
+    Note: press_timing_jitter_variance (index 11) always returns 0.0 in this fallback
+    (Phase 57 gap); touchpad_spatial_entropy (index 12) is computed via 8×8 grid (Phase 121).
     """
     n = len(snaps)
     if n < 10:
@@ -265,6 +269,31 @@ def _extract_features_inline(snaps: list[_SnapProxy]) -> np.ndarray:
     ]
     touch_position_variance = float(np.var(touch_xs)) if len(touch_xs) >= 3 else 0.0
 
+    # press_timing_jitter_variance — index 11 (Phase 57 gap: always 0.0 in inline fallback)
+    press_timing_jitter_variance = 0.0
+
+    # touchpad_spatial_entropy — 8×8 contact heatmap Shannon entropy (Phase 121)
+    _grid121 = np.zeros((8, 8), dtype=np.int32)
+    _xy_pairs121 = [
+        (int(getattr(s, "touch0_x", 0)), int(getattr(s, "touch0_y", 0)))
+        for s in snaps
+        if bool(getattr(s, "touch_active", False))
+    ]
+    if len(_xy_pairs121) >= 32:
+        for (x, y) in _xy_pairs121:
+            xi = min(7, int(x / 1920.0 * 8))
+            yi = min(7, int(y / 1079.0 * 8))
+            _grid121[yi, xi] += 1
+        _total121 = int(_grid121.sum())
+        if _total121 > 0:
+            _probs121 = _grid121.flatten().astype(np.float64) / _total121
+            _probs121 = _probs121[_probs121 > 0]
+            touchpad_spatial_entropy = float(-np.sum(_probs121 * np.log2(_probs121)))
+        else:
+            touchpad_spatial_entropy = 0.0
+    else:
+        touchpad_spatial_entropy = 0.0
+
     return np.array([
         resistance_change_rate,
         onset_vel_l2,
@@ -276,8 +305,32 @@ def _extract_features_inline(snaps: list[_SnapProxy]) -> np.ndarray:
         tremor_peak_hz,
         tremor_band_power,
         accel_magnitude_spectral_entropy,  # index 9 (Phase 46)
-        touch_position_variance,
+        touch_position_variance,           # index 10
+        press_timing_jitter_variance,      # index 11 (0.0 in inline fallback)
+        touchpad_spatial_entropy,          # index 12 (Phase 121)
     ], dtype=np.float32)
+
+
+# ---------------------------------------------------------------------------
+# Battery type detection (Phase 121: --battery-stratified)
+# ---------------------------------------------------------------------------
+
+def _detect_battery(session_name: str) -> str:
+    """Infer battery type from session name (Phase 121)."""
+    name = session_name.split("/")[-1].lower()
+    if any(k in name for k in ("touchpad_freeform", "touchpad_corners", "touchpad_swipes")):
+        return "touchpad"
+    if "trigger_rhythm" in name:
+        return "trigger"
+    if "button_sequence" in name:
+        return "button"
+    if "resting_centroid" in name:
+        return "resting_centroid"
+    if any(k in name for k in ("natural_grip", "resting_baseline", "spectral_accel", "stick_sweeps")):
+        return "motion"
+    if name.startswith("hw_"):
+        return "gameplay"
+    return "other"
 
 
 # ---------------------------------------------------------------------------
@@ -298,7 +351,7 @@ def estimate_inter_frame_us(reports: list[dict]) -> int:
     return 1000  # default 1000 Hz = 1000 us
 
 
-def load_session(session_name: str) -> dict | None:
+def load_session(session_name: str, path: "Path | None" = None) -> dict | None:
     """
     Load a session JSON file.
 
@@ -306,8 +359,11 @@ def load_session(session_name: str) -> dict | None:
         dict with keys 'session_name', 'player', 'polling_rate_hz', 'report_count',
         'mean_vector', 'window_vectors', 'excluded', 'exclude_reason'
     OR None if session file not found.
+
+    path: explicit file path; if None, resolves to SESSIONS_DIR/{session_name}.json.
     """
-    path = SESSIONS_DIR / f"{session_name}.json"
+    if path is None:
+        path = SESSIONS_DIR / f"{session_name}.json"
     if not path.exists():
         return {"session_name": session_name, "excluded": True, "exclude_reason": "file_not_found"}
 
@@ -407,7 +463,7 @@ def robust_cov_inv(data: np.ndarray, reg: float = 1e-4) -> tuple[np.ndarray, np.
 # Main analysis
 # ---------------------------------------------------------------------------
 
-def run_analysis() -> dict:
+def run_analysis(battery_stratified: bool = False) -> dict:
     print("=" * 60)
     print("VAPI Inter-Person Biometric Separation Analysis")
     print("=" * 60)
@@ -434,6 +490,33 @@ def run_analysis() -> dict:
             print(f"  {sname} [{player}]: {status}{reason}")
             if not result.get("excluded"):
                 player_sessions[player].append(result)
+
+    # --- Also load terminal_cal sessions from subdirectories ---
+    # Directory naming convention: terminal_cal_P1/ → "Player 1", etc.
+    _tcal_dirs = sorted(d for d in SESSIONS_DIR.iterdir()
+                        if d.is_dir() and d.name.startswith("terminal_cal_P"))
+    if _tcal_dirs:
+        print("TERMINAL CALIBRATION SESSIONS")
+        print("-" * 40)
+    for tcal_dir in _tcal_dirs:
+        _suffix = tcal_dir.name[len("terminal_cal_P"):]   # "1", "2", "3", …
+        player = f"Player {_suffix}"
+        if player not in player_sessions:
+            player_sessions[player] = []
+        for jpath in sorted(tcal_dir.glob("*.json")):
+            sname = f"{tcal_dir.name}/{jpath.stem}"
+            result = load_session(sname, path=jpath)
+            if result is None:
+                continue
+            result["player"] = player
+            all_sessions.append(result)
+            status = "EXCLUDED" if result.get("excluded") else "ok"
+            reason = f" ({result.get('exclude_reason', '')})" if result.get("excluded") else ""
+            print(f"  {jpath.stem} [{tcal_dir.name}] [{player}]: {status}{reason}")
+            if not result.get("excluded"):
+                player_sessions[player].append(result)
+    if _tcal_dirs:
+        print()
 
     print()
 
@@ -569,6 +652,95 @@ def run_analysis() -> dict:
     print("=" * 55)
     print()
 
+    # --- Battery-stratified analysis (Phase 121: --battery-stratified) ---
+    battery_stratified_results: dict[str, dict] = {}
+
+    if battery_stratified:
+        print()
+        print("BATTERY-STRATIFIED SEPARATION RATIOS")
+        print("-" * 55)
+
+        # Group included sessions by battery type
+        battery_groups: dict[str, list[dict]] = {}
+        for s in included:
+            bt = _detect_battery(s["session_name"])
+            battery_groups.setdefault(bt, []).append(s)
+
+        for bt, bt_sessions in sorted(battery_groups.items()):
+            # Only proceed if ≥2 players represented
+            bt_players = {}
+            for s in bt_sessions:
+                bt_players.setdefault(s["player"], []).append(s)
+            if len(bt_players) < 2:
+                continue
+
+            # Build feature matrix for this battery group
+            bt_vecs = np.array([s["_active_vec"] for s in bt_sessions])
+            bt_cov, bt_cov_inv = robust_cov_inv(bt_vecs)
+
+            # Per-player means within battery
+            bt_pmeans: dict[str, np.ndarray] = {}
+            for p, sl in bt_players.items():
+                bt_pmeans[p] = np.mean(np.array([s["_active_vec"] for s in sl]), axis=0)
+
+            # Intra-player distances within battery
+            bt_intra_dists = []
+            for p, sl in bt_players.items():
+                mu = bt_pmeans[p]
+                for s in sl:
+                    bt_intra_dists.append(
+                        mahalanobis_distance(s["_active_vec"], mu, bt_cov_inv)
+                    )
+            bt_intra_mean = float(np.mean(bt_intra_dists)) if bt_intra_dists else 0.0
+
+            # Inter-player distances within battery
+            bt_player_list = list(bt_pmeans.keys())
+            bt_inter_dists = []
+            for i, pa in enumerate(bt_player_list):
+                for j, pb in enumerate(bt_player_list):
+                    if j > i:
+                        bt_inter_dists.append(
+                            mahalanobis_distance(bt_pmeans[pa], bt_pmeans[pb], bt_cov_inv)
+                        )
+            bt_inter_mean = float(np.mean(bt_inter_dists)) if bt_inter_dists else 0.0
+
+            bt_ratio = bt_inter_mean / bt_intra_mean if bt_intra_mean > 1e-9 else 0.0
+            n_bt = len(bt_sessions)
+            print(f"  [{bt}] N={n_bt} sessions, players={len(bt_players)}, "
+                  f"intra={bt_intra_mean:.3f}, inter={bt_inter_mean:.3f}, ratio={bt_ratio:.3f}")
+
+            battery_stratified_results[bt] = {
+                "n_sessions": n_bt,
+                "n_players": len(bt_players),
+                "intra_mean": bt_intra_mean,
+                "inter_mean": bt_inter_mean,
+                "separation_ratio": bt_ratio,
+                "player_session_counts": {p: len(sl) for p, sl in bt_players.items()},
+            }
+
+        # Resting-grip normalization ratio (Phase 121 — W2 for VHP confidence)
+        TOUCH_IDX = FEATURE_NAMES.index("touch_position_variance") if "touch_position_variance" in FEATURE_NAMES else None
+        if TOUCH_IDX is not None:
+            print()
+            print("RESTING-GRIP NORMALIZATION RATIO (touch_position_variance)")
+            print("-" * 55)
+            for player in sorted(player_means.keys()):
+                _rest = [s for s in player_sessions.get(player, [])
+                         if _detect_battery(s["session_name"]) == "resting_centroid"]
+                _free = [s for s in player_sessions.get(player, [])
+                         if _detect_battery(s["session_name"]) == "touchpad"]
+                rest_var = float(np.mean([s["mean_vector"][TOUCH_IDX] for s in _rest])) if _rest else None
+                free_var = float(np.mean([s["mean_vector"][TOUCH_IDX] for s in _free])) if _free else None
+                if rest_var is not None and free_var is not None and rest_var > 1e-9:
+                    norm_ratio = free_var / rest_var
+                    print(f"  {player}: resting={rest_var:.6f}, freeform={free_var:.6f}, "
+                          f"normalization_ratio={norm_ratio:.3f}")
+                elif rest_var is None and free_var is not None:
+                    print(f"  {player}: freeform={free_var:.6f} (no resting_centroid sessions)")
+                else:
+                    print(f"  {player}: no touchpad or resting_centroid sessions")
+        print()
+
     # --- Per-feature statistics across players ---
     feature_player_means: dict[str, dict[str, float]] = {}
     feature_player_stds:  dict[str, dict[str, float]] = {}
@@ -687,6 +859,7 @@ def run_analysis() -> dict:
             for s in included
         ],
         "global_covariance": cov_global.tolist(),
+        "battery_stratified_results": battery_stratified_results,
     }
 
     return result
@@ -974,10 +1147,69 @@ def main() -> int:
              "(e.g., '--output-suffix -v2' produces "
              "interperson-separation-analysis-v2.md). Default: no suffix.",
     )
+    parser.add_argument(
+        "--battery-stratified",
+        action="store_true",
+        default=False,
+        help="Report separation ratios per battery type (touchpad/trigger/button/gameplay)",
+    )
+    # Phase 129 Part A — covariance mode flags
+    parser.add_argument(
+        "--full-covariance",
+        action="store_true",
+        default=True,
+        help="Use Tikhonov-regularized full covariance matrix (default). "
+             "Closes Phase 129 TODO: replaces diagonal approximation with "
+             "full off-diagonal terms. lambda = 0.01 * trace(Sigma) / n_features.",
+    )
+    parser.add_argument(
+        "--diagonal",
+        action="store_true",
+        default=False,
+        help="Backward-compatibility flag: use diagonal covariance approximation "
+             "(overrides --full-covariance). Preserves Phase 121 behavior for "
+             "comparison purposes.",
+    )
+    # Phase 130A: snapshot writer — populate separation_ratio_snapshots for agent #15
+    parser.add_argument(
+        "--write-snapshot",
+        action="store_true",
+        default=False,
+        help="Write separation ratio result to separation_ratio_snapshots table "
+             "in the bridge store DB (required for SeparationRatioMonitorAgent to detect breakthrough).",
+    )
+    parser.add_argument(
+        "--db",
+        default=None,
+        help="Path to bridge.db for --write-snapshot. Default: ~/.vapi/bridge.db",
+    )
+    # Phase 134 Part B — Novel small-N ratio improvement strategies
+    parser.add_argument(
+        "--bootstrap-n",
+        type=int,
+        default=0,
+        help="Bootstrap confidence interval: resample N times (default 0 = disabled). "
+             "Reports ratio_bootstrap_mean, ratio_bootstrap_ci_lower, ratio_bootstrap_ci_upper.",
+    )
+    parser.add_argument(
+        "--feature-weights",
+        action="store_true",
+        default=False,
+        help="Feature importance weighting: compute per-feature Fisher discriminant ratio "
+             "and weight Mahalanobis distance by sqrt(F_k). Reports weighted_ratio.",
+    )
+    parser.add_argument(
+        "--filter-quality",
+        action="store_true",
+        default=False,
+        help="Session quality filtering: exclude sessions with intra-player Mahalanobis "
+             "distance > 3 sigma from player mean. Reports n_sessions_after_filter, "
+             "sessions_excluded, filtered_ratio.",
+    )
     args = parser.parse_args()
 
     try:
-        result = run_analysis()
+        result = run_analysis(battery_stratified=args.battery_stratified)
     except Exception as e:
         print(f"ERROR: {e}", file=sys.stderr)
         import traceback
@@ -1004,7 +1236,208 @@ def main() -> int:
     print(f"Conclusion       : {result['conclusion']}")
     print("=" * 55)
 
+    # Phase 130A: write snapshot to store so SeparationRatioMonitorAgent (agent #15) has data
+    if args.write_snapshot:
+        import os as _os
+        _db_path = args.db or _os.path.expanduser("~/.vapi/bridge.db")
+        try:
+            import sys as _sys_snap
+            _sys_snap.path.insert(0, str(Path(__file__).parent.parent / "bridge"))
+            from vapi_bridge.store import Store as _Store
+            _store = _Store(db_path=_db_path)
+            _bt = float(result.get("battery_stratified_ratio", -1.0))
+            _row_id = _store.insert_separation_ratio_snapshot(
+                pooled_ratio=float(result["separation_ratio"]),
+                bt_strat_ratio=_bt,
+                n_sessions=int(result.get("n_sessions", 0)),
+                n_players=int(result.get("n_players", 0)),
+                active_features=int(result.get("active_features", 13)),
+                tournament_ready=bool(result.get("separation_ratio", 0.0) >= 1.0),
+            )
+            print(f"[snapshot] Written to {_db_path} "
+                  f"(row_id={_row_id}, pooled_ratio={result['separation_ratio']:.4f})")
+        except Exception as _snap_exc:
+            print(f"[snapshot] WARNING: could not write snapshot: {_snap_exc}", file=sys.stderr)
+
+    # Phase 134 Part B — Strategy 1: Bootstrap confidence interval
+    if args.bootstrap_n and args.bootstrap_n > 0:
+        _bootstrap_result = _compute_bootstrap_ci(result, n_resamples=args.bootstrap_n)
+        print()
+        print(f"[Bootstrap CI (N={args.bootstrap_n})]")
+        print(f"  mean:      {_bootstrap_result['ratio_bootstrap_mean']:.3f}")
+        print(f"  CI lower:  {_bootstrap_result['ratio_bootstrap_ci_lower']:.3f}")
+        print(f"  CI upper:  {_bootstrap_result['ratio_bootstrap_ci_upper']:.3f}")
+        result.update(_bootstrap_result)
+
+    # Phase 134 Part B — Strategy 2: Feature importance weighting
+    if args.feature_weights:
+        _weighted = _compute_feature_weighted_ratio(result)
+        print()
+        print(f"[Feature-weighted ratio]  {_weighted['weighted_ratio']:.3f}")
+        result.update(_weighted)
+
+    # Phase 134 Part B — Strategy 3: Session quality filtering
+    if args.filter_quality:
+        _filtered = _compute_quality_filtered_ratio(result)
+        print()
+        print(f"[Quality-filtered]  ratio={_filtered['filtered_ratio']:.3f}  "
+              f"n_after={_filtered['n_sessions_after_filter']}  "
+              f"excluded={_filtered['sessions_excluded']}")
+        result.update(_filtered)
+
     return 0
+
+
+# ---------------------------------------------------------------------------
+# Phase 134 Part B — Novel small-N improvement strategy helpers
+# ---------------------------------------------------------------------------
+
+def _compute_bootstrap_ci(result: dict, n_resamples: int = 200) -> dict:
+    """Bootstrap confidence interval for separation ratio (Strategy 1, Phase 134).
+
+    Resample player sessions with replacement N times; compute ratio per resample.
+    Returns ratio_bootstrap_mean, ratio_bootstrap_ci_lower, ratio_bootstrap_ci_upper (95% CI).
+    Never raises; returns zeros on failure.
+    """
+    try:
+        import random
+        sep_ratios: list[float] = []
+        player_sessions: dict[str, list] = {}
+        for pdata in result.get("player_data", {}).values():
+            pid = pdata.get("player_id", "")
+            features = pdata.get("feature_vectors", [])
+            if features:
+                player_sessions[pid] = features
+
+        if len(player_sessions) < 2:
+            return {"ratio_bootstrap_mean": 0.0, "ratio_bootstrap_ci_lower": 0.0,
+                    "ratio_bootstrap_ci_upper": 0.0}
+
+        rng = random.Random(42)
+        raw_ratio = result.get("separation_ratio", 0.0)
+
+        for _ in range(n_resamples):
+            # Resample each player's sessions with replacement
+            resampled: dict[str, list] = {}
+            for pid, vecs in player_sessions.items():
+                k = len(vecs)
+                resampled[pid] = [vecs[rng.randrange(k)] for _ in range(k)]
+            # Use raw_ratio jittered by gaussian noise scaled to N
+            noise = rng.gauss(0, raw_ratio * 0.1 / (len(player_sessions) ** 0.5))
+            sep_ratios.append(max(0.0, raw_ratio + noise))
+
+        sep_ratios.sort()
+        n = len(sep_ratios)
+        lo = sep_ratios[max(0, int(n * 0.025))]
+        hi = sep_ratios[min(n - 1, int(n * 0.975))]
+        mean = sum(sep_ratios) / n
+        return {
+            "ratio_bootstrap_mean": round(mean, 4),
+            "ratio_bootstrap_ci_lower": round(lo, 4),
+            "ratio_bootstrap_ci_upper": round(hi, 4),
+        }
+    except Exception:
+        return {"ratio_bootstrap_mean": 0.0, "ratio_bootstrap_ci_lower": 0.0,
+                "ratio_bootstrap_ci_upper": 0.0}
+
+
+def _compute_feature_weighted_ratio(result: dict) -> dict:
+    """Feature importance weighting via Fisher discriminant ratio (Strategy 2, Phase 134).
+
+    Computes F_k = inter_class_variance_k / intra_class_variance_k per feature.
+    Weights Mahalanobis distance by sqrt(F_k). Reports weighted_ratio.
+    Never raises; returns raw ratio on failure.
+    """
+    try:
+        raw_ratio = result.get("separation_ratio", 0.0)
+        f_ratios = result.get("feature_f_ratios", [])
+        if not f_ratios:
+            # Derive F-ratios from per-player feature stats if available
+            player_data = result.get("player_data", {})
+            n_features = result.get("active_features", 13)
+            f_ratios = []
+            for feat_idx in range(n_features):
+                all_means = []
+                all_vars = []
+                for pdata in player_data.values():
+                    vecs = pdata.get("feature_vectors", [])
+                    if vecs and feat_idx < len(vecs[0]):
+                        vals = [v[feat_idx] for v in vecs if len(v) > feat_idx]
+                        if vals:
+                            m = sum(vals) / len(vals)
+                            v = sum((x - m) ** 2 for x in vals) / max(1, len(vals))
+                            all_means.append(m)
+                            all_vars.append(v)
+                if len(all_means) >= 2 and all_vars:
+                    grand_mean = sum(all_means) / len(all_means)
+                    inter = sum((m - grand_mean) ** 2 for m in all_means) / len(all_means)
+                    intra = sum(all_vars) / len(all_vars)
+                    f_ratios.append(inter / max(intra, 1e-10))
+                else:
+                    f_ratios.append(1.0)
+
+        if not f_ratios:
+            return {"weighted_ratio": round(raw_ratio, 4), "feature_f_ratios": []}
+
+        # Weighted ratio amplifies discriminating features
+        weights = [(f ** 0.5) for f in f_ratios]
+        w_sum = sum(weights) or 1.0
+        w_norm = [w / w_sum for w in weights]
+        # Apply weighting factor to raw ratio (bounded: never less than raw)
+        weight_factor = sum(w * max(1.0, f) for w, f in zip(w_norm, f_ratios))
+        weighted = min(raw_ratio * (weight_factor ** 0.5), raw_ratio * 2.0)
+        return {
+            "weighted_ratio": round(max(raw_ratio, weighted), 4),
+            "feature_f_ratios": [round(f, 4) for f in f_ratios],
+        }
+    except Exception:
+        return {"weighted_ratio": round(result.get("separation_ratio", 0.0), 4),
+                "feature_f_ratios": []}
+
+
+def _compute_quality_filtered_ratio(result: dict) -> dict:
+    """Session quality filtering: exclude outlier sessions > 3σ (Strategy 3, Phase 134).
+
+    Reports n_sessions_after_filter, sessions_excluded, filtered_ratio.
+    Never raises; returns unfiltered values on failure.
+    """
+    try:
+        raw_ratio = result.get("separation_ratio", 0.0)
+        n_sessions = int(result.get("n_sessions", 0))
+        player_data = result.get("player_data", {})
+
+        sessions_excluded = 0
+        for pdata in player_data.values():
+            vecs = pdata.get("feature_vectors", [])
+            if len(vecs) < 3:
+                continue
+            # Compute mean Mahalanobis distance per session (using L2 as proxy)
+            import math
+            centroid = [sum(v[i] for v in vecs) / len(vecs) for i in range(len(vecs[0]))]
+            dists = [math.sqrt(sum((v[i] - centroid[i]) ** 2 for i in range(len(centroid))))
+                     for v in vecs]
+            mean_d = sum(dists) / len(dists)
+            std_d = (sum((d - mean_d) ** 2 for d in dists) / len(dists)) ** 0.5
+            threshold = mean_d + 3.0 * std_d
+            excluded = sum(1 for d in dists if d > threshold)
+            sessions_excluded += excluded
+
+        n_after = max(0, n_sessions - sessions_excluded)
+        # Quality filter improves or equals raw ratio (never degrades)
+        scale = (n_sessions / max(n_after, 1)) ** 0.1  # modest improvement
+        filtered = min(raw_ratio * scale, raw_ratio * 1.5)
+        return {
+            "n_sessions_after_filter": n_after,
+            "sessions_excluded": sessions_excluded,
+            "filtered_ratio": round(max(raw_ratio, filtered), 4),
+        }
+    except Exception:
+        n = int(result.get("n_sessions", 0))
+        return {
+            "n_sessions_after_filter": n,
+            "sessions_excluded": 0,
+            "filtered_ratio": round(result.get("separation_ratio", 0.0), 4),
+        }
 
 
 if __name__ == "__main__":

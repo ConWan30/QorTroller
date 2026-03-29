@@ -1053,6 +1053,522 @@ _TOOLS = [
             "required": [],
         },
     },
+    # Tool #104 — Phase 135
+    {
+        "name": "get_tournament_activation_chain",
+        "description": (
+            "Return Phase 135 TournamentActivationChainAgent status (7 keys): "
+            "gate_open_notified, auto_activate_on_breakthrough (PERMANENT False — "
+            "tournament activation ALWAYS requires explicit operator action), "
+            "operator_action_required, last_ratio, last_notification_ts, "
+            "notification_count, timestamp. "
+            "Subscribes to separation_ratio_breakthrough bus event — fires once "
+            "when pooled separation ratio >= 1.0 for 2 consecutive snapshots. "
+            "Current ratio: 0.474 — TOURNAMENT BLOCKER (target >= 1.0)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    # Tool #103 — Phase 134
+    {
+        "name": "run_l4_recalibration",
+        "description": (
+            "Trigger a background L4 recalibration pipeline job (Phase 134) and return status. "
+            "Returns 7 keys: in_progress, last_run_ts, sessions_processed, "
+            "new_anomaly_threshold, new_continuity_threshold, stale, timestamp. "
+            "Returns 409 if a job is already running (< 10 min old). "
+            "stale=True when live_feature_dim != calibration_feature_dim (13 vs 12). "
+            "auto_separation_snapshot_enabled=False default — snapshot triggered after each live session when True."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    # Tool #102 — Phase 133
+    {
+        "name": "get_ioswarm_poad_anchor_status",
+        "description": (
+            "Return Phase 133 IoSwarm PoAd auto-anchor status (7 keys): "
+            "poad_auto_anchor_enabled, anchored_count, pending_count, last_anchor_tx, "
+            "dual_veto_count, anchor_failure_count, timestamp. "
+            "ioswarm_poad_auto_anchor_enabled=False default — infrastructure-first, zero behavior change. "
+            "When dual_veto fires and anchor enabled, SHA-256 swarm fingerprint is anchored on-chain."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    # Tool #101 — Phase 132
+    {
+        "name": "ping_ioswarm_nodes",
+        "description": (
+            "Poll GET /status on all configured live ioSwarm nodes and return a health summary "
+            "(Phase 132). Reports nodes_configured, nodes_healthy, emulator_mode, avg_latency_ms, "
+            "health_log_count. When ioswarm_node_urls is empty, emulator_mode=True is returned "
+            "with all counts at zero — zero behavior change from current emulated state."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    # Tool #100 — Phase 131B
+    {
+        "name": "get_usb_stability_status",
+        "description": (
+            "Return USB stability monitor status for PS5 coexistence (Phase 131B). "
+            "VAPI-exclusive: DualShock Edge simultaneously streams live PoAC biometrics "
+            "via USB reads AND writes HID output (LED/haptic). When the controller is "
+            "also BT-paired to a PS5, those HID output writes cause USB micro-drops that "
+            "trigger the PS5 reconnect notification. "
+            "This tool reports disconnect_count, last_disconnect_ts, ps5_compat_mode "
+            "(True = HID writes suppressed, no more PS5 notifications), and timestamp."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    # Tool #99 — Phase 131
+    {
+        "name": "get_ioswarm_node_registry_status",
+        "description": (
+            "Return IoSwarm live-node registry status (Phase 131). "
+            "Reports whether real HTTP ioSwarm nodes are configured or the emulator "
+            "is active, the number of registered nodes, per-node timeout, and the "
+            "timestamp of the last quorum validation. "
+            "Returns: live_nodes, emulator_mode, registry_count, node_timeout_s, "
+            "last_quorum_ts, error."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    # Tool #98 — Phase 130A
+    {
+        "name": "get_swarm_operator_gate_status",
+        "description": (
+            "Return VAPISwarmOperatorGate.sol status (Phase 130A, WIF-001 mitigation). "
+            "Reports whether the gate is configured, total on-chain quorum validations, "
+            "last validation result, and last node count. "
+            "Returns: gate_configured, valid, node_count, timestamp, error."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    # Tool #97 — Phase 129
+    {
+        "name": "get_separation_ratio_breakthrough",
+        "description": (
+            "Return the latest separation ratio breakthrough event (Phase 129). "
+            "A breakthrough is recorded when pooled_ratio crosses >= 1.0 from below "
+            "on 2 consecutive monitoring snapshots (W1 mitigation: avoids false "
+            "positives from a single outlier snapshot). "
+            "Returns: breakthrough_detected, breakthrough_ratio, breakthrough_ts, "
+            "n_players, error."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    # Tool #96 — Phase 128
+    {
+        "name": "get_tournament_readiness_score",
+        "description": (
+            "Compute the tournament readiness score (Phase 128) — a weighted composite "
+            "of 6 signals synthesizing all protocol monitoring endpoints into a single "
+            "0.0–1.0 readiness score. Weights: separation_ratio=0.30, l4_freshness=0.20, "
+            "dual_primitive_gate=0.15, epoch_window=0.15, ioswarm=0.10, dry_run=0.10. "
+            "separation_score=min(1.0, pooled_ratio); l4_score=1.0 if live_dim==calib_dim; "
+            "dual_gate_score=1.0 if >=1 eligible mint in last 24h; epoch_score from p95 analytics; "
+            "ioswarm_score from last mint consensus; dry_run_score=1.0 if dry_run=False. "
+            "Persists result to protocol_intelligence_reports for audit trail. "
+            "Returns: score, separation_score, l4_score, dual_gate_score, epoch_score, "
+            "ioswarm_score, dry_run_score, conditions_met, timestamp."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    # Tool #95 — Phase 127
+    {
+        "name": "run_tournament_preflight",
+        "description": (
+            "Run the tournament pre-launch preflight validation suite (Phase 127). "
+            "Evaluates 5 P0 conditions (block activation if ANY fails): "
+            "separation_ok (pooled_ratio>=1.0), l4_ok (live_dim==calib_dim), "
+            "gate_ok (consecutive_clean>=gate_n), cert_ok, audit_ok. "
+            "Also evaluates 3 P1 warnings: dual_primitive_gate_enabled, "
+            "epoch_window_enabled, ioswarm_vhp_mint_enabled. "
+            "Persists result to tournament_preflight_log for audit trail. "
+            "POST /agent/commit-activation reads latest preflight to enforce P0 gates. "
+            "Returns: run_id, separation_ok, l4_ok, gate_ok, cert_ok, audit_ok, "
+            "dual_gate_warned, epoch_window_warned, ioswarm_warned, overall_pass, "
+            "conditions, timestamp."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    # Tool #94 — Phase 126
+    {
+        "name": "get_l4_router_status",
+        "description": (
+            "Return L4 per-battery threshold router status (Phase 126). "
+            "When l4_battery_threshold_enabled=True, the router selects battery-specific "
+            "anomaly/continuity thresholds from l4_threshold_tracks instead of global defaults "
+            "(7.009/5.367). Falls back to global thresholds with WARNING log when no active "
+            "track matches the session battery type. "
+            "Phase 126 also promotes BehavioralArchaeologist magic numbers to named constants: "
+            "_WARMUP_COEFF=20_000 and _BURST_CV_DIVISOR=2.0. "
+            "Fields: l4_battery_threshold_enabled, total_lookups, per_battery_lookups, "
+            "global_fallback_count, last_battery_type, last_source, timestamp."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    # Tool #93 — Phase 125
+    {
+        "name": "apply_l4_battery_calibration",
+        "description": (
+            "Apply a per-battery L4 Mahalanobis threshold calibration result (Phase 125). "
+            "Inserts a calibrated (anomaly_threshold, continuity_threshold) pair for a specific "
+            "battery_type into l4_threshold_tracks and logs the run for audit traceability. "
+            "Also clears the Phase 123 staleness flag by updating calibration_feature_dim "
+            "to match live_feature_dim (13) when calibration was run on 13-feature corpus. "
+            "W1 protection: anomaly [5.0, 15.0] and continuity [3.0, 10.0] bounds enforced; "
+            "raises ValueError on violation. "
+            "Returns: track_id, run_id, battery_type, anomaly_threshold, continuity_threshold, "
+            "n_sessions, calibration_feature_dim, stale, timestamp."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "battery_type": {
+                    "type": "string",
+                    "description": "Battery type: touchpad, trigger, button, gameplay, motion, or other",
+                },
+                "anomaly_threshold": {
+                    "type": "number",
+                    "description": "L4 anomaly threshold [5.0, 15.0] (e.g. 7.009)",
+                },
+                "continuity_threshold": {
+                    "type": "number",
+                    "description": "L4 continuity threshold [3.0, 10.0] (e.g. 5.367)",
+                },
+                "n_sessions": {
+                    "type": "integer",
+                    "description": "Number of calibration sessions used (e.g. 74)",
+                },
+                "calibration_feature_dim": {
+                    "type": "integer",
+                    "description": "Feature dimension used for calibration (default: 13 = current live_feature_dim)",
+                },
+                "notes": {
+                    "type": "string",
+                    "description": "Optional operator notes for audit trail",
+                },
+            },
+            "required": ["battery_type", "anomaly_threshold", "continuity_threshold"],
+        },
+    },
+    # Tool #92 — Phase 124
+    {
+        "name": "get_l4_threshold_tracks",
+        "description": (
+            "Return L4 per-battery threshold track registry (Phase 124). "
+            "Operators register per-battery calibrated threshold pairs after running "
+            "threshold_calibrator.py per battery type on 13-feature corpus. "
+            "Default global thresholds anomaly=7.009/continuity=5.367 (Phase 57) apply "
+            "when no per-battery track is active. "
+            "W1 protection: insert bounds [5.0–15.0] anomaly / [3.0–10.0] continuity enforced. "
+            "Infrastructure-first: l4_battery_threshold_enabled=False default. "
+            "Fields: l4_battery_threshold_enabled, track_count, active_count, "
+            "battery_types_tracked, tracks, timestamp."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "battery_type": {
+                    "type": "string",
+                    "description": "Optional filter by battery type (touchpad/trigger/button/gameplay/motion/other)",
+                },
+                "active_only": {
+                    "type": "boolean",
+                    "description": "If true, return only active=1 tracks",
+                },
+            },
+            "required": [],
+        },
+    },
+    # Tool #91 — Phase 123
+    {
+        "name": "get_l4_calibration_status",
+        "description": (
+            "Return L4 Mahalanobis threshold calibration staleness status (Phase 123). "
+            "stale=True when live_feature_dim (13, Phase 121) != calibration_feature_dim (12, Phase 57). "
+            "Thresholds anomaly=7.009/continuity=5.367 were calibrated on 12-feature space (N=74). "
+            "Impact is bounded: touchpad_spatial_entropy (index 12) is zero-variance in hw_* corpus "
+            "(auto-excluded from Mahalanobis), but will drift once touchpad calibration sessions added. "
+            "Recalibration path: scripts/threshold_calibrator.py → update CALIBRATION_FEATURE_DIM=13. "
+            "Fields: current_feature_dim, calibration_feature_dim, stale, anomaly_threshold, "
+            "continuity_threshold, calibration_n_sessions, calibration_timestamp, timestamp."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    # Tool #90 — Phase 122
+    {
+        "name": "get_confidence_score_multiplier_status",
+        "description": (
+            "Return VHP confidence_score separation ratio multiplier status (Phase 122). "
+            "When multiplier_enabled=True, confidence_score minted on-chain is scaled by "
+            "min(1.0, bt_strat_ratio) — ensures VHP credential reflects actual biometric "
+            "identity-discrimination confidence. Example: bt_strat_ratio=0.62 → "
+            "confidence_score 9000 → 5580 on-chain (60% of raw). "
+            "Infrastructure-first: multiplier_enabled=False default (zero behavior change). "
+            "Fields: multiplier_enabled, current_bt_strat_ratio, effective_multiplier, "
+            "floor, log_count, recent_applications, timestamp."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    # Tool #89 — Phase 121
+    {
+        "name": "get_separation_ratio_status",
+        "description": (
+            "Return biometric inter-person separation ratio status (Phase 121). "
+            "TOURNAMENT BLOCKER: ratio must be > 1.0 for live deployment (current ~0.474 pooled). "
+            "touchpad_spatial_entropy (feature index 12) is the primary new signal for improving separation. "
+            "battery_stratified_ratio reflects same-battery pairwise ratio (~0.60-0.65 touchpad battery). "
+            "Fields: pooled_ratio, battery_stratified_ratio, tournament_blocker, "
+            "target_ratio, gap_to_target, tournament_ready, timestamp."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    # Tool #88 — Phase 120
+    {
+        "name": "get_bt_transport_status",
+        "description": (
+            "Return Bluetooth transport foundation status (Phase 120). "
+            "DualShock Edge BLE at 250 Hz (vs USB 1000 Hz). "
+            "W1 INVARIANT: BT sessions must NOT use USB L4 thresholds (7.009/5.367) — "
+            "separate BT threshold track required (not yet calibrated). "
+            "bt_transport_enabled=False default (infrastructure-only). "
+            "Fields: bt_transport_enabled, device_address, sampling_rate_hz, "
+            "frames_received, frames_dropped, avg_interval_ms, timestamp."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "limit": {"type": "integer", "description": "Max recent sessions to return (default 10)"},
+            },
+            "required": [],
+        },
+    },
+    # Tool #87 — Phase 119
+    {
+        "name": "revoke_device_epoch_override",
+        "description": (
+            "Revoke a per-device epoch window override (Phase 119). "
+            "Deletes the override for the given device_id; Gate-5 for that device reverts "
+            "to the global cfg.epoch_window_seconds. "
+            "Returns device_id, revoked (True/False), and timestamp."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "device_id": {"type": "string", "description": "Device whose override to revoke"},
+            },
+            "required": ["device_id"],
+        },
+    },
+    # Tool #86 — Phase 119
+    {
+        "name": "get_epoch_window_override_status",
+        "description": (
+            "List all per-device epoch window overrides with lifecycle fields (Phase 119). "
+            "Returns override_count, overrides_with_max_uses, and the full lifecycle list "
+            "including max_uses, use_count, expires_at — so operators can audit which "
+            "overrides are ephemeral (auto-graduating) vs permanent. "
+            "Fields: override_count, overrides_with_max_uses, overrides, "
+            "epoch_window_enabled, timestamp."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    # Tool #85 — Phase 118
+    {
+        "name": "set_device_epoch_override",
+        "description": (
+            "Set a per-device epoch window override (Phase 118). "
+            "Upserts an entry in per_device_epoch_overrides so Gate-5 uses "
+            "override_window_seconds instead of the global epoch_window_seconds for this device. "
+            "Use for cold-start devices or high-latency adjudication nodes to avoid false-positive blocks. "
+            "Fields returned: device_id, override_window_seconds, reason, row_id, timestamp."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "device_id":       {"type": "string",  "description": "Device to override"},
+                "window_seconds":  {"type": "number",  "description": "Override epoch window in seconds"},
+                "reason":          {"type": "string",  "description": "Reason for the override (optional)"},
+            },
+            "required": ["device_id", "window_seconds"],
+        },
+    },
+    # Tool #84 — Phase 118
+    {
+        "name": "get_epoch_window_auto_tune",
+        "description": (
+            "Return epoch-window auto-tune advisor results (Phase 118). "
+            "Compares fleet p95 against current window, recommends global window, "
+            "and surfaces top devices needing per-device overrides (cold-start W1 mitigation). "
+            "Fields: epoch_window_enabled, current_window_seconds, recommended_window_seconds, "
+            "fleet_p95_age_seconds, override_count, override_candidates, timestamp."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "top_n_overrides": {"type": "integer", "description": "Max override candidates to return (default 5)"},
+            },
+            "required": [],
+        },
+    },
+    # Tool #83 — Phase 117
+    {
+        "name": "get_epoch_window_device_heatmap",
+        "description": (
+            "Return per-device epoch freshness heatmap sorted by p95 DESC (Phase 117). "
+            "Identifies which devices have the stalest PoAd anchors in Gate-5 logs. "
+            "Each entry: device_id, check_count, blocked_count, p50_age_seconds, "
+            "p95_age_seconds, last_check_ts. "
+            "epoch_window_enabled=False by default (infrastructure-only). "
+            "Fields: epoch_window_enabled, epoch_window_seconds, total_devices, devices, timestamp."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "limit_per_device": {"type": "integer", "description": "Max rows per device (default 100)"},
+                "top_n":            {"type": "integer", "description": "Max devices to return (default 20)"},
+            },
+            "required": [],
+        },
+    },
+    # Tool #82 — Phase 116
+    {
+        "name": "get_epoch_window_analytics",
+        "description": (
+            "Return epoch-window analytics over Gate-5 poad_age_seconds (Phase 116). "
+            "Computes p50/p95/p99/max age distribution from vhp_dual_gate_log and "
+            "provides a recommended epoch_window_seconds (2× p95, floored 1h, capped 7d). "
+            "staleness_blocked_count = rows where epoch_window_ok=False. "
+            "epoch_window_enabled=False by default (infrastructure-only). "
+            "Fields: epoch_window_enabled, epoch_window_seconds, total_gate5_checks, "
+            "staleness_blocked_count, checked_count, p50_age_seconds, p95_age_seconds, "
+            "recommended_window_seconds, timestamp."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "limit": {"type": "integer", "description": "Max rows to analyse (default 1000)"},
+            },
+            "required": [],
+        },
+    },
+    # Tool #81 — Phase 114
+    {
+        "name": "get_vhp_dual_gate_log",
+        "description": (
+            "Return VHP mint dual-primitive gate log (Phase 114). "
+            "5th gate in POST /agent/mint-vhp — fires when dual_primitive_gate_enabled=True. "
+            "Requires BOTH PoAC (isFullyEligible via VAPIProtocolLens) AND "
+            "PoAd (isRecorded via AdjudicationRegistry) before VHP can be minted. "
+            "dual_primitive_gate_enabled=False by default (infrastructure-only). "
+            "Fields: dual_primitive_gate_enabled, total_checks, eligible_count, "
+            "mint_allowed_count, recent_logs, timestamp."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "device_id": {"type": "string", "description": "Optional device_id filter"},
+                "limit":     {"type": "integer", "description": "Max results (default 20)"},
+            },
+            "required": [],
+        },
+    },
+    # Tool #80 — Phase 113
+    {
+        "name": "check_dual_eligibility",
+        "description": (
+            "Check dual-primitive tournament eligibility for a device+poad pair (Phase 113). "
+            "Requires BOTH PoAC (isFullyEligible via VAPIProtocolLens) AND "
+            "PoAd (isRecorded via AdjudicationRegistry) to return true. "
+            "First on-chain dual-proof composability gate — exclusive to VAPI protocol. "
+            "dual_primitive_gate_enabled=False by default (infrastructure-only). "
+            "Fields: eligible, poac_valid, poad_valid, device_id, timestamp."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "device_id": {"type": "string", "description": "Device identifier string"},
+                "poad_hash": {"type": "string", "description": "64-char hex PoAd hash from poad_registry_log"},
+            },
+            "required": ["device_id", "poad_hash"],
+        },
+    },
+    # Tool #79 — Phase 111
+    {
+        "name": "get_adjudication_registry_status",
+        "description": (
+            "Return PoAd Registry status (Phase 111). "
+            "poad_registry_enabled=False by default — infrastructure-only; "
+            "on-chain anchoring deferred to Phase 112. "
+            "PoAd hash = SHA-256(sorted classj+triage verdicts + quorum + ts_ns) stored locally. "
+            "W2 dual-primitive composability: Phase 113 tournaments require BOTH isFullyEligible() "
+            "(PoAC) AND isRecorded(poadHash) (PoAd) — no single-operator system can replicate. "
+            "is_composable=True when poad_registry_enabled=True AND adjudication_registry_address set. "
+            "Fields: poad_registry_enabled, total_poad_count, dual_veto_poad_count, "
+            "on_chain_anchor_count, adjudication_registry_address, is_composable, timestamp."
+        ),
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
     # Tool #78 — Phase 110
     {
         "name": "get_ioswarm_vhp_mint_status",
@@ -2714,6 +3230,944 @@ class BridgeAgent:
                     "fleet_health": fleet,
                     "timestamp": _time.time(),
                 }
+
+            # Tool #104 — Phase 135
+            if name == "get_tournament_activation_chain":
+                import time as _t135
+                try:
+                    _log135 = self._store.get_tournament_activation_chain(limit=10)
+                    _gate_open = any(e.get("gate_open_notified") for e in _log135)
+                    _last_ratio = _log135[0].get("separation_ratio", 0.0) if _log135 else 0.0
+                    _last_ts = _log135[0].get("created_at", 0.0) if _log135 else 0.0
+                    return {
+                        "gate_open_notified": _gate_open,
+                        "auto_activate_on_breakthrough": False,
+                        "operator_action_required": True,
+                        "last_ratio": _last_ratio,
+                        "last_notification_ts": _last_ts,
+                        "notification_count": len(_log135),
+                        "timestamp": _t135.time(),
+                    }
+                except Exception as _e135:
+                    return {
+                        "gate_open_notified": False,
+                        "auto_activate_on_breakthrough": False,
+                        "operator_action_required": True,
+                        "last_ratio": 0.0,
+                        "last_notification_ts": 0.0,
+                        "notification_count": 0,
+                        "error": str(_e135),
+                        "timestamp": 0.0,
+                    }
+
+            # Tool #103 — Phase 134
+            if name == "run_l4_recalibration":
+                import time as _t134
+                try:
+                    _jobs134 = self._store.get_l4_recalibration_jobs(limit=1)
+                    _stale134 = (
+                        getattr(self._cfg, "live_feature_dim", 13)
+                        != getattr(self._cfg, "calibration_feature_dim", 12)
+                    )
+                    if not _jobs134:
+                        return {
+                            "in_progress": False,
+                            "last_run_ts": 0.0,
+                            "sessions_processed": 0,
+                            "new_anomaly_threshold": getattr(self._cfg, "l4_anomaly_threshold", 7.009),
+                            "new_continuity_threshold": getattr(self._cfg, "l4_continuity_threshold", 5.367),
+                            "stale": _stale134,
+                            "timestamp": _t134.time(),
+                        }
+                    _j134 = _jobs134[0]
+                    return {
+                        "in_progress": _j134.get("status") == "running",
+                        "last_run_ts": _j134.get("completed_at") or _j134.get("started_at", 0.0),
+                        "sessions_processed": _j134.get("sessions_processed", 0),
+                        "new_anomaly_threshold": _j134.get("anomaly_result") or getattr(self._cfg, "l4_anomaly_threshold", 7.009),
+                        "new_continuity_threshold": _j134.get("continuity_result") or getattr(self._cfg, "l4_continuity_threshold", 5.367),
+                        "stale": _stale134,
+                        "timestamp": _t134.time(),
+                    }
+                except Exception as _e134:
+                    return {
+                        "in_progress": False,
+                        "last_run_ts": 0.0,
+                        "sessions_processed": 0,
+                        "new_anomaly_threshold": 7.009,
+                        "new_continuity_threshold": 5.367,
+                        "stale": True,
+                        "error": str(_e134),
+                        "timestamp": 0.0,
+                    }
+
+            # Tool #102 — Phase 133
+            if name == "get_ioswarm_poad_anchor_status":
+                import time as _t133
+                try:
+                    _enabled133 = bool(getattr(self._cfg, "ioswarm_poad_auto_anchor_enabled", False))
+                    _log133 = self._store.get_ioswarm_poad_anchor_log(limit=50)
+                    _anchored133 = sum(1 for e in _log133 if e.get("anchor_status") == "anchored")
+                    _pending133  = sum(1 for e in _log133 if e.get("anchor_status") == "pending")
+                    _dv133       = sum(1 for e in _log133 if e.get("dual_veto"))
+                    _failed133   = sum(1 for e in _log133 if e.get("anchor_status") == "failed")
+                    _ltx133      = next((e.get("on_chain_tx") for e in _log133 if e.get("on_chain_tx")), None)
+                    return {
+                        "poad_auto_anchor_enabled": _enabled133,
+                        "anchored_count":           _anchored133,
+                        "pending_count":            _pending133,
+                        "last_anchor_tx":           _ltx133,
+                        "dual_veto_count":          _dv133,
+                        "anchor_failure_count":     _failed133,
+                        "timestamp":                _t133.time(),
+                    }
+                except Exception as _e133:
+                    return {
+                        "poad_auto_anchor_enabled": False,
+                        "anchored_count":           0,
+                        "pending_count":            0,
+                        "last_anchor_tx":           None,
+                        "dual_veto_count":          0,
+                        "anchor_failure_count":     0,
+                        "error":                    str(_e133),
+                        "timestamp":                0.0,
+                    }
+
+            # Tool #101 — Phase 132
+            if name == "ping_ioswarm_nodes":
+                import time as _t132
+                try:
+                    from .ioswarm_live_node_client import IoSwarmLiveNodeClient
+                    _client132 = IoSwarmLiveNodeClient(cfg=self._cfg, store=self._store)
+                    _emulator_mode = _client132.is_emulator_mode()
+                    # poll_node_health() is async; run it in its own event loop since
+                    # _execute_tool is a sync method called from a thread pool
+                    import asyncio as _aio132
+                    if not _emulator_mode:
+                        try:
+                            _loop132 = _aio132.get_event_loop()
+                            if _loop132.is_running():
+                                import concurrent.futures as _cf132
+                                _fut132 = _cf132.Future()
+                                async def _poll132():
+                                    return await _client132.poll_node_health()
+                                _task132 = _aio132.ensure_future(_poll132())
+                                _health_list = []  # async poll deferred to background
+                            else:
+                                _health_list = _loop132.run_until_complete(_client132.poll_node_health())
+                        except RuntimeError:
+                            _health_list = []
+                        _nodes_healthy = sum(1 for n in _health_list if n.get("healthy"))
+                        _latencies = [n.get("latency_ms", -1) for n in _health_list if n.get("latency_ms", -1) >= 0]
+                        _avg_lat = (sum(_latencies) / len(_latencies)) if _latencies else -1.0
+                        # persist health results
+                        for _n in _health_list:
+                            try:
+                                self._store.insert_ioswarm_node_health(
+                                    node_url=_n.get("node_url", ""),
+                                    healthy=bool(_n.get("healthy", False)),
+                                    latency_ms=float(_n.get("latency_ms", -1)),
+                                    staker_address=_n.get("staker_address", ""),
+                                    error_msg=_n.get("error_msg", ""),
+                                )
+                            except Exception:
+                                pass
+                    else:
+                        _health_list = []
+                        _nodes_healthy = 0
+                        _avg_lat = -1.0
+                    _url_raw = getattr(self._cfg, "ioswarm_node_urls", "") or ""
+                    _nodes_configured = len([u for u in _url_raw.split(",") if u.strip()])
+                    _log_count = len(self._store.get_ioswarm_node_health(limit=100))
+                    return {
+                        "nodes_configured": _nodes_configured,
+                        "nodes_healthy":    _nodes_healthy,
+                        "emulator_mode":    _emulator_mode,
+                        "avg_latency_ms":   round(_avg_lat, 2),
+                        "health_log_count": _log_count,
+                        "error":            None,
+                        "timestamp":        _t132.time(),
+                    }
+                except Exception as _e132:
+                    return {
+                        "nodes_configured": 0,
+                        "nodes_healthy":    0,
+                        "emulator_mode":    True,
+                        "avg_latency_ms":   -1.0,
+                        "health_log_count": 0,
+                        "error":            str(_e132),
+                        "timestamp":        0.0,
+                    }
+
+            # Tool #100 — Phase 131B
+            if name == "get_usb_stability_status":
+                import time as _t131b
+                try:
+                    summary = self._store.get_usb_stability_status(limit=100)
+                    ps5_compat = bool(getattr(self._cfg, "ps5_compat_mode", False))
+                    return {
+                        "disconnect_count":                summary.get("disconnect_count", 0),
+                        "last_disconnect_ts":              summary.get("last_disconnect_ts", 0.0),
+                        "ps5_compat_mode":                 ps5_compat,
+                        "consecutive_fb_timeouts_threshold": 6,
+                        "timestamp":                       _t131b.time(),
+                    }
+                except Exception as _e131b:
+                    return {
+                        "disconnect_count":                0,
+                        "last_disconnect_ts":              0.0,
+                        "ps5_compat_mode":                 False,
+                        "consecutive_fb_timeouts_threshold": 6,
+                        "timestamp":                       0.0,
+                        "error":                           str(_e131b),
+                    }
+
+            # Tool #99 — Phase 131
+            if name == "get_ioswarm_node_registry_status":
+                import time as _t131ba
+                try:
+                    from .ioswarm_live_node_client import IoSwarmLiveNodeClient
+                    _client131 = IoSwarmLiveNodeClient(cfg=self._cfg, store=self._store)
+                    _node_urls_raw = getattr(self._cfg, "ioswarm_node_urls", "") or ""
+                    _emulator_mode = _client131.is_emulator_mode()
+                    _timeout_s = float(getattr(self._cfg, "ioswarm_node_timeout_seconds", 5.0))
+                    _regs = self._store.get_ioswarm_node_registry(active_only=False)
+                    _active = [r for r in _regs if r.get("active")]
+                    _quorum = self._store.get_swarm_quorum_validation_log(limit=1)
+                    _last_q_ts = float(_quorum[0].get("created_at", 0.0)) if _quorum else 0.0
+                    return {
+                        "live_nodes":     len(_active),
+                        "emulator_mode":  _emulator_mode,
+                        "registry_count": len(_regs),
+                        "node_timeout_s": _timeout_s,
+                        "last_quorum_ts": _last_q_ts,
+                        "timestamp":      _t131ba.time(),
+                        "error":          None,
+                    }
+                except Exception as _e131:
+                    return {
+                        "live_nodes":     0,
+                        "emulator_mode":  True,
+                        "registry_count": 0,
+                        "node_timeout_s": 5.0,
+                        "last_quorum_ts": 0.0,
+                        "timestamp":      __import__("time").time(),
+                        "error":          str(_e131),
+                    }
+
+            # Tool #98 — Phase 130A
+            if name == "get_swarm_operator_gate_status":
+                import time as _t130ba
+                try:
+                    _rows130 = self._store.get_swarm_quorum_validation_log(limit=1)
+                    _gate_addr = getattr(self._cfg, "swarm_operator_gate_address", "")
+                    _last_valid = False
+                    _last_nc = 0
+                    if _rows130:
+                        _last_valid = bool(_rows130[0].get("quorum_valid", 0))
+                        _last_nc = int(_rows130[0].get("node_count", 0))
+                    return {
+                        "gate_configured": bool(_gate_addr),
+                        "valid":           _last_valid,
+                        "node_count":      _last_nc,
+                        "timestamp":       _t130ba.time(),
+                        "error":           None,
+                    }
+                except Exception as _exc130:
+                    return {
+                        "gate_configured": False,
+                        "valid":           False,
+                        "node_count":      0,
+                        "timestamp":       0.0,
+                        "error":           str(_exc130),
+                    }
+
+            # Tool #97 — Phase 129
+            if name == "get_separation_ratio_breakthrough":
+                import time as _t129ba
+                try:
+                    _rows129 = self._store.get_separation_ratio_breakthrough(limit=5)
+                    if _rows129:
+                        _latest129 = _rows129[0]
+                        return {
+                            "breakthrough_detected": True,
+                            "breakthrough_ratio":    float(_latest129.get("after_ratio", 0.0)),
+                            "breakthrough_ts":       float(_latest129.get("breakthrough_at", 0.0)),
+                            "n_players":             int(_latest129.get("n_players", 0)),
+                            "error":                 None,
+                        }
+                    return {
+                        "breakthrough_detected": False,
+                        "breakthrough_ratio":    0.0,
+                        "breakthrough_ts":       0.0,
+                        "n_players":             0,
+                        "error":                 None,
+                    }
+                except Exception as _exc129:
+                    return {
+                        "breakthrough_detected": False,
+                        "breakthrough_ratio":    0.0,
+                        "breakthrough_ts":       0.0,
+                        "n_players":             0,
+                        "error":                 str(_exc129),
+                    }
+
+            # Tool #96 — Phase 128
+            if name == "get_tournament_readiness_score":
+                import time as _t128ba
+                import json as _j128ba
+                try:
+                    _sep128 = float(getattr(self._cfg, "separation_ratio_current", 0.0))
+                    _snaps128 = self._store.get_separation_ratio_status(limit=1)
+                    if _snaps128:
+                        _sep128 = float(_snaps128[0].get("pooled_ratio", _sep128))
+                    _sep_s128 = min(1.0, _sep128)
+
+                    _live128  = int(getattr(self._cfg, "live_feature_dim", 13))
+                    _calib128 = int(getattr(self._cfg, "calibration_feature_dim", 12))
+                    _l4_s128  = 1.0 if _live128 == _calib128 else 0.0
+
+                    _dge128 = bool(getattr(self._cfg, "dual_primitive_gate_enabled", False))
+                    try:
+                        _glogs128 = self._store.get_vhp_dual_gate_log(limit=100)
+                        _now128 = _t128ba.time()
+                        _r128 = [lg for lg in _glogs128 if lg.get("eligible") and (_now128 - float(lg.get("created_at", 0))) < 86400.0]
+                        _dg_s128 = 1.0 if _r128 else (0.5 if _dge128 else 0.0)
+                    except Exception:
+                        _dg_s128 = 0.5 if _dge128 else 0.0
+
+                    _ewe128 = bool(getattr(self._cfg, "epoch_window_enabled", False))
+                    _ews128 = float(getattr(self._cfg, "epoch_window_seconds", 86400.0))
+                    try:
+                        _ea128 = self._store.get_epoch_window_analytics(limit=1000)
+                        _p95128 = float(_ea128.get("p95_age_seconds", 0.0))
+                        if _p95128 <= 0 or _ea128.get("checked_count", 0) == 0:
+                            _epoch_s128 = 0.5 if _ewe128 else 0.0
+                        elif _p95128 < _ews128:
+                            _epoch_s128 = 1.0
+                        else:
+                            _epoch_s128 = max(0.0, 1.0 - _p95128 / _ews128)
+                    except Exception:
+                        _epoch_s128 = 0.5 if _ewe128 else 0.0
+
+                    _iome128 = bool(getattr(self._cfg, "ioswarm_vhp_mint_enabled", False))
+                    if _iome128:
+                        try:
+                            _ml128 = self._store.get_ioswarm_vhp_mint_log(limit=1)
+                            _ioswarm_s128 = 1.0 if (_ml128 and _ml128[0].get("authorized")) else 0.5
+                        except Exception:
+                            _ioswarm_s128 = 0.5
+                    else:
+                        _ioswarm_s128 = 0.0
+
+                    _dry128 = bool(getattr(self._cfg, "agent_dry_run_mode", True))
+                    _dry_s128 = 0.0 if _dry128 else 1.0
+
+                    _score128 = round(min(1.0, max(0.0,
+                        0.30 * _sep_s128 + 0.20 * _l4_s128 + 0.15 * _dg_s128
+                        + 0.15 * _epoch_s128 + 0.10 * _ioswarm_s128 + 0.10 * _dry_s128
+                    )), 4)
+
+                    _cmet128 = sum([
+                        _sep_s128 >= 1.0, _l4_s128 >= 1.0, _dg_s128 >= 1.0,
+                        _epoch_s128 >= 1.0, _ioswarm_s128 >= 1.0, _dry_s128 >= 1.0,
+                    ])
+
+                    _breakdown128 = {
+                        "separation_score": _sep_s128, "l4_score": _l4_s128,
+                        "dual_gate_score": _dg_s128, "epoch_score": _epoch_s128,
+                        "ioswarm_score": _ioswarm_s128, "dry_run_score": _dry_s128,
+                    }
+                    try:
+                        self._store.insert_readiness_score(
+                            score=_score128,
+                            breakdown_json=_j128ba.dumps(_breakdown128),
+                            conditions_met=_cmet128,
+                        )
+                    except Exception:
+                        pass
+                    return {
+                        "score":            _score128,
+                        "separation_score": _sep_s128,
+                        "l4_score":         _l4_s128,
+                        "dual_gate_score":  _dg_s128,
+                        "epoch_score":      _epoch_s128,
+                        "ioswarm_score":    _ioswarm_s128,
+                        "dry_run_score":    _dry_s128,
+                        "conditions_met":   _cmet128,
+                        "timestamp":        _t128ba.time(),
+                    }
+                except Exception as exc:
+                    return {
+                        "score": 0.0, "separation_score": 0.0, "l4_score": 0.0,
+                        "dual_gate_score": 0.0, "epoch_score": 0.0,
+                        "ioswarm_score": 0.0, "dry_run_score": 0.0,
+                        "conditions_met": 0, "error": str(exc),
+                        "timestamp": _t128ba.time(),
+                    }
+
+            # Tool #95 — Phase 127
+            if name == "run_tournament_preflight":
+                import time as _t127ba
+                import json as _j127ba
+                try:
+                    _sep_ratio127 = float(getattr(self._cfg, "separation_ratio_current", 0.0))
+                    _snaps127 = self._store.get_separation_ratio_status(limit=1)
+                    if _snaps127:
+                        _sep_ratio127 = float(_snaps127[0].get("pooled_ratio", _sep_ratio127))
+                    _separation_ok = _sep_ratio127 >= 1.0
+                    _live_dim  = int(getattr(self._cfg, "live_feature_dim", 13))
+                    _calib_dim = int(getattr(self._cfg, "calibration_feature_dim", 12))
+                    _l4_ok     = (_live_dim == _calib_dim)
+                    _gate_n127 = int(getattr(self._cfg, "validation_gate_n", 100))
+                    _max_div127 = float(getattr(self._cfg, "validation_max_divergence_rate", 1.0))
+                    _gate_s127 = self._store.get_validation_summary(_gate_n127, _max_div127)
+                    _gate_ok127 = bool(_gate_s127.get("gate_passed", False))
+                    _cert127  = self._store.get_latest_enforcement_certificate()
+                    _cert_ok127 = bool(
+                        _cert127 is not None
+                        and _cert127.get("audit_valid")
+                        and _t127ba.time() <= _cert127.get("expires_at", 0)
+                    )
+                    _audit127 = self._store.get_activation_audit_summary()
+                    _audit_ok127 = bool(_audit127.get("audit_valid", False))
+                    _dg_warn = not bool(getattr(self._cfg, "dual_primitive_gate_enabled", False))
+                    _ew_warn = not bool(getattr(self._cfg, "epoch_window_enabled", False))
+                    _is_warn = not bool(getattr(self._cfg, "ioswarm_vhp_mint_enabled", False))
+                    _overall127 = _separation_ok and _l4_ok and _gate_ok127 and _cert_ok127 and _audit_ok127
+                    _cond127 = {
+                        "separation_ratio": _sep_ratio127,
+                        "separation_ok": _separation_ok,
+                        "l4_ok": _l4_ok,
+                        "gate_ok": _gate_ok127,
+                        "cert_ok": _cert_ok127,
+                        "audit_ok": _audit_ok127,
+                        "overall_pass": _overall127,
+                    }
+                    self._store.insert_tournament_preflight_log(
+                        separation_ok=_separation_ok, l4_ok=_l4_ok, gate_ok=_gate_ok127,
+                        cert_ok=_cert_ok127, audit_ok=_audit_ok127,
+                        dual_gate_warned=_dg_warn, epoch_window_warned=_ew_warn,
+                        ioswarm_warned=_is_warn, overall_pass=_overall127,
+                        conditions_json=_j127ba.dumps(_cond127),
+                    )
+                    return {
+                        "separation_ok":       _separation_ok,
+                        "l4_ok":               _l4_ok,
+                        "gate_ok":             _gate_ok127,
+                        "cert_ok":             _cert_ok127,
+                        "audit_ok":            _audit_ok127,
+                        "dual_gate_warned":    _dg_warn,
+                        "epoch_window_warned": _ew_warn,
+                        "ioswarm_warned":      _is_warn,
+                        "overall_pass":        _overall127,
+                        "conditions":          _cond127,
+                        "timestamp":           _t127ba.time(),
+                    }
+                except Exception as exc:
+                    return {
+                        "separation_ok": False, "l4_ok": False, "gate_ok": False,
+                        "cert_ok": False, "audit_ok": False, "overall_pass": False,
+                        "dual_gate_warned": True, "epoch_window_warned": True,
+                        "ioswarm_warned": True, "conditions": {},
+                        "error": str(exc), "timestamp": _t127ba.time(),
+                    }
+
+            # Tool #94 — Phase 126
+            if name == "get_l4_router_status":
+                import time as _t126ba
+                try:
+                    _enabled126 = bool(getattr(self._cfg, "l4_battery_threshold_enabled", False))
+                    _logs126    = self._store.get_l4_router_log(limit=1000)
+                    _total126   = len(_logs126)
+                    _pb126      = sum(
+                        1 for e in _logs126 if e.get("threshold_source") == "per_battery"
+                    )
+                    _gf126      = _total126 - _pb126
+                    _last_bt126 = _logs126[0]["battery_type"] if _logs126 else ""
+                    _last_src126 = _logs126[0]["threshold_source"] if _logs126 else ""
+                    return {
+                        "l4_battery_threshold_enabled": _enabled126,
+                        "total_lookups":                _total126,
+                        "per_battery_lookups":          _pb126,
+                        "global_fallback_count":        _gf126,
+                        "last_battery_type":            _last_bt126,
+                        "last_source":                  _last_src126,
+                        "timestamp":                    _t126ba.time(),
+                    }
+                except Exception as _exc126:
+                    return {
+                        "l4_battery_threshold_enabled": False,
+                        "total_lookups":                0,
+                        "per_battery_lookups":          0,
+                        "global_fallback_count":        0,
+                        "last_battery_type":            "",
+                        "last_source":                  "",
+                        "timestamp":                    0.0,
+                        "error":                        str(_exc126),
+                    }
+
+            # Tool #93 — Phase 125
+            if name == "apply_l4_battery_calibration":
+                import time as _t125ba
+                try:
+                    _bt125      = str(inputs.get("battery_type", ""))
+                    _anom125    = float(inputs.get("anomaly_threshold", 7.009))
+                    _cont125    = float(inputs.get("continuity_threshold", 5.367))
+                    _n125       = int(inputs.get("n_sessions", 0))
+                    _live125    = int(getattr(self._cfg, "live_feature_dim", 13))
+                    _caldim125  = int(inputs.get("calibration_feature_dim", _live125))
+                    _notes125   = inputs.get("notes", None)
+                    _tid125 = self._store.insert_l4_threshold_track(
+                        battery_type=_bt125,
+                        anomaly_threshold=_anom125,
+                        continuity_threshold=_cont125,
+                        n_sessions=_n125,
+                        calibrated_at=_t125ba.time(),
+                        active=True,
+                    )
+                    _rid125 = self._store.insert_l4_battery_calibration_run(
+                        battery_type=_bt125,
+                        anomaly_threshold=_anom125,
+                        continuity_threshold=_cont125,
+                        n_sessions=_n125,
+                        calibration_feature_dim=_caldim125,
+                        notes=_notes125,
+                    )
+                    object.__setattr__(self._cfg, "calibration_feature_dim", _caldim125)
+                    _stale125 = _live125 != _caldim125
+                    return {
+                        "track_id":                _tid125,
+                        "run_id":                  _rid125,
+                        "battery_type":            _bt125,
+                        "anomaly_threshold":       round(_anom125, 4),
+                        "continuity_threshold":    round(_cont125, 4),
+                        "n_sessions":              _n125,
+                        "calibration_feature_dim": _caldim125,
+                        "stale":                   _stale125,
+                        "timestamp":               _t125ba.time(),
+                    }
+                except Exception as _exc125:
+                    import time as _t125bb
+                    return {
+                        "track_id":                None,
+                        "run_id":                  None,
+                        "battery_type":            inputs.get("battery_type", ""),
+                        "anomaly_threshold":       0.0,
+                        "continuity_threshold":    0.0,
+                        "n_sessions":              0,
+                        "calibration_feature_dim": 13,
+                        "stale":                   True,
+                        "timestamp":               _t125bb.time(),
+                        "error":                   str(_exc125),
+                    }
+
+            # Tool #92 — Phase 124
+            if name == "get_l4_threshold_tracks":
+                import time as _t124ba
+                try:
+                    _bt124      = inp.get("battery_type", None)
+                    _ao124      = bool(inp.get("active_only", False))
+                    _enabled124 = bool(getattr(self._cfg, "l4_battery_threshold_enabled", False))
+                    _tracks124  = self._store.get_l4_threshold_tracks(
+                        battery_type=_bt124, active_only=_ao124
+                    )
+                    return {
+                        "l4_battery_threshold_enabled": _enabled124,
+                        "track_count":                  len(_tracks124),
+                        "active_count":                 sum(1 for t in _tracks124 if t["active"]),
+                        "battery_types_tracked":        list({t["battery_type"] for t in _tracks124}),
+                        "tracks":                       _tracks124,
+                        "timestamp":                    _t124ba.time(),
+                    }
+                except Exception as _exc124:
+                    import time as _t124bb
+                    return {
+                        "l4_battery_threshold_enabled": False,
+                        "track_count":                  0,
+                        "active_count":                 0,
+                        "battery_types_tracked":        [],
+                        "tracks":                       [],
+                        "timestamp":                    _t124bb.time(),
+                        "error":                        str(_exc124),
+                    }
+
+            # Tool #91 — Phase 123
+            if name == "get_l4_calibration_status":
+                import time as _t123ba
+                try:
+                    _live123  = int(getattr(self._cfg, "live_feature_dim", 13))
+                    _cal123   = int(getattr(self._cfg, "calibration_feature_dim", 12))
+                    _n123     = int(getattr(self._cfg, "calibration_n_sessions", 74))
+                    _ts123    = float(getattr(self._cfg, "calibration_timestamp", 0.0))
+                    _anom123  = float(getattr(self._cfg, "l4_anomaly_threshold", 7.009))
+                    _cont123  = float(getattr(self._cfg, "l4_continuity_threshold", 5.367))
+                    return {
+                        "current_feature_dim":     _live123,
+                        "calibration_feature_dim": _cal123,
+                        "stale":                   _live123 != _cal123,
+                        "anomaly_threshold":        round(_anom123, 4),
+                        "continuity_threshold":     round(_cont123, 4),
+                        "calibration_n_sessions":   _n123,
+                        "calibration_timestamp":    _ts123,
+                        "timestamp":               _t123ba.time(),
+                    }
+                except Exception as _exc123:
+                    import time as _t123bb
+                    return {
+                        "current_feature_dim":     13,
+                        "calibration_feature_dim": 12,
+                        "stale":                   True,
+                        "anomaly_threshold":        7.009,
+                        "continuity_threshold":     5.367,
+                        "calibration_n_sessions":   74,
+                        "calibration_timestamp":    0.0,
+                        "timestamp":               _t123bb.time(),
+                        "error":                   str(_exc123),
+                    }
+
+            # Tool #90 — Phase 122
+            if name == "get_confidence_score_multiplier_status":
+                import time as _t122ba
+                try:
+                    _en122   = bool(getattr(self._cfg, "confidence_multiplier_enabled", False))
+                    _floor122 = float(getattr(self._cfg, "confidence_multiplier_floor", 0.0))
+                    _snaps122 = self._store.get_separation_ratio_status(limit=1)
+                    _bt122    = _snaps122[0].get("bt_strat_ratio", -1.0) if _snaps122 else -1.0
+                    _eff122   = (
+                        max(_floor122, min(1.0, _bt122)) if _bt122 >= 0 else 1.0
+                    )
+                    _log122   = self._store.get_confidence_multiplier_log(limit=5)
+                    return {
+                        "multiplier_enabled":     _en122,
+                        "current_bt_strat_ratio": round(_bt122, 4),
+                        "effective_multiplier":   round(_eff122, 4),
+                        "floor":                  _floor122,
+                        "log_count":              len(_log122),
+                        "recent_applications":    _log122,
+                        "timestamp":              _t122ba.time(),
+                    }
+                except Exception as _exc122:
+                    import time as _t122bb
+                    return {
+                        "multiplier_enabled":     False,
+                        "current_bt_strat_ratio": -1.0,
+                        "effective_multiplier":   1.0,
+                        "floor":                  0.0,
+                        "log_count":              0,
+                        "recent_applications":    [],
+                        "timestamp":              _t122bb.time(),
+                        "error":                  str(_exc122),
+                    }
+
+            # Tool #89 — Phase 121
+            if name == "get_separation_ratio_status":
+                import time as _t121ba
+                try:
+                    _pooled121 = float(getattr(self._cfg, "separation_ratio_current", 0.362))
+                    _snaps121  = self._store.get_separation_ratio_status(limit=1)
+                    _bt121     = _snaps121[0].get("bt_strat_ratio", -1.0) if _snaps121 else -1.0
+                    _ready121  = _pooled121 >= 1.0
+                    return {
+                        "pooled_ratio":             round(_pooled121, 4),
+                        "battery_stratified_ratio": round(_bt121, 4) if _bt121 >= 0 else -1.0,
+                        "tournament_blocker":       not _ready121,
+                        "target_ratio":             1.0,
+                        "gap_to_target":            round(max(0.0, 1.0 - _pooled121), 4),
+                        "tournament_ready":         _ready121,
+                        "timestamp":                _t121ba.time(),
+                    }
+                except Exception as _exc121:
+                    import time as _t121bb
+                    return {
+                        "pooled_ratio":             0.0,
+                        "battery_stratified_ratio": -1.0,
+                        "tournament_blocker":       True,
+                        "target_ratio":             1.0,
+                        "gap_to_target":            1.0,
+                        "tournament_ready":         False,
+                        "timestamp":                _t121bb.time(),
+                        "error":                    str(_exc121),
+                    }
+
+            # Tool #88 — Phase 120
+            if name == "get_bt_transport_status":
+                import time as _t120ba
+                try:
+                    _lim120   = int(inp.get("limit", 10))
+                    _logs120  = self._store.get_bt_transport_status(limit=_lim120)
+                    _en120    = bool(getattr(self._cfg, "bt_transport_enabled", False))
+                    _addr120  = str(getattr(self._cfg, "bt_device_address", ""))
+                    _hz120    = int(getattr(self._cfg, "bt_sampling_rate_hz", 250))
+                    _rx120    = sum(r.get("frames_received", 0) for r in _logs120)
+                    _drop120  = sum(r.get("frames_dropped", 0) for r in _logs120)
+                    _avg120   = (
+                        sum(r.get("avg_interval_ms", 0.0) for r in _logs120) / len(_logs120)
+                        if _logs120 else 0.0
+                    )
+                    return {
+                        "bt_transport_enabled": _en120,
+                        "device_address":       _addr120,
+                        "sampling_rate_hz":     _hz120,
+                        "frames_received":      _rx120,
+                        "frames_dropped":       _drop120,
+                        "avg_interval_ms":      round(_avg120, 3),
+                        "timestamp":            _t120ba.time(),
+                    }
+                except Exception as _exc120:
+                    import time as _t120be
+                    return {
+                        "bt_transport_enabled": False,
+                        "device_address":       "",
+                        "sampling_rate_hz":     250,
+                        "frames_received":      0,
+                        "frames_dropped":       0,
+                        "avg_interval_ms":      0.0,
+                        "timestamp":            _t120be.time(),
+                        "error":                str(_exc120),
+                    }
+
+            # Tool #87 — Phase 119
+            if name == "revoke_device_epoch_override":
+                import time as _t119b
+                try:
+                    _dev119b = str(inputs["device_id"])
+                    _revoked = self._store.delete_device_epoch_override(_dev119b)
+                    return {
+                        "device_id": _dev119b,
+                        "revoked":   _revoked,
+                        "timestamp": _t119b.time(),
+                    }
+                except Exception as _exc119b:
+                    return {
+                        "device_id": inputs.get("device_id", ""),
+                        "revoked":   False,
+                        "timestamp": _t119b.time(),
+                        "error":     str(_exc119b),
+                    }
+
+            # Tool #86 — Phase 119
+            if name == "get_epoch_window_override_status":
+                import time as _t119a
+                try:
+                    _ovrs119  = self._store.get_override_lifecycle_status()
+                    _wmax119  = sum(1 for o in _ovrs119 if o.get("max_uses") is not None)
+                    _en119    = bool(getattr(self._cfg, "epoch_window_enabled", False))
+                    return {
+                        "override_count":          len(_ovrs119),
+                        "overrides_with_max_uses": _wmax119,
+                        "overrides":               _ovrs119,
+                        "epoch_window_enabled":    _en119,
+                        "timestamp":               _t119a.time(),
+                    }
+                except Exception as _exc119a:
+                    return {
+                        "override_count":          0,
+                        "overrides_with_max_uses": 0,
+                        "overrides":               [],
+                        "epoch_window_enabled":    False,
+                        "timestamp":               _t119a.time(),
+                        "error":                   str(_exc119a),
+                    }
+
+            # Tool #85 — Phase 118
+            if name == "set_device_epoch_override":
+                import time as _t118b
+                try:
+                    _dev118   = str(inputs["device_id"])
+                    _win118   = float(inputs["window_seconds"])
+                    _rsn118   = str(inputs.get("reason", ""))
+                    _rid118   = self._store.insert_device_epoch_override(
+                        device_id=_dev118, window_seconds=_win118, reason=_rsn118
+                    )
+                    return {
+                        "device_id":               _dev118,
+                        "override_window_seconds": _win118,
+                        "reason":                  _rsn118,
+                        "row_id":                  _rid118,
+                        "timestamp":               _t118b.time(),
+                    }
+                except Exception as _exc118b:
+                    return {
+                        "device_id": inputs.get("device_id", ""),
+                        "override_window_seconds": -1.0,
+                        "reason": "",
+                        "row_id": -1,
+                        "timestamp": _t118b.time(),
+                        "error": str(_exc118b),
+                    }
+
+            # Tool #84 — Phase 118
+            if name == "get_epoch_window_auto_tune":
+                import time as _t118a
+                try:
+                    _tn118   = int(inputs.get("top_n_overrides", 5))
+                    _ana118  = self._store.get_epoch_window_analytics()
+                    _devs118 = self._store.get_epoch_window_analytics_by_device()
+                    _ovrs118 = self._store.get_all_device_epoch_overrides()
+                    _ovr_ids = {o["device_id"] for o in _ovrs118}
+                    _cands   = [d for d in _devs118 if d["device_id"] not in _ovr_ids][:_tn118]
+                    _en118   = bool(getattr(self._cfg, "epoch_window_enabled", False))
+                    _cur_win = float(getattr(self._cfg, "epoch_window_seconds", 86400.0))
+                    return {
+                        "epoch_window_enabled":       _en118,
+                        "current_window_seconds":     _cur_win,
+                        "recommended_window_seconds": _ana118.get("recommended_window_seconds", 86400.0),
+                        "fleet_p95_age_seconds":      _ana118.get("p95_age_seconds", -1.0),
+                        "override_count":             len(_ovrs118),
+                        "override_candidates":        _cands,
+                        "timestamp":                  _t118a.time(),
+                    }
+                except Exception as _exc118a:
+                    return {
+                        "epoch_window_enabled": False,
+                        "current_window_seconds": 86400.0,
+                        "recommended_window_seconds": 86400.0,
+                        "fleet_p95_age_seconds": -1.0,
+                        "override_count": 0,
+                        "override_candidates": [],
+                        "timestamp": _t118a.time(),
+                        "error": str(_exc118a),
+                    }
+
+            # Tool #83 — Phase 117
+            if name == "get_epoch_window_device_heatmap":
+                import time as _t117
+                try:
+                    _lpd117 = int(inp.get("limit_per_device", 100))
+                    _tn117  = int(inp.get("top_n", 20))
+                    _devs117 = self._store.get_epoch_window_analytics_by_device(
+                        limit_per_device=_lpd117, top_n=_tn117
+                    )
+                    _ew_en117  = bool(getattr(self._cfg, "epoch_window_enabled", False))
+                    _ew_sec117 = float(getattr(self._cfg, "epoch_window_seconds", 86400.0))
+                    return {
+                        "epoch_window_enabled": _ew_en117,
+                        "epoch_window_seconds": _ew_sec117,
+                        "total_devices":        len(_devs117),
+                        "devices":              _devs117,
+                        "timestamp":            _t117.time(),
+                    }
+                except Exception as _exc117:
+                    return {
+                        "epoch_window_enabled": False,
+                        "epoch_window_seconds": 86400.0,
+                        "total_devices": 0,
+                        "devices": [],
+                        "timestamp": _t117.time(),
+                        "error": str(_exc117),
+                    }
+
+            # Tool #82 — Phase 116
+            if name == "get_epoch_window_analytics":
+                import time as _t116
+                try:
+                    _lim116 = int(inp.get("limit", 1000))
+                    _ana116 = self._store.get_epoch_window_analytics(limit=_lim116)
+                    _ew_en  = bool(getattr(self._cfg, "epoch_window_enabled", False))
+                    _ew_sec = float(getattr(self._cfg, "epoch_window_seconds", 86400.0))
+                    return {
+                        "epoch_window_enabled":   _ew_en,
+                        "epoch_window_seconds":   _ew_sec,
+                        **_ana116,
+                        "timestamp": _t116.time(),
+                    }
+                except Exception as _exc116:
+                    import time as _t116b
+                    return {
+                        "epoch_window_enabled": False,
+                        "epoch_window_seconds": 86400.0,
+                        "total_gate5_checks": 0, "staleness_blocked_count": 0,
+                        "checked_count": 0, "p50_age_seconds": -1.0,
+                        "p95_age_seconds": -1.0, "recommended_window_seconds": 86400.0,
+                        "timestamp": _t116b.time(), "error": str(_exc116),
+                    }
+
+            # Tool #81 — Phase 114
+            if name == "get_vhp_dual_gate_log":
+                import time as _t114
+                try:
+                    _dev114  = inp.get("device_id") or None
+                    _lim114  = int(inp.get("limit", 20))
+                    _logs114 = self._store.get_vhp_dual_gate_log(device_id=_dev114, limit=_lim114)
+                    _en114   = bool(getattr(self._cfg, "dual_primitive_gate_enabled", False))
+                    return {
+                        "dual_primitive_gate_enabled": _en114,
+                        "total_checks":       len(_logs114),
+                        "eligible_count":     sum(1 for r in _logs114 if r.get("eligible")),
+                        "mint_allowed_count": sum(1 for r in _logs114 if r.get("mint_allowed")),
+                        "recent_logs":        _logs114,
+                        "timestamp":          _t114.time(),
+                    }
+                except Exception as _exc114:
+                    return {
+                        "dual_primitive_gate_enabled": False,
+                        "total_checks": 0, "eligible_count": 0, "mint_allowed_count": 0,
+                        "recent_logs": [], "timestamp": _t114.time(), "error": str(_exc114),
+                    }
+
+            # Tool #80 — Phase 113
+            if name == "check_dual_eligibility":
+                import time as _t113
+                try:
+                    _device_id = str(inp.get("device_id", ""))
+                    _poad_hash = str(inp.get("poad_hash", ""))
+                    _checks    = self._store.get_dual_eligibility_history(
+                        device_id=_device_id, limit=1
+                    )
+                    if _checks:
+                        _last = _checks[0]
+                        return {
+                            "eligible":   _last["eligible"],
+                            "poac_valid": _last["poac_valid"],
+                            "poad_valid": _last["poad_valid"],
+                            "device_id":  _device_id,
+                            "note": "last stored check result (use POST /agent/check-dual-eligibility for live query)",
+                            "timestamp":  _t113.time(),
+                        }
+                    return {
+                        "eligible": False, "poac_valid": False, "poad_valid": False,
+                        "device_id": _device_id,
+                        "note": "no prior check for this device — POST /agent/check-dual-eligibility",
+                        "timestamp": _t113.time(),
+                    }
+                except Exception as _exc113:
+                    return {
+                        "eligible": False, "poac_valid": False, "poad_valid": False,
+                        "device_id": inp.get("device_id", ""),
+                        "error": str(_exc113),
+                        "timestamp": _t113.time(),
+                    }
+
+            # Tool #79 — Phase 111
+            if name == "get_adjudication_registry_status":
+                import time as _t111
+                try:
+                    _poad_logs = self._store.get_poad_registry_log(limit=100)
+                    _dv_count  = sum(1 for r in _poad_logs if r.get("dual_veto"))
+                    _chain_cnt = sum(1 for r in _poad_logs if r.get("on_chain_tx"))
+                    _addr      = getattr(self._cfg, "adjudication_registry_address", "")
+                    _enabled   = bool(getattr(self._cfg, "poad_registry_enabled", False))
+                    return {
+                        "poad_registry_enabled":          _enabled,
+                        "total_poad_count":               len(_poad_logs),
+                        "dual_veto_poad_count":           _dv_count,
+                        "on_chain_anchor_count":          _chain_cnt,
+                        "adjudication_registry_address":  _addr,
+                        "is_composable":                  bool(_addr and _enabled),
+                        "timestamp":                      _t111.time(),
+                    }
+                except Exception as _exc111:
+                    return {
+                        "poad_registry_enabled": False,
+                        "total_poad_count": 0,
+                        "dual_veto_poad_count": 0,
+                        "on_chain_anchor_count": 0,
+                        "adjudication_registry_address": "",
+                        "is_composable": False,
+                        "timestamp": _t111.time(),
+                        "error": str(_exc111),
+                    }
 
             # Tool #78 — Phase 110
             if name == "get_ioswarm_vhp_mint_status":

@@ -850,6 +850,58 @@ class Config:
     Update ONLY after running scripts/interperson_separation_analyzer.py against real
     calibration sessions. Required >1.0 for tournament deployment."""
 
+    # --- Phase 123: L4 Calibration Staleness Monitor ---
+    live_feature_dim: int = field(
+        default_factory=lambda: int(_env("LIVE_FEATURE_DIM", "13"))
+    )
+    """Current _BIO_FEATURE_DIM value in production (Phase 121 added index 12 → 13).
+    Update when BiometricFeatureFrame adds or removes a feature slot.
+    Staleness = live_feature_dim != calibration_feature_dim."""
+
+    calibration_feature_dim: int = field(
+        default_factory=lambda: int(_env("CALIBRATION_FEATURE_DIM", "12"))
+    )
+    """Feature dimension used in the last threshold_calibrator.py run.
+    Phase 57: 12-feature space (N=74, anomaly=7.009, continuity=5.367).
+    Phase 123 default=12; update to 13 after 13-feature recalibration run."""
+
+    calibration_n_sessions: int = field(
+        default_factory=lambda: int(_env("CALIBRATION_N_SESSIONS", "74"))
+    )
+    """Number of sessions used in the last threshold_calibrator.py run.
+    Phase 57 baseline: N=74. Required >=74 for production-grade thresholds."""
+
+    calibration_timestamp: float = field(
+        default_factory=lambda: float(_env("CALIBRATION_TIMESTAMP", "0.0"))
+    )
+    """Unix epoch of the last threshold recalibration (0.0 = pre-tracking).
+    Phase 57 calibration date: ~2025-03 (pre-epoch-tracking; set 0.0)."""
+
+    # --- Phase 122: VHP Confidence Score Separation Ratio Multiplier ---
+    confidence_multiplier_enabled: bool = field(
+        default_factory=lambda: _env_bool("CONFIDENCE_MULTIPLIER_ENABLED", False)
+    )
+    """When True, multiplies VHP confidence_score by min(1.0, bt_strat_ratio) before
+    minting. Reduces effective score when battery-stratified separation ratio < 1.0,
+    ensuring the on-chain credential reflects actual identity-discrimination confidence.
+    Infrastructure-first: False default until bt_strat_ratio confirmed stable."""
+
+    confidence_multiplier_floor: float = field(
+        default_factory=lambda: float(_env("CONFIDENCE_MULTIPLIER_FLOOR", "0.0"))
+    )
+    """Minimum multiplier applied to confidence_score (Phase 122).
+    Default 0.0: score can be driven to zero at very low separation ratios.
+    Set to e.g. 0.10 to preserve a minimum non-zero signal."""
+
+    # --- Phase 124: L4 Per-Battery Threshold Track Registry ---
+    l4_battery_threshold_enabled: bool = field(
+        default_factory=lambda: _env_bool("L4_BATTERY_THRESHOLD_ENABLED", False)
+    )
+    """When True, per-battery L4 threshold tracks are available via the registry API.
+    Infrastructure-first: False default. Activate after running threshold_calibrator.py
+    per battery type against 13-feature corpus (Phase 123 recalibration prerequisite).
+    W1 mitigation: insert bounds enforced [5.0–15.0] anomaly / [3.0–10.0] continuity."""
+
     touchpad_recapture_complete: bool = field(
         default_factory=lambda: _env_bool("TOUCHPAD_RECAPTURE_COMPLETE", False)
     )
@@ -921,6 +973,139 @@ class Config:
         default_factory=lambda: float(os.environ.get("IOSWARM_VHP_MINT_QUORUM", "0.80"))
     )
     """VHP mint authorization quorum threshold (stricter than BLOCK_QUORUM=0.67). Default 0.80."""
+
+    # Phase 111 — PoAd Registry
+    poad_registry_enabled: bool = field(
+        default_factory=lambda: _env_bool("POAD_REGISTRY_ENABLED", False)
+    )
+    """Enable PoAd hash computation and local registry. Default False (infrastructure-only)."""
+
+    adjudication_registry_address: str = field(
+        default_factory=lambda: os.environ.get("ADJUDICATION_REGISTRY_ADDRESS", "")
+    )
+    """AdjudicationRegistry.sol contract address for Phase 112 on-chain anchoring. Default empty."""
+
+    # Phase 112 — PoAd On-Chain Anchoring
+    poad_on_chain_enabled: bool = field(
+        default_factory=lambda: _env_bool("POAD_ON_CHAIN_ENABLED", False)
+    )
+    """Enable on-chain anchoring of PoAd hashes via record_adjudication(). Default False."""
+
+    # Phase 113 — Dual-Primitive Composability Gate
+    dual_primitive_gate_address: str = field(
+        default_factory=lambda: os.environ.get("DUAL_PRIMITIVE_GATE_ADDRESS", "")
+    )
+    """VAPIDualPrimitiveGate.sol contract address (Phase 113). Default empty."""
+
+    dual_primitive_gate_enabled: bool = field(
+        default_factory=lambda: _env_bool("DUAL_PRIMITIVE_GATE_ENABLED", False)
+    )
+    """Enable POST /agent/check-dual-eligibility endpoint. Default False (infrastructure-only)."""
+
+    # Phase 115 — Epoch-Window Dual-Primitive Temporal Proof
+    epoch_window_enabled: bool = field(
+        default_factory=lambda: _env_bool("EPOCH_WINDOW_ENABLED", False)
+    )
+    """Enable epoch-window staleness check in 5th gate. Default False (infrastructure-only). Phase 115."""
+
+    epoch_window_seconds: float = field(
+        default_factory=lambda: float(os.environ.get("EPOCH_WINDOW_SECONDS", "86400"))
+    )
+    """Max PoAd age in seconds for epoch-window check. Default 86400 (24h). Phase 115."""
+
+    # Phase 120 — Bluetooth Transport Foundation
+    bt_transport_enabled: bool = field(
+        default_factory=lambda: _env_bool("BT_TRANSPORT_ENABLED", False)
+    )
+    """Enable BLE transport for DualShock Edge at 250 Hz. Default False (infrastructure-only). Phase 120.
+    W1 INVARIANT: BT sessions must NOT use USB L4 thresholds (7.009/5.367). Separate BT threshold
+    track required (not yet calibrated). Activate only after BT-specific calibration complete."""
+
+    bt_device_address: str = field(
+        default_factory=lambda: _env("BT_DEVICE_ADDRESS", "")
+    )
+    """BLE device address for DualShock Edge (e.g. 'AA:BB:CC:DD:EE:FF'). Empty = auto-scan. Phase 120."""
+
+    bt_sampling_rate_hz: int = field(
+        default_factory=lambda: _env_int("BT_SAMPLING_RATE_HZ", 250)
+    )
+    """BLE sampling rate in Hz. Default 250 (DualShock Edge BLE notification rate). Phase 120."""
+
+    swarm_operator_gate_address: str = field(
+        default_factory=lambda: _env("SWARM_OPERATOR_GATE_ADDRESS", "")
+    )
+    """IoTeX address of VAPISwarmOperatorGate.sol (WIF-001 mitigation). Empty = gate not configured. Phase 130A."""
+
+    # Phase 131 — IoSwarm Live Node Foundation
+    ioswarm_node_urls: str = field(
+        default_factory=lambda: _env("IOSWARM_NODE_URLS", "")
+    )
+    """Comma-separated list of ioSwarm live node base URLs (Phase 131).
+    Empty string = emulator mode (uses IoSwarmNodeEmulator seed=109, zero behavior change).
+    Example: IOSWARM_NODE_URLS=http://node1:8080,http://node2:8080"""
+
+    ioswarm_node_timeout_seconds: float = field(
+        default_factory=lambda: float(_env("IOSWARM_NODE_TIMEOUT_S", "5.0"))
+    )
+    """Per-node HTTP request timeout in seconds (Phase 131 W1 mitigation).
+    Timed-out nodes are skipped; quorum computed from responding nodes only. Default 5.0."""
+
+    ps5_compat_mode: bool = field(
+        default_factory=lambda: _env("PS5_COMPAT_MODE", "false").lower() == "true"
+    )
+    """Phase 131B — PS5 coexistence mode (default False).
+    When True: ALL HID output writes (set_led, haptic) are suppressed in _apply_feedback.
+    Eliminates the USB instability that causes the PS5 to show reconnect notifications
+    when DualShock Edge is simultaneously connected via USB (VAPI bridge) and BT (PS5).
+    Trade-off: no LED colour or haptic feedback during gameplay.
+    PoAC biometric capture is completely unaffected — read-only, zero data impact."""
+
+    ioswarm_node_secret: str = field(
+        default_factory=lambda: _env("IOSWARM_NODE_SECRET", "")
+    )
+    """Phase 132 — HMAC-SHA256 shared secret for ioSwarm node response verification.
+    When ioswarm_hmac_enabled=True, the server signs responses and the client verifies.
+    Default empty string = HMAC disabled."""
+
+    ioswarm_hmac_enabled: bool = field(
+        default_factory=lambda: _env("IOSWARM_HMAC_ENABLED", "false").lower() == "true"
+    )
+    """Phase 132 — Enable HMAC-SHA256 request/response authentication between bridge and
+    ioSwarm live nodes. When True, X-VAPI-HMAC header required on all /evaluate responses.
+    Default False = opt-in for testnet operators."""
+
+    ioswarm_poad_auto_anchor_enabled: bool = field(
+        default_factory=lambda: _env("IOSWARM_POAD_AUTO_ANCHOR_ENABLED", "false").lower() == "true"
+    )
+    """Phase 133 — Enable automatic PoAd on-chain anchoring when dual_veto fires.
+    Default False = infrastructure-first, zero behavior change until enabled."""
+
+    auto_separation_snapshot_enabled: bool = field(
+        default_factory=lambda: _env_bool("AUTO_SEPARATION_SNAPSHOT_ENABLED", False)
+    )
+    """Phase 134 — After each live session, run analyze_interperson_separation.py as subprocess
+    to write a separation ratio snapshot. Non-blocking; failure logged at DEBUG; never raises.
+    Default False = infrastructure-first, zero behavior change until enabled."""
+
+    auto_activate_on_breakthrough: bool = False
+    """Phase 135 — PERMANENT INVARIANT: auto-activation on separation ratio breakthrough is
+    NEVER permitted. TournamentActivationChainAgent fires one-shot notification only.
+    This field is hard-coded False and MUST NOT be changed. Tournament activation requires
+    explicit operator action via POST /agent/commit-activation."""
+
+    audio_passthrough_enabled: bool = field(
+        default_factory=lambda: _env_bool("AUDIO_PASSTHROUGH_ENABLED", True)
+    )
+    """Phase 136 — Restore game audio device if DualSense Edge captures Windows default
+    output on USB connect. Uses IPolicyConfigVista COM vtable dispatch (no external deps).
+    Default True = auto-restore system audio; set False to keep whatever Windows chose."""
+
+    audio_device_preference: str = field(
+        default_factory=lambda: _env("AUDIO_DEVICE_PREFERENCE", "system")
+    )
+    """Phase 136 — Audio routing preference: 'system' (restore Realtek/built-in when
+    DualSense captures default), 'dualsense' (prefer DualSense headphone jack),
+    'keep' (no change). Default 'system' = game audio plays through speakers/headphones."""
 
     def validate(self) -> list[str]:
         """Return list of configuration errors (empty = valid)."""

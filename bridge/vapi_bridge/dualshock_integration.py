@@ -114,6 +114,10 @@ _TIER_THRESHOLDS = [0, 1000, 1500, 2000, 2500]
 _EWC_SESSION_INTERVAL = 30   # Update EWC every 30 loop iterations (~30s at 1s/iter)
 _EWC_FISHER_INTERVAL  = 300  # Recompute Fisher every 300 iterations (~5min)
 
+# Phase 130A: USB feedback backoff guard
+_FEEDBACK_SKIP_THRESHOLD = 3   # consecutive timeouts before entering cooldown
+_FEEDBACK_COOLDOWN_MOD   = 10  # retry once per N iters during cooldown
+
 # SkillOracle minimal ABI (matches SkillOracle.sol)
 _SKILL_ORACLE_ABI = [
     {
@@ -387,6 +391,7 @@ class DualShockTransport:
         import collections as _col
         self._replay_ring: _col.deque = _col.deque(maxlen=60)   # Phase 61 replay buffer
         self._session_count: int   = 0      # Loop-iteration counter for EWC scheduling
+        self._consecutive_fb_timeouts: int = 0   # Phase 130A: backoff guard
         self._recent_session_vecs: list = []  # Last N session vectors for Fisher
         self._l2_mode_history: list[int] = []  # Last 16 L2 mode values for trigger_mode_hash
         self._r2_mode_history: list[int] = []  # Last 16 R2 mode values for trigger_mode_hash
@@ -429,6 +434,9 @@ class DualShockTransport:
         self._l6p_last_r2_ts: float = 0.0  # time.monotonic() * 1000 of last R2 rising edge
         self._l6p_events: int = 0           # total R2 presses scored this session
         self._l6p_flagged: int = 0          # resistance events flagged this session
+
+        # Phase 136: Audio passthrough router (Windows Core Audio, no external deps)
+        self._audio_router = None  # AudioRouter, initialised in run() if enabled
 
         # Phase C: L6 Active Physical Challenge-Response
         self._l6_driver = None     # L6TriggerDriver, set below if enabled
@@ -581,6 +589,25 @@ class DualShockTransport:
         boot_raw = self._make_record(INFER_NOMINAL, ACTION_BOOT, 220, 0)
         if boot_raw:
             await self._dispatch(boot_raw)
+
+        # Phase 136: Restore game audio if DualSense Edge captured Windows default output
+        if getattr(self._cfg, "audio_passthrough_enabled", True):
+            try:
+                from .audio_router import AudioRouter
+                pref = getattr(self._cfg, "audio_device_preference", "system")
+                self._audio_router = AudioRouter(preferred=pref)
+                result = self._audio_router.ensure_game_audio()
+                if result.action != "keep":
+                    log.info(
+                        "Phase 136 audio: action=%s prev=%s current=%s",
+                        result.action,
+                        (result.previous_device_id or "")[:40],
+                        (result.current_device_id or "")[:40],
+                    )
+                if not result.success and result.error:
+                    log.debug("Phase 136 audio router: %s", result.error)
+            except Exception as _ar_exc:
+                log.debug("Phase 136 audio router init failed (non-fatal): %s", _ar_exc)
 
         # Main session loop
         try:
@@ -1465,18 +1492,67 @@ class DualShockTransport:
                 # Fix D: timeout prevents USB write hang from freezing the event loop.
                 # pydualsense set_led() can block indefinitely on disconnect; without
                 # this guard the await never resolves and counter=7 never appears.
-                try:
-                    await asyncio.wait_for(
-                        loop.run_in_executor(self._feedback_executor, self._apply_feedback, inference),
-                        timeout=self._interval * 2,
-                    )
-                except asyncio.TimeoutError:
-                    log.warning(
-                        "_apply_feedback timed out after %.1fs (iter=%d) — possible USB write hang",
-                        self._interval * 2, _loop_iter,
-                    )
-                except Exception as _fb_exc:
-                    log.debug("_apply_feedback error (non-fatal): %s", _fb_exc)
+                # Phase 130A: backoff guard — after _FEEDBACK_SKIP_THRESHOLD consecutive
+                # timeouts, skip feedback for _FEEDBACK_COOLDOWN_MOD-1 iters then retry.
+                # No impact on PoAC capture — feedback is cosmetic (LED/haptic) only.
+                if self._consecutive_fb_timeouts >= _FEEDBACK_SKIP_THRESHOLD:
+                    # Phase 131B: auto-log USB instability event when timeouts hit 2× threshold.
+                    # This is the signal that HID writes are causing PS5 coexistence issues.
+                    _auto_log_threshold = _FEEDBACK_SKIP_THRESHOLD * 2
+                    if (self._consecutive_fb_timeouts == _auto_log_threshold
+                            and not getattr(self, "_usb_instability_logged", False)):
+                        try:
+                            _dev_addr = self._device_id.hex()[:16] if self._device_id else ""
+                            self._store.insert_usb_reconnect_log(
+                                device_address=_dev_addr,
+                                disconnect_reason="hid_feedback_timeout",
+                                consecutive_fb_timeouts=self._consecutive_fb_timeouts,
+                                ps5_compat_mode_active=getattr(self._cfg, "ps5_compat_mode", False),
+                                session_id=str(_loop_iter),
+                            )
+                            self._usb_instability_logged = True
+                            log.warning(
+                                "USB instability detected — %d consecutive _apply_feedback "
+                                "timeouts (iter=%d). PS5 reconnect notifications likely. "
+                                "Set PS5_COMPAT_MODE=true to suppress HID output writes.",
+                                self._consecutive_fb_timeouts, _loop_iter,
+                            )
+                        except Exception:
+                            pass  # Never block on diagnostic logging
+                    if _loop_iter % _FEEDBACK_COOLDOWN_MOD == 0:
+                        try:
+                            await asyncio.wait_for(
+                                loop.run_in_executor(self._feedback_executor, self._apply_feedback, inference),
+                                timeout=self._interval * 2,
+                            )
+                            self._consecutive_fb_timeouts = 0
+                            self._usb_instability_logged = False  # reset on recovery
+                            log.info("_apply_feedback recovered (iter=%d)", _loop_iter)
+                        except asyncio.TimeoutError:
+                            self._consecutive_fb_timeouts += 1
+                            log.debug(
+                                "_apply_feedback cooldown retry timed out (iter=%d, consecutive=%d)",
+                                _loop_iter, self._consecutive_fb_timeouts,
+                            )
+                        except Exception as _fb_exc:
+                            log.debug("_apply_feedback error (non-fatal): %s", _fb_exc)
+                    # else: silently skip this iter during cooldown
+                else:
+                    try:
+                        await asyncio.wait_for(
+                            loop.run_in_executor(self._feedback_executor, self._apply_feedback, inference),
+                            timeout=self._interval * 2,
+                        )
+                        self._consecutive_fb_timeouts = 0
+                    except asyncio.TimeoutError:
+                        self._consecutive_fb_timeouts += 1
+                        log.warning(
+                            "_apply_feedback timed out after %.1fs (iter=%d, consecutive=%d)"
+                            " — possible USB write hang",
+                            self._interval * 2, _loop_iter, self._consecutive_fb_timeouts,
+                        )
+                    except Exception as _fb_exc:
+                        log.debug("_apply_feedback error (non-fatal): %s", _fb_exc)
 
             # --- Phase 13 E1: maintain trigger mode history for sensor_commitment_v2_bio ---
             if frames:
@@ -1947,8 +2023,19 @@ class DualShockTransport:
                 log.debug("set_trigger_effect hardware forward failed: %s", exc)
 
     def _apply_feedback(self, inference: int):
-        """Set controller LED and haptics based on anti-cheat result."""
+        """Set controller LED and haptics based on anti-cheat result.
+
+        Phase 131B — PS5 coexistence mode:
+        When ps5_compat_mode=True ALL HID output writes are suppressed. This is the
+        VAPI-exclusive fix for the PS5 reconnect notification: DualShock Edge USB writes
+        (set_led/haptic) briefly drop the USB connection, causing the simultaneously-paired
+        PS5 to show 'controller modules are not correct' and request a BT reconnect.
+        Suppressing writes makes the bridge fully read-only — PoAC capture unaffected.
+        """
         if not self._reader:
+            return
+        # Phase 131B: suppress ALL HID output writes in PS5 coexistence mode
+        if getattr(self._cfg, "ps5_compat_mode", False):
             return
         try:
             if inference == INFER_SKILLED:
@@ -2029,6 +2116,14 @@ class DualShockTransport:
                 log.debug("Phase C: L6 triggers cleared on shutdown")
             except Exception as _exc:
                 log.debug("Phase C: L6 trigger clear on shutdown failed (non-fatal): %s", _exc)
+
+        # Phase 136: Restore original audio device on shutdown
+        if self._audio_router is not None:
+            try:
+                self._audio_router.restore()
+                log.debug("Phase 136 audio: restored previous device on shutdown")
+            except Exception as _ar_exc:
+                log.debug("Phase 136 audio restore failed (non-fatal): %s", _ar_exc)
 
         # Phase 27: Generate ZK PITL session proof for this session
         if self._pitl_prover is not None and self._pending_pitl_meta:

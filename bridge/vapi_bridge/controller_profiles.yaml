@@ -1,0 +1,498 @@
+# VAPI Canonical Controller Profiles (Phase 136)
+# 
+# This file contains the canonical controller profiles for VAPI multi-controller support.
+# Each profile defines the capabilities, PITL layer availability, and tier eligibility
+# for a specific controller model.
+#
+# Format: YAML 1.2
+# Maintainer: ControllerHardwareIntelligenceAgent (Agent #17)
+# Version: 1.0 (Phase 136)
+
+# =============================================================================
+# Sony DualShock Edge (Primary Certified Device)
+# =============================================================================
+sony_dualshock_edge_v1:
+  identity:
+    display_name: "Sony DualShock Edge (CFI-ZCP1)"
+    manufacturer: "Sony"
+    model: "CFI-ZCP1"
+    controller_type: "sony_dualshock_edge"
+  
+  usb:
+    vid: 0x054C
+    pid: 0x0DF2
+    interface: 3
+    report_size: 64
+    report_layout: "sony_dualsense_edge"
+  
+  ble:
+    service_uuid: "00001124-0000-1000-8000-00805f9b34fb"
+    report_char_uuid: "00002a4d-0000-1000-8000-00805f9b34fb"
+    name_prefix: "DualSense Edge"
+  
+  transport:
+    usb_hz: 1000
+    ble_hz: 250
+  
+  pitl_layers:
+    L0: "always"
+    L1: "always"
+    L2: "always"
+    L3: "always"
+    L4: "full"
+    L5: "always"
+    L6: "full"
+  
+  capabilities:
+    touchpad:
+      present: true
+      size: [1920, 1080]
+      multi_touch: true
+      pressure: false
+    
+    triggers:
+      type: "adaptive"
+      l2_adaptive: true
+      r2_adaptive: true
+      mode_count: 3
+    
+    gyroscope:
+      present: true
+      axes: 3
+      precision: 16
+      range_dps: 2000
+      sample_rate_hz: 1000
+    
+    accelerometer:
+      present: true
+      axes: 3
+      precision: 16
+      range_g: 16
+      sample_rate_hz: 1000
+    
+    gsr_grip_addon:
+      capable: true
+      interface: "usb_passthrough"
+  
+  tier_eligibility:
+    standard: true
+    attested: true
+  
+  attested_requirements:
+    - "L6_full"
+    - "transport_1000hz"
+    - "phci_certified"
+    - "N_calibration_min: 50"
+  
+  calibration:
+    battery_types:
+      - "touchpad"
+      - "trigger"
+      - "gameplay"
+      - "resting_grip"
+    feature_dimensions: 13
+    # Feature mask order: [gyro_std_x, gyro_std_y, gyro_std_z, gyro_corr_xy, accel_entropy, accel_std,
+    #                      touchpad_entropy, touchpad_var_x, touchpad_var_y, 
+    #                      trigger_resist_l2, trigger_resist_r2, press_timing_jitter, resting_grip]
+    feature_mask: [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+    l4_notes: "Full biometric suite (touchpad + gyro + accel + adaptive triggers)"
+    l6_notes: "Full adaptive trigger resistance measurement"
+  
+  phci:
+    certified: true
+    certification_date: "2026-01-15"
+    certification_version: "PHCI-2026.1"
+    tier: 1
+  
+  notes: "Primary certified device. Full PITL stack support."
+
+# =============================================================================
+# Microsoft Xbox Series X Controller
+# =============================================================================
+microsoft_xbox_series_x:
+  identity:
+    display_name: "Microsoft Xbox Series X Controller"
+    manufacturer: "Microsoft"
+    model: "Series X"
+    controller_type: "microsoft_xbox_series_x"
+  
+  usb:
+    vid: 0x045E
+    pid: 0x0B12
+    interface: 0
+    report_size: 18
+    report_layout: "microsoft_xinput"
+  
+  ble:
+    service_uuid: "00001124-0000-1000-8000-00805f9b34fb"
+    report_char_uuid: "00002a4d-0000-1000-8000-00805f9b34fb"
+    name_prefix: "Xbox Wireless Controller"
+  
+  transport:
+    usb_hz: 1000
+    ble_hz: 250
+    proprietary:
+      - name: "xbox_wireless"
+        hz: 1000
+        latency_ms: 2.0
+  
+  pitl_layers:
+    L0: "always"
+    L1: "always"
+    L2: "always"
+    L3: "always"
+    L4: "partial"
+    L5: "always"
+    L6: "none"
+  
+  capabilities:
+    touchpad:
+      present: false
+    
+    triggers:
+      type: "impulse"
+      l2_adaptive: false
+      r2_adaptive: false
+      l2_impulse: true
+      r2_impulse: true
+      mode_count: 0
+    
+    gyroscope:
+      present: true
+      axes: 3
+      precision: 16
+      range_dps: 2000
+      sample_rate_hz: 1000
+      notes: "Elite 2 controller required"
+    
+    accelerometer:
+      present: true
+      axes: 3
+      precision: 16
+      range_g: 16
+      sample_rate_hz: 1000
+      notes: "Elite 2 controller required"
+    
+    gsr_grip_addon:
+      capable: false
+    
+    impulse_triggers:
+      present: true
+      l2: true
+      r2: true
+  
+  tier_eligibility:
+    standard: true
+    attested: false
+  
+  attested_requirements: []  # Not eligible - no adaptive triggers
+  
+  calibration:
+    battery_types:
+      - "gameplay"
+      - "trigger"
+    feature_dimensions: 7
+    feature_mask: [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1]
+    l4_notes: "Gyro-only L4 (no touchpad features). Elite 2 required for gyro."
+    l6_notes: "L6 DISABLED - no adaptive trigger resistance measurement"
+  
+  phci:
+    certified: false
+    certification_date: null
+    certification_version: null
+    tier: null
+  
+  notes: "Standard tier only. No adaptive triggers (L6 unavailable). Attested tier blocked."
+
+# =============================================================================
+# Nintendo Switch Pro Controller
+# =============================================================================
+nintendo_switch_pro:
+  identity:
+    display_name: "Nintendo Switch Pro Controller"
+    manufacturer: "Nintendo"
+    model: "HAC-013"
+    controller_type: "nintendo_switch_pro"
+  
+  usb:
+    vid: 0x057E
+    pid: 0x2009
+    interface: 0
+    report_size: 64
+    report_layout: "nintendo_switch_pro"
+  
+  ble:
+    service_uuid: "00001124-0000-1000-8000-00805f9b34fb"
+    report_char_uuid: "00002a4d-0000-1000-8000-00805f9b34fb"
+    name_prefix: "Pro Controller"
+  
+  transport:
+    usb_hz: 1000
+    ble_hz: 250
+  
+  pitl_layers:
+    L0: "always"
+    L1: "always"
+    L2: "always"
+    L3: "always"
+    L4: "partial"
+    L5: "always"
+    L6: "none"
+  
+  capabilities:
+    touchpad:
+      present: false
+    
+    triggers:
+      type: "standard"
+      l2_adaptive: false
+      r2_adaptive: false
+    
+    gyroscope:
+      present: true
+      axes: 3
+      precision: 16
+      range_dps: 2000
+      sample_rate_hz: 1000
+      notes: "Best-in-class gyro (industry standard)"
+    
+    accelerometer:
+      present: true
+      axes: 3
+      precision: 16
+      range_g: 16
+      sample_rate_hz: 1000
+    
+    gsr_grip_addon:
+      capable: false
+    
+    hd_rumble:
+      present: true
+      l2: true
+      r2: true
+      frequency_range: [0, 1250]
+  
+  tier_eligibility:
+    standard: true
+    attested: false
+  
+  attested_requirements: []  # Not eligible - no adaptive triggers
+  
+  calibration:
+    battery_types:
+      - "gameplay"
+    feature_dimensions: 6
+    feature_mask: [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 0]
+    l4_notes: "Best-in-class gyro, no touchpad. Excellent for gyro-only L4."
+    l6_notes: "L6 DISABLED - HD rumble not equivalent to adaptive triggers"
+  
+  phci:
+    certified: false
+    certification_date: null
+    certification_version: null
+    tier: null
+  
+  notes: "Standard tier only. Exceptional gyro quality for L4. No adaptive triggers."
+
+# =============================================================================
+# Sony DualShock 4 (Legacy)
+# =============================================================================
+sony_dualshock_4:
+  identity:
+    display_name: "Sony DualShock 4"
+    manufacturer: "Sony"
+    model: "CUH-ZCT2"
+    controller_type: "sony_dualshock_4"
+  
+  usb:
+    vid: 0x054C
+    pid: 0x05C4
+    interface: 0
+    report_size: 64
+    report_layout: "sony_dualshock_4"
+  
+  ble:
+    service_uuid: "00001124-0000-1000-8000-00805f9b34fb"
+    report_char_uuid: "00002a4d-0000-1000-8000-00805f9b34fb"
+    name_prefix: "Wireless Controller"
+  
+  transport:
+    usb_hz: 1000
+    ble_hz: 250
+  
+  pitl_layers:
+    L0: "always"
+    L1: "always"
+    L2: "always"
+    L3: "always"
+    L4: "full"
+    L5: "always"
+    L6: "partial"
+  
+  capabilities:
+    touchpad:
+      present: true
+      size: [1200, 800]
+      multi_touch: true
+      pressure: false
+      notes: "Smaller than Edge"
+    
+    triggers:
+      type: "standard"
+      l2_adaptive: false
+      r2_adaptive: false
+    
+    gyroscope:
+      present: true
+      axes: 3
+      precision: 16
+      range_dps: 2000
+      sample_rate_hz: 1000
+    
+    accelerometer:
+      present: true
+      axes: 3
+      precision: 16
+      range_g: 16
+      sample_rate_hz: 1000
+    
+    gsr_grip_addon:
+      capable: false
+    
+    lightbar:
+      present: true
+      rgb: true
+      player_id: true
+  
+  tier_eligibility:
+    standard: true
+    attested: false
+  
+  attested_requirements: []  # Not eligible - no adaptive triggers
+  
+  calibration:
+    battery_types:
+      - "touchpad"
+      - "gameplay"
+      - "trigger"
+    feature_dimensions: 11
+    feature_mask: [1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 1, 1]
+    l4_notes: "Touchpad available but smaller surface area than Edge"
+    l6_notes: "L6 PARTIAL - trigger latency only (no resistance measurement)"
+  
+  phci:
+    certified: true
+    certification_date: "2024-06-01"
+    certification_version: "PHCI-2024.2"
+    tier: 2
+  
+  notes: "PHCI Tier 2 (Standard only). Touchpad but no adaptive triggers. Legacy support."
+
+# =============================================================================
+# Generic/Fallback Controller
+# =============================================================================
+generic:
+  identity:
+    display_name: "Generic HID Controller"
+    manufacturer: "Unknown"
+    model: "Generic"
+    controller_type: "generic"
+  
+  usb:
+    vid: 0x0000
+    pid: 0x0000
+    interface: 0
+    report_size: 8
+    report_layout: "generic_hid"
+  
+  ble: null
+  
+  transport:
+    usb_hz: 125
+    ble_hz: 0
+  
+  pitl_layers:
+    L0: "always"
+    L1: "always"
+    L2: "always"
+    L3: "always"
+    L4: "none"
+    L5: "always"
+    L6: "none"
+  
+  capabilities:
+    touchpad:
+      present: false
+    
+    triggers:
+      type: "standard"
+      l2_adaptive: false
+      r2_adaptive: false
+    
+    gyroscope:
+      present: false
+    
+    accelerometer:
+      present: false
+    
+    gsr_grip_addon:
+      capable: false
+  
+  tier_eligibility:
+    standard: true
+    attested: false
+  
+  attested_requirements: []  # Not eligible
+  
+  calibration:
+    battery_types:
+      - "gameplay"
+    feature_dimensions: 5
+    feature_mask: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1]
+    l4_notes: "No biometric features - L4 unavailable"
+    l6_notes: "No active challenge support"
+  
+  phci:
+    certified: false
+    certification_date: null
+    certification_version: null
+    tier: null
+  
+  notes: "Fallback profile for unknown controllers. Standard tier only (advisory)."
+
+# =============================================================================
+# Version Metadata
+# =============================================================================
+_version:
+  schema_version: "1.0"
+  phase: 136
+  last_updated: "2026-03-29"
+  maintainer: "ControllerHardwareIntelligenceAgent"
+  total_profiles: 5
+  phci_certified: 2
+  attested_eligible: 1
+
+# =============================================================================
+# Statistics
+# =============================================================================
+_statistics:
+  by_manufacturer:
+    Sony: 2
+    Microsoft: 1
+    Nintendo: 1
+    Unknown: 1
+  
+  by_tier_eligibility:
+    attested: 1
+    standard: 5
+    fallback: 1
+  
+  by_pitl_l4_status:
+    full: 3
+    partial: 2
+    none: 1
+  
+  by_pitl_l6_status:
+    full: 1
+    partial: 1
+    none: 3

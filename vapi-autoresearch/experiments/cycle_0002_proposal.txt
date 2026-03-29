@@ -1,0 +1,37 @@
+---PROPOSAL_START---
+[DESCRIPTION]
+Add WIF-007 (corpus imbalance ratio bias) and WIF-008 (touchpad_corners session as biometric anchor) to the WHAT_IF corpus — deepens separation_ratio pathways using empirical evidence from Player 2's live touchpad_corners capture (2026-03-29) and the structural risk of P1-dominant covariance in the N=127 analysis corpus.
+
+[SKILL_MD_DELTA]
+ADD to section "WHAT_IF Corpus — Validated Pairs" (after WIF-006 block, before W3 meta-risks note):
+
+**WIF-007 — Corpus Imbalance Covariance Bias (Phase 137)**
+W1 — When N(P1) >= 3x N(P2) or N(P3), the global Tikhonov-regularized covariance matrix is dominated by the majority player's intra-session variance axes, causing inter-player Mahalanobis distances for minority players to be computed in a biased eigenspace.
+  Implication: separation ratio 0.362 computed on an imbalanced corpus (P1 currently 104 sessions vs P2/P3 with fewer) may both understate true inter-player separation (minority players have high leverage against P1-biased covariance) AND overstate it if P1 is an outlier player. Either direction is a tournament readiness risk -- the ratio could cross 1.0 with a balanced corpus OR be revealed as inflated. A security audit of isFullyEligible() will request balanced corpus evidence.
+  Mitigation: Add --balance-corpus flag to analyze_interperson_separation.py that subsamples each player to min(N_players) sessions before building covariance matrix. Run both balanced and unbalanced to bracket the true ratio. Phase 137A, ~2h effort. Currently N=127 sessions found; P2 captured 2026-03-29 (20 sessions inc. touchpad_corners). Target: >=50 sessions/player before separation ratio report is tournament-defensible.
+
+W2 -- touchpad_corners session type as per-player biometric fingerprint anchor, already captured for P2 (2026-03-29).
+  Mechanism: Deliberate structured corner taps (upper-left, upper-right, lower-left, lower-right x 10 each, 60s) create spatially distinct touch_position_variance and touchpad_spatial_entropy patterns per player, driven by individual thumb morphology and grip habit. The DualShock Edge touchpad captures these with sub-mm accuracy. A touchpad_corners session contributes concentrated inter-player variance in the 2D spatial dimension that free-form gameplay does not -- because corner taps are a structured probe that reveals resting-thumb bias. Player 2 has already captured touchpad_corners_20260329T203046Z.json. Running equivalent sessions for P1 and P3 is predicted to improve separation ratio by 0.3-0.5 units.
+  Phase candidate: Phase 137B -- add --session-type touchpad_corners filter to analyze_interperson_separation.py for isolated touchpad_corners contribution analysis; add touchpad_corners capture template to terminal_calibration_runner.py.
+  Exclusive because: DualShock Edge has a high-resolution capacitive touchpad absent from Xbox Series X/S and Nintendo Switch Pro. Competitors cannot replicate structured touchpad biometrics without VAPI-certified hardware.
+
+**WIF-008 -- Per-Player Touchpad Coverage Asymmetry (Phase 137)**
+W1 -- Touchpad coverage disparity across players (P2: touchpad_corners captured; P1/P3: free-form only at 22% coverage) introduces a feature-selection asymmetry: touch_position_variance and touchpad_spatial_entropy are informative for P2 but structurally near-zero for P1/P3, causing Tikhonov regularization to suppress these features globally even though they ARE discriminative.
+  Implication: When 2/3 players have ~zero touchpad variance, the touchpad feature column contributes near-zero weight to the global cov_inv, effectively excluding the strongest inter-player discriminator for P2. The zero-variance auto-exclusion filter (feature_stds < 1e-9) will drop the touchpad feature if P1/P3 variance is too low -- losing P2's entire biometric advantage in separation analysis.
+  Mitigation: Run touchpad_corners for P1 and P3 before final separation ratio measurement. Require >=10 touchpad sessions per player before touchpad_spatial_entropy is included in Mahalanobis. Current status: P2 COMPLETE, P1 and P3 PENDING. Phase 137B blocker.
+
+W2 -- Differential touchpad coverage as forensic anti-spoofing signal: touchpad corner-tap challenge-response at tournament entry.
+  Mechanism: If a player claims to be Player 2 (calibrated touchpad biometric), but incoming touchpad_spatial_entropy pattern mismatches P2's calibration fingerprint, this is a strong spoofing indicator. Challenge-response: display corner to tap, verify entropy match against registered fingerprint. Turns touchpad_corners into a live anti-impersonation gate that is player-specific, hardware-enforced, and non-bypassable without the physical DualShock Edge touchpad.
+  Phase candidate: Phase 139 -- touchpad challenge-response anti-spoofing gate (post-calibration, requires >=10 touchpad sessions/player across all enrolled players).
+  Exclusive because: Requires DualShock Edge high-resolution touchpad + VAPI per-player touchpad fingerprint corpus + touchpad_corners protocol. No competitor has this input surface.
+
+[WHAT_IF]
+W1 -- Corpus imbalance (N(P1) >= 3x N(P2/P3)) in inter-person separation analysis produces Tikhonov covariance dominated by majority player's variance axes; inter-player Mahalanobis distances for minority players computed in biased eigenspace where their inter-player distances are underweighted.
+  Implication: separation ratio 0.362 (diagonal) / 0.474 pooled may be both pessimistic underestimate AND structurally undefendable as tournament evidence without balanced corpus. Security audit of isFullyEligible() will require per-player session balance verification and balanced-corpus separation ratio. Economic grounding: tournament operator liability for false eligibility claims requires defensible balanced N>=50/player corpus.
+  Mitigation available: yes -- --balance-corpus flag subsamples to min(N_players) before covariance build. Phase 137A. P2 has 20 new sessions captured 2026-03-29 inc. touchpad_corners; P3 recapture pending.
+
+W2 -- touchpad_corners structured probe session empirically activated by P2 capture (2026-03-29) is predicted to add 0.3-0.5 separation ratio units when matched across all three players -- turning the TOURNAMENT BLOCKER from intractable to a 2-player-session workstream.
+  Mechanism: 60s structured corner tap protocol creates concentrated spatial entropy patterns driven by individual thumb morphology. P2 touchpad_corners already captured. When P1/P3 add equivalent sessions, touchpad_spatial_entropy (feature index 12, Phase 121) transitions from structurally near-zero to the strongest inter-player discriminator. The interperson separation analysis is run via analyze_interperson_separation.py with --battery-stratified --full-covariance to measure the contribution.
+  Phase candidate: Phase 137B -- touchpad_corners analysis filter + --session-type flag + terminal_calibration_runner.py template.
+  Exclusive because: DualShock Edge high-resolution capacitive touchpad absent from Xbox/Switch. Competitors using standard controllers cannot replicate structured touchpad biometric probing. No other DePIN anti-cheat protocol has this calibration primitive.
+---PROPOSAL_END---

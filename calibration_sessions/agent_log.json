@@ -1,202 +1,202 @@
 [
   {
-    "ts": "2026-03-22T05:17:28Z",
-    "event": "milestone: Session 1453: touch_variance=0.0748"
+    "ts": "2026-03-28T21:08:55Z",
+    "event": "milestone: Session 68: touch_variance=0.2193"
   },
   {
-    "ts": "2026-03-22T05:17:59Z",
-    "event": "milestone: Session 1481: touch_variance=0.0748"
+    "ts": "2026-03-28T21:19:35Z",
+    "event": "milestone: Session 69: touch_variance=0.2193"
   },
   {
-    "ts": "2026-03-22T05:18:30Z",
-    "event": "milestone: Session 1509: touch_variance=0.0748"
+    "ts": "2026-03-28T21:33:34Z",
+    "event": "milestone: Session 70: touch_variance=0.2193"
   },
   {
-    "ts": "2026-03-22T05:19:01Z",
-    "event": "milestone: Session 1537: touch_variance=0.0748"
+    "ts": "2026-03-28T21:46:47Z",
+    "event": "milestone: Session 71: touch_variance=0.2193"
   },
   {
-    "ts": "2026-03-22T05:19:32Z",
-    "event": "milestone: Session 1542: touch_variance=0.0748"
+    "ts": "2026-03-28T22:06:57Z",
+    "event": "milestone: Session 72: touch_variance=0.2193"
   },
   {
-    "ts": "2026-03-22T05:20:03Z",
-    "event": "milestone: Session 1543: touch_variance=0.0748"
+    "ts": "2026-03-28T22:18:18Z",
+    "event": "milestone: Session 73: touch_variance=0.2193"
   },
   {
-    "ts": "2026-03-22T05:20:07Z",
+    "ts": "2026-03-28T22:44:00Z",
     "event": "controller_connected: DualSense Edge Wireless Controller"
   },
   {
-    "ts": "2026-03-22T05:41:59Z",
+    "ts": "2026-03-28T23:00:01Z",
+    "event": "milestone: Session 74: touch_variance=0.2193"
+  },
+  {
+    "ts": "2026-03-28T23:10:36Z",
+    "event": "milestone: Session 75: touch_variance=0.2193"
+  },
+  {
+    "ts": "2026-03-28T23:33:14Z",
+    "event": "milestone: Session 76: touch_variance=0.2193"
+  },
+  {
+    "ts": "2026-03-28T23:44:41Z",
+    "event": "milestone: Session 77: touch_variance=0.2193"
+  },
+  {
+    "ts": "2026-03-28T23:54:34Z",
+    "event": "controller_connected: DualSense Edge Wireless Controller"
+  },
+  {
+    "ts": "2026-03-28T23:57:08Z",
+    "event": "controller_connected: DualSense Edge Wireless Controller"
+  },
+  {
+    "ts": "2026-03-29T00:18:59Z",
+    "event": "milestone: Session 78: touch_variance=0.2193"
+  },
+  {
+    "ts": "2026-03-29T00:37:19Z",
     "event": "controller_disconnected"
   },
   {
-    "ts": "2026-03-22T05:42:32Z",
+    "ts": "2026-03-29T00:37:50Z",
     "event": "controller_connected: DualSense Edge Wireless Controller"
   },
   {
-    "ts": "2026-03-22T05:43:06Z",
-    "event": "milestone: Session 1544: touch_variance=0.1655"
-  },
-  {
-    "ts": "2026-03-22T05:43:08Z",
-    "event": "milestone: Session 1544: touch_variance=0.1655"
-  },
-  {
-    "ts": "2026-03-22T05:43:22Z",
+    "ts": "2026-03-29T01:02:07Z",
     "event": "controller_connected: DualSense Edge Wireless Controller"
   },
   {
-    "ts": "2026-03-22T05:45:28Z",
-    "event": "controller_connected: DualSense Edge Wireless Controller"
-  },
-  {
-    "ts": "2026-03-22T05:46:00Z",
+    "ts": "2026-03-29T01:04:17Z",
     "event": "controller_disconnected"
   },
   {
-    "ts": "2026-03-22T05:46:31Z",
+    "ts": "2026-03-29T01:04:53Z",
     "event": "controller_connected: DualSense Edge Wireless Controller"
   },
   {
-    "ts": "2026-03-22T05:47:03Z",
-    "event": "controller_disconnected"
+    "ts": "2026-03-29T01:09:19Z",
+    "event": "milestone: Session 79: touch_variance=0.2193"
   },
   {
-    "ts": "2026-03-22T05:53:13Z",
+    "ts": "2026-03-29T01:44:30Z",
+    "event": "milestone: Session 80: touch_variance=0.2193"
+  },
+  {
+    "ts": "2026-03-29T02:04:52Z",
+    "event": "milestone: Session 81: touch_variance=0.2193"
+  },
+  {
+    "ts": "2026-03-29T02:17:02Z",
+    "event": "milestone: Session 82: touch_variance=0.2193"
+  },
+  {
+    "ts": "2026-03-29T03:39:43Z",
     "event": "controller_connected: DualSense Edge Wireless Controller"
   },
   {
-    "ts": "2026-03-22T06:02:09Z",
+    "ts": "2026-03-29T04:18:29Z",
+    "event": "milestone: Session 83: touch_variance=0.2193"
+  },
+  {
+    "ts": "2026-03-29T13:03:38Z",
     "event": "controller_connected: DualSense Edge Wireless Controller"
   },
   {
-    "ts": "2026-03-22T06:14:02Z",
+    "ts": "2026-03-29T13:18:15Z",
+    "event": "milestone: Session 84: touch_variance=0.2193"
+  },
+  {
+    "ts": "2026-03-29T13:34:32Z",
+    "event": "milestone: Session 85: touch_variance=0.2193"
+  },
+  {
+    "ts": "2026-03-29T13:47:48Z",
+    "event": "milestone: Session 86: touch_variance=0.2193"
+  },
+  {
+    "ts": "2026-03-29T13:59:47Z",
+    "event": "milestone: Session 87: touch_variance=0.2193"
+  },
+  {
+    "ts": "2026-03-29T14:11:14Z",
+    "event": "milestone: Session 88: touch_variance=0.2193"
+  },
+  {
+    "ts": "2026-03-29T14:23:59Z",
+    "event": "milestone: Session 89: touch_variance=0.2193"
+  },
+  {
+    "ts": "2026-03-29T14:37:26Z",
+    "event": "milestone: Session 90: touch_variance=0.2193"
+  },
+  {
+    "ts": "2026-03-29T14:50:51Z",
+    "event": "milestone: Session 91: touch_variance=0.2193"
+  },
+  {
+    "ts": "2026-03-29T15:03:13Z",
+    "event": "milestone: Session 92: touch_variance=0.2193"
+  },
+  {
+    "ts": "2026-03-29T15:17:24Z",
+    "event": "milestone: Session 93: touch_variance=0.2193"
+  },
+  {
+    "ts": "2026-03-29T15:29:44Z",
+    "event": "milestone: Session 94: touch_variance=0.2193"
+  },
+  {
+    "ts": "2026-03-29T15:41:52Z",
+    "event": "milestone: Session 95: touch_variance=0.2193"
+  },
+  {
+    "ts": "2026-03-29T15:55:58Z",
+    "event": "milestone: Session 96: touch_variance=0.2193"
+  },
+  {
+    "ts": "2026-03-29T16:13:06Z",
+    "event": "milestone: Session 97: touch_variance=0.2193"
+  },
+  {
+    "ts": "2026-03-29T16:23:40Z",
+    "event": "milestone: Session 98: touch_variance=0.2193"
+  },
+  {
+    "ts": "2026-03-29T16:39:45Z",
+    "event": "milestone: Session 99: touch_variance=0.2193"
+  },
+  {
+    "ts": "2026-03-29T16:54:02Z",
+    "event": "milestone: Session 100: touch_variance=0.2193"
+  },
+  {
+    "ts": "2026-03-29T17:06:18Z",
+    "event": "milestone: Session 101: touch_variance=0.2193"
+  },
+  {
+    "ts": "2026-03-29T17:33:39Z",
+    "event": "milestone: Session 102: touch_variance=0.2193"
+  },
+  {
+    "ts": "2026-03-29T18:27:57Z",
     "event": "controller_connected: DualSense Edge Wireless Controller"
   },
   {
-    "ts": "2026-03-22T06:34:57Z",
+    "ts": "2026-03-29T18:29:02Z",
+    "event": "milestone: Session 103: touch_variance=0.2193"
+  },
+  {
+    "ts": "2026-03-29T18:48:42Z",
+    "event": "milestone: Session 104: touch_variance=0.2193"
+  },
+  {
+    "ts": "2026-03-29T20:23:56Z",
     "event": "controller_connected: DualSense Edge Wireless Controller"
   },
   {
-    "ts": "2026-03-22T06:46:23Z",
-    "event": "controller_disconnected"
-  },
-  {
-    "ts": "2026-03-22T06:48:27Z",
-    "event": "controller_connected: DualSense Edge Wireless Controller"
-  },
-  {
-    "ts": "2026-03-22T17:40:11Z",
-    "event": "controller_disconnected"
-  },
-  {
-    "ts": "2026-03-22T17:40:52Z",
-    "event": "milestone: Session 1545: touch_variance=0.2128"
-  },
-  {
-    "ts": "2026-03-22T18:20:04Z",
-    "event": "controller_connected: DualSense Edge Wireless Controller"
-  },
-  {
-    "ts": "2026-03-22T18:26:59Z",
-    "event": "milestone: Session 47: touch_variance=0.2128"
-  },
-  {
-    "ts": "2026-03-22T18:31:27Z",
-    "event": "controller_connected: DualSense Edge Wireless Controller"
-  },
-  {
-    "ts": "2026-03-22T18:39:30Z",
-    "event": "milestone: Session 48: touch_variance=0.2128"
-  },
-  {
-    "ts": "2026-03-22T18:43:49Z",
-    "event": "controller_connected: DualSense Edge Wireless Controller"
-  },
-  {
-    "ts": "2026-03-22T18:58:48Z",
-    "event": "controller_connected: DualSense Edge Wireless Controller"
-  },
-  {
-    "ts": "2026-03-22T19:14:44Z",
-    "event": "controller_connected: DualSense Edge Wireless Controller"
-  },
-  {
-    "ts": "2026-03-22T19:52:09Z",
-    "event": "controller_connected: DualSense Edge Wireless Controller"
-  },
-  {
-    "ts": "2026-03-22T19:56:14Z",
-    "event": "controller_connected: DualSense Edge Wireless Controller"
-  },
-  {
-    "ts": "2026-03-22T20:05:57Z",
-    "event": "controller_connected: DualSense Edge Wireless Controller"
-  },
-  {
-    "ts": "2026-03-22T20:23:27Z",
-    "event": "controller_connected: DualSense Edge Wireless Controller"
-  },
-  {
-    "ts": "2026-03-22T20:31:26Z",
-    "event": "controller_connected: DualSense Edge Wireless Controller"
-  },
-  {
-    "ts": "2026-03-22T20:37:19Z",
-    "event": "controller_connected: DualSense Edge Wireless Controller"
-  },
-  {
-    "ts": "2026-03-22T20:56:31Z",
-    "event": "controller_connected: DualSense Edge Wireless Controller"
-  },
-  {
-    "ts": "2026-03-22T21:05:49Z",
-    "event": "controller_connected: DualSense Edge Wireless Controller"
-  },
-  {
-    "ts": "2026-03-22T21:28:07Z",
-    "event": "controller_disconnected"
-  },
-  {
-    "ts": "2026-03-22T21:28:42Z",
-    "event": "controller_connected: DualSense Edge Wireless Controller"
-  },
-  {
-    "ts": "2026-03-22T21:29:47Z",
-    "event": "milestone: Session 49: touch_variance=0.2128"
-  },
-  {
-    "ts": "2026-03-22T21:58:28Z",
-    "event": "controller_connected: DualSense Edge Wireless Controller"
-  },
-  {
-    "ts": "2026-03-22T22:11:38Z",
-    "event": "controller_connected: DualSense Edge Wireless Controller"
-  },
-  {
-    "ts": "2026-03-24T03:40:32Z",
-    "event": "controller_connected: DualSense Edge Wireless Controller"
-  },
-  {
-    "ts": "2026-03-24T04:05:04Z",
-    "event": "controller_disconnected"
-  },
-  {
-    "ts": "2026-03-24T04:16:28Z",
-    "event": "milestone: 50 sessions reached \u2014 run interperson_separation_analyzer.py now."
-  },
-  {
-    "ts": "2026-03-24T04:16:28Z",
-    "event": "milestone: Session 50: touch_variance=0.2128"
-  },
-  {
-    "ts": "2026-03-24T04:28:23Z",
-    "event": "milestone: Session 51: touch_variance=0.2128"
-  },
-  {
-    "ts": "2026-03-25T21:02:59Z",
-    "event": "controller_connected: DualSense Edge Wireless Controller"
+    "ts": "2026-03-29T20:40:49Z",
+    "event": "milestone: Session 105: touch_variance=0.2193"
   }
 ]
