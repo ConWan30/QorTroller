@@ -27,38 +27,58 @@
 
 ## 1. Current Phase Status
 
-**Active Phase**: Phase 136 — DualSense Audio Passthrough Router
-**Phase Start**: 2026-03-29
+**Active Phase**: Phase 156 — EnrollmentAutoGuidanceAgent (agent #20)
+**Phase Start**: 2026-04-04
 **Phase Status**: COMPLETE
-**Next Phase**: Phase 137 (Tikhonov verification / SeparationRatioRegistry.sol / Tikhonov auto-detect)
+**Next Phase**: Phase 157 (TBD — user approval required)
 
-### Phase 136 Deliverables
+### Phase 150 Deliverables (COMPLETE 2026-04-03)
 
 | Component | Status | Evidence |
 |-----------|--------|----------|
-| audio_router.py | ✅ LIVE | NEW: Windows Core Audio COM vtable dispatch |
-| AudioDevice / AudioRouteResult / AudioRouter | ✅ LIVE | 3 new classes |
-| config audio_passthrough_enabled(True) / audio_device_preference("system") | ✅ LIVE | +2 config fields |
-| dualshock_integration.py | ✅ LIVE | _audio_router=None init + ensure_game_audio() + restore() |
-| Bridge tests | ✅ PASS | 1,734 pytest (+18 Phase 136) |
-| SDK tests | ✅ PASS | 233 tests (unchanged) |
+| separation_defensibility_log table | ✅ LIVE | insert/get store methods + schema(150) |
+| config.min_touchpad_sessions_per_player | ✅ LIVE | default=10 (WIF-010 target) |
+| analyze_interperson_separation.py | ✅ LIVE | --session-consistency + --min-n-per-player flags |
+| GET /agent/separation-defensibility-status | ✅ LIVE | 6 keys (defensible/ratio/n_per_player/min_n_per_player/all_pairs_above_1/found) |
+| Tool #106 get_separation_defensibility_status | ✅ LIVE | BridgeAgent tool, 6 required keys |
+| SeparationDefensibilityResult + VAPISeparationDefensibility SDK | ✅ LIVE | 6 slots, never raises |
+| openapi.yaml SeparationDefensibilityStatus schema | ✅ LIVE | GET /agent/separation-defensibility-status path |
+| SDK_VERSION | ✅ UPDATED | 3.0.0-phase148→3.0.0-phase150 |
+| WIF-010 formal closure | ✅ DOCUMENTED | defensible=False (P1=3/P2=4/P3=4 < min_n=10) |
+| WIF-011 added | ✅ DOCUMENTED | Session type mixing integrity gap (OPEN) |
+| Bridge tests | ✅ PASS | 1,868 pytest (+40 Phases 152-156) |
+| SDK tests | ✅ PASS | 265 tests (+20 Phases 152-156) |
+| Hardhat tests | ✅ PASS | 468 tests (+6 Phase 153 SeparationRatioRegistry) |
+
+### Phase 149 Deliverables (COMPLETE 2026-04-03)
+
+| Component | Status | Evidence |
+|-----------|--------|----------|
+| calibration_agent.py _CURRENT_PHASE=148 | ✅ LIVE | DB-first ratio + dir-based player count |
+| hardware_calibration_watcher.py | ✅ LIVE | default ratio 0.362→1.261 + Phase 148 docstring |
+| calibration_intelligence_agent.py | ✅ LIVE | Phase 148 prompt + Phase 143 values ratio=1.261/LOO=63.6% |
+| CALIBRATE_SETUP.ps1 | ✅ LIVE | Phase 109→148 reference |
+| Bridge tests | ✅ PASS | 1,808 pytest (+10 Phase 149) |
+| SDK tests | ✅ PASS | 237 tests (unchanged) |
 | Hardhat tests | ✅ PASS | 462 tests (unchanged) |
 
-### Phase 135 Deliverables (COMPLETE 2026-03-27)
+### Phase 148 Deliverables (COMPLETE 2026-04-02)
 
 | Component | Status | Evidence |
 |-----------|--------|----------|
-| TournamentActivationChainAgent | ✅ LIVE | agent #16, auto_activate_on_breakthrough=False |
-| tournament_activation_chain_log | ✅ LIVE | 7-key GET endpoint |
-| Tool #104 | ✅ LIVE | get_tournament_activation_chain |
+| AgentCalibrationIntegrityMonitor (ACIM) | ✅ LIVE | agent #18, 16 self-tests every 15 min |
+| mcp_server.py | ✅ CODE COMPLETE | mcp_server_enabled=False default; 6 MCP resources |
+| agent_calibration_health table | ✅ LIVE | insert/get |
+| Tool #105 get_agent_calibration_health | ✅ LIVE | 6 keys |
+| GET /agent/calibration-health | ✅ LIVE | endpoint |
 
 ### Claude Code Guidance
 
 When working on VAPI:
 - Check this section first to understand current system state
-- Phase 136 COMPLETE — Phase 137 work requires user approval first
+- Phase 149 COMPLETE — Phase 150 requires user approval first
 - Reference specific agent numbers and tool numbers from this table
-- If test counts differ from this table (expected: 1734/462/233), investigate regression
+- If test counts differ from this table (expected: 1808/462/237), investigate regression
 
 ---
 
@@ -127,15 +147,15 @@ When proposing on-chain operations:
 
 | Component | Test Count | Status | Last Run |
 |-----------|------------|--------|----------|
-| Bridge pytest | 1,734 | ✅ PASS | 2026-03-29 |
-| SDK tests | 233 | ✅ PASS | 2026-03-29 |
-| Hardhat tests | 462 | ✅ PASS | 2026-03-29 |
+| Bridge pytest | 1,868 | ✅ PASS | 2026-04-04 |
+| SDK tests | 265 | ✅ PASS | 2026-04-04 |
+| Hardhat tests | 468 | ✅ PASS | 2026-04-04 |
 | Hardware tests | 37 | ⚠️ HARDWARE-ONLY | Manual |
 | E2E tests | 14 | ⚠️ REQUIRES NODE | Manual |
 
 ### BridgeAgent Tools
 
-**Available**: 104 deterministic tools (expanded from 28 original)
+**Available**: 105 deterministic tools (expanded from 28 original)
 **Key Tools** (sample):
 - #1-20: Core bridge operations
 - #21: get_game_profile (Phase 51)
@@ -155,13 +175,14 @@ When proposing on-chain operations:
 
 | Agent | Cycle Time | Status | Last Action |
 |-------|------------|--------|-------------|
-| SessionAdjudicator | 5 min | ACTIVE | 2026-03-29 |
-| RulingEnforcementAgent | 5 min | ACTIVE | 2026-03-29 |
-| PoAdAnchorAgent | 60 sec | ACTIVE | 2026-03-29 |
-| SeparationRatioMonitorAgent (#15) | 300 sec | MONITORING | 2026-03-29 |
+| SessionAdjudicator | 5 min | ACTIVE | 2026-04-03 |
+| RulingEnforcementAgent | 5 min | ACTIVE | 2026-04-03 |
+| PoAdAnchorAgent | 60 sec | ACTIVE | 2026-04-03 |
+| SeparationRatioMonitorAgent (#15) | 300 sec | MONITORING | 2026-04-03 |
 | TournamentActivationChainAgent (#16) | N/A (manual) | STANDBY | — |
 | CalibrationIntelligenceAgent | 30 min | EVENT-DRIVEN | — |
 | Agent #17 ControllerHardwareIntelligenceAgent | — | DESIGN ONLY Phase 137+ | — |
+| Agent #18 AgentCalibrationIntegrityMonitor (ACIM) | 15 min | ACTIVE | Phase 148 LIVE |
 
 ### SQLite Schema
 
@@ -240,20 +261,20 @@ score = 0.30 × separation_score +
 
 | Signal | Value | Status | Blocker? |
 |--------|-------|--------|----------|
-| separation_score | 0.474 / 1.0 required | ⚠️ LOW | **YES** |
-| l4_score | [From l4_calibration_log] | TBD | — |
+| separation_score | **1.261** touchpad_corners N=11 (Phase 143 diagonal+LOO) | ✅ ABOVE GATE | N=11 thin — needs ≥10/player |
+| l4_score | [From l4_calibration_log] | stale (dim 12 vs 13) | — |
 | dual_gate_score | [From vhp_dual_gate_log] | TBD | — |
 | epoch_score | [From epoch_window_analytics] | TBD | — |
 | ioswarm_score | [From ioswarm_node_registry] | TBD | — |
-| dry_run_score | True (N<100?) | ⚠️ | — |
+| dry_run_score | True (N<100 live adjudications) | ⚠️ | — |
 
-**Overall**: NOT READY (separation_ratio < 1.0 is non-negotiable)
+**Overall**: CONDITIONALLY UNBLOCKED on touchpad_corners (ratio=1.261 > 1.0). Full corpus pooled=0.417 still BLOCKER. Touchpad_corners N=11 legally thin — target ≥10 sessions/player for defensible evidence.
 
 ### State Flags (Current Configuration)
 
 These flags indicate current system capabilities. They change as phases complete, but each value has specific meaning.
 
-### Current Values (Phase 136)
+### Current Values (Phase 149)
 
 | Flag | Value | Meaning | Phase |
 |------|-------|---------|-------|
@@ -264,6 +285,7 @@ These flags indicate current system capabilities. They change as phases complete
 | ioswarm_enabled | false | Live ioSwarm nodes not registered | 109A |
 | l4_battery_threshold_enabled | false | Per-battery routing not active | 126 |
 | confidence_multiplier_enabled | false | bt_strat_ratio multiplier disabled | 122 |
+| mcp_server_enabled | false | FastAPI MCP sub-app disabled (Phase 148 infrastructure) | 148 |
 | multi_controller_enabled | false | Agent #17 (ControllerHardwareIntelligenceAgent) DESIGN ONLY Phase 137+ | 137+ |
 
 ### Controller Registry Status
@@ -309,13 +331,19 @@ When assessing tournament readiness:
 - **Platform**: Windows 11
 - **HID Interface**: 3 (hidapi: VID=0x054C, PID=0x0DF2)
 
-### Breakthrough Hypothesis (Phase 129)
+### Breakthrough Results (Phases 137–143)
 
-**Claim**: Diagonal approximation (0.474) under-reports true separation due to feature correlation. Full covariance Tikhonov correction may reveal ratio > 0.60 or even > 1.0.
+**Phase 143 result (CURRENT BEST — 2026-04-02)**:
+- Separation ratio: **1.261** (diagonal + proper LOO, N=11 touchpad_corners, 3-player)
+- Classification: 63.6% (7/11, proper LOO) — honest estimate
+- Inter-player pairs: P1 vs P2=2.868, P1 vs P3=3.276, P2 vs P3=2.243
+- Covariance: diagonal auto-fallback (N/p=1.375 < 3.0 threshold)
+- Status: ABOVE 1.0 gate — but N=11 legally thin; target ≥10 sessions/player
 
-**Status**: UNVERIFIED — requires `--full-covariance` run on N=177 corpus.
+**Phase 138 result (P4→P3 merge, superseded by Phase 143)**:
+- Ratio 1.552 (full Tikhonov) — P1/P3 distance 0.127 was covariance noise artifact; diagonal gives 3.276
 
-**Action Required**: Run Phase 129 analysis when approved.
+**Full corpus pooled (N=127, 2026-03-29)**: 0.417 — plateau regime confirmed; free-form gameplay cannot reach >1.0.
 
 ### Claude Code Guidance
 
@@ -362,7 +390,8 @@ When proposing documentation changes:
 
 | Gap | Current | Required | Phase | Status |
 |-----|---------|----------|-------|--------|
-| Separation ratio | 0.474 | >1.0 | 121/129 | **OPEN** |
+| Separation ratio (touchpad_corners) | **1.261** N=11 | >1.0 defensible (N≥10/player) | 143 | **CONDITIONALLY MET** |
+| Separation ratio (full corpus pooled) | 0.417 N=127 | >1.0 | 129 | **OPEN** |
 | Wallet funding | ~0.35 IOTX | ~0.40 IOTX | 130B | **OPEN** |
 
 ### Calibration Gaps (Progressive)
@@ -383,7 +412,8 @@ When prioritizing work:
 
 ---
 
-**Document Version**: 1.0 (Phase 135)
-**Last Updated**: 2026-03-29
-**Update Trigger**: Phase 136 completion
+**Document Version**: 1.2 (Phase 156)
+**Last Updated**: 2026-04-04
+**Update Trigger**: Phase 156 session — VAPI_AGENTS.md synced (agents #19-20 added); VAPI_SKILLS.md Skill 14 added; vapi.md 20-phase drift corrected; AutoResearch cycle 4 score=1.000
 **Update Method**: Manual edit, not AutoResearch (ground truth file)
+**AutoResearch Last Run**: 2026-04-04 (cycle 4, score=1.000; W1 enrollment_count_gate + W2 PoFC filed)
