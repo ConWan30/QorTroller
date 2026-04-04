@@ -2,7 +2,7 @@ openapi: "3.0.3"
 
 info:
   title: VAPI — Self-Verifying Integration SDK REST API
-  version: "3.0.0-phase135"
+  version: "3.0.0-phase160"
   description: |
     The VAPI REST API exposes Proof of Authentic Controller (PoAC) submission,
     on-chain verification, device PHCI certification, SDK self-attestation,
@@ -3055,6 +3055,426 @@ paths:
         "403":
           description: Forbidden
 
+  /agent/calibration-health:
+    get:
+      summary: AgentCalibrationMonitor (ACIM) health summary (Phase 148)
+      description: >
+        Returns Phase 148 AgentCalibrationIntegrityMonitor (agent #18) latest self-test
+        results for all 16 agents. ACIM runs every 15 minutes and cross-validates each
+        agent's core calibration invariant independently — W1 mitigation for single-validator
+        anti-pattern. mcp_server_enabled=False default.
+      parameters:
+        - name: api_key
+          in: query
+          schema:
+            type: string
+          description: Operator API key
+      responses:
+        "200":
+          description: Calibration health summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentCalibrationHealth"
+        "403":
+          description: Forbidden
+
+  /agent/run-agent-self-test:
+    post:
+      summary: Trigger immediate ACIM self-test cycle (Phase 148)
+      description: >
+        Immediately runs all 16 agent self-tests and persists results to
+        agent_calibration_health table. Returns healthy_count/degraded_count summary.
+      parameters:
+        - name: api_key
+          in: query
+          schema:
+            type: string
+          description: Operator API key
+      responses:
+        "200":
+          description: Self-test triggered and results stored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  triggered:
+                    type: boolean
+                  agent_count:
+                    type: integer
+                  healthy_count:
+                    type: integer
+                  degraded_count:
+                    type: integer
+                  timestamp:
+                    type: number
+        "403":
+          description: Forbidden
+
+  /agent/separation-defensibility-status:
+    get:
+      summary: Separation ratio defensibility status (Phase 150, WIF-010 closure)
+      description: >
+        Returns whether the current per-player touchpad_corners session counts meet
+        the minimum required (default N=10/player) for a legally defensible separation
+        ratio claim. defensible=True requires ALL players >= min_n_per_player AND
+        ratio > 1.0 AND all inter-player pair distances > 1.0.
+        Current state: P1=3, P2=4, P3=4 — defensible=False (N=11 legally thin).
+        Ratio=1.261 (Phase 143, touchpad_corners diagonal+LOO) is above the 1.0 gate.
+        Phase 150 WIF-010 formal closure.
+      parameters:
+        - name: api_key
+          in: query
+          schema:
+            type: string
+          description: Operator API key
+        - name: session_type
+          in: query
+          schema:
+            type: string
+            default: touchpad_corners
+          description: Probe session type to query (default touchpad_corners)
+      responses:
+        "200":
+          description: Separation defensibility status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SeparationDefensibilityStatus"
+        "403":
+          description: Forbidden
+
+  /agent/centroid-velocity-status:
+    get:
+      summary: Centroid velocity monitor — separation ratio drift rate (Phase 152)
+      description: >
+        Returns rate of change of separation ratio between consecutive defensibility
+        log snapshots. stagnant=True when velocity_per_day < 0.001 (plateau threshold).
+      tags: [Agent]
+      parameters:
+        - in: query
+          name: probe_type
+          schema: {type: string}
+          description: "Probe type (default: touchpad_corners)"
+      responses:
+        "200":
+          description: Centroid velocity status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CentroidVelocityStatus"
+        "403":
+          description: Forbidden
+
+  /agent/separation-ratio-registry-status:
+    get:
+      summary: On-chain separation ratio commitment registry (Phase 153)
+      description: >
+        Returns status of the SeparationRatioRegistry.sol on-chain proof-of-calibration
+        commitment. commit_hash = SHA-256(ratio_str + N + players_sorted + ts_ns).
+      tags: [Agent]
+      responses:
+        "200":
+          description: Registry status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SeparationRatioRegistryStatus"
+        "403":
+          description: Forbidden
+
+  /agent/capture-stagnation-status:
+    get:
+      summary: Capture stagnation monitor — daily probe session rate (Phase 154)
+      description: >
+        Returns sessions/day rolling rate from separation_defensibility_log.
+        stagnant=True when sessions_per_day < stagnation_threshold (default 0.5/day).
+      tags: [Agent]
+      parameters:
+        - in: query
+          name: probe_type
+          schema: {type: string}
+          description: "Probe type (default: touchpad_corners)"
+      responses:
+        "200":
+          description: Capture stagnation status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CaptureStagnationStatus"
+        "403":
+          description: Forbidden
+
+  /agent/controller-hardware-status:
+    get:
+      summary: Controller hardware intelligence — per-controller tier status (Phase 155)
+      description: >
+        Returns registered controller hardware profiles split by tier.
+        Attested (DualShock Edge L0-L6) vs Standard (Xbox/Switch L0-L5).
+        multi_controller_enabled=False default.
+      tags: [Agent]
+      responses:
+        "200":
+          description: Controller hardware status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControllerHardwareStatus"
+        "403":
+          description: Forbidden
+
+  /agent/consent-status/{device_id}:
+    get:
+      summary: Consent Ledger status for a device — Phase 160 BP-002
+      description: >
+        BP-002 Consent Ledger (WIF-018/019): per-device consent tracking for GDPR Art.7/17
+        compliance. consent_given=True required before biometric processing.
+        revoked=True triggers right-to-erasure workflow (anonymize_device_records).
+      parameters:
+        - name: device_id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Device ID to query consent status for
+        - name: api_key
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Consent status for device
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConsentStatus"
+        "403":
+          description: Forbidden
+
+  /agent/register-consent:
+    post:
+      summary: Register biometric processing consent — Phase 160 BP-002
+      description: >
+        Records consent_given=True for a device (GDPR Art.7).
+        Must be called before biometric sessions are processed.
+      parameters:
+        - name: device_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: consent_type
+          in: query
+          required: false
+          schema:
+            type: string
+            default: biometric_processing
+        - name: api_key
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Consent registered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  registered:
+                    type: boolean
+                  device_id:
+                    type: string
+                  consent_type:
+                    type: string
+                  consent_ts:
+                    type: number
+        "403":
+          description: Forbidden
+        "422":
+          description: Consent ledger disabled
+
+  /agent/revoke-consent:
+    post:
+      summary: Revoke consent and execute GDPR Art.17 erasure — Phase 160 BP-002
+      description: >
+        Revokes consent (GDPR Art.7(3)) and triggers right-to-erasure workflow (GDPR Art.17).
+        anonymize_device_records() NULLs humanity_score + evidence_json in pitl_session_proofs.
+      parameters:
+        - name: device_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: reason
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: execute_erasure
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: true
+        - name: api_key
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Consent revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  revoked:
+                    type: boolean
+                  device_id:
+                    type: string
+                  fields_anonymized:
+                    type: integer
+                  erasure_completed:
+                    type: boolean
+        "403":
+          description: Forbidden
+        "422":
+          description: Consent ledger disabled
+
+  /agent/biometric-privacy-status:
+    get:
+      summary: BiometricPrivacyComplianceAgent status — Phase 159 agent #22 BP-001
+      description: >
+        BP-001 Temporal Biometric Decay monitoring: TBD(t) = e^(-λt), λ = ln(2)/τ_half,
+        τ_half=90d (configurable). Monitors enrolled player records for biometric age.
+        warning_triggered=True when mean_decay_factor < 0.25 (≈2 half-lives ≈180 days).
+        privacy_budget_epsilon is advisory (ε = oldest_age_days / half_life_days).
+        Regulatory alignment: GDPR Art.5.1.e, CCPA retention minimization, EU AI Act.
+        biometric_privacy_enabled=True default; polls every 21600s (6h).
+      tags: [Agent]
+      responses:
+        "200":
+          description: Biometric privacy compliance status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BiometricPrivacyStatus"
+        "403":
+          description: Forbidden
+
+  /agent/gsr-hmac-validation-status:
+    get:
+      summary: GSR Class K HMAC frame validation status — Phase 158 WIF-014
+      description: >
+        Class K anti-spoofing: validates HMAC-SHA256 tags on incoming 80-byte GSR frames.
+        Frame layout: [0:8] magic, [8:32] arousal/corr/conductance/ts_ns, [32:48] device_id,
+        [48:80] HMAC-SHA256 over [0:48]. Rejects synthetic EDA generators without session key.
+        gsr_hmac_enabled=False default (infrastructure-first). Requires GSR_HMAC_KEY_HEX env var.
+      tags: [Agent]
+      responses:
+        "200":
+          description: GSR HMAC validation status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GSRHMACValidationStatus"
+        "403":
+          description: Forbidden
+
+  /agent/pohbg-status:
+    get:
+      summary: PoHBG (Proof of Hardware Biometric Grip) status — Phase 158 WIF-015
+      description: >
+        PoHBG = SHA-256(device_id_bytes + pack('>IIIQ', arousal_millis,
+        correlation_millis, conductance_raw_int, ts_ns)).
+        Extends composable proof triple (PoAC + PoAd + PoFC) with grip hardware proof.
+        pohbg_enabled=False default (infrastructure-first).
+      tags: [Agent]
+      responses:
+        "200":
+          description: PoHBG status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PoHBGStatus"
+        "403":
+          description: Forbidden
+
+  /agent/fleet-consensus-snapshot:
+    get:
+      summary: Fleet Consensus Snapshot — Phase 157 agent #21 PoFC
+      description: >
+        Returns the latest PoFC (Proof of Fleet Consensus) snapshot.
+        PoFC_hash = SHA-256(sorted_verdicts_json | separation_ratio | ts_ns).
+        Third composable proof primitive alongside PoAC (physiological) and PoAd (adjudication).
+        fleet_consensus_enabled=True default; polls every 1800s.
+      tags: [Agent]
+      responses:
+        "200":
+          description: Fleet consensus snapshot status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FleetConsensusSnapshotStatus"
+        "403":
+          description: Forbidden
+
+  /agent/enrollment-auto-guidance-status:
+    get:
+      summary: Enrollment auto-guidance synthesis — Phase 156/157 agent #20
+      description: >
+        Returns synthesized enrollment guidance from Phase 151 + 152 + 154 + 155 signals.
+        Phase 157 WIF-012: overall_ready requires sessions_needed=0 AND defensible=True.
+        Phase 157 WIF-016: cov_regime_status reports covariance stability classification.
+        urgency_level HIGH = stagnant + not ready; MEDIUM = velocity low; LOW = on track.
+      tags: [Agent]
+      responses:
+        "200":
+          description: Enrollment auto-guidance status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrollmentAutoGuidanceStatus"
+        "403":
+          description: Forbidden
+
+  /agent/enrollment-capture-guidance:
+    get:
+      summary: Per-player enrollment capture guidance (Phase 151 P1)
+      description: >
+        Returns per-player capture guidance for each structured probe type
+        (touchpad_corners / touchpad_freeform / touchpad_swipes). Reports how
+        many more sessions each player needs to reach min_n_per_player.
+        overall_ready=True when ALL players >= min_n in ALL probe types AND
+        ratio > 1.0 for each. Use to plan calibration capture sessions during
+        gameplay. Session type whitelist enforced (W1-011 closure, Phase 151 P0).
+      parameters:
+        - name: api_key
+          in: query
+          schema:
+            type: string
+          description: Operator API key
+        - name: min_n
+          in: query
+          schema:
+            type: integer
+            default: 10
+          description: Minimum sessions per player per probe type (default 10)
+      responses:
+        "200":
+          description: Enrollment capture guidance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrollmentCaptureGuidance"
+        "403":
+          description: Forbidden
+
   /agent/tournament-activation-chain:
     get:
       summary: TournamentActivationChainAgent status (Phase 135)
@@ -3884,7 +4304,8 @@ paths:
         activation_committed, dry_run_inactive, pmi>=1) + 2 hardware
         (separation_ratio_current>1.0, touchpad_recapture_complete).
         fully_ready=True only when all 7 pass. Current hardware blocker:
-        separation_ratio_current=0.362 (required >1.0).
+        separation_ratio_current=1.261 (Phase 143 diagonal LOO, N=11; required >1.0;
+        classification 63.6% — BLOCKER until ≥80%).
       tags: [Agent]
       parameters:
         - name: api_key
@@ -7447,7 +7868,7 @@ components:
           type: integer
         separation_ratio_current:
           type: number
-          description: "Current inter-person separation ratio (baseline 0.362, required >1.0)"
+          description: "Current inter-person separation ratio (Phase 143 result=1.261, required >1.0; classification 63.6% — BLOCKER until ≥80%)"
         separation_ratio_required:
           type: number
         fully_ready:
@@ -7570,6 +7991,39 @@ webhooks:
           type: number
           description: "Unix timestamp of response"
 
+    AgentCalibrationHealth:
+      type: object
+      description: >
+        Phase 148 AgentCalibrationMonitor (ACIM, agent #18) health summary.
+        Runs 16 agent self-tests every 15 minutes; cross-validates each agent's
+        calibration invariant independently (W1: anti-single-validator mitigation).
+      properties:
+        agent_count:
+          type: integer
+          description: "Total agents monitored (always 16)"
+        healthy_count:
+          type: integer
+          description: "Number of agents whose self-test returned PASS"
+        degraded_count:
+          type: integer
+          description: "Number of agents whose self-test returned FAIL or ERROR"
+        failed_agents:
+          type: array
+          items:
+            type: string
+          description: "Agent names that failed their self-test"
+        latest_tests:
+          type: array
+          items:
+            type: object
+          description: "Latest self-test result row per agent (from agent_calibration_health table)"
+        mcp_server_enabled:
+          type: boolean
+          description: "True if MCP server is enabled (MCP_SERVER_ENABLED=true)"
+        timestamp:
+          type: number
+          description: "Unix timestamp of response"
+
     TournamentActivationChainStatus:
       type: object
       description: >
@@ -7597,6 +8051,359 @@ webhooks:
         notification_count:
           type: integer
           description: "Total entries in tournament_activation_chain_log"
+        timestamp:
+          type: number
+          description: "Unix timestamp of response"
+
+    SeparationDefensibilityStatus:
+      type: object
+      description: >
+        Phase 150 separation ratio defensibility status (WIF-010 formal closure).
+        defensible=True requires ALL players >= min_n_per_player AND ratio > 1.0
+        AND all inter-player pair distances > 1.0.
+        Current state: P1=3, P2=4, P3=4 sessions — defensible=False (N=11 legally thin).
+        Ratio=1.261 (Phase 143 touchpad_corners diagonal+LOO) is above tournament gate.
+        Target: >=10 sessions/player for tournament defense.
+      properties:
+        defensible:
+          type: boolean
+          description: "True if ALL players >= min_n_per_player AND ratio > 1.0 AND all pairs > 1.0"
+        ratio:
+          type: number
+          description: "Latest separation ratio (1.261 for touchpad_corners Phase 143)"
+        n_per_player:
+          type: object
+          description: "Per-player session counts {player: n_sessions}"
+          additionalProperties:
+            type: integer
+        min_n_per_player:
+          type: integer
+          description: "Minimum required sessions per player (default 10, WIF-010)"
+        all_pairs_above_1:
+          type: boolean
+          description: "True if all inter-player Mahalanobis pair distances > 1.0"
+        found:
+          type: boolean
+          description: "True if a defensibility record exists in the database"
+        timestamp:
+          type: number
+          description: "Unix timestamp of response"
+
+    EnrollmentCaptureGuidance:
+      type: object
+      description: >
+        Phase 151 P1 per-player capture guidance for structured probe types.
+        For each probe type, reports how many sessions each player still needs
+        to reach min_n_per_player. Session type whitelist enforced (W1-011).
+        overall_ready=True only when ALL probe types have ALL players >= min_n.
+      properties:
+        min_n_per_player:
+          type: integer
+          description: "Target sessions per player per probe type (default 10)"
+        probe_types:
+          type: array
+          items:
+            type: string
+          description: "List of structured probe types (touchpad_corners/freeform/swipes)"
+        guidance:
+          type: object
+          description: >
+            Per-probe-type breakdown. Each key is a probe_type, value has:
+            found (bool), current_ratio (float), n_per_player (dict player→int),
+            gap (dict player→sessions_needed), all_players_ready (bool).
+          additionalProperties:
+            type: object
+        sessions_needed_total:
+          type: integer
+          description: "Total sessions needed across all probes and players"
+        overall_ready:
+          type: boolean
+          description: "True when ALL players >= min_n in ALL probe types AND ratio > 1.0"
+        timestamp:
+          type: number
+          description: "Unix timestamp of response"
+
+    CentroidVelocityStatus:
+      type: object
+      description: "Phase 152 centroid velocity monitor status"
+      properties:
+        probe_type:
+          type: string
+          description: "Probe type analyzed"
+        velocity:
+          type: number
+          description: "Rate of ratio change per second"
+        velocity_per_day:
+          type: number
+          description: "velocity * 86400"
+        stagnant:
+          type: boolean
+          description: "True when velocity_per_day < 0.001 (plateau threshold)"
+        n_snapshots_used:
+          type: integer
+          description: "Number of defensibility snapshots used in computation"
+        ratio_prev:
+          type: number
+          nullable: true
+          description: "Previous ratio snapshot"
+        ratio_curr:
+          type: number
+          nullable: true
+          description: "Current ratio snapshot"
+        timestamp:
+          type: number
+          description: "Unix timestamp of response"
+
+    SeparationRatioRegistryStatus:
+      type: object
+      description: "Phase 153 on-chain separation ratio registry status"
+      properties:
+        committed:
+          type: boolean
+          description: "True if a commitment has been recorded"
+        commit_hash:
+          type: string
+          description: "SHA-256(ratio_str + N + players_sorted + ts_ns)"
+        ratio_millis:
+          type: integer
+          description: "separation_ratio * 1000 (e.g. 1261 = 1.261)"
+        n_sessions:
+          type: integer
+          description: "Sessions in corpus at time of commit"
+        n_players:
+          type: integer
+          description: "Players in corpus at time of commit"
+        on_chain_tx:
+          type: string
+          nullable: true
+          description: "On-chain transaction hash (null if not yet anchored)"
+        total_commits:
+          type: integer
+          description: "Total commitments recorded"
+        separation_ratio_on_chain_enabled:
+          type: boolean
+          description: "Whether on-chain anchoring is enabled"
+        timestamp:
+          type: number
+          description: "Unix timestamp of response"
+
+    CaptureStagnationStatus:
+      type: object
+      description: "Phase 154 capture stagnation monitor status"
+      properties:
+        probe_type:
+          type: string
+          description: "Probe type analyzed"
+        sessions_per_day:
+          type: number
+          description: "Rolling sessions/day rate within window_days"
+        stagnant:
+          type: boolean
+          description: "True when sessions_per_day < stagnation_threshold"
+        sessions_in_window:
+          type: integer
+          description: "Sessions captured within the rolling window"
+        window_days:
+          type: number
+          description: "Rolling window size in days"
+        stagnation_threshold:
+          type: number
+          description: "Minimum sessions/day to be considered non-stagnant (default 0.5)"
+        notes:
+          type: string
+          description: "Additional context"
+        timestamp:
+          type: number
+          description: "Unix timestamp of response"
+
+    ControllerHardwareStatus:
+      type: object
+      description: "Phase 155 controller hardware intelligence status"
+      properties:
+        controller_intelligence_enabled:
+          type: boolean
+          description: "Whether ControllerHardwareIntelligenceAgent is active"
+        multi_controller_enabled:
+          type: boolean
+          description: "Multi-controller support flag (default False)"
+        attested_count:
+          type: integer
+          description: "Number of Attested-tier controller profiles (DualShock Edge)"
+        standard_count:
+          type: integer
+          description: "Number of Standard-tier controller profiles (Xbox/Switch)"
+        active_composite_key:
+          type: string
+          description: "profile_hash:battery_type:transport_type for active profile"
+        profiles:
+          type: array
+          items: {type: object}
+          description: "List of registered hardware profiles"
+        timestamp:
+          type: number
+          description: "Unix timestamp of response"
+
+    EnrollmentAutoGuidanceStatus:
+      type: object
+      description: "Phase 156/157 enrollment auto-guidance agent status"
+      properties:
+        sessions_needed_total:
+          type: integer
+          description: "Total sessions still needed across all probes and players"
+        overall_ready:
+          type: boolean
+          description: "Phase 157 WIF-012: True when sessions_needed=0 AND defensible=True"
+        recommended_action:
+          type: string
+          description: "Actionable guidance text for operator"
+        urgency_level:
+          type: string
+          enum: [HIGH, MEDIUM, LOW, UNKNOWN]
+          description: "HIGH=stagnant+not ready; MEDIUM=velocity low; LOW=on track"
+        estimated_days:
+          type: number
+          description: "Estimated days to enrollment readiness (-1 if stagnant)"
+        stagnant_probes:
+          type: array
+          items: {type: string}
+          description: "Probe types currently below stagnation threshold"
+        activation_chain_event:
+          type: string
+          nullable: true
+          description: "Event fired to TournamentActivationChainAgent when ready"
+        cov_regime_status:
+          type: string
+          enum: [diagonal_stable, transition_warning, full_covariance_active, unknown]
+          description: "Phase 157 WIF-016: covariance regime stability classification"
+        timestamp:
+          type: number
+          description: "Unix timestamp of response"
+
+    ConsentStatus:
+      type: object
+      description: "Phase 160 BP-002 Consent Ledger status for a device (WIF-018/019)"
+      properties:
+        consent_ledger_enabled:
+          type: boolean
+          description: "True when Consent Ledger is active (default True)"
+        consent_given:
+          type: boolean
+          description: "True when device has active consent for biometric processing"
+        consent_ts:
+          type: number
+          nullable: true
+          description: "Unix timestamp when consent was registered (null if never consented)"
+        revoked:
+          type: boolean
+          description: "True when consent has been revoked (GDPR Art.7(3))"
+        erasure_requested:
+          type: boolean
+          description: "True when right-to-erasure has been requested (GDPR Art.17)"
+        erasure_completed:
+          type: boolean
+          description: "True when anonymize_device_records() has been executed"
+        timestamp:
+          type: number
+          description: "Unix timestamp of response"
+
+    BiometricPrivacyStatus:
+      type: object
+      description: "Phase 159 BiometricPrivacyComplianceAgent (agent #22) BP-001 status"
+      properties:
+        biometric_privacy_enabled:
+          type: boolean
+          description: "True when BiometricPrivacyComplianceAgent is enabled"
+        bp001_half_life_days:
+          type: number
+          description: "BP-001 biometric half-life in days (default 90d, IMMUTABLE per §6)"
+        records_monitored:
+          type: integer
+          description: "Number of enrolled sessions currently monitored for decay"
+        records_expired:
+          type: integer
+          description: "Sessions with decay_factor < 0.25 (warning threshold)"
+        mean_decay_factor:
+          type: number
+          description: "Mean TBD decay factor across all monitored records (0.0-1.0)"
+        warning_triggered:
+          type: boolean
+          description: "True when mean_decay_factor < 0.25 — biometric_decay_warning bus event fired"
+        privacy_budget_epsilon:
+          type: number
+          description: "Advisory ε = oldest_age_days / half_life_days (BP-003 DPT future)"
+        timestamp:
+          type: number
+          description: "Unix timestamp of response"
+
+    GSRHMACValidationStatus:
+      type: object
+      description: "Phase 158 WIF-014 Class K HMAC frame validation status"
+      properties:
+        gsr_hmac_enabled:
+          type: boolean
+          description: "True when HMAC authentication is active on GSR frames"
+        gsr_hmac_key_configured:
+          type: boolean
+          description: "True when GSR_HMAC_KEY_HEX env var is set"
+        total_validations:
+          type: integer
+          description: "Total HMAC validation attempts logged"
+        valid_count:
+          type: integer
+          description: "Frames that passed HMAC verification"
+        rejected_count:
+          type: integer
+          description: "Frames rejected due to HMAC mismatch or malformed structure"
+        timestamp:
+          type: number
+          description: "Unix timestamp of response"
+
+    PoHBGStatus:
+      type: object
+      description: "Phase 158 WIF-015 PoHBG (Proof of Hardware Biometric Grip) status"
+      properties:
+        pohbg_enabled:
+          type: boolean
+          description: "True when PoHBG hash computation is enabled"
+        total_pohbg:
+          type: integer
+          description: "Total PoHBG hashes stored in pohbg_log"
+        latest_pohbg_hash:
+          type: string
+          nullable: true
+          description: "Latest PoHBG hash (SHA-256, 64-char hex)"
+        latest_device_id:
+          type: string
+          nullable: true
+          description: "Device ID of latest PoHBG entry"
+        latest_ts_ns:
+          type: integer
+          nullable: true
+          description: "Timestamp (nanoseconds) of latest PoHBG entry"
+        timestamp:
+          type: number
+          description: "Unix timestamp of response"
+
+    FleetConsensusSnapshotStatus:
+      type: object
+      description: "Phase 157 FleetConsensusSnapshotAgent (agent #21) status"
+      properties:
+        fleet_consensus_enabled:
+          type: boolean
+          description: "True when FleetConsensusSnapshotAgent is enabled"
+        total_snapshots:
+          type: integer
+          description: "Total PoFC snapshots stored in fleet_consensus_snapshot_log"
+        latest_pofc_hash:
+          type: string
+          nullable: true
+          description: "Latest PoFC hash (SHA-256, 64-char hex) — third composable proof primitive"
+        latest_agent_count:
+          type: integer
+          description: "Number of agent verdicts included in latest snapshot"
+        latest_separation_ratio:
+          type: number
+          description: "Separation ratio at time of latest snapshot"
         timestamp:
           type: number
           description: "Unix timestamp of response"

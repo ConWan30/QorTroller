@@ -928,10 +928,39 @@ CONFIRMED / REJECTED
 
 ---
 
-**Document Version**: 1.3 (AutoResearch cycles 5-6, 2026-04-04)
+## WIF-018 — Biometric Data Used After Consent Revocation: No Gate in Defensibility Pipeline (Phase 160 candidate)
+
+**W1 — Failure mode**: `insert_separation_defensibility_log` accepts structured probe sessions for any device regardless of consent status. A player who revokes consent (GDPR Art.7) or requests erasure (GDPR Art.17) can still have new biometric sessions inserted into the separation defensibility log.
+
+**Implication**: Phase 151 STRUCTURED_PROBE_TYPES whitelist enforces session type purity but does NOT check consent. `BiometricPrivacyComplianceAgent` (Phase 159) tracks decay but has no consent query interface. No consent ledger → no processing lawfulness audit trail → regulatory exposure for tournament operators.
+
+**Cryptographic grounding**: GDPR Art.9 (special category biometric data) + Art.7(3) (withdrawal as easy as giving) + Art.17 (erasure without undue delay). Tournament operators face €20M or 4% global revenue fines for unlawful biometric processing after consent revocation.
+
+**Mitigation (Phase 160)**: `consent_ledger` table + `insert_separation_defensibility_log` consent guard + `anonymize_device_records()` + `right_to_erasure_log` table.
+
+**Status**: OPEN — Phase 160 candidate. Filed 2026-04-04 (AutoResearch cycle 7).
+
+---
+
+## WIF-019 — Consent Ledger as Composable Privacy Primitive (Phase 160 candidate)
+
+**W2 — Opportunity**: `get_consent_status(device_id)` as a queryable bridge primitive enabling every data-writing agent to check consent before storing biometric records. Composable gate: `consent_given AND defensible AND decay_factor > 0.25` = full privacy-compliant enrollment gate.
+
+**Mechanism**: `consent_ledger` table + `right_to_erasure_log` + `get_consent_status()` store method + `POST /agent/register-consent` + `POST /agent/revoke-consent` + `GET /agent/consent-status/{device_id}` + Tool #117 + `ConsentLedgerResult` SDK.
+
+**Exclusive because**: Requires Phase 151 STRUCTURED_PROBE_TYPES whitelist + Phase 159 BiometricPrivacyComplianceAgent (BP-001) + Phase 150 separation defensibility gate. No competing gaming DePIN protocol has per-device biometric consent as a queryable primitive composable with on-chain separation ratio registry.
+
+**Phase candidate**: Phase 160 (~3h effort).
+
+**Status**: NEW — Phase 160 candidate. Filed 2026-04-04 (AutoResearch cycle 7).
+
+---
+
+**Document Version**: 1.4 (AutoResearch cycles 5-7, 2026-04-04)
 **Last Updated**: 2026-04-04
-**W1 Count**: 15 entries (WIF-014 Class K GSR bypass; WIF-016 covariance regime instability)
-**W2 Count**: 12 entries (WIF-015 PoHBG quadruple proof; WIF-017 adaptive probe sequencing)
+**W1 Count**: 17 entries (WIF-014 Class K GSR bypass; WIF-016 covariance regime instability; WIF-018 consent gate gap)
+**W2 Count**: 13 entries (WIF-015 PoHBG quadruple proof; WIF-017 adaptive probe sequencing; WIF-019 consent ledger)
 **W3 Count**: 5 entries
 **Update Method**: Append-only, status updates inline
 **Key Cycle 5-6 Updates**: WIF-014/015 Class K + PoHBG (Phase 158 candidates); WIF-016/017 covariance instability + adaptive sequencing (Phase 157 candidates); AutoResearch cycles 5-6 score=1.000
+**Key Cycle 7 Updates**: WIF-018/019 consent gate gap + consent ledger primitive (Phase 160 candidates); AutoResearch cycle 7 score=1.000

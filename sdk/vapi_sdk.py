@@ -78,7 +78,7 @@ for _d in [str(_CONTROLLER_DIR), str(_BRIDGE_DIR)]:
 # Protocol constants (PoAC spec — immutable)
 # ---------------------------------------------------------------------------
 
-SDK_VERSION       = "3.0.0-phase135"
+SDK_VERSION       = "3.0.0-phase160"
 POAC_RECORD_SIZE  = 228
 POAC_BODY_SIZE    = 164
 POAC_SIG_SIZE     = 64
@@ -1936,7 +1936,8 @@ class VAPILiveModeValidator:
 class TournamentReadinessResult:
     """Phase 108 — Comprehensive tournament readiness scorecard.
     fully_ready=True requires all 7 conditions (5 software + 2 hardware).
-    Current hardware blocker: separation_ratio_current=0.362, required >1.0.
+    Current hardware blocker: separation_ratio_current=1.261 (Phase 143, N=11), required >1.0;
+    classification 63.6% — BLOCKER until ≥80%.
     error=None on success.
     """
     software_conditions_met:   int
@@ -1971,7 +1972,7 @@ class VAPITournamentReadiness:
                 software_conditions_total=int(d.get("software_conditions_total", 5)),
                 hardware_conditions_met=int(d.get("hardware_conditions_met", 0)),
                 hardware_conditions_total=int(d.get("hardware_conditions_total", 2)),
-                separation_ratio_current=float(d.get("separation_ratio_current", 0.362)),
+                separation_ratio_current=float(d.get("separation_ratio_current", 1.261)),
                 separation_ratio_required=float(d.get("separation_ratio_required", 1.0)),
                 fully_ready=bool(d.get("fully_ready", False)),
                 blocking_conditions=list(d.get("blocking_conditions", [])),
@@ -1982,7 +1983,7 @@ class VAPITournamentReadiness:
             return TournamentReadinessResult(
                 software_conditions_met=0, software_conditions_total=5,
                 hardware_conditions_met=0, hardware_conditions_total=2,
-                separation_ratio_current=0.362, separation_ratio_required=1.0,
+                separation_ratio_current=1.261, separation_ratio_required=1.0,
                 fully_ready=False, blocking_conditions=[], ready_for_live=False,
                 pmi=0, error=str(exc),
             )
@@ -3667,4 +3668,726 @@ class VAPITournamentActivationChain:
                 last_notification_ts=0.0,
                 notification_count=0,
                 error=str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Phase 148 — Agent Calibration Health (ACIM) SDK
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class AgentCalibrationHealthResult:
+    """Result from VAPIAgentCalibrationMonitor.get_health()."""
+    agent_count:        int = 16
+    healthy_count:      int = 0
+    degraded_count:     int = 0
+    failed_agents:      list = field(default_factory=list)
+    mcp_server_enabled: bool = False
+    error:              str | None = None
+
+
+class VAPIAgentCalibrationMonitor:
+    """SDK client for AgentCalibrationMonitor (ACIM, agent #18) health endpoint (Phase 148).
+
+    Exposes GET /agent/calibration-health and POST /agent/run-agent-self-test.
+    Never raises; error path returns AgentCalibrationHealthResult with error != None.
+    """
+
+    def __init__(self, base_url: str = "http://localhost:8000", api_key: str = ""):
+        self._base = base_url.rstrip("/")
+        self._key = api_key
+
+    def get_health(self) -> AgentCalibrationHealthResult:
+        """Call GET /agent/calibration-health. Returns AgentCalibrationHealthResult."""
+        import urllib.request as _ur
+        import json as _j
+        try:
+            url = f"{self._base}/agent/calibration-health?api_key={self._key}"
+            with _ur.urlopen(url, timeout=10) as resp:
+                data = _j.loads(resp.read())
+            return AgentCalibrationHealthResult(
+                agent_count=int(data.get("agent_count", 16)),
+                healthy_count=int(data.get("healthy_count", 0)),
+                degraded_count=int(data.get("degraded_count", 0)),
+                failed_agents=list(data.get("failed_agents", [])),
+                mcp_server_enabled=bool(data.get("mcp_server_enabled", False)),
+                error=None,
+            )
+        except Exception as exc:
+            return AgentCalibrationHealthResult(
+                agent_count=16,
+                healthy_count=0,
+                degraded_count=0,
+                failed_agents=[],
+                mcp_server_enabled=False,
+                error=str(exc),
+            )
+
+    def trigger_self_test(self) -> dict:
+        """Call POST /agent/run-agent-self-test. Returns status dict."""
+        import urllib.request as _ur
+        import json as _j
+        import urllib.parse as _up
+        try:
+            url = f"{self._base}/agent/run-agent-self-test?api_key={self._key}"
+            req = _ur.Request(url, data=b"{}", method="POST",
+                              headers={"Content-Type": "application/json"})
+            with _ur.urlopen(req, timeout=30) as resp:
+                return _j.loads(resp.read())
+        except Exception as exc:
+            return {"triggered": False, "error": str(exc)}
+
+
+# ---------------------------------------------------------------------------
+# Phase 150 — Separation Ratio Defensibility (WIF-010 formal closure)
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class SeparationDefensibilityResult:
+    """Phase 150 separation ratio defensibility result.
+
+    defensible=True requires: ALL players >= min_n_per_player (default 10)
+    AND ratio > 1.0 AND all inter-player pair distances > 1.0.
+
+    Current state (Phase 150): P1=3, P2=4, P3=4 — defensible=False.
+    Ratio=1.261 (Phase 143, touchpad_corners) is above gate but N=11 is
+    legally thin (WIF-010). Target: >=10 sessions/player for tournament defense.
+    """
+
+    defensible:         bool  = False
+    ratio:              float = 0.0
+    n_per_player:       dict  = field(default_factory=dict)
+    min_n_per_player:   int   = 10
+    all_pairs_above_1:  bool  = False
+    error:              "str | None" = None
+
+
+class VAPISeparationDefensibility:
+    """Phase 150 SDK client — separation ratio defensibility status (WIF-010 closure).
+
+    Queries GET /agent/separation-defensibility-status and returns a
+    SeparationDefensibilityResult. Never raises — returns error-populated result
+    on any exception (consistent with all Phase 99+ SDK clients).
+    """
+
+    def __init__(self, base_url: str, api_key: str = ""):
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_defensibility_status(
+        self, session_type: str = "touchpad_corners"
+    ) -> SeparationDefensibilityResult:
+        """Call GET /agent/separation-defensibility-status."""
+        import urllib.request as _ur
+        import json as _j
+        try:
+            url = (
+                f"{self._base}/agent/separation-defensibility-status"
+                f"?api_key={self._key}&session_type={session_type}"
+            )
+            with _ur.urlopen(url, timeout=10) as resp:
+                data = _j.loads(resp.read())
+            return SeparationDefensibilityResult(
+                defensible        = bool(data.get("defensible", False)),
+                ratio             = float(data.get("ratio", 0.0)),
+                n_per_player      = dict(data.get("n_per_player", {})),
+                min_n_per_player  = int(data.get("min_n_per_player", 10)),
+                all_pairs_above_1 = bool(data.get("all_pairs_above_1", False)),
+                error             = None,
+            )
+        except Exception as exc:
+            return SeparationDefensibilityResult(
+                defensible        = False,
+                ratio             = 0.0,
+                n_per_player      = {},
+                min_n_per_player  = 10,
+                all_pairs_above_1 = False,
+                error             = str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Phase 151 P1 — Enrollment Capture Guidance
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class CaptureGuidanceResult:
+    """Phase 151 per-player capture guidance for structured probe types.
+
+    For each structured probe type (touchpad_corners / touchpad_freeform /
+    touchpad_swipes), reports how many more sessions each player needs to reach
+    min_n_per_player.
+
+    overall_ready=True when ALL players have >= min_n sessions in ALL probe types
+    AND ratio > 1.0 for each probe — the tournament defensibility target.
+
+    Current state (Phase 151): P1=3, P2=4, P3=4 touchpad_corners.
+    sessions_needed_total=19 (7+6+6 for touchpad_corners alone).
+    """
+
+    min_n_per_player:       int   = 10
+    probe_types:            list  = field(default_factory=list)
+    guidance:               dict  = field(default_factory=dict)
+    sessions_needed_total:  int   = 0
+    overall_ready:          bool  = False
+    error:                  "str | None" = None
+
+
+class VAPIEnrollmentCaptureGuidance:
+    """Phase 151 P1 SDK client — enrollment capture guidance.
+
+    Queries GET /agent/enrollment-capture-guidance and returns a
+    CaptureGuidanceResult. Never raises — returns error-populated result
+    on any exception.
+    """
+
+    def __init__(self, base_url: str, api_key: str = ""):
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_guidance(self, min_n: int = 10) -> CaptureGuidanceResult:
+        """Call GET /agent/enrollment-capture-guidance."""
+        import urllib.request as _ur
+        import json as _j
+        try:
+            url = (
+                f"{self._base}/agent/enrollment-capture-guidance"
+                f"?api_key={self._key}&min_n={min_n}"
+            )
+            with _ur.urlopen(url, timeout=10) as resp:
+                data = _j.loads(resp.read())
+            return CaptureGuidanceResult(
+                min_n_per_player      = int(data.get("min_n_per_player", 10)),
+                probe_types           = list(data.get("probe_types", [])),
+                guidance              = dict(data.get("guidance", {})),
+                sessions_needed_total = int(data.get("sessions_needed_total", 0)),
+                overall_ready         = bool(data.get("overall_ready", False)),
+                error                 = None,
+            )
+        except Exception as exc:
+            return CaptureGuidanceResult(
+                min_n_per_player      = 10,
+                probe_types           = [],
+                guidance              = {},
+                sessions_needed_total = 0,
+                overall_ready         = False,
+                error                 = str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Phase 152 — Centroid Velocity Monitor
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class CentroidVelocityResult:
+    probe_type:       str
+    velocity:         float
+    velocity_per_day: float
+    stagnant:         bool
+    n_snapshots_used: int
+    error:            str | None
+
+
+class VAPICentroidVelocityMonitor:
+    """Read-only client for GET /agent/centroid-velocity-status.  Never raises."""
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_velocity_status(self, probe_type: str = "touchpad_corners") -> CentroidVelocityResult:
+        import urllib.request, urllib.parse, json as _json
+        try:
+            _params = urllib.parse.urlencode({"probe_type": probe_type, "api_key": self._key})
+            req = urllib.request.Request(
+                f"{self._base}/agent/centroid-velocity-status?{_params}",
+                headers={"X-API-Key": self._key},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = _json.loads(resp.read())
+            return CentroidVelocityResult(
+                probe_type       = str(data.get("probe_type", probe_type)),
+                velocity         = float(data.get("velocity", 0.0)),
+                velocity_per_day = float(data.get("velocity_per_day", 0.0)),
+                stagnant         = bool(data.get("stagnant", True)),
+                n_snapshots_used = int(data.get("n_snapshots_used", 0)),
+                error            = None,
+            )
+        except Exception as exc:
+            return CentroidVelocityResult(
+                probe_type       = probe_type,
+                velocity         = 0.0,
+                velocity_per_day = 0.0,
+                stagnant         = True,
+                n_snapshots_used = 0,
+                error            = str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Phase 153 — Separation Ratio Registry (on-chain commitment)
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class SeparationRatioRegistryResult:
+    committed:   bool
+    commit_hash: str
+    ratio_millis: int
+    n_sessions:  int
+    n_players:   int
+    error:       str | None
+
+
+class VAPISeparationRatioRegistry:
+    """Read-only client for GET /agent/separation-ratio-registry-status.  Never raises."""
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_registry_status(self) -> SeparationRatioRegistryResult:
+        import urllib.request, urllib.parse, json as _json
+        try:
+            _params = urllib.parse.urlencode({"api_key": self._key})
+            req = urllib.request.Request(
+                f"{self._base}/agent/separation-ratio-registry-status?{_params}",
+                headers={"X-API-Key": self._key},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = _json.loads(resp.read())
+            return SeparationRatioRegistryResult(
+                committed    = bool(data.get("committed", False)),
+                commit_hash  = str(data.get("commit_hash", "")),
+                ratio_millis = int(data.get("ratio_millis", 0)),
+                n_sessions   = int(data.get("n_sessions", 0)),
+                n_players    = int(data.get("n_players", 0)),
+                error        = None,
+            )
+        except Exception as exc:
+            return SeparationRatioRegistryResult(
+                committed    = False,
+                commit_hash  = "",
+                ratio_millis = 0,
+                n_sessions   = 0,
+                n_players    = 0,
+                error        = str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Phase 154 — Capture Stagnation Monitor
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class CaptureStagnationResult:
+    probe_type:       str
+    sessions_per_day: float
+    stagnant:         bool
+    sessions_in_window: int
+    window_days:      float
+    error:            str | None
+
+
+class VAPICaptureStagnationMonitor:
+    """Read-only client for GET /agent/capture-stagnation-status.  Never raises."""
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_stagnation_status(self, probe_type: str = "touchpad_corners") -> CaptureStagnationResult:
+        import urllib.request, urllib.parse, json as _json
+        try:
+            _params = urllib.parse.urlencode({"probe_type": probe_type, "api_key": self._key})
+            req = urllib.request.Request(
+                f"{self._base}/agent/capture-stagnation-status?{_params}",
+                headers={"X-API-Key": self._key},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = _json.loads(resp.read())
+            return CaptureStagnationResult(
+                probe_type         = str(data.get("probe_type", probe_type)),
+                sessions_per_day   = float(data.get("sessions_per_day", 0.0)),
+                stagnant           = bool(data.get("stagnant", True)),
+                sessions_in_window = int(data.get("sessions_in_window", 0)),
+                window_days        = float(data.get("window_days", 7.0)),
+                error              = None,
+            )
+        except Exception as exc:
+            return CaptureStagnationResult(
+                probe_type         = probe_type,
+                sessions_per_day   = 0.0,
+                stagnant           = True,
+                sessions_in_window = 0,
+                window_days        = 7.0,
+                error              = str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Phase 155 — Controller Hardware Intelligence
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class ControllerHardwareResult:
+    controller_intelligence_enabled: bool
+    multi_controller_enabled:        bool
+    attested_count:                  int
+    standard_count:                  int
+    active_composite_key:            str
+    error:                           str | None
+
+
+class VAPIControllerHardware:
+    """Read-only client for GET /agent/controller-hardware-status.  Never raises."""
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_hardware_status(self) -> ControllerHardwareResult:
+        import urllib.request, urllib.parse, json as _json
+        try:
+            _params = urllib.parse.urlencode({"api_key": self._key})
+            req = urllib.request.Request(
+                f"{self._base}/agent/controller-hardware-status?{_params}",
+                headers={"X-API-Key": self._key},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = _json.loads(resp.read())
+            return ControllerHardwareResult(
+                controller_intelligence_enabled = bool(data.get("controller_intelligence_enabled", True)),
+                multi_controller_enabled        = bool(data.get("multi_controller_enabled", False)),
+                attested_count                  = int(data.get("attested_count", 0)),
+                standard_count                  = int(data.get("standard_count", 0)),
+                active_composite_key            = str(data.get("active_composite_key", "")),
+                error                           = None,
+            )
+        except Exception as exc:
+            return ControllerHardwareResult(
+                controller_intelligence_enabled = True,
+                multi_controller_enabled        = False,
+                attested_count                  = 0,
+                standard_count                  = 0,
+                active_composite_key            = "",
+                error                           = str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Phase 156 — Enrollment Auto-Guidance Agent
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class EnrollmentAutoGuidanceResult:
+    sessions_needed_total: int
+    overall_ready:         bool
+    recommended_action:    str
+    urgency_level:         str
+    estimated_days:        float
+    cov_regime_status:     str
+    error:                 str | None
+
+
+class VAPIEnrollmentAutoGuidance:
+    """Read-only client for GET /agent/enrollment-auto-guidance-status.  Never raises."""
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_guidance_status(self) -> EnrollmentAutoGuidanceResult:
+        import urllib.request, urllib.parse, json as _json
+        try:
+            _params = urllib.parse.urlencode({"api_key": self._key})
+            req = urllib.request.Request(
+                f"{self._base}/agent/enrollment-auto-guidance-status?{_params}",
+                headers={"X-API-Key": self._key},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = _json.loads(resp.read())
+            return EnrollmentAutoGuidanceResult(
+                sessions_needed_total = int(data.get("sessions_needed_total", 0)),
+                overall_ready         = bool(data.get("overall_ready", False)),
+                recommended_action    = str(data.get("recommended_action", "")),
+                urgency_level         = str(data.get("urgency_level", "UNKNOWN")),
+                estimated_days        = float(data.get("estimated_days", -1.0)),
+                cov_regime_status     = str(data.get("cov_regime_status", "unknown")),
+                error                 = None,
+            )
+        except Exception as exc:
+            return EnrollmentAutoGuidanceResult(
+                sessions_needed_total = 0,
+                overall_ready         = False,
+                recommended_action    = "Run EnrollmentAutoGuidanceAgent",
+                urgency_level         = "UNKNOWN",
+                estimated_days        = -1.0,
+                cov_regime_status     = "unknown",
+                error                 = str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Phase 157 — FleetConsensusSnapshotAgent (agent #21) SDK
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class BiometricPrivacyComplianceResult:
+    """Phase 159 — BP-001 Temporal Biometric Decay compliance status."""
+    biometric_privacy_enabled: bool
+    bp001_half_life_days:       float
+    records_monitored:          int
+    mean_decay_factor:          float
+    warning_triggered:          bool
+    error:                      str | None
+
+
+class VAPIBiometricPrivacy:
+    """Read-only client for GET /agent/biometric-privacy-status.  Never raises.
+
+    BP-001 Temporal Biometric Decay: TBD(t) = e^(-λt), λ = ln(2)/τ_half, τ_half=90d.
+    warning_triggered=True when mean_decay_factor < 0.25 (≈2 half-lives).
+    biometric_privacy_enabled=True default; polls every 21600s (6h).
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_privacy_status(self) -> BiometricPrivacyComplianceResult:
+        import urllib.request, urllib.parse, json as _json
+        try:
+            _params = urllib.parse.urlencode({"api_key": self._key})
+            req = urllib.request.Request(
+                f"{self._base}/agent/biometric-privacy-status?{_params}",
+                headers={"X-API-Key": self._key},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = _json.loads(resp.read())
+            return BiometricPrivacyComplianceResult(
+                biometric_privacy_enabled = bool(data.get("biometric_privacy_enabled", True)),
+                bp001_half_life_days      = float(data.get("bp001_half_life_days", 90.0)),
+                records_monitored         = int(data.get("records_monitored", 0)),
+                mean_decay_factor         = float(data.get("mean_decay_factor", 1.0)),
+                warning_triggered         = bool(data.get("warning_triggered", False)),
+                error                     = None,
+            )
+        except Exception as exc:
+            return BiometricPrivacyComplianceResult(
+                biometric_privacy_enabled = True,
+                bp001_half_life_days      = 90.0,
+                records_monitored         = 0,
+                mean_decay_factor         = 1.0,
+                warning_triggered         = False,
+                error                     = str(exc),
+            )
+
+
+@dataclass(slots=True)
+class ConsentLedgerResult:
+    """Phase 160 — BP-002 Consent Ledger status for a device."""
+    consent_ledger_enabled: bool
+    consent_given:          bool
+    consent_ts:             float | None
+    revoked:                bool
+    erasure_requested:      bool
+    error:                  str | None
+
+
+class VAPIConsentLedger:
+    """Consent Ledger client for BP-002 (WIF-018/019).  Never raises.
+
+    Reads consent status for a device.  Use POST /agent/register-consent
+    to record consent, POST /agent/revoke-consent to revoke + trigger erasure.
+    consent_ledger_enabled=True default.
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_consent_status(self, device_id: str) -> ConsentLedgerResult:
+        """Return BP-002 consent status for device_id.  Never raises."""
+        import urllib.request, urllib.parse, json as _json
+        try:
+            _params = urllib.parse.urlencode({"api_key": self._key})
+            req = urllib.request.Request(
+                f"{self._base}/agent/consent-status/{urllib.parse.quote(device_id, safe='')}?{_params}",
+                headers={"X-API-Key": self._key},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = _json.loads(resp.read())
+            return ConsentLedgerResult(
+                consent_ledger_enabled = bool(data.get("consent_ledger_enabled", True)),
+                consent_given          = bool(data.get("consent_given", False)),
+                consent_ts             = data.get("consent_ts"),
+                revoked                = bool(data.get("revoked", False)),
+                erasure_requested      = bool(data.get("erasure_requested", False)),
+                error                  = None,
+            )
+        except Exception as exc:
+            return ConsentLedgerResult(
+                consent_ledger_enabled = True,
+                consent_given          = False,
+                consent_ts             = None,
+                revoked                = False,
+                erasure_requested      = False,
+                error                  = str(exc),
+            )
+
+
+@dataclass(slots=True)
+class GSRHMACValidationResult:
+    """Phase 158 WIF-014 — Class K HMAC validation status result."""
+    gsr_hmac_enabled:        bool
+    gsr_hmac_key_configured: bool
+    total_validations:       int
+    valid_count:             int
+    rejected_count:          int
+    error:                   str | None
+
+
+class VAPIGSRHMACValidator:
+    """Read-only client for GET /agent/gsr-hmac-validation-status.  Never raises.
+
+    Class K anti-spoofing: validates HMAC-SHA256 tags on 80-byte GSR frames.
+    Rejects synthetic EDA generators that cannot produce correct HMAC tags.
+    gsr_hmac_enabled=False default (infrastructure-first).
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_validation_status(self) -> GSRHMACValidationResult:
+        import urllib.request, urllib.parse, json as _json
+        try:
+            _params = urllib.parse.urlencode({"api_key": self._key})
+            req = urllib.request.Request(
+                f"{self._base}/agent/gsr-hmac-validation-status?{_params}",
+                headers={"X-API-Key": self._key},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = _json.loads(resp.read())
+            return GSRHMACValidationResult(
+                gsr_hmac_enabled        = bool(data.get("gsr_hmac_enabled", False)),
+                gsr_hmac_key_configured = bool(data.get("gsr_hmac_key_configured", False)),
+                total_validations       = int(data.get("total_validations", 0)),
+                valid_count             = int(data.get("valid_count", 0)),
+                rejected_count          = int(data.get("rejected_count", 0)),
+                error                   = None,
+            )
+        except Exception as exc:
+            return GSRHMACValidationResult(
+                gsr_hmac_enabled        = False,
+                gsr_hmac_key_configured = False,
+                total_validations       = 0,
+                valid_count             = 0,
+                rejected_count          = 0,
+                error                   = str(exc),
+            )
+
+
+@dataclass(slots=True)
+class PoHBGResult:
+    """Phase 158 WIF-015 — Proof of Hardware Biometric Grip status result."""
+    pohbg_enabled:    bool
+    total_pohbg:      int
+    latest_pohbg_hash: str | None
+    latest_device_id: str | None
+    latest_ts_ns:     int | None
+    error:            str | None
+
+
+class VAPIPoHBG:
+    """Read-only client for GET /agent/pohbg-status.  Never raises.
+
+    PoHBG = SHA-256(device_id_bytes + pack('>IIIQ', arousal_millis,
+                    correlation_millis, conductance_raw_int, ts_ns))
+    Extends the composable proof triple (PoAC + PoAd + PoFC) with grip hardware proof.
+    pohbg_enabled=False default (infrastructure-first).
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_pohbg_status(self) -> PoHBGResult:
+        import urllib.request, urllib.parse, json as _json
+        try:
+            _params = urllib.parse.urlencode({"api_key": self._key})
+            req = urllib.request.Request(
+                f"{self._base}/agent/pohbg-status?{_params}",
+                headers={"X-API-Key": self._key},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = _json.loads(resp.read())
+            return PoHBGResult(
+                pohbg_enabled     = bool(data.get("pohbg_enabled", False)),
+                total_pohbg       = int(data.get("total_pohbg", 0)),
+                latest_pohbg_hash = data.get("latest_pohbg_hash"),
+                latest_device_id  = data.get("latest_device_id"),
+                latest_ts_ns      = data.get("latest_ts_ns"),
+                error             = None,
+            )
+        except Exception as exc:
+            return PoHBGResult(
+                pohbg_enabled     = False,
+                total_pohbg       = 0,
+                latest_pohbg_hash = None,
+                latest_device_id  = None,
+                latest_ts_ns      = None,
+                error             = str(exc),
+            )
+
+
+@dataclass(slots=True)
+class FleetConsensusSnapshotResult:
+    fleet_consensus_enabled: bool
+    total_snapshots:         int
+    latest_pofc_hash:        str | None
+    latest_agent_count:      int
+    latest_separation_ratio: float
+    error:                   str | None
+
+
+class VAPIFleetConsensus:
+    """Read-only client for GET /agent/fleet-consensus-snapshot.  Never raises.
+
+    Returns the latest PoFC (Proof of Fleet Consensus) snapshot:
+    PoFC_hash = SHA-256(sorted_verdicts_json | separation_ratio | ts_ns)
+    This is the third composable proof primitive (PoAC + PoAd + PoFC).
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_snapshot(self) -> FleetConsensusSnapshotResult:
+        import urllib.request, urllib.parse, json as _json
+        try:
+            _params = urllib.parse.urlencode({"api_key": self._key})
+            req = urllib.request.Request(
+                f"{self._base}/agent/fleet-consensus-snapshot?{_params}",
+                headers={"X-API-Key": self._key},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = _json.loads(resp.read())
+            return FleetConsensusSnapshotResult(
+                fleet_consensus_enabled = bool(data.get("fleet_consensus_enabled", True)),
+                total_snapshots         = int(data.get("total_snapshots", 0)),
+                latest_pofc_hash        = data.get("latest_pofc_hash"),
+                latest_agent_count      = int(data.get("latest_agent_count", 0)),
+                latest_separation_ratio = float(data.get("latest_separation_ratio", 0.0)),
+                error                   = None,
+            )
+        except Exception as exc:
+            return FleetConsensusSnapshotResult(
+                fleet_consensus_enabled = True,
+                total_snapshots         = 0,
+                latest_pofc_hash        = None,
+                latest_agent_count      = 0,
+                latest_separation_ratio = 0.0,
+                error                   = str(exc),
             )

@@ -400,8 +400,8 @@ _TOOLS = [
             "Compare two devices' L4 biometric fingerprints via Mahalanobis distance between "
             "their EMA mean vectors from player_calibration_profiles. Uses diagonal covariance "
             "(baseline_std). Verdict: DISTINCT (dist > 6.726) / INDETERMINATE (dist > 5.097) / "
-            "SIMILAR (dist <= 5.097). plain_english ALWAYS contains separation ratio 0.362 caveat "
-            "because L4 is an intra-player anomaly detector only, not an identity verifier."
+            "SIMILAR (dist <= 5.097). plain_english ALWAYS contains separation ratio 1.261 caveat "
+            "(Phase 143 diagonal, N=11 touchpad_corners) because L4 is an intra-player anomaly detector only, not an identity verifier."
         ),
         "input_schema": {
             "type": "object",
@@ -1053,6 +1053,290 @@ _TOOLS = [
             "required": [],
         },
     },
+    # Tool #117 — Phase 160
+    {
+        "name": "get_consent_status",
+        "description": (
+            "Return Phase 160 Consent Ledger status for a device (BP-002, WIF-018/019). "
+            "Consent Ledger is the GDPR Art.7/17 compliance primitive: "
+            "consent_given=True is required before biometric data is processed. "
+            "revoked=True + erasure_completed=True = full GDPR Art.17 erasure honored. "
+            "anonymize_device_records() NULLs humanity_score + evidence_json in pitl_session_proofs. "
+            "Returns: consent_ledger_enabled, consent_given, consent_ts, revoked, "
+            "erasure_requested, erasure_completed, timestamp. "
+            "consent_ledger_enabled=True default. "
+            "Use POST /agent/register-consent to give consent; POST /agent/revoke-consent to revoke."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "device_id": {
+                    "type": "string",
+                    "description": "Device ID to query consent status for.",
+                },
+            },
+            "required": ["device_id"],
+        },
+    },
+    # Tool #116 — Phase 159
+    {
+        "name": "get_biometric_privacy_status",
+        "description": (
+            "Return Phase 159 BiometricPrivacyComplianceAgent (agent #22) BP-001 status. "
+            "BP-001 Temporal Biometric Decay: TBD(t) = e^(-λt), λ = ln(2)/τ_half, τ_half=90d. "
+            "Monitors enrolled player record ages — mean_decay_factor tracks fleet-wide decay. "
+            "warning_triggered=True when mean_decay_factor < 0.25 (≈2 half-lives ≈180 days). "
+            "privacy_budget_epsilon is advisory (ε = oldest_age_days / half_life_days). "
+            "Returns: biometric_privacy_enabled, bp001_half_life_days, records_monitored, "
+            "records_expired, mean_decay_factor, warning_triggered, privacy_budget_epsilon, timestamp. "
+            "biometric_privacy_enabled=True default; polls every 21600s (6h). "
+            "BP-001 is IMMUTABLE per VAPI_INVARIANTS.md §6."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    # Tool #115 — Phase 158
+    {
+        "name": "get_pohbg_status",
+        "description": (
+            "Return Phase 158 PoHBG (Proof of Hardware Biometric Grip) status (WIF-015). "
+            "PoHBG hash = SHA-256(device_id_bytes + pack('>IIIQ', arousal_millis, "
+            "correlation_millis, conductance_raw_int, ts_ns)). "
+            "Extends the composable proof triple (PoAC + PoAd + PoFC) with grip hardware proof. "
+            "Returns: pohbg_enabled, total_pohbg, latest_pohbg_hash (64-char hex), "
+            "latest_device_id, latest_ts_ns, timestamp. "
+            "pohbg_enabled=False default (infrastructure-first)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    # Tool #114 — Phase 158
+    {
+        "name": "get_gsr_hmac_validation_status",
+        "description": (
+            "Return Phase 158 GSR Class K HMAC frame authentication status (WIF-014). "
+            "Class K anti-spoofing: validates incoming 80-byte GSR frames carry correct "
+            "HMAC-SHA256 tag over [magic+arousal+correlation+conductance+ts_ns+device_id]. "
+            "Rejects synthetic EDA generators (no session key). "
+            "Returns: gsr_hmac_enabled, gsr_hmac_key_configured, total_validations, "
+            "valid_count, rejected_count, timestamp. "
+            "gsr_hmac_enabled=False default (infrastructure-first). "
+            "Requires GSR_HMAC_KEY_HEX env var (64-char hex, 32-byte session key)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    # Tool #113 — Phase 157
+    {
+        "name": "get_fleet_consensus_snapshot",
+        "description": (
+            "Return Phase 157 FleetConsensusSnapshotAgent (agent #21) status. "
+            "Computes PoFC (Proof of Fleet Consensus): SHA-256 hash of the sorted agent verdict "
+            "state + separation_ratio + ts_ns — the third composable proof primitive alongside "
+            "PoAC (physiological) and PoAd (adjudication). "
+            "Returns: fleet_consensus_enabled, total_snapshots, latest_pofc_hash (64-char hex), "
+            "latest_agent_count, latest_separation_ratio, timestamp. "
+            "fleet_consensus_enabled=True default (poll every 1800s)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    # Tool #112 — Phase 156
+    {
+        "name": "get_enrollment_auto_guidance_status",
+        "description": (
+            "Return Phase 156 EnrollmentAutoGuidanceAgent synthesis: reads Phase 151 capture guidance, "
+            "Phase 154 stagnation status, Phase 152 centroid velocity, and Phase 155 controller status, "
+            "then emits a unified recommended_action with urgency_level. "
+            "Returns: sessions_needed_total, overall_ready, recommended_action, urgency_level, "
+            "estimated_days, stagnant_probes (list), activation_chain_event, timestamp. "
+            "urgency_level: HIGH (stagnant+not ready), MEDIUM (velocity low), LOW (on track). "
+            "This agent coordinates with TournamentActivationChainAgent (#16) when overall_ready=True. "
+            "enrollment_auto_guidance_enabled=True default (poll every 3600s)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    # Tool #111 — Phase 155
+    {
+        "name": "get_controller_hardware_status",
+        "description": (
+            "Return Phase 155 ControllerHardwareIntelligenceAgent status: registered controller profiles "
+            "split by tier (Attested=DualShock Edge L0-L6 / Standard=Xbox/Switch L0-L5). "
+            "Returns: controller_intelligence_enabled, multi_controller_enabled, attested_count, "
+            "standard_count, active_composite_key (profile_hash:battery:transport), profiles (list), "
+            "timestamp. "
+            "multi_controller_enabled=False default — never change without N≥50 per-controller calibration. "
+            "Composite key format: profile_hash:battery_type:transport_type for per-controller routing. "
+            "Default Attested profile: DualShock Edge, anomaly=7.009, continuity=5.367."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    # Tool #110 — Phase 154
+    {
+        "name": "get_capture_stagnation_status",
+        "description": (
+            "Return Phase 154 capture stagnation monitor status for a structured probe type. "
+            "Computes sessions/day rolling rate from separation_defensibility_log over window_days. "
+            "stagnant=True when sessions_per_day < stagnation_threshold (default 0.5/day). "
+            "Returns: probe_type, sessions_per_day, stagnant, sessions_in_window, window_days, "
+            "stagnation_threshold, notes, timestamp. "
+            "Use to detect when capture progress has plateaued and intervention is needed. "
+            "Feeds into Phase 156 EnrollmentAutoGuidanceAgent for urgency escalation."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "probe_type": {
+                    "type": "string",
+                    "description": "Probe type to check (default: touchpad_corners).",
+                },
+            },
+            "required": [],
+        },
+    },
+    # Tool #109 — Phase 153
+    {
+        "name": "get_separation_ratio_registry_status",
+        "description": (
+            "Return Phase 153 on-chain separation ratio registry status. "
+            "commit_hash = SHA-256(ratio_str + N + players_sorted + ts_ns). "
+            "Returns: committed, commit_hash, ratio_millis (int(ratio*1000)), n_sessions, "
+            "n_players, on_chain_tx, total_commits, separation_ratio_on_chain_enabled, timestamp. "
+            "separation_ratio_on_chain_enabled=False default (infrastructure-first). "
+            "SeparationRatioRegistry.sol: commitRatio(bytes32, uint256, uint32, uint32) onlyOwner; "
+            "anti-replay via UNIQUE commitHash; converts trust-me calibration to verifiable on-chain proof."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    # Tool #108 — Phase 152
+    {
+        "name": "get_centroid_velocity_status",
+        "description": (
+            "Return Phase 152 centroid velocity monitor: rate of change of separation ratio between "
+            "consecutive defensibility log snapshots. velocity = |ratio_curr - ratio_prev| / dt_seconds. "
+            "velocity_per_day = velocity * 86400. "
+            "stagnant=True when velocity_per_day < 0.001 (plateau threshold). "
+            "Returns: probe_type, velocity, velocity_per_day, stagnant, n_snapshots_used, "
+            "ratio_prev, ratio_curr, timestamp. "
+            "Use to detect when the calibration corpus is plateauing vs actively improving. "
+            "Feeds into Phase 156 EnrollmentAutoGuidanceAgent for urgency classification."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "probe_type": {
+                    "type": "string",
+                    "description": "Probe type to check (default: touchpad_corners).",
+                },
+            },
+            "required": [],
+        },
+    },
+    # Tool #107 — Phase 151 P1
+    {
+        "name": "get_enrollment_capture_guidance",
+        "description": (
+            "Return Phase 151 per-player capture guidance for structured probe types. "
+            "For each probe type (touchpad_corners / touchpad_freeform / touchpad_swipes), "
+            "reports how many more sessions each player needs to reach min_n_per_player (default 10). "
+            "Returns: min_n_per_player, probe_types (list), guidance (per-probe breakdown), "
+            "sessions_needed_total, overall_ready, timestamp. "
+            "guidance[probe_type] contains: found, current_ratio, n_per_player, gap (sessions needed "
+            "per player), all_players_ready. "
+            "Current state (Phase 143): P1=3, P2=4, P3=4 touchpad_corners — gap={P1:7,P2:6,P3:6}. "
+            "overall_ready=True when ALL players >= min_n in ALL probe types AND ratio > 1.0. "
+            "Use this to plan capture sessions — each gameplay session with structured probe adds "
+            "to one probe type per player."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "min_n": {
+                    "type": "integer",
+                    "description": "Minimum sessions per player per probe type (default 10).",
+                },
+            },
+            "required": [],
+        },
+    },
+    # Tool #106 — Phase 150
+    {
+        "name": "get_separation_defensibility_status",
+        "description": (
+            "Return Phase 150 separation ratio defensibility status (WIF-010 closure). "
+            "Reports whether the current per-player touchpad_corners session counts meet "
+            "the minimum required (default N=10/player) for a legally defensible "
+            "separation ratio claim. "
+            "Returns 6 keys: defensible (bool), ratio (float), n_per_player (dict), "
+            "min_n_per_player (int), all_pairs_above_1 (bool), found (bool). "
+            "Current state: P1=3, P2=4, P3=4 — all below target=10; defensible=False. "
+            "Ratio=1.261 (touchpad_corners, Phase 143 diagonal+LOO) is above the 1.0 "
+            "tournament gate but N=11 is legally thin. "
+            "W1 (WIF-010): single outlier session could reverse ratio below 1.0 at N=11. "
+            "Pair distances: P1vP2=2.868, P1vP3=3.276, P2vP3=2.243 — all above 1.0."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "session_type": {
+                    "type": "string",
+                    "description": (
+                        "Probe session type to query (default: 'touchpad_corners'). "
+                        "Filters the defensibility log by session_type."
+                    ),
+                },
+            },
+            "required": [],
+        },
+    },
+    # Tool #105 — Phase 148
+    {
+        "name": "get_agent_calibration_health",
+        "description": (
+            "Return Phase 148 AgentCalibrationMonitor (ACIM, agent #18) health summary. "
+            "Returns 6 keys: agent_count (16), healthy_count, degraded_count, "
+            "failed_agents (list of agent names that failed their self-test), "
+            "mcp_server_enabled, timestamp. "
+            "ACIM runs every 15 minutes and cross-validates each of the 16 agents' "
+            "core calibration invariants independently (W1: breaks single-validator "
+            "anti-pattern where CIA validates its own thresholds). "
+            "mcp_server_enabled=False default — enable with MCP_SERVER_ENABLED=true."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "agent_id": {
+                    "type": "integer",
+                    "description": "Optional: filter results to a specific agent (1-16).",
+                },
+            },
+            "required": [],
+        },
+    },
     # Tool #104 — Phase 135
     {
         "name": "get_tournament_activation_chain",
@@ -1646,7 +1930,8 @@ _TOOLS = [
             "(n_tested>=100, false_positive_count=0, activation_committed, "
             "dry_run=False, pmi>=1) AND 2 hardware "
             "(separation_ratio_current>1.0, touchpad_recapture_complete). "
-            "CURRENT STATUS: separation_ratio=0.362 — TOURNAMENT BLOCKER. "
+            "CURRENT STATUS: separation_ratio=1.261 (Phase 143 diagonal LOO, N=11) — "
+            "classification 63.6%, TOURNAMENT BLOCKER until classification ≥80%. "
             "Software P0 gate (Phase 107) is achievable now; hardware requires "
             "calibration sessions. Use this tool for deployment readiness decisions. "
             "Fields: software_conditions_met/5, hardware_conditions_met/2, "
@@ -2475,7 +2760,8 @@ class BridgeAgent:
                                  f"(need >=30 NOMINAL records each)",
                         "plain_english": (
                             "Cannot compare — calibration data unavailable. "
-                            "separation ratio 0.362 (L4 is intra-player anomaly detector only)."
+                            "separation ratio 1.261 (Phase 143 diagonal, N=11 touchpad_corners; "
+                            "L4 is intra-player anomaly detector only)."
                         ),
                     }
                 mean_a = float(profile_a.get("baseline_mean") or 0.0)
@@ -2490,7 +2776,7 @@ class BridgeAgent:
                     verdict = "SIMILAR"
                 plain_english = (
                     f"Devices are {verdict} (Mahalanobis distance={dist:.3f}). "
-                    f"separation ratio 0.362 — L4 is intra-player anomaly detector only; "
+                    f"separation ratio 1.261 (Phase 143, N=11) — L4 is intra-player anomaly detector only; "
                     f"SIMILAR does not confirm same identity."
                 )
                 return {
@@ -2724,8 +3010,10 @@ class BridgeAgent:
                     "attack_class": cls,
                     **rec,
                     "separation_gap_note": (
-                        "Inter-person separation ratio=0.362. Biometric transplant attack "
-                        "(P1 uses P2 device) has 0% detection at all layers. Tournament blocker."
+                        "Inter-person separation ratio=1.261 (Phase 143 diagonal, N=11 touchpad_corners; "
+                        "classification 63.6%). Biometric transplant attack "
+                        "(P1 uses P2 device) has 0% detection at L4 in gameplay sessions. "
+                        "Tournament blocker: classification <80%."
                     ),
                 }
 
@@ -3230,6 +3518,354 @@ class BridgeAgent:
                     "fleet_health": fleet,
                     "timestamp": _time.time(),
                 }
+
+            # Tool #117 — Phase 160
+            if name == "get_consent_status":
+                import time as _t160
+                _device_id160 = inputs.get("device_id", "")
+                try:
+                    _cstatus160 = self._store.get_consent_status(_device_id160)
+                    return {
+                        "consent_ledger_enabled": getattr(self._cfg, "consent_ledger_enabled", True),
+                        "consent_given":          _cstatus160["consent_given"],
+                        "consent_ts":             _cstatus160["consent_ts"],
+                        "revoked":                _cstatus160["revoked"],
+                        "erasure_requested":      _cstatus160["erasure_requested"],
+                        "erasure_completed":      _cstatus160["erasure_completed"],
+                        "timestamp":              _t160.time(),
+                    }
+                except Exception as exc:
+                    return {
+                        "consent_ledger_enabled": getattr(self._cfg, "consent_ledger_enabled", True),
+                        "consent_given":          False,
+                        "consent_ts":             None,
+                        "revoked":                False,
+                        "erasure_requested":      False,
+                        "erasure_completed":      False,
+                        "error":                  str(exc),
+                        "timestamp":              _t160.time(),
+                    }
+
+            # Tool #116 — Phase 159
+            if name == "get_biometric_privacy_status":
+                import time as _t159
+                try:
+                    _priv159 = self._store.get_privacy_compliance_status()
+                    return {
+                        "biometric_privacy_enabled": getattr(self._cfg, "biometric_privacy_enabled", True),
+                        "bp001_half_life_days":      getattr(self._cfg, "bp001_half_life_days", 90.0),
+                        "records_monitored":         _priv159["records_monitored"],
+                        "records_expired":           _priv159["records_expired"],
+                        "mean_decay_factor":         _priv159["mean_decay_factor"],
+                        "warning_triggered":         _priv159["warning_triggered"],
+                        "privacy_budget_epsilon":    _priv159["privacy_budget_epsilon"],
+                        "timestamp":                 _t159.time(),
+                    }
+                except Exception as _exc159:
+                    return {
+                        "biometric_privacy_enabled": getattr(self._cfg, "biometric_privacy_enabled", True),
+                        "bp001_half_life_days":      90.0,
+                        "records_monitored":         0,
+                        "records_expired":           0,
+                        "mean_decay_factor":         1.0,
+                        "warning_triggered":         False,
+                        "privacy_budget_epsilon":    0.0,
+                        "error":                     str(_exc159),
+                        "timestamp":                 _t159.time(),
+                    }
+
+            # Tool #115 — Phase 158
+            if name == "get_pohbg_status":
+                import time as _t158p
+                try:
+                    _pohbg158 = self._store.get_pohbg_status(limit=1)
+                    _latest158p = _pohbg158["recent_hashes"][0] if _pohbg158["recent_hashes"] else None
+                    return {
+                        "pohbg_enabled":    getattr(self._cfg, "pohbg_enabled", False),
+                        "total_pohbg":      _pohbg158["total_pohbg"],
+                        "latest_pohbg_hash": _latest158p["pohbg_hash"] if _latest158p else None,
+                        "latest_device_id": _latest158p["device_id"] if _latest158p else None,
+                        "latest_ts_ns":     _latest158p["ts_ns"] if _latest158p else None,
+                        "timestamp":        _t158p.time(),
+                    }
+                except Exception as _exc158p:
+                    return {
+                        "pohbg_enabled":    getattr(self._cfg, "pohbg_enabled", False),
+                        "total_pohbg":      0,
+                        "latest_pohbg_hash": None,
+                        "latest_device_id": None,
+                        "latest_ts_ns":     None,
+                        "error":            str(_exc158p),
+                        "timestamp":        _t158p.time(),
+                    }
+
+            # Tool #114 — Phase 158
+            if name == "get_gsr_hmac_validation_status":
+                import time as _t158h
+                try:
+                    _hmac158 = self._store.get_gsr_hmac_validation_status(limit=5)
+                    return {
+                        "gsr_hmac_enabled":        getattr(self._cfg, "gsr_hmac_enabled", False),
+                        "gsr_hmac_key_configured": bool(getattr(self._cfg, "gsr_hmac_key_hex", "")),
+                        "total_validations":       _hmac158["total_validations"],
+                        "valid_count":             _hmac158["valid_count"],
+                        "rejected_count":          _hmac158["rejected_count"],
+                        "timestamp":               _t158h.time(),
+                    }
+                except Exception as _exc158h:
+                    return {
+                        "gsr_hmac_enabled":        getattr(self._cfg, "gsr_hmac_enabled", False),
+                        "gsr_hmac_key_configured": False,
+                        "total_validations":       0,
+                        "valid_count":             0,
+                        "rejected_count":          0,
+                        "error":                   str(_exc158h),
+                        "timestamp":               _t158h.time(),
+                    }
+
+            # Tool #113 — Phase 157
+            if name == "get_fleet_consensus_snapshot":
+                import time as _t157
+                try:
+                    _snaps157 = self._store.get_fleet_consensus_snapshot(limit=1)
+                    _latest157 = _snaps157[0] if _snaps157 else None
+                    _total157 = 0
+                    try:
+                        with self._store._conn() as _c157:
+                            _total157 = _c157.execute(
+                                "SELECT COUNT(*) FROM fleet_consensus_snapshot_log"
+                            ).fetchone()[0]
+                    except Exception:
+                        pass
+                    return {
+                        "fleet_consensus_enabled": getattr(self._cfg, "fleet_consensus_enabled", True),
+                        "total_snapshots":         _total157,
+                        "latest_pofc_hash":        _latest157["pofc_hash"] if _latest157 else None,
+                        "latest_agent_count":      _latest157["agent_count"] if _latest157 else 0,
+                        "latest_separation_ratio": _latest157["separation_ratio"] if _latest157 else 0.0,
+                        "timestamp":               _t157.time(),
+                    }
+                except Exception as _exc157:
+                    return {
+                        "fleet_consensus_enabled": getattr(self._cfg, "fleet_consensus_enabled", True),
+                        "total_snapshots":         0,
+                        "latest_pofc_hash":        None,
+                        "latest_agent_count":      0,
+                        "latest_separation_ratio": 0.0,
+                        "error":                   str(_exc157),
+                        "timestamp":               _t157.time(),
+                    }
+
+            # Tool #112 — Phase 156
+            if name == "get_enrollment_auto_guidance_status":
+                import time as _t156
+                try:
+                    _s156 = self._store.get_enrollment_guidance_status()
+                    _s156["timestamp"] = _t156.time()
+                    return _s156
+                except Exception as _exc156:
+                    return {
+                        "sessions_needed_total": 0,
+                        "overall_ready":         False,
+                        "recommended_action":    "Run EnrollmentAutoGuidanceAgent",
+                        "urgency_level":         "UNKNOWN",
+                        "estimated_days":        -1.0,
+                        "stagnant_probes":       [],
+                        "activation_chain_event": None,
+                        "error":                 str(_exc156),
+                        "timestamp":             _t156.time(),
+                    }
+
+            # Tool #111 — Phase 155
+            if name == "get_controller_hardware_status":
+                import time as _t155
+                try:
+                    _profiles155 = self._store.get_controller_hardware_profiles(active_only=False)
+                    _attested = sum(1 for p in _profiles155 if p.get("tier") == "Attested")
+                    _standard = sum(1 for p in _profiles155 if p.get("tier") == "Standard")
+                    _ck = _profiles155[0].get("composite_key", "") if _profiles155 else ""
+                    return {
+                        "controller_intelligence_enabled": getattr(self._cfg, "controller_intelligence_enabled", True),
+                        "multi_controller_enabled":        getattr(self._cfg, "multi_controller_enabled", False),
+                        "attested_count":                  _attested,
+                        "standard_count":                  _standard,
+                        "active_composite_key":            _ck,
+                        "profiles":                        _profiles155,
+                        "timestamp":                       _t155.time(),
+                    }
+                except Exception as _exc155:
+                    return {
+                        "controller_intelligence_enabled": getattr(self._cfg, "controller_intelligence_enabled", True),
+                        "multi_controller_enabled":        getattr(self._cfg, "multi_controller_enabled", False),
+                        "attested_count":                  0,
+                        "standard_count":                  0,
+                        "active_composite_key":            "",
+                        "profiles":                        [],
+                        "error":                           str(_exc155),
+                        "timestamp":                       _t155.time(),
+                    }
+
+            # Tool #110 — Phase 154
+            if name == "get_capture_stagnation_status":
+                import time as _t154
+                _pt154 = (inputs.get("probe_type", "touchpad_corners") if isinstance(inputs, dict) else "touchpad_corners")
+                try:
+                    _r154 = self._store.get_capture_stagnation_status(probe_type=_pt154)
+                    if not _r154:
+                        _r154 = self._store.compute_capture_stagnation(
+                            probe_type=_pt154,
+                            window_days=float(getattr(self._cfg, "capture_stagnation_window_days", 7.0)),
+                            threshold=float(getattr(self._cfg, "capture_stagnation_threshold", 0.5)),
+                        )
+                    _r154["timestamp"] = _t154.time()
+                    return _r154
+                except Exception as _exc154:
+                    return {
+                        "probe_type":         _pt154,
+                        "sessions_per_day":   0.0,
+                        "stagnant":           True,
+                        "sessions_in_window": 0,
+                        "window_days":        7.0,
+                        "stagnation_threshold": 0.5,
+                        "notes":              "",
+                        "error":              str(_exc154),
+                        "timestamp":          _t154.time(),
+                    }
+
+            # Tool #109 — Phase 153
+            if name == "get_separation_ratio_registry_status":
+                import time as _t153
+                try:
+                    _r153 = self._store.get_separation_ratio_registry_status()
+                    _r153["separation_ratio_on_chain_enabled"] = getattr(self._cfg, "separation_ratio_on_chain_enabled", False)
+                    _r153["timestamp"] = _t153.time()
+                    return _r153
+                except Exception as _exc153:
+                    return {
+                        "committed":   False,
+                        "commit_hash": "",
+                        "ratio_millis": 0,
+                        "n_sessions":  0,
+                        "n_players":   0,
+                        "on_chain_tx": None,
+                        "total_commits": 0,
+                        "separation_ratio_on_chain_enabled": getattr(self._cfg, "separation_ratio_on_chain_enabled", False),
+                        "error":       str(_exc153),
+                        "timestamp":   _t153.time(),
+                    }
+
+            # Tool #108 — Phase 152
+            if name == "get_centroid_velocity_status":
+                import time as _t152
+                _pt152 = (inputs.get("probe_type", "touchpad_corners") if isinstance(inputs, dict) else "touchpad_corners")
+                try:
+                    _r152 = self._store.get_centroid_velocity_status(probe_type=_pt152)
+                    if not _r152:
+                        _r152 = self._store.compute_centroid_velocity(probe_type=_pt152)
+                    _r152["probe_type"]       = _r152.get("probe_type", _pt152)
+                    _r152["velocity_per_day"] = float(_r152.get("velocity", 0.0)) * 86400
+                    _r152["timestamp"] = _t152.time()
+                    return _r152
+                except Exception as _exc152:
+                    return {
+                        "probe_type":        _pt152,
+                        "velocity":          0.0,
+                        "velocity_per_day":  0.0,
+                        "stagnant":          True,
+                        "n_snapshots_used":  0,
+                        "ratio_prev":        None,
+                        "ratio_curr":        None,
+                        "error":             str(_exc152),
+                        "timestamp":         _t152.time(),
+                    }
+
+            # Tool #107 — Phase 151 P1
+            if name == "get_enrollment_capture_guidance":
+                import time as _t151
+                try:
+                    _min_n151 = int(inputs.get("min_n", 10)) if isinstance(inputs, dict) else 10
+                    _min_n151 = int(getattr(self._cfg, "min_touchpad_sessions_per_player", _min_n151))
+                    _guidance = self._store.get_enrollment_capture_guidance(min_n=_min_n151)
+                    _guidance["timestamp"] = _t151.time()
+                    return _guidance
+                except Exception as _exc151:
+                    return {
+                        "min_n_per_player":      _min_n151 if "_min_n151" in dir() else 10,
+                        "probe_types":           sorted(["touchpad_corners", "touchpad_freeform", "touchpad_swipes"]),
+                        "guidance":              {},
+                        "sessions_needed_total": 0,
+                        "overall_ready":         False,
+                        "error":                 str(_exc151),
+                        "timestamp":             _t151.time(),
+                    }
+
+            # Tool #106 — Phase 150
+            if name == "get_separation_defensibility_status":
+                import time as _t150
+                try:
+                    _stype150 = inputs.get("session_type", "touchpad_corners") if isinstance(inputs, dict) else "touchpad_corners"
+                    _min_n150 = int(getattr(self._cfg, "min_touchpad_sessions_per_player", 10))
+                    _row150 = self._store.get_separation_defensibility_status(session_type=_stype150)
+                    if _row150 is None:
+                        return {
+                            "defensible":        False,
+                            "ratio":             0.0,
+                            "n_per_player":      {},
+                            "min_n_per_player":  _min_n150,
+                            "all_pairs_above_1": False,
+                            "found":             False,
+                        }
+                    return {
+                        "defensible":        bool(_row150.get("defensible")),
+                        "ratio":             float(_row150.get("ratio", 0.0)),
+                        "n_per_player":      _row150.get("n_per_player", {}),
+                        "min_n_per_player":  int(_row150.get("min_n_per_player", _min_n150)),
+                        "all_pairs_above_1": bool(_row150.get("all_pairs_above_1")),
+                        "found":             True,
+                    }
+                except Exception as _exc150:
+                    return {
+                        "defensible":        False,
+                        "ratio":             0.0,
+                        "n_per_player":      {},
+                        "min_n_per_player":  10,
+                        "all_pairs_above_1": False,
+                        "error":             str(_exc150),
+                    }
+
+            # Tool #105 — Phase 148
+            if name == "get_agent_calibration_health":
+                import time as _t148
+                try:
+                    _agent_id_filter = inputs.get("agent_id") if isinstance(inputs, dict) else None
+                    _agent_id_int = int(_agent_id_filter) if _agent_id_filter is not None else None
+                    _rows148 = self._store.get_agent_calibration_health(limit=32, agent_id=_agent_id_int)
+                    _seen148: dict = {}
+                    for _row148 in _rows148:
+                        _aid = _row148.get("agent_id", 0)
+                        if _aid not in _seen148:
+                            _seen148[_aid] = _row148
+                    _healthy148  = sum(1 for r in _seen148.values() if r.get("result") == "PASS")
+                    _degraded148 = sum(1 for r in _seen148.values() if r.get("result") != "PASS")
+                    _failed148   = [r.get("agent_name") for r in _seen148.values() if r.get("result") != "PASS"]
+                    return {
+                        "agent_count":        16,
+                        "healthy_count":      _healthy148,
+                        "degraded_count":     _degraded148,
+                        "failed_agents":      _failed148,
+                        "mcp_server_enabled": bool(getattr(self._cfg, "mcp_server_enabled", False)),
+                        "timestamp":          _t148.time(),
+                    }
+                except Exception as exc:
+                    return {
+                        "agent_count":        16,
+                        "healthy_count":      0,
+                        "degraded_count":     0,
+                        "failed_agents":      [],
+                        "mcp_server_enabled": False,
+                        "error":              str(exc),
+                        "timestamp":          0.0,
+                    }
 
             # Tool #104 — Phase 135
             if name == "get_tournament_activation_chain":
@@ -3864,7 +4500,7 @@ class BridgeAgent:
             if name == "get_separation_ratio_status":
                 import time as _t121ba
                 try:
-                    _pooled121 = float(getattr(self._cfg, "separation_ratio_current", 0.362))
+                    _pooled121 = float(getattr(self._cfg, "separation_ratio_current", 1.261))
                     _snaps121  = self._store.get_separation_ratio_status(limit=1)
                     _bt121     = _snaps121[0].get("bt_strat_ratio", -1.0) if _snaps121 else -1.0
                     _ready121  = _pooled121 >= 1.0
@@ -4251,7 +4887,7 @@ class BridgeAgent:
                 import time as _t108
                 try:
                     snap = self._store.get_latest_tournament_readiness_snapshot()
-                    sep  = float(getattr(self._cfg, "separation_ratio_current", 0.362))
+                    sep  = float(getattr(self._cfg, "separation_ratio_current", 1.261))
                     if snap is None:
                         return {
                             "fully_ready": False, "found": False,
