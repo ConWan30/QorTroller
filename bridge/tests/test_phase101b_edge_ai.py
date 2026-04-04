@@ -63,10 +63,10 @@ class TestEdgeAIProfile(unittest.TestCase):
                     "iotex_layer_integration", "positioning", "timestamp"):
             self.assertIn(key, result, f"Missing key: {key}")
 
-    def test_2_agent_fleet_size_is_14(self):
-        """agent_fleet_size == 14 (14-agent autonomous fleet — Phase 102 adds VHPRenewalAgent)."""
+    def test_2_agent_fleet_size_is_20(self):
+        """agent_fleet_size == 20 (20-agent autonomous fleet — agents #19-20 added Phases 155-156)."""
         result = get_edge_ai_profile()
-        self.assertEqual(result["agent_fleet_size"], 14)
+        self.assertEqual(result["agent_fleet_size"], 20)
 
     def test_3_edge_ai_profile_endpoint_returns_200(self):
         """GET /agent/edge-ai-profile returns 200 with required fields."""
