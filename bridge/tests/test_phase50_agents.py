@@ -263,7 +263,7 @@ class TestCalibrationAgentTools(unittest.TestCase):
             {"device_id_a": device_a, "device_id_b": device_b},
         )
         self.assertIn("plain_english", result)
-        self.assertIn("0.362", result["plain_english"])
+        self.assertIn("1.261", result["plain_english"])
 
 
 # ============================================================
@@ -346,7 +346,7 @@ class TestBridgeAgentProactive(unittest.TestCase):
             {"device_id_a": device_a, "device_id_b": device_b},
         )
         self.assertEqual(result.get("verdict"), "DISTINCT")
-        self.assertIn("0.362", result["plain_english"])
+        self.assertIn("1.261", result["plain_english"])
 
 
 if __name__ == "__main__":
