@@ -735,14 +735,14 @@ class Config:
     """Enable multi-agent consensus check before live BLOCK execution (Phase 98). Default True."""
 
     epistemic_consensus_threshold: float = field(
-        default_factory=lambda: float(_env("EPISTEMIC_CONSENSUS_THRESHOLD", "0.60"))
+        default_factory=lambda: float(_env("EPISTEMIC_CONSENSUS_THRESHOLD", "0.65"))
     )
-    """Minimum consensus score for BLOCK execution in live mode (Phase 98). Default 0.60.
+    """Minimum consensus score for BLOCK execution in live mode (Phase 98). Default 0.65.
 
-    W1 VULNERABILITY: threshold=0.60 is exactly reachable by ClassJDetector alone
-    (class_j=0.40 + supervisor=0.20 = 0.60). An adversary who suppresses triage
-    escalation across sessions reduces the 3-agent design to a 1-agent gate.
-    Operators in sustained adversarial deployments should raise this to 0.65.
+    Phase 147: raised from 0.60 → 0.65 to close W1 vulnerability.
+    W1 MITIGATED (Phase 147): threshold=0.60 was exactly reachable by ClassJDetector alone
+    (class_j=0.40 + supervisor=0.20 = 0.60). Raised to 0.65 — ClassJ+Supervisor sum=0.60
+    cannot reach 0.65 without positive triage_score contribution.
     """
 
     # --- Phase 99A: AGaaS Foundation Token Stack ---
@@ -838,15 +838,21 @@ class Config:
     """Recommended epistemic threshold (Phase 105). Auto-applied when PMI>=1 (Phase 104/105 synergy)."""
 
     epistemic_triage_prereq_required: bool = field(
-        default_factory=lambda: _env_bool("EPISTEMIC_TRIAGE_PREREQ_REQUIRED", False)
+        default_factory=lambda: _env_bool("EPISTEMIC_TRIAGE_PREREQ_REQUIRED", True)
     )
-    """Require triage_score > 0.0 before epistemic vote runs (Phase 105 W1 mitigation, opt-in)."""
+    """Require triage_score > 0.0 before epistemic vote runs (Phase 105 W1 mitigation; Phase 147: default True).
+
+    Phase 147: changed from opt-in (False) to default-on (True) to close Phase 98 W1.
+    Combined with threshold=0.65, prevents ClassJ-only BLOCK without triage involvement.
+    Set EPISTEMIC_TRIAGE_PREREQ_REQUIRED=false to revert to Phase 105 opt-in behavior.
+    """
 
     # --- Phase 108: Tournament Readiness Hardware Conditions ---
     separation_ratio_current: float = field(
-        default_factory=lambda: float(_env("SEPARATION_RATIO_CURRENT", "0.362"))
+        default_factory=lambda: float(_env("SEPARATION_RATIO_CURRENT", "1.261"))
     )
-    """Inter-person L4 separation ratio. Phase 57 N=74 empirical baseline=0.362.
+    """Inter-person L4 separation ratio. Phase 143 honest diagonal LOO result=1.261
+    (N=11 touchpad_corners, 3 players; classification 63.6% — BLOCKER until ≥80%).
     Update ONLY after running scripts/interperson_separation_analyzer.py against real
     calibration sessions. Required >1.0 for tournament deployment."""
 
@@ -1106,6 +1112,142 @@ class Config:
     """Phase 136 — Audio routing preference: 'system' (restore Realtek/built-in when
     DualSense captures default), 'dualsense' (prefer DualSense headphone jack),
     'keep' (no change). Default 'system' = game audio plays through speakers/headphones."""
+
+    agent_calibration_monitor_enabled: bool = field(
+        default_factory=lambda: _env_bool("AGENT_CALIBRATION_MONITOR_ENABLED", True)
+    )
+    """Phase 148 — Enable AgentCalibrationIntegrityMonitor (ACIM, agent #18).
+    Runs 16 agent self-tests every 15 minutes; cross-validates calibration invariants
+    independently (W1 anti-single-validator mitigation). Default True."""
+
+    mcp_server_enabled: bool = field(
+        default_factory=lambda: _env_bool("MCP_SERVER_ENABLED", False)
+    )
+    """Phase 148 — Enable VAPI MCP (Model Context Protocol) server at /mcp.
+    Exposes agent fleet calibration state as MCP resources for autoresearch sessions.
+    Infrastructure-first: Default False = zero behavior change until enabled."""
+
+    mcp_server_port: int = field(
+        default_factory=lambda: int(_env("MCP_SERVER_PORT", "8081"))
+    )
+    """Phase 148 — Port for standalone MCP server if run independently.
+    When mounted as sub-app, this is informational only. Default 8081."""
+
+    min_touchpad_sessions_per_player: int = field(
+        default_factory=lambda: int(_env("MIN_TOUCHPAD_SESSIONS_PER_PLAYER", "10"))
+    )
+    """Phase 150 — Minimum touchpad_corners sessions per player required for a defensible
+    separation ratio claim (WIF-010 closure). Current state: P1=3, P2=4, P3=4 — all below
+    target=10. defensible=True requires all players >= this threshold AND ratio > 1.0.
+    Default 10 (per WIF-010 N-thin analysis)."""
+
+    # --- Phase 152: Centroid Velocity Monitor ---
+    centroid_velocity_monitor_enabled: bool = field(
+        default_factory=lambda: _env("CENTROID_VELOCITY_MONITOR_ENABLED", "true").lower() == "true"
+    )
+    """Phase 152 — Enable per-probe biometric fingerprint drift rate monitoring.
+    stagnant=True when velocity_per_day < 0.001 ratio/day (plateau threshold). Default True."""
+
+    # --- Phase 153: SeparationRatioRegistry ---
+    separation_ratio_registry_address: str = field(
+        default_factory=lambda: _env("SEPARATION_RATIO_REGISTRY_ADDRESS", "")
+    )
+    """Phase 153 — SeparationRatioRegistry.sol address on IoTeX testnet. Empty = not deployed."""
+
+    separation_ratio_on_chain_enabled: bool = field(
+        default_factory=lambda: _env("SEPARATION_RATIO_ON_CHAIN_ENABLED", "false").lower() == "true"
+    )
+    """Phase 153 — Enable on-chain separation ratio commitment publishing. Default False."""
+
+    # --- Phase 154: Capture Stagnation Monitor ---
+    capture_stagnation_threshold: float = field(
+        default_factory=lambda: float(_env("CAPTURE_STAGNATION_THRESHOLD", "0.5"))
+    )
+    """Phase 154 — sessions/day rate below which capture is stagnant. Default 0.5/day."""
+
+    capture_stagnation_window_days: float = field(
+        default_factory=lambda: float(_env("CAPTURE_STAGNATION_WINDOW_DAYS", "7.0"))
+    )
+    """Phase 154 — Rolling window in days for capture rate computation. Default 7.0."""
+
+    # --- Phase 155: Controller Hardware Intelligence ---
+    controller_intelligence_enabled: bool = field(
+        default_factory=lambda: _env("CONTROLLER_INTELLIGENCE_ENABLED", "true").lower() == "true"
+    )
+    """Phase 155 — Enable ControllerHardwareIntelligenceAgent (agent #19). Default True."""
+
+    multi_controller_enabled: bool = field(
+        default_factory=lambda: _env("MULTI_CONTROLLER_ENABLED", "false").lower() == "true"
+    )
+    """Phase 155 — Enable multi-controller routing (Xbox/Switch Standard tier). Default False.
+    Never change without N>=50 per-controller calibration. DualShock Edge always active."""
+
+    # --- Phase 156: Enrollment Auto-Guidance Agent ---
+    enrollment_auto_guidance_enabled: bool = field(
+        default_factory=lambda: _env("ENROLLMENT_AUTO_GUIDANCE_ENABLED", "true").lower() == "true"
+    )
+    """Phase 156 — Enable EnrollmentAutoGuidanceAgent (agent #20). Default True."""
+
+    enrollment_guidance_poll_interval_s: int = field(
+        default_factory=lambda: int(_env("ENROLLMENT_GUIDANCE_POLL_INTERVAL_S", "3600"))
+    )
+    """Phase 156 — Poll interval for EnrollmentAutoGuidanceAgent in seconds. Default 3600."""
+
+    # --- Phase 157: Covariance Stability + FleetConsensusSnapshotAgent ---
+    cov_stability_margin_np: float = field(
+        default_factory=lambda: float(_env("COV_STABILITY_MARGIN_NP", "0.5"))
+    )
+    """Phase 157 — Safety margin around COV_MIN_RATIO=3.0 for regime transition warning.
+    'transition_warning' fires when N/p in [3.0-margin, 3.0+margin]. Default 0.5."""
+
+    fleet_consensus_enabled: bool = field(
+        default_factory=lambda: _env("FLEET_CONSENSUS_ENABLED", "true").lower() == "true"
+    )
+    """Phase 157 — Enable FleetConsensusSnapshotAgent (agent #21). Default True."""
+
+    fleet_consensus_snapshot_interval_s: int = field(
+        default_factory=lambda: int(_env("FLEET_CONSENSUS_SNAPSHOT_INTERVAL_S", "1800"))
+    )
+    """Phase 157 — Poll interval for FleetConsensusSnapshotAgent in seconds. Default 1800."""
+
+    # --- Phase 158: Class K HMAC Validation + PoHBG ---
+    gsr_hmac_enabled: bool = field(
+        default_factory=lambda: _env("GSR_HMAC_ENABLED", "false").lower() == "true"
+    )
+    """Phase 158 — Enable Class K HMAC-SHA256 frame authentication on incoming GSR frames.
+    Infrastructure-first default False. Requires gsr_hmac_key_hex to be set."""
+
+    gsr_hmac_key_hex: str = field(
+        default_factory=lambda: _env("GSR_HMAC_KEY_HEX", "")
+    )
+    """Phase 158 — 64-char hex session HMAC key (32 bytes) for GSR frame authentication.
+    Must be set when gsr_hmac_enabled=True. Empty string = not configured."""
+
+    pohbg_enabled: bool = field(
+        default_factory=lambda: _env("POHBG_ENABLED", "false").lower() == "true"
+    )
+    """Phase 158 — Enable PoHBG (Proof of Hardware Biometric Grip) hash computation.
+    Infrastructure-first default False."""
+
+    # --- Phase 159: BiometricPrivacyComplianceAgent (agent #22) ---
+    biometric_privacy_enabled: bool = field(
+        default_factory=lambda: _env("BIOMETRIC_PRIVACY_ENABLED", "true").lower() == "true"
+    )
+    """Phase 159 — Enable BiometricPrivacyComplianceAgent (agent #22). Default True."""
+
+    bp001_half_life_days: float = field(
+        default_factory=lambda: float(_env("BP001_HALF_LIFE_DAYS", "90.0"))
+    )
+    """Phase 159 — BP-001 biometric half-life in days. TBD decay λ = ln(2)/τ_half.
+    Default 90 days per GDPR storage limitation guidance. IMMUTABLE per VAPI_INVARIANTS.md §6."""
+
+    # --- Phase 160: Consent Ledger + Right-to-Erasure (BP-002 foundation) ---
+    consent_ledger_enabled: bool = field(
+        default_factory=lambda: _env("CONSENT_LEDGER_ENABLED", "true").lower() == "true"
+    )
+    """Phase 160 — Enable BP-002 Consent Ledger (WIF-018/019). Default True.
+    When True, POST /agent/register-consent and POST /agent/revoke-consent are active.
+    anonymize_device_records() enforces GDPR Art.17 on revocation."""
 
     def validate(self) -> list[str]:
         """Return list of configuration errors (empty = valid)."""

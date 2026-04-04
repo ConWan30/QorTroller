@@ -2344,7 +2344,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             sw_met = sum(sw_conds.values())
 
             # Hardware conditions
-            sep_ratio   = float(getattr(cfg, "separation_ratio_current", 0.362))
+            sep_ratio   = float(getattr(cfg, "separation_ratio_current", 1.261))
             touchpad_ok = bool(getattr(cfg, "touchpad_recapture_complete", False))
             hw_conds = {
                 "separation_ratio_gt_1":       sep_ratio > 1.0,
@@ -2664,7 +2664,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         _check_key(api_key)
         _check_rate(api_key)
         try:
-            pooled = float(getattr(cfg, "separation_ratio_current", 0.362))
+            pooled = float(getattr(cfg, "separation_ratio_current", 1.261))
             snapshots = store.get_separation_ratio_status(limit=1)
             bt_strat = snapshots[0].get("bt_strat_ratio", -1.0) if snapshots else -1.0
             tournament_ready = pooled >= 1.0
@@ -3754,6 +3754,572 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                 "registry_count": len(registry_rows),
                 "last_quorum_ts": last_quorum_ts,
                 "timestamp":      _t131.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 148 — GET /agent/calibration-health
+    # ------------------------------------------------------------------
+    @app.get("/agent/calibration-health")
+    async def get_calibration_health_endpoint(api_key: str = ""):
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t148
+        try:
+            rows = store.get_agent_calibration_health(limit=32)
+            # Latest result per agent_id
+            seen: dict = {}
+            for row in rows:
+                aid = row.get("agent_id", 0)
+                if aid not in seen:
+                    seen[aid] = row
+            healthy  = sum(1 for r in seen.values() if r.get("result") == "PASS")
+            degraded = sum(1 for r in seen.values() if r.get("result") != "PASS")
+            failed   = [r.get("agent_name") for r in seen.values() if r.get("result") != "PASS"]
+            mcp_enabled = bool(getattr(cfg, "mcp_server_enabled", False))
+            return {
+                "agent_count":       16,
+                "healthy_count":     healthy,
+                "degraded_count":    degraded,
+                "failed_agents":     failed,
+                "latest_tests":      list(seen.values()),
+                "mcp_server_enabled": mcp_enabled,
+                "timestamp":         _t148.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 150 — GET /agent/separation-defensibility-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/separation-defensibility-status")
+    async def get_separation_defensibility_status_endpoint(
+        api_key: str = "",
+        session_type: str = "touchpad_corners",
+    ):
+        """Return latest separation ratio defensibility report (Phase 150, WIF-010 closure).
+
+        defensible=True requires ALL players >= min_n_per_player (default 10) AND
+        ratio > 1.0 AND all inter-player pair distances > 1.0.
+        Current state: P1=3, P2=4, P3=4 — all below target; defensible=False.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t150
+        try:
+            _min_n = int(getattr(cfg, "min_touchpad_sessions_per_player", 10))
+            _row = store.get_separation_defensibility_status(
+                session_type=session_type if session_type else None
+            )
+            if _row is None:
+                return {
+                    "defensible":          False,
+                    "ratio":               0.0,
+                    "n_per_player":        {},
+                    "min_n_per_player":    _min_n,
+                    "all_pairs_above_1":   False,
+                    "found":               False,
+                    "timestamp":           _t150.time(),
+                }
+            return {
+                "defensible":          bool(_row.get("defensible")),
+                "ratio":               float(_row.get("ratio", 0.0)),
+                "n_per_player":        _row.get("n_per_player", {}),
+                "min_n_per_player":    int(_row.get("min_n_per_player", _min_n)),
+                "all_pairs_above_1":   bool(_row.get("all_pairs_above_1")),
+                "found":               True,
+                "timestamp":           _t150.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 151 P1 — GET /agent/enrollment-capture-guidance
+    # ------------------------------------------------------------------
+    @app.get("/agent/enrollment-capture-guidance")
+    async def get_enrollment_capture_guidance_endpoint(
+        api_key: str = "",
+        min_n: int = 10,
+    ):
+        """Per-player capture guidance: sessions needed per structured probe type (Phase 151 P1).
+
+        Returns a breakdown per probe type (touchpad_corners / touchpad_freeform /
+        touchpad_swipes) of how many more sessions each player needs to reach min_n.
+        Use this endpoint to plan calibration capture sessions during gameplay.
+
+        overall_ready=True only when ALL players have >= min_n sessions in ALL probe
+        types AND ratio > 1.0 for each — the tournament defensibility target.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t151
+        try:
+            _min_n = int(getattr(cfg, "min_touchpad_sessions_per_player", min_n))
+            _guidance = store.get_enrollment_capture_guidance(min_n=_min_n)
+            _guidance["timestamp"] = _t151.time()
+            return _guidance
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 152 — GET /agent/centroid-velocity-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/centroid-velocity-status")
+    async def get_centroid_velocity_status_endpoint(
+        api_key: str = "",
+        probe_type: str = "touchpad_corners",
+    ):
+        """Per-probe biometric fingerprint drift rate (Phase 152).
+
+        Returns: probe_type, velocity (ratio/sec), ratio_prev, ratio_curr,
+        dt_seconds, n_snapshots_used, stagnant, velocity_per_day, timestamp.
+        stagnant=True when velocity_per_day < 0.001 (plateau threshold).
+        Reads from separation_defensibility_log; velocity=0 when < 2 snapshots.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t152
+        try:
+            _row = store.get_centroid_velocity_status(probe_type=probe_type)
+            if _row is None:
+                _computed = store.compute_centroid_velocity(probe_type=probe_type)
+            else:
+                _computed = {
+                    "velocity":           float(_row.get("velocity", 0.0)),
+                    "ratio_prev":         float(_row.get("ratio_prev", 0.0)),
+                    "ratio_curr":         float(_row.get("ratio_curr", 0.0)),
+                    "dt_seconds":         float(_row.get("dt_seconds", 0.0)),
+                    "n_snapshots_used":   int(_row.get("n_snapshots_used", 0)),
+                    "stagnant":           bool(_row.get("stagnant")),
+                }
+            return {
+                "probe_type":         probe_type,
+                "velocity":           _computed["velocity"],
+                "ratio_prev":         _computed["ratio_prev"],
+                "ratio_curr":         _computed["ratio_curr"],
+                "dt_seconds":         _computed["dt_seconds"],
+                "n_snapshots_used":   _computed["n_snapshots_used"],
+                "stagnant":           _computed["stagnant"],
+                "velocity_per_day":   _computed["velocity"] * 86400,
+                "timestamp":          _t152.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 153 — GET /agent/separation-ratio-registry-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/separation-ratio-registry-status")
+    async def get_separation_ratio_registry_status_endpoint(api_key: str = ""):
+        """On-chain separation ratio registry status (Phase 153).
+
+        Returns: separation_ratio_on_chain_enabled, registry_address, commit_hash,
+        ratio_millis, n_sessions, n_players, committed (bool), on_chain_tx, timestamp.
+        commit_hash = SHA-256(ratio_str + n_sessions + players_sorted + ts_ns).
+        Committed=True after chain.record_separation_ratio_on_chain() confirms tx.
+        Infrastructure-first: separation_ratio_on_chain_enabled=False default.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t153
+        try:
+            _row = store.get_separation_ratio_registry_status()
+            _enabled = bool(getattr(cfg, "separation_ratio_on_chain_enabled", False))
+            _addr = getattr(cfg, "separation_ratio_registry_address", "")
+            if _row is None:
+                return {
+                    "separation_ratio_on_chain_enabled": _enabled,
+                    "registry_address": _addr,
+                    "commit_hash":  None,
+                    "ratio_millis": 0,
+                    "n_sessions":   0,
+                    "n_players":    0,
+                    "committed":    False,
+                    "on_chain_tx":  None,
+                    "found":        False,
+                    "timestamp":    _t153.time(),
+                }
+            return {
+                "separation_ratio_on_chain_enabled": _enabled,
+                "registry_address": _addr,
+                "commit_hash":  _row.get("commit_hash"),
+                "ratio_millis": int(_row.get("ratio_millis", 0)),
+                "n_sessions":   int(_row.get("n_sessions", 0)),
+                "n_players":    int(_row.get("n_players", 0)),
+                "committed":    bool(_row.get("committed")),
+                "on_chain_tx":  _row.get("on_chain_tx"),
+                "found":        True,
+                "timestamp":    _t153.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 154 — GET /agent/capture-stagnation-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/capture-stagnation-status")
+    async def get_capture_stagnation_status_endpoint(
+        api_key: str = "",
+        probe_type: str = "touchpad_corners",
+    ):
+        """Probe capture stagnation monitor (Phase 154).
+
+        Returns: probe_type, sessions_in_window, window_days, sessions_per_day,
+        stagnant (bool), stagnation_threshold, found (bool), timestamp.
+        stagnant=True when sessions_per_day < stagnation_threshold (default 0.5/day).
+        Reads separation_defensibility_log entries over rolling window_days window.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t154
+        try:
+            _threshold = float(getattr(cfg, "capture_stagnation_threshold", 0.5))
+            _window = float(getattr(cfg, "capture_stagnation_window_days", 7.0))
+            _row = store.get_capture_stagnation_status(probe_type=probe_type)
+            if _row is None:
+                _computed = store.compute_capture_stagnation(
+                    probe_type=probe_type,
+                    window_days=_window,
+                    threshold=_threshold,
+                )
+                return {
+                    **_computed,
+                    "found":     False,
+                    "timestamp": _t154.time(),
+                }
+            return {
+                "probe_type":           probe_type,
+                "sessions_in_window":   int(_row.get("sessions_in_window", 0)),
+                "window_days":          float(_row.get("window_days", _window)),
+                "sessions_per_day":     float(_row.get("sessions_per_day", 0.0)),
+                "stagnant":             bool(_row.get("stagnant")),
+                "stagnation_threshold": float(_row.get("stagnation_threshold", _threshold)),
+                "found":                True,
+                "timestamp":            _t154.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 155 — GET /agent/controller-hardware-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/controller-hardware-status")
+    async def get_controller_hardware_status_endpoint(api_key: str = ""):
+        """Controller hardware intelligence status (Phase 155, agent #19).
+
+        Returns: controller_intelligence_enabled, multi_controller_enabled,
+        attested_count, standard_count, profiles (list), timestamp.
+        Attested tier: DualShock Edge CFI-ZCP1 (full L0–L6 PITL stack).
+        Standard tier: Xbox/Switch (L0–L5 only; N=0 calibration pending).
+        multi_controller_enabled=False default — never change without N>=50 calibration.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t155
+        try:
+            _ci = bool(getattr(cfg, "controller_intelligence_enabled", True))
+            _mc = bool(getattr(cfg, "multi_controller_enabled", False))
+            _profiles = store.get_controller_hardware_profiles(active_only=True)
+            _attested = sum(1 for p in _profiles if p.get("tier") == "Attested")
+            _standard = sum(1 for p in _profiles if p.get("tier") == "Standard")
+            return {
+                "controller_intelligence_enabled": _ci,
+                "multi_controller_enabled":        _mc,
+                "attested_count":                  _attested,
+                "standard_count":                  _standard,
+                "profiles":                        _profiles,
+                "timestamp":                       _t155.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 156 — GET /agent/enrollment-auto-guidance-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/enrollment-auto-guidance-status")
+    async def get_enrollment_auto_guidance_status_endpoint(api_key: str = ""):
+        """Autonomous enrollment guidance agent status (Phase 156, agent #20).
+
+        Returns: enrollment_auto_guidance_enabled, sessions_needed_total, overall_ready,
+        recommended_action, urgency_level, stagnant_probes, estimated_days,
+        activation_chain_event, found (bool), timestamp.
+        urgency_level: "low" | "medium" | "high" | "critical"
+        Integrates Phase 151 guidance + Phase 154 stagnation + Phase 152 velocity.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t156
+        try:
+            _enabled = bool(getattr(cfg, "enrollment_auto_guidance_enabled", True))
+            _row = store.get_enrollment_guidance_status()
+            if _row is None:
+                return {
+                    "enrollment_auto_guidance_enabled": _enabled,
+                    "sessions_needed_total": 0,
+                    "overall_ready":         False,
+                    "recommended_action":    "Run EnrollmentAutoGuidanceAgent to generate guidance",
+                    "urgency_level":         "low",
+                    "stagnant_probes":       [],
+                    "estimated_days":        -1.0,
+                    "activation_chain_event": None,
+                    "found":                 False,
+                    "timestamp":             _t156.time(),
+                }
+            return {
+                "enrollment_auto_guidance_enabled": _enabled,
+                "sessions_needed_total": int(_row.get("sessions_needed_total", 0)),
+                "overall_ready":         bool(_row.get("overall_ready")),
+                "recommended_action":    _row.get("recommended_action", ""),
+                "urgency_level":         _row.get("urgency_level", "low"),
+                "stagnant_probes":       _row.get("stagnant_probes", []),
+                "estimated_days":        float(_row.get("estimated_days", -1.0)),
+                "activation_chain_event": _row.get("activation_chain_event"),
+                "cov_regime_status":     _row.get("cov_regime_status", "unknown"),
+                "found":                 True,
+                "timestamp":             _t156.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 157 — GET /agent/fleet-consensus-snapshot
+    # ------------------------------------------------------------------
+    @app.get("/agent/fleet-consensus-snapshot")
+    async def get_fleet_consensus_snapshot_endpoint(api_key: str = ""):
+        """Fleet Consensus Snapshot agent status (Phase 157, agent #21).
+
+        Returns: fleet_consensus_enabled, total_snapshots, latest_pofc_hash,
+        latest_agent_count, latest_separation_ratio, timestamp.
+        PoFC_hash = SHA-256(sorted_verdicts_json | ratio_str | ts_ns_str)
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t157
+        try:
+            _enabled157 = bool(getattr(cfg, "fleet_consensus_enabled", True))
+            _snaps = store.get_fleet_consensus_snapshot(limit=1)
+            _latest = _snaps[0] if _snaps else None
+            _total_count = 0
+            try:
+                with store._conn() as _c157:
+                    _total_count = _c157.execute(
+                        "SELECT COUNT(*) FROM fleet_consensus_snapshot_log"
+                    ).fetchone()[0]
+            except Exception:
+                pass
+            return {
+                "fleet_consensus_enabled": _enabled157,
+                "total_snapshots":         _total_count,
+                "latest_pofc_hash":        _latest["pofc_hash"] if _latest else None,
+                "latest_agent_count":      _latest["agent_count"] if _latest else 0,
+                "latest_separation_ratio": _latest["separation_ratio"] if _latest else 0.0,
+                "timestamp":               _t157.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 159 — GET /agent/biometric-privacy-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/biometric-privacy-status")
+    async def get_biometric_privacy_status_endpoint(api_key: str = ""):
+        """BiometricPrivacyComplianceAgent status (Phase 159, agent #22, BP-001).
+
+        Returns: biometric_privacy_enabled, bp001_half_life_days,
+        records_monitored, records_expired, mean_decay_factor, warning_triggered,
+        privacy_budget_epsilon, timestamp.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t159
+        try:
+            _enabled159   = bool(getattr(cfg, "biometric_privacy_enabled", True))
+            _half_life159 = float(getattr(cfg, "bp001_half_life_days", 90.0))
+            _status159    = store.get_privacy_compliance_status()
+            return {
+                "biometric_privacy_enabled": _enabled159,
+                "bp001_half_life_days":      _half_life159,
+                "records_monitored":         _status159["records_monitored"],
+                "records_expired":           _status159["records_expired"],
+                "mean_decay_factor":         _status159["mean_decay_factor"],
+                "warning_triggered":         _status159["warning_triggered"],
+                "privacy_budget_epsilon":    _status159["privacy_budget_epsilon"],
+                "timestamp":                 _t159.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 160 — GET /agent/consent-status/{device_id}
+    # ------------------------------------------------------------------
+    @app.get("/agent/consent-status/{device_id}")
+    async def get_consent_status_endpoint(device_id: str, api_key: str = ""):
+        """Consent Ledger status for a device (Phase 160, BP-002, WIF-018/019).
+
+        Returns: consent_ledger_enabled, consent_given, consent_ts, revoked,
+        erasure_requested, erasure_completed, timestamp.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t160a
+        try:
+            _enabled160 = bool(getattr(cfg, "consent_ledger_enabled", True))
+            _cstatus    = store.get_consent_status(device_id)
+            return {
+                "consent_ledger_enabled": _enabled160,
+                "consent_given":          _cstatus["consent_given"],
+                "consent_ts":             _cstatus["consent_ts"],
+                "revoked":                _cstatus["revoked"],
+                "erasure_requested":      _cstatus["erasure_requested"],
+                "erasure_completed":      _cstatus["erasure_completed"],
+                "timestamp":              _t160a.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 160 — POST /agent/register-consent
+    # ------------------------------------------------------------------
+    @app.post("/agent/register-consent")
+    async def register_consent_endpoint(
+        device_id: str,
+        consent_type: str = "biometric_processing",
+        api_key: str = "",
+    ):
+        """Register biometric processing consent for a device (Phase 160, BP-002).
+
+        Records consent_given=True with current timestamp.
+        Returns: registered, device_id, consent_type, consent_ts.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t160b
+        if not getattr(cfg, "consent_ledger_enabled", True):
+            raise HTTPException(status_code=422, detail="consent_ledger: disabled")
+        try:
+            _ts = _t160b.time()
+            store.insert_consent_record(
+                device_id=device_id,
+                consent_type=consent_type,
+                consent_given=True,
+                consent_ts=_ts,
+            )
+            return {
+                "registered":   True,
+                "device_id":    device_id,
+                "consent_type": consent_type,
+                "consent_ts":   _ts,
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 160 — POST /agent/revoke-consent
+    # ------------------------------------------------------------------
+    @app.post("/agent/revoke-consent")
+    async def revoke_consent_endpoint(
+        device_id: str,
+        reason: str = "",
+        execute_erasure: bool = True,
+        api_key: str = "",
+    ):
+        """Revoke consent and execute GDPR Art.17 erasure for a device (Phase 160, BP-002).
+
+        Sets consent_given=False, erasure_requested=True.
+        When execute_erasure=True (default), immediately anonymizes biometric records.
+        Returns: revoked, device_id, fields_anonymized, erasure_completed.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        if not getattr(cfg, "consent_ledger_enabled", True):
+            raise HTTPException(status_code=422, detail="consent_ledger: disabled")
+        try:
+            _updated = store.revoke_consent(
+                device_id=device_id,
+                reason=reason,
+            )
+            _fields = 0
+            _completed = False
+            if execute_erasure:
+                _fields    = store.mark_erasure_complete(device_id)
+                _completed = True
+            return {
+                "revoked":           _updated,
+                "device_id":         device_id,
+                "fields_anonymized": _fields,
+                "erasure_completed": _completed,
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 158 — GET /agent/gsr-hmac-validation-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/gsr-hmac-validation-status")
+    async def get_gsr_hmac_validation_status_endpoint(api_key: str = ""):
+        """GSR Class K HMAC frame validation status (Phase 158, WIF-014).
+
+        Returns: gsr_hmac_enabled, gsr_hmac_key_configured, total_validations,
+        valid_count, rejected_count, timestamp.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t158a
+        try:
+            _enabled158 = bool(getattr(cfg, "gsr_hmac_enabled", False))
+            _key_cfg    = bool(getattr(cfg, "gsr_hmac_key_hex", ""))
+            _status     = store.get_gsr_hmac_validation_status(limit=5)
+            return {
+                "gsr_hmac_enabled":       _enabled158,
+                "gsr_hmac_key_configured": _key_cfg,
+                "total_validations":      _status["total_validations"],
+                "valid_count":            _status["valid_count"],
+                "rejected_count":         _status["rejected_count"],
+                "timestamp":              _t158a.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 158 — GET /agent/pohbg-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/pohbg-status")
+    async def get_pohbg_status_endpoint(api_key: str = ""):
+        """PoHBG (Proof of Hardware Biometric Grip) status (Phase 158, WIF-015).
+
+        Returns: pohbg_enabled, total_pohbg, latest_pohbg_hash,
+        latest_device_id, latest_ts_ns, timestamp.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t158b
+        try:
+            _enabled158p = bool(getattr(cfg, "pohbg_enabled", False))
+            _pohbg_st    = store.get_pohbg_status(limit=1)
+            _latest      = _pohbg_st["recent_hashes"][0] if _pohbg_st["recent_hashes"] else None
+            return {
+                "pohbg_enabled":    _enabled158p,
+                "total_pohbg":      _pohbg_st["total_pohbg"],
+                "latest_pohbg_hash": _latest["pohbg_hash"] if _latest else None,
+                "latest_device_id": _latest["device_id"] if _latest else None,
+                "latest_ts_ns":     _latest["ts_ns"] if _latest else None,
+                "timestamp":        _t158b.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 148 — POST /agent/run-agent-self-test
+    # ------------------------------------------------------------------
+    @app.post("/agent/run-agent-self-test")
+    async def run_agent_self_test_endpoint(api_key: str = ""):
+        """Trigger an immediate ACIM self-test cycle (Phase 148)."""
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t148b
+        try:
+            from .agent_calibration_monitor import AgentCalibrationMonitor
+            _acim = AgentCalibrationMonitor(cfg, store, bus=None)
+            await _acim._run_all_tests()
+            rows = store.get_agent_calibration_health(limit=32)
+            seen: dict = {}
+            for row in rows:
+                aid = row.get("agent_id", 0)
+                if aid not in seen:
+                    seen[aid] = row
+            healthy  = sum(1 for r in seen.values() if r.get("result") == "PASS")
+            degraded = sum(1 for r in seen.values() if r.get("result") != "PASS")
+            return {
+                "triggered":     True,
+                "agent_count":   16,
+                "healthy_count": healthy,
+                "degraded_count": degraded,
+                "timestamp":     _t148b.time(),
             }
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc

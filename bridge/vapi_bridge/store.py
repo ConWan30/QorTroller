@@ -987,7 +987,7 @@ class Store:
                     pmi                         INTEGER NOT NULL DEFAULT 0,
                     dry_run_active              INTEGER NOT NULL DEFAULT 1,
                     software_conditions_met     INTEGER NOT NULL DEFAULT 0,
-                    separation_ratio            REAL    NOT NULL DEFAULT 0.362,
+                    separation_ratio            REAL    NOT NULL DEFAULT 1.261,
                     separation_ratio_ok         INTEGER NOT NULL DEFAULT 0,
                     touchpad_recapture_complete INTEGER NOT NULL DEFAULT 0,
                     hardware_conditions_met     INTEGER NOT NULL DEFAULT 0,
@@ -1341,6 +1341,265 @@ class Store:
                 CREATE INDEX IF NOT EXISTS idx_usb_reconnect_created
                 ON usb_reconnect_log(created_at DESC)
             """)
+            # Phase 148: agent_calibration_health — ACIM self-test results (agent #18)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS agent_calibration_health (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    agent_id        INTEGER NOT NULL,
+                    agent_name      TEXT    NOT NULL DEFAULT '',
+                    test_name       TEXT    NOT NULL DEFAULT '',
+                    result          TEXT    NOT NULL DEFAULT 'UNKNOWN',
+                    details         TEXT    NOT NULL DEFAULT '',
+                    calibration_ts  REAL    NOT NULL DEFAULT 0.0,
+                    created_at      REAL    NOT NULL DEFAULT (unixepoch('now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_agent_cal_health_agent_id
+                ON agent_calibration_health(agent_id, created_at DESC)
+            """)
+            # Phase 150: separation_defensibility_log — per-player N-count defensibility tracking
+            # Formally closes WIF-010 (legally thin N) by recording defensibility status per probe type.
+            # defensible=True requires ALL players >= min_n_per_player (default 10) AND ratio > 1.0.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS separation_defensibility_log (
+                    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_type         TEXT    NOT NULL DEFAULT 'touchpad_corners',
+                    n_sessions_total     INTEGER NOT NULL DEFAULT 0,
+                    n_per_player_json    TEXT    NOT NULL DEFAULT '{}',
+                    min_n_per_player     INTEGER NOT NULL DEFAULT 10,
+                    defensible           INTEGER NOT NULL DEFAULT 0,
+                    ratio                REAL    NOT NULL DEFAULT 0.0,
+                    all_pairs_above_1    INTEGER NOT NULL DEFAULT 0,
+                    created_at           REAL    NOT NULL DEFAULT (unixepoch('now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_sep_def_log_created
+                ON separation_defensibility_log(created_at DESC)
+            """)
+            # Phase 150: idempotent ALTER TABLE — add touchpad_n_ok to tournament_preflight_log
+            # touchpad_n_ok=1 (default) means N >= min_touchpad_sessions_per_player for all players.
+            try:
+                conn.execute(
+                    "ALTER TABLE tournament_preflight_log ADD COLUMN "
+                    "touchpad_n_ok INTEGER NOT NULL DEFAULT 1"
+                )
+            except Exception:
+                pass  # Column already exists on databases migrated from Phase 127
+            # Phase 152: centroid_velocity_log — per-probe biometric fingerprint drift rate monitor.
+            # Tracks separation ratio velocity between successive defensibility snapshots.
+            # stagnant=True when velocity_per_day < PLATEAU_THRESHOLD (0.001 ratio/day).
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS centroid_velocity_log (
+                    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                    probe_type       TEXT    NOT NULL DEFAULT 'touchpad_corners',
+                    velocity         REAL    NOT NULL DEFAULT 0.0,
+                    ratio_prev       REAL    NOT NULL DEFAULT 0.0,
+                    ratio_curr       REAL    NOT NULL DEFAULT 0.0,
+                    dt_seconds       REAL    NOT NULL DEFAULT 0.0,
+                    n_snapshots_used INTEGER NOT NULL DEFAULT 0,
+                    stagnant         INTEGER NOT NULL DEFAULT 0,
+                    created_at       REAL    NOT NULL DEFAULT (unixepoch('now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_centroid_vel_probe
+                ON centroid_velocity_log(probe_type, created_at DESC)
+            """)
+            # Phase 153: separation_ratio_registry_log — on-chain proof-of-calibration tracking.
+            # SHA-256(ratio_str + N + players_sorted + ts_ns) anchored to IoTeX L1.
+            # Committed=True after chain.record_separation_ratio_on_chain() confirms tx.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS separation_ratio_registry_log (
+                    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                    commit_hash      TEXT    NOT NULL UNIQUE,
+                    ratio_millis     INTEGER NOT NULL DEFAULT 0,
+                    n_sessions       INTEGER NOT NULL DEFAULT 0,
+                    n_players        INTEGER NOT NULL DEFAULT 0,
+                    on_chain_tx      TEXT,
+                    committed        INTEGER NOT NULL DEFAULT 0,
+                    created_at       REAL    NOT NULL DEFAULT (unixepoch('now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_sep_ratio_reg_created
+                ON separation_ratio_registry_log(created_at DESC)
+            """)
+            # Phase 154: capture_stagnation_log — daily probe capture rate monitor.
+            # stagnant=True when sessions_per_day < stagnation_threshold (default 0.5/day).
+            # Reads separation_defensibility_log timestamps over rolling window_days window.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS capture_stagnation_log (
+                    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+                    probe_type            TEXT    NOT NULL DEFAULT 'touchpad_corners',
+                    sessions_in_window    INTEGER NOT NULL DEFAULT 0,
+                    window_days           REAL    NOT NULL DEFAULT 7.0,
+                    sessions_per_day      REAL    NOT NULL DEFAULT 0.0,
+                    stagnant              INTEGER NOT NULL DEFAULT 0,
+                    stagnation_threshold  REAL    NOT NULL DEFAULT 0.5,
+                    notes                 TEXT,
+                    created_at            REAL    NOT NULL DEFAULT (unixepoch('now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_capture_stag_probe
+                ON capture_stagnation_log(probe_type, created_at DESC)
+            """)
+            # Phase 155: controller_hardware_profiles — per-controller calibration status.
+            # composite_key = profile_hash:battery_type:transport_type
+            # Attested tier: DualShock Edge with full L0–L6 PITL stack.
+            # Standard tier: Xbox/Switch with L0–L5 only (no L6 haptic; pending calibration).
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS controller_hardware_profiles (
+                    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+                    profile_hash         TEXT    NOT NULL UNIQUE,
+                    controller_name      TEXT    NOT NULL DEFAULT 'DualShock_Edge_v1',
+                    tier                 TEXT    NOT NULL DEFAULT 'Attested',
+                    n_calibration        INTEGER NOT NULL DEFAULT 0,
+                    transport_type       TEXT    NOT NULL DEFAULT 'usb',
+                    battery_type         TEXT    NOT NULL DEFAULT 'gameplay',
+                    anomaly_threshold    REAL    NOT NULL DEFAULT 7.009,
+                    continuity_threshold REAL    NOT NULL DEFAULT 5.367,
+                    composite_key        TEXT    NOT NULL DEFAULT '',
+                    active               INTEGER NOT NULL DEFAULT 1,
+                    created_at           REAL    NOT NULL DEFAULT (unixepoch('now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_ctrl_hw_profile_hash
+                ON controller_hardware_profiles(profile_hash, active)
+            """)
+            # Phase 156: enrollment_guidance_log — autonomous enrollment guidance agent reports.
+            # EnrollmentAutoGuidanceAgent (#20) publishes enrollment_guidance_update bus events.
+            # urgency_level: "low" | "medium" | "high" | "critical"
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS enrollment_guidance_log (
+                    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+                    sessions_needed_total   INTEGER NOT NULL DEFAULT 0,
+                    overall_ready           INTEGER NOT NULL DEFAULT 0,
+                    recommended_action      TEXT    NOT NULL DEFAULT '',
+                    urgency_level           TEXT    NOT NULL DEFAULT 'low',
+                    stagnant_probes         TEXT    NOT NULL DEFAULT '[]',
+                    estimated_days          REAL    NOT NULL DEFAULT -1.0,
+                    activation_chain_event  TEXT,
+                    created_at              REAL    NOT NULL DEFAULT (unixepoch('now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_enroll_guidance_created
+                ON enrollment_guidance_log(created_at DESC)
+            """)
+            # Phase 157: idempotent migration — add cov_regime_status to enrollment_guidance_log
+            try:
+                conn.execute(
+                    "ALTER TABLE enrollment_guidance_log "
+                    "ADD COLUMN cov_regime_status TEXT NOT NULL DEFAULT 'unknown'"
+                )
+            except Exception:
+                pass  # Column already exists (Phase 157 migration already applied)
+            # Phase 157: fleet_consensus_snapshot_log — FleetConsensusSnapshotAgent (agent #21)
+            # Stores PoFC (Proof of Fleet Consensus) cryptographic snapshots.
+            # pfc_hash = SHA-256(sorted_verdicts_json | separation_ratio_str | ts_ns_str)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS fleet_consensus_snapshot_log (
+                    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                    pofc_hash           TEXT    NOT NULL DEFAULT '',
+                    agent_count         INTEGER NOT NULL DEFAULT 0,
+                    separation_ratio    REAL    NOT NULL DEFAULT 0.0,
+                    verdict_summary_json TEXT   NOT NULL DEFAULT '{}',
+                    created_at          REAL    NOT NULL DEFAULT (unixepoch('now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_fleet_consensus_created
+                ON fleet_consensus_snapshot_log(created_at DESC)
+            """)
+            # Phase 158: gsr_hmac_validation_log — Class K HMAC frame authentication (WIF-014)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS gsr_hmac_validation_log (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_id       TEXT    NOT NULL DEFAULT '',
+                    frame_size      INTEGER NOT NULL DEFAULT 0,
+                    valid           INTEGER NOT NULL DEFAULT 0,
+                    rejection_reason TEXT   NOT NULL DEFAULT '',
+                    ts_ns           INTEGER NOT NULL DEFAULT 0,
+                    created_at      REAL    NOT NULL DEFAULT (unixepoch('now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_gsr_hmac_device
+                ON gsr_hmac_validation_log(device_id, created_at DESC)
+            """)
+            # Phase 158: pohbg_log — PoHBG (Proof of Hardware Biometric Grip) hash log (WIF-015)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS pohbg_log (
+                    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_id           TEXT    NOT NULL DEFAULT '',
+                    pohbg_hash          TEXT    NOT NULL DEFAULT '',
+                    arousal_millis      INTEGER NOT NULL DEFAULT 0,
+                    correlation_millis  INTEGER NOT NULL DEFAULT 0,
+                    conductance_raw_int INTEGER NOT NULL DEFAULT 0,
+                    ts_ns               INTEGER NOT NULL DEFAULT 0,
+                    created_at          REAL    NOT NULL DEFAULT (unixepoch('now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_pohbg_device
+                ON pohbg_log(device_id, created_at DESC)
+            """)
+            # Phase 159: privacy_compliance_log — BiometricPrivacyComplianceAgent (agent #22)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS privacy_compliance_log (
+                    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+                    records_monitored       INTEGER NOT NULL DEFAULT 0,
+                    records_expired         INTEGER NOT NULL DEFAULT 0,
+                    mean_decay_factor       REAL    NOT NULL DEFAULT 1.0,
+                    oldest_session_days     REAL    NOT NULL DEFAULT 0.0,
+                    privacy_budget_epsilon  REAL    NOT NULL DEFAULT 0.0,
+                    warning_triggered       INTEGER NOT NULL DEFAULT 0,
+                    created_at              REAL    NOT NULL DEFAULT (unixepoch('now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_privacy_compliance_created
+                ON privacy_compliance_log(created_at DESC)
+            """)
+            # Phase 160: consent_ledger — BP-002 Consent Ledger (WIF-018/019)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS consent_ledger (
+                    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_id           TEXT    NOT NULL,
+                    consent_type        TEXT    NOT NULL DEFAULT 'biometric_processing',
+                    consent_given       INTEGER NOT NULL DEFAULT 0,
+                    consent_ts          REAL,
+                    revoked_at          REAL,
+                    revocation_reason   TEXT,
+                    erasure_requested   INTEGER NOT NULL DEFAULT 0,
+                    erasure_completed   INTEGER NOT NULL DEFAULT 0,
+                    created_at          REAL    NOT NULL DEFAULT (unixepoch('now')),
+                    UNIQUE(device_id, consent_type)
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_consent_ledger_device
+                ON consent_ledger(device_id, consent_type)
+            """)
+            # Phase 160: right_to_erasure_log — GDPR Art.17 erasure audit trail
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS right_to_erasure_log (
+                    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_id           TEXT    NOT NULL,
+                    requested_at        REAL    NOT NULL,
+                    fields_anonymized   INTEGER NOT NULL DEFAULT 0,
+                    completed_at        REAL,
+                    created_at          REAL    NOT NULL DEFAULT (unixepoch('now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_erasure_log_device
+                ON right_to_erasure_log(device_id, created_at DESC)
+            """)
             # Phase 135: tournament_activation_chain_log — TournamentActivationChainAgent records
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS tournament_activation_chain_log (
@@ -1617,6 +1876,16 @@ class Store:
                 (134, "l4_recalibration_jobs"),
                 (135, "tournament_activation_chain"),
                 (1315, "usb_reconnect"),
+                (150, "separation_defensibility"),
+                (152, "centroid_velocity"),
+                (153, "separation_ratio_registry"),
+                (154, "capture_stagnation"),
+                (155, "controller_hardware_profiles"),
+                (156, "enrollment_guidance"),
+                (157, "fleet_consensus_snapshot"),
+                (158, "gsr_hmac_pohbg"),
+                (159, "biometric_privacy_compliance"),
+                (160, "consent_ledger"),
             ]:
                 conn.execute(
                     "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
@@ -6818,4 +7087,795 @@ class Store:
                 "SELECT * FROM tournament_activation_chain_log ORDER BY id DESC LIMIT ?",
                 (limit,),
             ).fetchall()
+        return [dict(r) for r in rows]
+
+    # Phase 148 — Agent Calibration Health (ACIM)
+    # -------------------------------------------------------------------------
+
+    def insert_agent_calibration_health(
+        self,
+        agent_id: int,
+        agent_name: str,
+        test_name: str,
+        result: str,
+        details: str = "",
+    ) -> int:
+        """Insert an agent self-test result (Phase 148)."""
+        with self._conn() as con:
+            cur = con.execute(
+                "INSERT INTO agent_calibration_health "
+                "(agent_id, agent_name, test_name, result, details, calibration_ts, created_at)"
+                " VALUES (?,?,?,?,?,?,?)",
+                (agent_id, agent_name, test_name, result, details,
+                 time.time(), time.time()),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def get_agent_calibration_health(self, limit: int = 32, agent_id: int | None = None) -> list:
+        """Return agent calibration health rows ordered by id DESC (Phase 148)."""
+        with self._conn() as con:
+            if agent_id is not None:
+                rows = con.execute(
+                    "SELECT * FROM agent_calibration_health WHERE agent_id=? ORDER BY id DESC LIMIT ?",
+                    (agent_id, limit),
+                ).fetchall()
+            else:
+                rows = con.execute(
+                    "SELECT * FROM agent_calibration_health ORDER BY id DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+        return [dict(r) for r in rows]
+
+    # Phase 150 — Separation Ratio Defensibility Log
+    # -------------------------------------------------------------------------
+
+    # Phase 151 P0 — W1-011 session type integrity whitelist.
+    # Only structured biometric probe sessions are valid inputs for the defensibility
+    # gate.  Free-form gameplay (ratio≈0.417) must never pollute the defensibility log
+    # and be silently mistaken for a structured probe result.
+    STRUCTURED_PROBE_TYPES: "frozenset[str]" = frozenset({
+        "touchpad_corners",
+        "touchpad_freeform",
+        "touchpad_swipes",
+    })
+
+    def insert_separation_defensibility_log(
+        self,
+        session_type: str,
+        n_sessions_total: int,
+        n_per_player: dict,
+        min_n_per_player: int,
+        defensible: bool,
+        ratio: float,
+        all_pairs_above_1: bool,
+    ) -> int:
+        """Insert a separation defensibility report (Phase 150/151).
+
+        defensible=True requires ALL players >= min_n_per_player AND ratio > 1.0.
+        Closes WIF-010 formally by tracking per-player N vs target.
+
+        Phase 151 P0 — W1-011: session_type must be in STRUCTURED_PROBE_TYPES.
+        Raises ValueError on invalid session_type to prevent free-form corpus
+        contamination of the defensibility gate.
+        """
+        if session_type not in self.STRUCTURED_PROBE_TYPES:
+            raise ValueError(
+                f"Invalid session_type {session_type!r} for defensibility log. "
+                f"Must be one of {sorted(self.STRUCTURED_PROBE_TYPES)}. "
+                "Free-form gameplay sessions must not enter the defensibility gate "
+                "(W1-011: session type mixing integrity)."
+            )
+        import json as _json150
+        with self._conn() as con:
+            cur = con.execute(
+                "INSERT INTO separation_defensibility_log "
+                "(session_type, n_sessions_total, n_per_player_json, min_n_per_player, "
+                " defensible, ratio, all_pairs_above_1, created_at)"
+                " VALUES (?,?,?,?,?,?,?,?)",
+                (
+                    session_type,
+                    n_sessions_total,
+                    _json150.dumps(n_per_player),
+                    min_n_per_player,
+                    1 if defensible else 0,
+                    float(ratio),
+                    1 if all_pairs_above_1 else 0,
+                    time.time(),
+                ),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def get_separation_defensibility_status(
+        self, session_type: str | None = None
+    ) -> "dict | None":
+        """Return the latest defensibility report, optionally filtered by session_type (Phase 150)."""
+        import json as _json150
+        with self._conn() as con:
+            if session_type:
+                row = con.execute(
+                    "SELECT * FROM separation_defensibility_log "
+                    "WHERE session_type=? ORDER BY id DESC LIMIT 1",
+                    (session_type,),
+                ).fetchone()
+            else:
+                row = con.execute(
+                    "SELECT * FROM separation_defensibility_log ORDER BY id DESC LIMIT 1"
+                ).fetchone()
+        if row is None:
+            return None
+        d = dict(row)
+        try:
+            d["n_per_player"] = _json150.loads(d.pop("n_per_player_json", "{}"))
+        except Exception:
+            d["n_per_player"] = {}
+        return d
+
+    def get_enrollment_capture_guidance(
+        self, min_n: int = 10
+    ) -> dict:
+        """Return per-player capture guidance for each structured probe type (Phase 151 P1).
+
+        For each probe type in STRUCTURED_PROBE_TYPES, reads the latest defensibility
+        log entry and computes how many more sessions each player needs to reach min_n.
+
+        Returns a guidance dict with:
+          - min_n_per_player: the target
+          - probe_types: list of structured probe types
+          - guidance: per-probe-type breakdown with n_per_player, gap, all_players_ready
+          - sessions_needed_total: total capture sessions across all probes/players
+          - overall_ready: True when all probe types have all players >= min_n AND ratio > 1.0
+        """
+        import json as _j151
+        guidance = {}
+        sessions_needed_total = 0
+        overall_ready = True
+
+        for probe in sorted(self.STRUCTURED_PROBE_TYPES):
+            row = self.get_separation_defensibility_status(session_type=probe)
+            if row is None:
+                guidance[probe] = {
+                    "found":             False,
+                    "current_ratio":     0.0,
+                    "n_per_player":      {},
+                    "gap":               {},
+                    "all_players_ready": False,
+                }
+                overall_ready = False
+                continue
+
+            n_per_player = row.get("n_per_player", {})
+            gap = {
+                player: max(0, min_n - count)
+                for player, count in n_per_player.items()
+            }
+            all_players_ready = all(count >= min_n for count in n_per_player.values()) \
+                and bool(n_per_player)
+            probe_ratio_ok = float(row.get("ratio", 0.0)) > 1.0
+            probe_entry_ready = all_players_ready and probe_ratio_ok
+
+            sessions_needed_total += sum(gap.values())
+            if not probe_entry_ready:
+                overall_ready = False
+
+            guidance[probe] = {
+                "found":             True,
+                "current_ratio":     float(row.get("ratio", 0.0)),
+                "n_per_player":      n_per_player,
+                "gap":               gap,
+                "all_players_ready": probe_entry_ready,
+            }
+
+        return {
+            "min_n_per_player":     min_n,
+            "probe_types":          sorted(self.STRUCTURED_PROBE_TYPES),
+            "guidance":             guidance,
+            "sessions_needed_total": sessions_needed_total,
+            "overall_ready":        overall_ready,
+        }
+
+    # Phase 152 — Centroid Velocity Log
+    # -------------------------------------------------------------------------
+
+    _PLATEAU_THRESHOLD_PER_DAY = 0.001  # ratio units/day below which = stagnant
+
+    def insert_centroid_velocity_log(
+        self,
+        probe_type: str,
+        velocity: float,
+        ratio_prev: float,
+        ratio_curr: float,
+        dt_seconds: float,
+        n_snapshots_used: int,
+        stagnant: bool,
+    ) -> int:
+        """Insert a centroid velocity record (Phase 152)."""
+        with self._conn() as con:
+            cur = con.execute(
+                "INSERT INTO centroid_velocity_log "
+                "(probe_type, velocity, ratio_prev, ratio_curr, dt_seconds, "
+                " n_snapshots_used, stagnant, created_at)"
+                " VALUES (?,?,?,?,?,?,?,?)",
+                (probe_type, float(velocity), float(ratio_prev), float(ratio_curr),
+                 float(dt_seconds), int(n_snapshots_used),
+                 1 if stagnant else 0, time.time()),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def get_centroid_velocity_status(
+        self, probe_type: str = "touchpad_corners"
+    ) -> "dict | None":
+        """Return the latest centroid velocity record for a probe type (Phase 152)."""
+        with self._conn() as con:
+            row = con.execute(
+                "SELECT * FROM centroid_velocity_log WHERE probe_type=? ORDER BY id DESC LIMIT 1",
+                (probe_type,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def compute_centroid_velocity(
+        self, probe_type: str = "touchpad_corners"
+    ) -> dict:
+        """Compute centroid velocity from last 2 defensibility snapshots (Phase 152).
+
+        velocity = |ratio_curr - ratio_prev| / dt_seconds (ratio units per second).
+        stagnant = True when velocity_per_day < _PLATEAU_THRESHOLD_PER_DAY (0.001/day).
+        Returns velocity dict; never raises.
+        """
+        with self._conn() as con:
+            rows = con.execute(
+                "SELECT ratio, created_at FROM separation_defensibility_log "
+                "WHERE session_type=? ORDER BY id DESC LIMIT 2",
+                (probe_type,),
+            ).fetchall()
+        if len(rows) < 2:
+            return {
+                "velocity": 0.0, "ratio_prev": 0.0, "ratio_curr": 0.0,
+                "dt_seconds": 0.0, "n_snapshots_used": len(rows), "stagnant": True,
+            }
+        ratio_curr = float(rows[0]["ratio"])
+        ratio_prev = float(rows[1]["ratio"])
+        dt = max(1.0, float(rows[0]["created_at"]) - float(rows[1]["created_at"]))
+        velocity = abs(ratio_curr - ratio_prev) / dt
+        stagnant = (velocity * 86400) < self._PLATEAU_THRESHOLD_PER_DAY
+        return {
+            "velocity": velocity,
+            "ratio_prev": ratio_prev,
+            "ratio_curr": ratio_curr,
+            "dt_seconds": dt,
+            "n_snapshots_used": 2,
+            "stagnant": stagnant,
+        }
+
+    # Phase 153 — Separation Ratio Registry Log
+    # -------------------------------------------------------------------------
+
+    def insert_separation_ratio_registry_log(
+        self,
+        commit_hash: str,
+        ratio_millis: int,
+        n_sessions: int,
+        n_players: int,
+        on_chain_tx: "str | None" = None,
+        committed: bool = False,
+    ) -> int:
+        """Insert a separation ratio registry commitment record (Phase 153)."""
+        with self._conn() as con:
+            cur = con.execute(
+                "INSERT OR IGNORE INTO separation_ratio_registry_log "
+                "(commit_hash, ratio_millis, n_sessions, n_players, "
+                " on_chain_tx, committed, created_at)"
+                " VALUES (?,?,?,?,?,?,?)",
+                (commit_hash, int(ratio_millis), int(n_sessions), int(n_players),
+                 on_chain_tx, 1 if committed else 0, time.time()),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def get_separation_ratio_registry_status(self) -> "dict | None":
+        """Return the latest separation ratio registry entry (Phase 153)."""
+        with self._conn() as con:
+            row = con.execute(
+                "SELECT * FROM separation_ratio_registry_log ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+        return dict(row) if row else None
+
+    # Phase 154 — Capture Stagnation Log
+    # -------------------------------------------------------------------------
+
+    def insert_capture_stagnation_log(
+        self,
+        probe_type: str,
+        sessions_in_window: int,
+        window_days: float,
+        sessions_per_day: float,
+        stagnant: bool,
+        stagnation_threshold: float = 0.5,
+        notes: "str | None" = None,
+    ) -> int:
+        """Insert a capture stagnation check result (Phase 154)."""
+        with self._conn() as con:
+            cur = con.execute(
+                "INSERT INTO capture_stagnation_log "
+                "(probe_type, sessions_in_window, window_days, sessions_per_day, "
+                " stagnant, stagnation_threshold, notes, created_at)"
+                " VALUES (?,?,?,?,?,?,?,?)",
+                (probe_type, int(sessions_in_window), float(window_days),
+                 float(sessions_per_day), 1 if stagnant else 0,
+                 float(stagnation_threshold), notes, time.time()),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def get_capture_stagnation_status(
+        self, probe_type: str = "touchpad_corners"
+    ) -> "dict | None":
+        """Return the latest capture stagnation check for a probe type (Phase 154)."""
+        with self._conn() as con:
+            row = con.execute(
+                "SELECT * FROM capture_stagnation_log WHERE probe_type=? ORDER BY id DESC LIMIT 1",
+                (probe_type,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def compute_capture_stagnation(
+        self, probe_type: str = "touchpad_corners",
+        window_days: float = 7.0, threshold: float = 0.5
+    ) -> dict:
+        """Compute capture stagnation for a probe type over window_days (Phase 154).
+
+        Counts separation_defensibility_log entries in the last window_days.
+        stagnant=True when sessions_per_day < threshold (default 0.5/day = 1 every 2 days).
+        """
+        cutoff = time.time() - window_days * 86400
+        with self._conn() as con:
+            count_row = con.execute(
+                "SELECT COUNT(*) AS cnt FROM separation_defensibility_log "
+                "WHERE session_type=? AND created_at >= ?",
+                (probe_type, cutoff),
+            ).fetchone()
+        count = int(count_row["cnt"]) if count_row else 0
+        spd = count / window_days if window_days > 0 else 0.0
+        return {
+            "probe_type": probe_type,
+            "sessions_in_window": count,
+            "window_days": window_days,
+            "sessions_per_day": spd,
+            "stagnant": spd < threshold,
+            "stagnation_threshold": threshold,
+        }
+
+    # Phase 155 — Controller Hardware Profiles
+    # -------------------------------------------------------------------------
+
+    def insert_controller_hardware_profile(
+        self,
+        profile_hash: str,
+        controller_name: str = "DualShock_Edge_v1",
+        tier: str = "Attested",
+        n_calibration: int = 0,
+        transport_type: str = "usb",
+        battery_type: str = "gameplay",
+        anomaly_threshold: float = 7.009,
+        continuity_threshold: float = 5.367,
+    ) -> int:
+        """Upsert a controller hardware profile (Phase 155).
+
+        composite_key = profile_hash:battery_type:transport_type
+        Attested tier: DualShock Edge, full L0–L6 PITL stack.
+        Standard tier: Xbox/Switch, L0–L5 only (no L6 haptic challenge).
+        Never apply DualShock Edge thresholds to non-DualShock controllers.
+        """
+        composite_key = f"{profile_hash}:{battery_type}:{transport_type}"
+        with self._conn() as con:
+            cur = con.execute(
+                "INSERT OR IGNORE INTO controller_hardware_profiles "
+                "(profile_hash, controller_name, tier, n_calibration, transport_type, "
+                " battery_type, anomaly_threshold, continuity_threshold, composite_key, "
+                " active, created_at)"
+                " VALUES (?,?,?,?,?,?,?,?,?,1,?)",
+                (profile_hash, controller_name, tier, int(n_calibration), transport_type,
+                 battery_type, float(anomaly_threshold), float(continuity_threshold),
+                 composite_key, time.time()),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def get_controller_hardware_profiles(self, active_only: bool = True) -> list:
+        """Return controller hardware profiles (Phase 155)."""
+        with self._conn() as con:
+            if active_only:
+                rows = con.execute(
+                    "SELECT * FROM controller_hardware_profiles WHERE active=1 ORDER BY id DESC"
+                ).fetchall()
+            else:
+                rows = con.execute(
+                    "SELECT * FROM controller_hardware_profiles ORDER BY id DESC"
+                ).fetchall()
+        return [dict(r) for r in rows]
+
+    # Phase 156 — Enrollment Guidance Log
+    # -------------------------------------------------------------------------
+
+    def insert_enrollment_guidance_log(
+        self,
+        sessions_needed_total: int,
+        overall_ready: bool,
+        recommended_action: str,
+        urgency_level: str = "low",
+        stagnant_probes: "list | None" = None,
+        estimated_days: float = -1.0,
+        activation_chain_event: "str | None" = None,
+        cov_regime_status: str = "unknown",
+    ) -> int:
+        """Insert an autonomous enrollment guidance report (Phase 156/157)."""
+        import json as _j156
+        with self._conn() as con:
+            cur = con.execute(
+                "INSERT INTO enrollment_guidance_log "
+                "(sessions_needed_total, overall_ready, recommended_action, "
+                " urgency_level, stagnant_probes, estimated_days, "
+                " activation_chain_event, cov_regime_status, created_at)"
+                " VALUES (?,?,?,?,?,?,?,?,?)",
+                (
+                    int(sessions_needed_total),
+                    1 if overall_ready else 0,
+                    recommended_action,
+                    urgency_level,
+                    _j156.dumps(stagnant_probes or []),
+                    float(estimated_days),
+                    activation_chain_event,
+                    cov_regime_status,
+                    time.time(),
+                ),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def get_enrollment_guidance_status(self) -> "dict | None":
+        """Return the latest enrollment guidance report (Phase 156/157)."""
+        import json as _j156
+        with self._conn() as con:
+            row = con.execute(
+                "SELECT * FROM enrollment_guidance_log ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+        if row is None:
+            return None
+        d = dict(row)
+        try:
+            d["stagnant_probes"] = _j156.loads(d.get("stagnant_probes", "[]"))
+        except Exception:
+            d["stagnant_probes"] = []
+        if "cov_regime_status" not in d:
+            d["cov_regime_status"] = "unknown"
+        return d
+
+    # Phase 157 — Fleet Consensus Snapshot Log
+    # -------------------------------------------------------------------------
+
+    def insert_fleet_consensus_snapshot(
+        self,
+        pofc_hash: str,
+        agent_count: int,
+        separation_ratio: float,
+        verdict_summary: "dict | None" = None,
+    ) -> int:
+        """Insert a PoFC (Proof of Fleet Consensus) snapshot (Phase 157)."""
+        import json as _j157
+        with self._conn() as con:
+            cur = con.execute(
+                "INSERT INTO fleet_consensus_snapshot_log "
+                "(pofc_hash, agent_count, separation_ratio, verdict_summary_json, created_at)"
+                " VALUES (?,?,?,?,?)",
+                (
+                    pofc_hash,
+                    int(agent_count),
+                    float(separation_ratio),
+                    _j157.dumps(verdict_summary or {}),
+                    time.time(),
+                ),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def get_fleet_consensus_snapshot(self, limit: int = 1) -> "list[dict]":
+        """Return recent PoFC snapshots, newest-first (Phase 157)."""
+        import json as _j157
+        with self._conn() as con:
+            rows = con.execute(
+                "SELECT * FROM fleet_consensus_snapshot_log ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            try:
+                d["verdict_summary"] = _j157.loads(d.get("verdict_summary_json", "{}"))
+            except Exception:
+                d["verdict_summary"] = {}
+            out.append(d)
+        return out
+
+    # --- Phase 158: Class K HMAC Validation + PoHBG ---
+
+    def insert_gsr_hmac_validation(
+        self,
+        *,
+        device_id: str,
+        frame_size: int,
+        valid: bool,
+        rejection_reason: str = "",
+        ts_ns: int = 0,
+    ) -> int:
+        """Log a GSR HMAC frame validation attempt (Phase 158 WIF-014)."""
+        with self._conn() as con:
+            cur = con.execute(
+                "INSERT INTO gsr_hmac_validation_log "
+                "(device_id, frame_size, valid, rejection_reason, ts_ns, created_at)"
+                " VALUES (?,?,?,?,?,?)",
+                (device_id, int(frame_size), int(valid), rejection_reason, int(ts_ns), time.time()),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def get_gsr_hmac_validation_status(self, limit: int = 20) -> dict:
+        """Return HMAC validation summary + recent entries (Phase 158)."""
+        with self._conn() as con:
+            total = con.execute(
+                "SELECT COUNT(*) FROM gsr_hmac_validation_log"
+            ).fetchone()[0]
+            valid_count = con.execute(
+                "SELECT COUNT(*) FROM gsr_hmac_validation_log WHERE valid=1"
+            ).fetchone()[0]
+            rows = con.execute(
+                "SELECT * FROM gsr_hmac_validation_log ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return {
+            "gsr_hmac_enabled": False,  # populated by operator_api from cfg
+            "total_validations": total,
+            "valid_count": valid_count,
+            "rejected_count": total - valid_count,
+            "recent_entries": [dict(r) for r in rows],
+        }
+
+    def insert_pohbg(
+        self,
+        *,
+        device_id: str,
+        pohbg_hash: str,
+        arousal_millis: int,
+        correlation_millis: int,
+        conductance_raw_int: int,
+        ts_ns: int,
+    ) -> int:
+        """Log a PoHBG (Proof of Hardware Biometric Grip) hash (Phase 158 WIF-015)."""
+        with self._conn() as con:
+            cur = con.execute(
+                "INSERT INTO pohbg_log "
+                "(device_id, pohbg_hash, arousal_millis, correlation_millis,"
+                " conductance_raw_int, ts_ns, created_at)"
+                " VALUES (?,?,?,?,?,?,?)",
+                (
+                    device_id,
+                    pohbg_hash,
+                    int(arousal_millis),
+                    int(correlation_millis),
+                    int(conductance_raw_int),
+                    int(ts_ns),
+                    time.time(),
+                ),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def get_pohbg_status(self, limit: int = 10) -> dict:
+        """Return PoHBG summary + recent hashes (Phase 158)."""
+        with self._conn() as con:
+            total = con.execute("SELECT COUNT(*) FROM pohbg_log").fetchone()[0]
+            rows = con.execute(
+                "SELECT * FROM pohbg_log ORDER BY id DESC LIMIT ?", (limit,)
+            ).fetchall()
+        return {
+            "pohbg_enabled": False,  # populated by operator_api from cfg
+            "total_pohbg": total,
+            "recent_hashes": [dict(r) for r in rows],
+        }
+
+    # --- Phase 159: BiometricPrivacyComplianceAgent ---
+
+    def insert_privacy_compliance_log(
+        self,
+        *,
+        records_monitored: int,
+        records_expired: int,
+        mean_decay_factor: float,
+        oldest_session_days: float,
+        privacy_budget_epsilon: float,
+        warning_triggered: bool,
+    ) -> int:
+        """Log a BP-001 compliance check result (Phase 159)."""
+        with self._conn() as con:
+            cur = con.execute(
+                "INSERT INTO privacy_compliance_log "
+                "(records_monitored, records_expired, mean_decay_factor,"
+                " oldest_session_days, privacy_budget_epsilon, warning_triggered, created_at)"
+                " VALUES (?,?,?,?,?,?,?)",
+                (
+                    int(records_monitored),
+                    int(records_expired),
+                    float(mean_decay_factor),
+                    float(oldest_session_days),
+                    float(privacy_budget_epsilon),
+                    int(warning_triggered),
+                    time.time(),
+                ),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def get_privacy_compliance_status(self) -> dict:
+        """Return latest BP-001 compliance report (Phase 159)."""
+        with self._conn() as con:
+            total = con.execute(
+                "SELECT COUNT(*) FROM privacy_compliance_log"
+            ).fetchone()[0]
+            row = con.execute(
+                "SELECT * FROM privacy_compliance_log ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+        if row:
+            d = dict(row)
+            return {
+                "biometric_privacy_enabled": True,  # populated by operator_api from cfg
+                "bp001_half_life_days":      90.0,  # populated by operator_api from cfg
+                "records_monitored":         d["records_monitored"],
+                "records_expired":           d["records_expired"],
+                "mean_decay_factor":         d["mean_decay_factor"],
+                "oldest_session_days":       d["oldest_session_days"],
+                "privacy_budget_epsilon":    d["privacy_budget_epsilon"],
+                "warning_triggered":         bool(d["warning_triggered"]),
+                "total_checks":              total,
+                "found":                     True,
+            }
+        return {
+            "biometric_privacy_enabled": True,
+            "bp001_half_life_days":      90.0,
+            "records_monitored":         0,
+            "records_expired":           0,
+            "mean_decay_factor":         1.0,
+            "oldest_session_days":       0.0,
+            "privacy_budget_epsilon":    0.0,
+            "warning_triggered":         False,
+            "total_checks":              0,
+            "found":                     False,
+        }
+
+    # --- Phase 160: Consent Ledger + Right-to-Erasure (BP-002 foundation) ---
+
+    def insert_consent_record(
+        self,
+        *,
+        device_id: str,
+        consent_type: str = "biometric_processing",
+        consent_given: bool,
+        consent_ts: float | None = None,
+    ) -> int:
+        """Register or update consent for a device (Phase 160 BP-002)."""
+        now = time.time()
+        with self._conn() as con:
+            cur = con.execute(
+                "INSERT INTO consent_ledger"
+                " (device_id, consent_type, consent_given, consent_ts, created_at)"
+                " VALUES (?,?,?,?,?)"
+                " ON CONFLICT(device_id, consent_type) DO UPDATE SET"
+                " consent_given=excluded.consent_given,"
+                " consent_ts=excluded.consent_ts",
+                (
+                    device_id,
+                    consent_type,
+                    int(consent_given),
+                    consent_ts if consent_ts is not None else now,
+                    now,
+                ),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def revoke_consent(
+        self,
+        *,
+        device_id: str,
+        consent_type: str = "biometric_processing",
+        reason: str = "",
+    ) -> bool:
+        """Revoke consent for a device and mark erasure_requested (Phase 160 BP-002).
+
+        Returns True if a record was updated, False if device not found.
+        """
+        now = time.time()
+        with self._conn() as con:
+            cur = con.execute(
+                "UPDATE consent_ledger SET"
+                " consent_given=0, revoked_at=?, revocation_reason=?, erasure_requested=1"
+                " WHERE device_id=? AND consent_type=?",
+                (now, reason, device_id, consent_type),
+            )
+        return cur.rowcount > 0
+
+    def get_consent_status(
+        self,
+        device_id: str,
+        consent_type: str = "biometric_processing",
+    ) -> dict:
+        """Return current consent state for a device (Phase 160 BP-002).
+
+        Returns a dict with keys: consent_given, consent_ts, revoked,
+        erasure_requested, erasure_completed, found.
+        """
+        with self._conn() as con:
+            row = con.execute(
+                "SELECT * FROM consent_ledger WHERE device_id=? AND consent_type=?",
+                (device_id, consent_type),
+            ).fetchone()
+        if row:
+            d = dict(row)
+            return {
+                "consent_given":    bool(d["consent_given"]),
+                "consent_ts":       d["consent_ts"],
+                "revoked":          d["revoked_at"] is not None,
+                "revocation_reason": d["revocation_reason"] or "",
+                "erasure_requested": bool(d["erasure_requested"]),
+                "erasure_completed": bool(d["erasure_completed"]),
+                "found":            True,
+            }
+        return {
+            "consent_given":    False,
+            "consent_ts":       None,
+            "revoked":          False,
+            "revocation_reason": "",
+            "erasure_requested": False,
+            "erasure_completed": False,
+            "found":            False,
+        }
+
+    def mark_erasure_complete(self, device_id: str) -> int:
+        """Mark erasure as completed and log the erasure action (Phase 160 BP-002).
+
+        Returns the number of fields anonymized.
+        """
+        now = time.time()
+        fields_anonymized = self.anonymize_device_records(device_id)
+        with self._conn() as con:
+            con.execute(
+                "UPDATE consent_ledger SET erasure_completed=1"
+                " WHERE device_id=?",
+                (device_id,),
+            )
+            con.execute(
+                "INSERT INTO right_to_erasure_log"
+                " (device_id, requested_at, fields_anonymized, completed_at, created_at)"
+                " VALUES (?,?,?,?,?)",
+                (device_id, now, fields_anonymized, now, now),
+            )
+        return fields_anonymized
+
+    def anonymize_device_records(self, device_id: str) -> int:
+        """Soft-delete biometric fields for a device (GDPR Art.17, Phase 160 BP-002).
+
+        Redacts evidence_json and reasoning in agent_rulings for the device.
+        Returns count of rows anonymized.
+        """
+        with self._conn() as con:
+            cur = con.execute(
+                "UPDATE agent_rulings"
+                " SET evidence_json='{}', reasoning='[redacted - GDPR Art.17 erasure]'"
+                " WHERE device_id=?",
+                (device_id,),
+            )
+        return cur.rowcount
+
+    def get_erasure_log(self, device_id: str | None = None, limit: int = 20) -> list[dict]:
+        """Return right-to-erasure log entries (Phase 160 BP-002)."""
+        with self._conn() as con:
+            if device_id:
+                rows = con.execute(
+                    "SELECT * FROM right_to_erasure_log WHERE device_id=?"
+                    " ORDER BY id DESC LIMIT ?",
+                    (device_id, limit),
+                ).fetchall()
+            else:
+                rows = con.execute(
+                    "SELECT * FROM right_to_erasure_log ORDER BY id DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
         return [dict(r) for r in rows]
