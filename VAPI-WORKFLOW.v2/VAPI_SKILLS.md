@@ -137,9 +137,9 @@ VAPI Skills are packaged, multi-step workflows that turn hours of manual work in
 10-15 minutes (full covariance slower than diagonal)
 
 ### Last Run
-**Status**: PENDING
-**Result**: TBD
-**Next**: Execute when approved (critical path)
+**Status**: COMPLETE (2026-04-02, Phase 143)
+**Result**: ratio=1.261 (diagonal+proper LOO, touchpad_corners N=11, 3-player). Classification 63.6% (7/11). Full Tikhonov unstable at N=11 — diagonal auto-fallback correct (N/p=1.375 < 3.0). P4 merged into P3 (same person). Per-pair: P1vP2=2.868, P1vP3=3.276, P2vP3=2.243. ABOVE 1.0 tournament gate. Caveat: N=11 legally thin — target ≥10/player.
+**Next**: Capture ≥10 touchpad_corners sessions per player for enrollment quality gate
 
 ---
 
@@ -252,8 +252,8 @@ VAPI Skills are packaged, multi-step workflows that turn hours of manual work in
 
 ### Last Run
 **Status**: DYNAMIC (run on demand)
-**Result**: separation_ratio=0.474 BLOCKER
-**Next**: Execute after Tikhonov analysis
+**Result**: separation_ratio=1.261 (touchpad_corners, Phase 143) — CONDITIONALLY ABOVE GATE. Full corpus pooled=0.417 still BLOCKER. dry_run=True still blocks full activation.
+**Next**: Run after ≥10 touchpad_corners sessions/player captured
 
 ---
 
@@ -756,8 +756,395 @@ When a pattern emerges in VAPI_MEMORY.md, propose new skills using this template
 
 ---
 
-**Document Version**: 1.2 (Phase 136-137)
-**Last Updated**: 2026-03-29
-**Skill Count**: 11 (complete + privacy)
-**Skill Status**: 7 COMPLETE, 4 PENDING (Controller skills + Privacy)
+---
+
+## Skill 14: PostCode Mitigation Sweep
+
+**Command**: `/vapi sweep post-code`
+
+**Purpose**: 12-step autonomous guardrail executed after EVERY code change. Detects invariant drift, security vulnerabilities, enrollment quality regressions, separation ratio impacts, and WHAT_IF corpus gaps before they reach production. The postcursor to perfected code — mitigation-first, proactive, eliminates vulnerabilities before they start.
+
+**Skill ID**: 14
+**Version**: 2.1 (Phase 156 — corrected + enhanced from Skill14.md v2.0)
+**Trigger**: After any `Edit`, `Write`, or code-affecting tool call
+
+---
+
+### Preconditions
+- CLAUDE.md is readable (ground truth for phase/counts)
+- Bridge test suite runnable (`python -m pytest bridge/tests/ -q`)
+- MCP vapi server responding (or bridge API at port 8080)
+- `VAPI_SKILLS.md` / `VAPI_INVARIANTS.md` accessible
+- Phase ≥ 156 (EnrollmentAutoGuidanceAgent LIVE)
+
+---
+
+### Steps
+
+#### Step 1 — MCP Invariant Gate (ALWAYS FIRST — BLOCKS ALL OTHERS IF FAILS)
+
+Query MCP or scan modified files for violation of any MANDATORY_INVARIANT. If ANY invariant is violated, **STOP IMMEDIATELY**, report `[INVARIANT_VIOLATION]`, do not proceed.
+
+**MANDATORY_INVARIANTS** (all 20 must be present/respected):
+```
+1.  "228 bytes"               — PoAC wire format total size
+2.  "SHA-256(raw[:164])"      — chain link hash body ONLY (NEVER raw[:228])
+3.  "separation ratio 0.362"  — pre-Phase 143 diagonal reference (historical truth)
+4.  "BLOCK_QUORUM=0.67"       — ioSwarm BLOCK threshold
+5.  "ratio > 1.0"             — tournament gate target
+6.  "TOURNAMENT BLOCKER"      — 0.417 full free-form corpus status
+7.  "MINT_QUORUM=0.80"        — VHP mint ioSwarm threshold (fail-CLOSED)
+8.  "dry_run=True"            — default enforcement simulation mode
+9.  "ioswarm_enabled=False"   — no live ioSwarm nodes registered yet
+10. "nPublic=5"               — ZK circuit public signals (FROZEN)
+11. "L6_CHALLENGES_ENABLED=false" — never change without N≥50 RIGID_MAX
+12. "GSR_ENABLED=false"       — never change without N≥30 sessions/player
+13. "L6B_ENABLED=false"       — never change without N≥50 neuromuscular data
+14. "auto_activate_on_breakthrough=False" — PERMANENT hardcoded (Phase 135)
+15. "epistemic_consensus_threshold=0.65" — Phase 147 hardened (NOT 0.60)
+16. "triage_prereq_required=True"        — Phase 147 W1 closure
+17. "WIF-011 STRUCTURED_PROBE_TYPES"     — {touchpad_corners, touchpad_freeform, touchpad_swipes} frozenset
+18. "SeparationRatioRegistry SHA-256(ratio_str+N+players_sorted+ts_ns)" — Phase 153 commitment formula
+19. "Agent #19 tier mapping"  — DualShock Edge=Attested(L0-L6), Xbox/Switch=Standard(L0-L5)
+20. "enrollment_complete ≠ defensible" — Phase 156 W1: count-gate fires on sessions_needed_total==0; defensible=True is SEPARATE gate
+```
+
+**Phase 156-specific MCP checks** (invoke `mcp__vapi__vapi_validate_proposal` or manual scan):
+- `CHAIN_HASH_SLICE`: Any `raw[:228]` or `raw[164:]` hash usage → BLOCK
+- `AUTO_ACTIVATE`: Any modification to `auto_activate_on_breakthrough` → BLOCK
+- `EPISTEMIC_REGRESSION`: threshold < 0.65 or `triage_prereq_required=False` → BLOCK
+- `ENROLLMENT_QUALITY_BYPASS`: `enrollment_complete` fires without checking `defensible` from separation_defensibility_log → FLAG W1
+- `BT_THRESHOLD_POLLUTION`: BT sessions using USB thresholds 7.009/5.367 → BLOCK
+- `SEPARATION_HARDCODE`: Hardcoded `separation_ratio = 1.261` without reading from DB → FLAG
+
+#### Step 2 — Targeted Test Execution
+
+Run only tests relevant to changed files. Map files to test suites:
+
+| Changed File | Test Suite | Count Check |
+|---|---|---|
+| `bridge_agent.py` | `test_phase{N}_*.py` relevant phases | Bridge 1868 |
+| `store.py` | All `test_phase*` (schema changes) | Bridge 1868 |
+| `session_adjudicator.py` | Phase 98/105/109C/147 tests | Bridge 1868 |
+| `operator_api.py` | All phase endpoint tests | Bridge 1868 |
+| `config.py` | Config-dependent tests | Bridge 1868 |
+| `*.sol` contracts | `npx hardhat test` | Hardhat 468 |
+| `sdk/vapi_sdk.py` | `python -m pytest sdk/tests/ -v` | SDK 265 |
+| `analyze_interperson_separation.py` | Phase 137-150 analysis tests | Bridge 1868 |
+
+**Baseline counts** (Phase 156 ground truth from CLAUDE.md):
+- Bridge: **1868** passing
+- SDK: **265** passing
+- Hardhat: **468** passing
+- E2E: **14** (needs Hardhat node)
+
+If count drops below baseline: `[TEST_REGRESSION]` — stop, root-cause before proceeding.
+
+#### Step 3 — Root Cause Classification
+
+Classify any failure by root cause from the 15-class taxonomy:
+
+| Class | Trigger Pattern | Severity |
+|---|---|---|
+| `INVARIANT_DRIFT` | Any MANDATORY_INVARIANT violated | P0 — STOP |
+| `AUTO_ACTIVATE_VIOLATION` | `auto_activate_on_breakthrough` touched | P0 — STOP |
+| `CHAIN_HASH_ERROR` | `SHA-256(raw[:228])` used anywhere | P0 — STOP |
+| `PRIVACY_VIOLATION` | `humanity_prob` appears on-chain or in logs | P0 — STOP |
+| `PHASE_INTEROP` | Phase N logic calls Phase M > N+5 dependency | P1 — BLOCK |
+| `BUS_EVENT_MISMATCH` | Bus event topic string inconsistent across publishers/subscribers | P1 — BLOCK |
+| `BT_THRESHOLD_POLLUTION` | BT path using USB thresholds | P1 — BLOCK |
+| `EPISTEMIC_REGRESSION` | Threshold < 0.65 or prereq removed | P1 — BLOCK |
+| `SCHEMA_MISMATCH` | DB column count in test ≠ CREATE TABLE definition | P2 — FIX |
+| `IMPORT_BREAK` | New import not in requirements.txt or mock not applied | P2 — FIX |
+| `DB_MIGRATION` | ALTER TABLE missing from idempotent migration path | P2 — FIX |
+| `ENROLLMENT_COUNT_GATE` | enrollment_complete fires without defensible=True check | P2 — FLAG W1 |
+| `WS_PROTOCOL` | WebSocket message format changed without frontend sync | P3 — WARN |
+| `IOSWARM_SEED_DRIFT` | Emulator seed ≠ phase-anchored constant (e.g., seed=109) | P3 — WARN |
+| `SEPARATION_HARDCODE` | Ratio value hardcoded instead of DB-read | P3 — WARN |
+
+#### Step 4 — Separation Ratio Impact Assessment
+
+For any change touching: `store.py`, `session_adjudicator.py`, `analyze_interperson_separation.py`, calibration paths, or `separation_defensibility_log`:
+
+Assess impact level:
+
+| Level | Condition | Action |
+|---|---|---|
+| **NEUTRAL** | No separation-path code touched | Skip |
+| **SAFE** | Read-only changes to ratio/defensibility | Log + continue |
+| **MONITOR** | Session type filtering / covariance mode changed | Run `--probe-comparison`, log delta |
+| **CAUTION** | `STRUCTURED_PROBE_TYPES` modified or session_type_filter logic changed | `[WIF-011]` — audit WIF-011 surface |
+| **CRITICAL** | `min_n_per_player` lowered, `defensible` logic weakened, or `insert_separation_defensibility_log` validation bypassed | `[SEPARATION_REGRESSION]` — STOP |
+
+**Key state to verify** (read from DB, not hardcoded):
+- Current defensible=? (from `get_separation_defensibility_status()`)
+- N per player for touchpad_corners (P1=3, P2=4, P3=4 — all below min_n=10, NOT YET DEFENSIBLE)
+- Ratio 1.261 (touchpad_corners, N=11, diagonal) — CONDITIONALLY ABOVE GATE (thin N)
+- Full corpus 0.417 (N=127, pooled) — TOURNAMENT BLOCKER
+
+> ⚠️ **WIF-009 PLATEAU TRAP**: Do NOT recommend growing the free-form gameplay corpus to improve separation ratio. Free-form is confirmed in plateau regime (~0.417, will not exceed 1.0). The ONLY path to tournament-viable separation is ≥10 `touchpad_corners` sessions per player. Any code change that routes free-form sessions into separation analysis as if they contribute to tournament eligibility is `[SEPARATION_REGRESSION]`.
+
+#### Step 5 — Enrollment Quality Gate Check
+
+For changes touching: `EnrollmentAutoGuidanceAgent`, `calibration_intelligence_agent.py`, `separation_defensibility_log`, or `session_adjudicator_validator.py`:
+
+**Phase 156 enrollment_complete semantics** (read `bridge/vapi_bridge/enrollment_auto_guidance_agent.py`):
+- `enrollment_complete` fires when `overall_ready=True` (sessions_needed_total == 0)
+- `defensible=True` (from `separation_defensibility_log`) is NOT currently a prerequisite
+- This is **W1 (enrollment count-gate spoofing)** — enrolled count hit without quality gate
+- Phase 157 candidate: add `defensible=True` as dual-condition for `enrollment_complete`
+
+Check:
+- [ ] Does the change weaken or bypass the enrollment quality gate further?
+- [ ] Does `get_enrollment_capture_guidance()` still correctly compute per-probe per-player gaps?
+- [ ] Does `insert_separation_defensibility_log` still raise `ValueError` on non-`STRUCTURED_PROBE_TYPES` session types?
+- [ ] Does urgency_level (HIGH/MEDIUM/LOW) correctly escalate when stagnant_probe_count > 0?
+
+If any check fails: classify as `ENROLLMENT_COUNT_GATE` and flag `[W1_ENROLLMENT_SPOOFING_RISK]`.
+
+#### Step 6 — Agent Fleet Coherence
+
+For changes touching `main.py`, `bridge_agent.py`, `operator_api.py`, or any agent file:
+
+Verify the 20-agent fleet is intact:
+
+| Agent # | Name | Status | Poll |
+|---|---|---|---|
+| 1-14 | Core agents (Phase 65–102) | LIVE | Various |
+| 15 | SeparationRatioMonitorAgent | LIVE | 300s |
+| 16 | TournamentActivationChainAgent | LIVE | auto_activate=False PERMANENT |
+| 17 | SeparationRatioMonitorAgent (alias) | LIVE | — |
+| 18 | AgentCalibrationIntegrityMonitor (ACIM) | LIVE | 15 min, 16 self-tests |
+| 19 | ControllerHardwareIntelligenceAgent | LIVE Phase 155 | 1h |
+| 20 | EnrollmentAutoGuidanceAgent | LIVE Phase 156 | 1h |
+
+Critical invariants:
+- Agent #16 `auto_activate_on_breakthrough=False` PERMANENT — touching this is P0 STOP
+- Agent #18 ACIM runs 16 self-tests every 15 minutes — any change to agent health log schema needs ACIM test update
+- Agent #19 tier mapping is immutable: DualShock Edge CFI-ZCP1 → Attested (L0-L6); Xbox/Switch → Standard (L0-L5)
+- Agent #20 fires `enrollment_complete` bus event → TournamentActivationChainAgent (agent #16); verify event topology preserved
+
+#### Step 7 — Schema and Migration Audit
+
+For changes adding/modifying SQLite tables:
+
+1. Verify `schema(N, "table_name")` entry added to `_SCHEMA_VERSIONS` in `store.py`
+2. Verify `CREATE TABLE IF NOT EXISTS` in schema creation
+3. Verify idempotent `ALTER TABLE ... ADD COLUMN` for any new columns on existing tables
+4. Verify new columns have DEFAULT values (no NOT NULL without default)
+5. Verify `INSERT OR IGNORE` used for dedup where appropriate
+6. Verify table is queried in at least one `GET /agent/...` endpoint
+7. Verify test covers schema_version assertion
+
+> Phase 156 tables to preserve: `enrollment_auto_guidance_log`, `capture_stagnation_log`, `centroid_velocity_log`, `separation_defensibility_log`, `controller_hardware_profiles`, `tournament_activation_chain_log`
+
+#### Step 8 — Fix Proposal
+
+For any issue found in Steps 1-7:
+
+Structure the fix proposal as:
+```
+[ROOT_CAUSE_CLASS] File: path/to/file.py Lines: N-M
+Issue: <one sentence>
+Why it matters: <invariant or security impact>
+Fix: <exact code change or instruction>
+Invariant preserved: <yes/no + which invariant>
+Test coverage: <existing test catches this / new test needed>
+```
+
+Do NOT propose a fix that:
+- Modifies any `[FROZEN]` or `[IMMUTABLE]` value
+- Loosens a threshold without calibration data (N requirement)
+- Sets `auto_activate_on_breakthrough=True`
+- Uses `SHA-256(raw[:228])` as chain hash
+- Enables `GSR_ENABLED`, `L6B_ENABLED`, `L6_CHALLENGES_ENABLED` without N≥ data
+- Routes free-form gameplay sessions into tournament separation analysis
+
+#### Step 9 — WHAT_IF Corpus Update
+
+After every sweep, evaluate whether the change surface warrants a new WHAT_IF entry:
+
+**W1 trigger** (new failure mode): File any of these as candidate W1 if found:
+- New agent-to-agent bus event creates unauthenticated trust chain
+- New DB table lacks idempotent migration (Phase upgrade path broken)
+- New enrollment quality check missing from `enrollment_complete` prerequisite chain
+- New on-chain call lacks anti-replay protection
+- New threshold parameter lacks min() enforcement
+
+**W2 trigger** (novel opportunity): File candidate W2 if:
+- New bus event creates composability surface for on-chain proof (PoAC + PoAd + PoFC pattern)
+- New agent output creates oracle input for Phase N+1 tournament gate
+- New calibration track creates per-cohort separation analysis surface
+
+Update `VAPI_WHAT_IF.md` with `WIF-XXX` entry if warranted. Reference phase candidate.
+
+**Session W1 (Phase 157 candidate)**:
+- `ENROLLMENT_COUNT_GATE`: `enrollment_complete` fires on `sessions_needed_total==0` without requiring `defensible=True` from separation_defensibility_log. Adversary could satisfy session count with N<10/player non-defensible sessions and trigger activation chain. Mitigation: dual-condition in Phase 157.
+
+**Session W2 (Phase 157 candidate)**:
+- `FLEET_CONSENSUS_SNAPSHOT`: SHA-256(sorted_agent_verdicts + separation_ratio + ts_ns) as "Proof of Fleet Consensus" (PoFC). Composable triple: PoAC (physiological) + PoAd (adjudication) + PoFC (fleet consensus). Agent #21 candidate.
+
+#### Step 10 — Atomic Update Sequence
+
+If code changes are approved after fix proposal (Step 8), apply in strict order:
+
+```
+1. source file(s)
+2. store.py (if schema changes)
+3. config.py (if new config fields)
+4. operator_api.py (if new endpoints)
+5. bridge_agent.py (if new tools)
+6. sdk/vapi_sdk.py (if new SDK classes)
+7. sdk/openapi.yaml (if new schemas/paths)
+8. bridge/tests/ (new test file for phase N)
+9. sdk/tests/ (new SDK test file)
+10. contracts/ (if Solidity changes)
+11. CLAUDE.md (update counts + phase)
+12. VAPI-WORKFLOW.v2/VAPI_MEMORY.md (log findings)
+```
+
+Never apply out of order. Never update CLAUDE.md counts until tests pass.
+
+#### Step 11 — Count Verification
+
+After applying all fixes and running tests, verify final counts match CLAUDE.md:
+
+```bash
+python -m pytest bridge/tests/ --ignore=bridge/tests/test_e2e_simulation.py -q 2>&1 | tail -1
+python -m pytest sdk/tests/ -q 2>&1 | tail -1
+cd contracts && npx hardhat test 2>&1 | tail -3
+```
+
+Expected format:
+```
+Bridge: X passed (X ≥ 1868)
+SDK: X passed (X ≥ 265)
+Hardhat: X passing (X ≥ 468)
+```
+
+If any count drops: **DO NOT UPDATE CLAUDE.md**. Root-cause first.
+
+If counts increase: update CLAUDE.md `Bridge:`, `SDK:`, `Hardhat:` fields AND `SDK_VERSION` if applicable.
+
+#### Step 12 — ACIM Fleet Health Check (NEW — Phase 156)
+
+Always query AgentCalibrationIntegrityMonitor after every sweep:
+
+```bash
+# Via bridge API
+curl -H "x-api-key: $OPERATOR_KEY" http://localhost:8080/agent/calibration-health
+```
+
+Expected healthy response:
+```json
+{
+  "agent_calibration_monitor_enabled": true,
+  "total_self_tests": 16,
+  "passed_self_tests": 16,
+  "failed_self_tests": 0,
+  "last_check_ts": "...",
+  "timestamp": "..."
+}
+```
+
+If `failed_self_tests > 0`: classify as `[ACIM_ALERT]` — do NOT merge the change. ACIM failing means a cross-agent calibration invariant was broken by the code change.
+
+If ACIM is not running (bridge not started): verify `agent_calibration_monitor_enabled=True` in config and that `AgentCalibrationIntegrityMonitor` is wired in `main.py`.
+
+---
+
+### Invariant Checks Summary
+
+| Check | Condition | Action |
+|---|---|---|
+| PoAC size | Any struct ≠ 228 bytes | ❌ BLOCK |
+| Chain hash | SHA-256(raw[:228]) used | ❌ BLOCK |
+| Auto-activate | `auto_activate_on_breakthrough=True` | ❌ BLOCK |
+| Epistemic | threshold < 0.65 or prereq removed | ❌ BLOCK |
+| BT thresholds | BT using 7.009/5.367 | ❌ BLOCK |
+| Separation | free-form added to tournament analysis | ❌ BLOCK |
+| Count regression | test count < baseline | ❌ BLOCK |
+| Enrollment W1 | count-gate without quality gate | ⚠️ FLAG W1 |
+| ACIM health | failed_self_tests > 0 | ⚠️ FLAG |
+| Schema | missing idempotent migration | ⚠️ FIX |
+| WIF-011 | session_type not in STRUCTURED_PROBE_TYPES | ⚠️ FLAG |
+
+---
+
+### Outputs
+
+```json
+{
+  "sweep_version": "2.1",
+  "phase": 156,
+  "timestamp": "2026-04-04T...",
+  "invariants_checked": 20,
+  "invariants_passed": 20,
+  "root_cause_class": "NEUTRAL",
+  "severity": "P4",
+  "separation_impact": "NEUTRAL",
+  "enrollment_gate_ok": true,
+  "acim_healthy": true,
+  "test_counts": {
+    "bridge": 1868,
+    "sdk": 265,
+    "hardhat": 468
+  },
+  "what_if_updates": [],
+  "fix_proposals": [],
+  "verdict": "PROCEED"
+}
+```
+
+### AutoResearch Version
+
+**Skill 14-AR**: AutoResearch trigger — run Skill 14 as autoresearch cycle targeting sweep security score ≥ 0.70.
+
+Scoring formula:
+```
+score = 0.30 × invariants_preserved  (all 20 pass = 1.0)
+      + 0.25 × gap_advancement        (W1s found and filed = 1.0; none found = 0.5)
+      + 0.20 × what_if_quality        (new WIF entry with phase candidate = 1.0)
+      + 0.15 × phase_coherence        (all phase references accurate = 1.0)
+      + 0.10 × backward_compatibility (no count regression = 1.0)
+PASS_THRESHOLD = 0.70
+```
+
+AutoResearch sweep log entry format:
+```json
+{
+  "cycle": N,
+  "skill": "14-AR",
+  "score": 0.XXX,
+  "invariants_preserved": true,
+  "gaps_found": ["ENROLLMENT_COUNT_GATE", "..."],
+  "what_if_filed": "WIF-NNN",
+  "phase_coherence_ok": true,
+  "test_delta": 0,
+  "verdict": "PASS/FAIL"
+}
+```
+
+Commit format when score ≥ 0.70:
+```
+chore(skill14-sweep): PostCode Mitigation cycle N (score=X.XXX)
+```
+
+### Time Estimate
+
+- Fast path (no issues found): 3-5 minutes
+- Medium path (schema/import fix): 10-15 minutes
+- Full path (P1+ issue found): 30-60 minutes (root cause + fix + tests)
+
+### Last Run
+**Status**: PENDING
+**Result**: —
+**Next**: Run after next code change
+
+---
+
+**Document Version**: 1.4 (Phase 156)
+**Last Updated**: 2026-04-04
+**Skill Count**: 12 (complete + privacy + sweep)
+**Skill Status**: 8 COMPLETE, 3 PENDING (Controller skills + Privacy), 1 NEW (Skill 14 PostCode Sweep)
 **Update Method**: Add new skills when patterns emerge, update "Last run" after execution

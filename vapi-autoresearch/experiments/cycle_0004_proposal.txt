@@ -1,0 +1,36 @@
+Phase 156 autoresearch sync — corrected 20-phase drift in vapi.md:
+
+1. Agent fleet updated: 16→20 agents. Agent #19 ControllerHardwareIntelligenceAgent LIVE (Phase 155).
+   Agent #20 EnrollmentAutoGuidanceAgent LIVE (Phase 156).
+2. Test counts corrected: Bridge 1734→1868, Hardhat 462→468, SDK 233→265.
+3. Reference state updated: Phase 136→156, separation ratio 1.261 (touchpad_corners) + 0.417 (pooled TOURNAMENT BLOCKER).
+4. Epistemic hardening Phase 147: threshold 0.60→0.65, triage_prereq_required=True. Phase 98 W1 formally CLOSED.
+5. MULTI_CONTROLLER: Agent #17/#19 ControllerHardwareIntelligenceAgent now LIVE (was DESIGN ONLY).
+   Attested tier=DualShock Edge L0-L6; Standard tier=Xbox/Switch L0-L5. multi_controller_enabled=False.
+6. Skill 14 PostCode Mitigation Sweep added to SKILL_EXECUTION table. /vapi sweep post-code command.
+7. ACIM (Agent #18) documented correctly (was mislabeled as BiometricPrivacyComplianceAgent).
+
+[WHAT_IF]
+W1 — Enrollment count-gate spoofing: enrollment_complete fires when sessions_needed_total==0
+  WITHOUT requiring defensible=True from separation_defensibility_log.
+  Implication: adversary satisfies session count with thin N < min_n_per_player sessions,
+  triggers activation chain without achieving separation ratio > 1.0 tournament gate.
+  Cryptographic grounding: defensible=True requires SHA-256-committed ratio > 1.0 in
+  separation_defensibility_log — count-gate bypass is economically motivated.
+  Mitigation: Phase 157 dual-condition enforcement — overall_ready = (sessions_needed_total==0) AND (defensible==True).
+
+W2 — Fleet Consensus Snapshot (PoFC) as third composable proof primitive.
+  Mechanism: Agent #21 computes SHA-256(sorted(agent_verdicts) + separation_ratio + ts_ns) = Proof of Fleet Consensus.
+  Composable triple: PoAC (physiological) + PoAd (adjudication registry) + PoFC (fleet consensus).
+  No competing gaming DePIN protocol has fleet-consensus-based composable proof triple.
+  Phase candidate: Phase 157 — FleetConsensusSnapshotAgent + fleet_consensus_snapshot table +
+  GET /agent/fleet-consensus-snapshot. ~2h effort. Anchors in SeparationRatioRegistry.sol pattern.
+  Exclusive because: requires 20-agent fleet cross-validation infrastructure + PoAC + PoAd on-chain.
+
+Separation ratio advancement: touchpad_corners 1.261 (above 1.0 gate, N=11 thin);
+touchpad probe sessions are the ONLY path to defensible separation (WIF-009 plateau confirmed).
+dry_run=True, TOURNAMENT BLOCKER still applies to full free-form corpus (0.417).
+W1 enrollment_count_gate is a new gap advancement.
+ioSwarm BLOCK_QUORUM=0.67 preserved; MINT_QUORUM=0.80 preserved.
+separation ratio 0.362 historical reference preserved.
+SeparationRatioRegistry SHA-256(ratio_str+N+players_sorted+ts_ns) commitment formula documented.

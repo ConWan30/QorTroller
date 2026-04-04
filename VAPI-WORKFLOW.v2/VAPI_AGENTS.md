@@ -14,7 +14,7 @@
 - **Firmware Engineer**: nRF9160 embedded development, Zephyr RTOS, sensor polling optimization, 228-byte PoAC record generation, power-efficient cryptography
 - **Full-Stack Integration Engineer**: Python SDK design, OpenAPI client generation, dataclass/slot optimization, pytest automation, Hardhat contract testing
 
-**Your Role**: When reading this file, you are the agent fleet commander. You can spawn parallel expert contexts for any of these 16+ agents. You know their fail modes, epistemic weights, and tool inventories. Orchestrate them for complex cross-domain tasks.
+**Your Role**: When reading this file, you are the agent fleet commander. You can spawn parallel expert contexts for any of these 20 agents. You know their fail modes, epistemic weights, and tool inventories. Orchestrate them for complex cross-domain tasks.
 
 > **INSTRUCTION TO CLAUDE CODE**: This file defines the VAPI agent fleet as callable expert subsystems.
 > When reading this file, you must:
@@ -27,7 +27,7 @@
 
 ## Agent Overview
 
-VAPI operates 16+ specialized agents in the bridge service. Each agent is a background asyncio task with specific expertise, tools, and decision logic. This document maps them for Claude Code expert spawning.
+VAPI operates 20 specialized agents in the bridge service. Each agent is a background asyncio task with specific expertise, tools, and decision logic. This document maps them for Claude Code expert spawning.
 
 ### Agent Table
 
@@ -49,7 +49,10 @@ VAPI operates 16+ specialized agents in the bridge service. Each agent is a back
 | 14 | IoSwarmRenewalCoordinator | — | Event | ioSwarm consensus for VHP renewal | Fail-open | 5 |
 | 15 | IoSwarmAdjudicationCoordinator | — | Event | Dual-quorum veto for adjudication | Fail-open | 5 |
 | 16 | IoSwarmVHPMintCoordinator | — | Event | ioSwarm quorum for VHP minting | Fail-closed | 6 |
-| 17 | ControllerHardwareIntelligenceAgent | claude-opus-4-6 | Event-driven | Multi-controller capability mapping, PITL layer availability, tier eligibility, transport negotiation | Fail-open | 8 |
+| 17 | ControllerHardwareIntelligenceAgent (v1) | claude-opus-4-6 | Event-driven | Multi-controller capability mapping, PITL layer availability, tier eligibility, transport negotiation | Fail-open | 8 |
+| 18 | AgentCalibrationIntegrityMonitor (ACIM) | — | 15 min | Cross-validates 16 agents' calibration invariants independently; anti-single-validator | Fail-open | 1 |
+| 19 | ControllerHardwareIntelligenceAgent | claude-opus-4-6 | 1 hour | Attested vs Standard tier mapping; composite key profile_hash:battery_type:transport_type; default thresholds 7.009/5.367; controller_hardware_profiles table | Fail-open | 8 |
+| 20 | EnrollmentAutoGuidanceAgent | — | 1 hour | Synthesizes Phase 151 guidance + Phase 154 stagnation + Phase 152 velocity + Phase 155 controller status; urgency HIGH/MEDIUM/LOW; fires enrollment_complete → TournamentActivationChainAgent | Fail-open | 1 |
 
 ---
 
@@ -525,7 +528,104 @@ Every agent must respect:
 
 ---
 
-**Document Version**: 1.0 (Phase 135)
-**Last Updated**: 2026-03-29
+---
+
+## Agent 18: AgentCalibrationIntegrityMonitor (ACIM) — Phase 148
+
+**Trigger**: Automatic 15-min poll
+
+**Role**: Cross-validate each agent's calibration invariant independently (W1: anti-single-validator)
+
+**Expertise**:
+- Runs 16 self-tests every 15 minutes (one per agent in the fleet)
+- Checks each agent's calibration invariant independently
+- Publishes failures to agent_calibration_health table
+- W1 mitigation: no single agent validates itself — cross-validation only
+
+**Decision Output**:
+- PASS: Agent calibration invariant satisfied
+- FAIL: Calibration invariant violated — alert generated
+
+**Tools** (1 available):
+- Tool #105 get_agent_calibration_health (6 keys: agent_count/healthy_count/degraded_count/failed_agents/latest_tests/mcp_server_enabled)
+
+**Fail Mode**: Fail-open
+- Self-test failure logged but does not block bridge operation
+- Degraded count reported in health endpoint
+
+**Config**: agent_calibration_monitor_enabled=True (default), mcp_server_enabled=False (infrastructure only)
+
+---
+
+## Agent 19: ControllerHardwareIntelligenceAgent — Phase 155
+
+**Trigger**: Automatic 1-hour poll
+
+**Role**: Manages controller hardware profiles and tier mapping. Determines Attested vs Standard tier eligibility per composite key.
+
+**Expertise**:
+- Controller auto-detection and tier mapping (DualShock Edge → Attested, Xbox/Switch → Standard)
+- Composite key: `profile_hash:battery_type:transport_type`
+- Default thresholds anomaly=7.009/continuity=5.367 per profile
+- PHCI certification required for Attested tier
+- `multi_controller_enabled=False` infrastructure-first default
+
+**Decision Output**:
+- Controller profile tier (attested/standard)
+- Available PITL layers (L0-L6 for Attested; L0-L5 for Standard)
+- Active composite key
+- Threshold assignment per profile
+
+**Tools** (8 available):
+- Tool #111 get_controller_hardware_status (7 keys: controller_intelligence_enabled/multi_controller_enabled/attested_count/standard_count/active_composite_key/profiles/timestamp)
+
+**Fail Mode**: Fail-open (fallback to DualShock Edge Attested profile)
+
+**Config**: controller_intelligence_enabled=True, multi_controller_enabled=False
+
+**Invariants**:
+- DualShock Edge CFI-ZCP1 is ONLY Attested tier device (L0-L6 mandatory)
+- Xbox/Switch ALWAYS Standard tier (no L6 adaptive triggers)
+- BT thresholds separate from USB — never share 7.009/5.367 across transport types
+
+---
+
+## Agent 20: EnrollmentAutoGuidanceAgent — Phase 156
+
+**Trigger**: Automatic 1-hour poll
+
+**Role**: Synthesizes 4 upstream data sources to produce actionable enrollment guidance with urgency_level. Fires enrollment_complete bus event → TournamentActivationChainAgent when overall_ready=True.
+
+**Expertise**:
+- Synthesizes: Phase 151 enrollment capture guidance + Phase 154 stagnation status + Phase 152 velocity status + Phase 155 controller hardware status
+- Computes urgency_level: HIGH (stagnant + sessions_needed_total > 0), MEDIUM (velocity plateau), LOW (on track)
+- `enrollment_complete` fires when `sessions_needed_total == 0` (count-gate)
+- **W1 OPEN**: count-gate does NOT check `defensible=True` from separation_defensibility_log — Phase 157 candidate dual-condition enforcement
+
+**Decision Output**:
+- sessions_needed_total: how many more capture sessions required
+- overall_ready: True/False
+- recommended_action: human-readable instruction
+- urgency_level: HIGH/MEDIUM/LOW
+- estimated_days: projected completion
+- stagnant_probe_count: number of probe types in stagnation
+
+**Tools** (1 available):
+- Tool #112 get_enrollment_auto_guidance_status (8 keys: sessions_needed_total/overall_ready/recommended_action/urgency_level/estimated_days/stagnant_probe_count/velocity_per_day/timestamp)
+
+**Fail Mode**: Fail-open (advisory; never blocks capture or enrollment)
+
+**Config**: enrollment_auto_guidance_enabled=True (default)
+
+**Bus Event**: `enrollment_complete` → TournamentActivationChainAgent (agent #16); fires ONLY when `overall_ready=True`
+
+**W1 (Phase 157 candidate)**: Dual-condition enforcement — `enrollment_complete` should require BOTH `sessions_needed_total == 0` AND `defensible=True` from `separation_defensibility_log`. Currently only count-gate enforced.
+
+---
+
+**Document Version**: 1.2 (Phase 156)
+**Last Updated**: 2026-04-04
 **Update Method**: Add new agents as phases complete
-**Agent Count**: 16 (Phase 135)
+**Agent Count**: 20 (Phase 156)
+**Key Phase 155 change**: Agent #19 ControllerHardwareIntelligenceAgent LIVE (was DESIGN ONLY in Phase 149)
+**Key Phase 156 change**: Agent #20 EnrollmentAutoGuidanceAgent LIVE; W1 enrollment count-gate identified
