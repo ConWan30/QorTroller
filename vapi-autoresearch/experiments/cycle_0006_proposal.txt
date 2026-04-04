@@ -1,0 +1,89 @@
+CYCLE 6 PROPOSAL — Covariance Regime Stability Gate + Adaptive Probe Sequencing (Phase 157 candidate)
+
+Gap targeted: separation_ratio (N=11 thin touchpad_corners; N/p=1.375 forces diagonal auto-fallback;
+  target: defensible separation with N/p stability throughout enrollment growth)
+
+Current state: Phase 142 COV_MIN_RATIO=3.0; N=11 touchpad_corners, p=8 active features →
+  N/p=1.375 (diagonal auto-fallback active). Phase 143 proper LOO: 63.6% classification with
+  diagonal covariance. Phase 141 key finding: P1 vs P3 under full covariance = suppression_ratio=0.032
+  (97% suppression — catastrophic P1/P3 confusion). Current separation ratio 1.261 is ONLY valid
+  while diagonal auto-fallback remains active (N/p < 3.0). As enrollment grows from N=11 toward N=24
+  sessions, N/p will cross 3.0 and switch to full Tikhonov covariance — potentially dropping P1/P3
+  distance from 3.276 back to ~0.127, collapsing the overall ratio toward the 0.417 free-form baseline.
+
+Proposal:
+  - Add covariance stability gate to separation defensibility analysis
+  - COV_STABILITY_MARGIN_NP = 0.5 config: warn when |N/p - COV_MIN_RATIO| < 0.5 (transition zone)
+  - COVARIANCE_TRANSITION_WARNING flag in separation_defensibility_log and enrollment_auto_guidance_log
+  - Proactively recommend N/player ≥ ceil(p * 5.0) = 40 sessions before enabling full covariance
+    (target N/p = 5.0 for full covariance stability with p=8 features)
+  - EnrollmentAutoGuidanceAgent recommended_action includes covariance regime status
+
+Protocol invariants preserved throughout:
+  228 bytes PoAC wire format. SHA-256(raw[:164]) chain hash frozen. NOMINAL sessions only for stable
+  EMA track. L4 anomaly=7.009 continuity=5.367. Poseidon(8) ZK commitment. nPublic=5 public signals.
+  Epistemic consensus threshold 0.60 (Phase 98 W1 reference; Phase 147 hardened to 0.65).
+  separation ratio 0.362 historical reference (N=74 free-form). ratio > 1.0 TGE gate non-negotiable.
+  GSR_ENABLED=false until N>=30 calibration sessions per player. L6B_ENABLED=false until N>=50
+  neuromuscular calibration. 0x33 GSR_CORRELATION_ABSENT never hard gate, always advisory only.
+  soulbound VHP — all transfer functions revert. BLOCK_QUORUM=0.67 ioSwarm.
+  separation ratio 0.362 TOURNAMENT BLOCKER (free-form corpus). dry_run=True enforcement default.
+
+[WHAT_IF]
+W1 — Covariance Regime Instability: Silent Separation Ratio Collapse at N~24 Transition Point:
+  As touchpad_corners enrollment grows from N=11 toward N=24 (exactly at N/p = 24/8 = 3.0 threshold),
+  Phase 142 COV_MIN_RATIO=3.0 diagonal auto-fallback DEACTIVATES, switching to full Tikhonov
+  covariance — silently collapsing P1/P3 inter-player distance from 3.276 to ~0.127.
+  Implication: separation_defensibility_log stores the ratio at capture time; defensible=True is
+  stored as a static snapshot. But tournament systems calling get_separation_defensibility_status()
+  re-evaluate DYNAMICALLY using current session data. An N/p crossing event at N=24 causes
+  defensible=True to flip to defensible=False without any fraudulent sessions being added — a silent
+  tournament-blocking regression triggered purely by legitimate enrollment growth. EnrollmentAutoGuidanceAgent
+  would continue reporting "sessions_needed_total > 0" even though the required 10/player threshold
+  was met, with no clear indication that covariance mode was the root cause.
+  Cryptographic grounding: separation_defensibility_log records are SHA-256-committed (Phase 153
+  SeparationRatioRegistry); the on-chain commitment at N=11 would disagree with the live dynamic
+  result at N=24 — creating a verifiable on-chain/off-chain inconsistency that could be exploited to
+  challenge tournament eligibility status. Economically motivated: adversary captures exactly 3 more
+  sessions (pushing honest player's enrollment from N=21 to N=24 in any probe type) to trigger
+  covariance regime flip and invalidate competitor's tournament eligibility.
+  Mitigation: Phase 157 COV_STABILITY_MARGIN_NP check in get_separation_defensibility_status():
+  re-runs analysis with N/p + 0.5 (simulated near-term growth) and flags COVARIANCE_TRANSITION_WARNING
+  when current N/p within COV_STABILITY_MARGIN_NP of COV_MIN_RATIO. EnrollmentAutoGuidanceAgent
+  urgency_level escalates to HIGH when COVARIANCE_TRANSITION_WARNING is active. Recommended resolution:
+  either stay in diagonal mode (lock COV_MIN_RATIO to a very high value) or grow enrollment to N/p ≥ 5.0
+  before enabling full covariance at all (requires N ≥ 40 sessions per player with p=8 features).
+
+W2 — Adaptive Covariance-Aware Probe Sequencing in EnrollmentAutoGuidanceAgent:
+  Mechanism: EnrollmentAutoGuidanceAgent recommended_action is extended with cov_regime_status field:
+  "diagonal_stable" (N/p < 2.5), "transition_warning" (2.5 ≤ N/p < 3.5), "full_covariance_active"
+  (N/p ≥ 3.5). When "transition_warning" is active, recommended_action switches from
+  "capture_touchpad_corners" to "evaluate_covariance_regime_before_capture" — preventing blind
+  enrollment growth into the instability zone. If operator chooses to continue, the system recommends
+  capturing at least 10 additional sessions per player (from transition point) to reach N/p ≥ 5.0,
+  bypassing the instability zone entirely and anchoring in stable full-covariance territory.
+  Phase candidate: Phase 157 — add cov_stability_check() to analyze_interperson_separation.py;
+  add COV_STABILITY_MARGIN_NP=0.5 config field; extend enrollment_auto_guidance_log with
+  cov_regime_status column; update EnrollmentAutoGuidanceAgent recommended_action logic.
+  Exclusive to VAPI: requires intersection of Phase 142 Mahalanobis COV_MIN_RATIO auto-fallback
+  + Phase 143 proper LOO + Phase 150 separation defensibility gate + Phase 156 enrollment guidance
+  + 20-agent fleet. No competing biometric DePIN protocol has covariance-regime-aware enrollment
+  sequencing guidance. This transforms passive session counting into active covariance regime management.
+  Novel: first biometric enrollment system with adaptive Mahalanobis covariance regime stability
+  tracking and proactive phase-transition mitigation — directly addresses the ONLY known mechanism
+  by which legitimate enrollment growth can silently invalidate tournament eligibility.
+
+Gap advancement summary:
+  separation_ratio: touchpad interperson separation 1.261 (N=11, diagonal+LOO). COV_MIN_RATIO=3.0
+    transition zone identified as tournament stability risk. Terminal touchpad probe sessions are the
+    only path to defensible separation; covariance regime stability is required to maintain ratio > 1.0
+    throughout enrollment growth.
+  w1_threshold: W1 enrollment_count_gate (WIF-012) OPEN; W1 covariance instability newly identified
+    as Phase 157 candidate. quorum homogeneity distinct operators BLOCK_QUORUM=0.67 preserved.
+  dry_run: dry_run=True enforcement preserved. live mode adjudication transition still blocked.
+  vhp_quorum: VHP soulbound mint ioSwarm MINT_QUORUM=0.80 quorum decentralized authorization preserved.
+
+ioSwarm: BLOCK_QUORUM=0.67, MINT_QUORUM=0.80.
+AdjudicationRegistry PoAd Phase 111. VAPIDualPrimitiveGate Phase 113.
+SeparationRatioRegistry SHA-256(ratio_str+N+players_sorted+ts_ns) Phase 153.
+IoSwarmConsensusAggregator; VAPISwarmOperatorGate; Phase 109 Phase 110 Phase 111 Phase 112 Phase 113.

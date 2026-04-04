@@ -414,6 +414,6 @@ When prioritizing work:
 
 **Document Version**: 1.2 (Phase 156)
 **Last Updated**: 2026-04-04
-**Update Trigger**: Phase 156 session — VAPI_AGENTS.md synced (agents #19-20 added); VAPI_SKILLS.md Skill 14 added; vapi.md 20-phase drift corrected; AutoResearch cycle 4 score=1.000
+**Update Trigger**: Phase 156 session — VAPI_AGENTS.md synced (agents #19-20 added); VAPI_SKILLS.md Skill 14 added; vapi.md 20-phase drift corrected; AutoResearch cycles 4-6 score=1.000
 **Update Method**: Manual edit, not AutoResearch (ground truth file)
-**AutoResearch Last Run**: 2026-04-04 (cycle 4, score=1.000; W1 enrollment_count_gate + W2 PoFC filed)
+**AutoResearch Last Run**: 2026-04-04 (cycle 6, score=1.000; W1 Class K GSR bypass + W2 PoHBG quadruple proof; W1 covariance regime instability + W2 adaptive probe sequencing filed as WIF-014–017)

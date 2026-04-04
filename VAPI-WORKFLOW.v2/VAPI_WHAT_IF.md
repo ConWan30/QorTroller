@@ -901,10 +901,37 @@ CONFIRMED / REJECTED
 
 ---
 
-**Document Version**: 1.2 (Phase 156)
+## WIF-014 — Class K Synthetic EDA Generator: Feature-Level Bypass of L7 GSR (Phase 158 candidate)
+
+**W1 — Failure mode**: Adversary injects synthetic EDA signals into the BLE GSR packet stream, producing plausible SCR morphology that passes all four L7 feature checks (sympathetic_arousal_index, gsr_game_event_correlation, baseline_conductance_drift, cognitive_load_variance). L7 advisory code 0x33 GSR_CORRELATION_ABSENT never fires because correlation IS present — with synthetic data.
+  Implication: Current 48-byte GSR packet format (magic 0x47535201) contains no HMAC field; BLE broadcast is unauthenticated. The Class K adversary is economically motivated (VHP mint → tournament entry). MockGSRGrip source code doubles as a Class K attack blueprint — $15 ESP32-S3 + BLE advertisement injection is sufficient.
+  Cryptographic grounding: No cryptographic commitment exists on the current GSR packet. Packet injection requires only BLE advertisement spoofing + knowledge of MockGSRGrip morphology parameters.
+  Mitigation (Phase 158): Extend GSR packet from 48B to 80B (+32B HMAC-SHA256). ESP32-S3 signs each batch with ATECC608A device private key. certLevel=2 in VAPIHardwareCertRegistry records HMAC public key. Bridge validates HMAC before L7 feature extraction; rejects unsigned packets with 0x33 advisory at WARNING.
+  **Status**: OPEN — Phase 158 candidate. Filed 2026-04-04 (AutoResearch cycle 5).
+
+**W2 — Hardware-Bound GSR Proof (PoHBG) as Fourth Composable Proof Primitive.**
+  Mechanism: PoHBG_hash = SHA-256(sorted_samples + ts_ns + device_pubkey_hash_bytes32). Composable quadruple: PoAC + PoAd + PoFC + PoHBG. Shifts GSR from advisory signal (0x33) to cryptographically hardware-bound proof. Phase 158, ~4h effort.
+  Exclusive because: requires certLevel=2 VAPIHardwareCertRegistry (Phase 99A LIVE) + GSRRegistryAgent (Phase 99B) + 20-agent fleet + PoAC + PoAd + PoFC. No competing gaming DePIN protocol has hardware-attested biometric composable proof.
+
+---
+
+## WIF-016 — Covariance Regime Instability at N~24 Transition Point (Phase 157 candidate)
+
+**W1 — Failure mode**: Legitimate touchpad_corners enrollment growth from N=11 to N=24 crosses Phase 142 COV_MIN_RATIO=3.0 threshold (N/p = 24/8 = 3.0), triggering silent covariance regime switch that collapses P1/P3 distance from 3.276 to ~0.127 — invalidating tournament eligibility without any fraudulent sessions.
+  Implication: get_separation_defensibility_status() re-evaluates dynamically. An N/p crossing event at N=24 causes defensible=True to flip to defensible=False with no visible root cause. Adversary exploit: capture 3 sessions targeting a competitor's enrollment, push their N/p to exactly 3.0, collapse their separation ratio.
+  Cryptographic grounding: Phase 153 SeparationRatioRegistry commits ratio on-chain at N=11. Live re-evaluation at N=24 disagrees — verifiable on-chain/off-chain inconsistency. Economically motivated: tournament exclusion of a competitor has direct prize-pool benefit.
+  Mitigation (Phase 157): COV_STABILITY_MARGIN_NP=0.5 check in get_separation_defensibility_status(); COVARIANCE_TRANSITION_WARNING flag; EnrollmentAutoGuidanceAgent urgency HIGH when in transition zone. Resolution: stay diagonal OR grow to N/p ≥ 5.0 (N ≥ 40/player).
+  **Status**: OPEN — Phase 157 candidate. Filed 2026-04-04 (AutoResearch cycle 6).
+
+**W2 — Adaptive Covariance-Aware Probe Sequencing in EnrollmentAutoGuidanceAgent.**
+  Mechanism: cov_regime_status field ("diagonal_stable" / "transition_warning" / "full_covariance_active"); recommended_action adapts to covariance transition zone. Prevents blind enrollment growth into instability zone. Phase 157, ~2h effort. First biometric enrollment system with Mahalanobis covariance-regime-aware enrollment sequencing.
+
+---
+
+**Document Version**: 1.3 (AutoResearch cycles 5-6, 2026-04-04)
 **Last Updated**: 2026-04-04
-**W1 Count**: 13 entries (added WIF-011 W1 CLOSED Phase 151, WIF-012 W1 OPEN Phase 157, WIF-013 W1 Phase 157)
-**W2 Count**: 10 entries (added WIF-011 W2, WIF-012 W2, WIF-013 W2)
+**W1 Count**: 15 entries (WIF-014 Class K GSR bypass; WIF-016 covariance regime instability)
+**W2 Count**: 12 entries (WIF-015 PoHBG quadruple proof; WIF-017 adaptive probe sequencing)
 **W3 Count**: 5 entries
 **Update Method**: Append-only, status updates inline
-**Key Phase 156 Updates**: WIF-011 CLOSED (Phase 151); WIF-012 OPEN count-gate (Phase 157); WIF-013 NEW PoFC triple-proof (Phase 157); AutoResearch cycle 4 score=1.000
+**Key Cycle 5-6 Updates**: WIF-014/015 Class K + PoHBG (Phase 158 candidates); WIF-016/017 covariance instability + adaptive sequencing (Phase 157 candidates); AutoResearch cycles 5-6 score=1.000

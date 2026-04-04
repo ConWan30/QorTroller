@@ -1,0 +1,90 @@
+CYCLE 5 PROPOSAL — Class K GSR Spoofer Threat Model + Hardware-Bound GSR Proof Architecture
+
+Gap targeted: class_k (Class K: GSR spoofer — synthetic EDA generator; currently undefined detection approach)
+
+Current state: GSR_ENABLED=false; N=0 GSR calibration sessions per player; 0x33 GSR_CORRELATION_ABSENT
+is advisory only, never hard gate. Class K attacker model exists in the security matrix but has no
+defined detection approach, no hardware anti-tamper specification, and no mitigation path beyond
+"future challenge-response" noted as open gap.
+
+Proposal: Formally specify Class K adversary model + Phase 99B+/Phase 158 detection architecture:
+  - Class K adversary uses synthetic EDA generator intercepting BLE GSR packet stream (48B magic
+    0x47535201 format) and injecting biologically plausible SCR signals (Butterworth-filtered,
+    baseline drift, peak-like structure at biologically valid inter-peak intervals).
+  - Gap: MockGSRGrip (scipy Butterworth + Gaussian SCR) and a sophisticated Class K synthetic EDA
+    generator produce signal morphologies that are indistinguishable at the feature-extraction level
+    (sympathetic_arousal_index, gsr_game_event_correlation, baseline_conductance_drift,
+    cognitive_load_variance). Feature-level detection alone cannot close Class K.
+  - Mitigation path: certLevel=2 hardware certification in VAPIHardwareCertRegistry (Phase 99A) must
+    require HMAC-SHA256 challenge-response at the BLE packet level. ESP32-S3 device private key signs
+    each GSR batch with a bridge-issued nonce. Synthetic EDA generators cannot forge HMAC without
+    device private key.
+
+Protocol invariants preserved throughout this proposal:
+  228 bytes PoAC wire format. SHA-256(raw[:164]) chain hash frozen. NOMINAL sessions only for stable
+  EMA track. L4 anomaly=7.009 continuity=5.367. Poseidon(8) ZK commitment. nPublic=5 public signals.
+  Epistemic consensus threshold 0.60 (Phase 98 W1 reference; Phase 147 raised to 0.65).
+  separation ratio 0.362 historical reference (N=74, free-form corpus). ratio > 1.0 TGE gate is
+  non-negotiable. GSR_ENABLED=false until N>=30 calibration sessions per player. L6B_ENABLED=false
+  until N>=50 neuromuscular calibration sessions. 0x33 GSR_CORRELATION_ABSENT: never hard gate,
+  always advisory only. soulbound VHP — all transfer functions revert. BLOCK_QUORUM=0.67 ioSwarm.
+  separation ratio 0.362 TOURNAMENT BLOCKER (free-form corpus). dry_run=True default enforcement.
+
+[WHAT_IF]
+W1 — Class K Synthetic EDA Generator Bypass: adversary intercepts the BLE GSR packet stream between
+  ESP32-S3 grip and bridge; injects pre-recorded or synthetically generated EDA signals with plausible
+  SCR morphology that passes all four L7 feature checks.
+  Implication: sympathetic_arousal_index is in normal human range (0.2–0.8); gsr_game_event_correlation
+  appears positive because injected SCR peaks are time-shifted to coincide with known game event latency
+  windows; baseline_conductance_drift shows plausible session-fatigue slope; cognitive_load_variance
+  produces valid inter-SCR interval variation. L7 advisory code 0x33 GSR_CORRELATION_ABSENT never
+  fires because correlation IS present — but with synthetic data, not physiological response. The
+  current MockGSRGrip(seed=42) design inadvertently defines the Class K attack surface: an adversary
+  with access to the MockGSRGrip source can replicate its signal characteristics exactly.
+  Cryptographic grounding: BLE advertisement is unauthenticated; current 48-byte GSR packet format
+  (magic 0x47535201 + arousal_millis + correlation_millis + ts_ns) contains no HMAC field. A synthetic
+  EDA generator with packet injection capability (BLE advertisement spoofing) is economically motivated
+  by VHP mint access — tournament entry + prize eligibility. Injecting plausible GSR signals requires
+  only a $15 ESP32-S3 and the open MockGSRGrip source as a reference implementation.
+  Mitigation: Phase 99B+ Class K Anti-Spoofing: extend GSR packet format to 80 bytes (48B original
+  + 32B HMAC-SHA256). ESP32-S3 firmware generates per-packet HMAC using device private key seeded
+  from ATECC608A secure element. certLevel=2 in VAPIHardwareCertRegistry stores HMAC public key.
+  Bridge validates HMAC on each GSR packet before L7 feature extraction; rejects unsigned packets
+  with 0x33 GSR_CORRELATION_ABSENT advisory at WARNING severity. Class K adversary cannot forge
+  HMAC without physical access to ATECC608A key material.
+
+W2 — Hardware-Bound GSR Proof (PoHBG) as Fourth Composable Proof Primitive:
+  Mechanism: ESP32-S3 signs each GSR sample batch with device private key: PoHBG_hash = SHA-256(
+  sorted_samples + ts_ns + device_pubkey_hash_bytes32). Bridge validates PoHBG against certLevel=2
+  pubkey registered in VAPIHardwareCertRegistry.sol. On-chain: VAPIGSRRegistry.recordSample gains
+  hmac_hash bytes32 field (non-breaking extension). Composable quadruple: PoAC (physiological,
+  228B, ECDSA-P256) + PoAd (adjudication, AdjudicationRegistry.sol) + PoFC (fleet consensus,
+  Phase 157 candidate) + PoHBG (hardware-bound GSR, Phase 158 candidate).
+  Phase candidate: Phase 158 — VAPIGSRRegistry.sol extension + ATECC608A firmware integration
+  + bridge GSR packet HMAC validation + certLevel=2 enforcement (~4h effort).
+  Exclusive to VAPI: requires intersection of: hardware certification registry (Phase 99A LIVE),
+  20-agent fleet with GSRRegistryAgent (Phase 99B), ESP32-S3 BLE grip pipeline, certLevel=2 registry
+  lookup in VAPIHardwareCertRegistry. No competing gaming DePIN protocol has hardware-bound biometric
+  proof composability at this depth. Class K gap closure is uniquely enabled by VAPI's DePIN
+  hardware certification stack.
+  Novel: shifts GSR from advisory signal (0x33 GSR_CORRELATION_ABSENT, purely software-based) to
+  cryptographically hardware-bound proof primitive — first hardware-attested physiological signal
+  in any gaming anti-cheat protocol.
+
+Gap advancement summary:
+  class_k: Class K GSR spoofer synthetic EDA adversary model formally specified; HMAC challenge-response
+    mitigation path defined; ATECC608A secure element binding described.
+  separation_ratio: touchpad separation 1.261 (N=11 thin, diagonal+LOO, Phase 143). Free-form 0.417
+    remains TOURNAMENT BLOCKER. Terminal touchpad probe sessions are the only path to defensible
+    separation above 1.0.
+  vhp_quorum: VHP mint ioSwarm MINT_QUORUM=0.80 quorum authorization preserved; decentralized hardware
+    certification via VAPIHardwareCertRegistry composability.
+  dry_run: dry_run=True enforcement; adjudication live mode transition blocked by tournament blockers.
+  w1_threshold: W1 enrollment_count_gate (WIF-012) OPEN; quorum homogeneity distinct operators
+    preserved per BLOCK_QUORUM=0.67.
+
+ioSwarm: BLOCK_QUORUM=0.67, MINT_QUORUM=0.80.
+AdjudicationRegistry PoAd anti-replay UNIQUE poadHash; Phase 111 LIVE.
+VAPIDualPrimitiveGate isDualEligible composability; Phase 113 LIVE.
+SeparationRatioRegistry SHA-256(ratio_str+N+players_sorted+ts_ns) commitment; Phase 153.
+IoSwarmConsensusAggregator; VAPISwarmOperatorGate; Phase 109-113 architecture.
