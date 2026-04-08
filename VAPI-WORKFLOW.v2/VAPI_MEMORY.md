@@ -28,6 +28,154 @@
 
 ## 1. Session Outcomes (Chronological, Newest First)
 
+### 2026-04-07: Phases 166-168 COMPLETE — Wiki Engine v3 + Bootstrap CI Integration
+
+**Phase 166** (mixed_biometric_probe + configurable defensibility gate):
+- `mixed_biometric_probe` added to STRUCTURED_PROBE_TYPES + _TERMINAL_CAL_ONLY_TYPES.
+- `min_separation_ratio:float=0.70` config replaces hardcoded 1.0 gate (hardware variance ceiling).
+- Bridge 1942->1950 +8; SDK 301->305 +4; Hardhat 468.
+
+**Phase 167** (Wiki Engine Integration Validation + 4 hardening mitigations):
+- 7 integration points validated: status/check/brief/agent_feed/sync_what_if/snapshot/phase_close.
+- 4 fixes: schema probe `_probe_db_schema()`; CLAUDE.md-first phase detection; OS file lock `_locked_append()`; EPISTEMIC regex extended to catch 0.60-0.64 range.
+- Bridge 1950 unchanged; SDK 305 unchanged.
+
+**Phase 168** (Bootstrap CI in separation_ratio_snapshots):
+- `separation_ratio_snapshots` +3 columns: ci_lower/ci_upper/n_bootstrap (idempotent ALTER TABLE).
+- `analyze_interperson_separation.py`: bootstrap CI computed BEFORE write_snapshot so CI persists in DB row.
+- `operator_api.py`: GET /agent/separation-defensibility-status +ci_lower/ci_upper/n_bootstrap.
+- `vapi_wiki_engine.py`: agent_feed fixed (was querying non-existent `stratified_estimate` column, now `bt_strat_ratio`); CI annotation in wiki page when n_bootstrap>0.
+- `SeparationRatioResult` +3 slots; `VAPISeparationStatus.get_status()` populates CI from API.
+- 8 bridge + 4 SDK tests. Bridge 1950->1958 +8; SDK 305->309 +4; Hardhat 468 unchanged.
+
+**Counts**: Bridge 1958 | SDK 309 | Hardhat 468 | Tools 122 | Agents 22
+
+---
+
+### 2026-04-05: Phase 165 COMPLETE — WIF-024 Post-Erasure Separation Ratio Recompute
+
+**Phase 165 implementation** (WIF-024 closure):
+- `anonymize_device_records()` gains `post_erasure_recompute:bool=False` parameter. When True: snapshots current separation ratio into `post_erasure_ratio_log` before erasure, sets `recompute_needed=1`, `ratio_after=NULL` (pending re-analysis via `analyze_interperson_separation.py`).
+- `post_erasure_ratio_log` table: device_id/n_anonymized/ratio_before/ratio_after/recompute_needed/triggered_by/consent_type/recompute_ts/created_at.
+- GET /agent/separation-defensibility-status: +`post_erasure_recomputed_at` field.
+- GET /agent/post-erasure-recompute-status (7 keys): consent_ledger_enabled/total_recomputes/pending_recomputes/latest_recompute_ts/latest_ratio_before/recompute_needed/timestamp.
+- Tool #122 `trigger_post_erasure_recompute` (input: device_id/dry_run); dry_run=True reads status only.
+- `PostErasureRecomputeResult` (6 slots) + `VAPIPostErasureRecompute` SDK; SDK_VERSION 3.0.0-phase165.
+- 8 bridge + 4 SDK tests. Bridge 1934→1942 +8; SDK 297→301 +4; Hardhat 468 unchanged. schema(165,"post_erasure_recompute"). WIF-024 CLOSED.
+
+**Session also completed** (same session):
+- CLAUDE.md compression: 182k → 76k chars (58.2% reduction, WIF-027 mitigation).
+- CLAUDE_HISTORY.md created (Phase 17-130 verbose blocks archived, 106k chars).
+- Memory scope audit: 2 stale files deleted (project_what_if_156.md, project_separation.md).
+- WIF-027 filed: Context Window Budget Exhaustion root cause of session disruptions.
+- Skill 14 Step 13 (Memory Scope Audit) added to VAPI_SKILLS.md v1.6.
+
+**Counts**: Bridge 1942 | SDK 301 | Hardhat 468 | Tools 122 | Agents 22
+
+---
+
+### 2026-04-05: Phases 157–164 COMPLETE — Privacy/Consent Infrastructure [BULK SYNC ENTRY]
+
+**Recovery note**: Claude session disconnect after Phase 164. Files synced via sync_vapi_workflow.py.
+
+**What was done** (8 phases, 2026-04-04 to 2026-04-05):
+- **Phase 157**: FleetConsensusSnapshotAgent (agent #21); WIF-012 dual-condition overall_ready gate (sessions_needed==0 AND defensible==True); WIF-016 cov_stability_check() regime labels (diagonal_stable/transition_warning/full_covariance_active); WIF-013 PoFC hash=SHA-256(sorted_verdicts+ratio+ts_ns); fleet_consensus_snapshot_log; cov_regime_status in enrollment guidance; Bridge 1877 SDK 269
+- **Phase 158**: Class K HMAC Validation (WIF-014) + PoHBG (WIF-015); validate_gsr_hmac() 80-byte HMAC-SHA256 frame auth; compute_pohbg_hash() SHA-256(device_id+pack); gsr_hmac_validation_log+pohbg_log; Tools #114+#115; Bridge 1886 SDK 273
+- **Phase 159**: BiometricPrivacyComplianceAgent (agent #22); BP-001 Temporal Biometric Decay TBD(t)=e^(-λt) λ=ln(2)/τ_half τ_half=90d; warning when mean_decay_factor<0.25; privacy_compliance_log; biometric_decay_warning bus event; Tool #116; Bridge 1894 SDK 277
+- **Phase 160**: Consent Ledger + Right-to-Erasure (BP-002 foundation); WIF-018: insert_separation_defensibility_log had no consent gate; WIF-019: ConsentLedgerAgent as composable privacy primitive; consent_ledger table + right_to_erasure_log; anonymize_device_records() GDPR Art.17 soft delete; Tools #117; consent_ledger_enabled=True; Bridge 1902 SDK 281
+- **Phase 161**: Consent Gate Enforcement; WIF-018 CLOSED: insert_validation_record calls _check_consent_gate(); gate fails open for unknown devices; WIF-020 CLOSED: anonymize_device_records() REDACTs ruling_validation_log.divergence_reason; consent_gate_violation_log; GET /agent/consent-gate-status; Tool #118; Bridge 1910 SDK 285
+- **Phase 162**: Consent-Aware Corpus Status (WIF-021 CLOSED); get_consent_corpus_coverage() returns active_consent_count/revoked_count/erasure_requested_count/consent_corpus_defensible; GET /agent/consent-aware-corpus-status; Tool #119; Bridge 1918 SDK 289
+- **Phase 163**: Consent-Bound Separation Hash (WIF-022 CLOSED); SHA-256 preimage extended to SHA-256(ratio_str+N+N_consented+players_sorted+ts_ns); n_consented binds active consent count atomically; compute_separation_ratio_commit_hash(); update_separation_ratio_registry_committed(); Tool #120; Bridge 1926 SDK 293
+- **Phase 164**: ConsentSnapshotAnchor (WIF-023 CLOSED); consent_snapshot_log table linked by commit_hash; insert_consent_snapshot() called atomically after every commit; get_consent_snapshot_delta() delta=positive when revocations occurred post-commit; revoked_since_commit = max(0, revoked_live - revoked_at_commit); GET /agent/consent-snapshot-delta; Tool #121; Bridge 1934 SDK 297
+
+**Key results**:
+- Agent fleet: 20→22 (FleetConsensusSnapshotAgent #21, BiometricPrivacyComplianceAgent #22)
+- WIFs 012–023: ALL CLOSED
+- consent_ledger_enabled=True (permanent)
+- Bridge: 1868→1934 (+66 tests over 8 phases)
+- SDK: 265→297 (+32 tests)
+- Hardhat: 468 (unchanged throughout)
+- All biometric privacy primitives BP-001 and BP-002 foundation now LIVE
+
+**What we learned**:
+- Session disconnect mid-phase causes VAPI-WORKFLOW.v2 drift; sync_vapi_workflow.py created as mitigation
+- consent_ledger_enabled=True is the new default state — all future phases must respect this
+- ConsentSnapshotDelta (Phase 164) reveals post-commit revocations but does not enforce invalidation — Phase 165 W1 candidate
+- VAPI mobile extension discussed as Phase 165 precursor to Phase 200; previous session disconnected before documenting Phase 165 spec
+
+**CORRECTION**: Agent #21 is FleetConsensusSnapshotAgent (Phase 157), agent #22 is BiometricPrivacyComplianceAgent (Phase 159).
+
+**Pattern identified** [PATTERN-013]:
+Context sync must run atomically with CLAUDE.md update:
+1. sync_vapi_workflow.py executed after every phase-completion CLAUDE.md write
+2. PostToolUse hook configured in settings.json as fallback
+3. Recovery script run at session start when drift detected (MEMORY.md session cadence)
+4. Never mark phase COMPLETE until sync confirms VAPI-WORKFLOW.v2 updated
+
+---
+
+### 2026-04-03: Phase 150 COMPLETE — Session Consistency Scoring + Defensibility Gate
+
+**What was done**:
+- **Phase 150**: WIF-010 formal closure — separation_defensibility_log table; `defensible=True` requires ALL players ≥ min_n=10 AND ratio > 1.0 AND all pairs > 1.0; current state: defensible=False (P1=3, P2=4, P3=4 all below min_n=10); GET /agent/separation-defensibility-status (6 keys); Tool #106; SeparationDefensibilityResult SDK; WIF-011 added (session type mixing integrity gap)
+- **Bridge**: 1808→1818 (+10), **SDK**: 237→241 (+4), **Hardhat**: 462 unchanged
+- Test pattern: avoided FastAPI 0.116.1 TestClient incompatibility by replicating endpoint response logic inline (not via create_operator_app) — see test_phase150_separation_defensibility.py TestSeparationDefensibilityEndpoint
+
+**Key results**:
+- WIF-010 closed: System now formally tracks that touchpad_corners N=11 is legally thin; operators get explicit defensible=False transparency
+- WIF-011 opened: session_type="all" insertion could conflate incomparable ratios; default API specifies session_type="touchpad_corners" explicitly
+- SDK version bumped to 3.0.0-phase150 (required updating test_phase148_acim_sdk.py + test_phase85_tournament_sdk.py version assertions)
+
+**What we learned**:
+- FastAPI 0.116.1 breaks create_operator_app entirely (on_startup keyword removed from Router.__init__); all TestClient-based endpoint tests fail in this environment — use direct response-logic replication instead
+- SDK class attributes: VAPISeparationDefensibility stores `_base` and `_key` (not `_base_url`/`_api_key`) — test must match actual attribute names, not assumed names
+- Config class name is `Config` (not `VAPIBridgeConfig`); import as `from bridge.vapi_bridge.config import Config`
+
+### 2026-04-03: Phases 137–149 COMPLETE — Corpus Analysis + ACIM + MCP [BULK ENTRY]
+
+**What was done** (13 phases, 2026-03-29 to 2026-04-03):
+- **Phase 137A**: --balance-corpus flag; WIF-007 confirmed: balanced_ratio=1.611 (n=3/player) vs pooled=0.417 — P1 imbalance confirmed
+- **Phase 137B**: --session-type touchpad_corners filter; touchpad_corners pre-merge ratio=1.469 (4-player)
+- **Phase 138**: P4→P3 corpus merge (P4 confirmed same person as P3); clean 3-player touchpad_corners ratio=1.552 (full Tikhonov)
+- **Phase 139**: Analysis fast-path — _TERMINAL_CAL_ONLY_TYPES; skips 74 hw_* sessions; 120s→<30s runtime
+- **Phase 140**: --probe-comparison (corners/freeform/swipes); ALL above 1.0: corners=1.552, freeform=1.270, swipes=1.032
+- **Phase 141**: --per-pair-attribution; KEY FINDING: P1 vs P3 diagonal=3.925 >> full=0.127 → suppression_ratio=0.032 (97%!) — covariance noise artifact, NOT true similarity
+- **Phase 142**: COV_MIN_RATIO=3.0 auto-fallback; when N/p < 3.0 → diagonal covariance; prevents off-diagonal noise suppression
+- **Phase 143**: Proper LOO classification; each test session's centroid recomputed WITHOUT that session; honest 63.6% (7/11); CURRENT BEST ratio=1.261 (diagonal+LOO)
+- **Phase 144**: --player-quality-report; per-player enrollment stability/probe-type/enrollment-ready (P1/P2/P3 all NOT READY at N<10/player)
+- **Phase 147**: Epistemic threshold hardening; 0.60→0.65; triage_prereq_required=True; closes Phase 98 W1
+- **Phase 148**: AgentCalibrationIntegrityMonitor (ACIM, agent #18); 16 self-tests every 15 min; mcp_server.py (6 MCP resources, disabled by default)
+- **Phase 149**: Calibration staleness fixes; hardcoded values replaced with DB reads; Phase 148 docstrings
+
+**Key results**:
+- Separation ratio: **1.261** (touchpad_corners, diagonal+LOO, Phase 143) — ABOVE 1.0 tournament gate
+- Classification: 63.6% (7/11) — honest LOO estimate
+- Bridge: 1734→1808 (+74 tests across 13 phases)
+- SDK: 233→237 (+4)
+- Hardhat: 462 (unchanged)
+- Agent fleet: 16→18 (+ACIM)
+
+**What we learned**:
+- Free-form gameplay cannot reach separation ratio >1.0 — plateau confirmed at ~0.417
+- Structured touchpad probe (touchpad_corners) is the ONLY path to >1.0
+- Full Tikhonov covariance with N=11 is unstable — diagonal is correct for small-N touchpad corpus
+- P1/P3 confusion is covariance noise artifact, NOT true biometric similarity (97% suppression)
+- Proper LOO (Phase 143) is the honest estimate; biased centroid inflates to 72.7%
+- MCP servers need restart to activate — write to settings.json is not hot-reload
+- VAPI-WORKFLOW.v2 files drifted 13 phases — added bulk sync session (2026-04-03)
+
+**CORRECTION**: Agent #17 ControllerHardwareIntelligenceAgent remains DESIGN ONLY. Phase 148 introduced Agent #18 (ACIM), not #17.
+
+**Pattern identified** [PATTERN-012]:
+Touchpad separation analysis must:
+1. Use --session-type touchpad_corners to isolate structured probe sessions
+2. Apply diagonal covariance when N/p < 3.0 (Phase 142 auto-fallback)
+3. Use proper LOO (Phase 143) — biased centroid overstates accuracy
+4. Require ≥10 sessions/player for enrollment quality gate (Phase 144)
+5. Report per-pair attribution (Phase 141) to distinguish true separation from covariance noise
+
+---
+
 ### 2026-03-29: Phase 136 COMPLETE — DualSense Audio Passthrough Router [DONE]
 
 **What was done**:
@@ -451,7 +599,7 @@ Based on accumulated learning:
 
 ---
 
-**Document Version**: 1.0 (Phase 135)
-**Last Updated**: 2026-03-29
+**Document Version**: 1.1 (Phase 149)
+**Last Updated**: 2026-04-03
 **Update Method**: Append-only, manual edit after significant sessions
 **Retention**: All entries preserved indefinitely

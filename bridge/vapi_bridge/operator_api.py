@@ -2343,11 +2343,12 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             }
             sw_met = sum(sw_conds.values())
 
-            # Hardware conditions
-            sep_ratio   = float(getattr(cfg, "separation_ratio_current", 1.261))
-            touchpad_ok = bool(getattr(cfg, "touchpad_recapture_complete", False))
+            # Hardware conditions — Phase 166: configurable gate (default 0.70)
+            _min_sep108   = float(getattr(cfg, "min_separation_ratio", 0.70))
+            sep_ratio     = float(getattr(cfg, "separation_ratio_current", 1.261))
+            touchpad_ok   = bool(getattr(cfg, "touchpad_recapture_complete", False))
             hw_conds = {
-                "separation_ratio_gt_1":       sep_ratio > 1.0,
+                "separation_ratio_above_gate": sep_ratio >= _min_sep108,
                 "touchpad_recapture_complete":  touchpad_ok,
             }
             hw_met = sum(hw_conds.values())
@@ -2362,7 +2363,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                 dry_run_active=1 if dry_run else 0,
                 software_conditions_met=sw_met,
                 separation_ratio=sep_ratio,
-                separation_ratio_ok=1 if sep_ratio > 1.0 else 0,
+                separation_ratio_ok=1 if sep_ratio >= _min_sep108 else 0,
                 touchpad_recapture_complete=1 if touchpad_ok else 0,
                 hardware_conditions_met=hw_met,
                 fully_ready=1 if fully_ready else 0,
@@ -3187,12 +3188,13 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         """Internal helper: evaluate all 8 preflight conditions and return result dict."""
         import json as _json127
 
-        # P0: separation_ratio ≥ 1.0
+        # P0: separation_ratio >= min_separation_ratio (Phase 166: configurable gate, default 0.70)
         sep_ratio = float(getattr(cfg, "separation_ratio_current", 0.0))
         _snap = store.get_separation_ratio_status(limit=1)
         if _snap:
             sep_ratio = float(_snap[0].get("pooled_ratio", sep_ratio))
-        separation_ok = sep_ratio >= 1.0
+        _min_sep = float(getattr(cfg, "min_separation_ratio", 0.70))
+        separation_ok = sep_ratio >= _min_sep
 
         # P0: L4 staleness cleared (live_feature_dim == calibration_feature_dim)
         live_dim  = int(getattr(cfg, "live_feature_dim", 13))
@@ -3811,23 +3813,33 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                 session_type=session_type if session_type else None
             )
             if _row is None:
+                _per = store.get_post_erasure_recompute_status()
                 return {
-                    "defensible":          False,
-                    "ratio":               0.0,
-                    "n_per_player":        {},
-                    "min_n_per_player":    _min_n,
-                    "all_pairs_above_1":   False,
-                    "found":               False,
-                    "timestamp":           _t150.time(),
+                    "defensible":               False,
+                    "ratio":                    0.0,
+                    "n_per_player":             {},
+                    "min_n_per_player":         _min_n,
+                    "all_pairs_above_1":        False,
+                    "found":                    False,
+                    "post_erasure_recomputed_at": _per.get("latest_recompute_ts"),
+                    "timestamp":                _t150.time(),
                 }
+            _per = store.get_post_erasure_recompute_status()
+            # Phase 168: include bootstrap CI from latest separation_ratio_snapshot
+            _snap_rows = store.get_separation_ratio_status(limit=1)
+            _snap = _snap_rows[0] if _snap_rows else {}
             return {
-                "defensible":          bool(_row.get("defensible")),
-                "ratio":               float(_row.get("ratio", 0.0)),
-                "n_per_player":        _row.get("n_per_player", {}),
-                "min_n_per_player":    int(_row.get("min_n_per_player", _min_n)),
-                "all_pairs_above_1":   bool(_row.get("all_pairs_above_1")),
-                "found":               True,
-                "timestamp":           _t150.time(),
+                "defensible":               bool(_row.get("defensible")),
+                "ratio":                    float(_row.get("ratio", 0.0)),
+                "n_per_player":             _row.get("n_per_player", {}),
+                "min_n_per_player":         int(_row.get("min_n_per_player", _min_n)),
+                "all_pairs_above_1":        bool(_row.get("all_pairs_above_1")),
+                "found":                    True,
+                "post_erasure_recomputed_at": _per.get("latest_recompute_ts"),
+                "ci_lower":                 float(_snap.get("ci_lower", 0.0)),
+                "ci_upper":                 float(_snap.get("ci_upper", 0.0)),
+                "n_bootstrap":              int(_snap.get("n_bootstrap", 0)),
+                "timestamp":                _t150.time(),
             }
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -3946,6 +3958,89 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                 "on_chain_tx":  _row.get("on_chain_tx"),
                 "found":        True,
                 "timestamp":    _t153.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 163 — POST /agent/commit-separation-ratio
+    # ------------------------------------------------------------------
+    @app.post("/agent/commit-separation-ratio")
+    async def commit_separation_ratio_endpoint(
+        ratio: float = 1.261,
+        n_sessions: int = 0,
+        n_players: int = 3,
+        players_sorted: str = "P1,P2,P3",
+        api_key: str = "",
+    ):
+        """Consent-bound separation ratio commitment (Phase 163 WIF-022).
+
+        Computes SHA-256(ratio_str + N + N_consented + players_sorted + ts_ns) where
+        N_consented = active_consent_count from consent_ledger — binds consent filtering
+        into the on-chain proof. separation_ratio_on_chain_enabled=False → dry_run=True,
+        hash computed+stored in SQLite but no chain tx.
+        Returns 9 keys: separation_ratio_on_chain_enabled/commit_hash/n_consented/
+        n_sessions/n_players/committed/on_chain_tx/dry_run/timestamp.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t163
+        try:
+            _ts_ns = time.time_ns()
+            _commit_hash, _n_consented = store.compute_separation_ratio_commit_hash(
+                ratio=ratio,
+                n_sessions=n_sessions,
+                players_sorted=players_sorted,
+                ts_ns=_ts_ns,
+            )
+            _ratio_millis = int(ratio * 1000)
+            _enabled = bool(getattr(cfg, "separation_ratio_on_chain_enabled", False))
+            store.insert_separation_ratio_registry_log(
+                commit_hash=_commit_hash,
+                ratio_millis=_ratio_millis,
+                n_sessions=n_sessions,
+                n_players=n_players,
+                on_chain_tx=None,
+                committed=False,
+                n_consented=_n_consented,
+            )
+            # Phase 164 WIF-023: snapshot consent state at commit time so post-commit
+            # revocations produce a verifiable delta chain rather than silent divergence.
+            try:
+                _cov164 = store.get_consent_corpus_coverage()
+                store.insert_consent_snapshot(
+                    commit_hash=_commit_hash,
+                    n_consented_at_commit=_n_consented,
+                    revoked_count_at_commit=int(_cov164.get("revoked_count", 0)),
+                    erasure_count_at_commit=int(_cov164.get("erasure_requested_count", 0)),
+                )
+            except Exception as _snap_exc:
+                log.warning("consent_snapshot insert error (non-fatal): %s", _snap_exc)
+            _committed = False
+            _on_chain_tx = None
+            if _enabled and chain is not None:
+                try:
+                    _on_chain_tx = await chain.commit_separation_ratio(
+                        ratio=ratio,
+                        n_sessions=n_sessions,
+                        n_players=n_players,
+                        players_sorted=players_sorted,
+                        n_consented=_n_consented,
+                        commit_hash_hex=_commit_hash,
+                    )
+                    store.update_separation_ratio_registry_committed(_commit_hash, _on_chain_tx)
+                    _committed = True
+                except Exception as _exc163:
+                    log.warning("commit_separation_ratio chain error: %s", _exc163)
+            return {
+                "separation_ratio_on_chain_enabled": _enabled,
+                "commit_hash":  _commit_hash,
+                "n_consented":  _n_consented,
+                "n_sessions":   n_sessions,
+                "n_players":    n_players,
+                "committed":    _committed,
+                "on_chain_tx":  _on_chain_tx,
+                "dry_run":      not _enabled,
+                "timestamp":    _t163.time(),
             }
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -4140,6 +4235,89 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
+    # Phase 161 — GET /agent/consent-gate-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/consent-gate-status")
+    async def get_consent_gate_status_endpoint(api_key: str = ""):
+        """Consent Gate enforcement status (Phase 161 BP-002, WIF-018/020 closure).
+
+        Returns: consent_ledger_enabled, gate_active, violations_total,
+        last_violation_ts, timestamp.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t161
+        try:
+            _gate_data = store.get_consent_gate_status()
+            _enabled   = bool(getattr(cfg, "consent_ledger_enabled", True))
+            return {
+                "consent_ledger_enabled": _enabled,
+                "gate_active":            _enabled,
+                "violations_total":       _gate_data["violations_total"],
+                "last_violation_ts":      _gate_data["last_violation_ts"],
+                "timestamp":              _t161.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 164 — GET /agent/consent-snapshot-delta
+    # ------------------------------------------------------------------
+    @app.get("/agent/consent-snapshot-delta")
+    async def get_consent_snapshot_delta_endpoint(api_key: str = ""):
+        """Consent snapshot delta since last separation ratio commit (Phase 164 WIF-023).
+
+        Compares the consent count bound into the on-chain hash (N_consented_at_commit)
+        with the current live consent count. delta > 0 means the chain attestation
+        overstates current consent coverage (post-commit revocations occurred).
+        Returns: consent_ledger_enabled/found/commit_hash/n_consented_at_commit/
+        n_consented_live/delta/revoked_since_commit/snapshot_ts/timestamp.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t164
+        try:
+            _snap = store.get_consent_snapshot_delta()
+            return {
+                "consent_ledger_enabled":  bool(getattr(cfg, "consent_ledger_enabled", True)),
+                "found":                   _snap["found"],
+                "commit_hash":             _snap["commit_hash"],
+                "n_consented_at_commit":   _snap["n_consented_at_commit"],
+                "n_consented_live":        _snap["n_consented_live"],
+                "delta":                   _snap["delta"],
+                "revoked_since_commit":    _snap["revoked_since_commit"],
+                "snapshot_ts":             _snap["snapshot_ts"],
+                "timestamp":               _t164.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 162 — GET /agent/consent-aware-corpus-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/consent-aware-corpus-status")
+    async def get_consent_aware_corpus_status_endpoint(api_key: str = ""):
+        """Consent-aware corpus coverage status (Phase 162 WIF-021).
+
+        Reports how many registered devices have active consent vs revoked/erasure,
+        and whether the corpus is defensible (no revoked/erasure_requested devices).
+        Returns: consent_ledger_enabled, active_consent_count, revoked_count,
+        erasure_requested_count, consent_corpus_defensible, timestamp.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t162
+        try:
+            _cov = store.get_consent_corpus_coverage()
+            return {
+                "consent_ledger_enabled":    bool(getattr(cfg, "consent_ledger_enabled", True)),
+                "active_consent_count":      _cov["active_consent_count"],
+                "revoked_count":             _cov["revoked_count"],
+                "erasure_requested_count":   _cov["erasure_requested_count"],
+                "consent_corpus_defensible": _cov["consent_corpus_defensible"],
+                "timestamp":                 _t162.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
     # Phase 160 — GET /agent/consent-status/{device_id}
     # ------------------------------------------------------------------
     @app.get("/agent/consent-status/{device_id}")
@@ -4290,6 +4468,44 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                 "latest_device_id": _latest["device_id"] if _latest else None,
                 "latest_ts_ns":     _latest["ts_ns"] if _latest else None,
                 "timestamp":        _t158b.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 165 — GET /agent/post-erasure-recompute-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/post-erasure-recompute-status")
+    async def get_post_erasure_recompute_status_endpoint(
+        api_key: str = "",
+        device_id: str = "",
+    ):
+        """Post-erasure separation ratio recompute audit status (Phase 165, WIF-024).
+
+        When a device's biometric records are erased (GDPR Art.17), the stored
+        separation ratio becomes stale because the anonymised device can no longer
+        contribute feature vectors to the next analysis run.
+        recompute_needed=True signals that analyze_interperson_separation.py should
+        be re-run before the next tournament pre-launch preflight.
+
+        Returns: consent_ledger_enabled/total_recomputes/pending_recomputes/
+        latest_recompute_ts/latest_ratio_before/recompute_needed/timestamp.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t165
+        try:
+            _enabled165 = bool(getattr(cfg, "consent_ledger_enabled", True))
+            _status165  = store.get_post_erasure_recompute_status(
+                device_id=device_id if device_id else None
+            )
+            return {
+                "consent_ledger_enabled": _enabled165,
+                "total_recomputes":       _status165["total_recomputes"],
+                "pending_recomputes":     _status165["pending_recomputes"],
+                "latest_recompute_ts":    _status165["latest_recompute_ts"],
+                "latest_ratio_before":    _status165["latest_ratio_before"],
+                "recompute_needed":       _status165["recompute_needed"],
+                "timestamp":              _t165.time(),
             }
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc

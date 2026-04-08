@@ -78,7 +78,7 @@ for _d in [str(_CONTROLLER_DIR), str(_BRIDGE_DIR)]:
 # Protocol constants (PoAC spec — immutable)
 # ---------------------------------------------------------------------------
 
-SDK_VERSION       = "3.0.0-phase160"
+SDK_VERSION       = "3.0.0-phase166"
 POAC_RECORD_SIZE  = 228
 POAC_BODY_SIZE    = 164
 POAC_SIG_SIZE     = 64
@@ -2743,20 +2743,26 @@ class VAPIBTTransport:
 
 @dataclass(slots=True)
 class SeparationRatioResult:
-    """Biometric inter-person separation ratio status (Phase 121).
+    """Biometric inter-person separation ratio status (Phase 121/168).
 
-    pooled_ratio: measured across all sessions (currently 0.474).
+    pooled_ratio: measured across all sessions (currently 0.569, N=20, 2026-04-05).
     battery_stratified_ratio: same-battery pairwise estimate (-1.0 if unavailable).
     tournament_blocker: True when pooled_ratio < 1.0.
     gap_to_target: 1.0 - pooled_ratio (0.0 when tournament_ready=True).
     tournament_ready: True only when pooled_ratio >= 1.0.
+    ci_lower: bootstrap 95% CI lower bound (0.0 if not computed — pass --bootstrap-n 1000).
+    ci_upper: bootstrap 95% CI upper bound (0.0 if not computed).
+    n_bootstrap: number of bootstrap resamples used (0 = CI not available).
     """
     pooled_ratio:             float
     battery_stratified_ratio: float
     tournament_blocker:       bool
     gap_to_target:            float
     tournament_ready:         bool
-    error: "str | None" = None  # 6 slots total
+    ci_lower:                 float = 0.0
+    ci_upper:                 float = 0.0
+    n_bootstrap:              int   = 0
+    error: "str | None" = None  # 9 slots total
 
 
 class VAPISeparationStatus:
@@ -2791,6 +2797,9 @@ class VAPISeparationStatus:
                 tournament_blocker=bool(body.get("tournament_blocker", True)),
                 gap_to_target=float(body.get("gap_to_target", 1.0)),
                 tournament_ready=bool(body.get("tournament_ready", False)),
+                ci_lower=float(body.get("ci_lower", 0.0)),
+                ci_upper=float(body.get("ci_upper", 0.0)),
+                n_bootstrap=int(body.get("n_bootstrap", 0)),
             )
         except Exception as exc:
             return SeparationRatioResult(
@@ -2799,6 +2808,9 @@ class VAPISeparationStatus:
                 tournament_blocker=True,
                 gap_to_target=1.0,
                 tournament_ready=False,
+                ci_lower=0.0,
+                ci_upper=0.0,
+                n_bootstrap=0,
                 error=str(exc),
             )
 
@@ -4238,6 +4250,174 @@ class VAPIConsentLedger:
 
 
 @dataclass(slots=True)
+class ConsentGateResult:
+    """Phase 161 — BP-002 Consent Gate enforcement status."""
+    consent_ledger_enabled: bool
+    gate_active:            bool
+    violations_total:       int
+    last_violation_ts:      float | None
+    error:                  str | None
+
+
+class VAPIConsentGate:
+    """Phase 161 — GET /agent/consent-gate-status.  Never raises.
+
+    Tracks consent gate enforcement (WIF-018/020 closure).
+    Gate blocks insert_validation_record for devices with revoked consent.
+    Gate fails open for unknown devices (no consent record = allowed).
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_gate_status(self) -> ConsentGateResult:
+        """Return BP-002 consent gate enforcement status.  Never raises."""
+        import urllib.request, urllib.parse, json as _json
+        try:
+            _params = urllib.parse.urlencode({"api_key": self._key})
+            req = urllib.request.Request(
+                f"{self._base}/agent/consent-gate-status?{_params}",
+                headers={"X-API-Key": self._key},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = _json.loads(resp.read())
+            return ConsentGateResult(
+                consent_ledger_enabled = bool(data.get("consent_ledger_enabled", False)),
+                gate_active            = bool(data.get("gate_active", False)),
+                violations_total       = int(data.get("violations_total", 0)),
+                last_violation_ts      = data.get("last_violation_ts"),
+                error                  = None,
+            )
+        except Exception as exc:
+            return ConsentGateResult(
+                consent_ledger_enabled = False,
+                gate_active            = False,
+                violations_total       = 0,
+                last_violation_ts      = None,
+                error                  = str(exc),
+            )
+
+
+@dataclass(slots=True)
+class SeparationRatioCommitResult:
+    """Phase 163 — WIF-022 Consent-Bound Separation Ratio Commitment result."""
+    committed:    bool
+    commit_hash:  str
+    n_consented:  int
+    n_sessions:   int
+    n_players:    int
+    dry_run:      bool
+    error:        str | None
+
+
+class VAPISeparationRatioCommit:
+    """Phase 163 — POST /agent/commit-separation-ratio.  Never raises.
+
+    Commits a consent-bound separation ratio: SHA-256 preimage includes N_consented,
+    so the on-chain proof cryptographically asserts consent-filtered corpus (WIF-022).
+    separation_ratio_on_chain_enabled=False → dry_run=True (hash stored, no chain tx).
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def commit(
+        self,
+        ratio: float,
+        n_sessions: int,
+        n_players: int,
+        players_sorted: str,
+    ) -> SeparationRatioCommitResult:
+        """Commit consent-bound ratio.  Never raises."""
+        import urllib.request, urllib.parse, json as _json
+        try:
+            _params = urllib.parse.urlencode({
+                "api_key":       self._key,
+                "ratio":         ratio,
+                "n_sessions":    n_sessions,
+                "n_players":     n_players,
+                "players_sorted": players_sorted,
+            })
+            req = urllib.request.Request(
+                f"{self._base}/agent/commit-separation-ratio?{_params}",
+                data=b"",
+                method="POST",
+                headers={"X-API-Key": self._key},
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                data = _json.loads(resp.read())
+            return SeparationRatioCommitResult(
+                committed   = bool(data.get("committed", False)),
+                commit_hash = str(data.get("commit_hash", "")),
+                n_consented = int(data.get("n_consented", 0)),
+                n_sessions  = int(data.get("n_sessions", 0)),
+                n_players   = int(data.get("n_players", 0)),
+                dry_run     = bool(data.get("dry_run", True)),
+                error       = None,
+            )
+        except Exception as exc:
+            return SeparationRatioCommitResult(
+                committed=False, commit_hash="", n_consented=0,
+                n_sessions=0, n_players=0, dry_run=True, error=str(exc),
+            )
+
+
+@dataclass(slots=True)
+class ConsentAwareCorpusResult:
+    """Phase 162 — WIF-021 Consent-Aware Corpus coverage status."""
+    consent_ledger_enabled:    bool
+    active_consent_count:      int
+    revoked_count:             int
+    erasure_requested_count:   int
+    consent_corpus_defensible: bool
+    error:                     str | None
+
+
+class VAPIConsentAwareCorpus:
+    """Phase 162 — GET /agent/consent-aware-corpus-status.  Never raises.
+
+    Reports whether the separation-ratio corpus is free of revoked/erasure devices
+    (WIF-021 closure).  A defensible corpus is required for legally valid on-chain
+    ratio commitment in SeparationRatioRegistry.sol.
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_corpus_status(self) -> ConsentAwareCorpusResult:
+        """Return WIF-021 consent-aware corpus status.  Never raises."""
+        import urllib.request, urllib.parse, json as _json
+        try:
+            _params = urllib.parse.urlencode({"api_key": self._key})
+            req = urllib.request.Request(
+                f"{self._base}/agent/consent-aware-corpus-status?{_params}",
+                headers={"X-API-Key": self._key},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = _json.loads(resp.read())
+            return ConsentAwareCorpusResult(
+                consent_ledger_enabled    = bool(data.get("consent_ledger_enabled", False)),
+                active_consent_count      = int(data.get("active_consent_count", 0)),
+                revoked_count             = int(data.get("revoked_count", 0)),
+                erasure_requested_count   = int(data.get("erasure_requested_count", 0)),
+                consent_corpus_defensible = bool(data.get("consent_corpus_defensible", False)),
+                error                     = None,
+            )
+        except Exception as exc:
+            return ConsentAwareCorpusResult(
+                consent_ledger_enabled    = False,
+                active_consent_count      = 0,
+                revoked_count             = 0,
+                erasure_requested_count   = 0,
+                consent_corpus_defensible = False,
+                error                     = str(exc),
+            )
+
+
+@dataclass(slots=True)
 class GSRHMACValidationResult:
     """Phase 158 WIF-014 — Class K HMAC validation status result."""
     gsr_hmac_enabled:        bool
@@ -4343,6 +4523,58 @@ class VAPIPoHBG:
 
 
 @dataclass(slots=True)
+class ConsentSnapshotResult:
+    """Phase 164 WIF-023 — ConsentSnapshotAnchor delta result."""
+    commit_hash:            str | None
+    n_consented_at_commit:  int
+    n_consented_live:       int
+    delta:                  int
+    revoked_since_commit:   int
+    error:                  str | None
+
+
+class VAPIConsentSnapshotDelta:
+    """Read-only client for GET /agent/consent-snapshot-delta.  Never raises.
+
+    Returns the delta between the N_consented value bound into the on-chain
+    SHA-256 hash at the last separation ratio commit and the current live
+    consent count.  delta > 0 = chain attestation overstates current coverage.
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_delta(self) -> ConsentSnapshotResult:
+        import urllib.request, urllib.parse, json as _json
+        try:
+            _params = urllib.parse.urlencode({"api_key": self._key})
+            req = urllib.request.Request(
+                f"{self._base}/agent/consent-snapshot-delta?{_params}",
+                headers={"X-API-Key": self._key},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = _json.loads(resp.read())
+            return ConsentSnapshotResult(
+                commit_hash           = data.get("commit_hash"),
+                n_consented_at_commit = int(data.get("n_consented_at_commit", 0)),
+                n_consented_live      = int(data.get("n_consented_live", 0)),
+                delta                 = int(data.get("delta", 0)),
+                revoked_since_commit  = int(data.get("revoked_since_commit", 0)),
+                error                 = None,
+            )
+        except Exception as exc:
+            return ConsentSnapshotResult(
+                commit_hash           = None,
+                n_consented_at_commit = 0,
+                n_consented_live      = 0,
+                delta                 = 0,
+                revoked_since_commit  = 0,
+                error                 = str(exc),
+            )
+
+
+@dataclass(slots=True)
 class FleetConsensusSnapshotResult:
     fleet_consensus_enabled: bool
     total_snapshots:         int
@@ -4390,4 +4622,116 @@ class VAPIFleetConsensus:
                 latest_agent_count      = 0,
                 latest_separation_ratio = 0.0,
                 error                   = str(exc),
+            )
+
+
+@dataclass(slots=True)
+class PostErasureRecomputeResult:
+    """Phase 165 WIF-024 — Post-Erasure Separation Ratio Recompute audit result."""
+    consent_ledger_enabled: bool
+    total_recomputes:        int
+    pending_recomputes:      int
+    latest_recompute_ts:     "float | None"
+    recompute_needed:        bool
+    error:                   "str | None"
+
+
+class VAPIPostErasureRecompute:
+    """Read-only client for GET /agent/post-erasure-recompute-status.  Never raises.
+
+    When a device's biometric records are erased (GDPR Art.17), the stored
+    separation ratio becomes stale.  This client surfaces the audit trail so
+    operators know when analyze_interperson_separation.py must be re-run.
+    recompute_needed=True means at least one pending erasure has not yet been
+    reflected in a new separation analysis run.
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self, device_id: str = "") -> PostErasureRecomputeResult:
+        import urllib.request, urllib.parse, json as _json
+        try:
+            _params = urllib.parse.urlencode(
+                {k: v for k, v in {"api_key": self._key, "device_id": device_id}.items() if v}
+            )
+            req = urllib.request.Request(
+                f"{self._base}/agent/post-erasure-recompute-status?{_params}",
+                headers={"X-API-Key": self._key},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = _json.loads(resp.read())
+            return PostErasureRecomputeResult(
+                consent_ledger_enabled = bool(data.get("consent_ledger_enabled", True)),
+                total_recomputes       = int(data.get("total_recomputes", 0)),
+                pending_recomputes     = int(data.get("pending_recomputes", 0)),
+                latest_recompute_ts    = data.get("latest_recompute_ts"),
+                recompute_needed       = bool(data.get("recompute_needed", False)),
+                error                  = None,
+            )
+        except Exception as exc:
+            return PostErasureRecomputeResult(
+                consent_ledger_enabled = True,
+                total_recomputes       = 0,
+                pending_recomputes     = 0,
+                latest_recompute_ts    = None,
+                recompute_needed       = False,
+                error                  = str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Phase 166 — MixedProbeConfig + VAPIMixedProbeGate
+# mixed_biometric_probe: 2-min all-feature probe; configurable defensibility gate
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class MixedProbeGateResult:
+    """Result of GET /agent/enrollment-capture-guidance with Phase 166 gate."""
+    min_separation_ratio:  float
+    sessions_needed_total: int
+    overall_ready:         bool
+    mixed_probe_in_types:  bool
+    error:                 "str | None"
+
+
+class VAPIMixedProbeGate:
+    """Read-only client surfacing Phase 166 mixed_biometric_probe gate status.
+
+    Checks whether mixed_biometric_probe is included in the enrollment guidance
+    probe_types and exposes the configurable min_separation_ratio gate (default 0.70).
+    Never raises — returns error-default on any network or parse error.
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self) -> MixedProbeGateResult:
+        import urllib.request, urllib.parse, json as _json
+        try:
+            _params = urllib.parse.urlencode(
+                {k: v for k, v in {"api_key": self._key}.items() if v}
+            )
+            req = urllib.request.Request(
+                f"{self._base}/agent/enrollment-capture-guidance?{_params}",
+                headers={"X-API-Key": self._key},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = _json.loads(resp.read())
+            return MixedProbeGateResult(
+                min_separation_ratio  = float(data.get("min_separation_ratio", 0.70)),
+                sessions_needed_total = int(data.get("sessions_needed_total", 0)),
+                overall_ready         = bool(data.get("overall_ready", False)),
+                mixed_probe_in_types  = "mixed_biometric_probe" in data.get("probe_types", []),
+                error                 = None,
+            )
+        except Exception as exc:
+            return MixedProbeGateResult(
+                min_separation_ratio  = 0.70,
+                sessions_needed_total = 0,
+                overall_ready         = False,
+                mixed_probe_in_types  = False,
+                error                 = str(exc),
             )
