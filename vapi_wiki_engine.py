@@ -84,6 +84,7 @@ Usage:
 
 import hashlib
 import json
+import os
 import re
 import shutil
 import sqlite3
@@ -206,7 +207,8 @@ def check_invariants(text: str) -> tuple[bool, list[str]]:
         if "=false" not in low.replace(" ", ""):
             v.append("PERMANENT: auto_activate_on_breakthrough=False is a compile-time constant.")
 
-    if re.search(r"epistemic.{0,60}0\.[0-5]\d", low):
+    # Catch any threshold below 0.65 (covers 0.00–0.59 AND 0.60–0.64)
+    if re.search(r"epistemic.{0,60}(?:0\.[0-5]\d|0\.6[0-4])", low):
         v.append("EPISTEMIC: Threshold 0.65 (Phase 147). Cannot regress.")
 
     if re.search(r"separation_ratio\s*=\s*[\d.]+", text):
@@ -239,6 +241,33 @@ def append_file(path: Path, content: str):
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "a", encoding="utf-8") as f:
         f.write(content)
+
+def _locked_append(path: Path, content: str, retries: int = 8, delay: float = 0.15):
+    """
+    Append to path under a file lock (cross-platform, stdlib only).
+    Used for shared files like VAPI_WHAT_IF.md where concurrent sweep + agent
+    polls could race. Creates a .lock sentinel; retries if another process holds it.
+    """
+    import time
+    lock = path.with_suffix(".lock")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    for attempt in range(retries):
+        try:
+            fd = os.open(str(lock), os.O_CREAT | os.O_EXCL | os.O_RDWR)
+            os.close(fd)
+            break
+        except FileExistsError:
+            time.sleep(delay)
+    else:
+        # Lock not acquired after retries — append anyway (best-effort)
+        print(f"  [WARN] Could not acquire lock on {path.name} — appending without lock.")
+    try:
+        append_file(path, content)
+    finally:
+        try:
+            lock.unlink()
+        except FileNotFoundError:
+            pass
 
 def prov(phase: int, source: str, kind: str = "MEASURED") -> str:
     return f"[VAPI:Phase{phase}:{source}:{kind}]"
@@ -275,6 +304,21 @@ def db_query(sql: str, params=()) -> list[dict]:
         return []
     finally:
         conn.close()
+
+_AGENT15_REQUIRED_COLS = {"pooled_ratio", "stratified_estimate", "n_sessions", "created_at"}
+
+def _probe_db_schema() -> bool:
+    """Schema probe for separation_ratio_snapshots. Warns visibly on column drift."""
+    rows = db_query("PRAGMA table_info(separation_ratio_snapshots)")
+    if not rows:
+        return False  # table absent or DB offline
+    present = {r["name"] for r in rows}
+    missing = _AGENT15_REQUIRED_COLS - present
+    if missing:
+        print(f"  [WARN] Schema drift in separation_ratio_snapshots — missing columns: {missing}")
+        print(f"  [WARN] agent_feed will degrade. Re-run bridge to rebuild schema.")
+        return False
+    return True
 
 # ─────────────────────────────────────────────────────────────
 # INIT
@@ -429,6 +473,11 @@ def cmd_agent_feed():
     No API call. Pure SQLite read.
     """
     print("\n[AGENT_FEED] Reading Agent 15 (SeparationRatioMonitorAgent) data...")
+
+    # Schema probe — visible warning on column drift (mitigates silent degradation)
+    if DB_PATH.exists() and not _probe_db_schema():
+        print("  Skipping query — schema mismatch or table absent.")
+        return
 
     rows = db_query(
         "SELECT pooled_ratio, stratified_estimate, n_sessions, created_at, notes "
@@ -683,7 +732,7 @@ Regression: {ratio_impact.get('regression', False)}
 {provenance}
 """
 
-    append_file(what_if_path, entry)
+    _locked_append(what_if_path, entry)
 
     # Also write to wiki/what_if/ and AutoResearch corpus
     safe = re.sub(r"[^\w\-]", "_", failure_class.lower())
@@ -1103,7 +1152,25 @@ def cmd_status():
 # ─────────────────────────────────────────────────────────────
 
 def _detect_current_phase() -> int:
-    """Reads current phase from MEMORY.md."""
+    """
+    Detects current phase. Priority:
+      1. VAPI_PHASE env var (override for non-standard MEMORY.md formatting)
+      2. Regex parse of CLAUDE.md 'Current phase: Phase NNN' line
+      3. Regex parse of MEMORY.md
+      4. Default: 166
+    """
+    # 1. Env override
+    env_phase = os.environ.get("VAPI_PHASE")
+    if env_phase and env_phase.isdigit():
+        return int(env_phase)
+    # 2. CLAUDE.md is authoritative — parse "Current phase: Phase NNN"
+    claude_md = ROOT / "CLAUDE.md"
+    if claude_md.exists():
+        text = claude_md.read_text(encoding="utf-8", errors="ignore")
+        m = re.search(r"Current phase:\s*Phase\s*(\d{2,3})", text)
+        if m:
+            return int(m.group(1))
+    # 3. Fallback: MEMORY.md
     memory = read(CORPUS.get("memory", Path("MEMORY.md")))
     m = re.search(r"phase\s+(\d{2,3})", memory, re.IGNORECASE)
     return int(m.group(1)) if m else 166
