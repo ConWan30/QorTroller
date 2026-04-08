@@ -1053,6 +1053,121 @@ _TOOLS = [
             "required": [],
         },
     },
+    # Tool #123 — Phase 173
+    {
+        "name": "get_separation_ratio_recovery_status",
+        "description": (
+            "Phase 173 SeparationRatioRecoveryAgent status (agent #23). "
+            "Returns the latest recovery assessment: current separation ratio, "
+            "trend_velocity (dRatio/dSnapshot — negative means converging downward), "
+            "recovery_needed flag, and recommended action. "
+            "Recovery actions: STABLE (no action needed) | AGE_WEIGHTING (apply "
+            "--session-age-weight 30 flag to mitigate P1 temporal non-stationarity) | "
+            "P1_RE_ENROLLMENT (P1 biometric fingerprint drifting — re-capture >=10 fresh "
+            "touchpad_corners sessions) | MORE_SESSIONS (capture more structured probe data). "
+            "Returns: separation_recovery_enabled/current_ratio/trend_velocity/"
+            "n_snapshots_used/recovery_needed/recovery_action/recommendation/timestamp."
+        ),
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    # Tool #122 — Phase 165
+    {
+        "name": "trigger_post_erasure_recompute",
+        "description": (
+            "Phase 165 WIF-024 closure: trigger a post-erasure separation ratio recompute "
+            "audit for a device. When a device's biometric records are erased (GDPR Art.17), "
+            "the stored separation ratio becomes stale — this tool snapshots the current "
+            "ratio before erasure and writes to post_erasure_ratio_log, flagging that "
+            "analyze_interperson_separation.py must be re-run. "
+            "dry_run=True (default) returns current status without executing erasure. "
+            "dry_run=False calls anonymize_device_records(post_erasure_recompute=True). "
+            "Returns: consent_ledger_enabled/total_recomputes/pending_recomputes/"
+            "latest_recompute_ts/latest_ratio_before/recompute_needed/triggered/timestamp."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "device_id": {
+                    "type":        "string",
+                    "description": "Device ID to trigger post-erasure recompute for.",
+                },
+                "dry_run": {
+                    "type":        "boolean",
+                    "description": "When True (default), only reads status. When False, executes erasure+recompute.",
+                },
+            },
+            "required": [],
+        },
+    },
+    # Tool #121 — Phase 164
+    {
+        "name": "get_consent_snapshot_delta",
+        "description": (
+            "Return Phase 164 WIF-023 ConsentSnapshotAnchor delta. "
+            "Compares N_consented bound into the on-chain SHA-256 hash at the last "
+            "separation ratio commit against the current live consent count. "
+            "delta > 0 means the chain attestation overstates current consent coverage "
+            "(post-commit revocations occurred — GDPR Art.7(3) / Art.17(3)(e) exposure). "
+            "delta == 0 means consent state unchanged since commit. "
+            "Returns: consent_ledger_enabled/found/commit_hash/n_consented_at_commit/"
+            "n_consented_live/delta/revoked_since_commit/snapshot_ts/timestamp."
+        ),
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    # Tool #120 — Phase 163
+    {
+        "name": "commit_separation_ratio",
+        "description": (
+            "Phase 163 WIF-022 closure: commit a consent-bound separation ratio to "
+            "SeparationRatioRegistry.sol (or dry-run store when chain disabled). "
+            "commit_hash = SHA-256(ratio_str + N + N_consented + players_sorted + ts_ns). "
+            "N_consented = active_consent_count from consent_ledger — cryptographically binds "
+            "consent filtering into the on-chain proof. "
+            "separation_ratio_on_chain_enabled=False → dry_run=True, hash computed+stored in "
+            "SQLite but no chain tx. "
+            "Returns: committed/commit_hash/n_consented/n_sessions/n_players/on_chain_tx/"
+            "dry_run/separation_ratio_on_chain_enabled/timestamp."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "ratio":          {"type": "number",  "description": "Separation ratio (float)"},
+                "n_sessions":     {"type": "integer", "description": "Total sessions in corpus"},
+                "n_players":      {"type": "integer", "description": "Player count"},
+                "players_sorted": {"type": "string",  "description": "Comma-joined sorted player IDs"},
+            },
+            "required": ["ratio", "n_sessions", "n_players", "players_sorted"],
+        },
+    },
+    # Tool #119 — Phase 162
+    {
+        "name": "get_consent_aware_corpus_status",
+        "description": (
+            "Return Phase 162 Consent-Aware Corpus Status (WIF-021 closure). "
+            "Reports active_consent_count, revoked_count, erasure_requested_count, and "
+            "consent_corpus_defensible flag. A defensible corpus has zero revoked/erasure "
+            "devices — required for legally defensible on-chain separation ratio commitment. "
+            "WIF-021: consent-unaware corpus contamination from GDPR-revoked devices. "
+            "Returns: consent_ledger_enabled/active_consent_count/revoked_count/"
+            "erasure_requested_count/consent_corpus_defensible/timestamp."
+        ),
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    # Tool #118 — Phase 161
+    {
+        "name": "get_consent_gate_status",
+        "description": (
+            "Return Phase 161 Consent Gate enforcement status (BP-002 WIF-018/020 closure). "
+            "Reports violations_total, gate_active, last_violation_ts. "
+            "Gate blocks insert_validation_record for devices with revoked consent or "
+            "pending erasure_requested. Gate fails open for unknown devices (no consent "
+            "record = allowed). WIF-020: anonymize_device_records now covers "
+            "ruling_validation_log (GDPR Art.17 full closure). "
+            "Returns: consent_ledger_enabled, gate_active, violations_total, "
+            "last_violation_ts, timestamp."
+        ),
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
     # Tool #117 — Phase 160
     {
         "name": "get_consent_status",
@@ -3518,6 +3633,169 @@ class BridgeAgent:
                     "fleet_health": fleet,
                     "timestamp": _time.time(),
                 }
+
+            # Tool #123 — Phase 173
+            if name == "get_separation_ratio_recovery_status":
+                import time as _t173
+                try:
+                    _rows173   = self._store.get_separation_ratio_recovery_status(limit=1)
+                    _latest173 = _rows173[0] if _rows173 else {}
+                    return {
+                        "separation_recovery_enabled": getattr(self._cfg, "separation_recovery_enabled", True),
+                        "current_ratio":    float(_latest173.get("current_ratio",  0.0)),
+                        "trend_velocity":   float(_latest173.get("trend_velocity", 0.0)),
+                        "n_snapshots_used": int(_latest173.get("n_snapshots_used", 0)),
+                        "recovery_needed":  bool(_latest173.get("recovery_needed", False)),
+                        "recovery_action":  str(_latest173.get("recovery_action",  "STABLE")),
+                        "recommendation":   str(_latest173.get("recommendation",   "")),
+                        "timestamp":        _t173.time(),
+                    }
+                except Exception as _exc173:
+                    return {"error": str(_exc173), "timestamp": _t173.time()}
+
+            # Tool #122 — Phase 165
+            if name == "trigger_post_erasure_recompute":
+                import time as _t165
+                try:
+                    _dev165  = str(inputs.get("device_id", "")).strip()
+                    _dry165  = bool(inputs.get("dry_run", True))
+                    _triggered165 = False
+                    if _dev165 and not _dry165:
+                        self._store.anonymize_device_records(
+                            _dev165, post_erasure_recompute=True
+                        )
+                        _triggered165 = True
+                    _st165 = self._store.get_post_erasure_recompute_status(
+                        device_id=_dev165 if _dev165 else None
+                    )
+                    return {
+                        "consent_ledger_enabled": getattr(self._cfg, "consent_ledger_enabled", True),
+                        "total_recomputes":       _st165["total_recomputes"],
+                        "pending_recomputes":     _st165["pending_recomputes"],
+                        "latest_recompute_ts":    _st165["latest_recompute_ts"],
+                        "latest_ratio_before":    _st165["latest_ratio_before"],
+                        "recompute_needed":       _st165["recompute_needed"],
+                        "triggered":              _triggered165,
+                        "timestamp":              _t165.time(),
+                    }
+                except Exception as exc:
+                    return {
+                        "consent_ledger_enabled": True,
+                        "total_recomputes": 0, "pending_recomputes": 0,
+                        "latest_recompute_ts": None, "latest_ratio_before": None,
+                        "recompute_needed": False, "triggered": False,
+                        "timestamp": _t165.time(), "error": str(exc),
+                    }
+
+            # Tool #121 — Phase 164
+            if name == "get_consent_snapshot_delta":
+                import time as _t164
+                try:
+                    _snap164 = self._store.get_consent_snapshot_delta()
+                    return {
+                        "consent_ledger_enabled": getattr(self._cfg, "consent_ledger_enabled", True),
+                        "found":                  _snap164["found"],
+                        "commit_hash":            _snap164["commit_hash"],
+                        "n_consented_at_commit":  _snap164["n_consented_at_commit"],
+                        "n_consented_live":       _snap164["n_consented_live"],
+                        "delta":                  _snap164["delta"],
+                        "revoked_since_commit":   _snap164["revoked_since_commit"],
+                        "snapshot_ts":            _snap164["snapshot_ts"],
+                        "timestamp":              _t164.time(),
+                    }
+                except Exception as exc:
+                    return {
+                        "consent_ledger_enabled": True, "found": False,
+                        "commit_hash": None, "n_consented_at_commit": 0,
+                        "n_consented_live": 0, "delta": 0,
+                        "revoked_since_commit": 0, "snapshot_ts": None,
+                        "timestamp": _t164.time(), "error": str(exc),
+                    }
+
+            # Tool #120 — Phase 163
+            if name == "commit_separation_ratio":
+                import time as _t163, hashlib as _hl163
+                try:
+                    _ratio163  = float(inputs.get("ratio", 1.261))
+                    _n_sess163 = int(inputs.get("n_sessions", 0))
+                    _n_play163 = int(inputs.get("n_players", 3))
+                    _players163 = str(inputs.get("players_sorted", "P1,P2,P3"))
+                    _ts_ns163  = _t163.time_ns()
+                    _chash163, _n_cons163 = self._store.compute_separation_ratio_commit_hash(
+                        ratio=_ratio163,
+                        n_sessions=_n_sess163,
+                        players_sorted=_players163,
+                        ts_ns=_ts_ns163,
+                    )
+                    _enabled163 = getattr(self._cfg, "separation_ratio_on_chain_enabled", False)
+                    self._store.insert_separation_ratio_registry_log(
+                        commit_hash=_chash163,
+                        ratio_millis=int(_ratio163 * 1000),
+                        n_sessions=_n_sess163,
+                        n_players=_n_play163,
+                        on_chain_tx=None,
+                        committed=False,
+                        n_consented=_n_cons163,
+                    )
+                    return {
+                        "separation_ratio_on_chain_enabled": bool(_enabled163),
+                        "commit_hash":  _chash163,
+                        "n_consented":  _n_cons163,
+                        "n_sessions":   _n_sess163,
+                        "n_players":    _n_play163,
+                        "committed":    False,
+                        "on_chain_tx":  None,
+                        "dry_run":      not bool(_enabled163),
+                        "timestamp":    _t163.time(),
+                    }
+                except Exception as exc:
+                    return {
+                        "separation_ratio_on_chain_enabled": False,
+                        "commit_hash": "", "n_consented": 0,
+                        "n_sessions": 0, "n_players": 0,
+                        "committed": False, "on_chain_tx": None,
+                        "dry_run": True, "timestamp": _t163.time(), "error": str(exc),
+                    }
+
+            # Tool #119 — Phase 162
+            if name == "get_consent_aware_corpus_status":
+                import time as _t162
+                try:
+                    _cov162 = self._store.get_consent_corpus_coverage()
+                    return {
+                        "consent_ledger_enabled":    getattr(self._cfg, "consent_ledger_enabled", True),
+                        "active_consent_count":      _cov162["active_consent_count"],
+                        "revoked_count":             _cov162["revoked_count"],
+                        "erasure_requested_count":   _cov162["erasure_requested_count"],
+                        "consent_corpus_defensible": _cov162["consent_corpus_defensible"],
+                        "timestamp":                 _t162.time(),
+                    }
+                except Exception as exc:
+                    return {
+                        "consent_ledger_enabled": True,
+                        "active_consent_count": 0, "revoked_count": 0,
+                        "erasure_requested_count": 0, "consent_corpus_defensible": False,
+                        "timestamp": _t162.time(), "error": str(exc),
+                    }
+
+            # Tool #118 — Phase 161
+            if name == "get_consent_gate_status":
+                import time as _t161
+                try:
+                    _gdata161 = self._store.get_consent_gate_status()
+                    return {
+                        "consent_ledger_enabled": getattr(self._cfg, "consent_ledger_enabled", True),
+                        "gate_active":            getattr(self._cfg, "consent_ledger_enabled", True),
+                        "violations_total":       _gdata161["violations_total"],
+                        "last_violation_ts":      _gdata161["last_violation_ts"],
+                        "timestamp":              _t161.time(),
+                    }
+                except Exception as exc:
+                    return {
+                        "consent_ledger_enabled": True, "gate_active": False,
+                        "violations_total": 0, "last_violation_ts": None,
+                        "timestamp": _t161.time(), "error": str(exc),
+                    }
 
             # Tool #117 — Phase 160
             if name == "get_consent_status":

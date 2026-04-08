@@ -4735,3 +4735,76 @@ class VAPIMixedProbeGate:
                 mixed_probe_in_types  = False,
                 error                 = str(exc),
             )
+
+
+# ---------------------------------------------------------------------------
+# Phase 173 — SeparationRatioRecoveryAgent
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class SeparationRatioRecoveryResult:
+    """SeparationRatioRecoveryAgent status (Phase 173, agent #23).
+
+    Attributes:
+        separation_recovery_enabled: True when agent is active.
+        current_ratio:    Most recent pooled separation ratio (0.0 if none).
+        trend_velocity:   dRatio/dSnapshot — negative = converging downward.
+        recovery_needed:  True when ratio below gate OR trend strongly negative.
+        recovery_action:  STABLE | AGE_WEIGHTING | P1_RE_ENROLLMENT | MORE_SESSIONS.
+        recommendation:   Human-readable recovery guidance.
+        error:            Non-None on request failure.
+    """
+    separation_recovery_enabled: bool
+    current_ratio:    float
+    trend_velocity:   float
+    recovery_needed:  bool
+    recovery_action:  str
+    recommendation:   str
+    error: "str | None" = None
+
+
+class VAPISeparationRatioRecovery:
+    """SDK client for GET /agent/separation-ratio-recovery-status (Phase 173).
+
+    Example::
+
+        recovery = VAPISeparationRatioRecovery("http://localhost:8080", api_key)
+        result = recovery.get_status()
+        if result.recovery_needed:
+            print(f"Action: {result.recovery_action}")
+            print(result.recommendation)
+    """
+
+    def __init__(self, base_url: str, api_key: str) -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self) -> SeparationRatioRecoveryResult:
+        """Return the latest separation ratio recovery assessment.
+
+        On error: returns SeparationRatioRecoveryResult with error field set and
+        recovery_needed=False, recovery_action='STABLE'.
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/agent/separation-ratio-recovery-status?api_key={self._key}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return SeparationRatioRecoveryResult(
+                separation_recovery_enabled = bool(body.get("separation_recovery_enabled", True)),
+                current_ratio    = float(body.get("current_ratio",   0.0)),
+                trend_velocity   = float(body.get("trend_velocity",  0.0)),
+                recovery_needed  = bool(body.get("recovery_needed",  False)),
+                recovery_action  = str(body.get("recovery_action",   "STABLE")),
+                recommendation   = str(body.get("recommendation",    "")),
+            )
+        except Exception as exc:
+            return SeparationRatioRecoveryResult(
+                separation_recovery_enabled = True,
+                current_ratio    = 0.0,
+                trend_velocity   = 0.0,
+                recovery_needed  = False,
+                recovery_action  = "STABLE",
+                recommendation   = "",
+                error            = str(exc),
+            )

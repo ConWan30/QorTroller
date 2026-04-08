@@ -1640,6 +1640,27 @@ class Store:
                     )
                 except sqlite3.OperationalError:
                     pass  # Column already exists
+            # Phase 173: separation_ratio_recovery_log — SeparationRatioRecoveryAgent (agent #23).
+            # Detects P1 temporal non-stationarity (converging downward ratio trend) and
+            # recommends recovery actions (P1 re-enrollment, age weighting, more sessions).
+            # trend_velocity: dRatio/dSession — negative = converging downward (CRITICAL).
+            # recovery_action: STABLE | AGE_WEIGHTING | P1_RE_ENROLLMENT | MORE_SESSIONS.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS separation_ratio_recovery_log (
+                    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+                    current_ratio      REAL    NOT NULL DEFAULT 0.0,
+                    trend_velocity     REAL    NOT NULL DEFAULT 0.0,
+                    n_snapshots_used   INTEGER NOT NULL DEFAULT 0,
+                    recovery_needed    INTEGER NOT NULL DEFAULT 0,
+                    recovery_action    TEXT    NOT NULL DEFAULT 'STABLE',
+                    recommendation     TEXT    NOT NULL DEFAULT '',
+                    created_at         REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_sep_recovery_created
+                ON separation_ratio_recovery_log(created_at DESC)
+            """)
             # Phase 164: consent_snapshot_log — WIF-023 ConsentSnapshotAnchor.
             # Records consent coverage at every separation-ratio commit so that post-commit
             # revocations produce a verifiable delta chain rather than silent divergence.
@@ -1976,6 +1997,7 @@ class Store:
                 (164, "consent_snapshot"),
                 (165, "post_erasure_recompute"),
                 (168, "bootstrap_ci_separation_ratio"),
+                (173, "separation_ratio_recovery"),
             ]:
                 conn.execute(
                     "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
@@ -8279,3 +8301,59 @@ class Store:
             "revoked_since_commit":  revoked_since,
             "snapshot_ts":           d["snapshot_ts"],
         }
+
+    # --- Phase 173: SeparationRatioRecoveryAgent ---
+
+    def insert_separation_ratio_recovery_log(
+        self,
+        current_ratio: float,
+        trend_velocity: float,
+        n_snapshots_used: int,
+        recovery_needed: bool,
+        recovery_action: str,
+        recommendation: str,
+    ) -> int:
+        """Insert a separation ratio recovery assessment (Phase 173).
+
+        trend_velocity: dRatio/dSession — negative means converging downward.
+        recovery_action: one of STABLE | AGE_WEIGHTING | P1_RE_ENROLLMENT | MORE_SESSIONS.
+        """
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO separation_ratio_recovery_log "
+                "(current_ratio, trend_velocity, n_snapshots_used, recovery_needed, "
+                "recovery_action, recommendation, created_at) VALUES (?,?,?,?,?,?,?)",
+                (
+                    float(current_ratio),
+                    float(trend_velocity),
+                    int(n_snapshots_used),
+                    1 if recovery_needed else 0,
+                    str(recovery_action),
+                    str(recommendation),
+                    time.time(),
+                ),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def get_separation_ratio_recovery_status(self, limit: int = 1) -> "list[dict]":
+        """Return most recent recovery assessments, newest first (Phase 173)."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT id, current_ratio, trend_velocity, n_snapshots_used, "
+                "recovery_needed, recovery_action, recommendation, created_at "
+                "FROM separation_ratio_recovery_log ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [
+            {
+                "id":               r[0],
+                "current_ratio":    float(r[1]),
+                "trend_velocity":   float(r[2]),
+                "n_snapshots_used": int(r[3]),
+                "recovery_needed":  bool(r[4]),
+                "recovery_action":  r[5],
+                "recommendation":   r[6],
+                "created_at":       r[7],
+            }
+            for r in rows
+        ]
