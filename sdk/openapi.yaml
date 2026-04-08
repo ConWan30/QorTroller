@@ -2,7 +2,7 @@ openapi: "3.0.3"
 
 info:
   title: VAPI — Self-Verifying Integration SDK REST API
-  version: "3.0.0-phase160"
+  version: "3.0.0-phase165"
   description: |
     The VAPI REST API exposes Proof of Authentic Controller (PoAC) submission,
     on-chain verification, device PHCI certification, SDK self-attestation,
@@ -3221,6 +3221,130 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ControllerHardwareStatus"
+        "403":
+          description: Forbidden
+
+  /agent/consent-snapshot-delta:
+    get:
+      summary: Consent snapshot delta since last separation ratio commit — Phase 164 WIF-023
+      tags: [Agent]
+      description: >
+        Phase 164 WIF-023 ConsentSnapshotAnchor: compares N_consented bound into the on-chain
+        SHA-256 hash at the last separation ratio commit against the current live consent count.
+        delta > 0 = chain attestation overstates current consent coverage (post-commit revocations
+        occurred — GDPR Art.7(3) / Art.17(3)(e) exposure). delta == 0 = no divergence.
+      parameters:
+        - name: api_key
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Consent snapshot delta
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentSnapshotDelta'
+        "403":
+          description: Forbidden
+
+  /agent/post-erasure-recompute-status:
+    get:
+      summary: Post-erasure separation ratio recompute audit status — Phase 165 WIF-024
+      tags: [Agent]
+      description: >
+        Phase 165 WIF-024 closure: when a device's biometric records are erased (GDPR Art.17),
+        the stored separation ratio becomes stale because the anonymised device can no longer
+        contribute feature vectors to the next analysis run.  recompute_needed=True signals
+        that analyze_interperson_separation.py should be re-run before the next tournament
+        pre-launch preflight.  Pairs with Tool #122 trigger_post_erasure_recompute.
+      parameters:
+        - {name: api_key,   in: query, schema: {type: string}, required: false}
+        - {name: device_id, in: query, schema: {type: string}, required: false}
+      responses:
+        "200":
+          description: Post-erasure recompute audit status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PostErasureRecomputeStatus'
+        "403":
+          description: Forbidden
+
+  /agent/commit-separation-ratio:
+    post:
+      summary: Consent-bound separation ratio commitment — Phase 163 WIF-022
+      tags: [Agent]
+      description: >
+        Phase 163 WIF-022 closure: computes SHA-256(ratio_str + N + N_consented +
+        players_sorted + ts_ns) and optionally anchors to SeparationRatioRegistry.sol.
+        N_consented = active_consent_count from consent_ledger — cryptographic proof
+        that ratio was computed over consent-filtered data only.
+        separation_ratio_on_chain_enabled=False → dry_run=True (hash stored, no chain tx).
+      parameters:
+        - {name: api_key,        in: query, schema: {type: string},  required: false}
+        - {name: ratio,          in: query, schema: {type: number},  required: false}
+        - {name: n_sessions,     in: query, schema: {type: integer}, required: false}
+        - {name: n_players,      in: query, schema: {type: integer}, required: false}
+        - {name: players_sorted, in: query, schema: {type: string},  required: false}
+      responses:
+        "200":
+          description: Consent-bound ratio commit result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeparationRatioCommitResult'
+        "403":
+          description: Forbidden
+
+  /agent/consent-aware-corpus-status:
+    get:
+      summary: Consent-Aware Corpus coverage status — Phase 162 WIF-021
+      tags: [Agent]
+      description: >
+        Phase 162 WIF-021 closure: reports whether the biometric separation-ratio corpus
+        is free of revoked/erasure_requested devices. consent_corpus_defensible=True only
+        when all registered devices have active consent (no revoked, no erasure_requested).
+        Required for legally defensible on-chain ratio commitment in SeparationRatioRegistry.sol.
+      parameters:
+        - name: api_key
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Consent-Aware Corpus coverage status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentAwareCorpusStatus'
+        "403":
+          description: Forbidden
+
+  /agent/consent-gate-status:
+    get:
+      summary: Consent Gate enforcement status — Phase 161 BP-002
+      tags: [Agent]
+      description: >
+        Phase 161 Consent Gate enforcement (WIF-018/020 closure): reports violations_total,
+        gate_active, last_violation_ts. Gate blocks insert_validation_record for devices with
+        revoked consent or pending erasure_requested. Fails open for unknown devices.
+        WIF-020: anonymize_device_records now covers ruling_validation_log (GDPR Art.17 full closure).
+      parameters:
+        - name: api_key
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Consent Gate enforcement status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsentGateStatus'
         "403":
           description: Forbidden
 
@@ -7556,7 +7680,7 @@ components:
 
     SeparationRatioStatus:
       type: object
-      description: "Phase 121 biometric inter-person separation ratio status (tournament blocker tracker)"
+      description: "Phase 121/168 biometric inter-person separation ratio status (tournament blocker tracker; Phase 168 adds bootstrap CI)"
       properties:
         pooled_ratio:
           type: number
@@ -7570,6 +7694,15 @@ components:
           type: number
         tournament_ready:
           type: boolean
+        ci_lower:
+          type: number
+          description: "Bootstrap 95% CI lower bound (0.0 when n_bootstrap=0)"
+        ci_upper:
+          type: number
+          description: "Bootstrap 95% CI upper bound (0.0 when n_bootstrap=0)"
+        n_bootstrap:
+          type: integer
+          description: "Number of bootstrap resamples used to compute CI (0 when not run)"
         timestamp:
           type: number
 
@@ -8275,6 +8408,145 @@ webhooks:
           type: string
           enum: [diagonal_stable, transition_warning, full_covariance_active, unknown]
           description: "Phase 157 WIF-016: covariance regime stability classification"
+        timestamp:
+          type: number
+          description: "Unix timestamp of response"
+
+    ConsentSnapshotDelta:
+      type: object
+      description: "Phase 164 WIF-023 — ConsentSnapshotAnchor delta between commit-time and live consent state"
+      properties:
+        consent_ledger_enabled:
+          type: boolean
+          description: "True when Consent Ledger is active"
+        found:
+          type: boolean
+          description: "True when at least one consent snapshot exists"
+        commit_hash:
+          type: string
+          nullable: true
+          description: "SHA-256 commit hash from the most recent separation ratio commit"
+        n_consented_at_commit:
+          type: integer
+          description: "Active consent count bound into the on-chain hash at commit time"
+        n_consented_live:
+          type: integer
+          description: "Current live active consent count from consent_ledger"
+        delta:
+          type: integer
+          description: "n_consented_at_commit - n_consented_live; positive means chain overstates coverage"
+        revoked_since_commit:
+          type: integer
+          description: "Number of devices that revoked consent after the last commit"
+        snapshot_ts:
+          type: number
+          nullable: true
+          description: "Unix timestamp when the consent snapshot was recorded"
+        timestamp:
+          type: number
+          description: "Unix timestamp of response"
+
+    PostErasureRecomputeStatus:
+      type: object
+      description: "Phase 165 WIF-024 — Post-Erasure Separation Ratio Recompute audit status"
+      properties:
+        consent_ledger_enabled:
+          type: boolean
+          description: "True when Consent Ledger is active"
+        total_recomputes:
+          type: integer
+          description: "Total erasures logged to post_erasure_ratio_log"
+        pending_recomputes:
+          type: integer
+          description: "Erasures where ratio_after is NULL — ratio recompute not yet performed"
+        latest_recompute_ts:
+          type: number
+          nullable: true
+          description: "Unix timestamp of most recent post-erasure recompute log entry"
+        latest_ratio_before:
+          type: number
+          nullable: true
+          description: "Separation ratio snapshotted immediately before most recent erasure"
+        recompute_needed:
+          type: boolean
+          description: "True when pending_recomputes > 0 — run analyze_interperson_separation.py"
+        timestamp:
+          type: number
+          description: "Unix timestamp of response"
+
+    SeparationRatioCommitResult:
+      type: object
+      description: "Phase 163 WIF-022 Consent-Bound Separation Ratio Commitment result"
+      properties:
+        separation_ratio_on_chain_enabled:
+          type: boolean
+          description: "True when on-chain anchoring is active"
+        commit_hash:
+          type: string
+          description: "SHA-256 hex of consent-bound preimage (ratio+N+N_consented+players+ts)"
+        n_consented:
+          type: integer
+          description: "Active consent count bound into hash at commit time"
+        n_sessions:
+          type: integer
+          description: "Total sessions in corpus at commit time"
+        n_players:
+          type: integer
+          description: "Player count"
+        committed:
+          type: boolean
+          description: "True if chain tx confirmed"
+        on_chain_tx:
+          type: string
+          nullable: true
+          description: "Transaction hash if committed on-chain"
+        dry_run:
+          type: boolean
+          description: "True when separation_ratio_on_chain_enabled=False"
+        timestamp:
+          type: number
+          description: "Unix timestamp of response"
+
+    ConsentAwareCorpusStatus:
+      type: object
+      description: "Phase 162 WIF-021 Consent-Aware Corpus coverage status"
+      properties:
+        consent_ledger_enabled:
+          type: boolean
+          description: "True when Consent Ledger is active"
+        active_consent_count:
+          type: integer
+          description: "Number of devices with active consent (consent_given=1, revoked=0, erasure_requested=0)"
+        revoked_count:
+          type: integer
+          description: "Number of devices with revoked consent"
+        erasure_requested_count:
+          type: integer
+          description: "Number of devices with pending GDPR Art.17 erasure request"
+        consent_corpus_defensible:
+          type: boolean
+          description: "True when corpus has zero revoked/erasure devices — required for on-chain ratio commitment"
+        timestamp:
+          type: number
+          description: "Unix timestamp of response"
+
+    ConsentGateStatus:
+      type: object
+      description: "Phase 161 BP-002 Consent Gate enforcement status (WIF-018/020 closure)"
+      properties:
+        consent_ledger_enabled:
+          type: boolean
+          description: "True when Consent Ledger is active"
+        gate_active:
+          type: boolean
+          description: "True when gate enforcement is active (= consent_ledger_enabled)"
+        violations_total:
+          type: integer
+          description: "Total consent gate violations recorded"
+        last_violation_ts:
+          type: number
+          nullable: true
+          description: "Unix timestamp of last gate violation (null if none)"
         timestamp:
           type: number
           description: "Unix timestamp of response"

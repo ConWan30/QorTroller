@@ -305,7 +305,7 @@ def db_query(sql: str, params=()) -> list[dict]:
     finally:
         conn.close()
 
-_AGENT15_REQUIRED_COLS = {"pooled_ratio", "stratified_estimate", "n_sessions", "created_at"}
+_AGENT15_REQUIRED_COLS = {"pooled_ratio", "bt_strat_ratio", "n_sessions", "created_at"}
 
 def _probe_db_schema() -> bool:
     """Schema probe for separation_ratio_snapshots. Warns visibly on column drift."""
@@ -479,8 +479,13 @@ def cmd_agent_feed():
         print("  Skipping query — schema mismatch or table absent.")
         return
 
+    # Phase 168: bt_strat_ratio is the real column name in separation_ratio_snapshots
     rows = db_query(
-        "SELECT pooled_ratio, stratified_estimate, n_sessions, created_at, notes "
+        "SELECT pooled_ratio, bt_strat_ratio, n_sessions, n_players, "
+        "COALESCE(ci_lower, 0.0) as ci_lower, "
+        "COALESCE(ci_upper, 0.0) as ci_upper, "
+        "COALESCE(n_bootstrap, 0) as n_bootstrap, "
+        "created_at "
         "FROM separation_ratio_snapshots ORDER BY created_at DESC LIMIT 10"
     )
 
@@ -489,12 +494,21 @@ def cmd_agent_feed():
         print("  Run sessions with: python scripts/terminal_calibration_runner.py")
         return
 
-    latest       = rows[0]
+    latest        = rows[0]
     current_ratio = latest["pooled_ratio"]
     gate          = float(FROZEN["separation_gate"])
     gap           = round(gate - current_ratio, 3)
     ts            = datetime.now(timezone.utc).isoformat()
     phase         = _detect_current_phase()
+    ci_lower      = float(latest.get("ci_lower", 0.0))
+    ci_upper      = float(latest.get("ci_upper", 0.0))
+    n_bootstrap   = int(latest.get("n_bootstrap", 0))
+
+    # Phase 168: CI annotation — "0.569 [CI95: 0.41–0.73, N=1000]" when available
+    ci_annotation = (
+        f" [CI95: {ci_lower:.3f}\u2013{ci_upper:.3f}, N={n_bootstrap}]"
+        if n_bootstrap > 0 else ""
+    )
 
     provenance = prov(phase, "Agent15_SeparationRatioMonitorAgent", "MEASURED")
 
@@ -502,6 +516,7 @@ def cmd_agent_feed():
     history_rows = "\n".join([
         f"| {r['created_at'][:10]} | {r['pooled_ratio']:.3f} | "
         f"{r.get('n_sessions', '?')} | "
+        f"{'[CI95: ' + str(round(r.get('ci_lower',0),3)) + '-' + str(round(r.get('ci_upper',0),3)) + ']' if r.get('n_bootstrap',0) > 0 else 'no CI'} | "
         f"{'ABOVE GATE' if r['pooled_ratio'] >= gate else 'BELOW GATE'} |"
         for r in rows
     ])
@@ -518,12 +533,13 @@ biometric identification.
 ## Current State (Live from Agent 15)
 | Metric | Value | Status |
 |--------|-------|--------|
-| Current pooled ratio | **{current_ratio:.3f}** | {'ABOVE GATE' if current_ratio >= gate else 'BELOW GATE — TOURNAMENT BLOCKER'} |
+| Current pooled ratio | **{current_ratio:.3f}{ci_annotation}** | {'ABOVE GATE' if current_ratio >= gate else 'BELOW GATE — TOURNAMENT BLOCKER'} |
 | Tournament gate | {gate} | Phase 166 (lowered from 1.0) |
 | Gap to gate | {gap:.3f} | {'CLEARED' if gap <= 0 else f'{gap:.3f} units remaining'} |
 | N sessions | {latest.get('n_sessions', '?')} | |
+| N players | {latest.get('n_players', '?')} | |
+| Bootstrap CI | {'CI95=[' + str(ci_lower) + ', ' + str(ci_upper) + '] N=' + str(n_bootstrap) if n_bootstrap > 0 else 'not computed'} | Run --bootstrap-n 1000 to populate |
 | Last updated | {latest['created_at']} | Agent 15 poll |
-| Stratified estimate | {latest.get('stratified_estimate', 'N/A')} | |
 
 ## Root Cause (Phase 166)
 {provenance}

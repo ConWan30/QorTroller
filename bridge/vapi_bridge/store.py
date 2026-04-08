@@ -28,8 +28,9 @@ STATUS_DEAD_LETTER = "dead_letter"
 class Store:
     """SQLite-backed persistence for the bridge service."""
 
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str, consent_ledger_enabled: bool = False) -> None:
         self._db_path = db_path
+        self._consent_ledger_enabled = consent_ledger_enabled
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self._init_schema()
 
@@ -1600,6 +1601,89 @@ class Store:
                 CREATE INDEX IF NOT EXISTS idx_erasure_log_device
                 ON right_to_erasure_log(device_id, created_at DESC)
             """)
+            # Phase 161: consent_gate_violation_log — BP-002 consent gate audit trail (WIF-018/020)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS consent_gate_violation_log (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_id       TEXT    NOT NULL,
+                    operation       TEXT    NOT NULL,
+                    blocked_reason  TEXT    NOT NULL,
+                    created_at      REAL    NOT NULL DEFAULT (unixepoch('now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_consent_gate_device
+                ON consent_gate_violation_log(device_id, created_at DESC)
+            """)
+            # Phase 163: add n_consented column to separation_ratio_registry_log (idempotent).
+            # Binds active consent count into SHA-256 preimage (WIF-022 closure).
+            # DEFAULT 0 preserves semantics for pre-163 rows (legacy hashes had no consent filtering).
+            try:
+                conn.execute(
+                    "ALTER TABLE separation_ratio_registry_log"
+                    " ADD COLUMN n_consented INTEGER NOT NULL DEFAULT 0"
+                )
+            except sqlite3.OperationalError:
+                pass  # Column already exists
+            # Phase 168: add bootstrap CI columns to separation_ratio_snapshots (idempotent).
+            # ci_lower/ci_upper: 95% CI bounds from bootstrap resampling (--bootstrap-n flag).
+            # n_bootstrap: number of resamples used; 0 = CI not computed for this snapshot.
+            # DEFAULT 0.0/0 preserves semantics for pre-168 snapshots (no CI available).
+            for _col168, _type168 in [
+                ("ci_lower", "REAL NOT NULL DEFAULT 0.0"),
+                ("ci_upper", "REAL NOT NULL DEFAULT 0.0"),
+                ("n_bootstrap", "INTEGER NOT NULL DEFAULT 0"),
+            ]:
+                try:
+                    conn.execute(
+                        f"ALTER TABLE separation_ratio_snapshots ADD COLUMN {_col168} {_type168}"
+                    )
+                except sqlite3.OperationalError:
+                    pass  # Column already exists
+            # Phase 164: consent_snapshot_log — WIF-023 ConsentSnapshotAnchor.
+            # Records consent coverage at every separation-ratio commit so that post-commit
+            # revocations produce a verifiable delta chain rather than silent divergence.
+            # commit_hash links to separation_ratio_registry_log.commit_hash (foreign key semantics).
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS consent_snapshot_log (
+                    id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+                    commit_hash              TEXT    NOT NULL,
+                    n_consented_at_commit    INTEGER NOT NULL DEFAULT 0,
+                    revoked_count_at_commit  INTEGER NOT NULL DEFAULT 0,
+                    erasure_count_at_commit  INTEGER NOT NULL DEFAULT 0,
+                    snapshot_ts              REAL    NOT NULL,
+                    created_at               REAL    NOT NULL DEFAULT (unixepoch('now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_consent_snapshot_commit
+                ON consent_snapshot_log(commit_hash, created_at DESC)
+            """)
+            # Phase 165: post_erasure_ratio_log — WIF-024 Post-Erasure Separation Recompute.
+            # When a device's biometric data is anonymised (GDPR Art.17), the stored
+            # separation ratio becomes stale because the anonymised device's feature
+            # vectors can no longer contribute to the next run of
+            # analyze_interperson_separation.py.  This table creates an audit trail so
+            # operators know when the ratio needs recomputing.
+            # ratio_after is NULL until a new defensibility entry is inserted post-analysis.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS post_erasure_ratio_log (
+                    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_id        TEXT    NOT NULL,
+                    n_anonymized     INTEGER NOT NULL DEFAULT 0,
+                    ratio_before     REAL,
+                    ratio_after      REAL,
+                    recompute_needed INTEGER NOT NULL DEFAULT 1,
+                    triggered_by     TEXT    NOT NULL DEFAULT 'anonymize_device_records',
+                    consent_type     TEXT    NOT NULL DEFAULT 'biometric',
+                    recompute_ts     REAL    NOT NULL,
+                    created_at       REAL    NOT NULL DEFAULT (unixepoch('now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_post_erasure_device
+                ON post_erasure_ratio_log(device_id, created_at DESC)
+            """)
             # Phase 135: tournament_activation_chain_log — TournamentActivationChainAgent records
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS tournament_activation_chain_log (
@@ -1886,6 +1970,12 @@ class Store:
                 (158, "gsr_hmac_pohbg"),
                 (159, "biometric_privacy_compliance"),
                 (160, "consent_ledger"),
+                (161, "consent_gate"),
+                (162, "consent_aware_corpus"),
+                (163, "consent_bound_separation_hash"),
+                (164, "consent_snapshot"),
+                (165, "post_erasure_recompute"),
+                (168, "bootstrap_ci_separation_ratio"),
             ]:
                 conn.execute(
                     "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
@@ -4028,6 +4118,8 @@ class Store:
         divergence_reason (Phase 88): JSON string of non-nominal evidence fields that
         may explain why LLM and _rule_fallback disagreed. None for non-diverging records.
         """
+        if self._consent_ledger_enabled:
+            self._check_consent_gate(device_id, "insert_validation_record")
         now = time.time()
         with self._conn() as conn:
             cur = conn.execute(
@@ -6453,25 +6545,35 @@ class Store:
         n_players: int,
         active_features: int,
         tournament_ready: bool,
+        ci_lower: float = 0.0,
+        ci_upper: float = 0.0,
+        n_bootstrap: int = 0,
     ) -> int:
-        """Insert a separation ratio snapshot (Phase 121 — observability only)."""
+        """Insert a separation ratio snapshot (Phase 121).
+        Phase 168: ci_lower/ci_upper/n_bootstrap from bootstrap resampling (optional).
+        """
         import time as _t121
         with self._conn() as conn:
             cur = conn.execute(
                 "INSERT INTO separation_ratio_snapshots "
                 "(pooled_ratio, bt_strat_ratio, n_sessions, n_players, active_features, "
-                "tournament_ready, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "tournament_ready, ci_lower, ci_upper, n_bootstrap, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (pooled_ratio, bt_strat_ratio, n_sessions, n_players, active_features,
-                 int(tournament_ready), _t121.time()),
+                 int(tournament_ready), ci_lower, ci_upper, n_bootstrap, _t121.time()),
             )
             return cur.lastrowid
 
     def get_separation_ratio_status(self, limit: int = 1) -> "list[dict]":
-        """Return most recent separation ratio snapshots, newest first (Phase 121)."""
+        """Return most recent separation ratio snapshots, newest first (Phase 121/168)."""
         with self._conn() as conn:
             rows = conn.execute(
                 "SELECT id, pooled_ratio, bt_strat_ratio, n_sessions, n_players, "
-                "active_features, tournament_ready, created_at "
+                "active_features, tournament_ready, "
+                "COALESCE(ci_lower, 0.0) as ci_lower, "
+                "COALESCE(ci_upper, 0.0) as ci_upper, "
+                "COALESCE(n_bootstrap, 0) as n_bootstrap, "
+                "created_at "
                 "FROM separation_ratio_snapshots ORDER BY id DESC LIMIT ?",
                 (limit,),
             ).fetchall()
@@ -6484,7 +6586,10 @@ class Store:
                 "n_players":        r[4],
                 "active_features":  r[5],
                 "tournament_ready": bool(r[6]),
-                "created_at":       r[7],
+                "ci_lower":         float(r[7]),
+                "ci_upper":         float(r[8]),
+                "n_bootstrap":      int(r[9]),
+                "created_at":       r[10],
             }
             for r in rows
         ]
@@ -7137,6 +7242,7 @@ class Store:
         "touchpad_corners",
         "touchpad_freeform",
         "touchpad_swipes",
+        "mixed_biometric_probe",  # Phase 166: 2-min multi-feature probe (touchpad+trigger+button+stick)
     })
 
     def insert_separation_defensibility_log(
@@ -7223,12 +7329,14 @@ class Store:
           - probe_types: list of structured probe types
           - guidance: per-probe-type breakdown with n_per_player, gap, all_players_ready
           - sessions_needed_total: total capture sessions across all probes/players
-          - overall_ready: True when all probe types have all players >= min_n AND ratio > 1.0
+          - overall_ready: True when all probe types have all players >= min_n AND ratio >= min_separation_ratio
         """
         import json as _j151
         guidance = {}
         sessions_needed_total = 0
         overall_ready = True
+        # Phase 166: configurable gate — retrieve from store attribute if set, else default 0.70
+        _min_sep = float(getattr(self, "_min_separation_ratio", 0.70))
 
         for probe in sorted(self.STRUCTURED_PROBE_TYPES):
             row = self.get_separation_defensibility_status(session_type=probe)
@@ -7250,7 +7358,7 @@ class Store:
             }
             all_players_ready = all(count >= min_n for count in n_per_player.values()) \
                 and bool(n_per_player)
-            probe_ratio_ok = float(row.get("ratio", 0.0)) > 1.0
+            probe_ratio_ok = float(row.get("ratio", 0.0)) >= _min_sep
             probe_entry_ready = all_players_ready and probe_ratio_ok
 
             sessions_needed_total += sum(gap.values())
@@ -7266,11 +7374,12 @@ class Store:
             }
 
         return {
-            "min_n_per_player":     min_n,
-            "probe_types":          sorted(self.STRUCTURED_PROBE_TYPES),
-            "guidance":             guidance,
-            "sessions_needed_total": sessions_needed_total,
-            "overall_ready":        overall_ready,
+            "min_n_per_player":       min_n,
+            "min_separation_ratio":   _min_sep,
+            "probe_types":            sorted(self.STRUCTURED_PROBE_TYPES),
+            "guidance":               guidance,
+            "sessions_needed_total":  sessions_needed_total,
+            "overall_ready":          overall_ready,
         }
 
     # Phase 152 — Centroid Velocity Log
@@ -7357,26 +7466,62 @@ class Store:
         n_players: int,
         on_chain_tx: "str | None" = None,
         committed: bool = False,
+        n_consented: int = 0,
     ) -> int:
-        """Insert a separation ratio registry commitment record (Phase 153)."""
+        """Insert a separation ratio registry commitment record (Phase 153).
+        Phase 163: n_consented binds active consent count into hash preimage (WIF-022).
+        """
         with self._conn() as con:
             cur = con.execute(
                 "INSERT OR IGNORE INTO separation_ratio_registry_log "
                 "(commit_hash, ratio_millis, n_sessions, n_players, "
-                " on_chain_tx, committed, created_at)"
-                " VALUES (?,?,?,?,?,?,?)",
+                " on_chain_tx, committed, n_consented, created_at)"
+                " VALUES (?,?,?,?,?,?,?,?)",
                 (commit_hash, int(ratio_millis), int(n_sessions), int(n_players),
-                 on_chain_tx, 1 if committed else 0, time.time()),
+                 on_chain_tx, 1 if committed else 0, int(n_consented), time.time()),
             )
         return cur.lastrowid  # type: ignore[return-value]
 
     def get_separation_ratio_registry_status(self) -> "dict | None":
-        """Return the latest separation ratio registry entry (Phase 153)."""
+        """Return the latest separation ratio registry entry (Phase 153/163)."""
         with self._conn() as con:
             row = con.execute(
                 "SELECT * FROM separation_ratio_registry_log ORDER BY id DESC LIMIT 1"
             ).fetchone()
         return dict(row) if row else None
+
+    def update_separation_ratio_registry_committed(
+        self, commit_hash: str, on_chain_tx: str
+    ) -> None:
+        """Mark a separation ratio registry entry as committed on-chain (Phase 163)."""
+        with self._conn() as con:
+            con.execute(
+                "UPDATE separation_ratio_registry_log"
+                " SET committed=1, on_chain_tx=? WHERE commit_hash=?",
+                (on_chain_tx, commit_hash),
+            )
+
+    def compute_separation_ratio_commit_hash(
+        self,
+        ratio: float,
+        n_sessions: int,
+        players_sorted: str,
+        ts_ns: int,
+    ) -> "tuple[str, int]":
+        """Compute (commit_hash, n_consented) for Phase 163 WIF-022.
+
+        Hash formula: SHA-256('{ratio:.6f}:{n_sessions}:{n_consented}:{players_sorted}:{ts_ns}')
+        Reads n_consented atomically from consent_corpus_coverage at call time.
+        Returns (commit_hash_hex, n_consented).
+        """
+        import hashlib as _hl163
+        cov = self.get_consent_corpus_coverage()
+        n_consented = cov["active_consent_count"]
+        preimage = (
+            f"{ratio:.6f}:{n_sessions}:{n_consented}:{players_sorted}:{ts_ns}"
+        ).encode()
+        commit_hash = _hl163.sha256(preimage).hexdigest()
+        return commit_hash, n_consented
 
     # Phase 154 — Capture Stagnation Log
     # -------------------------------------------------------------------------
@@ -7849,20 +7994,46 @@ class Store:
             )
         return fields_anonymized
 
-    def anonymize_device_records(self, device_id: str) -> int:
+    def anonymize_device_records(
+        self,
+        device_id: str,
+        post_erasure_recompute: bool = False,
+    ) -> int:
         """Soft-delete biometric fields for a device (GDPR Art.17, Phase 160 BP-002).
 
-        Redacts evidence_json and reasoning in agent_rulings for the device.
-        Returns count of rows anonymized.
+        Phase 161 (WIF-020): also redacts divergence_reason in ruling_validation_log.
+        Phase 165 (WIF-024): when post_erasure_recompute=True, snapshot the current
+        separation ratio before anonymization and write to post_erasure_ratio_log so
+        operators are alerted that ratio recompute is needed.
+
+        Returns total count of rows anonymized across both tables.
         """
+        if post_erasure_recompute:
+            _def_row = self.get_separation_defensibility_status()
+            _ratio_before = float(_def_row.get("ratio", 0.0)) if _def_row else None
         with self._conn() as con:
-            cur = con.execute(
+            cur1 = con.execute(
                 "UPDATE agent_rulings"
                 " SET evidence_json='{}', reasoning='[redacted - GDPR Art.17 erasure]'"
                 " WHERE device_id=?",
                 (device_id,),
             )
-        return cur.rowcount
+            cur2 = con.execute(
+                "UPDATE ruling_validation_log"
+                " SET divergence_reason='[redacted - GDPR Art.17 erasure]'"
+                " WHERE device_id=?",
+                (device_id,),
+            )
+        count = cur1.rowcount + cur2.rowcount
+        if post_erasure_recompute:
+            self.insert_post_erasure_recompute_log(
+                device_id=device_id,
+                n_anonymized=count,
+                ratio_before=_ratio_before,
+                ratio_after=None,  # pending re-analysis via analyze_interperson_separation.py
+                triggered_by="anonymize_device_records",
+            )
+        return count
 
     def get_erasure_log(self, device_id: str | None = None, limit: int = 20) -> list[dict]:
         """Return right-to-erasure log entries (Phase 160 BP-002)."""
@@ -7879,3 +8050,232 @@ class Store:
                     (limit,),
                 ).fetchall()
         return [dict(r) for r in rows]
+
+    # ------------------------------------------------------------------
+    # Phase 161 — Consent Gate (BP-002 WIF-018/020 enforcement)
+    # ------------------------------------------------------------------
+
+    def _check_consent_gate(self, device_id: str, operation: str) -> None:
+        """Raise ValueError + log if device has revoked consent or erasure_requested.
+
+        Callers must check self._consent_ledger_enabled before calling this method.
+        Fails open for unknown devices (no record = allowed) to avoid blocking new
+        devices before consent is registered via POST /agent/register-consent.
+        """
+        status = self.get_consent_status(device_id)
+        if status["erasure_requested"] or status["revoked"]:
+            reason = "erasure_requested" if status["erasure_requested"] else "consent_revoked"
+            with self._conn() as con:
+                con.execute(
+                    "INSERT INTO consent_gate_violation_log"
+                    " (device_id, operation, blocked_reason, created_at)"
+                    " VALUES (?,?,?,?)",
+                    (device_id, operation, reason, time.time()),
+                )
+            raise ValueError(
+                f"Consent gate: device {device_id!r} blocked for operation "
+                f"{operation!r} — reason: {reason} (GDPR Art.7/17, Phase 161 BP-002)."
+            )
+
+    def get_consent_gate_status(self) -> dict:
+        """Return consent gate violation summary (Phase 161 BP-002)."""
+        with self._conn() as con:
+            row = con.execute(
+                "SELECT COUNT(*) as total, MAX(created_at) as last_ts,"
+                " MAX(device_id) as last_device"
+                " FROM consent_gate_violation_log"
+            ).fetchone()
+        d = dict(row) if row else {}
+        return {
+            "violations_total":      int(d.get("total") or 0),
+            "last_violation_ts":     d.get("last_ts"),
+            "last_violation_device": d.get("last_device"),
+        }
+
+    def get_active_consent_devices(self) -> list:
+        """Return devices with active consent (Phase 162 WIF-021)."""
+        with self._conn() as con:
+            rows = con.execute(
+                "SELECT device_id, consent_type, consent_ts FROM consent_ledger"
+                " WHERE consent_given=1 AND erasure_requested=0"
+                "   AND (revoked_at IS NULL)"
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_consent_corpus_coverage(self) -> dict:
+        """Return consent coverage statistics for corpus defensibility (Phase 162 WIF-021)."""
+        with self._conn() as con:
+            row = con.execute(
+                "SELECT"
+                "  COUNT(*) as total,"
+                "  SUM(CASE WHEN consent_given=1 AND erasure_requested=0"
+                "           AND revoked_at IS NULL THEN 1 ELSE 0 END) as active_count,"
+                "  SUM(CASE WHEN revoked_at IS NOT NULL THEN 1 ELSE 0 END) as revoked_count,"
+                "  SUM(CASE WHEN erasure_requested=1 THEN 1 ELSE 0 END) as erasure_count"
+                " FROM consent_ledger"
+            ).fetchone()
+        d = dict(row) if row else {}
+        total   = int(d.get("total",        0) or 0)
+        active  = int(d.get("active_count", 0) or 0)
+        revoked = int(d.get("revoked_count", 0) or 0)
+        erasure = int(d.get("erasure_count", 0) or 0)
+        return {
+            "total_registered":        total,
+            "active_consent_count":    active,
+            "revoked_count":           revoked,
+            "erasure_requested_count": erasure,
+            "consent_corpus_defensible": (revoked == 0 and erasure == 0 and total > 0),
+        }
+
+    def insert_consent_snapshot(
+        self,
+        commit_hash: str,
+        n_consented_at_commit: int,
+        revoked_count_at_commit: int,
+        erasure_count_at_commit: int,
+    ) -> None:
+        """Record consent coverage snapshot linked to a ratio commit (Phase 164 WIF-023).
+
+        Called immediately after insert_separation_ratio_registry_log so that
+        post-commit revocations produce a verifiable delta chain.
+        commit_hash links to separation_ratio_registry_log.commit_hash.
+        """
+        with self._conn() as con:
+            con.execute(
+                "INSERT INTO consent_snapshot_log"
+                " (commit_hash, n_consented_at_commit, revoked_count_at_commit,"
+                "  erasure_count_at_commit, snapshot_ts, created_at)"
+                " VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    commit_hash,
+                    n_consented_at_commit,
+                    revoked_count_at_commit,
+                    erasure_count_at_commit,
+                    time.time(),
+                    time.time(),
+                ),
+            )
+
+    # ------------------------------------------------------------------
+    # Phase 165 — Post-Erasure Separation Ratio Recompute (WIF-024)
+    # ------------------------------------------------------------------
+
+    def insert_post_erasure_recompute_log(
+        self,
+        device_id: str,
+        n_anonymized: int,
+        ratio_before: "float | None",
+        ratio_after: "float | None" = None,
+        triggered_by: str = "anonymize_device_records",
+        consent_type: str = "biometric",
+    ) -> int:
+        """Record that a device erasure requires separation ratio recompute (Phase 165 WIF-024).
+
+        ratio_after is NULL until the operator re-runs analyze_interperson_separation.py
+        and inserts a new separation_defensibility_log entry.
+        recompute_needed=1 (True) while ratio_after IS NULL.
+        """
+        now = time.time()
+        with self._conn() as con:
+            cur = con.execute(
+                "INSERT INTO post_erasure_ratio_log"
+                " (device_id, n_anonymized, ratio_before, ratio_after,"
+                "  recompute_needed, triggered_by, consent_type, recompute_ts, created_at)"
+                " VALUES (?,?,?,?,?,?,?,?,?)",
+                (
+                    device_id,
+                    n_anonymized,
+                    ratio_before,
+                    ratio_after,
+                    1 if ratio_after is None else 0,
+                    triggered_by,
+                    consent_type,
+                    now,
+                    now,
+                ),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def get_post_erasure_recompute_status(self, device_id: "str | None" = None) -> dict:
+        """Return post-erasure recompute audit summary (Phase 165 WIF-024).
+
+        pending_recomputes counts rows where ratio_after IS NULL — these represent
+        devices whose erasure has not yet been reflected in a new separation analysis.
+        recompute_needed=True when pending_recomputes > 0.
+        """
+        with self._conn() as con:
+            if device_id:
+                total_row = con.execute(
+                    "SELECT COUNT(*) as total FROM post_erasure_ratio_log"
+                    " WHERE device_id=?",
+                    (device_id,),
+                ).fetchone()
+                pending_row = con.execute(
+                    "SELECT COUNT(*) as pending FROM post_erasure_ratio_log"
+                    " WHERE device_id=? AND ratio_after IS NULL",
+                    (device_id,),
+                ).fetchone()
+                latest_row = con.execute(
+                    "SELECT ratio_before, recompute_ts FROM post_erasure_ratio_log"
+                    " WHERE device_id=? ORDER BY id DESC LIMIT 1",
+                    (device_id,),
+                ).fetchone()
+            else:
+                total_row = con.execute(
+                    "SELECT COUNT(*) as total FROM post_erasure_ratio_log"
+                ).fetchone()
+                pending_row = con.execute(
+                    "SELECT COUNT(*) as pending FROM post_erasure_ratio_log"
+                    " WHERE ratio_after IS NULL"
+                ).fetchone()
+                latest_row = con.execute(
+                    "SELECT ratio_before, recompute_ts FROM post_erasure_ratio_log"
+                    " ORDER BY id DESC LIMIT 1"
+                ).fetchone()
+        total   = int((dict(total_row).get("total")   or 0) if total_row   else 0)
+        pending = int((dict(pending_row).get("pending") or 0) if pending_row else 0)
+        latest  = dict(latest_row) if latest_row else {}
+        return {
+            "total_recomputes":    total,
+            "pending_recomputes":  pending,
+            "latest_recompute_ts": latest.get("recompute_ts"),
+            "latest_ratio_before": latest.get("ratio_before"),
+            "recompute_needed":    pending > 0,
+        }
+
+    def get_consent_snapshot_delta(self) -> dict:
+        """Return delta between the most recent consent snapshot and live consent state.
+
+        Phase 164 WIF-023: on-chain hash is immutable; consent_ledger is mutable.
+        delta > 0 means N_consented has shrunk since the last commit — the chain
+        attestation overstates current consent coverage.
+        """
+        with self._conn() as con:
+            row = con.execute(
+                "SELECT * FROM consent_snapshot_log ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+        if row is None:
+            return {
+                "found":                  False,
+                "commit_hash":            None,
+                "n_consented_at_commit":  0,
+                "n_consented_live":       0,
+                "delta":                  0,
+                "revoked_since_commit":   0,
+                "snapshot_ts":            None,
+            }
+        d = dict(row)
+        live    = self.get_consent_corpus_coverage()
+        n_live  = live["active_consent_count"]
+        revoked_live = live["revoked_count"]
+        delta            = d["n_consented_at_commit"] - n_live
+        revoked_since    = max(0, revoked_live - d["revoked_count_at_commit"])
+        return {
+            "found":                 True,
+            "commit_hash":           d["commit_hash"],
+            "n_consented_at_commit": d["n_consented_at_commit"],
+            "n_consented_live":      n_live,
+            "delta":                 delta,
+            "revoked_since_commit":  revoked_since,
+            "snapshot_ts":           d["snapshot_ts"],
+        }
