@@ -718,6 +718,105 @@ VAPI Skills are packaged, multi-step workflows that turn hours of manual work in
 
 ---
 
+---
+## Skill 15: VAPI Wiki Engine
+
+**Command**: `/vapi wiki <operation>`
+
+**Purpose**: Protocol-anchored knowledge base that accumulates VAPI protocol
+knowledge permanently. No Anthropic API. Claude Code IS the intelligence layer.
+Every claim has provenance. Every write is invariant-checked. Every session
+ends with a cryptographic snapshot.
+
+### Operations
+
+| Command | What it does |
+|---------|-------------|
+| `python vapi_wiki.py init` | Create wiki/ structure (once) |
+| `python vapi_wiki.py brief <file> <phase>` | Generate Claude Code ingest brief |
+| `python vapi_wiki.py check "<text>"` | Invariant check before writing |
+| `python vapi_wiki.py write_page <type> <entity> <phase>` | Write page with enforcement |
+| `python vapi_wiki.py what_if "<topic>" W1\|W2 <phase>` | Append WHAT_IF to VAPI_WHAT_IF.md |
+| `python vapi_wiki.py autoresearch_feed` | Sync wiki gaps → AutoResearch log |
+| `python vapi_wiki.py lint` | Health check (no API) |
+| `python vapi_wiki.py snapshot` | SHA-256 snapshot of wiki state |
+| `python vapi_wiki.py status` | Full integration health |
+
+### Integration Points (no duplication)
+
+| System | How it connects |
+|--------|----------------|
+| MCP knowledge_server.py | Reads same VAPI_*.md files — wiki entries visible immediately |
+| vapi_autoresearch.py | Shares experiments/log.jsonl — wiki feeds gaps to research loop |
+| vapi_eval_harness.py | score_wiki_proposal() uses same rubric as AutoResearch |
+| VAPI_WHAT_IF.md | what_if command appends directly — MCP vapi_query_what_if finds it |
+| MEMORY.md | Wiki pages sourced from MEMORY.md — brief command extracts structure |
+
+### Standard Session Protocol
+
+**Start of session** (after /vapi start):
+  python vapi_wiki.py status
+
+**After completing a phase**:
+  python vapi_wiki.py brief MEMORY.md <new_phase>
+  [Claude Code reads brief and writes pages]
+  python vapi_wiki.py snapshot
+  python vapi_wiki.py autoresearch_feed
+
+**After any WHAT_IF is identified**:
+  python vapi_wiki.py what_if "<topic>" W1 <phase>
+  [MCP server finds it immediately via vapi_query_what_if]
+
+**End of session**:
+  python vapi_wiki.py lint
+  python vapi_wiki.py snapshot
+
+### Invariant Checks (enforced before every page write)
+
+- BLOCK: SHA-256(raw[:228]) — wrong hash slice
+- BLOCK: nPublic≠5 — ZK circuit frozen
+- BLOCK: auto_activate_on_breakthrough set to anything but False
+- BLOCK: epistemic threshold < 0.65
+- BLOCK: separation_ratio hardcoded to literal value
+- BLOCK: dry_run=False without N≥100 adjudications context
+- BLOCK: USB thresholds applied to BT sessions
+
+### Why No API
+
+Claude Code IS the LLM. Calling the Anthropic API from within a Claude Code
+session is redundant — it would lose all CLAUDE.md context, cost money, and
+split the reasoning across two separate contexts. The engine handles only:
+  - File I/O (wiki/ directory management)
+  - Provenance formatting ([VAPI:Phase{N}:source:type])
+  - Invariant enforcement (pure Python regex)
+  - Eval harness scoring (imports vapi_eval_harness.py)
+  - Cryptographic snapshots (SHA-256)
+  - Lint scanning (pure regex)
+  - WHAT_IF corpus appending (writes to VAPI_WHAT_IF.md)
+  - AutoResearch feed (writes to experiments/log.jsonl)
+
+Claude Code handles all reasoning, synthesis, and page generation.
+
+### Outputs
+
+```json
+{
+  "operation":      "brief|write_page|what_if|lint|snapshot",
+  "pages_affected": ["wiki/phases/phase_166.md"],
+  "provenance":     "[VAPI:Phase166:MEMORY.md:MEASURED]",
+  "invariant_check":"PASS",
+  "snapshot_hash":  "sha256:2c63aeb7dbfe...",
+  "ar_feed_gaps":   6,
+  "health_score":   87
+}
+```
+
+### Last Run
+**Status**: COMPLETE (Phase 166 integration)
+**Result**: wiki/ initialized, 4 corpus briefs generated, 30 pages written, genesis snapshot 2c63aeb7dbfe
+**Next**: Run brief after every phase completion. Snapshot at end of every session.
+---
+
 ## Skill Proposal Template
 
 When a pattern emerges in VAPI_MEMORY.md, propose new skills using this template:
@@ -1053,6 +1152,81 @@ If ACIM is not running (bridge not started): verify `agent_calibration_monitor_e
 
 ---
 
+#### Step 13 — Memory Scope Audit (NEW — Phase 164)
+
+After every sweep, evaluate the `/memory` auto-memory index against VAPI's current development trajectory. This is the **WHAT_IF-driven memory loop**: a recursive self-assessment that ensures the agent's own long-term memory serves VAPI's forward progress and does not accumulate ballast that degrades context quality.
+
+**Trigger**: Run as part of every Skill 14 execution. Also available standalone as `/vapi sweep memory`.
+
+**Evaluation Logic — Three-Class Scoring**:
+
+For each file in `C:\Users\Contr\.claude\projects\C--Users-Contr-vapi-pebble-prototype\memory\`:
+
+| Class | Condition | Action |
+|-------|-----------|--------|
+| **ACTIVE** | Content needed for current/next phase decisions; contains non-derivable operational knowledge | KEEP |
+| **ARCHIVABLE** | Historical fact fully derivable from `git log`, CLAUDE.md, or VAPI_WHAT_IF.md | MOVE to inline note in project_state.md OR delete if truly superseded |
+| **STALE** | Content contradicted by current project state; WIF entries whose phases are CLOSED; analysis superseded by newer data | DELETE |
+
+**WHAT_IF Loop Activation** — Score each file against two questions:
+```
+W1: "Does this memory describe a risk or constraint that still governs decisions in Phase N+1 or beyond?"
+W2: "Does this memory surface an opportunity whose W2 implementation is not yet complete?"
+
+If W1=NO and W2=NO → class STALE → delete autonomously
+If W1=YES or W2=YES → class ACTIVE → keep
+If all content is in CLAUDE.md or VAPI_WHAT_IF.md → class ARCHIVABLE → delete (already archived)
+```
+
+**CLAUDE.md Size Gate** — Check current CLAUDE.md char count:
+```bash
+wc -c C:/Users/Contr/vapi-pebble-prototype/CLAUDE.md
+```
+
+| Size | Status | Action |
+|------|--------|--------|
+| < 40,000 chars | ✅ HEALTHY | No action |
+| 40,000–100,000 chars | ⚠️ WARNING | Flag for compression in next session |
+| > 100,000 chars | ❌ CRITICAL | Propose CLAUDE_HISTORY.md archival immediately |
+
+**Context Budget Invariant**: CLAUDE.md > 40k chars forces Claude Code's compaction layer to apply lossy summarization, which is the root cause of phase drift and session disruptions (WIF-026, WIF-027). Keeping CLAUDE.md lean is a **protocol integrity requirement**, not a cosmetic preference.
+
+**Archival Target** — Sections safe to archive to `CLAUDE_HISTORY.md`:
+- Per-phase detail blocks for Phase 17–130 (captured in git; derivable from `git log --oneline`)
+- Completed items section (fully superseded by current phase log)
+- Any "Phase N completed" block more than 10 phases behind current
+
+**Sections to KEEP in CLAUDE.md** (never archive):
+- Header state block (current phase, test counts, L4 thresholds, separation ratio, wallet)
+- Architecture table
+- PoAC wire format (FROZEN invariant)
+- PITL stack table
+- Calibration Corpus State (Phase 143 → current, N=14 touchpad_corners regression documented)
+- L4 Calibration State (N=74, thresholds 7.009/5.367)
+- Humanity Probability Formula
+- Condensed Phase Summary table (1-line per phase — keep all, strip verbose blocks)
+- Build & Test Commands
+- Key Gotchas (Windows/HID)
+- Hard Rules
+
+**Autonomous Action**: When CLAUDE.md > 100k chars, autonomously propose the compression plan (what to archive, what to keep, target char count) and wait for user approval before executing. Never compress without approval — this modifies the single source of truth.
+
+**Output Fields** (added to sweep JSON):
+```json
+{
+  "memory_scope_audit": {
+    "files_evaluated": N,
+    "files_deleted": N,
+    "files_kept": N,
+    "claude_md_chars": N,
+    "claude_md_status": "HEALTHY|WARNING|CRITICAL",
+    "compression_proposed": false
+  }
+}
+```
+
+---
+
 ### Invariant Checks Summary
 
 | Check | Condition | Action |
@@ -1075,20 +1249,28 @@ If ACIM is not running (bridge not started): verify `agent_calibration_monitor_e
 
 ```json
 {
-  "sweep_version": "2.1",
-  "phase": 156,
-  "timestamp": "2026-04-04T...",
-  "invariants_checked": 20,
-  "invariants_passed": 20,
+  "sweep_version": "2.2",
+  "phase": 164,
+  "timestamp": "2026-04-05T...",
+  "invariants_checked": 21,
+  "invariants_passed": 21,
   "root_cause_class": "NEUTRAL",
   "severity": "P4",
   "separation_impact": "NEUTRAL",
   "enrollment_gate_ok": true,
   "acim_healthy": true,
   "test_counts": {
-    "bridge": 1868,
-    "sdk": 265,
+    "bridge": 1934,
+    "sdk": 297,
     "hardhat": 468
+  },
+  "memory_scope_audit": {
+    "files_evaluated": 5,
+    "files_deleted": 0,
+    "files_kept": 5,
+    "claude_md_chars": 0,
+    "claude_md_status": "HEALTHY",
+    "compression_proposed": false
   },
   "what_if_updates": [],
   "fix_proposals": [],
@@ -1143,8 +1325,113 @@ chore(skill14-sweep): PostCode Mitigation cycle N (score=X.XXX)
 
 ---
 
-**Document Version**: 1.4 (Phase 156)
-**Last Updated**: 2026-04-04
-**Skill Count**: 12 (complete + privacy + sweep)
-**Skill Status**: 8 COMPLETE, 3 PENDING (Controller skills + Privacy), 1 NEW (Skill 14 PostCode Sweep)
+---
+
+## Skill 15: WORKFLOW.v2 Sync Recovery
+
+**Command**: `/vapi sync-workflow`
+
+**Purpose**: Recover VAPI-WORKFLOW.v2 context files to match CLAUDE.md ground truth after any session
+disconnect or drift event. Detects phase/test-count divergence and corrects atomically.
+
+**Skill ID**: 15
+**Version**: 1.0 (Phase 164 — WIF-026 mitigation)
+**Trigger**: Session start (if drift detected), manually, or via PostToolUse hook (automatic)
+
+---
+
+### Preconditions
+- `CLAUDE.md` exists at repo root (ground truth)
+- `VAPI-WORKFLOW.v2/VAPI_CONTEXT.md` exists
+- `VAPI-WORKFLOW.v2/VAPI_MEMORY.md` exists
+- Python 3.11+ available
+
+---
+
+### Steps
+
+#### Step 1 — Drift Check (read-only)
+```bash
+python scripts/sync_vapi_workflow.py --check
+```
+Output: lists any drift items (PHASE, BRIDGE, SDK mismatches) or "No drift detected".
+
+#### Step 2 — Full Sync (if drift found)
+```bash
+python scripts/sync_vapi_workflow.py
+```
+Updates: `VAPI_CONTEXT.md` Active Phase line, test count table rows (Bridge/SDK/Hardhat),
+Next Phase line. Appends sync recovery note to `VAPI_MEMORY.md` Section 1.
+
+#### Step 3 — Verify
+```bash
+python scripts/sync_vapi_workflow.py --check
+```
+Should report: `✅ No drift detected — WORKFLOW.v2 files are current.`
+
+#### Step 4 — Manual file review (if --check still shows drift)
+Script covers: Active Phase, test counts, Next Phase. Manual items if regex didn't match:
+- Agent fleet count in `VAPI_AGENTS.md` (if new agents added since last sync)
+- WIF status updates in `VAPI_WHAT_IF.md` (if WIFs closed in missed phases)
+- Skill Last Run timestamps in `VAPI_SKILLS.md`
+
+---
+
+### Invariant Checks
+- ✅ **PROCEED** if CLAUDE.md is readable and has `Current phase: Phase NNN —` pattern
+- ⚠️ **WARNING** if drift > 3 phases: auto-sync covers counts but agent fleet entries may need manual update
+- ❌ **BLOCK** if CLAUDE.md missing: "Single source of truth not found — cannot sync"
+- ⚠️ **WARNING** if regex patterns don't match: means CLAUDE.md format changed — update sync script
+
+---
+
+### Outputs
+```
+[sync_vapi_workflow] Reading CLAUDE.md...
+[sync_vapi_workflow] CLAUDE.md state: {'phase_num': 164, 'phase_desc': 'ConsentSnapshotAnchor ...', 'bridge': 1934, 'hardhat': 468, 'sdk': 297}
+[sync_vapi_workflow] CONTEXT.md state: {'phase_num': 156, 'bridge': 1868, 'sdk': 265}
+[sync_vapi_workflow] ⚠️  DRIFT DETECTED (3 items):
+  PHASE: CLAUDE.md=164 CONTEXT.md=156
+  BRIDGE: CLAUDE.md=1934 CONTEXT.md=1868
+  SDK: CLAUDE.md=297 CONTEXT.md=265
+[sync_vapi_workflow] ✅ Updated: CONTEXT.md active phase, CONTEXT.md test counts, CONTEXT.md next phase, MEMORY.md sync note
+```
+
+---
+
+### Automation: PostToolUse Hook (ACTIVE)
+
+The hook in `.claude/settings.local.json` fires automatically after every `Write` tool call:
+```json
+"hooks": {
+  "PostToolUse": [
+    {
+      "matcher": "Write",
+      "hooks": [{ "type": "command", "command": "cd C:/Users/Contr/vapi-pebble-prototype && python scripts/sync_vapi_workflow.py 2>&1 | head -5" }]
+    }
+  ]
+}
+```
+- Runs in background after every file write
+- Exits immediately if no drift (< 1 second)
+- WIF-026 mitigation: context drift can never accumulate silently
+
+---
+
+### Time Estimate
+- Drift check: < 1 second
+- Full sync (script): < 2 seconds
+- Manual agent/WIF review (large drift): 5-10 minutes
+
+### Last Run
+**Status**: COMPLETE (2026-04-05)
+**Result**: 8-phase drift recovered (Phase 156→164, Bridge 1868→1934, SDK 265→297, agents 20→22)
+**Next**: Automatic via PostToolUse hook on every Write
+
+---
+
+**Document Version**: 1.6 (Phase 164 — Step 13 Memory Scope Audit added)
+**Last Updated**: 2026-04-05
+**Skill Count**: 15 (complete + privacy + sweep + sync)
+**Skill Status**: 8 COMPLETE, 3 PENDING (Controller skills + Privacy), 1 NEW (Skill 14 PostCode Sweep v2.2 + Step 13), 1 ACTIVE (Skill 15 Sync Recovery — hook live)
 **Update Method**: Add new skills when patterns emerge, update "Last run" after execution
