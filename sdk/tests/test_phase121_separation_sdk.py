@@ -12,14 +12,16 @@ from sdk.vapi_sdk import SeparationRatioResult, VAPISeparationStatus
 
 
 # ---------------------------------------------------------------------------
-# Test 1 — SeparationRatioResult __slots__ has exactly 6 fields
+# Test 1 — SeparationRatioResult __slots__ has expected fields (Phase 168: 9 fields)
 # ---------------------------------------------------------------------------
 
 def test_separation_ratio_result_slots():
     slots = SeparationRatioResult.__slots__
+    # Phase 168 added ci_lower, ci_upper, n_bootstrap (was 6, now 9)
     expected = {
         "pooled_ratio", "battery_stratified_ratio", "tournament_blocker",
         "gap_to_target", "tournament_ready", "error",
+        "ci_lower", "ci_upper", "n_bootstrap",
     }
     assert set(slots) == expected
 
