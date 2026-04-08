@@ -23,3 +23,15 @@ Format: timestamp | operation | pages | provenance | outcome
 2026-04-08T01:37:35.446639+00:00 | AR_FEED | vapi-autoresearch\experiments\log.jsonl | [VAPI:Phase26:vapi_wiki_engine.py:MEASURED] | gaps=6, ratio=None
 2026-04-08T01:38:16.631279+00:00 | LINT | wiki\lint_report.md | [VAPI:Phase26:vapi_wiki_engine.py:MEASURED] | health=0
 2026-04-08T01:39:00.624897+00:00 | LINT | wiki\lint_report.md | [VAPI:Phase26:vapi_wiki_engine.py:MEASURED] | health=0
+2026-04-08T01:43:32.697409+00:00 | BRIEF | wiki\briefs\brief_MEMORY.md_167.md | [VAPI:Phase167:MEMORY.md:MEASURED] | domains=1, violations=0
+2026-04-08T01:44:22.320748+00:00 | AR_FEED | vapi-autoresearch\experiments\log.jsonl | [VAPI:Phase26:vapi_wiki_engine.py:MEASURED] | gaps=7, ratio=None
+2026-04-08T01:44:29.253389+00:00 | BRIEF | wiki\briefs\brief_MEMORY.md_167.md | [VAPI:Phase167:MEMORY.md:MEASURED] | domains=1, violations=0
+2026-04-08T01:44:37.266776+00:00 | SNAPSHOT | wiki\snapshots.md | [SNAPSHOT:14a6c9c81e22] | pages=31, anchor=anchor_failed (<urlopen error [WinError 10061] No conne)
+2026-04-08T01:44:37.284549+00:00 | SYNC_WHAT_IF | vapi-autoresearch\vapi_eval_harness.py | [VAPI:Phase26:VAPI_WHAT_IF.md:MEASURED] | 14 W1 entries synced to harness WIKI_KNOWN_W1
+2026-04-08T01:44:37.433583+00:00 | AR_FEED | vapi-autoresearch\experiments\log.jsonl | [VAPI:Phase26:vapi_wiki_engine.py:MEASURED] | gaps=7, ratio=None
+2026-04-08T01:45:17.981116+00:00 | BRIEF | wiki\briefs\brief_MEMORY.md_167.md | [VAPI:Phase167:MEMORY.md:MEASURED] | domains=1, violations=0
+2026-04-08T01:45:18.023494+00:00 | BRIEF | wiki\briefs\brief_VAPI_WHAT_IF.md_167.md | [VAPI:Phase167:VAPI_WHAT_IF.md:MEASURED] | domains=8, violations=1
+2026-04-08T01:45:22.844125+00:00 | SNAPSHOT | wiki\snapshots.md | [SNAPSHOT:6dde2f875359] | pages=32, anchor=anchor_failed (<urlopen error [WinError 10061] No conne)
+2026-04-08T01:45:22.926930+00:00 | SYNC_WHAT_IF | vapi-autoresearch\vapi_eval_harness.py | [VAPI:Phase26:VAPI_WHAT_IF.md:MEASURED] | 14 W1 entries synced to harness WIKI_KNOWN_W1
+2026-04-08T01:45:23.084074+00:00 | AR_FEED | vapi-autoresearch\experiments\log.jsonl | [VAPI:Phase26:vapi_wiki_engine.py:MEASURED] | gaps=8, ratio=None
+2026-04-08T02:50:52.759052+00:00 | SNAPSHOT | wiki\snapshots.md | [SNAPSHOT:6579b8abc0fa] | pages=32, anchor=local only

@@ -323,6 +323,13 @@ def cmd_init():
 
 def cmd_brief(source_path: str, phase: int):
     source = Path(source_path)
+    # If bare filename given, try to resolve via CORPUS dict first
+    if not source.exists():
+        basename = source.name
+        for v in CORPUS.values():
+            if v.name == basename and v.exists():
+                source = v
+                break
     if not source.exists():
         print(f"ERROR: {source_path} not found")
         return
