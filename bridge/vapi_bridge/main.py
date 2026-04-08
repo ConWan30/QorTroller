@@ -90,7 +90,7 @@ class Bridge:
 
     def __init__(self, cfg: Config):
         self.cfg = cfg
-        self.store = Store(cfg.db_path)
+        self.store = Store(cfg.db_path, consent_ledger_enabled=cfg.consent_ledger_enabled)
         self.chain = ChainClient(cfg)
         self.batcher = Batcher(cfg, self.store, self.chain)
         self._tasks: list[asyncio.Task] = []
@@ -825,6 +825,121 @@ class Bridge:
             )
         except Exception as _taca_exc:
             log.warning("Phase 135: TournamentActivationChainAgent unavailable: %s", _taca_exc)
+
+        # Phase 148: AgentCalibrationMonitor — agent #18 (ACIM)
+        # W1: cross-validates 16 agent invariants independently (no single-validator anti-pattern)
+        if getattr(self.cfg, "agent_calibration_monitor_enabled", True):
+            try:
+                from .agent_calibration_monitor import AgentCalibrationMonitor
+                _acim = AgentCalibrationMonitor(self.cfg, self.store, bus=_bus)
+                _acim_task = asyncio.ensure_future(_acim.run_poll_loop())
+                _acim_task.set_name("AgentCalibrationMonitor")
+                self._tasks.append(_acim_task)
+                log.info(
+                    "Phase 148: AgentCalibrationMonitor started (agent #18; "
+                    "poll=900s, 16 self-tests, W1 cross-validation)"
+                )
+            except Exception as _acim_exc:
+                log.warning("Phase 148: AgentCalibrationMonitor unavailable: %s", _acim_exc)
+        else:
+            log.info("Phase 148: AgentCalibrationMonitor skipped (AGENT_CALIBRATION_MONITOR_ENABLED=false)")
+
+        # Phase 155: ControllerHardwareIntelligenceAgent — agent #19
+        # Registers DualShock Edge Attested profile; 5-min poll; multi_controller_enabled=False default.
+        if getattr(self.cfg, "controller_intelligence_enabled", True):
+            try:
+                from .controller_hardware_intelligence_agent import ControllerHardwareIntelligenceAgent
+                _chi = ControllerHardwareIntelligenceAgent(self.cfg, self.store, bus=_bus)
+                _chi_task = asyncio.ensure_future(_chi.run_poll_loop())
+                _chi_task.set_name("ControllerHardwareIntelligenceAgent")
+                self._tasks.append(_chi_task)
+                log.info(
+                    "Phase 155: ControllerHardwareIntelligenceAgent started (agent #19; "
+                    "poll=300s, multi_controller=%s)",
+                    getattr(self.cfg, "multi_controller_enabled", False),
+                )
+            except Exception as _chi_exc:
+                log.warning("Phase 155: ControllerHardwareIntelligenceAgent unavailable: %s", _chi_exc)
+        else:
+            log.info("Phase 155: ControllerHardwareIntelligenceAgent skipped (CONTROLLER_INTELLIGENCE_ENABLED=false)")
+
+        # Phase 156: EnrollmentAutoGuidanceAgent — agent #20
+        # Synthesizes Phase 151 + 152 + 154 + 155 guidance; 1-hour poll.
+        if getattr(self.cfg, "enrollment_auto_guidance_enabled", True):
+            try:
+                from .enrollment_auto_guidance_agent import EnrollmentAutoGuidanceAgent
+                _eag = EnrollmentAutoGuidanceAgent(self.cfg, self.store, bus=_bus)
+                _eag_task = asyncio.ensure_future(_eag.run_poll_loop())
+                _eag_task.set_name("EnrollmentAutoGuidanceAgent")
+                self._tasks.append(_eag_task)
+                log.info(
+                    "Phase 156: EnrollmentAutoGuidanceAgent started (agent #20; "
+                    "poll=%ss)",
+                    getattr(self.cfg, "enrollment_guidance_poll_interval_s", 3600),
+                )
+            except Exception as _eag_exc:
+                log.warning("Phase 156: EnrollmentAutoGuidanceAgent unavailable: %s", _eag_exc)
+        else:
+            log.info("Phase 156: EnrollmentAutoGuidanceAgent skipped (ENROLLMENT_AUTO_GUIDANCE_ENABLED=false)")
+
+        # Phase 157: FleetConsensusSnapshotAgent — agent #21
+        # Computes PoFC (Proof of Fleet Consensus) cryptographic snapshots every 30 min.
+        if getattr(self.cfg, "fleet_consensus_enabled", True):
+            try:
+                from .fleet_consensus_snapshot_agent import FleetConsensusSnapshotAgent
+                _fcs = FleetConsensusSnapshotAgent(self.cfg, self.store, bus=_bus)
+                _fcs_task = asyncio.ensure_future(_fcs.run_poll_loop())
+                _fcs_task.set_name("FleetConsensusSnapshotAgent")
+                self._tasks.append(_fcs_task)
+                log.info(
+                    "Phase 157: FleetConsensusSnapshotAgent started (agent #21; "
+                    "poll=%ss)",
+                    getattr(self.cfg, "fleet_consensus_snapshot_interval_s", 1800),
+                )
+            except Exception as _fcs_exc:
+                log.warning("Phase 157: FleetConsensusSnapshotAgent unavailable: %s", _fcs_exc)
+        else:
+            log.info("Phase 157: FleetConsensusSnapshotAgent skipped (FLEET_CONSENSUS_ENABLED=false)")
+
+        # Phase 159: BiometricPrivacyComplianceAgent — agent #22
+        # BP-001 Temporal Biometric Decay monitor; polls every 6h.
+        if getattr(self.cfg, "biometric_privacy_enabled", True):
+            try:
+                from .biometric_privacy_compliance_agent import BiometricPrivacyComplianceAgent
+                _bpca = BiometricPrivacyComplianceAgent(self.cfg, self.store, bus=_bus)
+                _bpca_task = asyncio.ensure_future(_bpca.run_poll_loop())
+                _bpca_task.set_name("BiometricPrivacyComplianceAgent")
+                self._tasks.append(_bpca_task)
+                log.info(
+                    "Phase 159: BiometricPrivacyComplianceAgent started (agent #22; "
+                    "BP-001 half_life=%.0fd)",
+                    getattr(self.cfg, "bp001_half_life_days", 90.0),
+                )
+            except Exception as _bpca_exc:
+                log.warning("Phase 159: BiometricPrivacyComplianceAgent unavailable: %s", _bpca_exc)
+        else:
+            log.info("Phase 159: BiometricPrivacyComplianceAgent skipped (BIOMETRIC_PRIVACY_ENABLED=false)")
+
+        # Phase 173: SeparationRatioRecoveryAgent — agent #23
+        # Detects P1 temporal non-stationarity (converging-downward ratio trend) and
+        # recommends recovery actions (AGE_WEIGHTING / P1_RE_ENROLLMENT / MORE_SESSIONS).
+        if getattr(self.cfg, "separation_recovery_enabled", True):
+            try:
+                from .separation_ratio_recovery_agent import SeparationRatioRecoveryAgent
+                _srra = SeparationRatioRecoveryAgent(self.cfg, self.store, bus=_bus)
+                _srra_task = asyncio.ensure_future(_srra.run_poll_loop())
+                _srra_task.set_name("SeparationRatioRecoveryAgent")
+                self._tasks.append(_srra_task)
+                log.info(
+                    "Phase 173: SeparationRatioRecoveryAgent started (agent #23; "
+                    "poll=%ss min_sep=%.2f)",
+                    getattr(self.cfg, "separation_recovery_poll_interval_s", 3600),
+                    getattr(self.cfg, "min_separation_ratio", 0.70),
+                )
+            except Exception as _srra_exc:
+                log.warning("Phase 173: SeparationRatioRecoveryAgent unavailable: %s", _srra_exc)
+        else:
+            log.info("Phase 173: SeparationRatioRecoveryAgent skipped (SEPARATION_RECOVERY_ENABLED=false)")
 
         log.info("All services started — bridge is operational")
 

@@ -3249,6 +3249,28 @@ paths:
         "403":
           description: Forbidden
 
+  /agent/separation-ratio-recovery-status:
+    get:
+      summary: Separation ratio recovery assessment — Phase 173 agent #23
+      tags: [Agent]
+      description: >
+        SeparationRatioRecoveryAgent (agent #23) detects P1 temporal non-stationarity
+        (converging-downward ratio trend) and recommends recovery actions.
+        trend_velocity: dRatio/dSnapshot — negative = converging downward.
+        recovery_action: STABLE | AGE_WEIGHTING | P1_RE_ENROLLMENT | MORE_SESSIONS.
+        Pairs with Tool #123 get_separation_ratio_recovery_status.
+      parameters:
+        - {name: api_key, in: query, schema: {type: string}, required: false}
+      responses:
+        "200":
+          description: Recovery assessment status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeparationRatioRecoveryStatus'
+        "403":
+          description: Forbidden
+
   /agent/post-erasure-recompute-status:
     get:
       summary: Post-erasure separation ratio recompute audit status — Phase 165 WIF-024
@@ -8445,6 +8467,33 @@ webhooks:
         timestamp:
           type: number
           description: "Unix timestamp of response"
+
+    SeparationRatioRecoveryStatus:
+      type: object
+      description: "Phase 173 — SeparationRatioRecoveryAgent (agent #23) status"
+      properties:
+        separation_recovery_enabled:
+          type: boolean
+        current_ratio:
+          type: number
+          description: "Most recent pooled separation ratio (0.0 if no snapshots)"
+        trend_velocity:
+          type: number
+          description: "dRatio/dSnapshot — negative = converging downward (CRITICAL < -0.05)"
+        n_snapshots_used:
+          type: integer
+          description: "Number of snapshots used to compute trend"
+        recovery_needed:
+          type: boolean
+          description: "True when ratio below gate OR trend strongly negative"
+        recovery_action:
+          type: string
+          enum: [STABLE, AGE_WEIGHTING, P1_RE_ENROLLMENT, MORE_SESSIONS]
+        recommendation:
+          type: string
+          description: "Human-readable recovery guidance"
+        timestamp:
+          type: number
 
     PostErasureRecomputeStatus:
       type: object

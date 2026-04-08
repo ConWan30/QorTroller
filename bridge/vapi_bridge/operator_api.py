@@ -4472,6 +4472,39 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
+    # Phase 173 — GET /agent/separation-ratio-recovery-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/separation-ratio-recovery-status")
+    async def get_separation_ratio_recovery_status_endpoint(api_key: str = ""):
+        """SeparationRatioRecoveryAgent status (Phase 173, agent #23).
+
+        Detects P1 temporal non-stationarity (converging-downward ratio trend).
+        trend_velocity: dRatio/dSnapshot — negative = converging downward.
+        recovery_action: STABLE | AGE_WEIGHTING | P1_RE_ENROLLMENT | MORE_SESSIONS.
+
+        Returns: separation_recovery_enabled, current_ratio, trend_velocity,
+        n_snapshots_used, recovery_needed, recovery_action, recommendation, timestamp.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t173
+        try:
+            _enabled173 = bool(getattr(cfg, "separation_recovery_enabled", True))
+            _rows173    = store.get_separation_ratio_recovery_status(limit=1)
+            _latest173  = _rows173[0] if _rows173 else {}
+            return {
+                "separation_recovery_enabled": _enabled173,
+                "current_ratio":    float(_latest173.get("current_ratio",  0.0)),
+                "trend_velocity":   float(_latest173.get("trend_velocity", 0.0)),
+                "n_snapshots_used": int(_latest173.get("n_snapshots_used", 0)),
+                "recovery_needed":  bool(_latest173.get("recovery_needed", False)),
+                "recovery_action":  str(_latest173.get("recovery_action",  "STABLE")),
+                "recommendation":   str(_latest173.get("recommendation",   "")),
+                "timestamp":        _t173.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
     # Phase 165 — GET /agent/post-erasure-recompute-status
     # ------------------------------------------------------------------
     @app.get("/agent/post-erasure-recompute-status")
