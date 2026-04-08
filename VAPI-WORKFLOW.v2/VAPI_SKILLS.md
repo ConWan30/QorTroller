@@ -723,98 +723,82 @@ VAPI Skills are packaged, multi-step workflows that turn hours of manual work in
 
 **Command**: `/vapi wiki <operation>`
 
-**Purpose**: Protocol-anchored knowledge base that accumulates VAPI protocol
-knowledge permanently. No Anthropic API. Claude Code IS the intelligence layer.
-Every claim has provenance. Every write is invariant-checked. Every session
-ends with a cryptographic snapshot.
+**File**: `vapi_wiki_engine.py` (replaces vapi_wiki.py and vapi_knowledge_engine.py)
 
-### Operations
+**Purpose**: Protocol-anchored knowledge base that accumulates VAPI knowledge
+permanently. No Anthropic API. Claude Code IS the intelligence layer.
 
-| Command | What it does |
+### Commands
+
+| Command | What It Does |
 |---------|-------------|
-| `python vapi_wiki.py init` | Create wiki/ structure (once) |
-| `python vapi_wiki.py brief <file> <phase>` | Generate Claude Code ingest brief |
-| `python vapi_wiki.py check "<text>"` | Invariant check before writing |
-| `python vapi_wiki.py write_page <type> <entity> <phase>` | Write page with enforcement |
-| `python vapi_wiki.py what_if "<topic>" W1\|W2 <phase>` | Append WHAT_IF to VAPI_WHAT_IF.md |
-| `python vapi_wiki.py autoresearch_feed` | Sync wiki gaps → AutoResearch log |
-| `python vapi_wiki.py lint` | Health check (no API) |
-| `python vapi_wiki.py snapshot` | SHA-256 snapshot of wiki state |
-| `python vapi_wiki.py status` | Full integration health |
+| `python vapi_wiki_engine.py init` | Create wiki/ structure (once) |
+| `python vapi_wiki_engine.py brief <file> <phase>` | Generate Claude Code ingest brief |
+| `python vapi_wiki_engine.py check "<text>"` | Invariant check before writing |
+| `python vapi_wiki_engine.py agent_feed` | Pull separation ratio from Agent 15 DB -> wiki page |
+| `python vapi_wiki_engine.py ingest_sweep <json>` | Consume Skill 14 output -> wiki + W1 + AR log |
+| `python vapi_wiki_engine.py sync_what_if` | VAPI_WHAT_IF.md W1s -> eval harness WIKI_KNOWN_W1 |
+| `python vapi_wiki_engine.py snapshot [--anchor]` | SHA-256 [+ AdjudicationRegistry.sol on-chain] |
+| `python vapi_wiki_engine.py phase_close <N>` | Complete phase boundary sequence |
+| `python vapi_wiki_engine.py autoresearch_feed` | Wiki gaps -> AutoResearch experiment log |
+| `python vapi_wiki_engine.py lint` | Health check (no API) |
+| `python vapi_wiki_engine.py status` | Full integration health |
 
-### Integration Points (no duplication)
+### Exclusive Integrations (all use existing VAPI infrastructure)
 
-| System | How it connects |
-|--------|----------------|
-| MCP knowledge_server.py | Reads same VAPI_*.md files — wiki entries visible immediately |
-| vapi_autoresearch.py | Shares experiments/log.jsonl — wiki feeds gaps to research loop |
-| vapi_eval_harness.py | score_wiki_proposal() uses same rubric as AutoResearch |
-| VAPI_WHAT_IF.md | what_if command appends directly — MCP vapi_query_what_if finds it |
-| MEMORY.md | Wiki pages sourced from MEMORY.md — brief command extracts structure |
+| Integration | What Connects | How |
+|------------|--------------|-----|
+| Agent 15 live feed | separation_ratio_snapshots table | Direct SQLite read |
+| Skill 14 sweep | PostCode sweep JSON output | ingest_sweep command |
+| Eval harness | KNOWN_GAPS -> WIKI_KNOWN_W1 | sync_what_if command |
+| AdjudicationRegistry.sol | On-chain wiki anchor | snapshot --anchor |
+| MCP server | vapi_reload_knowledge | After phase_close |
+| AutoResearch loop | experiments/log.jsonl | autoresearch_feed |
+| VAPI_WHAT_IF.md | W1 entries -> harness | Bidirectional sync |
 
 ### Standard Session Protocol
 
-**Start of session** (after /vapi start):
-  python vapi_wiki.py status
+**Start of session**: `python vapi_wiki_engine.py status`
 
 **After completing a phase**:
-  python vapi_wiki.py brief MEMORY.md <new_phase>
-  [Claude Code reads brief and writes pages]
-  python vapi_wiki.py snapshot
-  python vapi_wiki.py autoresearch_feed
+```bash
+python vapi_wiki_engine.py phase_close <N>
+# Then: Claude Code reads wiki/briefs/ and generates pages
+```
 
-**After any WHAT_IF is identified**:
-  python vapi_wiki.py what_if "<topic>" W1 <phase>
-  [MCP server finds it immediately via vapi_query_what_if]
+**After any Skill 14 sweep**:
+```bash
+python vapi_wiki_engine.py ingest_sweep sweep_output.json
+python vapi_wiki_engine.py sync_what_if
+```
 
 **End of session**:
-  python vapi_wiki.py lint
-  python vapi_wiki.py snapshot
+```bash
+python vapi_wiki_engine.py lint
+python vapi_wiki_engine.py snapshot --anchor
+```
 
-### Invariant Checks (enforced before every page write)
-
-- BLOCK: SHA-256(raw[:228]) — wrong hash slice
-- BLOCK: nPublic≠5 — ZK circuit frozen
-- BLOCK: auto_activate_on_breakthrough set to anything but False
-- BLOCK: epistemic threshold < 0.65
-- BLOCK: separation_ratio hardcoded to literal value
-- BLOCK: dry_run=False without N≥100 adjudications context
-- BLOCK: USB thresholds applied to BT sessions
+### Invariant Enforcement (blocked before any wiki write)
+- SHA-256(raw[:228]) — wrong hash slice
+- nPublic != 5 — ZK circuit frozen
+- auto_activate_on_breakthrough != False
+- Epistemic threshold < 0.65
+- separation_ratio assigned literal value
+- dry_run=False without N>=100 context
+- USB thresholds applied to BT sessions
+- GSR_ENABLED=True without N>=30
 
 ### Why No API
-
-Claude Code IS the LLM. Calling the Anthropic API from within a Claude Code
-session is redundant — it would lose all CLAUDE.md context, cost money, and
-split the reasoning across two separate contexts. The engine handles only:
-  - File I/O (wiki/ directory management)
-  - Provenance formatting ([VAPI:Phase{N}:source:type])
-  - Invariant enforcement (pure Python regex)
-  - Eval harness scoring (imports vapi_eval_harness.py)
-  - Cryptographic snapshots (SHA-256)
-  - Lint scanning (pure regex)
-  - WHAT_IF corpus appending (writes to VAPI_WHAT_IF.md)
-  - AutoResearch feed (writes to experiments/log.jsonl)
-
-Claude Code handles all reasoning, synthesis, and page generation.
-
-### Outputs
-
-```json
-{
-  "operation":      "brief|write_page|what_if|lint|snapshot",
-  "pages_affected": ["wiki/phases/phase_166.md"],
-  "provenance":     "[VAPI:Phase166:MEMORY.md:MEASURED]",
-  "invariant_check":"PASS",
-  "snapshot_hash":  "sha256:2c63aeb7dbfe...",
-  "ar_feed_gaps":   6,
-  "health_score":   87
-}
-```
+Claude Code holds CLAUDE.md, all VAPI_*.md corpus files, and the full
+session context. Calling the Anthropic API separately loses all of that,
+costs tokens, and produces weaker results. The engine handles file I/O,
+provenance, invariants, scoring, snapshots, and feed operations.
+Claude Code handles all reasoning and page generation.
 
 ### Last Run
 **Status**: COMPLETE (Phase 166 integration)
-**Result**: wiki/ initialized, 4 corpus briefs generated, 30 pages written, genesis snapshot 2c63aeb7dbfe
-**Next**: Run brief after every phase completion. Snapshot at end of every session.
+**Result**: Replaces vapi_wiki.py and vapi_knowledge_engine.py; 30 pages written; genesis snapshot d42ab3fecf8a
+**Next**: phase_close after each phase completion
 ---
 
 ## Skill Proposal Template

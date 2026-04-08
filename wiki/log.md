@@ -17,3 +17,9 @@ Format: timestamp | operation | pages | provenance | outcome
 2026-04-08T01:17:44.466128+00:00 | SNAPSHOT | wiki\snapshots.md | [SNAPSHOT:2c63aeb7dbfe] | pages=30, log_lines=16
 2026-04-08T01:17:49.760117+00:00 | AR_FEED | vapi-autoresearch\experiments\log.jsonl | [VAPI:Phase166:vapi_wiki.py:MEASURED] | gaps=6, ratio=None, gate=0.70
 2026-04-08T01:18:32.301960+00:00 | SNAPSHOT | wiki\snapshots.md | [SNAPSHOT:70924f7804c3] | pages=30, log_lines=18
+2026-04-08T01:32:35.066896+00:00 | SYNC_WHAT_IF | vapi-autoresearch\vapi_eval_harness.py | [VAPI:Phase26:VAPI_WHAT_IF.md:MEASURED] | 14 W1 entries synced to harness WIKI_KNOWN_W1
+2026-04-08T01:37:27.101085+00:00 | SYNC_WHAT_IF | vapi-autoresearch\vapi_eval_harness.py | [VAPI:Phase26:VAPI_WHAT_IF.md:MEASURED] | 14 W1 entries synced to harness WIKI_KNOWN_W1
+2026-04-08T01:37:31.397297+00:00 | SNAPSHOT | wiki\snapshots.md | [SNAPSHOT:d42ab3fecf8a] | pages=30, anchor=local only
+2026-04-08T01:37:35.446639+00:00 | AR_FEED | vapi-autoresearch\experiments\log.jsonl | [VAPI:Phase26:vapi_wiki_engine.py:MEASURED] | gaps=6, ratio=None
+2026-04-08T01:38:16.631279+00:00 | LINT | wiki\lint_report.md | [VAPI:Phase26:vapi_wiki_engine.py:MEASURED] | health=0
+2026-04-08T01:39:00.624897+00:00 | LINT | wiki\lint_report.md | [VAPI:Phase26:vapi_wiki_engine.py:MEASURED] | health=0
