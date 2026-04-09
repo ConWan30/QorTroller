@@ -599,7 +599,100 @@ Based on accumulated learning:
 
 ---
 
-**Document Version**: 1.1 (Phase 149)
-**Last Updated**: 2026-04-03
+---
+
+## 7. Autoresearch Cycle 8 — Phases 169–177 (2026-04-08)
+
+### Session Summary
+
+**Phases completed in one autoresearch loop**: 169→177 (9 phases, Bridge +88, SDK +32)
+
+**Final counts (Phase 177 COMPLETE):**
+| Metric | Value |
+|--------|-------|
+| Bridge tests | **1998** |
+| SDK tests | **325** |
+| Hardhat tests | **468** |
+| Contracts | **39 ALL LIVE** |
+| Agent fleet | **26** |
+| Tools | **126** |
+
+### Agents Added This Cycle
+
+| # | Agent | Phase | Signal |
+|---|-------|-------|--------|
+| #23 | SeparationRatioRecoveryAgent | 173 | trend_velocity from last 5 snapshots; recovery_action STABLE/AGE_WEIGHTING/P1_RE_ENROLLMENT/MORE_SESSIONS |
+| #24 | AgeWeightedRatioPersistenceAgent | 175 | temporal_drift_index = raw_ratio - age_weighted_ratio; P1_NONSTATIONARITY/IMPROVING/STABLE |
+| #25 | PoACChainIntegrityMonitor | 176 | SHA-256 chain linkage audit; integrity_score = valid_links/total_records |
+| #26 | ProtocolMaturityScoringAgent | 177 | 6-component weighted maturity_score (0.0–1.0); tiers ALPHA/BETA/PRODUCTION_CANDIDATE |
+
+### Phase 174 — Session Age Weighting
+
+`analyze_interperson_separation.py` gained `--session-age-weight <halflife_days>` flag.  
+Gaussian decay: `w_i = exp(-λ·age_days)` where `λ = ln(2)/halflife`.  
+WIF-025 CLOSED — AGE_WEIGHTING recommendation from Phase 173 now actionable.
+
+### Phase 175 — AgeWeightedRatioPersistenceAgent
+
+`temporal_drift_index = raw_ratio - age_weighted_ratio`  
+- TDI > 0.05 → P1_NONSTATIONARITY (old sessions inflate ratio)  
+- TDI < -0.05 → IMPROVING (new sessions stronger)  
+- |TDI| ≤ 0.05 → STABLE  
+Tool #124; SDK AgeWeightAnalysisResult(6 slots)+VAPIAgeWeightAnalysis.
+
+### Phase 176 — PoACChainIntegrityMonitor
+
+Audits SHA-256 chain linkage across all PoAC records.  
+W1 mitigation: only aggregate counts exposed — no broken record IDs returned.  
+`audit_passed=True` when `broken_links==0`; fail-open error path.  
+Tool #125; SDK PoACChainIntegrityResult(6 slots)+VAPIPoACChainIntegrity.
+
+### Phase 177 — ProtocolMaturityScoringAgent
+
+Synthesizes 6 signals into unified maturity_score:
+
+| Component | Weight | Source |
+|-----------|--------|--------|
+| separation | 0.25 | separation_defensibility_log ratio |
+| chain_integrity | 0.20 | poac_chain_audit_log integrity_score |
+| consent | 0.15 | consent_ledger active consent coverage |
+| biometric_freshness | 0.15 | privacy_compliance_log mean_decay_factor |
+| agent_calibration | 0.15 | agent_calibration_health latest_pass_rate |
+| enrollment | 0.10 | enrollment_auto_guidance_log |
+
+Tiers: ALPHA (<0.50) / BETA (0.50–0.85) / PRODUCTION_CANDIDATE (≥0.85)  
+**NOTE**: Class renamed `ProtocolMaturityScoringResult`/`VAPIProtocolMaturityScoring` (not `ProtocolMaturityResult`/`VAPIProtocolMaturity`) to avoid Phase 104 naming collision.  
+Tool #126; SDK ProtocolMaturityScoringResult(9 slots)+VAPIProtocolMaturityScoring.
+
+### Separation Ratio Crisis (as of 2026-04-05)
+
+| N (touchpad_corners) | Ratio | Status |
+|----------------------|-------|--------|
+| N=11 | 1.261 | Was above gate |
+| N=14 | 0.789 | Below gate |
+| N=20 | **0.569** | **TOURNAMENT BLOCKER** |
+
+**Root cause**: P1 temporal non-stationarity — intra-player variance range [1.661, 4.410].  
+Old P1 sessions cluster near P2; new P1 sessions cluster near P3.  
+LOO classification: 20.0% (4/20) — below random baseline (33%).  
+P1=6/P2=7/P3=7 sessions; need ≥10/player for defensibility gate.  
+Recovery action: **P1_RE_ENROLLMENT** (Agent #23 active signal).  
+TDI: **P1_NONSTATIONARITY** (Agent #24 active signal).  
+Maturity tier: **ALPHA** (maturity_score < 0.50 until separation recovers).
+
+### WHAT_IF Entries Filed
+
+- **WIF-025**: CLOSED Phase 174 (age weighting implementation)
+- **WIF-026** (Phase 176): W1=chain audit exposes injection windows → mitigation: aggregate counts only; W2=isChainIntegrous() as third composable primitive
+- **WIF-027** (Phase 177): W1=maturity score gaming by silencing agents → mitigation: silence_penalty component (Phase 178 candidate); W2=maturity_score≥0.85 as DePIN marketplace trustworthiness oracle
+
+### SDK Naming Collision Fixed (2026-04-08)
+
+Phase 177 originally shipped `ProtocolMaturityResult`/`VAPIProtocolMaturity` — same names as Phase 104's PMI-based classes. Python last-definition-wins caused Phase 104 tests to break (5 failures). Fixed by renaming Phase 177 classes to `ProtocolMaturityScoringResult`/`VAPIProtocolMaturityScoring`. CLAUDE.md and test file updated atomically.
+
+---
+
+**Document Version**: 1.2 (Phase 177)
+**Last Updated**: 2026-04-08
 **Update Method**: Append-only, manual edit after significant sessions
 **Retention**: All entries preserved indefinitely

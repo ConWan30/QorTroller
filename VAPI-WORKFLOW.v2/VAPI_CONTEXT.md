@@ -27,28 +27,73 @@
 
 ## 1. Current Phase Status
 
-**Active Phase**: Phase 156 — EnrollmentAutoGuidanceAgent (agent #20)
-**Phase Start**: 2026-04-04
+**Active Phase**: Phase 177 — ProtocolMaturityScoringAgent (agent #26)
+**Phase Start**: 2026-04-08
 **Phase Status**: COMPLETE
-**Next Phase**: Phase 157 (TBD — user approval required)
+**Next Phase**: Phase 178 (TBD — user approval required; WIF-027 candidate: silence_penalty component)
 
-### Phase 150 Deliverables (COMPLETE 2026-04-03)
+> **SYNC NOTE**: Phases 165–177 completed 2026-04-05/08 (Autoresearch Cycle 8). Files synced 2026-04-08.
+
+### Phase 177 Deliverables (COMPLETE 2026-04-08)
+
+| Component | Status | Evidence |
+|-----------|--------|----------|
+| ProtocolMaturityScoringAgent (agent #26) | ✅ LIVE | 6-component weighted maturity_score (0.0–1.0) |
+| Maturity formula | ✅ LIVE | sep(0.25)+chain(0.20)+consent(0.15)+freshness(0.15)+cal(0.15)+enroll(0.10) |
+| Tiers ALPHA/BETA/PRODUCTION_CANDIDATE | ✅ LIVE | <0.50 / 0.50–0.85 / ≥0.85 |
+| protocol_maturity_log table | ✅ LIVE | insert_protocol_maturity_log/get_protocol_maturity_status |
+| GET /agent/protocol-maturity-score | ✅ LIVE | 10 keys incl. all 6 components |
+| Tool #126 get_protocol_maturity_score | ✅ LIVE | BridgeAgent tool |
+| ProtocolMaturityScoringResult(9 slots) + VAPIProtocolMaturityScoring SDK | ✅ LIVE | renamed to avoid Phase 104 collision |
+| WIF-027 filed | ✅ DOCUMENTED | W1: silence gaming; W2: DePIN oracle |
+| Bridge tests | ✅ PASS | **1,998** pytest (+8 Phase 177) |
+| SDK tests | ✅ PASS | **325** tests (+4 Phase 177) |
+| Hardhat tests | ✅ PASS | 468 tests (unchanged) |
+
+### Autoresearch Cycle 8 Summary (Phases 165–177)
+
+| Phase | Agent/Feature | WIF | Bridge | SDK |
+|-------|---------------|-----|--------|-----|
+| 165 | Post-Erasure Separation Ratio Recompute | WIF-024 CLOSED | 1942 | 301 |
+| 166 | mixed_biometric_probe + configurable gate | — | 1950 | 305 |
+| 167 | Wiki Engine Integration Validation | — | 1950 | 305 |
+| 168 | Bootstrap CI in separation_ratio_snapshots | — | 1958 | 309 |
+| 173 | SeparationRatioRecoveryAgent (#23) | — | 1966 | 313 |
+| 174 | Session Age Weighting (script only) | WIF-025 CLOSED | 1974 | 313 |
+| 175 | AgeWeightedRatioPersistenceAgent (#24) | — | 1982 | 317 |
+| 176 | PoACChainIntegrityMonitor (#25) | WIF-026 filed | 1990 | 321 |
+| 177 | ProtocolMaturityScoringAgent (#26) | WIF-027 filed | **1998** | **325** |
+
+### Phase 164 Deliverables (COMPLETE 2026-04-05) [archived]
+
+| Component | Status | Evidence |
+|-----------|--------|----------|
+| consent_snapshot_log table | ✅ LIVE | linked by commit_hash to separation_ratio_registry_log |
+| Bridge tests | ✅ PASS | 1,934 pytest (+8 Phase 164) |
+| SDK tests | ✅ PASS | 297 tests (+4 Phase 164) |
+| Hardhat tests | ✅ PASS | 468 tests (unchanged) |
+
+### Privacy Phase Summary (Phases 157–164)
+
+| Phase | Agent/Feature | WIF Closed | Bridge | SDK |
+|-------|---------------|------------|--------|-----|
+| 157 | FleetConsensusSnapshotAgent (#21) | WIF-012/013/016 | 1877 | 269 |
+| 158 | Class K HMAC Validation + PoHBG | WIF-014/015 | 1886 | 273 |
+| 159 | BiometricPrivacyComplianceAgent (#22, BP-001) | — | 1894 | 277 |
+| 160 | Consent Ledger + Right-to-Erasure | WIF-018/019 | 1902 | 281 |
+| 161 | Consent Gate Enforcement (GDPR Art.17) | WIF-018/020 CLOSED | 1910 | 285 |
+| 162 | Consent-Aware Corpus Status | WIF-021 CLOSED | 1918 | 289 |
+| 163 | Consent-Bound Separation Hash | WIF-022 CLOSED | 1926 | 293 |
+| 164 | ConsentSnapshotAnchor | WIF-023 CLOSED | 1934 | 297 |
+
+### Phase 150 Deliverables (COMPLETE 2026-04-03) [archived]
 
 | Component | Status | Evidence |
 |-----------|--------|----------|
 | separation_defensibility_log table | ✅ LIVE | insert/get store methods + schema(150) |
 | config.min_touchpad_sessions_per_player | ✅ LIVE | default=10 (WIF-010 target) |
-| analyze_interperson_separation.py | ✅ LIVE | --session-consistency + --min-n-per-player flags |
-| GET /agent/separation-defensibility-status | ✅ LIVE | 6 keys (defensible/ratio/n_per_player/min_n_per_player/all_pairs_above_1/found) |
-| Tool #106 get_separation_defensibility_status | ✅ LIVE | BridgeAgent tool, 6 required keys |
-| SeparationDefensibilityResult + VAPISeparationDefensibility SDK | ✅ LIVE | 6 slots, never raises |
-| openapi.yaml SeparationDefensibilityStatus schema | ✅ LIVE | GET /agent/separation-defensibility-status path |
-| SDK_VERSION | ✅ UPDATED | 3.0.0-phase148→3.0.0-phase150 |
 | WIF-010 formal closure | ✅ DOCUMENTED | defensible=False (P1=3/P2=4/P3=4 < min_n=10) |
-| WIF-011 added | ✅ DOCUMENTED | Session type mixing integrity gap (OPEN) |
-| Bridge tests | ✅ PASS | 1,868 pytest (+40 Phases 152-156) |
-| SDK tests | ✅ PASS | 265 tests (+20 Phases 152-156) |
-| Hardhat tests | ✅ PASS | 468 tests (+6 Phase 153 SeparationRatioRegistry) |
+| WIF-011 added | ✅ DOCUMENTED | Session type mixing integrity gap |
 
 ### Phase 149 Deliverables (COMPLETE 2026-04-03)
 
@@ -147,9 +192,9 @@ When proposing on-chain operations:
 
 | Component | Test Count | Status | Last Run |
 |-----------|------------|--------|----------|
-| Bridge pytest | 1,868 | ✅ PASS | 2026-04-04 |
-| SDK tests | 265 | ✅ PASS | 2026-04-04 |
-| Hardhat tests | 468 | ✅ PASS | 2026-04-04 |
+| Bridge pytest | **1,998** | ✅ PASS | 2026-04-08 |
+| SDK tests | **325** | ✅ PASS | 2026-04-08 |
+| Hardhat tests | 468 | ✅ PASS | 2026-04-08 |
 | Hardware tests | 37 | ⚠️ HARDWARE-ONLY | Manual |
 | E2E tests | 14 | ⚠️ REQUIRES NODE | Manual |
 
@@ -412,8 +457,8 @@ When prioritizing work:
 
 ---
 
-**Document Version**: 1.2 (Phase 156)
-**Last Updated**: 2026-04-04
-**Update Trigger**: Phase 156 session — VAPI_AGENTS.md synced (agents #19-20 added); VAPI_SKILLS.md Skill 14 added; vapi.md 20-phase drift corrected; AutoResearch cycles 4-6 score=1.000
-**Update Method**: Manual edit, not AutoResearch (ground truth file)
-**AutoResearch Last Run**: 2026-04-04 (cycle 6, score=1.000; W1 Class K GSR bypass + W2 PoHBG quadruple proof; W1 covariance regime instability + W2 adaptive probe sequencing filed as WIF-014–017)
+**Document Version**: 1.4 (Phase 177)
+**Last Updated**: 2026-04-08
+**Update Trigger**: Phase 177 COMPLETE — 13-phase drift (165→177) synced manually; Autoresearch Cycle 8 complete; agent fleet 22→26; WIF-024–027 closed/filed; bridge 1934→1998; SDK 297→325
+**Update Method**: Manual edit post Autoresearch Cycle 8
+**AutoResearch Last Run**: 2026-04-08 (cycle 8, phases 169–177, bridge +64, SDK +16)
