@@ -1661,6 +1661,26 @@ class Store:
                 CREATE INDEX IF NOT EXISTS idx_sep_recovery_created
                 ON separation_ratio_recovery_log(created_at DESC)
             """)
+            # Phase 176: poac_chain_audit_log — PoACChainIntegrityMonitor (agent #25).
+            # Audits SHA-256 chain linkage across PoAC records for each device.
+            # integrity_score = valid_links / total_links (0.0 = broken, 1.0 = intact).
+            # W1 mitigation: only aggregate counts exposed (never broken record IDs).
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS poac_chain_audit_log (
+                    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_id         TEXT    NOT NULL DEFAULT '',
+                    total_records     INTEGER NOT NULL DEFAULT 0,
+                    valid_links       INTEGER NOT NULL DEFAULT 0,
+                    broken_links      INTEGER NOT NULL DEFAULT 0,
+                    integrity_score   REAL    NOT NULL DEFAULT 1.0,
+                    audit_passed      INTEGER NOT NULL DEFAULT 1,
+                    created_at        REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_chain_audit_device
+                ON poac_chain_audit_log(device_id, created_at DESC)
+            """)
             # Phase 175: age_weight_analysis_log — AgeWeightedRatioPersistenceAgent (agent #24).
             # Persists results of --session-age-weight analysis runs (Phase 174 script).
             # temporal_drift_index = raw_ratio - age_weighted_ratio:
@@ -8446,6 +8466,81 @@ class Store:
                 "n_sessions_used":      int(r[6]),
                 "drift_direction":      r[7],
                 "created_at":           r[8],
+            }
+            for r in rows
+        ]
+
+    # --- Phase 176: PoACChainIntegrityMonitor ---
+
+    def insert_poac_chain_audit_log(
+        self,
+        device_id: str,
+        total_records: int,
+        valid_links: int,
+        broken_links: int,
+    ) -> int:
+        """Insert a PoAC chain integrity audit result (Phase 176).
+
+        integrity_score = valid_links / total_links (0.0 when total=0 → score=1.0 vacuous).
+        audit_passed = True when integrity_score >= 1.0 (no broken links).
+        W1 mitigation: only aggregate counts stored — no broken record IDs.
+        """
+        if total_records > 0:
+            integrity_score = round(float(valid_links) / float(total_records), 6)
+        else:
+            integrity_score = 1.0  # vacuously intact
+        audit_passed = 1 if broken_links == 0 else 0
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO poac_chain_audit_log "
+                "(device_id, total_records, valid_links, broken_links, "
+                "integrity_score, audit_passed, created_at) VALUES (?,?,?,?,?,?,?)",
+                (
+                    str(device_id),
+                    int(total_records),
+                    int(valid_links),
+                    int(broken_links),
+                    integrity_score,
+                    audit_passed,
+                    time.time(),
+                ),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def get_poac_chain_audit_status(
+        self, device_id: "str | None" = None, limit: int = 1
+    ) -> "list[dict]":
+        """Return most recent chain audit results (Phase 176).
+
+        If device_id is provided, filters to that device only.
+        Returns newest-first. W1: never exposes broken record IDs.
+        """
+        with self._conn() as conn:
+            if device_id:
+                rows = conn.execute(
+                    "SELECT id, device_id, total_records, valid_links, broken_links, "
+                    "integrity_score, audit_passed, created_at "
+                    "FROM poac_chain_audit_log WHERE device_id=? "
+                    "ORDER BY id DESC LIMIT ?",
+                    (device_id, limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT id, device_id, total_records, valid_links, broken_links, "
+                    "integrity_score, audit_passed, created_at "
+                    "FROM poac_chain_audit_log ORDER BY id DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+        return [
+            {
+                "id":              r[0],
+                "device_id":       r[1],
+                "total_records":   int(r[2]),
+                "valid_links":     int(r[3]),
+                "broken_links":    int(r[4]),
+                "integrity_score": float(r[5]),
+                "audit_passed":    bool(r[6]),
+                "created_at":      r[7],
             }
             for r in rows
         ]

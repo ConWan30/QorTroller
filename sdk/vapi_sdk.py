@@ -4875,3 +4875,73 @@ class VAPIAgeWeightAnalysis:
                 drift_direction      = "STABLE",
                 error                = str(exc),
             )
+
+
+# ---------------------------------------------------------------------------
+# Phase 176 — PoACChainIntegrityMonitor (agent #25)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class PoACChainIntegrityResult:
+    """Result from VAPIPoACChainIntegrity.get_status() (Phase 176).
+
+    integrity_score = valid_links / total_records:
+      1.0  = fully intact chain (all SHA-256 linkages verified)
+      <1.0 = broken links detected (audit_passed=False)
+    W1: broken_links is count only — no IDs exposed (prevents injection window leakage).
+    """
+    chain_integrity_enabled: bool
+    total_records:   int
+    valid_links:     int
+    broken_links:    int
+    integrity_score: float
+    audit_passed:    bool
+    error: "str | None" = None
+
+
+class VAPIPoACChainIntegrity:
+    """SDK client for GET /agent/poac-chain-integrity (Phase 176).
+
+    Example::
+
+        chain = VAPIPoACChainIntegrity("http://localhost:8080", api_key)
+        result = chain.get_status()
+        if not result.audit_passed:
+            print(f"Chain broken: {result.broken_links}/{result.total_records} links")
+    """
+
+    def __init__(self, base_url: str, api_key: str) -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self, device_id: str = "") -> PoACChainIntegrityResult:
+        """Return the latest PoAC chain integrity audit result.
+
+        On error: returns PoACChainIntegrityResult with error set and audit_passed=True
+        (fail-open — chain audit failure must not block tournament gate).
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/agent/poac-chain-integrity?api_key={self._key}"
+            if device_id:
+                url += f"&device_id={device_id}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return PoACChainIntegrityResult(
+                chain_integrity_enabled = bool(body.get("chain_integrity_enabled", True)),
+                total_records   = int(body.get("total_records",   0)),
+                valid_links     = int(body.get("valid_links",     0)),
+                broken_links    = int(body.get("broken_links",    0)),
+                integrity_score = float(body.get("integrity_score", 1.0)),
+                audit_passed    = bool(body.get("audit_passed",   True)),
+            )
+        except Exception as exc:
+            return PoACChainIntegrityResult(
+                chain_integrity_enabled = True,
+                total_records   = 0,
+                valid_links     = 0,
+                broken_links    = 0,
+                integrity_score = 1.0,
+                audit_passed    = True,
+                error           = str(exc),
+            )

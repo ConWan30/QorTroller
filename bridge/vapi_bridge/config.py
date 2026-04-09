@@ -1250,6 +1250,14 @@ class Config:
     """Phase 159 — BP-001 biometric half-life in days. TBD decay λ = ln(2)/τ_half.
     Default 90 days per GDPR storage limitation guidance. IMMUTABLE per VAPI_INVARIANTS.md §6."""
 
+    # --- Phase 176: PoACChainIntegrityMonitor (agent #25) ---
+    chain_integrity_enabled: bool = field(
+        default_factory=lambda: _env("CHAIN_INTEGRITY_ENABLED", "true").lower() == "true"
+    )
+    """Phase 176 — Enable PoACChainIntegrityMonitor (agent #25). Default True.
+    Audits SHA-256 chain linkage across PoAC records.
+    W1 mitigation: only aggregate counts exposed; broken record IDs never returned."""
+
     # --- Phase 175: AgeWeightedRatioPersistenceAgent (agent #24) ---
     age_weight_analysis_enabled: bool = field(
         default_factory=lambda: _env("AGE_WEIGHT_ANALYSIS_ENABLED", "true").lower() == "true"

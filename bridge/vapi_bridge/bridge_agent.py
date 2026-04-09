@@ -1053,6 +1053,30 @@ _TOOLS = [
             "required": [],
         },
     },
+    # Tool #125 — Phase 176
+    {
+        "name": "get_poac_chain_integrity",
+        "description": (
+            "Phase 176 PoACChainIntegrityMonitor status (agent #25). "
+            "Audits SHA-256 chain linkage across PoAC records for a device. "
+            "integrity_score = valid_links / total_records (1.0 = fully intact chain). "
+            "W1 mitigation: only aggregate counts returned — no broken record IDs exposed "
+            "(exposing broken record IDs would reveal injection windows to adversaries). "
+            "audit_passed=True when broken_links==0. "
+            "Returns: chain_integrity_enabled/device_id/total_records/valid_links/"
+            "broken_links/integrity_score/audit_passed/timestamp."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "device_id": {
+                    "type": "string",
+                    "description": "Filter to a specific device_id (optional; omit for latest overall).",
+                }
+            },
+            "required": [],
+        },
+    },
     # Tool #124 — Phase 175
     {
         "name": "get_age_weight_analysis_status",
@@ -3649,6 +3673,26 @@ class BridgeAgent:
                     "fleet_health": fleet,
                     "timestamp": _time.time(),
                 }
+
+            # Tool #125 — Phase 176
+            if name == "get_poac_chain_integrity":
+                import time as _t176
+                _dev176 = (args.get("device_id") or "").strip() or None
+                try:
+                    _rows176   = self._store.get_poac_chain_audit_status(device_id=_dev176, limit=1)
+                    _latest176 = _rows176[0] if _rows176 else {}
+                    return {
+                        "chain_integrity_enabled": getattr(self._cfg, "chain_integrity_enabled", True),
+                        "device_id":       str(_latest176.get("device_id",       "")),
+                        "total_records":   int(_latest176.get("total_records",   0)),
+                        "valid_links":     int(_latest176.get("valid_links",     0)),
+                        "broken_links":    int(_latest176.get("broken_links",    0)),
+                        "integrity_score": float(_latest176.get("integrity_score", 1.0)),
+                        "audit_passed":    bool(_latest176.get("audit_passed",   True)),
+                        "timestamp":       _t176.time(),
+                    }
+                except Exception as _e176:
+                    return {"error": str(_e176), "audit_passed": True, "integrity_score": 1.0}
 
             # Tool #124 — Phase 175
             if name == "get_age_weight_analysis_status":
