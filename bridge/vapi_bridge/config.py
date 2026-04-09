@@ -1159,6 +1159,15 @@ class Config:
     )
     """Phase 153 — Enable on-chain separation ratio commitment publishing. Default False."""
 
+    # --- Phase 166: Configurable Defensibility Gate ---
+    min_separation_ratio: float = field(
+        default_factory=lambda: float(_env("MIN_SEPARATION_RATIO", "0.70"))
+    )
+    """Phase 166 — Minimum inter-person separation ratio for defensible=True.
+    Lowered from hardcoded 1.0 to 0.70 (single shared-controller ceiling; all 3 players
+    use the same physical DualShock Edge, removing hardware variance as discriminator).
+    Configurable via MIN_SEPARATION_RATIO env. Default 0.70."""
+
     # --- Phase 154: Capture Stagnation Monitor ---
     capture_stagnation_threshold: float = field(
         default_factory=lambda: float(_env("CAPTURE_STAGNATION_THRESHOLD", "0.5"))
@@ -1240,6 +1249,14 @@ class Config:
     )
     """Phase 159 — BP-001 biometric half-life in days. TBD decay λ = ln(2)/τ_half.
     Default 90 days per GDPR storage limitation guidance. IMMUTABLE per VAPI_INVARIANTS.md §6."""
+
+    # --- Phase 175: AgeWeightedRatioPersistenceAgent (agent #24) ---
+    age_weight_analysis_enabled: bool = field(
+        default_factory=lambda: _env("AGE_WEIGHT_ANALYSIS_ENABLED", "true").lower() == "true"
+    )
+    """Phase 175 — Enable AgeWeightedRatioPersistenceAgent (agent #24). Default True.
+    Persists temporal_drift_index from --session-age-weight analysis runs.
+    temporal_drift_index > 0 signals P1 non-stationarity (old sessions inflate ratio)."""
 
     # --- Phase 160: Consent Ledger + Right-to-Erasure (BP-002 foundation) ---
     consent_ledger_enabled: bool = field(

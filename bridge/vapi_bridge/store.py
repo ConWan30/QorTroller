@@ -1661,6 +1661,29 @@ class Store:
                 CREATE INDEX IF NOT EXISTS idx_sep_recovery_created
                 ON separation_ratio_recovery_log(created_at DESC)
             """)
+            # Phase 175: age_weight_analysis_log — AgeWeightedRatioPersistenceAgent (agent #24).
+            # Persists results of --session-age-weight analysis runs (Phase 174 script).
+            # temporal_drift_index = raw_ratio - age_weighted_ratio:
+            #   positive  → old sessions inflate ratio (P1 non-stationarity present)
+            #   negative  → new sessions stronger (player improving/stabilizing over time)
+            #   near-zero → player is biometrically stationary (ideal state)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS age_weight_analysis_log (
+                    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+                    probe_type           TEXT    NOT NULL DEFAULT 'touchpad_corners',
+                    raw_ratio            REAL    NOT NULL DEFAULT 0.0,
+                    age_weighted_ratio   REAL    NOT NULL DEFAULT 0.0,
+                    temporal_drift_index REAL    NOT NULL DEFAULT 0.0,
+                    halflife_days        REAL    NOT NULL DEFAULT 90.0,
+                    n_sessions_used      INTEGER NOT NULL DEFAULT 0,
+                    drift_direction      TEXT    NOT NULL DEFAULT 'STABLE',
+                    created_at           REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_age_weight_created
+                ON age_weight_analysis_log(created_at DESC)
+            """)
             # Phase 164: consent_snapshot_log — WIF-023 ConsentSnapshotAnchor.
             # Records consent coverage at every separation-ratio commit so that post-commit
             # revocations produce a verifiable delta chain rather than silent divergence.
@@ -8354,6 +8377,75 @@ class Store:
                 "recovery_action":  r[5],
                 "recommendation":   r[6],
                 "created_at":       r[7],
+            }
+            for r in rows
+        ]
+
+    # --- Phase 175: AgeWeightedRatioPersistenceAgent ---
+
+    def insert_age_weight_analysis_log(
+        self,
+        probe_type: str,
+        raw_ratio: float,
+        age_weighted_ratio: float,
+        halflife_days: float,
+        n_sessions_used: int,
+    ) -> int:
+        """Insert an age-weighted separation ratio analysis result (Phase 175).
+
+        temporal_drift_index = raw_ratio - age_weighted_ratio.
+          positive  → old sessions inflate ratio (P1 non-stationarity)
+          negative  → new sessions stronger (player stabilising)
+          near-zero → biometrically stationary (ideal)
+        drift_direction: P1_NONSTATIONARITY | IMPROVING | STABLE
+        """
+        tdi = round(float(raw_ratio) - float(age_weighted_ratio), 6)
+        if tdi > 0.05:
+            direction = "P1_NONSTATIONARITY"
+        elif tdi < -0.05:
+            direction = "IMPROVING"
+        else:
+            direction = "STABLE"
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO age_weight_analysis_log "
+                "(probe_type, raw_ratio, age_weighted_ratio, temporal_drift_index, "
+                "halflife_days, n_sessions_used, drift_direction, created_at) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (
+                    str(probe_type),
+                    float(raw_ratio),
+                    float(age_weighted_ratio),
+                    tdi,
+                    float(halflife_days),
+                    int(n_sessions_used),
+                    direction,
+                    time.time(),
+                ),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def get_age_weight_analysis_status(self, limit: int = 1) -> "list[dict]":
+        """Return most recent age-weight analysis results, newest first (Phase 175)."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT id, probe_type, raw_ratio, age_weighted_ratio, "
+                "temporal_drift_index, halflife_days, n_sessions_used, "
+                "drift_direction, created_at "
+                "FROM age_weight_analysis_log ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [
+            {
+                "id":                   r[0],
+                "probe_type":           r[1],
+                "raw_ratio":            float(r[2]),
+                "age_weighted_ratio":   float(r[3]),
+                "temporal_drift_index": float(r[4]),
+                "halflife_days":        float(r[5]),
+                "n_sessions_used":      int(r[6]),
+                "drift_direction":      r[7],
+                "created_at":           r[8],
             }
             for r in rows
         ]

@@ -4808,3 +4808,70 @@ class VAPISeparationRatioRecovery:
                 recommendation   = "",
                 error            = str(exc),
             )
+
+
+# ---------------------------------------------------------------------------
+# Phase 175 — AgeWeightedRatioPersistenceAgent (agent #24)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class AgeWeightAnalysisResult:
+    """Result from VAPIAgeWeightAnalysis.get_status() (Phase 175).
+
+    temporal_drift_index = raw_ratio - age_weighted_ratio:
+      positive  -> P1_NONSTATIONARITY (old sessions inflate ratio)
+      negative  -> IMPROVING (new sessions biometrically stronger)
+      near-zero -> STABLE (biometrically stationary — ideal for tournament)
+    """
+    age_weight_analysis_enabled: bool
+    raw_ratio:            float
+    age_weighted_ratio:   float
+    temporal_drift_index: float
+    halflife_days:        float
+    drift_direction:      str
+    error: "str | None" = None
+
+
+class VAPIAgeWeightAnalysis:
+    """SDK client for GET /agent/age-weight-analysis-status (Phase 175).
+
+    Example::
+
+        awa = VAPIAgeWeightAnalysis("http://localhost:8080", api_key)
+        result = awa.get_status()
+        if result.drift_direction == "P1_NONSTATIONARITY":
+            print(f"TDI={result.temporal_drift_index:.3f}: re-enrollment needed")
+    """
+
+    def __init__(self, base_url: str, api_key: str) -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self) -> AgeWeightAnalysisResult:
+        """Return the latest age-weighted ratio analysis result.
+
+        On error: returns AgeWeightAnalysisResult with error set and STABLE defaults.
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/agent/age-weight-analysis-status?api_key={self._key}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return AgeWeightAnalysisResult(
+                age_weight_analysis_enabled = bool(body.get("age_weight_analysis_enabled", True)),
+                raw_ratio            = float(body.get("raw_ratio",            0.0)),
+                age_weighted_ratio   = float(body.get("age_weighted_ratio",   0.0)),
+                temporal_drift_index = float(body.get("temporal_drift_index", 0.0)),
+                halflife_days        = float(body.get("halflife_days",        90.0)),
+                drift_direction      = str(body.get("drift_direction",        "STABLE")),
+            )
+        except Exception as exc:
+            return AgeWeightAnalysisResult(
+                age_weight_analysis_enabled = True,
+                raw_ratio            = 0.0,
+                age_weighted_ratio   = 0.0,
+                temporal_drift_index = 0.0,
+                halflife_days        = 90.0,
+                drift_direction      = "STABLE",
+                error                = str(exc),
+            )

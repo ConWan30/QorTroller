@@ -4505,6 +4505,41 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
+    # Phase 175 — GET /agent/age-weight-analysis-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/age-weight-analysis-status")
+    async def get_age_weight_analysis_status_endpoint(api_key: str = ""):
+        """AgeWeightedRatioPersistenceAgent status (Phase 175, agent #24).
+
+        Persists results of --session-age-weight analysis runs (Phase 174 script).
+        temporal_drift_index = raw_ratio - age_weighted_ratio:
+          positive  -> old sessions inflate ratio (P1_NONSTATIONARITY)
+          negative  -> new sessions stronger (IMPROVING)
+          near-zero -> biometrically stationary (STABLE)
+
+        Returns: age_weight_analysis_enabled, raw_ratio, age_weighted_ratio,
+        temporal_drift_index, halflife_days, n_sessions_used, drift_direction, timestamp.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t175
+        try:
+            _enabled175 = bool(getattr(cfg, "age_weight_analysis_enabled", True))
+            _rows175    = store.get_age_weight_analysis_status(limit=1)
+            _latest175  = _rows175[0] if _rows175 else {}
+            return {
+                "age_weight_analysis_enabled": _enabled175,
+                "raw_ratio":            float(_latest175.get("raw_ratio",            0.0)),
+                "age_weighted_ratio":   float(_latest175.get("age_weighted_ratio",   0.0)),
+                "temporal_drift_index": float(_latest175.get("temporal_drift_index", 0.0)),
+                "halflife_days":        float(_latest175.get("halflife_days",        90.0)),
+                "n_sessions_used":      int(_latest175.get("n_sessions_used",        0)),
+                "drift_direction":      str(_latest175.get("drift_direction",        "STABLE")),
+                "timestamp":            _t175.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
     # Phase 165 — GET /agent/post-erasure-recompute-status
     # ------------------------------------------------------------------
     @app.get("/agent/post-erasure-recompute-status")
