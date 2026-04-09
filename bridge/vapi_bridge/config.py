@@ -1250,6 +1250,15 @@ class Config:
     """Phase 159 — BP-001 biometric half-life in days. TBD decay λ = ln(2)/τ_half.
     Default 90 days per GDPR storage limitation guidance. IMMUTABLE per VAPI_INVARIANTS.md §6."""
 
+    # --- Phase 177: ProtocolMaturityScoringAgent (agent #26) ---
+    protocol_maturity_enabled: bool = field(
+        default_factory=lambda: _env("PROTOCOL_MATURITY_ENABLED", "true").lower() == "true"
+    )
+    """Phase 177 — Enable ProtocolMaturityScoringAgent (agent #26). Default True.
+    Synthesizes 6 signals into maturity_score: ALPHA/BETA/PRODUCTION_CANDIDATE.
+    PRODUCTION_CANDIDATE requires separation_ratio>1.0, chain integrity 1.0,
+    consent corpus defensible, biometric freshness, all agents calibrated, enrollment done."""
+
     # --- Phase 176: PoACChainIntegrityMonitor (agent #25) ---
     chain_integrity_enabled: bool = field(
         default_factory=lambda: _env("CHAIN_INTEGRITY_ENABLED", "true").lower() == "true"

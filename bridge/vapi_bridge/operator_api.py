@@ -4505,6 +4505,45 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
+    # Phase 177 — GET /agent/protocol-maturity-score
+    # ------------------------------------------------------------------
+    @app.get("/agent/protocol-maturity-score")
+    async def get_protocol_maturity_score_endpoint(api_key: str = ""):
+        """ProtocolMaturityScoringAgent status (Phase 177, agent #26).
+
+        Synthesizes 6 agent signals into a unified maturity_score (0.0-1.0).
+        Component weights: separation(0.25) + chain_integrity(0.20) +
+          consent(0.15) + biometric_freshness(0.15) + agent_calibration(0.15)
+          + enrollment(0.10).
+        maturity_tier: ALPHA (<0.50) | BETA (0.50-0.85) | PRODUCTION_CANDIDATE (>=0.85)
+
+        Returns: protocol_maturity_enabled, maturity_score, maturity_tier,
+        separation_component, chain_integrity_component, consent_component,
+        biometric_freshness_component, agent_calibration_component,
+        enrollment_component, timestamp.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t177
+        try:
+            _enabled177 = bool(getattr(cfg, "protocol_maturity_enabled", True))
+            _rows177    = store.get_protocol_maturity_status(limit=1)
+            _latest177  = _rows177[0] if _rows177 else {}
+            return {
+                "protocol_maturity_enabled":      _enabled177,
+                "maturity_score":                 float(_latest177.get("maturity_score",                0.0)),
+                "maturity_tier":                  str(_latest177.get("maturity_tier",                   "ALPHA")),
+                "separation_component":           float(_latest177.get("separation_component",          0.0)),
+                "chain_integrity_component":      float(_latest177.get("chain_integrity_component",     0.0)),
+                "consent_component":              float(_latest177.get("consent_component",             0.0)),
+                "biometric_freshness_component":  float(_latest177.get("biometric_freshness_component", 0.0)),
+                "agent_calibration_component":    float(_latest177.get("agent_calibration_component",   0.0)),
+                "enrollment_component":           float(_latest177.get("enrollment_component",          0.0)),
+                "timestamp":                      _t177.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
     # Phase 176 — GET /agent/poac-chain-integrity
     # ------------------------------------------------------------------
     @app.get("/agent/poac-chain-integrity")

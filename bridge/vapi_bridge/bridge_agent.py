@@ -1053,6 +1053,25 @@ _TOOLS = [
             "required": [],
         },
     },
+    # Tool #126 — Phase 177
+    {
+        "name": "get_protocol_maturity_score",
+        "description": (
+            "Phase 177 ProtocolMaturityScoringAgent status (agent #26). "
+            "Synthesizes 6 agent signals into a unified maturity_score (0.0-1.0). "
+            "Component weights: separation(0.25) + chain_integrity(0.20) + consent(0.15) "
+            "+ biometric_freshness(0.15) + agent_calibration(0.15) + enrollment(0.10). "
+            "maturity_tier: ALPHA (<0.50) | BETA (0.50-0.85) | PRODUCTION_CANDIDATE (>=0.85). "
+            "PRODUCTION_CANDIDATE requires maturity_score>=0.85 which is only achievable "
+            "when separation_ratio>1.0 (tournament gate), chain integrity 1.0, consent "
+            "corpus defensible, biometric freshness above decay threshold, all 26 agents "
+            "calibrated, and enrollment complete. "
+            "Returns: protocol_maturity_enabled/maturity_score/maturity_tier/"
+            "separation_component/chain_integrity_component/consent_component/"
+            "biometric_freshness_component/agent_calibration_component/enrollment_component/timestamp."
+        ),
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
     # Tool #125 — Phase 176
     {
         "name": "get_poac_chain_integrity",
@@ -3673,6 +3692,27 @@ class BridgeAgent:
                     "fleet_health": fleet,
                     "timestamp": _time.time(),
                 }
+
+            # Tool #126 — Phase 177
+            if name == "get_protocol_maturity_score":
+                import time as _t177
+                try:
+                    _rows177   = self._store.get_protocol_maturity_status(limit=1)
+                    _latest177 = _rows177[0] if _rows177 else {}
+                    return {
+                        "protocol_maturity_enabled":      getattr(self._cfg, "protocol_maturity_enabled", True),
+                        "maturity_score":                 float(_latest177.get("maturity_score",                0.0)),
+                        "maturity_tier":                  str(_latest177.get("maturity_tier",                   "ALPHA")),
+                        "separation_component":           float(_latest177.get("separation_component",          0.0)),
+                        "chain_integrity_component":      float(_latest177.get("chain_integrity_component",     0.0)),
+                        "consent_component":              float(_latest177.get("consent_component",             0.0)),
+                        "biometric_freshness_component":  float(_latest177.get("biometric_freshness_component", 0.0)),
+                        "agent_calibration_component":    float(_latest177.get("agent_calibration_component",   0.0)),
+                        "enrollment_component":           float(_latest177.get("enrollment_component",          0.0)),
+                        "timestamp":                      _t177.time(),
+                    }
+                except Exception as _e177:
+                    return {"error": str(_e177), "maturity_tier": "ALPHA", "maturity_score": 0.0}
 
             # Tool #125 — Phase 176
             if name == "get_poac_chain_integrity":
