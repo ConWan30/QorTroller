@@ -28,12 +28,16 @@ MonitoringState is a module-level singleton. Components update it via:
 
 from __future__ import annotations
 
+import logging
 import time
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Optional
 
 from fastapi import FastAPI
 from fastapi.responses import PlainTextResponse
+
+_log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -63,6 +67,9 @@ class MonitoringState:
     _submit_times: list = field(default_factory=list)
     # Total records dropped due to a full batcher queue (incremented by Batcher.enqueue)
     records_dropped: int = 0
+    # VBSV: controller presence at bridge startup (set by lifespan handler)
+    controller_detected_at_startup: Optional[bool] = None
+    startup_manifest: dict = field(default_factory=dict)
 
     def record_dropped(self) -> None:
         """Call when a record is dropped because the batcher queue is full."""
@@ -196,12 +203,50 @@ def create_monitoring_app(
     _state = state or globals().get("state") or MonitoringState()
     _store = store
 
+    # VBSV: Bridge Startup Validation — probe controller presence at HTTP service start.
+    # Non-blocking: runs once at uvicorn startup, never prevents bridge from serving.
+    @asynccontextmanager
+    async def _lifespan(app: FastAPI):
+        # ── startup ──────────────────────────────────────────────────────────
+        import importlib, sys as _sys
+        _controller_present: Optional[bool] = None
+        try:
+            _hid = importlib.import_module("hid")
+            _devs = _hid.enumerate(0x054C, 0x0DF2)  # DualShock Edge VID/PID
+            _controller_present = len(_devs) > 0
+        except Exception:
+            pass  # hid not installed or device enumerate failed — non-fatal
+
+        _state.controller_detected_at_startup = _controller_present
+        _state.startup_manifest = {
+            "fastapi": importlib.import_module("fastapi").__version__,
+            "starlette": importlib.import_module("starlette").__version__,
+            "python": f"{_sys.version_info.major}.{_sys.version_info.minor}.{_sys.version_info.micro}",
+            "controller_present": _controller_present,
+            "startup_ts": time.time(),
+        }
+
+        if _controller_present is True:
+            _log.info("VBSV: DualShock Edge detected at startup (VID=054C PID=0DF2)")
+        elif _controller_present is False:
+            _log.warning(
+                "VBSV: DualShock Edge NOT detected at startup — "
+                "plug controller via USB then restart bridge or wait for auto-reconnect"
+            )
+        else:
+            _log.debug("VBSV: hid module unavailable — controller probe skipped (pip install hidapi)")
+
+        yield
+        # ── shutdown ─────────────────────────────────────────────────────────
+        _log.info("VAPI monitoring sub-app shutdown (uptime=%.0fs)", _state.uptime_s)
+
     app = FastAPI(
         title="VAPI Monitoring",
         description="Operational health, metrics, and alerts for the VAPI bridge",
         version="1.0.0-phase36",
         docs_url="/docs",
         redoc_url=None,
+        lifespan=_lifespan,
     )
 
     @app.get("/health")
@@ -218,6 +263,9 @@ def create_monitoring_app(
             "chain_rpc_ok": _state.last_rpc_ok,
             "active_devices": _state.active_devices,
             "alerts_count": len(alerts),
+            # VBSV fields (None = probe not yet run / hid unavailable)
+            "controller_detected_at_startup": _state.controller_detected_at_startup,
+            "startup_manifest": _state.startup_manifest,
         }
 
     @app.get("/metrics", response_class=PlainTextResponse)

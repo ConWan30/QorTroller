@@ -96,11 +96,16 @@ def git_revert():
 
 
 def get_priority_from_log(log: list) -> str:
-    """Pick the improvement priority least addressed in recent experiments."""
+    """Pick the improvement priority least addressed in recent experiments.
+    Phase 177 edition: new priorities rotate into the cycle first."""
     priorities = [
+        "temporal_drift",              # WIF-029 — highest urgency pre-tournament
+        "zk_ceremony",                 # WIF-030 — ZK trust model gap
+        "bt_calibration",              # Hardware path still at 0/50 sessions
+        "pofc_consensus",              # Agent fleet 26-agent coherence check
+        "separation_ratio_stratified", # 0.569 → 1.0+ via persona-windowed calibration
+        # Legacy priorities (cycle through as fallback)
         "what_if_corpus_depth",
-        "phase_109_113_precision",
-        "separation_ratio_pathways",
         "class_k_definition",
         "legal_defensibility",
     ]
@@ -344,11 +349,19 @@ def main():
     parser.add_argument("--cycle", type=int,
                         help="Run N improvement cycles")
     parser.add_argument("--priority",
-                        choices=["what_if_corpus_depth",
-                                 "phase_109_113_precision",
-                                 "separation_ratio_pathways",
-                                 "class_k_definition",
-                                 "legal_defensibility"],
+                        choices=[
+                            "temporal_drift",
+                            "zk_ceremony",
+                            "bt_calibration",
+                            "pofc_consensus",
+                            "separation_ratio_stratified",
+                            # Legacy priorities
+                            "what_if_corpus_depth",
+                            "phase_109_113_precision",
+                            "separation_ratio_pathways",
+                            "class_k_definition",
+                            "legal_defensibility",
+                        ],
                         help="Force a specific improvement priority")
     parser.add_argument("--apply",
                         help="Apply a Claude-generated proposal file")
@@ -388,22 +401,55 @@ def main():
 
 # Allow Claude to modify the improvement logic below this line
 # ============================================================
-# CLAUDE-EDITABLE ZONE: improvement heuristics
+# CLAUDE-EDITABLE ZONE: improvement heuristics — Phase 177 edition
 # ============================================================
 
 def select_skill_section_to_improve(priority: str, skill_md: str) -> str:
     """
     Given the current priority, identify which section of skill.md
-    most needs improvement. Claude can refine this heuristic.
+    most needs improvement. Phase 177 edition adds ZK circuit, PoFC,
+    and temporal drift sections.
     """
     priority_section_map = {
-        "what_if_corpus_depth":       "WHAT_IF",
-        "phase_109_113_precision":    "BLOCKCHAIN_ENGINEERING",
-        "separation_ratio_pathways":  "CALIBRATION",
-        "class_k_definition":         "SECURITY_REVIEW",
-        "legal_defensibility":        "Hard Stops",
+        "temporal_drift":              "VHP_CREDENTIAL_LIFECYCLE",
+        "zk_ceremony":                 "ZK_CIRCUIT_ENGINEERING",
+        "bt_calibration":              "CALIBRATION",
+        "pofc_consensus":              "BLOCKCHAIN_ENGINEERING",
+        "separation_ratio_stratified": "CALIBRATION",
+        # Legacy (kept for backward-compat with cycle log)
+        "what_if_corpus_depth":        "WHAT_IF",
+        "phase_109_113_precision":     "BLOCKCHAIN_ENGINEERING",
+        "separation_ratio_pathways":   "CALIBRATION",
+        "class_k_definition":          "SECURITY_REVIEW",
+        "legal_defensibility":         "Hard Stops",
     }
     return priority_section_map.get(priority, "Session Start Protocol")
+
+
+def score_phase_177_readiness(skill_md: str) -> dict:
+    """
+    Phase 177 synthesis gate pre-check. Returns a readiness dict.
+    Claude Code should call this before any Phase 177+ synthesis work begins.
+    """
+    checks = {
+        "poac_228_bytes":          "228" in skill_md,
+        "auto_activate_locked":    "auto_activate_on_breakthrough=False PERMANENT" in skill_md,
+        "epistemic_threshold_065": "0.65" in skill_md,
+        "bt_separate_calibration": "BT requires separate" in skill_md or "bt_transport" in skill_md,
+        "agent_21_pofc":           "ProofOfFleetConsensus" in skill_md or "FleetConsensusSnapshot" in skill_md,
+        "wif028_persona_break":    "WIF-028" in skill_md or "temporal_non_stationarity" in skill_md or "persona" in skill_md.lower(),
+        "wif029_temporal_drift":   "WIF-029" in skill_md or "temporal_biometric_drift" in skill_md or "biometric_credential_ttl" in skill_md,
+        "wif030_zk_ceremony":      "WIF-030" in skill_md or "ceremony_audit" in skill_md,
+        "touchpad_corners_path":   "touchpad_corners" in skill_md,
+        "consent_chain_complete":  "ConsentSnapshot" in skill_md or "consent_delta" in skill_md,
+    }
+    score = sum(checks.values()) / len(checks)
+    return {
+        "phase_177_readiness_score": round(score, 3),
+        "checks": checks,
+        "gate_open": score >= 0.80,
+        "blocking_checks": [k for k, v in checks.items() if not v],
+    }
 
 
 if __name__ == "__main__":

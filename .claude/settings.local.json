@@ -1,7 +1,75 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Read(//c/Users/Contr/vapi-pebble-prototype/vapi-mcp//**)",
+      "Read(//c/Users/Contr/AppData/Roaming/Claude//**)",
+      "Bash(cmd /c \"tasklist /FI \\\\\"IMAGENAME eq python.exe\\\\\" 2>&1\")",
+      "Skill(update-config)",
+      "Bash(claude mcp:*)",
+      "Read(//c/Users/Contr/.claude/**)",
+      "Bash(\"C:/Users/Contr/AppData/Local/Programs/Python/Python313/python.exe\" --version)",
+      "Bash(\"C:/Users/Contr/AppData/Local/Programs/Python/Python313/python.exe\" \"C:/Users/Contr/vapi-pebble-prototype/vapi-mcp/server.py\")",
+      "Bash(kill %1)",
+      "Bash(\"C:/Users/Contr/AppData/Local/Programs/Python/Python313/python.exe\" -c \"import mcp; print\\(mcp.__version__\\)\")",
+      "Bash(\"C:/Users/Contr/AppData/Local/Programs/Python/Python313/python.exe\" -m pip list)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(printf '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{},\"clientInfo\":{\"name\":\"test\",\"version\":\"1\"}}}\\\\n{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\",\"params\":{}}\\\\n{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\",\"params\":{}}\\\\n')",
+      "Bash(timeout 5 \"C:/Users/Contr/AppData/Local/Programs/Python/Python313/python.exe\" \"C:/Users/Contr/vapi-pebble-prototype/vapi-mcp/knowledge_server.py\")",
+      "Read(//c/Users/Contr/**)",
+      "mcp__vapi__vapi_protocol_state",
+      "mcp__vapi-knowledge__vapi_session_start_protocol",
+      "mcp__vapi__vapi_autoresearch_seed",
+      "mcp__vapi__vapi_what_if",
+      "mcp__vapi-knowledge__vapi_validate_proposal",
+      "Bash(ls sdk/tests/*.py)",
+      "Bash(findstr /C:\"passed\" /C:\"failed\")",
+      "Bash(echo \"DONE:$?\")",
+      "Bash(pip show:*)",
+      "Bash(pip index:*)",
+      "Bash(pip install:*)",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(sed:*)",
+      "Bash(npx hardhat:*)",
+      "mcp__vapi-knowledge__vapi_query_what_if",
+      "Bash(grep -n \"Tool.*#1[01][0-9]\" bridge/tests/test_phase159_biometric_privacy*.py)",
+      "Bash(grep -n \"bridge_agent\\\\|BridgeAgent\\\\|_store\\\\|get_privacy\" bridge/tests/test_phase159_biometric_privacy*.py)",
+      "Bash(grep -n \"Tool #116\\\\|BridgeAgent\\\\|_dispatch\" bridge/tests/test_phase159*.py)",
+      "Bash(grep -n \"Tool #1[01][0-9]\\\\|BridgeAgent\\\\|_dispatch\\\\|get_agent_tool\\\\|call_tool\\\\|handle_tool\" bridge/tests/test_phase158*.py)",
+      "Bash(grep -B10 \"insert_separation_defensibility_log\" bridge/vapi_bridge/*.py)",
+      "Bash(grep:*)",
+      "Bash(python3:*)",
+      "Bash(\"C:/Users/Contr/AppData/Local/Programs/Python/Python313/python.exe\" -m pytest sdk/tests/ --tb=no -q)",
+      "Bash(C:/Users/Contr/AppData/Local/Microsoft/WindowsApps/PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0/python.exe:*)",
+      "Bash(xxd \"C:/Users/Contr/AppData/Local/Temp/claude/C--Users-Contr-vapi-pebble-prototype/e766b6fd-13a4-4796-b161-a6d77b8ac1ca/tasks/birk7ea7w.output\")",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(cp \"C:/Users/Contr/Downloads/vapi_wiki_engine.py\" \"C:/Users/Contr/vapi-pebble-prototype/vapi_wiki_engine.py\")",
+      "Bash(cp \"C:/Users/Contr/Downloads/VAPI_WikiEngine_Claude_Code_Prompt.md\" \"C:/Users/Contr/vapi-pebble-prototype/VAPI_WikiEngine_Claude_Code_Prompt.md\")",
+      "Bash(git -C \"C:/Users/Contr/vapi-pebble-prototype/.claude/worktrees/agent-ae6505a9\" log --oneline -5)",
+      "Bash(git -C \"C:/Users/Contr/vapi-pebble-prototype/.claude/worktrees/agent-ae6505a9\" status --short)",
+      "Bash(git -C \"C:/Users/Contr/vapi-pebble-prototype/.claude/worktrees/agent-a516979a\" log --oneline -5)",
+      "Bash(git -C \"C:/Users/Contr/vapi-pebble-prototype/.claude/worktrees/agent-a516979a\" status --short)",
+      "Bash(git -C \"C:/Users/Contr/vapi-pebble-prototype/.claude/worktrees/agent-ae6505a9\" diff HEAD --name-only)",
+      "Bash(git:*)",
+      "Bash(awk 'NR>40')",
+      "Bash(PYTHONUTF8=1 python vapi_autoresearch.py --cycle 1 --priority temporal_drift)",
+      "Bash(PYTHONUTF8=1 python vapi_autoresearch.py --apply experiments/cycle_0008_proposal.txt)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd C:/Users/Contr/vapi-pebble-prototype && \"C:/Users/Contr/AppData/Local/Programs/Python/Python313/python.exe\" scripts/sync_vapi_workflow.py 2>&1 | head -5"
+          }
+        ]
+      }
     ]
   }
 }

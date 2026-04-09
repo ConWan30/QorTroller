@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
 """
-VAPI Calibration Intelligence Agent — Phase 109
+VAPI Calibration Intelligence Agent — Phase 148
 ================================================
 Autonomous hardware calibration monitor. Detects controller connection,
 tracks sessions, evaluates progress, and guides you toward tournament readiness.
+
+Phase 148 state:
+  Separation ratio : 1.261 (diagonal, touchpad_corners, N=11, Phase 143 proper LOO)
+  Classification   : 63.6% (7/11) — BLOCKER until ≥80% (need ≥10 sessions/player)
+  L4 staleness     : live_dim=13 vs calib_dim=12 — BLOCKER (run recalibrate_l4_pipeline.py)
+  Players          : 3 (P1, P2, P3) — terminal_cal sessions + hw_* sessions
 
 Activate from PowerShell (after one-time CALIBRATE_SETUP.ps1):
   calibrate              # Agentic monitor — start here while playing
@@ -17,7 +23,7 @@ Direct:
 Environment:
   DB_PATH                  — bridge.db path (default: ~/.vapi/bridge.db)
   POLL_S                   — poll interval seconds (default: 30)
-  SEPARATION_RATIO_CURRENT — override separation ratio (default: 0.362)
+  SEPARATION_RATIO_CURRENT — override separation ratio (reads DB first; default: 1.261)
   BRIDGE_URL               — bridge API base URL (default: http://localhost:18080)
   OPERATOR_API_KEY         — bridge API key for tournament-readiness call
 """
@@ -55,6 +61,10 @@ _BOLD = "\033[1m"
 _POLL_S = int(os.environ.get("POLL_S", "30"))
 _BRIDGE_URL = os.environ.get("BRIDGE_URL", "http://localhost:18080")
 _API_KEY = os.environ.get("OPERATOR_API_KEY", "")
+_CURRENT_PHASE = 148
+# Phase 143 honest diagonal: 1.261 (touchpad_corners, N=11, proper LOO, 3 players)
+# Still BLOCKER: classification=63.6% < 80% target; need ≥10 sessions/player
+_DEFAULT_SEPARATION_RATIO = "1.261"
 
 
 # -- Windows ANSI enable -----------------------------------------------------
@@ -190,14 +200,66 @@ def _load_rulings(db: pathlib.Path) -> list:
     return [{"verdict": r.get("verdict") or "", "dry_run": bool(r.get("dry_run"))} for r in rows]
 
 
+def _load_separation_from_db(db: pathlib.Path) -> "float | None":
+    """Read latest pooled_ratio from separation_ratio_snapshots table (Phase 121+).
+
+    Returns float if a snapshot exists, None otherwise (caller should fall back to env var).
+    Never raises.
+    """
+    rows = _query(
+        db,
+        "SELECT pooled_ratio FROM separation_ratio_snapshots ORDER BY id DESC LIMIT 1",
+    )
+    if rows:
+        try:
+            return float(rows[0]["pooled_ratio"])
+        except (KeyError, TypeError, ValueError):
+            pass
+    return None
+
+
+def _count_players_from_dirs() -> int:
+    """Count distinct players from session directory structure.
+
+    Reads terminal_cal_P* subdirs under sessions/human/ (P1, P2, P3 etc.) and
+    hw_*.json files (all P1). Returns the number of distinct player labels found.
+    Falls back to 0 if session dirs not found (bridge not yet run).
+    """
+    sessions_root = _REPO_ROOT / "sessions" / "human"
+    players: set[str] = set()
+    if sessions_root.exists():
+        # terminal_cal_P1, terminal_cal_P2, terminal_cal_P3 …
+        for d in sessions_root.glob("terminal_cal_P*/"):
+            if d.is_dir():
+                # "terminal_cal_P1" → "P1"
+                label = d.name.replace("terminal_cal_", "")
+                if label:
+                    players.add(label)
+        # hw_*.json sessions are all from Player 1
+        if any(sessions_root.glob("hw_*.json")):
+            players.add("P1")
+    return len(players)
+
+
 # -- Progress computation ----------------------------------------------------
 
-def _compute_progress(sessions: list, rulings: list) -> dict:
-    sep_ratio = float(os.environ.get("SEPARATION_RATIO_CURRENT", "0.362"))
+def _compute_progress(
+    sessions: list,
+    rulings: list,
+    db: "pathlib.Path | None" = None,
+) -> dict:
+    # Separation ratio: DB snapshot → env var → default 1.261
+    sep_ratio: float | None = _load_separation_from_db(db) if db else None
+    if sep_ratio is None:
+        sep_ratio = float(os.environ.get("SEPARATION_RATIO_CURRENT", _DEFAULT_SEPARATION_RATIO))
+
+    # Player count: directory scan (terminal_cal_P*) is authoritative
+    n_players_dirs = _count_players_from_dirs()
 
     if not sessions:
         return {
-            "n_sessions": 0, "n_players": 0,
+            "n_sessions": 0,
+            "n_players": n_players_dirs,
             "sessions_with_touch_variance": 0,
             "touch_variance_mean": 0.0, "touch_variance_max": 0.0,
             "touch_variance_nonzero_fraction": 0.0,
@@ -230,8 +292,11 @@ def _compute_progress(sessions: list, rulings: list) -> dict:
     fp_rate = len(live_blocks) / len(live_total) if live_total else 0.0
     recent = sorted(sessions, key=lambda s: s["created_at"], reverse=True)[:5]
 
+    # Player count: use directory scan (authoritative) or device_id grouping, whichever is larger
+    n_players_effective = max(len(player_map), n_players_dirs)
+
     return {
-        "n_sessions": n, "n_players": len(player_map),
+        "n_sessions": n, "n_players": n_players_effective,
         "sessions_with_touch_variance": nonzero,
         "touch_variance_mean": sum(tvars) / n,
         "touch_variance_max": max(tvars),
@@ -250,8 +315,10 @@ def _write_progress(progress: dict, db: pathlib.Path) -> None:
         "last_updated": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "db_path": str(db), **progress,
         "_note": (
-            "Auto-written by calibration_agent.py (Phase 109). "
-            "touch_position_variance must be nonzero to unlock separation ratio improvement."
+            f"Auto-written by calibration_agent.py (Phase {_CURRENT_PHASE}). "
+            "Separation ratio reads from separation_ratio_snapshots DB table when available. "
+            "Phase 143: ratio=1.261 (diagonal, touchpad_corners, N=11, proper LOO). "
+            "BLOCKER: classification=63.6% <80% target — need ≥10 touchpad_corners sessions/player."
         ),
     }
     tmp.write_text(json.dumps(payload, indent=2))
@@ -269,7 +336,7 @@ def _write_progress(progress: dict, db: pathlib.Path) -> None:
 def _poll_db(db: pathlib.Path) -> dict:
     sessions = _load_sessions(db)
     rulings = _load_rulings(db)
-    progress = _compute_progress(sessions, rulings)
+    progress = _compute_progress(sessions, rulings, db=db)
     _write_progress(progress, db)
     return progress
 
@@ -353,8 +420,11 @@ def _print_scorecard(p: dict, bridge_data: dict | None = None) -> None:
                f"val={mx:.4f}" if nz > 0 else "swipe touchpad >=3x per session"))
     print(_row("Touch var coverage", f"{frac:.0%}", frac >= 0.5,
                "" if frac >= 0.5 else "play more sessions with touchpad"))
-    print(_row("12-feature space", "ACTIVE" if mx > 0 else "10-feature (limited)",
-               mx > 0, ""))
+    # Phase 148: live_dim=13 (touchpad_spatial_entropy added Phase 121)
+    # calib_dim=12 — L4 thresholds stale until recalibrate_l4_pipeline.py is run
+    feat_label = "13-live/12-cal" if mx > 0 else "13-live/12-cal"
+    feat_note = "L4 thresholds stale: run recalibrate_l4_pipeline.py"
+    print(_row("Feature dims", feat_label, False, feat_note))
     print(_row("False positives", str(fp), fp == 0,
                "investigate via GET /agent/rulings" if fp > 0 else ""))
     print(_row("Separation ratio", f"{ratio:.3f} / 1.000", ratio > 1.0,
@@ -474,7 +544,7 @@ def cmd_monitor() -> None:
 
     print(f"\n{_BOLD}{_C}+══════════════════════════════════════════════════════+")
     print(f"|  VAPI Calibration Intelligence Agent               |")
-    print(f"|  Phase 109  ·  Keyword: calibrate                  |")
+    print(f"|  Phase {_CURRENT_PHASE}  ·  Keyword: calibrate                  |")
     print(f"+══════════════════════════════════════════════════════+{_X}")
     print(f"\n  Database   : {db}")
     print(f"  Progress   : {_PROGRESS_FILE}")

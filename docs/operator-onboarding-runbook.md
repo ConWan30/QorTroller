@@ -165,7 +165,7 @@ The following conditions cannot be satisfied in software alone:
 
 | Blocker | Requirement |
 |---------|-------------|
-| Inter-person separation ratio = 0.362 | Touchpad recapture + N-player calibration |
+| Inter-person separation ratio = 1.261 (Phase 143, classification 63.6%) | Classification ≥80% requires ≥10 touchpad_corners sessions/player |
 | Tournament deployment | `ready_for_live=True` AND separation ratio > 1.0 |
 
 Until separation ratio > 1.0 is empirically confirmed: **"production protocol architecture

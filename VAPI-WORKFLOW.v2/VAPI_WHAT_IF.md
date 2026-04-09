@@ -1324,6 +1324,7 @@ a pre-phase step (< 30 min).
 **Key Cycle 10 Updates**: WIF-025 TouchAC Mobile Biometric Proof (Phase 200 candidate); mobile agent fleet #M1-#M5 design; cross-platform VHP composability via LayerZero; 2026-04-05
 **Key Cycle 11 Updates**: WIF-026 Context Drift on Session Disconnect — MITIGATED (PostToolUse hook + sync script + startup check); 2026-04-05
 **Key Cycle 12 Updates**: WIF-027 Context Window Budget Exhaustion — IDENTIFIED; CLAUDE_HISTORY.md archival pattern proposed; Skill 14 Step 13 Memory Scope Audit added; 2026-04-05
+**Key Cycle 7 (AutoResearch 2026-04-07)**: WIF-028 P1 Temporal Persona Break — structural one-way ratchet explains N=11(1.261)→N=14(0.789)→N=20(0.569) convergence; W2-028 session-date clustering + persona-windowed calibration recovery; Phase 169 candidate; score=1.000
 
 ### W1-014: enrollment_complete count-gate spoofing (Phase 166, Wiki-Generated)
 
@@ -1360,3 +1361,184 @@ a pre-phase step (< 30 min).
 **Connection to ratio**: [Claude Code: how does this advance separation ratio or tournament launch?]
 
 [VAPI:Phase166:vapi_wiki.py:MEASURED]
+
+---
+
+### W1-028: P1 Temporal Non-Stationarity — One-Way Ratchet on Separation Ratio (Phase 169 candidate)
+
+**Status**: OPEN
+**Detected by**: AutoResearch Cycle 7 (2026-04-07)
+**Phase**: Phase 168 → 169
+
+**Failure mechanism**: P1 intra-player Mahalanobis variance grows monotonically as sessions from different calendar weeks are added to the enrollment corpus. Each new week introduces sessions that cluster differently (grip posture shift, hardware wear, physiological variation), expanding the intra-player covariance ellipsoid toward inter-player space. This creates a structural one-way ratchet: more N makes the separation ratio WORSE, not better.
+
+**Observed signature**: N=11 → ratio=1.261, N=14 → ratio=0.789, N=20 → ratio=0.569. The trend is the mathematical signature of a persona break — not a data shortage.
+
+**Implication**: Without persona-break detection, the ratio will continue declining toward ~0.30 as more sessions are captured. The P2/P3 separation (~1.3) is masked by P1's expanding variance, making the 3-player corpus appear non-separable. TOURNAMENT BLOCKER is irresolvable by the current naive "capture more sessions" approach.
+
+**Cryptographic grounding**: Phase 153 SeparationRatioRegistry.sol commitment at N=11 (ratio=1.261) is on-chain inconsistent with live N=20 (ratio=0.569) — legally discoverable during tournament dispute resolution.
+
+**Mitigation**: W2-028 session-date clustering + persona-windowed calibration (Phase 169 candidate).
+
+**Invariants affected**: separation ratio 0.362/0.569 (below min_separation_ratio=0.70 gate); ratio > 1.0 tournament gate; TOURNAMENT BLOCKER; dry_run=True (no live enforcement yet).
+
+**Separation ratio impact**: CRITICAL — primary root cause of current TOURNAMENT BLOCKER
+
+[VAPI:Phase168:autoresearch_cycle7:PROPOSED]
+
+---
+
+### W2-028: Session-Date Clustering — Persona-Windowed Calibration Recovery (Phase 169 candidate)
+
+**Status**: PROPOSED
+**Detected by**: AutoResearch Cycle 7 (2026-04-07)
+**Phase**: Phase 168 → 169
+
+**Mechanism**: Extend `analyze_interperson_separation.py` with `_detect_persona_break(player_id)`:
+1. Group sessions by ISO calendar week
+2. Compute per-week centroid (mean feature vector)
+3. Compute pairwise inter-week centroid Euclidean distance
+4. If `max(inter_week_dist) > 1.5 × mean_intra_week_std`: flag `PERSONA_BREAK`
+5. Retain only most recent contiguous calendar cluster
+6. Re-run ratio analysis on persona-pruned corpus
+
+**Bridge additions**: `persona_break_log` table + `GET /agent/persona-break-status` + Tool #123 `get_persona_break_status` + `PersonaBreakResult(6 slots)` + `VAPIPersonaBreak` SDK
+
+**ioSwarm integration**: `IoSwarmAdjudicationCoordinator` (Phase 131) treats `persona_break_detected=True AND ratio_after < min_separation_ratio` as equivalent to `ratio < 1.0` — blocks VHP mint via Phase 110 gate.
+
+**Phase candidate**: Phase 169 (~4h) — 8 bridge + 4 SDK tests; Bridge 1958→1966 +8; SDK 309→313 +4; Hardhat 468 unchanged
+
+**Exclusive because**: Requires Phase 142 + 143 + 150 + 153 + 157 + 163 + 164 composable infrastructure — no competing protocol has this.
+
+**Connection to ratio**: Directly addresses TOURNAMENT BLOCKER by pruning old-persona P1 sessions and recovering defensible corpus from stable recent persona.
+
+[VAPI:Phase168:autoresearch_cycle7:PROPOSED]
+
+---
+
+## WIF-029 — Temporal Biometric Drift: On-Chain Ratio Valid at T₀ but Stale at Tournament T₁ (Phase 178)
+
+**W1 — Failure mode**: The `SeparationRatioRegistry.sol` commitment anchored at time T₀ carries no
+expiry or TTL. A tournament operator authorized at T₀ (ratio=1.261, N=30) may run a tournament six
+months later at T₁ — but a player's touchpad tremor pattern, grip pressure distribution, and bilateral
+asymmetry index measurably drift over that window due to injury, muscular adaptation, or neurological
+change. The Mahalanobis centroid computed at T₀ is no longer representative of the player's biometric
+profile at T₁. The on-chain proof is cryptographically valid but biometrically stale. Courts in Germany
+(DSGVO §35 purpose limitation) and France (CNIL guidance on biometric data minimization) require that
+biometric processing remain fit-for-purpose; using a T₀ centroid for T₁ tournament adjudication
+constitutes processing beyond the original lawful purpose if the biometric profile has changed
+materially.
+
+**Implication**: A tournament player blocked by L4 at T₁ can challenge the BLOCK ruling by
+demonstrating their biometric profile no longer matches the centroid used to authorize the system —
+the on-chain proof becomes a liability rather than a defense. The operator cannot prove freshness
+without a re-calibration event log.
+
+**Cryptographic grounding**: SHA-256(ratio_str + N + N_consented + players_sorted + ts_ns) encodes
+`ts_ns` but has no TTL field. The absence of TTL in the commitment means any downstream consumer of
+the proof must independently verify freshness — which is currently impossible without VAPI API access.
+
+**Mitigation (Phase 178)**: Introduce `biometric_credential_ttl_days=90` in `Config`. On every
+tournament authorization request, `TournamentActivationChainAgent` computes
+`age_days = (now - commitment_ts_ns / 1e9) / 86400`. If `age_days > biometric_credential_ttl_days`,
+return `{authorized: False, reason: "BIOMETRIC_CREDENTIAL_EXPIRED", recalibration_required: True}`.
+The `SeparationRatioRegistry.sol` commitment schema gains a `ttl_days` field (default 90).
+Tool #N `get_biometric_credential_age`; `BiometricCredentialAgeResult` SDK.
+
+**Status**: OPEN — Phase 178 candidate. Filed 2026-04-09 (AutoResearch cycle 13).
+
+---
+
+**W2 — Biometric Credential TTL as Renewable Tournament License Primitive.**
+
+**Mechanism**: Each re-calibration event (N≥5 new touchpad_corners sessions per player) triggers a
+`renew_separation_ratio_commitment()` flow: fresh Mahalanobis analysis → new
+`SeparationRatioRegistry.sol` entry with `{prev_commit_hash, renewal_reason: "TTL_EXPIRY",
+recalibration_ts_ns, new_ttl_days}`. The chain of renewals constitutes a temporally-sequenced
+biometric license: original grant → renewals with provenance → current validity window. Tournament
+operators receive a `license_chain_id` mapping to the full renewal history. This is the first
+renewable biometric tournament license with on-chain TTL provenance in any gaming DePIN protocol.
+Combined with WIF-023 ConsentSnapshotRegistry and WIF-024 post-erasure recompute, the full legal
+audit trail spans: consent grants → erasure deltas → ratio recomputes → TTL renewals — a complete
+temporal biometric ledger.
+
+**Phase candidate**: Phase 178, ~4h effort (`biometric_credential_ttl_days` config +
+`TournamentActivationChainAgent` TTL check + `SeparationRatioRegistry.sol` `ttl_days` field +
+renewal flow + `biometric_renewal_log` table + Tool #N + SDK `BiometricCredentialAgeResult` +
+openapi schema + 6 Hardhat TTL tests).
+
+**Exclusive because**: Requires Phase 153 SeparationRatioRegistry.sol + Phase 163 N_consented hash
+binding + Phase 164/165 consent delta chain + Phase 177 synthesis gate. No competing gaming protocol
+has renewal-chainable biometric tournament licenses with on-chain TTL provenance.
+
+[VAPI:Phase177:autoresearch_cycle13:PROPOSED]
+
+---
+
+## WIF-030 — ZK Ceremony Capture Attack: Single-Operator Trusted Setup Voids Zero-Knowledge (Phase 179)
+
+**W1 — Failure mode**: VAPI's ZK proof circuits use Groth16, which requires a trusted-setup MPC
+ceremony. If only the VAPI operator participated in the ceremony, the toxic waste (τ, α, β) is known
+to a single party. That party can forge proofs without possessing real biometric data: a
+`FeatureExtractionIntegrityProof` claiming legitimate sensor data, a `CalibrationIntegrityProof`
+claiming honest calibration, and a `SeparationRatioZKProof` claiming ratio > 1.0 — all verifiable
+on-chain but cryptographically hollow. The ceremony produces valid-looking CRS (Common Reference
+String) elements indistinguishable from a multi-party ceremony on-chain. No existing VAPI component
+validates ceremony participant count or audit log presence before accepting a ZK proof as
+tournament-valid.
+
+**Implication**: A compromised or colluding operator can generate synthetic tournament credentials
+that pass all ZK verification checks. The biometric cryptographic binding (VAPI's core novel claim)
+is reduced to a single point of trust — indistinguishable from a conventional centralized system
+on-chain. Any legal challenge to a tournament ruling can void the ZK proof basis by demonstrating
+single-party ceremony participation.
+
+**Cryptographic grounding**: Groth16 soundness holds only under the knowledge-of-exponent assumption
+applied to the CRS. Single-party setup breaks the "powers of tau" assumption. The on-chain verifier
+(`verifyProof()`) has no access to ceremony metadata — it verifies the algebraic constraint, not the
+ceremony integrity.
+
+**Mitigation (Phase 179)**: Introduce `ceremony_audit_log` table:
+`{ceremony_id, circuit_name, participant_address, contribution_hash, ts_ns}`. Minimum 3 distinct
+`participant_address` entries required per circuit before any ZK proof from that circuit is accepted
+by `TournamentActivationChainAgent`. New `CeremonyAuditGate` check: `ceremony_participants_ok =
+count(distinct participant_address) ≥ 3`. Tool #N `get_ceremony_audit_status`;
+`CeremonyAuditResult` SDK.
+
+**Status**: OPEN — Phase 179 candidate. Filed 2026-04-09 (AutoResearch cycle 13).
+
+---
+
+**W2 — Multi-Party Ceremony Audit Chain as ZK Proof Provenance Primitive.**
+
+**Mechanism**: Each ceremony participant contributes a `contribution_hash =
+SHA-256(prev_hash + participant_address + contribution_entropy + ts_ns)`, forming an append-only
+ceremony chain stored in `CeremonyAuditRegistry.sol`. The chain root is embedded in the CRS metadata
+and verified by `CeremonyAuditGate` before any ZK proof is accepted. External auditors can replay
+the chain from the genesis contribution to verify that toxic waste was destroyed at each step.
+Tournament regulators receive a `ceremony_chain_id` alongside each ZK proof — provable multi-party
+participation is a first-class tournament credential. This is the first ZK ceremony audit chain used
+as a tournament authorization primitive in any gaming DePIN protocol — converting a
+normally-invisible cryptographic setup ritual into a transparent, on-chain, regulator-inspectable
+provenance proof.
+
+**Phase candidate**: Phase 179, ~5h effort (`ceremony_audit_log` table +
+`CeremonyAuditRegistry.sol` deploy + `CeremonyAuditGate` check +
+`TournamentActivationChainAgent` gate condition extended + Tool #N + SDK `CeremonyAuditResult` +
+openapi schema + 8 Hardhat ceremony tests + 4 bridge tests).
+
+**Exclusive because**: Requires Phase 67 MPC ceremony infrastructure + Phase 177 synthesis gate +
+Phase 179 ceremony_audit_log. No competing protocol has ceremony audit as a tournament authorization
+condition.
+
+[VAPI:Phase177:autoresearch_cycle13:PROPOSED]
+
+---
+
+**Document Version**: 2.0 (WIF-029/030 temporal biometric drift + ZK ceremony capture, 2026-04-09)
+**Last Updated**: 2026-04-09
+**W1 Count**: 26 entries (WIF-029 temporal biometric drift; WIF-030 ZK ceremony capture attack)
+**W2 Count**: 22 entries (WIF-029 renewable tournament license; WIF-030 ceremony audit chain)
+**W3 Count**: 5 entries
+**Update Method**: Append-only, status updates inline
+**Key Cycle 13 Updates**: WIF-029 temporal biometric drift (Phase 178 candidate); WIF-030 ZK ceremony capture attack (Phase 179 candidate); AutoResearch cycle 13; program.md updated to Phase 177 edition; score_phase_177_readiness() gate added to vapi_autoresearch.py

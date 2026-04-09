@@ -21,7 +21,7 @@ if (-not (Test-Path $AgentScript)) {
 # Build the function block to add to profile
 $FunctionBlock = @"
 
-# ── VAPI Calibration Intelligence Agent (Phase 109) ──────────────────────
+# ── VAPI Calibration Intelligence Agent (Phase 148) ──────────────────────
 # Keyword: calibrate
 # Source : $AgentScript
 function calibrate {

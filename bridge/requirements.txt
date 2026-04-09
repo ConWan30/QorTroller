@@ -13,7 +13,9 @@ aiomqtt>=2.0.0
 aiocoap>=0.4.7
 
 # HTTP / Dashboard
-fastapi>=0.109.0
+fastapi>=0.120.0          # 0.120+ supports starlette>=1.0.0 (no upper bound)
+starlette>=1.0.0          # pinned to stable 1.0 series; do NOT downgrade
+sse-starlette>=3.0.0      # SSE streaming for /operator/agent/stream
 uvicorn[standard]>=0.27.0
 
 # Configuration

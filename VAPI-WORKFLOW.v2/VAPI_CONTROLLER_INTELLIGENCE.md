@@ -29,10 +29,12 @@
 ## 1. Agent #17: ControllerHardwareIntelligenceAgent
 
 **Agent Number**: 17  
+**Status**: **DESIGN ONLY — no implementation as of Phase 149** (Agent #18 = ACIM Phase 148 LIVE)  
 **Trigger**: `/vapi expert controller <detect|profile|validate|negotiate>`  
 **Cycle**: Event-driven (on USB/BT hotplug) + on-demand  
 **Fail Mode**: Fail-open (fallback to Standard tier)  
-**Epistemic Weight**: 0.25 (infrastructure authority)
+**Epistemic Weight**: 0.25 (infrastructure authority)  
+**Phase 149 Update**: Touchpad spatial entropy confirmed as primary inter-player discriminator (Phase 143: P1 vs P3 diagonal distance=3.276 dominated by touchpad features). PHCI certification for Attested tier must mandate touchpad-equipped controllers.
 
 ### Core Responsibilities
 
@@ -1208,8 +1210,10 @@ class GSRGripAddon:
 
 ---
 
-**Document Version**: 1.0 (Phase 136)  
-**Last Updated**: 2026-03-29  
-**Controller Profiles**: 4 (Edge, Xbox, Switch, DS4)  
-**Agent**: #17 ControllerHardwareIntelligenceAgent  
-**Target**: 10+ certified controllers by Phase 140  
+**Document Version**: 1.1 (Phase 149)  
+**Last Updated**: 2026-04-03  
+**Controller Profiles**: 7 defined (Edge, Xbox, Switch, DS4, DualSense Standard, Scuf, Razer) — all DESIGN ONLY  
+**Agent**: #17 ControllerHardwareIntelligenceAgent — **DESIGN ONLY, no code written as of Phase 149**  
+**Target**: Phase 150+ implementation (deferred; touchpad_corners separation breakthrough achieved without multi-controller support)  
+**Key Phase 143 Finding**: Touchpad spatial entropy (touchpad_spatial_entropy) is the #1 inter-player discriminator → PHCI certification MUST require touchpad-capable hardware (DualShock Edge class or equivalent with 1000 Hz touchpad). Controllers without touchpad (Xbox Series X, Switch Pro) are LIMITED to Standard tier and cannot achieve Attested certification.  
+**Separation Breakthrough Note**: touchpad_corners N=11, 3-player → ratio=1.261 (Phase 143). PHCI certification gate should require N≥30 touchpad_corners sessions for Attested tier controllers.  

@@ -28,19 +28,31 @@ _CALIB_MODEL = "claude-sonnet-4-6"
 _CALIB_SYSTEM_PROMPT = """You are the VAPI CalibrationIntelligenceAgent — an expert on \
 maintaining the integrity of the PITL L4 biometric threshold calibration system.
 
+Phase 148 state:
+- L4 thresholds: anomaly=7.009, continuity=5.367 (Phase 57, N=74, 12-feature calibration)
+- Live feature space: 13 features (Phase 121 added touchpad_spatial_entropy at index 12)
+- L4 STALE: calib_dim=12 vs live_dim=13 — run recalibrate_l4_pipeline.py to clear
+- Phase 46 anchors (6.726/5.097) are historical baseline reference only; current are 7.009/5.367
+- Separation ratio: 1.261 (diagonal, touchpad_corners, N=11, Phase 143 proper LOO)
+- Classification: 63.6% (7/11) — TOURNAMENT BLOCKER until ≥80%; need ≥10 sessions/player
+- touch_position_variance (index 10): NOW ACTIVE in touchpad_corners sessions
+- touchpad_spatial_entropy (index 12): Phase 121 addition, active in touchpad sessions
+
 Your role:
 - Monitor L4 threshold drift against Phase 46 anchors (anomaly=6.726, continuity=5.097)
 - Identify zero-variance features that inflate Mahalanobis distances
 - Trigger personal per-device recalibration when drift signals accumulate
-- Maintain separation analysis awareness (ratio=0.362 — L4 is intra-player only)
+- Report Phase 148 separation ratio (1.261 diagonal, touchpad_corners) accurately
+- Flag L4 staleness (calib_dim=12 vs live_dim=13) when discussing tournament readiness
 - Enforce: per-player thresholds can ONLY tighten, never loosen (min() rule)
 
 When answering:
 1. Use available tools to fetch real calibration data before drawing conclusions
 2. Flag near-zero baseline_std features as suspicious (possible zero-variance contamination)
 3. For trigger_recalibration: ALWAYS verify new_threshold <= current before applying
-4. Reference Phase 46 anchors (6.726/5.097) when interpreting drift percentages
-5. Be direct and actionable — calibration decisions affect tournament integrity"""
+4. Reference Phase 46 anchors (6.726/5.097) only as historical baseline; use 7.009/5.367 as current
+5. Be direct and actionable — calibration decisions affect tournament integrity
+6. Always distinguish intra-player anomaly detection (L4 purpose) from inter-player identification"""
 
 _CALIB_TOOLS = [
     {
@@ -88,9 +100,10 @@ _CALIB_TOOLS = [
     {
         "name": "get_separation_analysis",
         "description": (
-            "Return the Phase 49 interperson separation analysis: ratio=0.362, "
-            "LOO=42.2%, indistinguishable=[P1,P2]. Use to contextualize any "
-            "fingerprint comparison or cross-device query."
+            "Return the Phase 143 honest interperson separation analysis: ratio=1.261 "
+            "(diagonal covariance, N=11 touchpad_corners, 3 players, proper LOO), "
+            "LOO=63.6% (7/11), tournament_blocker=True (classification <80%). "
+            "Use to contextualize any fingerprint comparison or cross-device query."
         ),
         "input_schema": {
             "type": "object",
@@ -140,9 +153,13 @@ _CALIB_TOOLS = [
     },
 ]
 
-# Phase 46 anchors (never change — they are the calibrated ground truth)
-_ANCHOR_ANOMALY    = 6.726
-_ANCHOR_CONTINUITY = 5.097
+# Phase 46 anchors — historical baseline reference (N=74, 10-feature space)
+# Current live thresholds (Phase 57, N=74, 12-feature): anomaly=7.009, continuity=5.367
+# L4 is stale: calibrated at calib_dim=12; live_dim=13 (Phase 121 touchpad_spatial_entropy)
+_ANCHOR_ANOMALY    = 6.726   # Phase 46 baseline
+_ANCHOR_CONTINUITY = 5.097   # Phase 46 baseline
+_LIVE_ANOMALY      = 7.009   # Phase 57 current (used in drift % calculations)
+_LIVE_CONTINUITY   = 5.367   # Phase 57 current
 _SEVEN_DAYS_S      = 7 * 24 * 3600
 _MIN_PERSONAL_RECORDS = 30
 
@@ -271,6 +288,11 @@ class CalibrationIntelligenceAgent:
                 }
 
             if name == "get_zero_variance_features":
+                # Phase 148: feature space is 13 features (index 0-12)
+                # - Index 0 (trigger_resistance_change_rate): still structurally zero
+                # - Index 10 (touch_position_variance): NOW ACTIVE in touchpad_corners sessions
+                # - Index 12 (touchpad_spatial_entropy): Phase 121 addition, active in touchpad sessions
+                # L4 calibration: calib_dim=12 (before Phase 121), live_dim=13 → stale
                 return {
                     "features": [
                         {
@@ -278,41 +300,90 @@ class CalibrationIntelligenceAgent:
                             "feature_index": 0,
                             "status": "structurally_zero",
                             "fix_path": "Requires adaptive trigger hardware + gameplay recapture",
-                            "exclusion": "masked from active 9-feature Mahalanobis space",
+                            "exclusion": "excluded from active Mahalanobis space (all calibration sessions)",
                         },
                         {
                             "name": "touch_position_variance",
                             "feature_index": 10,
-                            "status": "structurally_zero",
-                            "fix_path": "Requires post-Phase-17 touchpad recapture (hardware + gameplay)",
-                            "exclusion": "masked from active 9-feature Mahalanobis space",
+                            "status": "active_in_touchpad_sessions",
+                            "values": {"P1": 0.0040, "P2": 0.0018, "P3": 0.0016},
+                            "fix_path": "COMPLETE — terminal_cal touchpad_corners sessions capture this",
+                            "exclusion": (
+                                "Was excluded in hw_* gameplay sessions (structurally zero); "
+                                "NOW ACTIVE in terminal_cal sessions. "
+                                "Top discriminator for P1/P3 separation (Phase 141)."
+                            ),
+                        },
+                        {
+                            "name": "touchpad_spatial_entropy",
+                            "feature_index": 12,
+                            "status": "active_in_touchpad_sessions",
+                            "fix_path": "Phase 121 — Shannon entropy of 8x8 touchpad heatmap",
+                            "exclusion": (
+                                "Added in Phase 121; NOT in L4 calibration (calib_dim=12). "
+                                "This is the source of L4 staleness: live_dim=13 vs calib_dim=12."
+                            ),
                         },
                     ],
                     "note": (
-                        "These 2 features are excluded by covariance mask. "
-                        "Active feature count: 9 of 11. "
-                        "accel_magnitude_spectral_entropy (index 9) replaced touchpad_active_fraction."
+                        "Phase 148: 13 features total (live_dim=13). "
+                        "Active in gameplay: 11/13 (indices 0 and structurally-zero excluded). "
+                        "Active in touchpad sessions: 12/13 (index 0 still zero). "
+                        "L4 threshold calibration (Phase 57) used 12-feature space (pre Phase 121). "
+                        "Run recalibrate_l4_pipeline.py to clear staleness."
                     ),
+                    "l4_staleness": {
+                        "live_dim": 13,
+                        "calib_dim": 12,
+                        "stale": True,
+                        "action": "python scripts/recalibrate_l4_pipeline.py",
+                    },
                 }
 
             if name == "get_separation_analysis":
+                # Read from separation_ratio_snapshots DB table first (Phase 121+ live data)
+                pooled_ratio = 1.261  # Phase 143 honest diagonal, touchpad_corners N=11
+                n_players = 3
+                try:
+                    snaps = self._store.get_separation_ratio_status(limit=1)
+                    if snaps:
+                        snap = snaps[0]
+                        pooled_ratio = float(snap.get("pooled_ratio") or 1.261)
+                        n_players = int(snap.get("n_players") or 3)
+                except Exception:
+                    pass
                 return {
-                    "interperson_separation_ratio": 0.362,
-                    "loo_classification_accuracy":  0.422,
+                    "interperson_separation_ratio": pooled_ratio,
+                    "loo_classification_accuracy":  0.636,   # Phase 143: 7/11 proper LOO
                     "chance_level":                 0.333,
-                    "indistinguishable_players":     ["P1", "P2"],
-                    "best_discriminator":            "tremor_peak_hz",
+                    "n_sessions":                   11,       # touchpad_corners sessions
+                    "n_players":                    n_players,
+                    "session_type_filter":          "touchpad_corners",
+                    "covariance_mode":              "diagonal",  # Phase 142 auto-fallback N/p=1.375
+                    "tournament_blocker":           True,        # classification 63.6% < 80% target
+                    "indistinguishable_pairs":      ["partial P1/P3 cluster"],
+                    "best_discriminator":           "touchpad_spatial_entropy",  # Phase 141
                     "discriminator_detail": {
-                        "P3_tremor_peak_hz": 7.8,
-                        "P1_P2_tremor_peak_hz_range": [0.7, 1.0],
-                        "note": "P1 and P2 are statistically INDISTINGUISHABLE by L4",
+                        "top_features": ["touchpad_spatial_entropy", "touch_position_variance",
+                                         "micro_tremor_accel_variance", "stick_autocorr_lag1"],
+                        "P1_vs_P2_distance": 2.868,
+                        "P1_vs_P3_distance": 3.276,
+                        "P2_vs_P3_distance": 2.243,
+                        "note": (
+                            "Phase 143 proper LOO: 4 misclassified sessions. "
+                            "P1/P3 diagonal distance=3.276 is real — not noise artifact. "
+                            "Need ≥10 touchpad_corners sessions/player for ≥80% classification."
+                        ),
                     },
                     "implication": (
                         "L4 is an intra-player anomaly detector ONLY. "
-                        "SIMILAR fingerprint comparison verdict does NOT confirm same identity. "
-                        "True inter-player separation requires touchpad recapture + wider tremor FFT."
+                        "Separation ratio > 1.0 is met (1.261) but classification < 80% (63.6%). "
+                        "Both conditions required for tournament gate. "
+                        "Capture ≥10 touchpad_corners sessions/player to push classification above 80%."
                     ),
-                    "source": "docs/interperson-separation-analysis-v2.md",
+                    "source": "Phase 143 analyze_interperson_separation.py --session-type touchpad_corners",
+                    "phase": 143,
+                    "data_date": "2026-04-02",
                 }
 
             if name == "get_pending_recalibration_flags":

@@ -1,9 +1,11 @@
-# VAPI Biometric Privacy Architecture (Phase 135-140)
+# VAPI Biometric Privacy Architecture (Phase 148+)
 ## Novel Privacy-First Enforcement for Competitive Gaming Credentials
 
-**Status**: Design Phase  
-**Agent**: #18 BiometricPrivacyComplianceAgent (Proposed)  
-**Last Updated**: 2026-03-29  
+**Status**: Design Phase — Primitives BP-001 to BP-007 IMMUTABLE (defined in VAPI_INVARIANTS.md §6)  
+**Agent**: **#19 BiometricPrivacyComplianceAgent (PROPOSED — TBD)**  
+  ⚠️ NOTE: Agent #18 is now **AgentCalibrationIntegrityMonitor (ACIM)**, implemented in Phase 148.  
+  BiometricPrivacyComplianceAgent is proposed as Agent #19 (pending Phase 150+ roadmap).  
+**Last Updated**: 2026-04-03  
 **PITL Layers Affected**: L0 (privacy layer), L4 (biometric fusion), L6 (active challenge)  
 **Regulatory Scope**: GDPR Art.9, CCPA/CPRA, BIPA, EU AI Act, PIPL, LGPD  
 
@@ -359,56 +361,61 @@ SessionCleanup:
 
 ## 5. Implementation Roadmap
 
-### Phase 137: Core Primitives (Weeks 1-4)
+> **PHASE STATUS NOTE (2026-04-03)**: Phases 137-149 completed with different content than originally projected here. Phases 137-143 focused on corpus analysis (balanced subsampling, covariance auto-fallback, proper LOO) and achieved separation ratio 1.261 on touchpad_corners. Phases 147-149 focused on epistemic hardening, ACIM (Agent #18), and MCP server infrastructure. Privacy primitives remain DESIGN ONLY — scheduled for Phase 150+ implementation.
+
+### Phase 150: Core Primitives (Target — Weeks 1-4 post-N≥30 touchpad_corners)
+
+**Prerequisite**: Touchpad_corners N≥30 (from ~11 currently) — separation ratio solidified before privacy architecture
 
 **Week 1**: Temporal Biometric Decay (TBD)
-- Add `calibration_timestamp` to PoAC wire format
+- Add `calibration_timestamp` to PoAC wire format  
+  ⚠️ CONSTRAINT: Must NOT change 228-byte PoAC wire format (FROZEN invariant); decay applied at analysis layer only
 - Implement decay factor in SessionAdjudicator
 - Update threshold tracks with decay weights
 
 **Week 2**: ZK-Attested Consent (ZAC)
-- Design consent circuit (circom)
-- Deploy consent verifier contract
-- Integrate with DualPrimitiveGate
+- Design consent circuit (circom 2.0.0)
+- Deploy consent verifier contract on IoTeX testnet
+- Integrate with DualPrimitiveGate (Phase 113 infrastructure ready)
 
 **Week 3**: Ephemeral Session Entropy (ESE)
-- `mlock()` integration in calibration pipeline
-- Secure erase implementation
-- Session heartbeat mechanism
+- `mlock()` integration in calibration pipeline (Windows: `VirtualLock()`)
+- Secure erase implementation (constant-time memset)
+- Session heartbeat mechanism (30-minute max duration)
 
 **Week 4**: Differential Privacy Thresholds (DPT)
 - Laplacian noise injection in CalibrationIntelligenceAgent
-- Privacy budget tracking per player
-- Sensitivity analysis for each feature
+- Privacy budget tracking per player (new SQLite table: `privacy_budgets`)
+- Sensitivity analysis for each of 13 biometric features
 
-### Phase 138: Advanced Primitives (Weeks 5-8)
+### Phase 151: Advanced Primitives (Weeks 5-8)
 
 **Week 5**: K-Anonymity Cohort Calibration (KACC)
-- Cohort formation logic
-- Minimum pool size enforcement
-- Cross-cohort threshold merging
+- Cohort formation logic (composite key: controller+battery+transport+time_window)
+- Minimum pool size enforcement K≥5
+- Integration with per-battery threshold tracks (Phase 124 infrastructure)
 
 **Week 6**: Homomorphic Separation Ratios (HSR)
-- Paillier/CKKS integration
-- Encrypted Mahalanobis distance
-- Performance optimization
+- Paillier/CKKS integration (Python: `phe` library for Paillier)
+- Encrypted Mahalanobis distance approximation
+- Performance target: <100ms overhead per L4 calculation
 
 **Week 7**: Biometric Shamir Sharing (BSS)
-- 16-agent share distribution
-- 8-of-16 reconstruction protocol
-- Byzantine fault tolerance testing
+- 18-agent share distribution (updated from 16 — fleet now 18 agents post-Phase 148)
+- 9-of-18 reconstruction protocol (updated threshold)
+- Agent identity table: includes ACIM (Agent #18) as share holder
 
 **Week 8**: Integration & Testing
 - End-to-end privacy flow testing
-- Regulatory compliance validation
-- Performance benchmarking
+- ACIM (Agent #18) validates privacy primitive health as part of calibration self-tests
+- Privacy budget stored in `agent_calibration_health` extension table
 
-### Phase 139: Certification & Documentation (Weeks 9-12)
+### Phase 152: Certification & Documentation
 
 - **Legal review**: GDPR DPIA, CCPA risk assessment
-- **Audit framework**: Privacy budget reporting
+- **Audit framework**: Privacy budget reporting via MCP vapi-knowledge server
 - **Public documentation**: Open-source privacy primitives
-- **Academic publication**: Novel contributions to privacy-preserving biometrics
+- **BiometricPrivacyComplianceAgent (Agent #19)**: Deploy after Phase 151 complete
 
 ---
 
@@ -472,16 +479,19 @@ BP-007 EPHEMERAL_SESSIONS: Raw data exists only in RAM, never persisted
 
 ### 7.3 Agent Additions (VAPI_AGENTS.md)
 
-**Agent #18: BiometricPrivacyComplianceAgent**
-- **Role**: Privacy primitive orchestration
+> **CURRENT AGENT #18**: AgentCalibrationIntegrityMonitor (ACIM) — Phase 148, LIVE. Runs 16 calibration self-tests every 15 minutes. Not a privacy agent.
+
+**Agent #19 (PROPOSED): BiometricPrivacyComplianceAgent**
+- **Role**: Privacy primitive orchestration (Phase 150-152 roadmap)
 - **Expertise**: Differential privacy, ZK proofs, homomorphic encryption
 - **Tools**: 
-  - Privacy budget tracker
-  - Cohort formation engine
-  - Noise injection module
-  - BSS distribution protocol
-- **Fail Mode**: Hard stop when privacy budget exhausted
-- **Integration**: Called by CalibrationIntelligenceAgent before threshold derivation
+  - Privacy budget tracker (per-player ε counter)
+  - Cohort formation engine (K-anonymity enforcement)
+  - Noise injection module (Laplacian noise for DPT)
+  - BSS distribution protocol (Shamir 9-of-18 on 18-agent fleet)
+- **Fail Mode**: Hard stop when privacy budget exhausted (no queries allowed)
+- **Integration**: Called by CalibrationIntelligenceAgent before threshold derivation; validated by ACIM (Agent #18) in calibration health self-tests
+- **Status**: DESIGN ONLY — no code written as of Phase 149
 
 ---
 
@@ -512,8 +522,10 @@ BP-007 EPHEMERAL_SESSIONS: Raw data exists only in RAM, never persisted
 
 ---
 
-**Document Version**: 1.0 (Phase 135)  
-**Privacy Primitives**: 7 novel mechanisms  
+**Document Version**: 1.1 (Phase 149)  
+**Last Updated**: 2026-04-03  
+**Privacy Primitives**: 7 novel mechanisms (BP-001 to BP-007 — IMMUTABLE, defined in VAPI_INVARIANTS.md §6)  
 **Regulatory Coverage**: GDPR, CCPA/CPRA, BIPA, EU AI Act, PIPL, LGPD  
-**Target**: Phase 140 full privacy compliance certification  
+**Target**: Phase 150-152 full privacy compliance implementation  
+**Agent Status**: BiometricPrivacyComplianceAgent = PROPOSED Agent #19 (Agent #18 = ACIM, Phase 148 LIVE)  
 **Competitive Advantage**: First privacy-preserving competitive gaming attestation protocol  

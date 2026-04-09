@@ -1,5 +1,5 @@
 """
-TournamentActivationChainAgent — Phase 135
+TournamentActivationChainAgent — Phase 135 / Phase 178
 
 Agent #16. Subscribes to `separation_ratio_breakthrough` bus event (fired by
 SeparationRatioMonitorAgent when pooled_ratio >= 1.0 for 2 consecutive snapshots).
@@ -8,6 +8,13 @@ On breakthrough:
 - Logs gate-open notification to tournament_activation_chain_log
 - Publishes `tournament_gate_open_notification` bus event
 - Does NOT auto-activate — auto_activate_on_breakthrough=False is PERMANENT
+
+Phase 178 — Biometric Credential TTL Gate (WIF-029 W1 closure):
+- check_biometric_credential_ttl() computes age_days from latest SeparationRatioRegistry.sol
+  commitment and compares against cfg.biometric_credential_ttl_days (default 90).
+- ttl_expired=True → BLOCKS tournament authorization + sets recalibration_required=True.
+- Result logged to biometric_renewal_log for audit trail.
+- Never part of the one-shot breakthrough handler — runs on operator preflight queries.
 
 Protocol invariant: VAPI never auto-activates on a ratio breakthrough.
 Tournament activation always requires explicit operator action via
@@ -106,3 +113,61 @@ class TournamentActivationChainAgent:
                     log.debug("TournamentActivationChainAgent: bus publish failed: %s", exc)
         except Exception as exc:
             log.debug("TournamentActivationChainAgent._on_breakthrough error: %s", exc)
+
+    def check_biometric_credential_ttl(self) -> "dict":
+        """Check whether the latest on-chain separation ratio commitment has expired (Phase 178).
+
+        Computes age_days = (now - latest_commit_ts_ns / 1e9) / 86400 from the most recent
+        SeparationRatioRegistry.sol commitment stored in separation_ratio_registry_log.
+        When age_days > cfg.biometric_credential_ttl_days:
+          - ttl_expired=True
+          - recalibration_required=True
+          - result logged to biometric_renewal_log for audit trail
+
+        Returns dict with 8 keys matching GET /agent/biometric-credential-age response shape.
+        Never raises — on any error returns ttl_expired=False (fail-open for backward compat).
+        """
+        try:
+            ttl_days = float(self._cfg.biometric_credential_ttl_days)
+            status = self._store.get_biometric_credential_age_status(ttl_days=ttl_days)
+            age_days = float(status.get("age_days", 0.0))
+            commit_hash = str(status.get("commit_hash", ""))
+            ttl_expired = age_days > ttl_days and bool(commit_hash)
+            recalibration_required = ttl_expired
+            # Log every TTL check to biometric_renewal_log for audit trail
+            self._store.insert_biometric_renewal_log(
+                commit_hash=commit_hash,
+                age_days=age_days,
+                ttl_days=ttl_days,
+                ttl_expired=ttl_expired,
+                recalibration_required=recalibration_required,
+            )
+            if ttl_expired:
+                log.warning(
+                    "TournamentActivationChainAgent: biometric credential EXPIRED "
+                    "(age_days=%.1f > ttl_days=%.1f, commit=%s) — "
+                    "tournament authorization BLOCKED; recalibration required",
+                    age_days, ttl_days, commit_hash[:16] if commit_hash else "(none)",
+                )
+            return {
+                "ttl_enabled":            True,
+                "commit_hash":            commit_hash,
+                "commit_ts":              float(status.get("commit_ts", 0.0)),
+                "age_days":               round(age_days, 4),
+                "ttl_days":               ttl_days,
+                "ttl_expired":            ttl_expired,
+                "recalibration_required": recalibration_required,
+                "timestamp":              time.time(),
+            }
+        except Exception as exc:
+            log.debug("TournamentActivationChainAgent.check_biometric_credential_ttl error: %s", exc)
+            return {
+                "ttl_enabled":            True,
+                "commit_hash":            "",
+                "commit_ts":              0.0,
+                "age_days":               0.0,
+                "ttl_days":               90.0,
+                "ttl_expired":            False,
+                "recalibration_required": False,
+                "timestamp":              time.time(),
+            }

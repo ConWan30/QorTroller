@@ -28,6 +28,14 @@ _AGENT_FLEET = [
     "LiveModeActivationAgent",
     "GSRRegistryAgent",
     "VHPRenewalAgent",
+    "SeparationRatioMonitorAgent",
+    "TournamentActivationChainAgent",
+    "PoAdAnchorAgent",
+    "AgentCalibrationMonitor",
+    "ControllerHardwareIntelligenceAgent",
+    "EnrollmentAutoGuidanceAgent",
+    "FleetConsensusSnapshotAgent",
+    "BiometricPrivacyComplianceAgent",
 ]
 
 
@@ -132,7 +140,7 @@ def get_edge_ai_profile(cfg=None, store=None) -> dict:
         log.warning("get_edge_ai_profile: %s", exc)
         return {
             "protocol": "VAPI",
-            "agent_fleet_size": 14,
+            "agent_fleet_size": 22,
             "error": str(exc),
             "timestamp": time.time(),
         }

@@ -1422,8 +1422,177 @@ The hook in `.claude/settings.local.json` fires automatically after every `Write
 
 ---
 
-**Document Version**: 1.7 (Phase 177 — baselines updated to Bridge 1998 / SDK 325 / Agents 26)
-**Last Updated**: 2026-04-08
-**Skill Count**: 15 (complete + privacy + sweep + sync)
-**Skill Status**: 8 COMPLETE, 3 PENDING (Controller skills + Privacy), 1 NEW (Skill 14 PostCode Sweep v2.2 + Step 13), 1 ACTIVE (Skill 15 Sync Recovery — hook live)
+---
+
+## Skill 16: Phase 177+ Tournament Readiness Synthesis Preflight
+
+**Command**: `/vapi preflight --phase177`
+
+**Purpose**: Execute the complete Phase 177+ synthesis gate: multi-condition AND check across all
+VAPI subsystems, verifying that ProtocolMaturityScoring + PoFC + consent chain + enrollment quality
++ biometric TTL + ZK ceremony audit are all simultaneously satisfied before any live tournament
+authorization. Synthesizes all 26 agent signals into a single authoritative TOURNAMENT_AUTHORIZED
+or GATES_INCOMPLETE verdict.
+
+**Skill ID**: 16
+**Version**: 1.0 (Phase 177 — AutoResearch cycle 13, 2026-04-09)
+**Trigger**: Before any tournament authorization decision; after Phase 178/179 completion; on demand
+
+---
+
+### Preconditions
+- Agent fleet 26 agents all LIVE (Agents #1–#26, including #26 ProtocolMaturityScoringAgent)
+- Bridge test count ≥ 1998 (Phase 177 confirmed)
+- SDK test count ≥ 325 (Phase 177 confirmed)
+- Hardhat test count ≥ 468
+- maturity_score from GET /agent/protocol-maturity-score available
+- separation_defensibility_log has current entries (Phase 150+)
+- consent_ledger_enabled=True (Phase 160+ default)
+
+---
+
+### Steps
+
+#### Step 1 — Protocol Maturity Synthesis (Agent #26)
+```bash
+curl http://localhost:8080/agent/protocol-maturity-score
+```
+Verify: `maturity_score ≥ 0.85` (PRODUCTION_CANDIDATE tier) AND `separation_ratio > 1.0`.
+If maturity_tier == ALPHA: **BLOCK** — do not proceed.
+
+#### Step 2 — Separation Defensibility
+```bash
+curl http://localhost:8080/agent/separation-defensibility-status
+```
+Verify: `defensible=True`, `ratio > 1.0`, `all_pairs_above_1=True`.
+Check `post_erasure_recomputed_at` — if pending recompute: **WARN** re-run analysis.
+
+#### Step 3 — Agent Calibration Health (ACIM Agent #18)
+```bash
+curl http://localhost:8080/agent/calibration-health
+```
+Verify: `passed_self_tests=16`, `failed_self_tests=0`.
+
+#### Step 4 — Tournament Activation Chain (Agent #16)
+```bash
+curl http://localhost:8080/agent/tournament-activation-chain
+```
+Verify: all 8 activation chain conditions True.
+**BLOCK** if `auto_activate_on_breakthrough=True` — PERMANENT invariant violation.
+
+#### Step 5 — Consent Snapshot Delta (Phase 164)
+```bash
+curl http://localhost:8080/agent/consent-snapshot-delta
+```
+Verify: `delta=0` (no post-commit revocations). If `delta > 0`: **WARN** consent corpus shrunk.
+
+#### Step 6 — Biometric Credential Age (Phase 178 — when available)
+```bash
+curl http://localhost:8080/agent/biometric-credential-age
+```
+Verify: `age_days < biometric_credential_ttl_days` (default 90).
+If Phase 178 not yet deployed: **WARN** TTL gate pending — flag for next phase.
+
+#### Step 7 — Ceremony Audit Status (Phase 179 — when available)
+```bash
+curl http://localhost:8080/agent/ceremony-audit-status
+```
+Verify: `ceremony_participants_ok=True` (≥3 distinct participants per ZK circuit).
+If Phase 179 not yet deployed: **WARN** ceremony audit gate pending — flag for next phase.
+
+#### Step 8 — Fleet Consensus Snapshot (Agent #21)
+```bash
+curl http://localhost:8080/agent/fleet-consensus-snapshot
+```
+Verify: `total_snapshots > 0`, `latest_pofc_hash` non-null.
+
+#### Step 9 — Live Separation Analysis
+```bash
+python scripts/analyze_interperson_separation.py \
+  --session-type touchpad_corners --loo --session-age-weight 90
+```
+Verify: `ratio > 1.0` with current corpus and age-weighted analysis (Phase 174/175).
+
+---
+
+### Invariant Checks
+- ❌ **BLOCK** if `maturity_tier == ALPHA` (score < 0.50)
+- ❌ **BLOCK** if `separation_ratio < min_separation_ratio` (config gate, default 0.70)
+- ❌ **BLOCK** if `failed_self_tests > 0` (ACIM health failure)
+- ❌ **BLOCK** if `auto_activate_on_breakthrough=True` — PERMANENT INVARIANT
+- ❌ **BLOCK** if tournament_activation_chain has any condition False
+- ⚠️ **WARN** if `maturity_score` is 0.50–0.85 (BETA tier — not PRODUCTION_CANDIDATE)
+- ⚠️ **WARN** if `age_days ≥ 90` and Phase 178 not deployed (biometric TTL unguarded)
+- ⚠️ **WARN** if ceremony audit < 3 participants per circuit and Phase 179 not deployed
+- ⚠️ **WARN** if `delta > 0` from consent snapshot (revocations since last commit)
+- ⚠️ **WARN** if BT sessions still 0 (BT tournament path unavailable)
+- ⚠️ **WARN** if N < 30 touchpad_corners sessions (thin corpus below defensibility target)
+
+---
+
+### Preflight Scoring Formula (Skill 16 Readiness Score)
+```
+score = 0.25 × maturity_gate         (score ≥ 0.85, tier=PRODUCTION_CANDIDATE)
+      + 0.20 × separation_gate       (ratio > 1.0 AND defensible = 1.0)
+      + 0.20 × acim_gate             (16/16 self-tests = 1.0)
+      + 0.15 × consent_chain_gate    (delta=0 AND consent_corpus_defensible = 1.0)
+      + 0.10 × biometric_ttl_gate    (age < ttl = 1.0; 0.5 if Phase 178 not deployed)
+      + 0.10 × ceremony_audit_gate   (participants ≥ 3 = 1.0; 0.5 if Phase 179 not deployed)
+PASS_THRESHOLD = 0.85
+```
+
+---
+
+### Outputs
+```json
+{
+  "preflight_version": "1.0",
+  "phase": 177,
+  "timestamp": "2026-XX-XXTXX:XX:XXZ",
+  "gates": {
+    "maturity_score_ok": true,
+    "separation_defensible": true,
+    "acim_healthy": true,
+    "tournament_chain_ok": true,
+    "consent_chain_valid": true,
+    "biometric_ttl_ok": "PENDING_PHASE_178",
+    "ceremony_audit_ok": "PENDING_PHASE_179",
+    "pofc_hash_present": true,
+    "live_ratio_above_gate": true
+  },
+  "preflight_score": 0.85,
+  "maturity_tier": "PRODUCTION_CANDIDATE",
+  "maturity_score": 0.87,
+  "separation_ratio": 1.261,
+  "touchpad_n": 11,
+  "consent_delta": 0,
+  "pofc_hash": "SHA256:...",
+  "verdict": "TOURNAMENT_AUTHORIZED"
+}
+```
+
+### Key Novelties vs Phase 127 /vapi preflight
+| Dimension | Skill 6 (Phase 127) | Skill 16 (Phase 177+) |
+|-----------|--------------------|-----------------------|
+| Synthesis agent | None | Agent #26 ProtocolMaturityScoringAgent |
+| Maturity tier | Not tracked | ALPHA / BETA / PRODUCTION_CANDIDATE |
+| Biometric TTL | Not tracked | Phase 178 TTL gate (WIF-029 closure) |
+| ZK ceremony audit | Not tracked | Phase 179 ceremony audit gate (WIF-030 closure) |
+| Age-weighted ratio | Not tracked | Phase 174/175 --session-age-weight 90 |
+| Scoring formula | Binary pass/fail | Weighted 6-component score (threshold 0.85) |
+
+### Time Estimate
+8–15 minutes (all API calls + fresh age-weighted separation analysis)
+
+### Last Run
+**Status**: PENDING — Phase 178 (TTL gate) and Phase 179 (ceremony audit) incomplete
+**Blocking**: biometric_credential_ttl gate (WIF-029, Phase 178) + ceremony_audit gate (WIF-030, Phase 179)
+**Target**: All gates green by Phase 179 completion
+
+---
+
+**Document Version**: 1.8 (Phase 177 — Skill 16 Phase 177+ Tournament Readiness Synthesis Preflight, 2026-04-09)
+**Last Updated**: 2026-04-09
+**Skill Count**: 16 (complete + privacy + sweep + sync + preflight-177)
+**Skill Status**: 8 COMPLETE, 3 PENDING (Controller skills + Privacy), 1 NEW (Skill 14 PostCode Sweep v2.2 + Step 13), 1 ACTIVE (Skill 15 Sync Recovery — hook live), 1 PENDING (Skill 16 — awaiting Phase 178/179)
 **Update Method**: Add new skills when patterns emerge, update "Last run" after execution

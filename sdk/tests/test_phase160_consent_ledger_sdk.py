@@ -49,9 +49,9 @@ class TestPhase160SDK(unittest.TestCase):
         self.assertFalse(result.consent_given)
         self.assertFalse(result.revoked)
 
-    def test_sdk_version_is_phase160(self):
-        """SDK_VERSION reflects Phase 160."""
-        self.assertEqual(SDK_VERSION, "3.0.0-phase160")
+    def test_sdk_version_is_phase162(self):
+        """SDK_VERSION reflects Phase 162 (bumped from 160 via 161)."""
+        self.assertEqual(SDK_VERSION, "3.0.0-phase166")
 
 
 if __name__ == "__main__":
