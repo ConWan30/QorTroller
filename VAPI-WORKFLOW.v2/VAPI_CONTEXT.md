@@ -27,10 +27,10 @@
 
 ## 1. Current Phase Status
 
-**Active Phase**: Phase 177 — ProtocolMaturityScoringAgent (agent #26)
+**Active Phase**: Phase 180 — COMPLETE
 **Phase Start**: 2026-04-08
 **Phase Status**: COMPLETE
-**Next Phase**: Phase 178 (TBD — user approval required; WIF-027 candidate: silence_penalty component)
+**Next Phase**: Phase 181 (TBD — user approval required)
 
 > **SYNC NOTE**: Phases 165–177 completed 2026-04-05/08 (Autoresearch Cycle 8). Files synced 2026-04-08.
 
@@ -192,15 +192,15 @@ When proposing on-chain operations:
 
 | Component | Test Count | Status | Last Run |
 |-----------|------------|--------|----------|
-| Bridge pytest | **1,998** | ✅ PASS | 2026-04-08 |
-| SDK tests | **325** | ✅ PASS | 2026-04-08 |
-| Hardhat tests | 468 | ✅ PASS | 2026-04-08 |
+| Bridge pytest | **2,022** | ✅ PASS | 2026-04-09 |
+| SDK tests | **337** | ✅ PASS | 2026-04-09 |
+| Hardhat tests | **482** | ✅ PASS | 2026-04-09 |
 | Hardware tests | 37 | ⚠️ HARDWARE-ONLY | Manual |
 | E2E tests | 14 | ⚠️ REQUIRES NODE | Manual |
 
 ### BridgeAgent Tools
 
-**Available**: 105 deterministic tools (expanded from 28 original)
+**Available**: 129 deterministic tools (expanded from 28 original)
 **Key Tools** (sample):
 - #1-20: Core bridge operations
 - #21: get_game_profile (Phase 51)
@@ -457,8 +457,8 @@ When prioritizing work:
 
 ---
 
-**Document Version**: 1.4 (Phase 177)
-**Last Updated**: 2026-04-08
-**Update Trigger**: Phase 177 COMPLETE — 13-phase drift (165→177) synced manually; Autoresearch Cycle 8 complete; agent fleet 22→26; WIF-024–027 closed/filed; bridge 1934→1998; SDK 297→325
-**Update Method**: Manual edit post Autoresearch Cycle 8
-**AutoResearch Last Run**: 2026-04-08 (cycle 8, phases 169–177, bridge +64, SDK +16)
+**Document Version**: 1.5 (Phase 180)
+**Last Updated**: 2026-04-09
+**Update Trigger**: Phase 180 COMPLETE — WIF-029 W1/W2 + WIF-030 W1 closed; Autoresearch Cycle 8 applied (WIF-031 filed); agent fleet 26; bridge 1998→2022; SDK 325→337; Hardhat 468→482; Contracts 39→40 (CeremonyAuditRegistry.sol code-complete, deploy deferred)
+**Update Method**: sync_vapi_workflow.py + manual edit 2026-04-09
+**AutoResearch Last Run**: 2026-04-09 (cycle 8, WIF-031 W1/W2, score=0.752)

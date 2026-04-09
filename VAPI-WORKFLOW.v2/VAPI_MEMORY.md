@@ -28,6 +28,24 @@
 
 ## 1. Session Outcomes (Chronological, Newest First)
 
+### 2026-04-09: WORKFLOW SYNC — Phase 180 drift recovered
+
+**Trigger**: sync_vapi_workflow.py automatic recovery
+**Drift detected**: BRIDGE: CLAUDE.md=2022 CONTEXT.md=None; SDK: CLAUDE.md=337 CONTEXT.md=None
+**Corrected to**: Phase 180 | Bridge 2022 | SDK 337
+**Action**: VAPI_CONTEXT.md phase/test counts updated from CLAUDE.md ground truth.
+
+---
+
+### 2026-04-09: WORKFLOW SYNC — Phase 180 drift recovered
+
+**Trigger**: sync_vapi_workflow.py automatic recovery
+**Drift detected**: PHASE: CLAUDE.md=180 CONTEXT.md=177; BRIDGE: CLAUDE.md=2022 CONTEXT.md=None; SDK: CLAUDE.md=337 CONTEXT.md=None
+**Corrected to**: Phase 180 | Bridge 2022 | SDK 337
+**Action**: VAPI_CONTEXT.md phase/test counts updated from CLAUDE.md ground truth.
+
+---
+
 ### 2026-04-09: Phase 177 Orchestration Update — AutoResearch Cycle 13 [PLANNING]
 
 **What was done**:
