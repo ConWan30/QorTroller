@@ -4505,6 +4505,40 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
+    # Phase 176 — GET /agent/poac-chain-integrity
+    # ------------------------------------------------------------------
+    @app.get("/agent/poac-chain-integrity")
+    async def get_poac_chain_integrity_endpoint(api_key: str = "", device_id: str = ""):
+        """PoACChainIntegrityMonitor status (Phase 176, agent #25).
+
+        Audits SHA-256 chain linkage across PoAC records.
+        integrity_score = valid_links / total_records (1.0 = fully intact).
+        W1 mitigation: only aggregate counts returned — no broken record IDs exposed.
+
+        Returns: chain_integrity_enabled, device_id, total_records, valid_links,
+        broken_links, integrity_score, audit_passed, timestamp.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t176
+        try:
+            _enabled176 = bool(getattr(cfg, "chain_integrity_enabled", True))
+            _dev176     = device_id.strip() or None
+            _rows176    = store.get_poac_chain_audit_status(device_id=_dev176, limit=1)
+            _latest176  = _rows176[0] if _rows176 else {}
+            return {
+                "chain_integrity_enabled": _enabled176,
+                "device_id":       str(_latest176.get("device_id",       "")),
+                "total_records":   int(_latest176.get("total_records",   0)),
+                "valid_links":     int(_latest176.get("valid_links",     0)),
+                "broken_links":    int(_latest176.get("broken_links",    0)),
+                "integrity_score": float(_latest176.get("integrity_score", 1.0)),
+                "audit_passed":    bool(_latest176.get("audit_passed",   True)),
+                "timestamp":       _t176.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
     # Phase 175 — GET /agent/age-weight-analysis-status
     # ------------------------------------------------------------------
     @app.get("/agent/age-weight-analysis-status")
