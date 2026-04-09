@@ -367,3 +367,109 @@ if __name__ == "__main__":
     print(f"Subscores: {json.dumps(result.subscores, indent=2)}")
     print(f"Gap advances: {result.gap_advances}")
     print(f"WHAT_IF: {result.what_if_assessment}")
+
+
+# Auto-synced from VAPI_WHAT_IF.md by vapi_wiki_engine.py
+# Last sync: 2026-04-08T03:44:30.704093+00:00
+WIKI_KNOWN_W1 = {
+    "W1-001": {
+        "title": "ioSwarm Node-Pool Homogeneity",
+        "status": "DOCUMENTED",
+        "keywords": ["ioswarm", "node-pool", "homogeneity"],
+        "source": "VAPI_WHAT_IF.md",
+    },
+    "W1-002": {
+        "title": "Separation Ratio Calibration Deadline",
+        "status": "DOCUMENTED",
+        "keywords": ["separation", "ratio", "calibration"],
+        "source": "VAPI_WHAT_IF.md",
+    },
+    "W1-003": {
+        "title": "L4 Threshold Staleness",
+        "status": "DOCUMENTED",
+        "keywords": ["threshold", "staleness"],
+        "source": "VAPI_WHAT_IF.md",
+    },
+    "W1-004": {
+        "title": "BT Transport Threshold Pollution",
+        "status": "DOCUMENTED",
+        "keywords": ["transport", "threshold"],
+        "source": "VAPI_WHAT_IF.md",
+    },
+    "W1-005": {
+        "title": "Confidence Multiplier Penalty",
+        "status": "DOCUMENTED",
+        "keywords": ["confidence", "multiplier", "penalty"],
+        "source": "VAPI_WHAT_IF.md",
+    },
+    "W1-006": {
+        "title": "Wallet Funding Exhaustion",
+        "status": "DOCUMENTED",
+        "keywords": ["wallet", "funding", "exhaustion"],
+        "source": "VAPI_WHAT_IF.md",
+    },
+    "W1-007": {
+        "title": "Corpus Imbalance Covariance Bias",
+        "status": "DOCUMENTED",
+        "keywords": ["corpus", "imbalance", "covariance"],
+        "source": "VAPI_WHAT_IF.md",
+    },
+    "W1-008": {
+        "title": "Touchpad Coverage Asymmetry and Thin N",
+        "status": "DOCUMENTED",
+        "keywords": ["touchpad", "coverage", "asymmetry"],
+        "source": "VAPI_WHAT_IF.md",
+    },
+    "W1-009": {
+        "title": "Free-Form Gameplay Separation Plateau",
+        "status": "DOCUMENTED",
+        "keywords": ["free-form", "gameplay", "separation"],
+        "source": "VAPI_WHAT_IF.md",
+    },
+    "W1-010": {
+        "title": "ACIM Single-Validator Risk",
+        "status": "DOCUMENTED",
+        "keywords": ["acim", "single-validator", "risk"],
+        "source": "VAPI_WHAT_IF.md",
+    },
+    "W1-011": {
+        "title": "Defensibility Gate Passes Prematurely via Session Type Mixing",
+        "status": "DOCUMENTED",
+        "keywords": ["defensibility", "gate", "passes"],
+        "source": "VAPI_WHAT_IF.md",
+    },
+    "W1-012": {
+        "title": "On-Chain Ratio Commitment Before N Reaches Defensible Threshold",
+        "status": "DOCUMENTED",
+        "keywords": ["on-chain", "ratio", "commitment"],
+        "source": "VAPI_WHAT_IF.md",
+    },
+    "W1-013": {
+        "title": "Capture Stagnation Trap — Silent Infinite ETA",
+        "status": "DOCUMENTED",
+        "keywords": ["capture", "stagnation", "trap"],
+        "source": "VAPI_WHAT_IF.md",
+    },
+    "W1-014": {
+        "title": "enrollment_complete count-gate spoofing",
+        "status": "DOCUMENTED",
+        "keywords": ["enrollment_complete", "count-gate", "spoofing"],
+        "source": "VAPI_WHAT_IF.md",
+    },
+    "W1-015": {
+        "title": "chain audit exposes injection windows (WIF-026)",
+        "status": "MITIGATED",
+        "keywords": ["chain_audit", "injection_window", "broken_record_ids", "poac_chain_integrity"],
+        "source": "VAPI_WHAT_IF.md WIF-026",
+        "mitigation": "only aggregate counts exposed — no broken record IDs returned; Phase 176 PoACChainIntegrityMonitor",
+    },
+    "W1-016": {
+        "title": "maturity score gaming by silencing agents (WIF-027)",
+        "status": "OPEN",
+        "keywords": ["maturity_score", "silence_penalty", "agent_disabled", "protocol_maturity"],
+        "source": "VAPI_WHAT_IF.md WIF-027",
+        "mitigation": "silence_penalty component — Phase 178 candidate",
+    },
+}
+
+# last_sync updated 2026-04-08 (Phase 177; WIF-026 W1-015 MITIGATED, WIF-027 W1-016 OPEN)

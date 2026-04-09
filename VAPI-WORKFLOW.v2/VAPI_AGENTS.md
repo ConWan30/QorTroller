@@ -27,7 +27,9 @@
 
 ## Agent Overview
 
-VAPI operates 20 specialized agents in the bridge service. Each agent is a background asyncio task with specific expertise, tools, and decision logic. This document maps them for Claude Code expert spawning.
+VAPI operates **22 specialized agents** in the bridge service. Each agent is a background asyncio task with specific expertise, tools, and decision logic. This document maps them for Claude Code expert spawning.
+
+> **SYNC NOTE**: Agents 21–22 added in Phases 157/159. Synced 2026-04-05.
 
 ### Agent Table
 
@@ -53,6 +55,8 @@ VAPI operates 20 specialized agents in the bridge service. Each agent is a backg
 | 18 | AgentCalibrationIntegrityMonitor (ACIM) | — | 15 min | Cross-validates 16 agents' calibration invariants independently; anti-single-validator | Fail-open | 1 |
 | 19 | ControllerHardwareIntelligenceAgent | claude-opus-4-6 | 1 hour | Attested vs Standard tier mapping; composite key profile_hash:battery_type:transport_type; default thresholds 7.009/5.367; controller_hardware_profiles table | Fail-open | 8 |
 | 20 | EnrollmentAutoGuidanceAgent | — | 1 hour | Synthesizes Phase 151 guidance + Phase 154 stagnation + Phase 152 velocity + Phase 155 controller status; urgency HIGH/MEDIUM/LOW; fires enrollment_complete → TournamentActivationChainAgent | Fail-open | 1 |
+| 21 | FleetConsensusSnapshotAgent | — | 1800 sec | WIF-012 dual-condition overall_ready gate; WIF-016 cov_stability_check() 3 regime labels; WIF-013 PoFC hash=SHA-256(sorted_verdicts+ratio+ts_ns); fleet_consensus_snapshot_log | Fail-open | 1 |
+| 22 | BiometricPrivacyComplianceAgent | — | 5 min | BP-001 Temporal Biometric Decay TBD(t)=e^(-λt) τ_half=90d; warning when mean_decay_factor<0.25 (≈2 half-lives); privacy_compliance_log; biometric_decay_warning bus event | Advisory | 1 |
 
 ---
 
@@ -623,9 +627,126 @@ Every agent must respect:
 
 ---
 
-**Document Version**: 1.2 (Phase 156)
-**Last Updated**: 2026-04-04
+## Agent 21: FleetConsensusSnapshotAgent — Phase 157
+
+**Trigger**: Automatic (interval-based, fleet_consensus_snapshot_interval_s=1800)
+
+**Role**: Captures fleet-wide consensus snapshots (PoFC = Proof of Fleet Consensus). Enforces dual-condition overall_ready gate (WIF-012 closure): `sessions_needed_total==0 AND defensible==True`. Detects covariance regime transitions (WIF-016).
+
+**Tools** (1 available):
+- Tool #113 get_fleet_consensus_snapshot (6 keys: fleet_consensus_enabled/total_snapshots/latest_pofc_hash/latest_agent_count/latest_separation_ratio/timestamp)
+
+**Config**: fleet_consensus_enabled=True, cov_stability_margin_np=0.5, fleet_consensus_snapshot_interval_s=1800
+
+---
+
+## Agent 22: BiometricPrivacyComplianceAgent — Phase 159
+
+**Trigger**: Automatic (event-driven on new biometric records)
+
+**Role**: BP-001 Temporal Biometric Decay monitoring. TBD(t) = e^(-λt), λ = ln(2)/τ_half, τ_half=90d. Fires `biometric_decay_warning` bus event when mean_decay_factor < 0.25 (≈2 half-lives).
+
+**Tools** (1 available):
+- Tool #116 get_biometric_privacy_status (8 keys: biometric_privacy_enabled/bp001_half_life_days/records_monitored/records_expired/mean_decay_factor/warning_triggered/privacy_budget_epsilon/timestamp)
+
+**Config**: biometric_privacy_enabled=True, bp001_half_life_days=90.0
+
+---
+
+## Agent 23: SeparationRatioRecoveryAgent — Phase 173
+
+**Trigger**: Automatic (fires when new separation ratio snapshot available)
+
+**Role**: Detects P1 temporal non-stationarity from converging-downward ratio trend (N=11→1.261, N=14→0.789, N=20→0.569). Computes `compute_trend_velocity()` via linear regression over last 5 snapshots. Recommends recovery action.
+
+**Decision Output**:
+- trend_velocity: Mahalanobis ratio change per snapshot (negative = converging down)
+- recovery_action: STABLE | AGE_WEIGHTING | P1_RE_ENROLLMENT | MORE_SESSIONS
+- P1_RE_ENROLLMENT when velocity ≤ -0.05/snapshot
+- AGE_WEIGHTING when mildly negative trend
+
+**Tools** (1 available):
+- Tool #123 get_separation_ratio_recovery_status (8 keys: separation_ratio_recovery_enabled/ratio/trend_velocity/recovery_needed/recovery_action/snapshots_used/last_snapshot_ts/timestamp)
+
+**Bus Event**: `ratio_recovery_needed` when recovery_needed=True
+
+---
+
+## Agent 24: AgeWeightedRatioPersistenceAgent — Phase 175
+
+**Trigger**: Automatic (fires after analyze_interperson_separation.py --session-age-weight run)
+
+**Role**: Persists session-age-weighted separation ratio analysis. Detects temporal drift between raw ratio and age-weighted ratio. WIF-025 CLOSED.
+
+**Decision Output**:
+- temporal_drift_index (TDI) = raw_ratio - age_weighted_ratio
+- TDI > 0.05 → P1_NONSTATIONARITY (old sessions inflate ratio estimate)
+- TDI < -0.05 → IMPROVING (new sessions produce stronger separation)
+- |TDI| ≤ 0.05 → STABLE
+
+**Tools** (1 available):
+- Tool #124 get_age_weight_analysis_status (8 keys: age_weight_analysis_enabled/raw_ratio/age_weighted_ratio/temporal_drift_index/halflife_days/n_sessions_used/drift_direction/timestamp)
+
+**Config**: age_weight_analysis_enabled=True
+
+---
+
+## Agent 25: PoACChainIntegrityMonitor — Phase 176
+
+**Trigger**: Automatic (periodic audit of SHA-256 chain linkage)
+
+**Role**: Audits SHA-256 chain linkage across all PoAC records. integrity_score = valid_links / total_records. W1 mitigation: only aggregate counts exposed — no broken record IDs returned (WIF-026 W1 closure). Vacuous integrity (total=0) → 1.0.
+
+**Decision Output**:
+- integrity_score: 0.0–1.0 (1.0 = fully intact SHA-256 chain)
+- audit_passed: True when broken_links == 0
+- broken_links: count only (no IDs — prevents injection window disclosure)
+
+**Tools** (1 available):
+- Tool #125 get_poac_chain_integrity (input: device_id optional; 8 keys: chain_integrity_enabled/device_id/total_records/valid_links/broken_links/integrity_score/audit_passed/timestamp)
+
+**Fail Mode**: Fail-open (audit failure must not block tournament gate)
+
+**Config**: chain_integrity_enabled=True
+
+**W2 (WIF-026)**: isChainIntegrous() as third composable primitive alongside isFullyEligible() and isRecorded()
+
+---
+
+## Agent 26: ProtocolMaturityScoringAgent — Phase 177
+
+**Trigger**: Automatic (synthesizes signals from 6 upstream agents)
+
+**Role**: Synthesizes 6 agent signals into a unified maturity_score (0.0–1.0). Single oracle for protocol production-readiness. W2 opportunity: maturity_score ≥ 0.85 as 7th composable tournament primitive + DePIN data marketplace trustworthiness oracle.
+
+**Maturity Formula**:
+| Component | Weight | Source |
+|-----------|--------|--------|
+| separation | 0.25 | separation_defensibility_log ratio |
+| chain_integrity | 0.20 | poac_chain_audit_log integrity_score |
+| consent | 0.15 | consent_ledger active coverage |
+| biometric_freshness | 0.15 | privacy_compliance_log mean_decay_factor |
+| agent_calibration | 0.15 | agent_calibration_health latest_pass_rate |
+| enrollment | 0.10 | enrollment_auto_guidance_log |
+
+**Tiers**: ALPHA (<0.50) / BETA (0.50–0.85) / PRODUCTION_CANDIDATE (≥0.85)
+**Current tier**: ALPHA (separation_ratio=0.569 < 0.70 gate → separation_component low)
+
+**Tools** (1 available):
+- Tool #126 get_protocol_maturity_score (10 keys: protocol_maturity_enabled/maturity_score/maturity_tier/separation_component/chain_integrity_component/consent_component/biometric_freshness_component/agent_calibration_component/enrollment_component/timestamp)
+
+**SDK**: ProtocolMaturityScoringResult(9 slots) + VAPIProtocolMaturityScoring
+**NOTE**: Class renamed from ProtocolMaturityResult/VAPIProtocolMaturity to avoid Phase 104 collision (2026-04-08).
+
+**Config**: protocol_maturity_enabled=True
+
+**W1 (WIF-027)**: Maturity score gaming by silencing agents → silence_penalty (Phase 178 candidate)
+**W2 (WIF-027)**: maturity_score ≥ 0.85 as DePIN marketplace trustworthiness oracle
+
+---
+
+**Document Version**: 1.3 (Phase 177)
+**Last Updated**: 2026-04-08
 **Update Method**: Add new agents as phases complete
-**Agent Count**: 20 (Phase 156)
-**Key Phase 155 change**: Agent #19 ControllerHardwareIntelligenceAgent LIVE (was DESIGN ONLY in Phase 149)
-**Key Phase 156 change**: Agent #20 EnrollmentAutoGuidanceAgent LIVE; W1 enrollment count-gate identified
+**Agent Count**: 26 (Phase 177)
+**SYNC NOTE**: Agents 21–26 added in Phases 157/159/173/175/176/177. Synced 2026-04-08.

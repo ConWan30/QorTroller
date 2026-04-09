@@ -906,18 +906,18 @@ Run only tests relevant to changed files. Map files to test suites:
 
 | Changed File | Test Suite | Count Check |
 |---|---|---|
-| `bridge_agent.py` | `test_phase{N}_*.py` relevant phases | Bridge 1868 |
-| `store.py` | All `test_phase*` (schema changes) | Bridge 1868 |
-| `session_adjudicator.py` | Phase 98/105/109C/147 tests | Bridge 1868 |
-| `operator_api.py` | All phase endpoint tests | Bridge 1868 |
-| `config.py` | Config-dependent tests | Bridge 1868 |
+| `bridge_agent.py` | `test_phase{N}_*.py` relevant phases | Bridge 1998 |
+| `store.py` | All `test_phase*` (schema changes) | Bridge 1998 |
+| `session_adjudicator.py` | Phase 98/105/109C/147 tests | Bridge 1998 |
+| `operator_api.py` | All phase endpoint tests | Bridge 1998 |
+| `config.py` | Config-dependent tests | Bridge 1998 |
 | `*.sol` contracts | `npx hardhat test` | Hardhat 468 |
-| `sdk/vapi_sdk.py` | `python -m pytest sdk/tests/ -v` | SDK 265 |
-| `analyze_interperson_separation.py` | Phase 137-150 analysis tests | Bridge 1868 |
+| `sdk/vapi_sdk.py` | `python -m pytest sdk/tests/ -v` | SDK 325 |
+| `analyze_interperson_separation.py` | Phase 137-177 analysis tests | Bridge 1998 |
 
-**Baseline counts** (Phase 156 ground truth from CLAUDE.md):
-- Bridge: **1868** passing
-- SDK: **265** passing
+**Baseline counts** (Phase 177 ground truth from CLAUDE.md):
+- Bridge: **1998** passing
+- SDK: **325** passing
 - Hardhat: **468** passing
 - E2E: **14** (needs Hardhat node)
 
@@ -1000,12 +1000,20 @@ Verify the 20-agent fleet is intact:
 | 18 | AgentCalibrationIntegrityMonitor (ACIM) | LIVE | 15 min, 16 self-tests |
 | 19 | ControllerHardwareIntelligenceAgent | LIVE Phase 155 | 1h |
 | 20 | EnrollmentAutoGuidanceAgent | LIVE Phase 156 | 1h |
+| 21 | FleetConsensusSnapshotAgent | LIVE Phase 157 | 1800s |
+| 22 | BiometricPrivacyComplianceAgent | LIVE Phase 159 | event-driven |
+| 23 | SeparationRatioRecoveryAgent | LIVE Phase 173 | on snapshot |
+| 24 | AgeWeightedRatioPersistenceAgent | LIVE Phase 175 | on analysis run |
+| 25 | PoACChainIntegrityMonitor | LIVE Phase 176 | periodic audit |
+| 26 | ProtocolMaturityScoringAgent | LIVE Phase 177 | synthesizes 6 signals |
 
 Critical invariants:
 - Agent #16 `auto_activate_on_breakthrough=False` PERMANENT — touching this is P0 STOP
 - Agent #18 ACIM runs 16 self-tests every 15 minutes — any change to agent health log schema needs ACIM test update
 - Agent #19 tier mapping is immutable: DualShock Edge CFI-ZCP1 → Attested (L0-L6); Xbox/Switch → Standard (L0-L5)
 - Agent #20 fires `enrollment_complete` bus event → TournamentActivationChainAgent (agent #16); verify event topology preserved
+- Agent #23 fires `ratio_recovery_needed` bus event when recovery_needed=True; recovery_action P1_RE_ENROLLMENT is highest-urgency signal
+- Agent #26 ProtocolMaturityScoringResult class renamed (not ProtocolMaturityResult — Phase 104 collision); verify in SDK sweeps
 
 #### Step 7 — Schema and Migration Audit
 
@@ -1100,8 +1108,8 @@ cd contracts && npx hardhat test 2>&1 | tail -3
 
 Expected format:
 ```
-Bridge: X passed (X ≥ 1868)
-SDK: X passed (X ≥ 265)
+Bridge: X passed (X ≥ 1998)
+SDK: X passed (X ≥ 325)
 Hardhat: X passing (X ≥ 468)
 ```
 
@@ -1408,14 +1416,14 @@ The hook in `.claude/settings.local.json` fires automatically after every `Write
 - Manual agent/WIF review (large drift): 5-10 minutes
 
 ### Last Run
-**Status**: COMPLETE (2026-04-05)
-**Result**: 8-phase drift recovered (Phase 156→164, Bridge 1868→1934, SDK 265→297, agents 20→22)
+**Status**: COMPLETE (2026-04-08)
+**Result**: 13-phase drift recovered (Phase 164→177, Bridge 1934→1998, SDK 297→325, agents 22→26)
 **Next**: Automatic via PostToolUse hook on every Write
 
 ---
 
-**Document Version**: 1.6 (Phase 164 — Step 13 Memory Scope Audit added)
-**Last Updated**: 2026-04-05
+**Document Version**: 1.7 (Phase 177 — baselines updated to Bridge 1998 / SDK 325 / Agents 26)
+**Last Updated**: 2026-04-08
 **Skill Count**: 15 (complete + privacy + sweep + sync)
 **Skill Status**: 8 COMPLETE, 3 PENDING (Controller skills + Privacy), 1 NEW (Skill 14 PostCode Sweep v2.2 + Step 13), 1 ACTIVE (Skill 15 Sync Recovery — hook live)
 **Update Method**: Add new skills when patterns emerge, update "Last run" after execution
