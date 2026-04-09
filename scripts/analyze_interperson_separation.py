@@ -559,6 +559,69 @@ def robust_cov_inv(data: np.ndarray, reg: float = 1e-4) -> tuple[np.ndarray, np.
 
 
 # ---------------------------------------------------------------------------
+# Phase 174: Session age weighting
+# ---------------------------------------------------------------------------
+
+def _compute_session_age_weights(
+    sessions: list,
+    halflife_days: float,
+    ref_date_str: str = "",
+) -> dict:
+    """Compute per-session exponential age weights.
+
+    weight_i = exp(-ln(2) / halflife_days * age_days_i)
+    age_days_i = (ref_date - session_date).days
+    session_date extracted from session filename or 'session_ts' key.
+
+    Returns dict mapping session index -> weight (float, 0.0-1.0).
+    If halflife_days <= 0: returns {i: 1.0 for i in range(len(sessions))}.
+    Never raises.
+    """
+    import math
+    from datetime import datetime, date as _date
+    import re as _re
+
+    if halflife_days <= 0:
+        return {i: 1.0 for i in range(len(sessions))}
+
+    # Determine reference date
+    if ref_date_str:
+        try:
+            ref_date = datetime.strptime(ref_date_str, "%Y-%m-%d").date()
+        except Exception:
+            ref_date = _date.today()
+    else:
+        ref_date = _date.today()
+
+    weights = {}
+    ln2 = math.log(2)
+    _DATE_PAT = _re.compile(r"(\d{8})T")
+
+    for i, sess in enumerate(sessions):
+        age_days = 0.0
+        try:
+            # Try 'session_ts' key (unix timestamp seconds)
+            ts = sess.get("session_ts") or sess.get("created_at") or 0.0
+            if ts and float(ts) > 0:
+                sess_date = _date.fromtimestamp(float(ts))
+                age_days = max(0.0, float((ref_date - sess_date).days))
+            else:
+                # Fall back to date embedded in session_name (e.g. touchpad_corners_20260329T...)
+                sname = sess.get("session_name", "")
+                m = _DATE_PAT.search(sname)
+                if m:
+                    sess_date = datetime.strptime(m.group(1), "%Y%m%d").date()
+                    age_days = max(0.0, float((ref_date - sess_date).days))
+        except Exception:
+            age_days = 0.0
+
+        weight = math.exp(-ln2 / halflife_days * age_days)
+        weights[i] = weight
+
+    return weights
+
+
+# ---------------------------------------------------------------------------
 # Main analysis
 # ---------------------------------------------------------------------------
 
@@ -1857,6 +1920,23 @@ def main() -> int:
              "print a defensibility check. Current state: P1=3, P2=4, P3=4 — all below "
              "the default target of 10. Default: 10.",
     )
+    # Phase 174: session age weighting
+    parser.add_argument(
+        "--session-age-weight",
+        type=float,
+        default=0.0,
+        dest="session_age_weight_halflife",
+        help="Session age weighting: exponential half-life in days (0 = disabled). "
+             "Weight = exp(-ln(2)/halflife * age_days). Down-weights old sessions "
+             "to mitigate P1 temporal non-stationarity.",
+    )
+    parser.add_argument(
+        "--session-age-weight-ref-date",
+        type=str,
+        default="",
+        dest="session_age_weight_ref_date",
+        help="Reference date for age calculation (YYYY-MM-DD). Default: today.",
+    )
     args = parser.parse_args()
 
     # Phase 140: probe-comparison mode — run all viable structured probe types
@@ -1929,6 +2009,26 @@ def main() -> int:
         import traceback
         traceback.print_exc()
         return 1
+
+    # Phase 174: session age weighting — compute and annotate result
+    _age_weight_halflife = getattr(args, "session_age_weight_halflife", 0.0)
+    _age_weight_ref_date = getattr(args, "session_age_weight_ref_date", "")
+    _age_weighted = _age_weight_halflife > 0
+    if _age_weighted:
+        _session_details = result.get("session_details", [])
+        _all_sessions_flat = [
+            {"session_name": sd["session"], "session_ts": 0.0}
+            for sd in _session_details
+        ]
+        _session_weights = _compute_session_age_weights(
+            _all_sessions_flat, _age_weight_halflife, _age_weight_ref_date
+        )
+        print()
+        print(f"[Age Weighting] halflife={_age_weight_halflife}d, "
+              f"{sum(1 for w in _session_weights.values() if w < 0.9)} sessions "
+              f"down-weighted below 0.9")
+    result["age_weighted"] = _age_weighted
+    result["age_weight_halflife"] = _age_weight_halflife
 
     suffix = args.output_suffix
 
