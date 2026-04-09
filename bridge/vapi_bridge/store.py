@@ -1661,6 +1661,71 @@ class Store:
                 CREATE INDEX IF NOT EXISTS idx_sep_recovery_created
                 ON separation_ratio_recovery_log(created_at DESC)
             """)
+            # Phase 180: biometric_renewal_chain_log — Biometric Renewal Engine (WIF-029 W2 closure).
+            # Records each consent-bound renewal commitment chain entry.
+            # new_commit_hash: SHA-256(prev_hash + ratio_str + N + N_consented + players + ttl_days + ts_ns).
+            # on_chain_tx: populated when renewal_enabled=True and renewCommit() succeeds on IoTeX.
+            # dry_run=1: default — never calls chain without explicit operator intent.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS biometric_renewal_chain_log (
+                    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                    prev_commit_hash  TEXT    NOT NULL DEFAULT '',
+                    new_commit_hash   TEXT    NOT NULL UNIQUE,
+                    renewal_reason    TEXT    NOT NULL DEFAULT 'TTL_EXPIRY',
+                    n_consented       INTEGER NOT NULL DEFAULT 0,
+                    n_sessions        INTEGER NOT NULL DEFAULT 0,
+                    ttl_days          REAL    NOT NULL DEFAULT 90.0,
+                    on_chain_tx       TEXT,
+                    dry_run           INTEGER NOT NULL DEFAULT 1,
+                    created_at        REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_renewal_chain_created
+                ON biometric_renewal_chain_log(created_at DESC)
+            """)
+            # Phase 179: ceremony_audit_log — ZK Ceremony Audit Gate (WIF-030 W1 closure).
+            # Tracks MPC trusted-setup ceremony participants per ZK circuit.
+            # Anti-replay: UNIQUE(ceremony_id, participant_address, circuit_name).
+            # TournamentActivationChainAgent requires >= min_participants per circuit
+            # before accepting ZK proofs as tournament-valid (when ceremony_audit_enabled=True).
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS ceremony_audit_log (
+                    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ceremony_id          TEXT    NOT NULL,
+                    circuit_name         TEXT    NOT NULL,
+                    participant_address  TEXT    NOT NULL,
+                    contribution_hash    TEXT    NOT NULL,
+                    ts_ns                INTEGER NOT NULL DEFAULT 0,
+                    created_at           REAL    NOT NULL DEFAULT (strftime('%s','now')),
+                    UNIQUE(ceremony_id, participant_address, circuit_name)
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_ceremony_audit_circuit
+                ON ceremony_audit_log(circuit_name, created_at DESC)
+            """)
+            # Phase 178: biometric_renewal_log — Biometric Credential TTL Gate (WIF-029 W1 closure).
+            # Records each TTL check performed by TournamentActivationChainAgent against
+            # the latest SeparationRatioRegistry.sol commitment.
+            # ttl_expired=True when age_days > biometric_credential_ttl_days (default 90).
+            # When expired: recalibration_required=True and tournament authorization is BLOCKED.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS biometric_renewal_log (
+                    id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+                    commit_hash              TEXT    NOT NULL DEFAULT '',
+                    age_days                 REAL    NOT NULL DEFAULT 0.0,
+                    ttl_days                 REAL    NOT NULL DEFAULT 90.0,
+                    ttl_expired              INTEGER NOT NULL DEFAULT 0,
+                    recalibration_required   INTEGER NOT NULL DEFAULT 0,
+                    checked_by               TEXT    NOT NULL DEFAULT 'tournament_activation_chain_agent',
+                    created_at               REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_biometric_renewal_created
+                ON biometric_renewal_log(created_at DESC)
+            """)
             # Phase 177: protocol_maturity_log — ProtocolMaturityScoringAgent (agent #26).
             # Synthesizes 6 agent signals into a unified maturity_score (0.0-1.0).
             # maturity_tier: ALPHA (<0.50) | BETA (0.50-0.85) | PRODUCTION_CANDIDATE (>=0.85)
@@ -2064,6 +2129,9 @@ class Store:
                 (165, "post_erasure_recompute"),
                 (168, "bootstrap_ci_separation_ratio"),
                 (173, "separation_ratio_recovery"),
+                (178, "biometric_renewal"),
+                (179, "ceremony_audit"),
+                (180, "biometric_renewal_chain"),
             ]:
                 conn.execute(
                     "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
@@ -8567,6 +8635,234 @@ class Store:
             }
             for r in rows
         ]
+
+    # --- Phase 180: Biometric Renewal Engine (WIF-029 W2 closure) ---
+
+    def insert_biometric_renewal_chain_log(
+        self,
+        prev_commit_hash: str,
+        new_commit_hash: str,
+        n_consented: int,
+        n_sessions: int,
+        ttl_days: float,
+        on_chain_tx: "str | None" = None,
+        dry_run: bool = True,
+        renewal_reason: str = "TTL_EXPIRY",
+    ) -> int:
+        """Insert a biometric renewal chain record (Phase 180).
+
+        Stores the consent-bound renewal commitment chain entry.
+        new_commit_hash = SHA-256(prev_hash + ratio_str + N + N_consented + players + ttl_days + ts_ns).
+        Raises sqlite3.IntegrityError on duplicate new_commit_hash (anti-replay).
+        """
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO biometric_renewal_chain_log "
+                "(prev_commit_hash, new_commit_hash, renewal_reason, "
+                "n_consented, n_sessions, ttl_days, on_chain_tx, dry_run, created_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?)",
+                (
+                    str(prev_commit_hash),
+                    str(new_commit_hash),
+                    str(renewal_reason),
+                    int(n_consented),
+                    int(n_sessions),
+                    float(ttl_days),
+                    str(on_chain_tx) if on_chain_tx else None,
+                    1 if dry_run else 0,
+                    time.time(),
+                ),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def get_biometric_renewal_chain_status(self) -> "dict":
+        """Return the renewal chain status for GET /agent/renewal-chain-status (Phase 180).
+
+        Returns 7 keys: renewal_enabled/total_renewals/latest_renewal_ts/
+        prev_commit_hash/new_commit_hash/ttl_days/timestamp.
+        """
+        ts_now = time.time()
+        with self._conn() as conn:
+            total_row = conn.execute(
+                "SELECT COUNT(*) FROM biometric_renewal_chain_log"
+            ).fetchone()
+            total_renewals = int(total_row[0]) if total_row else 0
+            latest_row = conn.execute(
+                "SELECT prev_commit_hash, new_commit_hash, ttl_days, created_at "
+                "FROM biometric_renewal_chain_log ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+        if latest_row:
+            return {
+                "renewal_enabled":    False,      # caller overlays from cfg
+                "total_renewals":     total_renewals,
+                "latest_renewal_ts":  float(latest_row[3]),
+                "prev_commit_hash":   str(latest_row[0]),
+                "new_commit_hash":    str(latest_row[1]),
+                "ttl_days":           float(latest_row[2]),
+                "timestamp":          ts_now,
+            }
+        return {
+            "renewal_enabled":    False,
+            "total_renewals":     0,
+            "latest_renewal_ts":  0.0,
+            "prev_commit_hash":   "",
+            "new_commit_hash":    "",
+            "ttl_days":           90.0,
+            "timestamp":          ts_now,
+        }
+
+    # --- Phase 179: ZK Ceremony Audit Gate (WIF-030 W1 closure) ---
+
+    def insert_ceremony_audit_entry(
+        self,
+        ceremony_id: str,
+        circuit_name: str,
+        participant_address: str,
+        contribution_hash: str,
+        ts_ns: int = 0,
+    ) -> int:
+        """Insert a ZK ceremony participant entry (Phase 179).
+
+        Anti-replay: UNIQUE(ceremony_id, participant_address, circuit_name).
+        Duplicate entries raise sqlite3.IntegrityError (caller should catch and skip).
+        Returns new row id on success.
+        """
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO ceremony_audit_log "
+                "(ceremony_id, circuit_name, participant_address, "
+                "contribution_hash, ts_ns, created_at) "
+                "VALUES (?,?,?,?,?,?)",
+                (
+                    str(ceremony_id),
+                    str(circuit_name),
+                    str(participant_address),
+                    str(contribution_hash),
+                    int(ts_ns),
+                    time.time(),
+                ),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def count_ceremony_participants(self, circuit_name: str) -> int:
+        """Return count of distinct participant_address entries for a ZK circuit (Phase 179)."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT COUNT(DISTINCT participant_address) FROM ceremony_audit_log "
+                "WHERE circuit_name = ?",
+                (str(circuit_name),),
+            ).fetchone()
+        return int(row[0]) if row else 0
+
+    def get_ceremony_audit_status(self) -> "dict":
+        """Return ceremony audit summary for GET /agent/ceremony-audit-status (Phase 179).
+
+        Returns 7 keys: ceremony_audit_enabled/total_entries/distinct_participants/
+        circuits_audited/min_participants/audit_passed/timestamp.
+        audit_passed=True when distinct_participants >= min_participants across all circuits.
+        When ceremony_audit_enabled=False (default): audit_passed=True (gate inactive).
+        """
+        ts_now = time.time()
+        with self._conn() as conn:
+            total_entries = conn.execute(
+                "SELECT COUNT(*) FROM ceremony_audit_log"
+            ).fetchone()[0]
+            distinct_participants = conn.execute(
+                "SELECT COUNT(DISTINCT participant_address) FROM ceremony_audit_log"
+            ).fetchone()[0]
+            circuits_row = conn.execute(
+                "SELECT COUNT(DISTINCT circuit_name) FROM ceremony_audit_log"
+            ).fetchone()
+            circuits_audited = int(circuits_row[0]) if circuits_row else 0
+        return {
+            "ceremony_audit_enabled":   False,  # always reported; caller overlays from cfg
+            "total_entries":            int(total_entries),
+            "distinct_participants":    int(distinct_participants),
+            "circuits_audited":         circuits_audited,
+            "min_participants":         3,       # caller overlays from cfg
+            "audit_passed":             True,    # caller overlays when enabled
+            "timestamp":                ts_now,
+        }
+
+    # --- Phase 178: Biometric Credential TTL Gate (WIF-029 W1 closure) ---
+
+    def insert_biometric_renewal_log(
+        self,
+        commit_hash: str,
+        age_days: float,
+        ttl_days: float,
+        ttl_expired: bool,
+        recalibration_required: bool,
+        checked_by: str = "tournament_activation_chain_agent",
+    ) -> int:
+        """Insert a biometric credential TTL check record (Phase 178).
+
+        Called by TournamentActivationChainAgent each time it evaluates whether the
+        latest SeparationRatioRegistry.sol commitment has expired.
+        ttl_expired=True blocks tournament authorization and sets recalibration_required=True.
+        """
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO biometric_renewal_log "
+                "(commit_hash, age_days, ttl_days, ttl_expired, "
+                "recalibration_required, checked_by, created_at) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (
+                    str(commit_hash),
+                    float(age_days),
+                    float(ttl_days),
+                    1 if ttl_expired else 0,
+                    1 if recalibration_required else 0,
+                    str(checked_by),
+                    time.time(),
+                ),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def get_biometric_credential_age_status(self, ttl_days: float = 90.0) -> "dict":
+        """Return the current biometric credential age and TTL status (Phase 178).
+
+        Computes age_days live from the most recent separation_ratio_registry_log commit
+        and compares against ttl_days (default 90, overridden by cfg.biometric_credential_ttl_days).
+        ttl_expired=True is computed HERE — the biometric_renewal_log is an audit trail only,
+        not the authority on current expiry state.
+
+        Returns a dict with 8 keys: ttl_enabled/commit_hash/commit_ts/age_days/
+        ttl_days/ttl_expired/recalibration_required/timestamp.
+        """
+        import time as _time
+
+        ts_now = _time.time()
+        # Get latest on-chain commit timestamp from separation_ratio_registry_log
+        with self._conn() as conn:
+            reg_row = conn.execute(
+                "SELECT commit_hash, created_at FROM separation_ratio_registry_log "
+                "ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+
+        if reg_row is not None:
+            commit_hash = str(reg_row[0])
+            commit_ts = float(reg_row[1])
+            age_days = (ts_now - commit_ts) / 86400.0
+        else:
+            commit_hash = ""
+            commit_ts = 0.0
+            age_days = 0.0
+
+        # Compute expiry live: only expired when a commit exists AND age exceeds TTL
+        ttl_expired = bool(commit_hash) and (age_days > float(ttl_days))
+        recalibration_required = ttl_expired
+
+        return {
+            "ttl_enabled":             True,
+            "commit_hash":             commit_hash,
+            "commit_ts":               commit_ts,
+            "age_days":                round(age_days, 4),
+            "ttl_days":                float(ttl_days),
+            "ttl_expired":             ttl_expired,
+            "recalibration_required":  recalibration_required,
+            "timestamp":               ts_now,
+        }
 
     # --- Phase 177: ProtocolMaturityScoringAgent ---
 

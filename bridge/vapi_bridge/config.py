@@ -1250,6 +1250,46 @@ class Config:
     """Phase 159 — BP-001 biometric half-life in days. TBD decay λ = ln(2)/τ_half.
     Default 90 days per GDPR storage limitation guidance. IMMUTABLE per VAPI_INVARIANTS.md §6."""
 
+    # --- Phase 180: Biometric Renewal Engine (WIF-029 W2 closure) ---
+    renewal_enabled: bool = field(
+        default_factory=lambda: _env("RENEWAL_ENABLED", "false").lower() == "true"
+    )
+    """Phase 180 — Enable Biometric Renewal Engine (WIF-029 W2 closure).
+    Infrastructure-first default: False (dry_run=True on all renewal calls until enabled).
+    When True and TTL is expired, POST /agent/renew-separation-ratio-commitment
+    calls SeparationRatioRegistry.sol.renewCommit() to chain-link prev_commit_hash
+    → new_commit_hash, extending tournament authorization by ttl_days.
+    Renewal hash: SHA-256(prev_hash + ratio_str + N + N_consented + players + ttl_days + ts_ns)."""
+
+    # --- Phase 179: ZK Ceremony Audit Gate (WIF-030 W1 closure) ---
+    ceremony_audit_enabled: bool = field(
+        default_factory=lambda: _env("CEREMONY_AUDIT_ENABLED", "false").lower() == "true"
+    )
+    """Phase 179 — Enable ZK ceremony multi-party audit gate (WIF-030 W1 closure).
+    Infrastructure-first default: False (zero behavior change for existing flows).
+    When True, TournamentActivationChainAgent checks that each VAPI ZK circuit has
+    >= ceremony_audit_min_participants distinct ceremony participants recorded in
+    ceremony_audit_log before accepting any ZK proof as tournament-valid.
+    Single-operator Groth16 setup = toxic waste known to one party = forgeable proofs."""
+
+    ceremony_audit_min_participants: int = field(
+        default_factory=lambda: int(_env("CEREMONY_AUDIT_MIN_PARTICIPANTS", "3"))
+    )
+    """Phase 179 — Minimum distinct participant_address entries per ZK circuit (default 3).
+    Groth16 MPC trusted-setup ceremony requires >= 3 external participants for safety.
+    Each participant contributes randomness; a single compromised entry cannot forge proofs
+    when N >= 3 (one honest participant is sufficient for a secure ceremony)."""
+
+    # --- Phase 178: Biometric Credential TTL Gate (WIF-029 W1 closure) ---
+    biometric_credential_ttl_days: float = field(
+        default_factory=lambda: float(_env("BIOMETRIC_CREDENTIAL_TTL_DAYS", "90.0"))
+    )
+    """Phase 178 — TTL in days for on-chain separation ratio commitments (WIF-029 W1 closure).
+    A SeparationRatioRegistry.sol commitment older than this value is biometrically stale:
+    player touchpad tremor patterns measurably drift over 90 days (P1 non-stationarity).
+    TournamentActivationChainAgent blocks authorization when age_days > biometric_credential_ttl_days.
+    Default 90 days per DSGVO §35 purpose-limitation guidance. Matches BP-001 τ_half=90d constant."""
+
     # --- Phase 177: ProtocolMaturityScoringAgent (agent #26) ---
     protocol_maturity_enabled: bool = field(
         default_factory=lambda: _env("PROTOCOL_MATURITY_ENABLED", "true").lower() == "true"
