@@ -4948,6 +4948,219 @@ class VAPIPoACChainIntegrity:
 
 
 # ---------------------------------------------------------------------------
+# Phase 180 — Biometric Renewal Engine (WIF-029 W2 closure)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class BiometricRenewalResult:
+    """Result from VAPIBiometricRenewal.get_status() or trigger_renewal() (Phase 180).
+
+    Records the consent-bound renewal commitment chain entry.
+    new_commit_hash = SHA-256(prev_hash + ratio_str + N + N_consented + players + ttl_days + ts_ns).
+    renewal_enabled=False by default (infrastructure-first, dry_run=True default).
+    First renewable consent-bound biometric tournament license in any gaming DePIN protocol.
+    """
+    renewal_enabled:   bool
+    prev_commit_hash:  str
+    new_commit_hash:   str
+    ttl_days:          float
+    dry_run:           bool
+    total_renewals:    int
+    error: "str | None" = None
+
+
+class VAPIBiometricRenewal:
+    """SDK client for GET /agent/renewal-chain-status (Phase 180).
+
+    Example::
+
+        br = VAPIBiometricRenewal("http://localhost:8080", api_key)
+        result = br.get_status()
+        print(f"Renewals: {result.total_renewals}, latest: {result.new_commit_hash}")
+    """
+
+    def __init__(self, base_url: str, api_key: str) -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self) -> BiometricRenewalResult:
+        """Return the current biometric renewal chain status.
+
+        On error: returns BiometricRenewalResult with error set (fail-safe).
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/agent/renewal-chain-status?api_key={self._key}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return BiometricRenewalResult(
+                renewal_enabled  = bool(body.get("renewal_enabled",  False)),
+                prev_commit_hash = str(body.get("prev_commit_hash",  "")),
+                new_commit_hash  = str(body.get("new_commit_hash",   "")),
+                ttl_days         = float(body.get("ttl_days",        90.0)),
+                dry_run          = bool(body.get("dry_run",          True)),
+                total_renewals   = int(body.get("total_renewals",    0)),
+            )
+        except Exception as exc:
+            return BiometricRenewalResult(
+                renewal_enabled  = False,
+                prev_commit_hash = "",
+                new_commit_hash  = "",
+                ttl_days         = 90.0,
+                dry_run          = True,
+                total_renewals   = 0,
+                error            = str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Phase 179 — ZK Ceremony Audit Gate (WIF-030 W1 closure)
+# NOTE: Named CeremonyAuditGateResult / VAPICeremonyAuditGate to avoid
+# collision with Phase 85 CeremonyAuditResult / VAPICeremonyAudit
+# (Phase 85 = ZK proof ceremony verification; Phase 179 = audit gate status).
+# ---------------------------------------------------------------------------
+
+@dataclass
+class CeremonyAuditGateResult:
+    """Result from VAPICeremonyAuditGate.get_status() (Phase 179).
+
+    Tracks Groth16 MPC trusted-setup ceremony participants per ZK circuit.
+    Infrastructure-first: ceremony_audit_enabled=False by default.
+    When enabled: audit_passed=True requires >= min_participants per circuit.
+    Single-operator ceremony: toxic waste (τ, α, β) known to one party →
+    can forge ZK proofs undetected (WIF-030 W1).
+    """
+    ceremony_audit_enabled:   bool
+    total_entries:             int
+    distinct_participants:     int
+    circuits_audited:          int
+    min_participants:          int
+    audit_passed:              bool
+    error: "str | None" = None
+
+
+class VAPICeremonyAuditGate:
+    """SDK client for GET /agent/ceremony-audit-status (Phase 179).
+
+    Renamed from VAPICeremonyAudit to avoid collision with Phase 85's
+    VAPICeremonyAudit (ZK proof ceremony verification vs audit gate status).
+
+    Example::
+
+        ca = VAPICeremonyAuditGate("http://localhost:8080", api_key)
+        result = ca.get_status()
+        if not result.audit_passed:
+            print(f"Ceremony audit FAILED — {result.distinct_participants} participants "
+                  f"< {result.min_participants} required")
+    """
+
+    def __init__(self, base_url: str, api_key: str) -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self) -> CeremonyAuditGateResult:
+        """Return the current ZK ceremony audit gate status.
+
+        On error: returns CeremonyAuditGateResult with error set, audit_passed=True (fail-open).
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/agent/ceremony-audit-status?api_key={self._key}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return CeremonyAuditGateResult(
+                ceremony_audit_enabled = bool(body.get("ceremony_audit_enabled", False)),
+                total_entries          = int(body.get("total_entries",         0)),
+                distinct_participants  = int(body.get("distinct_participants",  0)),
+                circuits_audited       = int(body.get("circuits_audited",       0)),
+                min_participants       = int(body.get("min_participants",       3)),
+                audit_passed           = bool(body.get("audit_passed",          True)),
+            )
+        except Exception as exc:
+            return CeremonyAuditGateResult(
+                ceremony_audit_enabled = False,
+                total_entries          = 0,
+                distinct_participants  = 0,
+                circuits_audited       = 0,
+                min_participants       = 3,
+                audit_passed           = True,   # fail-open: error must not block gate
+                error                  = str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Phase 178 — Biometric Credential TTL Gate (WIF-029 W1 closure)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class BiometricCredentialAgeResult:
+    """Result from VAPIBiometricCredentialTTL.get_status() (Phase 178).
+
+    Checks whether the latest SeparationRatioRegistry.sol commitment has expired.
+    ttl_expired=True when age_days > ttl_days (default 90).
+    An expired credential BLOCKS tournament authorization — operator must run
+    fresh calibration sessions and commit a new SeparationRatioRegistry.sol record.
+    Each check logged to biometric_renewal_log for regulatory audit trail.
+    """
+    ttl_enabled:             bool
+    commit_hash:             str
+    commit_ts:               float
+    age_days:                float
+    ttl_days:                float
+    ttl_expired:             bool
+    recalibration_required:  bool
+    error: "str | None" = None
+
+
+class VAPIBiometricCredentialTTL:
+    """SDK client for GET /agent/biometric-credential-age (Phase 178).
+
+    Example::
+
+        bttl = VAPIBiometricCredentialTTL("http://localhost:8080", api_key)
+        result = bttl.get_status()
+        if result.ttl_expired:
+            print(f"Credential expired ({result.age_days:.1f}d > {result.ttl_days}d)")
+            print("Recalibration required before tournament authorization")
+    """
+
+    def __init__(self, base_url: str, api_key: str) -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self) -> BiometricCredentialAgeResult:
+        """Return the current biometric credential age and TTL status.
+
+        On error: returns BiometricCredentialAgeResult with error set, ttl_expired=False.
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/agent/biometric-credential-age?api_key={self._key}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return BiometricCredentialAgeResult(
+                ttl_enabled            = bool(body.get("ttl_enabled",            True)),
+                commit_hash            = str(body.get("commit_hash",             "")),
+                commit_ts              = float(body.get("commit_ts",             0.0)),
+                age_days               = float(body.get("age_days",              0.0)),
+                ttl_days               = float(body.get("ttl_days",              90.0)),
+                ttl_expired            = bool(body.get("ttl_expired",            False)),
+                recalibration_required = bool(body.get("recalibration_required", False)),
+            )
+        except Exception as exc:
+            return BiometricCredentialAgeResult(
+                ttl_enabled            = True,
+                commit_hash            = "",
+                commit_ts              = 0.0,
+                age_days               = 0.0,
+                ttl_days               = 90.0,
+                ttl_expired            = False,
+                recalibration_required = False,
+                error                  = str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
 # Phase 177 — ProtocolMaturityScoringAgent (agent #26)
 # ---------------------------------------------------------------------------
 

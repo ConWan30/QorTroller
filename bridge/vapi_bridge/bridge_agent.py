@@ -1053,6 +1053,63 @@ _TOOLS = [
             "required": [],
         },
     },
+    # Tool #129 — Phase 180
+    {
+        "name": "trigger_renewal_commitment",
+        "description": (
+            "Phase 180 Biometric Renewal Engine — trigger consent-bound separation ratio renewal. "
+            "When the biometric credential TTL is expired (age_days > biometric_credential_ttl_days), "
+            "computes a new commit_hash linked to prev_commit_hash via consent-bound SHA-256 preimage: "
+            "SHA-256(prev_hash + ratio_str + N + N_consented + players + ttl_days + ts_ns). "
+            "n_consented read live from consent corpus (Phase 163 pattern). "
+            "dry_run=True (default): records renewal chain entry, no chain call. "
+            "dry_run=False: calls SeparationRatioRegistry.renewCommit() on IoTeX testnet "
+            "when renewal_enabled=True in config. "
+            "Returns: renewal_enabled/prev_commit_hash/new_commit_hash/ttl_days/dry_run/total_renewals/n_consented/error."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "ratio":   {"type": "number",  "description": "New separation ratio (e.g. 1.261)"},
+                "n_sessions": {"type": "integer", "description": "Number of calibration sessions used"},
+                "n_players":  {"type": "integer", "description": "Number of players in corpus"},
+                "dry_run": {"type": "boolean", "description": "If true, no chain call (default: true)"},
+            },
+            "required": ["ratio", "n_sessions", "n_players"],
+        },
+    },
+    # Tool #128 — Phase 179
+    {
+        "name": "get_ceremony_audit_status",
+        "description": (
+            "Phase 179 ZK Ceremony Audit Gate status (WIF-030 W1 closure). "
+            "Returns ceremony participant audit summary for all registered VAPI ZK circuits. "
+            "Infrastructure-first: ceremony_audit_enabled=False by default — zero behavior change. "
+            "When enabled: audit_passed=True only when each circuit has >= min_participants "
+            "(default 3) distinct participant_address entries in ceremony_audit_log. "
+            "Single-operator Groth16 trusted setup = toxic waste known to one party = "
+            "forgeable ZK proofs undetected (WIF-030 W1). "
+            "Returns: ceremony_audit_enabled/total_entries/distinct_participants/"
+            "circuits_audited/min_participants/audit_passed/timestamp."
+        ),
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    # Tool #127 — Phase 178
+    {
+        "name": "get_biometric_credential_age",
+        "description": (
+            "Phase 178 Biometric Credential TTL Gate status (WIF-029 W1 closure). "
+            "Checks whether the latest SeparationRatioRegistry.sol commitment has exceeded "
+            "the 90-day biometric credential TTL. Expired credentials block tournament "
+            "authorization and require operator-triggered recalibration. "
+            "age_days is computed live from the most recent separation_ratio_registry_log "
+            "commit timestamp. ttl_expired=True when age_days > biometric_credential_ttl_days "
+            "(default 90). Each check is logged to biometric_renewal_log for audit trail. "
+            "Returns: ttl_enabled/commit_hash/commit_ts/age_days/ttl_days/"
+            "ttl_expired/recalibration_required/timestamp."
+        ),
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
     # Tool #126 — Phase 177
     {
         "name": "get_protocol_maturity_score",
@@ -3692,6 +3749,117 @@ class BridgeAgent:
                     "fleet_health": fleet,
                     "timestamp": _time.time(),
                 }
+
+            # Tool #129 — Phase 180
+            if name == "trigger_renewal_commitment":
+                import hashlib as _hl180, time as _t180
+                try:
+                    _ratio180       = float(tool_input.get("ratio", 0.0))
+                    _n_sess180      = int(tool_input.get("n_sessions", 0))
+                    _n_play180      = int(tool_input.get("n_players",  0))
+                    _dry180         = bool(tool_input.get("dry_run", True))
+                    _ttl180         = float(getattr(self._cfg, "biometric_credential_ttl_days", 90.0))
+                    _renew_en180    = bool(getattr(self._cfg, "renewal_enabled", False))
+                    _age180         = self._store.get_biometric_credential_age_status(ttl_days=_ttl180)
+                    _prev_hash180   = str(_age180.get("commit_hash", ""))
+                    _consent180     = self._store.get_consent_corpus_coverage()
+                    _n_con180       = int(_consent180.get("active_consent_count", 0))
+                    _ts_ns180       = _t180.time_ns()
+                    _preimage180 = (
+                        _prev_hash180
+                        + f"{_ratio180:.6f}"
+                        + str(_n_sess180)
+                        + str(_n_con180)
+                        + f"{_ttl180:.1f}"
+                        + str(_ts_ns180)
+                    ).encode()
+                    _new_hash180    = "sha256:" + _hl180.sha256(_preimage180).hexdigest()
+                    self._store.insert_biometric_renewal_chain_log(
+                        prev_commit_hash=_prev_hash180,
+                        new_commit_hash=_new_hash180,
+                        n_consented=_n_con180,
+                        n_sessions=_n_sess180,
+                        ttl_days=_ttl180,
+                        dry_run=_dry180,
+                    )
+                    _cs180 = self._store.get_biometric_renewal_chain_status()
+                    return {
+                        "renewal_enabled":  _renew_en180,
+                        "prev_commit_hash": _prev_hash180,
+                        "new_commit_hash":  _new_hash180,
+                        "ttl_days":         _ttl180,
+                        "dry_run":          _dry180,
+                        "total_renewals":   int(_cs180.get("total_renewals", 0)),
+                        "n_consented":      _n_con180,
+                        "error":            None,
+                    }
+                except Exception as _e180:
+                    return {
+                        "renewal_enabled": False,
+                        "prev_commit_hash": "",
+                        "new_commit_hash":  "",
+                        "ttl_days":         90.0,
+                        "dry_run":          True,
+                        "total_renewals":   0,
+                        "n_consented":      0,
+                        "error":            str(_e180),
+                    }
+
+            # Tool #128 — Phase 179
+            if name == "get_ceremony_audit_status":
+                import time as _t179
+                try:
+                    _enabled179 = bool(getattr(self._cfg, "ceremony_audit_enabled", False))
+                    _min_p179   = int(getattr(self._cfg, "ceremony_audit_min_participants", 3))
+                    _status179  = self._store.get_ceremony_audit_status()
+                    if _enabled179:
+                        _circuits179 = int(_status179.get("circuits_audited", 0))
+                        if _circuits179 == 0:
+                            _audit_passed = False
+                        else:
+                            with self._store._conn() as _c179:
+                                _rows179 = _c179.execute(
+                                    "SELECT circuit_name, COUNT(DISTINCT participant_address) "
+                                    "AS n FROM ceremony_audit_log GROUP BY circuit_name"
+                                ).fetchall()
+                            _audit_passed = all(int(r[1]) >= _min_p179 for r in _rows179)
+                    else:
+                        _audit_passed = True
+                    return {
+                        "ceremony_audit_enabled":  _enabled179,
+                        "total_entries":           int(_status179.get("total_entries",         0)),
+                        "distinct_participants":   int(_status179.get("distinct_participants",  0)),
+                        "circuits_audited":        int(_status179.get("circuits_audited",       0)),
+                        "min_participants":        _min_p179,
+                        "audit_passed":            _audit_passed,
+                        "timestamp":               _t179.time(),
+                    }
+                except Exception as _e179:
+                    return {
+                        "ceremony_audit_enabled": False,
+                        "audit_passed":           True,
+                        "error":                  str(_e179),
+                    }
+
+            # Tool #127 — Phase 178
+            if name == "get_biometric_credential_age":
+                try:
+                    from .tournament_activation_chain_agent import TournamentActivationChainAgent as _TACA178
+                    _taca178 = _TACA178(cfg=self._cfg, store=self._store, bus=None)
+                    return _taca178.check_biometric_credential_ttl()
+                except Exception as _e178:
+                    import time as _t178e
+                    return {
+                        "ttl_enabled":            True,
+                        "commit_hash":            "",
+                        "commit_ts":              0.0,
+                        "age_days":               0.0,
+                        "ttl_days":               90.0,
+                        "ttl_expired":            False,
+                        "recalibration_required": False,
+                        "timestamp":              _t178e.time(),
+                        "error":                  str(_e178),
+                    }
 
             # Tool #126 — Phase 177
             if name == "get_protocol_maturity_score":

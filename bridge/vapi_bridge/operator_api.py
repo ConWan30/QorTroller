@@ -4505,6 +4505,243 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
+    # Phase 180 — POST /agent/renew-separation-ratio-commitment + GET /agent/renewal-chain-status
+    # ------------------------------------------------------------------
+    @app.post("/agent/renew-separation-ratio-commitment")
+    async def renew_separation_ratio_commitment_endpoint(
+        ratio: float,
+        n_sessions: int,
+        n_players: int,
+        players_sorted: str = "",
+        dry_run: bool = True,
+        api_key: str = "",
+    ):
+        """Biometric Renewal Engine — trigger consent-bound separation ratio renewal (Phase 180).
+
+        When the biometric credential TTL is expired (age_days > biometric_credential_ttl_days),
+        the operator triggers this endpoint to compute a new commit_hash, link it to the
+        previous commit via prev_commit_hash, and store the chain record.
+
+        New commit hash: SHA-256(prev_hash + ratio_str + N + N_consented + players + ttl_days + ts_ns).
+        n_consented read live from get_consent_corpus_coverage() (Phase 163 pattern).
+        dry_run=True (default): no chain call; dry_run=False calls SeparationRatioRegistry.renewCommit().
+
+        Returns: renewal_enabled, prev_commit_hash, new_commit_hash, ttl_days,
+        dry_run, total_renewals, n_consented, error.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import hashlib as _hl, time as _t180, struct as _s
+        try:
+            _ttl_days = float(getattr(cfg, "biometric_credential_ttl_days", 90.0))
+            _renewal_enabled = bool(getattr(cfg, "renewal_enabled", False))
+
+            # Read prev commit hash from latest separation_ratio_registry_log
+            _age_status = store.get_biometric_credential_age_status(ttl_days=_ttl_days)
+            _prev_hash  = str(_age_status.get("commit_hash", ""))
+
+            # Read n_consented live (Phase 163 pattern)
+            _consent_cov = store.get_consent_corpus_coverage()
+            _n_consented = int(_consent_cov.get("active_consent_count", 0))
+
+            # Compute new hash: SHA-256(prev_hash + ratio_str + N + N_consented + players + ttl_days + ts_ns)
+            _ts_ns       = _t180.time_ns()
+            _ratio_str   = f"{float(ratio):.6f}"
+            _players_str = str(players_sorted) if players_sorted else ""
+            _preimage = (
+                _prev_hash
+                + _ratio_str
+                + str(n_sessions)
+                + str(_n_consented)
+                + _players_str
+                + f"{_ttl_days:.1f}"
+                + str(_ts_ns)
+            ).encode()
+            _new_hash = "sha256:" + _hl.sha256(_preimage).hexdigest()
+
+            _on_chain_tx: "str | None" = None
+            _error: "str | None" = None
+
+            # Chain call only when renewal_enabled=True AND dry_run=False
+            if _renewal_enabled and not dry_run and _prev_hash:
+                try:
+                    from .chain import ChainClient as _CC180
+                    _chain180 = _CC180(cfg)
+                    _ratio_millis = int(float(ratio) * 1000)
+                    _on_chain_tx = await _chain180.renew_separation_ratio_commitment(
+                        prev_hash_hex=_prev_hash.removeprefix("sha256:"),
+                        new_hash_hex=_new_hash.removeprefix("sha256:"),
+                        ttl_days=int(_ttl_days),
+                        ratio_millis=_ratio_millis,
+                        n_sessions=n_sessions,
+                        n_consented=_n_consented,
+                    )
+                except Exception as exc_chain:
+                    _error = f"chain call failed: {exc_chain}"
+                    _on_chain_tx = None
+
+            # Store renewal chain record
+            store.insert_biometric_renewal_chain_log(
+                prev_commit_hash=_prev_hash,
+                new_commit_hash=_new_hash,
+                n_consented=_n_consented,
+                n_sessions=n_sessions,
+                ttl_days=_ttl_days,
+                on_chain_tx=_on_chain_tx,
+                dry_run=dry_run,
+                renewal_reason="TTL_EXPIRY",
+            )
+
+            _chain_status = store.get_biometric_renewal_chain_status()
+            return {
+                "renewal_enabled":    _renewal_enabled,
+                "prev_commit_hash":   _prev_hash,
+                "new_commit_hash":    _new_hash,
+                "ttl_days":           _ttl_days,
+                "dry_run":            dry_run,
+                "total_renewals":     int(_chain_status.get("total_renewals", 0)),
+                "n_consented":        _n_consented,
+                "error":              _error,
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @app.get("/agent/renewal-chain-status")
+    async def get_renewal_chain_status_endpoint(api_key: str = ""):
+        """Biometric Renewal Engine — renewal chain status (Phase 180).
+
+        Returns the current state of the biometric renewal commitment chain.
+        Shows total_renewals, latest prev/new commit hashes, and ttl_days.
+        renewal_enabled=False by default (infrastructure-first).
+
+        Returns: renewal_enabled, total_renewals, latest_renewal_ts,
+        prev_commit_hash, new_commit_hash, ttl_days, timestamp.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            _status180 = store.get_biometric_renewal_chain_status()
+            _status180["renewal_enabled"] = bool(getattr(cfg, "renewal_enabled", False))
+            return _status180
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 179 — GET /agent/ceremony-audit-status + POST /agent/register-ceremony-participant
+    # ------------------------------------------------------------------
+    @app.get("/agent/ceremony-audit-status")
+    async def get_ceremony_audit_status_endpoint(api_key: str = ""):
+        """ZK Ceremony Audit Gate status (Phase 179, WIF-030 W1 closure).
+
+        Returns ceremony participant audit summary. When ceremony_audit_enabled=False
+        (default): audit_passed=True, gate is inactive (zero behavior change).
+        When enabled: audit_passed=True only when distinct_participants >= min_participants
+        for every VAPI ZK circuit in ceremony_audit_log.
+
+        Returns: ceremony_audit_enabled, total_entries, distinct_participants,
+        circuits_audited, min_participants, audit_passed, timestamp.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t179
+        try:
+            _enabled179 = bool(getattr(cfg, "ceremony_audit_enabled", False))
+            _min_p179   = int(getattr(cfg, "ceremony_audit_min_participants", 3))
+            _status179  = store.get_ceremony_audit_status()
+            _distinct   = int(_status179.get("distinct_participants", 0))
+            # audit_passed logic: when disabled → True (gate inactive); when enabled →
+            # all circuits must have >= min_participants distinct addresses
+            if _enabled179:
+                _circuits = int(_status179.get("circuits_audited", 0))
+                if _circuits == 0:
+                    _audit_passed = False  # no circuits registered = gate fails when enabled
+                else:
+                    # Check per-circuit participant count
+                    with store._conn() as _c179:
+                        _circuit_rows = _c179.execute(
+                            "SELECT circuit_name, COUNT(DISTINCT participant_address) "
+                            "AS n FROM ceremony_audit_log GROUP BY circuit_name"
+                        ).fetchall()
+                    _audit_passed = all(int(r[1]) >= _min_p179 for r in _circuit_rows)
+            else:
+                _audit_passed = True
+            return {
+                "ceremony_audit_enabled":  _enabled179,
+                "total_entries":           int(_status179.get("total_entries",         0)),
+                "distinct_participants":   _distinct,
+                "circuits_audited":        int(_status179.get("circuits_audited",      0)),
+                "min_participants":        _min_p179,
+                "audit_passed":            _audit_passed,
+                "timestamp":               _t179.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @app.post("/agent/register-ceremony-participant")
+    async def register_ceremony_participant_endpoint(
+        ceremony_id: str,
+        circuit_name: str,
+        participant_address: str,
+        contribution_hash: str,
+        api_key: str = "",
+    ):
+        """Register a ZK ceremony participant for a circuit (Phase 179).
+
+        Anti-replay: duplicate (ceremony_id, participant_address, circuit_name) is silently
+        accepted (idempotent — same participant registering twice is not an error).
+        Returns: registered (bool), ceremony_id, circuit_name, participant_address, timestamp.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t179p, sqlite3 as _sq179
+        try:
+            _registered = False
+            try:
+                store.insert_ceremony_audit_entry(
+                    ceremony_id=ceremony_id,
+                    circuit_name=circuit_name,
+                    participant_address=participant_address,
+                    contribution_hash=contribution_hash,
+                    ts_ns=int(_t179p.time_ns()),
+                )
+                _registered = True
+            except _sq179.IntegrityError:
+                _registered = False  # duplicate — idempotent, not an error
+            return {
+                "registered":           _registered,
+                "ceremony_id":          ceremony_id,
+                "circuit_name":         circuit_name,
+                "participant_address":  participant_address,
+                "timestamp":            _t179p.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 178 — GET /agent/biometric-credential-age
+    # ------------------------------------------------------------------
+    @app.get("/agent/biometric-credential-age")
+    async def get_biometric_credential_age_endpoint(api_key: str = ""):
+        """Biometric Credential TTL Gate status (Phase 178, WIF-029 W1 closure).
+
+        Checks whether the latest SeparationRatioRegistry.sol commitment has exceeded
+        the 90-day biometric TTL. Expired credentials BLOCK tournament authorization
+        and require operator-triggered recalibration.
+
+        age_days computed live from the latest separation_ratio_registry_log commit_ts.
+        ttl_expired=True when age_days > biometric_credential_ttl_days (default 90).
+
+        Returns: ttl_enabled, commit_hash, commit_ts, age_days, ttl_days,
+        ttl_expired, recalibration_required, timestamp.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            from .tournament_activation_chain_agent import TournamentActivationChainAgent as _TACA
+            _taca178 = _TACA(cfg=cfg, store=store, bus=None)
+            _result178 = _taca178.check_biometric_credential_ttl()
+            return _result178
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
     # Phase 177 — GET /agent/protocol-maturity-score
     # ------------------------------------------------------------------
     @app.get("/agent/protocol-maturity-score")

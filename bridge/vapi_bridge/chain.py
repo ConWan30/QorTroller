@@ -2713,6 +2713,122 @@ class ChainClient:
         except Exception:
             return False
 
+    async def commit_separation_ratio(
+        self,
+        ratio: float,
+        n_sessions: int,
+        n_players: int,
+        players_sorted: str,
+        n_consented: int,
+        commit_hash_hex: str,
+    ) -> str:
+        """Call SeparationRatioRegistry.commitRatio(bytes32, uint256, uint32, uint32).
+        Phase 163 WIF-022: commit_hash_hex already encodes n_consented in its preimage.
+        Inline ABI matches Phase 153 SeparationRatioRegistry.sol commitRatio 4-arg signature.
+        ~100k gas. Raises RuntimeError on missing address or revert.
+        """
+        _ABI = [
+            {
+                "inputs": [
+                    {"internalType": "bytes32", "name": "commitHash",  "type": "bytes32"},
+                    {"internalType": "uint256", "name": "ratioMillis", "type": "uint256"},
+                    {"internalType": "uint32",  "name": "nSessions",   "type": "uint32"},
+                    {"internalType": "uint32",  "name": "nPlayers",    "type": "uint32"},
+                ],
+                "name": "commitRatio",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function",
+            }
+        ]
+        _addr = getattr(self._cfg, "separation_ratio_registry_address", "")
+        if not _addr:
+            raise RuntimeError("commit_separation_ratio: separation_ratio_registry_address not configured")
+        _hash_bytes = bytes.fromhex(commit_hash_hex)[:32]
+        _ratio_millis = int(ratio * 1000)
+        contract = self._w3.eth.contract(
+            address=self._w3.to_checksum_address(_addr),
+            abi=_ABI,
+        )
+        acct = self._w3.eth.account.from_key(self._private_key)
+        nonce = await self._w3.eth.get_transaction_count(acct.address)
+        gas_price = await self._w3.eth.gas_price
+        tx = contract.functions.commitRatio(
+            _hash_bytes, _ratio_millis, int(n_sessions), int(n_players)
+        ).build_transaction({
+            "from": acct.address,
+            "nonce": nonce,
+            "gas": 100_000,
+            "gasPrice": gas_price,
+        })
+        signed = acct.sign_transaction(tx)
+        tx_hash = await self._w3.eth.send_raw_transaction(signed.raw_transaction)
+        receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+        if receipt["status"] != 1:
+            raise RuntimeError(f"commit_separation_ratio: tx reverted commit_hash={commit_hash_hex[:16]}…")
+        return tx_hash.hex()
+
+    async def renew_separation_ratio_commitment(
+        self,
+        prev_hash_hex: str,
+        new_hash_hex: str,
+        ttl_days: int,
+        ratio_millis: int,
+        n_sessions: int,
+        n_consented: int,
+    ) -> str:
+        """Call SeparationRatioRegistry.renewCommit(prevHash, newHash, ttlDays) (Phase 180).
+
+        Phase 178 added renewCommit() to SeparationRatioRegistry.sol:
+          - onlyOwner; ttlDays > 0 guard; anti-replay UNIQUE on newCommitHash
+          - Inherits ratioMillis/nSessions/nPlayers from the previous commit
+        Phase 180 new_hash preimage: SHA-256(prev_hash + ratio_str + N + N_consented + players + ttl_days + ts_ns)
+        ~110k gas. Raises RuntimeError on missing address or tx revert.
+        """
+        _ABI = [
+            {
+                "inputs": [
+                    {"internalType": "bytes32", "name": "prevCommitHash", "type": "bytes32"},
+                    {"internalType": "bytes32", "name": "newCommitHash",  "type": "bytes32"},
+                    {"internalType": "uint32",  "name": "ttlDays",        "type": "uint32"},
+                ],
+                "name": "renewCommit",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function",
+            }
+        ]
+        _addr = getattr(self._cfg, "separation_ratio_registry_address", "")
+        if not _addr:
+            raise RuntimeError(
+                "renew_separation_ratio_commitment: separation_ratio_registry_address not configured"
+            )
+        _prev_bytes = bytes.fromhex(prev_hash_hex.removeprefix("sha256:"))[:32]
+        _new_bytes  = bytes.fromhex(new_hash_hex.removeprefix("sha256:"))[:32]
+        contract = self._w3.eth.contract(
+            address=self._w3.to_checksum_address(_addr),
+            abi=_ABI,
+        )
+        acct = self._w3.eth.account.from_key(self._private_key)
+        nonce = await self._w3.eth.get_transaction_count(acct.address)
+        gas_price = await self._w3.eth.gas_price
+        tx = contract.functions.renewCommit(
+            _prev_bytes, _new_bytes, int(ttl_days)
+        ).build_transaction({
+            "from": acct.address,
+            "nonce": nonce,
+            "gas": 110_000,
+            "gasPrice": gas_price,
+        })
+        signed = acct.sign_transaction(tx)
+        tx_hash = await self._w3.eth.send_raw_transaction(signed.raw_transaction)
+        receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+        if receipt["status"] != 1:
+            raise RuntimeError(
+                f"renew_separation_ratio_commitment: tx reverted new_hash={new_hash_hex[:16]}…"
+            )
+        return tx_hash.hex()
+
     async def renew_vhp(self, token_id: int) -> str:
         """Call VAPIVerifiedHumanProof.renew(tokenId). Extends expiresAt +90 days. 60k gas.
         Phase 102: VHPRenewalAgent uses this to refresh expiring soulbound tokens.
