@@ -4945,3 +4945,84 @@ class VAPIPoACChainIntegrity:
                 audit_passed    = True,
                 error           = str(exc),
             )
+
+
+# ---------------------------------------------------------------------------
+# Phase 177 — ProtocolMaturityScoringAgent (agent #26)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class ProtocolMaturityResult:
+    """Result from VAPIProtocolMaturity.get_score() (Phase 177).
+
+    maturity_score = weighted synthesis of 6 agent signals (0.0-1.0):
+      separation(0.25) + chain_integrity(0.20) + consent(0.15)
+      + biometric_freshness(0.15) + agent_calibration(0.15) + enrollment(0.10)
+    maturity_tier:
+      ALPHA              score < 0.50  — protocol not ready for any live use
+      BETA               0.50 <= score < 0.85  — controlled testing only
+      PRODUCTION_CANDIDATE score >= 0.85  — all gates met; TGE consideration
+    PRODUCTION_CANDIDATE requires separation_ratio > 1.0 (non-negotiable).
+    """
+    protocol_maturity_enabled:       bool
+    maturity_score:                   float
+    maturity_tier:                    str
+    separation_component:             float
+    chain_integrity_component:        float
+    consent_component:                float
+    biometric_freshness_component:    float
+    agent_calibration_component:      float
+    enrollment_component:             float
+    error: "str | None" = None
+
+
+class VAPIProtocolMaturity:
+    """SDK client for GET /agent/protocol-maturity-score (Phase 177).
+
+    Example::
+
+        pm = VAPIProtocolMaturity("http://localhost:8080", api_key)
+        result = pm.get_score()
+        print(f"Maturity: {result.maturity_score:.3f} ({result.maturity_tier})")
+        if result.maturity_tier == "PRODUCTION_CANDIDATE":
+            print("Protocol ready for TGE consideration")
+    """
+
+    def __init__(self, base_url: str, api_key: str) -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_score(self) -> ProtocolMaturityResult:
+        """Return the latest protocol maturity score.
+
+        On error: returns ProtocolMaturityResult with error set, ALPHA tier.
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/agent/protocol-maturity-score?api_key={self._key}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return ProtocolMaturityResult(
+                protocol_maturity_enabled       = bool(body.get("protocol_maturity_enabled", True)),
+                maturity_score                   = float(body.get("maturity_score",                0.0)),
+                maturity_tier                    = str(body.get("maturity_tier",                   "ALPHA")),
+                separation_component             = float(body.get("separation_component",          0.0)),
+                chain_integrity_component        = float(body.get("chain_integrity_component",     0.0)),
+                consent_component                = float(body.get("consent_component",             0.0)),
+                biometric_freshness_component    = float(body.get("biometric_freshness_component", 0.0)),
+                agent_calibration_component      = float(body.get("agent_calibration_component",   0.0)),
+                enrollment_component             = float(body.get("enrollment_component",          0.0)),
+            )
+        except Exception as exc:
+            return ProtocolMaturityResult(
+                protocol_maturity_enabled       = True,
+                maturity_score                   = 0.0,
+                maturity_tier                    = "ALPHA",
+                separation_component             = 0.0,
+                chain_integrity_component        = 0.0,
+                consent_component                = 0.0,
+                biometric_freshness_component    = 0.0,
+                agent_calibration_component      = 0.0,
+                enrollment_component             = 0.0,
+                error                            = str(exc),
+            )

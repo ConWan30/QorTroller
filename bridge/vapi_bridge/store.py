@@ -1661,6 +1661,29 @@ class Store:
                 CREATE INDEX IF NOT EXISTS idx_sep_recovery_created
                 ON separation_ratio_recovery_log(created_at DESC)
             """)
+            # Phase 177: protocol_maturity_log — ProtocolMaturityScoringAgent (agent #26).
+            # Synthesizes 6 agent signals into a unified maturity_score (0.0-1.0).
+            # maturity_tier: ALPHA (<0.50) | BETA (0.50-0.85) | PRODUCTION_CANDIDATE (>=0.85)
+            # Component weights: separation(0.25)+chain_integrity(0.20)+consent(0.15)
+            #   +biometric_freshness(0.15)+agent_calibration(0.15)+enrollment(0.10)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS protocol_maturity_log (
+                    id                            INTEGER PRIMARY KEY AUTOINCREMENT,
+                    maturity_score                REAL    NOT NULL DEFAULT 0.0,
+                    maturity_tier                 TEXT    NOT NULL DEFAULT 'ALPHA',
+                    separation_component          REAL    NOT NULL DEFAULT 0.0,
+                    chain_integrity_component     REAL    NOT NULL DEFAULT 0.0,
+                    consent_component             REAL    NOT NULL DEFAULT 0.0,
+                    biometric_freshness_component REAL    NOT NULL DEFAULT 0.0,
+                    agent_calibration_component   REAL    NOT NULL DEFAULT 0.0,
+                    enrollment_component          REAL    NOT NULL DEFAULT 0.0,
+                    created_at                    REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_maturity_created
+                ON protocol_maturity_log(created_at DESC)
+            """)
             # Phase 176: poac_chain_audit_log — PoACChainIntegrityMonitor (agent #25).
             # Audits SHA-256 chain linkage across PoAC records for each device.
             # integrity_score = valid_links / total_links (0.0 = broken, 1.0 = intact).
@@ -8541,6 +8564,92 @@ class Store:
                 "integrity_score": float(r[5]),
                 "audit_passed":    bool(r[6]),
                 "created_at":      r[7],
+            }
+            for r in rows
+        ]
+
+    # --- Phase 177: ProtocolMaturityScoringAgent ---
+
+    def insert_protocol_maturity_log(
+        self,
+        separation_component: float,
+        chain_integrity_component: float,
+        consent_component: float,
+        biometric_freshness_component: float,
+        agent_calibration_component: float,
+        enrollment_component: float,
+    ) -> int:
+        """Insert a protocol maturity score assessment (Phase 177).
+
+        maturity_score = (
+            0.25 * separation_component     -- ratio converging or above gate
+          + 0.20 * chain_integrity_component -- Phase 176 audit
+          + 0.15 * consent_component         -- Phase 162 consent corpus defensibility
+          + 0.15 * biometric_freshness_component -- Phase 159 TBD mean decay factor
+          + 0.15 * agent_calibration_component  -- Phase 148 ACIM health
+          + 0.10 * enrollment_component         -- Phase 156 overall_ready
+        )
+        maturity_tier: ALPHA (<0.50) | BETA (0.50-0.85) | PRODUCTION_CANDIDATE (>=0.85)
+        """
+        score = round(
+            0.25 * float(separation_component)
+            + 0.20 * float(chain_integrity_component)
+            + 0.15 * float(consent_component)
+            + 0.15 * float(biometric_freshness_component)
+            + 0.15 * float(agent_calibration_component)
+            + 0.10 * float(enrollment_component),
+            6,
+        )
+        if score >= 0.85:
+            tier = "PRODUCTION_CANDIDATE"
+        elif score >= 0.50:
+            tier = "BETA"
+        else:
+            tier = "ALPHA"
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO protocol_maturity_log "
+                "(maturity_score, maturity_tier, separation_component, "
+                "chain_integrity_component, consent_component, "
+                "biometric_freshness_component, agent_calibration_component, "
+                "enrollment_component, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                (
+                    score,
+                    tier,
+                    float(separation_component),
+                    float(chain_integrity_component),
+                    float(consent_component),
+                    float(biometric_freshness_component),
+                    float(agent_calibration_component),
+                    float(enrollment_component),
+                    time.time(),
+                ),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def get_protocol_maturity_status(self, limit: int = 1) -> "list[dict]":
+        """Return most recent protocol maturity assessments, newest first (Phase 177)."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT id, maturity_score, maturity_tier, separation_component, "
+                "chain_integrity_component, consent_component, "
+                "biometric_freshness_component, agent_calibration_component, "
+                "enrollment_component, created_at "
+                "FROM protocol_maturity_log ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [
+            {
+                "id":                            r[0],
+                "maturity_score":                float(r[1]),
+                "maturity_tier":                 r[2],
+                "separation_component":          float(r[3]),
+                "chain_integrity_component":     float(r[4]),
+                "consent_component":             float(r[5]),
+                "biometric_freshness_component": float(r[6]),
+                "agent_calibration_component":   float(r[7]),
+                "enrollment_component":          float(r[8]),
+                "created_at":                    r[9],
             }
             for r in rows
         ]
