@@ -4952,8 +4952,8 @@ class VAPIPoACChainIntegrity:
 # ---------------------------------------------------------------------------
 
 @dataclass
-class ProtocolMaturityResult:
-    """Result from VAPIProtocolMaturity.get_score() (Phase 177).
+class ProtocolMaturityScoringResult:
+    """Result from VAPIProtocolMaturityScoring.get_score() (Phase 177).
 
     maturity_score = weighted synthesis of 6 agent signals (0.0-1.0):
       separation(0.25) + chain_integrity(0.20) + consent(0.15)
@@ -4976,12 +4976,12 @@ class ProtocolMaturityResult:
     error: "str | None" = None
 
 
-class VAPIProtocolMaturity:
+class VAPIProtocolMaturityScoring:
     """SDK client for GET /agent/protocol-maturity-score (Phase 177).
 
     Example::
 
-        pm = VAPIProtocolMaturity("http://localhost:8080", api_key)
+        pm = VAPIProtocolMaturityScoring("http://localhost:8080", api_key)
         result = pm.get_score()
         print(f"Maturity: {result.maturity_score:.3f} ({result.maturity_tier})")
         if result.maturity_tier == "PRODUCTION_CANDIDATE":
@@ -4992,17 +4992,17 @@ class VAPIProtocolMaturity:
         self._base = base_url.rstrip("/")
         self._key  = api_key
 
-    def get_score(self) -> ProtocolMaturityResult:
+    def get_score(self) -> ProtocolMaturityScoringResult:
         """Return the latest protocol maturity score.
 
-        On error: returns ProtocolMaturityResult with error set, ALPHA tier.
+        On error: returns ProtocolMaturityScoringResult with error set, ALPHA tier.
         """
         import urllib.request as _ur, json as _j
         try:
             url = f"{self._base}/agent/protocol-maturity-score?api_key={self._key}"
             with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
                 body = _j.loads(resp.read())
-            return ProtocolMaturityResult(
+            return ProtocolMaturityScoringResult(
                 protocol_maturity_enabled       = bool(body.get("protocol_maturity_enabled", True)),
                 maturity_score                   = float(body.get("maturity_score",                0.0)),
                 maturity_tier                    = str(body.get("maturity_tier",                   "ALPHA")),
@@ -5014,7 +5014,7 @@ class VAPIProtocolMaturity:
                 enrollment_component             = float(body.get("enrollment_component",          0.0)),
             )
         except Exception as exc:
-            return ProtocolMaturityResult(
+            return ProtocolMaturityScoringResult(
                 protocol_maturity_enabled       = True,
                 maturity_score                   = 0.0,
                 maturity_tier                    = "ALPHA",

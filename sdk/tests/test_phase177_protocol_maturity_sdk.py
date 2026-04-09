@@ -1,9 +1,9 @@
-"""Phase 177 SDK tests — ProtocolMaturityResult + VAPIProtocolMaturity.
+"""Phase 177 SDK tests — ProtocolMaturityScoringResult + VAPIProtocolMaturityScoring.
 
 4 tests:
-  T177-SDK-1  ProtocolMaturityResult has expected slots
+  T177-SDK-1  ProtocolMaturityScoringResult has expected slots
   T177-SDK-2  Default error is None
-  T177-SDK-3  VAPIProtocolMaturity.get_score() populates all fields from body
+  T177-SDK-3  VAPIProtocolMaturityScoring.get_score() populates all fields from body
   T177-SDK-4  Error path returns ALPHA tier with error set
 """
 import json
@@ -22,8 +22,8 @@ import pytest
 # ---------------------------------------------------------------------------
 
 def test_t177_sdk_1_result_has_expected_slots():
-    from vapi_sdk import ProtocolMaturityResult
-    r = ProtocolMaturityResult(
+    from vapi_sdk import ProtocolMaturityScoringResult
+    r = ProtocolMaturityScoringResult(
         protocol_maturity_enabled       = True,
         maturity_score                   = 0.64,
         maturity_tier                    = "BETA",
@@ -47,8 +47,8 @@ def test_t177_sdk_1_result_has_expected_slots():
 # ---------------------------------------------------------------------------
 
 def test_t177_sdk_2_default_error_none():
-    from vapi_sdk import ProtocolMaturityResult
-    r = ProtocolMaturityResult(
+    from vapi_sdk import ProtocolMaturityScoringResult
+    r = ProtocolMaturityScoringResult(
         protocol_maturity_enabled       = True,
         maturity_score                   = 1.0,
         maturity_tier                    = "PRODUCTION_CANDIDATE",
@@ -67,7 +67,7 @@ def test_t177_sdk_2_default_error_none():
 # ---------------------------------------------------------------------------
 
 def test_t177_sdk_3_get_score_populates_from_body():
-    from vapi_sdk import VAPIProtocolMaturity
+    from vapi_sdk import VAPIProtocolMaturityScoring
 
     mock_body = {
         "protocol_maturity_enabled":       True,
@@ -88,7 +88,7 @@ def test_t177_sdk_3_get_score_populates_from_body():
         def read(self): return json.dumps(mock_body).encode()
 
     with patch("urllib.request.urlopen", return_value=_FakeResp()):
-        client = VAPIProtocolMaturity("http://localhost:8080", "k")
+        client = VAPIProtocolMaturityScoring("http://localhost:8080", "k")
         result = client.get_score()
 
     assert result.protocol_maturity_enabled is True
@@ -103,10 +103,10 @@ def test_t177_sdk_3_get_score_populates_from_body():
 # ---------------------------------------------------------------------------
 
 def test_t177_sdk_4_error_path_alpha_tier():
-    from vapi_sdk import VAPIProtocolMaturity
+    from vapi_sdk import VAPIProtocolMaturityScoring
 
     with patch("urllib.request.urlopen", side_effect=Exception("conn refused")):
-        client = VAPIProtocolMaturity("http://localhost:8080", "k")
+        client = VAPIProtocolMaturityScoring("http://localhost:8080", "k")
         result = client.get_score()
 
     assert result.error is not None
