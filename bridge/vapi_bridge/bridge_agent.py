@@ -1053,6 +1053,22 @@ _TOOLS = [
             "required": [],
         },
     },
+    # Tool #124 — Phase 175
+    {
+        "name": "get_age_weight_analysis_status",
+        "description": (
+            "Phase 175 AgeWeightedRatioPersistenceAgent status (agent #24). "
+            "Returns the latest age-weighted separation ratio analysis result persisted "
+            "from a --session-age-weight analysis run (Phase 174 script). "
+            "temporal_drift_index = raw_ratio - age_weighted_ratio: "
+            "positive (P1_NONSTATIONARITY) = old sessions inflate ratio; "
+            "negative (IMPROVING) = new sessions are biometrically stronger; "
+            "near-zero (STABLE) = player biometrically stationary (ideal for tournament). "
+            "Returns: age_weight_analysis_enabled/raw_ratio/age_weighted_ratio/"
+            "temporal_drift_index/halflife_days/n_sessions_used/drift_direction/timestamp."
+        ),
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
     # Tool #123 — Phase 173
     {
         "name": "get_separation_ratio_recovery_status",
@@ -3633,6 +3649,25 @@ class BridgeAgent:
                     "fleet_health": fleet,
                     "timestamp": _time.time(),
                 }
+
+            # Tool #124 — Phase 175
+            if name == "get_age_weight_analysis_status":
+                import time as _t175
+                try:
+                    _rows175   = self._store.get_age_weight_analysis_status(limit=1)
+                    _latest175 = _rows175[0] if _rows175 else {}
+                    return {
+                        "age_weight_analysis_enabled": getattr(self._cfg, "age_weight_analysis_enabled", True),
+                        "raw_ratio":            float(_latest175.get("raw_ratio",            0.0)),
+                        "age_weighted_ratio":   float(_latest175.get("age_weighted_ratio",   0.0)),
+                        "temporal_drift_index": float(_latest175.get("temporal_drift_index", 0.0)),
+                        "halflife_days":        float(_latest175.get("halflife_days",        90.0)),
+                        "n_sessions_used":      int(_latest175.get("n_sessions_used",        0)),
+                        "drift_direction":      str(_latest175.get("drift_direction",        "STABLE")),
+                        "timestamp":            _t175.time(),
+                    }
+                except Exception as _e175:
+                    return {"error": str(_e175), "drift_direction": "STABLE", "temporal_drift_index": 0.0}
 
             # Tool #123 — Phase 173
             if name == "get_separation_ratio_recovery_status":
