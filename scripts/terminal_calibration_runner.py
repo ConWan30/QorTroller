@@ -26,15 +26,20 @@ separation_focused  (RECOMMENDED — ~45–55 min per player)
     Then runs analyze_interperson_separation.py across all available player data.
     Prints new separation ratio before exiting.
 
-touchpad_focused  (~7 min — touchpad recapture, NO gameplay)
-    Three short phases targeting touch_position_variance specifically.
-    Run this for each player to unblock the structural-zero touchpad gap.
+touchpad_focused  (~8 min — touchpad recapture, NO gameplay)
+    Four phases: tremor seed warmup + three touchpad phases.
+    CRITICAL: right thumb rests on right analog stick throughout all touchpad phases
+    so that tremor_peak_hz and tremor_band_power capture real physiological tremor.
+    Without this, touchpad-only sessions produce tremor_peak_hz=0.000 (ring buffer
+    never filled by right-stick movement), collapsing two key separation features.
 
-      Phase 1  touchpad_swipes   2 min  Deliberate swipes across full touchpad surface.
+      Phase 0  tremor_seed      30 s   Right thumb on stick, hold still.
+                                        Seeds the 1025-frame tremor FFT ring buffer.
+      Phase 1  touchpad_swipes   2 min  LEFT thumb on touchpad, RIGHT thumb on stick.
                                         touch_position_variance, spatial range.
-      Phase 2  touchpad_freeform 2 min  Natural freeform thumb movement, no instructions.
+      Phase 2  touchpad_freeform 2 min  LEFT thumb on touchpad, RIGHT thumb on stick.
                                         Person-specific arc/drift biometrics.
-      Phase 3  touchpad_corners  1 min  Slide to each corner in sequence repeatedly.
+      Phase 3  touchpad_corners  1 min  LEFT thumb on touchpad, RIGHT thumb on stick.
                                         Trajectory consistency and corner preference.
 
 quick   (15 min — development / pre-check)
@@ -194,11 +199,29 @@ _SEPARATION_FOCUSED: list[_Phase] = [
 
 _TOUCHPAD_FOCUSED: list[_Phase] = [
     _Phase(
+        name="tremor_seed",
+        label="Phase 0/4 — TREMOR SEED (ring buffer warmup)",
+        duration_s=30,
+        instruction=(
+            "IMPORTANT: This phase seeds the tremor ring buffer before touchpad capture.\n"
+            "Hold the controller in your NORMAL gaming grip.\n"
+            "Rest your RIGHT thumb GENTLY on the right analog stick — do NOT move it.\n"
+            "Let your left thumb rest on the left stick or face buttons.\n"
+            "Hold completely still.  Do NOT touch the touchpad yet.\n"
+            "This 30-second hold ensures tremor_peak_hz and tremor_band_power are\n"
+            "computed from your actual physiological hand tremor in every session.\n"
+            "Duration: 30 seconds."
+        ),
+    ),
+    _Phase(
         name="touchpad_swipes",
-        label="Phase 1/3 — TOUCHPAD SWIPES",
+        label="Phase 1/4 — TOUCHPAD SWIPES",
         duration_s=120,
         instruction=(
-            "Place your RIGHT thumb on the LEFT edge of the touchpad.\n"
+            "Use your LEFT thumb on the touchpad for all movements in this phase.\n"
+            "Keep your RIGHT thumb resting GENTLY on the right analog stick throughout.\n"
+            "\n"
+            "Place your LEFT thumb on the LEFT edge of the touchpad.\n"
             "Slide slowly to the RIGHT edge, lift, return, repeat.\n"
             "Also do: top-to-bottom swipes, and diagonal corner-to-corner.\n"
             "KEEP CONTACT WHILE SLIDING — do not hover or tap.\n"
@@ -208,10 +231,13 @@ _TOUCHPAD_FOCUSED: list[_Phase] = [
     ),
     _Phase(
         name="touchpad_freeform",
-        label="Phase 2/3 — TOUCHPAD FREEFORM",
+        label="Phase 2/4 — TOUCHPAD FREEFORM",
         duration_s=120,
         instruction=(
-            "Move your thumb freely across the touchpad however feels natural.\n"
+            "Use your LEFT thumb on the touchpad for all movements in this phase.\n"
+            "Keep your RIGHT thumb resting GENTLY on the right analog stick throughout.\n"
+            "\n"
+            "Move your LEFT thumb freely across the touchpad however feels natural.\n"
             "Circles, arcs, lazy figure-eights — whatever your thumb does naturally.\n"
             "Do NOT follow a deliberate pattern.  Just let your thumb wander.\n"
             "KEEP CONTACT — continuous sliding, not tapping.\n"
@@ -221,10 +247,13 @@ _TOUCHPAD_FOCUSED: list[_Phase] = [
     ),
     _Phase(
         name="touchpad_corners",
-        label="Phase 3/3 — TOUCHPAD CORNERS",
+        label="Phase 3/4 — TOUCHPAD CORNERS",
         duration_s=60,
         instruction=(
-            "Slide your thumb to each corner in sequence: top-left, top-right,\n"
+            "Use your LEFT thumb on the touchpad for all movements in this phase.\n"
+            "Keep your RIGHT thumb resting GENTLY on the right analog stick throughout.\n"
+            "\n"
+            "Slide your LEFT thumb to each corner in sequence: top-left, top-right,\n"
             "bottom-right, bottom-left.  Then repeat.\n"
             "Move at your own comfortable pace.  Stay in contact throughout.\n"
             "Duration: 1 minute."
@@ -257,11 +286,48 @@ _RESTING_GRIP: list[_Phase] = [
     ),
 ]
 
+# Phase 166 — mixed_biometric_probe: 2-minute comprehensive probe activating all 13 features.
+# Design rationale: touchpad-only sessions leave 5 features as zero-variance (trigger
+# resistance, trigger onset L2/R2, grip asymmetry, press timing jitter), reducing the
+# active feature space from 13 to 8 and degrading inter-player separation.
+# This 4-segment × 30s design reactivates all 5 excluded features.
+# RIGHT thumb stays on RIGHT analog stick throughout to seed the tremor FFT ring buffer.
+_MIXED_BIOMETRIC_PROBE: list[_Phase] = [
+    _Phase(
+        name="mixed_biometric_probe",
+        label="Phase 1/1 — MIXED BIOMETRIC PROBE (2 min)",
+        duration_s=120,
+        instruction=(
+            "This probe activates ALL 13 biometric features in 2 minutes.\n"
+            "Keep your RIGHT thumb resting on the RIGHT analog stick throughout.\n"
+            "\n"
+            "Segment A (0-30s) — TOUCHPAD CORNERS\n"
+            "  LEFT thumb taps each corner in sequence: top-left, top-right,\n"
+            "  bottom-right, bottom-left.  Repeat cycle at your own pace.\n"
+            "\n"
+            "Segment B (30-60s) — TRIGGER SEQUENCE\n"
+            "  Press L2 fully 5 times, then R2 fully 5 times, then alternate L2/R2\n"
+            "  5 more times.  Your natural pressure and speed — do not rush.\n"
+            "\n"
+            "Segment C (60-90s) — BUTTON SEQUENCE\n"
+            "  Cross -> Square -> Triangle -> Circle, repeating in your natural rhythm.\n"
+            "  Use your right thumb (right stick stays held by thumb pad during buttons).\n"
+            "\n"
+            "Segment D (90-120s) — STICK SWEEPS + NATURAL GRIP\n"
+            "  Slow full circles with the LEFT analog stick (3x clockwise, 3x counter-\n"
+            "  clockwise).  Hold controller in natural gaming grip.  No other input.\n"
+            "\n"
+            "Start on ENTER.  Duration: 2 minutes exactly."
+        ),
+    ),
+]
+
 _BATTERIES: dict[str, list[_Phase]] = {
-    "separation_focused": _SEPARATION_FOCUSED,
-    "touchpad_focused":   _TOUCHPAD_FOCUSED,
-    "quick":              _QUICK,
-    "resting_grip":       _RESTING_GRIP,
+    "separation_focused":   _SEPARATION_FOCUSED,
+    "touchpad_focused":     _TOUCHPAD_FOCUSED,
+    "quick":                _QUICK,
+    "resting_grip":         _RESTING_GRIP,
+    "mixed_biometric_probe": _MIXED_BIOMETRIC_PROBE,
 }
 
 
@@ -553,11 +619,12 @@ def main() -> int:
                 print(f"    python scripts/terminal_calibration_runner.py --battery separation_focused --player {m}")
     else:
         print(
-            "\n  All three players complete.  Run the final separation analysis:\n"
-            "    python scripts/analyze_interperson_separation.py\n"
+            "\n  All three players complete.  Run the touchpad_corners separation analysis:\n"
+            "    python scripts/analyze_interperson_separation.py --session-type touchpad_corners\n"
             "\n  Check docs/interperson-separation-analysis.md for the new ratio.\n"
-            "  Target: separation_ratio > 1.0 (current: 0.362).\n"
-            "  If ratio > 1.0: tournament deployment unblocked."
+            "  Target: separation_ratio > 1.0 (current: 0.789, N=14, P1=4/P2=5/P3=5).\n"
+            "  Defensibility gate: N >= 10 per player required (Phase 150).\n"
+            "  If ratio > 1.0 AND N >= 10/player: tournament deployment unblocked."
         )
 
     return 0 if not failed else 2

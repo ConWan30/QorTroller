@@ -114,7 +114,7 @@ VAPI is in **pre-calibration deployment**. The following limitations apply:
 
 | Metric | Current Value | Target |
 |--------|--------------|--------|
-| Inter-person separation ratio | **0.362** | > 1.0 |
+| Inter-person separation ratio | **1.261** (Phase 143, N=11 touchpad_corners; classification 63.6% — BLOCKER until ≥80%) | > 1.0 |
 | `demo_mode` | `True` | `False` (post-calibration) |
 | `ready_for_live` | Software-only gate | Hardware-calibrated |
 

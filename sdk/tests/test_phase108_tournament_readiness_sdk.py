@@ -4,7 +4,7 @@ Tests:
   test_1  TournamentReadinessResult.__slots__ has all 11 fields
   test_2  VAPITournamentReadiness.__init__ sets _base_url (rstrip('/')) and _api_key
   test_3  get_scorecard() never raises on bad URL; returns TournamentReadinessResult with error!=None
-  test_4  get_scorecard() result has separation_ratio_current=0.362 and fully_ready=False on error
+  test_4  get_scorecard() result has separation_ratio_current=1.261 and fully_ready=False on error
 
 SDK count: 113 -> 117 (+4)
 """
@@ -45,10 +45,10 @@ class TestPhase108TournamentReadinessSDK(unittest.TestCase):
         self.assertFalse(result.fully_ready)
 
     def test_4_get_scorecard_default_values_on_error(self):
-        """get_scorecard() returns separation_ratio_current=0.362 and fully_ready=False on error."""
+        """get_scorecard() returns separation_ratio_current=1.261 and fully_ready=False on error."""
         tr = VAPITournamentReadiness("http://127.0.0.1:19998", "badkey")
         result = tr.get_scorecard()
-        self.assertAlmostEqual(result.separation_ratio_current, 0.362, places=3)
+        self.assertAlmostEqual(result.separation_ratio_current, 1.261, places=3)
         self.assertFalse(result.fully_ready)
         self.assertEqual(result.software_conditions_met, 0)
         self.assertEqual(result.hardware_conditions_met, 0)

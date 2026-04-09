@@ -107,23 +107,27 @@ When reviewing ZK-related changes:
 
 **Important**: These are USB-specific. BT requires separate calibration (N≥50, currently 0/50).
 
-### Epistemic Consensus (Phase 98)
+### Epistemic Consensus (Phase 147) [HARDENED]
 
-- **W1 Threshold**: 0.60 (baseline quorum)
+- **W1 Threshold**: 0.65 (Phase 147 hardened — was 0.60 in Phase 98)
 - **BLOCK_QUORUM**: 0.67 (ioSwarm MINT, fail-CLOSED)
 - **GENERAL_QUORUM**: 0.60 (baseline, fail-open)
+- **triage_prereq_required**: True (Phase 147 — ClassJ+Supervisor=0.60 no longer reaches 0.65 gate alone; closes Phase 98 W1)
 - **Weight Sum**: Must equal 1.0 exactly
   - Swarm enabled: {0.35, 0.35, 0.15, 0.15}
   - Swarm disabled: {0.40, 0.40, 0.20}
 
-### Separation Ratio (Phase 121) [DISCLOSED TRUTH]
+### Separation Ratio (Phase 143) [CONDITIONALLY MET — THIN N]
 
-- **Current measured**: 0.362 (diagonal approximation)
-- **Current pooled**: 0.474 (Phase 121 battery-stratified)
+- **Touchpad corners (CURRENT BEST)**: 1.261 (diagonal+proper LOO, N=11, 3-player, Phase 143, 2026-04-02)
+  - P1 vs P2: 2.868 | P1 vs P3: 3.276 | P2 vs P3: 2.243
+  - Classification: 63.6% (7/11, proper LOO) — honest estimate
+  - Covariance: Diagonal (N/p=1.375 < COV_MIN_RATIO=3.0, Phase 142 auto-fallback)
+- **Full corpus pooled**: 0.417 (N=127, 3-player, 2026-03-29) — TOURNAMENT BLOCKER for free-form gameplay
 - **Target**: >1.0 (tournament requirement)
-- **Status**: TOURNAMENT BLOCKER
+- **Status**: CONDITIONALLY ABOVE GATE on touchpad_corners (N=11 thin); BLOCKER on full free-form corpus
 
-**Critical**: This is honest disclosure, not hidden failure. The whitepaper and all docs state 0.362 explicitly.
+**Critical**: Touchpad_corners result (1.261) is above gate but N=11 is legally thin. Full corpus (0.417) remains the main disclosed truth for free-form gameplay. All tournament discussions must cite both values.
 
 ### Claude Code Guidance
 
@@ -139,7 +143,7 @@ When reviewing threshold-related changes:
 
 These flags indicate current system capabilities. They change as phases complete, but each value has specific meaning.
 
-### Current Values (Phase 135)
+### Current Values (Phase 149)
 
 | Flag | Value | Meaning | Phase |
 |------|-------|---------|-------|
@@ -150,6 +154,8 @@ These flags indicate current system capabilities. They change as phases complete
 | ioswarm_enabled | false | Live ioSwarm nodes not registered | 109A |
 | l4_battery_threshold_enabled | false | Per-battery routing not active | 126 |
 | confidence_multiplier_enabled | false | bt_strat_ratio multiplier disabled | 122 |
+| mcp_server_enabled | false | FastAPI MCP sub-app disabled (httpx-only; port 8081) | 148 |
+| epistemic_triage_prereq_required | true | Phase 147 W1 hardening — ClassJ+Supervisor alone can't reach 0.65 threshold | 147 |
 
 ### Claude Code Guidance
 
@@ -334,8 +340,10 @@ If ANY check fails, BLOCK proposal and explain invariant violation.
 
 ---
 
-**Document Version**: 1.0 (Phase 135)
-**Last Updated**: 2026-03-29
-**Next Review**: Phase 136 completion
+**Document Version**: 1.1 (Phase 149)
+**Last Updated**: 2026-04-03
+**Next Review**: Phase 150 completion
 **Immutable Sections**: 1-3 (PoAC, Crypto, Thresholds)
 **Mutable Sections**: 4-5 (State flags update per phase)
+**Key Phase 147 Change**: epistemic_consensus_threshold 0.60→0.65; triage_prereq_required=True (closes Phase 98 W1)
+**Key Phase 143 Change**: Separation ratio 1.261 (touchpad_corners diagonal+LOO) — ABOVE gate but N=11 thin

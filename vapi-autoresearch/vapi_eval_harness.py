@@ -370,7 +370,7 @@ if __name__ == "__main__":
 
 
 # Auto-synced from VAPI_WHAT_IF.md by vapi_wiki_engine.py
-# Last sync: 2026-04-08T03:44:30.704093+00:00
+# Last sync: 2026-04-09T21:52:55.260737+00:00
 WIKI_KNOWN_W1 = {
     "W1-001": {
         "title": "ioSwarm Node-Pool Homogeneity",
@@ -456,19 +456,11 @@ WIKI_KNOWN_W1 = {
         "keywords": ["enrollment_complete", "count-gate", "spoofing"],
         "source": "VAPI_WHAT_IF.md",
     },
-    "W1-015": {
-        "title": "chain audit exposes injection windows (WIF-026)",
-        "status": "MITIGATED",
-        "keywords": ["chain_audit", "injection_window", "broken_record_ids", "poac_chain_integrity"],
-        "source": "VAPI_WHAT_IF.md WIF-026",
-        "mitigation": "only aggregate counts exposed — no broken record IDs returned; Phase 176 PoACChainIntegrityMonitor",
-    },
-    "W1-016": {
-        "title": "maturity score gaming by silencing agents (WIF-027)",
-        "status": "OPEN",
-        "keywords": ["maturity_score", "silence_penalty", "agent_disabled", "protocol_maturity"],
-        "source": "VAPI_WHAT_IF.md WIF-027",
-        "mitigation": "silence_penalty component — Phase 178 candidate",
+    "W1-028": {
+        "title": "P1 Temporal Non-Stationarity — One-Way Ratchet on Separation Ratio",
+        "status": "DOCUMENTED",
+        "keywords": ["temporal", "non-stationarity"],
+        "source": "VAPI_WHAT_IF.md",
     },
 }
 

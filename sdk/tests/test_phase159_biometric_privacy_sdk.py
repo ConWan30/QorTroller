@@ -47,9 +47,9 @@ class TestPhase159SDK(unittest.TestCase):
         self.assertIsNotNone(result.error)
         self.assertAlmostEqual(result.mean_decay_factor, 1.0)
 
-    def test_sdk_version_is_phase160(self):
-        """SDK_VERSION reflects Phase 160 (bumped from 159)."""
-        self.assertEqual(SDK_VERSION, "3.0.0-phase160")
+    def test_sdk_version_is_phase162(self):
+        """SDK_VERSION reflects Phase 162 (bumped from 159 via 160–161)."""
+        self.assertEqual(SDK_VERSION, "3.0.0-phase166")
 
 
 if __name__ == "__main__":

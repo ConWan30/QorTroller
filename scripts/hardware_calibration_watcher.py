@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Hardware Calibration Watcher — Phase 108 Support Tool
+Hardware Calibration Watcher — Phase 148 Support Tool
 ======================================================
 Monitors the VAPI bridge SQLite database while the operator plays NCAA CFB 26
 on DualShock Edge and auto-exports calibration progress to:
@@ -10,19 +10,23 @@ on DualShock Edge and auto-exports calibration progress to:
 Run from the repo root:
   python scripts/hardware_calibration_watcher.py
 
-Key metric tracked: touch_position_variance (BiometricFeatureFrame index 10)
-  - Currently ZERO across all N=78 sessions (touchpad not captured during gameplay)
-  - Must become NONZERO to unlock inter-person separation ratio improvement
-  - separation_ratio_current > 1.0 required for tournament deployment (currently 0.362)
+Phase 148 state:
+  Separation ratio: 1.261 (diagonal, touchpad_corners, N=11, Phase 143 proper LOO)
+  Classification  : 63.6% (7/11) — BLOCKER until ≥80% (need ≥10 sessions/player)
+  L4 staleness    : live_dim=13 vs calib_dim=12 (run recalibrate_l4_pipeline.py)
+  touch_position_variance: NOW ACTIVE in touchpad_corners sessions (P1=0.0040, P2=0.0018, P3=0.0016)
 
-After collecting ≥50 sessions across ≥3 players with nonzero touch variance, run:
-  python scripts/interperson_separation_analyzer.py
-Then set SEPARATION_RATIO_CURRENT=<new_value> env var and re-run this watcher.
+To capture more touchpad_corners sessions:
+  python scripts/terminal_calibration_runner.py --player P1 --battery touchpad_corners
+
+After capturing ≥30 new touchpad_corners sessions (≥10/player), run:
+  python scripts/analyze_interperson_separation.py --session-type touchpad_corners --write-snapshot --db ~/.vapi/bridge.db
+Then the separation ratio scorecard will auto-update from the DB snapshot.
 
 Environment:
   DB_PATH                  — override bridge.db path (default: ~/.vapi/bridge.db)
   POLL_S                   — poll interval seconds (default: 30)
-  SEPARATION_RATIO_CURRENT — current empirical separation ratio (default: 0.362)
+  SEPARATION_RATIO_CURRENT — override separation ratio (reads DB first; default: 1.261)
 """
 
 import json
@@ -152,7 +156,7 @@ def _read_rulings(db_path: pathlib.Path) -> list:
 
 def _compute_progress(sessions: list, rulings: list) -> dict:
     """Compute calibration progress statistics."""
-    sep_ratio = float(os.environ.get("SEPARATION_RATIO_CURRENT", "0.362"))
+    sep_ratio = float(os.environ.get("SEPARATION_RATIO_CURRENT", "1.261"))
 
     if not sessions:
         return {
@@ -224,11 +228,12 @@ def _write_progress(progress: dict, db_path: pathlib.Path) -> None:
         "db_path": str(db_path),
         **progress,
         "_note": (
-            "touch_position_variance MUST be nonzero to unlock inter-person separation ratio "
-            "improvement. After n_sessions>=50 across n_players>=3 with nonzero touch variance, "
-            "run: python scripts/interperson_separation_analyzer.py. "
-            "Then set SEPARATION_RATIO_CURRENT=<new_value> and re-run this watcher. "
-            "Tournament gate: separation_ratio_current > 1.0 (currently 0.362 — BLOCKER)."
+            "Phase 148: separation ratio 1.261 (diagonal, touchpad_corners, Phase 143). "
+            "Classification 63.6% (7/11) — BLOCKER until ≥80% target. "
+            "Need ≥10 touchpad_corners sessions/player (currently N=11 total). "
+            "Run: python scripts/terminal_calibration_runner.py --player P1 --battery touchpad_corners. "
+            "After ≥30 new sessions: analyze_interperson_separation.py --session-type touchpad_corners "
+            "--write-snapshot --db ~/.vapi/bridge.db"
         ),
     }
     tmp.write_text(json.dumps(data, indent=2))
@@ -259,7 +264,7 @@ def main() -> None:
     print()
     print("  Goal 1: touch_position_variance > 0 in calibration sessions")
     print("  Goal 2: n_sessions >= 50 across n_players >= 3")
-    print("  Goal 3: separation_ratio_current > 1.0 (currently 0.362 — TOURNAMENT BLOCKER)")
+    print("  Goal 3: classification ≥ 80% (currently 63.6% — TOURNAMENT BLOCKER; ratio=1.261)")
     print()
     if not db_path.exists():
         print(f"  [WARN] DB not found at {db_path}. Start bridge first. Polling anyway...")

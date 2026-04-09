@@ -155,7 +155,7 @@ class TestPhase108TournamentReadiness(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertEqual(data["hardware_conditions_met"], 2)
-        self.assertTrue(data["hardware_conditions"]["separation_ratio_gt_1"])
+        self.assertTrue(data["hardware_conditions"]["separation_ratio_above_gate"])
         self.assertTrue(data["hardware_conditions"]["touchpad_recapture_complete"])
 
     def test_6_fully_ready_false_when_hw_blocking(self):
@@ -170,7 +170,7 @@ class TestPhase108TournamentReadiness(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertFalse(data["fully_ready"])
-        self.assertIn("separation_ratio_gt_1", data["blocking_conditions"])
+        self.assertIn("separation_ratio_above_gate", data["blocking_conditions"])
 
     def test_7_insert_get_latest_roundtrip(self):
         """insert + get_latest roundtrip; all fields present; blocking_conditions is list."""

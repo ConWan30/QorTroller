@@ -1,0 +1,47 @@
+
+VAPI-AutoResearch Improvement Cycle #2
+================================================
+Priority this cycle: temporal_drift
+
+PROGRAM DIRECTIVES (from program.md):
+No program.md found. Using default priorities....
+
+KNOWN GAPS (ground truth):
+  separation_ratio: 0.362 → 1.0 [BLOCKER]
+  w1_threshold: 0.6 → 0.65 [DOCUMENTED]
+  class_k: undefined → defined detection approach [OPEN]
+  dry_run: True → False (after N>=100 adjudications) [BLOCKED]
+  vhp_quorum: single operator → ioSwarm quorum [Phase 110 target]
+
+RECENT EXPERIMENT HISTORY (1 total experiments):
+Last 3 priorities addressed: ['?']
+Last 3 scores: [0.838]
+
+CURRENT SKILL.MD LENGTH: 53840 characters
+
+TASK: Generate ONE targeted improvement to the /vapi orchestration skill.
+The improvement must:
+1. Address the priority: temporal_drift
+2. Preserve all 20 mandatory invariants (listed in eval harness)
+3. Add ONE new WHAT_IF pair (W1 grounded failure + W2 novel opportunity)
+4. Be specific to VAPI Phase 108–113 state — not generic advice
+
+FORMAT YOUR RESPONSE AS:
+---PROPOSAL_START---
+[DESCRIPTION]
+One sentence describing what this change improves and why.
+
+[SKILL_MD_DELTA]
+The exact text addition or modification to skill.md.
+Use format: "ADD to section X:" or "REPLACE in section Y:"
+
+[WHAT_IF]
+W1 — [grounded failure mode, physically/cryptographically/economically rooted]
+  Implication: [specific consequence]
+  Mitigation: [concrete fix, phase reference]
+
+W2 — [genuinely novel opportunity, VAPI-exclusive]
+  Mechanism: [concrete description]
+  Phase candidate: [Phase N]
+  Exclusive because: [why competitors cannot replicate]
+---PROPOSAL_END---

@@ -41,4 +41,4 @@ def test_3_get_status_bad_url_never_raises():
 
 
 def test_4_sdk_version_phase135():
-    assert SDK_VERSION == "3.0.0-phase135"
+    assert SDK_VERSION == "3.0.0-phase166"

@@ -1,0 +1,38 @@
+---PROPOSAL_START---
+[DESCRIPTION]
+Phase 178/180 skill.md update: adds biometric_credential_ttl enforcement instructions
+to Session Start Protocol, WIF-029 TTL cross-check to Separation Ratio Pathways,
+and WIF-031 renewal chain provenance manipulation W1/W2 pair.
+
+[SKILL_MD_DELTA]
+ADD to "Session Start Protocol — Invariant Cross-Check":
+  Phase 178+ mandatory: if tournament authorization age_days > biometric_credential_ttl_days
+  (default 90) → BLOCK + return BIOMETRIC_CREDENTIAL_EXPIRED + set recalibration_required=True.
+  Never authorize tournament on expired biometric commitment.
+
+ADD to "Separation Ratio Pathways":
+  On TTL expiry: trigger POST /agent/renew-separation-ratio-commitment (Phase 180) BEFORE
+  re-running Skill 16 preflight. Renewal requires: N>=5 new touchpad_corners sessions per
+  player + fresh Mahalanobis run + new SeparationRatioRegistry.sol commit.
+  Renewal hash binds: SHA-256(prev_hash + ratio + N_consented + players + ttl_days + ts_ns).
+
+[WHAT_IF]
+W1 — WIF-031 failure: biometric_renewal_chain_log entries can be forged by excluding
+  known-failing players from renewal corpus, inflating post-renewal ratio artificially.
+  Without consent snapshot validation at renewal time, renewal hash does not bind N_consented
+  — selective de-enrollment masquerades as TTL renewal.
+  Implication: on-chain renewal proof overstates corpus integrity; tournament regulators
+  cannot detect selective corpus manipulation via renewal event alone.
+  Mitigation: extend renew_separation_ratio_commitment() to atomically bind N_consented
+  from get_consent_corpus_coverage() (Phase 163 pattern) — Phase 181 candidate.
+
+W2 — Consent-bound renewal chain as temporally-sequenced biometric license history:
+  Each renewal: SHA-256(prev_hash + ratio + N_consented + players + ttl_days + ts_ns)
+  — chain links original commitment to every renewal with consent corpus proof at each step.
+  Tournament regulators receive license_chain_id spanning original grant → renewals →
+  current validity. First renewable consent-bound biometric tournament license with full
+  provenance chain in any gaming DePIN protocol.
+  Phase candidate: Phase 181, ~2h (extend renew_separation_ratio_commitment() to read
+  N_consented from consent ledger at renewal time — reuses Phase 163 pattern exactly).
+  Exclusive because: requires Phases 153+163+178+180 composite infrastructure.
+---PROPOSAL_END---

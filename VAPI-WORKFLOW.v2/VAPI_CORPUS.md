@@ -14,7 +14,7 @@
 - **Firmware Engineer**: nRF9160 embedded development, Zephyr RTOS, sensor polling optimization, 228-byte PoAC record generation, power-efficient cryptography
 - **Full-Stack Integration Engineer**: Python SDK design, OpenAPI client generation, dataclass/slot optimization, pytest automation, Hardhat contract testing
 
-**Your Role**: When reading this file, you are the forensic evidence custodian. You must preserve the 177-session hardware corpus with integrity. You know the legal hold requirements, the separation ratio calculation methods, and the tournament defensibility criteria. Never delete, always append.
+**Your Role**: When reading this file, you are the forensic evidence custodian. You must preserve the 120-session (post-P4→P3 merge) hardware corpus with integrity. You know the legal hold requirements, the separation ratio calculation methods, and the tournament defensibility criteria. Never delete, always append. Note: Player 4 was confirmed to be Player 3 mislabeled — all 3 P4 sessions were merged into terminal_cal_P3 (2026-04-02).
 
 > **INSTRUCTION TO CLAUDE CODE**: This file documents the VAPI forensic evidence layer.
 > When reading this file, you must:
@@ -42,29 +42,30 @@ The VAPI Hardware Calibration Corpus is the foundational evidence for:
 
 ## 2. Corpus Statistics
 
-### Current State (2026-03-29)
+### Current State (2026-04-03)
 
 | Metric | Value | Status | Notes |
 |--------|-------|--------|-------|
-| **Total sessions** | 177 | ✅ ACTIVE | USB only, DualShock Edge only |
-| **USB sessions** | 177 | ✅ ACTIVE | 1000 Hz transport |
+| **Total sessions (included)** | 120 | ✅ ACTIVE | 3-player corpus post P4→P3 merge (2026-04-02) |
+| **Total sessions (excluded)** | 5 | ⚠️ EXCLUDED | polling_rate_hz outside [800,1100]: hw_043/044/067/069/073 |
+| **USB sessions** | 120 included | ✅ ACTIVE | 1000 Hz transport |
 | **BT sessions** | 0 | ❌ PENDING | 250 Hz transport |
-| **Unique players** | 3 | ✅ ACTIVE | P1, P2, P3 |
-| **Player P1 sessions** | ~59 | ✅ ACTIVE | Estimated |
-| **Player P2 sessions** | ~59 | ✅ ACTIVE | Estimated |
-| **Player P3 sessions** | ~59 | ✅ ACTIVE | Estimated |
+| **Unique players** | 3 (P1, P2, P3) | ✅ ACTIVE | P4 ELIMINATED — confirmed same person as P3 (2026-04-02) |
+| **Player P1 sessions** | 53 | ✅ ACTIVE | hw_005–hw_042 exc. 2 polling-excluded + terminal_cal_P1; 3 touchpad_corners |
+| **Player P2 sessions** | 34 | ✅ ACTIVE | terminal_cal_P2; 4 touchpad_corners inc. touchpad_corners_20260329T203046Z |
+| **Player P3 sessions** | 33 | ✅ ACTIVE | terminal_cal_P3 (21 files — gained 3 former P4 sessions); 4 touchpad_corners |
+| **Touchpad corners total** | 11 | ✅ KEY METRIC | P1=3, P2=4, P3=4 — separation 1.261 (Phase 143) |
 | **Average duration** | ~120s | ✅ ACTIVE | Mixed 60s/300s |
-| **Total gameplay time** | ~354 minutes | ✅ ACTIVE | ~6 hours |
 | **Controller diversity** | 1 | ❌ LOW | Edge only (target: 4+) |
 | **Xbox sessions** | 0 | ❌ REQUIRED | Target: 50+ for calibration |
 | **Switch Pro sessions** | 0 | ❌ REQUIRED | Target: 50+ for calibration |
 | **DS4 sessions** | 0 | ❌ REQUIRED | Target: 50+ dedicated |
 
-### Controller Diversity Targets (Phase 136-140)
+### Controller Diversity Targets (Phase 150+)
 
 | Controller | Current N | Target N | Tier | Status |
 |------------|-----------|----------|------|--------|
-| Sony DualShock Edge | 177 | 200+ | Attested + Standard | ✅ EXCEEDING |
+| Sony DualShock Edge | 120 included | 200+ | Attested + Standard | ✅ SUFFICIENT for touchpad_corners |
 | Microsoft Xbox Series X | 0 | 50+ | Standard only | ❌ NOT STARTED |
 | Nintendo Switch Pro | 0 | 50+ | Standard only | ❌ NOT STARTED |
 | Sony DualShock 4 | 0 | 50+ | Standard only | ❌ NOT STARTED |
@@ -75,11 +76,13 @@ The VAPI Hardware Calibration Corpus is the foundational evidence for:
 
 | Milestone | Target | Current | Gap | Status |
 |-----------|--------|---------|-----|--------|
-| N=50 (minimum calibration) | 50 | 177 | +127 | ✅ EXCEEDED |
-| N=150 (Tikhonov stability) | 150 | 177 | +27 | ✅ EXCEEDED |
-| N=200 (high confidence) | 200 | 177 | -23 | ⚠️ APPROACHING |
-| N=300 (excellent confidence) | 300 | 177 | -123 | ❌ NOT YET |
-| 4th player diversity | 4 players | 3 | -1 | ❌ NOT YET |
+| N=50 (minimum calibration) | 50 | 120 inc. | +70 | ✅ EXCEEDED |
+| Touchpad corners N=11 separation > 1.0 | ratio>1.0 | 1.261 | +0.261 | ✅ ACHIEVED (Phase 143, 2026-04-02) |
+| Classification >50% (proper LOO) | 50% | 63.6% | +13.6% | ✅ ACHIEVED (Phase 143) |
+| P4→P3 identity confirmation | — | done | — | ✅ COMPLETE (Phase 138, 2026-04-02) |
+| Full corpus separation > 1.0 | ratio>1.0 | 0.417 | -0.583 | ❌ TOURNAMENT BLOCKER for free-form |
+| N=11 touchpad corners legally thick N | N≥30 | 11 | -19 | ⚠️ THIN — needs more touchpad sessions |
+| 4th player diversity | 4 players | 3 | -1 | ❌ NOT YET (after P4→P3 confirmed) |
 | BT calibration minimum | 50 | 0 | -50 | ❌ NOT STARTED |
 
 ---
@@ -199,31 +202,39 @@ Each session file (JSON) contains:
 
 - **Timestamp**: 2026-03-20
 - **Method**: Diagonal covariance (feature independence assumed)
-- **Corpus**: N=177, 3 players
-- **Pooled ratio**: 0.474
-- **Per-battery ratios**:
-  - Touchpad dominant: [value]
-  - Trigger dominant: [value]
-  - Resting grip: [value]
-- **Confidence**: LOW (methodological approximation)
-- **Status**: SUPERSEDED by v2 (pending)
+- **Corpus**: N=177, 3 players (pre-merge)
+- **Pooled ratio**: 0.474 (battery-stratified, Phase 121)
+- **Status**: SUPERSEDED — see Phase 137A (imbalanced corpus) and Phase 143 (touchpad_corners)
 
-### Snapshot v2 — Tikhonov Full Covariance (Phase 129)
+### Snapshot v2 — Full Corpus Pooled (Phase 137A/B, 2026-03-30)
 
-- **Timestamp**: PENDING
-- **Method**: Full covariance with Tikhonov regularization
-- **Corpus**: N=177, 3 players (same as v1)
-- **Pooled ratio**: TBD
-- **Per-battery ratios**: TBD
-- **Confidence**: HIGH (N>150, mathematically stable)
-- **Status**: PENDING execution
-- **Hypothesis**: > 0.60 or potentially > 1.0
+- **Timestamp**: 2026-03-29 to 2026-03-30
+- **Method**: Phase 137A balanced (seed=42, n=3/player N=12) + Phase 137B session-type filter
+- **Corpus**: N=127 (pooled), 3 players
+- **Pooled ratio**: 0.417 (N=127, full corpus, 2026-03-29)
+- **Balanced ratio**: 1.611 (n=3/player N=12, seed=42, Phase 137A) — WIF-007 confirmed
+- **Touchpad corners (pre-merge)**: 1.469 (N=11, P1=3/P2=4/P3=3/P4=1, Phase 137B) — SUPERSEDED by v3
+- **Status**: ACTIVE for free-form gameplay baseline (0.417 remains tournament blocker)
+
+### Snapshot v3 — Touchpad Corners, 3-Player Clean (Phase 138/143, 2026-04-02) [CURRENT BEST]
+
+- **Timestamp**: 2026-04-02
+- **Method**: Diagonal covariance (auto-fallback COV_MIN_RATIO=3.0, Phase 142) + Proper LOO (Phase 143)
+- **Corpus**: N=11 touchpad_corners sessions (P1=3, P2=4, P3=4) — post P4→P3 merge (Phase 138)
+- **Pooled ratio**: **1.261** (above 1.0 tournament gate)
+- **Classification**: 63.6% (7/11, proper LOO) — honest estimate
+- **Per-pair distances**:
+  - P1 vs P2: 2.868 | P1 vs P3: 3.276 | P2 vs P3: 2.243
+  - Intra: P1 mean=2.963, P2 mean=1.976, P3 mean=1.711
+- **Confidence**: CONDITIONALLY HIGH — diagonal correct for N=11, but N thin (need N≥30)
+- **Note**: Full Tikhonov covariance (Phase 138) showed 1.552 but P1/P3=0.127 was 97% suppressed noise artifact; diagonal is correct method at N=11
+- **Status**: ABOVE GATE — but legally thin (N=11 vs target N≥30 for tournament deployment)
 
 ### Future Snapshots
 
-- **v3**: Post-touchpad-recapture (if Tikhonov < 1.0)
-- **v4**: With 4th player (diversity improvement)
-- **v5**: BT transport calibrated (N≥50)
+- **v4**: Touchpad corners N≥30 (needs ~19 more sessions per player mix)
+- **v5**: With genuine 4th player (true diversity improvement post-P4→P3 confirmation)
+- **v6**: BT transport calibrated (N≥50)
 
 ---
 
@@ -266,37 +277,41 @@ find . -name "*.json" -type f -exec sha256sum {} \; | sort | sha256sum
 
 ### Player P1
 
-- **Sessions**: ~59
-- **Dominant battery**: [touchpad|trigger|mixed]
-- **Gameplay style**: [competitive|casual|mixed]
-- **L4 baseline**: [Mahalanobis mean]
-- **L5 baseline**: [CV mean]
-- **Notes**: [Any patterns]
+- **Sessions**: 53 included (hw_005–hw_042 exc. 2 polling-rate excluded + terminal_cal_P1)
+- **Touchpad corners**: 3 sessions (touchpad_corners_P1_*)
+- **Dominant battery**: mixed (gameplay + touchpad + resting_grip)
+- **Gameplay style**: competitive (NCAA CFB 26)
+- **L4 intra-player mean (touchpad_corners)**: 2.963 (high — single-player centroid wide)
+- **Notes**: Largest session count (53) — dominates global covariance (WIF-007 confirmed). Balanced analysis essential.
+- **Enrollment quality**: NOT READY (centroid_stability=2.963 > 0.70 threshold, Phase 144)
 
 ### Player P2
 
-- **Sessions**: ~59
-- **Dominant battery**: [touchpad|trigger|mixed]
-- **Gameplay style**: [competitive|casual|mixed]
-- **L4 baseline**: [Mahalanobis mean]
-- **L5 baseline**: [CV mean]
-- **Notes**: [Any patterns]
+- **Sessions**: 34 included (terminal_cal_P2; 4 touchpad_corners)
+- **Touchpad corners**: 4 sessions (inc. touchpad_corners_20260329T203046Z)
+- **Dominant battery**: mixed (gameplay + touchpad)
+- **Gameplay style**: mixed
+- **L4 intra-player mean (touchpad_corners)**: 1.976
+- **Notes**: Best-balanced player for touchpad_corners analysis. Top touchpad discriminator vs P1: micro_tremor + stick_autocorr.
+- **Enrollment quality**: NOT READY (single probe type in filter mode, Phase 144)
 
 ### Player P3
 
-- **Sessions**: ~59
-- **Dominant battery**: [touchpad|trigger|mixed]
-- **Gameplay style**: [competitive|casual|mixed]
-- **L4 baseline**: [Mahalanobis mean]
-- **L5 baseline**: [CV mean]
-- **Notes**: [Any patterns]
+- **Sessions**: 33 included (terminal_cal_P3 = 21 files — gained 3 former P4 sessions; 4 touchpad_corners)
+- **Touchpad corners**: 4 sessions
+- **Dominant battery**: mixed
+- **Gameplay style**: mixed
+- **L4 intra-player mean (touchpad_corners)**: 1.711 (tightest cluster)
+- **Notes**: P4→P3 merge confirmed 2026-04-02. Former P4 sessions integrated. Top touchpad discriminator vs P1: touch_position_variance + touchpad_spatial_entropy.
+- **Enrollment quality**: NOT READY (single probe type in filter mode, Phase 144)
 
-### Player P4 (Candidate)
+### Player P4 — ELIMINATED
 
-- **Status**: RECRUITING
-- **Requirements**: NCAA CFB 26 experience, DualShock Edge available
-- **Target sessions**: 50+
-- **Diversity benefit**: Gender, age, playstyle variation improves separation
+- **Status**: ELIMINATED — confirmed same person as Player 3 (2026-04-02, Phase 138)
+- **Evidence**: P3 vs P4 distance=0.074 (full covariance, near-zero) — intra-player variance, not inter-player
+- **Action**: All 3 terminal_cal_P4 sessions moved to terminal_cal_P3; P3 now has 21 terminal_cal files
+- **Impact**: Removes false diversity count; touchpad_corners now clean 3-player (P1/P2/P3 N=11)
+- **Future players**: Genuine 4th player required for diversity improvement (different person, DualShock Edge)
 
 ---
 
@@ -355,15 +370,20 @@ Pending per-battery calibration:
 |------|--------|----------------|-------------|----------|
 | 2026-03-15 | Initial capture | 50 | 0x... | [Operator] |
 | 2026-03-20 | Continued capture | 100 | 0x... | [Operator] |
-| 2026-03-27 | Phase 135 complete | 177 | 0x... | [Operator] |
-| 2026-03-?? | BT capture start | 0→? | TBD | [Future] |
-| 2026-0?-?? | 4th player added | 177→? | TBD | [Future] |
+| 2026-03-27 | Phase 135 complete | 177 raw | 0x... | [Operator] |
+| 2026-03-29 | P2 touchpad_corners captured | +touchpad_corners_20260329T203046Z (P2) | 0x... | [Operator] |
+| 2026-04-02 | P4→P3 merge confirmed | 0 added; 3 P4 sessions reclassified to P3 | 0x... | [Operator] |
+| 2026-04-02 | Phase 138 clean 3-player corpus | 120 included / 5 excluded; P3 touchpad_corners = 4 | 0x... | [Operator] |
+| 2026-0?-?? | BT capture start | 0→? | TBD | [Future] |
+| 2026-0?-?? | Genuine 4th player added | 120→? | TBD | [Future] |
 
 ---
 
-**Document Version**: 1.0 (Phase 135)
-**Last Updated**: 2026-03-29
-**Corpus Status**: N=177 USB, 0 BT, 3 players
-**Next Milestone**: N=200 or Tikhonov verification
+**Document Version**: 1.1 (Phase 149)
+**Last Updated**: 2026-04-03
+**Corpus Status**: N=120 included / 5 excluded; USB only; 3 players (P1=53, P2=34, P3=33); 0 BT
+**Touchpad Corners**: N=11 (P1=3, P2=4, P3=4) — ratio=1.261 ABOVE GATE (Phase 143, thin N)
+**Key Result**: Separation 1.261 on touchpad_corners (diagonal+LOO, Phase 143) — above 1.0 tournament gate
+**Next Milestone**: Touchpad corners N≥30 for legally defensible tournament deployment
 **Legal Hold**: ACTIVE
 **Retention**: PERMANENT

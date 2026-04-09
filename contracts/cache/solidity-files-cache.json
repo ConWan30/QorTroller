@@ -2626,6 +2626,85 @@
         "IVAPIOperatorRegistry",
         "VAPISwarmOperatorGate"
       ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\SeparationRatioRegistry.sol": {
+      "lastModificationDate": 1775732108933,
+      "contentHash": "827ba1153d78ce4912e3088fac885bad",
+      "sourceName": "contracts/SeparationRatioRegistry.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts/access/Ownable.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "SeparationRatioRegistry"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\CeremonyAuditRegistry.sol": {
+      "lastModificationDate": 1775734054984,
+      "contentHash": "26da973171176c7621df828d38409e2c",
+      "sourceName": "contracts/CeremonyAuditRegistry.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts/access/Ownable.sol",
+        "@openzeppelin/contracts/utils/ReentrancyGuard.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "CeremonyAuditRegistry"
+      ]
     }
   }
 }
