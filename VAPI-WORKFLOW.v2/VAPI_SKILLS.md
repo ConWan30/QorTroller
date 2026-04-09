@@ -906,19 +906,19 @@ Run only tests relevant to changed files. Map files to test suites:
 
 | Changed File | Test Suite | Count Check |
 |---|---|---|
-| `bridge_agent.py` | `test_phase{N}_*.py` relevant phases | Bridge 1998 |
-| `store.py` | All `test_phase*` (schema changes) | Bridge 1998 |
-| `session_adjudicator.py` | Phase 98/105/109C/147 tests | Bridge 1998 |
-| `operator_api.py` | All phase endpoint tests | Bridge 1998 |
-| `config.py` | Config-dependent tests | Bridge 1998 |
-| `*.sol` contracts | `npx hardhat test` | Hardhat 468 |
-| `sdk/vapi_sdk.py` | `python -m pytest sdk/tests/ -v` | SDK 325 |
-| `analyze_interperson_separation.py` | Phase 137-177 analysis tests | Bridge 1998 |
+| `bridge_agent.py` | `test_phase{N}_*.py` relevant phases | Bridge 2022 |
+| `store.py` | All `test_phase*` (schema changes) | Bridge 2022 |
+| `session_adjudicator.py` | Phase 98/105/109C/147 tests | Bridge 2022 |
+| `operator_api.py` | All phase endpoint tests | Bridge 2022 |
+| `config.py` | Config-dependent tests | Bridge 2022 |
+| `*.sol` contracts | `npx hardhat test` | Hardhat 482 |
+| `sdk/vapi_sdk.py` | `python -m pytest sdk/tests/ -v` | SDK 337 |
+| `analyze_interperson_separation.py` | Phase 137-180 analysis tests | Bridge 2022 |
 
-**Baseline counts** (Phase 177 ground truth from CLAUDE.md):
-- Bridge: **1998** passing
-- SDK: **325** passing
-- Hardhat: **468** passing
+**Baseline counts** (Phase 180 ground truth from CLAUDE.md):
+- Bridge: **2022** passing
+- SDK: **337** passing
+- Hardhat: **482** passing
 - E2E: **14** (needs Hardhat node)
 
 If count drops below baseline: `[TEST_REGRESSION]` — stop, root-cause before proceeding.
@@ -1108,9 +1108,9 @@ cd contracts && npx hardhat test 2>&1 | tail -3
 
 Expected format:
 ```
-Bridge: X passed (X ≥ 1998)
-SDK: X passed (X ≥ 325)
-Hardhat: X passing (X ≥ 468)
+Bridge: X passed (X ≥ 2022)
+SDK: X passed (X ≥ 337)
+Hardhat: X passing (X ≥ 482)
 ```
 
 If any count drops: **DO NOT UPDATE CLAUDE.md**. Root-cause first.
@@ -1416,8 +1416,8 @@ The hook in `.claude/settings.local.json` fires automatically after every `Write
 - Manual agent/WIF review (large drift): 5-10 minutes
 
 ### Last Run
-**Status**: COMPLETE (2026-04-08)
-**Result**: 13-phase drift recovered (Phase 164→177, Bridge 1934→1998, SDK 297→325, agents 22→26)
+**Status**: COMPLETE (2026-04-09)
+**Result**: Phase 178-180 drift recovered (WIF-029 W1/W2+WIF-030 W1 CLOSED, AutoResearch Cycle 8 WIF-031 filed, Bridge 1998→2022, SDK 325→337, Hardhat 468→482, agents 26, tools 129, contracts 40)
 **Next**: Automatic via PostToolUse hook on every Write
 
 ---

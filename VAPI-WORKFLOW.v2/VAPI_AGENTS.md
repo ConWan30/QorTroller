@@ -745,8 +745,9 @@ Every agent must respect:
 
 ---
 
-**Document Version**: 1.3 (Phase 177)
-**Last Updated**: 2026-04-08
+**Document Version**: 1.4 (Phase 180)
+**Last Updated**: 2026-04-09
 **Update Method**: Add new agents as phases complete
-**Agent Count**: 26 (Phase 177)
-**SYNC NOTE**: Agents 21–26 added in Phases 157/159/173/175/176/177. Synced 2026-04-08.
+**Agent Count**: 26 (Phase 180 — Phases 178/179/180 added infrastructure tools only; no new agents)
+**SYNC NOTE**: Agents 21–26 added in Phases 157/159/173/175/176/177. Phases 178–180 added Tools #127/128/129. Synced 2026-04-09.
+**Next agents**: #27 PersonaBreakDetectorAgent (Phase 182 candidate); #28 MaturityElevationGateAgent (Phase 183 candidate).

@@ -1445,7 +1445,7 @@ return `{authorized: False, reason: "BIOMETRIC_CREDENTIAL_EXPIRED", recalibratio
 The `SeparationRatioRegistry.sol` commitment schema gains a `ttl_days` field (default 90).
 Tool #N `get_biometric_credential_age`; `BiometricCredentialAgeResult` SDK.
 
-**Status**: OPEN — Phase 178 candidate. Filed 2026-04-09 (AutoResearch cycle 13).
+**Status**: CLOSED (Phase 178, 2026-04-09) — `biometric_credential_ttl_days=90.0`; `TournamentActivationChainAgent.check_biometric_credential_ttl()` blocks on `age_days > ttl_days`; Tool #127; BiometricCredentialAgeResult+VAPIBiometricCredentialTTL SDK; SeparationRatioRegistry.sol +renewCommit()+ttlDays field.
 
 ---
 
@@ -1470,6 +1470,8 @@ openapi schema + 6 Hardhat TTL tests).
 **Exclusive because**: Requires Phase 153 SeparationRatioRegistry.sol + Phase 163 N_consented hash
 binding + Phase 164/165 consent delta chain + Phase 177 synthesis gate. No competing gaming protocol
 has renewal-chainable biometric tournament licenses with on-chain TTL provenance.
+
+**Status W2**: CLOSED (Phase 180, 2026-04-09) — `renewal_enabled=False` default; `biometric_renewal_chain_log` table (UNIQUE new_commit_hash anti-replay); `chain.renew_separation_ratio_commitment()` calls SeparationRatioRegistry.renewCommit(); new_hash=SHA-256(prev_hash+ratio+N+N_consented+ttl+ts_ns); Tool #129 trigger_renewal_commitment; BiometricRenewalResult+VAPIBiometricRenewal SDK. WIF-031 (consent-bound renewal provenance) filed as Phase 181 candidate.
 
 [VAPI:Phase177:autoresearch_cycle13:PROPOSED]
 
@@ -1505,7 +1507,7 @@ by `TournamentActivationChainAgent`. New `CeremonyAuditGate` check: `ceremony_pa
 count(distinct participant_address) ≥ 3`. Tool #N `get_ceremony_audit_status`;
 `CeremonyAuditResult` SDK.
 
-**Status**: OPEN — Phase 179 candidate. Filed 2026-04-09 (AutoResearch cycle 13).
+**Status**: CLOSED (Phase 179, 2026-04-09) — `ceremony_audit_enabled=False` default (infrastructure-first); `ceremony_audit_log` table (UNIQUE ceremony_id+participant_address+circuit_name); `CeremonyAuditRegistry.sol` NEW; GET /agent/ceremony-audit-status + POST /agent/register-ceremony-participant; Tool #128; CeremonyAuditGateResult+VAPICeremonyAuditGate SDK (renamed from CeremonyAuditResult/VAPICeremonyAudit to avoid Phase 85 collision); audit_passed=True fail-open on error.
 
 ---
 
@@ -1535,10 +1537,57 @@ condition.
 
 ---
 
-**Document Version**: 2.0 (WIF-029/030 temporal biometric drift + ZK ceremony capture, 2026-04-09)
+---
+
+## WIF-031 — Renewal Provenance Manipulation: Selective De-enrollment at Renewal Inflates Ratio (Phase 181)
+
+**W1 — Failure mode**: `biometric_renewal_chain_log` entries are inserted by the operator. The renewal
+flow computes `n_consented` live from `get_consent_corpus_coverage()`, but this call does NOT prevent
+an operator from first revoking known-failing players' consent (via `POST /agent/revoke-consent`)
+immediately before triggering renewal. The revocation drops those players from the active corpus,
+inflating `N_consented` and shifting the Mahalanobis centroid away from high-variance individuals.
+The resulting separation ratio is overstated: the renewal hash legitimately binds `N_consented` at
+renewal time, but that number was artificially reduced by selective de-enrollment. Tournament regulators
+cannot detect this manipulation via the renewal event alone — the chain is cryptographically valid.
+
+**Implication**: A biometric renewal can function as a corpus pruning mechanism, turning a
+TOURNAMENT BLOCKER (ratio=0.569) into an apparent pass (ratio>1.0) by removing the players whose
+intra-player variance was suppressing the ratio. The Biometric Renewal Engine (Phase 180) makes this
+manipulation more accessible, not less.
+
+**Mitigation (Phase 181 candidate)**: Extend `POST /agent/renew-separation-ratio-commitment` to
+atomically snapshot `N_consented` AND `players_consented_list` from the consent ledger into a
+`renewal_consent_snapshot_log` table, linking via `new_commit_hash`. Any change in `players_consented_list`
+between original commitment and renewal is flagged as `corpus_delta_detected=True` in the renewal record.
+Regulators can audit the snapshot to verify no selective exclusions occurred. Reuses Phase 164
+ConsentSnapshotDelta pattern exactly.
+
+**Status**: OPEN — Phase 181 candidate. Filed 2026-04-09 (AutoResearch cycle 8, score=0.752).
+
+---
+
+**W2 — Consent-bound renewal chain as temporally-sequenced biometric license history.**
+
+**Mechanism**: Each renewal binds `N_consented` from the consent ledger at renewal time:
+`SHA-256(prev_hash + ratio + N_consented + players_sorted + ttl_days + ts_ns)` — chain links
+original commitment to every renewal with consent corpus proof at each step. Tournament regulators
+receive `license_chain_id` spanning original grant → renewals → current validity. Full provenance
+chain is the first renewable consent-bound biometric tournament license in any gaming DePIN protocol.
+
+**Phase candidate**: Phase 181, ~2h (extend `renew_separation_ratio_commitment()` to snapshot
+consent corpus at renewal time — reuses Phase 163+164 pattern exactly; add `renewal_consent_snapshot_log`
+table; extend POST response with `corpus_delta_detected` flag).
+
+**Exclusive because**: Requires Phases 153+163+164+178+180 composite infrastructure.
+
+[VAPI:Phase180:autoresearch_cycle8:PROPOSED:score=0.752]
+
+---
+
+**Document Version**: 2.1 (WIF-029/030 CLOSED + WIF-031 filed, 2026-04-09)
 **Last Updated**: 2026-04-09
-**W1 Count**: 26 entries (WIF-029 temporal biometric drift; WIF-030 ZK ceremony capture attack)
-**W2 Count**: 22 entries (WIF-029 renewable tournament license; WIF-030 ceremony audit chain)
+**W1 Count**: 27 entries (WIF-029 CLOSED Phase 178; WIF-030 CLOSED Phase 179; WIF-031 consent-bound renewal provenance OPEN)
+**W2 Count**: 23 entries (WIF-029 W2 CLOSED Phase 180; WIF-030 W2 OPEN Phase 181 candidate; WIF-031 W2 OPEN Phase 181 candidate)
 **W3 Count**: 5 entries
 **Update Method**: Append-only, status updates inline
 **Key Cycle 13 Updates**: WIF-029 temporal biometric drift (Phase 178 candidate); WIF-030 ZK ceremony capture attack (Phase 179 candidate); AutoResearch cycle 13; program.md updated to Phase 177 edition; score_phase_177_readiness() gate added to vapi_autoresearch.py
