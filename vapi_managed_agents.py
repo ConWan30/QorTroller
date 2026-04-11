@@ -146,6 +146,9 @@ BUS_CHANNELS = {
     "wiki":          "Wiki engine events — brief generated, snapshot taken, sync complete",
     "alert":         "Cross-agent alerts requiring immediate coordination",
     "maturity":      "Protocol maturity score (Agent 26) — ALPHA/BETA/PRODUCTION_CANDIDATE",
+    # Phase 192: CorpusDataCuratorAgent (Agent #35)
+    "curator":       "CorpusDataCuratorAgent 7-task cycle results — provenance DAG, entropy, readiness cert",
+    "corpus_quality": "Federated corpus quality snapshots — anonymized cross-bridge stats (BP-007 compliant)",
 }
 
 # ─────────────────────────────────────────────────────────────

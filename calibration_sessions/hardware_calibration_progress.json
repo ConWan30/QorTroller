@@ -1,25 +1,46 @@
 {
-  "last_updated": "2026-04-06T01:15:00Z",
+  "last_updated": "2026-04-11T14:56:53Z",
   "db_path": "C:\\Users\\Contr\\.vapi\\bridge.db",
-  "n_sessions": 170,
+  "n_sessions": 173,
   "n_players": 3,
-  "sessions_with_touch_variance": 35,
-  "touch_variance_mean": 0.02502003898337416,
+  "sessions_with_touch_variance": 38,
+  "touch_variance_mean": 0.026404586274654016,
   "touch_variance_max": 0.22186673271483834,
-  "touch_variance_nonzero_fraction": 0.20588235294117646,
+  "touch_variance_nonzero_fraction": 0.21965317919075145,
   "false_positive_count": 0,
   "false_positive_rate": 0.0,
-  "separation_ratio_current": 1.261,
+  "separation_ratio_current": 0.5690192153777379,
   "separation_ratio_required": 1.0,
   "players": {
     "581a836c98b3a1b6...": {
-      "n_sessions": 170,
-      "touch_variance_mean": 0.02502003898337416,
-      "touch_variance_nonzero_count": 35,
+      "n_sessions": 173,
+      "touch_variance_mean": 0.026404586274654016,
+      "touch_variance_nonzero_count": 38,
       "touch_variance_max": 0.22186673271483834
     }
   },
   "recent_sessions": [
+    {
+      "device_id": "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8",
+      "touch_position_variance": 0.14581694379264926,
+      "micro_tremor_accel_variance": 2.189526292225213e-05,
+      "press_timing_jitter_variance": 0.0,
+      "created_at": 1775880173.2214622
+    },
+    {
+      "device_id": "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8",
+      "touch_position_variance": 0.15360894214111823,
+      "micro_tremor_accel_variance": 0.00013029609385060623,
+      "press_timing_jitter_variance": 0.0,
+      "created_at": 1775876068.5580387
+    },
+    {
+      "device_id": "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8",
+      "touch_position_variance": 0.015160912407769097,
+      "micro_tremor_accel_variance": 0.0023058122471299896,
+      "press_timing_jitter_variance": 0.0,
+      "created_at": 1775874237.900365
+    },
     {
       "device_id": "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8",
       "touch_position_variance": 0.0,
@@ -33,27 +54,6 @@
       "micro_tremor_accel_variance": 0.0004418158252087826,
       "press_timing_jitter_variance": 0.0,
       "created_at": 1775437263.3238108
-    },
-    {
-      "device_id": "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8",
-      "touch_position_variance": 0.0,
-      "micro_tremor_accel_variance": 3.009265538105056e-36,
-      "press_timing_jitter_variance": 0.0,
-      "created_at": 1775404126.3524115
-    },
-    {
-      "device_id": "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8",
-      "touch_position_variance": 0.0,
-      "micro_tremor_accel_variance": 3.009265538105056e-36,
-      "press_timing_jitter_variance": 0.0,
-      "created_at": 1775369262.12726
-    },
-    {
-      "device_id": "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8",
-      "touch_position_variance": 0.0,
-      "micro_tremor_accel_variance": 3.009265538105056e-36,
-      "press_timing_jitter_variance": 0.0,
-      "created_at": 1775368444.4577498
     }
   ],
   "_note": "Auto-written by calibration_agent.py (Phase 148). Separation ratio reads from separation_ratio_snapshots DB table when available. Phase 143: ratio=1.261 (diagonal, touchpad_corners, N=11, proper LOO). BLOCKER: classification=63.6% <80% target \u2014 need \u226510 touchpad_corners sessions/player."

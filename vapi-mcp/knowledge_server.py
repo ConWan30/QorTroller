@@ -669,6 +669,79 @@ async def vapi_corpus_integrity(check_separation_snapshots: bool = True,
 
 
 @tool(
+    name="vapi_fleet_coherence",
+    description=(
+        "Returns current fleet signal coherence status from the Phase 193 "
+        "FleetSignalCoherenceAgent (agent #36). "
+        "CRITICAL/HIGH findings mean two or more VAPI agents are producing "
+        "logically contradictory outputs — one is operating on stale data. "
+        "Query this before any cross-agent operation to verify signal topology is consistent. "
+        "Three failure modes: CONTRADICTION (7 rules), ORPHAN (5 rules), INVERSION (3 rules). "
+        "RENEWAL_WITHOUT_ATTESTATION is CRITICAL severity — indicates Phase 185/186 attestation chain bypass."
+    ),
+    schema={
+        "type": "object",
+        "properties": {
+            "severity_filter": {
+                "type": "string",
+                "enum": ["CRITICAL", "HIGH", "MEDIUM"],
+                "description": "Only return findings at or above this severity"
+            }
+        },
+        "required": []
+    }
+)
+async def vapi_fleet_coherence(severity_filter: str = "", **_):
+    rows = db_query(
+        "SELECT failure_mode, rule_name, severity, explanation, resolution, "
+        "promoted_to_wif, wif_entry_id, resolved, created_at "
+        "FROM fleet_coherence_log ORDER BY created_at DESC LIMIT 50"
+    )
+    open_rows = [r for r in rows if not r.get("resolved")]
+
+    # apply severity filter
+    _order = {"CRITICAL": 3, "HIGH": 2, "MEDIUM": 1}
+    if severity_filter:
+        min_level = _order.get(severity_filter.upper(), 0)
+        open_rows = [r for r in open_rows if _order.get(r.get("severity", ""), 0) >= min_level]
+
+    by_mode = {}
+    by_sev  = {}
+    for r in open_rows:
+        m = r.get("failure_mode", "?"); by_mode[m] = by_mode.get(m, 0) + 1
+        s = r.get("severity",     "?"); by_sev[s]  = by_sev.get(s, 0)  + 1
+
+    promoted = sum(1 for r in open_rows if r.get("promoted_to_wif"))
+
+    return {
+        "fleet_coherence_enabled": True,
+        "total_open":    len(open_rows),
+        "by_severity":   by_sev,
+        "by_mode":       by_mode,
+        "promoted_to_wif": promoted,
+        "severity_filter": severity_filter or "all",
+        "entries": [
+            {
+                "failure_mode": r.get("failure_mode"),
+                "rule_name":    r.get("rule_name"),
+                "severity":     r.get("severity"),
+                "explanation":  r.get("explanation"),
+                "resolution":   r.get("resolution"),
+                "promoted_to_wif": bool(r.get("promoted_to_wif")),
+                "wif_entry_id": r.get("wif_entry_id"),
+                "created_at":   r.get("created_at"),
+            }
+            for r in open_rows[:20]
+        ],
+        "guidance": (
+            "No open contradictions — fleet signal topology coherent."
+            if not open_rows else
+            f"{len(open_rows)} open failures — review CRITICAL/HIGH before any cross-agent operation."
+        ),
+    }
+
+
+@tool(
     name="vapi_privacy_compliance",
     description=(
         "Checks a proposed data handling pattern against VAPI_BIOMETRIC_PRIVACY.md "
@@ -1185,6 +1258,165 @@ def _seed_hypothesis(priority: str) -> dict:
         "w2_novel": "Unknown priority",
         "w2_phase": "TBD"
     })
+
+
+# ============================================================
+# Phase 192: DataCurator MCP tools
+# ============================================================
+
+@mcp.tool(
+    name="vapi_corpus_entropy",
+    description=(
+        "Query the CorpusDataCuratorAgent (Phase 192, Task 2) corpus entropy status. "
+        "Returns Shannon entropy of the 13-dim biometric feature space, clustering "
+        "warning flag (entropy < 1.5 = CLUSTERING_WARNING), and timestamp. "
+        "Use this to check whether the calibration corpus is becoming too homogeneous."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {},
+        "required": []
+    }
+)
+async def vapi_corpus_entropy(**_):
+    rows = db_query(
+        "SELECT entropy_score, clustering_warning, n_sessions, n_players, "
+        "entropy_note, created_at "
+        "FROM corpus_entropy_log ORDER BY created_at DESC LIMIT 1"
+    )
+    if not rows:
+        return {
+            "entropy_score": None,
+            "clustering_warning": False,
+            "n_sessions": 0,
+            "n_players": 0,
+            "entropy_note": "No corpus entropy data yet — CorpusDataCuratorAgent poll pending.",
+            "created_at": None,
+            "corpus_entropy_enabled": True,
+        }
+    row = rows[0]
+    return {
+        "entropy_score": row.get("entropy_score"),
+        "clustering_warning": bool(row.get("clustering_warning", 0)),
+        "n_sessions": row.get("n_sessions", 0),
+        "n_players": row.get("n_players", 0),
+        "entropy_note": row.get("entropy_note", ""),
+        "created_at": row.get("created_at"),
+        "corpus_entropy_enabled": True,
+    }
+
+
+@mcp.tool(
+    name="vapi_data_readiness_certificate",
+    description=(
+        "Query the latest Data Readiness Certificate from CorpusDataCuratorAgent "
+        "(Phase 192, Task 6). Returns 8-dimension readiness assessment: "
+        "separation_ok, l4_calibration_ok, vhp_enrolled_ok, erasure_compliant, "
+        "corpus_entropy_ok, contribution_weighted_ok, provenance_dag_ok, "
+        "federated_quality_ok. Certificate hash is SHA-256 anchored. "
+        "certificate_ready=True only when all 8 dims pass."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {},
+        "required": []
+    }
+)
+async def vapi_data_readiness_certificate(**_):
+    rows = db_query(
+        "SELECT certificate_hash, separation_ok, l4_calibration_ok, vhp_enrolled_ok, "
+        "erasure_compliant, corpus_entropy_ok, contribution_weighted_ok, "
+        "provenance_dag_ok, federated_quality_ok, certificate_ready, "
+        "anchored_tx_hash, created_at "
+        "FROM data_readiness_certificate_log ORDER BY created_at DESC LIMIT 1"
+    )
+    if not rows:
+        return {
+            "certificate_ready": False,
+            "certificate_hash": None,
+            "dims": {},
+            "created_at": None,
+            "note": "No data readiness certificate yet — CorpusDataCuratorAgent poll pending.",
+        }
+    row = rows[0]
+    dims = {
+        "separation_ok": bool(row.get("separation_ok", 0)),
+        "l4_calibration_ok": bool(row.get("l4_calibration_ok", 0)),
+        "vhp_enrolled_ok": bool(row.get("vhp_enrolled_ok", 0)),
+        "erasure_compliant": bool(row.get("erasure_compliant", 0)),
+        "corpus_entropy_ok": bool(row.get("corpus_entropy_ok", 0)),
+        "contribution_weighted_ok": bool(row.get("contribution_weighted_ok", 0)),
+        "provenance_dag_ok": bool(row.get("provenance_dag_ok", 0)),
+        "federated_quality_ok": bool(row.get("federated_quality_ok", 0)),
+    }
+    passed = sum(1 for v in dims.values() if v)
+    return {
+        "certificate_ready": bool(row.get("certificate_ready", 0)),
+        "certificate_hash": row.get("certificate_hash"),
+        "dims": dims,
+        "dims_passed": passed,
+        "dims_total": 8,
+        "anchored_tx_hash": row.get("anchored_tx_hash"),
+        "created_at": row.get("created_at"),
+    }
+
+
+@mcp.tool(
+    name="vapi_provenance_chain",
+    description=(
+        "Query the provenance DAG from CorpusDataCuratorAgent (Phase 192, Task 1). "
+        "Returns the chain of nodes from a given artifact back to its origin "
+        "(calibration session → defensibility log → VHP badge). "
+        "Use node_id='' to list root nodes. max_depth controls chain traversal "
+        "(default 20, FROZEN). "
+        "Enables legally defensible audit trail: GDPR Art.17 compliance path."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "node_id": {"type": "string", "description": "Start node ID ('' = list roots)"},
+            "max_depth": {"type": "integer", "description": "Max chain depth (default 20)"}
+        },
+        "required": []
+    }
+)
+async def vapi_provenance_chain(node_id: str = "", max_depth: int = 20, **_):
+    if node_id:
+        rows = db_query(
+            "WITH RECURSIVE chain(node_id, parent_node_id, artifact_type, "
+            "player_id, session_name, data_hash, depth) AS ("
+            "  SELECT node_id, parent_node_id, artifact_type, player_id, "
+            "         session_name, data_hash, 0 FROM data_provenance_dag "
+            "  WHERE node_id = ? "
+            "  UNION ALL "
+            "  SELECT p.node_id, p.parent_node_id, p.artifact_type, p.player_id, "
+            "         p.session_name, p.data_hash, chain.depth+1 "
+            "  FROM data_provenance_dag p "
+            "  JOIN chain ON p.node_id = chain.parent_node_id "
+            "  WHERE chain.depth < ? "
+            ") SELECT * FROM chain",
+            [node_id, max_depth]
+        )
+        return {
+            "node_id": node_id,
+            "chain_length": len(rows),
+            "chain": rows,
+            "max_depth": max_depth,
+        }
+    else:
+        # List root nodes (no parent)
+        roots = db_query(
+            "SELECT node_id, artifact_type, player_id, session_name, data_hash, created_at "
+            "FROM data_provenance_dag WHERE parent_node_id IS NULL "
+            "ORDER BY created_at DESC LIMIT 20"
+        )
+        total = db_query("SELECT COUNT(*) as n FROM data_provenance_dag")
+        return {
+            "root_count": len(roots),
+            "total_nodes": total[0]["n"] if total else 0,
+            "roots": roots,
+            "max_depth": max_depth,
+        }
 
 
 # ============================================================

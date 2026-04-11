@@ -941,6 +941,53 @@ class Bridge:
         else:
             log.info("Phase 173: SeparationRatioRecoveryAgent skipped (SEPARATION_RECOVERY_ENABLED=false)")
 
+        # Phase 192: CorpusDataCuratorAgent (agent #35) — 7-task data coherence layer.
+        # Runs 30-minute unified poll cycle. Each task is independently fail-open.
+        # Tasks: provenance_dag | corpus_entropy | erasure_cert | federation_quality
+        #        | correlation_engine | readiness_cert | contribution_weights
+        # Depends on: SeparationRatioMonitorAgent (#15), AgeWeightedRatioPersistenceAgent (#24),
+        #             PersonaBreakDetectorAgent (#27), BiometricCredentialTTLAgent (#29).
+        try:
+            from .corpus_curator_agent import CorpusDataCuratorAgent
+            _curator192 = CorpusDataCuratorAgent(
+                self.store, self.cfg, bus=_bus, logger=log
+            )
+            _curator192_task = asyncio.ensure_future(_curator192.run())
+            _curator192_task.set_name("CorpusDataCuratorAgent")
+            self._tasks.append(_curator192_task)
+            log.info(
+                "Phase 192: CorpusDataCuratorAgent started (agent #35; "
+                "7-task data coherence layer; poll=%ss)",
+                1800,
+            )
+        except Exception as _curator192_exc:
+            log.warning(
+                "Phase 192: CorpusDataCuratorAgent unavailable: %s", _curator192_exc
+            )
+
+        # Phase 193: FleetSignalCoherenceAgent (agent #36) — fleet-level coherence observer.
+        # Polls every 900s (15 min). Detects contradictions / orphans / inversions across all
+        # 35 agents. Auto-promotes persistent contradictions to VAPI_WHAT_IF.md (N>=3).
+        # Depends on: data_provenance_dag (Phase 192 Task 1) for INVERSION rules.
+        # The first agent whose primary output is WHAT_IF corpus entries, not operational signals.
+        try:
+            from .fleet_signal_coherence_agent import FleetSignalCoherenceAgent
+            _fsca193 = FleetSignalCoherenceAgent(
+                self.store, self.cfg, bus=_bus, logger=log
+            )
+            _fsca193_task = asyncio.ensure_future(_fsca193.run())
+            _fsca193_task.set_name("FleetSignalCoherenceAgent")
+            self._tasks.append(_fsca193_task)
+            log.info(
+                "Phase 193: FleetSignalCoherenceAgent started (agent #36; "
+                "7 CONTRADICTION + 5 ORPHAN + 3 INVERSION rules; poll=%ss)",
+                getattr(self.cfg, "coherence_poll_interval_seconds", 900),
+            )
+        except Exception as _fsca193_exc:
+            log.warning(
+                "Phase 193: FleetSignalCoherenceAgent unavailable: %s", _fsca193_exc
+            )
+
         log.info("All services started — bridge is operational")
 
         # Wait for shutdown

@@ -78,7 +78,7 @@ for _d in [str(_CONTROLLER_DIR), str(_BRIDGE_DIR)]:
 # Protocol constants (PoAC spec — immutable)
 # ---------------------------------------------------------------------------
 
-SDK_VERSION       = "3.0.0-phase166"
+SDK_VERSION       = "3.0.0-phase193"
 POAC_RECORD_SIZE  = 228
 POAC_BODY_SIZE    = 164
 POAC_SIG_SIZE     = 64
@@ -4965,8 +4965,10 @@ class BiometricRenewalResult:
     new_commit_hash:   str
     ttl_days:          float
     dry_run:           bool
-    total_renewals:    int
+    total_renewals:         int
     error: "str | None" = None
+    # Phase 181 addition: consent corpus delta detection
+    corpus_delta_detected:  bool = False
 
 
 class VAPIBiometricRenewal:
@@ -4994,22 +4996,23 @@ class VAPIBiometricRenewal:
             with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
                 body = _j.loads(resp.read())
             return BiometricRenewalResult(
-                renewal_enabled  = bool(body.get("renewal_enabled",  False)),
-                prev_commit_hash = str(body.get("prev_commit_hash",  "")),
-                new_commit_hash  = str(body.get("new_commit_hash",   "")),
-                ttl_days         = float(body.get("ttl_days",        90.0)),
-                dry_run          = bool(body.get("dry_run",          True)),
-                total_renewals   = int(body.get("total_renewals",    0)),
+                renewal_enabled       = bool(body.get("renewal_enabled",       False)),
+                prev_commit_hash      = str(body.get("prev_commit_hash",       "")),
+                new_commit_hash       = str(body.get("new_commit_hash",        "")),
+                ttl_days              = float(body.get("ttl_days",             90.0)),
+                dry_run               = bool(body.get("dry_run",               True)),
+                total_renewals        = int(body.get("total_renewals",         0)),
+                corpus_delta_detected = bool(body.get("corpus_delta_detected", False)),
             )
         except Exception as exc:
             return BiometricRenewalResult(
-                renewal_enabled  = False,
-                prev_commit_hash = "",
-                new_commit_hash  = "",
-                ttl_days         = 90.0,
-                dry_run          = True,
-                total_renewals   = 0,
-                error            = str(exc),
+                renewal_enabled       = False,
+                prev_commit_hash      = "",
+                new_commit_hash       = "",
+                ttl_days              = 90.0,
+                dry_run               = True,
+                total_renewals        = 0,
+                error                 = str(exc),
             )
 
 
@@ -5054,9 +5057,11 @@ class VAPICeremonyAuditGate:
                   f"< {result.min_participants} required")
     """
 
-    def __init__(self, base_url: str, api_key: str) -> None:
+    def __init__(self, base_url: str, api_key: str = "",
+                 ceremony_audit_registry_address: str = "") -> None:
         self._base = base_url.rstrip("/")
         self._key  = api_key
+        self.ceremony_audit_registry_address = ceremony_audit_registry_address
 
     def get_status(self) -> CeremonyAuditGateResult:
         """Return the current ZK ceremony audit gate status.
@@ -5187,6 +5192,9 @@ class ProtocolMaturityScoringResult:
     agent_calibration_component:      float
     enrollment_component:             float
     error: "str | None" = None
+    # Phase 191 TSP additions
+    threat_forecast_accuracy_component: float = 0.0
+    biometric_stationarity_component:   float = 0.0
 
 
 class VAPIProtocolMaturityScoring:
@@ -5216,26 +5224,1031 @@ class VAPIProtocolMaturityScoring:
             with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
                 body = _j.loads(resp.read())
             return ProtocolMaturityScoringResult(
-                protocol_maturity_enabled       = bool(body.get("protocol_maturity_enabled", True)),
-                maturity_score                   = float(body.get("maturity_score",                0.0)),
-                maturity_tier                    = str(body.get("maturity_tier",                   "ALPHA")),
-                separation_component             = float(body.get("separation_component",          0.0)),
-                chain_integrity_component        = float(body.get("chain_integrity_component",     0.0)),
-                consent_component                = float(body.get("consent_component",             0.0)),
-                biometric_freshness_component    = float(body.get("biometric_freshness_component", 0.0)),
-                agent_calibration_component      = float(body.get("agent_calibration_component",   0.0)),
-                enrollment_component             = float(body.get("enrollment_component",          0.0)),
+                protocol_maturity_enabled           = bool(body.get("protocol_maturity_enabled", True)),
+                maturity_score                       = float(body.get("maturity_score",                0.0)),
+                maturity_tier                        = str(body.get("maturity_tier",                   "ALPHA")),
+                separation_component                 = float(body.get("separation_component",          0.0)),
+                chain_integrity_component            = float(body.get("chain_integrity_component",     0.0)),
+                consent_component                    = float(body.get("consent_component",             0.0)),
+                biometric_freshness_component        = float(body.get("biometric_freshness_component", 0.0)),
+                agent_calibration_component          = float(body.get("agent_calibration_component",   0.0)),
+                enrollment_component                 = float(body.get("enrollment_component",          0.0)),
+                threat_forecast_accuracy_component   = float(body.get("threat_forecast_accuracy_component", 0.0)),
+                biometric_stationarity_component     = float(body.get("biometric_stationarity_component",   0.0)),
             )
         except Exception as exc:
             return ProtocolMaturityScoringResult(
-                protocol_maturity_enabled       = True,
-                maturity_score                   = 0.0,
-                maturity_tier                    = "ALPHA",
-                separation_component             = 0.0,
-                chain_integrity_component        = 0.0,
-                consent_component                = 0.0,
-                biometric_freshness_component    = 0.0,
-                agent_calibration_component      = 0.0,
-                enrollment_component             = 0.0,
-                error                            = str(exc),
+                protocol_maturity_enabled           = True,
+                maturity_score                       = 0.0,
+                maturity_tier                        = "ALPHA",
+                separation_component                 = 0.0,
+                chain_integrity_component            = 0.0,
+                consent_component                    = 0.0,
+                biometric_freshness_component        = 0.0,
+                agent_calibration_component          = 0.0,
+                enrollment_component                 = 0.0,
+                threat_forecast_accuracy_component   = 0.0,
+                biometric_stationarity_component     = 0.0,
+                error                                = str(exc),
             )
+
+
+# ---------------------------------------------------------------------------
+# Phase 182 — PersonaBreakDetectorAgent (WIF-028 deeper mitigation)
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class PersonaBreakResult:
+    """Result from VAPIPersonaBreakDetector.get_status() (Phase 182).
+
+    persona_break_detected=True when mean LOO accuracy trend < persona_break_loo_threshold (0.20).
+    re_enrollment_urgency: CRITICAL / HIGH / MEDIUM
+    """
+    persona_break_detected: bool
+    player_id:              str
+    loo_accuracy_trend:     float
+    tdi_current:            float
+    re_enrollment_urgency:  str
+    error: "str | None" = None
+
+
+class VAPIPersonaBreakDetector:
+    """SDK client for GET /agent/persona-break-status (Phase 182).
+
+    Example::
+
+        pb = VAPIPersonaBreakDetector("http://localhost:8080", api_key)
+        result = pb.get_status(player_id="P1")
+        if result.persona_break_detected:
+            print(f"Persona break: urgency={result.re_enrollment_urgency}")
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self, player_id: str = "") -> PersonaBreakResult:
+        """Return the latest persona break detection status.
+
+        On error: returns PersonaBreakResult with persona_break_detected=False (fail-open).
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/agent/persona-break-status?api_key={self._key}"
+            if player_id:
+                url += f"&player_id={player_id}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return PersonaBreakResult(
+                persona_break_detected = bool(body.get("persona_break_detected", False)),
+                player_id              = str(body.get("player_id",              player_id)),
+                loo_accuracy_trend     = float(body.get("loo_accuracy_trend",    0.0)),
+                tdi_current            = float(body.get("tdi_current",           0.0)),
+                re_enrollment_urgency  = str(body.get("re_enrollment_urgency",   "MEDIUM")),
+            )
+        except Exception as exc:
+            return PersonaBreakResult(
+                persona_break_detected = False,
+                player_id              = player_id,
+                loo_accuracy_trend     = 0.0,
+                tdi_current            = 0.0,
+                re_enrollment_urgency  = "MEDIUM",
+                error                  = str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Phase 183 — MaturityElevationGateAgent (WIF-027 W2 closure)
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class MaturityElevationResult:
+    """Result from VAPIMaturityElevation.get_status() (Phase 183).
+
+    elevation_available=True when gap_to_target < 0.05.
+    elevation_plan: dict mapping component name -> {gap, action, estimated_sessions, blocking}.
+    """
+    current_tier:         str
+    target_tier:          str
+    gap_to_target:        float
+    elevation_available:  bool
+    elevation_plan:       dict
+    critical_component:   str
+    error: "str | None" = None
+
+
+class VAPIMaturityElevation:
+    """SDK client for GET /agent/maturity-elevation-plan (Phase 183).
+
+    Example::
+
+        me = VAPIMaturityElevation("http://localhost:8080", api_key)
+        result = me.get_status()
+        print(f"Tier: {result.current_tier}, gap: {result.gap_to_target:.3f}")
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self) -> MaturityElevationResult:
+        """Return the current maturity elevation plan.
+
+        On error: returns ALPHA-tier safe defaults (fail-safe).
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/agent/maturity-elevation-plan?api_key={self._key}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return MaturityElevationResult(
+                current_tier        = str(body.get("current_tier",        "ALPHA")),
+                target_tier         = str(body.get("target_tier",         "BETA")),
+                gap_to_target       = float(body.get("gap_to_target",     1.0)),
+                elevation_available = bool(body.get("elevation_available", False)),
+                elevation_plan      = dict(body.get("elevation_plan",     {})),
+                critical_component  = str(body.get("critical_component",  "")),
+            )
+        except Exception as exc:
+            return MaturityElevationResult(
+                current_tier        = "ALPHA",
+                target_tier         = "BETA",
+                gap_to_target       = 1.0,
+                elevation_available = False,
+                elevation_plan      = {},
+                critical_component  = "",
+                error               = str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Phase 185 — ReEnrollmentAttestationAgent (WIF-032 W1 closure)
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class ReEnrollmentAttestationResult:
+    """Result from VAPIReEnrollmentAttestation.get_status() (Phase 185).
+
+    HMAC-SHA256 attestation token gates re-enrollment window.
+    active=True means a valid, non-expired attestation exists for the player.
+    """
+    attestation_hash: str
+    player_id:        str
+    issued_at:        float
+    expires_at:       float
+    active:           bool
+    error: "str | None" = None
+
+
+class VAPIReEnrollmentAttestation:
+    """SDK client for GET /agent/reenrollment-attestation-status (Phase 185).
+
+    Example::
+
+        ra = VAPIReEnrollmentAttestation("http://localhost:8080", api_key)
+        result = ra.get_status(player_id="P1")
+        if result.active:
+            print(f"Attestation active: {result.attestation_hash[:12]}")
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self, player_id: str = "") -> ReEnrollmentAttestationResult:
+        """Return the current re-enrollment attestation status.
+
+        On error: returns active=False safe defaults.
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/agent/reenrollment-attestation-status?api_key={self._key}"
+            if player_id:
+                url += f"&player_id={player_id}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return ReEnrollmentAttestationResult(
+                attestation_hash = str(body.get("attestation_hash", "")),
+                player_id        = str(body.get("player_id",        player_id)),
+                issued_at        = float(body.get("issued_at",       0.0)),
+                expires_at       = float(body.get("expires_at",      0.0)),
+                active           = bool(body.get("active",           False)),
+            )
+        except Exception as exc:
+            return ReEnrollmentAttestationResult(
+                attestation_hash = "",
+                player_id        = player_id,
+                issued_at        = 0.0,
+                expires_at       = 0.0,
+                active           = False,
+                error            = str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Phase 186 — AttestationBoundRenewalAgent (WIF-032 W2 closure)
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class AttestationBoundRenewalResult:
+    """Result from VAPIAttestationBoundRenewal.get_status() (Phase 186).
+
+    Validates that every renewal has a valid active HMAC attestation.
+    renewal_approved=True means the attestation was valid at renewal time.
+    """
+    attestation_bound_renewal_enabled: bool
+    attestation_hash:                  str
+    renewal_approved:                  bool
+    denial_reason:                     str
+    total_blocked:                     int
+    error: "str | None" = None
+
+
+class VAPIAttestationBoundRenewal:
+    """SDK client for GET /agent/attestation-bound-renewal-status (Phase 186).
+
+    Example::
+
+        abr = VAPIAttestationBoundRenewal("http://localhost:8080", api_key)
+        result = abr.get_status(player_id="P1")
+        if not result.renewal_approved:
+            print(f"Renewal blocked: {result.denial_reason}")
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self, player_id: str = "") -> AttestationBoundRenewalResult:
+        """Return the latest attestation-bound renewal status.
+
+        On error: returns enabled=False safe defaults.
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/agent/attestation-bound-renewal-status?api_key={self._key}"
+            if player_id:
+                url += f"&player_id={player_id}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            # API may return latest_attestation_hash or attestation_hash
+            attest_hash = str(
+                body.get("latest_attestation_hash") or body.get("attestation_hash", "")
+            )
+            renewal_ok = bool(
+                body.get("latest_renewal_approved") or body.get("renewal_approved", False)
+            )
+            return AttestationBoundRenewalResult(
+                attestation_bound_renewal_enabled = bool(body.get("attestation_bound_renewal_enabled", False)),
+                attestation_hash                  = attest_hash,
+                renewal_approved                  = renewal_ok,
+                denial_reason                     = str(body.get("denial_reason", "")),
+                total_blocked                     = int(body.get("total_blocked",  0)),
+            )
+        except Exception as exc:
+            return AttestationBoundRenewalResult(
+                attestation_bound_renewal_enabled = False,
+                attestation_hash                  = "",
+                renewal_approved                  = False,
+                denial_reason                     = "",
+                total_blocked                     = 0,
+                error                             = str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Phase 187 — AttestationOpSecAdvisorAgent (WIF-033 W1 closure)
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class AttestationOpSecResult:
+    """Result from VAPIAttestationOpSec.get_status() (Phase 187).
+
+    timing_disclosure_risk: HIGH / MEDIUM / LOW
+    HIGH when bound_renewal_enabled=True AND active_attestations > 0.
+    recommendation: STANDARD_TX_OK / USE_PRIVATE_MEMPOOL_OR_DELAY_TX / etc.
+    """
+    mempool_opsec_enabled:   bool  = False
+    timing_disclosure_risk:  str   = "LOW"
+    active_attestations:     int   = 0
+    recommendation:          str   = "STANDARD_TX_OK"
+    total_high_risk_events:  int   = 0
+    error: "str | None" = None
+
+
+class VAPIAttestationOpSec:
+    """SDK client for GET /agent/attestation-opsec-status (Phase 187).
+
+    Example::
+
+        ao = VAPIAttestationOpSec("http://localhost:8080", api_key)
+        result = ao.get_status(player_id="P1")
+        if result.timing_disclosure_risk == "HIGH":
+            print(f"OpSec risk: {result.recommendation}")
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self, player_id: str = "") -> AttestationOpSecResult:
+        """Return the current attestation OpSec advisory status.
+
+        On error: returns LOW risk safe defaults.
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/agent/attestation-opsec-status?api_key={self._key}"
+            if player_id:
+                url += f"&player_id={player_id}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return AttestationOpSecResult(
+                mempool_opsec_enabled  = bool(body.get("mempool_opsec_enabled",  False)),
+                timing_disclosure_risk = str(body.get("timing_disclosure_risk",  "LOW")),
+                active_attestations    = int(body.get("active_attestations",     0)),
+                recommendation         = str(body.get("recommendation",          "STANDARD_TX_OK")),
+                total_high_risk_events = int(body.get("total_high_risk_events",  0)),
+            )
+        except Exception as exc:
+            return AttestationOpSecResult(error=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Phase 187 — VHPReenrollmentBadge (WIF-033 W2 closure)
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class VHPReenrollmentBadgeResult:
+    """Result from VAPIVHPReenrollmentBadge.get_status() (Phase 187).
+
+    ERC-4671 soulbound badge for reenrollment; anti-replay via attestationUsed.
+    badge_token_id=0 means no badge minted yet.
+    """
+    reenrollment_badge_enabled: bool  = False
+    player_id:                  str   = ""
+    badge_token_id:             int   = 0
+    re_enrollment_count:        int   = 0
+    total_badges:               int   = 0
+    error: "str | None" = None
+
+
+class VAPIVHPReenrollmentBadge:
+    """SDK client for GET /agent/vhp-reenrollment-badge-status (Phase 187).
+
+    Example::
+
+        badge = VAPIVHPReenrollmentBadge("http://localhost:8080", api_key)
+        result = badge.get_status(player_id="P1")
+        print(f"Badges minted: {result.total_badges}, latest ID: {result.badge_token_id}")
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self, player_id: str = "") -> VHPReenrollmentBadgeResult:
+        """Return the current VHP reenrollment badge status.
+
+        On error: returns enabled=False safe defaults.
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/agent/vhp-reenrollment-badge-status?api_key={self._key}"
+            if player_id:
+                url += f"&player_id={player_id}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return VHPReenrollmentBadgeResult(
+                reenrollment_badge_enabled = bool(body.get("reenrollment_badge_enabled", False)),
+                player_id                  = str(body.get("player_id",                  player_id)),
+                badge_token_id             = int(body.get("badge_token_id",              0)),
+                re_enrollment_count        = int(body.get("re_enrollment_count",         0)),
+                total_badges               = int(body.get("total_badges",                0)),
+            )
+        except Exception as exc:
+            return VHPReenrollmentBadgeResult(error=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Phase 188 — BiometricStationarityOracleAgent (agent #32)
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class BiometricStationarityResult:
+    """Result from VAPIBiometricStationarity.get_status() (Phase 188).
+
+    Discriminates genuine biometric drift from adversarial window exploitation.
+    stationarity_verdict: ADVERSARIAL_WINDOW / GENUINE_DRIFT / AMBIGUOUS / STABLE
+    """
+    biometric_stationarity_enabled:     bool  = False
+    p_genuine_drift:                    float = 0.0
+    p_adversarial_window:               float = 0.0
+    stationarity_verdict:               str   = "STABLE"
+    biometric_stationarity_confidence:  float = 0.0
+    error:                              str   = ""
+
+
+class VAPIBiometricStationarity:
+    """SDK client for GET /agent/biometric-stationarity-status (Phase 188).
+
+    Example::
+
+        bs = VAPIBiometricStationarity("http://localhost:8080", api_key)
+        result = bs.get_status(player_id="P1")
+        if result.stationarity_verdict == "ADVERSARIAL_WINDOW":
+            print("Adversarial window attack detected!")
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self, player_id: str = "") -> BiometricStationarityResult:
+        """Return the latest biometric stationarity oracle result.
+
+        On error: returns STABLE verdict safe defaults (fail-open).
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/agent/biometric-stationarity-status?api_key={self._key}"
+            if player_id:
+                url += f"&player_id={player_id}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return BiometricStationarityResult(
+                biometric_stationarity_enabled    = bool(body.get("biometric_stationarity_enabled",    False)),
+                p_genuine_drift                   = float(body.get("p_genuine_drift",                  0.0)),
+                p_adversarial_window              = float(body.get("p_adversarial_window",             0.0)),
+                stationarity_verdict              = str(body.get("stationarity_verdict",               "STABLE")),
+                biometric_stationarity_confidence = float(body.get("biometric_stationarity_confidence", 0.0)),
+            )
+        except Exception as exc:
+            return BiometricStationarityResult(error=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Phase 189 — ProtocolIntelligenceRecordAgent (agent #33)
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class PIRChainResult:
+    """Result from VAPIProtocolIntelligenceRecord.get_status() (Phase 189).
+
+    SHA-256 hash-linked PIR chain. chain_intact=True when all prev_pir_hash links verify.
+    Vacuous integrity: empty chain → chain_intact=True.
+    """
+    pir_chain_enabled:      bool  = False
+    total_pirs:             int   = 0
+    chain_intact:           bool  = True
+    latest_cycle:           int   = 0
+    latest_threat_forecast: str   = ""
+    error:                  str   = ""
+
+
+class VAPIProtocolIntelligenceRecord:
+    """SDK client for GET /agent/pir-chain-status (Phase 189).
+
+    Example::
+
+        pir = VAPIProtocolIntelligenceRecord("http://localhost:8080", api_key)
+        result = pir.get_status()
+        if not result.chain_intact:
+            print("PIR chain integrity violation!")
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self) -> PIRChainResult:
+        """Return the current PIR chain status.
+
+        On error: returns chain_intact=True safe defaults (fail-open).
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/agent/pir-chain-status?api_key={self._key}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return PIRChainResult(
+                pir_chain_enabled      = bool(body.get("pir_chain_enabled",      False)),
+                total_pirs             = int(body.get("total_pirs",              0)),
+                chain_intact           = bool(body.get("chain_intact",           True)),
+                latest_cycle           = int(body.get("latest_cycle",            0)),
+                latest_threat_forecast = str(body.get("latest_threat_forecast",  "")),
+            )
+        except Exception as exc:
+            return PIRChainResult(error=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Phase 190 — LivePresenceSignalingAgent (agent #34)
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class LivePresenceSignalingResult:
+    """Result from VAPILivePresenceSignaling.get_status() (Phase 190).
+
+    Bidirectional VAPI presence channel: controller LED+haptic (ps5_compat_aware)
+    plus ANSI terminal stream (always active).
+    Signal vocabulary: HARD_CHEAT_DETECTED / CERTIFY_ADJUDICATION / BIOMETRIC_ANOMALY /
+    PERSONA_BREAK_DETECTED / ENROLLMENT_MILESTONE / MATURITY_ELEVATION /
+    SEPARATION_BREAKTHROUGH / CHAIN_MILESTONE
+    """
+    live_presence_signaling_enabled: bool  = False
+    total_signals:                   int   = 0
+    controller_fired_count:          int   = 0
+    ps5_suppressed_count:            int   = 0
+    latest_signal_type:              str   = ""
+    error:                           str   = ""
+
+
+class VAPILivePresenceSignaling:
+    """SDK client for GET /agent/live-presence-signaling-status (Phase 190).
+
+    Example::
+
+        lps = VAPILivePresenceSignaling("http://localhost:8080", api_key)
+        result = lps.get_status()
+        print(f"Signals fired: {result.total_signals}, controller: {result.controller_fired_count}")
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self) -> LivePresenceSignalingResult:
+        """Return the current live presence signaling status.
+
+        On error: returns zero-count safe defaults.
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/agent/live-presence-signaling-status?api_key={self._key}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return LivePresenceSignalingResult(
+                live_presence_signaling_enabled = bool(body.get("live_presence_signaling_enabled", False)),
+                total_signals                   = int(body.get("total_signals",                    0)),
+                controller_fired_count          = int(body.get("controller_fired_count",           0)),
+                ps5_suppressed_count            = int(body.get("ps5_suppressed_count",             0)),
+                latest_signal_type              = str(body.get("latest_signal_type",               "")),
+            )
+        except Exception as exc:
+            return LivePresenceSignalingResult(error=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Phase 192: DataCuratorAgent (Agent #35) — 7 result dataclasses
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class ProvenanceChainResult:
+    """Result from VAPIProvenanceChain.get_chain() (Phase 192).
+
+    Provenance DAG chain walk from leaf_node_id to root calibration session.
+    The full causal chain from a 228-byte PoAC session to an on-chain VHP badge.
+    """
+    leaf_node_id:    str   = ""
+    chain_length:    int   = 0
+    chain:           str   = "[]"     # JSON list of provenance nodes
+    forensic_summary: str  = ""
+    error:           str   = ""
+
+
+class VAPIProvenanceChain:
+    """SDK client for GET /agent/data-provenance-chain (Phase 192, Tool #136).
+
+    Example::
+
+        pc = VAPIProvenanceChain("http://localhost:8080", api_key)
+        result = pc.get_chain(leaf_node_id="sha256:...")
+        print(f"Chain length: {result.chain_length}, summary: {result.forensic_summary}")
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_chain(self, leaf_node_id: str = "") -> ProvenanceChainResult:
+        """Return provenance chain for the given leaf node. On error: empty chain."""
+        import urllib.request as _ur, json as _j, urllib.parse as _up
+        try:
+            params = f"leaf_node_id={_up.quote(leaf_node_id)}"
+            url = f"{self._base}/agent/data-provenance-chain?{params}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            import json as _json
+            return ProvenanceChainResult(
+                leaf_node_id    = str(body.get("leaf_node_id",    "")),
+                chain_length    = int(body.get("chain_length",    0)),
+                chain           = _json.dumps(body.get("chain",   [])),
+                forensic_summary = str(body.get("forensic_summary", "")),
+            )
+        except Exception as exc:
+            return ProvenanceChainResult(error=str(exc))
+
+
+@dataclass(slots=True)
+class CorpusEntropyResult:
+    """Result from VAPICorpusEntropy.get_status() (Phase 192).
+
+    Shannon entropy of 13-dim feature space per player.
+    Score < 1.5 = CLUSTERING_WARNING (brittle centroid).
+    Score > 2.5 = WELL_SAMPLED (trustworthy ratio).
+    """
+    corpus_entropy_score:  float = 0.0
+    clustering_warning:    bool  = True
+    status:                str   = "NO_DATA"
+    per_player_entropy:    str   = "{}"
+    low_entropy_features:  str   = "[]"
+    n_sessions_analyzed:   int   = 0
+    error:                 str   = ""
+
+
+class VAPICorpusEntropy:
+    """SDK client for GET /agent/corpus-entropy-status (Phase 192, Tool #137).
+
+    Example::
+
+        ce = VAPICorpusEntropy("http://localhost:8080", api_key)
+        result = ce.get_status()
+        print(f"Entropy: {result.corpus_entropy_score:.2f} ({result.status})")
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self) -> CorpusEntropyResult:
+        """Return corpus entropy status. On error: returns NO_DATA safe defaults."""
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/agent/corpus-entropy-status"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return CorpusEntropyResult(
+                corpus_entropy_score = float(body.get("corpus_entropy_score", 0.0)),
+                clustering_warning   = bool(body.get("clustering_warning",    True)),
+                status               = str(body.get("status",                 "NO_DATA")),
+                per_player_entropy   = str(body.get("per_player_entropy",     "{}")),
+                low_entropy_features = str(body.get("low_entropy_features",   "[]")),
+                n_sessions_analyzed  = int(body.get("n_sessions_analyzed",    0)),
+            )
+        except Exception as exc:
+            return CorpusEntropyResult(error=str(exc))
+
+
+@dataclass(slots=True)
+class ErasureCertificateResult:
+    """Result from VAPIErasureCertificate.get_certificate() (Phase 192).
+
+    GDPR Art.17 cryptographic erasure proof anchored to AdjudicationRegistry.sol.
+    """
+    device_id:          str   = ""
+    certificate_found:  bool  = False
+    certificate_hash:   str   = ""
+    post_erasure_ratio: float = 0.0
+    anchored:           bool  = False
+    error:              str   = ""
+
+
+class VAPIErasureCertificate:
+    """SDK client for GET /agent/erasure-certificate (Phase 192, Tool #138).
+
+    Example::
+
+        ec = VAPIErasureCertificate("http://localhost:8080", api_key)
+        result = ec.get_certificate("device_abc123")
+        print(f"Cert found: {result.certificate_found}, anchored: {result.anchored}")
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_certificate(self, device_id: str) -> ErasureCertificateResult:
+        """Return erasure certificate for device_id. On error: not-found defaults."""
+        import urllib.request as _ur, json as _j, urllib.parse as _up
+        try:
+            url = f"{self._base}/agent/erasure-certificate?device_id={_up.quote(device_id)}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return ErasureCertificateResult(
+                device_id          = str(body.get("device_id",          "")),
+                certificate_found  = bool(body.get("certificate_found", False)),
+                certificate_hash   = str(body.get("certificate_hash",   "") or ""),
+                post_erasure_ratio = float(body.get("post_erasure_ratio", 0.0) or 0.0),
+                anchored           = bool(body.get("anchored",           False)),
+            )
+        except Exception as exc:
+            return ErasureCertificateResult(device_id=device_id, error=str(exc))
+
+
+@dataclass(slots=True)
+class FederatedCorpusQualityResult:
+    """Result from VAPIFederatedCorpusQuality.get_status() (Phase 192).
+
+    Anonymized corpus quality statistics for cross-bridge comparison.
+    BP-007: only derived metrics — never raw biometric data.
+    """
+    federated_corpus_quality_enabled: bool = False
+    record_count:                     int  = 0
+    privacy_constraint:               str  = "BP-007: no raw biometric data"
+    error:                            str  = ""
+
+
+class VAPIFederatedCorpusQuality:
+    """SDK client for GET /agent/federated-corpus-quality (Phase 192, Tool #140).
+
+    Example::
+
+        fcq = VAPIFederatedCorpusQuality("http://localhost:8080", api_key)
+        result = fcq.get_status()
+        print(f"Records: {result.record_count}, enabled: {result.federated_corpus_quality_enabled}")
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self) -> FederatedCorpusQualityResult:
+        """Return federated corpus quality status. On error: disabled defaults."""
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/agent/federated-corpus-quality"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return FederatedCorpusQualityResult(
+                federated_corpus_quality_enabled = bool(
+                    body.get("federated_corpus_quality_enabled", False)),
+                record_count     = int(body.get("record_count", 0)),
+                privacy_constraint = str(body.get("privacy_constraint", "BP-007")),
+            )
+        except Exception as exc:
+            return FederatedCorpusQualityResult(error=str(exc))
+
+
+@dataclass(slots=True)
+class FeatureCorrelationResult:
+    """Result from VAPIFeatureCorrelation.get_status() (Phase 192).
+
+    Per-player 13x13 feature correlation matrix and Frobenius separability.
+    correlation_separable=True when frobenius > separability_threshold (FROZEN=0.5).
+    """
+    player_id:             str   = ""
+    correlation_found:     bool  = False
+    correlation_separable: bool  = False
+    frobenius_vs_p1:       float = 0.0
+    frobenius_vs_p2:       float = 0.0
+    frobenius_vs_p3:       float = 0.0
+    error:                 str   = ""
+
+
+class VAPIFeatureCorrelation:
+    """SDK client for GET /agent/feature-correlation-status (Phase 192, Tool #141).
+
+    Example::
+
+        fc = VAPIFeatureCorrelation("http://localhost:8080", api_key)
+        result = fc.get_status(player_id="P1")
+        print(f"Separable: {result.correlation_separable}, frobenius_vs_P2: {result.frobenius_vs_p2}")
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self, player_id: str = "") -> FeatureCorrelationResult:
+        """Return feature correlation status. On error: not-found defaults."""
+        import urllib.request as _ur, json as _j, urllib.parse as _up
+        try:
+            url = (f"{self._base}/agent/feature-correlation-status"
+                   f"?player_id={_up.quote(player_id)}")
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return FeatureCorrelationResult(
+                player_id             = str(body.get("player_id",             "")),
+                correlation_found     = bool(body.get("correlation_found",    False)),
+                correlation_separable = bool(body.get("correlation_separable", False)),
+                frobenius_vs_p1       = float(body.get("frobenius_vs_p1", 0.0) or 0.0),
+                frobenius_vs_p2       = float(body.get("frobenius_vs_p2", 0.0) or 0.0),
+                frobenius_vs_p3       = float(body.get("frobenius_vs_p3", 0.0) or 0.0),
+            )
+        except Exception as exc:
+            return FeatureCorrelationResult(player_id=player_id, error=str(exc))
+
+
+@dataclass(slots=True)
+class DataReadinessCertificateResult:
+    """Result from VAPIDataReadinessCertificate.get_status() (Phase 192).
+
+    8-dimension pre-tournament certification artifact.
+    certification_status: CERTIFIED | BLOCKED | ADVISORY_ONLY.
+    FROZEN: separation_gate=0.70, vhp_expiry_days=90.
+    """
+    certificate_found:    bool  = False
+    certification_status: str   = "NO_CERTIFICATE"
+    certificate_hash:     str   = ""
+    separation_ratio:     float = 0.0
+    blocking_failures:    str   = "[]"
+    advisory_warnings:    str   = "[]"
+    error:                str   = ""
+
+
+class VAPIDataReadinessCertificate:
+    """SDK client for GET /agent/data-readiness-certificate (Phase 192, Tool #142).
+
+    Example::
+
+        drc = VAPIDataReadinessCertificate("http://localhost:8080", api_key)
+        result = drc.get_status()
+        print(f"Status: {result.certification_status}, ratio: {result.separation_ratio:.3f}")
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self) -> DataReadinessCertificateResult:
+        """Return latest data readiness certificate. On error: NO_CERTIFICATE defaults."""
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/agent/data-readiness-certificate"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return DataReadinessCertificateResult(
+                certificate_found    = bool(body.get("certificate_found",    False)),
+                certification_status = str(body.get("certification_status",  "NO_CERTIFICATE")),
+                certificate_hash     = str(body.get("certificate_hash",      "") or ""),
+                separation_ratio     = float(body.get("separation_ratio",    0.0)),
+                blocking_failures    = str(body.get("blocking_failures",     "[]")),
+                advisory_warnings    = str(body.get("advisory_warnings",     "[]")),
+            )
+        except Exception as exc:
+            return DataReadinessCertificateResult(error=str(exc))
+
+
+@dataclass(slots=True)
+class SessionContributionWeightResult:
+    """Result from VAPISessionContributionWeight.get_weights() (Phase 192).
+
+    TBD-decay session contribution weights.
+    FROZEN: lambda=ln(2)/90 (BP-001 TBD half-life=vhp_expiry_days=90).
+    effective_weight = tbd_weight * type_multiplier * stationarity_multiplier.
+    """
+    player_id:        str   = ""
+    tbd_lambda:       float = 0.0
+    tbd_halflife_days: int  = 90
+    weight_count:     int   = 0
+    weights:          str   = "[]"    # JSON list of weight records
+    error:            str   = ""
+
+
+class VAPISessionContributionWeight:
+    """SDK client for GET /agent/session-contribution-weights (Phase 192, Tool #144).
+
+    Example::
+
+        scw = VAPISessionContributionWeight("http://localhost:8080", api_key)
+        result = scw.get_weights(player_id="P1")
+        print(f"P1 sessions: {result.weight_count}, lambda: {result.tbd_lambda:.5f}")
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_weights(self, player_id: str = "") -> SessionContributionWeightResult:
+        """Return session contribution weights. On error: empty-weight defaults."""
+        import urllib.request as _ur, json as _j, urllib.parse as _up
+        try:
+            url = (f"{self._base}/agent/session-contribution-weights"
+                   f"?player_id={_up.quote(player_id)}")
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return SessionContributionWeightResult(
+                player_id         = str(body.get("player_id",         "")),
+                tbd_lambda        = float(body.get("tbd_lambda",      0.0)),
+                tbd_halflife_days = int(body.get("tbd_halflife_days", 90)),
+                weight_count      = int(body.get("weight_count",      0)),
+                weights           = _j.dumps(body.get("weights",      [])),
+            )
+        except Exception as exc:
+            return SessionContributionWeightResult(player_id=player_id, error=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Phase 193: FleetSignalCoherenceAgent (Agent #36) — 2 result dataclasses
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class CoherenceSummaryResult:
+    """Result from VAPIFleetCoherence.get_summary() (Phase 193).
+
+    Fleet-level signal coherence summary across 35-agent fleet.
+    Three failure modes: CONTRADICTION (7 rules), ORPHAN (5 rules), INVERSION (3 rules).
+    fleet_coherence_enabled=True by default (coherence monitoring always on).
+    promoted_to_wif: auto-promoted entries after N_PROMOTE_THRESHOLD=3 occurrences.
+    """
+    fleet_coherence_enabled: bool  = True
+    total_open:              int   = 0
+    by_severity:             str   = "{}"    # JSON: {CRITICAL: N, HIGH: N, MEDIUM: N}
+    by_mode:                 str   = "{}"    # JSON: {CONTRADICTION: N, ORPHAN: N, INVERSION: N}
+    promoted_to_wif:         int   = 0
+    last_cycle_findings:     int   = 0
+    error:                   str   = ""
+
+
+@dataclass(slots=True)
+class CoherenceEntryResult:
+    """Result from VAPIFleetCoherence.get_entries() (Phase 193).
+
+    Open coherence failure entries filterable by failure_mode and severity.
+    Each entry: coherence_id (coh_<16 hex>), rule_name, agents_involved,
+    severity, explanation, resolution, promoted_to_wif.
+    RENEWAL_WITHOUT_ATTESTATION is CRITICAL — indicates Phase 185/186 bypass.
+    """
+    entry_count:  int  = 0
+    entries:      str  = "[]"    # JSON list of coherence entry dicts
+    failure_mode: str  = "all"
+    severity:     str  = "all"
+    error:        str  = ""
+
+
+class VAPIFleetCoherence:
+    """SDK client for Phase 193 FleetSignalCoherenceAgent endpoints (Tools #145–#147).
+
+    Example::
+
+        fc = VAPIFleetCoherence("http://localhost:8080", api_key)
+        summary = fc.get_summary()
+        print(f"Open coherence failures: {summary.total_open}")
+        entries = fc.get_entries(failure_mode="CONTRADICTION", severity="CRITICAL")
+        print(f"CRITICAL contradictions: {entries.entry_count}")
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def _headers(self) -> dict:
+        h = {"Content-Type": "application/json"}
+        if self._key:
+            h["x-api-key"] = self._key
+        return h
+
+    def get_summary(self) -> CoherenceSummaryResult:
+        """Return fleet coherence summary. On error: zero-failure defaults."""
+        import urllib.request as _ur, json as _j
+        try:
+            req = _ur.Request(f"{self._base}/agent/fleet-coherence-summary",
+                              headers=self._headers())
+            with _ur.urlopen(req, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return CoherenceSummaryResult(
+                fleet_coherence_enabled = bool(body.get("fleet_coherence_enabled", True)),
+                total_open              = int(body.get("total_open",          0)),
+                by_severity             = _j.dumps(body.get("by_severity",   {})),
+                by_mode                 = _j.dumps(body.get("by_mode",       {})),
+                promoted_to_wif         = int(body.get("promoted_to_wif",    0)),
+                last_cycle_findings     = int(body.get("last_cycle_findings", 0)),
+            )
+        except Exception as exc:
+            return CoherenceSummaryResult(error=str(exc))
+
+    def get_entries(self, failure_mode: str = "", severity: str = "") -> CoherenceEntryResult:
+        """Return open coherence entries filtered by failure_mode and severity."""
+        import urllib.request as _ur, json as _j, urllib.parse as _up
+        try:
+            params = _up.urlencode({k: v for k, v in
+                                    [("failure_mode", failure_mode), ("severity", severity)]
+                                    if v})
+            url = f"{self._base}/agent/fleet-coherence-entries"
+            if params:
+                url += "?" + params
+            req = _ur.Request(url, headers=self._headers())
+            with _ur.urlopen(req, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return CoherenceEntryResult(
+                entry_count  = int(body.get("entry_count",  0)),
+                entries      = _j.dumps(body.get("entries", [])),
+                failure_mode = str(body.get("failure_mode", failure_mode or "all")),
+                severity     = str(body.get("severity",     severity or "all")),
+            )
+        except Exception as exc:
+            return CoherenceEntryResult(error=str(exc))
+
+    def resolve_entry(self, coherence_id: str, resolved_by: str) -> dict:
+        """Mark a coherence entry as resolved. Returns response dict."""
+        import urllib.request as _ur, json as _j
+        try:
+            payload = _j.dumps({"coherence_id": coherence_id,
+                                 "resolved_by": resolved_by}).encode()
+            req = _ur.Request(f"{self._base}/agent/resolve-coherence-entry",
+                              data=payload, headers=self._headers(), method="POST")
+            with _ur.urlopen(req, timeout=10) as resp:  # noqa: S310
+                return _j.loads(resp.read())
+        except Exception as exc:
+            return {"error": str(exc)}

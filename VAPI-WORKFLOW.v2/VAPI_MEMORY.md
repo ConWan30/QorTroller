@@ -761,7 +761,74 @@ Phase 177 originally shipped `ProtocolMaturityResult`/`VAPIProtocolMaturity` —
 
 ---
 
-**Document Version**: 1.2 (Phase 177)
-**Last Updated**: 2026-04-08
+---
+
+### 2026-04-11: Phase 192 COMPLETE — CorpusDataCuratorAgent (Agent #35)
+
+**What was done**:
+- Phase 192 COMPLETE: CorpusDataCuratorAgent (agent #35); 7-task data coherence layer.
+  Bridge 2114→2128 +14; SDK 383→390 +7; Hardhat 482 unchanged; agent fleet 34→35.
+- 7 data coherence tasks implemented end-to-end:
+  1. **Provenance DAG** — data_provenance_dag table; insert_provenance_node(dict) / get_provenance_chain(leaf_node_id, max_depth=20) walk to root
+  2. **Corpus Entropy Monitor** — corpus_entropy_log table; CLUSTERING_WARNING when score < 1.5; per_player_entropy + per_feature JSON blobs
+  3. **Proof-of-Erasure Certificate** — erasure_certificate_log; cert = "sha256:" + SHA-256(device_id+erased_tables_json+post_erasure_ratio+ts_ns); GDPR compliance
+  4. **Federated Corpus Quality** — federation_corpus_quality_log; BP-007: bridge_id_hash only (never bridge URL); privacy_constraint gate
+  5. **Cross-Feature Temporal Correlation** — feature_correlation_log; correlation_upper_tri + Frobenius distance (frobenius_vs_p1/p2/p3); correlation_separable=True when any inter-player Frobenius > threshold
+  6. **Data Readiness Certificate** — data_readiness_certificate_log; 8-dimension gate; certification_status=NOT_READY/READY/PARTIAL; blocking_failures + advisory_warnings JSON
+  7. **Session Contribution Weights** — session_contribution_weight_log; TBD λ=ln(2)/90 (FROZEN BP-001); effective_weight = tbd_weight × type_multiplier × stationarity_multiplier
+- Script extensions: --weighted-centroid + --correlation-matrix flags in analyze_interperson_separation.py
+- MCP tools: vapi_corpus_entropy, vapi_data_readiness_certificate, vapi_provenance_chain in knowledge_server.py
+- Wiki: _trigger_provenance_registration() in cmd_phase_close(); corpus entropy in agent_feed
+- AutoResearch: 3 new Phase 192 priorities + score_phase_192_readiness() (10 checks, gate ≥0.70)
+- Managed agents: "curator" + "corpus_quality" bus channels
+
+**What we learned**:
+- `insert_provenance_node` takes a **dict** (not keyword args) — dict-based API avoids long signature churn
+- `compute_erasure_certificate` returns "sha256:" + 64-char hex; always validate prefix in tests
+- `clustering_warning` in `CorpusEntropyResult` defaults to **True** (not False) — conservative default until data says otherwise
+- `get_session_weight(session_file)` returns **float**, not a dict — single-value convenience method
+- SDK slot collision risk: always check existing class names before naming new result/client classes
+- BP-007 federated privacy: store bridge_id_hash (SHA-256[:16]) NOT bridge URL; enforced as privacy_constraint default
+
+**Test counts**: Bridge 2128 | SDK 390 | Hardhat 482 | Contracts 43
+
+---
+
+---
+
+### 2026-04-11: Phase 193 COMPLETE — FleetSignalCoherenceAgent (Agent #36)
+
+**What we did**: Implemented the VAPI RSI Learning integration — FleetSignalCoherenceAgent
+as the fleet-level signal coherence observer across all 35 agents.
+Bridge 2128→2142 +14; SDK 390→394 +4; Hardhat 482 unchanged; agent fleet 35→36.
+
+- **3 failure modes**: CONTRADICTION (7 rules), ORPHAN (5 rules), INVERSION (3 rules — Provenance DAG walk)
+- **RENEWAL_WITHOUT_ATTESTATION = CRITICAL** (highest severity) — detects Phase 185/186 attestation chain bypass
+- **coherence_id format**: "coh_" + SHA-256(rule_name + sorted_agents + ts_ns)[:16] — idempotent per cycle
+- **auto-promote**: N_PROMOTE_THRESHOLD=3 occurrences → auto-appended to VAPI_WHAT_IF.md
+- **fleet_coherence_enabled=True DEFAULT** — unlike most agents which default False; coherence monitoring always on
+- **BP-007 _scrub_evidence()**: removes raw biometric fields (features, hid_reports, raw_data, sensor_commitment,
+  gyro_std, accel, feature_vector, correlation_upper_tri) before evidence_json storage
+- Store: fleet_coherence_log table + insert_coherence_entry/get_open_coherence_entries/get_coherence_summary/
+  mark_coherence_resolved/mark_coherence_promoted
+- Wiki: cmd_coherence_status() + _db_query() helper + "coherence_status" CMDS entry; auto-called by cmd_phase_close()
+- MCP: vapi_fleet_coherence tool in knowledge_server.py (severity_filter parameter)
+- AutoResearch: "fleet_coherence_critical" + "fleet_coherence_orphan" priorities; score_phase_193_readiness() gate ≥0.80
+- SDK: CoherenceSummaryResult(slots=True) + CoherenceEntryResult(slots=True) + VAPIFleetCoherence client
+- BridgeAgent: Tools #145 get_fleet_coherence_summary / #146 get_fleet_coherence_entries / #147 resolve_coherence_entry
+- OpenAPI: FleetCoherenceSummary + CoherenceEntryResult schemas; 4 paths
+
+**What we learned**:
+- `@dataclass(slots=True)` not `@dataclasses.dataclass(slots=True)` — SDK uses `from dataclasses import dataclass`
+- vapi_managed_agents.py bus channels are free-form strings; no central BUS_CHANNELS registry to update
+- _db_query() helper in vapi_wiki_engine.py: fail-open, returns [] if table doesn't exist yet
+- fleet_coherence_enabled=True (default True) is the exception; document explicitly in every consumer
+
+**Test counts**: Bridge 2142 | SDK 394 | Hardhat 482 | Contracts 43
+
+---
+
+**Document Version**: 1.4 (Phase 193)
+**Last Updated**: 2026-04-11
 **Update Method**: Append-only, manual edit after significant sessions
 **Retention**: All entries preserved indefinitely

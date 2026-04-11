@@ -608,6 +608,22 @@ auto_activate_on_breakthrough=False PERMANENT — operator confirms manually.
     print(f"  Current ratio: {current_ratio:.3f} (gate: {gate})")
     print(f"  Snapshots read: {len(rows)}")
 
+    # Phase 192: append corpus entropy status to agent feed output
+    try:
+        _entropy_rows = db_query(
+            "SELECT entropy_score, clustering_warning, n_sessions, created_at "
+            "FROM corpus_entropy_log ORDER BY created_at DESC LIMIT 1"
+        )
+        if _entropy_rows:
+            _er = _entropy_rows[0]
+            _warn = " [CLUSTERING_WARNING]" if _er.get("clustering_warning") else ""
+            print(f"  Corpus entropy: {_er['entropy_score']:.4f}{_warn}  "
+                  f"(N={_er.get('n_sessions', '?')}, {_er.get('created_at', '')[:10]})")
+        else:
+            print("  Corpus entropy: no data yet (Phase 192 CorpusDataCuratorAgent pending)")
+    except Exception:
+        pass  # fail-open; table may not exist on older DBs
+
 # ─────────────────────────────────────────────────────────────
 # INGEST SWEEP — consumes Skill 14 PostCode sweep output
 # Skill 14 generates a structured JSON report.
@@ -955,6 +971,37 @@ def mcp_reload():
 # One command per phase completion.
 # ─────────────────────────────────────────────────────────────
 
+def _trigger_provenance_registration(phase: int) -> None:
+    """Phase 192: register a provenance DAG node for this phase close event.
+
+    Writes a phase_close node into data_provenance_dag via the bridge store.
+    Fail-open: any exception is logged and ignored.
+    """
+    try:
+        import sys as _sys_prov, hashlib as _hash_prov
+        _sys_prov.path.insert(0, str(Path(__file__).parent / "bridge"))
+        from vapi_bridge.store import Store as _Store  # type: ignore
+        _store = _Store()
+        import time as _time_prov
+        _ts = int(_time_prov.time_ns())
+        _raw = f"phase_close:{phase}:{_ts}".encode()
+        _data_hash = _hash_prov.sha256(_raw).hexdigest()
+        _node_id = f"phase_close_{phase}_{_ts}"
+        _store.insert_provenance_node(
+            node_id=_node_id,
+            parent_node_id=None,
+            artifact_type="phase_close",
+            player_id="",
+            session_name=f"phase_{phase}",
+            data_hash=_data_hash,
+            phase=phase,
+            notes=f"Auto-registered by vapi_wiki_engine.cmd_phase_close({phase})",
+        )
+        print(f"  Provenance node registered: {_node_id[:40]}...")
+    except Exception as _exc:
+        print(f"  [WARN] Provenance registration skipped: {_exc}")
+
+
 def cmd_phase_close(phase: int):
     """
     Runs the complete phase boundary sequence:
@@ -967,6 +1014,9 @@ def cmd_phase_close(phase: int):
     """
     print(f"\n[PHASE_CLOSE] Phase {phase}")
     print("=" * 50)
+
+    print("\n0. Phase 192: triggering provenance DAG registration...")
+    _trigger_provenance_registration(phase)
 
     print("\n1. Generating ingest briefs...")
     cmd_brief("MEMORY.md", phase)
@@ -987,6 +1037,9 @@ def cmd_phase_close(phase: int):
     print("\n6. MCP reload...")
     mcp_reload()
 
+    print("\n7. Coherence status (Phase 193 fleet signal check)...")
+    cmd_coherence_status()
+
     print(f"\n[PHASE_CLOSE COMPLETE] Phase {phase}")
     print(f"  Wiki snapshot: sha256:{h[:12]}...")
     print(f"  Briefs ready in wiki/briefs/ — Claude Code reads them to generate pages")
@@ -995,6 +1048,49 @@ def cmd_phase_close(phase: int):
     print(f"\nNext:")
     print(f"  Claude Code: Read wiki/briefs/brief_MEMORY.md_{phase}.md and generate pages")
     print(f"  python vapi_autoresearch.py --cycle 1 --priority separation_ratio")
+
+# ─────────────────────────────────────────────────────────────
+# PHASE 193: FLEET COHERENCE STATUS
+# ─────────────────────────────────────────────────────────────
+
+def cmd_coherence_status():
+    """
+    Reads fleet_coherence_log and prints a human-readable summary.
+    Called after phase_close to show if any new contradictions emerged
+    during the phase implementation.
+    """
+    rows = _db_query(
+        "SELECT failure_mode, rule_name, severity, resolved, promoted_to_wif, wif_entry_id "
+        "FROM fleet_coherence_log ORDER BY created_at DESC LIMIT 20"
+    )
+    if not rows:
+        print("  [COHERENCE] No contradictions detected. Fleet signals coherent.")
+        return
+
+    open_rows = [r for r in rows if not r["resolved"]]
+    print(f"\n  [COHERENCE] {len(open_rows)} open coherence failures:")
+    for r in open_rows:
+        sev = r.get("severity", "MEDIUM")
+        icon = "CRIT" if sev == "CRITICAL" else "HIGH" if sev == "HIGH" else "WARN"
+        wif  = f" -> {r['wif_entry_id']}" if r.get("promoted_to_wif") else ""
+        print(f"    [{icon}] [{r.get('failure_mode', '?')}] {r.get('rule_name', '?')}{wif}")
+
+
+def _db_query(sql: str, params: tuple = ()) -> list:
+    """Query the VAPI bridge SQLite DB; returns list of row dicts, fail-open."""
+    import sqlite3
+    db_path = ROOT / "bridge" / "vapi_bridge.db"
+    if not db_path.exists():
+        return []
+    try:
+        con = sqlite3.connect(str(db_path))
+        con.row_factory = sqlite3.Row
+        rows = con.execute(sql, params).fetchall()
+        con.close()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+
 
 # ─────────────────────────────────────────────────────────────
 # AUTORESEARCH FEED
@@ -1254,6 +1350,7 @@ CMDS = {
     "snapshot":         "SHA-256 snapshot [--anchor: on-chain via AdjudicationRegistry]",
     "phase_close":      "Complete phase boundary sequence (brief+feed+snapshot+sync+AR)",
     "autoresearch_feed":"Sync wiki gaps -> AutoResearch experiment log",
+    "coherence_status": "Fleet signal coherence check (Phase 193 — FSCA contradiction scan)",
     "lint":             "Wiki health check (no API)",
     "status":           "Full integration health",
 }
@@ -1304,6 +1401,8 @@ def main():
         cmd_phase_close(phase)
     elif cmd == "autoresearch_feed":
         cmd_autoresearch_feed()
+    elif cmd == "coherence_status":
+        cmd_coherence_status()
     elif cmd == "lint":
         cmd_lint()
     elif cmd == "status":

@@ -745,9 +745,110 @@ Every agent must respect:
 
 ---
 
-**Document Version**: 1.4 (Phase 180)
-**Last Updated**: 2026-04-09
+---
+
+## Agent #35 — CorpusDataCuratorAgent (Phase 192)
+
+**Phase**: 192 COMPLETE (2026-04-11)
+**Class**: `CorpusDataCuratorAgent` in `bridge/vapi_bridge/corpus_curator_agent.py`
+**Poll interval**: On-demand + periodic (7-task cycle)
+**Bus channel**: "curator" (7-task results) + "corpus_quality" (federated anonymized stats)
+**Config flag**: implicit (always active; individual task flags per feature)
+
+**Purpose**: Data coherence layer sitting below all other agents. Ensures the calibration corpus
+remains provenance-tracked, entropy-monitored, erasure-compliant, federation-quality-controlled,
+correlation-validated, readiness-certified, and contribution-weighted. The 7-task cycle is the
+prerequisite audit trail for FleetSignalCoherenceAgent (agent #36).
+
+**7 Tasks**:
+
+| Task | Store table | Key output |
+|------|-------------|------------|
+| 1 — Provenance DAG | data_provenance_dag | 20-hop causal chain from session → VHP badge |
+| 2 — Corpus Entropy Monitor | corpus_entropy_log | CLUSTERING_WARNING when score < 1.5 |
+| 3 — Proof-of-Erasure Certificate | erasure_certificate_log | "sha256:"+64hex GDPR cert |
+| 4 — Federated Corpus Quality | federation_corpus_quality_log | BP-007 anonymized cross-bridge stats |
+| 5 — Cross-Feature Temporal Correlation | feature_correlation_log | Frobenius per-player-pair separability |
+| 6 — Data Readiness Certificate | data_readiness_certificate_log | 8-dim gate: NOT_READY/READY/PARTIAL |
+| 7 — Session Contribution Weights | session_contribution_weight_log | TBD λ=ln(2)/90 (FROZEN BP-001) |
+
+**FROZEN invariants**:
+- TBD lambda: λ=ln(2)/90 days (BP-001 Temporal Biometric Decay) — never change
+- Corpus entropy warning threshold: 1.5 (CLUSTERING_WARNING when score < 1.5)
+- Erasure cert format: "sha256:" + SHA-256(device_id+erased_tables_json+post_erasure_ratio+ts_ns)
+- BP-007: store bridge_id_hash (SHA-256[:16]) NEVER bridge URL in federation_corpus_quality_log
+- separation_gate frozen at 0.70 (Data Readiness Certificate gate)
+- vhp_expiry_days frozen at 90 (Data Readiness Certificate biometric freshness gate)
+
+**Tools** (9, #136–#144):
+- Tool #136 get_provenance_chain (node_id, max_depth=20)
+- Tool #137 insert_provenance_node (dict API: node_id, node_type, source_table, source_row_id, source_hash, parent_node_id, edge_type, phase_produced, player_id, on_chain_ref)
+- Tool #138 get_corpus_entropy_status (session_type filter)
+- Tool #139 get_erasure_certificate (device_id)
+- Tool #140 get_federated_corpus_quality (session_type, limit)
+- Tool #141 get_feature_correlation (player_id, session_type)
+- Tool #142 get_data_readiness_certificate
+- Tool #143 get_session_weight (session_file → float)
+- Tool #144 get_session_weights (player_id → list)
+
+**SDK**: 7 result classes + 7 client classes
+- ProvenanceChainResult(5 slots) + VAPIProvenanceChain
+- CorpusEntropyResult(7 slots; clustering_warning defaults True) + VAPICorpusEntropy
+- ErasureCertificateResult(6 slots) + VAPIErasureCertificate
+- FederatedCorpusQualityResult(4 slots; privacy_constraint="BP-007: no raw biometric data") + VAPIFederatedCorpusQuality
+- FeatureCorrelationResult(7 slots; correlation_separable/found default False) + VAPIFeatureCorrelation
+- DataReadinessCertificateResult(7 slots; certification_status="NO_CERTIFICATE") + VAPIDataReadinessCertificate
+- SessionContributionWeightResult(6 slots; tbd_halflife_days=90 FROZEN) + VAPISessionContributionWeight
+
+**Tests**: 14 bridge tests (T192-1 through T192-14); 7 SDK tests (T192S-1 through T192S-7)
+
+**W1 (WIF-032)**: Erasure certificate replay — stale cert re-anchored to cover new data (Phase 194 candidate)
+**W2 (WIF-033)**: Correlation gate bypass — Frobenius threshold held below 0.5 silently (Phase 194 candidate)
+
+---
+
+---
+
+## Agent #36 — FleetSignalCoherenceAgent (Phase 193)
+
+**Phase**: 193 COMPLETE (2026-04-11)
+**Class**: `FleetSignalCoherenceAgent` in `bridge/vapi_bridge/fleet_signal_coherence_agent.py`
+**Role**: Fleet-level signal coherence observer. Detects contradictory, orphaned, or inverted
+signals across the 35-agent fleet and auto-promotes persistent contradictions to VAPI_WHAT_IF.md.
+
+**Failure Modes (3)**:
+- **CONTRADICTION** (7 rules): Cross-agent outputs that logically conflict
+  - TTL_COMMITTED_AT_MISMATCH, DEFENSIBILITY_N_MISMATCH, CEREMONY_PARTICIPANT_MISMATCH,
+    MATURITY_ELEVATION_READINESS_INVERSION, RENEWAL_WITHOUT_ATTESTATION (CRITICAL — highest severity),
+    PERSONA_BREAK_ENROLLMENT_CONFLICT, SEPARATION_GATE_ACTIVATION_CONFLICT
+- **ORPHAN** (5 rules): Agent output not consumed by its downstream within 48h
+  - PERSONA_BREAK_UNATTESTED, MATURITY_ELEVATION_UNACKNOWLEDGED, BIOMETRIC_EXPIRED_GATE_NOT_UPDATED,
+    ERASURE_CERT_NOT_ANCHORED, CORPUS_ENTROPY_WARNING_NO_AUTORESEARCH
+- **INVERSION** (3 rules): Provenance DAG walk reveals temporal inversion
+  - COMMITMENT_PREDATES_CONSENT, BADGE_WITHOUT_RENEWAL_PARENT, RULING_PREDATES_CALIBRATION
+
+**Key Invariants**:
+- `coherence_id` = "coh_" + SHA-256(rule_name + sorted_agents + ts_ns)[:16] — idempotent per cycle
+- `N_PROMOTE_THRESHOLD` = 3 occurrences → auto-appended to VAPI_WHAT_IF.md + sync_what_if() triggered
+- `fleet_coherence_enabled=True` DEFAULT (unlike most agents which default False)
+- BP-007 `_scrub_evidence()` strips raw biometric fields from evidence_json before storage
+- Poll interval: 900s (15 min)
+
+**Store**: `fleet_coherence_log` table
+**Config**: 6 fields: fleet_coherence_enabled(True), coherence_poll_interval_seconds(900),
+coherence_promote_threshold(3), coherence_alert_on_critical(True),
+coherence_alert_on_high(True), coherence_alert_on_medium(False)
+**Tools**: #145 get_fleet_coherence_summary / #146 get_fleet_coherence_entries / #147 resolve_coherence_entry
+**MCP**: `vapi_fleet_coherence` in knowledge_server.py (severity_filter parameter)
+**Wiki**: cmd_coherence_status() called at end of every cmd_phase_close()
+**SDK**: CoherenceSummaryResult + CoherenceEntryResult + VAPIFleetCoherence
+**AutoResearch**: "fleet_coherence_critical" + "fleet_coherence_orphan" priorities; score_phase_193_readiness() gate ≥0.80
+
+---
+
+**Document Version**: 1.6 (Phase 193)
+**Last Updated**: 2026-04-11
 **Update Method**: Add new agents as phases complete
-**Agent Count**: 26 (Phase 180 — Phases 178/179/180 added infrastructure tools only; no new agents)
-**SYNC NOTE**: Agents 21–26 added in Phases 157/159/173/175/176/177. Phases 178–180 added Tools #127/128/129. Synced 2026-04-09.
-**Next agents**: #27 PersonaBreakDetectorAgent (Phase 182 candidate); #28 MaturityElevationGateAgent (Phase 183 candidate).
+**Agent Count**: 36 (Phase 193 — FleetSignalCoherenceAgent agent #36)
+**SYNC NOTE**: Agents 27–36 added in Phases 182/183/185/186/187(×2)/188/189/190/191/192/193.
+**Next agents**: #37 TBD (Phase 194 candidate — WIF-032 erasure cert replay or WIF-033 correlation gate bypass).

@@ -1323,6 +1323,272 @@ class Config:
     When True, POST /agent/register-consent and POST /agent/revoke-consent are active.
     anonymize_device_records() enforces GDPR Art.17 on revocation."""
 
+    # --- Phase 181: Consent-Bound Renewal Provenance (WIF-030 W2 + WIF-031 W1) ---
+    ceremony_audit_registry_address: str = field(
+        default_factory=lambda: _env("CEREMONY_AUDIT_REGISTRY_ADDRESS", "")
+    )
+    """Phase 181 — On-chain CeremonyAuditRegistry.sol address (WIF-030 W2 closure).
+    Empty string = dry-run mode (no on-chain audit calls). Set CEREMONY_AUDIT_REGISTRY_ADDRESS
+    to the deployed contract address to enable live on-chain ceremony verification.
+    CeremonyAuditRegistry.sol LIVE 2026-04-10 at 0xb9164E6d74Dde1508df2a39b01d3702ACC8230C2."""
+
+    # --- Phase 182: PersonaBreakDetectorAgent (WIF-028 deeper mitigation) ---
+    persona_break_detection_enabled: bool = field(
+        default_factory=lambda: _env("PERSONA_BREAK_DETECTION_ENABLED", "true").lower() == "true"
+    )
+    """Phase 182 — Enable PersonaBreakDetectorAgent (agent #27). Default True.
+    Monitors LOO accuracy trend over last 5 separation_ratio_snapshots per player.
+    persona_break_detected=True when mean_loo < persona_break_loo_threshold (0.20).
+    Fires persona_break bus event; triggers re-enrollment urgency escalation."""
+
+    persona_break_loo_threshold: float = field(
+        default_factory=lambda: float(_env("PERSONA_BREAK_LOO_THRESHOLD", "0.20"))
+    )
+    """Phase 182 — LOO accuracy threshold below which a persona break is flagged (default 0.20).
+    Below 33% random-baseline for 3-class classification — signals genuine centroid migration.
+    P1 empirically measured at LOO=0% on latest N=20 corpus (2026-04-05)."""
+
+    # --- Phase 183: MaturityElevationGateAgent (WIF-027 W2 closure) ---
+    maturity_elevation_enabled: bool = field(
+        default_factory=lambda: _env("MATURITY_ELEVATION_ENABLED", "true").lower() == "true"
+    )
+    """Phase 183 — Enable MaturityElevationGateAgent (agent #28). Default True.
+    Reads 6-component protocol_maturity_log (Phase 177) and generates actionable
+    elevation_plan per component (gap/action/estimated_sessions/blocking).
+    elevation_available=True when gap_to_target < 0.05."""
+
+    # --- Phase 185: ReEnrollmentAttestationAgent (WIF-032 W1 closure) ---
+    reauth_attestation_enabled: bool = field(
+        default_factory=lambda: _env("REAUTH_ATTESTATION_ENABLED", "true").lower() == "true"
+    )
+    """Phase 185 — Enable ReEnrollmentAttestationAgent (agent #29). Default True.
+    HMAC-SHA256 attestation token gates re-enrollment window so adversary cannot
+    trigger re-enrollment without operator secret (WIF-032 W1 closure)."""
+
+    reauth_attestation_ttl_days: float = field(
+        default_factory=lambda: float(_env("REAUTH_ATTESTATION_TTL_DAYS", "7.0"))
+    )
+    """Phase 185 — Attestation token TTL in days (default 7.0). Tokens expire automatically.
+    expire_stale_attestations() deactivates expired rows on each agent cycle."""
+
+    reauth_attestation_secret: str = field(
+        default_factory=lambda: _env("REAUTH_ATTESTATION_SECRET", "")
+    )
+    """Phase 185 — Operator HMAC-SHA256 signing secret (empty = SHA-256 test-mode fallback).
+    Set REAUTH_ATTESTATION_SECRET to a strong random string in production. Empty default
+    prevents accidental HMAC activation; SHA-256 fallback is weaker but non-blocking."""
+
+    # --- Phase 186: AttestationBoundRenewalAgent (WIF-032 W2 closure) ---
+    attestation_bound_renewal_enabled: bool = field(
+        default_factory=lambda: _env("ATTESTATION_BOUND_RENEWAL_ENABLED", "false").lower() == "true"
+    )
+    """Phase 186 — Enable AttestationBoundRenewalAgent (agent #30). Default False (infra-first).
+    When True, every separation-ratio renewal must have a valid active HMAC attestation
+    from Phase 185 ReEnrollmentAttestationAgent. Adversary cannot forge without operator secret."""
+
+    # --- Phase 187: AttestationOpSecAdvisorAgent + VHPReenrollmentBadge ---
+    mempool_opsec_enabled: bool = field(
+        default_factory=lambda: _env("MEMPOOL_OPSEC_ENABLED", "false").lower() == "true"
+    )
+    """Phase 187 — Enable mempool OpSec advisor (WIF-033 W1 closure). Default False (infra-first).
+    When True, AttestationOpSecAdvisorAgent monitors active attestations and flags HIGH risk
+    when attestation_bound_renewal_enabled=True and active_attestations > 0 simultaneously
+    (timing disclosure vector: adversary monitors IoTeX mempool for registerAttestation() tx)."""
+
+    reenrollment_badge_enabled: bool = field(
+        default_factory=lambda: _env("REENROLLMENT_BADGE_ENABLED", "false").lower() == "true"
+    )
+    """Phase 187 — Enable VHPReenrollmentBadge.sol soulbound minting. Default False (infra-first).
+    ERC-4671 soulbound badge minted after each successful re-enrollment attestation cycle.
+    Anti-replay: attestationUsed mapping prevents double-minting per attestation hash."""
+
+    vhp_reenrollment_badge_address: str = field(
+        default_factory=lambda: _env("VHP_REENROLLMENT_BADGE_ADDRESS", "")
+    )
+    """Phase 187 — VHPReenrollmentBadge.sol deployed address. Empty = dry-run.
+    LIVE 2026-04-10 at 0x42E7A25d0E5667BBae45e5cF33a6e2CC6E42d45C (IoTeX testnet 4690)."""
+
+    # --- Phase 188: BiometricStationarityOracleAgent ---
+    biometric_stationarity_enabled: bool = field(
+        default_factory=lambda: _env("BIOMETRIC_STATIONARITY_ENABLED", "false").lower() == "true"
+    )
+    """Phase 188 — Enable BiometricStationarityOracleAgent (agent #32). Default False (infra-first).
+    Closes P1 genuine-drift vs adversarial-window ambiguity. Discriminator: Agent 25
+    chain_integrity_score — genuine drift leaves PoAC chain intact; adversarial window
+    exploitation produces chain anomalies coincident with drift."""
+
+    stationarity_adversarial_threshold: float = field(
+        default_factory=lambda: float(_env("STATIONARITY_ADVERSARIAL_THRESHOLD", "0.60"))
+    )
+    """Phase 188 — P(adversarial_window) above which ADVERSARIAL_WINDOW verdict fires (default 0.60).
+    Calibrated against Phase 173 corpus: genuine drift P1 chain_integrity_score remains near 1.0
+    while adversarial window exploitation produces chain anomalies (score < 0.95 floor)."""
+
+    stationarity_chain_integrity_floor: float = field(
+        default_factory=lambda: float(_env("STATIONARITY_CHAIN_INTEGRITY_FLOOR", "0.95"))
+    )
+    """Phase 188 — Minimum chain_integrity_score below which ADVERSARIAL_WINDOW risk escalates.
+    Agent 25 (PoACChainIntegrityMonitor) provides this score; score < 0.95 coincident with
+    large trend_velocity is the key discriminating signal for adversarial window exploitation."""
+
+    # --- Phase 189: ProtocolIntelligenceRecordAgent ---
+    pir_chain_enabled: bool = field(
+        default_factory=lambda: _env("PIR_CHAIN_ENABLED", "false").lower() == "true"
+    )
+    """Phase 189 — Enable ProtocolIntelligenceRecordAgent (agent #33). Default False (infra-first).
+    SHA-256 hash-linked PIR chain analogous to PoAC record chain.
+    pir_hash = SHA-256(prev_pir_hash + cycle + phase + wif_hash + forecast + score + ts).
+    Genesis PIR-0010 anchors Cycle 10/WIF-033/Phase 187 as chain origin."""
+
+    pir_anchor_interval: int = field(
+        default_factory=lambda: int(_env("PIR_ANCHOR_INTERVAL", "10"))
+    )
+    """Phase 189 — AutoResearch cycle interval between PIR anchor writes (default 10).
+    Every 10th cycle produces a new PIR record linked into the hash chain.
+    insert_pir() raises ValueError on UNIQUE duplicate (anti-replay invariant)."""
+
+    # --- Phase 190: LivePresenceSignalingAgent ---
+    live_presence_signaling_enabled: bool = field(
+        default_factory=lambda: _env("LIVE_PRESENCE_SIGNALING_ENABLED", "false").lower() == "true"
+    )
+    """Phase 190 — Enable LivePresenceSignalingAgent (agent #34). Default False (infra-first).
+    Bidirectional VAPI presence channel: dual-path routing via controller LED+haptic
+    (ps5_compat_mode aware) + ANSI terminal color stream (always active when enabled).
+    Solves 'nothing happens during gameplay' gap from Phase 131B ps5_compat_mode suppression."""
+
+    live_presence_haptic_enabled: bool = field(
+        default_factory=lambda: _env("LIVE_PRESENCE_HAPTIC_ENABLED", "true").lower() == "true"
+    )
+    """Phase 190 — Enable haptic feedback in LivePresenceSignalingAgent (default True).
+    When True and ps5_compat_mode=False, haptic pulses accompany LED color signals.
+    HARD_CHEAT_DETECTED: 3×200ms, CERTIFY: 1×100ms, BIOMETRIC_ANOMALY: 1×80ms."""
+
+    live_presence_chain_milestone_interval: int = field(
+        default_factory=lambda: int(_env("LIVE_PRESENCE_CHAIN_MILESTONE_INTERVAL", "100"))
+    )
+    """Phase 190 — PoAC record count interval that triggers a CHAIN_MILESTONE signal (default 100).
+    Every 100th PoAC record produces a Cyan(0,255,200) LED flash + no haptic.
+    Provides operator visual confirmation that the PoAC chain is progressing."""
+
+    # --- Phase 191: Threat Succession Protocol (TSP) ---
+    tsp_enabled: bool = field(
+        default_factory=lambda: _env("TSP_ENABLED", "true").lower() == "true"
+    )
+    """Phase 191 — Enable Threat Succession Protocol (TSP). Default True.
+    Wires threat_forecast_accuracy_component (PIR harness_score, weight=0.07) and
+    biometric_stationarity_component (BSO confidence, weight=0.04) into 8-component
+    maturity_score v2 formula. AutoResearch Cycle 11 threat: WIF-034 PIR chain integrity attack."""
+
+    # --- Phase 192: DataCuratorAgent (Agent #35) ---
+    # Task 1: Provenance DAG Engine
+    data_provenance_dag_enabled: bool = field(
+        default_factory=lambda: _env("DATA_PROVENANCE_DAG_ENABLED", "true").lower() == "true"
+    )
+    """Phase 192 — Enable Provenance DAG Engine. Tracks causal lineage from calibration
+    session to VHP badge as a directed acyclic graph. Default True."""
+
+    provenance_max_chain_depth: int = field(
+        default_factory=lambda: int(_env("PROVENANCE_MAX_CHAIN_DEPTH", "20"))
+    )
+    """Phase 192 — Maximum hop depth for provenance chain traversal (prevents infinite
+    loop on corrupt graph). Default 20."""
+
+    # Task 2: Corpus Entropy Monitor
+    corpus_entropy_enabled: bool = field(
+        default_factory=lambda: _env("CORPUS_ENTROPY_ENABLED", "true").lower() == "true"
+    )
+    """Phase 192 — Enable Corpus Entropy Monitor. Tracks Shannon entropy of the 13-dim
+    feature space per player. Score < 1.5 = CLUSTERING_WARNING. Default True."""
+
+    corpus_entropy_warning_threshold: float = field(
+        default_factory=lambda: float(_env("CORPUS_ENTROPY_WARNING_THRESHOLD", "1.5"))
+    )
+    """Phase 192 — Corpus entropy score below this threshold triggers CLUSTERING_WARNING.
+    Range: 0.0 (all sessions identical) to 3.32 (uniform). Default 1.5."""
+
+    corpus_entropy_poll_interval: int = field(
+        default_factory=lambda: int(_env("CORPUS_ENTROPY_POLL_INTERVAL", "3600"))
+    )
+    """Phase 192 — Corpus entropy recompute interval in seconds. Default 3600 (1 hour)."""
+
+    # Task 4: Federated Corpus Quality Aggregator
+    federated_corpus_quality_enabled: bool = field(
+        default_factory=lambda: _env("FEDERATED_CORPUS_QUALITY_ENABLED", "false").lower() == "true"
+    )
+    """Phase 192 — Enable Federated Corpus Quality Aggregator. Off until 2+ bridges active.
+    Publishes anonymized corpus stats (N, entropy, stationarity, velocity) to federation bus.
+    Never sends raw biometric data (BP-007). Default False."""
+
+    corpus_outlier_sigma_threshold: float = field(
+        default_factory=lambda: float(_env("CORPUS_OUTLIER_SIGMA_THRESHOLD", "2.0"))
+    )
+    """Phase 192 — Flag local corpus as outlier if > N sigma from federation mean.
+    Default 2.0."""
+
+    # Task 5: Cross-Feature Temporal Correlation Engine
+    correlation_engine_enabled: bool = field(
+        default_factory=lambda: _env("CORRELATION_ENGINE_ENABLED", "true").lower() == "true"
+    )
+    """Phase 192 — Enable Cross-Feature Temporal Correlation Engine. Computes 13x13
+    per-player feature correlation matrices and Frobenius separability distances.
+    Default True."""
+
+    correlation_separability_threshold: float = field(
+        default_factory=lambda: float(_env("CORRELATION_SEPARABILITY_THRESHOLD", "0.5"))
+    )
+    """Phase 192 — Frobenius distance floor for correlation_separable=True.
+    A player pair with frobenius_distance > 0.5 is separable by correlation structure.
+    Default 0.5."""
+
+    correlation_high_pair_threshold: float = field(
+        default_factory=lambda: float(_env("CORRELATION_HIGH_PAIR_THRESHOLD", "0.7"))
+    )
+    """Phase 192 — |corr| above this threshold is logged as a high-correlation pair.
+    Default 0.7."""
+
+    # Task 7: Session Contribution Weight Table
+    contribution_weight_enabled: bool = field(
+        default_factory=lambda: _env("CONTRIBUTION_WEIGHT_ENABLED", "true").lower() == "true"
+    )
+    """Phase 192 — Enable Session Contribution Weight Table. Computes TBD-decay x
+    type_multiplier x stationarity_multiplier per session. FROZEN: lambda=ln(2)/90 (BP-001).
+    Default True."""
+
+    # --- Phase 193: FleetSignalCoherenceAgent (Agent #36) ---
+    fleet_coherence_enabled: bool = field(
+        default_factory=lambda: _env("FLEET_COHERENCE_ENABLED", "true").lower() == "true"
+    )
+    """Phase 193 — Enable FleetSignalCoherenceAgent. Polls every 900s. Detects when
+    agents are individually correct but collectively contradictory. Three failure modes:
+    CONTRADICTION, ORPHAN, INVERSION. Default True."""
+
+    coherence_poll_interval_seconds: int = field(
+        default_factory=lambda: int(_env("COHERENCE_POLL_INTERVAL_SECONDS", "900"))
+    )
+    """Phase 193 — Poll interval for FleetSignalCoherenceAgent in seconds. Default 900 (15 min)."""
+
+    coherence_promote_threshold: int = field(
+        default_factory=lambda: int(_env("COHERENCE_PROMOTE_THRESHOLD", "3"))
+    )
+    """Phase 193 — Number of occurrences before a coherence failure is auto-promoted
+    to a WIF entry in VAPI_WHAT_IF.md. Default 3."""
+
+    coherence_alert_on_critical: bool = field(
+        default_factory=lambda: _env("COHERENCE_ALERT_ON_CRITICAL", "true").lower() == "true"
+    )
+    """Phase 193 — Publish to alert bus channel on CRITICAL coherence failures. Default True."""
+
+    coherence_alert_on_high: bool = field(
+        default_factory=lambda: _env("COHERENCE_ALERT_ON_HIGH", "true").lower() == "true"
+    )
+    """Phase 193 — Publish to alert bus channel on HIGH coherence failures. Default True."""
+
+    coherence_alert_on_medium: bool = field(
+        default_factory=lambda: _env("COHERENCE_ALERT_ON_MEDIUM", "false").lower() == "true"
+    )
+    """Phase 193 — Publish to alert bus channel on MEDIUM coherence failures. Default False
+    (advisory only — reduce noise; MEDIUM contradictions logged to wiki but not alerted)."""
+
     def validate(self) -> list[str]:
         """Return list of configuration errors (empty = valid)."""
         errors = []
