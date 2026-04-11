@@ -1584,10 +1584,54 @@ table; extend POST response with `corpus_delta_detected` flag).
 
 ---
 
-**Document Version**: 2.1 (WIF-029/030 CLOSED + WIF-031 filed, 2026-04-09)
-**Last Updated**: 2026-04-09
-**W1 Count**: 27 entries (WIF-029 CLOSED Phase 178; WIF-030 CLOSED Phase 179; WIF-031 consent-bound renewal provenance OPEN)
-**W2 Count**: 23 entries (WIF-029 W2 CLOSED Phase 180; WIF-030 W2 OPEN Phase 181 candidate; WIF-031 W2 OPEN Phase 181 candidate)
+---
+
+## WIF-032 — Erasure Certificate Replay: Stale Certificate Re-Anchored to Cover New Data (Phase 192)
+
+**Filed**: 2026-04-11 (Phase 192 — CorpusDataCuratorAgent)
+**Category**: W1 Failure Mode — Proof-of-Erasure authenticity gap
+
+**Mechanism**: An adversary (or compromised bridge) generates a valid erasure certificate at
+time T (covering tables A, B, C), then later submits new data under tables A, B, C, and re-anchors
+the old certificate claiming those tables were erased. The certificate hash is valid — it was
+computed correctly at time T — but the post-erasure data is new. If `ts_ns` is not validated
+against a tamper-evident log with UNIQUE `certificate_hash`, a replay is undetectable.
+
+**VAPI Mitigation (Phase 192)**:
+- `erasure_certificate_log.certificate_hash` has UNIQUE constraint — same cert cannot be re-inserted
+- `compute_erasure_certificate()` binds `ts_ns` into the hash; different times → different hashes
+- `on_chain_ref` field reserved for future anchoring to SeparationRatioRegistry
+
+**Status**: OPEN — Phase 194 candidate: anchor cert hash via `chain.record_erasure_on_chain()`.
+Filed 2026-04-11.
+
+---
+
+## WIF-033 — Correlation Gate Bypass: Adversary Keeps Frobenius Distance Below Separability Threshold (Phase 192)
+
+**Filed**: 2026-04-11 (Phase 192 — CorpusDataCuratorAgent)
+**Category**: W1 Failure Mode — Feature correlation exploitability
+
+**Mechanism**: The `correlation_separable` gate triggers only when inter-player Frobenius distance
+exceeds `separability_threshold=0.5`. An adversary who profiles the current corpus can craft
+inputs that land within the threshold band — maintaining `correlation_separable=False` forever —
+so the corpus never triggers the correlation warning that would flag non-separable player data.
+This defeats the Data Readiness Certificate gate silently.
+
+**VAPI Mitigation (Phase 192)**:
+- Frobenius distances stored per-pair in `feature_correlation_log`; trend analysis externally detectable
+- `correlation_separable=False` is itself a blocking failure in DataReadinessCertificate
+- Phase 143 diagonal LOO baselines (P1vP2=2.868, P1vP3=3.276, P2vP3=2.243) far exceed 0.5
+
+**Status**: OPEN — Phase 194 candidate: adaptive threshold from rolling per-pair Frobenius median.
+Filed 2026-04-11.
+
+---
+
+**Document Version**: 2.2 (WIF-032/033 filed Phase 192, 2026-04-11)
+**Last Updated**: 2026-04-11
+**W1 Count**: 29 entries (WIF-031 consent-bound renewal OPEN; WIF-032 erasure replay OPEN; WIF-033 correlation bypass OPEN)
+**W2 Count**: 23 entries (WIF-030 W2 OPEN Phase 181 candidate; WIF-031 W2 OPEN Phase 181 candidate)
 **W3 Count**: 5 entries
 **Update Method**: Append-only, status updates inline
-**Key Cycle 13 Updates**: WIF-029 temporal biometric drift (Phase 178 candidate); WIF-030 ZK ceremony capture attack (Phase 179 candidate); AutoResearch cycle 13; program.md updated to Phase 177 edition; score_phase_177_readiness() gate added to vapi_autoresearch.py
+**Key Phase 192 Updates**: WIF-032 erasure cert replay (Phase 194 candidate); WIF-033 correlation gate bypass (Phase 194 candidate); CorpusDataCuratorAgent agent #35; score_phase_192_readiness() gate

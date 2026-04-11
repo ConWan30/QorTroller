@@ -1937,6 +1937,27 @@ def main() -> int:
         dest="session_age_weight_ref_date",
         help="Reference date for age calculation (YYYY-MM-DD). Default: today.",
     )
+    # Phase 192: contribution-weighted centroid
+    parser.add_argument(
+        "--weighted-centroid",
+        action="store_true",
+        default=False,
+        help="Compute per-player centroids weighted by CorpusDataCuratorAgent session "
+             "contribution weights (TBD-decay × type_multiplier × stationarity_multiplier). "
+             "Reads weights from the bridge store (--db path required). Falls back to "
+             "uniform weighting if store is unavailable. Default: False.",
+    )
+    # Phase 192: cross-feature temporal correlation matrix
+    parser.add_argument(
+        "--correlation-matrix",
+        action="store_true",
+        default=False,
+        help="Compute 13×13 per-player Pearson correlation matrix across the active "
+             "feature space and report Frobenius distance between player correlation "
+             "matrices as a separability indicator independent of Mahalanobis distance. "
+             "correlation_separable=True when any inter-player Frobenius distance > "
+             "cfg.correlation_separability_threshold (default 0.5). Default: False.",
+    )
     args = parser.parse_args()
 
     # Phase 140: probe-comparison mode — run all viable structured probe types
@@ -2208,6 +2229,40 @@ def main() -> int:
         result.update(_cons)
         result.update(_def)
 
+    # Phase 192 — Contribution-weighted centroid analysis
+    if args.weighted_centroid:
+        _wc = _compute_weighted_centroid_ratio(result, db_path=getattr(args, "db", None))
+        print()
+        print("[Weighted-Centroid Ratio] (Phase 192)")
+        print("-" * 68)
+        print(f"  source:       {_wc.get('weight_source', 'uniform')}")
+        print(f"  ratio:        {_wc.get('weighted_centroid_ratio', 0.0):.4f}  "
+              f"(unweighted: {result.get('separation_ratio', 0.0):.4f})")
+        _delta = _wc.get("weighted_centroid_ratio", 0.0) - result.get("separation_ratio", 0.0)
+        print(f"  delta:        {_delta:+.4f}")
+        if _wc.get("weighted_centroid_error"):
+            print(f"  WARNING: {_wc['weighted_centroid_error']}")
+        print("-" * 68)
+        result.update(_wc)
+
+    # Phase 192 — Cross-feature Pearson correlation matrix + Frobenius separability
+    if args.correlation_matrix:
+        _cm = _compute_correlation_matrix(result)
+        print()
+        print("[Cross-Feature Correlation Matrix] (Phase 192)")
+        print("-" * 68)
+        print(f"  correlation_separable: {_cm.get('correlation_separable', False)}")
+        _fro = _cm.get("frobenius_distances", {})
+        for pair_key, dist in _fro.items():
+            flag = " ***" if dist > 0.5 else ""
+            print(f"  Frobenius({pair_key}): {dist:.4f}{flag}")
+        _thresh = _cm.get("separability_threshold", 0.5)
+        print(f"  separability_threshold: {_thresh}")
+        if _cm.get("correlation_matrix_error"):
+            print(f"  WARNING: {_cm['correlation_matrix_error']}")
+        print("-" * 68)
+        result.update(_cm)
+
     return 0
 
 
@@ -2470,6 +2525,206 @@ def _compute_balanced_ratio(result: dict, seed: int = 42) -> dict:
             "balance_n_per_player": 0,
             "balanced_ratio_enabled": True,
             "balanced_ratio_error": str(exc),
+        }
+
+
+# ---------------------------------------------------------------------------
+# Phase 192 helpers — weighted centroid + correlation matrix
+# ---------------------------------------------------------------------------
+
+def _compute_weighted_centroid_ratio(result: dict, db_path: str | None = None) -> dict:
+    """Replace uniform centroid with CorpusDataCuratorAgent contribution-weighted centroid.
+
+    Weight source priority:
+      1. Bridge store session_contribution_weight_log (if db_path provided and populated)
+      2. Uniform (fallback, weight_source="uniform")
+
+    FROZEN: TBD lambda = ln(2)/90 days (BP-001); applied as default when store unavailable.
+    Never raises — returns zeros on any failure.
+    """
+    _TBD_LAMBDA = math.log(2) / 90.0
+
+    try:
+        feature_names = result.get("feature_names", [])
+        active_names = result.get("active_feature_names", [])
+        active_indices = [i for i, fn in enumerate(feature_names) if fn in active_names]
+        if not active_indices:
+            raise ValueError("No active feature indices.")
+
+        # Build player → list of (session_name, feature_vector) pairs
+        player_sessions: dict[str, list[tuple[str, np.ndarray]]] = {}
+        for sd in result.get("session_details", []):
+            player = sd.get("player", "")
+            mv = sd.get("mean_vector", [])
+            sname = sd.get("session", "")
+            if not mv or len(mv) < len(feature_names) or not player:
+                continue
+            vec = np.array([mv[i] for i in active_indices])
+            player_sessions.setdefault(player, []).append((sname, vec))
+
+        if len(player_sessions) < 2:
+            return {"weighted_centroid_ratio": 0.0, "weight_source": "uniform",
+                    "weighted_centroid_error": "Need >=2 players."}
+
+        # Attempt to load weights from store
+        store_weights: dict[str, float] = {}
+        weight_source = "uniform"
+        if db_path:
+            try:
+                import sys as _sys_wc
+                _sys_wc.path.insert(0, str(Path(__file__).parent.parent / "bridge"))
+                from vapi_bridge.store import Store as _Store
+                _st = _Store(db_path=db_path)
+                for player in player_sessions:
+                    player_id = player.replace("Player ", "P")
+                    rows = _st.get_session_weights(player_id=player_id)
+                    for row in rows:
+                        s = row.get("session_name", "")
+                        w = float(row.get("effective_weight", 1.0))
+                        if s:
+                            store_weights[s] = w
+                if store_weights:
+                    weight_source = "corpus_curator"
+            except Exception:
+                pass  # fallback to uniform
+
+        # Compute weighted centroids per player
+        player_centroids: dict[str, np.ndarray] = {}
+        for player, sv_pairs in player_sessions.items():
+            vecs = np.array([v for _, v in sv_pairs])
+            if weight_source == "corpus_curator" and store_weights:
+                raw_ws = np.array([store_weights.get(s, 1.0) for s, _ in sv_pairs])
+            else:
+                raw_ws = np.ones(len(sv_pairs))
+            # TBD-decay fallback: apply if weight_source is uniform (no store data)
+            if weight_source == "uniform":
+                raw_ws = np.exp(-_TBD_LAMBDA * np.arange(len(sv_pairs), 0, -1).astype(float))
+                weight_source = "tbd_decay_fallback"
+            total = raw_ws.sum()
+            if total <= 0:
+                raw_ws = np.ones(len(sv_pairs))
+                total = float(len(sv_pairs))
+            player_centroids[player] = np.average(vecs, weights=raw_ws / total, axis=0)
+
+        # Rebuild covariance on all session vectors (unweighted, same as main analysis)
+        all_vecs = np.array(
+            [v for sv_pairs in player_sessions.values() for _, v in sv_pairs]
+        )
+        _, cov_inv = robust_cov_inv(all_vecs)
+
+        players_sorted = sorted(player_centroids.keys())
+        # Intra-player: weighted centroid vs each session vector
+        intra_dists: list[float] = []
+        for player, sv_pairs in player_sessions.items():
+            mu = player_centroids[player]
+            for _, v in sv_pairs:
+                intra_dists.append(mahalanobis_distance(v, mu, cov_inv))
+        intra_mean = float(np.mean(intra_dists)) if intra_dists else 0.0
+
+        # Inter-player: between weighted centroids
+        inter_dists: list[float] = []
+        for i, pa in enumerate(players_sorted):
+            for j in range(i + 1, len(players_sorted)):
+                pb = players_sorted[j]
+                inter_dists.append(
+                    mahalanobis_distance(player_centroids[pa], player_centroids[pb], cov_inv)
+                )
+        inter_mean = float(np.mean(inter_dists)) if inter_dists else 0.0
+
+        wc_ratio = inter_mean / intra_mean if intra_mean > 0 else 0.0
+        return {
+            "weighted_centroid_ratio": round(wc_ratio, 4),
+            "weighted_centroid_intra_mean": round(intra_mean, 4),
+            "weighted_centroid_inter_mean": round(inter_mean, 4),
+            "weight_source": weight_source,
+            "n_store_weights": len(store_weights),
+        }
+    except Exception as exc:
+        return {
+            "weighted_centroid_ratio": 0.0,
+            "weight_source": "uniform",
+            "weighted_centroid_error": str(exc),
+        }
+
+
+def _compute_correlation_matrix(
+    result: dict,
+    separability_threshold: float = 0.5,
+) -> dict:
+    """Compute 13×13 per-player Pearson correlation matrix; Frobenius distance for separability.
+
+    correlation_separable=True when any inter-player Frobenius distance > threshold.
+    This is independent of Mahalanobis-based ratio — it captures feature co-movement
+    patterns that differ between players even when mean vectors converge.
+
+    Never raises — returns empty dict on failure.
+    """
+    try:
+        feature_names = result.get("feature_names", [])
+        active_names = result.get("active_feature_names", [])
+        active_indices = [i for i, fn in enumerate(feature_names) if fn in active_names]
+        if len(active_indices) < 2:
+            return {"correlation_separable": False,
+                    "correlation_matrix_error": "Need >=2 active features."}
+
+        # Build player → matrix (n_sessions × n_active_features)
+        player_mats: dict[str, np.ndarray] = {}
+        for sd in result.get("session_details", []):
+            player = sd.get("player", "")
+            mv = sd.get("mean_vector", [])
+            if not mv or len(mv) < len(feature_names) or not player:
+                continue
+            vec = np.array([mv[i] for i in active_indices])
+            if player not in player_mats:
+                player_mats[player] = []
+            player_mats[player].append(vec)  # type: ignore[union-attr]
+
+        if len(player_mats) < 2:
+            return {"correlation_separable": False,
+                    "correlation_matrix_error": "Need >=2 players."}
+
+        # Per-player correlation matrix (fallback to identity if n_sessions < 3)
+        player_corr: dict[str, np.ndarray] = {}
+        _ndim = len(active_indices)
+        for player, rows in player_mats.items():
+            mat = np.array(rows)
+            if mat.shape[0] < 3:
+                player_corr[player] = np.eye(_ndim)
+            else:
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    corr = np.corrcoef(mat.T)
+                # Replace NaN (zero-variance features) with 0
+                corr = np.nan_to_num(corr, nan=0.0)
+                np.fill_diagonal(corr, 1.0)
+                player_corr[player] = corr
+
+        # Frobenius distance between each pair of correlation matrices
+        players_sorted = sorted(player_corr.keys())
+        frobenius_distances: dict[str, float] = {}
+        any_separable = False
+        for i, pa in enumerate(players_sorted):
+            for j in range(i + 1, len(players_sorted)):
+                pb = players_sorted[j]
+                diff = player_corr[pa] - player_corr[pb]
+                fro = float(np.linalg.norm(diff, "fro"))
+                pair_key = f"{pa} vs {pb}"
+                frobenius_distances[pair_key] = round(fro, 4)
+                if fro > separability_threshold:
+                    any_separable = True
+
+        return {
+            "correlation_separable": any_separable,
+            "frobenius_distances": frobenius_distances,
+            "separability_threshold": separability_threshold,
+            "n_active_features_corr": _ndim,
+        }
+    except Exception as exc:
+        return {
+            "correlation_separable": False,
+            "frobenius_distances": {},
+            "separability_threshold": separability_threshold,
+            "correlation_matrix_error": str(exc),
         }
 
 

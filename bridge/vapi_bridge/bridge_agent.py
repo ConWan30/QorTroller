@@ -1053,6 +1053,238 @@ _TOOLS = [
             "required": [],
         },
     },
+    # Tool #144 — Phase 192
+    {
+        "name": "get_session_contribution_weights",
+        "description": (
+            "Phase 192 DataCuratorAgent — Session Contribution Weight Table (Task 7). "
+            "Returns TBD-decay contribution weights per session: "
+            "effective_weight = tbd_weight x type_multiplier x stationarity_multiplier. "
+            "FROZEN: lambda=ln(2)/90 (BP-001 TBD half-life=vhp_expiry_days=90 days). "
+            "Type multipliers (FROZEN): touchpad_corners=1.0, mixed_biometric_probe=0.9, "
+            "touchpad_freeform=0.7, resting_grip=0.5, gameplay=0.3. "
+            "Powers --weighted-centroid flag in analyze_interperson_separation.py. "
+            "P1 old sessions (>60 days) receive tbd_weight<0.3, reducing centroid contamination. "
+            "Returns: player_id/tbd_lambda/tbd_halflife_days/weight_count/weights/timestamp."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "player_id": {"type": "string", "description": "Player ID filter (P1/P2/P3) or empty for all"},
+            },
+            "required": [],
+        },
+    },
+    # Tool #143 — Phase 192
+    {
+        "name": "anchor_data_readiness_certificate",
+        "description": (
+            "Phase 192 DataCuratorAgent — Anchor Data Readiness Certificate on-chain (Task 6). "
+            "Anchors the 8-dimension pre-tournament certification artifact to "
+            "AdjudicationRegistry.sol as a pre-tournament checkpoint. "
+            "When a ruling is later challenged, the operator can prove data was certified "
+            "to a specific standard before the tournament began. "
+            "dry_run=True: records anchor, no chain call. "
+            "Returns: anchored/certificate_hash/tx_hash/dry_run/timestamp."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "certificate_hash": {"type": "string", "description": "SHA-256 certificate hash to anchor"},
+                "tx_hash":          {"type": "string", "description": "Optional: IoTeX tx hash (dry_run if omitted)"},
+            },
+            "required": ["certificate_hash"],
+        },
+    },
+    # Tool #142 — Phase 192
+    {
+        "name": "get_data_readiness_certificate",
+        "description": (
+            "Phase 192 DataCuratorAgent — Data Readiness Certificate status (Task 6). "
+            "Returns 8-dimension pre-tournament certification: "
+            "separation_ratio_above_gate (FROZEN gate=0.70, BLOCKING), "
+            "corpus_age_tbd_compliant (FROZEN 90 days, advisory), "
+            "session_type_mix_adequate (advisory), "
+            "centroid_stability_ok (persona_break_detected=False, BLOCKING), "
+            "consent_coverage_complete (n_consented==n_enrolled, BLOCKING), "
+            "biometric_ttl_valid (commitment_age<90d, BLOCKING), "
+            "corpus_entropy_adequate (score>=1.5, advisory), "
+            "attestation_status_clean (active_attestations==0, advisory). "
+            "certification_status: CERTIFIED|BLOCKED|ADVISORY_ONLY. "
+            "Returns: certificate_found/certification_status/certificate_hash/separation_ratio/"
+            "blocking_failures/advisory_warnings/dimension_results/anchored/valid_until_ts/timestamp."
+        ),
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    # Tool #141 — Phase 192
+    {
+        "name": "get_feature_correlation_status",
+        "description": (
+            "Phase 192 DataCuratorAgent — Cross-Feature Temporal Correlation status (Task 5). "
+            "Returns per-player 13x13 feature correlation matrix (upper triangle, 91 values) "
+            "and Frobenius distances between players. "
+            "correlation_separable=True when min(frobenius_distances) > "
+            "correlation_separability_threshold (FROZEN=0.5). "
+            "Frobenius distance measures correlation-structure separability independent of "
+            "Mahalanobis distance. A player pair with ratio=0.8 AND frobenius_distance=0.9 "
+            "is MORE defensible than ratio=1.2 AND frobenius_distance=0.1. "
+            "Returns: player_id/correlation_found/correlation_separable/separability_threshold/"
+            "frobenius_vs_p1/frobenius_vs_p2/frobenius_vs_p3/n_sessions_used/timestamp."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "player_id": {"type": "string", "description": "Player to query (P1/P2/P3 or empty for latest)"},
+            },
+            "required": [],
+        },
+    },
+    # Tool #140 — Phase 192
+    {
+        "name": "get_federated_corpus_quality",
+        "description": (
+            "Phase 192 DataCuratorAgent — Federated Corpus Quality Aggregator (Task 4). "
+            "Returns anonymized corpus quality statistics for cross-bridge comparison. "
+            "BP-007 constraint: ONLY derived metrics — never raw biometric data. "
+            "Contents: N_sessions, entropy_score, stationarity_score, centroid_velocity_mean. "
+            "federation_outlier=True when local corpus is >corpus_outlier_sigma_threshold (2.0) "
+            "sigma from federation mean. Disabled until 2+ bridges active. "
+            "Returns: federated_corpus_quality_enabled/record_count/records/privacy_constraint/timestamp."
+        ),
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    # Tool #139 — Phase 192
+    {
+        "name": "anchor_erasure_certificate",
+        "description": (
+            "Phase 192 DataCuratorAgent — Anchor Erasure Certificate on-chain (Task 3). "
+            "Anchors GDPR Art.17 erasure proof to AdjudicationRegistry.sol "
+            "(same contract as PoAd — zero new infrastructure). "
+            "After anchoring, regulators can query the full erasure lifecycle from "
+            "VAPI bridge to IoTeX L1 as a single verifiable artifact. "
+            "dry_run=True: records anchor, no chain call. "
+            "Returns: anchored/certificate_hash/tx_hash/dry_run/timestamp."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "certificate_hash": {"type": "string", "description": "SHA-256 erasure certificate hash"},
+                "tx_hash":          {"type": "string", "description": "Optional: IoTeX tx hash"},
+            },
+            "required": ["certificate_hash"],
+        },
+    },
+    # Tool #138 — Phase 192
+    {
+        "name": "get_erasure_certificate",
+        "description": (
+            "Phase 192 DataCuratorAgent — GDPR Art.17 Proof-of-Erasure Certificate (Task 3). "
+            "Returns cryptographic certificate proving biometric data erasure happened correctly. "
+            "certificate_hash = SHA-256(device_id + sorted_table_row_hashes + ratio + ts_ns). "
+            "Anchored to AdjudicationRegistry.sol (same as PoAd — zero new infra). "
+            "Returns: device_id/certificate_found/certificate_hash/player_id/"
+            "post_erasure_ratio/anchored/on_chain_tx_hash/ts_ns/timestamp."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "device_id": {"type": "string", "description": "Device ID to retrieve erasure cert for"},
+            },
+            "required": ["device_id"],
+        },
+    },
+    # Tool #137 — Phase 192
+    {
+        "name": "get_corpus_entropy_status",
+        "description": (
+            "Phase 192 DataCuratorAgent — Corpus Entropy Monitor status (Task 2). "
+            "Returns Shannon entropy of the 13-dimensional feature space per player. "
+            "Score range: 0.0 (all sessions identical) to 3.32 (uniform over 10 bins). "
+            "CLUSTERING_WARNING when score < 1.5 — sessions are not sampling the feature space "
+            "well; centroid will be brittle under small perturbation. "
+            "WELL_SAMPLED when score > 2.5 — safe to report separation ratio as trustworthy. "
+            "A ratio of 0.9 with entropy 2.8 is MORE defensible than ratio 1.1 with entropy 0.8. "
+            "Returns: corpus_entropy_score/clustering_warning/status/per_player_entropy/"
+            "low_entropy_features/n_sessions_analyzed/session_type_filter/warning_threshold/timestamp."
+        ),
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    # Tool #136 — Phase 192
+    {
+        "name": "get_data_provenance_chain",
+        "description": (
+            "Phase 192 DataCuratorAgent — Provenance DAG chain walk (Task 1). "
+            "Walks from a leaf_node_id to root(s) via parent_node_id relationships. "
+            "Full causal chain: calibration_session -> separation_snapshot -> "
+            "defensibility_log -> commitment_hash -> renewal_log -> attestation -> badge_token. "
+            "This is the forensic lineage answer to 'what data produced this credential'. "
+            "Regulators can traverse the full chain from consent snapshot to ratio commitment "
+            "as a single DAG traversal — no manual table joins needed. "
+            "Max depth: provenance_max_chain_depth (FROZEN=20, prevents infinite loop). "
+            "Returns: leaf_node_id/chain_length/chain/forensic_summary/timestamp."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "leaf_node_id": {"type": "string", "description": "Node ID to trace from (SHA-256 hex)"},
+            },
+            "required": [],
+        },
+    },
+    # Tools #145–#147 — Phase 193 FleetSignalCoherenceAgent
+    {
+        "name": "get_fleet_coherence_summary",
+        "description": (
+            "Phase 193 FleetSignalCoherenceAgent — Fleet-level signal coherence summary (Tool #145). "
+            "Detects contradictory, orphaned, or inverted signals across the 35-agent fleet. "
+            "Three failure modes: CONTRADICTION (7 rules — e.g. RENEWAL_WITHOUT_ATTESTATION CRITICAL), "
+            "ORPHAN (5 rules — unacknowledged signals from an agent not consumed by its downstream), "
+            "INVERSION (3 rules — Provenance DAG walk shows temporal inversion). "
+            "fleet_coherence_enabled=True by default (unlike most agents which default False). "
+            "promoted_to_wif: count auto-promoted to VAPI_WHAT_IF.md (N_PROMOTE_THRESHOLD=3 occurrences). "
+            "Returns: fleet_coherence_enabled/total_open/by_severity/by_mode/"
+            "promoted_to_wif/last_cycle_findings/last_checked_at/timestamp."
+        ),
+        "input_schema": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "get_fleet_coherence_entries",
+        "description": (
+            "Phase 193 FleetSignalCoherenceAgent — Open coherence failures detail (Tool #146). "
+            "Returns open (unresolved) coherence entries, filterable by failure_mode and severity. "
+            "failure_mode: CONTRADICTION | ORPHAN | INVERSION (empty=all). "
+            "severity: CRITICAL | HIGH | MEDIUM (empty=all). "
+            "CRITICAL entries (RENEWAL_WITHOUT_ATTESTATION) indicate a bypass of Phase 185/186 chain. "
+            "Each entry includes: coherence_id, rule_name, agents_involved, explanation, resolution, promoted_to_wif. "
+            "Returns: entry_count/entries/failure_mode/severity/timestamp."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "failure_mode": {"type": "string", "description": "CONTRADICTION|ORPHAN|INVERSION or empty for all"},
+                "severity":     {"type": "string", "description": "CRITICAL|HIGH|MEDIUM or empty for all"},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "resolve_coherence_entry",
+        "description": (
+            "Phase 193 FleetSignalCoherenceAgent — Mark a coherence entry as resolved (Tool #147). "
+            "Marks a coherence failure as resolved by the specified operator identity. "
+            "CRITICAL entries (RENEWAL_WITHOUT_ATTESTATION) should only be resolved after "
+            "the underlying attestation chain gap has been verified as a false positive or fixed. "
+            "Returns: resolved/coherence_id/resolved_by/timestamp."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "coherence_id": {"type": "string", "description": "Coherence entry ID (coh_<16 hex chars>)"},
+                "resolved_by":  {"type": "string", "description": "Operator identity resolving this entry"},
+            },
+            "required": ["coherence_id", "resolved_by"],
+        },
+    },
     # Tool #129 — Phase 180
     {
         "name": "trigger_renewal_commitment",
@@ -3749,6 +3981,186 @@ class BridgeAgent:
                     "fleet_health": fleet,
                     "timestamp": _time.time(),
                 }
+
+            # Tools #136–#144 — Phase 192 DataCuratorAgent
+            if name in ("get_data_provenance_chain", "get_corpus_entropy_status",
+                        "get_erasure_certificate", "anchor_erasure_certificate",
+                        "get_federated_corpus_quality", "get_feature_correlation_status",
+                        "get_data_readiness_certificate", "anchor_data_readiness_certificate",
+                        "get_session_contribution_weights"):
+                import time as _t192, math as _m192
+                try:
+                    if name == "get_data_provenance_chain":
+                        leaf_id = str(tool_input.get("leaf_node_id", ""))
+                        max_depth = getattr(self._cfg, "provenance_max_chain_depth", 20)
+                        if not leaf_id:
+                            try:
+                                with self._store._conn() as _conn192:
+                                    _row192 = _conn192.execute(
+                                        "SELECT node_id FROM data_provenance_dag "
+                                        "ORDER BY id DESC LIMIT 1"
+                                    ).fetchone()
+                                    leaf_id = _row192[0] if _row192 else "none"
+                            except Exception:
+                                leaf_id = "none"
+                        _chain = self._store.get_provenance_chain(leaf_id, max_depth=max_depth)
+                        _summary = (
+                            f"{len(_chain)}-hop chain from "
+                            f"{_chain[0].get('node_type', '?')} to "
+                            f"{_chain[-1].get('node_type', '?')}"
+                            if _chain else "No chain found"
+                        )
+                        return {"leaf_node_id": leaf_id, "chain_length": len(_chain),
+                                "chain": _chain, "forensic_summary": _summary,
+                                "timestamp": _t192.time()}
+
+                    if name == "get_corpus_entropy_status":
+                        _row = self._store.get_latest_corpus_entropy()
+                        _thr = getattr(self._cfg, "corpus_entropy_warning_threshold", 1.5)
+                        if _row is None:
+                            return {"corpus_entropy_score": 0.0, "clustering_warning": True,
+                                    "status": "NO_DATA", "per_player_entropy": "{}",
+                                    "n_sessions_analyzed": 0, "warning_threshold": _thr,
+                                    "timestamp": _t192.time()}
+                        return {"corpus_entropy_score": float(_row["corpus_entropy_score"]),
+                                "clustering_warning": bool(_row["clustering_warning"]),
+                                "status": "CLUSTERING_WARNING" if _row["clustering_warning"] else "WELL_SAMPLED",
+                                "per_player_entropy": _row["per_player_entropy"],
+                                "low_entropy_features": _row["low_entropy_features"],
+                                "n_sessions_analyzed": int(_row["n_sessions_analyzed"]),
+                                "session_type_filter": _row["session_type_filter"],
+                                "warning_threshold": _thr, "timestamp": _t192.time()}
+
+                    if name == "get_erasure_certificate":
+                        _did = str(tool_input.get("device_id", ""))
+                        if not _did:
+                            return {"error": "device_id required"}
+                        _cert = self._store.get_erasure_certificate(_did)
+                        return {"device_id": _did, "certificate_found": _cert is not None,
+                                "certificate_hash": _cert["certificate_hash"] if _cert else None,
+                                "post_erasure_ratio": float(_cert["post_erasure_ratio"]) if _cert else None,
+                                "anchored": bool(_cert["anchored"]) if _cert else False,
+                                "timestamp": _t192.time()}
+
+                    if name == "anchor_erasure_certificate":
+                        _ch = str(tool_input.get("certificate_hash", ""))
+                        if not _ch:
+                            return {"error": "certificate_hash required"}
+                        _tx = str(tool_input.get("tx_hash", f"dry_run_{int(_t192.time_ns())}"))
+                        self._store.anchor_erasure_certificate(_ch, _tx)
+                        return {"anchored": True, "certificate_hash": _ch, "tx_hash": _tx,
+                                "dry_run": getattr(self._cfg, "agent_dry_run_mode", True),
+                                "timestamp": _t192.time()}
+
+                    if name == "get_federated_corpus_quality":
+                        _recs = self._store.get_federated_corpus_quality(limit=10)
+                        return {"federated_corpus_quality_enabled": getattr(
+                                    self._cfg, "federated_corpus_quality_enabled", False),
+                                "record_count": len(_recs), "records": _recs,
+                                "privacy_constraint": "BP-007: no raw biometric data",
+                                "timestamp": _t192.time()}
+
+                    if name == "get_feature_correlation_status":
+                        _pid = str(tool_input.get("player_id", ""))
+                        _row_c = self._store.get_feature_correlation(player_id=_pid)
+                        _thr_c = getattr(self._cfg, "correlation_separability_threshold", 0.5)
+                        if _row_c is None:
+                            return {"player_id": _pid or "all", "correlation_found": False,
+                                    "correlation_separable": False,
+                                    "separability_threshold": _thr_c,
+                                    "timestamp": _t192.time()}
+                        return {"player_id": _row_c["player_id"],
+                                "correlation_found": True,
+                                "correlation_separable": bool(_row_c["correlation_separable"]),
+                                "separability_threshold": _thr_c,
+                                "frobenius_vs_p1": _row_c["frobenius_vs_p1"],
+                                "frobenius_vs_p2": _row_c["frobenius_vs_p2"],
+                                "frobenius_vs_p3": _row_c["frobenius_vs_p3"],
+                                "n_sessions_used": int(_row_c["n_sessions_used"]),
+                                "timestamp": _t192.time()}
+
+                    if name == "get_data_readiness_certificate":
+                        _cert_r = self._store.get_latest_data_readiness_certificate()
+                        if _cert_r is None:
+                            return {"certificate_found": False,
+                                    "certification_status": "NO_CERTIFICATE",
+                                    "separation_ratio": 0.0,
+                                    "timestamp": _t192.time()}
+                        return {"certificate_found": True,
+                                "certification_status": _cert_r["certification_status"],
+                                "certificate_hash": _cert_r["certificate_hash"],
+                                "separation_ratio": float(_cert_r["separation_ratio"]),
+                                "blocking_failures": _cert_r["blocking_failures"],
+                                "advisory_warnings": _cert_r["advisory_warnings"],
+                                "anchored": bool(_cert_r["anchored"]),
+                                "timestamp": _t192.time()}
+
+                    if name == "anchor_data_readiness_certificate":
+                        _ch_r = str(tool_input.get("certificate_hash", ""))
+                        if not _ch_r:
+                            return {"error": "certificate_hash required"}
+                        _tx_r = str(tool_input.get("tx_hash", f"dry_run_{int(_t192.time_ns())}"))
+                        self._store.anchor_data_readiness_certificate(_ch_r, _tx_r)
+                        return {"anchored": True, "certificate_hash": _ch_r, "tx_hash": _tx_r,
+                                "dry_run": getattr(self._cfg, "agent_dry_run_mode", True),
+                                "timestamp": _t192.time()}
+
+                    if name == "get_session_contribution_weights":
+                        _pid_w = str(tool_input.get("player_id", ""))
+                        _wts = self._store.get_session_weights(player_id=_pid_w, limit=30)
+                        _lam = _m192.log(2) / 90  # FROZEN: BP-001
+                        return {"player_id": _pid_w or "all", "tbd_lambda": round(_lam, 8),
+                                "tbd_halflife_days": 90, "weight_count": len(_wts),
+                                "weights": _wts, "timestamp": _t192.time()}
+
+                except Exception as _exc192:
+                    return {"error": str(_exc192), "tool": name}
+
+            # Tools #145–#147 — Phase 193 FleetSignalCoherenceAgent
+            if name in ("get_fleet_coherence_summary", "get_fleet_coherence_entries",
+                        "resolve_coherence_entry"):
+                import time as _t193
+                try:
+                    if name == "get_fleet_coherence_summary":
+                        _sum193 = self._store.get_coherence_summary()
+                        _en193  = getattr(self._cfg, "fleet_coherence_enabled", True)
+                        return {
+                            "fleet_coherence_enabled": _en193,
+                            "total_open":        _sum193.get("total_open", 0),
+                            "by_severity":       _sum193.get("by_severity", {}),
+                            "by_mode":           _sum193.get("by_mode", {}),
+                            "promoted_to_wif":   _sum193.get("promoted_to_wif", 0),
+                            "last_cycle_findings": _sum193.get("last_cycle_findings", 0),
+                            "last_checked_at":   _sum193.get("last_checked_at"),
+                            "timestamp":         _t193.time(),
+                        }
+
+                    if name == "get_fleet_coherence_entries":
+                        _fm193  = str(tool_input.get("failure_mode", ""))
+                        _sev193 = str(tool_input.get("severity", ""))
+                        _ents193 = self._store.get_open_coherence_entries(
+                            severity=_sev193 or None,
+                            failure_mode=_fm193 or None,
+                        )
+                        return {
+                            "entry_count": len(_ents193),
+                            "entries":     _ents193,
+                            "failure_mode": _fm193 or "all",
+                            "severity":    _sev193 or "all",
+                            "timestamp":   _t193.time(),
+                        }
+
+                    if name == "resolve_coherence_entry":
+                        _cid193 = str(tool_input.get("coherence_id", ""))
+                        _by193  = str(tool_input.get("resolved_by", "operator"))
+                        if not _cid193:
+                            return {"error": "coherence_id required"}
+                        self._store.mark_coherence_resolved(_cid193, _by193)
+                        return {"resolved": True, "coherence_id": _cid193,
+                                "resolved_by": _by193, "timestamp": _t193.time()}
+
+                except Exception as _exc193:
+                    return {"error": str(_exc193), "tool": name}
 
             # Tool #129 — Phase 180
             if name == "trigger_renewal_commitment":

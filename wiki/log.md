@@ -59,3 +59,17 @@ Format: timestamp | operation | pages | provenance | outcome
 2026-04-09T21:52:47.971529+00:00 | AR_FEED | vapi-autoresearch\experiments\log.jsonl | [VAPI:Phase180:vapi_wiki_engine.py:MEASURED] | gaps=17, ratio=None
 2026-04-09T21:52:55.265753+00:00 | SYNC_WHAT_IF | vapi-autoresearch\vapi_eval_harness.py | [VAPI:Phase180:VAPI_WHAT_IF.md:MEASURED] | 15 W1 entries synced to harness WIKI_KNOWN_W1
 2026-04-09T21:52:58.774380+00:00 | AR_FEED | vapi-autoresearch\experiments\log.jsonl | [VAPI:Phase180:vapi_wiki_engine.py:MEASURED] | gaps=17, ratio=None
+2026-04-11T18:02:17.371372+00:00 | SYNC_WHAT_IF | vapi-autoresearch\vapi_eval_harness.py | [VAPI:Phase192:VAPI_WHAT_IF.md:MEASURED] | 15 W1 entries synced to harness WIKI_KNOWN_W1
+2026-04-11T18:02:39.748958+00:00 | SNAPSHOT | wiki\snapshots.md | [SNAPSHOT:de4de07fbe97] | pages=60, anchor=anchor_failed (timed out)
+2026-04-11T18:02:44.366934+00:00 | BRIEF | wiki\briefs\brief_MEMORY.md_192.md | [VAPI:Phase192:MEMORY.md:MEASURED] | domains=1, violations=0
+2026-04-11T18:02:44.414832+00:00 | BRIEF | wiki\briefs\brief_VAPI_WHAT_IF.md_192.md | [VAPI:Phase192:VAPI_WHAT_IF.md:MEASURED] | domains=8, violations=2
+2026-04-11T18:02:57.179564+00:00 | SNAPSHOT | wiki\snapshots.md | [SNAPSHOT:de8d08b8b82c] | pages=62, anchor=anchor_failed (timed out)
+2026-04-11T18:02:57.239285+00:00 | SYNC_WHAT_IF | vapi-autoresearch\vapi_eval_harness.py | [VAPI:Phase192:VAPI_WHAT_IF.md:MEASURED] | 15 W1 entries synced to harness WIKI_KNOWN_W1
+2026-04-11T18:02:57.382968+00:00 | AR_FEED | vapi-autoresearch\experiments\log.jsonl | [VAPI:Phase192:vapi_wiki_engine.py:MEASURED] | gaps=37, ratio=None
+2026-04-11T18:24:19.465060+00:00 | SYNC_WHAT_IF | vapi-autoresearch\vapi_eval_harness.py | [VAPI:Phase193:VAPI_WHAT_IF.md:MEASURED] | 15 W1 entries synced to harness WIKI_KNOWN_W1
+2026-04-11T18:24:44.410609+00:00 | SNAPSHOT | wiki\snapshots.md | [SNAPSHOT:42f090eb12ad] | pages=62, anchor=anchor_failed (timed out)
+2026-04-11T18:24:51.216349+00:00 | BRIEF | wiki\briefs\brief_MEMORY.md_193.md | [VAPI:Phase193:MEMORY.md:MEASURED] | domains=1, violations=0
+2026-04-11T18:24:51.273966+00:00 | BRIEF | wiki\briefs\brief_VAPI_WHAT_IF.md_193.md | [VAPI:Phase193:VAPI_WHAT_IF.md:MEASURED] | domains=8, violations=2
+2026-04-11T18:25:04.063551+00:00 | SNAPSHOT | wiki\snapshots.md | [SNAPSHOT:aecf50345820] | pages=64, anchor=anchor_failed (timed out)
+2026-04-11T18:25:04.123296+00:00 | SYNC_WHAT_IF | vapi-autoresearch\vapi_eval_harness.py | [VAPI:Phase193:VAPI_WHAT_IF.md:MEASURED] | 15 W1 entries synced to harness WIKI_KNOWN_W1
+2026-04-11T18:25:04.297998+00:00 | AR_FEED | vapi-autoresearch\experiments\log.jsonl | [VAPI:Phase193:vapi_wiki_engine.py:MEASURED] | gaps=39, ratio=None

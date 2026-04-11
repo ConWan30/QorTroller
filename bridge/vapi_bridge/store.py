@@ -1661,6 +1661,257 @@ class Store:
                 CREATE INDEX IF NOT EXISTS idx_sep_recovery_created
                 ON separation_ratio_recovery_log(created_at DESC)
             """)
+            # Phase 190: live_presence_signaling_log — LivePresenceSignalingAgent (agent #34).
+            # Bidirectional VAPI presence channel: controller LED+haptic + ANSI terminal stream.
+            # signal_type: HARD_CHEAT_DETECTED/CERTIFY_ADJUDICATION/BIOMETRIC_ANOMALY/
+            #   PERSONA_BREAK_DETECTED/ENROLLMENT_MILESTONE/MATURITY_ELEVATION/
+            #   SEPARATION_BREAKTHROUGH/CHAIN_MILESTONE
+            # controller_fired=0 when ps5_compat_mode=True suppresses HID writes.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS live_presence_signaling_log (
+                    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                    signal_source     TEXT    NOT NULL DEFAULT '',
+                    signal_type       TEXT    NOT NULL DEFAULT '',
+                    led_rgb           TEXT    NOT NULL DEFAULT '0,0,0',
+                    haptic_duration   INTEGER NOT NULL DEFAULT 0,
+                    terminal_output   TEXT    NOT NULL DEFAULT '',
+                    controller_fired  INTEGER NOT NULL DEFAULT 0,
+                    ps5_compat_mode   INTEGER NOT NULL DEFAULT 0,
+                    created_at        REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_presence_created
+                ON live_presence_signaling_log(created_at DESC)
+            """)
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                " VALUES (?, ?, ?)",
+                (190, "live_presence_signaling", time.time()),
+            )
+            # Phase 189: protocol_intelligence_record_log — ProtocolIntelligenceRecordAgent (agent #33).
+            # SHA-256 hash-linked PIR chain analogous to PoAC record chain.
+            # pir_hash = SHA-256(prev_pir_hash + cycle + phase + wif_hash + forecast + score + ts).
+            # Genesis PIR-0010: prev_pir_hash = "0"*64.
+            # UNIQUE pir_hash enforces anti-replay (duplicate raises ValueError).
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS protocol_intelligence_record_log (
+                    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                    cycle_number      INTEGER NOT NULL DEFAULT 0,
+                    phase_produced    TEXT    NOT NULL DEFAULT '',
+                    wif_hash          TEXT    NOT NULL DEFAULT '',
+                    threat_forecast   TEXT    NOT NULL DEFAULT '',
+                    harness_score     REAL    NOT NULL DEFAULT 0.0,
+                    prev_pir_hash     TEXT    NOT NULL DEFAULT '',
+                    pir_hash          TEXT    NOT NULL UNIQUE,
+                    eval_timestamp    REAL    NOT NULL DEFAULT 0.0,
+                    created_at        REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_pir_cycle
+                ON protocol_intelligence_record_log(cycle_number DESC)
+            """)
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                " VALUES (?, ?, ?)",
+                (189, "protocol_intelligence_record", time.time()),
+            )
+            # Phase 188: biometric_stationarity_log — BiometricStationarityOracleAgent (agent #32).
+            # Closes P1 genuine-drift vs adversarial-window ambiguity.
+            # Discriminator: Agent 25 chain_integrity_score — genuine drift leaves PoAC chain intact;
+            # adversarial window exploitation produces chain anomalies coincident with drift.
+            # stationarity_verdict: ADVERSARIAL_WINDOW | GENUINE_DRIFT | AMBIGUOUS | STABLE
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS biometric_stationarity_log (
+                    id                                INTEGER PRIMARY KEY AUTOINCREMENT,
+                    player_id                         TEXT    NOT NULL DEFAULT '',
+                    p_genuine_drift                   REAL    NOT NULL DEFAULT 0.0,
+                    p_adversarial_window              REAL    NOT NULL DEFAULT 0.0,
+                    stationarity_verdict              TEXT    NOT NULL DEFAULT 'STABLE',
+                    biometric_stationarity_confidence REAL    NOT NULL DEFAULT 0.5,
+                    chain_integrity_score             REAL    NOT NULL DEFAULT 1.0,
+                    trend_velocity                    REAL    NOT NULL DEFAULT 0.0,
+                    temporal_drift_index              REAL    NOT NULL DEFAULT 0.0,
+                    session_count_used                INTEGER NOT NULL DEFAULT 0,
+                    created_at                        REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_stationarity_player
+                ON biometric_stationarity_log(player_id, created_at DESC)
+            """)
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                " VALUES (?, ?, ?)",
+                (188, "biometric_stationarity", time.time()),
+            )
+            # Phase 187 (VHP badge): vhp_reenrollment_badge_log — VHPReenrollmentBadge.sol ERC-4671.
+            # Soulbound badge minted after each successful re-enrollment attestation cycle.
+            # badge_token_id: on-chain token ID from mintBadge() (0 = dry-run / not yet minted).
+            # on_chain_tx: tx hash from mintBadge() IoTeX call (empty = dry-run).
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS vhp_reenrollment_badge_log (
+                    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                    player_id         TEXT    NOT NULL DEFAULT '',
+                    attestation_hash  TEXT    NOT NULL DEFAULT '',
+                    badge_token_id    INTEGER NOT NULL DEFAULT 0,
+                    ttl_days          REAL    NOT NULL DEFAULT 90.0,
+                    on_chain_tx       TEXT    NOT NULL DEFAULT '',
+                    dry_run           INTEGER NOT NULL DEFAULT 1,
+                    created_at        REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_badge_player
+                ON vhp_reenrollment_badge_log(player_id, created_at DESC)
+            """)
+            # Phase 187 (opsec): attestation_opsec_log — AttestationOpSecAdvisorAgent (agent #31).
+            # timing_disclosure_risk: HIGH when bound_renewal_enabled + active_attestations > 0.
+            # HIGH risk: adversary monitors IoTeX mempool for registerAttestation() tx (WIF-033 W1).
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS attestation_opsec_log (
+                    id                         INTEGER PRIMARY KEY AUTOINCREMENT,
+                    player_id                  TEXT    NOT NULL DEFAULT '',
+                    timing_disclosure_risk     TEXT    NOT NULL DEFAULT 'LOW',
+                    active_attestations        INTEGER NOT NULL DEFAULT 0,
+                    re_enrollment_window_active INTEGER NOT NULL DEFAULT 0,
+                    recommendation             TEXT    NOT NULL DEFAULT '',
+                    created_at                 REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_opsec_created
+                ON attestation_opsec_log(created_at DESC)
+            """)
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                " VALUES (?, ?, ?)",
+                (187, "attestation_opsec", time.time()),
+            )
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                " VALUES (?, ?, ?)",
+                (1870, "vhp_reenrollment_badge", time.time()),
+            )
+            # Phase 186: attestation_bound_renewal_log — AttestationBoundRenewalAgent (agent #30).
+            # Validates that every renewal has a valid active HMAC attestation from Phase 185.
+            # renewal_approved=0: adversary cannot trigger renewal without operator attestation.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS attestation_bound_renewal_log (
+                    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                    player_id         TEXT    NOT NULL DEFAULT '',
+                    attestation_hash  TEXT    NOT NULL DEFAULT '',
+                    renewal_approved  INTEGER NOT NULL DEFAULT 0,
+                    denial_reason     TEXT    NOT NULL DEFAULT '',
+                    new_commit_hash   TEXT    NOT NULL DEFAULT '',
+                    created_at        REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_bound_renewal_player
+                ON attestation_bound_renewal_log(player_id, created_at DESC)
+            """)
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                " VALUES (?, ?, ?)",
+                (186, "attestation_bound_renewal", time.time()),
+            )
+            # Phase 185: persona_break_attestation_log — ReEnrollmentAttestationAgent (agent #29).
+            # HMAC-SHA256 attestation token gates re-enrollment window (WIF-032 W1 closure).
+            # UNIQUE attestation_hash prevents double-issuance (anti-replay).
+            # active=0 when expired via expire_stale_attestations() or manually revoked.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS persona_break_attestation_log (
+                    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                    player_id           TEXT    NOT NULL DEFAULT '',
+                    attestation_hash    TEXT    NOT NULL UNIQUE,
+                    active              INTEGER NOT NULL DEFAULT 1,
+                    issued_at           REAL    NOT NULL DEFAULT 0.0,
+                    expires_at          REAL    NOT NULL DEFAULT 0.0,
+                    loo_trend_at_break  REAL    NOT NULL DEFAULT 0.0,
+                    tdi_at_break        REAL    NOT NULL DEFAULT 0.0,
+                    ttl_days            REAL    NOT NULL DEFAULT 7.0,
+                    created_at          REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_attestation_player_active
+                ON persona_break_attestation_log(player_id, active, expires_at DESC)
+            """)
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                " VALUES (?, ?, ?)",
+                (185, "persona_break_attestation", time.time()),
+            )
+            # Phase 183: maturity_elevation_log — MaturityElevationGateAgent (agent #28).
+            # Reads 6-component protocol_maturity_log and generates actionable elevation_plan.
+            # elevation_available=True when gap_to_target < 0.05 (close to next tier threshold).
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS maturity_elevation_log (
+                    id                        INTEGER PRIMARY KEY AUTOINCREMENT,
+                    current_tier              TEXT    NOT NULL DEFAULT 'ALPHA',
+                    target_tier               TEXT    NOT NULL DEFAULT 'BETA',
+                    gap_to_target             REAL    NOT NULL DEFAULT 1.0,
+                    elevation_plan_json       TEXT    NOT NULL DEFAULT '{}',
+                    elevation_available       INTEGER NOT NULL DEFAULT 0,
+                    critical_component        TEXT    NOT NULL DEFAULT '',
+                    estimated_sessions_total  INTEGER NOT NULL DEFAULT 0,
+                    created_at                REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_elevation_created
+                ON maturity_elevation_log(created_at DESC)
+            """)
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                " VALUES (?, ?, ?)",
+                (183, "maturity_elevation", time.time()),
+            )
+            # Phase 182: persona_break_log — PersonaBreakDetectorAgent (agent #27).
+            # LOO accuracy trend over last 5 separation_ratio_snapshots per player.
+            # persona_break_detected=True when mean_loo < persona_break_loo_threshold (0.20).
+            # re_enrollment_urgency: CRITICAL | HIGH | MEDIUM
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS persona_break_log (
+                    id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+                    player_id              TEXT    NOT NULL DEFAULT '',
+                    loo_accuracy_trend     REAL    NOT NULL DEFAULT 1.0,
+                    tdi_current            REAL    NOT NULL DEFAULT 0.0,
+                    persona_break_detected INTEGER NOT NULL DEFAULT 0,
+                    re_enrollment_urgency  TEXT    NOT NULL DEFAULT 'MEDIUM',
+                    n_snapshots_used       INTEGER NOT NULL DEFAULT 0,
+                    created_at             REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_persona_break_player
+                ON persona_break_log(player_id, created_at DESC)
+            """)
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                " VALUES (?, ?, ?)",
+                (182, "persona_break", time.time()),
+            )
+            # Phase 181: renewal_consent_snapshot_log — Consent-Bound Renewal Provenance.
+            # Records consent coverage at every separation-ratio renewal (WIF-030 W2 closure).
+            # corpus_delta_detected=1 when player set changed since last snapshot.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS renewal_consent_snapshot_log (
+                    id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+                    new_commit_hash        TEXT    NOT NULL UNIQUE,
+                    n_consented_at_renewal INTEGER NOT NULL DEFAULT 0,
+                    players_consented_json TEXT    NOT NULL DEFAULT '[]',
+                    revoked_at_renewal     INTEGER NOT NULL DEFAULT 0,
+                    corpus_delta_detected  INTEGER NOT NULL DEFAULT 0,
+                    created_at             REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_renewal_snapshot_hash
+                ON renewal_consent_snapshot_log(new_commit_hash)
+            """)
             # Phase 180: biometric_renewal_chain_log — Biometric Renewal Engine (WIF-029 W2 closure).
             # Records each consent-bound renewal commitment chain entry.
             # new_commit_hash: SHA-256(prev_hash + ratio_str + N + N_consented + players + ttl_days + ts_ns).
@@ -1726,29 +1977,286 @@ class Store:
                 CREATE INDEX IF NOT EXISTS idx_biometric_renewal_created
                 ON biometric_renewal_log(created_at DESC)
             """)
-            # Phase 177: protocol_maturity_log — ProtocolMaturityScoringAgent (agent #26).
-            # Synthesizes 6 agent signals into a unified maturity_score (0.0-1.0).
+            # Phase 177 / Phase 191 TSP: protocol_maturity_log — ProtocolMaturityScoringAgent (agent #26).
+            # Synthesizes 8 agent signals into a unified maturity_score (0.0-1.0).
             # maturity_tier: ALPHA (<0.50) | BETA (0.50-0.85) | PRODUCTION_CANDIDATE (>=0.85)
-            # Component weights: separation(0.25)+chain_integrity(0.20)+consent(0.15)
-            #   +biometric_freshness(0.15)+agent_calibration(0.15)+enrollment(0.10)
+            # Component weights v2 (Phase 191): separation(0.20)+chain_integrity(0.20)+consent(0.15)
+            #   +biometric_freshness(0.12)+agent_calibration(0.12)+enrollment(0.10)
+            #   +threat_forecast_accuracy(0.07)+biometric_stationarity(0.04)
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS protocol_maturity_log (
-                    id                            INTEGER PRIMARY KEY AUTOINCREMENT,
-                    maturity_score                REAL    NOT NULL DEFAULT 0.0,
-                    maturity_tier                 TEXT    NOT NULL DEFAULT 'ALPHA',
-                    separation_component          REAL    NOT NULL DEFAULT 0.0,
-                    chain_integrity_component     REAL    NOT NULL DEFAULT 0.0,
-                    consent_component             REAL    NOT NULL DEFAULT 0.0,
-                    biometric_freshness_component REAL    NOT NULL DEFAULT 0.0,
-                    agent_calibration_component   REAL    NOT NULL DEFAULT 0.0,
-                    enrollment_component          REAL    NOT NULL DEFAULT 0.0,
-                    created_at                    REAL    NOT NULL DEFAULT (strftime('%s','now'))
+                    id                                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                    maturity_score                      REAL    NOT NULL DEFAULT 0.0,
+                    maturity_tier                       TEXT    NOT NULL DEFAULT 'ALPHA',
+                    separation_component                REAL    NOT NULL DEFAULT 0.0,
+                    chain_integrity_component           REAL    NOT NULL DEFAULT 0.0,
+                    consent_component                   REAL    NOT NULL DEFAULT 0.0,
+                    biometric_freshness_component       REAL    NOT NULL DEFAULT 0.0,
+                    agent_calibration_component         REAL    NOT NULL DEFAULT 0.0,
+                    enrollment_component                REAL    NOT NULL DEFAULT 0.0,
+                    threat_forecast_accuracy_component  REAL    NOT NULL DEFAULT 0.0,
+                    biometric_stationarity_component    REAL    NOT NULL DEFAULT 0.0,
+                    created_at                          REAL    NOT NULL DEFAULT (strftime('%s','now'))
                 )
             """)
+            # Phase 191: idempotent migration — add TSP columns to existing DBs
+            for _col191, _default191 in (
+                ("threat_forecast_accuracy_component", "0.0"),
+                ("biometric_stationarity_component",   "0.0"),
+            ):
+                try:
+                    conn.execute(
+                        f"ALTER TABLE protocol_maturity_log ADD COLUMN {_col191} REAL NOT NULL DEFAULT {_default191}"
+                    )
+                except Exception:
+                    pass  # column already exists
             conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_maturity_created
                 ON protocol_maturity_log(created_at DESC)
             """)
+            # Phase 192: DataCuratorAgent (Agent #35) — 7-task data coherence layer.
+            # Task 1: data_provenance_dag — causal DAG from calibration session to VHP badge.
+            # node_type values: CALIBRATION_SESSION | SEPARATION_SNAPSHOT | DEFENSIBILITY_LOG |
+            #   COMMITMENT_HASH | RENEWAL_LOG | ATTESTATION_LOG | BADGE_TOKEN |
+            #   RULING_LOG | CONSENT_SNAPSHOT | ERASURE_CERTIFICATE
+            # edge_type values: FEATURE_EXTRACTION | DEFENSIBILITY_CHECK |
+            #   COMMITMENT | RENEWAL | ATTESTATION | BADGE_MINT | RULING | CONSENT | ERASURE
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS data_provenance_dag (
+                    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                    node_id          TEXT    NOT NULL UNIQUE,
+                    node_type        TEXT    NOT NULL,
+                    source_table     TEXT    NOT NULL,
+                    source_row_id    INTEGER,
+                    source_hash      TEXT,
+                    parent_node_id   TEXT,
+                    edge_type        TEXT,
+                    phase_produced   INTEGER NOT NULL,
+                    player_id        TEXT,
+                    on_chain_ref     TEXT,
+                    created_at       TEXT    DEFAULT (datetime('now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_provenance_parent
+                ON data_provenance_dag(parent_node_id)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_provenance_player
+                ON data_provenance_dag(player_id)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_provenance_type
+                ON data_provenance_dag(node_type)
+            """)
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                " VALUES (?, ?, ?)",
+                (192, "data_provenance_dag", time.time()),
+            )
+            # Task 2: corpus_entropy_log — Shannon entropy of 13-dim feature space per player.
+            # Score < 1.5 = CLUSTERING_WARNING (brittle centroid).
+            # Score > 2.5 = WELL_SAMPLED (trustworthy ratio).
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS corpus_entropy_log (
+                    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+                    corpus_entropy_score  REAL    NOT NULL,
+                    per_player_entropy    TEXT    NOT NULL,
+                    per_feature_entropy   TEXT    NOT NULL,
+                    low_entropy_features  TEXT    NOT NULL,
+                    clustering_warning    INTEGER NOT NULL DEFAULT 0,
+                    n_sessions_analyzed   INTEGER NOT NULL,
+                    session_type_filter   TEXT    DEFAULT 'touchpad_corners',
+                    computed_at_ts        INTEGER NOT NULL,
+                    created_at            TEXT    DEFAULT (datetime('now'))
+                )
+            """)
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                " VALUES (?, ?, ?)",
+                (192, "corpus_entropy", time.time()),
+            )
+            # Task 3: erasure_certificate_log — GDPR Art.17 cryptographic erasure proof.
+            # certificate_hash = SHA-256(device_id + sorted_table_row_hashes + ratio + ts_ns).
+            # Anchored to AdjudicationRegistry.sol (same contract as PoAd — zero new infra).
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS erasure_certificate_log (
+                    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+                    certificate_hash      TEXT    NOT NULL UNIQUE,
+                    device_id             TEXT    NOT NULL,
+                    player_id             TEXT    NOT NULL,
+                    erased_tables_json    TEXT    NOT NULL,
+                    erased_row_count      INTEGER NOT NULL,
+                    post_erasure_ratio    REAL    NOT NULL,
+                    on_chain_tx_hash      TEXT,
+                    anchored              INTEGER NOT NULL DEFAULT 0,
+                    ts_ns                 INTEGER NOT NULL,
+                    created_at            TEXT    DEFAULT (datetime('now'))
+                )
+            """)
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                " VALUES (?, ?, ?)",
+                (192, "erasure_certificate", time.time()),
+            )
+            # Task 4: federation_corpus_quality_log — anonymized cross-bridge corpus stats.
+            # BP-007: only derived metrics leave a bridge — no feature vectors, no player IDs.
+            # Contents: bridge_id_hash, session_type, N, entropy, stationarity, velocity.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS federation_corpus_quality_log (
+                    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+                    bridge_id_hash          TEXT    NOT NULL,
+                    session_type            TEXT    NOT NULL,
+                    n_sessions              INTEGER NOT NULL,
+                    entropy_score           REAL    NOT NULL,
+                    stationarity_score      REAL    NOT NULL,
+                    centroid_velocity_mean  REAL    NOT NULL,
+                    federation_entropy_mean REAL,
+                    federation_outlier      INTEGER NOT NULL DEFAULT 0,
+                    outlier_sigma           REAL,
+                    received_at_ts          INTEGER NOT NULL,
+                    created_at              TEXT    DEFAULT (datetime('now'))
+                )
+            """)
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                " VALUES (?, ?, ?)",
+                (192, "federation_corpus_quality", time.time()),
+            )
+            # Task 5: feature_correlation_log — 13x13 per-player correlation matrix.
+            # Upper triangle stored as JSON (91 values). Frobenius distance measures
+            # correlation-structure separability independent of Mahalanobis distance.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS feature_correlation_log (
+                    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+                    player_id             TEXT    NOT NULL,
+                    session_type          TEXT    NOT NULL DEFAULT 'touchpad_corners',
+                    n_sessions_used       INTEGER NOT NULL,
+                    correlation_upper_tri TEXT    NOT NULL,
+                    high_correlation_pairs TEXT   NOT NULL,
+                    frobenius_vs_p1       REAL,
+                    frobenius_vs_p2       REAL,
+                    frobenius_vs_p3       REAL,
+                    correlation_separable INTEGER NOT NULL DEFAULT 0,
+                    computed_at_ts        INTEGER NOT NULL,
+                    created_at            TEXT    DEFAULT (datetime('now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_correlation_player
+                ON feature_correlation_log(player_id, computed_at_ts DESC)
+            """)
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                " VALUES (?, ?, ?)",
+                (192, "feature_correlation", time.time()),
+            )
+            # Task 6: data_readiness_certificate_log — 8-dimension pre-tournament certification.
+            # certificate_hash = SHA-256(sorted_dims_json + ratio_str + ts_ns_bytes).
+            # Anchored to AdjudicationRegistry.sol. certification_status:
+            #   CERTIFIED = all blocking dims passed.
+            #   BLOCKED = >= 1 blocking dimension failed.
+            #   ADVISORY_ONLY = all blocking passed, some advisory warnings.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS data_readiness_certificate_log (
+                    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+                    certificate_hash     TEXT    NOT NULL UNIQUE,
+                    certification_status TEXT    NOT NULL,
+                    blocking_failures    TEXT    NOT NULL,
+                    advisory_warnings    TEXT    NOT NULL,
+                    dimension_results    TEXT    NOT NULL,
+                    separation_ratio     REAL    NOT NULL,
+                    on_chain_tx_hash     TEXT,
+                    anchored             INTEGER NOT NULL DEFAULT 0,
+                    valid_until_ts       INTEGER NOT NULL,
+                    ts_ns                INTEGER NOT NULL,
+                    created_at           TEXT    DEFAULT (datetime('now'))
+                )
+            """)
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                " VALUES (?, ?, ?)",
+                (192, "data_readiness_certificate", time.time()),
+            )
+            # Task 7: session_contribution_weight_log — TBD-decay weighted centroid input.
+            # FROZEN: lambda = ln(2)/90 (BP-001 TBD half-life = vhp_expiry_days = 90 days).
+            # effective_weight = tbd_weight * type_multiplier * stationarity_multiplier.
+            # Powers weighted centroid (--weighted-centroid flag in analyze_interperson_separation.py).
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS session_contribution_weight_log (
+                    id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_file           TEXT    NOT NULL,
+                    player_id              TEXT    NOT NULL,
+                    session_type           TEXT    NOT NULL,
+                    session_captured_at_ts INTEGER NOT NULL,
+                    age_days               REAL    NOT NULL,
+                    tbd_weight             REAL    NOT NULL,
+                    type_multiplier        REAL    NOT NULL,
+                    stationarity_multiplier REAL   NOT NULL,
+                    effective_weight       REAL    NOT NULL,
+                    centroid_influence_rank INTEGER,
+                    computed_at_ts         INTEGER NOT NULL,
+                    created_at             TEXT    DEFAULT (datetime('now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_contrib_weight_player
+                ON session_contribution_weight_log(player_id, effective_weight DESC)
+            """)
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                " VALUES (?, ?, ?)",
+                (192, "session_contribution_weight", time.time()),
+            )
+            # Phase 193: fleet_coherence_log — FleetSignalCoherenceAgent (agent #36).
+            # Stores CONTRADICTION / ORPHAN / INVERSION findings from fleet-level coherence detection.
+            # coherence_id = SHA-256(rule_name + sorted(agents_involved) + ts_ns)[:16] — idempotent.
+            # INSERT OR IGNORE on coherence_id prevents duplicate findings within same cycle.
+            # evidence_json stores only derived metrics — no raw biometric data (BP-007 IMMUTABLE).
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS fleet_coherence_log (
+                    id                        INTEGER PRIMARY KEY AUTOINCREMENT,
+                    coherence_id              TEXT    NOT NULL UNIQUE,
+                    failure_mode              TEXT    NOT NULL,
+                    rule_name                 TEXT    NOT NULL,
+                    agents_involved           TEXT    NOT NULL,
+                    severity                  TEXT    NOT NULL,
+                    explanation               TEXT    NOT NULL,
+                    resolution                TEXT    NOT NULL,
+                    evidence_json             TEXT    NOT NULL DEFAULT '[]',
+                    promoted_to_wif           INTEGER NOT NULL DEFAULT 0,
+                    wif_entry_id              TEXT,
+                    wiki_contradict_written   INTEGER NOT NULL DEFAULT 0,
+                    alert_published           INTEGER NOT NULL DEFAULT 0,
+                    resolved                  INTEGER NOT NULL DEFAULT 0,
+                    resolved_at               TEXT,
+                    resolved_by               TEXT,
+                    phase_detected            INTEGER NOT NULL DEFAULT 193,
+                    ts_ns                     INTEGER NOT NULL DEFAULT 0,
+                    created_at                TEXT    DEFAULT (datetime('now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_coherence_mode
+                ON fleet_coherence_log(failure_mode)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_coherence_severity
+                ON fleet_coherence_log(severity)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_coherence_resolved
+                ON fleet_coherence_log(resolved)
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_coherence_rule
+                ON fleet_coherence_log(rule_name)
+            """)
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                " VALUES (?, ?, ?)",
+                (193, "fleet_coherence", time.time()),
+            )
             # Phase 176: poac_chain_audit_log — PoACChainIntegrityMonitor (agent #25).
             # Audits SHA-256 chain linkage across PoAC records for each device.
             # integrity_score = valid_links / total_links (0.0 = broken, 1.0 = intact).
@@ -8874,26 +9382,31 @@ class Store:
         biometric_freshness_component: float,
         agent_calibration_component: float,
         enrollment_component: float,
+        threat_forecast_accuracy_component: float = 0.0,
+        biometric_stationarity_component: float = 0.0,
     ) -> int:
-        """Insert a protocol maturity score assessment (Phase 177).
+        """Insert a protocol maturity score assessment (Phase 177, v2 Phase 191 TSP).
 
         maturity_score = (
-            0.25 * separation_component     -- ratio converging or above gate
-          + 0.20 * chain_integrity_component -- Phase 176 audit
-          + 0.15 * consent_component         -- Phase 162 consent corpus defensibility
-          + 0.15 * biometric_freshness_component -- Phase 159 TBD mean decay factor
-          + 0.15 * agent_calibration_component  -- Phase 148 ACIM health
-          + 0.10 * enrollment_component         -- Phase 156 overall_ready
-        )
+            0.20 * separation_component                -- ratio converging or above gate
+          + 0.20 * chain_integrity_component           -- Phase 176 audit
+          + 0.15 * consent_component                   -- Phase 162 consent corpus defensibility
+          + 0.12 * biometric_freshness_component       -- Phase 159 TBD decay
+          + 0.12 * agent_calibration_component         -- Phase 148 ACIM health
+          + 0.10 * enrollment_component                -- Phase 156 overall_ready
+          + 0.07 * threat_forecast_accuracy_component  -- Phase 191 PIR harness score
+          + 0.04 * biometric_stationarity_component    -- Phase 191 BSO confidence
         maturity_tier: ALPHA (<0.50) | BETA (0.50-0.85) | PRODUCTION_CANDIDATE (>=0.85)
         """
         score = round(
-            0.25 * float(separation_component)
+            0.20 * float(separation_component)
             + 0.20 * float(chain_integrity_component)
             + 0.15 * float(consent_component)
-            + 0.15 * float(biometric_freshness_component)
-            + 0.15 * float(agent_calibration_component)
-            + 0.10 * float(enrollment_component),
+            + 0.12 * float(biometric_freshness_component)
+            + 0.12 * float(agent_calibration_component)
+            + 0.10 * float(enrollment_component)
+            + 0.07 * float(threat_forecast_accuracy_component)
+            + 0.04 * float(biometric_stationarity_component),
             6,
         )
         if score >= 0.85:
@@ -8908,7 +9421,8 @@ class Store:
                 "(maturity_score, maturity_tier, separation_component, "
                 "chain_integrity_component, consent_component, "
                 "biometric_freshness_component, agent_calibration_component, "
-                "enrollment_component, created_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                "enrollment_component, threat_forecast_accuracy_component, "
+                "biometric_stationarity_component, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     score,
                     tier,
@@ -8918,34 +9432,1532 @@ class Store:
                     float(biometric_freshness_component),
                     float(agent_calibration_component),
                     float(enrollment_component),
+                    float(threat_forecast_accuracy_component),
+                    float(biometric_stationarity_component),
                     time.time(),
                 ),
             )
         return cur.lastrowid  # type: ignore[return-value]
 
     def get_protocol_maturity_status(self, limit: int = 1) -> "list[dict]":
-        """Return most recent protocol maturity assessments, newest first (Phase 177)."""
+        """Return most recent protocol maturity assessments, newest first (Phase 177, v2 Phase 191)."""
         with self._conn() as conn:
             rows = conn.execute(
                 "SELECT id, maturity_score, maturity_tier, separation_component, "
                 "chain_integrity_component, consent_component, "
                 "biometric_freshness_component, agent_calibration_component, "
-                "enrollment_component, created_at "
+                "enrollment_component, "
+                "threat_forecast_accuracy_component, biometric_stationarity_component, "
+                "created_at "
                 "FROM protocol_maturity_log ORDER BY id DESC LIMIT ?",
                 (limit,),
             ).fetchall()
         return [
             {
-                "id":                            r[0],
-                "maturity_score":                float(r[1]),
-                "maturity_tier":                 r[2],
-                "separation_component":          float(r[3]),
-                "chain_integrity_component":     float(r[4]),
-                "consent_component":             float(r[5]),
-                "biometric_freshness_component": float(r[6]),
-                "agent_calibration_component":   float(r[7]),
-                "enrollment_component":          float(r[8]),
-                "created_at":                    r[9],
+                "id":                                    r[0],
+                "maturity_score":                        float(r[1]),
+                "maturity_tier":                         r[2],
+                "separation_component":                  float(r[3]),
+                "chain_integrity_component":             float(r[4]),
+                "consent_component":                     float(r[5]),
+                "biometric_freshness_component":         float(r[6]),
+                "agent_calibration_component":           float(r[7]),
+                "enrollment_component":                  float(r[8]),
+                "threat_forecast_accuracy_component":    float(r[9]) if r[9] is not None else 0.0,
+                "biometric_stationarity_component":      float(r[10]) if r[10] is not None else 0.0,
+                "created_at":                            r[11],
             }
             for r in rows
         ]
+
+    def get_threat_forecast_accuracy(self) -> float:
+        """Return latest PIR harness_score as threat_forecast_accuracy (Phase 191).
+
+        Uses protocol_intelligence_record_log.harness_score — the eval harness score
+        from AutoResearch Cycle 11+ is the threat quality metric for TSP.
+        Returns 0.5 (neutral) when no PIR data exists.
+        """
+        try:
+            with self._conn() as conn:
+                row = conn.execute(
+                    "SELECT harness_score FROM protocol_intelligence_record_log "
+                    "ORDER BY id DESC LIMIT 1"
+                ).fetchone()
+            if row is None:
+                return 0.5
+            return round(min(1.0, max(0.0, float(row[0]))), 6)
+        except Exception:
+            return 0.5
+
+    # --- Phase 190: LivePresenceSignalingAgent ---
+
+    def insert_presence_signal(
+        self,
+        signal_source: str,
+        signal_type: str,
+        led_rgb: "tuple[int,int,int]",
+        haptic_duration: int,
+        terminal_output: str,
+        controller_fired: bool,
+        ps5_compat_mode: bool,
+    ) -> int:
+        """Insert a live presence signal record (Phase 190)."""
+        rgb_str = f"{led_rgb[0]},{led_rgb[1]},{led_rgb[2]}"
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO live_presence_signaling_log "
+                "(signal_source, signal_type, led_rgb, haptic_duration, "
+                "terminal_output, controller_fired, ps5_compat_mode, created_at) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (
+                    signal_source,
+                    signal_type,
+                    rgb_str,
+                    int(haptic_duration),
+                    terminal_output,
+                    1 if controller_fired else 0,
+                    1 if ps5_compat_mode else 0,
+                    time.time(),
+                ),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def get_presence_signal_status(self, limit: int = 10) -> dict:
+        """Return live presence signaling status (Phase 190)."""
+        try:
+            with self._conn() as conn:
+                rows = conn.execute(
+                    "SELECT signal_source, signal_type, led_rgb, haptic_duration, "
+                    "terminal_output, controller_fired, ps5_compat_mode, created_at "
+                    "FROM live_presence_signaling_log ORDER BY id DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+                total = conn.execute(
+                    "SELECT COUNT(*) FROM live_presence_signaling_log"
+                ).fetchone()[0]
+                controller_fired_count = conn.execute(
+                    "SELECT COUNT(*) FROM live_presence_signaling_log WHERE controller_fired=1"
+                ).fetchone()[0]
+                ps5_suppressed_count = conn.execute(
+                    "SELECT COUNT(*) FROM live_presence_signaling_log WHERE ps5_compat_mode=1"
+                ).fetchone()[0]
+        except Exception:
+            return {
+                "total_signals": 0,
+                "controller_fired_count": 0,
+                "ps5_suppressed_count": 0,
+                "latest_signal_source": "",
+                "latest_signal_type": "",
+                "latest_terminal_output": "",
+                "timestamp": time.time(),
+            }
+        latest = rows[0] if rows else None
+        return {
+            "total_signals":          int(total),
+            "controller_fired_count": int(controller_fired_count),
+            "ps5_suppressed_count":   int(ps5_suppressed_count),
+            "latest_signal_source":   latest[0] if latest else "",
+            "latest_signal_type":     latest[1] if latest else "",
+            "latest_terminal_output": latest[4] if latest else "",
+            "timestamp":              time.time(),
+        }
+
+    # --- Phase 189: ProtocolIntelligenceRecordAgent ---
+
+    @staticmethod
+    def _compute_pir_hash(
+        prev_pir_hash: str,
+        cycle_number: int,
+        phase_produced: "int | str",
+        wif_hash: str,
+        threat_forecast: str,
+        harness_score: float,
+        eval_timestamp: float,
+    ) -> str:
+        """Compute SHA-256 hash linking a PIR record into the chain (Phase 189).
+
+        Formula: SHA-256("{prev}:{cycle}:{phase}:{wif}:{forecast}:{score:.6f}:{int(ts)}")
+        """
+        import hashlib
+        body = (
+            f"{prev_pir_hash}:{cycle_number}:{phase_produced}:{wif_hash}"
+            f":{threat_forecast}:{float(harness_score):.6f}:{int(eval_timestamp)}"
+        )
+        return hashlib.sha256(body.encode()).hexdigest()
+
+    def insert_pir(
+        self,
+        cycle_number: int,
+        phase_produced: "int | str",
+        wif_hash: str,
+        threat_forecast: str,
+        harness_score: float,
+        eval_timestamp: float,
+    ) -> "tuple[int, str]":
+        """Insert a Protocol Intelligence Record into the hash-linked chain (Phase 189).
+
+        Automatically fetches prev_pir_hash from the latest row ("0"*64 for genesis).
+        Raises ValueError on UNIQUE duplicate (anti-replay).
+        Returns (row_id, pir_hash).
+        """
+        with self._conn() as conn:
+            prev_row = conn.execute(
+                "SELECT pir_hash FROM protocol_intelligence_record_log ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+            prev_pir_hash = prev_row[0] if prev_row else "0" * 64
+            pir_hash = self._compute_pir_hash(
+                prev_pir_hash, cycle_number, phase_produced,
+                wif_hash, threat_forecast, harness_score, eval_timestamp,
+            )
+            try:
+                cur = conn.execute(
+                    "INSERT INTO protocol_intelligence_record_log "
+                    "(cycle_number, phase_produced, wif_hash, threat_forecast, "
+                    "harness_score, prev_pir_hash, pir_hash, eval_timestamp, created_at) "
+                    "VALUES (?,?,?,?,?,?,?,?,?)",
+                    (
+                        int(cycle_number),
+                        str(phase_produced),
+                        wif_hash,
+                        threat_forecast,
+                        float(harness_score),
+                        prev_pir_hash,
+                        pir_hash,
+                        float(eval_timestamp),
+                        time.time(),
+                    ),
+                )
+            except Exception as exc:
+                if "UNIQUE" in str(exc).upper():
+                    raise ValueError(f"Duplicate PIR hash (anti-replay): {pir_hash}") from exc
+                raise
+        return (cur.lastrowid, pir_hash)  # type: ignore[return-value]
+
+    def get_pir_chain_status(self, window: int = 10) -> dict:
+        """Return PIR chain integrity status (Phase 189).
+
+        Verifies hash linkage in the latest `window` records.
+        chain_intact=True when empty (vacuous integrity).
+        """
+        try:
+            with self._conn() as conn:
+                rows = conn.execute(
+                    "SELECT id, pir_hash, prev_pir_hash, cycle_number, "
+                    "phase_produced, threat_forecast, created_at "
+                    "FROM protocol_intelligence_record_log ORDER BY id DESC LIMIT ?",
+                    (window,),
+                ).fetchall()
+                total = conn.execute(
+                    "SELECT COUNT(*) FROM protocol_intelligence_record_log"
+                ).fetchone()[0]
+        except Exception:
+            return {
+                "total_pirs": 0,
+                "chain_intact": True,
+                "latest_cycle": 0,
+                "latest_pir_hash": "",
+                "latest_phase_produced": 0,
+                "latest_threat_forecast": "",
+                "records": [],
+                "timestamp": time.time(),
+            }
+        chain_intact = True
+        if len(rows) >= 2:
+            for i in range(len(rows) - 1):
+                # rows[i] is newer; rows[i+1] is older
+                if rows[i][2] != rows[i + 1][1]:
+                    chain_intact = False
+                    break
+        latest = rows[0] if rows else None
+        records_list = [
+            {
+                "id": r[0],
+                "pir_hash": r[1],
+                "prev_pir_hash": r[2],
+                "cycle_number": r[3],
+                "phase_produced": r[4],
+                "threat_forecast": r[5],
+                "created_at": r[6],
+            }
+            for r in rows
+        ]
+        return {
+            "total_pirs":             int(total),
+            "chain_intact":           chain_intact,
+            "latest_cycle":           int(latest[3]) if latest else 0,
+            "latest_pir_hash":        latest[1] if latest else "",
+            "latest_phase_produced":  latest[4] if latest else 0,
+            "latest_threat_forecast": latest[5] if latest else "",
+            "records":                records_list,
+            "timestamp":              time.time(),
+        }
+
+    # --- Phase 188: BiometricStationarityOracleAgent ---
+
+    def insert_biometric_stationarity_log(
+        self,
+        player_id: str,
+        p_genuine_drift: float,
+        p_adversarial_window: float,
+        stationarity_verdict: str,
+        chain_integrity_score: float,
+        trend_velocity: float,
+        temporal_drift_index: float,
+        session_count_used: int,
+    ) -> int:
+        """Insert a biometric stationarity assessment (Phase 188)."""
+        confidence = max(p_genuine_drift, p_adversarial_window)
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO biometric_stationarity_log "
+                "(player_id, p_genuine_drift, p_adversarial_window, stationarity_verdict, "
+                "biometric_stationarity_confidence, chain_integrity_score, trend_velocity, "
+                "temporal_drift_index, session_count_used, created_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (
+                    player_id,
+                    float(p_genuine_drift),
+                    float(p_adversarial_window),
+                    stationarity_verdict,
+                    float(confidence),
+                    float(chain_integrity_score),
+                    float(trend_velocity),
+                    float(temporal_drift_index),
+                    int(session_count_used),
+                    time.time(),
+                ),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def get_biometric_stationarity_status(self, player_id: "str | None" = None) -> "dict | None":
+        """Return latest biometric stationarity assessment (Phase 188)."""
+        try:
+            with self._conn() as conn:
+                if player_id:
+                    row = conn.execute(
+                        "SELECT player_id, p_genuine_drift, p_adversarial_window, "
+                        "stationarity_verdict, biometric_stationarity_confidence, "
+                        "chain_integrity_score, trend_velocity, temporal_drift_index, "
+                        "session_count_used, created_at "
+                        "FROM biometric_stationarity_log WHERE player_id=? "
+                        "ORDER BY id DESC LIMIT 1",
+                        (player_id,),
+                    ).fetchone()
+                else:
+                    row = conn.execute(
+                        "SELECT player_id, p_genuine_drift, p_adversarial_window, "
+                        "stationarity_verdict, biometric_stationarity_confidence, "
+                        "chain_integrity_score, trend_velocity, temporal_drift_index, "
+                        "session_count_used, created_at "
+                        "FROM biometric_stationarity_log ORDER BY id DESC LIMIT 1"
+                    ).fetchone()
+                total_adversarial = conn.execute(
+                    "SELECT COUNT(*) FROM biometric_stationarity_log "
+                    "WHERE stationarity_verdict='ADVERSARIAL_WINDOW'"
+                ).fetchone()[0]
+        except Exception:
+            return None
+        if row is None:
+            return {
+                "player_id": player_id or "",
+                "p_genuine_drift": 0.0,
+                "p_adversarial_window": 0.0,
+                "stationarity_verdict": "STABLE",
+                "biometric_stationarity_confidence": 0.5,
+                "chain_integrity_score": 1.0,
+                "trend_velocity": 0.0,
+                "temporal_drift_index": 0.0,
+                "session_count_used": 0,
+                "total_adversarial_alerts": 0,
+                "created_at": 0.0,
+            }
+        return {
+            "player_id":                        row[0],
+            "p_genuine_drift":                  float(row[1]),
+            "p_adversarial_window":             float(row[2]),
+            "stationarity_verdict":             row[3],
+            "biometric_stationarity_confidence": float(row[4]),
+            "chain_integrity_score":            float(row[5]),
+            "trend_velocity":                   float(row[6]),
+            "temporal_drift_index":             float(row[7]),
+            "session_count_used":               int(row[8]),
+            "total_adversarial_alerts":         int(total_adversarial),
+            "created_at":                       float(row[9]),
+        }
+
+    # --- Phase 187: AttestationOpSecAdvisorAgent + VHPReenrollmentBadge ---
+
+    def insert_attestation_opsec_log(
+        self,
+        player_id: str,
+        timing_disclosure_risk: str,
+        active_attestations: int,
+        re_enrollment_window_active: bool,
+        recommendation: str,
+    ) -> int:
+        """Insert an attestation OpSec advisory record (Phase 187)."""
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO attestation_opsec_log "
+                "(player_id, timing_disclosure_risk, active_attestations, "
+                "re_enrollment_window_active, recommendation, created_at) "
+                "VALUES (?,?,?,?,?,?)",
+                (
+                    player_id,
+                    timing_disclosure_risk,
+                    int(active_attestations),
+                    1 if re_enrollment_window_active else 0,
+                    recommendation,
+                    time.time(),
+                ),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def get_attestation_opsec_status(self, player_id: "str | None" = None) -> dict:
+        """Return latest attestation OpSec advisory status (Phase 187)."""
+        try:
+            with self._conn() as conn:
+                if player_id:
+                    row = conn.execute(
+                        "SELECT player_id, timing_disclosure_risk, active_attestations, "
+                        "re_enrollment_window_active, recommendation, created_at "
+                        "FROM attestation_opsec_log WHERE player_id=? ORDER BY id DESC LIMIT 1",
+                        (player_id,),
+                    ).fetchone()
+                else:
+                    row = conn.execute(
+                        "SELECT player_id, timing_disclosure_risk, active_attestations, "
+                        "re_enrollment_window_active, recommendation, created_at "
+                        "FROM attestation_opsec_log ORDER BY id DESC LIMIT 1"
+                    ).fetchone()
+                total_high = conn.execute(
+                    "SELECT COUNT(*) FROM attestation_opsec_log WHERE timing_disclosure_risk='HIGH'"
+                ).fetchone()[0]
+        except Exception:
+            return {
+                "player_id": player_id or "",
+                "timing_disclosure_risk": "LOW",
+                "active_attestations": 0,
+                "re_enrollment_window_active": False,
+                "recommendation": "STANDARD_TX_OK",
+                "total_high_risk_events": 0,
+                "created_at": 0.0,
+            }
+        if row is None:
+            return {
+                "player_id": player_id or "",
+                "timing_disclosure_risk": "LOW",
+                "active_attestations": 0,
+                "re_enrollment_window_active": False,
+                "recommendation": "STANDARD_TX_OK",
+                "total_high_risk_events": int(total_high),
+                "created_at": 0.0,
+            }
+        return {
+            "player_id":                  row[0],
+            "timing_disclosure_risk":     row[1],
+            "active_attestations":        int(row[2]),
+            "re_enrollment_window_active": bool(row[3]),
+            "recommendation":             row[4],
+            "total_high_risk_events":     int(total_high),
+            "created_at":                 float(row[5]),
+        }
+
+    def insert_reenrollment_badge_log(
+        self,
+        player_id: str,
+        attestation_hash: str,
+        badge_token_id: int,
+        ttl_days: float,
+        on_chain_tx: str,
+        dry_run: bool,
+    ) -> int:
+        """Insert a VHP re-enrollment badge log record (Phase 187)."""
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO vhp_reenrollment_badge_log "
+                "(player_id, attestation_hash, badge_token_id, ttl_days, "
+                "on_chain_tx, dry_run, created_at) VALUES (?,?,?,?,?,?,?)",
+                (
+                    player_id,
+                    attestation_hash,
+                    int(badge_token_id),
+                    float(ttl_days),
+                    on_chain_tx,
+                    1 if dry_run else 0,
+                    time.time(),
+                ),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def get_reenrollment_badge_status(self, player_id: "str | None" = None) -> dict:
+        """Return VHP re-enrollment badge status (Phase 187)."""
+        try:
+            with self._conn() as conn:
+                if player_id:
+                    row = conn.execute(
+                        "SELECT player_id, attestation_hash, badge_token_id, ttl_days, "
+                        "on_chain_tx, dry_run, created_at "
+                        "FROM vhp_reenrollment_badge_log WHERE player_id=? ORDER BY id DESC LIMIT 1",
+                        (player_id,),
+                    ).fetchone()
+                    total_badges = conn.execute(
+                        "SELECT COUNT(*) FROM vhp_reenrollment_badge_log WHERE player_id=?",
+                        (player_id,),
+                    ).fetchone()[0]
+                else:
+                    row = conn.execute(
+                        "SELECT player_id, attestation_hash, badge_token_id, ttl_days, "
+                        "on_chain_tx, dry_run, created_at "
+                        "FROM vhp_reenrollment_badge_log ORDER BY id DESC LIMIT 1"
+                    ).fetchone()
+                    total_badges = conn.execute(
+                        "SELECT COUNT(*) FROM vhp_reenrollment_badge_log"
+                    ).fetchone()[0]
+        except Exception:
+            return {
+                "player_id": player_id or "",
+                "attestation_hash": "",
+                "badge_token_id": 0,
+                "re_enrollment_count": 0,
+                "total_badges": 0,
+                "ttl_days": 90.0,
+                "dry_run": True,
+            }
+        if row is None:
+            return {
+                "player_id": player_id or "",
+                "attestation_hash": "",
+                "badge_token_id": 0,
+                "re_enrollment_count": 0,
+                "total_badges": 0,
+                "ttl_days": 90.0,
+                "dry_run": True,
+            }
+        return {
+            "player_id":          row[0],
+            "attestation_hash":   row[1],
+            "badge_token_id":     int(row[2]),
+            "re_enrollment_count": int(total_badges),
+            "total_badges":       int(total_badges),
+            "ttl_days":           float(row[3]),
+            "dry_run":            bool(row[5]),
+        }
+
+    # --- Phase 186: AttestationBoundRenewalAgent ---
+
+    def insert_attestation_bound_renewal_log(
+        self,
+        player_id: str,
+        attestation_hash: str,
+        renewal_approved: bool,
+        denial_reason: str,
+        new_commit_hash: str,
+    ) -> int:
+        """Insert an attestation-bound renewal validation record (Phase 186)."""
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO attestation_bound_renewal_log "
+                "(player_id, attestation_hash, renewal_approved, denial_reason, "
+                "new_commit_hash, created_at) VALUES (?,?,?,?,?,?)",
+                (
+                    player_id,
+                    attestation_hash,
+                    1 if renewal_approved else 0,
+                    denial_reason,
+                    new_commit_hash,
+                    time.time(),
+                ),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def get_attestation_bound_renewal_status(self, player_id: "str | None" = None) -> dict:
+        """Return attestation-bound renewal status (Phase 186)."""
+        try:
+            with self._conn() as conn:
+                if player_id:
+                    row = conn.execute(
+                        "SELECT player_id, attestation_hash, renewal_approved, denial_reason, "
+                        "new_commit_hash, created_at "
+                        "FROM attestation_bound_renewal_log WHERE player_id=? "
+                        "ORDER BY id DESC LIMIT 1",
+                        (player_id,),
+                    ).fetchone()
+                else:
+                    row = conn.execute(
+                        "SELECT player_id, attestation_hash, renewal_approved, denial_reason, "
+                        "new_commit_hash, created_at "
+                        "FROM attestation_bound_renewal_log ORDER BY id DESC LIMIT 1"
+                    ).fetchone()
+                total_blocked = conn.execute(
+                    "SELECT COUNT(*) FROM attestation_bound_renewal_log WHERE renewal_approved=0"
+                ).fetchone()[0]
+                total_approved = conn.execute(
+                    "SELECT COUNT(*) FROM attestation_bound_renewal_log WHERE renewal_approved=1"
+                ).fetchone()[0]
+        except Exception:
+            return {
+                "player_id": player_id or "",
+                "attestation_hash": "",
+                "renewal_approved": False,
+                "denial_reason": "",
+                "total_blocked": 0,
+                "total_approved": 0,
+            }
+        if row is None:
+            return {
+                "player_id": player_id or "",
+                "attestation_hash": "",
+                "renewal_approved": False,
+                "denial_reason": "",
+                "total_blocked": int(total_blocked),
+                "total_approved": int(total_approved),
+            }
+        return {
+            "player_id":        row[0],
+            "attestation_hash": row[1],
+            "renewal_approved": bool(row[2]),
+            "denial_reason":    row[3],
+            "total_blocked":    int(total_blocked),
+            "total_approved":   int(total_approved),
+        }
+
+    # --- Phase 185: ReEnrollmentAttestationAgent ---
+
+    def insert_persona_break_attestation(
+        self,
+        player_id: str,
+        hash: str,
+        loo_trend: float,
+        tdi: float,
+        ttl_days: float,
+        issued_at: float,
+        expires_at: float,
+    ) -> int:
+        """Insert a persona break attestation token (Phase 185)."""
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO persona_break_attestation_log "
+                "(player_id, attestation_hash, active, issued_at, expires_at, "
+                "loo_trend_at_break, tdi_at_break, ttl_days, created_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?)",
+                (
+                    player_id,
+                    hash,
+                    1,
+                    float(issued_at),
+                    float(expires_at),
+                    float(loo_trend),
+                    float(tdi),
+                    float(ttl_days),
+                    time.time(),
+                ),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def get_active_attestation(self, player_id: str) -> dict:
+        """Return latest active attestation for a player (Phase 185).
+
+        Returns safe dict with active=False when no active row found.
+        """
+        try:
+            with self._conn() as conn:
+                row = conn.execute(
+                    "SELECT player_id, attestation_hash, active, issued_at, expires_at, "
+                    "loo_trend_at_break, tdi_at_break, ttl_days, created_at "
+                    "FROM persona_break_attestation_log "
+                    "WHERE player_id=? AND active=1 ORDER BY id DESC LIMIT 1",
+                    (player_id,),
+                ).fetchone()
+        except Exception:
+            row = None
+        if row is None:
+            return {
+                "player_id": player_id,
+                "attestation_hash": "",
+                "active": False,
+                "issued_at": 0.0,
+                "expires_at": 0.0,
+                "loo_trend_at_break": 0.0,
+                "tdi_at_break": 0.0,
+                "ttl_days": 7.0,
+            }
+        return {
+            "player_id":        row[0],
+            "attestation_hash": row[1],
+            "active":           bool(row[2]),
+            "issued_at":        float(row[3]),
+            "expires_at":       float(row[4]),
+            "loo_trend_at_break": float(row[5]),
+            "tdi_at_break":     float(row[6]),
+            "ttl_days":         float(row[7]),
+        }
+
+    def expire_stale_attestations(self) -> int:
+        """Set active=0 for all attestations past their expires_at (Phase 185).
+
+        Returns count of rows deactivated.
+        """
+        now = time.time()
+        with self._conn() as conn:
+            cur = conn.execute(
+                "UPDATE persona_break_attestation_log SET active=0 "
+                "WHERE active=1 AND expires_at <= ?",
+                (now,),
+            )
+        return cur.rowcount
+
+    # --- Phase 183: MaturityElevationGateAgent ---
+
+    def insert_maturity_elevation_log(
+        self,
+        current_tier: str,
+        target_tier: str,
+        gap_to_target: float,
+        elevation_plan_json: str,
+        elevation_available: bool,
+        critical_component: str,
+        estimated_sessions_total: int,
+    ) -> int:
+        """Insert a maturity elevation assessment (Phase 183)."""
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO maturity_elevation_log "
+                "(current_tier, target_tier, gap_to_target, elevation_plan_json, "
+                "elevation_available, critical_component, estimated_sessions_total, created_at) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (
+                    current_tier,
+                    target_tier,
+                    float(gap_to_target),
+                    elevation_plan_json,
+                    1 if elevation_available else 0,
+                    critical_component,
+                    int(estimated_sessions_total),
+                    time.time(),
+                ),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def get_maturity_elevation_status(self) -> dict:
+        """Return latest maturity elevation status (Phase 183)."""
+        try:
+            with self._conn() as conn:
+                row = conn.execute(
+                    "SELECT current_tier, target_tier, gap_to_target, elevation_plan_json, "
+                    "elevation_available, critical_component, estimated_sessions_total, created_at "
+                    "FROM maturity_elevation_log ORDER BY id DESC LIMIT 1"
+                ).fetchone()
+        except Exception:
+            row = None
+        if row is None:
+            return {
+                "current_tier": "ALPHA",
+                "target_tier": "BETA",
+                "gap_to_target": 1.0,
+                "elevation_plan_json": "{}",
+                "elevation_available": False,
+                "critical_component": "",
+                "estimated_sessions_total": 0,
+                "created_at": 0.0,
+            }
+        return {
+            "current_tier":            row[0],
+            "target_tier":             row[1],
+            "gap_to_target":           float(row[2]),
+            "elevation_plan_json":     row[3],
+            "elevation_available":     bool(row[4]),
+            "critical_component":      row[5],
+            "estimated_sessions_total": int(row[6]),
+            "created_at":              float(row[7]),
+        }
+
+    # --- Phase 182: PersonaBreakDetectorAgent ---
+
+    def insert_persona_break_log(
+        self,
+        player_id: str,
+        loo_accuracy_trend: float,
+        tdi_current: float,
+        persona_break_detected: bool,
+        urgency: str,
+        n_snapshots: int,
+    ) -> int:
+        """Insert a persona break detection record (Phase 182)."""
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO persona_break_log "
+                "(player_id, loo_accuracy_trend, tdi_current, persona_break_detected, "
+                "re_enrollment_urgency, n_snapshots_used, created_at) VALUES (?,?,?,?,?,?,?)",
+                (
+                    player_id,
+                    float(loo_accuracy_trend),
+                    float(tdi_current),
+                    1 if persona_break_detected else 0,
+                    urgency,
+                    int(n_snapshots),
+                    time.time(),
+                ),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def get_persona_break_status(self, player_id: "str | None" = None) -> dict:
+        """Return latest persona break status (Phase 182).
+
+        Returns safe defaults when no data exists.
+        """
+        try:
+            with self._conn() as conn:
+                if player_id:
+                    row = conn.execute(
+                        "SELECT player_id, loo_accuracy_trend, tdi_current, "
+                        "persona_break_detected, re_enrollment_urgency, n_snapshots_used, created_at "
+                        "FROM persona_break_log WHERE player_id=? ORDER BY id DESC LIMIT 1",
+                        (player_id,),
+                    ).fetchone()
+                else:
+                    row = conn.execute(
+                        "SELECT player_id, loo_accuracy_trend, tdi_current, "
+                        "persona_break_detected, re_enrollment_urgency, n_snapshots_used, created_at "
+                        "FROM persona_break_log ORDER BY id DESC LIMIT 1"
+                    ).fetchone()
+        except Exception:
+            row = None
+        if row is None:
+            return {
+                "player_id":              player_id or "",
+                "loo_accuracy_trend":     1.0,
+                "tdi_current":            0.0,
+                "persona_break_detected": False,
+                "re_enrollment_urgency":  "MEDIUM",
+                "n_snapshots_used":       0,
+                "created_at":             0.0,
+            }
+        return {
+            "player_id":              row[0],
+            "loo_accuracy_trend":     float(row[1]),
+            "tdi_current":            float(row[2]),
+            "persona_break_detected": bool(row[3]),
+            "re_enrollment_urgency":  row[4],
+            "n_snapshots_used":       int(row[5]),
+            "created_at":             float(row[6]),
+        }
+
+    # --- Phase 181: Consent-Bound Renewal Provenance ---
+
+    def insert_renewal_consent_snapshot(
+        self,
+        new_commit_hash: str,
+        n_consented: int,
+        players_json: str,
+        revoked: int,
+        delta: bool,
+    ) -> int:
+        """Insert a renewal consent snapshot linked by new_commit_hash (Phase 181)."""
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO renewal_consent_snapshot_log "
+                "(new_commit_hash, n_consented_at_renewal, players_consented_json, "
+                "revoked_at_renewal, corpus_delta_detected, created_at) VALUES (?,?,?,?,?,?)",
+                (
+                    new_commit_hash,
+                    int(n_consented),
+                    players_json,
+                    int(revoked),
+                    1 if delta else 0,
+                    time.time(),
+                ),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def get_renewal_consent_snapshot(self, new_commit_hash: str) -> "dict | None":
+        """Return renewal consent snapshot for a given commit hash (Phase 181).
+
+        Returns None when hash not found.
+        """
+        try:
+            with self._conn() as conn:
+                row = conn.execute(
+                    "SELECT new_commit_hash, n_consented_at_renewal, players_consented_json, "
+                    "revoked_at_renewal, corpus_delta_detected, created_at "
+                    "FROM renewal_consent_snapshot_log WHERE new_commit_hash=?",
+                    (new_commit_hash,),
+                ).fetchone()
+        except Exception:
+            return None
+        if row is None:
+            return None
+        return {
+            "new_commit_hash":        row[0],
+            "n_consented_at_renewal": int(row[1]),
+            "players_consented_json": row[2],
+            "revoked_at_renewal":     int(row[3]),
+            "corpus_delta_detected":  int(row[4]),
+            "created_at":             float(row[5]),
+        }
+
+    # --- Phase 192: DataCuratorAgent (Agent #35) ---
+
+    # Task 1: Provenance DAG Engine
+
+    def insert_provenance_node(self, node: dict) -> str:
+        """Insert a provenance DAG node. Idempotent — INSERT OR IGNORE on UNIQUE node_id.
+        Returns node_id (Phase 192)."""
+        with self._conn() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO data_provenance_dag "
+                "(node_id, node_type, source_table, source_row_id, source_hash, "
+                "parent_node_id, edge_type, phase_produced, player_id, on_chain_ref) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (
+                    node.get("node_id", ""),
+                    node.get("node_type", ""),
+                    node.get("source_table", ""),
+                    node.get("source_row_id"),
+                    node.get("source_hash"),
+                    node.get("parent_node_id"),
+                    node.get("edge_type"),
+                    int(node.get("phase_produced", 192)),
+                    node.get("player_id"),
+                    node.get("on_chain_ref"),
+                ),
+            )
+        return node.get("node_id", "")
+
+    def get_provenance_chain(self, leaf_node_id: str, max_depth: int = 20) -> list:
+        """Walk from leaf_node_id to root(s) via parent_node_id.
+        Returns ordered list from root to leaf. Max depth prevents infinite loop (Phase 192)."""
+        chain = []
+        visited = set()
+        current_id = leaf_node_id
+        depth = 0
+        while current_id and depth < max_depth:
+            if current_id in visited:
+                break
+            visited.add(current_id)
+            try:
+                with self._conn() as conn:
+                    row = conn.execute(
+                        "SELECT node_id, node_type, source_table, source_row_id, source_hash, "
+                        "parent_node_id, edge_type, phase_produced, player_id, on_chain_ref, created_at "
+                        "FROM data_provenance_dag WHERE node_id=?",
+                        (current_id,),
+                    ).fetchone()
+            except Exception:
+                break
+            if row is None:
+                break
+            chain.append({
+                "node_id":        row[0],
+                "node_type":      row[1],
+                "source_table":   row[2],
+                "source_row_id":  row[3],
+                "source_hash":    row[4],
+                "parent_node_id": row[5],
+                "edge_type":      row[6],
+                "phase_produced": int(row[7]) if row[7] is not None else 192,
+                "player_id":      row[8],
+                "on_chain_ref":   row[9],
+                "created_at":     row[10],
+            })
+            current_id = row[5]  # parent_node_id
+            depth += 1
+        chain.reverse()  # root first
+        return chain
+
+    def get_provenance_subtree(self, root_node_id: str) -> list:
+        """Return all descendants of a root node (Phase 192)."""
+        result = []
+        queue = [root_node_id]
+        visited = set()
+        while queue:
+            nid = queue.pop(0)
+            if nid in visited:
+                continue
+            visited.add(nid)
+            try:
+                with self._conn() as conn:
+                    rows = conn.execute(
+                        "SELECT node_id, node_type, source_table, source_row_id, source_hash, "
+                        "parent_node_id, edge_type, phase_produced, player_id, on_chain_ref, created_at "
+                        "FROM data_provenance_dag WHERE parent_node_id=?",
+                        (nid,),
+                    ).fetchall()
+            except Exception:
+                rows = []
+            for row in rows:
+                child = {
+                    "node_id":        row[0],
+                    "node_type":      row[1],
+                    "source_table":   row[2],
+                    "source_row_id":  row[3],
+                    "source_hash":    row[4],
+                    "parent_node_id": row[5],
+                    "edge_type":      row[6],
+                    "phase_produced": int(row[7]) if row[7] is not None else 192,
+                    "player_id":      row[8],
+                    "on_chain_ref":   row[9],
+                    "created_at":     row[10],
+                }
+                result.append(child)
+                queue.append(row[0])
+        return result
+
+    def register_calibration_session(self, session_file: str, player_id: str,
+                                     phase: int) -> str:
+        """Create a CALIBRATION_SESSION root node in the provenance DAG (Phase 192).
+        node_id = SHA-256(session_file + player_id + str(phase))."""
+        import hashlib
+        node_id = "sha256:" + hashlib.sha256(
+            (session_file + player_id + str(phase)).encode()
+        ).hexdigest()
+        self.insert_provenance_node({
+            "node_id":        node_id,
+            "node_type":      "CALIBRATION_SESSION",
+            "source_table":   "calibration_sessions",
+            "source_row_id":  None,
+            "source_hash":    None,
+            "parent_node_id": None,
+            "edge_type":      None,
+            "phase_produced": phase,
+            "player_id":      player_id,
+            "on_chain_ref":   None,
+        })
+        return node_id
+
+    # Task 2: Corpus Entropy Monitor
+
+    def insert_corpus_entropy(self, score: float, per_player_json: str,
+                              per_feature_json: str, low_entropy_features_json: str,
+                              clustering_warning: bool, n_sessions: int,
+                              session_type_filter: str = "touchpad_corners",
+                              computed_at_ts: int = 0) -> int:
+        """Insert a corpus entropy measurement (Phase 192)."""
+        if computed_at_ts == 0:
+            computed_at_ts = int(time.time())
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO corpus_entropy_log "
+                "(corpus_entropy_score, per_player_entropy, per_feature_entropy, "
+                "low_entropy_features, clustering_warning, n_sessions_analyzed, "
+                "session_type_filter, computed_at_ts) VALUES (?,?,?,?,?,?,?,?)",
+                (score, per_player_json, per_feature_json, low_entropy_features_json,
+                 1 if clustering_warning else 0, n_sessions, session_type_filter,
+                 computed_at_ts),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def get_latest_corpus_entropy(self, session_type: str = "touchpad_corners") -> "dict | None":
+        """Return most recent corpus entropy record (Phase 192)."""
+        try:
+            with self._conn() as conn:
+                row = conn.execute(
+                    "SELECT corpus_entropy_score, per_player_entropy, per_feature_entropy, "
+                    "low_entropy_features, clustering_warning, n_sessions_analyzed, "
+                    "session_type_filter, computed_at_ts, created_at "
+                    "FROM corpus_entropy_log WHERE session_type_filter=? "
+                    "ORDER BY computed_at_ts DESC LIMIT 1",
+                    (session_type,),
+                ).fetchone()
+        except Exception:
+            row = None
+        if row is None:
+            return None
+        return {
+            "corpus_entropy_score":  float(row[0]),
+            "per_player_entropy":    row[1],
+            "per_feature_entropy":   row[2],
+            "low_entropy_features":  row[3],
+            "clustering_warning":    bool(row[4]),
+            "n_sessions_analyzed":   int(row[5]),
+            "session_type_filter":   row[6],
+            "computed_at_ts":        int(row[7]),
+            "created_at":            row[8],
+        }
+
+    # Task 3: Proof-of-Erasure Certificate Engine
+
+    def compute_erasure_certificate(self, device_id: str, player_id: str,
+                                    erased_tables: dict, post_erasure_ratio: float,
+                                    ts_ns: int) -> str:
+        """Compute GDPR Art.17 erasure certificate hash (Phase 192).
+        SHA-256(device_id_bytes + sorted_table_row_hashes + ratio_str + ts_ns_bytes)."""
+        import hashlib
+        import struct
+        parts = [device_id.encode()]
+        # Sort table names for determinism
+        for tbl in sorted(erased_tables.keys()):
+            rows_str = ",".join(str(r) for r in sorted(erased_tables[tbl]))
+            parts.append(f"{tbl}:{rows_str}".encode())
+        parts.append(f"{post_erasure_ratio:.8f}".encode())
+        parts.append(struct.pack(">Q", ts_ns))
+        digest = hashlib.sha256(b"".join(parts)).hexdigest()
+        return "sha256:" + digest
+
+    def insert_erasure_certificate(self, certificate_hash: str, device_id: str,
+                                   player_id: str, erased_tables_json: str,
+                                   erased_row_count: int, post_erasure_ratio: float,
+                                   ts_ns: int) -> int:
+        """Insert an erasure certificate (idempotent on UNIQUE certificate_hash). Phase 192."""
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO erasure_certificate_log "
+                "(certificate_hash, device_id, player_id, erased_tables_json, "
+                "erased_row_count, post_erasure_ratio, ts_ns) VALUES (?,?,?,?,?,?,?)",
+                (certificate_hash, device_id, player_id, erased_tables_json,
+                 erased_row_count, post_erasure_ratio, ts_ns),
+            )
+        return cur.lastrowid or 0  # type: ignore[return-value]
+
+    def get_erasure_certificate(self, device_id: str) -> "dict | None":
+        """Return most recent erasure certificate for device_id (Phase 192)."""
+        try:
+            with self._conn() as conn:
+                row = conn.execute(
+                    "SELECT certificate_hash, device_id, player_id, erased_tables_json, "
+                    "erased_row_count, post_erasure_ratio, on_chain_tx_hash, anchored, "
+                    "ts_ns, created_at "
+                    "FROM erasure_certificate_log WHERE device_id=? "
+                    "ORDER BY ts_ns DESC LIMIT 1",
+                    (device_id,),
+                ).fetchone()
+        except Exception:
+            row = None
+        if row is None:
+            return None
+        return {
+            "certificate_hash":   row[0],
+            "device_id":          row[1],
+            "player_id":          row[2],
+            "erased_tables_json": row[3],
+            "erased_row_count":   int(row[4]),
+            "post_erasure_ratio": float(row[5]),
+            "on_chain_tx_hash":   row[6],
+            "anchored":           bool(row[7]),
+            "ts_ns":              int(row[8]),
+            "created_at":         row[9],
+        }
+
+    def anchor_erasure_certificate(self, certificate_hash: str, tx_hash: str) -> None:
+        """Mark an erasure certificate as anchored on-chain (Phase 192)."""
+        with self._conn() as conn:
+            conn.execute(
+                "UPDATE erasure_certificate_log SET on_chain_tx_hash=?, anchored=1 "
+                "WHERE certificate_hash=?",
+                (tx_hash, certificate_hash),
+            )
+
+    # Task 4: Federated Corpus Quality Aggregator
+
+    def insert_federation_corpus_quality(self, bridge_id_hash: str, session_type: str,
+                                         n_sessions: int, entropy_score: float,
+                                         stationarity_score: float,
+                                         centroid_velocity_mean: float,
+                                         received_at_ts: int) -> int:
+        """Insert anonymized federation corpus quality record (Phase 192, BP-007)."""
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO federation_corpus_quality_log "
+                "(bridge_id_hash, session_type, n_sessions, entropy_score, "
+                "stationarity_score, centroid_velocity_mean, received_at_ts) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (bridge_id_hash, session_type, n_sessions, entropy_score,
+                 stationarity_score, centroid_velocity_mean, received_at_ts),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def get_federated_corpus_quality(self, session_type: str = "touchpad_corners",
+                                     limit: int = 10) -> list:
+        """Return recent federation corpus quality records (Phase 192)."""
+        try:
+            with self._conn() as conn:
+                rows = conn.execute(
+                    "SELECT bridge_id_hash, session_type, n_sessions, entropy_score, "
+                    "stationarity_score, centroid_velocity_mean, federation_entropy_mean, "
+                    "federation_outlier, outlier_sigma, received_at_ts, created_at "
+                    "FROM federation_corpus_quality_log WHERE session_type=? "
+                    "ORDER BY received_at_ts DESC LIMIT ?",
+                    (session_type, limit),
+                ).fetchall()
+        except Exception:
+            rows = []
+        return [
+            {
+                "bridge_id_hash":         r[0],
+                "session_type":           r[1],
+                "n_sessions":             int(r[2]),
+                "entropy_score":          float(r[3]),
+                "stationarity_score":     float(r[4]),
+                "centroid_velocity_mean": float(r[5]),
+                "federation_entropy_mean": float(r[6]) if r[6] is not None else None,
+                "federation_outlier":     bool(r[7]),
+                "outlier_sigma":          float(r[8]) if r[8] is not None else None,
+                "received_at_ts":         int(r[9]),
+                "created_at":             r[10],
+            }
+            for r in rows
+        ]
+
+    # Task 5: Cross-Feature Temporal Correlation Engine
+
+    def insert_feature_correlation(self, player_id: str, session_type: str,
+                                   n_sessions_used: int, correlation_upper_tri: str,
+                                   high_correlation_pairs: str,
+                                   frobenius_vs_p1: "float | None",
+                                   frobenius_vs_p2: "float | None",
+                                   frobenius_vs_p3: "float | None",
+                                   correlation_separable: bool,
+                                   computed_at_ts: int = 0) -> int:
+        """Insert per-player feature correlation matrix (Phase 192)."""
+        if computed_at_ts == 0:
+            computed_at_ts = int(time.time())
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO feature_correlation_log "
+                "(player_id, session_type, n_sessions_used, correlation_upper_tri, "
+                "high_correlation_pairs, frobenius_vs_p1, frobenius_vs_p2, frobenius_vs_p3, "
+                "correlation_separable, computed_at_ts) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (player_id, session_type, n_sessions_used, correlation_upper_tri,
+                 high_correlation_pairs, frobenius_vs_p1, frobenius_vs_p2, frobenius_vs_p3,
+                 1 if correlation_separable else 0, computed_at_ts),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def get_feature_correlation(self, player_id: str = "",
+                                session_type: str = "touchpad_corners") -> "dict | None":
+        """Return most recent correlation entry for player_id (Phase 192)."""
+        try:
+            with self._conn() as conn:
+                if player_id:
+                    row = conn.execute(
+                        "SELECT player_id, session_type, n_sessions_used, correlation_upper_tri, "
+                        "high_correlation_pairs, frobenius_vs_p1, frobenius_vs_p2, frobenius_vs_p3, "
+                        "correlation_separable, computed_at_ts, created_at "
+                        "FROM feature_correlation_log WHERE player_id=? AND session_type=? "
+                        "ORDER BY computed_at_ts DESC LIMIT 1",
+                        (player_id, session_type),
+                    ).fetchone()
+                else:
+                    row = conn.execute(
+                        "SELECT player_id, session_type, n_sessions_used, correlation_upper_tri, "
+                        "high_correlation_pairs, frobenius_vs_p1, frobenius_vs_p2, frobenius_vs_p3, "
+                        "correlation_separable, computed_at_ts, created_at "
+                        "FROM feature_correlation_log WHERE session_type=? "
+                        "ORDER BY computed_at_ts DESC LIMIT 1",
+                        (session_type,),
+                    ).fetchone()
+        except Exception:
+            row = None
+        if row is None:
+            return None
+        return {
+            "player_id":              row[0],
+            "session_type":           row[1],
+            "n_sessions_used":        int(row[2]),
+            "correlation_upper_tri":  row[3],
+            "high_correlation_pairs": row[4],
+            "frobenius_vs_p1":        float(row[5]) if row[5] is not None else None,
+            "frobenius_vs_p2":        float(row[6]) if row[6] is not None else None,
+            "frobenius_vs_p3":        float(row[7]) if row[7] is not None else None,
+            "correlation_separable":  bool(row[8]),
+            "computed_at_ts":         int(row[9]),
+            "created_at":             row[10],
+        }
+
+    # Task 6: Data Readiness Certificate Engine
+
+    def insert_data_readiness_certificate(self, certificate_hash: str,
+                                          certification_status: str,
+                                          blocking_failures: str,
+                                          advisory_warnings: str,
+                                          dimension_results: str,
+                                          separation_ratio: float,
+                                          valid_until_ts: int,
+                                          ts_ns: int) -> int:
+        """Insert a data readiness certificate (idempotent on UNIQUE hash). Phase 192."""
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO data_readiness_certificate_log "
+                "(certificate_hash, certification_status, blocking_failures, advisory_warnings, "
+                "dimension_results, separation_ratio, valid_until_ts, ts_ns) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (certificate_hash, certification_status, blocking_failures, advisory_warnings,
+                 dimension_results, separation_ratio, valid_until_ts, ts_ns),
+            )
+        return cur.lastrowid or 0  # type: ignore[return-value]
+
+    def get_latest_data_readiness_certificate(self) -> "dict | None":
+        """Return most recent data readiness certificate (Phase 192)."""
+        try:
+            with self._conn() as conn:
+                row = conn.execute(
+                    "SELECT certificate_hash, certification_status, blocking_failures, "
+                    "advisory_warnings, dimension_results, separation_ratio, on_chain_tx_hash, "
+                    "anchored, valid_until_ts, ts_ns, created_at "
+                    "FROM data_readiness_certificate_log ORDER BY ts_ns DESC LIMIT 1"
+                ).fetchone()
+        except Exception:
+            row = None
+        if row is None:
+            return None
+        return {
+            "certificate_hash":    row[0],
+            "certification_status": row[1],
+            "blocking_failures":   row[2],
+            "advisory_warnings":   row[3],
+            "dimension_results":   row[4],
+            "separation_ratio":    float(row[5]),
+            "on_chain_tx_hash":    row[6],
+            "anchored":            bool(row[7]),
+            "valid_until_ts":      int(row[8]),
+            "ts_ns":               int(row[9]),
+            "created_at":          row[10],
+        }
+
+    def anchor_data_readiness_certificate(self, certificate_hash: str, tx_hash: str) -> None:
+        """Mark a data readiness certificate as anchored on-chain (Phase 192)."""
+        with self._conn() as conn:
+            conn.execute(
+                "UPDATE data_readiness_certificate_log SET on_chain_tx_hash=?, anchored=1 "
+                "WHERE certificate_hash=?",
+                (tx_hash, certificate_hash),
+            )
+
+    # Task 7: Session Contribution Weight Table
+
+    def insert_session_contribution_weight(self, session_file: str, player_id: str,
+                                           session_type: str,
+                                           session_captured_at_ts: int,
+                                           age_days: float, tbd_weight: float,
+                                           type_multiplier: float,
+                                           stationarity_multiplier: float,
+                                           effective_weight: float,
+                                           centroid_influence_rank: "int | None" = None,
+                                           computed_at_ts: int = 0) -> int:
+        """Insert session contribution weight (Phase 192). FROZEN: lambda=ln(2)/90."""
+        if computed_at_ts == 0:
+            computed_at_ts = int(time.time())
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO session_contribution_weight_log "
+                "(session_file, player_id, session_type, session_captured_at_ts, age_days, "
+                "tbd_weight, type_multiplier, stationarity_multiplier, effective_weight, "
+                "centroid_influence_rank, computed_at_ts) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (session_file, player_id, session_type, session_captured_at_ts, age_days,
+                 tbd_weight, type_multiplier, stationarity_multiplier, effective_weight,
+                 centroid_influence_rank, computed_at_ts),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def get_session_weights(self, player_id: str = "",
+                            limit: int = 50) -> list:
+        """Return session contribution weights, ordered by effective_weight DESC (Phase 192)."""
+        try:
+            with self._conn() as conn:
+                if player_id:
+                    rows = conn.execute(
+                        "SELECT session_file, player_id, session_type, session_captured_at_ts, "
+                        "age_days, tbd_weight, type_multiplier, stationarity_multiplier, "
+                        "effective_weight, centroid_influence_rank, computed_at_ts, created_at "
+                        "FROM session_contribution_weight_log WHERE player_id=? "
+                        "ORDER BY effective_weight DESC LIMIT ?",
+                        (player_id, limit),
+                    ).fetchall()
+                else:
+                    rows = conn.execute(
+                        "SELECT session_file, player_id, session_type, session_captured_at_ts, "
+                        "age_days, tbd_weight, type_multiplier, stationarity_multiplier, "
+                        "effective_weight, centroid_influence_rank, computed_at_ts, created_at "
+                        "FROM session_contribution_weight_log "
+                        "ORDER BY effective_weight DESC LIMIT ?",
+                        (limit,),
+                    ).fetchall()
+        except Exception:
+            rows = []
+        return [
+            {
+                "session_file":           r[0],
+                "player_id":              r[1],
+                "session_type":           r[2],
+                "session_captured_at_ts": int(r[3]),
+                "age_days":               float(r[4]),
+                "tbd_weight":             float(r[5]),
+                "type_multiplier":        float(r[6]),
+                "stationarity_multiplier": float(r[7]),
+                "effective_weight":       float(r[8]),
+                "centroid_influence_rank": int(r[9]) if r[9] is not None else None,
+                "computed_at_ts":         int(r[10]),
+                "created_at":             r[11],
+            }
+            for r in rows
+        ]
+
+    def get_session_weight(self, session_file: str) -> float:
+        """Return effective_weight for a specific session file (Phase 192, 1.0 if not found)."""
+        try:
+            with self._conn() as conn:
+                row = conn.execute(
+                    "SELECT effective_weight FROM session_contribution_weight_log "
+                    "WHERE session_file=? ORDER BY computed_at_ts DESC LIMIT 1",
+                    (session_file,),
+                ).fetchone()
+        except Exception:
+            row = None
+        return float(row[0]) if row else 1.0
+
+    # -----------------------------------------------------------------------
+    # Phase 193: FleetSignalCoherenceAgent (Agent #36) — fleet_coherence_log
+    # -----------------------------------------------------------------------
+
+    def insert_coherence_entry(self, entry: dict) -> str:
+        """INSERT OR IGNORE on coherence_id (idempotent). Returns coherence_id.
+        evidence_json must already be BP-007 scrubbed (no raw biometric fields)."""
+        import json as _json
+        try:
+            with self._conn() as conn:
+                conn.execute(
+                    "INSERT OR IGNORE INTO fleet_coherence_log "
+                    "(coherence_id, failure_mode, rule_name, agents_involved, severity, "
+                    " explanation, resolution, evidence_json, phase_detected, ts_ns) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    (
+                        entry["coherence_id"],
+                        entry["failure_mode"],
+                        entry["rule_name"],
+                        entry["agents_involved"]
+                        if isinstance(entry["agents_involved"], str)
+                        else _json.dumps(entry["agents_involved"]),
+                        entry["severity"],
+                        entry["explanation"],
+                        entry["resolution"],
+                        entry.get("evidence_json", "[]"),
+                        entry.get("phase_detected", 193),
+                        entry.get("ts_ns", 0),
+                    ),
+                )
+        except Exception:
+            pass
+        return entry["coherence_id"]
+
+    def get_open_coherence_entries(
+        self,
+        severity: "str | None" = None,
+        failure_mode: "str | None" = None,
+    ) -> "list[dict]":
+        """Return all unresolved fleet_coherence_log entries, optionally filtered."""
+        import json as _json
+        clauses = ["resolved = 0"]
+        params: list = []
+        if severity:
+            clauses.append("severity = ?")
+            params.append(severity)
+        if failure_mode:
+            clauses.append("failure_mode = ?")
+            params.append(failure_mode)
+        where = " AND ".join(clauses)
+        try:
+            with self._conn() as conn:
+                rows = conn.execute(
+                    f"SELECT * FROM fleet_coherence_log WHERE {where} "
+                    "ORDER BY created_at DESC LIMIT 100",
+                    params,
+                ).fetchall()
+        except Exception:
+            return []
+        cols = [
+            "id", "coherence_id", "failure_mode", "rule_name", "agents_involved",
+            "severity", "explanation", "resolution", "evidence_json",
+            "promoted_to_wif", "wif_entry_id", "wiki_contradict_written",
+            "alert_published", "resolved", "resolved_at", "resolved_by",
+            "phase_detected", "ts_ns", "created_at",
+        ]
+        result = []
+        for row in rows:
+            d = dict(zip(cols, row))
+            d["promoted_to_wif"] = bool(d["promoted_to_wif"])
+            d["resolved"] = bool(d["resolved"])
+            try:
+                d["agents_involved"] = _json.loads(d["agents_involved"])
+            except Exception:
+                pass
+            result.append(d)
+        return result
+
+    def get_coherence_summary(self) -> dict:
+        """Return aggregated fleet coherence status for GET /agent/fleet-coherence-summary."""
+        from datetime import datetime, timezone
+        try:
+            with self._conn() as conn:
+                total_row = conn.execute(
+                    "SELECT COUNT(*) FROM fleet_coherence_log WHERE resolved=0"
+                ).fetchone()
+                total_open = int(total_row[0]) if total_row else 0
+
+                sev_rows = conn.execute(
+                    "SELECT severity, COUNT(*) FROM fleet_coherence_log "
+                    "WHERE resolved=0 GROUP BY severity"
+                ).fetchall()
+                by_severity = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
+                for sev, cnt in sev_rows:
+                    if sev in by_severity:
+                        by_severity[sev] = int(cnt)
+
+                mode_rows = conn.execute(
+                    "SELECT failure_mode, COUNT(*) FROM fleet_coherence_log "
+                    "WHERE resolved=0 GROUP BY failure_mode"
+                ).fetchall()
+                by_mode = {"CONTRADICTION": 0, "ORPHAN": 0, "INVERSION": 0}
+                for mode, cnt in mode_rows:
+                    if mode in by_mode:
+                        by_mode[mode] = int(cnt)
+
+                promo_row = conn.execute(
+                    "SELECT COUNT(*) FROM fleet_coherence_log WHERE promoted_to_wif=1"
+                ).fetchone()
+                promoted = int(promo_row[0]) if promo_row else 0
+
+                last_row = conn.execute(
+                    "SELECT created_at FROM fleet_coherence_log ORDER BY created_at DESC LIMIT 1"
+                ).fetchone()
+                last_checked = last_row[0] if last_row else ""
+        except Exception:
+            total_open, by_severity, by_mode, promoted, last_checked = (
+                0,
+                {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0},
+                {"CONTRADICTION": 0, "ORPHAN": 0, "INVERSION": 0},
+                0,
+                "",
+            )
+        return {
+            "total_open":      total_open,
+            "by_severity":     by_severity,
+            "by_mode":         by_mode,
+            "promoted_to_wif": promoted,
+            "last_checked_at": last_checked,
+        }
+
+    def mark_coherence_resolved(self, coherence_id: str, resolved_by: str) -> None:
+        """Mark a coherence entry as resolved."""
+        from datetime import datetime, timezone
+        ts = datetime.now(timezone.utc).isoformat()
+        try:
+            with self._conn() as conn:
+                conn.execute(
+                    "UPDATE fleet_coherence_log SET resolved=1, resolved_at=?, resolved_by=? "
+                    "WHERE coherence_id=?",
+                    (ts, resolved_by, coherence_id),
+                )
+        except Exception:
+            pass
+
+    def mark_coherence_promoted(self, coherence_id: str, wif_id: str) -> None:
+        """Mark a coherence entry as promoted to a WIF entry."""
+        try:
+            with self._conn() as conn:
+                conn.execute(
+                    "UPDATE fleet_coherence_log SET promoted_to_wif=1, wif_entry_id=? "
+                    "WHERE coherence_id=?",
+                    (wif_id, coherence_id),
+                )
+        except Exception:
+            pass

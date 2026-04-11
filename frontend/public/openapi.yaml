@@ -3926,6 +3926,200 @@ paths:
         "403":
           description: Forbidden
 
+  /agent/data-provenance-chain:
+    get:
+      summary: "DataCuratorAgent: Provenance DAG chain walk from leaf to root (Phase 192, Tool #136)"
+      tags: [Agent]
+      parameters:
+        - name: leaf_node_id
+          in: query
+          required: false
+          schema: {type: string}
+      responses:
+        "200":
+          description: Provenance chain
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProvenanceChainStatus"
+  /agent/corpus-entropy-status:
+    get:
+      summary: "DataCuratorAgent: Corpus entropy monitor status (Phase 192, Tool #137)"
+      tags: [Agent]
+      responses:
+        "200":
+          description: Corpus entropy status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CorpusEntropyStatus"
+  /agent/erasure-certificate:
+    get:
+      summary: "DataCuratorAgent: GDPR Art.17 erasure certificate for device (Phase 192, Tool #138)"
+      tags: [Agent]
+      parameters:
+        - name: device_id
+          in: query
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Erasure certificate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErasureCertificateStatus"
+  /agent/anchor-erasure-certificate:
+    post:
+      summary: "DataCuratorAgent: Anchor erasure certificate on-chain (Phase 192, Tool #139)"
+      tags: [Agent]
+      responses:
+        "200":
+          description: Anchor result
+          content:
+            application/json:
+              schema: {type: object}
+  /agent/federated-corpus-quality:
+    get:
+      summary: "DataCuratorAgent: Federated corpus quality aggregator (Phase 192, Tool #140)"
+      tags: [Agent]
+      responses:
+        "200":
+          description: Federated corpus quality
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FederatedCorpusQualityStatus"
+  /agent/feature-correlation-status:
+    get:
+      summary: "DataCuratorAgent: Per-player 13x13 correlation matrix status (Phase 192, Tool #141)"
+      tags: [Agent]
+      parameters:
+        - name: player_id
+          in: query
+          required: false
+          schema: {type: string}
+      responses:
+        "200":
+          description: Feature correlation status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeatureCorrelationStatus"
+  /agent/data-readiness-certificate:
+    get:
+      summary: "DataCuratorAgent: 8-dimension pre-tournament certification (Phase 192, Tool #142)"
+      tags: [Agent]
+      responses:
+        "200":
+          description: Data readiness certificate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DataReadinessCertificateStatus"
+  /agent/anchor-data-readiness-certificate:
+    post:
+      summary: "DataCuratorAgent: Anchor data readiness certificate on-chain (Phase 192, Tool #143)"
+      tags: [Agent]
+      responses:
+        "200":
+          description: Anchor result
+          content:
+            application/json:
+              schema: {type: object}
+  /agent/session-contribution-weights:
+    get:
+      summary: "DataCuratorAgent: TBD-decay session contribution weights (Phase 192, Tool #144)"
+      tags: [Agent]
+      parameters:
+        - name: player_id
+          in: query
+          required: false
+          schema: {type: string}
+      responses:
+        "200":
+          description: Session weights
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionContributionWeightStatus"
+  /agent/fleet-coherence-summary:
+    get:
+      summary: "FleetSignalCoherenceAgent: fleet signal coherence summary (Phase 193, Tool #145)"
+      tags: [Agent]
+      responses:
+        "200":
+          description: Fleet coherence summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FleetCoherenceSummary"
+  /agent/fleet-coherence-entries:
+    get:
+      summary: "FleetSignalCoherenceAgent: open coherence failure entries (Phase 193, Tool #146)"
+      tags: [Agent]
+      parameters:
+        - name: failure_mode
+          in: query
+          required: false
+          schema: {type: string, enum: [CONTRADICTION, ORPHAN, INVERSION]}
+        - name: severity
+          in: query
+          required: false
+          schema: {type: string, enum: [CRITICAL, HIGH, MEDIUM]}
+      responses:
+        "200":
+          description: Open coherence entries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CoherenceEntryResult"
+  /agent/resolve-coherence-entry:
+    post:
+      summary: "FleetSignalCoherenceAgent: mark coherence entry resolved (Phase 193)"
+      tags: [Agent]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [coherence_id, resolved_by]
+              properties:
+                coherence_id: {type: string}
+                resolved_by:  {type: string}
+      responses:
+        "200":
+          description: Entry resolved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  resolved:     {type: boolean}
+                  coherence_id: {type: string}
+                  resolved_by:  {type: string}
+                  timestamp:    {type: number}
+  /agent/fleet-coherence-history:
+    get:
+      summary: "FleetSignalCoherenceAgent: coherence history by rule (Phase 193, Tool #147)"
+      tags: [Agent]
+      parameters:
+        - name: rule_name
+          in: query
+          required: false
+          schema: {type: string}
+        - name: limit
+          in: query
+          required: false
+          schema: {type: integer, default: 20}
+      responses:
+        "200":
+          description: Coherence history
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CoherenceEntryResult"
   /agent/renew-separation-ratio-commitment:
     post:
       summary: Biometric Renewal Engine — trigger consent-bound separation ratio renewal (Phase 180)
@@ -7853,6 +8047,138 @@ webhooks:
           type: number
           description: "Unix timestamp of response"
 
+    ProvenanceChainStatus:
+      type: object
+      description: >
+        Phase 192 DataCuratorAgent Task 1 — Provenance DAG chain walk.
+        Returns forensic lineage from leaf_node_id to root calibration session.
+        Chain: CALIBRATION_SESSION -> SEPARATION_SNAPSHOT -> DEFENSIBILITY_LOG
+        -> COMMITMENT_HASH -> RENEWAL_LOG -> ATTESTATION_LOG -> BADGE_TOKEN.
+      properties:
+        leaf_node_id: {type: string}
+        chain_length: {type: integer}
+        chain: {type: array, items: {type: object}}
+        forensic_summary: {type: string}
+        timestamp: {type: number}
+    CorpusEntropyStatus:
+      type: object
+      description: >
+        Phase 192 DataCuratorAgent Task 2 — Corpus Entropy Monitor.
+        Shannon entropy of 13-dim feature space per player.
+        Score < 1.5 = CLUSTERING_WARNING (brittle centroid).
+        Score > 2.5 = WELL_SAMPLED (trustworthy ratio).
+      properties:
+        corpus_entropy_score: {type: number}
+        clustering_warning: {type: boolean}
+        status: {type: string, enum: [CLUSTERING_WARNING, WELL_SAMPLED, NO_DATA]}
+        per_player_entropy: {type: string}
+        low_entropy_features: {type: string}
+        n_sessions_analyzed: {type: integer}
+        session_type_filter: {type: string}
+        warning_threshold: {type: number}
+        timestamp: {type: number}
+    ErasureCertificateStatus:
+      type: object
+      description: >
+        Phase 192 DataCuratorAgent Task 3 — GDPR Art.17 Proof-of-Erasure Certificate.
+        SHA-256 certificate anchored to AdjudicationRegistry.sol.
+      properties:
+        device_id: {type: string}
+        certificate_found: {type: boolean}
+        certificate_hash: {type: string, nullable: true}
+        post_erasure_ratio: {type: number, nullable: true}
+        anchored: {type: boolean}
+        on_chain_tx_hash: {type: string, nullable: true}
+        ts_ns: {type: integer, nullable: true}
+        timestamp: {type: number}
+    FederatedCorpusQualityStatus:
+      type: object
+      description: >
+        Phase 192 DataCuratorAgent Task 4 — Federated Corpus Quality.
+        BP-007: only derived metrics — never raw biometric data.
+      properties:
+        federated_corpus_quality_enabled: {type: boolean}
+        record_count: {type: integer}
+        records: {type: array, items: {type: object}}
+        privacy_constraint: {type: string}
+        timestamp: {type: number}
+    FeatureCorrelationStatus:
+      type: object
+      description: >
+        Phase 192 DataCuratorAgent Task 5 — Cross-Feature Temporal Correlation.
+        13x13 per-player correlation matrix and Frobenius separability distances.
+      properties:
+        player_id: {type: string}
+        correlation_found: {type: boolean}
+        correlation_separable: {type: boolean}
+        separability_threshold: {type: number}
+        frobenius_vs_p1: {type: number, nullable: true}
+        frobenius_vs_p2: {type: number, nullable: true}
+        frobenius_vs_p3: {type: number, nullable: true}
+        n_sessions_used: {type: integer}
+        high_correlation_pairs: {type: string}
+        timestamp: {type: number}
+    DataReadinessCertificateStatus:
+      type: object
+      description: >
+        Phase 192 DataCuratorAgent Task 6 — Data Readiness Certificate.
+        8-dimension pre-tournament certification.
+        certification_status: CERTIFIED | BLOCKED | ADVISORY_ONLY.
+        FROZEN: separation_gate=0.70, vhp_expiry_days=90.
+      properties:
+        certificate_found: {type: boolean}
+        certification_status: {type: string, enum: [CERTIFIED, BLOCKED, ADVISORY_ONLY, NO_CERTIFICATE]}
+        certificate_hash: {type: string, nullable: true}
+        separation_ratio: {type: number}
+        blocking_failures: {type: string}
+        advisory_warnings: {type: string}
+        dimension_results: {type: string}
+        anchored: {type: boolean}
+        on_chain_tx_hash: {type: string, nullable: true}
+        valid_until_ts: {type: integer}
+        timestamp: {type: number}
+    SessionContributionWeightStatus:
+      type: object
+      description: >
+        Phase 192 DataCuratorAgent Task 7 — Session Contribution Weights.
+        FROZEN: lambda=ln(2)/90 (BP-001 TBD half-life=90 days).
+        effective_weight = tbd_weight * type_multiplier * stationarity_multiplier.
+      properties:
+        player_id: {type: string}
+        tbd_lambda: {type: number}
+        tbd_halflife_days: {type: integer}
+        weight_count: {type: integer}
+        weights: {type: array, items: {type: object}}
+        timestamp: {type: number}
+    FleetCoherenceSummary:
+      type: object
+      description: >
+        Phase 193 FleetSignalCoherenceAgent — fleet-level signal coherence summary.
+        Detects CONTRADICTION (7 rules), ORPHAN (5 rules), INVERSION (3 rules) across
+        the 35-agent fleet. fleet_coherence_enabled=True by default.
+        promoted_to_wif: count auto-promoted to VAPI_WHAT_IF.md (N_PROMOTE_THRESHOLD=3).
+      properties:
+        fleet_coherence_enabled: {type: boolean}
+        total_open:              {type: integer}
+        by_severity:             {type: object}
+        by_mode:                 {type: object}
+        promoted_to_wif:         {type: integer}
+        last_cycle_findings:     {type: integer}
+        last_checked_at:         {type: string, nullable: true}
+        timestamp:               {type: number}
+    CoherenceEntryResult:
+      type: object
+      description: >
+        Phase 193 FleetSignalCoherenceAgent — coherence entry list result.
+        Each entry: coherence_id (coh_<16 hex>), failure_mode, rule_name,
+        agents_involved, severity, explanation, resolution, promoted_to_wif.
+        RENEWAL_WITHOUT_ATTESTATION is CRITICAL severity — indicates Phase 185/186 bypass.
+      properties:
+        entry_count: {type: integer}
+        entries:     {type: array, items: {type: object}}
+        failure_mode: {type: string}
+        severity:    {type: string}
+        timestamp:   {type: number}
     BiometricRenewalStatus:
       type: object
       description: >

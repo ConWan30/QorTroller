@@ -4505,6 +4505,355 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
+    # Phase 190 — GET /agent/live-presence-signaling-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/live-presence-signaling-status")
+    async def get_live_presence_signaling_status_endpoint(api_key: str = ""):
+        """LivePresenceSignalingAgent status (Phase 190, agent #34).
+
+        Bidirectional VAPI presence channel: dual-path routing via controller LED+haptic
+        (ps5_compat_mode aware) + ANSI terminal color stream (always active).
+
+        Returns: live_presence_signaling_enabled/total_signals/controller_fired_count/
+        ps5_suppressed_count/latest_signal_source/latest_signal_type/
+        latest_terminal_output/timestamp.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t190
+        try:
+            _enabled190 = bool(getattr(cfg, "live_presence_signaling_enabled", False))
+            _status190  = store.get_presence_signal_status()
+            return {
+                "live_presence_signaling_enabled": _enabled190,
+                "total_signals":          _status190.get("total_signals", 0),
+                "controller_fired_count": _status190.get("controller_fired_count", 0),
+                "ps5_suppressed_count":   _status190.get("ps5_suppressed_count", 0),
+                "latest_signal_source":   _status190.get("latest_signal_source", ""),
+                "latest_signal_type":     _status190.get("latest_signal_type", ""),
+                "latest_terminal_output": _status190.get("latest_terminal_output", ""),
+                "timestamp":              _t190.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 189 — GET /agent/pir-chain-status + POST /agent/create-pir
+    # ------------------------------------------------------------------
+    @app.get("/agent/pir-chain-status")
+    async def get_pir_chain_status_endpoint(api_key: str = ""):
+        """ProtocolIntelligenceRecordAgent chain status (Phase 189, agent #33).
+
+        SHA-256 hash-linked PIR chain. chain_intact=True for empty chain (vacuous).
+        Returns: pir_chain_enabled/total_pirs/chain_intact/latest_cycle/
+        latest_pir_hash/latest_phase_produced/latest_threat_forecast/timestamp.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t189
+        try:
+            _enabled189 = bool(getattr(cfg, "pir_chain_enabled", False))
+            _status189  = store.get_pir_chain_status()
+            return {
+                "pir_chain_enabled":        _enabled189,
+                "total_pirs":               _status189.get("total_pirs", 0),
+                "chain_intact":             _status189.get("chain_intact", True),
+                "latest_cycle":             _status189.get("latest_cycle", 0),
+                "latest_pir_hash":          _status189.get("latest_pir_hash", ""),
+                "latest_phase_produced":    _status189.get("latest_phase_produced", 0),
+                "latest_threat_forecast":   _status189.get("latest_threat_forecast", ""),
+                "timestamp":                _t189.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @app.post("/agent/create-pir")
+    async def create_pir_endpoint(
+        wif_hash: str,
+        cycle_number: int = 0,
+        phase_produced: int = 0,
+        threat_forecast: str = "",
+        harness_score: float = 0.0,
+        api_key: str = "",
+    ):
+        """Create a Protocol Intelligence Record (Phase 189).
+
+        Returns 409 on duplicate pir_hash (anti-replay).
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t189b
+        try:
+            row_id, _pir_hash189 = store.insert_pir(
+                cycle_number=cycle_number,
+                phase_produced=phase_produced,
+                wif_hash=wif_hash,
+                threat_forecast=threat_forecast,
+                harness_score=harness_score,
+                eval_timestamp=_t189b.time(),
+            )
+            return {"created": True, "row_id": row_id, "pir_hash": _pir_hash189}
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 188 — GET /agent/biometric-stationarity-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/biometric-stationarity-status")
+    async def get_biometric_stationarity_status_endpoint(
+        api_key: str = "",
+        player_id: str = "",
+    ):
+        """BiometricStationarityOracleAgent status (Phase 188, agent #32).
+
+        Discriminates P1 genuine drift from adversarial window exploitation using
+        Agent 25 chain_integrity_score as the key discriminating signal.
+
+        Returns: biometric_stationarity_enabled/player_id/p_genuine_drift/
+        p_adversarial_window/stationarity_verdict/biometric_stationarity_confidence/
+        total_adversarial_alerts/timestamp.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t188
+        try:
+            _enabled188 = bool(getattr(cfg, "biometric_stationarity_enabled", False))
+            _status188  = store.get_biometric_stationarity_status(
+                player_id=player_id if player_id else None
+            )
+            _s = _status188 or {}
+            return {
+                "biometric_stationarity_enabled":   _enabled188,
+                "player_id":                        _s.get("player_id", player_id),
+                "p_genuine_drift":                  float(_s.get("p_genuine_drift", 0.0)),
+                "p_adversarial_window":             float(_s.get("p_adversarial_window", 0.0)),
+                "stationarity_verdict":             _s.get("stationarity_verdict", "STABLE"),
+                "biometric_stationarity_confidence": float(_s.get("biometric_stationarity_confidence", 0.5)),
+                "total_adversarial_alerts":         int(_s.get("total_adversarial_alerts", 0)),
+                "timestamp":                        _t188.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 187 — GET /agent/attestation-opsec-status + GET /agent/vhp-reenrollment-badge-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/attestation-opsec-status")
+    async def get_attestation_opsec_status_endpoint(
+        api_key: str = "",
+        player_id: str = "",
+    ):
+        """AttestationOpSecAdvisorAgent status (Phase 187, agent #31, WIF-033 W1 CLOSED).
+
+        Monitors timing_disclosure_risk: adversary monitoring IoTeX mempool for
+        registerAttestation() tx can extract hash before confirmation.
+
+        Returns: mempool_opsec_enabled/timing_disclosure_risk/active_attestations/
+        re_enrollment_window_active/recommendation/total_high_risk_events/player_id/timestamp.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t187a
+        try:
+            _enabled187 = bool(getattr(cfg, "mempool_opsec_enabled", False))
+            _status187  = store.get_attestation_opsec_status(
+                player_id=player_id if player_id else None
+            )
+            return {
+                "mempool_opsec_enabled":        _enabled187,
+                "timing_disclosure_risk":       _status187.get("timing_disclosure_risk", "LOW"),
+                "active_attestations":          int(_status187.get("active_attestations", 0)),
+                "re_enrollment_window_active":  bool(_status187.get("re_enrollment_window_active", False)),
+                "recommendation":               _status187.get("recommendation", ""),
+                "total_high_risk_events":       int(_status187.get("total_high_risk_events", 0)),
+                "player_id":                    _status187.get("player_id", player_id),
+                "timestamp":                    _t187a.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @app.get("/agent/vhp-reenrollment-badge-status")
+    async def get_vhp_reenrollment_badge_status_endpoint(
+        api_key: str = "",
+        player_id: str = "",
+    ):
+        """VHPReenrollmentBadge status (Phase 187, WIF-033 W2 CLOSED).
+
+        ERC-4671 soulbound badge minted after each successful re-enrollment attestation.
+        LIVE 2026-04-10 at 0x42E7A25d0E5667BBae45e5cF33a6e2CC6E42d45C.
+
+        Returns: reenrollment_badge_enabled/player_id/badge_token_id/re_enrollment_count/
+        total_badges/ttl_days/dry_run/timestamp.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t187b
+        try:
+            _enabled187b = bool(getattr(cfg, "reenrollment_badge_enabled", False))
+            _status187b  = store.get_reenrollment_badge_status(
+                player_id=player_id if player_id else None
+            )
+            return {
+                "reenrollment_badge_enabled": _enabled187b,
+                "player_id":          _status187b.get("player_id", player_id),
+                "badge_token_id":     int(_status187b.get("badge_token_id", 0)),
+                "re_enrollment_count": int(_status187b.get("re_enrollment_count", 0)),
+                "total_badges":       int(_status187b.get("total_badges", 0)),
+                "ttl_days":           float(_status187b.get("ttl_days", 90.0)),
+                "dry_run":            bool(_status187b.get("dry_run", True)),
+                "timestamp":          _t187b.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 186 — GET /agent/attestation-bound-renewal-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/attestation-bound-renewal-status")
+    async def get_attestation_bound_renewal_status_endpoint(
+        api_key: str = "",
+        player_id: str = "",
+    ):
+        """AttestationBoundRenewalAgent status (Phase 186, agent #30, WIF-032 W2 CLOSED).
+
+        Validates that every renewal has a valid active HMAC attestation from Phase 185.
+
+        Returns: attestation_bound_renewal_enabled/player_id/latest_attestation_hash/
+        latest_renewal_approved/denial_reason/total_blocked/total_approved/timestamp.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t186
+        try:
+            _enabled186 = bool(getattr(cfg, "attestation_bound_renewal_enabled", False))
+            _status186  = store.get_attestation_bound_renewal_status(
+                player_id=player_id if player_id else None
+            )
+            return {
+                "attestation_bound_renewal_enabled": _enabled186,
+                "player_id":               _status186.get("player_id", player_id),
+                "latest_attestation_hash": _status186.get("latest_attestation_hash", ""),
+                "latest_renewal_approved": bool(_status186.get("latest_renewal_approved", False)),
+                "denial_reason":           _status186.get("denial_reason", ""),
+                "total_blocked":           int(_status186.get("total_blocked", 0)),
+                "total_approved":          int(_status186.get("total_approved", 0)),
+                "timestamp":               _t186.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 185 — GET /agent/reenrollment-attestation-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/reenrollment-attestation-status")
+    async def get_reenrollment_attestation_status_endpoint(
+        api_key: str = "",
+        player_id: str = "",
+    ):
+        """ReEnrollmentAttestationAgent status (Phase 185, agent #29, WIF-032 W1 CLOSED).
+
+        HMAC-SHA256 attestation token gates re-enrollment window.
+        Adversary cannot forge without REAUTH_ATTESTATION_SECRET.
+
+        Returns: reauth_attestation_enabled/player_id/attestation_hash/issued_at/
+        expires_at/active/hmac_mode/timestamp.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t185
+        try:
+            _enabled185 = bool(getattr(cfg, "reauth_attestation_enabled", True))
+            _secret185  = getattr(cfg, "reauth_attestation_secret", "")
+            _hmac_mode  = bool(_secret185)
+            _attest185  = store.get_active_attestation(player_id if player_id else "")
+            return {
+                "reauth_attestation_enabled": _enabled185,
+                "player_id":       _attest185.get("player_id", player_id),
+                "attestation_hash": _attest185.get("attestation_hash", ""),
+                "issued_at":       float(_attest185.get("issued_at", 0.0)),
+                "expires_at":      float(_attest185.get("expires_at", 0.0)),
+                "active":          bool(_attest185.get("active", False)),
+                "hmac_mode":       _hmac_mode,
+                "timestamp":       _t185.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 183 — GET /agent/maturity-elevation-plan
+    # ------------------------------------------------------------------
+    @app.get("/agent/maturity-elevation-plan")
+    async def get_maturity_elevation_plan_endpoint(api_key: str = ""):
+        """MaturityElevationGateAgent elevation plan (Phase 183, agent #28, WIF-027 W2 CLOSED).
+
+        Reads 6-component protocol_maturity_log and generates actionable elevation_plan
+        per component (gap/action/estimated_sessions/blocking).
+        elevation_available=True when gap_to_target < 0.05.
+
+        Returns: maturity_elevation_enabled/current_tier/target_tier/gap_to_target/
+        elevation_available/elevation_plan/estimated_sessions_total/critical_component/timestamp.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t183
+        import json as _json183
+        try:
+            _enabled183 = bool(getattr(cfg, "maturity_elevation_enabled", True))
+            _status183  = store.get_maturity_elevation_status()
+            _plan_json  = _status183.get("elevation_plan_json", "{}")
+            try:
+                _plan = _json183.loads(_plan_json)
+            except Exception:
+                _plan = {}
+            return {
+                "maturity_elevation_enabled": _enabled183,
+                "current_tier":              _status183.get("current_tier", "ALPHA"),
+                "target_tier":               _status183.get("target_tier", "BETA"),
+                "gap_to_target":             float(_status183.get("gap_to_target", 1.0)),
+                "elevation_available":       bool(_status183.get("elevation_available", False)),
+                "elevation_plan":            _plan,
+                "estimated_sessions_total":  int(_status183.get("estimated_sessions_total", 0)),
+                "critical_component":        _status183.get("critical_component", ""),
+                "timestamp":                 _t183.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 182 — GET /agent/persona-break-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/persona-break-status")
+    async def get_persona_break_status_endpoint(
+        api_key: str = "",
+        player_id: str = "",
+    ):
+        """PersonaBreakDetectorAgent status (Phase 182, agent #27, WIF-028 deeper mitigation).
+
+        Monitors LOO accuracy trend over last 5 separation_ratio_snapshots per player.
+        persona_break_detected=True when mean_loo < persona_break_loo_threshold (0.20).
+
+        Returns: persona_break_detection_enabled/player_id/loo_accuracy_trend/tdi_current/
+        persona_break_detected/re_enrollment_urgency/n_snapshots_used/timestamp.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t182
+        try:
+            _enabled182 = bool(getattr(cfg, "persona_break_detection_enabled", True))
+            _status182  = store.get_persona_break_status(
+                player_id=player_id if player_id else None
+            )
+            return {
+                "persona_break_detection_enabled": _enabled182,
+                "player_id":              _status182.get("player_id", player_id),
+                "loo_accuracy_trend":     float(_status182.get("loo_accuracy_trend", 1.0)),
+                "tdi_current":            float(_status182.get("tdi_current", 0.0)),
+                "persona_break_detected": bool(_status182.get("persona_break_detected", False)),
+                "re_enrollment_urgency":  _status182.get("re_enrollment_urgency", "MEDIUM"),
+                "n_snapshots_used":       int(_status182.get("n_snapshots_used", 0)),
+                "timestamp":              _t182.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 181 — renewal endpoint corpus_delta extension (via Phase 180 endpoint)
+    # NOTE: The POST /agent/renew-separation-ratio-commitment already exists (Phase 180).
+    # Phase 181 adds corpus_delta_detected key to the response — handled inside that endpoint.
     # Phase 180 — POST /agent/renew-separation-ratio-commitment + GET /agent/renewal-chain-status
     # ------------------------------------------------------------------
     @app.post("/agent/renew-separation-ratio-commitment")
@@ -4592,16 +4941,40 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                 renewal_reason="TTL_EXPIRY",
             )
 
+            # Phase 181: Consent-Bound Renewal Provenance — snapshot corpus at renewal time
+            _corpus_delta = False
+            try:
+                import json as _json181
+                _active_devices = store.get_active_consent_devices()
+                _players_now    = sorted({str(d.get("device_id", "")) for d in _active_devices})
+                _players_json   = _json181.dumps(_players_now)
+                _revoked_count  = int(_consent_cov.get("revoked_count", 0))
+                # Check corpus delta: compare against prior snapshot for same commit if exists
+                _prior = store.get_renewal_consent_snapshot(_prev_hash) if _prev_hash else None
+                if _prior:
+                    _prior_players = _json181.loads(_prior.get("players_consented_json", "[]"))
+                    _corpus_delta  = set(_prior_players) != set(_players_now)
+                store.insert_renewal_consent_snapshot(
+                    new_commit_hash=_new_hash,
+                    n_consented=_n_consented,
+                    players_json=_players_json,
+                    revoked=_revoked_count,
+                    delta=_corpus_delta,
+                )
+            except Exception:
+                pass  # non-fatal: provenance snapshot must not block renewal
+
             _chain_status = store.get_biometric_renewal_chain_status()
             return {
-                "renewal_enabled":    _renewal_enabled,
-                "prev_commit_hash":   _prev_hash,
-                "new_commit_hash":    _new_hash,
-                "ttl_days":           _ttl_days,
-                "dry_run":            dry_run,
-                "total_renewals":     int(_chain_status.get("total_renewals", 0)),
-                "n_consented":        _n_consented,
-                "error":              _error,
+                "renewal_enabled":     _renewal_enabled,
+                "prev_commit_hash":    _prev_hash,
+                "new_commit_hash":     _new_hash,
+                "ttl_days":            _ttl_days,
+                "dry_run":             dry_run,
+                "total_renewals":      int(_chain_status.get("total_renewals", 0)),
+                "n_consented":         _n_consented,
+                "corpus_delta_detected": _corpus_delta,
+                "error":               _error,
             }
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -4917,5 +5290,372 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             }
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # -----------------------------------------------------------------------
+    # Phase 192: DataCuratorAgent (Agent #35) — Tools #136–#144
+    # -----------------------------------------------------------------------
+
+    # Tool #136 — GET /agent/data-provenance-chain
+    @app.get("/agent/data-provenance-chain")
+    async def get_data_provenance_chain(
+        leaf_node_id: str = "",
+        x_api_key: str = Header(default=""),
+    ):
+        """Tool #136 — Provenance DAG chain walk from leaf to root (Phase 192)."""
+        _check_rate(x_api_key)
+        import time as _t192_1
+        max_depth = getattr(cfg, "provenance_max_chain_depth", 20)
+        if not leaf_node_id:
+            # Return latest provenance node as default leaf
+            try:
+                with store._conn() as conn:
+                    row = conn.execute(
+                        "SELECT node_id FROM data_provenance_dag ORDER BY id DESC LIMIT 1"
+                    ).fetchone()
+                    leaf_node_id = row[0] if row else "none"
+            except Exception:
+                leaf_node_id = "none"
+        chain = store.get_provenance_chain(leaf_node_id, max_depth=max_depth)
+        if chain:
+            root = chain[0]
+            leaf = chain[-1]
+            summary = (
+                f"{len(chain)}-hop chain from {root.get('node_type', '?')} "
+                f"(Phase {root.get('phase_produced', '?')}) to "
+                f"{leaf.get('node_type', '?')}"
+            )
+            if leaf.get("on_chain_ref"):
+                summary += f" — on-chain ref: {leaf['on_chain_ref'][:16]}..."
+        else:
+            summary = "No provenance chain found for this leaf_node_id"
+        return {
+            "leaf_node_id":    leaf_node_id,
+            "chain_length":    len(chain),
+            "chain":           chain,
+            "forensic_summary": summary,
+            "timestamp":       _t192_1.time(),
+        }
+
+    # Tool #137 — GET /agent/corpus-entropy-status
+    @app.get("/agent/corpus-entropy-status")
+    async def get_corpus_entropy_status(
+        x_api_key: str = Header(default=""),
+    ):
+        """Tool #137 — Corpus entropy monitor status (Phase 192)."""
+        _check_rate(x_api_key)
+        import time as _t192_2
+        row = store.get_latest_corpus_entropy()
+        threshold = getattr(cfg, "corpus_entropy_warning_threshold", 1.5)
+        if row is None:
+            return {
+                "corpus_entropy_score":  0.0,
+                "clustering_warning":    True,
+                "status":                "NO_DATA",
+                "per_player_entropy":    "{}",
+                "low_entropy_features":  "[]",
+                "n_sessions_analyzed":   0,
+                "session_type_filter":   "touchpad_corners",
+                "warning_threshold":     threshold,
+                "timestamp":             _t192_2.time(),
+            }
+        score = float(row["corpus_entropy_score"])
+        return {
+            "corpus_entropy_score":  score,
+            "clustering_warning":    bool(row["clustering_warning"]),
+            "status":                "CLUSTERING_WARNING" if row["clustering_warning"] else "WELL_SAMPLED",
+            "per_player_entropy":    row["per_player_entropy"],
+            "low_entropy_features":  row["low_entropy_features"],
+            "n_sessions_analyzed":   int(row["n_sessions_analyzed"]),
+            "session_type_filter":   row["session_type_filter"],
+            "warning_threshold":     threshold,
+            "timestamp":             _t192_2.time(),
+        }
+
+    # Tool #138 — GET /agent/erasure-certificate
+    @app.get("/agent/erasure-certificate")
+    async def get_erasure_certificate(
+        device_id: str = "",
+        x_api_key: str = Header(default=""),
+    ):
+        """Tool #138 — GDPR Art.17 erasure certificate for a device (Phase 192)."""
+        _check_rate(x_api_key)
+        import time as _t192_3
+        if not device_id:
+            raise HTTPException(status_code=422, detail="device_id required")
+        cert = store.get_erasure_certificate(device_id)
+        return {
+            "device_id":         device_id,
+            "certificate_found": cert is not None,
+            "certificate_hash":  cert["certificate_hash"] if cert else None,
+            "player_id":         cert["player_id"] if cert else None,
+            "post_erasure_ratio": float(cert["post_erasure_ratio"]) if cert else None,
+            "anchored":          bool(cert["anchored"]) if cert else False,
+            "on_chain_tx_hash":  cert["on_chain_tx_hash"] if cert else None,
+            "ts_ns":             int(cert["ts_ns"]) if cert else None,
+            "timestamp":         _t192_3.time(),
+        }
+
+    # Tool #139 — POST /agent/anchor-erasure-certificate
+    @app.post("/agent/anchor-erasure-certificate")
+    async def anchor_erasure_certificate(
+        request: Request,
+        x_api_key: str = Header(default=""),
+    ):
+        """Tool #139 — Anchor erasure certificate to AdjudicationRegistry.sol (Phase 192)."""
+        _check_rate(x_api_key)
+        import time as _t192_3b
+        body = await request.json() if request.headers.get("content-type") else {}
+        cert_hash = body.get("certificate_hash", "")
+        tx_hash = body.get("tx_hash", f"dry_run_anchor_{int(_t192_3b.time() * 1e9)}")
+        if not cert_hash:
+            raise HTTPException(status_code=422, detail="certificate_hash required")
+        store.anchor_erasure_certificate(cert_hash, tx_hash)
+        return {
+            "anchored":          True,
+            "certificate_hash":  cert_hash,
+            "tx_hash":           tx_hash,
+            "dry_run":           getattr(cfg, "agent_dry_run_mode", True),
+            "timestamp":         _t192_3b.time(),
+        }
+
+    # Tool #140 — GET /agent/federated-corpus-quality
+    @app.get("/agent/federated-corpus-quality")
+    async def get_federated_corpus_quality(
+        x_api_key: str = Header(default=""),
+    ):
+        """Tool #140 — Federated corpus quality aggregator status (Phase 192)."""
+        _check_rate(x_api_key)
+        import time as _t192_4
+        enabled = getattr(cfg, "federated_corpus_quality_enabled", False)
+        records = store.get_federated_corpus_quality(limit=10)
+        return {
+            "federated_corpus_quality_enabled": enabled,
+            "record_count":                     len(records),
+            "records":                          records,
+            "privacy_constraint":               "BP-007: no raw biometric data",
+            "timestamp":                        _t192_4.time(),
+        }
+
+    # Tool #141 — GET /agent/feature-correlation-status
+    @app.get("/agent/feature-correlation-status")
+    async def get_feature_correlation_status(
+        player_id: str = "",
+        x_api_key: str = Header(default=""),
+    ):
+        """Tool #141 — Per-player 13x13 correlation matrix status (Phase 192)."""
+        _check_rate(x_api_key)
+        import time as _t192_5
+        threshold = getattr(cfg, "correlation_separability_threshold", 0.5)
+        row = store.get_feature_correlation(player_id=player_id)
+        if row is None:
+            return {
+                "player_id":             player_id or "all",
+                "correlation_found":     False,
+                "correlation_separable": False,
+                "separability_threshold": threshold,
+                "frobenius_vs_p1":       None,
+                "frobenius_vs_p2":       None,
+                "frobenius_vs_p3":       None,
+                "n_sessions_used":       0,
+                "timestamp":             _t192_5.time(),
+            }
+        return {
+            "player_id":             row["player_id"],
+            "correlation_found":     True,
+            "correlation_separable": bool(row["correlation_separable"]),
+            "separability_threshold": threshold,
+            "frobenius_vs_p1":       row["frobenius_vs_p1"],
+            "frobenius_vs_p2":       row["frobenius_vs_p2"],
+            "frobenius_vs_p3":       row["frobenius_vs_p3"],
+            "n_sessions_used":       int(row["n_sessions_used"]),
+            "high_correlation_pairs": row["high_correlation_pairs"],
+            "timestamp":             _t192_5.time(),
+        }
+
+    # Tool #142 — GET /agent/data-readiness-certificate
+    @app.get("/agent/data-readiness-certificate")
+    async def get_data_readiness_certificate(
+        x_api_key: str = Header(default=""),
+    ):
+        """Tool #142 — 8-dimension pre-tournament data readiness certificate (Phase 192)."""
+        _check_rate(x_api_key)
+        import time as _t192_6
+        cert = store.get_latest_data_readiness_certificate()
+        if cert is None:
+            return {
+                "certificate_found":     False,
+                "certification_status":  "NO_CERTIFICATE",
+                "certificate_hash":      None,
+                "separation_ratio":      0.0,
+                "blocking_failures":     "[]",
+                "advisory_warnings":     "[]",
+                "anchored":              False,
+                "timestamp":             _t192_6.time(),
+            }
+        return {
+            "certificate_found":     True,
+            "certification_status":  cert["certification_status"],
+            "certificate_hash":      cert["certificate_hash"],
+            "separation_ratio":      float(cert["separation_ratio"]),
+            "blocking_failures":     cert["blocking_failures"],
+            "advisory_warnings":     cert["advisory_warnings"],
+            "dimension_results":     cert["dimension_results"],
+            "anchored":              bool(cert["anchored"]),
+            "on_chain_tx_hash":      cert["on_chain_tx_hash"],
+            "valid_until_ts":        int(cert["valid_until_ts"]),
+            "timestamp":             _t192_6.time(),
+        }
+
+    # Tool #143 — POST /agent/anchor-data-readiness-certificate
+    @app.post("/agent/anchor-data-readiness-certificate")
+    async def anchor_data_readiness_certificate(
+        request: Request,
+        x_api_key: str = Header(default=""),
+    ):
+        """Tool #143 — Anchor data readiness certificate on-chain (Phase 192)."""
+        _check_rate(x_api_key)
+        import time as _t192_6b
+        body = await request.json() if request.headers.get("content-type") else {}
+        cert_hash = body.get("certificate_hash", "")
+        tx_hash = body.get("tx_hash", f"dry_run_anchor_{int(_t192_6b.time() * 1e9)}")
+        if not cert_hash:
+            raise HTTPException(status_code=422, detail="certificate_hash required")
+        store.anchor_data_readiness_certificate(cert_hash, tx_hash)
+        return {
+            "anchored":         True,
+            "certificate_hash": cert_hash,
+            "tx_hash":          tx_hash,
+            "dry_run":          getattr(cfg, "agent_dry_run_mode", True),
+            "timestamp":        _t192_6b.time(),
+        }
+
+    # Tool #144 — GET /agent/session-contribution-weights
+    @app.get("/agent/session-contribution-weights")
+    async def get_session_contribution_weights(
+        player_id: str = "",
+        x_api_key: str = Header(default=""),
+    ):
+        """Tool #144 — TBD-decay session contribution weights (Phase 192).
+        FROZEN: lambda=ln(2)/90 (BP-001 TBD half-life=90 days).
+        """
+        _check_rate(x_api_key)
+        import time as _t192_7
+        import math as _math192
+        weights = store.get_session_weights(player_id=player_id, limit=30)
+        tbd_lambda = _math192.log(2) / 90  # FROZEN: BP-001
+        return {
+            "player_id":          player_id or "all",
+            "tbd_lambda":         round(tbd_lambda, 8),
+            "tbd_halflife_days":  90,
+            "weight_count":       len(weights),
+            "weights":            weights,
+            "timestamp":          _t192_7.time(),
+        }
+
+    # Phase 193: FleetSignalCoherenceAgent (agent #36) endpoints
+    # Tool #145 — GET /agent/fleet-coherence-summary
+    @app.get("/agent/fleet-coherence-summary")
+    async def get_fleet_coherence_summary(
+        x_api_key: str = Header(default=""),
+    ):
+        """Tool #145 — Fleet signal coherence summary (Phase 193).
+        Returns total open contradictions/orphans/inversions, severity counts,
+        WIF promotion count. CRITICAL entries mean two agents report incompatible states.
+        """
+        _check_rate(x_api_key)
+        import time as _t193_1
+        enabled = getattr(cfg, "fleet_coherence_enabled", True)
+        summary = store.get_coherence_summary()
+        return {
+            "fleet_coherence_enabled": enabled,
+            "total_open":              summary.get("total_open", 0),
+            "by_severity":             summary.get("by_severity",
+                                           {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}),
+            "by_mode":                 summary.get("by_mode",
+                                           {"CONTRADICTION": 0, "ORPHAN": 0, "INVERSION": 0}),
+            "promoted_to_wif":         summary.get("promoted_to_wif", 0),
+            "last_cycle_findings":     summary.get("total_open", 0),
+            "last_checked_at":         summary.get("last_checked_at", ""),
+            "timestamp":               _t193_1.time(),
+        }
+
+    # Tool #146 — GET /agent/fleet-coherence-entries
+    @app.get("/agent/fleet-coherence-entries")
+    async def get_fleet_coherence_entries(
+        failure_mode: str = "",
+        severity: str = "",
+        x_api_key: str = Header(default=""),
+    ):
+        """Tool #146 — Fleet coherence open entries, filterable by failure_mode and severity (Phase 193)."""
+        _check_rate(x_api_key)
+        import time as _t193_2
+        entries = store.get_open_coherence_entries(
+            severity=severity or None,
+            failure_mode=failure_mode or None,
+        )
+        return {
+            "entry_count":  len(entries),
+            "entries":      entries,
+            "failure_mode": failure_mode or "all",
+            "severity":     severity or "all",
+            "timestamp":    _t193_2.time(),
+        }
+
+    # POST /agent/resolve-coherence-entry
+    @app.post("/agent/resolve-coherence-entry")
+    async def resolve_coherence_entry(
+        request: Request,
+        x_api_key: str = Header(default=""),
+    ):
+        """Resolve a fleet coherence entry by coherence_id (Phase 193)."""
+        _check_rate(x_api_key)
+        import time as _t193_3
+        body = await request.json() if request.headers.get("content-type") else {}
+        coherence_id = body.get("coherence_id", "")
+        resolved_by  = body.get("resolved_by", "operator")
+        if not coherence_id:
+            raise HTTPException(status_code=422, detail="coherence_id required")
+        store.mark_coherence_resolved(coherence_id, resolved_by)
+        return {
+            "resolved":      True,
+            "coherence_id":  coherence_id,
+            "resolved_by":   resolved_by,
+            "timestamp":     _t193_3.time(),
+        }
+
+    # Tool #147 — GET /agent/fleet-coherence-history
+    @app.get("/agent/fleet-coherence-history")
+    async def get_fleet_coherence_history(
+        rule_name: str = "",
+        limit: int = 20,
+        x_api_key: str = Header(default=""),
+    ):
+        """Tool #147 — Fleet coherence history for a specific rule (Phase 193)."""
+        _check_rate(x_api_key)
+        import time as _t193_4
+        import sqlite3 as _sq193
+        try:
+            with _sq193.connect(store._db_path) as _conn193:
+                _conn193.row_factory = _sq193.Row
+                _q = (
+                    "SELECT coherence_id, failure_mode, rule_name, severity, "
+                    "resolved, promoted_to_wif, wif_entry_id, created_at "
+                    "FROM fleet_coherence_log"
+                )
+                _params: list = []
+                if rule_name:
+                    _q += " WHERE rule_name=?"
+                    _params.append(rule_name)
+                _q += " ORDER BY created_at DESC LIMIT ?"
+                _params.append(min(limit, 100))
+                rows = [dict(r) for r in _conn193.execute(_q, _params).fetchall()]
+        except Exception:
+            rows = []
+        return {
+            "rule_name":    rule_name or "all",
+            "entry_count":  len(rows),
+            "entries":      rows,
+            "timestamp":    _t193_4.time(),
+        }
 
     return app

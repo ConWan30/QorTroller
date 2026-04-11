@@ -97,12 +97,17 @@ def git_revert():
 
 def get_priority_from_log(log: list) -> str:
     """Pick the improvement priority least addressed in recent experiments.
-    Phase 177 edition: new priorities rotate into the cycle first."""
+    Phase 193 edition: fleet coherence priorities added."""
     priorities = [
+        "fleet_coherence_critical",    # Phase 193 FSCA — CRITICAL contradiction detection
+        "fleet_coherence_orphan",      # Phase 193 FSCA — orphan signal detection (>48h unresolved)
         "temporal_drift",              # WIF-029 — highest urgency pre-tournament
         "zk_ceremony",                 # WIF-030 — ZK trust model gap
+        "data_readiness_certificate",  # Phase 192 — 8-dim pre-tournament cert
+        "provenance_dag_coverage",     # Phase 192 — causal audit trail depth
+        "corpus_entropy_monitor",      # Phase 192 — feature space homogeneity
         "bt_calibration",              # Hardware path still at 0/50 sessions
-        "pofc_consensus",              # Agent fleet 26-agent coherence check
+        "pofc_consensus",              # Agent fleet coherence check
         "separation_ratio_stratified", # 0.569 → 1.0+ via persona-windowed calibration
         # Legacy priorities (cycle through as fallback)
         "what_if_corpus_depth",
@@ -216,7 +221,7 @@ def run_cycle(
     # In actual Claude Code session, Claude produces the proposal
     # Here we save the prompt for Claude to respond to
     prompt_path = EXPERIMENT_LOG.parent / f"cycle_{cycle_num:04d}_prompt.txt"
-    prompt_path.write_text(prompt)
+    prompt_path.write_text(prompt, encoding="utf-8")
     print(f"  Prompt saved to: {prompt_path}")
     print()
     print("  NEXT STEP (Claude Code):")
@@ -350,6 +355,14 @@ def main():
                         help="Run N improvement cycles")
     parser.add_argument("--priority",
                         choices=[
+                            # Phase 193 priorities
+                            "fleet_coherence_critical",
+                            "fleet_coherence_orphan",
+                            # Phase 192 priorities
+                            "data_readiness_certificate",
+                            "provenance_dag_coverage",
+                            "corpus_entropy_monitor",
+                            # Core priorities
                             "temporal_drift",
                             "zk_ceremony",
                             "bt_calibration",
@@ -411,6 +424,14 @@ def select_skill_section_to_improve(priority: str, skill_md: str) -> str:
     and temporal drift sections.
     """
     priority_section_map = {
+        # Phase 193 (fleet coherence)
+        "fleet_coherence_critical":    "SECURITY_REVIEW",   # CONTRADICTION rules → attack surface
+        "fleet_coherence_orphan":      "ANALYSIS",          # ORPHAN rules → stale signal detection
+        # Phase 192 (corpus curator)
+        "data_readiness_certificate":  "ANALYSIS",          # 8-dim pre-tournament cert
+        "provenance_dag_coverage":     "ANALYSIS",          # causal audit trail depth
+        "corpus_entropy_monitor":      "CALIBRATION",       # feature space homogeneity
+        # Core
         "temporal_drift":              "VHP_CREDENTIAL_LIFECYCLE",
         "zk_ceremony":                 "ZK_CIRCUIT_ENGINEERING",
         "bt_calibration":              "CALIBRATION",
@@ -446,6 +467,58 @@ def score_phase_177_readiness(skill_md: str) -> dict:
     score = sum(checks.values()) / len(checks)
     return {
         "phase_177_readiness_score": round(score, 3),
+        "checks": checks,
+        "gate_open": score >= 0.80,
+        "blocking_checks": [k for k, v in checks.items() if not v],
+    }
+
+
+def score_phase_192_readiness(skill_md: str) -> dict:
+    """
+    Phase 192 DataCuratorAgent synthesis gate pre-check.
+    Verifies that the skill file reflects all Phase 192 invariants
+    before any further synthesis work begins.
+    """
+    checks = {
+        "corpus_curator_agent_35":     "CorpusDataCuratorAgent" in skill_md or "agent #35" in skill_md,
+        "provenance_dag_20hop":        "20" in skill_md and "provenance" in skill_md.lower(),
+        "entropy_threshold_1_5":       "1.5" in skill_md and "entropy" in skill_md.lower(),
+        "erasure_cert_gdpr":           "GDPR" in skill_md or "erasure_certificate" in skill_md,
+        "federated_bp007":             "BP-007" in skill_md or "federated_corpus" in skill_md,
+        "correlation_frobenius":       "Frobenius" in skill_md or "correlation_matrix" in skill_md,
+        "readiness_cert_8dim":         "8" in skill_md and "readiness" in skill_md.lower() and "certificate" in skill_md.lower(),
+        "contribution_tbd_decay":      "TBD" in skill_md and "contribution" in skill_md.lower(),
+        "separation_gate_frozen":      "separation_gate" in skill_md or "0.70" in skill_md,
+        "tool_136_144_present":        "#136" in skill_md or "Tool #136" in skill_md,
+    }
+    score = sum(checks.values()) / len(checks)
+    return {
+        "phase_192_readiness_score": round(score, 3),
+        "checks": checks,
+        "gate_open": score >= 0.70,
+        "blocking_checks": [k for k, v in checks.items() if not v],
+    }
+
+
+def score_phase_193_readiness(skill_md: str) -> dict:
+    """
+    Phase 193 FleetSignalCoherenceAgent synthesis gate pre-check.
+    Verifies that the skill file reflects all Phase 193 invariants
+    before any further synthesis work begins. Gate: score >= 0.80.
+    """
+    checks = {
+        "fsca_agent_36":              "FleetSignalCoherenceAgent" in skill_md or "agent #36" in skill_md,
+        "contradiction_7_rules":      "CONTRADICTION" in skill_md and "7" in skill_md,
+        "orphan_5_rules":             "ORPHAN" in skill_md and "5" in skill_md,
+        "inversion_3_rules":          "INVERSION" in skill_md and "3" in skill_md,
+        "renewal_without_attestation":"RENEWAL_WITHOUT_ATTESTATION" in skill_md or "attestation chain" in skill_md.lower(),
+        "coherence_id_format":        "coh_" in skill_md or "coherence_id" in skill_md,
+        "wif_auto_promote":           "N_PROMOTE_THRESHOLD" in skill_md or "auto-promot" in skill_md.lower(),
+        "fleet_coherence_enabled_true":"fleet_coherence_enabled=True" in skill_md or "default True" in skill_md or "always on" in skill_md.lower(),
+    }
+    score = sum(checks.values()) / len(checks)
+    return {
+        "phase_193_readiness_score": round(score, 3),
         "checks": checks,
         "gate_open": score >= 0.80,
         "blocking_checks": [k for k, v in checks.items() if not v],
