@@ -57,7 +57,9 @@
       "Bash(awk 'NR>40')",
       "Bash(PYTHONUTF8=1 python vapi_autoresearch.py --cycle 1 --priority temporal_drift)",
       "Bash(PYTHONUTF8=1 python vapi_autoresearch.py --apply experiments/cycle_0008_proposal.txt)",
-      "Bash(sort -t'#' -k2 -n)"
+      "Bash(sort -t'#' -k2 -n)",
+      "mcp__vapi__vapi_agent_fleet",
+      "mcp__vapi__vapi_phase_context"
     ]
   },
   "hooks": {
