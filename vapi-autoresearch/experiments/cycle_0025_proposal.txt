@@ -1,0 +1,41 @@
+---PROPOSAL_START---
+[DESCRIPTION]
+Add TEMPORAL_DRIFT_GATE to MODE: PHASE_ADVANCE so operators check biometric_credential_age against the 90-day TTL (Phase 178) and the temporal_drift_index (Phase 175) before authorizing dry_run=False or token launch, closing the gap where separation_ok=True can coexist with a legally-stale biometric commitment when renewal_enabled=False.
+
+[SKILL_MD_DELTA]
+ADD to section MODE: PHASE_ADVANCE — after "Output exactly 3 phase candidates in standard format. Never start without user approval.":
+
+### TEMPORAL DRIFT GATE (Phase 178 — BiometricCredentialTTLGate)
+
+Before any P0 or P1 advancement (dry_run=False authorization or token launch gate):
+
+1. **Check credential age**: `GET /agent/biometric-credential-age` (Tool #127 Phase 178)
+   - `biometric_credential_ttl_days` = 90.0 (config — FROZEN per BP-001 τ_half=90d)
+   - `credential_age_days > biometric_credential_ttl_days` AND `renewal_enabled=False` → **HARD STOP: TTL EXPIRED, NO RENEWAL PATHWAY**
+   - `credential_age_days > biometric_credential_ttl_days` AND `renewal_enabled=True, dry_run=True` → TTL renewal committed on-chain but not enforced live — treat as ADVISORY WARNING, not clearance
+   - `credential_age_days < biometric_credential_ttl_days` → PASS; runway = `ttl_days - credential_age_days`
+
+2. **Check temporal drift index**: `GET /agent/age-weight-analysis-status` (Phase 175 — AgeWeightedRatioPersistenceAgent)
+   - `temporal_drift_index = raw_ratio - age_weighted_ratio` (positive = old sessions inflating ratio)
+   - `> 0.10`: P1 non-stationarity detected — old sessions are pulling ratio above true steady-state; schedule 2+ new touchpad_corners captures BEFORE TTL renewal
+   - `0.01–0.10`: mild drift — monitor; full 90-day TTL valid
+   - `< 0.01`: biometrically stationary — full TTL valid; ratio stable across time
+
+3. **Renewal pathway** (Phase 180 — BiometricRenewalEngine, Tool #129):
+   - `renewal_enabled=False` (default) — operator must explicitly enable
+   - `dry_run=True` (default) — commits on-chain but does NOT enforce live
+   - Do NOT trigger renewal when `temporal_drift_index > 0.10` — stale sessions will seed the renewed commitment; new captures required first
+   - Renewal resets TTL clock from `new_commit_hash` timestamp in `biometric_renewal_chain_log`
+
+**Hard rule**: Never authorize `dry_run=False` (N≥100 live adjudications) when `credential_age_days > biometric_credential_ttl_days`. `separation_ok=True` in preflight is NECESSARY but NOT SUFFICIENT — biometric_ttl_ok must also pass. This rule mirrors the `all_pairs_above_1` requirement: meeting the aggregate gate does not clear individual component gates.
+
+[WHAT_IF]
+W1 — Operator advances to dry_run=False at day 95 (N=103 live adjudications): separation ratio = 1.05 (above gate), separation_ok=True in tournament preflight, but biometric_credential_age = 95 > TTL = 90.0. renewal_enabled=False was never toggled, so no renewal event exists in biometric_renewal_chain_log. TournamentActivationChainAgent.check_biometric_credential_ttl() fires a TTL warning, but the warning does NOT gate the preflight separation_ok check — operator sees overall_pass=True and proceeds to live enforcement.
+  Implication: VHP credentials are issued against an expired biometric commitment for 5+ days before the operator notices the TTL warning in logs. Every VHP issued after day 90 is cryptographically anchored to the Phase 153 SeparationRatioRegistry.sol SHA-256 commitment, which is correct at time of issue, but the underlying calibration corpus that produced it now exceeds BP-001's 90-day temporal validity window — making the biometric defensibility chain stale for legal/audit purposes even though the on-chain ratio hash is valid.
+  Mitigation: Add `biometric_ttl_ok` as a P0 condition in `POST /agent/run-tournament-preflight` alongside `separation_ok` and `l4_ok` — TTL expiry sets `biometric_ttl_ok=False` and blocks `overall_pass` even when ratio > 1.0. Phase candidate: Phase 195 (tournament preflight v2 — 9 conditions; current Phase 127 implementation has 8).
+
+W2 — BiometricPrivacyComplianceAgent mean_decay_factor (Phase 159, BP-001 TBD(t) = e^{-λt}, λ=ln(2)/90) can serve as a biometrically-grounded TTL scaling factor that contracts with actual feature-set age rather than a fixed calendar gate: TTL_effective = biometric_credential_ttl_days × min(1.0, mean_decay_factor / 0.50). When mean_decay_factor < 0.50 (>1 τ_half elapsed since last capture), the effective TTL expires proportionally — catching non-stationary players whose biometrics drift faster than calendar time indicates.
+  Mechanism: BiometricPrivacyComplianceAgent already computes mean_decay_factor per device in `biometric_privacy_compliance_log`. Wire into `TournamentActivationChainAgent.check_biometric_credential_ttl()` as TTL scaling multiplier (config: `biometric_ttl_decay_scaling_enabled=False` default). When enabled: `effective_ttl = ttl_days × (mean_decay_factor / 0.50)`; when disabled: fixed 90-day gate (current behavior, Phase 178).
+  Phase candidate: Phase 196 (TTL decay scaling — dependent on Phase 195 preflight v2 gate).
+  Exclusive because: No other DePIN anti-cheat protocol ties biometric credential validity duration to per-player physiological temporal drift patterns — VAPI's BP-001 exponential decay curve is the foundation for a dynamic TTL that self-shortens as player biometrics become less stationary, creating the world's first biometrically self-expiring tournament credential.
+---PROPOSAL_END---
