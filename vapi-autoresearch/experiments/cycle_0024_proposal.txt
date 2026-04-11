@@ -1,0 +1,101 @@
+---PROPOSAL_START---
+[DESCRIPTION]
+Add ORPHAN_TRIAGE_PROTOCOL to MODE: ANALYSIS so that operators encountering
+unresolved fleet signals >48h have a domain-prioritized triage sequence,
+with special handling for the separation_ratio ORPHAN case (ratio crossing
+detected but SeparationRatioRegistry on-chain commit unconfirmed).
+
+[SKILL_MD_DELTA]
+ADD to section MODE: ANALYSIS — after the existing "Output findings by severity" bullet:
+
+### ORPHAN TRIAGE PROTOCOL (Phase 193 — FleetSignalCoherenceAgent)
+
+When ANALYSIS encounters unexpected fleet behavior, check ORPHAN entries FIRST
+(before L4/L5/L6 layer analysis). ORPHAN signals indicate the agent fleet detected
+an event but its downstream confirmation timed out — they are often the root cause
+of apparent contradictions between API endpoint state and on-chain state.
+
+**Step 1 — Query open entries:**
+  `cmd_coherence_status()` → filter `failure_mode = "ORPHAN"` → sort by `created_at ASC`
+  An ORPHAN entry has `resolved_at IS NULL` and age > 48h.
+
+**Step 2 — Triage by domain (priority order):**
+
+  **CRITICAL — separation_ratio domain:**
+  ORPHAN here means `SeparationRatioMonitorAgent` fired a breakthrough event (ratio
+  approaching or crossing 1.0) but `SeparationRatioRegistry.renewCommit()` on-chain
+  was never confirmed. This creates a split state: fleet believes ratio > 1.0;
+  on-chain registry holds a stale commitment hash.
+  Resolution: rerun `analyze_interperson_separation.py --session-type touchpad_corners`
+  to confirm live ratio → check `separation_ratio_on_chain_enabled` flag → if True,
+  verify tx hash in `separation_ratio_registry_log` → if tx missing, re-trigger
+  via Tool #129 `trigger_renewal_commitment`. Run `resolve_coherence_entry()` (Tool #147)
+  only AFTER on-chain confirmation is verified.
+  Current state (2026-04-11): ratio=0.998, separation_ratio_on_chain_enabled=False —
+  ORPHAN entries in this domain are expected until flag is enabled and ratio > 1.0 is
+  confirmed defensible (all_pairs_above_1=True required alongside global ratio > 1.0).
+
+  **HIGH — attestation domain:**
+  ORPHAN here means `ReEnrollmentAttestationAgent` (Phase 185) generated an HMAC
+  attestation token that was never consumed by `AttestationBoundRenewalAgent` (Phase 186).
+  Unresolved attestation ORPHAN + any subsequent renewal event = RENEWAL_WITHOUT_ATTESTATION
+  CONTRADICTION (CRITICAL severity). Always check attestation ORPHAN before renewal actions.
+  Resolution: query `reauth_attestation_log` for unbound tokens → verify `AttestationBoundRenewalAgent`
+  consumed them → if unconsumed, do NOT proceed with renewal until resolved.
+
+  **MEDIUM — ceremony_audit domain:**
+  ORPHAN here means a ceremony participant was registered but `CeremonyAuditRegistry.sol`
+  confirmation never arrived. Advisory — does not block tournament unless ceremony_audit_enabled=True.
+
+  **LOW — renewal domain:**
+  ORPHAN here means `BiometricRenewalEngine` (Phase 180) computed a renewal commitment
+  but dry_run=True blocked the on-chain write. Expected behavior — document, do not alert.
+
+**Step 3 — ORPHAN age threshold:**
+  < 6h: monitoring window, no action required
+  6-48h: advisory — log and monitor
+  > 48h: ORPHAN state — triage per domain above; separation_ratio and attestation domains require resolution
+
+**Step 4 — Resolution:**
+  `resolve_coherence_entry(coherence_id=<id>, resolution_note="<action taken>")` — Tool #147
+  Idempotent. Only call after root cause confirmed resolved, not as a workaround.
+
+**NEVER** resolve an ORPHAN by calling Tool #147 without verifying the downstream
+confirmation (on-chain tx, attestation consumption, or ceremony log entry). A resolved
+ORPHAN with unverified cause is a masked gap, not a closed gap.
+
+[WHAT_IF]
+W1 — An ORPHAN entry in the separation_ratio domain is resolved via Tool #147 without
+  verifying on-chain commitment, allowing the fleet to report a coherent state while
+  SeparationRatioRegistry.sol holds a commitment hash from a pre-crossing ratio value.
+  Implication: GET /agent/separation-ratio-status reports ratio=1.003 (post-crossing),
+  but SeparationRatioRegistry.getLatestCommit() returns the pre-crossing hash
+  (ratio=0.998, N=29). A tournament operator relying on on-chain verification for
+  legal defensibility finds the on-chain record contradicts the API. The crossing event
+  is real but cryptographically undocumented — the VHP soulbound credential minted
+  against this ratio is indefensible in dispute resolution.
+  Mitigation: Add on_chain_confirmed boolean to fleet_coherence_log separation_ratio
+  ORPHAN entries; Tool #147 blocks resolution when on_chain_confirmed=False AND
+  separation_ratio_on_chain_enabled=True. Phase candidate: Phase 194 audit gate —
+  add on_chain_confirmed column (idempotent ALTER TABLE) + resolution guard in
+  resolve_coherence_entry().
+
+W2 — ORPHAN age distribution across domains provides a Protocol Metabolism Index (PMI):
+  mean_orphan_resolution_hours per domain measures how quickly the 36-agent fleet
+  self-heals from signal inconsistency. A fleet with PMI < 6h in critical domains
+  demonstrates autonomous recovery capability; PMI > 48h in separation_ratio domain
+  is a tournament-blocking signal. Feed PMI as a 9th component into
+  ProtocolMaturityScoringAgent (Phase 191, currently 8 components):
+  pmi_component = max(0.0, 1.0 - mean_orphan_age_hours / 48.0) with weight=0.03
+  redistributed from existing components to maintain sum=1.00.
+  Mechanism: store.get_orphan_resolution_stats(domain=None) queries fleet_coherence_log
+  for ORPHAN entries with resolved_at IS NOT NULL, computes mean(resolved_at - created_at)
+  per domain. Tool #149 get_protocol_metabolism_index exposes this as a new API endpoint.
+  Phase candidate: Phase 195 — get_orphan_resolution_stats() store method + Tool #149 +
+  ProtocolMaturityScoringResult 9th slot (pmi_score) + 8 bridge + 4 SDK tests.
+  Exclusive because: Requires simultaneous operation of 36-agent fleet with causal DAG
+  (Phase 192 CorpusDataCuratorAgent), ORPHAN detection rules (Phase 193
+  FleetSignalCoherenceAgent), and ProtocolMaturityScoringAgent (Phase 191) — no
+  competing DePIN protocol has all three infrastructure layers to define, measure,
+  or optimize Protocol Metabolism as a quantified self-healing metric.
+---PROPOSAL_END---
