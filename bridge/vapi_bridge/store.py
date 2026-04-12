@@ -2709,6 +2709,60 @@ class Store:
                     " VALUES (?, ?, ?)",
                     (_ph, _nm, time.time()),
                 )
+            # Phase 202: tremor_convergence_log — TremorRestingConvergenceOracle.
+            # Tracks per-session tremor_resting separation ratio velocity to gate
+            # the irreversible SeparationRatioRegistry.sol commitment chain.
+            # velocity = (ratio_curr - ratio_prev) / N_delta between successive sessions.
+            # convergence_stable=1 when velocity >= 0 for 2 consecutive sessions.
+            # Closes WIF-037 W1: premature on-chain commitment on declining velocity.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS tremor_convergence_log (
+                    id                        INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_type              TEXT    NOT NULL DEFAULT 'tremor_resting',
+                    ratio                     REAL    NOT NULL DEFAULT 0.0,
+                    velocity                  REAL    NOT NULL DEFAULT 0.0,
+                    n_sessions                INTEGER NOT NULL DEFAULT 0,
+                    convergence_stable        INTEGER NOT NULL DEFAULT 0,
+                    consecutive_positive      INTEGER NOT NULL DEFAULT 0,
+                    sessions_to_target_est    INTEGER NOT NULL DEFAULT 0,
+                    created_at                REAL    NOT NULL DEFAULT (unixepoch('now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_tremor_conv_session_type
+                ON tremor_convergence_log(session_type, created_at DESC)
+            """)
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                " VALUES (?, ?, ?)",
+                (202, "tremor_convergence", time.time()),
+            )
+            # Phase 203: agent_context_log — AgentContextRegistry on-chain prompt commitment.
+            # Anchors SHA-256(system_prompt) for each LLM agent to detect prompt drift.
+            # UNIQUE(agent_id, prompt_sha256) prevents duplicate registrations (anti-replay).
+            # on_chain_tx populated when agent_context_on_chain_enabled=True and
+            # AgentContextRegistry.sol anchor() call succeeds.
+            # Closes WIF-036 W1: static Phase 201 tests can't detect runtime semantic drift.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS agent_context_log (
+                    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                    agent_id       TEXT    NOT NULL,
+                    prompt_sha256  TEXT    NOT NULL,
+                    phase_number   INTEGER NOT NULL DEFAULT 0,
+                    on_chain_tx    TEXT,
+                    anchored_at    REAL,
+                    created_at     REAL    NOT NULL DEFAULT (unixepoch('now'))
+                )
+            """)
+            conn.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS ux_agent_context
+                ON agent_context_log(agent_id, prompt_sha256)
+            """)
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                " VALUES (?, ?, ?)",
+                (203, "agent_context", time.time()),
+            )
 
     # --- Device operations ---
 
@@ -11267,3 +11321,123 @@ class Store:
                 "orphan_count_open":     0,
                 "domain":                domain or "all",
             }
+
+    # --- Phase 202: TremorRestingConvergenceOracle ---
+
+    def insert_tremor_convergence_log(
+        self,
+        session_type: str,
+        ratio: float,
+        velocity: float,
+        n_sessions: int,
+        convergence_stable: bool,
+        consecutive_positive: int,
+        sessions_to_target_est: int = 0,
+    ) -> int:
+        """Insert a tremor convergence velocity snapshot (Phase 202).
+
+        Called after each tremor_resting defensibility update.
+        velocity = (ratio_curr - ratio_prev) / N_delta.
+        convergence_stable=True when velocity >= 0 for 2 consecutive sessions.
+        sessions_to_target_est: linear extrapolation of sessions needed to reach ratio=1.0.
+        """
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO tremor_convergence_log "
+                "(session_type, ratio, velocity, n_sessions, convergence_stable, "
+                " consecutive_positive, sessions_to_target_est, created_at)"
+                " VALUES (?,?,?,?,?,?,?,?)",
+                (
+                    session_type,
+                    float(ratio),
+                    float(velocity),
+                    int(n_sessions),
+                    1 if convergence_stable else 0,
+                    int(consecutive_positive),
+                    int(sessions_to_target_est),
+                    time.time(),
+                ),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def get_tremor_convergence_status(
+        self, session_type: str = "tremor_resting"
+    ) -> "dict | None":
+        """Return the latest tremor convergence status for a session type (Phase 202)."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM tremor_convergence_log "
+                "WHERE session_type=? ORDER BY id DESC LIMIT 1",
+                (session_type,),
+            ).fetchone()
+        if row is None:
+            return None
+        return dict(row)
+
+    def get_tremor_convergence_history(
+        self, session_type: str = "tremor_resting", limit: int = 10
+    ) -> "list[dict]":
+        """Return recent tremor convergence snapshots, newest first (Phase 202)."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM tremor_convergence_log "
+                "WHERE session_type=? ORDER BY id DESC LIMIT ?",
+                (session_type, limit),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    # --- Phase 203: AgentContextRegistry ---
+
+    def upsert_agent_context_hash(
+        self,
+        agent_id: str,
+        prompt_sha256: str,
+        phase_number: int,
+    ) -> int:
+        """Insert or ignore an agent context hash record (Phase 203).
+
+        UNIQUE(agent_id, prompt_sha256) — same hash for same agent is a no-op.
+        Returns the row id of the inserted or existing record.
+        """
+        with self._conn() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO agent_context_log "
+                "(agent_id, prompt_sha256, phase_number, created_at)"
+                " VALUES (?,?,?,?)",
+                (agent_id, prompt_sha256, int(phase_number), time.time()),
+            )
+            row = conn.execute(
+                "SELECT id FROM agent_context_log "
+                "WHERE agent_id=? AND prompt_sha256=? LIMIT 1",
+                (agent_id, prompt_sha256),
+            ).fetchone()
+        return int(row["id"]) if row else 0
+
+    def get_agent_context_status(
+        self, agent_id: str
+    ) -> "dict | None":
+        """Return the latest agent context hash record for an agent (Phase 203)."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM agent_context_log "
+                "WHERE agent_id=? ORDER BY id DESC LIMIT 1",
+                (agent_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return dict(row)
+
+    def get_all_agent_context_status(self) -> "list[dict]":
+        """Return the latest context hash record for all agents (Phase 203)."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT a.* FROM agent_context_log a
+                INNER JOIN (
+                    SELECT agent_id, MAX(id) as max_id
+                    FROM agent_context_log GROUP BY agent_id
+                ) b ON a.agent_id = b.agent_id AND a.id = b.max_id
+                ORDER BY a.agent_id
+                """
+            ).fetchall()
+        return [dict(r) for r in rows]

@@ -1186,6 +1186,24 @@ class Config:
     isolates neurological tremor signal (tremor_peak_hz primary discriminator) from
     gameplay motion artifacts."""
 
+    # --- Phase 202: TremorRestingConvergenceOracle ---
+    tremor_convergence_enabled: bool = field(
+        default_factory=lambda: _env("TREMOR_CONVERGENCE_ENABLED", "false").lower() == "true"
+    )
+    """Phase 202 — Enable TremorRestingConvergenceOracle velocity gate.
+    Default False (infrastructure-first).  When True, fires RATIO_VELOCITY_NEGATIVE
+    coherence event into FleetSignalCoherenceAgent when velocity < 0 for 2 consecutive
+    tremor_resting sessions, blocking VHP MINT_QUORUM=0.80 from firing prematurely."""
+
+    # --- Phase 203: AgentContextRegistry ---
+    agent_context_on_chain_enabled: bool = field(
+        default_factory=lambda: _env("AGENT_CONTEXT_ON_CHAIN_ENABLED", "false").lower() == "true"
+    )
+    """Phase 203 — Enable AgentContextRegistry.sol on-chain prompt hash anchoring.
+    Default False (infrastructure-first).  When True, POST /agent/anchor-context-hashes
+    calls AgentContextRegistry.anchor() for each of the 3 LLM agents, providing an
+    immutable tournament audit trail for the exact AI instructions behind any ruling."""
+
     # --- Phase 154: Capture Stagnation Monitor ---
     capture_stagnation_threshold: float = field(
         default_factory=lambda: float(_env("CAPTURE_STAGNATION_THRESHOLD", "0.5"))

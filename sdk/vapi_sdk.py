@@ -6593,3 +6593,143 @@ class VAPICoherenceFingerprint:
             )
         except Exception as exc:
             return CoherenceFingerprintResult(error=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Phase 202 — TremorRestingConvergenceOracle
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class TremorConvergenceResult:
+    """Result from VAPITremorConvergence.get_status() (Phase 202).
+
+    Per-session tremor_resting separation ratio velocity gate. Closes WIF-037 W1:
+    the touchpad_corners failure mode (0.998→0.728 as N grew) can recur with
+    tremor_resting if velocity is not monitored before the irreversible
+    SeparationRatioRegistry.sol commitment fires.
+
+    convergence_stable=True only when velocity >= 0 for 2 consecutive sessions.
+    When convergence_stable=False, the RATIO_VELOCITY_NEGATIVE ORPHAN rule in
+    FleetSignalCoherenceAgent blocks VHP MINT_QUORUM=0.80 authorization.
+    """
+    tremor_convergence_enabled:  bool
+    convergence_stable:          "bool | None"
+    velocity:                    "float | None"
+    ratio:                       "float | None"
+    consecutive_positive:        int
+    sessions_to_target_estimate: int
+    error: "str | None" = None
+
+
+class VAPITremorConvergence:
+    """SDK client for GET /agent/tremor-convergence-status (Phase 202).
+
+    Example::
+
+        tc = VAPITremorConvergence("http://localhost:8080", api_key)
+        result = tc.get_status()
+        if result.convergence_stable:
+            print(f"Ratio={result.ratio:.3f} stable — safe to proceed to commitment")
+        elif result.convergence_stable is False:
+            print(f"RATIO_VELOCITY_NEGATIVE — velocity={result.velocity:.4f}, block commitment")
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self) -> TremorConvergenceResult:
+        """Return TremorConvergenceResult from GET /agent/tremor-convergence-status.
+
+        On error: returns TremorConvergenceResult with error set.
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/agent/tremor-convergence-status?api_key={self._key}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            _stable = body.get("convergence_stable")
+            _vel    = body.get("velocity")
+            _ratio  = body.get("ratio")
+            return TremorConvergenceResult(
+                tremor_convergence_enabled  = bool(body.get("tremor_convergence_enabled", False)),
+                convergence_stable          = bool(_stable) if _stable is not None else None,
+                velocity                    = float(_vel)   if _vel    is not None else None,
+                ratio                       = float(_ratio) if _ratio  is not None else None,
+                consecutive_positive        = int(body.get("consecutive_positive", 0)),
+                sessions_to_target_estimate = int(body.get("sessions_to_target_estimate", 0)),
+            )
+        except Exception as exc:
+            return TremorConvergenceResult(
+                tremor_convergence_enabled  = False,
+                convergence_stable          = None,
+                velocity                    = None,
+                ratio                       = None,
+                consecutive_positive        = 0,
+                sessions_to_target_estimate = 0,
+                error                       = str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Phase 203 — AgentContextRegistry
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class AgentContextIntegrityResult:
+    """Result from VAPIAgentContextIntegrity.get_all_status() (Phase 203).
+
+    Provides on-chain prompt commitment audit trail for VAPI's 3 LLM agents.
+    Closes WIF-036 W1: Phase 201 static tests detect removed invariant strings
+    at commit time but cannot detect runtime semantic drift after phase advances.
+
+    CONTEXT_HASH_MISMATCH fires in FleetSignalCoherenceAgent (4th INVERSION rule)
+    when any of the 3 agents has no committed hash in agent_context_log (i.e.,
+    main.py Phase 203 startup code hasn't been run since bridge restart).
+    """
+    agent_context_on_chain_enabled: bool
+    all_registered:                 bool
+    agents:                         list
+    error: "str | None" = None
+
+
+class VAPIAgentContextIntegrity:
+    """SDK client for GET /agent/context-integrity-status (Phase 203).
+
+    Example::
+
+        aci = VAPIAgentContextIntegrity("http://localhost:8080", api_key)
+        result = aci.get_all_status()
+        if not result.all_registered:
+            print("One or more agents missing prompt hash — CONTEXT_HASH_MISMATCH may fire")
+        for agent in result.agents:
+            print(f"{agent['agent_id']}: sha={agent['prompt_sha256']}, "
+                  f"phase={agent['phase_number']}, registered={agent['registered']}")
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_all_status(self) -> AgentContextIntegrityResult:
+        """Return AgentContextIntegrityResult from GET /agent/context-integrity-status.
+
+        On error: returns AgentContextIntegrityResult with error set, all_registered=False.
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/agent/context-integrity-status?api_key={self._key}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return AgentContextIntegrityResult(
+                agent_context_on_chain_enabled = bool(body.get("agent_context_on_chain_enabled", False)),
+                all_registered                 = bool(body.get("all_registered", False)),
+                agents                         = list(body.get("agents", [])),
+            )
+        except Exception as exc:
+            return AgentContextIntegrityResult(
+                agent_context_on_chain_enabled = False,
+                all_registered                 = False,
+                agents                         = [],
+                error                          = str(exc),
+            )
