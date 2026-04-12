@@ -2,7 +2,7 @@ openapi: "3.0.3"
 
 info:
   title: VAPI — Self-Verifying Integration SDK REST API
-  version: "3.0.0-phase199"
+  version: "3.0.0-phase204"
   description: |
     The VAPI REST API exposes Proof of Authentic Controller (PoAC) submission,
     on-chain verification, device PHCI certification, SDK self-attestation,
@@ -4660,6 +4660,34 @@ paths:
         "403":
           description: Forbidden
 
+  /agent/prime-ioswarm-adjudication:
+    post:
+      summary: IoSwarm Adjudication Primer (Phase 204)
+      description: >
+        WIF-038 W2 closure. Seeds ioswarm_adjudication_log with 5 emulator-mode
+        adjudication entries to resolve the IOSWARM_ACTIVE_NO_ADJUDICATIONS
+        CONTRADICTION rule and unblock the VHP MINT_QUORUM=0.80 (FROZEN)
+        authorization pathway. Requires IOSWARM_ADJUDICATION_PRIMER_ENABLED=true.
+        Returns 409 when primer_enabled=False (default).
+      parameters:
+        - in: query
+          name: api_key
+          required: true
+          schema:
+            type: string
+          description: Operator API key
+      responses:
+        "200":
+          description: Primer ran successfully; ioswarm_adjudication_log seeded
+          content:
+            application\json:
+              schema:
+                $ref: "#/components/schemas/IoSwarmAdjudicationPrimerStatus"
+        "403":
+          description: Forbidden
+        "409":
+          description: Primer disabled (IOSWARM_ADJUDICATION_PRIMER_ENABLED=false)
+
 # =============================================================================
 # Components
 # =============================================================================
@@ -9113,3 +9141,43 @@ webhooks:
         timestamp:
           type: number
           description: "Unix timestamp of response"
+
+    IoSwarmAdjudicationPrimerStatus:
+      type: object
+      description: "Phase 204 IoSwarm Adjudication Primer — WIF-038 W2 closure"
+      properties:
+        primer_enabled:
+          type: boolean
+          description: "True when IOSWARM_ADJUDICATION_PRIMER_ENABLED=true (default False)"
+        devices_primed:
+          type: integer
+          description: "Count of synthetic device sessions run through IoSwarmAdjudicationCoordinator (target=5)"
+        ioswarm_adjudication_log_seeded:
+          type: boolean
+          description: "True when primer ran successfully and log entries were created"
+        ioswarm_adjudication_log_total:
+          type: integer
+          description: "Total row count in ioswarm_adjudication_log after primer completes"
+        results:
+          type: array
+          description: "Per-device primer adjudication results"
+          items:
+            type: object
+            properties:
+              device_id:
+                type: string
+                description: "Synthetic primer device identifier (primer_device_NNN)"
+              classj_verdict:
+                type: string
+                nullable: true
+                description: "ClassJ quorum verdict (CLEAR/FLAG/BLOCK/HOLD)"
+              triage_verdict:
+                type: string
+                nullable: true
+                description: "Triage quorum verdict (CLEAR/FLAG/BLOCK/HOLD)"
+              dual_veto:
+                type: boolean
+                description: "True when both ClassJ and Triage quorums returned BLOCK"
+        timestamp:
+          type: number
+          description: "Unix timestamp of primer execution"

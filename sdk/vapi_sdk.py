@@ -6733,3 +6733,102 @@ class VAPIAgentContextIntegrity:
                 agents                         = [],
                 error                          = str(exc),
             )
+
+
+# ---------------------------------------------------------------------------
+# Phase 204 — IoSwarm Adjudication Primer (WIF-038 W2 closure)
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class IoSwarmAdjudicationPrimerResult:
+    """Result from VAPIIoSwarmAdjudicationPrimer.prime() (Phase 204).
+
+    Represents the outcome of POST /agent/prime-ioswarm-adjudication, which
+    seeds ioswarm_adjudication_log with emulator-mode entries to resolve the
+    IOSWARM_ACTIVE_NO_ADJUDICATIONS CONTRADICTION rule (WIF-038 W1) and
+    unblock the VHP MINT_QUORUM=0.80 (FROZEN) authorization pathway.
+
+    Fields:
+        primer_enabled:                  True when IOSWARM_ADJUDICATION_PRIMER_ENABLED=true.
+        devices_primed:                  Count of synthetic device sessions run through
+                                         IoSwarmAdjudicationCoordinator (target=5).
+        ioswarm_adjudication_log_seeded: True when primer ran successfully.
+        ioswarm_adjudication_log_total:  Total row count in ioswarm_adjudication_log after
+                                         primer completes (0 on failure).
+        timestamp:                       Unix timestamp of the primer execution.
+        error:                           Non-empty string when primer_enabled=False or on
+                                         HTTP/parse error; None on success.
+    """
+    primer_enabled:                  bool
+    devices_primed:                  int
+    ioswarm_adjudication_log_seeded: bool
+    ioswarm_adjudication_log_total:  int          = 0
+    timestamp:                       float        = 0.0
+    error:                           "str | None" = None
+
+
+class VAPIIoSwarmAdjudicationPrimer:
+    """SDK client for POST /agent/prime-ioswarm-adjudication (Phase 204).
+
+    Closes WIF-038 W2: seeds ioswarm_adjudication_log with 5 emulator-mode
+    adjudication entries so the IOSWARM_ACTIVE_NO_ADJUDICATIONS CONTRADICTION
+    rule is resolved and VHP MINT_QUORUM=0.80 can proceed.
+
+    Requires IOSWARM_ADJUDICATION_PRIMER_ENABLED=true in the bridge environment.
+    Returns IoSwarmAdjudicationPrimerResult with error set when disabled (409).
+
+    Example::
+
+        primer = VAPIIoSwarmAdjudicationPrimer("http://localhost:8080", api_key)
+        result = primer.prime()
+        if result.error:
+            print(f"Primer failed: {result.error}")
+        else:
+            print(f"Seeded {result.devices_primed} adjudications; "
+                  f"total log rows: {result.ioswarm_adjudication_log_total}")
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def prime(self) -> IoSwarmAdjudicationPrimerResult:
+        """POST to /agent/prime-ioswarm-adjudication and return parsed result.
+
+        On 409 (primer disabled): returns result with primer_enabled=False, error set.
+        On other error: returns result with error set, ioswarm_adjudication_log_seeded=False.
+        """
+        import urllib.request as _ur
+        import urllib.error   as _ue
+        import json           as _j
+        try:
+            url = f"{self._base}/agent/prime-ioswarm-adjudication?api_key={self._key}"
+            req = _ur.Request(url, method="POST", data=b"")
+            with _ur.urlopen(req, timeout=15) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return IoSwarmAdjudicationPrimerResult(
+                primer_enabled                  = bool(body.get("primer_enabled", False)),
+                devices_primed                  = int(body.get("devices_primed", 0)),
+                ioswarm_adjudication_log_seeded = bool(body.get("ioswarm_adjudication_log_seeded", False)),
+                ioswarm_adjudication_log_total  = int(body.get("ioswarm_adjudication_log_total", 0)),
+                timestamp                       = float(body.get("timestamp", 0.0)),
+            )
+        except _ue.HTTPError as exc:
+            try:
+                detail = _j.loads(exc.read())
+                msg    = str(detail.get("message", detail))
+            except Exception:
+                msg = str(exc)
+            return IoSwarmAdjudicationPrimerResult(
+                primer_enabled                  = False,
+                devices_primed                  = 0,
+                ioswarm_adjudication_log_seeded = False,
+                error                           = msg,
+            )
+        except Exception as exc:
+            return IoSwarmAdjudicationPrimerResult(
+                primer_enabled                  = False,
+                devices_primed                  = 0,
+                ioswarm_adjudication_log_seeded = False,
+                error                           = str(exc),
+            )

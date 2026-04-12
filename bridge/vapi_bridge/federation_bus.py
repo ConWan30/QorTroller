@@ -12,6 +12,18 @@ Three operations per sync cycle:
   1. _publish_local_clusters — detect flagged clusters locally, store as is_local=True
   2. _fetch_peer_clusters    — GET /federation/clusters from each peer
   3. _process_peer_clusters  — store remote; check cross-confirmation; dispatch escalation
+
+VAPI-EXT addition (Phase 204+):
+  Namespace isolation for sub-protocol event publishing.
+  register_namespace(prefix, owner) — claims an event prefix for a sub-protocol.
+  validate_event_namespace(event_type) — raises NamespaceViolationError if the event
+    prefix is registered but the expected owner doesn't match.
+  publish_namespaced(event_type, payload, source) — validates namespace then delegates
+    to the AsyncIO message bus.
+
+  All existing VAPI core events pass through AgentMessageBus directly and are unaffected.
+  Sub-protocols MUST call register_namespace() before publishing prefixed events.
+  Empty-prefix events ("" owner = VAPI_CORE) are never blocked — backward compatible.
 """
 import asyncio
 import hashlib
@@ -20,6 +32,107 @@ import logging
 import time
 
 log = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# VAPI-EXT Namespace isolation — Phase 204+
+# ---------------------------------------------------------------------------
+
+
+class NamespaceConflictError(Exception):
+    """Raised when two sub-protocols attempt to register the same event namespace prefix."""
+
+
+class NamespaceViolationError(Exception):
+    """Raised when an event is published under a prefix owned by a different sub-protocol."""
+
+
+class _NamespaceRegistry:
+    """Thread/coroutine-safe namespace registry.
+
+    Stores prefix → owner mappings. A prefix is a non-empty string that event_type
+    strings must start with (e.g., "mobile." or "pragma.").
+
+    VAPI_CORE events have no prefix (empty string owner) and are never validated —
+    backward compatible.
+    """
+
+    def __init__(self) -> None:
+        self._namespaces: dict[str, str] = {}  # prefix → owner name
+
+    def register(self, prefix: str, owner: str) -> None:
+        """Register prefix as owned by owner.
+
+        Raises NamespaceConflictError if prefix is already owned by a different owner.
+        Idempotent: re-registering the same prefix/owner pair is allowed.
+        """
+        if not prefix:
+            raise ValueError("Namespace prefix must be non-empty.")
+        if not owner:
+            raise ValueError("Namespace owner must be non-empty.")
+        if prefix in self._namespaces:
+            existing_owner = self._namespaces[prefix]
+            if existing_owner != owner:
+                raise NamespaceConflictError(
+                    f"Namespace prefix '{prefix}' is already owned by '{existing_owner}'. "
+                    f"'{owner}' cannot claim it."
+                )
+            # Same owner re-registering — idempotent, no error
+            return
+        self._namespaces[prefix] = owner
+
+    def validate(self, event_type: str, expected_owner: str) -> None:
+        """Validate that event_type's prefix is owned by expected_owner.
+
+        Only validates events whose type starts with a registered prefix.
+        Unregistered-prefix events pass through without validation (backward compatible).
+        Empty-prefix events (VAPI_CORE) always pass through.
+
+        Raises NamespaceViolationError if the owning sub-protocol does not match
+        expected_owner.
+        """
+        for prefix, owner in self._namespaces.items():
+            if event_type.startswith(prefix):
+                if owner != expected_owner:
+                    raise NamespaceViolationError(
+                        f"Event '{event_type}' uses prefix '{prefix}' owned by "
+                        f"'{owner}', but caller claims ownership as '{expected_owner}'."
+                    )
+                return
+        # No registered prefix matched — VAPI_CORE backward-compatible passthrough
+
+    def get_owner(self, prefix: str) -> "str | None":
+        """Returns the owner of a prefix, or None if not registered."""
+        return self._namespaces.get(prefix)
+
+    def get_all(self) -> dict[str, str]:
+        """Returns a copy of all registered prefix → owner mappings."""
+        return dict(self._namespaces)
+
+    def _reset(self) -> None:
+        """Test-only helper."""
+        self._namespaces.clear()
+
+
+# Module-level namespace registry — shared by FederationBus instance and all sub-protocols
+_NAMESPACE_REGISTRY = _NamespaceRegistry()
+
+
+def register_namespace(prefix: str, owner: str) -> None:
+    """Module-level helper: register a namespace prefix for a sub-protocol.
+
+    Sub-protocols call this at startup, before publishing any events:
+        from vapi_bridge.federation_bus import register_namespace
+        register_namespace("mobile.", "VAPI_MOBILE")
+    """
+    _NAMESPACE_REGISTRY.register(prefix, owner)
+
+
+def validate_event_namespace(event_type: str, expected_owner: str) -> None:
+    """Module-level helper: validate that event_type belongs to expected_owner.
+
+    Raises NamespaceViolationError if the prefix is owned by a different sub-protocol.
+    """
+    _NAMESPACE_REGISTRY.validate(event_type, expected_owner)
 
 try:
     import httpx
@@ -68,6 +181,72 @@ class FederationBus:
         self._bridge_id = compute_bridge_id(
             getattr(cfg, "federation_api_key", "") or "default"
         )
+
+    # ------------------------------------------------------------------
+    # VAPI-EXT: Namespace isolation (Phase 204+)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def register_namespace(prefix: str, owner: str) -> None:
+        """Register a namespace prefix for a sub-protocol.
+
+        Delegates to the module-level _NAMESPACE_REGISTRY.
+        Raises NamespaceConflictError if prefix is owned by a different sub-protocol.
+        Idempotent: safe to call multiple times with the same prefix/owner.
+
+        Usage:
+            bus.register_namespace("mobile.", "VAPI_MOBILE")
+        """
+        _NAMESPACE_REGISTRY.register(prefix, owner)
+
+    @staticmethod
+    def validate_event_namespace(event_type: str, expected_owner: str) -> None:
+        """Validate that event_type's namespace prefix is owned by expected_owner.
+
+        Only fires for events whose type starts with a registered prefix.
+        VAPI_CORE events (no prefix) pass through unchanged — backward compatible.
+        Raises NamespaceViolationError on ownership mismatch.
+        """
+        _NAMESPACE_REGISTRY.validate(event_type, expected_owner)
+
+    async def publish_namespaced(
+        self,
+        event_type: str,
+        payload: dict,
+        source: str,
+        owner: str,
+        agent_bus=None,
+    ) -> None:
+        """Publish a namespace-validated event.
+
+        Validates the namespace before publishing. If agent_bus is provided,
+        delegates to agent_bus.publish() after validation. If not provided,
+        broadcasts via ws_broadcast.
+
+        This is the entry point for sub-protocol event publishing. VAPI_CORE
+        continues using AgentMessageBus.publish() directly (no change).
+
+        Args:
+            event_type:  The event type string (e.g., "mobile.session_verified")
+            payload:     Event payload dict
+            source:      Agent/component source identifier
+            owner:       The sub-protocol claiming ownership of this event
+            agent_bus:   Optional AgentMessageBus instance for intra-bridge delivery
+        """
+        _NAMESPACE_REGISTRY.validate(event_type, owner)
+        if agent_bus is not None:
+            await agent_bus.publish(event_type, payload, source)
+        else:
+            envelope = json.dumps({
+                "event_type": event_type,
+                "payload": payload,
+                "source": source,
+                "ts": time.time(),
+            })
+            try:
+                await ws_broadcast(envelope)
+            except Exception as exc:
+                log.warning("FederationBus.publish_namespaced: ws_broadcast error: %s", exc)
 
     def _get_peers(self) -> list:
         raw = getattr(self._cfg, "federation_peers", "")

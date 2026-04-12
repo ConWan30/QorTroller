@@ -222,6 +222,57 @@ CONTRADICTION_RULES: dict = {
             "update between activation chain evaluation and snapshot write."
         ),
     },
+
+    "IOSWARM_ACTIVE_NO_ADJUDICATIONS": {
+        # Phase 204: WIF-038 W1 closure.
+        # Fires when ioswarm_enabled=True AND ioswarm_adjudication_enabled=True but
+        # ioswarm_adjudication_log contains zero entries, while ioswarm_consensus_log
+        # already has activity (proving ioSwarm has been running).
+        #
+        # This contradiction is structurally invisible to any single-agent health check:
+        # SessionAdjudicator reports CERTIFY rulings normally and IoSwarmVHPMintCoordinator
+        # appears healthy — but the adjudication audit trail that VHP MINT_QUORUM=0.80
+        # (FROZEN) depends on has never been written. VHP mints remain permanently
+        # fail-CLOSED with no coherence alarm.
+        #
+        # Guard: dormant when ioswarm_enabled=False or ioswarm_adjudication_enabled=False
+        # (adjudication records are not expected when either flag is off).
+        "query": """
+            SELECT
+                (SELECT COUNT(*) FROM ioswarm_adjudication_log) AS total_adj,
+                (SELECT COUNT(*) FROM ioswarm_consensus_log)    AS consensus_count
+        """,
+        "params": lambda cfg: (),
+        "guard": lambda cfg: (
+            bool(getattr(cfg, "ioswarm_enabled", False))
+            and bool(getattr(cfg, "ioswarm_adjudication_enabled", False))
+        ),
+        "post_check": lambda row: (
+            row.get("total_adj", 0) == 0
+            and row.get("consensus_count", 0) > 0
+        ),
+        "agents_involved": ["IoSwarmAdjudicationCoordinator", "SessionAdjudicator"],
+        "severity": "HIGH",
+        "explanation": (
+            "ioswarm_enabled=True and ioswarm_adjudication_enabled=True with active "
+            "ioswarm_consensus_log entries, but ioswarm_adjudication_log contains zero "
+            "rows. IoSwarmAdjudicationCoordinator has never been invoked despite both "
+            "flags being active. The VHP MINT_QUORUM=0.80 (FROZEN) authorization pathway "
+            "relies on the adjudication pipeline being primed with at least one "
+            "quorum-confirmed entry. With zero records, the adjudication signal is "
+            "permanently absent: SessionAdjudicator reports CERTIFY rulings normally, "
+            "but IoSwarmVHPMintCoordinator cannot cross-validate adjudication history. "
+            "This contradiction is structurally invisible to any single-agent health check."
+        ),
+        "resolution": (
+            "Run POST /agent/prime-ioswarm-adjudication (requires primer_enabled=True via "
+            "IOSWARM_ADJUDICATION_PRIMER_ENABLED=true) to replay synthetic device sessions "
+            "through IoSwarmAdjudicationCoordinator in emulator mode, seeding "
+            "ioswarm_adjudication_log with primer entries. Alternatively: process at least "
+            "1 live session with both ioswarm_adjudication_enabled=True and "
+            "ioswarm_enabled=True active."
+        ),
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -507,6 +558,9 @@ INVERSION_RULES: dict = {
 }
 
 
+from .coherence_rules.loader import CoherenceRuleLoader as _CoherenceRuleLoader  # VAPI-EXT: sub-protocol rule plugin registry
+
+
 class FleetSignalCoherenceAgent:
     """
     Agent #36. Phase 193. Polls every 900s (15 minutes).
@@ -617,6 +671,10 @@ class FleetSignalCoherenceAgent:
         found = []
         for rule_name, rule in CONTRADICTION_RULES.items():
             try:
+                # Guard: per-rule cfg-dependent gating (Phase 204 — supports dry_run /
+                # ioswarm_enabled conditional rules without polluting the rule schema).
+                if "guard" in rule and not rule["guard"](self._config):
+                    continue
                 params = rule["params"](self._config)
                 rows   = self._db_query(rule["query"], params)
 

@@ -33,6 +33,7 @@ class Store:
         self._consent_ledger_enabled = consent_ledger_enabled
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self._init_schema()
+        from .migrations.runner import MigrationRunner; MigrationRunner(db_path).run_pending()  # VAPI-EXT
 
     @contextmanager
     def _conn(self):

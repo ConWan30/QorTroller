@@ -3125,6 +3125,65 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
+    @app.post("/agent/prime-ioswarm-adjudication")
+    def prime_ioswarm_adjudication(api_key: str = Query(...)):
+        """Phase 204 — WIF-038 W2 closure: IoSwarm Adjudication Primer.
+
+        Replays up to 5 synthetic device sessions through IoSwarmAdjudicationCoordinator
+        in emulator mode to seed ioswarm_adjudication_log with primer entries, resolving
+        the IOSWARM_ACTIVE_NO_ADJUDICATIONS CONTRADICTION rule and unblocking the VHP
+        MINT_QUORUM=0.80 (FROZEN) authorization pathway.
+
+        Requires IOSWARM_ADJUDICATION_PRIMER_ENABLED=true (primer_enabled=False default).
+        Returns 409 when disabled.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            primer_enabled = bool(getattr(cfg, "ioswarm_adjudication_primer_enabled", False))
+            if not primer_enabled:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "error":   "primer_disabled",
+                        "message": (
+                            "ioswarm_adjudication_primer_enabled=False. "
+                            "Set IOSWARM_ADJUDICATION_PRIMER_ENABLED=true to enable."
+                        ),
+                    },
+                )
+            from .ioswarm_adjudication_coordinator import IoSwarmAdjudicationCoordinator
+            coord   = IoSwarmAdjudicationCoordinator(cfg=cfg, store=store)
+            n_prime = 5
+            results = []
+            for i in range(n_prime):
+                dev_id = f"primer_device_{i:03d}"
+                r = coord.evaluate(
+                    device_id       = dev_id,
+                    session_id      = f"PRIMER:{i}",
+                    entropy_variance= 0.5,
+                    escalated       = False,
+                )
+                results.append({
+                    "device_id":      dev_id,
+                    "classj_verdict": r.get("classj_quorum_verdict"),
+                    "triage_verdict": r.get("triage_quorum_verdict"),
+                    "dual_veto":      bool(r.get("dual_veto", False)),
+                })
+            adj_total = len(store.get_ioswarm_adjudication_log(limit=200))
+            return {
+                "primer_enabled":                  True,
+                "devices_primed":                  len(results),
+                "results":                         results,
+                "ioswarm_adjudication_log_seeded": True,
+                "ioswarm_adjudication_log_total":  adj_total,
+                "timestamp":                       time.time(),
+            }
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
     @app.get("/agent/ioswarm-renewal-status")
     def ioswarm_renewal_status(api_key: str = Query(...)):
         """Phase 109B — ioSwarm Renewal Coordinator status + recent renewal log."""
