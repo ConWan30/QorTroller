@@ -2196,6 +2196,10 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                     _p0_fails.append("separation_ratio_below_1.0")
                 if not _latest_pf.get("l4_ok", False):
                     _p0_fails.append("l4_calibration_stale")
+                if not _latest_pf.get("biometric_ttl_ok", True):
+                    _p0_fails.append("biometric_ttl_expired_or_no_renewal_chain")
+                if not _latest_pf.get("all_pairs_p0_ok", False):
+                    _p0_fails.append("per_pair_separation_below_1.0")
                 if _p0_fails:
                     result["error"] = (
                         f"preflight_p0_blocked: {_p0_fails}. "
@@ -3219,12 +3223,27 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         audit    = store.get_activation_audit_summary()
         audit_ok = bool(audit.get("audit_valid", False))
 
+        # P0: biometric_ttl_ok — credential not expired AND renewal chain has ≥1 entry (Phase 196)
+        _ttl196     = float(getattr(cfg, "biometric_credential_ttl_days", 90.0))
+        _ttl_status = store.get_biometric_credential_age_status(ttl_days=_ttl196)
+        _renewal_ch = store.get_biometric_renewal_chain_status(limit=1)
+        _ttl_expired      = bool(_ttl_status.get("ttl_expired", False)) if _ttl_status else False
+        _renewal_has_entry = len(_renewal_ch) > 0
+        biometric_ttl_ok  = (not _ttl_expired) and _renewal_has_entry
+
+        # P0: all_pairs_p0_ok — every inter-player pair has separation ratio >= 1.0 (Phase 197)
+        _def197 = store.get_separation_defensibility_status()
+        all_pairs_p0_ok = bool(_def197.get("all_pairs_above_1", False)) if _def197 else False
+
         # P1 warnings
         dual_gate_warned    = not bool(getattr(cfg, "dual_primitive_gate_enabled", False))
         epoch_window_warned = not bool(getattr(cfg, "epoch_window_enabled", False))
         ioswarm_warned      = not bool(getattr(cfg, "ioswarm_vhp_mint_enabled", False))
 
-        overall_pass = separation_ok and l4_ok and gate_ok and cert_ok and audit_ok
+        overall_pass = (
+            separation_ok and l4_ok and gate_ok and cert_ok and audit_ok
+            and biometric_ttl_ok and all_pairs_p0_ok
+        )
 
         conditions = {
             "separation_ratio": sep_ratio,
@@ -3236,6 +3255,10 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "gate_ok": gate_ok,
             "cert_ok": cert_ok,
             "audit_ok": audit_ok,
+            "biometric_ttl_expired": _ttl_expired,
+            "biometric_renewal_entries": len(_renewal_ch),
+            "biometric_ttl_ok": biometric_ttl_ok,
+            "all_pairs_p0_ok": all_pairs_p0_ok,
             "dual_primitive_gate_enabled": not dual_gate_warned,
             "epoch_window_enabled": not epoch_window_warned,
             "ioswarm_vhp_mint_enabled": not ioswarm_warned,
@@ -3252,6 +3275,8 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             ioswarm_warned=ioswarm_warned,
             overall_pass=overall_pass,
             conditions_json=_json127.dumps(conditions),
+            biometric_ttl_ok=biometric_ttl_ok,
+            all_pairs_p0_ok=all_pairs_p0_ok,
         )
         return {
             "run_id":               row_id,
@@ -3260,6 +3285,8 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "gate_ok":              gate_ok,
             "cert_ok":              cert_ok,
             "audit_ok":             audit_ok,
+            "biometric_ttl_ok":     biometric_ttl_ok,
+            "all_pairs_p0_ok":      all_pairs_p0_ok,
             "dual_gate_warned":     dual_gate_warned,
             "epoch_window_warned":  epoch_window_warned,
             "ioswarm_warned":       ioswarm_warned,
@@ -3308,6 +3335,8 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                     "gate_ok":             latest["gate_ok"],
                     "cert_ok":             latest["cert_ok"],
                     "audit_ok":            latest["audit_ok"],
+                    "biometric_ttl_ok":    latest.get("biometric_ttl_ok", True),
+                    "all_pairs_p0_ok":     latest.get("all_pairs_p0_ok", False),
                     "dual_gate_warned":    latest["dual_gate_warned"],
                     "epoch_window_warned": latest["epoch_window_warned"],
                     "ioswarm_warned":      latest["ioswarm_warned"],
@@ -3320,6 +3349,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                 "found": False, "overall_pass": False,
                 "separation_ok": False, "l4_ok": False,
                 "gate_ok": False, "cert_ok": False, "audit_ok": False,
+                "biometric_ttl_ok": True, "all_pairs_p0_ok": False,
                 "timestamp": time.time(),
             }
         except Exception as exc:
@@ -5115,6 +5145,33 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
+    # Phase 198 — GET /agent/biometric-ttl-scaling-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/biometric-ttl-scaling-status")
+    async def get_biometric_ttl_scaling_endpoint(api_key: str = ""):
+        """Biometric TTL Decay Scaling status (Phase 198).
+
+        When biometric_ttl_decay_scaling_enabled=True:
+          effective_ttl = base_ttl × (mean_decay_factor / 0.50)
+          Clamped to [base_ttl × 0.25, base_ttl × 4.0].
+        mean_decay_factor from BP-001 BiometricPrivacyComplianceAgent (Phase 159).
+
+        Returns: effective_ttl_days/base_ttl_days/scaling_factor/
+                 mean_decay_factor/scaling_enabled/timestamp.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t198
+        try:
+            _base198    = float(getattr(cfg, "biometric_credential_ttl_days", 90.0))
+            _scaling198 = bool(getattr(cfg, "biometric_ttl_decay_scaling_enabled", False))
+            _result198  = store.get_effective_biometric_ttl(
+                base_ttl_days=_base198, scaling_enabled=_scaling198
+            )
+            return {**_result198, "timestamp": _t198.time()}
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
     # Phase 177 — GET /agent/protocol-maturity-score
     # ------------------------------------------------------------------
     @app.get("/agent/protocol-maturity-score")
@@ -5140,16 +5197,19 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             _rows177    = store.get_protocol_maturity_status(limit=1)
             _latest177  = _rows177[0] if _rows177 else {}
             return {
-                "protocol_maturity_enabled":      _enabled177,
-                "maturity_score":                 float(_latest177.get("maturity_score",                0.0)),
-                "maturity_tier":                  str(_latest177.get("maturity_tier",                   "ALPHA")),
-                "separation_component":           float(_latest177.get("separation_component",          0.0)),
-                "chain_integrity_component":      float(_latest177.get("chain_integrity_component",     0.0)),
-                "consent_component":              float(_latest177.get("consent_component",             0.0)),
-                "biometric_freshness_component":  float(_latest177.get("biometric_freshness_component", 0.0)),
-                "agent_calibration_component":    float(_latest177.get("agent_calibration_component",   0.0)),
-                "enrollment_component":           float(_latest177.get("enrollment_component",          0.0)),
-                "timestamp":                      _t177.time(),
+                "protocol_maturity_enabled":          _enabled177,
+                "maturity_score":                     float(_latest177.get("maturity_score",                0.0)),
+                "maturity_tier":                      str(_latest177.get("maturity_tier",                   "ALPHA")),
+                "separation_component":               float(_latest177.get("separation_component",          0.0)),
+                "chain_integrity_component":          float(_latest177.get("chain_integrity_component",     0.0)),
+                "consent_component":                  float(_latest177.get("consent_component",             0.0)),
+                "biometric_freshness_component":      float(_latest177.get("biometric_freshness_component", 0.0)),
+                "agent_calibration_component":        float(_latest177.get("agent_calibration_component",   0.0)),
+                "enrollment_component":               float(_latest177.get("enrollment_component",          0.0)),
+                "threat_forecast_accuracy_component": float(_latest177.get("threat_forecast_accuracy_component", 0.0)),
+                "biometric_stationarity_component":   float(_latest177.get("biometric_stationarity_component",   0.0)),
+                "pmi_component":                      float(_latest177.get("pmi_component",                 1.0)),
+                "timestamp":                          _t177.time(),
             }
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -5656,6 +5716,67 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "entry_count":  len(rows),
             "entries":      rows,
             "timestamp":    _t193_4.time(),
+        }
+
+    # Phase 194: CoherenceFingerprintRegistry — Tool #148
+    # -----------------------------------------------------------------------
+
+    # Tool #148 — GET /agent/coherence-fingerprint-status
+    @app.get("/agent/coherence-fingerprint-status")
+    async def get_coherence_fingerprint_status(
+        x_api_key: str = Header(default=""),
+    ):
+        """Tool #148 — Coherence fingerprint registry status (Phase 194).
+
+        Returns per-rule occurrence counts from coherence_fingerprint_log.
+        persistent_count = rules with occurrence_count >= 3 (N_PROMOTE_THRESHOLD).
+        maturity_penalty = min(1.0, persistent_count × 0.10) — applied to
+        ProtocolMaturityScoringAgent threat_forecast_accuracy_component.
+        """
+        _check_rate(x_api_key)
+        import time as _t194
+        status = store.get_coherence_fingerprint_status()
+        return {
+            "total_rules":        status.get("total_rules", 0),
+            "persistent_count":   status.get("persistent_count", 0),
+            "total_occurrences":  status.get("total_occurrences", 0),
+            "maturity_penalty":   status.get("maturity_penalty", 0.0),
+            "top_rules":          status.get("top_rules", []),
+            "n_promote_threshold": 3,
+            "timestamp":          _t194.time(),
+        }
+
+    # Phase 195: Protocol Metabolism Index — Tool #149
+    # -----------------------------------------------------------------------
+
+    # Tool #149 — GET /agent/protocol-metabolism-index
+    @app.get("/agent/protocol-metabolism-index")
+    async def get_protocol_metabolism_index(
+        x_api_key: str = Header(default=""),
+        domain: str = "",
+    ):
+        """Tool #149 — Protocol Metabolism Index status (Phase 195).
+
+        PMI = max(0.0, 1.0 - mean_orphan_resolution_hours / 48.0)
+        Measures how quickly the 36-agent fleet self-heals ORPHAN signal inconsistencies.
+        1.0 = instant resolution or no ORPHANs (healthy fleet).
+        0.0 = mean resolution >= 48h (fleet metabolises very slowly).
+        Feeds into ProtocolMaturityScoringAgent as the 9th component (weight=0.03).
+
+        Returns 6 keys:
+          mean_resolution_hours_critical / pmi_score / orphan_count_open /
+          orphan_count_resolved / domain / timestamp
+        """
+        _check_rate(x_api_key)
+        import time as _t195
+        stats = store.get_orphan_resolution_stats(domain=domain)
+        return {
+            "mean_resolution_hours_critical": stats.get("mean_resolution_hours", 0.0),
+            "pmi_score":                      stats.get("pmi_score", 1.0),
+            "orphan_count_open":              stats.get("orphan_count_open", 0),
+            "orphan_count_resolved":          stats.get("orphan_count_resolved", 0),
+            "domain":                         stats.get("domain", "all"),
+            "timestamp":                      _t195.time(),
         }
 
     return app

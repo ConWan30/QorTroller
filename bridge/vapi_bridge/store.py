@@ -1388,6 +1388,26 @@ class Store:
                 )
             except Exception:
                 pass  # Column already exists on databases migrated from Phase 127
+            # Phase 196: idempotent ALTER TABLE — add biometric_ttl_ok (WIF-035 P0 condition 9)
+            # biometric_ttl_ok=1 when biometric_credential_ttl not expired AND renewal chain valid.
+            try:
+                conn.execute(
+                    "ALTER TABLE tournament_preflight_log ADD COLUMN "
+                    "biometric_ttl_ok INTEGER NOT NULL DEFAULT 1"
+                )
+            except Exception:
+                pass  # Column already exists
+            # Phase 197: idempotent ALTER TABLE — add all_pairs_p0_ok (P0 condition 10)
+            # all_pairs_p0_ok=1 when all inter-player pairs have separation ratio >= 1.0.
+            # Reads all_pairs_above_1 from separation_defensibility_log.
+            # 0 (fail-closed) when no defensibility data exists.
+            try:
+                conn.execute(
+                    "ALTER TABLE tournament_preflight_log ADD COLUMN "
+                    "all_pairs_p0_ok INTEGER NOT NULL DEFAULT 0"
+                )
+            except Exception:
+                pass  # Column already exists
             # Phase 152: centroid_velocity_log — per-probe biometric fingerprint drift rate monitor.
             # Tracks separation ratio velocity between successive defensibility snapshots.
             # stagnant=True when velocity_per_day < PLATEAU_THRESHOLD (0.001 ratio/day).
@@ -2010,6 +2030,13 @@ class Store:
                     )
                 except Exception:
                     pass  # column already exists
+            # Phase 195: idempotent migration — add PMI component column
+            try:
+                conn.execute(
+                    "ALTER TABLE protocol_maturity_log ADD COLUMN pmi_component REAL NOT NULL DEFAULT 1.0"
+                )
+            except Exception:
+                pass  # column already exists
             conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_maturity_created
                 ON protocol_maturity_log(created_at DESC)
@@ -2256,6 +2283,42 @@ class Store:
                 "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
                 " VALUES (?, ?, ?)",
                 (193, "fleet_coherence", time.time()),
+            )
+            # Phase 194: coherence_fingerprint_log — contradiction fingerprint registry.
+            # Tracks occurrence_count per rule_name across all FleetSignalCoherenceAgent cycles.
+            # A rule is "persistent" when occurrence_count >= N_PROMOTE_THRESHOLD (3).
+            # Persistent contradictions are fed into ProtocolMaturityScoringAgent as a
+            # threat_forecast_accuracy penalty: score *= (1 - min(1.0, persistent_count * 0.10)).
+            # Also adds on_chain_confirmed column to fleet_coherence_log (idempotent ALTER TABLE).
+            try:
+                conn.execute(
+                    "ALTER TABLE fleet_coherence_log ADD COLUMN on_chain_confirmed INTEGER NOT NULL DEFAULT 0"
+                )
+            except Exception:
+                pass  # Column already exists on upgraded DBs — safe to ignore
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS coherence_fingerprint_log (
+                    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                    rule_name         TEXT    NOT NULL UNIQUE,
+                    failure_mode      TEXT    NOT NULL DEFAULT '',
+                    first_seen_at     TEXT    NOT NULL DEFAULT (datetime('now')),
+                    last_seen_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+                    occurrence_count  INTEGER NOT NULL DEFAULT 1,
+                    persistent        INTEGER NOT NULL DEFAULT 0,
+                    promoted_to_wif   INTEGER NOT NULL DEFAULT 0,
+                    wif_entry_id      TEXT,
+                    maturity_penalty  REAL    NOT NULL DEFAULT 0.0,
+                    created_at        TEXT    DEFAULT (datetime('now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_fingerprint_persistent
+                ON coherence_fingerprint_log(persistent, occurrence_count DESC)
+            """)
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                " VALUES (?, ?, ?)",
+                (194, "coherence_fingerprint", time.time()),
             )
             # Phase 176: poac_chain_audit_log — PoACChainIntegrityMonitor (agent #25).
             # Audits SHA-256 chain linkage across PoAC records for each device.
@@ -7430,8 +7493,10 @@ class Store:
         ioswarm_warned: bool = False,
         overall_pass: bool = False,
         conditions_json: str = "{}",
+        biometric_ttl_ok: bool = True,
+        all_pairs_p0_ok: bool = False,
     ) -> int:
-        """Insert a tournament preflight run record (Phase 127).
+        """Insert a tournament preflight run record (Phase 127; Phase 196 biometric_ttl_ok; Phase 197 all_pairs_p0_ok).
 
         Returns the new row id.
         """
@@ -7440,25 +7505,26 @@ class Store:
                 """INSERT INTO tournament_preflight_log
                    (separation_ok, l4_ok, gate_ok, cert_ok, audit_ok,
                     dual_gate_warned, epoch_window_warned, ioswarm_warned,
-                    overall_pass, conditions_json, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    overall_pass, conditions_json, biometric_ttl_ok, all_pairs_p0_ok, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     int(separation_ok), int(l4_ok), int(gate_ok),
                     int(cert_ok), int(audit_ok),
                     int(dual_gate_warned), int(epoch_window_warned), int(ioswarm_warned),
                     int(overall_pass), conditions_json,
+                    int(biometric_ttl_ok), int(all_pairs_p0_ok),
                     time.time(),
                 ),
             )
             return cur.lastrowid
 
     def get_tournament_preflight_status(self, limit: int = 5) -> "list[dict]":
-        """Return recent tournament preflight run records, newest first (Phase 127)."""
+        """Return recent tournament preflight run records, newest first (Phase 127; Phase 196; Phase 197)."""
         with self._conn() as conn:
             rows = conn.execute(
                 """SELECT id, separation_ok, l4_ok, gate_ok, cert_ok, audit_ok,
                           dual_gate_warned, epoch_window_warned, ioswarm_warned,
-                          overall_pass, conditions_json, created_at
+                          overall_pass, conditions_json, biometric_ttl_ok, all_pairs_p0_ok, created_at
                    FROM tournament_preflight_log
                    ORDER BY id DESC
                    LIMIT ?""",
@@ -7477,7 +7543,9 @@ class Store:
                 "ioswarm_warned":        bool(r[8]),
                 "overall_pass":          bool(r[9]),
                 "conditions_json":       r[10],
-                "created_at":            r[11],
+                "biometric_ttl_ok":      bool(r[11]) if r[11] is not None else True,
+                "all_pairs_p0_ok":       bool(r[12]) if r[12] is not None else False,
+                "created_at":            r[13],
             }
             for r in rows
         ]
@@ -9372,6 +9440,54 @@ class Store:
             "timestamp":               ts_now,
         }
 
+    # --- Phase 198: Biometric TTL Decay Scaling ---
+
+    def get_effective_biometric_ttl(
+        self,
+        base_ttl_days: float = 90.0,
+        scaling_enabled: bool = False,
+    ) -> dict:
+        """Compute effective biometric TTL with optional BP-001 decay scaling (Phase 198).
+
+        Formula when enabled:
+          scaling_factor = mean_decay_factor / 0.50
+          effective_ttl  = base_ttl_days × scaling_factor
+          Clamped to [base_ttl_days × 0.25, base_ttl_days × 4.0].
+
+        mean_decay_factor = 1.0 (fresh data) → effective_ttl = 2× base (generous)
+        mean_decay_factor = 0.50 (half-life)  → effective_ttl = 1× base (unchanged)
+        mean_decay_factor = 0.25 (old data)   → effective_ttl = 0.5× base (strict)
+
+        When scaling_enabled=False: effective_ttl = base_ttl_days (no change).
+
+        Returns: effective_ttl_days / base_ttl_days / scaling_factor /
+                 mean_decay_factor / scaling_enabled.
+        """
+        compliance = self.get_privacy_compliance_status()
+        mean_decay = float(compliance.get("mean_decay_factor", 1.0))
+
+        if not scaling_enabled:
+            return {
+                "effective_ttl_days": round(base_ttl_days, 4),
+                "base_ttl_days":      round(base_ttl_days, 4),
+                "scaling_factor":     1.0,
+                "mean_decay_factor":  mean_decay,
+                "scaling_enabled":    False,
+            }
+
+        _MIN_SCALE = 0.25
+        _MAX_SCALE = 4.0
+        scaling_factor = mean_decay / 0.50
+        scaling_factor = max(_MIN_SCALE, min(_MAX_SCALE, scaling_factor))
+        effective_ttl  = round(base_ttl_days * scaling_factor, 4)
+        return {
+            "effective_ttl_days": effective_ttl,
+            "base_ttl_days":      round(base_ttl_days, 4),
+            "scaling_factor":     round(scaling_factor, 6),
+            "mean_decay_factor":  round(mean_decay, 6),
+            "scaling_enabled":    True,
+        }
+
     # --- Phase 177: ProtocolMaturityScoringAgent ---
 
     def insert_protocol_maturity_log(
@@ -9384,29 +9500,32 @@ class Store:
         enrollment_component: float,
         threat_forecast_accuracy_component: float = 0.0,
         biometric_stationarity_component: float = 0.0,
+        pmi_component: float = 1.0,
     ) -> int:
-        """Insert a protocol maturity score assessment (Phase 177, v2 Phase 191 TSP).
+        """Insert a protocol maturity score assessment (Phase 177, v2 Phase 191 TSP, v3 Phase 195 PMI).
 
         maturity_score = (
-            0.20 * separation_component                -- ratio converging or above gate
+            0.18 * separation_component                -- ratio converging or above gate (Phase 195: was 0.20)
           + 0.20 * chain_integrity_component           -- Phase 176 audit
           + 0.15 * consent_component                   -- Phase 162 consent corpus defensibility
-          + 0.12 * biometric_freshness_component       -- Phase 159 TBD decay
+          + 0.11 * biometric_freshness_component       -- Phase 159 TBD decay (Phase 195: was 0.12)
           + 0.12 * agent_calibration_component         -- Phase 148 ACIM health
           + 0.10 * enrollment_component                -- Phase 156 overall_ready
           + 0.07 * threat_forecast_accuracy_component  -- Phase 191 PIR harness score
           + 0.04 * biometric_stationarity_component    -- Phase 191 BSO confidence
+          + 0.03 * pmi_component                       -- Phase 195 PMI fleet ORPHAN resolution velocity
         maturity_tier: ALPHA (<0.50) | BETA (0.50-0.85) | PRODUCTION_CANDIDATE (>=0.85)
         """
         score = round(
-            0.20 * float(separation_component)
+            0.18 * float(separation_component)
             + 0.20 * float(chain_integrity_component)
             + 0.15 * float(consent_component)
-            + 0.12 * float(biometric_freshness_component)
+            + 0.11 * float(biometric_freshness_component)
             + 0.12 * float(agent_calibration_component)
             + 0.10 * float(enrollment_component)
             + 0.07 * float(threat_forecast_accuracy_component)
-            + 0.04 * float(biometric_stationarity_component),
+            + 0.04 * float(biometric_stationarity_component)
+            + 0.03 * float(pmi_component),
             6,
         )
         if score >= 0.85:
@@ -9422,7 +9541,8 @@ class Store:
                 "chain_integrity_component, consent_component, "
                 "biometric_freshness_component, agent_calibration_component, "
                 "enrollment_component, threat_forecast_accuracy_component, "
-                "biometric_stationarity_component, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                "biometric_stationarity_component, pmi_component, created_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     score,
                     tier,
@@ -9434,13 +9554,14 @@ class Store:
                     float(enrollment_component),
                     float(threat_forecast_accuracy_component),
                     float(biometric_stationarity_component),
+                    float(pmi_component),
                     time.time(),
                 ),
             )
         return cur.lastrowid  # type: ignore[return-value]
 
     def get_protocol_maturity_status(self, limit: int = 1) -> "list[dict]":
-        """Return most recent protocol maturity assessments, newest first (Phase 177, v2 Phase 191)."""
+        """Return most recent protocol maturity assessments, newest first (Phase 177, v2 Phase 191, v3 Phase 195)."""
         with self._conn() as conn:
             rows = conn.execute(
                 "SELECT id, maturity_score, maturity_tier, separation_component, "
@@ -9448,7 +9569,7 @@ class Store:
                 "biometric_freshness_component, agent_calibration_component, "
                 "enrollment_component, "
                 "threat_forecast_accuracy_component, biometric_stationarity_component, "
-                "created_at "
+                "pmi_component, created_at "
                 "FROM protocol_maturity_log ORDER BY id DESC LIMIT ?",
                 (limit,),
             ).fetchall()
@@ -9465,7 +9586,8 @@ class Store:
                 "enrollment_component":                  float(r[8]),
                 "threat_forecast_accuracy_component":    float(r[9]) if r[9] is not None else 0.0,
                 "biometric_stationarity_component":      float(r[10]) if r[10] is not None else 0.0,
-                "created_at":                            r[11],
+                "pmi_component":                         float(r[11]) if r[11] is not None else 1.0,
+                "created_at":                            r[12],
             }
             for r in rows
         ]
@@ -10961,3 +11083,186 @@ class Store:
                 )
         except Exception:
             pass
+
+    # Phase 194: CoherenceFingerprintRegistry — coherence_fingerprint_log
+
+    def upsert_coherence_fingerprint(self, rule_name: str, failure_mode: str) -> None:
+        """Insert or increment occurrence_count for rule_name in coherence_fingerprint_log.
+
+        Called once per detection cycle per rule that fires. Sets persistent=1 when
+        occurrence_count reaches N_PROMOTE_THRESHOLD (3). Fail-open: never raises.
+        Uses two-statement insert-or-ignore + update pattern for broad SQLite compatibility.
+        """
+        N_PROMOTE_THRESHOLD = 3
+        try:
+            from datetime import datetime, timezone
+            now = datetime.now(timezone.utc).isoformat()
+            with self._conn() as conn:
+                # Step 1: ensure row exists (occurrence_count starts at 0 so
+                #          the UPDATE always owns the increment logic)
+                conn.execute(
+                    "INSERT OR IGNORE INTO coherence_fingerprint_log "
+                    "(rule_name, failure_mode, first_seen_at, last_seen_at, "
+                    " occurrence_count, persistent) "
+                    "VALUES (?, ?, ?, ?, 0, 0)",
+                    (rule_name, failure_mode, now, now),
+                )
+                # Step 2: increment occurrence_count and flip persistent when threshold met
+                conn.execute(
+                    "UPDATE coherence_fingerprint_log SET "
+                    "  occurrence_count = occurrence_count + 1, "
+                    "  last_seen_at     = ?, "
+                    "  failure_mode     = ?, "
+                    "  persistent       = CASE WHEN (occurrence_count + 1) >= ? "
+                    "                    THEN 1 ELSE persistent END "
+                    "WHERE rule_name = ?",
+                    (now, failure_mode, N_PROMOTE_THRESHOLD, rule_name),
+                )
+        except Exception:
+            pass
+
+    def get_coherence_fingerprint_status(self) -> dict:
+        """Return summary of coherence_fingerprint_log for GET /agent/coherence-fingerprint-status.
+
+        Returns: total_rules, persistent_count, total_occurrences, top_rules (list),
+                 maturity_penalty (0.0–1.0), timestamp.
+        """
+        try:
+            import sqlite3 as _sq194
+            with _sq194.connect(self._db_path) as conn:
+                conn.row_factory = _sq194.Row
+                total_row = conn.execute(
+                    "SELECT COUNT(*) as n FROM coherence_fingerprint_log"
+                ).fetchone()
+                total_rules = int(total_row["n"]) if total_row else 0
+
+                pers_row = conn.execute(
+                    "SELECT COUNT(*) as n FROM coherence_fingerprint_log WHERE persistent=1"
+                ).fetchone()
+                persistent_count = int(pers_row["n"]) if pers_row else 0
+
+                occ_row = conn.execute(
+                    "SELECT SUM(occurrence_count) as s FROM coherence_fingerprint_log"
+                ).fetchone()
+                total_occurrences = int(occ_row["s"]) if (occ_row and occ_row["s"] is not None) else 0
+
+                top_rows = conn.execute(
+                    "SELECT rule_name, failure_mode, occurrence_count, persistent, "
+                    "       first_seen_at, last_seen_at "
+                    "FROM coherence_fingerprint_log "
+                    "ORDER BY occurrence_count DESC LIMIT 5"
+                ).fetchall()
+                top_rules = [dict(r) for r in top_rows]
+
+            maturity_penalty = round(min(1.0, persistent_count * 0.10), 4)
+            return {
+                "total_rules":       total_rules,
+                "persistent_count":  persistent_count,
+                "total_occurrences": total_occurrences,
+                "maturity_penalty":  maturity_penalty,
+                "top_rules":         top_rules,
+            }
+        except Exception:
+            return {
+                "total_rules":       0,
+                "persistent_count":  0,
+                "total_occurrences": 0,
+                "maturity_penalty":  0.0,
+                "top_rules":         [],
+            }
+
+    def get_persistent_contradictions(self) -> list:
+        """Return all rules with persistent=1 (occurrence_count >= N_PROMOTE_THRESHOLD).
+
+        Used by ProtocolMaturityScoringAgent._threat_forecast_accuracy_component()
+        to apply the persistent contradiction penalty.
+        """
+        try:
+            import sqlite3 as _sq194b
+            with _sq194b.connect(self._db_path) as conn:
+                conn.row_factory = _sq194b.Row
+                rows = conn.execute(
+                    "SELECT rule_name, failure_mode, occurrence_count, last_seen_at "
+                    "FROM coherence_fingerprint_log WHERE persistent=1 "
+                    "ORDER BY occurrence_count DESC"
+                ).fetchall()
+                return [dict(r) for r in rows]
+        except Exception:
+            return []
+
+    # --- Phase 195: Protocol Metabolism Index (PMI) ---
+
+    def get_orphan_resolution_stats(self, domain: str = "") -> dict:
+        """Return ORPHAN resolution statistics for the Protocol Metabolism Index (Phase 195).
+
+        PMI = max(0.0, 1.0 - mean_resolution_hours_critical / 48.0)
+        where mean_resolution_hours_critical is the mean time (hours) to resolve
+        ORPHAN entries in fleet_coherence_log.
+
+        When no resolved ORPHANs exist (all healthy): pmi_score=1.0 (best possible).
+        When mean resolution > 48h: pmi_score → 0.0.
+
+        Args:
+            domain: optional substring filter on rule_name (e.g. "separation_ratio")
+
+        Returns dict with 5 keys:
+            mean_resolution_hours, pmi_score, orphan_count_resolved,
+            orphan_count_open, domain
+        """
+        try:
+            import sqlite3 as _sq195
+            from datetime import datetime as _dt195
+            with _sq195.connect(self._db_path) as conn:
+                conn.row_factory = _sq195.Row
+                if domain:
+                    resolved_rows = conn.execute(
+                        "SELECT created_at, resolved_at FROM fleet_coherence_log "
+                        "WHERE failure_mode='ORPHAN' AND resolved_at IS NOT NULL "
+                        "AND rule_name LIKE ?",
+                        (f"%{domain}%",),
+                    ).fetchall()
+                    open_row = conn.execute(
+                        "SELECT COUNT(*) AS n FROM fleet_coherence_log "
+                        "WHERE failure_mode='ORPHAN' AND resolved_at IS NULL "
+                        "AND rule_name LIKE ?",
+                        (f"%{domain}%",),
+                    ).fetchone()
+                else:
+                    resolved_rows = conn.execute(
+                        "SELECT created_at, resolved_at FROM fleet_coherence_log "
+                        "WHERE failure_mode='ORPHAN' AND resolved_at IS NOT NULL"
+                    ).fetchall()
+                    open_row = conn.execute(
+                        "SELECT COUNT(*) AS n FROM fleet_coherence_log "
+                        "WHERE failure_mode='ORPHAN' AND resolved_at IS NULL"
+                    ).fetchone()
+
+            hours_list: list = []
+            for r in resolved_rows:
+                try:
+                    created = _dt195.fromisoformat(str(r["created_at"]).replace(" ", "T"))
+                    resolved = _dt195.fromisoformat(str(r["resolved_at"]).replace(" ", "T"))
+                    hours_list.append((resolved - created).total_seconds() / 3600.0)
+                except Exception:
+                    pass
+
+            mean_hours = sum(hours_list) / len(hours_list) if hours_list else 0.0
+            # pmi_score=1.0 when no ORPHAN history (healthy fleet) or fast resolution
+            pmi_score = max(0.0, 1.0 - mean_hours / 48.0) if hours_list else 1.0
+            open_n = int(open_row["n"]) if open_row else 0
+
+            return {
+                "mean_resolution_hours": round(mean_hours, 4),
+                "pmi_score":             round(pmi_score, 6),
+                "orphan_count_resolved": len(hours_list),
+                "orphan_count_open":     open_n,
+                "domain":                domain or "all",
+            }
+        except Exception:
+            return {
+                "mean_resolution_hours": 0.0,
+                "pmi_score":             1.0,
+                "orphan_count_resolved": 0,
+                "orphan_count_open":     0,
+                "domain":                domain or "all",
+            }
