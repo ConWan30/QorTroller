@@ -44,6 +44,8 @@ class Batcher:
         self._dropped_records: int = 0
         # Phase 130A: suppress repeated P256 dead-letter warnings (testnet infra limitation)
         self._p256_unavailable: bool = False
+        # Phase 201: suppress repeated no-signing-key warnings (dry_run mode)
+        self._no_key_logged: bool = False
 
     async def enqueue(self, record: PoACRecord, raw_data: bytes):
         """Add a validated record to the batch queue.
@@ -269,7 +271,23 @@ class Batcher:
             # P256PrecompileEmptyReturn (0xf46a06ea) = IoTeX testnet P256 precompile
             # not available via this RPC endpoint. Dead-letter immediately — retrying
             # won't help; this is a testnet infrastructure limitation, not a transient error.
-            if "f46a06ea" in err_str:
+            if "private key not set" in err_str.lower() or "cannot sign transactions" in err_str.lower():
+                # Phase 201: dead-letter immediately when no signing key is configured.
+                # This is expected in dry_run mode. Log WARNING once, DEBUG thereafter.
+                if not self._no_key_logged:
+                    log.warning(
+                        "Batch dead-lettered: BRIDGE_PRIVATE_KEY not set — on-chain submission "
+                        "disabled for this session. Add BRIDGE_PRIVATE_KEY to bridge/.env to "
+                        "enable on-chain writes. Local PITL pipeline unaffected."
+                    )
+                    self._no_key_logged = True
+                else:
+                    log.debug("Batch dead-lettered: no signing key (suppressed repeat)")
+                self._store.update_submission(
+                    sub_id, status=STATUS_DEAD_LETTER, error="no signing key (dry_run mode)"
+                )
+                self._store.batch_update_status(record_hashes, STATUS_DEAD_LETTER)
+            elif "f46a06ea" in err_str:
                 # Phase 130A: log WARNING only on first occurrence per session;
                 # subsequent occurrences are DEBUG to avoid log spam.
                 if not self._p256_unavailable:
