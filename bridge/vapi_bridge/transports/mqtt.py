@@ -40,6 +40,10 @@ class MqttTransport:
             self._cfg.mqtt_broker, self._cfg.mqtt_port, topic,
         )
 
+        _fail_count = 0
+        _backoff = 5  # seconds, doubles on each failure up to _BACKOFF_CAP
+        _BACKOFF_CAP = 300  # 5 minutes max between retries
+
         while True:
             try:
                 async with aiomqtt.Client(
@@ -50,13 +54,27 @@ class MqttTransport:
                 ) as client:
                     await client.subscribe(topic)
                     log.info("MQTT subscribed to %s", topic)
+                    _fail_count = 0
+                    _backoff = 5  # reset on successful connect
 
                     async for message in client.messages:
                         await self._handle_message(message)
 
             except aiomqtt.MqttError as e:
-                log.error("MQTT connection lost: %s — reconnecting in 5s", e)
-                await asyncio.sleep(5)
+                _fail_count += 1
+                if _fail_count == 1:
+                    log.warning(
+                        "MQTT connection failed: %s — retrying with backoff "
+                        "(subsequent failures suppressed to DEBUG)",
+                        e,
+                    )
+                else:
+                    log.debug(
+                        "MQTT connection lost (attempt %d): %s — retrying in %ds",
+                        _fail_count, e, _backoff,
+                    )
+                await asyncio.sleep(_backoff)
+                _backoff = min(_backoff * 2, _BACKOFF_CAP)
             except asyncio.CancelledError:
                 log.info("MQTT transport shutting down")
                 raise

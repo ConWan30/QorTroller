@@ -139,7 +139,7 @@ class CorpusDataCuratorAgent:
                     "dag_nodes":   self._last_dag_nodes_registered,
                     "provenance":  "[VAPI:Phase192:CorpusDataCuratorAgent:MEASURED]",
                     "timestamp":   time.time(),
-                })
+                }, source="corpus_data_curator_agent")
             except Exception as exc:
                 self._logger.warning(
                     f"[CorpusDataCuratorAgent] Bus publish failed: {exc}"
@@ -494,7 +494,7 @@ class CorpusDataCuratorAgent:
                     "entropy_score":  entropy_score,
                     "n_sessions":     n_sessions,
                     "timestamp":      time.time(),
-                })
+                }, source="corpus_data_curator_agent")
         except Exception as exc:
             self._logger.warning(
                 f"[CorpusDataCuratorAgent] Task 4 (federation): {exc}"
