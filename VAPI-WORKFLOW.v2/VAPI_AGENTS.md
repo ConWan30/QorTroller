@@ -27,11 +27,17 @@
 
 ## Agent Overview
 
-VAPI operates **22 specialized agents** in the bridge service. Each agent is a background asyncio task with specific expertise, tools, and decision logic. This document maps them for Claude Code expert spawning.
+VAPI operates **36 specialized agents** in the bridge service. Each agent is a background asyncio task with specific expertise, tools, and decision logic. This document maps them for Claude Code expert spawning.
 
-> **SYNC NOTE**: Agents 21–22 added in Phases 157/159. Synced 2026-04-05.
+> **SYNC NOTE**: Agents 23–36 added in Phases 182–200. Synced 2026-04-12. Separation ratio updated to 0.728 (N=35, Phase 200). Protocol at Phase 200 COMPLETE.
 
 ### Agent Table
+
+**PHASE 200 PROTOCOL STATE** (synced 2026-04-12):
+- Separation ratio: **0.728** (N=35, touchpad_corners, diagonal+LOO) — TOURNAMENT BLOCKER
+- ALL_PAIRS_GATE_ENABLED=false (prototype mode); tremor_resting probe is path to >1.0
+- ioSwarm: ENABLED emulator mode (VAPISwarmOperatorGate.sol LIVE 0x969c0F1E)
+- dry_run=True (advisory rulings); 43 contracts ALL LIVE; 149 tools; Phase 200 COMPLETE
 
 | # | Agent | LLM | Cycle | Expertise | Fail Mode | Tools |
 |---|-------|-----|-------|-----------|-----------|-------|
@@ -56,7 +62,21 @@ VAPI operates **22 specialized agents** in the bridge service. Each agent is a b
 | 19 | ControllerHardwareIntelligenceAgent | claude-opus-4-6 | 1 hour | Attested vs Standard tier mapping; composite key profile_hash:battery_type:transport_type; default thresholds 7.009/5.367; controller_hardware_profiles table | Fail-open | 8 |
 | 20 | EnrollmentAutoGuidanceAgent | — | 1 hour | Synthesizes Phase 151 guidance + Phase 154 stagnation + Phase 152 velocity + Phase 155 controller status; urgency HIGH/MEDIUM/LOW; fires enrollment_complete → TournamentActivationChainAgent | Fail-open | 1 |
 | 21 | FleetConsensusSnapshotAgent | — | 1800 sec | WIF-012 dual-condition overall_ready gate; WIF-016 cov_stability_check() 3 regime labels; WIF-013 PoFC hash=SHA-256(sorted_verdicts+ratio+ts_ns); fleet_consensus_snapshot_log | Fail-open | 1 |
-| 22 | BiometricPrivacyComplianceAgent | — | 5 min | BP-001 Temporal Biometric Decay TBD(t)=e^(-λt) τ_half=90d; warning when mean_decay_factor<0.25 (≈2 half-lives); privacy_compliance_log; biometric_decay_warning bus event | Advisory | 1 |
+| 22 | BiometricPrivacyComplianceAgent | — | 5 min | BP-001 Temporal Biometric Decay TBD(t)=e^(-λt) τ_half=90d; warning when mean_decay_factor<0.25; privacy_compliance_log; biometric_decay_warning bus event | Advisory | 1 |
+| 23 | SeparationRatioRecoveryAgent | — | 300 sec | Centroid velocity + stagnation monitor; feeds urgency to EnrollmentAutoGuidanceAgent; PLATEAU_THRESHOLD_PER_DAY=0.001 | Advisory | 2 |
+| 24 | AgeWeightAnalysisAgent | — | 6 hr | Temporal drift index = raw_ratio − age_weighted_ratio; warning >0.10; feeds BiometricCredentialTTLAgent | Advisory | 1 |
+| 25 | PersonaBreakDetectorAgent | — | 15 min | LOO centroid drift detection; fires persona_break_detected bus event; persona_break_detection_enabled=True | Fail-open | 2 |
+| 26 | MaturityElevationGateAgent | — | 15 min | Reads ProtocolMaturityScoringAgent score; promotes ALPHA→BETA→PRODUCTION_CANDIDATE; maturity_elevation_enabled=True | Fail-open | 2 |
+| 27 | ProtocolMaturityScoringAgent | — | 30 min | 9-component score (0.0–1.0); _WEIGHTS v3: sep 0.18, fresh 0.11, pmi 0.03; ALPHA/BETA/PRODUCTION_CANDIDATE tier; Tool #126 | Advisory | 3 |
+| 28 | ReEnrollmentAttestationAgent | — | Event | HMAC attestation tokens on persona_break_detected; reauth_attestation_enabled=True; links attestation chain to renewal | Fail-closed | 2 |
+| 29 | AttestationBoundRenewalAgent | — | Event | Validates attestation token present at renewal; attestation_bound_renewal_enabled=False default | Fail-closed | 2 |
+| 30 | AttestationOpSecAdvisorAgent | — | Event | Mempool OPSEC advisory for attestation transactions; mempool_opsec_enabled=False; coordinates with VHPReenrollmentBadge.sol | Advisory | 2 |
+| 31 | BiometricStationarityOracleAgent | — | 30 min | Drift cause classifier; biometric_stationarity_enabled=False; provides biometric_stationarity_component to ProtocolMaturityScoringAgent | Advisory | 1 |
+| 32 | ProtocolIntelligenceRecordAgent | — | 60 min | PIR chain hash sequence; pir_chain_enabled=False; provides threat_forecast_accuracy_component | Advisory | 1 |
+| 33 | LivePresenceSignalingAgent | — | Event | Bidirectional VAPI presence; 8 signal types (LED+haptic); live_presence_signaling_enabled=False; 8 bus subscriptions | Advisory | 1 |
+| 34 | CorpusDataCuratorAgent | — | 6 hr | 7-task data coherence: Provenance DAG (20-hop), Corpus Entropy (threshold 1.5), Proof-of-Erasure (sha256), Federated Quality (BP-007), Feature Correlation, Data Readiness Cert (8-dim), Session Contribution Weights; Tools #136–#144 | Fail-open | 9 |
+| 35 | FleetSignalCoherenceAgent | — | 15 min | Fleet coherence observer; 15 rules: CONTRADICTION(7)+ORPHAN(5)+INVERSION(3); coherence_id=coh_+SHA-256[:16]; auto-promotes at N=3; fleet_coherence_enabled=True DEFAULT; RENEWAL_WITHOUT_ATTESTATION=CRITICAL; Tools #145–#147 | Advisory | 3 |
+| 36 | CoherenceFingerprintRegistry | — | Event | Persistent contradiction tracking; N_PROMOTE_THRESHOLD=3; score *= (1 − min(1.0, persistent_count×0.10)); maturity feedback loop; Tool #148 | Advisory | 1 |
 
 ---
 
