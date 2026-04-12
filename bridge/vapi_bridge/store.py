@@ -4637,7 +4637,7 @@ class Store:
             row = conn.execute(
                 "SELECT * FROM credential_enforcement WHERE device_id=? "
                 "AND suspended=1 AND (reinstated IS NULL OR reinstated=0) "
-                "ORDER BY created_at DESC LIMIT 1",
+                "ORDER BY last_updated DESC LIMIT 1",
                 (device_id,),
             ).fetchone()
         return dict(row) if row else None
