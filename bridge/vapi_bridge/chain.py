@@ -1039,6 +1039,11 @@ class ChainClient:
 
     async def _next_nonce(self) -> int:
         """Thread-safe nonce management."""
+        if self._account is None:
+            raise RuntimeError(
+                "Bridge private key not set — cannot sign transactions (read-only mode). "
+                "Add BRIDGE_PRIVATE_KEY to bridge/.env to enable on-chain writes."
+            )
         async with self._nonce_lock:
             if self._nonce is None:
                 self._nonce = await self._w3.eth.get_transaction_count(
@@ -1055,6 +1060,10 @@ class ChainClient:
 
     async def _send_tx(self, tx_func, *args, value: int = 0) -> str:
         """Build, sign, and send a transaction. Returns tx hash hex."""
+        if self._account is None:
+            raise RuntimeError(
+                "Bridge private key not set — cannot sign transactions (read-only mode)."
+            )
         nonce = await self._next_nonce()
         gas_price = await self._w3.eth.gas_price
 
@@ -1211,6 +1220,8 @@ class ChainClient:
             raise ValueError(f"Unknown tier: {tier!r}")
         tier_cfg = await self._registry.functions.tierConfigs(tier_int).call()
         deposit = tier_cfg[0]  # depositWei
+        if self._account is None:
+            raise RuntimeError("Bridge private key not set — cannot register device (read-only mode).")
         balance_wei = await self._w3.eth.get_balance(self._account.address)
         if balance_wei < deposit:
             raise RuntimeError(
