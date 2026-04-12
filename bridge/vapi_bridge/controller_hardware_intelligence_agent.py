@@ -995,14 +995,30 @@ class ControllerHardwareIntelligenceAgent:
     def get_controller_by_id(self, controller_id: str) -> Optional[DetectedController]:
         """
         Get a specific detected controller.
-        
+
         Args:
             controller_id: Controller identifier
-            
+
         Returns:
             DetectedController or None
         """
         return self._detected_controllers.get(controller_id)
+
+    async def run_poll_loop(self, poll_interval_s: int = 300) -> None:
+        """
+        Background poll loop — run one detection cycle every poll_interval_s seconds.
+        Called by main.py as an asyncio task (Phase 155).
+        """
+        import asyncio as _asyncio
+        while True:
+            try:
+                await self.run_detection_cycle()
+            except Exception as exc:
+                log.warning(
+                    "ControllerHardwareIntelligenceAgent: detection cycle error (non-fatal): %s",
+                    exc,
+                )
+            await _asyncio.sleep(poll_interval_s)
 
 # ---------------------------------------------------------------------------
 # Utility Functions
