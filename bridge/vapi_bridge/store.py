@@ -7975,6 +7975,7 @@ class Store:
         "touchpad_freeform",
         "touchpad_swipes",
         "mixed_biometric_probe",  # Phase 166: 2-min multi-feature probe (touchpad+trigger+button+stick)
+        "tremor_resting",         # Phase 199: 30s still-hold; isolates neurological tremor signal
     })
 
     def insert_separation_defensibility_log(

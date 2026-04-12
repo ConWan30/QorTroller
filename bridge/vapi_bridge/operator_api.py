@@ -3232,8 +3232,14 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         biometric_ttl_ok  = (not _ttl_expired) and _renewal_has_entry
 
         # P0: all_pairs_p0_ok — every inter-player pair has separation ratio >= 1.0 (Phase 197)
+        # Phase 199: all_pairs_gate_enabled=False bypasses per-pair check for prototype mode
+        # (known P2/P3 proximity ceiling — touchpad_corners protocol structurally limited).
         _def197 = store.get_separation_defensibility_status()
-        all_pairs_p0_ok = bool(_def197.get("all_pairs_above_1", False)) if _def197 else False
+        _all_pairs_gate = bool(getattr(cfg, "all_pairs_gate_enabled", True))
+        if not _all_pairs_gate:
+            all_pairs_p0_ok = True  # Prototype mode: per-pair gate disabled
+        else:
+            all_pairs_p0_ok = bool(_def197.get("all_pairs_above_1", False)) if _def197 else False
 
         # P1 warnings
         dual_gate_warned    = not bool(getattr(cfg, "dual_primitive_gate_enabled", False))
@@ -5169,6 +5175,83 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                 base_ttl_days=_base198, scaling_enabled=_scaling198
             )
             return {**_result198, "timestamp": _t198.time()}
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 199 — GET /agent/tremor-resting-probe-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/tremor-resting-probe-status")
+    async def get_tremor_resting_probe_status(api_key: str = ""):
+        """Tremor Resting Probe status (Phase 199 — 199-B).
+
+        Describes the tremor_resting structured probe type: 30-second still-hold session
+        that isolates neurological tremor signal from gameplay motion artifacts.
+
+        tremor_peak_hz is the primary inter-player discriminator:
+          P1 ~9.37 Hz (essential tremor), P2 ~1.71 Hz, P3 ~2.85 Hz.
+        During gameplay, P3's intra-player variance (mean=1.154) contaminates this signal.
+        A still resting probe removes that contamination and tightens P3's centroid.
+
+        Returns: probe_type, enabled, capture_instructions, primary_features,
+                 suppressed_features, target_duration_s, sessions_needed_per_player,
+                 all_pairs_gate_enabled (prototype mode indicator), timestamp.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t199
+        try:
+            _enabled199   = bool(getattr(cfg, "tremor_resting_probe_enabled", False))
+            _all_pairs199 = bool(getattr(cfg, "all_pairs_gate_enabled", True))
+            return {
+                "probe_type": "tremor_resting",
+                "enabled":    _enabled199,
+                "capture_instructions": (
+                    "Hold the DualShock Edge completely still — thumbs resting lightly on "
+                    "sticks (no pressure), fingers off triggers, controller flat in both "
+                    "palms.  Do not move for 30 seconds.  The bridge will capture raw "
+                    "accelerometer data and extract neurological tremor frequency signature."
+                ),
+                "primary_features":    ["tremor_peak_hz", "tremor_band_power",
+                                        "micro_tremor_accel_variance"],
+                "suppressed_features": ["stick_autocorr_lag1", "stick_autocorr_lag5",
+                                        "grip_asymmetry", "touchpad_spatial_entropy"],
+                "target_duration_s":          30,
+                "sessions_needed_per_player": 5,
+                "all_pairs_gate_enabled":     _all_pairs199,
+                "prototype_mode_active":      not _all_pairs199,
+                "timestamp":                  _t199.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 199 — GET /agent/probe-gate-config-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/probe-gate-config-status")
+    async def get_probe_gate_config_status(api_key: str = ""):
+        """Prototype Separation Gate configuration status (Phase 199 — 199-A).
+
+        separation_ok uses min_separation_ratio (Phase 166 default=0.70):
+          ratio=0.728 >= 0.70 → separation_ok=True.
+        all_pairs_p0_ok uses all_pairs_gate_enabled (Phase 199):
+          True  (production default) → strict per-pair >= 1.0 enforcement
+          False (prototype mode)    → gate bypassed; overall_pass driven by separation_ok
+
+        Returns: all_pairs_gate_enabled, min_separation_ratio, prototype_mode_active,
+                 separation_ok_threshold, timestamp.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t199g
+        try:
+            _all_pairs_g  = bool(getattr(cfg, "all_pairs_gate_enabled", True))
+            _min_sep_g    = float(getattr(cfg, "min_separation_ratio", 0.70))
+            return {
+                "all_pairs_gate_enabled":  _all_pairs_g,
+                "min_separation_ratio":    _min_sep_g,
+                "prototype_mode_active":   not _all_pairs_g,
+                "separation_ok_threshold": _min_sep_g,
+                "timestamp":               _t199g.time(),
+            }
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 

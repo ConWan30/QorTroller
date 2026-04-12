@@ -5392,6 +5392,138 @@ class VAPIBiometricTTLScaling:
             )
 
 
+# Phase 199 — Prototype Separation Gate Configurability + Tremor Resting Probe
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class ProbeGateConfigResult:
+    """Result from VAPIProbeGateConfig.get_status() (Phase 199 — 199-A).
+
+    all_pairs_gate_enabled=True  → production mode: per-pair >= 1.0 enforced.
+    all_pairs_gate_enabled=False → prototype mode: per-pair gate bypassed.
+    min_separation_ratio (Phase 166 default=0.70) governs separation_ok.
+    """
+    all_pairs_gate_enabled:  bool
+    min_separation_ratio:    float
+    prototype_mode_active:   bool
+    separation_ok_threshold: float
+    error: "str | None" = None
+
+
+class VAPIProbeGateConfig:
+    """SDK client for GET /agent/probe-gate-config-status (Phase 199).
+
+    Example::
+
+        cfg = VAPIProbeGateConfig("http://localhost:8080", api_key)
+        result = cfg.get_status()
+        if result.prototype_mode_active:
+            print(f"Prototype mode — per-pair gate bypassed; threshold={result.min_separation_ratio}")
+    """
+
+    def __init__(self, base_url: str, api_key: str) -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self) -> ProbeGateConfigResult:
+        """Return probe gate configuration status.
+
+        On error: returns ProbeGateConfigResult with all_pairs_gate_enabled=True, error set.
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/agent/probe-gate-config-status?api_key={self._key}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return ProbeGateConfigResult(
+                all_pairs_gate_enabled  = bool(body.get("all_pairs_gate_enabled", True)),
+                min_separation_ratio    = float(body.get("min_separation_ratio", 0.70)),
+                prototype_mode_active   = bool(body.get("prototype_mode_active", False)),
+                separation_ok_threshold = float(body.get("separation_ok_threshold", 0.70)),
+            )
+        except Exception as exc:
+            return ProbeGateConfigResult(
+                all_pairs_gate_enabled  = True,
+                min_separation_ratio    = 0.70,
+                prototype_mode_active   = False,
+                separation_ok_threshold = 0.70,
+                error                   = str(exc),
+            )
+
+
+@dataclass(slots=True)
+class TremorRestingProbeResult:
+    """Result from VAPITremorRestingProbe.get_status() (Phase 199 — 199-B).
+
+    30-second still-hold probe that isolates neurological tremor_peak_hz from
+    gameplay motion artifacts.  Primary discriminators: tremor_peak_hz, tremor_band_power,
+    micro_tremor_accel_variance.
+
+    P1 ~9.37 Hz, P2 ~1.71 Hz, P3 ~2.85 Hz (empirical, N=35 touchpad_corners corpus).
+    """
+    probe_type:                  str
+    enabled:                     bool
+    capture_instructions:        str
+    primary_features:            list
+    suppressed_features:         list
+    target_duration_s:           int
+    sessions_needed_per_player:  int
+    all_pairs_gate_enabled:      bool
+    prototype_mode_active:       bool
+    error: "str | None" = None
+
+
+class VAPITremorRestingProbe:
+    """SDK client for GET /agent/tremor-resting-probe-status (Phase 199).
+
+    Example::
+
+        probe = VAPITremorRestingProbe("http://localhost:8080", api_key)
+        result = probe.get_status()
+        if not result.enabled:
+            print("Set TREMOR_RESTING_PROBE_ENABLED=true to activate")
+    """
+
+    def __init__(self, base_url: str, api_key: str) -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self) -> TremorRestingProbeResult:
+        """Return tremor resting probe status.
+
+        On error: returns TremorRestingProbeResult with enabled=False, error set.
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/agent/tremor-resting-probe-status?api_key={self._key}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return TremorRestingProbeResult(
+                probe_type                 = str(body.get("probe_type", "tremor_resting")),
+                enabled                    = bool(body.get("enabled", False)),
+                capture_instructions       = str(body.get("capture_instructions", "")),
+                primary_features           = list(body.get("primary_features", [])),
+                suppressed_features        = list(body.get("suppressed_features", [])),
+                target_duration_s          = int(body.get("target_duration_s", 30)),
+                sessions_needed_per_player = int(body.get("sessions_needed_per_player", 5)),
+                all_pairs_gate_enabled     = bool(body.get("all_pairs_gate_enabled", True)),
+                prototype_mode_active      = bool(body.get("prototype_mode_active", False)),
+            )
+        except Exception as exc:
+            return TremorRestingProbeResult(
+                probe_type                 = "tremor_resting",
+                enabled                    = False,
+                capture_instructions       = "",
+                primary_features           = [],
+                suppressed_features        = [],
+                target_duration_s          = 30,
+                sessions_needed_per_player = 5,
+                all_pairs_gate_enabled     = True,
+                prototype_mode_active      = False,
+                error                      = str(exc),
+            )
+
+
 # Phase 182 — PersonaBreakDetectorAgent (WIF-028 deeper mitigation)
 # ---------------------------------------------------------------------------
 
