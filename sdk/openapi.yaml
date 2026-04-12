@@ -4602,6 +4602,64 @@ paths:
         "403":
           description: Forbidden
 
+  /agent/tremor-convergence-status:
+    get:
+      summary: TremorRestingConvergenceOracle status (Phase 202)
+      description: >
+        Returns per-session tremor_resting separation ratio velocity snapshot.
+        velocity = (ratio_curr - ratio_prev) / N_delta between successive sessions.
+        convergence_stable=True when velocity >= 0 for 2 consecutive sessions.
+        When convergence_stable=False, RATIO_VELOCITY_NEGATIVE ORPHAN rule in
+        FleetSignalCoherenceAgent fires, blocking VHP MINT_QUORUM=0.80 authorization.
+        sessions_to_target_estimate is a linear extrapolation of sessions needed to reach ratio=1.0.
+        Closes WIF-037 W1: the touchpad_corners failure mode (0.998->0.728) can recur with tremor_resting.
+        tremor_convergence_enabled=False default (infrastructure-first).
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Tremor convergence oracle status
+          content:
+            application\json:
+              schema:
+                $ref: "#/components/schemas/TremorConvergenceStatus"
+        "403":
+          description: Forbidden
+
+  /agent/context-integrity-status:
+    get:
+      summary: AgentContextRegistry integrity status (Phase 203)
+      description: >
+        Returns the committed SHA-256 system prompt hash for each of the 3 LLM agents
+        (bridge_agent, session_adjudicator, calibration_intelligence_agent).
+        The bridge registers hashes at startup via main.py Phase 203 block.
+        CONTEXT_HASH_MISMATCH is the 4th INVERSION rule in FleetSignalCoherenceAgent,
+        firing when any agent is NOT registered in agent_context_log (missing startup call).
+        Closes WIF-036 W1: Phase 201 static tests cannot detect runtime semantic drift.
+        agent_context_on_chain_enabled=False default (infrastructure-first).
+        When enabled, AgentContextRegistry.sol anchors prompt hashes on IoTeX L1.
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Agent context integrity status
+          content:
+            application\json:
+              schema:
+                $ref: "#/components/schemas/AgentContextIntegrityStatus"
+        "403":
+          description: Forbidden
+
 # =============================================================================
 # Components
 # =============================================================================
@@ -8975,6 +9033,83 @@ webhooks:
         prototype_mode_active:
           type: boolean
           description: "True when all_pairs_gate_enabled=False"
+        timestamp:
+          type: number
+          description: "Unix timestamp of response"
+
+    TremorConvergenceStatus:
+      type: object
+      description: "Phase 202 TremorRestingConvergenceOracle per-session velocity gate status"
+      properties:
+        tremor_convergence_enabled:
+          type: boolean
+          description: "True when TREMOR_CONVERGENCE_ENABLED=true (default False)"
+        convergence_stable:
+          type: boolean
+          nullable: true
+          description: "True when velocity >= 0 for 2 consecutive sessions; null when no data"
+        velocity:
+          type: number
+          nullable: true
+          description: "Ratio velocity = (ratio_curr - ratio_prev) / N_delta; null when no data"
+        ratio:
+          type: number
+          nullable: true
+          description: "Current tremor_resting separation ratio; null when no data"
+        consecutive_positive:
+          type: integer
+          description: "Count of consecutive sessions with positive velocity (0-2+)"
+        sessions_to_target_estimate:
+          type: integer
+          description: "Linear extrapolation: sessions needed to reach ratio=1.0 (0 when already above)"
+        n_sessions:
+          type: integer
+          description: "Number of tremor_resting sessions included in latest computation"
+        session_type:
+          type: string
+          description: "Session type monitored (always tremor_resting)"
+        timestamp:
+          type: number
+          description: "Unix timestamp of response"
+
+    AgentContextIntegrityStatus:
+      type: object
+      description: "Phase 203 AgentContextRegistry on-chain prompt commitment audit trail"
+      properties:
+        agent_context_on_chain_enabled:
+          type: boolean
+          description: "True when AGENT_CONTEXT_ON_CHAIN_ENABLED=true (default False)"
+        all_registered:
+          type: boolean
+          description: "True when all 3 LLM agents have committed prompt hashes in agent_context_log"
+        agents:
+          type: array
+          description: "Per-agent context integrity status (bridge_agent, session_adjudicator, calibration_intelligence_agent)"
+          items:
+            type: object
+            properties:
+              agent_id:
+                type: string
+                description: "Stable agent identifier (bridge_agent / session_adjudicator / calibration_intelligence_agent)"
+              prompt_sha256:
+                type: string
+                nullable: true
+                description: "SHA-256(system_prompt) hex digest; null when not yet registered"
+              phase_number:
+                type: integer
+                nullable: true
+                description: "Phase number at which hash was last committed; null when not registered"
+              on_chain_tx:
+                type: string
+                nullable: true
+                description: "IoTeX tx hash when AgentContextRegistry.anchor() was called; null if not anchored"
+              anchored_at:
+                type: number
+                nullable: true
+                description: "Unix timestamp of on-chain anchoring; null if not anchored"
+              registered:
+                type: boolean
+                description: "True when this agent has at least one committed hash"
         timestamp:
           type: number
           description: "Unix timestamp of response"

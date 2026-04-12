@@ -5255,6 +5255,93 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
+    # Phase 202 — GET /agent/tremor-convergence-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/tremor-convergence-status")
+    async def get_tremor_convergence_status_endpoint(api_key: str = ""):
+        """TremorRestingConvergenceOracle status (Phase 202).
+
+        Returns the latest tremor_resting separation ratio velocity snapshot.
+        Velocity = (ratio_curr - ratio_prev) / N_delta between successive sessions.
+        convergence_stable=True when velocity >= 0 for 2 consecutive sessions.
+        sessions_to_target_est: linear extrapolation of sessions needed to reach ratio=1.0.
+
+        When convergence_stable=False and consecutive_positive=0, the RATIO_VELOCITY_NEGATIVE
+        ORPHAN rule in FleetSignalCoherenceAgent fires, blocking VHP MINT_QUORUM=0.80.
+
+        Returns: tremor_convergence_enabled, convergence_stable, velocity, ratio,
+                 consecutive_positive, sessions_to_target_estimate, n_sessions,
+                 session_type, timestamp.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t202
+        try:
+            _enabled202 = bool(getattr(cfg, "tremor_convergence_enabled", False))
+            _status202  = store.get_tremor_convergence_status("tremor_resting")
+            return {
+                "tremor_convergence_enabled":    _enabled202,
+                "convergence_stable":            bool(_status202.get("convergence_stable", 0)) if _status202 else None,
+                "velocity":                      float(_status202.get("velocity", 0.0))        if _status202 else None,
+                "ratio":                         float(_status202.get("ratio", 0.0))            if _status202 else None,
+                "consecutive_positive":          int(_status202.get("consecutive_positive", 0)) if _status202 else 0,
+                "sessions_to_target_estimate":   int(_status202.get("sessions_to_target_est", 0)) if _status202 else 0,
+                "n_sessions":                    int(_status202.get("n_sessions", 0))           if _status202 else 0,
+                "session_type":                  str(_status202.get("session_type", "tremor_resting")) if _status202 else "tremor_resting",
+                "timestamp":                     _t202.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 203 — GET /agent/context-integrity-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/context-integrity-status")
+    async def get_context_integrity_status_endpoint(api_key: str = ""):
+        """AgentContextRegistry context integrity status (Phase 203).
+
+        Returns the committed SHA-256 system prompt hash for each LLM agent
+        alongside the phase number at which it was last registered.
+        The bridge registers hashes at startup via main.py Phase 203 block.
+
+        hash_match=True when the stored hash matches the live prompt at the
+        last bridge startup. phase_current=True when committed_phase equals
+        the current bridge phase (203).
+
+        Returns: agent_context_on_chain_enabled, agents (list of per-agent
+                 status dicts with agent_id/prompt_sha256/phase_number/
+                 on_chain_tx/anchored_at), all_registered, timestamp.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t203
+        try:
+            _enabled203 = bool(getattr(cfg, "agent_context_on_chain_enabled", False))
+            _rows203    = store.get_all_agent_context_status()
+            _registered203 = {r["agent_id"]: r for r in _rows203}
+            _expected203   = [
+                "bridge_agent", "session_adjudicator", "calibration_intelligence_agent"
+            ]
+            _agents203 = []
+            for _aid in _expected203:
+                _rec = _registered203.get(_aid)
+                _agents203.append({
+                    "agent_id":       _aid,
+                    "prompt_sha256":  _rec["prompt_sha256"]  if _rec else None,
+                    "phase_number":   _rec["phase_number"]   if _rec else None,
+                    "on_chain_tx":    _rec.get("on_chain_tx")  if _rec else None,
+                    "anchored_at":    _rec.get("anchored_at")  if _rec else None,
+                    "registered":     _rec is not None,
+                })
+            _all_registered = all(a["registered"] for a in _agents203)
+            return {
+                "agent_context_on_chain_enabled": _enabled203,
+                "agents":                         _agents203,
+                "all_registered":                 _all_registered,
+                "timestamp":                      _t203.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
     # Phase 177 — GET /agent/protocol-maturity-score
     # ------------------------------------------------------------------
     @app.get("/agent/protocol-maturity-score")

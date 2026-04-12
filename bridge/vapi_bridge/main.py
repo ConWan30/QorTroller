@@ -988,6 +988,48 @@ class Bridge:
                 "Phase 193: FleetSignalCoherenceAgent unavailable: %s", _fsca193_exc
             )
 
+        # Phase 203: AgentContextRegistry — commit SHA-256 of each LLM agent system
+        # prompt to agent_context_log at startup. Enables CONTEXT_HASH_MISMATCH INVERSION
+        # rule in FleetSignalCoherenceAgent to detect unregistered or drifted prompts.
+        # Fail-open: never raises — bridge startup is never blocked by hash registration.
+        try:
+            import hashlib as _hashlib203
+            _phase203_agents: list = []
+            try:
+                from .bridge_agent import BridgeAgent as _BA203
+                _ba_prompt = getattr(_BA203, "_SYSTEM_PROMPT", None)
+                if _ba_prompt:
+                    _phase203_agents.append(("bridge_agent", _ba_prompt))
+            except Exception:
+                pass
+            try:
+                from .session_adjudicator import SessionAdjudicator as _SA203
+                _sa_prompt = getattr(_SA203, "_SYSTEM_PROMPT", None)
+                if _sa_prompt:
+                    _phase203_agents.append(("session_adjudicator", _sa_prompt))
+            except Exception:
+                pass
+            try:
+                from .calibration_intelligence_agent import (
+                    CalibrationIntelligenceAgent as _CIA203,
+                )
+                _cia_prompt = getattr(_CIA203, "_CALIB_SYSTEM_PROMPT", None)
+                if _cia_prompt:
+                    _phase203_agents.append(("calibration_intelligence_agent", _cia_prompt))
+            except Exception:
+                pass
+            _current_phase203 = 203
+            for _aid203, _prompt203 in _phase203_agents:
+                _sha203 = _hashlib203.sha256(_prompt203.encode()).hexdigest()
+                self.store.upsert_agent_context_hash(_aid203, _sha203, _current_phase203)
+            if _phase203_agents:
+                log.info(
+                    "Phase 203: registered %d agent context hash(es) in agent_context_log",
+                    len(_phase203_agents),
+                )
+        except Exception as _ctx203_exc:
+            log.warning("Phase 203: agent context hash registration failed: %s", _ctx203_exc)
+
         log.info("All services started — bridge is operational")
 
         # Wait for shutdown

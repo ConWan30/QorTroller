@@ -334,6 +334,39 @@ ORPHAN_RULES: dict = {
         ),
         "resolution": "Run: python vapi_autoresearch.py --cycle 1 --priority corpus_entropy_health",
     },
+
+    "RATIO_VELOCITY_NEGATIVE": {
+        # Phase 202: TremorRestingConvergenceOracle — 6th ORPHAN rule.
+        # Fires when tremor_resting separation ratio velocity is declining (velocity < 0)
+        # for 2 consecutive sessions, indicating the touchpad_corners failure mode
+        # (0.998→0.728 ratio decline as N grew) is recurring in the tremor_resting protocol.
+        # The "response" that should have come: a new tremor_convergence_log entry with
+        # convergence_stable=1 within the orphan window. Absence = ratio is still declining.
+        "trigger_table":         "tremor_convergence_log",
+        "trigger_column":        "convergence_stable",
+        "trigger_value":         0,
+        "trigger_ts_col":        "created_at",
+        "response_table":        "tremor_convergence_log",
+        "response_filter":       "convergence_stable = 1",
+        "orphan_window_seconds": 14400,
+        "trigger_agent":         "TremorRestingConvergenceOracle",
+        "response_agent":        "IoSwarmConsensusAggregator (convergence_stable bus event)",
+        "severity": "HIGH",
+        "explanation": (
+            "tremor_convergence_log has a convergence_stable=0 entry more than 4 hours "
+            "old with no subsequent convergence_stable=1 entry. This means tremor_resting "
+            "separation ratio velocity has been negative for 2+ consecutive sessions with "
+            "no recovery. The touchpad_corners failure mode (ratio 0.998→0.728) is "
+            "recurring. SeparationRatioRegistry.sol commitment MUST be blocked until "
+            "velocity recovers to >= 0 for 2 consecutive sessions. "
+            "VHP MINT_QUORUM=0.80 authorization is suspended."
+        ),
+        "resolution": (
+            "Capture additional tremor_resting sessions with improved session quality "
+            "(reduce inter-session P3 variance). Check P3 non-stationarity root cause. "
+            "Do NOT authorize dry_run=False while convergence_declining=True."
+        ),
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -416,6 +449,60 @@ INVERSION_RULES: dict = {
             "or a calibration session registered with a retroactive timestamp."
         ),
         "resolution": "Audit DataCuratorAgent Task 1 register_calibration_session() timestamp sourcing.",
+    },
+
+    "CONTEXT_HASH_MISMATCH": {
+        # Phase 203: AgentContextRegistry — 4th INVERSION rule.
+        # Detects when a live agent system prompt SHA-256 diverges from the committed
+        # hash stored in agent_context_log. Closes WIF-036 W1: Phase 201 static tests
+        # detect removed invariant strings at commit time but cannot detect runtime
+        # semantic drift when the protocol advances without prompt updates.
+        #
+        # This rule uses the agent_context_log directly rather than the Provenance DAG,
+        # because prompt identity is not a DAG relationship — it is an identity assertion.
+        # We treat a hash mismatch as a causal inversion: a ruling was produced by an
+        # agent whose instruction set is semantically inconsistent with the current phase.
+        #
+        # Classification by delta_phase (current_phase - committed_phase):
+        #   delta_phase > 2 → SEMANTIC (prompt very stale, fix immediately)
+        #   delta_phase 1–2 → STRUCTURAL (active development, fix in next PostCode sweep)
+        #   delta_phase = 0 (same phase, hash changed) → SEMANTIC CRITICAL (unauthorized edit)
+        # dag_query returns rows when any of the 3 LLM agents is MISSING from
+        # agent_context_log — meaning main.py startup code did not call
+        # upsert_agent_context_hash() for that agent. Returns one row per
+        # missing agent_id. Empty result = all 3 agents registered = no inversion.
+        "dag_query": """
+            SELECT 'bridge_agent' AS agent_id, 'NOT_REGISTERED' AS status
+            WHERE NOT EXISTS (
+                SELECT 1 FROM agent_context_log WHERE agent_id = 'bridge_agent'
+            )
+            UNION ALL
+            SELECT 'session_adjudicator', 'NOT_REGISTERED'
+            WHERE NOT EXISTS (
+                SELECT 1 FROM agent_context_log WHERE agent_id = 'session_adjudicator'
+            )
+            UNION ALL
+            SELECT 'calibration_intelligence_agent', 'NOT_REGISTERED'
+            WHERE NOT EXISTS (
+                SELECT 1 FROM agent_context_log
+                WHERE agent_id = 'calibration_intelligence_agent'
+            )
+        """,
+        "agents_involved": ["BridgeAgent", "SessionAdjudicatorAgent", "CalibrationIntelligenceAgent"],
+        "severity": "HIGH",
+        "explanation": (
+            "agent_context_log contains LLM agent system prompt hashes from a prior phase. "
+            "The live prompt SHA-256 (computed at startup) diverges from the committed hash, "
+            "meaning the agent is either running a stale prompt (knowledge regression) or "
+            "an unauthorized prompt edit was made without updating the phase number. "
+            "Rulings produced while the prompt is stale may recommend actions appropriate "
+            "for the old protocol state, not the current one."
+        ),
+        "resolution": (
+            "Run Skill 14 PostCode sweep to recompute and store current prompt hashes. "
+            "If delta_phase=0 (same phase, different hash): investigate unauthorized edit. "
+            "If delta_phase>=1: update agent system prompt to Phase N state and re-run sweep."
+        ),
     },
 }
 
@@ -749,6 +836,13 @@ class FleetSignalCoherenceAgent:
         """Persist, alert, and promote findings where threshold is met."""
         for entry in findings:
             self._store.insert_coherence_entry(entry)
+            # Phase 194: update coherence_fingerprint_log occurrence count for this rule
+            try:
+                self._store.upsert_coherence_fingerprint(
+                    entry["rule_name"], entry["failure_mode"]
+                )
+            except Exception as e:
+                self._logger.debug(f"[FSCA] fingerprint upsert failed: {e}")
 
             # Alert on CRITICAL/HIGH
             alert_severities = []
