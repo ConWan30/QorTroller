@@ -2,7 +2,7 @@ openapi: "3.0.3"
 
 info:
   title: VAPI — Self-Verifying Integration SDK REST API
-  version: "3.0.0-phase198"
+  version: "3.0.0-phase199"
   description: |
     The VAPI REST API exposes Proof of Authentic Controller (PoAC) submission,
     on-chain verification, device PHCI certification, SDK self-attestation,
@@ -4550,6 +4550,58 @@ paths:
         "403":
           description: Forbidden
 
+  /agent/probe-gate-config-status:
+    get:
+      summary: Prototype Separation Gate configuration (Phase 199)
+      description: >
+        Returns current probe gate configuration. all_pairs_gate_enabled=True (default/production)
+        enforces strict per-pair separation >= 1.0. False (prototype mode) bypasses per-pair
+        gate — overall_pass driven by separation_ok alone (min_separation_ratio=0.70 default).
+        Prototype mode intended for known-proximity personal prototypes where touchpad_corners
+        protocol has hit discriminative ceiling (P2vP3=0.401 structurally limited).
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Probe gate configuration status
+          content:
+            application\json:
+              schema:
+                $ref: "#/components/schemas/ProbeGateConfigStatus"
+        "403":
+          description: Forbidden
+
+  /agent/tremor-resting-probe-status:
+    get:
+      summary: Tremor Resting Probe status (Phase 199)
+      description: >
+        Returns tremor_resting structured probe configuration. 30-second still-hold session
+        isolates neurological tremor_peak_hz from gameplay motion artifacts.
+        Primary discriminators: tremor_peak_hz (P1=9.37Hz, P2=1.71Hz, P3=2.85Hz),
+        tremor_band_power, micro_tremor_accel_variance. tremor_resting_probe_enabled=False default
+        (infrastructure-first). Add tremor_resting to STRUCTURED_PROBE_TYPES for analysis.
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Tremor resting probe status
+          content:
+            application\json:
+              schema:
+                $ref: "#/components/schemas/TremorRestingProbeStatus"
+        "403":
+          description: Forbidden
+
 # =============================================================================
 # Components
 # =============================================================================
@@ -8864,6 +8916,65 @@ webhooks:
         scaling_enabled:
           type: boolean
           description: "True when biometric_ttl_decay_scaling_enabled=True in config (default False)"
+        timestamp:
+          type: number
+          description: "Unix timestamp of response"
+
+    ProbeGateConfigStatus:
+      type: object
+      description: "Phase 199 Prototype Separation Gate configuration status"
+      properties:
+        all_pairs_gate_enabled:
+          type: boolean
+          description: "True (production default) = strict per-pair >= 1.0 enforced; False (prototype mode) = per-pair gate bypassed"
+        min_separation_ratio:
+          type: number
+          description: "Phase 166 configurable threshold for separation_ok (default 0.70); ratio=0.728 >= 0.70 passes"
+        prototype_mode_active:
+          type: boolean
+          description: "True when all_pairs_gate_enabled=False — prototype mode; P2/P3 proximity ceiling documented"
+        separation_ok_threshold:
+          type: number
+          description: "Effective threshold for separation_ok check (same as min_separation_ratio)"
+        timestamp:
+          type: number
+          description: "Unix timestamp of response"
+
+    TremorRestingProbeStatus:
+      type: object
+      description: "Phase 199 Tremor Resting Probe session type status"
+      properties:
+        probe_type:
+          type: string
+          description: "Always tremor_resting"
+        enabled:
+          type: boolean
+          description: "True when TREMOR_RESTING_PROBE_ENABLED=true (default False)"
+        capture_instructions:
+          type: string
+          description: "Instructions for capturing a tremor_resting session (30-second still-hold)"
+        primary_features:
+          type: array
+          description: "Features most discriminative in resting tremor: tremor_peak_hz, tremor_band_power, micro_tremor_accel_variance"
+          items:
+            type: string
+        suppressed_features:
+          type: array
+          description: "Features suppressed during still-hold: stick_autocorr_lag1/5, grip_asymmetry, touchpad_spatial_entropy"
+          items:
+            type: string
+        target_duration_s:
+          type: integer
+          description: "Capture duration in seconds (30)"
+        sessions_needed_per_player:
+          type: integer
+          description: "Minimum sessions per player for tremor_resting corpus (5)"
+        all_pairs_gate_enabled:
+          type: boolean
+          description: "Current all_pairs_gate_enabled config value (prototype mode indicator)"
+        prototype_mode_active:
+          type: boolean
+          description: "True when all_pairs_gate_enabled=False"
         timestamp:
           type: number
           description: "Unix timestamp of response"

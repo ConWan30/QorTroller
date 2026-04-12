@@ -1168,6 +1168,24 @@ class Config:
     use the same physical DualShock Edge, removing hardware variance as discriminator).
     Configurable via MIN_SEPARATION_RATIO env. Default 0.70."""
 
+    # --- Phase 199: Prototype Separation Gate + Tremor Resting Probe ---
+    all_pairs_gate_enabled: bool = field(
+        default_factory=lambda: _env("ALL_PAIRS_GATE_ENABLED", "true").lower() == "true"
+    )
+    """Phase 199 — When True (default/production), all_pairs_p0_ok requires all inter-player
+    pair distances >= 1.0 (Phase 197 P0 gate).  When False (prototype mode), per-pair gate
+    is disabled and overall_pass is determined by the global separation_ok check alone.
+    Set ALL_PAIRS_GATE_ENABLED=false for known-proximity personal prototypes (e.g. P2/P3
+    touchpad_corners distance=0.401 — structurally limited by protocol ceiling)."""
+
+    tremor_resting_probe_enabled: bool = field(
+        default_factory=lambda: _env("TREMOR_RESTING_PROBE_ENABLED", "false").lower() == "true"
+    )
+    """Phase 199 — Enable tremor_resting structured probe session type in the analysis
+    pipeline.  Default False (infrastructure-first).  30-second still-hold capture
+    isolates neurological tremor signal (tremor_peak_hz primary discriminator) from
+    gameplay motion artifacts."""
+
     # --- Phase 154: Capture Stagnation Monitor ---
     capture_stagnation_threshold: float = field(
         default_factory=lambda: float(_env("CAPTURE_STAGNATION_THRESHOLD", "0.5"))
