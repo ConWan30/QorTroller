@@ -90,14 +90,15 @@ L2C returns None in dead-zone stick games (NCAA CFB 26) — 0.10 weight resolves
   - LOO classification: **54.3% (19/35)** — 54% is slightly better but 16/35 misclassified
   - **Root cause**: P3 intra-player variance=1.154 (mean), range=[0.164,2.024] — P3 is non-stationary; intra-mean=0.802 > inter-mean=0.584 → ratio < 1.0 structurally
   - **P2/P3 biometric proximity**: touchpad_spatial_entropy P2=1.385 vs P3=1.379 (gap=0.006); touch_position_variance P2=0.028 vs P3=0.030 — nearly identical; corner-tap protocol actively suppresses discriminative signal
-  - **Key feature**: tremor_peak_hz P1=9.37Hz vs P2=1.71Hz vs P3=2.85Hz — only strong discriminator, does not separate P2/P3
+  - **Key feature**: tremor_peak_hz P1=9.37Hz vs P2=1.71Hz vs P3=2.85Hz — NOTE: these were theoretical projections in WIF corpus (Cycle 30); ACTUAL measured: tremor_peak_hz=0.0 for ALL tremor_seed sessions because BiometricFeatureExtractor uses right_stick_x velocity FFT (neutral=128 during still-hold). Phase 205 candidate: AccelTremorFFT fallback.
   - **DIAGNOSIS**: touchpad_corners protocol has hit discriminative ceiling for P2/P3; adding more sessions of same type will not cross 1.0
+  - **tremor_seed corpus (2026-04-12)**: P1=10/P2=8/P3=6 sessions; separation ratio=0.748 (diagonal+LOO, N=24); LOO accuracy=45.8% (11/24); only micro_tremor_accel_variance active; tremor_peak_hz=0 (right_stick_x=128 neutral); 4/13 features active vs 10/13 gameplay
   - **PREVIOUS STATE (superseded)**: ratio=0.998 (N=29, P1=8/P2=11/P3=10) — trend reversal was false; ratio fell as P3 sessions added
   - Inter-player distances: P1vP2=0.749, P1vP3=1.133, P2vP3=0.401 — P2/P3 still too close (0.401)
   - Intra-player: P1=0.622, P2=0.502, P3=1.165 — P3 very high variance
   - Touchpad corpus: P1=8, P2=11, P3=10 (P1 needs 2 more sessions to meet defensibility gate ≥10/player — Phase 150)
   - **Why trend reversed**: 4 new P2 sessions + 3 new P3 sessions today stabilized centroids
-  - **Path to >1.0**: Phase 199 — tremor_resting probe (30s still-hold): tremor_peak_hz P1=9.37/P2=1.71/P3=2.85 Hz isolates neurologically grounded discriminator from gameplay motion artifacts; 5 sessions/player; set ALL_PAIRS_GATE_ENABLED=false for prototype mode unblock (ratio=0.728 >= min_separation_ratio=0.70 already passes separation_ok)
+  - **Path to >1.0**: Phase 205 — AccelTremorFFT: modify BiometricFeatureExtractor to compute tremor_peak_hz from accel data when right_stick_x variance < threshold (still-hold sessions). Then tremor_resting sessions will show per-player tremor peak frequencies at their neurological origin. PC accel-based tremor peaks (measured 2026-04-12): P1≈3.1Hz/P2≈4.3Hz/P3≈3.7Hz — overlapping but measurable; more sessions needed post-AccelTremorFFT fix.
   - WIF-024: CLOSED Phase 165 — post_erasure_recompute audit trail implemented
 - **Full corpus (N=217, all session types)**: ratio=0.060 — EXPECTED/KNOWN (free-form gameplay doesn't separate players; this is the WIF-009 plateau regime result; never use this as the tournament gate metric)
 - **PHASE 143 RESULT (2026-04-02): N=11 — historical baseline (superseded by N=14 above)**
