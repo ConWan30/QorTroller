@@ -1268,6 +1268,44 @@ _TOOLS = [
         },
     },
     {
+        "name": "get_coherence_fingerprint_summary",
+        "description": (
+            "Phase 194 CoherenceFingerprintRegistry — Coherence fingerprint summary (Tool #148). "
+            "Returns per-rule occurrence counts from coherence_fingerprint_log. "
+            "persistent_count = rules with occurrence_count >= N_PROMOTE_THRESHOLD (3). "
+            "maturity_penalty = min(1.0, persistent_count × 0.10) — this penalty is applied "
+            "multiplicatively to ProtocolMaturityScoringAgent threat_forecast_accuracy_component. "
+            "top_rules = top-5 rules by occurrence_count. "
+            "Returns: total_rules/persistent_count/total_occurrences/maturity_penalty/top_rules/n_promote_threshold/timestamp."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    # Tool #149 — Phase 195
+    {
+        "name": "get_protocol_metabolism_index",
+        "description": (
+            "Phase 195 Protocol Metabolism Index (PMI) — fleet ORPHAN resolution velocity (Tool #149). "
+            "PMI = max(0.0, 1.0 - mean_resolution_hours / 48.0). "
+            "1.0 when fleet has never had ORPHAN entries (healthy, no backlog). "
+            "0.0 when mean ORPHAN resolution time >= 48 hours (fleet metabolises slowly). "
+            "ORPHAN entries come from FleetSignalCoherenceAgent (Phase 193) fleet_coherence_log. "
+            "PMI feeds as 9th component (weight=0.03) into ProtocolMaturityScoringAgent score. "
+            "Optional domain filter narrows to a specific rule_name substring. "
+            "Returns: mean_resolution_hours/pmi_score/orphan_count_open/orphan_count_resolved/domain/timestamp."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "domain": {"type": "string", "description": "Optional rule_name substring filter (empty = all domains)"},
+            },
+            "required": [],
+        },
+    },
+    {
         "name": "resolve_coherence_entry",
         "description": (
             "Phase 193 FleetSignalCoherenceAgent — Mark a coherence entry as resolved (Tool #147). "
@@ -4161,6 +4199,40 @@ class BridgeAgent:
 
                 except Exception as _exc193:
                     return {"error": str(_exc193), "tool": name}
+
+            # Tool #148 — Phase 194
+            if name == "get_coherence_fingerprint_summary":
+                import time as _t194
+                try:
+                    _fp194 = self._store.get_coherence_fingerprint_status()
+                    return {
+                        "total_rules":         _fp194.get("total_rules", 0),
+                        "persistent_count":    _fp194.get("persistent_count", 0),
+                        "total_occurrences":   _fp194.get("total_occurrences", 0),
+                        "maturity_penalty":    _fp194.get("maturity_penalty", 0.0),
+                        "top_rules":           _fp194.get("top_rules", []),
+                        "n_promote_threshold": 3,
+                        "timestamp":           _t194.time(),
+                    }
+                except Exception as _exc194:
+                    return {"error": str(_exc194), "tool": name}
+
+            # Tool #149 — Phase 195
+            if name == "get_protocol_metabolism_index":
+                import time as _t195pmi
+                try:
+                    _domain195 = str(tool_input.get("domain", ""))
+                    _stats195  = self._store.get_orphan_resolution_stats(domain=_domain195)
+                    return {
+                        "mean_resolution_hours": _stats195.get("mean_resolution_hours", 0.0),
+                        "pmi_score":             _stats195.get("pmi_score", 1.0),
+                        "orphan_count_open":     _stats195.get("orphan_count_open", 0),
+                        "orphan_count_resolved": _stats195.get("orphan_count_resolved", 0),
+                        "domain":                _stats195.get("domain", "all"),
+                        "timestamp":             _t195pmi.time(),
+                    }
+                except Exception as _exc195:
+                    return {"error": str(_exc195), "tool": name}
 
             # Tool #129 — Phase 180
             if name == "trigger_renewal_commitment":

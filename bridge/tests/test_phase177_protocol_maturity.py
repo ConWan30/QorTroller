@@ -58,20 +58,28 @@ def test_t177_2_get_returns_latest():
 
 
 # ---------------------------------------------------------------------------
-# T177-3  maturity_score formula = 0.25*sep + 0.20*chain + 0.15*consent
-#          + 0.15*fresh + 0.15*cal + 0.10*enroll
+# T177-3  maturity_score formula v3 (Phase 195):
+#   0.18*sep + 0.20*chain + 0.15*consent + 0.11*fresh + 0.12*cal
+#   + 0.10*enroll + 0.07*tfa + 0.04*bso + 0.03*pmi
 # ---------------------------------------------------------------------------
 
 def test_t177_3_score_formula():
     with tempfile.TemporaryDirectory() as tmp:
         s = _make_store(tmp)
         sep, chain, consent, fresh, cal, enroll = 0.5, 0.8, 0.6, 0.7, 0.9, 0.3
+        tfa, bso, pmi = 0.8, 0.7, 1.0
         expected = round(
-            0.25 * sep + 0.20 * chain + 0.15 * consent
-            + 0.15 * fresh + 0.15 * cal + 0.10 * enroll,
+            0.18 * sep + 0.20 * chain + 0.15 * consent
+            + 0.11 * fresh + 0.12 * cal + 0.10 * enroll
+            + 0.07 * tfa + 0.04 * bso + 0.03 * pmi,
             6,
         )
-        s.insert_protocol_maturity_log(sep, chain, consent, fresh, cal, enroll)
+        s.insert_protocol_maturity_log(
+            sep, chain, consent, fresh, cal, enroll,
+            threat_forecast_accuracy_component=tfa,
+            biometric_stationarity_component=bso,
+            pmi_component=pmi,
+        )
         rows = s.get_protocol_maturity_status(limit=1)
         assert abs(rows[0]["maturity_score"] - expected) < 1e-5
 
@@ -127,7 +135,12 @@ def test_t177_6_tier_production_candidate():
 def test_t177_7_all_zeros_alpha():
     with tempfile.TemporaryDirectory() as tmp:
         s = _make_store(tmp)
-        s.insert_protocol_maturity_log(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+        s.insert_protocol_maturity_log(
+            0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+            threat_forecast_accuracy_component=0.0,
+            biometric_stationarity_component=0.0,
+            pmi_component=0.0,
+        )
         rows = s.get_protocol_maturity_status(limit=1)
         assert rows[0]["maturity_tier"] == "ALPHA"
         assert rows[0]["maturity_score"] == 0.0
@@ -140,7 +153,12 @@ def test_t177_7_all_zeros_alpha():
 def test_t177_8_all_ones_production_candidate():
     with tempfile.TemporaryDirectory() as tmp:
         s = _make_store(tmp)
-        s.insert_protocol_maturity_log(1.0, 1.0, 1.0, 1.0, 1.0, 1.0)
+        s.insert_protocol_maturity_log(
+            1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+            threat_forecast_accuracy_component=1.0,
+            biometric_stationarity_component=1.0,
+            pmi_component=1.0,
+        )
         rows = s.get_protocol_maturity_status(limit=1)
         assert rows[0]["maturity_tier"] == "PRODUCTION_CANDIDATE"
         assert abs(rows[0]["maturity_score"] - 1.0) < 1e-6

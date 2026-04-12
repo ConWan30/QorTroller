@@ -27,12 +27,52 @@
 
 ## 1. Current Phase Status
 
-**Active Phase**: Phase 180 — COMPLETE
-**Phase Start**: 2026-04-08
+**Active Phase**: Phase 198 — COMPLETE
+**Phase Start**: 2026-04-11
 **Phase Status**: COMPLETE
-**Next Phase**: Phase 181 (TBD — user approval required)
+**Next Phase**: Phase 199 (TBD — user approval required)
 
-> **SYNC NOTE**: Phases 165–177 completed 2026-04-05/08 (Autoresearch Cycle 8). Files synced 2026-04-08.
+> **SYNC NOTE**: Phases 181–198 completed 2026-04-08/11 (Autoresearch Cycles 9–28). Files synced 2026-04-11.
+
+### Phase 198 Deliverables (COMPLETE 2026-04-11) — Biometric TTL Decay Scaling
+
+| Component | Status | Evidence |
+|-----------|--------|----------|
+| get_effective_biometric_ttl(base_ttl_days, scaling_enabled) store method | ✅ LIVE | Phase 198; scaling_factor=clamp(mean_decay/0.50, 0.25, 4.0) |
+| biometric_ttl_decay_scaling_enabled=False config default | ✅ LIVE | fail-safe; never affects TTL unless opted-in |
+| GET /agent/biometric-ttl-scaling-status | ✅ LIVE | returns effective_ttl_days/scaling_factor/mean_decay_factor |
+| BiometricTTLScalingResult(6 slots) + VAPIBiometricTTLScaling SDK | ✅ LIVE | fail-closed on error |
+| openapi BiometricTTLScalingStatus schema; version 3.0.0-phase198 | ✅ LIVE | all Phases 196-198 schemas added |
+| Bridge tests | ✅ PASS | **2,184** pytest (+8 Phase 198) |
+| SDK tests | ✅ PASS | **414** collected, 398 passing (+4 Phase 198) |
+| Hardhat tests | ✅ PASS | **482** tests (unchanged) |
+
+### Phase 197 Deliverables (COMPLETE 2026-04-11) — Per-Pair Separation P0 Gate
+
+| Component | Status | Evidence |
+|-----------|--------|----------|
+| all_pairs_p0_ok: 10th P0 condition in tournament preflight | ✅ LIVE | fail-closed, default=False |
+| Reads all_pairs_above_1 from separation_defensibility_log | ✅ LIVE | currently False (P2vP3=0.401 < 1.0) |
+| TournamentPreflightResult +all_pairs_p0_ok slot | ✅ LIVE | bridges Phase 150 defensibility to preflight |
+| commit-activation per_pair_separation_below_1.0 blocker | ✅ LIVE | tournament activation blocked until all pairs > 1.0 |
+
+### Phase 196 Deliverables (COMPLETE 2026-04-11) — Tournament Preflight v2 (WIF-035 W1)
+
+| Component | Status | Evidence |
+|-----------|--------|----------|
+| biometric_ttl_ok: 9th P0 condition | ✅ LIVE | WIF-035 W1 formal closure |
+| Condition: (not ttl_expired) AND len(renewal_chain)>0 | ✅ LIVE | idempotent ALTER TABLE migration |
+| TournamentPreflightResult +biometric_ttl_ok slot (default=True) | ✅ LIVE | safe default preserves Phase 127 behavior |
+
+### Phase 195 Deliverables (COMPLETE 2026-04-11) — Protocol Metabolism Index (PMI)
+
+| Component | Status | Evidence |
+|-----------|--------|----------|
+| PMI: 9th ProtocolMaturityScoring component, weight=0.03 | ✅ LIVE | _WEIGHTS v3: sep 0.18, fresh 0.11, pmi 0.03 |
+| PMI=max(0.0,1.0-mean_orphan_resolution_hours/48.0) | ✅ LIVE | 1.0=healthy, 0.0=slow fleet |
+| GET /agent/protocol-metabolism-index (Tool #149) | ✅ LIVE | optional domain filter |
+| PMIResult(6 slots) + VAPIProtocolMetabolism SDK | ✅ LIVE | fail-closed on error |
+| ProtocolMaturityScoringResult +pmi_component slot | ✅ LIVE | default=1.0 |
 
 ### Phase 177 Deliverables (COMPLETE 2026-04-08)
 
@@ -123,7 +163,7 @@ When working on VAPI:
 - Check this section first to understand current system state
 - Phase 149 COMPLETE — Phase 150 requires user approval first
 - Reference specific agent numbers and tool numbers from this table
-- If test counts differ from this table (expected: 1808/462/237), investigate regression
+- If test counts differ from this table (expected: 2184/482/414), investigate regression
 
 ---
 
@@ -133,12 +173,12 @@ When working on VAPI:
 
 | Wallet | Address | Balance | Status |
 |--------|---------|---------|--------|
-| Active Bridge | 0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692 | ~0.35 IOTX | OPERATIONAL |
-| Deploy Requirement | — | ~0.40 IOTX | **BLOCKED** |
+| Active Bridge | 0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692 | ~10.4 IOTX (funded 2026-04-11) | OPERATIONAL |
+| Deploy Requirement | — | ~0.13 IOTX per contract | UNBLOCKED |
 
-**Critical**: ~0.35 IOTX insufficient for VAPISwarmOperatorGate.sol deployment (~0.13 IOTX). Funding required to unblock Phase 130B.
+**Status**: 10.4 IOTX available. All 43 contracts live. VAPISwarmOperatorGate.sol deployed Phase 130 (0x969c0F1EFb28504a95Acf14331A59FBCb2944F98).
 
-### Live Contracts (39 Total)
+### Live Contracts (43 Total)
 
 #### Core Protocol (23 contracts)
 
@@ -192,15 +232,15 @@ When proposing on-chain operations:
 
 | Component | Test Count | Status | Last Run |
 |-----------|------------|--------|----------|
-| Bridge pytest | **2,022** | ✅ PASS | 2026-04-09 |
-| SDK tests | **337** | ✅ PASS | 2026-04-09 |
-| Hardhat tests | **482** | ✅ PASS | 2026-04-09 |
+| Bridge pytest | **2,184** | ✅ PASS | 2026-04-11 |
+| SDK tests | **414** (398 passing) | ✅ PASS | 2026-04-11 |
+| Hardhat tests | **482** | ✅ PASS | 2026-04-11 |
 | Hardware tests | 37 | ⚠️ HARDWARE-ONLY | Manual |
 | E2E tests | 14 | ⚠️ REQUIRES NODE | Manual |
 
 ### BridgeAgent Tools
 
-**Available**: 129 deterministic tools (expanded from 28 original)
+**Available**: 149 deterministic tools (Tool #149: get_protocol_metabolism_index, Phase 195)
 **Key Tools** (sample):
 - #1-20: Core bridge operations
 - #21: get_game_profile (Phase 51)

@@ -1,19 +1,21 @@
 """
 Phase 177 — ProtocolMaturityScoringAgent (agent #26)
 Phase 191 — Threat Succession Protocol (TSP) v2 rebalance
+Phase 195 — Protocol Metabolism Index (PMI) 9th component
 
-Synthesises 8 agent signals into a unified maturity_score (0.0–1.0) that
+Synthesises 9 agent signals into a unified maturity_score (0.0–1.0) that
 reflects VAPI's overall protocol readiness.
 
-Component weights v2 (sum = 1.0, Phase 191 TSP rebalance):
-    separation_component               0.20  — inter-person ratio vs 1.0 target
+Component weights v3 (sum = 1.0, Phase 195 PMI addition):
+    separation_component               0.18  — inter-person ratio vs 1.0 target (was 0.20)
     chain_integrity_component          0.20  — PoAC chain intact fraction
     consent_component                  0.15  — active consent corpus coverage
-    biometric_freshness_component      0.12  — credential TTL not expired
+    biometric_freshness_component      0.11  — credential TTL not expired (was 0.12)
     agent_calibration_component        0.12  — ACIM pass rate across agent fleet
     enrollment_component               0.10  — sessions_needed_total == 0
     threat_forecast_accuracy_component 0.07  — PIR harness_score (Phase 189 TSP)
     biometric_stationarity_component   0.04  — BSO confidence (Phase 188)
+    pmi_component                      0.03  — Protocol Metabolism Index (Phase 195)
 
 Maturity tiers:
     ALPHA              maturity_score < 0.50
@@ -39,14 +41,15 @@ _BETA_THRESHOLD        = 0.50
 _PRODUCTION_THRESHOLD  = 0.85
 
 _WEIGHTS = {
-    "separation_component":               0.20,  # Phase 177; was 0.25, reduced Phase 191
+    "separation_component":               0.18,  # Phase 177; was 0.25→0.20, reduced Phase 195
     "chain_integrity_component":          0.20,  # Phase 176; unchanged
     "consent_component":                  0.15,  # Phase 160; unchanged
-    "biometric_freshness_component":      0.12,  # Phase 178; was 0.15, reduced Phase 191
+    "biometric_freshness_component":      0.11,  # Phase 178; was 0.15→0.12, reduced Phase 195
     "agent_calibration_component":        0.12,  # Phase 148; was 0.15, reduced Phase 191
     "enrollment_component":               0.10,  # Phase 156; unchanged
     "threat_forecast_accuracy_component": 0.07,  # Phase 191 TSP — PIR harness score
     "biometric_stationarity_component":   0.04,  # Phase 191 TSP — BSO confidence
+    "pmi_component":                      0.03,  # Phase 195 PMI — fleet ORPHAN resolution velocity
 }
 
 
@@ -177,13 +180,25 @@ class ProtocolMaturityScoringAgent:
             return 0.0
 
     def _threat_forecast_accuracy_component(self) -> float:
-        """Latest PIR harness_score as threat forecast accuracy proxy (Phase 191 TSP).
+        """PIR harness_score as threat forecast accuracy, penalised by persistent contradictions (Phase 194).
 
-        Reads protocol_intelligence_record_log.harness_score via store.
+        Phase 191 TSP: reads protocol_intelligence_record_log.harness_score via store.
+        Phase 194 addition: applies persistent contradiction penalty from coherence_fingerprint_log.
+        For each rule with occurrence_count >= N_PROMOTE_THRESHOLD (persistent=1), the score
+        is reduced by 10% (multiplicative): score *= (1.0 - min(1.0, persistent_count * 0.10)).
         Returns 0.5 (neutral) when no PIR data exists or on error.
         """
         try:
-            return self._store.get_threat_forecast_accuracy()
+            pir_score = self._store.get_threat_forecast_accuracy()
+            # Phase 194: persistent contradiction penalty
+            try:
+                fingerprint = self._store.get_coherence_fingerprint_status()
+                persistent_count = int(fingerprint.get("persistent_count", 0))
+                penalty = min(1.0, persistent_count * 0.10)
+                return round(pir_score * (1.0 - penalty), 6)
+            except Exception as fp_exc:
+                log.debug("ProtocolMaturityScoringAgent: fingerprint penalty read error: %s", fp_exc)
+                return pir_score
         except Exception as exc:
             log.debug("ProtocolMaturityScoringAgent: threat forecast read error: %s", exc)
             return 0.5  # neutral
@@ -205,6 +220,26 @@ class ProtocolMaturityScoringAgent:
         except Exception as exc:
             log.debug("ProtocolMaturityScoringAgent: stationarity read error: %s", exc)
             return 0.5
+
+    def _pmi_component(self) -> float:
+        """Protocol Metabolism Index — fleet ORPHAN resolution velocity (Phase 195).
+
+        PMI = max(0.0, 1.0 - mean_resolution_hours / 48.0)
+        where mean_resolution_hours is the mean time (hours) to resolve ORPHAN entries
+        in fleet_coherence_log.
+
+        1.0 when the fleet has never had ORPHAN entries (healthy, no backlog).
+        0.0 when mean ORPHAN resolution time >= 48 hours (fleet metabolises slowly).
+        Linear decay between 0h and 48h.
+
+        Fail-safe: any error returns 1.0 (no penalty for missing infrastructure).
+        """
+        try:
+            stats = self._store.get_orphan_resolution_stats()
+            return round(float(stats.get("pmi_score", 1.0)), 6)
+        except Exception as exc:
+            log.debug("ProtocolMaturityScoringAgent: PMI read error: %s", exc)
+            return 1.0  # fail-open: absent data → no orphan penalty
 
     # ------------------------------------------------------------------
     # Poll logic
@@ -229,6 +264,7 @@ class ProtocolMaturityScoringAgent:
                 "enrollment_component":               self._enrollment_component(),
                 "threat_forecast_accuracy_component": self._threat_forecast_accuracy_component(),
                 "biometric_stationarity_component":   self._biometric_stationarity_component(),
+                "pmi_component":                      self._pmi_component(),
             }
 
             maturity_score = round(
@@ -245,6 +281,7 @@ class ProtocolMaturityScoringAgent:
                 enrollment_component=components["enrollment_component"],
                 threat_forecast_accuracy_component=components["threat_forecast_accuracy_component"],
                 biometric_stationarity_component=components["biometric_stationarity_component"],
+                pmi_component=components["pmi_component"],
             )
 
             # Gap to next tier — fire bus event when within striking distance
@@ -269,7 +306,7 @@ class ProtocolMaturityScoringAgent:
             log.info(
                 "ProtocolMaturityScoringAgent: score=%.4f tier=%s "
                 "sep=%.3f chain=%.3f consent=%.3f fresh=%.3f cal=%.3f enroll=%.3f "
-                "tfa=%.3f bso=%.3f",
+                "tfa=%.3f bso=%.3f pmi=%.3f",
                 maturity_score, maturity_tier,
                 components["separation_component"],
                 components["chain_integrity_component"],
@@ -279,6 +316,7 @@ class ProtocolMaturityScoringAgent:
                 components["enrollment_component"],
                 components["threat_forecast_accuracy_component"],
                 components["biometric_stationarity_component"],
+                components["pmi_component"],
             )
 
             return {

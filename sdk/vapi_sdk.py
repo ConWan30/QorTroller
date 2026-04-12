@@ -3144,6 +3144,10 @@ class TournamentPreflightResult:
     overall_pass: bool = False
     conditions_detail: "dict" = None   # type: ignore[assignment]
     error: "str | None" = None
+    # Phase 196: biometric_ttl_ok — 9th P0 condition (WIF-035 closure)
+    biometric_ttl_ok: bool = True
+    # Phase 197: all_pairs_p0_ok — 10th P0 condition (per-pair separation gate)
+    all_pairs_p0_ok: bool = False
 
     def __post_init__(self):
         if self.conditions_detail is None:
@@ -3177,12 +3181,14 @@ class VAPITournamentPreflight:
                 audit_ok=bool(body.get("audit_ok", False)),
                 overall_pass=bool(body.get("overall_pass", False)),
                 conditions_detail=body.get("conditions", {}),
+                biometric_ttl_ok=bool(body.get("biometric_ttl_ok", True)),
+                all_pairs_p0_ok=bool(body.get("all_pairs_p0_ok", False)),
             )
         except Exception as exc:
             return TournamentPreflightResult(
                 separation_ok=False, l4_ok=False, gate_ok=False,
                 cert_ok=False, audit_ok=False, overall_pass=False,
-                conditions_detail={}, error=str(exc),
+                conditions_detail={}, biometric_ttl_ok=True, all_pairs_p0_ok=False, error=str(exc),
             )
 
     def get_status(self) -> TournamentPreflightResult:
@@ -3201,12 +3207,14 @@ class VAPITournamentPreflight:
                 audit_ok=bool(body.get("audit_ok", False)),
                 overall_pass=bool(body.get("overall_pass", False)),
                 conditions_detail=body.get("conditions", {}),
+                biometric_ttl_ok=bool(body.get("biometric_ttl_ok", True)),
+                all_pairs_p0_ok=bool(body.get("all_pairs_p0_ok", False)),
             )
         except Exception as exc:
             return TournamentPreflightResult(
                 separation_ok=False, l4_ok=False, gate_ok=False,
                 cert_ok=False, audit_ok=False, overall_pass=False,
-                conditions_detail={}, error=str(exc),
+                conditions_detail={}, biometric_ttl_ok=True, all_pairs_p0_ok=False, error=str(exc),
             )
 
 
@@ -5195,6 +5203,8 @@ class ProtocolMaturityScoringResult:
     # Phase 191 TSP additions
     threat_forecast_accuracy_component: float = 0.0
     biometric_stationarity_component:   float = 0.0
+    # Phase 195 PMI addition
+    pmi_component: float = 1.0
 
 
 class VAPIProtocolMaturityScoring:
@@ -5235,6 +5245,7 @@ class VAPIProtocolMaturityScoring:
                 enrollment_component                 = float(body.get("enrollment_component",          0.0)),
                 threat_forecast_accuracy_component   = float(body.get("threat_forecast_accuracy_component", 0.0)),
                 biometric_stationarity_component     = float(body.get("biometric_stationarity_component",   0.0)),
+                pmi_component                        = float(body.get("pmi_component",                      1.0)),
             )
         except Exception as exc:
             return ProtocolMaturityScoringResult(
@@ -5249,11 +5260,138 @@ class VAPIProtocolMaturityScoring:
                 enrollment_component                 = 0.0,
                 threat_forecast_accuracy_component   = 0.0,
                 biometric_stationarity_component     = 0.0,
+                pmi_component                        = 1.0,
                 error                                = str(exc),
             )
 
 
 # ---------------------------------------------------------------------------
+# Phase 195 — Protocol Metabolism Index (PMI)
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class PMIResult:
+    """Result from VAPIProtocolMetabolism.get_status() (Phase 195).
+
+    PMI = max(0.0, 1.0 - mean_resolution_hours / 48.0).
+    1.0 = fleet has never had ORPHAN entries (or resolves them instantly).
+    0.0 = mean ORPHAN resolution time >= 48h (fleet metabolises slowly).
+    Feeds as pmi_component (weight=0.03) into ProtocolMaturityScoringAgent.
+    """
+    mean_resolution_hours: float
+    pmi_score:             float
+    orphan_count_open:     int
+    orphan_count_resolved: int
+    domain:                str
+    error: "str | None" = None
+
+
+class VAPIProtocolMetabolism:
+    """SDK client for GET /agent/protocol-metabolism-index (Phase 195).
+
+    Example::
+
+        pmi = VAPIProtocolMetabolism("http://localhost:8080", api_key)
+        result = pmi.get_status()
+        print(f"PMI: {result.pmi_score:.3f} (open orphans: {result.orphan_count_open})")
+    """
+
+    def __init__(self, base_url: str, api_key: str) -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self, domain: str = "") -> PMIResult:
+        """Return current Protocol Metabolism Index.
+
+        On error: returns PMIResult with pmi_score=1.0, error set (fail-open).
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            _dom = f"&domain={domain}" if domain else ""
+            url = f"{self._base}/agent/protocol-metabolism-index?api_key={self._key}{_dom}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return PMIResult(
+                mean_resolution_hours = float(body.get("mean_resolution_hours_critical", 0.0)),
+                pmi_score             = float(body.get("pmi_score",             1.0)),
+                orphan_count_open     = int(body.get("orphan_count_open",     0)),
+                orphan_count_resolved = int(body.get("orphan_count_resolved", 0)),
+                domain                = str(body.get("domain",                "all")),
+            )
+        except Exception as exc:
+            return PMIResult(
+                mean_resolution_hours = 0.0,
+                pmi_score             = 1.0,
+                orphan_count_open     = 0,
+                orphan_count_resolved = 0,
+                domain                = domain or "all",
+                error                 = str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Phase 198 — Biometric TTL Decay Scaling
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class BiometricTTLScalingResult:
+    """Result from VAPIBiometricTTLScaling.get_status() (Phase 198).
+
+    effective_ttl = base_ttl × (mean_decay_factor / 0.50) when enabled.
+    Clamped to [base_ttl × 0.25, base_ttl × 4.0].
+    mean_decay_factor from BiometricPrivacyComplianceAgent BP-001 (Phase 159).
+    """
+    effective_ttl_days: float
+    base_ttl_days:      float
+    scaling_factor:     float
+    mean_decay_factor:  float
+    scaling_enabled:    bool
+    error: "str | None" = None
+
+
+class VAPIBiometricTTLScaling:
+    """SDK client for GET /agent/biometric-ttl-scaling-status (Phase 198).
+
+    Example::
+
+        ttl = VAPIBiometricTTLScaling("http://localhost:8080", api_key)
+        result = ttl.get_status()
+        print(f"Effective TTL: {result.effective_ttl_days:.1f} days (scaling={result.scaling_enabled})")
+    """
+
+    def __init__(self, base_url: str, api_key: str) -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self) -> BiometricTTLScalingResult:
+        """Return current biometric TTL scaling status.
+
+        On error: returns BiometricTTLScalingResult with scaling_enabled=False, error set.
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/agent/biometric-ttl-scaling-status?api_key={self._key}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return BiometricTTLScalingResult(
+                effective_ttl_days = float(body.get("effective_ttl_days", 90.0)),
+                base_ttl_days      = float(body.get("base_ttl_days",      90.0)),
+                scaling_factor     = float(body.get("scaling_factor",     1.0)),
+                mean_decay_factor  = float(body.get("mean_decay_factor",  1.0)),
+                scaling_enabled    = bool(body.get("scaling_enabled",     False)),
+            )
+        except Exception as exc:
+            return BiometricTTLScalingResult(
+                effective_ttl_days = 90.0,
+                base_ttl_days      = 90.0,
+                scaling_factor     = 1.0,
+                mean_decay_factor  = 1.0,
+                scaling_enabled    = False,
+                error              = str(exc),
+            )
+
+
 # Phase 182 — PersonaBreakDetectorAgent (WIF-028 deeper mitigation)
 # ---------------------------------------------------------------------------
 
@@ -6252,3 +6390,74 @@ class VAPIFleetCoherence:
                 return _j.loads(resp.read())
         except Exception as exc:
             return {"error": str(exc)}
+
+
+# ---------------------------------------------------------------------------
+# Phase 194 — CoherenceFingerprintRegistry result classes
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class CoherenceFingerprintResult:
+    """Result from VAPICoherenceFingerprint.get_status() (Phase 194).
+
+    Fields:
+      total_rules        — distinct rules seen in coherence_fingerprint_log
+      persistent_count   — rules with occurrence_count >= N_PROMOTE_THRESHOLD (3)
+      total_occurrences  — sum of all occurrence counts
+      maturity_penalty   — min(1.0, persistent_count × 0.10); applied to threat_forecast_accuracy
+      top_rules          — JSON string of top-5 rules by occurrence_count
+      n_promote_threshold — always 3; documented here for client reference
+      error              — non-empty when an exception occurred
+    """
+    total_rules:         int   = 0
+    persistent_count:    int   = 0
+    total_occurrences:   int   = 0
+    maturity_penalty:    float = 0.0
+    top_rules:           str   = "[]"
+    n_promote_threshold: int   = 3
+    error:               str   = ""
+
+
+class VAPICoherenceFingerprint:
+    """Client for GET /agent/coherence-fingerprint-status (Phase 194, Tool #148).
+
+    Example::
+        fp = VAPICoherenceFingerprint("http://localhost:8080", api_key)
+        result = fp.get_status()
+        if result.persistent_count > 0:
+            print(f"maturity_penalty={result.maturity_penalty}")
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base    = base_url.rstrip("/")
+        self._api_key = api_key
+
+    def _headers(self) -> dict:
+        h = {"Content-Type": "application/json"}
+        if self._api_key:
+            h["x-api-key"] = self._api_key
+        return h
+
+    def get_status(self) -> CoherenceFingerprintResult:
+        """Return CoherenceFingerprintResult from GET /agent/coherence-fingerprint-status.
+
+        On error: returns CoherenceFingerprintResult with error set, zero counts.
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            req = _ur.Request(
+                f"{self._base}/agent/coherence-fingerprint-status",
+                headers=self._headers(),
+            )
+            with _ur.urlopen(req, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return CoherenceFingerprintResult(
+                total_rules        = int(body.get("total_rules",        0)),
+                persistent_count   = int(body.get("persistent_count",   0)),
+                total_occurrences  = int(body.get("total_occurrences",  0)),
+                maturity_penalty   = float(body.get("maturity_penalty", 0.0)),
+                top_rules          = _j.dumps(body.get("top_rules",     [])),
+                n_promote_threshold= int(body.get("n_promote_threshold",3)),
+            )
+        except Exception as exc:
+            return CoherenceFingerprintResult(error=str(exc))

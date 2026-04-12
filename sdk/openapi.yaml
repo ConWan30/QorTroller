@@ -2,7 +2,7 @@ openapi: "3.0.3"
 
 info:
   title: VAPI — Self-Verifying Integration SDK REST API
-  version: "3.0.0-phase165"
+  version: "3.0.0-phase198"
   description: |
     The VAPI REST API exposes Proof of Authentic Controller (PoAC) submission,
     on-chain verification, device PHCI certification, SDK self-attestation,
@@ -4492,6 +4492,64 @@ paths:
         "403":
           description: Forbidden
 
+  /agent/protocol-metabolism-index:
+    get:
+      summary: Protocol Metabolism Index — fleet ORPHAN resolution velocity (Phase 195)
+      description: >
+        PMI = max(0.0, 1.0 - mean_orphan_resolution_hours / 48.0).
+        1.0 when fleet has never had ORPHAN entries (healthy, no backlog).
+        0.0 when mean ORPHAN resolution >= 48h (fleet metabolises slowly).
+        Feeds as pmi_component (weight=0.03) into ProtocolMaturityScoringAgent.
+        Optional domain param narrows query to a rule_name substring.
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: domain
+          in: query
+          required: false
+          schema:
+            type: string
+          description: "Optional rule_name substring filter (empty = all domains)"
+      responses:
+        "200":
+          description: Protocol Metabolism Index status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProtocolMetabolismIndexStatus"
+        "403":
+          description: Forbidden
+
+  /agent/biometric-ttl-scaling-status:
+    get:
+      summary: Biometric TTL decay scaling status (Phase 198)
+      description: >
+        Returns effective biometric TTL derived from BP-001 mean_decay_factor.
+        Formula: effective_ttl = base_ttl × (mean_decay_factor / 0.50), clamped to
+        [base_ttl × 0.25, base_ttl × 4.0]. biometric_ttl_decay_scaling_enabled=False default.
+        When disabled, effective_ttl == base_ttl_days (90.0 default).
+        mean_decay_factor sourced from BiometricPrivacyComplianceAgent (Phase 159).
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Biometric TTL scaling status
+          content:
+            application\json:
+              schema:
+                $ref: "#/components/schemas/BiometricTTLScalingStatus"
+        "403":
+          description: Forbidden
+
 # =============================================================================
 # Components
 # =============================================================================
@@ -7426,7 +7484,7 @@ components:
 
     TournamentPreflightResult:
       type: object
-      description: "Phase 127 tournament pre-launch preflight result"
+      description: "Phase 127/196/197 tournament pre-launch preflight result (10 P0 conditions)"
       properties:
         run_id:
           type: integer
@@ -7440,6 +7498,12 @@ components:
           type: boolean
         audit_ok:
           type: boolean
+        biometric_ttl_ok:
+          type: boolean
+          description: "Phase 196 P0: credential not expired AND renewal_chain non-empty (WIF-035 W1)"
+        all_pairs_p0_ok:
+          type: boolean
+          description: "Phase 197 P0: all inter-player Mahalanobis pair distances > 1.0 (fail-closed)"
         dual_gate_warned:
           type: boolean
         epoch_window_warned:
@@ -8725,6 +8789,81 @@ webhooks:
         latest_separation_ratio:
           type: number
           description: "Separation ratio at time of latest snapshot"
+        timestamp:
+          type: number
+          description: "Unix timestamp of response"
+
+    ProtocolMetabolismIndexStatus:
+      type: object
+      description: "Phase 195 Protocol Metabolism Index — fleet ORPHAN resolution velocity"
+      properties:
+        mean_resolution_hours_critical:
+          type: number
+          description: "Mean hours to resolve ORPHAN entries in fleet_coherence_log (0.0 = none ever)"
+        pmi_score:
+          type: number
+          description: "PMI score: max(0.0, 1.0 - mean_resolution_hours / 48.0); 1.0 = healthy"
+        orphan_count_open:
+          type: integer
+          description: "Count of ORPHAN entries still unresolved in fleet_coherence_log"
+        orphan_count_resolved:
+          type: integer
+          description: "Count of ORPHAN entries that have been resolved (have resolved_at set)"
+        domain:
+          type: string
+          description: "Domain filter applied (empty string or 'all' means no filter)"
+        timestamp:
+          type: number
+          description: "Unix timestamp of response"
+
+    CoherenceFingerprintStatus:
+      type: object
+      description: "Phase 194 CoherenceFingerprintRegistry status — per-rule occurrence counts"
+      properties:
+        total_rules:
+          type: integer
+          description: "Distinct rules seen in coherence_fingerprint_log"
+        persistent_count:
+          type: integer
+          description: "Rules with occurrence_count >= N_PROMOTE_THRESHOLD (3); feed ProtocolMaturityScoring penalty"
+        total_occurrences:
+          type: integer
+          description: "Sum of all rule occurrence_count values across all cycles"
+        maturity_penalty:
+          type: number
+          description: "min(1.0, persistent_count x 0.10) — multiplicative penalty on threat_forecast_accuracy_component"
+        top_rules:
+          type: array
+          description: "Top-5 rules by occurrence_count"
+          items:
+            type: object
+        n_promote_threshold:
+          type: integer
+          description: "Always 3 — occurrence_count threshold for persistent=1 classification"
+        timestamp:
+          type: number
+          description: "Unix timestamp of response"
+
+
+    BiometricTTLScalingStatus:
+      type: object
+      description: "Phase 198 Biometric TTL Decay Scaling status"
+      properties:
+        effective_ttl_days:
+          type: number
+          description: "Effective TTL after decay scaling; equals base_ttl_days when scaling disabled"
+        base_ttl_days:
+          type: number
+          description: "Base biometric credential TTL in days (config: biometric_credential_ttl_days, default 90.0)"
+        scaling_factor:
+          type: number
+          description: "Factor applied: mean_decay_factor / 0.50, clamped to [0.25, 4.0]; 1.0 when disabled"
+        mean_decay_factor:
+          type: number
+          description: "Mean BP-001 TBD(t) decay factor from BiometricPrivacyComplianceAgent (1.0 = fresh data)"
+        scaling_enabled:
+          type: boolean
+          description: "True when biometric_ttl_decay_scaling_enabled=True in config (default False)"
         timestamp:
           type: number
           description: "Unix timestamp of response"
