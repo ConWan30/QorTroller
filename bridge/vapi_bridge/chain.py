@@ -834,14 +834,24 @@ class ChainClient:
             self._account = Account.from_key(private_key)
             log.info("Bridge key loaded from keystore: %s (address=%s)", ks_path, self._account.address)
         else:
-            # "env" source — existing behaviour; emit advisory if key is set
+            # "env" source — only parse key when it is actually set
             if getattr(cfg, "bridge_private_key", ""):
                 log.warning(
                     "BRIDGE_PRIVATE_KEY is a plaintext env var. "
                     "For mainnet, migrate to an encrypted keystore "
                     "(BRIDGE_PRIVATE_KEY_SOURCE=keystore)."
                 )
-            self._account = Account.from_key(cfg.bridge_private_key)
+                self._account = Account.from_key(cfg.bridge_private_key)
+            else:
+                # No key configured — acceptable for dry_run mode; chain writes will fail
+                # gracefully if attempted (all writes are guarded by dry_run checks).
+                self._account = None
+                log.warning(
+                    "BRIDGE_PRIVATE_KEY is not set — chain signing disabled. "
+                    "The bridge will start in read-only mode. "
+                    "Add BRIDGE_PRIVATE_KEY=<64-char hex private key> to bridge/.env "
+                    "to enable on-chain writes."
+                )
 
         self._nonce_lock = asyncio.Lock()
         self._nonce: int | None = None
@@ -849,10 +859,17 @@ class ChainClient:
         self._revoked_manufacturers: set[str] = set()
 
         # Initialize contracts
-        self._verifier = self._w3.eth.contract(
-            address=self._w3.to_checksum_address(cfg.verifier_address),
-            abi=VERIFIER_ABI,
-        )
+        if cfg.verifier_address:
+            self._verifier = self._w3.eth.contract(
+                address=self._w3.to_checksum_address(cfg.verifier_address),
+                abi=VERIFIER_ABI,
+            )
+        else:
+            self._verifier = None
+            log.warning(
+                "POAC_VERIFIER_ADDRESS not set — on-chain PoAC verification disabled. "
+                "Add POAC_VERIFIER_ADDRESS to bridge/.env."
+            )
         if cfg.bounty_market_address:
             self._bounty_market = self._w3.eth.contract(
                 address=self._w3.to_checksum_address(cfg.bounty_market_address),
@@ -1009,10 +1026,14 @@ class ChainClient:
 
     @property
     def bridge_address(self) -> str:
+        if self._account is None:
+            return "0x0000000000000000000000000000000000000000"
         return self._account.address
 
     async def get_balance(self) -> float:
         """Get bridge wallet balance in IOTX."""
+        if self._account is None:
+            return 0.0
         wei = await self._w3.eth.get_balance(self._account.address)
         return float(self._w3.from_wei(wei, "ether"))
 

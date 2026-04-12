@@ -1619,7 +1619,14 @@ class Config:
                 errors.append("BRIDGE_KEYSTORE_PATH is required when BRIDGE_PRIVATE_KEY_SOURCE=keystore")
         else:
             if not self.bridge_private_key:
-                errors.append("BRIDGE_PRIVATE_KEY is required")
+                # In dry_run mode (AGENT_DRY_RUN=true, the default), no private key is needed
+                # because all chain writes are advisory and skipped. Only require the key when
+                # live enforcement is explicitly activated.
+                if not getattr(self, "agent_dry_run_mode", True):
+                    errors.append(
+                        "BRIDGE_PRIVATE_KEY is required when AGENT_DRY_RUN=false. "
+                        "Add BRIDGE_PRIVATE_KEY=0x<64-char-hex> to bridge/.env."
+                    )
         if not any([self.mqtt_enabled, self.coap_enabled,
                     self.http_enabled, self.dualshock_enabled]):
             errors.append("At least one transport must be enabled")
