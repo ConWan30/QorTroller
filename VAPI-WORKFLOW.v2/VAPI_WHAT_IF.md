@@ -1628,10 +1628,165 @@ Filed 2026-04-11.
 
 ---
 
-**Document Version**: 2.2 (WIF-032/033 filed Phase 192, 2026-04-11)
-**Last Updated**: 2026-04-11
-**W1 Count**: 29 entries (WIF-031 consent-bound renewal OPEN; WIF-032 erasure replay OPEN; WIF-033 correlation bypass OPEN)
-**W2 Count**: 23 entries (WIF-030 W2 OPEN Phase 181 candidate; WIF-031 W2 OPEN Phase 181 candidate)
+## WIF-034 — Threat Forecast Accuracy Collapses When PIR Harness Score Unavailable (Phase 191)
+
+**Filed**: 2026-04-11 (Phase 191 — Threat Succession Protocol)
+**Category**: W1 Failure Mode — ProtocolMaturityScoringAgent accuracy gap
+
+**Mechanism**: The `threat_forecast_accuracy_component` in ProtocolMaturityScoringAgent (weight=0.07)
+reads its score from the PIR harness output. If ProtocolIntelligenceRecordAgent (Phase 189) has
+not produced any records — or the PIR chain is disabled — the component defaults to 0.5 (neutral)
+rather than 0.0. This masks low forecast accuracy behind a neutral score, allowing the overall
+maturity score to remain artificially high when the intelligence record pipeline is not running.
+
+**VAPI Mitigation (Phase 191)**:
+- `neutral 0.5 when no data` — documented design choice; prevents cold-start penalty
+- `tsp_enabled=True` default ensures TSP is always active when agents are running
+- `biometric_stationarity_component` (weight=0.04) from BiometricStationarityOracleAgent adds
+  independent corroboration
+
+**Status**: CLOSED by Phase 191. TSP formal implementation with 8-component v2 scoring.
+Filed 2026-04-11.
+
+---
+
+## WIF-035 — Biometric TTL Expiry Bypasses Tournament Preflight Gate (Phase 196)
+
+**Filed**: 2026-04-11 (Phase 195/196 — Tournament Preflight v2)
+**Category**: W1 Failure Mode — Tournament gate bypass via credential staleness
+
+**Mechanism**: Tournament preflight (Phase 127) checks 8 P0 conditions but does NOT check
+whether the biometric credential TTL has expired. A device with a valid `isFullyEligible()`
+call at T₀ whose biometric credential expires at T₁ < tournament_start can still pass all
+8 preflight conditions at T₀. When the actual tournament fires, `isFullyEligible()` returns
+False — credential expired — but preflight had already passed and tournament was launched.
+
+**VAPI Mitigation (Phase 196)**:
+- 9th P0 condition `biometric_ttl_ok` added to `TournamentPreflightResult`
+- Logic: `(not ttl_expired) AND len(renewal_chain) > 0` — requires active renewal chain
+- `commit-activation` extended: `biometric_ttl_expired_or_no_renewal_chain` blocker added
+- BT calibration gate (WIF-035 W1, Cycle 28): HARD RULE — never set `bt_transport_enabled=True`
+  without an active BT threshold track in `l4_threshold_tracks` (USB thresholds 7.009/5.367
+  NOT valid for BT sessions)
+
+**Status**: CLOSED by Phase 196. biometric_ttl_ok as 9th P0 preflight condition.
+Filed 2026-04-11.
+
+---
+
+## WIF-036 — Agent Context Drift: LLM System Prompt Advances Without Registry Update (Phase 203)
+
+**Filed**: 2026-04-12 (Phase 203 — AgentContextRegistry)
+**Category**: W1 Failure Mode — Silent semantic drift in LLM agent fleet
+
+**Mechanism**: Phase 201 added static tests checking that each of the 3 LLM agents
+(bridge_agent, session_adjudicator, calibration_intelligence_agent) contains specific
+Phase 200 invariant strings at commit time. But these tests pass at commit time and
+remain passing even after Phase 204+ advances the protocol with new invariants — the
+old static checks never update. More critically: if the bridge is restarted after a
+deployment error with the wrong environment variables or a stale container image, the
+agents can run with pre-Phase-200 system prompts while static tests at the committed
+version still pass. No runtime signal distinguishes "correct prompt at startup" from
+"stale prompt from old deployment."
+
+**Implication**: Bridge Agent makes tournament gate decisions using Phase 30 rules.
+Session Adjudicator runs dry_run=True logic even after dry_run was flipped. Calibration
+Intelligence Agent enforces Phase 148 thresholds after Phase 200 invariant updates.
+None of these failures are detectable from existing FSCA rules or the operator dashboard.
+
+**VAPI Mitigation (Phase 203)**:
+- `agent_context_log` table: UNIQUE(agent_id, prompt_sha256) — hash registered at startup
+- `main.py` Phase 203 block: SHA-256(system_prompt) for all 3 agents computed and stored
+  at every bridge startup
+- `CONTEXT_HASH_MISMATCH` — 4th INVERSION rule in FleetSignalCoherenceAgent
+- Fires when any of the 3 agents is NOT registered in `agent_context_log`
+- Severity: HIGH; resolution: "Restart bridge and verify Phase 203 startup block executed"
+
+**Status**: CLOSED by Phase 203. AgentContextRegistry + CONTEXT_HASH_MISMATCH INVERSION rule.
+Filed 2026-04-12.
+
+---
+
+## WIF-037 — Separation Ratio Velocity Regression: Convergence Reversal After Irreversible On-Chain Commit (Phase 202)
+
+**Filed**: 2026-04-12 (Phase 202 — TremorRestingConvergenceOracle)
+**Category**: W1 Failure Mode — Ratio regression post-commitment
+
+**Mechanism**: The touchpad_corners corpus demonstrated the exact failure mode: ratio peaked
+at 0.998 (N=29, P1=8/P2=11/P3=10) then declined to 0.728 (N=35) as P3 non-stationarity
+dominated. P3 intra-player variance=1.154 (mean), range=[0.164, 2.024] — P3 is non-stationary;
+intra-mean=0.802 > inter-mean=0.584 → ratio < 1.0 structurally. The tremor_resting probe
+(Phase 199) could exhibit the same pattern: ratio exceeds 1.0 at N=15, triggering IoSwarm
+quorum vote and SeparationRatioRegistry.sol commitment, then falls below 1.0 at N=20 as
+additional sessions reveal player non-stationarity. Once the on-chain SHA-256 commitment
+is written, it is immutable — the blockchain record states "separation confirmed" while
+the actual corpus says "separation failing."
+
+**Implication**: VHP mint authorized on false separation claim. Tournament launches against
+a biometric corpus that does not actually separate the enrolled players. First false
+positive/negative in live tournament exposes the protocol to challenge.
+
+**VAPI Mitigation (Phase 202)**:
+- `tremor_convergence_log` table tracks velocity per session for `tremor_resting` probe type
+- velocity = (ratio_curr - ratio_prev) / N_delta — per-session rate of change
+- `convergence_stable=True` only when velocity ≥ 0 for 2 consecutive sessions
+- `RATIO_VELOCITY_NEGATIVE` — 6th ORPHAN rule in FleetSignalCoherenceAgent
+  Fires when convergence_stable=0 for >4 hours with no recovery (orphan_window_seconds=14400)
+  Severity: HIGH; resolution: "Add more tremor_resting sessions; check P3 intra-player variance"
+- Acts as circuit breaker before any IoSwarm MINT_QUORUM=0.80 vote or on-chain commitment fires
+
+**Status**: CLOSED by Phase 202. TremorRestingConvergenceOracle + RATIO_VELOCITY_NEGATIVE rule.
+Filed 2026-04-12.
+
+---
+
+## WIF-038 — IoSwarm Active but Zero Quorum-Confirmed Adjudications: VHP Mint Permanently Fail-CLOSED (Phase 204)
+
+**Filed**: 2026-04-12 (Autoresearch Cycle 31, score=1.000 — fleet_coherence_critical)
+**Category**: W1 Failure Mode — Fleet-level SEMANTIC CONTRADICTION
+
+**Mechanism**: When `ioswarm_enabled=True` (Phase 200, set in bridge/.env) AND the
+`ruling_streaks` table has zero `consecutive_clean` entries older than 24 hours,
+`IoSwarmVHPMintCoordinator.request_mint()` fails CLOSED on every call because
+`IoSwarmAdjudicationCoordinator` has never produced a quorum-confirmed CERTIFY verdict.
+`MINT_QUORUM=0.80` (Phase 110) requires a CERTIFY verdict from IoSwarmAdjudicationCoordinator —
+but if the adjudicator has never run a quorum-confirmed session, the mint coordinator has
+zero valid entries to draw from, and `ioswarm_adjudication_log.quorum_reached=True` is
+always empty.
+
+**Implication**: Tournament operators see `ioswarm_enabled=True` and assume VHP mint is live.
+The separation ratio breaks through 1.0, the tournament activation chain completes, dry_run
+flips to False — and the first real VHP mint attempt silently fails with MINT_QUORUM=0.80
+not reached. No coherence alert fires. The stall is undetectable from existing FSCA rules
+(7 CONTRADICTION rules have no coverage of this conjunction), agent bus channels, or the
+operator dashboard. `BLOCK_QUORUM=0.67` may be reachable but was never exercised.
+
+**VAPI Mitigation (Phase 204 candidate)**:
+- 8th CONTRADICTION rule: `IOSWARM_ACTIVE_NO_ADJUDICATIONS`
+  Trigger: `ioswarm_adjudication_log` has no rows OR all rows have `quorum_reached=False`
+  AND `time_since_first_row > 86400s` AND `ioswarm_enabled=True`
+  Severity: HIGH. Dormant when `dry_run=True` (expected state; mint not authorized).
+  Resolution: "Run at least 1 live adjudication session to prime IoSwarmAdjudicationCoordinator.
+  Check ioswarm_adjudication_log for quorum_reached=False patterns. Verify BLOCK_QUORUM=0.67
+  is reachable with current emulator seed (Phase 109A 5-node emulator, seed=109/110)."
+- W2: IoSwarm Adjudication Primer — POST /agent/prime-ioswarm-adjudication
+  Replays last N=5 ruling_streaks entries through IoSwarmAdjudicationCoordinator (BLOCK_QUORUM=0.67)
+  in offline emulation mode to produce first quorum_reached=1 row, unblocking VHP mint pathway
+  before the first real tournament. Records in ioswarm_adjudication_log with source="primer".
+  primer_enabled=False default. +8 bridge tests, +4 SDK tests. No Hardhat needed.
+  Exclusive: requires simultaneous ioSwarm emulator (Phase 109A) + SessionAdjudicator streak
+  data (Phase 66) + IoSwarmVHPMintCoordinator (Phase 110) + FleetSignalCoherenceAgent
+  CONTRADICTION monitoring (Phase 193) — a 5-phase stack only VAPI has.
+
+**Status**: OPEN — Phase 204 candidate. Filed 2026-04-12.
+[VAPI:Phase204:autoresearch_cycle31:PROPOSED:score=1.000]
+
+---
+
+**Document Version**: 2.3 (WIF-034..038 filed 2026-04-12; WIF-036/037 CLOSED; WIF-038 Phase 204 candidate)
+**Last Updated**: 2026-04-12
+**W1 Count**: 34 entries (WIF-038 IOSWARM_ACTIVE_NO_ADJUDICATIONS OPEN Phase 204; WIF-037 CLOSED Phase 202; WIF-036 CLOSED Phase 203; WIF-035 CLOSED Phase 196; WIF-034 CLOSED Phase 191)
+**W2 Count**: 25 entries (WIF-038 W2 IoSwarm Adjudication Primer Phase 204 OPEN; WIF-037 W2 convergence oracle CLOSED; WIF-036 W2 agent hash registry CLOSED)
 **W3 Count**: 5 entries
 **Update Method**: Append-only, status updates inline
-**Key Phase 192 Updates**: WIF-032 erasure cert replay (Phase 194 candidate); WIF-033 correlation gate bypass (Phase 194 candidate); CorpusDataCuratorAgent agent #35; score_phase_192_readiness() gate
+**Key Phase 202/203 Updates**: WIF-037 tremor convergence velocity regression CLOSED; WIF-036 agent context drift CLOSED; WIF-038 ioSwarm adjudication gap filed (autoresearch cycle31 score=1.000)
