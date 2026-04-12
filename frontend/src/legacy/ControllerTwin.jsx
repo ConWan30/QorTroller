@@ -1379,7 +1379,7 @@ function AgentIntelPanel({ gate, liveMode, federation, ruling, mode }) {
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
         <span style={{ fontSize: 7, color: CYAN, letterSpacing: '0.14em', fontWeight: 700 }}>
-          AGENT INTELLIGENCE
+          AGENT INTELLIGENCE · 28 ACTIVE
         </span>
         <span style={{ fontSize: 6, color: isDryRun ? ORANGE : GREEN }}>
           {isDryRun ? 'DRY-RUN MODE' : '● LIVE ENFORCE'}
@@ -2241,12 +2241,22 @@ function ControllerTwinPage() {
           <span style={{
             fontFamily: 'JetBrains Mono, monospace', fontSize: 7, color: DIM,
             padding: '4px 8px', borderRadius: 2, border: '1px solid rgba(61,80,96,0.25)',
-          }}>Phase 81</span>
+          }}>Phase 199</span>
           <span style={{
             fontFamily: 'JetBrains Mono, monospace', fontSize: 7, color: GREEN,
             padding: '4px 8px', borderRadius: 2,
             border: `1px solid ${GREEN}40`, background: `${GREEN}07`,
           }}>MPC 3×3 ✓</span>
+          <span style={{
+            fontFamily: 'JetBrains Mono, monospace', fontSize: 7, color: GREEN,
+            padding: '4px 8px', borderRadius: 2,
+            border: `1px solid ${GREEN}40`, background: `${GREEN}07`,
+          }}>ioSwarm ●</span>
+          <span style={{
+            fontFamily: 'JetBrains Mono, monospace', fontSize: 7, color: '#ff9500',
+            padding: '4px 8px', borderRadius: 2,
+            border: '1px solid rgba(255,149,0,0.3)', background: 'rgba(255,149,0,0.05)',
+          }}>sep 0.728 · prototype</span>
           {classJRisk === 'HIGH' && (
             <span style={{
               fontFamily: 'JetBrains Mono, monospace', fontSize: 7, color: RED,
