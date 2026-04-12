@@ -58,7 +58,7 @@ const HARDWARE_METRICS = [
 ];
 
 const CALIBRATION = {
-  sessions: 74,
+  sessions: 217,            // Phase 199: 153 terminal + ~64 hw (N=35 touchpad_corners subset)
   players: 3,
   l4Anomaly: 7.009,
   l4Continuity: 5.367,
@@ -66,7 +66,10 @@ const CALIBRATION = {
   l5Entropy: 1.0,
   l2bCoupled: 0.55,
   l2cMaxCorr: 0.15,
-  separationRatio: 0.362,
+  separationRatio: 0.728,   // Phase 199: touchpad_corners N=35 diagonal+LOO (prototype ceiling)
+  separationRatioN: 35,
+  separationRatioTarget: 1.0,
+  prototypeGateEnabled: true, // ALL_PAIRS_GATE_ENABLED=false in bridge/.env
   humanCVMean: 1.184,
   humanEntropyMean: 2.085,
   // Phase 39/40 additions
@@ -75,6 +78,8 @@ const CALIBRATION = {
   l5CrossCoverage: 0.838,    // 62/74 sessions (N=74 calibrator run)
   rhythmHashDeques: 4,
   l5SourcePersisted: true,
+  // Phase 199: tremor_peak_hz per-player (neurological discriminator)
+  tremorPeakHz: { P1: 9.37, P2: 1.71, P3: 2.85 },
 };
 
 const L5_BUTTON_COVERAGE = [
@@ -109,9 +114,15 @@ const CONTRACT_STACK = [
   { name: "DataSovereigntyReg",    addr: "0xd928d953…", gas: "—",       status: "LIVE" },  // Phase 69
   { name: "VAPIGovernanceTimelock",addr: "0x0a44Ff57…", gas: "—",       status: "LIVE" },  // Phase 70
   { name: "VAPIProtocolLens",      addr: "0x1972bf75…", gas: "—",       status: "LIVE" },  // Phase 70
-  { name: "FederatedThreatReg",    addr: "—",           gas: "—",       status: "PENDING" }, // Phase 80 deploy
+  // Phase 109–199 contracts
+  { name: "AdjudicationRegistry",  addr: "0x44CF981f…", gas: "—",       status: "LIVE" },  // Phase 111
+  { name: "VAPIDualPrimitiveGate", addr: "0xd7b1465A…", gas: "—",       status: "LIVE" },  // Phase 113
+  { name: "VAPISwarmOperatorGate", addr: "0x969c0F1E…", gas: "—",       status: "LIVE" },  // Phase 130
+  { name: "SeparationRatioReg",    addr: "0xB39CeE73…", gas: "—",       status: "LIVE" },  // Phase 153
+  { name: "CeremonyAuditRegistry", addr: "0xb9164E6d…", gas: "—",       status: "LIVE" },  // Phase 179
+  { name: "VHPReenrollmentBadge",  addr: "0x42E7A25d…", gas: "—",       status: "LIVE" },  // Phase 187
   // Core contracts: PoACVerifier, PHGCredential, TournamentGateV3,
-  //   VAPIioIDRegistry, PITLTournamentPassport, PITLSessionRegistryV2 + 8 more = 31 total
+  //   VAPIioIDRegistry, PITLTournamentPassport, PITLSessionRegistryV2 + 8 more = 43 total
 ];
 
 const MODE6_DATA = Array.from({ length: 24 }, (_, i) => ({
@@ -816,7 +827,7 @@ function HardwareMetrics() {
 function ContractStack() {
   return (
     <Panel>
-      <SectionLabel>IoTeX Testnet — 31 Contracts LIVE (Phase 68–70)</SectionLabel>
+      <SectionLabel>IoTeX Testnet — 43 Contracts LIVE (Phase 68–199)</SectionLabel>
       <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
         {CONTRACT_STACK.map((c) => (
           <div key={c.name} style={{
@@ -840,7 +851,7 @@ function ContractStack() {
         ))}
       </div>
       <div style={{ marginTop: 10, fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: "#3d5060" }}>
-        P256 precompile at 0x0100 · IoTeX testnet chain 4690 · Phase 68: RulingRegistry + CeremonyRegistry LIVE · Phase 69: 6 DePIN oracle contracts · Phase 70: Governance + ProtocolLens · isThreatSignaled() tournament gate composable
+        P256 precompile at 0x0100 · IoTeX testnet chain 4690 · Phase 68–70: core 31 contracts · Phase 111–199: +12 contracts (AdjudicationRegistry, VAPIDualPrimitiveGate, VAPISwarmOperatorGate, SeparationRatioRegistry, CeremonyAuditRegistry, VHPReenrollmentBadge + 6 core) · isFullyEligible() tournament gate composable
       </div>
     </Panel>
   );
@@ -1017,7 +1028,7 @@ function PHGCredential({ phgScore }) {
 function OpenItems() {
   const items = [
     { id: "P1", label: "L6 Human Response Baseline",         status: "COMPLETE", priority: "—",      detail: "N=43 captures · per-profile onset_ms/settle_ms thresholds wired (PROFILE_VERSION 2) · l6_threshold_calibrator.py --from-db · Phase 43" },
-    { id: "P2", label: "Inter-Player Separation Improvement", status: "OPEN",     priority: "HIGH",   detail: "requires post-Phase-17 touchpad recapture (hardware + gameplay) · touch_position_variance structurally zero across all N=74 sessions · separation ratio 0.362 · tremor FFT widened (Phase 49) · touchpad recapture is the remaining blocker" },
+    { id: "P2", label: "Inter-Player Separation > 1.0",        status: "OPEN",     priority: "HIGH",   detail: "Phase 199: ratio=0.728 (N=35 touchpad_corners) — P2vP3=0.401 structural ceiling (touchpad_spatial_entropy P2=1.385 vs P3=1.379 gap=0.006). ALL_PAIRS_GATE_ENABLED=false prototype mode active. tremor_resting probe next: 5 sessions/player, 30s still-hold, tremor_peak_hz P1=9.37/P2=1.71/P3=2.85Hz is only strong discriminator. Target >1.0 for production gate." },
     { id: "P3", label: "Full Covariance L4 Fingerprinting",  status: "COMPLETE", priority: "—",      detail: "USE_FULL_COVARIANCE flag · EMA NxN cov matrix · Tikhonov regularization λ=0.01 · synthetic separation ratio 9.85 · Phase 41" },
     { id: "P4", label: "ZK Inference Code Binding",          status: "COMPLETE", priority: "—",      detail: "pub[2]=inferenceCode wired · PITLSessionRegistry.sol::submitPITLProof(inferenceCode) · C2 circuit constraint active · Phase 41" },
     { id: "P5", label: "Pro Bot Adversarial Data",           status: "COMPLETE", priority: "—",      detail: "3 white-box attack classes G/H/I (N=5 each, Phase 48) · H: 100% L4 (grip_asym+stick_autocorr) · G/I: 0% batch, detected live (L4+L2B / L2B) · real hardware bot software (aimbot, ML-driven) still untested" },
@@ -1049,14 +1060,24 @@ function OpenItems() {
     { id: "F5", label: "Federation Broadcast (Phase 80)",     status: "COMPLETE", priority: "—",   detail: "FederationBroadcastAgent: first purely event-driven agent (no polling) · ruling_block_committed bus → HTTP POST peers (<100ms vs 5-min = 150× speedup) · HMAC-SHA256 auth · FederatedThreatRegistry.sol: isThreatSignaled() tournament gate composability · bridge 1247→1256" },
     { id: "F6", label: "Class J ML-Bot Detection (Phase 81)", status: "COMPLETE", priority: "—",   detail: "ClassJDetector: temporal_state_transition_entropy_variance (human >0.15, HMM bot <0.02) · per-device deque N=10 entropy windows · assess() never raises · HIGH → bus publish class_j_high_risk_detected · evidence_summary enriched with ml_bot_candidate=True on HIGH · Tool #50 · bridge 1256→1264" },
     { id: "G0", label: "SessionAdjudicator dry_run=False",    status: "OPEN",     priority: "HIGH", detail: "GATED: requires N≥100 consecutive non-divergent rulings per Phase 75 ValidationAgent gate (GET /agent/validation-gate consecutive_clean tracking) · set AGENT_DRY_RUN=false via POST /agent/config when gate_passed=true" },
-    { id: "G1", label: "Reactive Adjudication (Phase 82 cand)", status: "FUTURE", priority: "MED", detail: "SessionAdjudicator subscribes to class_j_high_risk_detected bus event for immediate out-of-cycle LLM ruling (interrupt-driven) · collapses Class J detection→ruling→enforcement→federation chain from 15+ min to <5s" },
+    { id: "G1", label: "Reactive Adjudication (Ph82+)",       status: "FUTURE",   priority: "MED",  detail: "SessionAdjudicator subscribes to class_j_high_risk_detected bus event for immediate out-of-cycle LLM ruling (interrupt-driven) · collapses Class J detection→ruling→enforcement→federation chain from 15+ min to <5s" },
+    // Phase 82–199 completions
+    { id: "H0", label: "ioSwarm Consensus Layer (Ph109A–131)", status: "COMPLETE", priority: "—",    detail: "IOSWARM_ENABLED=true · emulator mode 5-node seed=109/110 · BLOCK_QUORUM=0.67 MINT_QUORUM=0.80 · VAPISwarmOperatorGate.sol LIVE 0x969c0F1E… · adjudication+renewal+VHP-mint 3 coordinators · Phase 130: live node registry + ioswarm_node_registry table" },
+    { id: "H1", label: "Tournament Preflight v2 (Ph127–199)", status: "COMPLETE", priority: "—",    detail: "10 P0 conditions: separation_ok+l4_ok+gate_ok+cert_ok+audit_ok+dual_gate+epoch+ioswarm+biometric_ttl_ok(Ph196)+all_pairs_p0_ok(Ph197) · commit-activation P0 enforcement · prototype mode bypass (Ph199) · Tools #95 run_tournament_preflight" },
+    { id: "H2", label: "Biometric TTL + Renewal (Ph178–198)", status: "COMPLETE", priority: "—",    detail: "Ph178: biometric_credential_ttl_days=90.0 · Ph180: renewal commitment chain SHA-256(prev+ratio+N+ts) · Ph196: biometric_ttl_ok P0 gate · Ph198: decay scaling effective_ttl=base×(mean_decay/0.50) clamped [0.25×,4.0×]" },
+    { id: "H3", label: "Protocol Maturity Score (Ph177–195)", status: "COMPLETE", priority: "—",    detail: "8-component score (sep 0.18, fresh 0.11, cal 0.12, tsp 0.07, bio_station 0.04, pmi 0.03, dual_gate 0.15, epoch 0.15, coherence penalty) · ALPHA/BETA/PRODUCTION_CANDIDATE tiers · Ph195: PMI=max(0,1-orphan_hours/48) weight=0.03" },
+    { id: "H4", label: "Fleet Coherence + Inversion (Ph193)", status: "COMPLETE", priority: "—",    detail: "FleetSignalCoherenceAgent #36: CONTRADICTION(7)+ORPHAN(5)+INVERSION(3 rules: COMMITMENT_PREDATES_CONSENT, BADGE_WITHOUT_RENEWAL_PARENT, RULING_PREDATES_CALIBRATION) · delta_s classifier: SEMANTIC>3600s/STRUCTURAL 300-3600s/TEMPORAL<=300s · fleet_coherence_enabled=True DEFAULT" },
+    { id: "H5", label: "Biometric Privacy + Renewal (Ph159–187)", status: "COMPLETE", priority: "—", detail: "BP-001 decay TBD(t)=e^(-λt) τ_half=90d · BP-007 evidence scrubbing · AttestationOpSecAdvisor + VHPReenrollmentBadge.sol LIVE 0x42E7A25d… · PersonaBreakDetector LOO centroid drift · ReEnrollmentAttestation HMAC · MaturityElevationGate" },
+    { id: "H6", label: "Tremor Resting Probe (Ph199)",         status: "OPEN",     priority: "HIGH", detail: "tremor_resting in STRUCTURED_PROBE_TYPES · 5 sessions/player × 30s still-hold = 12.5min total · tremor_peak_hz P1=9.37/P2=1.71/P3=2.85Hz (neurologically anchored, not motion-contaminated) · empirical test needed to confirm P2/P3 separation" },
+    { id: "H7", label: "WIF-032 Erasure Certificate Replay",   status: "OPEN",     priority: "MED",  detail: "Erasure certificate replay attack: adversary resubmits proof_of_erasure for a non-erased player · FleetSignalCoherenceAgent does not yet cross-reference consent timestamps with erasure timestamps" },
+    { id: "H8", label: "WIF-033 Correlation Gate Bypass",      status: "OPEN",     priority: "MED",  detail: "Correlation gate bypass via timed bursts: adversary paces inputs to exploit FleetConsensusSnapshot 300s poll gap · no within-window anomaly trigger · Phase 200+ candidate" },
   ];
   const colors  = { OPEN: "#ff9500", PLANNED: "#00d4ff", FUTURE: "#5a6a74", COMPLETE: "#00ff88" };
   const pColors = { HIGH: "#ff2d55", MEDIUM: "#ff9500", LOW: "#5a6a74", "—": "#3d5060" };
 
   return (
     <Panel>
-      <SectionLabel>Open Validation Items — §8.6 / §10.x</SectionLabel>
+      <SectionLabel>Open Validation Items — §8.6 / §10.x · Phase 199 · 36 agents · 149 tools · 43 contracts</SectionLabel>
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         {items.map((item) => (
           <div key={item.id} style={{
@@ -1183,6 +1204,29 @@ const AGENT_TOOLS = [
   "get_validation_gate_status",   "get_ruling_provenance",
   // Phase 79–81 (#48–50)
   "get_live_mode_status",         "get_federation_stats",         "get_class_j_assessment",
+  // Phase 82–99 (#51–74)
+  "get_supervisor_status",        "get_epistemic_consensus",      "get_consensus_threshold",
+  "get_triage_status",            "get_enrollment_guidance",      "get_separation_defensibility",
+  "get_biometric_privacy_status", "get_gsr_hmac_status",          "get_pohbg_status",
+  "get_fleet_snapshot_status",    "get_class_k_validation",       "get_gsrhmc_log",
+  "get_consent_gate_status",      "get_consent_snapshot",         "get_erasure_status",
+  "get_post_erasure_recompute",   "get_mixed_probe_status",       "get_corpus_readiness",
+  "get_entropy_monitor",          "get_feature_correlation",      "get_provenance_dag",
+  "get_erasure_certificate",      "get_session_weights",          "get_federated_quality",
+  // Phase 109–149 (#75–149)
+  "get_ioswarm_consensus",        "get_ioswarm_renewal_status",   "get_ioswarm_adjudication",
+  "get_ioswarm_mint_status",      "get_poad_registry_status",     "get_dual_primitive_status",
+  "get_poad_anchor_status",       "get_epoch_analytics",          "get_epoch_heatmap",
+  "get_epoch_auto_tune",          "get_epoch_override_status",    "revoke_epoch_override",
+  "get_bt_transport_status",      "get_separation_ratio_status",  "get_confidence_multiplier",
+  "get_l4_calibration_status",    "get_l4_threshold_tracks",      "apply_l4_battery_calibration",
+  "get_l4_router_status",         "run_tournament_preflight",     "get_readiness_score",
+  "get_breakthrough_status",      "get_ioswarm_node_registry",    "get_maturity_score",
+  "trigger_renewal_commitment",   "register_ceremony_participant","get_biometric_credential_age",
+  "get_renewal_chain_status",     "get_biometric_ttl_scaling",    "get_all_pairs_p0_status",
+  "get_preflight_status",         "get_pmi_status",               "get_coherence_fingerprint",
+  "get_fleet_coherence_entries",  "resolve_coherence_entry",      "get_protocol_metabolism_index",
+  "get_probe_gate_config",        "get_tremor_resting_status",    "get_enrollment_capture_guidance",
 ];
 
 const CALIB_AGENT_TOOLS = [
@@ -2039,19 +2083,321 @@ function useAgentFleet(enabled) {
   return { gate, liveMode, federation, classJ };
 }
 
+/* ─── PHASE 127–199: PROTOCOL STATUS HOOKS ──────────────────────────────── */
+
+function useProtocolStatus(enabled) {
+  const [preflight,  setPreflight]  = useState(null);
+  const [separation, setSeparation] = useState(null);
+  const [maturity,   setMaturity]   = useState(null);
+  const [ioswarm,    setIoswarm]    = useState(null);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let active = true;
+    const safeFetch = async (url) => {
+      try {
+        const r = await fetch(`${BRIDGE_URL}${url}`, { signal: AbortSignal.timeout(3000) });
+        if (r.ok && active) return r.json();
+      } catch {}
+      return null;
+    };
+
+    async function poll() {
+      const [pf, sep, mat, sw] = await Promise.all([
+        safeFetch("/agent/tournament-preflight-status"),
+        safeFetch("/agent/separation-ratio-status"),
+        safeFetch("/agent/protocol-maturity-score"),
+        safeFetch("/agent/ioswarm-status"),
+      ]);
+      if (active) {
+        if (pf)  setPreflight(pf);
+        if (sep) setSeparation(sep);
+        if (mat) setMaturity(mat);
+        if (sw)  setIoswarm(sw);
+      }
+    }
+
+    poll();
+    const t = setInterval(poll, 20000);
+    return () => { active = false; clearInterval(t); };
+  }, [enabled]);
+
+  return { preflight, separation, maturity, ioswarm };
+}
+
+/* ─── TOURNAMENT PREFLIGHT PANEL (Phase 127–199) ────────────────────────── */
+
+function TournamentPreflightPanel({ preflight }) {
+  if (!preflight) {
+    return (
+      <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: "#3d5060",
+        padding: "14px 18px" }}>
+        TOURNAMENT PREFLIGHT — AWAITING DATA
+      </div>
+    );
+  }
+
+  const overall = preflight.overall_pass;
+  const overallColor = overall ? "#00ff88" : "#ff2d55";
+  const conditions = [
+    { label: "separation_ok (ratio≥0.70)",    pass: preflight.separation_ok },
+    { label: "l4_ok (thresholds fresh)",       pass: preflight.l4_ok },
+    { label: "gate_ok (isFullyEligible)",       pass: preflight.gate_ok },
+    { label: "cert_ok (PHGCredential valid)",   pass: preflight.cert_ok },
+    { label: "audit_ok (MPC ceremony audit)",   pass: preflight.audit_ok },
+    { label: "dual_gate_ok",                    pass: !(preflight.dual_gate_warned) },
+    { label: "epoch_window_ok",                 pass: !(preflight.epoch_window_warned) },
+    { label: "ioswarm_ok",                      pass: !(preflight.ioswarm_warned) },
+    { label: "biometric_ttl_ok (Ph196)",        pass: preflight.biometric_ttl_ok },
+    { label: "all_pairs_p0_ok (Ph197/prototype)", pass: preflight.all_pairs_p0_ok },
+  ];
+
+  return (
+    <div style={{ padding: "8px 0" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+        <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: 20, fontWeight: 700,
+          color: overallColor, letterSpacing: "0.1em",
+          textShadow: `0 0 12px ${overallColor}66` }}>
+          {overall ? "PREFLIGHT PASS" : "PREFLIGHT FAIL"}
+        </div>
+        {preflight.prototype_mode_active && (
+          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7.5, color: "#ff9500",
+            padding: "2px 7px", border: "1px solid rgba(255,149,0,0.3)", borderRadius: 2,
+            background: "rgba(255,149,0,0.06)" }}>
+            PROTOTYPE MODE
+          </div>
+        )}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 16px" }}>
+        {conditions.map((c, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9,
+              color: c.pass === null ? "#3d5060" : c.pass ? "#00ff88" : "#ff2d55", flexShrink: 0 }}>
+              {c.pass === null ? "○" : c.pass ? "☑" : "☒"}
+            </span>
+            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7.5,
+              color: c.pass === null ? "#3d5060" : c.pass ? "#5a6a74" : "#c4cdd6" }}>
+              {c.label}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ─── SEPARATION RATIO STATUS PANEL (Phase 121–199) ─────────────────────── */
+
+function SeparationStatusPanel({ separation }) {
+  const ratio   = separation?.pooled_ratio   ?? CALIBRATION.separationRatio;
+  const target  = separation?.target_ratio   ?? 1.0;
+  const blocker = separation?.tournament_blocker ?? true;
+  const n       = CALIBRATION.separationRatioN;
+  const pct     = Math.min(100, Math.round((ratio / target) * 100));
+  const barColor = ratio >= 1.0 ? "#00ff88" : ratio >= 0.70 ? "#ff9500" : "#ff2d55";
+  const { P1, P2, P3 } = CALIBRATION.tremorPeakHz;
+
+  return (
+    <div style={{ padding: "8px 0" }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 10 }}>
+        <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: 28, fontWeight: 700,
+          color: barColor, lineHeight: 1, letterSpacing: "0.04em",
+          textShadow: `0 0 16px ${barColor}55` }}>
+          {ratio.toFixed(3)}
+        </div>
+        <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: "#3d5060" }}>
+          / {target.toFixed(1)} target · N={n} touchpad_corners
+        </div>
+      </div>
+      <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 2, height: 4, marginBottom: 8 }}>
+        <div style={{ height: "100%", borderRadius: 2, width: `${pct}%`,
+          background: barColor, transition: "width 0.6s ease",
+          boxShadow: `0 0 6px ${barColor}66` }} />
+      </div>
+      <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, color: "#3d5060",
+        marginBottom: 8, lineHeight: 1.6 }}>
+        P2vP3=0.401 (structural ceiling) · ALL_PAIRS_GATE_ENABLED=false (prototype)
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {[["P1", P1, "#ff6b00"], ["P2", P2, "#00d4ff"], ["P3", P3, "#00ff88"]].map(([p, hz, c]) => (
+          <div key={p} style={{ padding: "4px 8px", background: "rgba(255,255,255,0.02)",
+            border: `1px solid ${c}22`, borderRadius: 2 }}>
+            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, color: "#3d5060" }}>{p} tremor</div>
+            <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: 13, fontWeight: 600, color: c }}>{hz} Hz</div>
+          </div>
+        ))}
+        <div style={{ padding: "4px 8px", background: "rgba(255,149,0,0.04)",
+          border: "1px solid rgba(255,149,0,0.2)", borderRadius: 2, alignSelf: "center" }}>
+          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, color: "#3d5060" }}>next step</div>
+          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: "#ff9500" }}>tremor_resting probe</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── PROTOCOL MATURITY PANEL (Phase 191–199) ────────────────────────────── */
+
+function ProtocolMaturityPanel({ maturity }) {
+  if (!maturity) {
+    return (
+      <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: "#3d5060",
+        padding: "14px 18px" }}>
+        PROTOCOL MATURITY SCORE — AWAITING DATA
+      </div>
+    );
+  }
+
+  const score = maturity.maturity_score ?? 0;
+  const tier  = maturity.maturity_tier  ?? "ALPHA";
+  const tierColor = tier === "PRODUCTION_CANDIDATE" ? "#00ff88"
+    : tier === "BETA" ? "#ff9500" : "#ff6b00";
+  const pct = Math.round(score * 100);
+
+  const components = [
+    { label: "Separation",       key: "separation_component" },
+    { label: "Freshness",        key: "l4_freshness_component" },
+    { label: "Calibration",      key: "calibration_component" },
+    { label: "PMI",              key: "pmi_component" },
+    { label: "Threat Forecast",  key: "threat_forecast_accuracy_component" },
+    { label: "Bio Stationarity", key: "biometric_stationarity_component" },
+    { label: "Dual Gate",        key: "dual_gate_component" },
+    { label: "Epoch",            key: "epoch_window_component" },
+    { label: "CoherencePenalty", key: "coherence_penalty" },
+  ];
+
+  return (
+    <div style={{ padding: "8px 0" }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 10 }}>
+        <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: 28, fontWeight: 700,
+          color: tierColor, lineHeight: 1, letterSpacing: "0.04em",
+          textShadow: `0 0 14px ${tierColor}55` }}>
+          {pct}
+          <span style={{ fontSize: 14, fontWeight: 400, color: "#3d5060", marginLeft: 2 }}>/ 100</span>
+        </div>
+        <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: tierColor,
+          padding: "2px 8px", border: `1px solid ${tierColor}33`,
+          background: `${tierColor}0a`, borderRadius: 2 }}>
+          {tier}
+        </div>
+      </div>
+      <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 2, height: 4, marginBottom: 10 }}>
+        <div style={{ height: "100%", borderRadius: 2, width: `${pct}%`,
+          background: `linear-gradient(90deg, #ff6b00, ${tierColor})`,
+          transition: "width 0.6s ease" }} />
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "4px 8px" }}>
+        {components.map(c => {
+          const val = maturity[c.key];
+          if (val === undefined) return null;
+          const v = Math.round((val ?? 0) * 100);
+          const cc = v >= 70 ? "#00ff88" : v >= 40 ? "#ff9500" : "#ff2d55";
+          return (
+            <div key={c.key} style={{ display: "flex", justifyContent: "space-between",
+              padding: "2px 0", borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, color: "#3d5060" }}>
+                {c.label}
+              </span>
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7.5, color: cc }}>
+                {v}%
+              </span>
+            </div>
+          );
+        }).filter(Boolean)}
+      </div>
+    </div>
+  );
+}
+
+/* ─── IOSWARM STATUS PANEL (Phase 109A–199) ──────────────────────────────── */
+
+function IoSwarmStatusPanel({ ioswarm }) {
+  const enabled     = ioswarm?.ioswarm_enabled ?? false;
+  const emulator    = ioswarm?.emulator_mode   ?? true;
+  const blockQuorum = 0.67;
+  const mintQuorum  = 0.80;
+  const nodeCount   = ioswarm?.active_node_count ?? 5;
+
+  return (
+    <div style={{ padding: "8px 0" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6,
+          padding: "4px 12px",
+          border: enabled ? "1px solid rgba(0,255,136,0.3)" : "1px solid rgba(61,80,96,0.4)",
+          borderRadius: 2, background: enabled ? "rgba(0,255,136,0.06)" : "transparent" }}>
+          <span style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0,
+            background: enabled ? "#00ff88" : "#3d5060",
+            boxShadow: enabled ? "0 0 6px #00ff8888" : "none" }} />
+          <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9,
+            color: enabled ? "#00ff88" : "#3d5060" }}>
+            ioSwarm {enabled ? "ACTIVE" : "OFFLINE"}
+          </span>
+        </div>
+        {emulator && (
+          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7.5, color: "#ff9500",
+            padding: "2px 7px", border: "1px solid rgba(255,149,0,0.3)", borderRadius: 2 }}>
+            EMULATOR MODE · {nodeCount} nodes
+          </div>
+        )}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+        {[
+          { label: "BLOCK_QUORUM", value: `${(blockQuorum*100).toFixed(0)}%`, color: "#ff6b00" },
+          { label: "MINT_QUORUM",  value: `${(mintQuorum*100).toFixed(0)}%`,  color: "#ff9500" },
+          { label: "CONTRACT",     value: "0x969c0F…", color: "#00d4ff" },
+        ].map(s => (
+          <div key={s.label} style={{ padding: "8px 10px", background: "rgba(255,255,255,0.02)",
+            border: `1px solid ${s.color}22`, borderRadius: 2 }}>
+            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, color: "#3d5060", marginBottom: 2 }}>
+              {s.label}
+            </div>
+            <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, color: s.color, fontWeight: 700 }}>
+              {s.value}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, color: "#3d5060",
+        marginTop: 8, lineHeight: 1.6 }}>
+        VAPISwarmOperatorGate.sol LIVE 0x969c0F1EFb28504a95Acf14331A59FBCb2944F98 · Phase 130
+        {emulator ? " · no live nodes registered; using 5-node seed=109/110 emulator" : ""}
+      </div>
+    </div>
+  );
+}
+
 /* ─── AGENT FLEET PANEL ───────────────────────────────────────────────────── */
 
 function AgentFleetPanel({ gate, liveMode, federation }) {
   const agents = [
-    { id: "SessionAdjudicator",       phase: 65, role: "LLM ruling (dry_run)", active: true,  color: "#ff9500" },
-    { id: "RulingEnforcementAgent",   phase: 66, role: "streak→on-chain BLOCK", active: true, color: "#ff6b00" },
-    { id: "DataCuratorAgent",         phase: 69, role: "DePIN eligibility poll", active: true, color: "#00d4ff" },
-    { id: "RulingProvenanceAnchor",   phase: 76, role: "SHA-256 cognitive audit", active: true, color: "#00d4ff" },
-    { id: "SessionAdjudicatorValid.", phase: 75, role: "LLM vs rule cross-valid", active: true, color: "#00ff88" },
-    { id: "CeremonyWatchdogAgent",    phase: 75, role: "MPC key fingerprint poll", active: true, color: "#00d4ff" },
-    { id: "LiveModeActivationAgent",  phase: 79, role: "5-condition live-mode gate", active: true, color: "#ff9500" },
-    { id: "FederationBroadcastAgent", phase: 80, role: "event-driven BLOCK broadcast", active: true, color: "#00ff88" },
-    { id: "ClassJDetector",           phase: 81, role: "GaussHMM entropy variance", active: true, color: "#ff6b00" },
+    { id: "SessionAdjudicator",       phase: 65,  role: "LLM ruling (dry_run)",           color: "#ff9500" },
+    { id: "RulingEnforcementAgent",   phase: 66,  role: "streak→on-chain BLOCK",           color: "#ff6b00" },
+    { id: "DataCuratorAgent",         phase: 69,  role: "DePIN eligibility poll",          color: "#00d4ff" },
+    { id: "SessionAdjudicatorValid.", phase: 75,  role: "LLM vs rule cross-valid",         color: "#00ff88" },
+    { id: "CeremonyWatchdogAgent",    phase: 75,  role: "MPC key fingerprint poll",        color: "#00d4ff" },
+    { id: "RulingProvenanceAnchor",   phase: 76,  role: "SHA-256 cognitive audit",         color: "#00d4ff" },
+    { id: "LiveModeActivationAgent",  phase: 79,  role: "5-condition live-mode gate",      color: "#ff9500" },
+    { id: "FederationBroadcastAgent", phase: 80,  role: "event-driven BLOCK broadcast",    color: "#00ff88" },
+    { id: "ClassJDetector",           phase: 81,  role: "GaussHMM entropy variance",       color: "#ff6b00" },
+    { id: "EpistemicConsensus",       phase: 98,  role: "threshold=0.65 gatekeeper",       color: "#ff6b00" },
+    { id: "SeparationMonitorAgent",   phase: 129, role: "breakthrough 2-consecutive guard", color: "#00d4ff" },
+    { id: "BT Transport (foundation)",phase: 120, role: "BLE 250Hz transport layer",       color: "#3d5060" },
+    { id: "CaptureStagnationMonitor", phase: 154, role: "sessions/day rolling 7d window",  color: "#ff9500" },
+    { id: "ControllerHWIntelAgent",   phase: 155, role: "Attested/Standard tier routing",  color: "#00ff88" },
+    { id: "EnrollmentAutoGuidance",   phase: 156, role: "per-probe gap guidance 1h poll",  color: "#ff6b00" },
+    { id: "FleetConsensusSnapshot",   phase: 157, role: "PoFC hash + cov stability",       color: "#00d4ff" },
+    { id: "BiometricPrivacyCompl.",   phase: 159, role: "BP-001 decay λ=ln(2)/90",         color: "#00ff88" },
+    { id: "PersonaBreakDetector",     phase: 182, role: "LOO centroid drift detection",    color: "#ff9500" },
+    { id: "MaturityElevationGate",    phase: 183, role: "elevation plan gating",           color: "#ff6b00" },
+    { id: "ReEnrollmentAttestation",  phase: 185, role: "HMAC token on persona break",     color: "#00d4ff" },
+    { id: "AttestationBoundRenewal",  phase: 186, role: "validates attestation at renewal",color: "#00ff88" },
+    { id: "AttestationOpSecAdvisor",  phase: 187, role: "mempool opsec advisory",          color: "#3d5060" },
+    { id: "BiometricStationarityOracle",phase: 188,"role": "drift cause classifier",       color: "#ff9500" },
+    { id: "ProtocolIntelRecord",      phase: 189, role: "PIR chain hash sequence",         color: "#ff6b00" },
+    { id: "LivePresenceSignaling",    phase: 190, role: "LED+haptic vocab 8 signals",      color: "#3d5060" },
+    { id: "ProtocolMaturityScoring",  phase: 191, role: "8-component maturity 0.0–1.0",   color: "#00ff88" },
+    { id: "CorpusDataCurator",        phase: 192, role: "7-task data coherence layer",     color: "#00d4ff" },
+    { id: "FleetSignalCoherence",     phase: 193, role: "CONTRADICTION+ORPHAN+INVERSION",  color: "#ff6b00" },
   ];
 
   const validGate = gate?.gate_passed;
@@ -2064,7 +2410,7 @@ function AgentFleetPanel({ gate, liveMode, federation }) {
 
   return (
     <Panel>
-      <SectionLabel>Agent Fleet — 9 Agents Active · Phase 65–81</SectionLabel>
+      <SectionLabel>Agent Fleet — 28 Agents Active · Phase 65–193 · ioSwarm ACTIVE (emulator)</SectionLabel>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6, marginBottom: 14 }}>
         {agents.map((a) => (
           <div key={a.id} style={{
@@ -2598,11 +2944,11 @@ function TournamentGateCard({ records, snapshot }) {
           border: "1px solid rgba(255,107,0,0.2)", borderRadius: 3,
           background: "rgba(255,107,0,0.04)",
         }}>
-          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, color: "#ff6b00", letterSpacing: "0.06em" }}>
-            ⚠ SEPARATION RATIO 0.362 — OPEN GAP
+          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 7, color: "#ff9500", letterSpacing: "0.06em" }}>
+            SEPARATION RATIO 0.728 (N=35 touchpad_corners) — PROTOTYPE MODE ACTIVE
           </div>
           <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 6.5, color: "#3d5060", marginTop: 2, lineHeight: 1.5 }}>
-            L4 is intra-player only. Biometric transplant: 0% detection. §8.6 whitepaper.
+            ALL_PAIRS_GATE_ENABLED=false · min_sep_ratio=0.70 · passes separation_ok. P2vP3=0.401 structural ceiling — tremor_resting probe next step. Target &gt;1.0 for production.
           </div>
         </div>
       </div>
@@ -2626,13 +2972,16 @@ export default function VAPIDashboard() {
   const protocolReport = useProtocolIntelligence(mode === "LIVE");
   const triageEscalated = protocolReport?.triage_escalated_count ?? 0;
 
+  // Phase 127–199: Tournament preflight, separation, maturity, ioSwarm
+  const { preflight, separation, maturity, ioswarm } = useProtocolStatus(mode === "LIVE");
+
   // Phase 68+ protocol constants — hardcoded, not pulled from bridge snapshot.
   // snapshot.session.* returns internal bridge runtime counters, not these values.
   const phase50Stats   = snapshot?.phase50 ?? null;
 
-  const sessionCount  = useCounter(74,   1500);   // N=74 calibration corpus (3 players, DualShock Edge)
-  const testCount     = useCounter(1728, 1800);   // bridge 1264 + SDK 63 + Hardhat 404 + hw 28 + E2E 14
-  const contractCount = useCounter(31,   1200);   // ALL 31 contracts LIVE on IoTeX testnet
+  const sessionCount  = useCounter(217,  1500);   // Phase 199: 153 terminal + ~64 hw sessions (N=35 touchpad_corners)
+  const testCount     = useCounter(3089, 1800);   // Phase 199: Bridge 2192 + SDK 418 + Hardhat 482 + hw 37 + E2E 14 (16 pre-existing SDK failures excluded from CI)
+  const contractCount = useCounter(43,   1200);   // Phase 199: ALL 43 contracts LIVE on IoTeX testnet
 
   const l6Status      = snapshot ? (snapshot.l6?.enabled ? "ACTIVE" : "DISABLED") : undefined;
   // L2C dead-zone: derive from most recent WS record (true in NCAA CFB 26, 68/69 sessions).
@@ -2704,7 +3053,7 @@ export default function VAPIDashboard() {
               </span>
             </div>
             <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: "#3d5060", marginTop: 3, letterSpacing: "0.1em" }}>
-              Cryptographic Anti-Cheat Protocol · DualShock Edge CFI-ZCP1 · IoTeX L1 · Whitepaper v3 (Phase 81)
+              Cryptographic Anti-Cheat Protocol · DualShock Edge CFI-ZCP1 · IoTeX L1 · Whitepaper v3 (Phase 199)
             </div>
           </div>
           <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
@@ -2712,6 +3061,8 @@ export default function VAPIDashboard() {
               ["SESSIONS",  sessionCount,  "#ff6b00"],
               ["TESTS",     testCount,     "#00d4ff"],
               ["CONTRACTS", contractCount, "#00ff88"],
+              ["AGENTS",    28,            "#ff9500"],
+              ["TOOLS",     149,           "#c4cdd6"],
             ].map(([label, val, color]) => (
               <div key={label} style={{ textAlign: "center" }}>
                 <div style={{ fontFamily: "'Rajdhani', sans-serif", fontSize: 22, fontWeight: 700, color, lineHeight: 1 }}>{val.toLocaleString()}</div>
@@ -2809,14 +3160,33 @@ export default function VAPIDashboard() {
                 </span>
               </div>
             )}
-            {mode === "LIVE" && snapshot?.hardware?.controller_connected && latestDeviceId && (
+            {snapshot?.hardware?.controller_connected && latestDeviceId ? (
               <a href={`/controller-twin.html?device=${latestDeviceId}`}
                  target="_blank" rel="noopener noreferrer"
-                 style={{ display: "inline-flex", alignItems: "center", gap: 4,
-                          padding: "3px 10px", border: `1px solid rgba(255,107,0,0.4)`,
-                          borderRadius: 2, background: `rgba(255,107,0,0.07)`, cursor: "pointer",
-                          fontFamily: "'JetBrains Mono', monospace", fontSize: 8,
-                          color: "#ff6b00", textDecoration: "none", letterSpacing: "0.1em" }}>
+                 style={{ display: "inline-flex", alignItems: "center", gap: 6,
+                          padding: "6px 14px",
+                          border: "1px solid rgba(255,107,0,0.5)",
+                          borderRadius: 2,
+                          background: "linear-gradient(135deg, rgba(255,107,0,0.12), rgba(255,107,0,0.04))",
+                          cursor: "pointer",
+                          fontFamily: "'JetBrains Mono', monospace", fontSize: 9,
+                          color: "#ff6b00", textDecoration: "none", letterSpacing: "0.12em",
+                          boxShadow: "0 0 10px rgba(255,107,0,0.15)",
+                          transition: "all 0.2s",
+                 }}>
+                <span style={{ fontSize: 12 }}>⬡</span>
+                MY CONTROLLER ↗
+              </a>
+            ) : (
+              <a href="/controller-twin.html"
+                 target="_blank" rel="noopener noreferrer"
+                 style={{ display: "inline-flex", alignItems: "center", gap: 6,
+                          padding: "6px 14px",
+                          border: "1px solid rgba(61,80,96,0.5)",
+                          borderRadius: 2, background: "rgba(61,80,96,0.06)", cursor: "pointer",
+                          fontFamily: "'JetBrains Mono', monospace", fontSize: 9,
+                          color: "#3d5060", textDecoration: "none", letterSpacing: "0.12em" }}>
+                <span style={{ fontSize: 12 }}>⬡</span>
                 MY CONTROLLER ↗
               </a>
             )}
@@ -2840,7 +3210,7 @@ export default function VAPIDashboard() {
         <div style={{ padding: "14px 32px 32px", display: "flex", flexDirection: "column" }}>
 
           {mode === "LIVE" && (
-            <AccordionPanel title="AGENT FLEET & ENFORCEMENT" icon="◉" accentColor="#ff6b00" defaultOpen={true} badge="9 AGENTS">
+            <AccordionPanel title="AGENT FLEET & ENFORCEMENT" icon="◉" accentColor="#ff6b00" defaultOpen={true} badge="28 AGENTS · 149 TOOLS">
               <div style={{ display: "flex", flexDirection: "column", gap: 14, padding: "12px 16px" }}>
                 <AgentFleetPanel gate={gate} liveMode={liveMode} federation={federation} />
               </div>
@@ -2859,6 +3229,55 @@ export default function VAPIDashboard() {
               </div>
             </AccordionPanel>
           )}
+
+          {mode === "LIVE" && (
+            <AccordionPanel
+              title="TOURNAMENT PREFLIGHT"
+              icon="◆"
+              accentColor={preflight?.overall_pass ? "#00ff88" : "#ff2d55"}
+              badge={preflight ? (preflight.overall_pass ? "PASS" : "FAIL") : "AWAITING"}
+              defaultOpen={true}
+            >
+              <div style={{ padding: "12px 16px" }}>
+                <TournamentPreflightPanel preflight={preflight} />
+              </div>
+            </AccordionPanel>
+          )}
+
+          <AccordionPanel
+            title="SEPARATION RATIO · TREMOR ANALYSIS"
+            icon="◉"
+            accentColor="#ff9500"
+            badge={`${CALIBRATION.separationRatio.toFixed(3)} N=${CALIBRATION.separationRatioN}`}
+          >
+            <div style={{ padding: "12px 16px" }}>
+              <SeparationStatusPanel separation={separation} />
+            </div>
+          </AccordionPanel>
+
+          {mode === "LIVE" && (
+            <AccordionPanel
+              title="PROTOCOL MATURITY SCORE"
+              icon="◉"
+              accentColor="#00d4ff"
+              badge={maturity ? `${Math.round((maturity.maturity_score ?? 0) * 100)}/100 ${maturity.maturity_tier ?? "ALPHA"}` : "—"}
+            >
+              <div style={{ padding: "12px 16px" }}>
+                <ProtocolMaturityPanel maturity={maturity} />
+              </div>
+            </AccordionPanel>
+          )}
+
+          <AccordionPanel
+            title="ioSWARM · CONSENSUS LAYER"
+            icon="◈"
+            accentColor={ioswarm?.ioswarm_enabled ? "#00ff88" : "#3d5060"}
+            badge={ioswarm?.ioswarm_enabled ? "ACTIVE · EMULATOR" : (mode === "LIVE" ? "ACTIVE · EMULATOR" : "ENABLED")}
+          >
+            <div style={{ padding: "12px 16px" }}>
+              <IoSwarmStatusPanel ioswarm={ioswarm} />
+            </div>
+          </AccordionPanel>
 
           {mode === "LIVE" && (
             <AccordionPanel title="AGENT INTELLIGENCE" icon="◉" accentColor="#ff9500">
@@ -2890,7 +3309,7 @@ export default function VAPIDashboard() {
             </div>
           </AccordionPanel>
 
-          <AccordionPanel title="CALIBRATION STATE" icon="◉" accentColor="#ff9500" badge="⚠ ratio 0.362">
+          <AccordionPanel title="CALIBRATION STATE" icon="◉" accentColor="#ff9500" badge="ratio 0.728 · prototype mode">
             <div style={{ display: "flex", flexDirection: "column", gap: 14, padding: "12px 16px" }}>
               <LivingCalibration chartData={calibData} />
               <HardwareMetrics />
@@ -2928,10 +3347,10 @@ export default function VAPIDashboard() {
           display: "flex", justifyContent: "space-between", alignItems: "center",
         }}>
           <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: "#3d5060" }}>
-            VAPI Protocol Dashboard · Whitepaper v3 · Phase 81 · IoTeX Testnet · 31 Contracts LIVE
+            VAPI Protocol Dashboard · Whitepaper v3 · Phase 199 · IoTeX Testnet · 43 Contracts LIVE
           </span>
           <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 8, color: "#3d5060" }}>
-            228B PoAC wire format FROZEN · 9-layer PITL · Groth16 BN254 · MPC Ceremony LIVE · ~1,728 tests
+            228B PoAC wire format FROZEN · 9-layer PITL · Groth16 BN254 · MPC Ceremony LIVE · ~3,089 tests · 36 agents · 149 tools
           </span>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{

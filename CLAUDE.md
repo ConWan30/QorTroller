@@ -13,12 +13,13 @@ per cognition cycle, anchored on IoTeX L1. The certified device is a DualShock E
 
 ~270 files, ~3,089 automated tests total (~3,038 CI excluding 37 hardware, 14 E2E).
 Bridge: 2192 passing. Contract: 482. SDK: 418. Hardware: 37. E2E: 14.
-NOTE: 10 pre-existing env-config failures (Config reads .env file which enables infrastructure-first=False flags; empirical pass count=2100+; official count=2128 per phase additions).
+NOTE: 16 pre-existing SDK version-check failures. Bridge empirical pass count ~2128 (10 env-config sensitive tests may see IOSWARM_ENABLED=true via bridge/.env; ioSwarm activated Phase 200).
+NOTE: T199-8 (all_pairs_gate_enabled default=True) fixed to use os.environ.pop isolation from bridge/.env.
 43 contracts ALL LIVE on testnet (0 deferred; 4 previously-deferred contracts deployed 2026-04-10). AdjudicationRegistry: 0x44CF981f46a52ADE56476Ce894255954a7776fb4 (Phase 111, LIVE 2026-03-27). VAPIDualPrimitiveGate: 0xd7b1465Aad8F815C67b24681c9c022CED24FB876 (Phase 113, LIVE 2026-03-27). VAPISwarmOperatorGate: 0x969c0F1EFb28504a95Acf14331A59FBCb2944F98 (Phase 130, LIVE 2026-04-10). CeremonyAuditRegistry: 0xb9164E6d74Dde1508df2a39b01d3702ACC8230C2 (Phase 179, LIVE 2026-04-10). SeparationRatioRegistry: 0xB39CeE732cf91c93539Bd064D9426642a095a026 (Phase 153, LIVE 2026-04-10). VHPReenrollmentBadge: 0x42E7A25d0E5667BBae45e5cF33a6e2CC6E42d45C (Phase 187, LIVE 2026-04-10). See `contracts/deployed-addresses.json`.
 Active wallet (bridge + deployer): `0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692` (~10.4 IOTX as of 2026-04-11; funded after Phase 198 completion; all 4 deferred contracts live)
 Previous bridge wallet (no longer accessible): `0xfCF4681e57C8de9650c3Eb4dA8e26dC9441A5EF1` (deployed original 14 contracts — addresses unchanged, still valid on-chain)
 Chain ID: 4690 (IoTeX Testnet)
-Current phase: Phase 199 — COMPLETE (Prototype Separation Gate Configurability + Tremor Resting Probe — all_pairs_gate_enabled:bool=True config (False=prototype mode, bypasses per-pair P0 gate); tremor_resting added to STRUCTURED_PROBE_TYPES; GET /agent/probe-gate-config-status + GET /agent/tremor-resting-probe-status endpoints; ProbeGateConfigResult+VAPIProbeGateConfig + TremorRestingProbeResult+VAPITremorRestingProbe SDK; openapi ProbeGateConfigStatus+TremorRestingProbeStatus schemas; 8 bridge + 4 SDK tests; Bridge 2184→2192 +8; SDK 414→418 +4; Hardhat 482 unchanged; Tools 149 unchanged)
+Current phase: Phase 200 — COMPLETE (ioSwarm Activation + Frontend Alignment Phase 199 — all_pairs_gate_enabled:bool=True config (False=prototype mode, bypasses per-pair P0 gate); tremor_resting added to STRUCTURED_PROBE_TYPES; GET /agent/probe-gate-config-status + GET /agent/tremor-resting-probe-status endpoints; ProbeGateConfigResult+VAPIProbeGateConfig + TremorRestingProbeResult+VAPITremorRestingProbe SDK; openapi ProbeGateConfigStatus+TremorRestingProbeStatus schemas; 8 bridge + 4 SDK tests; Bridge 2184→2192 +8; SDK 414→418 +4; Hardhat 482 unchanged; Tools 149 unchanged)
 Phase 198 — COMPLETE (Biometric TTL Decay Scaling — effective_ttl = base_ttl × (mean_decay_factor / 0.50), clamped [base×0.25, base×4.0]; biometric_ttl_decay_scaling_enabled=False default; get_effective_biometric_ttl(base_ttl_days, scaling_enabled) store method; GET /agent/biometric-ttl-scaling-status endpoint; BiometricTTLScalingResult @dataclass(slots=True) 6 slots + VAPIBiometricTTLScaling SDK; openapi BiometricTTLScalingStatus schema; 8 bridge + 4 SDK tests; Bridge 2176→2184 +8; SDK 410→414 +4; Hardhat 482 unchanged; Tools 149 unchanged)
 Phase 197 — COMPLETE (Per-Pair Separation P0 Gate — all_pairs_p0_ok 10th P0 condition in tournament preflight; reads all_pairs_above_1 from separation_defensibility_log; fail-closed default=False; biometric_ttl_ok AND all_pairs_p0_ok both required for overall_pass; commit-activation extended: per_pair_separation_below_1.0 blocker; TournamentPreflightResult +all_pairs_p0_ok slot; 8 bridge + 4 SDK tests; Bridge 2168→2176 +8; SDK 406→410 +4; Hardhat 482 unchanged)
 Phase 196 — COMPLETE (Tournament Preflight v2 WIF-035 W1 closure — biometric_ttl_ok 9th P0 condition; (not ttl_expired) AND len(renewal_chain)>0; idempotent ALTER TABLE tournament_preflight_log ADD COLUMN biometric_ttl_ok; insert_tournament_preflight_log() + get_tournament_preflight_status() updated; TournamentPreflightResult +biometric_ttl_ok slot(default=True); commit-activation extended: biometric_ttl_expired_or_no_renewal_chain blocker; 8 bridge + 4 SDK tests; Bridge 2160→2168 +8; SDK 402→406 +4; Hardhat 482 unchanged)
@@ -335,7 +336,7 @@ Micro-tremor variance: 278,239 LSB².
 
 ## ioSwarm Integration (Phase 109A+)
 - Phase 109A: infrastructure COMPLETE — task spec + consensus aggregator + W3bstream bindings
-- ioswarm_enabled=false (default until live ioSwarm operator nodes registered)
+- ioswarm_enabled=true (Phase 200: set in bridge/.env; emulator mode, no live nodes)
 - Phase 109B: VHPRenewalAgent first task spec migration
 - Phase 110: VHP as ioSwarm physical action authorization gate (IoTeX DePIN)
 - scripts/vapi-swarm-agent.json: ioSwarm task spec (infrastructure only, not yet registered)
@@ -406,6 +407,7 @@ After Phase 70 completes, next phases in priority order. User decision required 
 - conftest.py: autouse event loop fixture prevents Python 3.13 asyncio teardown crash
 - Batch analysis: always use max_frames=0 — default 30k limit misses presses in 180s sessions
 - Phase 199 prototype mode: set ALL_PAIRS_GATE_ENABLED=false in bridge/.env to bypass per-pair P0 gate; ratio=0.728 already passes separation_ok (>= min_separation_ratio=0.70 Phase 166 default)
+- Phase 200: IOSWARM_ENABLED=true in bridge/.env; emulator mode (5-node seed=109/110); VAPISwarmOperatorGate.sol LIVE 0x969c0F1E. Test T199-8 isolated via os.environ.pop to prevent bridge/.env contamination.
 - tremor_resting probe: 30s still-hold session; valid STRUCTURED_PROBE_TYPE (Phase 199); primary discriminator tremor_peak_hz (P1 ~9.37Hz, P2 ~1.71Hz, P3 ~2.85Hz)
 - SDK naming: Phase 199 ProbeGateConfigResult/VAPIProbeGateConfig + TremorRestingProbeResult/VAPITremorRestingProbe — distinct from all prior Phase 182/183 names
 - Batch analysis: always use max_frames=0 — default 30k limit misses presses in 180s sessions

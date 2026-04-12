@@ -177,8 +177,21 @@ def test_t199_7_invalid_session_type_still_blocked():
 # ---------------------------------------------------------------------------
 
 def test_t199_8_all_pairs_gate_enabled_default_true():
-    """all_pairs_gate_enabled must default to True (production mode — fail-closed)."""
+    """all_pairs_gate_enabled must default to True (production mode — fail-closed).
+    Isolated from bridge/.env via explicit env-var override so prototype .env file
+    (ALL_PAIRS_GATE_ENABLED=false) does not contaminate the production-default assertion.
+    """
+    import os
     from vapi_bridge.config import Config
-    cfg = Config()
-    assert cfg.all_pairs_gate_enabled is True
-    assert cfg.tremor_resting_probe_enabled is False
+    # Temporarily unset the env var to verify the hard-coded default is True (fail-closed).
+    prev = os.environ.pop("ALL_PAIRS_GATE_ENABLED", None)
+    try:
+        cfg = Config()
+        assert cfg.all_pairs_gate_enabled is True, (
+            "Production default must be True (fail-closed). "
+            "Set ALL_PAIRS_GATE_ENABLED=false in bridge/.env for prototype mode."
+        )
+        assert cfg.tremor_resting_probe_enabled is False
+    finally:
+        if prev is not None:
+            os.environ["ALL_PAIRS_GATE_ENABLED"] = prev
