@@ -294,6 +294,17 @@ class DataCuratorAgent:
     ) -> None:
         """Publish HumanityOracle, RulingOracle, PassportOracle on IoTeX."""
 
+        # Skip all oracle publishes when no signing key is available (dry_run mode).
+        # The three oracle methods all require on-chain writes — without a key they
+        # will each throw RuntimeError and produce WARNING spam per device per cycle.
+        if getattr(self._chain, "_account", None) is None:
+            log.debug(
+                "DataCuratorAgent: oracle publishes skipped for %s — "
+                "no signing key (BRIDGE_PRIVATE_KEY not set, dry_run mode)",
+                device_id[:16],
+            )
+            return
+
         # HumanityOracle
         try:
             await self._publish_humanity_oracle(device_id, records)
