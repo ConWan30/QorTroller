@@ -1,10 +1,28 @@
 
-VAPI-AutoResearch Improvement Cycle #2
+VAPI-AutoResearch Improvement Cycle #31
 ================================================
 Priority this cycle: fleet_coherence_critical
 
 PROGRAM DIRECTIVES (from program.md):
-No program.md found. Using default priorities....
+# VAPI-AutoResearch Program
+# Living strategy document — Phase 193 edition (updated 2026-04-11)
+
+## Mission
+
+Continuously evolve the /vapi orchestration skill into the most reliable,
+anticipatory expert system for the VAPI protocol. Every improvement cycle
+makes the skill better at: preventing regressions, closing known gaps,
+generating novel WHAT_IF hypotheses, and anticipating Phase 193–200 needs
+before they are explicitly requested.
+
+## Ground Truth (never modify — read from MEMORY.md)
+
+The eval harness validates every proposed change against:
+
+1. Protocol integrity (20 invariants in skill.md)
+2. Tournament readiness advancement (4 conditions, all must pass simultaneously)
+3. Known gap closure (separation 0.998 → ≥1.0 gate / ≥1.5 anchored target; BT 0→50; Class K)
+4. Phase 193–200 coher...
 
 KNOWN GAPS (ground truth):
   separation_ratio: 0.362 → 1.0 [BLOCKER]
@@ -13,9 +31,9 @@ KNOWN GAPS (ground truth):
   dry_run: True → False (after N>=100 adjudications) [BLOCKED]
   vhp_quorum: single operator → ioSwarm quorum [Phase 110 target]
 
-RECENT EXPERIMENT HISTORY (1 total experiments):
-Last 3 priorities addressed: ['?']
-Last 3 scores: [0.838]
+RECENT EXPERIMENT HISTORY (30 total experiments):
+Last 3 priorities addressed: ['bt_calibration_threshold_separation', '?', 'tremor_convergence_velocity + class_k_definition']
+Last 3 scores: [0.94, 0.762, 1.0]
 
 CURRENT SKILL.MD LENGTH: 60356 characters
 
