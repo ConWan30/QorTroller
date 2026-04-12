@@ -2927,6 +2927,7 @@ class BridgeAgent:
         self._behavioral_arch = behavioral_arch
         self._network_detector = network_detector
         self._sessions: dict[str, list[dict]] = {}
+        from .tools.vapi_core_tools import VAPI_CORE_TOOLS; from .tool_registry import ToolRegistry as _TR; _TR.instance().is_registered(1) or _TR.instance().register_tool_range(VAPI_CORE_TOOLS)  # VAPI-EXT: register all 149 VAPI_CORE tools at startup
 
     # ------------------------------------------------------------------
     # Session persistence helpers (Phase 31)

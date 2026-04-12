@@ -1204,6 +1204,16 @@ class Config:
     calls AgentContextRegistry.anchor() for each of the 3 LLM agents, providing an
     immutable tournament audit trail for the exact AI instructions behind any ruling."""
 
+    # --- Phase 204: IoSwarm Adjudication Primer ---
+    ioswarm_adjudication_primer_enabled: bool = field(
+        default_factory=lambda: _env_bool("IOSWARM_ADJUDICATION_PRIMER_ENABLED", False)
+    )
+    """Phase 204 — WIF-038 W2 closure.  Enable POST /agent/prime-ioswarm-adjudication.
+    When True, the primer endpoint replays synthetic device sessions through
+    IoSwarmAdjudicationCoordinator in emulator mode, seeding ioswarm_adjudication_log
+    and unblocking the IOSWARM_ACTIVE_NO_ADJUDICATIONS CONTRADICTION rule.
+    Default False (infrastructure-first; requires explicit activation)."""
+
     # --- Phase 154: Capture Stagnation Monitor ---
     capture_stagnation_threshold: float = field(
         default_factory=lambda: float(_env("CAPTURE_STAGNATION_THRESHOLD", "0.5"))
