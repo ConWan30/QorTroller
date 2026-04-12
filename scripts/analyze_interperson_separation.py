@@ -392,7 +392,8 @@ _TERMINAL_CAL_ONLY_TYPES = frozenset({
     "natural_grip",
     "spectral_accel",
     "stick_sweeps",
-    "tremor_seed",  # Phase 139+ warmup: right-thumb-on-stick before touchpad phases
+    "tremor_seed",     # Phase 139+ warmup: right-thumb-on-stick before touchpad phases
+    "tremor_resting",  # Phase 199: 30s still-hold; primary tremor_peak_hz discriminator
     "mixed_biometric_probe",  # Phase 166: 2-min multi-feature probe activating all 13 features
 })
 
@@ -429,6 +430,10 @@ def _detect_session_type(session_name: str) -> str:
         return "resting_baseline"
     if stem.startswith("mixed_biometric_probe"):
         return "mixed_biometric_probe"
+    if stem.startswith("tremor_seed"):
+        return "tremor_seed"   # Phase 202: 30s still-hold tremor_resting probe sessions
+    if stem.startswith("tremor_resting"):
+        return "tremor_resting"
     return "gameplay"
 
 
