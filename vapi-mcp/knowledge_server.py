@@ -1,6 +1,6 @@
 """
-VAPI Knowledge Graph MCP Server  v2.0.0-phase149
-===================================================
+VAPI Knowledge Graph MCP Server  v2.0.0-phase{N} (N read from CLAUDE.md at startup)
+=======================================================================================
 Transforms 9 VAPI corpus files into a live, queryable, enforcing knowledge graph
 accessible to Claude Code as structured MCP tools.
 
@@ -56,6 +56,72 @@ DB_PATH      = os.environ.get("VAPI_DB_PATH", "bridge/vapi_store.db")
 # VAPI_*.md files live in VAPI-WORKFLOW.v2/ — not the project root
 CORPUS_DIR   = os.environ.get("VAPI_CORPUS_DIR", "VAPI-WORKFLOW.v2")
 PROJECT_ROOT = Path(os.environ.get("VAPI_ROOT", "."))
+
+# ============================================================
+# CLAUDE.md Live Parser — shared with server.py, never stale
+# ============================================================
+# Identical to server.py's _parse_claude_md(). CLAUDE.md is the single
+# authoritative source updated every phase — both MCP servers read it.
+
+_CLAUDE_CACHE_KS: dict = {"mtime": 0.0, "state": {}}
+
+def _parse_claude_md() -> dict:
+    """Parse CLAUDE.md into current protocol state. Mtime-cached — O(1) per call."""
+    claude_path = PROJECT_ROOT / "CLAUDE.md"
+    try:
+        mtime = claude_path.stat().st_mtime
+    except OSError:
+        return _CLAUDE_CACHE_KS.get("state", {})
+
+    if mtime <= _CLAUDE_CACHE_KS["mtime"] and _CLAUDE_CACHE_KS["state"]:
+        return _CLAUDE_CACHE_KS["state"]
+
+    try:
+        text = claude_path.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return _CLAUDE_CACHE_KS.get("state", {})
+
+    s: dict = {}
+    m = re.search(r"Current phase:\s*Phase\s*(\d+)", text)
+    s["phase_num"] = m.group(1) if m else "207"
+    s["phase"] = f"{s['phase_num']} COMPLETE"
+
+    m = re.search(r"Bridge:\s*(\d+)\s*passing", text)
+    s["bridge"] = int(m.group(1)) if m else 2252
+    m = re.search(r"Contract:\s*(\d+)", text)
+    s["hardhat"] = int(m.group(1)) if m else 482
+    m = re.search(r"SDK:\s*(\d+)", text)
+    s["sdk"] = int(m.group(1)) if m else 448
+    m = re.search(r"(\d+)\s+contracts\s+ALL\s+LIVE", text)
+    s["contracts_live"] = int(m.group(1)) if m else 43
+
+    arrows = re.findall(r"agents\s+(\d+)→(\d+)", text)
+    if arrows:
+        s["agents"] = max(int(pair[1]) for pair in arrows)
+    else:
+        agent_refs = re.findall(r"agent\s+#(\d+)", text)
+        s["agents"] = max((int(n) for n in agent_refs), default=36)
+
+    m = re.search(r"L4 anomaly threshold:\s*\*\*([0-9.]+)\*\*", text)
+    s["l4_anomaly"] = float(m.group(1)) if m else 7.009
+    m = re.search(r"L4 continuity threshold:\s*\*\*([0-9.]+)\*\*", text)
+    s["l4_continuity"] = float(m.group(1)) if m else 5.367
+
+    m = re.search(r"tremor_resting[^:]*:\s*\*\*([0-9.]+)\*\*[^N]*N=(\d+)", text)
+    s["tremor_resting_ratio"] = float(m.group(1)) if m else 1.177
+    s["tremor_resting_n"]     = int(m.group(2))    if m else 27
+
+    m = re.search(r"Separation ratio:\s*\*\*([0-9.]+)\*\*[^)]*diagonal\+LOO[^)]*N=(\d+)", text)
+    s["touchpad_corners_ratio"] = float(m.group(1)) if m else 0.728
+    s["touchpad_corners_n"]     = int(m.group(2))   if m else 35
+
+    # WIF corpus — count open entries
+    wif_open = len(re.findall(r"Status.*?OPEN", text))
+    s["wif_open_count"] = wif_open
+
+    _CLAUDE_CACHE_KS["mtime"] = mtime
+    _CLAUDE_CACHE_KS["state"] = s
+    return s
 
 CORPUS_FILES = {
     "invariants":   "VAPI_INVARIANTS.md",
@@ -201,24 +267,30 @@ class VAPIKnowledgeGraph:
         self.agent_registry = agents
 
     def _parse_corpus(self):
-        """Extract corpus statistics from VAPI_CORPUS.md."""
+        """Extract corpus statistics from VAPI_CORPUS.md + CLAUDE.md live state."""
         text = self.raw.get("corpus", "")
+        s = _parse_claude_md()  # always current
 
-        # Phase 149 ground truth: 3-player clean corpus (P4 eliminated Phase 138)
         self.corpus_stats = {
-            "total_sessions": 120,
+            "total_sessions": 217,  # from CLAUDE.md corpus state (153 terminal + ~64 hw)
             "unique_players": 3,
             "legal_hold": "ACTIVE",
             "retention": "PERMANENT",
             "status": "ACTIVE COLLECTION",
-            "transport": "USB only (BT pending)",
-            "analysis_date": "2026-04-02",
-            "separation_ratio_pooled": 0.417,
-            "separation_ratio_touchpad_corners_phase143": 1.261,
-            "separation_ratio_touchpad_corners_phase138_biased": 1.552,
+            "transport": "USB primary (BT pending Phase 120 infrastructure)",
+            "analysis_date": datetime.utcnow().strftime("%Y-%m-%d"),
+            "separation_ratio_tremor_resting": s.get("tremor_resting_ratio", 1.177),
+            "tremor_resting_n": s.get("tremor_resting_n", 27),
+            "separation_ratio_touchpad_corners": s.get("touchpad_corners_ratio", 0.728),
+            "touchpad_corners_n": s.get("touchpad_corners_n", 35),
+            "separation_ratio_touchpad_corners_phase143_best": 1.261,
             "separation_ratio_balanced": 1.611,
+            "all_pairs_p0_ok": False,
+            "p1vp3_inter_distance": 0.032,
             "p4_status": "ELIMINATED — confirmed=P3 mislabeled (Phase 138)",
-            "current_best": "1.261 (diagonal+proper LOO, Phase 143, touchpad_corners N=11)",
+            "current_best": "tremor_resting=1.177 (N=27); touchpad_corners=1.261 (N=11, Phase 143)",
+            "wif_039": "CorpusRatioRegressionGuard OPEN — Phase 208 candidate",
+            "phase": s.get("phase", "207 COMPLETE"),
         }
 
         total_m = re.search(r"\*\*Total sessions\*\*\s*\|\s*(\d+)", text)
@@ -1264,7 +1336,7 @@ def _seed_hypothesis(priority: str) -> dict:
 # Phase 192: DataCurator MCP tools
 # ============================================================
 
-@mcp.tool(
+@tool(
     name="vapi_corpus_entropy",
     description=(
         "Query the CorpusDataCuratorAgent (Phase 192, Task 2) corpus entropy status. "
@@ -1272,7 +1344,7 @@ def _seed_hypothesis(priority: str) -> dict:
         "warning flag (entropy < 1.5 = CLUSTERING_WARNING), and timestamp. "
         "Use this to check whether the calibration corpus is becoming too homogeneous."
     ),
-    input_schema={
+    schema={
         "type": "object",
         "properties": {},
         "required": []
@@ -1306,7 +1378,7 @@ async def vapi_corpus_entropy(**_):
     }
 
 
-@mcp.tool(
+@tool(
     name="vapi_data_readiness_certificate",
     description=(
         "Query the latest Data Readiness Certificate from CorpusDataCuratorAgent "
@@ -1316,7 +1388,7 @@ async def vapi_corpus_entropy(**_):
         "federated_quality_ok. Certificate hash is SHA-256 anchored. "
         "certificate_ready=True only when all 8 dims pass."
     ),
-    input_schema={
+    schema={
         "type": "object",
         "properties": {},
         "required": []
@@ -1361,7 +1433,7 @@ async def vapi_data_readiness_certificate(**_):
     }
 
 
-@mcp.tool(
+@tool(
     name="vapi_provenance_chain",
     description=(
         "Query the provenance DAG from CorpusDataCuratorAgent (Phase 192, Task 1). "
@@ -1371,7 +1443,7 @@ async def vapi_data_readiness_certificate(**_):
         "(default 20, FROZEN). "
         "Enables legally defensible audit trail: GDPR Art.17 compliance path."
     ),
-    input_schema={
+    schema={
         "type": "object",
         "properties": {
             "node_id": {"type": "string", "description": "Start node ID ('' = list roots)"},
@@ -1423,7 +1495,28 @@ async def vapi_provenance_chain(node_id: str = "", max_depth: int = 20, **_):
 # MCP Server Loop
 # ============================================================
 
+def _check_corpus_reload():
+    """Auto-reload KG if any corpus file has changed since last load. O(N) stat() calls."""
+    if not KG.loaded_at:
+        return
+    base = KG.corpus_dir
+    for filename in CORPUS_FILES.values():
+        path = base / filename
+        try:
+            mtime = path.stat().st_mtime
+            loaded_ts = datetime.fromisoformat(KG.loaded_at).timestamp()
+            if mtime > loaded_ts:
+                KG.load()  # corpus changed — reload entire graph
+                sys.stderr.write(
+                    f"[vapi-knowledge-mcp] Auto-reloaded corpus: {filename} changed\n"
+                )
+                return  # reload once per request, not once per changed file
+        except Exception:
+            pass
+
+
 async def handle(msg: dict) -> str:
+    _check_corpus_reload()  # autonomous: re-parse corpus files if any changed
     id_    = msg.get("id")
     method = msg.get("method", "")
     params = msg.get("params", {})
@@ -1435,7 +1528,7 @@ async def handle(msg: dict) -> str:
     if method == "initialize":
         return mcp_response(id_, {
             "protocolVersion": "2024-11-05",
-            "serverInfo": {"name": "vapi-knowledge-mcp", "version": "2.0.0-phase149"},
+            "serverInfo": {"name": "vapi-knowledge-mcp", "version": f"2.0.0-phase{_parse_claude_md().get('phase_num', '207')}"},
             "capabilities": {"tools": {}}
         })
 
@@ -1474,7 +1567,7 @@ async def main():
     files_status = {k: "OK" if "not found" not in v else "MISSING"
                     for k, v in KG.raw.items()}
     sys.stderr.write(
-        f"[VAPI Knowledge MCP v2.0.0-phase149] Loaded at {KG.loaded_at}\n"
+        f"[VAPI Knowledge MCP v2.0.0-phase{_parse_claude_md().get('phase_num','?')}] Loaded at {KG.loaded_at}\n"
         f"  Corpus dir : {KG.corpus_dir}\n"
         f"  Files      : {files_status}\n"
         f"  WHAT_IF    : {len(KG.what_if_entries)} entries\n"

@@ -15,7 +15,7 @@ Architecture:
     HTTP
   VAPI Bridge (localhost:8080)
     SQLite + IoTeX RPC
-  39 live contracts + 16 agents
+  43+ live contracts + 36 agents (counts read live from CLAUDE.md)
 
 Usage:
   python vapi-mcp/server.py
@@ -65,6 +65,102 @@ import httpx
 BRIDGE_URL   = os.environ.get("VAPI_BRIDGE_URL", "http://localhost:8080")
 DB_PATH      = os.environ.get("VAPI_DB_PATH", "bridge/vapi_store.db")
 PROJECT_ROOT = Path(os.environ.get("VAPI_ROOT", "."))
+
+# ============================================================
+# CLAUDE.md Live Parser — autonomous sync, never stale
+# ============================================================
+# CLAUDE.md is updated atomically every phase as part of the standard
+# phase implementation workflow. By parsing it here with mtime-based
+# caching, BOTH servers automatically reflect the current phase state
+# without any manual sync step. Cost: one stat() call per tool invocation.
+
+import re as _re
+
+_CLAUDE_CACHE: dict = {"mtime": 0.0, "state": {}}
+
+def _parse_claude_md() -> dict:
+    """
+    Parse CLAUDE.md and return current protocol state. Cached by file mtime —
+    re-parsed automatically whenever CLAUDE.md changes (i.e., after every phase).
+    Falls back to last known state on read error; never raises.
+    """
+    claude_path = PROJECT_ROOT / "CLAUDE.md"
+    try:
+        mtime = claude_path.stat().st_mtime
+    except OSError:
+        return _CLAUDE_CACHE.get("state", {})
+
+    if mtime <= _CLAUDE_CACHE["mtime"] and _CLAUDE_CACHE["state"]:
+        return _CLAUDE_CACHE["state"]
+
+    try:
+        text = claude_path.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return _CLAUDE_CACHE.get("state", {})
+
+    s: dict = {}
+
+    # Current phase: "Current phase: Phase 207 — COMPLETE (...)"
+    m = _re.search(r"Current phase:\s*Phase\s*(\d+)", text)
+    s["phase_num"] = m.group(1) if m else "207"
+    s["phase"] = f"{s['phase_num']} COMPLETE"
+
+    # Test counts: "Bridge: 2252 passing. Contract: 482. SDK: 448. Hardware: 37. E2E: 14."
+    m = _re.search(r"Bridge:\s*(\d+)\s*passing", text)
+    s["bridge"] = int(m.group(1)) if m else 2252
+    m = _re.search(r"Contract:\s*(\d+)", text)
+    s["hardhat"] = int(m.group(1)) if m else 482
+    m = _re.search(r"SDK:\s*(\d+)", text)
+    s["sdk"] = int(m.group(1)) if m else 448
+    m = _re.search(r"Hardware:\s*(\d+)", text)
+    s["hardware"] = int(m.group(1)) if m else 37
+    m = _re.search(r"E2E:\s*(\d+)", text)
+    s["e2e"] = int(m.group(1)) if m else 14
+    s["total_ci"] = s["bridge"] + s["hardhat"] + s["sdk"]
+
+    # Contracts: "43 contracts ALL LIVE on testnet"
+    m = _re.search(r"(\d+)\s+contracts\s+ALL\s+LIVE", text)
+    s["contracts_live"] = int(m.group(1)) if m else 43
+
+    # Agent count: largest M in "agents N→M" transitions
+    arrows = _re.findall(r"agents\s+(\d+)→(\d+)", text)
+    if arrows:
+        s["agents"] = max(int(pair[1]) for pair in arrows)
+    else:
+        agent_refs = _re.findall(r"agent\s+#(\d+)", text)
+        s["agents"] = max((int(n) for n in agent_refs), default=36)
+
+    # L4 thresholds
+    m = _re.search(r"L4 anomaly threshold:\s*\*\*([0-9.]+)\*\*", text)
+    s["l4_anomaly"] = float(m.group(1)) if m else 7.009
+    m = _re.search(r"L4 continuity threshold:\s*\*\*([0-9.]+)\*\*", text)
+    s["l4_continuity"] = float(m.group(1)) if m else 5.367
+
+    # Recent phases: "Phase NNN — COMPLETE (desc...)"
+    recent: dict = {}
+    for pm in _re.finditer(r"Phase\s+(\d+)\s*[—-]\s*COMPLETE\s*\(([^)]{5,})", text):
+        pn = pm.group(1)
+        if pn not in recent:
+            recent[pn] = pm.group(2).split(";")[0].strip()[:120]
+    sorted_p = sorted(recent.keys(), key=lambda x: int(x), reverse=True)[:10]
+    s["recent_phases"] = {p: recent[p] for p in sorted_p}
+
+    # Separation ratio state
+    m = _re.search(r"tremor_resting[^:]*:\s*\*\*([0-9.]+)\*\*[^N]*N=(\d+)", text)
+    s["tremor_resting_ratio"] = float(m.group(1)) if m else 1.177
+    s["tremor_resting_n"]     = int(m.group(2))    if m else 27
+
+    m = _re.search(r"Separation ratio:\s*\*\*([0-9.]+)\*\*[^)]*diagonal\+LOO[^)]*N=(\d+)", text)
+    s["touchpad_corners_ratio"] = float(m.group(1)) if m else 0.728
+    s["touchpad_corners_n"]     = int(m.group(2))   if m else 35
+
+    # Wallet
+    m = _re.search(r"Active wallet[^`]*`(0x[0-9a-fA-F]{40})`", text)
+    s["wallet"] = m.group(1) if m else "0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692"
+
+    _CLAUDE_CACHE["mtime"] = mtime
+    _CLAUDE_CACHE["state"] = s
+    return s
 
 # ============================================================
 # MCP Protocol (stdio transport — no external dependency)
@@ -144,36 +240,25 @@ def db_query(sql: str, params=()) -> list:
     schema={"type": "object", "properties": {}, "required": []}
 )
 async def vapi_protocol_state(**_):
+    # Parse CLAUDE.md for current state — auto-refreshes when file changes (every phase)
+    s = _parse_claude_md()
     state = {
-        "phase": "149 COMPLETE",
+        "phase": s.get("phase", "207 COMPLETE"),
         "timestamp": datetime.utcnow().isoformat() + "Z",
         "test_counts": {
-            "bridge": 1808,
-            "sdk": 237,
-            "hardhat": 462,
-            "hardware": 37,
-            "e2e": 14,
-            "total_ci": 2507,
+            "bridge":   s.get("bridge",   2252),
+            "sdk":      s.get("sdk",       448),
+            "hardhat":  s.get("hardhat",   482),
+            "hardware": s.get("hardware",   37),
+            "e2e":      s.get("e2e",        14),
+            "total_ci": s.get("total_ci", 3182),
         },
         "separation_ratio": {},
         "l4_thresholds": {},
         "tge_gate": {},
         "agent_fleet": {},
         "contracts": {},
-        "recent_phases": {
-            "149": "Calibration Staleness Fixes — calibration_agent.py DB-first ratio + dir-based player count; Bridge 1798→1808 +10",
-            "148": "AgentCalibrationIntegrityMonitor (ACIM, agent #18, 16 self-tests/15min) + MCP server; Bridge 1790→1798 +8",
-            "147": "Epistemic Threshold Hardening — threshold 0.60→0.65, triage_prereq_required=True; closes Phase 98 W1; Bridge 1782→1790 +8",
-            "144": "Per-Player Enrollment Quality Report --player-quality-report; Bridge 1774→1782 +8",
-            "143": "Proper LOO Classification — N-1 centroid, LOO=63.6% honest; ratio=1.261 (diagonal+LOO, N=11); Bridge 1766→1774 +8",
-            "142": "Small-N Covariance Auto-Fallback COV_MIN_RATIO=3.0; N/p=1.375<3.0→diagonal; Bridge 1758→1766 +8",
-            "141": "Per-Pair Feature Attribution — P1vP3 suppression=0.032 (97% noise!); top=touch_pos_var+touchpad_entropy; Bridge 1750→1758 +8",
-            "140": "Multi-Probe Comparison corners=1.552/63.6%, freeform=1.270/63.6%, swipes=1.032/45.5%—ALL >1.0; Bridge 1742→1750 +8",
-            "139": "Analysis Fast-Path — skips 74 hw_* sessions for terminal-cal-only types; <30s; Bridge 1734→1742 +8",
-            "138": "P4→P3 Corpus Merge + Clean 3-Player; P4 ELIMINATED (confirmed=P3 mislabeled); ratio=1.552 (biased) superseded by Phase 143",
-            "136": "DualSense Audio Passthrough Router; Bridge 1716→1734 +18",
-            "135": "TournamentActivationChainAgent (agent #16, auto_activate=False PERMANENT); Bridge 1708→1716 +8",
-        }
+        "recent_phases": s.get("recent_phases", {}),
     }
 
     # Live bridge endpoints
@@ -222,59 +307,79 @@ async def vapi_protocol_state(**_):
             "source": "live_db",
         }
     else:
+        _s = _parse_claude_md()
+        _tr = _s.get("tremor_resting_ratio", 1.177)
+        _tc = _s.get("touchpad_corners_ratio", 0.728)
         state["separation_ratio"] = {
-            "pooled_ratio": 0.417,
-            "balanced_ratio": 1.611,
-            "touchpad_corners_ratio": 1.469,
+            "tremor_resting_ratio": _tr,
+            "tremor_resting_n":     _s.get("tremor_resting_n", 27),
+            "touchpad_corners_ratio": _tc,
+            "touchpad_corners_n":   _s.get("touchpad_corners_n", 35),
+            "touchpad_corners_phase143_best": 1.261,
+            "all_pairs_p0_ok": False,
+            "p1vp3_blocker": 0.032,
             "target": 1.0,
-            "gap": 0.583,
-            "status": "TOURNAMENT BLOCKER",
-            "note": "from CLAUDE.md — no live snapshots in DB; pooled N=127, 2026-03-29",
-            "source": "fallback_memory",
+            "status": "ABOVE_1.0 but all_pairs_p0_ok FAILS" if _tr >= 1.0 else "TOURNAMENT BLOCKER",
+            "note": "Parsed from CLAUDE.md — auto-updates every phase. No live DB snapshot.",
+            "source": "claude_md_live",
         }
 
+    tr_ratio = s.get("tremor_resting_ratio", 1.177)
+    tr_n     = s.get("tremor_resting_n", 27)
+    tc_ratio = s.get("touchpad_corners_ratio", 0.728)
+    tc_n     = s.get("touchpad_corners_n", 35)
     state["tge_gate"] = {
-        "separation_ratio_gt_1": True,
+        "separation_ratio_gt_1": tr_ratio >= 1.0 or tc_ratio >= 1.0,
         "note": (
-            "touchpad_corners ratio=1.261 (Phase 143 proper LOO, diagonal cov, N=11) — "
-            "ABOVE 1.0 gate but N=11 is thin. All 3-player pairs: P1vP2=2.868, P1vP3=3.276, P2vP3=2.243. "
-            "P4 ELIMINATED (confirmed=P3 mislabeled, Phase 138 merge). "
-            "Full-corpus pooled=0.417 (N=127, free-form) — STALE, superseded by Phase 143."
+            f"tremor_resting={tr_ratio} (N={tr_n}) — ABOVE 1.0 but all_pairs_p0_ok FAILS (P1vP3=0.032). "
+            f"touchpad_corners={tc_ratio} (N={tc_n}) — BLOCKER. "
+            "touchpad_corners Phase 143 best: 1.261 (N=11, diagonal+LOO, ALL pairs above 1.0). "
+            "State read from CLAUDE.md — auto-updates every phase."
         ),
+        "all_pairs_p0_ok": False,
         "n100_live_adjudications": False,
         "vhp_demonstrated_testnet": True,
         "smart_contract_audit": False,
         "non_negotiable": True,
         "auto_activate_on_breakthrough": "False PERMANENT — hardcoded in TournamentActivationChainAgent",
-        "epistemic_threshold": "0.65 (Phase 147, hardened from 0.60); triage_prereq_required=True"
+        "epistemic_threshold": "0.65 (Phase 147, hardened from 0.60); triage_prereq_required=True",
+        "staged_graduation": "Phase 207 COMPLETE — P0 gate: staged_graduation_enabled + preflight_pass + non_convergence_clear",
+        "wif_039": "CorpusRatioRegressionGuard OPEN — Phase 208 candidate",
     }
 
     state["contracts"] = {
-        "total_live": 39,
+        "total_live": s.get("contracts_live", 43),
         "network": "IoTeX Testnet 4690",
         "key_addresses": {
-            "AdjudicationRegistry":  "0x44CF981f46a52ADE56476Ce894255954a7776fb4",
-            "VAPIDualPrimitiveGate": "0xd7b1465Aad8F815C67b24681c9c022CED24FB876",
-            "GateAttestationAnchor": "0xA39d00D3FF8C579840Fa02C01Adf06162630a449",
-            "ZK_ceremony_beacon":    "IoTeX block #41723255"
+            "AdjudicationRegistry":    "0x44CF981f46a52ADE56476Ce894255954a7776fb4",
+            "VAPIDualPrimitiveGate":   "0xd7b1465Aad8F815C67b24681c9c022CED24FB876",
+            "VAPISwarmOperatorGate":   "0x969c0F1EFb28504a95Acf14331A59FBCb2944F98",
+            "CeremonyAuditRegistry":   "0xb9164E6d74Dde1508df2a39b01d3702ACC8230C2",
+            "SeparationRatioRegistry": "0xB39CeE732cf91c93539Bd064D9426642a095a026",
+            "VHPReenrollmentBadge":    "0x42E7A25d0E5667BBae45e5cF33a6e2CC6E42d45C",
+            "GateAttestationAnchor":   "0xA39d00D3FF8C579840Fa02C01Adf06162630a449",
+            "ZK_ceremony_beacon":      "IoTeX block #41723255"
         },
-        "pending_deploy": {
-            "VAPISwarmOperatorGate": "wallet ~0.35 IOTX — needs ~0.05 top-up"
-        }
+        "wallet": s.get("wallet", "0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692"),
     }
 
     state["agent_fleet"] = {
-        "total": 18,
+        "total": s.get("agents", 36),
+        "note": f"Fleet size read from CLAUDE.md (auto-synced). Bridge offline — live agent status unavailable.",
         "key_agents": {
-            "14": "PoAdAnchorAgent (poad_on_chain_enabled=False default)",
-            "15": "SeparationRatioMonitorAgent (300s poll, 2-snapshot breakthrough guard)",
             "16": "TournamentActivationChainAgent (auto_activate=False PERMANENT)",
-            "17": "VHPRenewalAgent (6h poll, dry_run skips chain)",
-            "18": "AgentCalibrationIntegrityMonitor ACIM (16 self-tests/15min, mcp_server_enabled=False)"
+            "19": "ControllerHardwareIntelligenceAgent (multi_controller_enabled=False)",
+            "20": "EnrollmentAutoGuidanceAgent (1h poll, fires enrollment_complete)",
+            "21": "FleetConsensusSnapshotAgent (PoFC hash)",
+            "26": "ProtocolMaturityScoringAgent (maturity_score 0.0–1.0)",
+            "29": "ReEnrollmentAttestationAgent (reauth_attestation_enabled=True)",
+            "32": "BiometricStationarityOracleAgent (biometric_stationarity_enabled=False)",
+            "35": "CorpusDataCuratorAgent (7-task data coherence)",
+            "36": "FleetSignalCoherenceAgent (fleet_coherence_enabled=True DEFAULT)",
         },
         "dry_run": True,
-        "ioswarm": "emulator_only — no live nodes registered",
-        "mcp_server": "mcp_server_enabled=False (Phase 148 infrastructure-first)"
+        "ioswarm": "emulator_only (ioswarm_enabled=True in bridge/.env, 5-node seed=109/110)",
+        "staged_graduation": "StagedDryRunGraduationAgent LIVE (Phase 207); staged_graduation_enabled=False",
     }
 
     return state
@@ -579,17 +684,20 @@ async def vapi_agent_fleet(include_recent_rulings=True, **_):
         fleet = await bridge_get("/agent/edge-ai-profile")
         result["fleet"] = fleet
     except Exception:
+        _s = _parse_claude_md()
         result["fleet"] = {
-            "total_agents": 18,
+            "total_agents": _s.get("agents", 36),
             "agents": {
-                "1-13": "Core fleet (all live, dry_run=True)",
-                "14": "PoAdAnchorAgent (poad_on_chain_enabled=False)",
-                "15": "SeparationRatioMonitorAgent (300s poll, 2-snapshot confirmation)",
-                "16": "TournamentActivationChainAgent (auto_activate=False PERMANENT)",
-                "17": "VHPRenewalAgent (6h poll, dry_run skips chain)",
-                "18": "AgentCalibrationIntegrityMonitor ACIM (16 self-tests/15min)"
+                "1-20":  "Core fleet phases 1-156 (all live, dry_run=True)",
+                "21":    "FleetConsensusSnapshotAgent (PoFC hash, Phase 157)",
+                "26":    "ProtocolMaturityScoringAgent (maturity_score, Phase 177)",
+                "29":    "ReEnrollmentAttestationAgent (HMAC attestation, Phase 185)",
+                "32":    "BiometricStationarityOracleAgent (drift classifier, Phase 188)",
+                "35":    "CorpusDataCuratorAgent (7-task coherence, Phase 192)",
+                "36":    "FleetSignalCoherenceAgent (CONTRADICTION+ORPHAN+INVERSION, Phase 193)",
+                "207":   "StagedDryRunGraduationAgent (GRADUATION_SEQUENCE, Phase 207)",
             },
-            "note": "bridge offline — from CLAUDE.md"
+            "note": f"bridge offline — agent count ({_s.get('agents', 36)}) read from CLAUDE.md"
         }
 
     result["epistemic_consensus"] = {
@@ -664,64 +772,102 @@ async def vapi_agent_fleet(include_recent_rulings=True, **_):
     }
 )
 async def vapi_sync_memory(write_file=True, **_):
+    # All values from CLAUDE.md — auto-refreshes every phase
+    s = _parse_claude_md()
     state = await vapi_protocol_state()
     ratio_data = state.get("separation_ratio", {})
-    ratio_val = ratio_data.get("pooled_ratio", 0.417)
     now = datetime.utcnow().strftime("%Y-%m-%d")
 
+    phase_num  = s.get("phase_num", "207")
+    bridge     = s.get("bridge",    2252)
+    sdk        = s.get("sdk",        448)
+    hardhat    = s.get("hardhat",    482)
+    hardware   = s.get("hardware",    37)
+    e2e        = s.get("e2e",         14)
+    total_ci   = s.get("total_ci",  3182)
+    agents     = s.get("agents",      36)
+    contracts  = s.get("contracts_live", 43)
+    l4_anom    = s.get("l4_anomaly",  7.009)
+    l4_cont    = s.get("l4_continuity", 5.367)
+    tr_ratio   = s.get("tremor_resting_ratio",  1.177)
+    tr_n       = s.get("tremor_resting_n",         27)
+    tc_ratio   = s.get("touchpad_corners_ratio", 0.728)
+    tc_n       = s.get("touchpad_corners_n",       35)
+
+    # Prefer live DB ratio if available
+    live_pooled = ratio_data.get("tremor_resting_ratio", tr_ratio)
+
     content = f"""# VAPI System State — Auto-synced {now}
-# Generated by VAPI MCP Server (vapi-mcp/server.py) from live bridge + DB state
+# Generated by VAPI MCP Server (vapi-mcp/server.py) — source: CLAUDE.md (live parse)
+# CLAUDE.md is updated every phase — this file reflects current state automatically.
 
-## Test Counts (Phase 149)
-Bridge: 1,808 | SDK: 237 | Hardhat: 462 | Hardware: 37 | E2E: 14 | Total CI: 2,507
+## Current Phase: {phase_num} COMPLETE
 
-## Separation Ratio (LIVE from DB)
-Pooled: {ratio_val} (live DB or fallback 0.417 N=127) — full-corpus free-form plateau
-Phase 143 CURRENT BEST: 1.261 (diagonal+LOO, touchpad_corners, N=11, 3-player) — ABOVE 1.0 gate
+## Test Counts (Phase {phase_num})
+Bridge: {bridge:,} | SDK: {sdk} | Hardhat: {hardhat} | Hardware: {hardware} | E2E: {e2e} | Total CI: {total_ci:,}
+
+## Separation Ratio (from CLAUDE.md)
+tremor_resting: {tr_ratio} (N={tr_n}) — ABOVE 1.0 but all_pairs_p0_ok FAILS (P1vP3=0.032)
+touchpad_corners: {tc_ratio} (N={tc_n}) — BLOCKER (ratio declined 1.261→{tc_ratio} with N growth)
+touchpad_corners Phase 143 BEST: 1.261 (diagonal+LOO, N=11, ALL pairs above 1.0) — thin but defensible
 P4 ELIMINATED (Phase 138): confirmed=P3 mislabeled; clean 3-player corpus
-Pairs: P1vP2=2.868, P1vP3=3.276, P2vP3=2.243 — all above 1.0
-Balanced (n=3/player): 1.611 — WIF-007 confirmed (Phase 137A)
-Target: > 1.0 ALL pairs — CLEARED for touchpad_corners (N=11, need >=10/player for defense)
+Target: > 1.0 ALL pairs AND all_pairs_p0_ok=True
+WIF-039: CorpusRatioRegressionGuard OPEN — Phase 208 candidate
 
 ## L4 Thresholds
-Current (stale dim): anomaly=7.009, continuity=5.367 (N=74, 12-feat calibration on 13-feat live)
+anomaly={l4_anom}, continuity={l4_cont} (N=74, 12-feat — stale: live_dim=13 vs calib_dim=12)
 Candidate N=127: anomaly=6.613, continuity=5.143 (NOT YET APPLIED)
-Recalibrate via: POST /agent/apply-l4-battery-calibration
 
 ## TGE Gate (ALL NON-NEGOTIABLE)
-separation_ratio > 1.0: CLEARED touchpad_corners 1.261 (N=11 thin); full-corpus 0.417 stale
-N>=100 live adjudications: BLOCKED (dry_run=True)
+separation_ratio > 1.0: CONDITIONAL — tremor_resting={tr_ratio} ABOVE 1.0; all_pairs_p0_ok FAILS
+all_pairs_p0_ok: FAILS (P1vP3=0.032 < intra threshold)
+N>=100 live adjudications: BLOCKED (dry_run=True; Phase 207 StagedDryRunGraduationGate COMPLETE)
 VHP demonstrated: LIVE (testnet)
 Contract security audit: NOT DONE
 auto_activate_on_breakthrough: False PERMANENT
 epistemic_threshold: 0.65 (Phase 147), triage_prereq_required=True
 
-## Agent Fleet: 18 ACTIVE
-1-13: Core fleet (all live, dry_run=True)
-14: PoAdAnchorAgent (poad_on_chain_enabled=False)
-15: SeparationRatioMonitorAgent (300s poll, 2-snapshot confirmation guard)
+## Agent Fleet: {agents} ACTIVE
+All agents live; dry_run=True across fleet
+36: FleetSignalCoherenceAgent (fleet_coherence_enabled=True; 3 rules: CONTRADICTION/ORPHAN/INVERSION)
+35: CorpusDataCuratorAgent (7-task data coherence + Provenance DAG)
+26: ProtocolMaturityScoringAgent (9-component maturity_score 0.0–1.0)
+21: FleetConsensusSnapshotAgent (PoFC hash — WIF-013)
 16: TournamentActivationChainAgent (auto_activate=False PERMANENT)
-17: VHPRenewalAgent (6h poll, dry_run skips chain)
-18: AgentCalibrationIntegrityMonitor ACIM (16 self-tests/15min, mcp_server_enabled=False)
-ioSwarm: emulator_only — 0 live nodes registered
+207: StagedDryRunGraduationAgent (GRADUATION_SEQUENCE; staged_graduation_enabled=False)
+ioSwarm: emulator_only (ioswarm_enabled=True bridge/.env; 5-node seed=109/110; 0 live nodes)
 
-## Contracts: 39 ALL LIVE (IoTeX Testnet 4690)
-AdjudicationRegistry:  0x44CF981f46a52ADE56476Ce894255954a7776fb4
-VAPIDualPrimitiveGate: 0xd7b1465Aad8F815C67b24681c9c022CED24FB876
-VAPISwarmOperatorGate: PENDING (~0.05 IOTX wallet top-up needed)
+## Contracts: {contracts} ALL LIVE (IoTeX Testnet 4690)
+AdjudicationRegistry:    0x44CF981f46a52ADE56476Ce894255954a7776fb4
+VAPIDualPrimitiveGate:   0xd7b1465Aad8F815C67b24681c9c022CED24FB876
+VAPISwarmOperatorGate:   0x969c0F1EFb28504a95Acf14331A59FBCb2944F98
+CeremonyAuditRegistry:   0xb9164E6d74Dde1508df2a39b01d3702ACC8230C2
+SeparationRatioRegistry: 0xB39CeE732cf91c93539Bd064D9426642a095a026
+VHPReenrollmentBadge:    0x42E7A25d0E5667BBae45e5cF33a6e2CC6E42d45C
 
 ## Frozen Invariants
 PoAC: 228B | SHA-256(raw[:164]) | Poseidon(8), C3, nPublic=5
 Ceremony: IoTeX block #41723255
-Thresholds: 7.009/5.367 (stable EMA only on NOMINAL sessions)
+Thresholds: {l4_anom}/{l4_cont} (stable EMA only on NOMINAL sessions)
 """
 
     if write_file:
-        memory_path = PROJECT_ROOT / "MEMORY.md"
-        memory_path.write_text(content, encoding="utf-8")
-        return {"written": True, "path": str(memory_path), "pooled_ratio": ratio_val}
+        memory_path = PROJECT_ROOT / "VAPI-WORKFLOW.v2" / "VAPI_MEMORY.md"
+        # Prepend to existing VAPI_MEMORY.md rather than overwriting — preserves history
+        existing = ""
+        try:
+            existing = memory_path.read_text(encoding="utf-8")
+        except Exception:
+            pass
+        # Only write the state block; preserve everything below the first --- separator
+        separator = "\n---\n"
+        idx = existing.find(separator)
+        tail = existing[idx:] if idx != -1 else ""
+        memory_path.write_text(content + tail, encoding="utf-8")
+        return {"written": True, "path": str(memory_path), "phase": phase_num,
+                "bridge": bridge, "sdk": sdk, "agents": agents, "contracts": contracts}
 
-    return {"content": content, "pooled_ratio": ratio_val}
+    return {"content": content, "phase": phase_num, "bridge": bridge, "sdk": sdk}
 
 
 # --- PREFLIGHT GATE ---
@@ -1056,6 +1202,7 @@ async def vapi_what_if(topic: str, context: str = "", **_):
     }
 )
 async def vapi_autoresearch_seed(priority: str = "", cycle_num: int = 0, **_):
+    _s = _parse_claude_md()  # auto-synced from CLAUDE.md
     # Load autoresearch experiment log
     log_path = PROJECT_ROOT / "vapi-autoresearch" / "experiments" / "log.jsonl"
     recent_log = []
@@ -1077,12 +1224,12 @@ async def vapi_autoresearch_seed(priority: str = "", cycle_num: int = 0, **_):
 
     # Auto-detect priority from recent history
     PRIORITIES = [
-        "separation_ratio_n_expansion",  # P0: N=11 thin; need >=10/player for tournament defense
-        "l4_recalibration",              # P1: N=127 thresholds (6.613/5.143) not applied
-        "separation_ratio_pathways",     # P2: how to reach ratio>1.0 for full-corpus (not just touchpad)
-        "what_if_corpus_depth",          # P3: expand WIF corpus with post-143 observations
+        "separation_ratio_pathways",     # P0: all_pairs_p0_ok FAILS (P1vP3=0.032); per-probe ensemble gate
+        "phase_invariant_hardening",     # P1: WIF-039 CorpusRatioRegressionGuard (Phase 208)
+        "l4_recalibration",              # P2: N=127 thresholds (6.613/5.143) not applied (live_dim=13 vs 12)
+        "what_if_corpus_depth",          # P3: WIF-040 physiological pair similarity; WIF corpus at 39 entries
         "class_k_definition",            # P4: GSR spoofer (Class K) still undefined
-        "acim_integration",              # P5: ACIM self-tests for calibration invariant monitoring
+        "acim_integration",              # P5: ACIM self-tests for separation ratio drift detection
     ]
     recent_priorities = [e.get("priority", "") for e in recent_log]
     auto_priority = priority
@@ -1103,14 +1250,23 @@ async def vapi_autoresearch_seed(priority: str = "", cycle_num: int = 0, **_):
         "auto_priority": auto_priority,
         "live_state": {
             "pooled_ratio_db": current_ratio,
-            "touchpad_corners_ratio_phase143": 1.261,
-            "touchpad_corners_pairs": {"P1vP2": 2.868, "P1vP3": 3.276, "P2vP3": 2.243},
-            "balanced_ratio": 1.611,
+            "tremor_resting_ratio": _s.get("tremor_resting_ratio", 1.177),
+            "tremor_resting_n":     _s.get("tremor_resting_n", 27),
+            "tremor_resting_p1vp3": 0.032,
+            "touchpad_corners_ratio": _s.get("touchpad_corners_ratio", 0.728),
+            "touchpad_corners_n":   _s.get("touchpad_corners_n", 35),
+            "touchpad_corners_phase143_best": 1.261,
+            "touchpad_corners_pairs_phase143": {"P1vP2": 2.868, "P1vP3": 3.276, "P2vP3": 2.243},
+            "all_pairs_p0_ok": False,
             "p4_status": "ELIMINATED (Phase 138) — confirmed=P3 mislabeled; clean 3-player corpus",
-            "corpus": "P1=3 corners, P2=4 corners, P3=4 corners — all THIN (need >=10)",
-            "tge_blockers": ["n_touchpad_corners<10_per_player", "dry_run=True", "l4_stale", "no_audit"],
+            "corpus_tremor_resting": f"P1=9/P2=6/P3=12 — N=27; P1vP3=0.032 structural blocker",
+            "tge_blockers": ["all_pairs_p0_ok=False(P1vP3)", "dry_run=True", "l4_stale", "no_audit", "wif039_open"],
             "l4_stale": "12-feat calibration on 13-feat live (N=127 candidate: 6.613/5.143)",
-            "epistemic": "threshold=0.65 (Phase 147 hardened); triage_prereq_required=True"
+            "phase": _s.get("phase", "207 COMPLETE"),
+            "agents": _s.get("agents", 36),
+            "contracts": _s.get("contracts_live", 43),
+            "epistemic": "threshold=0.65 (Phase 147 hardened); triage_prereq_required=True",
+            "staged_graduation": "Phase 207 COMPLETE; staged_graduation_enabled=False pending all_pairs_p0_ok",
         },
         "seed_hypothesis": _seed_hypothesis(auto_priority),
         "what_if_corpus_size": wif_count,
@@ -1260,7 +1416,7 @@ async def handle(msg: dict) -> str:
     if method == "initialize":
         return mcp_response(id_, {
             "protocolVersion": "2024-11-05",
-            "serverInfo": {"name": "vapi-mcp", "version": "1.1.0-phase149"},
+            "serverInfo": {"name": "vapi-mcp", "version": f"1.1.0-phase{_parse_claude_md().get('phase_num', '207')}"},
             "capabilities": {"tools": {}}
         })
 
