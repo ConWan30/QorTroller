@@ -12,6 +12,13 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
+
+class CorpusRegressionError(ValueError):
+    """Raised by insert_separation_defensibility_log_guarded when the new entry
+    represents a ratio regression below 1.0 after a prior all_pairs_above_1=True
+    breakthrough and no authorized override exists for this probe type.
+    (Phase 208: WIF-039 W1 — CorpusRatioRegressionGuard)"""
+
 from .codec import PoACRecord
 
 log = logging.getLogger(__name__)
@@ -2763,6 +2770,84 @@ class Store:
                 "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
                 " VALUES (?, ?, ?)",
                 (203, "agent_context", time.time()),
+            )
+            # Phase 207: dry_run_graduation_log — StagedDryRunGraduationGate.
+            # Tracks per-agent controlled graduation from dry_run=True → dry_run=False.
+            # Each row is one graduation stage for one agent.  n_clean_sessions and
+            # n_false_positives are incremented as adjudication results arrive.
+            # rollback_triggered=1 when n_false_positives exceeds the threshold within
+            # the rollback window — agent reverts to dry_run=True automatically.
+            # stage_number is the sequential graduation order (1 = first agent to graduate).
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS dry_run_graduation_log (
+                    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+                    agent_id              TEXT    NOT NULL,
+                    stage_number          INTEGER NOT NULL DEFAULT 1,
+                    activated_at          REAL    NOT NULL DEFAULT (unixepoch('now')),
+                    dry_run_disabled_at   REAL,
+                    rollback_triggered    INTEGER NOT NULL DEFAULT 0,
+                    rollback_triggered_at REAL,
+                    rollback_reason       TEXT,
+                    n_clean_sessions      INTEGER NOT NULL DEFAULT 0,
+                    n_false_positives     INTEGER NOT NULL DEFAULT 0,
+                    notes                 TEXT    NOT NULL DEFAULT '',
+                    created_at            REAL    NOT NULL DEFAULT (unixepoch('now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_graduation_agent
+                ON dry_run_graduation_log(agent_id, created_at DESC)
+            """)
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                " VALUES (?, ?, ?)",
+                (207, "dry_run_graduation", time.time()),
+            )
+            # Phase 208: corpus_ratio_regression_guard_log — tamper-evident provenance chain
+            # for separation ratio breakthrough milestones (WIF-039 W1+W2).
+            # Each row with all_pairs_above_1=True is linked to its predecessor via
+            # provenance_hash = SHA-256(prev_hash + ratio + N + probe_type + ts_ns_str).
+            # Enables Mode-6-style ratchet: once all_pairs_above_1=True is reached for a
+            # probe type, subsequent inserts with all_pairs_above_1=False raise CorpusRegressionError
+            # unless an override is recorded in corpus_regression_override_log.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS corpus_ratio_regression_guard_log (
+                    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+                    probe_type            TEXT    NOT NULL,
+                    ratio                 REAL    NOT NULL,
+                    n_sessions_total      INTEGER NOT NULL DEFAULT 0,
+                    all_pairs_above_1     INTEGER NOT NULL DEFAULT 0,
+                    provenance_hash       TEXT    NOT NULL DEFAULT '',
+                    prev_hash             TEXT    NOT NULL DEFAULT '',
+                    created_at            REAL    NOT NULL DEFAULT (unixepoch('now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_corpus_guard_probe_created
+                ON corpus_ratio_regression_guard_log(probe_type, created_at DESC)
+            """)
+            # Phase 208: corpus_regression_override_log — authorized regressions below 1.0.
+            # Records operator-supplied reason when a regression override is granted.
+            # override_hash = SHA-256(probe_type + old_ratio_str + new_ratio_str + reason + ts_ns_str).
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS corpus_regression_override_log (
+                    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                    probe_type     TEXT    NOT NULL,
+                    old_ratio      REAL    NOT NULL,
+                    new_ratio      REAL    NOT NULL,
+                    reason         TEXT    NOT NULL DEFAULT '',
+                    override_hash  TEXT    NOT NULL DEFAULT '',
+                    created_at     REAL    NOT NULL DEFAULT (unixepoch('now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_regression_override_probe
+                ON corpus_regression_override_log(probe_type, created_at DESC)
+            """)
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                " VALUES (?, ?, ?)",
+                (208, "corpus_ratio_regression_guard", time.time()),
             )
 
     # --- Device operations ---
@@ -8079,6 +8164,177 @@ class Store:
             )
         return cur.lastrowid  # type: ignore[return-value]
 
+    # --- Phase 208: CorpusRatioRegressionGuard (WIF-039 W1+W2) ---
+
+    def insert_separation_defensibility_log_guarded(
+        self,
+        session_type: str,
+        n_sessions_total: int,
+        n_per_player: dict,
+        min_n_per_player: int,
+        defensible: bool,
+        ratio: float,
+        all_pairs_above_1: bool,
+        guard_enabled: bool = False,
+    ) -> int:
+        """Guarded variant of insert_separation_defensibility_log (Phase 208 — WIF-039 W1).
+
+        When guard_enabled=True (CORPUS_RATIO_REGRESSION_GUARD_ENABLED=true):
+          - If all_pairs_above_1=True: insert a breakthrough milestone in
+            corpus_ratio_regression_guard_log with a tamper-evident provenance chain.
+          - If all_pairs_above_1=False AND a prior breakthrough exists for this probe type
+            (any prior separation_defensibility_log row had all_pairs_above_1=True):
+            raises CorpusRegressionError UNLESS an override exists in
+            corpus_regression_override_log for this probe type.
+          - This is the Mode-6 ratchet for separation ratio: once all_pairs_above_1
+            is reached, it cannot silently regress without an explicit override record.
+
+        When guard_enabled=False (default): behaves identically to
+        insert_separation_defensibility_log — no regression check is performed.
+
+        The Ratio Provenance Chain links consecutive guard log entries via:
+          provenance_hash = SHA-256(prev_hash + str(ratio) + str(n) + probe_type + str(ts_ns))
+        This gives operators an auditable lineage of every milestone.
+        """
+        import hashlib as _hl208
+        # Always insert the main defensibility log entry (guard only adds a side effect)
+        row_id = self.insert_separation_defensibility_log(
+            session_type=session_type,
+            n_sessions_total=n_sessions_total,
+            n_per_player=n_per_player,
+            min_n_per_player=min_n_per_player,
+            defensible=defensible,
+            ratio=ratio,
+            all_pairs_above_1=all_pairs_above_1,
+        )
+
+        if not guard_enabled:
+            return row_id
+
+        with self._conn() as con:
+            # Check whether a prior breakthrough exists for this probe type
+            breakthrough_row = con.execute(
+                "SELECT id FROM separation_defensibility_log "
+                "WHERE session_type=? AND all_pairs_above_1=1 ORDER BY id ASC LIMIT 1",
+                (session_type,),
+            ).fetchone()
+            prior_breakthrough = breakthrough_row is not None
+
+            if not all_pairs_above_1 and prior_breakthrough:
+                # Regression detected — check for an authorized override
+                override_row = con.execute(
+                    "SELECT id FROM corpus_regression_override_log "
+                    "WHERE probe_type=? ORDER BY id DESC LIMIT 1",
+                    (session_type,),
+                ).fetchone()
+                if override_row is None:
+                    raise CorpusRegressionError(
+                        f"Corpus ratio regression blocked for probe_type={session_type!r}: "
+                        f"all_pairs_above_1 was previously True but new entry has "
+                        f"all_pairs_above_1=False (ratio={ratio:.3f}). "
+                        "Call insert_corpus_regression_override() with a reason before inserting. "
+                        "(Phase 208: WIF-039 W1 — CorpusRatioRegressionGuard)"
+                    )
+
+            # Record milestone in provenance chain when all_pairs_above_1=True
+            if all_pairs_above_1:
+                last_guard = con.execute(
+                    "SELECT provenance_hash FROM corpus_ratio_regression_guard_log "
+                    "WHERE probe_type=? ORDER BY id DESC LIMIT 1",
+                    (session_type,),
+                ).fetchone()
+                prev_hash = last_guard["provenance_hash"] if last_guard else ""
+                ts_ns = int(time.time() * 1e9)
+                prov_input = f"{prev_hash}{ratio}{n_sessions_total}{session_type}{ts_ns}"
+                prov_hash = _hl208.sha256(prov_input.encode()).hexdigest()
+                con.execute(
+                    "INSERT INTO corpus_ratio_regression_guard_log "
+                    "(probe_type, ratio, n_sessions_total, all_pairs_above_1, "
+                    " provenance_hash, prev_hash, created_at) VALUES (?,?,?,?,?,?,?)",
+                    (
+                        session_type,
+                        float(ratio),
+                        n_sessions_total,
+                        1,
+                        prov_hash,
+                        prev_hash,
+                        time.time(),
+                    ),
+                )
+
+        return row_id
+
+    def insert_corpus_regression_override(
+        self,
+        probe_type: str,
+        old_ratio: float,
+        new_ratio: float,
+        reason: str,
+    ) -> int:
+        """Record an authorized corpus ratio regression override (Phase 208 — WIF-039 W2).
+
+        Allows insert_separation_defensibility_log_guarded to proceed with
+        all_pairs_above_1=False after a prior breakthrough, provided this
+        override record exists.
+
+        override_hash = SHA-256(probe_type + str(old_ratio) + str(new_ratio) + reason + str(ts_ns))
+        """
+        import hashlib as _hl208o
+        ts_ns = int(time.time() * 1e9)
+        ov_input = f"{probe_type}{old_ratio}{new_ratio}{reason}{ts_ns}"
+        ov_hash = _hl208o.sha256(ov_input.encode()).hexdigest()
+        with self._conn() as con:
+            cur = con.execute(
+                "INSERT INTO corpus_regression_override_log "
+                "(probe_type, old_ratio, new_ratio, reason, override_hash, created_at) "
+                "VALUES (?,?,?,?,?,?)",
+                (probe_type, float(old_ratio), float(new_ratio), reason, ov_hash, time.time()),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def get_corpus_regression_guard_status(
+        self, probe_type: str | None = None
+    ) -> dict:
+        """Return corpus ratio regression guard summary (Phase 208).
+
+        Returns 7 keys:
+          guard_active / breakthrough_ratio / breakthrough_n /
+          provenance_hash / override_count / probe_type / timestamp
+        """
+        import time as _t208
+        with self._conn() as con:
+            if probe_type:
+                guard_row = con.execute(
+                    "SELECT ratio, n_sessions_total, provenance_hash, created_at "
+                    "FROM corpus_ratio_regression_guard_log "
+                    "WHERE probe_type=? ORDER BY id DESC LIMIT 1",
+                    (probe_type,),
+                ).fetchone()
+                override_count = con.execute(
+                    "SELECT COUNT(*) AS cnt FROM corpus_regression_override_log "
+                    "WHERE probe_type=?",
+                    (probe_type,),
+                ).fetchone()["cnt"]
+            else:
+                guard_row = con.execute(
+                    "SELECT ratio, n_sessions_total, provenance_hash, created_at "
+                    "FROM corpus_ratio_regression_guard_log ORDER BY id DESC LIMIT 1"
+                ).fetchone()
+                override_count = con.execute(
+                    "SELECT COUNT(*) AS cnt FROM corpus_regression_override_log"
+                ).fetchone()["cnt"]
+
+        guard_active = guard_row is not None
+        return {
+            "guard_active":      guard_active,
+            "breakthrough_ratio": float(guard_row["ratio"]) if guard_row else None,
+            "breakthrough_n":    int(guard_row["n_sessions_total"]) if guard_row else None,
+            "provenance_hash":   guard_row["provenance_hash"] if guard_row else None,
+            "override_count":    int(override_count),
+            "probe_type":        probe_type,
+            "timestamp":         _t208.time(),
+        }
+
     def get_separation_defensibility_status(
         self, session_type: str | None = None
     ) -> "dict | None":
@@ -11361,19 +11617,47 @@ class Store:
             )
         return cur.lastrowid  # type: ignore[return-value]
 
+    # Non-convergence threshold: 5 consecutive negative velocities → non-convergence declared.
+    _N_NONCONV_THRESHOLD: int = 5
+
     def get_tremor_convergence_status(
         self, session_type: str = "tremor_resting"
     ) -> "dict | None":
-        """Return the latest tremor convergence status for a session type (Phase 202)."""
+        """Return the latest tremor convergence status for a session type (Phase 202).
+
+        Phase 206 addition: also computes non_convergence_detected and
+        consecutive_negative from the last _N_NONCONV_THRESHOLD rows.
+        non_convergence_detected=True when _N_NONCONV_THRESHOLD consecutive readings
+        all have velocity < 0 — P3 genuine non-stationarity diagnosis gate.
+        """
         with self._conn() as conn:
             row = conn.execute(
                 "SELECT * FROM tremor_convergence_log "
                 "WHERE session_type=? ORDER BY id DESC LIMIT 1",
                 (session_type,),
             ).fetchone()
+            # Compute consecutive_negative from recent history (Phase 206)
+            recent_rows = conn.execute(
+                "SELECT velocity FROM tremor_convergence_log "
+                "WHERE session_type=? ORDER BY id DESC LIMIT ?",
+                (session_type, self._N_NONCONV_THRESHOLD),
+            ).fetchall()
         if row is None:
             return None
-        return dict(row)
+        result = dict(row)
+        # Count how many leading (most-recent) rows have velocity < 0
+        _consec_neg = 0
+        for _rrow in recent_rows:
+            if float(_rrow[0]) < 0.0:
+                _consec_neg += 1
+            else:
+                break
+        result["consecutive_negative"] = _consec_neg
+        result["non_convergence_detected"] = (
+            len(recent_rows) >= self._N_NONCONV_THRESHOLD
+            and _consec_neg >= self._N_NONCONV_THRESHOLD
+        )
+        return result
 
     def get_tremor_convergence_history(
         self, session_type: str = "tremor_resting", limit: int = 10
@@ -11440,5 +11724,131 @@ class Store:
                 ) b ON a.agent_id = b.agent_id AND a.id = b.max_id
                 ORDER BY a.agent_id
                 """
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    # --- Phase 207: StagedDryRunGraduationGate ---
+
+    def insert_graduation_stage(
+        self,
+        agent_id: str,
+        stage_number: int,
+        notes: str = "",
+    ) -> int:
+        """Insert a new graduation stage record for an agent (Phase 207).
+
+        Called when an operator activates dry_run=False for a specific agent.
+        stage_number indicates sequential graduation order (1 = first agent).
+        Returns the row id of the inserted record.
+        """
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO dry_run_graduation_log "
+                "(agent_id, stage_number, activated_at, dry_run_disabled_at, "
+                " n_clean_sessions, n_false_positives, notes, created_at)"
+                " VALUES (?,?,?,?,?,?,?,?)",
+                (
+                    agent_id,
+                    int(stage_number),
+                    time.time(),
+                    time.time(),
+                    0,
+                    0,
+                    notes,
+                    time.time(),
+                ),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def record_graduation_clean_session(self, agent_id: str) -> bool:
+        """Increment n_clean_sessions for the active graduation stage (Phase 207).
+
+        Called when an adjudication completes without triggering a false positive.
+        Returns True if a live graduation stage was found and updated, False otherwise.
+        """
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT id FROM dry_run_graduation_log "
+                "WHERE agent_id=? AND rollback_triggered=0 ORDER BY id DESC LIMIT 1",
+                (agent_id,),
+            ).fetchone()
+            if row is None:
+                return False
+            conn.execute(
+                "UPDATE dry_run_graduation_log SET n_clean_sessions=n_clean_sessions+1 "
+                "WHERE id=?",
+                (row["id"],),
+            )
+        return True
+
+    def record_graduation_false_positive(
+        self, agent_id: str, fp_threshold: int = 2
+    ) -> bool:
+        """Increment n_false_positives and auto-trigger rollback if threshold exceeded (Phase 207).
+
+        Returns True when rollback was auto-triggered (n_false_positives >= fp_threshold),
+        False when false positive was recorded but threshold not yet reached.
+        """
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT id, n_false_positives FROM dry_run_graduation_log "
+                "WHERE agent_id=? AND rollback_triggered=0 ORDER BY id DESC LIMIT 1",
+                (agent_id,),
+            ).fetchone()
+            if row is None:
+                return False
+            new_fp = int(row["n_false_positives"]) + 1
+            if new_fp >= fp_threshold:
+                conn.execute(
+                    "UPDATE dry_run_graduation_log "
+                    "SET n_false_positives=?, rollback_triggered=1, "
+                    "    rollback_triggered_at=?, rollback_reason=? "
+                    "WHERE id=?",
+                    (new_fp, time.time(), f"auto: {new_fp}>={fp_threshold} false positives", row["id"]),
+                )
+                return True
+            conn.execute(
+                "UPDATE dry_run_graduation_log SET n_false_positives=? WHERE id=?",
+                (new_fp, row["id"]),
+            )
+        return False
+
+    def trigger_graduation_rollback(self, agent_id: str, reason: str) -> bool:
+        """Manually trigger rollback for an agent's active graduation stage (Phase 207).
+
+        Returns True if an active stage was found and rolled back, False otherwise.
+        """
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT id FROM dry_run_graduation_log "
+                "WHERE agent_id=? AND rollback_triggered=0 ORDER BY id DESC LIMIT 1",
+                (agent_id,),
+            ).fetchone()
+            if row is None:
+                return False
+            conn.execute(
+                "UPDATE dry_run_graduation_log "
+                "SET rollback_triggered=1, rollback_triggered_at=?, rollback_reason=? "
+                "WHERE id=?",
+                (time.time(), reason, row["id"]),
+            )
+        return True
+
+    def get_graduation_stage_status(self, agent_id: str) -> "dict | None":
+        """Return the latest graduation stage for an agent (Phase 207)."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM dry_run_graduation_log "
+                "WHERE agent_id=? ORDER BY id DESC LIMIT 1",
+                (agent_id,),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def get_all_graduation_stages(self) -> "list[dict]":
+        """Return all graduation stages, ordered by stage_number then creation (Phase 207)."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM dry_run_graduation_log "
+                "ORDER BY stage_number ASC, id ASC"
             ).fetchall()
         return [dict(r) for r in rows]
