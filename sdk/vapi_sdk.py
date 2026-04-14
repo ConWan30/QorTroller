@@ -6618,6 +6618,8 @@ class TremorConvergenceResult:
     ratio:                       "float | None"
     consecutive_positive:        int
     sessions_to_target_estimate: int
+    non_convergence_detected:    bool = False   # Phase 206: True when ≥5 consecutive negative velocities
+    consecutive_negative:        int  = 0       # Phase 206: count of leading consecutive negative readings
     error: "str | None" = None
 
 
@@ -6658,6 +6660,8 @@ class VAPITremorConvergence:
                 ratio                       = float(_ratio) if _ratio  is not None else None,
                 consecutive_positive        = int(body.get("consecutive_positive", 0)),
                 sessions_to_target_estimate = int(body.get("sessions_to_target_estimate", 0)),
+                non_convergence_detected    = bool(body.get("non_convergence_detected", False)),
+                consecutive_negative        = int(body.get("consecutive_negative", 0)),
             )
         except Exception as exc:
             return TremorConvergenceResult(
@@ -6667,6 +6671,8 @@ class VAPITremorConvergence:
                 ratio                       = None,
                 consecutive_positive        = 0,
                 sessions_to_target_estimate = 0,
+                non_convergence_detected    = False,
+                consecutive_negative        = 0,
                 error                       = str(exc),
             )
 
@@ -6831,4 +6837,249 @@ class VAPIIoSwarmAdjudicationPrimer:
                 devices_primed                  = 0,
                 ioswarm_adjudication_log_seeded = False,
                 error                           = str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Phase 205 — AccelTremorFFT (still-hold neurological tremor fallback)
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class AccelTremorFFTResult:
+    """Result from VAPIAccelTremorFFT.status() (Phase 205).
+
+    Reports the accel magnitude FFT fallback configuration for tremor_peak_hz.
+    When accel_tremor_fallback_enabled=True, still-hold sessions (tremor_seed
+    probe type) compute tremor_peak_hz from the IMU accelerometer ring in the
+    1-15 Hz physiological tremor search range instead of returning 0.0 from
+    a flat right_stick_x velocity FFT (neutral=128 during still-hold).
+
+    Root cause closed: right_stick_x stays at neutral=128 in tremor_seed
+    sessions because no gameplay motion is present; diff() → all zeros →
+    FFT peak at 0 Hz.  IMU accel FFT captures neurological tremor origin
+    frequencies (PC baseline: P1≈3.1 Hz, P2≈4.3 Hz, P3≈3.7 Hz).
+
+    Fields:
+        accel_tremor_fallback_enabled: True when ACCEL_TREMOR_FALLBACK_ENABLED=true (default).
+        still_hold_var_threshold:      right_stick_x ring variance below which still-hold
+                                       is detected (default 4.0 LSB²).
+        fallback_source:               "accel_magnitude_fft" when enabled; "stick_fft_only" when not.
+        tremor_search_range_hz:        [min_hz, max_hz] used in accel tremor peak search.
+        timestamp:                     Unix timestamp of status query.
+        error:                         Non-None when HTTP/parse error occurred.
+    """
+    accel_tremor_fallback_enabled: bool
+    still_hold_var_threshold:      float
+    fallback_source:               str
+    tremor_search_range_hz:        list
+    timestamp:                     float        = 0.0
+    error:                         "str | None" = None
+
+
+class VAPIAccelTremorFFT:
+    """SDK client for GET /agent/accel-tremor-fft-status (Phase 205).
+
+    Closes the tremor_peak_hz=0 bug in tremor_seed sessions: the BiometricFeatureExtractor
+    now falls back to accel magnitude FFT when right_stick_x variance < 4.0 LSB²
+    (still-hold detection), enabling per-player neurological tremor fingerprinting
+    without gameplay motion.
+
+    Example::
+
+        atf = VAPIAccelTremorFFT("http://localhost:8080", api_key)
+        result = atf.status()
+        if result.accel_tremor_fallback_enabled:
+            print(f"AccelTremorFFT active — search range: {result.tremor_search_range_hz} Hz")
+        else:
+            print("AccelTremorFFT disabled — set ACCEL_TREMOR_FALLBACK_ENABLED=true")
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def status(self) -> AccelTremorFFTResult:
+        """Return AccelTremorFFTResult from GET /agent/accel-tremor-fft-status.
+
+        On error: returns AccelTremorFFTResult with error set, fallback_source='unknown'.
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/agent/accel-tremor-fft-status?api_key={self._key}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return AccelTremorFFTResult(
+                accel_tremor_fallback_enabled = bool(body.get("accel_tremor_fallback_enabled", True)),
+                still_hold_var_threshold      = float(body.get("still_hold_var_threshold", 4.0)),
+                fallback_source               = str(body.get("fallback_source", "accel_magnitude_fft")),
+                tremor_search_range_hz        = list(body.get("tremor_search_range_hz", [1.0, 15.0])),
+                timestamp                     = float(body.get("timestamp", 0.0)),
+            )
+        except Exception as exc:
+            return AccelTremorFFTResult(
+                accel_tremor_fallback_enabled = False,
+                still_hold_var_threshold      = 4.0,
+                fallback_source               = "unknown",
+                tremor_search_range_hz        = [],
+                error                         = str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Phase 207 — StagedDryRunGraduationGate SDK
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class DryRunGraduationResult:
+    """Result from VAPIDryRunGraduation.get_status() (Phase 207).
+
+    Reports the complete state of the StagedDryRunGraduationGate: which agents
+    have graduated from dry_run=True to dry_run=False, whether any rollbacks
+    are active, and the current gate configuration.
+
+    Graduation is sequential: agents activate one at a time.  Rollback fires
+    automatically when n_false_positives >= fp_threshold within the rollback
+    window.  All preconditions (tournament preflight + non_convergence_clear)
+    must pass at activation time.
+
+    Fields:
+        staged_graduation_enabled:  True when STAGED_GRADUATION_ENABLED=true.
+        rollback_window_sessions:   Window of sessions for FP rate assessment.
+        fp_threshold:               Max tolerated false positives before rollback.
+        stages:                     List of graduation stage records (dicts).
+        active_stage_count:         Number of currently active (non-rolled-back) stages.
+        timestamp:                  Unix timestamp of status query.
+        error:                      Non-None when HTTP/parse error occurred.
+    """
+    staged_graduation_enabled: bool
+    rollback_window_sessions:  int
+    fp_threshold:              int
+    stages:                    list
+    active_stage_count:        int
+    timestamp:                 float        = 0.0
+    error:                     "str | None" = None
+
+
+class VAPIDryRunGraduation:
+    """SDK client for Phase 207 StagedDryRunGraduationGate endpoints.
+
+    Reads GET /agent/dry-run-graduation-status to report graduation state.
+    Use POST /agent/activate-graduation-stage (operator-auth required) via
+    direct HTTP to activate a new graduation stage.
+
+    Example::
+
+        drg = VAPIDryRunGraduation("http://localhost:8080", api_key)
+        result = drg.get_status()
+        if result.staged_graduation_enabled:
+            print(f"Graduation gate active — {result.active_stage_count} agent(s) graduated")
+        else:
+            print("Graduation gate disabled (STAGED_GRADUATION_ENABLED=false)")
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self) -> DryRunGraduationResult:
+        """Return DryRunGraduationResult from GET /agent/dry-run-graduation-status.
+
+        On error: returns DryRunGraduationResult with error set and staged_graduation_enabled=False.
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/agent/dry-run-graduation-status?api_key={self._key}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return DryRunGraduationResult(
+                staged_graduation_enabled = bool(body.get("staged_graduation_enabled", False)),
+                rollback_window_sessions  = int(body.get("rollback_window_sessions", 10)),
+                fp_threshold              = int(body.get("fp_threshold", 2)),
+                stages                    = list(body.get("stages", [])),
+                active_stage_count        = int(body.get("active_stage_count", 0)),
+                timestamp                 = float(body.get("timestamp", 0.0)),
+            )
+        except Exception as exc:
+            return DryRunGraduationResult(
+                staged_graduation_enabled = False,
+                rollback_window_sessions  = 10,
+                fp_threshold              = 2,
+                stages                    = [],
+                active_stage_count        = 0,
+                error                     = str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Phase 208 — CorpusRatioRegressionGuard (WIF-039 W1+W2)
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class CorpusRegressionGuardResult:
+    """Result from VAPICorpusRegressionGuard.get_status() (Phase 208).
+
+    Reports the state of the CorpusRatioRegressionGuard: whether a prior
+    separation ratio breakthrough (all_pairs_above_1=True) has been recorded
+    for a probe type, and whether the guard is enabled to block future
+    regressions below 1.0.  Closes WIF-039 (W1: ratchet mechanism, W2: audit
+    trail via tamper-evident provenance chain).
+    """
+    corpus_ratio_regression_guard_enabled: bool      = False
+    guard_active:                          bool      = False
+    breakthrough_ratio:                    "float | None" = None
+    breakthrough_n:                        "int | None"   = None
+    provenance_hash:                       "str | None"   = None
+    override_count:                        int       = 0
+    timestamp:                             float     = 0.0
+    error:                                 "str | None"   = None
+
+
+class VAPICorpusRegressionGuard:
+    """SDK client for Phase 208 CorpusRatioRegressionGuard endpoint.
+
+    Reads GET /agent/corpus-regression-guard-status to report guard state.
+
+    Example::
+
+        guard = VAPICorpusRegressionGuard("http://localhost:8080", api_key)
+        result = guard.get_status(probe_type="tremor_resting")
+        if result.guard_active:
+            print(f"Guard active — breakthrough at ratio={result.breakthrough_ratio:.3f}")
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self, probe_type: str = "") -> CorpusRegressionGuardResult:
+        """Return CorpusRegressionGuardResult from GET /agent/corpus-regression-guard-status.
+
+        On error: returns CorpusRegressionGuardResult with error set and guard_active=False.
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            _params = f"api_key={self._key}"
+            if probe_type:
+                _params += f"&probe_type={probe_type}"
+            url = f"{self._base}/agent/corpus-regression-guard-status?{_params}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return CorpusRegressionGuardResult(
+                corpus_ratio_regression_guard_enabled = bool(body.get("corpus_ratio_regression_guard_enabled", False)),
+                guard_active     = bool(body.get("guard_active", False)),
+                breakthrough_ratio = body.get("breakthrough_ratio"),
+                breakthrough_n   = body.get("breakthrough_n"),
+                provenance_hash  = body.get("provenance_hash"),
+                override_count   = int(body.get("override_count", 0)),
+                timestamp        = float(body.get("timestamp", 0.0)),
+            )
+        except Exception as exc:
+            return CorpusRegressionGuardResult(
+                corpus_ratio_regression_guard_enabled = False,
+                guard_active     = False,
+                breakthrough_ratio = None,
+                breakthrough_n   = None,
+                provenance_hash  = None,
+                override_count   = 0,
+                error            = str(exc),
             )

@@ -1214,6 +1214,48 @@ class Config:
     and unblocking the IOSWARM_ACTIVE_NO_ADJUDICATIONS CONTRADICTION rule.
     Default False (infrastructure-first; requires explicit activation)."""
 
+    # --- Phase 205: AccelTremorFFT ---
+    accel_tremor_fallback_enabled: bool = field(
+        default_factory=lambda: _env("ACCEL_TREMOR_FALLBACK_ENABLED", "true").lower() != "false"
+    )
+    """Phase 205 — Enable accel magnitude FFT fallback for tremor_peak_hz when
+    right_stick_x variance < _STILL_HOLD_VAR_THRESHOLD (4.0 LSB²).  When True,
+    still-hold sessions (tremor_seed probe type) use IMU accelerometer data to
+    compute per-player neurological tremor peak frequencies instead of returning 0.0.
+    Default True.  Set ACCEL_TREMOR_FALLBACK_ENABLED=false to disable."""
+
+    # --- Phase 207: StagedDryRunGraduationGate ---
+    staged_graduation_enabled: bool = field(
+        default_factory=lambda: _env("STAGED_GRADUATION_ENABLED", "false").lower() == "true"
+    )
+    """Phase 207 — Enable the StagedDryRunGraduationGate.  When True, operators may
+    activate POST /agent/activate-graduation-stage to transition individual agents from
+    dry_run=True to dry_run=False sequentially.  Default False (infrastructure-first).
+    Requires tournament preflight overall_pass=True and non_convergence_clear=True."""
+
+    graduation_rollback_window_sessions: int = field(
+        default_factory=lambda: int(_env("GRADUATION_ROLLBACK_WINDOW_SESSIONS", "10"))
+    )
+    """Phase 207 — Rolling window of sessions within which false-positive rate is assessed.
+    An agent reverts to dry_run=True when n_false_positives >= graduation_fp_threshold
+    within this window.  Default 10."""
+
+    graduation_fp_threshold: int = field(
+        default_factory=lambda: int(_env("GRADUATION_FP_THRESHOLD", "2"))
+    )
+    """Phase 207 — Maximum tolerated false positives within graduation_rollback_window_sessions
+    before automatic rollback is triggered.  Default 2 (≥2 false positives → rollback)."""
+
+    # --- Phase 208: CorpusRatioRegressionGuard ---
+    corpus_ratio_regression_guard_enabled: bool = field(
+        default_factory=lambda: _env("CORPUS_RATIO_REGRESSION_GUARD_ENABLED", "false").lower() == "true"
+    )
+    """Phase 208 — Enable the CorpusRatioRegressionGuard (WIF-039 W1).  When True,
+    insert_separation_defensibility_log_guarded() raises CorpusRegressionError if the new
+    entry has all_pairs_above_1=False and a prior breakthrough (all_pairs_above_1=True) exists
+    for that probe type, unless an override is registered.  Default False (infrastructure-first).
+    Set CORPUS_RATIO_REGRESSION_GUARD_ENABLED=true once separation ratio exceeds 1.0."""
+
     # --- Phase 154: Capture Stagnation Monitor ---
     capture_stagnation_threshold: float = field(
         default_factory=lambda: float(_env("CAPTURE_STAGNATION_THRESHOLD", "0.5"))

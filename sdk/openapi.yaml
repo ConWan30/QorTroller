@@ -4688,6 +4688,64 @@ paths:
         "409":
           description: Primer disabled (IOSWARM_ADJUDICATION_PRIMER_ENABLED=false)
 
+  /agent/corpus-regression-guard-status:
+    get:
+      summary: CorpusRatioRegressionGuard status (Phase 208)
+      description: >
+        Reports whether the corpus ratio regression guard is enabled and whether
+        a prior separation ratio breakthrough (all_pairs_above_1=True) has been
+        recorded for the requested probe type.  When guard_active=True, any
+        future defensibility log insert with all_pairs_above_1=False will raise
+        CorpusRegressionError unless an override is registered first.  The
+        tamper-evident provenance chain (SHA-256 linked) provides an auditable
+        lineage of every breakthrough milestone.  Closes WIF-039 (W1: ratchet,
+        W2: provenance chain).
+      parameters:
+        - in: query
+          name: probe_type
+          required: false
+          schema:
+            type: string
+          description: Filter by probe type (e.g. "tremor_resting"); omit for global latest
+        - in: query
+          name: api_key
+          required: false
+          schema:
+            type: string
+          description: Optional operator API key
+      responses:
+        "200":
+          description: CorpusRatioRegressionGuard configuration and breakthrough status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CorpusRegressionGuardStatus"
+
+  /agent/accel-tremor-fft-status:
+    get:
+      summary: AccelTremorFFT fallback status (Phase 205)
+      description: >
+        Reports whether the accel magnitude FFT fallback for tremor_peak_hz is
+        enabled and the still-hold detection threshold.  When enabled, tremor_seed
+        still-hold sessions compute tremor_peak_hz from the IMU accelerometer ring
+        (search range 1-15 Hz) instead of returning 0.0 from a flat right_stick_x
+        velocity FFT (neutral=128 during still-hold).  Closes the tremor_peak_hz=0
+        bug that made all tremor_seed sessions report 0 Hz.
+      parameters:
+        - in: query
+          name: api_key
+          required: false
+          schema:
+            type: string
+          description: Optional operator API key
+      responses:
+        "200":
+          description: AccelTremorFFT configuration status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccelTremorFFTStatus"
+
 # =============================================================================
 # Components
 # =============================================================================
@@ -9181,3 +9239,54 @@ webhooks:
         timestamp:
           type: number
           description: "Unix timestamp of primer execution"
+
+    CorpusRegressionGuardStatus:
+      type: object
+      description: "Phase 208 CorpusRatioRegressionGuard — ratchet mechanism for separation ratio breakthrough milestones (WIF-039 W1+W2)"
+      properties:
+        corpus_ratio_regression_guard_enabled:
+          type: boolean
+          description: "True when CORPUS_RATIO_REGRESSION_GUARD_ENABLED=true (default False)"
+        guard_active:
+          type: boolean
+          description: "True when a prior all_pairs_above_1=True breakthrough has been recorded for the probe type"
+        breakthrough_ratio:
+          type: number
+          nullable: true
+          description: "Separation ratio at the most recent breakthrough milestone (null if no breakthrough yet)"
+        breakthrough_n:
+          type: integer
+          nullable: true
+          description: "N_sessions_total at the most recent breakthrough milestone (null if no breakthrough yet)"
+        provenance_hash:
+          type: string
+          nullable: true
+          description: "SHA-256 provenance chain hash of the most recent breakthrough milestone (null if no breakthrough)"
+        override_count:
+          type: integer
+          description: "Number of authorized regression overrides registered for this probe type"
+        timestamp:
+          type: number
+          description: "Unix timestamp of status query"
+
+    AccelTremorFFTStatus:
+      type: object
+      description: "Phase 205 AccelTremorFFT fallback — still-hold tremor_peak_hz computation"
+      properties:
+        accel_tremor_fallback_enabled:
+          type: boolean
+          description: "True when ACCEL_TREMOR_FALLBACK_ENABLED=true (default True)"
+        still_hold_var_threshold:
+          type: number
+          description: "right_stick_x ring variance below which still-hold is detected (default 4.0 LSB²)"
+        fallback_source:
+          type: string
+          description: "'accel_magnitude_fft' when enabled; 'stick_fft_only' when not"
+        tremor_search_range_hz:
+          type: array
+          items:
+            type: number
+          description: "[min_hz, max_hz] physiological tremor search range used in accel FFT (default [1.0, 15.0])"
+        timestamp:
+          type: number
+          description: "Unix timestamp of status query"

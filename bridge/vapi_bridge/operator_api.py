@@ -5347,6 +5347,9 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                 "sessions_to_target_estimate":   int(_status202.get("sessions_to_target_est", 0)) if _status202 else 0,
                 "n_sessions":                    int(_status202.get("n_sessions", 0))           if _status202 else 0,
                 "session_type":                  str(_status202.get("session_type", "tremor_resting")) if _status202 else "tremor_resting",
+                # Phase 206: non-convergence detection
+                "non_convergence_detected":      bool(_status202.get("non_convergence_detected", False)) if _status202 else False,
+                "consecutive_negative":          int(_status202.get("consecutive_negative", 0))  if _status202 else 0,
                 "timestamp":                     _t202.time(),
             }
         except Exception as exc:
@@ -6006,6 +6009,181 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "orphan_count_resolved":          stats.get("orphan_count_resolved", 0),
             "domain":                         stats.get("domain", "all"),
             "timestamp":                      _t195.time(),
+        }
+
+    # ------------------------------------------------------------------
+    # Phase 205 — GET /agent/accel-tremor-fft-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/accel-tremor-fft-status")
+    async def get_accel_tremor_fft_status(x_api_key: str = Header(default="")):
+        """AccelTremorFFT fallback status (Phase 205).
+
+        Reports whether the accel magnitude FFT fallback for tremor_peak_hz is
+        enabled and the still-hold detection threshold.  When enabled, still-hold
+        sessions (tremor_seed probe type) compute tremor_peak_hz from the IMU
+        accelerometer ring (1-15 Hz search range) instead of the right_stick_x
+        velocity FFT (which returns 0 at neutral=128 during still-hold).
+
+        Returns 5 keys:
+          accel_tremor_fallback_enabled / still_hold_var_threshold /
+          fallback_source / tremor_search_range_hz / timestamp
+        """
+        _check_rate(x_api_key)
+        import time as _t205
+        _enabled205 = bool(getattr(cfg, "accel_tremor_fallback_enabled", True))
+        return {
+            "accel_tremor_fallback_enabled": _enabled205,
+            "still_hold_var_threshold":      4.0,
+            "fallback_source":               "accel_magnitude_fft" if _enabled205 else "stick_fft_only",
+            "tremor_search_range_hz":        [1.0, 15.0],
+            "timestamp":                     _t205.time(),
+        }
+
+    # ------------------------------------------------------------------
+    # Phase 207 — GET /agent/dry-run-graduation-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/dry-run-graduation-status")
+    async def get_dry_run_graduation_status(x_api_key: str = Header(default="")):
+        """StagedDryRunGraduationGate status (Phase 207).
+
+        Reports the current state of all graduation stages and overall gate config.
+        staged_graduation_enabled=False means all agents remain in dry_run=True;
+        the endpoint is read-only and always available for monitoring.
+
+        Returns 6 keys:
+          staged_graduation_enabled / rollback_window_sessions / fp_threshold /
+          stages / active_stage_count / timestamp
+        """
+        _check_rate(x_api_key)
+        import time as _t207
+        _enabled207   = bool(getattr(cfg, "staged_graduation_enabled", False))
+        _window207    = int(getattr(cfg, "graduation_rollback_window_sessions", 10))
+        _fp_thresh207 = int(getattr(cfg, "graduation_fp_threshold", 2))
+        _stages207: list = []
+        try:
+            _stages207 = store.get_all_graduation_stages()
+        except Exception:
+            pass
+        _active207 = sum(1 for s in _stages207 if not s.get("rollback_triggered"))
+        return {
+            "staged_graduation_enabled":  _enabled207,
+            "rollback_window_sessions":   _window207,
+            "fp_threshold":               _fp_thresh207,
+            "stages":                     _stages207,
+            "active_stage_count":         _active207,
+            "timestamp":                  _t207.time(),
+        }
+
+    # ------------------------------------------------------------------
+    # Phase 207 — POST /agent/activate-graduation-stage
+    # ------------------------------------------------------------------
+    @app.post("/agent/activate-graduation-stage")
+    async def activate_graduation_stage(
+        request: Request,
+        x_api_key: str = Header(default=""),
+    ):
+        """Activate a dry-run graduation stage for a specific agent (Phase 207).
+
+        P0 preconditions (fail-closed):
+          - staged_graduation_enabled=True
+          - tournament_preflight overall_pass=True
+          - non_convergence_detected=False
+
+        Request body (JSON):
+          - agent_id: str  (required)
+          - notes:    str  (optional)
+
+        Returns activation result with precondition breakdown.
+        HTTP 422 if preconditions not met or agent_id missing.
+        """
+        import time as _t207p
+        # P0 fail-fast: check enabled flag before key auth (no state change, safe)
+        if not bool(getattr(cfg, "staged_graduation_enabled", False)):
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "staged_graduation_enabled=False — set STAGED_GRADUATION_ENABLED=true "
+                    "and ensure tournament_preflight overall_pass=True before activating."
+                ),
+            )
+        _check_rate(x_api_key)
+        _body207 = {}
+        try:
+            _body207 = await request.json()
+        except Exception:
+            pass
+        _agent_id207 = str(_body207.get("agent_id", "")).strip()
+        if not _agent_id207:
+            raise HTTPException(status_code=422, detail="agent_id required")
+
+        from .staged_dry_run_graduation_agent import StagedDryRunGraduationAgent as _SDRGA
+        _graduation_agent207 = _SDRGA(cfg=cfg, store=store, bus=None)
+        _result207 = _graduation_agent207.activate_stage(
+            agent_id=_agent_id207,
+            notes=str(_body207.get("notes", "")),
+        )
+        if not _result207.get("activated"):
+            raise HTTPException(
+                status_code=422,
+                detail=_result207.get("error", "activation_failed"),
+            )
+        return {
+            "activated":       _result207["activated"],
+            "row_id":          _result207.get("row_id"),
+            "stage_number":    _result207.get("stage_number"),
+            "agent_id":        _agent_id207,
+            "preconditions":   _result207.get("preconditions", {}),
+            "timestamp":       _t207p.time(),
+        }
+
+    # ------------------------------------------------------------------
+    # Phase 208 — GET /agent/corpus-regression-guard-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/corpus-regression-guard-status")
+    async def get_corpus_regression_guard_status(
+        probe_type: str = "",
+        x_api_key: str = Header(default=""),
+    ):
+        """CorpusRatioRegressionGuard status (Phase 208 — WIF-039 W1+W2).
+
+        Reports whether the corpus ratio regression guard is enabled and whether a
+        prior separation ratio breakthrough (all_pairs_above_1=True) has been recorded
+        for the requested probe type.  When guard_active=True, any future corpus insert
+        with all_pairs_above_1=False will raise CorpusRegressionError unless an override
+        is registered first.
+
+        Query param:
+          probe_type: str (optional) — filter by probe type; omit for global latest
+
+        Returns 7 keys:
+          corpus_ratio_regression_guard_enabled / guard_active / breakthrough_ratio /
+          breakthrough_n / provenance_hash / override_count / timestamp
+        """
+        _check_rate(x_api_key)
+        import time as _t208
+        _guard_enabled208 = bool(getattr(cfg, "corpus_ratio_regression_guard_enabled", False))
+        try:
+            _status208 = store.get_corpus_regression_guard_status(
+                probe_type=probe_type if probe_type else None
+            )
+        except Exception as _e208:
+            _status208 = {
+                "guard_active":      False,
+                "breakthrough_ratio": None,
+                "breakthrough_n":    None,
+                "provenance_hash":   None,
+                "override_count":    0,
+                "probe_type":        probe_type or None,
+                "timestamp":         _t208.time(),
+            }
+        return {
+            "corpus_ratio_regression_guard_enabled": _guard_enabled208,
+            "guard_active":      _status208.get("guard_active", False),
+            "breakthrough_ratio": _status208.get("breakthrough_ratio"),
+            "breakthrough_n":    _status208.get("breakthrough_n"),
+            "provenance_hash":   _status208.get("provenance_hash"),
+            "override_count":    _status208.get("override_count", 0),
+            "timestamp":         _t208.time(),
         }
 
     return app
