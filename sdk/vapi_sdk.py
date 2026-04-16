@@ -7083,3 +7083,382 @@ class VAPICorpusRegressionGuard:
                 override_count   = 0,
                 error            = str(exc),
             )
+
+
+@dataclass(slots=True)
+class L4DimSyncResult:
+    """Result from VAPIL4DimSync.get_status() (Phase 215).
+
+    Reports whether the L4 calibration dimension sync has been completed —
+    confirming that thresholds calibrated at dim=12 remain valid for the live
+    13-feature space because touchpad_spatial_entropy (index 12) is structurally
+    zero in gameplay sessions (NCAA CFB 26).  Closes G-003 L4 staleness gap.
+    """
+    l4_dim_sync_enabled:   bool             = False
+    sync_completed:        bool             = False
+    from_dim:              "int | None"     = None
+    to_dim:                "int | None"     = None
+    anomaly_threshold:     "float | None"   = None
+    continuity_threshold:  "float | None"   = None
+    error:                 "str | None"     = None
+
+
+class VAPIL4DimSync:
+    """SDK client for Phase 215 L4DimSyncConfirmation endpoint.
+
+    Reads GET /agent/l4-dim-sync-status to report whether the L4 calibration
+    dimension has been synced to the live feature space.
+
+    Example::
+
+        sync = VAPIL4DimSync("http://localhost:8080", api_key)
+        result = sync.get_status()
+        if result.sync_completed:
+            print(f"L4 dim synced: {result.from_dim} -> {result.to_dim}")
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self) -> L4DimSyncResult:
+        """Return L4DimSyncResult from GET /agent/l4-dim-sync-status.
+
+        On error: returns L4DimSyncResult with error set and sync_completed=False.
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/agent/l4-dim-sync-status?api_key={self._key}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return L4DimSyncResult(
+                l4_dim_sync_enabled  = bool(body.get("l4_dim_sync_enabled", False)),
+                sync_completed       = bool(body.get("sync_completed", False)),
+                from_dim             = body.get("from_dim"),
+                to_dim               = body.get("to_dim"),
+                anomaly_threshold    = body.get("anomaly_threshold"),
+                continuity_threshold = body.get("continuity_threshold"),
+            )
+        except Exception as exc:
+            return L4DimSyncResult(
+                l4_dim_sync_enabled  = False,
+                sync_completed       = False,
+                error                = str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Phase 216 — PerPairGapLog
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class PerPairGapResult:
+    """Result from VAPIPerPairGap.get_status() (Phase 216 PerPairGapLog)."""
+    per_pair_gap_log_enabled: bool             = False
+    all_pairs_above_1:        bool             = False
+    pair_count:               int              = 0
+    pairs:                    "list[dict]"     = field(default_factory=list)
+    blocker_pairs:            "list[dict]"     = field(default_factory=list)
+    error:                    "str | None"     = None
+
+
+class VAPIPerPairGap:
+    """SDK client for Phase 216 PerPairGapLog endpoint.
+
+    Reads GET /agent/per-pair-gap-status to report per-pair Mahalanobis
+    inter-player distances from the most recent analysis run.
+
+    Example::
+
+        ppg = VAPIPerPairGap("http://localhost:8080", api_key)
+        result = ppg.get_status()
+        if not result.all_pairs_above_1:
+            print(f"Blocker pairs: {result.blocker_pairs}")
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self) -> PerPairGapResult:
+        """Return PerPairGapResult from GET /agent/per-pair-gap-status.
+
+        On error: returns PerPairGapResult with error set and all_pairs_above_1=False.
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/agent/per-pair-gap-status"
+            req = _ur.Request(url, headers={"x-api-key": self._key})
+            with _ur.urlopen(req, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return PerPairGapResult(
+                per_pair_gap_log_enabled = bool(body.get("per_pair_gap_log_enabled", False)),
+                all_pairs_above_1        = bool(body.get("all_pairs_above_1", False)),
+                pair_count               = int(body.get("pair_count", 0)),
+                pairs                    = list(body.get("pairs", [])),
+                blocker_pairs            = list(body.get("blocker_pairs", [])),
+            )
+        except Exception as exc:
+            return PerPairGapResult(
+                per_pair_gap_log_enabled = False,
+                all_pairs_above_1        = False,
+                error                    = str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Phase 217 — PerPairGapTrend
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class PerPairGapTrendResult:
+    """Result from VAPIPerPairGapTrend.get_trend() (Phase 217 PerPairGapTrend)."""
+    per_pair_gap_trend_enabled: bool             = False
+    pair_key:                   str              = ""
+    distances:                  "list[float]"    = field(default_factory=list)
+    velocity_per_day:           "float | None"   = None
+    trend:                      str              = "UNKNOWN"
+    n_runs:                     int              = 0
+    blocker_resolved:           bool             = False
+    error:                      "str | None"     = None
+
+
+class VAPIPerPairGapTrend:
+    """SDK client for Phase 217 PerPairGapTrend endpoint.
+
+    Reads GET /agent/per-pair-gap-trend to report distance velocity and trend
+    for a specific pair key over recent analysis runs.
+
+    Example::
+
+        trend = VAPIPerPairGapTrend("http://localhost:8080", api_key)
+        result = trend.get_trend(pair_key="P1vP3")
+        print(f"{result.pair_key}: {result.trend} ({result.velocity_per_day:.4f}/day)")
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_trend(self, pair_key: str = "P1vP3", session_type: str = "",
+                  n_runs: int = 5) -> PerPairGapTrendResult:
+        """Return PerPairGapTrendResult from GET /agent/per-pair-gap-trend.
+
+        On error: returns PerPairGapTrendResult with error set and trend=UNKNOWN.
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            params = f"pair_key={pair_key}&n_runs={n_runs}"
+            if session_type:
+                params += f"&session_type={session_type}"
+            url = f"{self._base}/agent/per-pair-gap-trend?{params}"
+            req = _ur.Request(url, headers={"x-api-key": self._key})
+            with _ur.urlopen(req, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return PerPairGapTrendResult(
+                per_pair_gap_trend_enabled = bool(body.get("per_pair_gap_trend_enabled", False)),
+                pair_key                   = str(body.get("pair_key", pair_key)),
+                distances                  = list(body.get("distances", [])),
+                velocity_per_day           = body.get("velocity_per_day"),
+                trend                      = str(body.get("trend", "UNKNOWN")),
+                n_runs                     = int(body.get("n_runs", 0)),
+                blocker_resolved           = bool(body.get("blocker_resolved", False)),
+            )
+        except Exception as exc:
+            return PerPairGapTrendResult(
+                per_pair_gap_trend_enabled = False,
+                pair_key                   = pair_key,
+                trend                      = "UNKNOWN",
+                error                      = str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Phase 218 — CaptureVelocityOracle
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class CaptureVelocityResult:
+    """Result from VAPICaptureVelocityOracle.get_status() (Phase 218 CaptureVelocityOracle)."""
+    capture_velocity_oracle_enabled: bool           = False
+    probe_type:                      str            = "touchpad_corners"
+    sessions_per_day:                float          = 0.0
+    sessions_stagnant:               bool           = True
+    ratio_velocity:                  float          = 0.0
+    velocity_stagnant:               bool           = True
+    overall_capture_healthy:         bool           = False
+    recommended_action:              str            = "UNKNOWN"
+    error:                           "str | None"   = None
+
+
+class VAPICaptureVelocityOracle:
+    """SDK client for Phase 218 CaptureVelocityOracle endpoint.
+
+    Reads GET /agent/capture-velocity-oracle to report the synthesized capture
+    health status from Phase 152 + Phase 154 data.
+
+    Example::
+
+        cvo = VAPICaptureVelocityOracle("http://localhost:8080", api_key)
+        result = cvo.get_status()
+        if not result.overall_capture_healthy:
+            print(f"Capture action: {result.recommended_action}")
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self, probe_type: str = "touchpad_corners") -> CaptureVelocityResult:
+        """Return CaptureVelocityResult from GET /agent/capture-velocity-oracle.
+
+        On error: returns CaptureVelocityResult with error set and overall_capture_healthy=False.
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/agent/capture-velocity-oracle?probe_type={probe_type}"
+            req = _ur.Request(url, headers={"x-api-key": self._key})
+            with _ur.urlopen(req, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return CaptureVelocityResult(
+                capture_velocity_oracle_enabled = bool(body.get("capture_velocity_oracle_enabled", False)),
+                probe_type                      = str(body.get("probe_type", probe_type)),
+                sessions_per_day                = float(body.get("sessions_per_day", 0.0)),
+                sessions_stagnant               = bool(body.get("sessions_stagnant", True)),
+                ratio_velocity                  = float(body.get("ratio_velocity", 0.0)),
+                velocity_stagnant               = bool(body.get("velocity_stagnant", True)),
+                overall_capture_healthy         = bool(body.get("overall_capture_healthy", False)),
+                recommended_action              = str(body.get("recommended_action", "UNKNOWN")),
+            )
+        except Exception as exc:
+            return CaptureVelocityResult(
+                capture_velocity_oracle_enabled = False,
+                overall_capture_healthy         = False,
+                error                           = str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Phase 219 — TournamentBlockerSummary
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class TournamentBlockerSummaryResult:
+    """Result from VAPITournamentBlockerSummary.get_summary() (Phase 219)."""
+    tournament_blocker_summary_enabled: bool          = False
+    total_blockers:                     int           = 0
+    blockers:                           "list[dict]"  = field(default_factory=list)
+    overall_blocked:                    bool          = True
+    preflight_pass:                     bool          = False
+    capture_healthy:                    bool          = False
+    all_pairs_above_1:                  bool          = False
+    error:                              "str | None"  = None
+
+
+class VAPITournamentBlockerSummary:
+    """SDK client for Phase 219 TournamentBlockerSummary endpoint.
+
+    Reads GET /agent/tournament-blocker-summary to return all active TGE blockers.
+
+    Example::
+
+        tbs = VAPITournamentBlockerSummary("http://localhost:8080", api_key)
+        result = tbs.get_summary()
+        if result.overall_blocked:
+            for b in result.blockers:
+                print(f"[{b['severity']}] {b['source']}: {b['detail']}")
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_summary(self) -> TournamentBlockerSummaryResult:
+        """Return TournamentBlockerSummaryResult from GET /agent/tournament-blocker-summary.
+
+        On error: returns TournamentBlockerSummaryResult with error set and overall_blocked=True.
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/agent/tournament-blocker-summary"
+            req = _ur.Request(url, headers={"x-api-key": self._key})
+            with _ur.urlopen(req, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return TournamentBlockerSummaryResult(
+                tournament_blocker_summary_enabled = bool(body.get("tournament_blocker_summary_enabled", False)),
+                total_blockers                     = int(body.get("total_blockers", 0)),
+                blockers                           = list(body.get("blockers", [])),
+                overall_blocked                    = bool(body.get("overall_blocked", True)),
+                preflight_pass                     = bool(body.get("preflight_pass", False)),
+                capture_healthy                    = bool(body.get("capture_healthy", False)),
+                all_pairs_above_1                  = bool(body.get("all_pairs_above_1", False)),
+            )
+        except Exception as exc:
+            return TournamentBlockerSummaryResult(
+                tournament_blocker_summary_enabled = False,
+                overall_blocked                    = True,
+                error                              = str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Phase 220 — PerPairGapProjection
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class PerPairGapProjectionResult:
+    """Result from VAPIPerPairGapProjection.get_projection() (Phase 220)."""
+    per_pair_gap_projection_enabled: bool           = False
+    projections:                     "list[dict]"   = field(default_factory=list)
+    any_feasible:                    bool           = False
+    max_days_to_1_0:                 "float | None" = None
+    projected_tge_date:              "str | None"   = None
+    session_type:                    "str | None"   = None
+    error:                           "str | None"   = None
+
+
+class VAPIPerPairGapProjection:
+    """SDK client for Phase 220 PerPairGapProjection endpoint.
+
+    Reads GET /agent/per-pair-gap-projection to return projected TGE timeline
+    for each blocker pair based on current distance velocity.
+
+    Example::
+
+        proj = VAPIPerPairGapProjection("http://localhost:8080", api_key)
+        result = proj.get_projection()
+        print(f"Projected TGE date: {result.projected_tge_date}")
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_projection(self, session_type: str = "", n_runs: int = 5) -> PerPairGapProjectionResult:
+        """Return PerPairGapProjectionResult from GET /agent/per-pair-gap-projection.
+
+        On error: returns PerPairGapProjectionResult with error set and any_feasible=False.
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            params = f"n_runs={n_runs}"
+            if session_type:
+                params += f"&session_type={session_type}"
+            url = f"{self._base}/agent/per-pair-gap-projection?{params}"
+            req = _ur.Request(url, headers={"x-api-key": self._key})
+            with _ur.urlopen(req, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return PerPairGapProjectionResult(
+                per_pair_gap_projection_enabled = bool(body.get("per_pair_gap_projection_enabled", False)),
+                projections                     = list(body.get("projections", [])),
+                any_feasible                    = bool(body.get("any_feasible", False)),
+                max_days_to_1_0                 = body.get("max_days_to_1_0"),
+                projected_tge_date              = body.get("projected_tge_date"),
+                session_type                    = body.get("session_type"),
+            )
+        except Exception as exc:
+            return PerPairGapProjectionResult(
+                per_pair_gap_projection_enabled = False,
+                any_feasible                    = False,
+                error                           = str(exc),
+            )

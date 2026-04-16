@@ -418,6 +418,40 @@ ORPHAN_RULES: dict = {
             "Do NOT authorize dry_run=False while convergence_declining=True."
         ),
     },
+
+    "PER_PAIR_GAP_BLOCKER_UNRESOLVED": {
+        # Phase 217: PerPairGapTrend — 7th ORPHAN rule.
+        # Fires when per_pair_gap_log has a blocker entry (above_1_0=0) that is
+        # older than 24 hours without any subsequent entry showing above_1_0=1.
+        # This means a known tournament blocker pair (e.g. P1vP3=0.032) has gone
+        # unresolved for at least a full day with no corrective capture session.
+        "trigger_table":         "per_pair_gap_log",
+        "trigger_column":        "above_1_0",
+        "trigger_value":         0,
+        "trigger_ts_col":        "created_at",
+        "response_table":        "per_pair_gap_log",
+        "response_filter":       "above_1_0 = 1",
+        "orphan_window_seconds": 86400,  # 24 hours
+        "trigger_agent":         "PerPairGapLog (Phase 216)",
+        "response_agent":        "CorpusDataCuratorAgent (new capture session resolving blocker pair)",
+        "severity": "HIGH",
+        "explanation": (
+            "per_pair_gap_log has a blocker pair (above_1_0=0) entry more than 24 hours "
+            "old with no subsequent entry showing above_1_0=1 for any pair. This means a "
+            "known tournament blocker — e.g. P1vP3=0.032 or P2vP3=0.401 on touchpad_corners "
+            "— has not been resolved by new capture sessions. Tournament gate (all_pairs_p0_ok) "
+            "will remain blocked. Phase 217 trend analysis may show WORSENING velocity. "
+            "TGE gate requires ALL pairs above 1.0 before dry_run=False authorization."
+        ),
+        "resolution": (
+            "Capture additional structured probe sessions (touchpad_corners or tremor_resting) "
+            "for the blocker players. Run analyze_interperson_separation.py --session-consistency "
+            "and call insert_per_pair_gap() with updated distances. "
+            "G-001 (P1vP3 tremor_resting) requires hardware re-capture sessions. "
+            "G-002 (touchpad_corners ratio=0.728) requires more P1 corner-tap sessions. "
+            "Do NOT advance dry_run=False while any pair remains below 1.0."
+        ),
+    },
 }
 
 # ---------------------------------------------------------------------------
