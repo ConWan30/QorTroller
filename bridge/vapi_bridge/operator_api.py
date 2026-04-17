@@ -6239,4 +6239,265 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "timestamp":         _t208.time(),
         }
 
+    # ------------------------------------------------------------------
+    # Phase 215 — GET /agent/l4-dim-sync-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/l4-dim-sync-status")
+    async def get_l4_dim_sync_status(
+        x_api_key: str = Header(default=""),
+    ):
+        """L4 calibration dimension sync status (Phase 215 — G-003 closure).
+
+        Reports whether the L4 threshold dimension sync has been completed,
+        confirming that the existing thresholds (anomaly=7.009, continuity=5.367)
+        calibrated at dim=12 remain valid for the live 13-feature space.
+        Feature 12 (touchpad_spatial_entropy) is structurally zero in gameplay
+        sessions (NCAA CFB 26), so no recalibration is required.
+
+        Returns 7 keys:
+          l4_dim_sync_enabled / sync_completed / from_dim / to_dim /
+          anomaly_threshold / continuity_threshold / timestamp
+        """
+        _check_rate(x_api_key)
+        import time as _t215
+        _enabled215 = bool(getattr(cfg, "l4_dim_sync_enabled", True))
+        try:
+            _status215 = store.get_l4_dim_sync_status()
+        except Exception:
+            _status215 = {
+                "sync_completed":        False,
+                "from_dim":              None,
+                "to_dim":                None,
+                "anomaly_threshold":     None,
+                "continuity_threshold":  None,
+                "timestamp":             _t215.time(),
+            }
+        return {
+            "l4_dim_sync_enabled":   _enabled215,
+            "sync_completed":        _status215.get("sync_completed", False),
+            "from_dim":              _status215.get("from_dim"),
+            "to_dim":                _status215.get("to_dim"),
+            "anomaly_threshold":     _status215.get("anomaly_threshold"),
+            "continuity_threshold":  _status215.get("continuity_threshold"),
+            "timestamp":             _t215.time(),
+        }
+
+    # ------------------------------------------------------------------
+    # Phase 220 — GET /agent/per-pair-gap-projection
+    # ------------------------------------------------------------------
+    @app.get("/agent/per-pair-gap-projection")
+    async def get_per_pair_gap_projection(
+        x_api_key: str = Header(default=""),
+        session_type: str = "",
+        n_runs: int = 5,
+    ):
+        """Per-pair gap TGE timeline projection (Phase 220).
+
+        For each blocker pair, projects days until distance reaches 1.0 using
+        current velocity. WORSENING/STABLE pairs return projection_feasible=False.
+
+        Returns 7 keys: per_pair_gap_projection_enabled / projections /
+                        any_feasible / max_days_to_1_0 / projected_tge_date /
+                        session_type / timestamp
+        """
+        _check_rate(x_api_key)
+        import time as _t220
+        _enabled220 = bool(getattr(cfg, "per_pair_gap_projection_enabled", True))
+        _st220 = session_type.strip() or None
+        try:
+            _proj220 = store.get_per_pair_gap_projection(
+                session_type=_st220, n_runs=int(n_runs)
+            )
+        except Exception:
+            _proj220 = {
+                "projections": [], "any_feasible": False,
+                "max_days_to_1_0": None, "projected_tge_date": None,
+                "session_type": _st220, "timestamp": _t220.time(),
+            }
+        return {
+            "per_pair_gap_projection_enabled": _enabled220,
+            "projections":       _proj220.get("projections", []),
+            "any_feasible":      _proj220.get("any_feasible", False),
+            "max_days_to_1_0":   _proj220.get("max_days_to_1_0"),
+            "projected_tge_date": _proj220.get("projected_tge_date"),
+            "session_type":      _proj220.get("session_type"),
+            "timestamp":         _t220.time(),
+        }
+
+    # ------------------------------------------------------------------
+    # Phase 219 — GET /agent/tournament-blocker-summary
+    # ------------------------------------------------------------------
+    @app.get("/agent/tournament-blocker-summary")
+    async def get_tournament_blocker_summary(
+        x_api_key: str = Header(default=""),
+    ):
+        """Aggregated TGE blocker summary (Phase 219).
+
+        Queries tournament_preflight_log, per_pair_gap_log, and capture velocity
+        to produce a single list of all active blockers with source/severity.
+
+        Returns 8 keys: tournament_blocker_summary_enabled / total_blockers / blockers /
+                        overall_blocked / preflight_pass / capture_healthy /
+                        all_pairs_above_1 / timestamp
+        """
+        _check_rate(x_api_key)
+        import time as _t219
+        _enabled219 = bool(getattr(cfg, "tournament_blocker_summary_enabled", True))
+        try:
+            _summary219 = store.get_tournament_blocker_summary()
+        except Exception:
+            _summary219 = {
+                "total_blockers": 1,
+                "blockers": [{"source": "error", "key": "internal", "detail": "Summary unavailable", "severity": "P0"}],
+                "overall_blocked": True,
+                "preflight_pass": False,
+                "capture_healthy": False,
+                "all_pairs_above_1": False,
+                "timestamp": _t219.time(),
+            }
+        return {
+            "tournament_blocker_summary_enabled": _enabled219,
+            "total_blockers":   _summary219.get("total_blockers", 0),
+            "blockers":         _summary219.get("blockers", []),
+            "overall_blocked":  _summary219.get("overall_blocked", True),
+            "preflight_pass":   _summary219.get("preflight_pass", False),
+            "capture_healthy":  _summary219.get("capture_healthy", False),
+            "all_pairs_above_1": _summary219.get("all_pairs_above_1", False),
+            "timestamp":        _t219.time(),
+        }
+
+    # ------------------------------------------------------------------
+    # Phase 218 — GET /agent/capture-velocity-oracle
+    # ------------------------------------------------------------------
+    @app.get("/agent/capture-velocity-oracle")
+    async def get_capture_velocity_oracle(
+        x_api_key: str = Header(default=""),
+        probe_type: str = "touchpad_corners",
+    ):
+        """Unified capture velocity oracle (Phase 218).
+
+        Synthesizes Phase 152 centroid velocity + Phase 154 capture stagnation
+        into a single response with recommended_action.
+
+        Returns 9 keys: capture_velocity_oracle_enabled / probe_type / sessions_per_day /
+                        sessions_stagnant / ratio_velocity / velocity_stagnant /
+                        overall_capture_healthy / recommended_action / timestamp
+        """
+        _check_rate(x_api_key)
+        import time as _t218
+        _enabled218 = bool(getattr(cfg, "capture_velocity_oracle_enabled", True))
+        _pt218 = probe_type.strip() or "touchpad_corners"
+        try:
+            _oracle218 = store.get_capture_velocity_oracle_status(probe_type=_pt218)
+        except Exception:
+            _oracle218 = {
+                "probe_type": _pt218,
+                "sessions_per_day": 0.0,
+                "sessions_stagnant": True,
+                "ratio_velocity": 0.0,
+                "velocity_stagnant": True,
+                "overall_capture_healthy": False,
+                "recommended_action": "ERROR",
+                "timestamp": _t218.time(),
+            }
+        return {
+            "capture_velocity_oracle_enabled": _enabled218,
+            "probe_type":                      _oracle218.get("probe_type", _pt218),
+            "sessions_per_day":                _oracle218.get("sessions_per_day", 0.0),
+            "sessions_stagnant":               _oracle218.get("sessions_stagnant", True),
+            "ratio_velocity":                  _oracle218.get("ratio_velocity", 0.0),
+            "velocity_stagnant":               _oracle218.get("velocity_stagnant", True),
+            "overall_capture_healthy":         _oracle218.get("overall_capture_healthy", False),
+            "recommended_action":              _oracle218.get("recommended_action", "UNKNOWN"),
+            "timestamp":                       _t218.time(),
+        }
+
+    # ------------------------------------------------------------------
+    # Phase 217 — GET /agent/per-pair-gap-trend
+    # ------------------------------------------------------------------
+    @app.get("/agent/per-pair-gap-trend")
+    async def get_per_pair_gap_trend(
+        x_api_key: str = Header(default=""),
+        pair_key: str = "",
+        session_type: str = "",
+        n_runs: int = 5,
+    ):
+        """Per-pair Mahalanobis gap trend velocity (Phase 217).
+
+        Returns distance velocity (delta per day) for the requested pair_key over
+        the last n_runs analysis runs.  trend is IMPROVING/WORSENING/STABLE/UNKNOWN.
+
+        Returns 8 keys: per_pair_gap_trend_enabled / pair_key / distances /
+                        velocity_per_day / trend / n_runs / blocker_resolved / timestamp
+        """
+        _check_rate(x_api_key)
+        import time as _t217
+        _enabled217 = bool(getattr(cfg, "per_pair_gap_trend_enabled", True))
+        _pk217 = pair_key.strip() or "P1vP3"
+        _st217 = session_type.strip() or None
+        try:
+            _trend217 = store.get_per_pair_gap_trend(
+                pair_key=_pk217, session_type=_st217, n_runs=int(n_runs)
+            )
+        except Exception:
+            _trend217 = {
+                "pair_key": _pk217, "session_type": _st217, "distances": [],
+                "analysis_dates": [], "velocity_per_day": None,
+                "trend": "UNKNOWN", "n_runs": 0, "timestamp": _t217.time(),
+            }
+        # blocker_resolved=True only if the most recent distance is >= 1.0
+        _dists217 = _trend217.get("distances", [])
+        _blocker_resolved = bool(_dists217 and _dists217[0] >= 1.0)
+        return {
+            "per_pair_gap_trend_enabled": _enabled217,
+            "pair_key":                  _trend217.get("pair_key", _pk217),
+            "distances":                 _dists217,
+            "velocity_per_day":          _trend217.get("velocity_per_day"),
+            "trend":                     _trend217.get("trend", "UNKNOWN"),
+            "n_runs":                    _trend217.get("n_runs", 0),
+            "blocker_resolved":          _blocker_resolved,
+            "timestamp":                 _t217.time(),
+        }
+
+    # ------------------------------------------------------------------
+    # Phase 216 — GET /agent/per-pair-gap-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/per-pair-gap-status")
+    async def get_per_pair_gap_status(
+        x_api_key: str = Header(default=""),
+        session_type: str = "",
+    ):
+        """Per-pair Mahalanobis inter-player distance log status (Phase 216).
+
+        Returns per-pair distances from the most recent analysis run, including
+        which pairs are above 1.0 and which are the tournament blockers.
+        Returns 7 keys: per_pair_gap_log_enabled / all_pairs_above_1 / pairs /
+                        session_type / pair_count / blocker_pairs / timestamp
+        """
+        _check_rate(x_api_key)
+        import time as _t216
+        _enabled216 = bool(getattr(cfg, "per_pair_gap_log_enabled", True))
+        _stype216 = session_type.strip() or None
+        try:
+            _status216 = store.get_per_pair_gap_status(session_type=_stype216)
+        except Exception:
+            _status216 = {
+                "all_pairs_above_1": False,
+                "pairs": [],
+                "session_type": _stype216,
+                "pair_count": 0,
+                "timestamp": _t216.time(),
+            }
+        _pairs216 = _status216.get("pairs", [])
+        _blockers216 = [p for p in _pairs216 if not p.get("above_1_0", True)]
+        return {
+            "per_pair_gap_log_enabled": _enabled216,
+            "all_pairs_above_1":        _status216.get("all_pairs_above_1", False),
+            "pairs":                    _pairs216,
+            "session_type":             _status216.get("session_type"),
+            "pair_count":               _status216.get("pair_count", 0),
+            "blocker_pairs":            _blockers216,
+            "timestamp":                _t216.time(),
+        }
+
     return app
