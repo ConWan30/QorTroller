@@ -34,18 +34,29 @@ class SubProtocolConfig:
     """Immutable descriptor for a sub-protocol attached to VAPI infrastructure.
 
     Fields:
-        name                 — globally unique identifier (e.g., "VAPI_CORE", "VAPI_MOBILE")
-        event_namespace      — prefix for all bus events published by this sub-protocol
-                               (e.g., "mobile.", "pragma."); "" = no prefix (VAPI_CORE only)
-        agent_range          — (first_agent_number, last_agent_number) inclusive
-        tool_range           — (first_tool_number, last_tool_number) inclusive
-        table_prefix         — SQLite table name prefix (e.g., "mobile_", "pragma_");
-                               "" = no prefix (VAPI_CORE only)
-        contract_source_type — value stored in AdjudicationRegistry sourceType
-                               (e.g., "VAPI", "VAPI_MOBILE", "PRAGMA_JUDGE")
-        version              — phase string at registration time (e.g., "phase204")
-        dry_run              — whether this sub-protocol is in dry_run mode at registration
-        active               — False after deactivate(); history is preserved
+        name                    — globally unique identifier (e.g., "VAPI_CORE", "VAPI_MOBILE")
+        event_namespace         — prefix for all bus events published by this sub-protocol
+                                  (e.g., "mobile.", "pragma."); "" = no prefix (VAPI_CORE only)
+        agent_range             — (first_agent_number, last_agent_number) inclusive
+        tool_range              — (first_tool_number, last_tool_number) inclusive
+        table_prefix            — SQLite table name prefix (e.g., "mobile_", "pragma_");
+                                  "" = no prefix (VAPI_CORE only)
+        contract_source_type    — value stored in AdjudicationRegistry sourceType
+                                  (e.g., "VAPI", "VAPI_MOBILE", "PRAGMA_JUDGE")
+        version                 — phase string at registration time (e.g., "phase204")
+        dry_run                 — whether this sub-protocol is in dry_run mode at registration
+        active                  — False after deactivate(); history is preserved
+        permitted_vapi_interfaces — explicit list of VAPI interface calls this sub-protocol
+                                  may make. Serves as the isolation contract declaration:
+                                  any Claude Code session building this sub-protocol must
+                                  not call anything not on this list. This field is
+                                  documentation-enforced (not runtime-enforced) — it provides
+                                  the architectural boundary that prevents isolation decay.
+                                  Format: "ClassName.method_name" strings.
+                                  Example: ["VAPIProtocolLens.isFullyEligible",
+                                            "AdjudicationRegistry.anchorAdjudication"]
+                                  Empty list = no VAPI calls permitted (maximally isolated).
+                                  VAPI_CORE = None (unrestricted, owns the core).
     """
     name: str
     event_namespace: str
@@ -56,6 +67,7 @@ class SubProtocolConfig:
     version: str
     dry_run: bool = True
     active: bool = True
+    permitted_vapi_interfaces: Optional[list] = None  # None = unrestricted (VAPI_CORE only)
 
 
 # ---------------------------------------------------------------------------

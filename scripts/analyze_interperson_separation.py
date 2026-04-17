@@ -1963,6 +1963,21 @@ def main() -> int:
              "correlation_separable=True when any inter-player Frobenius distance > "
              "cfg.correlation_separability_threshold (default 0.5). Default: False.",
     )
+    # Phase 206: per-session-type stratified centroid analysis
+    # Diagnoses P3 non-stationarity: contamination (different centroids per type mixed into
+    # one pool) vs. genuine physiological non-stationarity (high variance within a single type).
+    parser.add_argument(
+        "--stratify-by-session-type",
+        action="store_true",
+        default=False,
+        dest="stratify_by_session_type",
+        help="Run separation analysis independently for each detected session type present "
+             "in the corpus (touchpad_corners, tremor_resting, tremor_seed, etc.) and print "
+             "a comparison table. Per-player intra_mean and intra_std per type reveals whether "
+             "P3 non-stationarity is session-type contamination (low within-type variance but "
+             "high cross-type variance) or genuine physiological drift (high within-type "
+             "variance). Default: False.",
+    )
     args = parser.parse_args()
 
     # Phase 140: probe-comparison mode — run all viable structured probe types
@@ -2021,6 +2036,144 @@ def main() -> int:
         print(f"{'='*70}")
         print("P1vP3: Mahalanobis distance between Player 1 and Player 3 mean vectors")
         print("+ = ratio >= 1.0 (tournament gate)")
+        return 0
+
+    # Phase 206: per-session-type stratified centroid analysis
+    # Diagnoses P3 non-stationarity: is it session-type contamination or genuine drift?
+    if args.stratify_by_session_type:
+        if args.session_type:
+            print("ERROR: --stratify-by-session-type cannot be combined with --session-type", file=sys.stderr)
+            return 1
+
+        # Discover which session types are present in the corpus
+        _type_candidates = [
+            "touchpad_corners", "touchpad_freeform", "touchpad_swipes",
+            "tremor_resting", "tremor_seed",
+            "trigger_rhythm", "button_sequence",
+            "resting_centroid", "resting_baseline",
+            "mixed_biometric_probe",
+        ]
+
+        _strat_results: dict[str, dict | None] = {}
+        for _stype in _type_candidates:
+            try:
+                import io as _io
+                import contextlib as _cl
+                # Suppress per-type verbose output to keep stratification table readable
+                _buf = _io.StringIO()
+                with _cl.redirect_stdout(_buf):
+                    _sr = run_analysis(
+                        session_type_filter=_stype,
+                        cov_auto_fallback=not args.no_cov_auto_fallback,
+                        cov_min_ratio=args.cov_min_ratio,
+                    )
+                _strat_results[_stype] = _sr
+            except RuntimeError:
+                _strat_results[_stype] = None  # type not present or too few sessions
+            except Exception as _se:
+                _strat_results[_stype] = {"_error": str(_se)}
+
+        # Filter to only types with actual data
+        _present = {k: v for k, v in _strat_results.items() if v is not None and "_error" not in v}
+        _errors  = {k: v["_error"] for k, v in _strat_results.items() if v is not None and "_error" in v}
+
+        if not _present:
+            print("No structured session types found in corpus (need ≥2 players × "
+                  f"≥{MIN_SESSIONS_FOR_TYPE_FILTER} sessions per type).", file=sys.stderr)
+            if _errors:
+                for k, e in _errors.items():
+                    print(f"  {k}: ERROR — {e}", file=sys.stderr)
+            return 1
+
+        _ALL_PLAYERS = ["Player 1", "Player 2", "Player 3"]
+
+        print()
+        print("=" * 90)
+        print("STRATIFIED SEPARATION ANALYSIS BY SESSION TYPE (Phase 206)")
+        print("=" * 90)
+        print()
+
+        # Summary table
+        _hdr = (f"{'Session Type':<24} {'N(P1/P2/P3)':>13} {'Ratio':>7} "
+                f"{'P2vP3':>7} {'P3 intra_mean':>14} {'P3 intra_std':>13} {'Cov':>5}")
+        print(_hdr)
+        print("-" * 90)
+
+        _per_type_p3_intra: dict[str, float] = {}
+        for _stype, _sr in _present.items():
+            _ratio   = _sr.get("separation_ratio", 0.0)
+            _players = _sr.get("players", [])
+            _psc     = _sr.get("player_session_counts", {})
+            _n_str   = "/".join(str(_psc.get(p, 0)) for p in _ALL_PLAYERS)
+            _cov_m   = _sr.get("cov_mode", "?")[:4]
+
+            # P2 vs P3 inter-distance
+            _mat    = _sr.get("inter_distance_matrix", {})
+            _plist  = _mat.get("players", [])
+            _vals   = _mat.get("values", [])
+            _p2vp3  = 0.0
+            if "Player 2" in _plist and "Player 3" in _plist:
+                _i2 = _plist.index("Player 2")
+                _i3 = _plist.index("Player 3")
+                if _vals and len(_vals) > max(_i2, _i3) and len(_vals[_i2]) > _i3:
+                    _p2vp3 = _vals[_i2][_i3]
+
+            # P3 intra-player stats
+            _intra  = _sr.get("intra_player_stats", {})
+            _p3stats = _intra.get("Player 3", {})
+            _p3_im  = _p3stats.get("mean", 0.0)
+            _p3_is  = _p3stats.get("std", 0.0)
+            _per_type_p3_intra[_stype] = _p3_im
+
+            _flag = " +" if _ratio >= 1.0 else "  "
+            print(f"{_flag}{_stype:<22} {_n_str:>13} {_ratio:>7.3f} "
+                  f"{_p2vp3:>7.3f} {_p3_im:>14.3f} {_p3_is:>13.3f} {_cov_m:>5}")
+
+        print("-" * 90)
+        print("+ = ratio >= 1.0  |  P2vP3: inter-player Mahalanobis distance  |  Cov: diagonal/full")
+        print()
+
+        # P3 non-stationarity diagnosis
+        print("P3 NON-STATIONARITY DIAGNOSIS")
+        print("-" * 60)
+        _p3_means = list(_per_type_p3_intra.values())
+        if len(_p3_means) >= 2:
+            _cross_type_range = max(_p3_means) - min(_p3_means) if _p3_means else 0.0
+            _within_type_mean = sum(_p3_means) / len(_p3_means) if _p3_means else 0.0
+            print(f"  P3 intra_mean range across types: "
+                  f"[{min(_p3_means):.3f}, {max(_p3_means):.3f}]  (range={_cross_type_range:.3f})")
+            print()
+            # Diagnosis criteria:
+            # If cross-type range > 0.5 AND within-type intra_mean < 0.8:
+            #   → session-type contamination (centroids differ per type; mixing inflates variance)
+            # If within-type intra_std is high even within one type:
+            #   → genuine physiological non-stationarity
+            if _cross_type_range > 0.5 and _within_type_mean < 0.8:
+                print("  DIAGNOSIS: SESSION-TYPE CONTAMINATION")
+                print("  P3 centroids differ significantly across session types.")
+                print("  When types are pooled, P3 intra-player distance inflates")
+                print("  because the centroid is computed over a heterogeneous mix.")
+                print()
+                print("  RECOMMENDED FIX: Always run separation analysis with")
+                print("  --session-type-filter <type> rather than on the pooled corpus.")
+                print("  The per-type centroids are the correct biometric fingerprints.")
+            elif _within_type_mean >= 0.8:
+                print("  DIAGNOSIS: GENUINE PHYSIOLOGICAL NON-STATIONARITY")
+                print("  P3 intra-player variance is high even WITHIN individual session types.")
+                print("  This cannot be resolved by stratification alone.")
+                print()
+                print("  RECOMMENDED FIX: Capture additional sessions for P3 over multiple")
+                print("  dates to determine whether variance is decreasing (centroid converging)")
+                print("  or stable-but-high (inherent biometric variability).")
+                print("  Consider TremorRestingConvergenceOracle (Phase 202) for P3.")
+            else:
+                print("  DIAGNOSIS: MIXED — partial contamination + possible drift.")
+                print("  Capture ≥5 additional P3 sessions of each type to disambiguate.")
+        else:
+            print("  Only 1 session type present — cannot compute cross-type range.")
+            print("  Capture sessions of additional types to enable diagnosis.")
+        print("-" * 60)
+
         return 0
 
     try:

@@ -1,191 +1,156 @@
-# VAPI: Verifiable Controller Input Provenance with Physics-Backed Liveness for Competitive Gaming
+# VAPI-AutoResearch
+## Session-Based Orchestration Improvement Loop
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18966169.svg)](https://doi.org/10.5281/zenodo.18966169)
-[![CI — Bridge + SDK](https://github.com/ConWan30/vapi-prototype/actions/workflows/ci.yml/badge.svg?job=bridge)](https://github.com/ConWan30/vapi-prototype/actions/workflows/ci.yml)
-[![CI — Smart Contracts](https://github.com/ConWan30/vapi-prototype/actions/workflows/ci.yml/badge.svg?job=contracts)](https://github.com/ConWan30/vapi-prototype/actions/workflows/ci.yml)
-[![CI — OpenAPI Lint](https://github.com/ConWan30/vapi-prototype/actions/workflows/ci.yml/badge.svg?job=yaml-lint)](https://github.com/ConWan30/vapi-prototype/actions/workflows/ci.yml)
+A novel adaptation of the Karpathy AutoResearch pattern, stripped of all
+GPU/ML dependencies and repurposed exclusively as an interactive self-improving
+expert system for the `/vapi` workflow orchestration skill.
 
-**Authors:** Contravious Battle — Independent Researcher
-
----
-
-## What Is VAPI
-
-VAPI (Verified Autonomous Physical Intelligence) is a cryptographic anti-cheat and identity protocol for competitive gaming. It attaches a tamper-evident, on-chain-verifiable record — a **Proof of Autonomous Cognition (PoAC)** — to every input event produced by a gaming controller. Each 228-byte PoAC record binds raw sensor commitments (IMU, adaptive trigger dynamics, biometric fingerprint) to a hardware-rooted ECDSA-P256 signature and a hash-chained sequence enforced on the IoTeX blockchain. The result is unforgeable evidence that a human physically operated a certified controller during a session, anchored to a nine-level Physical Input Trust Layer (PITL, L0–L6) that detects software injection, bot behavior, and identity transplants at rates impossible for pure software to forge.
+**No GPU. No overnight loops. No background processes.**
+Runs only while you are actively in a Claude Code session.
 
 ---
 
-## Architecture
+## What This Is
 
-| Component | Stack | Role |
-|-----------|-------|------|
-| **Firmware / C / Zephyr** | C · nRF Connect SDK · Zephyr RTOS | IoTeX Pebble Tracker reference implementation — PoAC chain, PSA crypto, MQTT uplink |
-| **Python asyncio Bridge** | Python 3.11 · asyncio · FastAPI · SQLite | DualShock Edge HID capture → PITL oracle pipeline → on-chain relay · BridgeAgent (Claude tool_use) |
-| **Solidity Contracts / IoTeX** | Solidity 0.8 · Hardhat · IoTeX L1 (P256 precompile 0x0100) | 13 contracts: PoACVerifier, PITLSessionRegistry, PHGCredential, TournamentGateV3, FederatedThreatRegistry, and more |
-| **DualShock Edge Controller Subsystem** | Python · hidapi · pydualsense · NumPy | HID report parser · 11-feature biometric extractor · L4 Mahalanobis · L5 rhythm oracle · L6 active challenge-response |
+Standard AutoResearch: propose → train neural net → eval → keep/revert
+VAPI-AutoResearch: propose → improve skill.md → eval against VAPI invariants → keep/revert
 
----
+The "model" being optimized is your `/vapi` orchestration skill.
+The "training data" is VAPI's own documented gaps, invariants, and phase architecture.
+The "loss function" is the eval harness — rooted in VAPI's tournament readiness conditions.
 
-## Current Status — Phase 41 Complete
-
-| Suite | Count | Status |
-|-------|-------|--------|
-| Bridge tests (pytest) | **874** | All pass |
-| Hardhat contract tests | **354** | All pass |
-| Hardware integration tests | **28** | Pass (requires DualShock Edge) |
-| E2E simulation tests | **14** | Pass |
-| Contracts on IoTeX testnet | **13** | Live |
-
-Key Phase 41 deliverables:
-- FFT tremor analysis ring buffer (512-frame persistent window)
-- Full covariance Mahalanobis L4 (`USE_FULL_COVARIANCE` flag, Tikhonov regularization λ=0.01)
-- Synthetic inter-player separation validation (5 players, 20 sessions each — ratio 9.85, LOO 98%)
-- ZK inference code binding: `pub[2] = inferenceCode` in `PITLSessionRegistry.sol`
-- Game genre certification framework (§7.5.2.1 in whitepaper)
-- Whitepaper published to Zenodo: [10.5281/zenodo.18966169](https://doi.org/10.5281/zenodo.18966169)
+**The recursive insight**: VAPI itself uses a self-improving calibration loop
+(CalibrationIntelligenceAgent, Mode 6, ±15%/cycle). AutoResearch applies the same
+pattern one level up — to the tool that builds VAPI.
 
 ---
 
-## Hardware Requirements
+## File Structure
 
-- **Controller:** Sony DualShock Edge CFI-ZCP1 (primary certified device)
-- **OS:** Windows 11 (USB HID polling at 1000 Hz)
-- **Cable:** USB-C data cable (not charge-only)
-- **Python:** 3.11+ with `hidapi` (`pip install hidapi`, NOT `hid`)
-- **Node.js:** 18+ (for Hardhat contract tests)
+```
+vapi-autoresearch/
+├── program.md              — Living strategy document (YOU edit this)
+├── vapi_eval_harness.py    — IMMUTABLE eval rubric (never modify)
+├── vapi_autoresearch.py    — EDITABLE orchestrator (Claude can improve this)
+├── experiments/
+│   ├── log.jsonl           — All cycle results (auto-generated)
+│   └── cycle_NNNN_prompt.txt — Per-cycle prompts (auto-generated)
+└── what_if_corpus/
+    └── wif_*.md            — Validated WHAT_IF pairs (auto-saved on pass)
+```
 
 ---
 
-## Live Dashboard
-
-The VAPI dashboard (`frontend/VAPIDashboard.jsx`) auto-detects the bridge and switches between **LIVE** and **DEMO** mode.
-
-### Starting the bridge
+## Setup (one-time)
 
 ```bash
-cd bridge
-pip install -r requirements.txt
-python -m vapi_bridge
-# Bridge starts on http://localhost:8080
-```
-
-### Starting the frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
-# Vite dev server on http://localhost:5173
-```
-
-### LIVE / DEMO mode
-
-| Mode | Indicator | Behaviour |
-|------|-----------|-----------|
-| **LIVE** | Pulsing green dot — `LIVE — BRIDGE CONNECTED` | Fetches `/dashboard/snapshot` every 30 s; subscribes to `WS /ws/records` for real-time PoAC record feed; L6 status, PHG score, Mode 6 calibration chart, and session counters update live |
-| **DEMO** | Static orange dot — `DEMO — BRIDGE OFFLINE` | All data falls back to whitepaper-accurate hardcoded constants; visual design is identical |
-
-The live record feed panel (bottom of left column) is only visible in LIVE mode and shows the last 10 incoming PoAC records with colour-coded inference codes (green=NOMINAL, orange=ADVISORY, red=HARD CHEAT).
-
-### Verify the connection
-
-```bash
-python scripts/test_dashboard_connection.py
-# Checks: /health, /dashboard/snapshot fields, CORS headers, WS /ws/records
+# From vapi-pebble-prototype root
+cp -r vapi-autoresearch/ .
+python vapi-autoresearch/vapi_eval_harness.py  # Smoke test
 ```
 
 ---
 
-## Running Tests
+## Usage in Claude Code Sessions
 
-### Bridge (874 tests)
+### Start an improvement cycle
 ```bash
-cd bridge
-pip install -r requirements.txt
-python -m pytest tests/ --ignore=tests/test_e2e_simulation.py -q
+python vapi-autoresearch/vapi_autoresearch.py --cycle 1
+```
+Claude Code reads the generated prompt and produces a `---PROPOSAL_START---` block.
+
+### Apply Claude's proposal
+```bash
+# Save Claude's proposal to a file, then:
+python vapi-autoresearch/vapi_autoresearch.py --apply proposal.txt
+```
+The eval harness validates it. Pass → git commit + WHAT_IF corpus update. Fail → git revert.
+
+### Force a specific priority
+```bash
+python vapi-autoresearch/vapi_autoresearch.py --cycle 1 --priority separation_ratio_pathways
+python vapi-autoresearch/vapi_autoresearch.py --cycle 1 --priority class_k_definition
+python vapi-autoresearch/vapi_autoresearch.py --cycle 1 --priority phase_109_113_precision
 ```
 
-### Contracts (354 tests)
+### Preview without committing
 ```bash
-cd contracts
-npm install
-npx hardhat test
+python vapi-autoresearch/vapi_autoresearch.py --cycle 1 --dry-run
 ```
 
-### Hardware integration (28 tests — requires DualShock Edge connected via USB)
+### Check experiment history
 ```bash
-python -m pytest bridge/tests/hardware/ -v -m hardware -s
+python vapi-autoresearch/vapi_autoresearch.py --status
 ```
 
-### E2E simulation (14 tests — requires local Hardhat node)
+### Run multiple cycles in one session
 ```bash
-cd contracts && npx hardhat node &
-HARDHAT_RPC_URL=http://127.0.0.1:8545 python -m pytest bridge/tests/test_e2e_simulation.py -v
-```
-
-### ZK proofs (5 tests — requires ceremony artifacts)
-```bash
-# Run ceremony first (one-time, ~10 minutes):
-cd contracts && PATH="$(pwd):$PATH" npx hardhat run scripts/run-ceremony.js
-# Then:
-python -m pytest bridge/tests/test_zk_prover_real.py -v
+python vapi-autoresearch/vapi_autoresearch.py --cycle 5
 ```
 
 ---
 
-## Key Files
+## What Gets Improved Each Cycle
 
-```
-vapi-pebble-prototype/
-├── bridge/
-│   ├── vapi_bridge/
-│   │   ├── dualshock_integration.py     # Main DualShock HID bridge (PITL L0–L6)
-│   │   ├── tinyml_biometric_fusion.py   # L4: 11-feature Mahalanobis biometric
-│   │   ├── temporal_rhythm_oracle.py    # L5: IBI CV/entropy/quantization
-│   │   ├── pitl_prover.py               # ZK PITL session proof generator
-│   │   └── chain.py                     # IoTeX on-chain relay
-│   └── tests/                           # 874 test files
-├── contracts/
-│   ├── contracts/
-│   │   ├── PoACVerifier.sol             # ECDSA-P256 + chain integrity
-│   │   ├── PITLSessionRegistry.sol      # ZK PITL proof registry + anti-replay
-│   │   ├── PHGCredential.sol            # Soulbound humanity credential (ERC-5192)
-│   │   └── TournamentGateV3.sol         # PHG-gated + credential-active entry
-│   └── circuits/
-│       └── PitlSessionProof.circom      # Groth16 ZK circuit (~1,820 constraints)
-├── controller/
-│   ├── tinyml_biometric_fusion.py       # L4 biometric feature extractor + classifier
-│   ├── temporal_rhythm_oracle.py        # L5 temporal rhythm oracle
-│   ├── l2b_imu_press_correlation.py     # L2B: IMU-button causal latency
-│   └── l2c_stick_imu_correlation.py     # L2C: stick-IMU cross-correlation
-├── scripts/
-│   ├── capture_session.py               # Live DualShock session capture
-│   ├── threshold_calibrator.py          # Recalibrate L4/L5 thresholds from sessions
-│   └── generate_synthetic_players.py   # Synthetic inter-player separation validator
-├── docs/
-│   ├── vapi-whitepaper-v3.md            # Canonical whitepaper (source)
-│   └── vapi-whitepaper-v3.pdf           # Compiled PDF
-└── calibration_profile.json             # Production L4/L5 thresholds (N=74 sessions)
-```
+Every cycle produces exactly three outputs:
+1. **skill.md delta** — one targeted improvement to the /vapi orchestration skill
+2. **WHAT_IF addition** — one validated W1+W2 pair added to the corpus
+3. **Experiment log entry** — scored result saved to experiments/log.jsonl
 
 ---
 
-## Citation
+## The Eval Harness (Immutable Rules)
 
-```bibtex
-@software{battle_2026_vapi,
-  author    = {Battle, Contravious},
-  title     = {VAPI: Verifiable Controller Input Provenance with
-               Physics-Backed Liveness for Competitive Gaming},
-  year      = {2026},
-  publisher = {Zenodo},
-  doi       = {10.5281/zenodo.18966169},
-  url       = {https://doi.org/10.5281/zenodo.18966169}
-}
-```
+Every proposal is scored against VAPI's own ground truth:
+
+| Criterion | Weight | What It Checks |
+|-----------|--------|---------------|
+| Invariants preserved | 30% | All 20 mandatory invariants in skill.md |
+| Gap advancement | 25% | Advances one of 5 known gaps |
+| WHAT_IF quality | 20% | W1 grounded, W2 novel and VAPI-exclusive |
+| Phase coherence | 15% | Consistent with Phase 109–113 architecture |
+| Backward compatibility | 10% | No regression on Phase 62/66/67 |
+
+**Pass threshold: 0.70**
+
+Mandatory invariants (if missing → instant fail):
+`228 bytes`, `SHA-256(raw[:164])`, `7.009`, `5.367`, `Poseidon(8)`, `0.362`,
+`GSR_ENABLED=false`, `dry_run=True`, `TOURNAMENT BLOCKER`, `non-negotiable`, and 10 more.
 
 ---
 
-## License
+## Five Improvement Priorities (from program.md)
 
-Copyright (C) 2026 Contravious Battle. All Rights Reserved.
+1. `what_if_corpus_depth` — Build curated library of 20+ validated WHAT_IF pairs
+2. `phase_109_113_precision` — Improve ioSwarm instruction depth to match Phase 62 ZK quality
+3. `separation_ratio_pathways` — Skill autonomously suggests terminal script + analysis command
+4. `class_k_definition` — Define Class K (GSR spoofer) detection approach
+5. `legal_defensibility` — Generate legally-precise language for each verdict tier
+
+The orchestrator auto-selects the priority least addressed in recent history.
+
+---
+
+## Why This Is Better Than Generic AutoResearch
+
+Generic AutoResearch optimizes a model against a benchmark.
+VAPI-AutoResearch optimizes the orchestration skill against VAPI's own documented reality.
+
+The eval harness IS VAPI's invariant checklist. The scoring gaps ARE the tournament
+readiness conditions. The WHAT_IF corpus IS the accumulated adversarial threat model.
+
+Every improvement cycle makes Claude Code better at building VAPI specifically —
+not better at generic software engineering.
+
+---
+
+## Session Cadence
+
+- **Deep work day**: 3–5 cycles at session start, then manual development
+- **Normal session**: 1 cycle, then work
+- **Hardware/calibration session**: 0 cycles (no orchestration improvement needed)
+- **Phase planning session**: 2 cycles focused on next phase coherence
+
+The skill improves alongside the protocol. By Phase 113, the orchestration layer
+will have accumulated 50+ validated improvement cycles and a curated WHAT_IF corpus
+covering every documented risk in the VAPI threat model.

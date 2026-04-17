@@ -1,6 +1,6 @@
 """
 Phase 202 — TremorRestingConvergenceOracle Tests
-T202-1..8
+T202-1..10
 
 Tests:
   T202-1: insert_tremor_convergence_log stores row correctly
@@ -11,6 +11,8 @@ Tests:
   T202-6: tremor_convergence_enabled config field defaults to False
   T202-7: RATIO_VELOCITY_NEGATIVE ORPHAN rule defined in FSCA
   T202-8: multiple session_type isolation — tremor_resting vs touchpad_corners
+  T202-9: non_convergence_detected=True after _N_NONCONV_THRESHOLD consecutive negatives (Phase 206)
+  T202-10: non_convergence_detected=False when fewer than _N_NONCONV_THRESHOLD consecutive negatives (Phase 206)
 """
 import os
 import sys
@@ -184,3 +186,57 @@ def test_T202_8_session_type_isolation():
     assert tc_status is not None
     assert tc_status["convergence_stable"] == 0
     assert abs(tc_status["ratio"] - 0.50) < 1e-9
+
+
+# ── T202-9: non_convergence_detected=True after N_NONCONV_THRESHOLD negatives ─
+def test_T202_9_non_convergence_detected_true_after_threshold(monkeypatch):
+    """Phase 206: non_convergence_detected=True when _N_NONCONV_THRESHOLD=5
+    consecutive negative velocities are recorded (P3 genuine non-stationarity gate)."""
+    store = _make_store()
+    # Insert exactly 5 consecutive negative velocity rows
+    for i in range(5):
+        store.insert_tremor_convergence_log(
+            "tremor_resting",
+            ratio=0.80 - i * 0.03,
+            velocity=-0.03 - i * 0.005,
+            n_sessions=i + 2,
+            convergence_stable=False,
+            consecutive_positive=0,
+            sessions_to_target_est=20,
+        )
+    status = store.get_tremor_convergence_status("tremor_resting")
+    assert status is not None, "Expected status to be non-None after 5 insertions"
+    assert status["non_convergence_detected"] is True, (
+        f"Expected non_convergence_detected=True after {store._N_NONCONV_THRESHOLD} "
+        f"consecutive negatives; got {status['non_convergence_detected']}"
+    )
+    assert status["consecutive_negative"] == 5, (
+        f"Expected consecutive_negative=5; got {status['consecutive_negative']}"
+    )
+
+
+# ── T202-10: non_convergence_detected=False when below threshold ───────────
+def test_T202_10_non_convergence_detected_false_below_threshold():
+    """Phase 206: non_convergence_detected=False when fewer than _N_NONCONV_THRESHOLD
+    consecutive negatives exist (e.g. 3 negatives, 1 positive, 1 negative = not persistent)."""
+    store = _make_store()
+    # 3 negative then 1 positive (breaks the streak)
+    velocities = [-0.05, -0.04, -0.03, +0.02, -0.01]
+    for i, vel in enumerate(velocities):
+        store.insert_tremor_convergence_log(
+            "tremor_resting",
+            ratio=0.70 + i * 0.01,
+            velocity=vel,
+            n_sessions=i + 1,
+            convergence_stable=(vel >= 0),
+            consecutive_positive=1 if vel >= 0 else 0,
+            sessions_to_target_est=10,
+        )
+    status = store.get_tremor_convergence_status("tremor_resting")
+    assert status is not None
+    # Latest entry has velocity=-0.01 (1 consecutive negative, not 5)
+    assert status["non_convergence_detected"] is False, (
+        f"Expected non_convergence_detected=False with streak broken; "
+        f"got {status['non_convergence_detected']}, consecutive_negative={status['consecutive_negative']}"
+    )
+    assert status["consecutive_negative"] == 1

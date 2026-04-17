@@ -1,6 +1,6 @@
 """
 Phase 202 + 203 SDK Tests
-T202-SDK-1..4: TremorConvergenceResult / VAPITremorConvergence
+T202-SDK-1..6: TremorConvergenceResult / VAPITremorConvergence (T202-SDK-5/6 Phase 206)
 T203-SDK-1..4: AgentContextIntegrityResult / VAPIAgentContextIntegrity
 """
 import sys
@@ -71,6 +71,73 @@ def test_T202_sdk_4_client_network_error():
     assert isinstance(result, TremorConvergenceResult)
     assert result.error is not None
     assert result.convergence_stable is None
+
+
+# ---------------------------------------------------------------------------
+# Phase 206 SDK tests (TremorConvergenceResult non-convergence fields)
+# ---------------------------------------------------------------------------
+
+def test_T202_sdk_5_non_convergence_detected_field_present():
+    """Phase 206: TremorConvergenceResult has non_convergence_detected and consecutive_negative slots."""
+    from vapi_sdk import TremorConvergenceResult
+    import dataclasses
+    fields = {f.name for f in dataclasses.fields(TremorConvergenceResult)}
+    assert "non_convergence_detected" in fields, (
+        "TremorConvergenceResult missing non_convergence_detected slot (Phase 206)"
+    )
+    assert "consecutive_negative" in fields, (
+        "TremorConvergenceResult missing consecutive_negative slot (Phase 206)"
+    )
+    # Verify defaults
+    r = TremorConvergenceResult(
+        tremor_convergence_enabled  = False,
+        convergence_stable          = None,
+        velocity                    = None,
+        ratio                       = None,
+        consecutive_positive        = 0,
+        sessions_to_target_estimate = 0,
+    )
+    assert r.non_convergence_detected is False
+    assert r.consecutive_negative == 0
+
+
+def test_T202_sdk_6_non_convergence_detected_parses_from_response():
+    """Phase 206: VAPITremorConvergence.get_status() parses non_convergence_detected
+    and consecutive_negative from a 200 response body."""
+    import json
+    from unittest.mock import MagicMock, patch
+    from vapi_sdk import VAPITremorConvergence, TremorConvergenceResult
+
+    body = json.dumps({
+        "tremor_convergence_enabled": True,
+        "convergence_stable":         False,
+        "velocity":                   -0.04,
+        "ratio":                      0.72,
+        "consecutive_positive":       0,
+        "sessions_to_target_estimate": 8,
+        "non_convergence_detected":   True,
+        "consecutive_negative":       5,
+        "timestamp":                  1712200000.0,
+    }).encode()
+
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = body
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = MagicMock(return_value=False)
+
+    with patch("urllib.request.urlopen", return_value=mock_resp):
+        client = VAPITremorConvergence("http://localhost:8080", "test-key")
+        result = client.get_status()
+
+    assert result.error is None
+    assert result.non_convergence_detected is True, (
+        f"Expected non_convergence_detected=True; got {result.non_convergence_detected}"
+    )
+    assert result.consecutive_negative == 5, (
+        f"Expected consecutive_negative=5; got {result.consecutive_negative}"
+    )
+    assert result.convergence_stable is False
+    assert result.velocity == pytest.approx(-0.04)
 
 
 # ---------------------------------------------------------------------------

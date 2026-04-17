@@ -809,7 +809,10 @@ class DualShockTransport:
                 self._biometric_classifier.ANOMALY_THRESHOLD = self._cfg.l4_anomaly_threshold
             if self._cfg.l4_continuity_threshold != BiometricFusionClassifier.CONTINUITY_THRESHOLD:
                 self._biometric_classifier.CONTINUITY_THRESHOLD = self._cfg.l4_continuity_threshold
-            self._bio_extractor        = BiometricFeatureExtractor()  # persistent instance; ring buffer accumulates across calls
+            self._bio_extractor        = BiometricFeatureExtractor(  # persistent instance; ring buffer accumulates across calls
+                accel_tremor_fallback_enabled=getattr(self._cfg, "accel_tremor_fallback_enabled", True),
+                accel_fft_nfft=getattr(self._cfg, "accel_fft_nfft", 4096),
+            )
             self._ewc_model            = EWCWorldModel()
             self._preference_model     = PreferenceModel()
             # Pin biometric model version into every PoAC record's model_manifest_hash

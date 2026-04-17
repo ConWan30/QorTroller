@@ -1783,10 +1783,133 @@ operator dashboard. `BLOCK_QUORUM=0.67` may be reachable but was never exercised
 
 ---
 
-**Document Version**: 2.3 (WIF-034..038 filed 2026-04-12; WIF-036/037 CLOSED; WIF-038 Phase 204 candidate)
-**Last Updated**: 2026-04-12
-**W1 Count**: 34 entries (WIF-038 IOSWARM_ACTIVE_NO_ADJUDICATIONS OPEN Phase 204; WIF-037 CLOSED Phase 202; WIF-036 CLOSED Phase 203; WIF-035 CLOSED Phase 196; WIF-034 CLOSED Phase 191)
-**W2 Count**: 25 entries (WIF-038 W2 IoSwarm Adjudication Primer Phase 204 OPEN; WIF-037 W2 convergence oracle CLOSED; WIF-036 W2 agent hash registry CLOSED)
+## WIF-039 — Corpus Ratio Regression Guard: No Upstream Gate Prevents Ratio from Falling Below 1.0 After Breakthrough (Phase 208)
+
+**Filed**: 2026-04-13 (Autoresearch Cycle 47 — separation_ratio_pathways)
+**Category**: W1 Failure Mode — Upstream Corpus Ingestion Gap
+
+**Mechanism**: All current VAPI blockers gate *downstream* actions (VHP mint, graduation,
+token launch) but NO gate protects *upstream* corpus ingestion. When the separation ratio
+crosses 1.0 (verified: touchpad_corners=1.261 at N=11, Phase 143; tremor_resting=1.349
+at N=15, 2026-04-13), additional session captures of the same probe type can silently
+reduce the ratio back below 1.0. This happened empirically: touchpad_corners ratio fell
+from 1.261 (N=11) to 0.728 (N=35) as 24 additional sessions were ingested without any
+gate firing. The TremorRestingConvergenceOracle (Phase 202) detects *velocity* regression
+but does NOT block ingestion. The SeparationRatioMonitorAgent (Phase 129) detects
+breakthrough but has no ratchet. FleetSignalCoherenceAgent RATIO_VELOCITY_NEGATIVE
+(ORPHAN rule) is advisory only — does not prevent `insert_separation_defensibility_log`.
+
+**Implication**: A ratio breakthrough that was valid at N=11 can be erased by N=24 more
+captures of the same session type without any operator alert, commit invalidation, or
+corpus lock. The VHP mint P0 gate (`separation_ok`) reads the LATEST ratio — so a
+breakthrough that crossed P0 is silently reverted. No coherence rule currently covers
+this cross-agent gap (FleetSignalCoherenceAgent Phase 193 4th INVERSION rule candidate
+WIF-035 did not address corpus regression; the PERSONA_BREAK_ELEVATION_RACE gap filed
+Phase 196 is related but not identical).
+
+**Analogy to Mode 6 min() enforcement**: CalibrationIntelligenceAgent enforces
+`min()` on L4 thresholds — they can only tighten, never loosen. No analogous ratchet
+exists for the separation ratio corpus. A "Mode 6 for corpus ratio" would prevent
+ingestion from regressing below 1.0 without explicit operator override.
+
+**VAPI Mitigation (Phase 208 candidate)**:
+
+**W1 mitigation**: CorpusRatioRegressionGuard
+- New method `insert_separation_defensibility_log_guarded()` that checks current
+  `get_separation_defensibility_status()` BEFORE insertion:
+  - If `all_pairs_above_1=True` was previously committed and new computed ratio < 1.0:
+    raise `CorpusRegressionError` with blockers=[`ratio_regression_below_1.0`]
+  - Override path: `override=True + reason=str` (operator-authenticated; logs to
+    `corpus_regression_override_log` table with `old_ratio`, `new_ratio`, `reason`, `ts_ns`)
+  - Analogous to Mode 6 bounds (±15% per cycle) — never bypass without documented reason
+- `corpus_ratio_regression_guard_enabled=False` default (non-breaking; opt-in)
+- Bridge: +8 tests. SDK: +4 tests. No Hardhat needed.
+
+**W2 opportunity**: Ratio Provenance Chain
+- Every `insert_separation_defensibility_log` call that results in `all_pairs_above_1=True`
+  commits a SHA-256 chain link: `ratio_commit_hash = SHA-256(prev_hash + ratio + N + session_types + ts_ns)`
+  Analogous to biometric_renewal_chain_log (Phase 180). This creates a tamper-evident
+  audit trail proving WHEN the ratio first crossed 1.0 and with WHAT corpus composition.
+  On-chain anchor via SeparationRatioRegistry.renewCommit() (Phase 178).
+  Exclusive to VAPI: requires PITL structured probe data + Mahalanobis separation analysis
+  + SeparationRatioRegistry.sol + renewal chain pattern (Phase 180) — no general gaming
+  anti-cheat stack has this combination.
+
+**Status**: OPEN — Phase 208 candidate. Filed 2026-04-13.
+[VAPI:Phase208:autoresearch_cycle47:PROPOSED:score=1.000]
+
+---
+
+## WIF-040 — Skill Manifest Temporal Drift: vapi.md Reference State Stale by 58+ Phases (Phase 212)
+
+**Filed**: 2026-04-14 (Phase 212 completion)
+**Category**: W3 Meta-Risk — Skill/Tool Staleness
+
+**Mechanism**: `vapi.md` embedded a hard-coded "Reference state" block showing Phase 149
+values. After Phase 212, the skill was 58+ phases stale. Every autoresearch cycle used stale
+embedded phase/bridge/SDK counts as ground truth, undermining gap_advancement scoring.
+MetaLearner dominant_blocker was `invariant_violation` because proposals based on stale
+state failed the eval harness. Separation ratio 0.362 (Phase 121 diagonal, free-form corpus
+TOURNAMENT BLOCKER) was correctly stated but bridge/SDK counts drifted significantly.
+
+**Status W1**: STRUCTURALLY_CLOSED (Phase 212, 2026-04-14) — `vapi_skill_state_sync` MCP
+Tool 13 generates paste-ready Reference state from live CLAUDE.md. dry_run=True default /
+BLOCK_QUORUM=0.67 / ratio > 1.0 required all pairs / TOURNAMENT BLOCKER — all preserved.
+
+**Status W2**: CLOSED — drift detection live via MCP; embedded Reference state replaced
+with MCP directive. [VAPI:Phase212:WIF040:STRUCTURALLY_CLOSED]
+
+---
+
+## WIF-041 — Graduation Autowatch Gap: all_pairs_p0_ok Transition Never Observed by StagedDryRunGraduationAgent (Phase 214)
+
+**Filed**: 2026-04-15 (Autoresearch Cycle 33 — separation_ratio_pathways; score=0.793)
+**Category**: W1 Failure Mode — Agent Fleet Cross-Signal Gap
+
+**Mechanism**: Phase 207 StagedDryRunGraduationAgent polls for rollback conditions only.
+It has NO mechanism to detect when the P0 precondition `all_pairs_p0_ok` transitions
+False→True. Phase 213 AccelTremorFFT FFT resolution fix resolves P1vP3=0.032 bin aliasing
+in code — but the separation ratio 0.362 (free-form corpus baseline, TOURNAMENT BLOCKER)
+only improves after new tremor_resting sessions are captured and analyzed. When
+`all_pairs_p0_ok` transitions True:
+- `SeparationRatioMonitorAgent` (Phase 129) fires `separation_ratio_breakthrough` only on
+  pooled ratio ≥ 1.0 on 2 consecutive snapshots — NOT on `all_pairs_p0_ok` change
+- `StagedDryRunGraduationAgent` never learns the P0 gate cleared
+- Human operator must manually notice and manually trigger `activate_stage()`
+- Tournament activation chain remains blocked indefinitely despite P0 conditions met
+- BLOCK_QUORUM=0.67 and MINT_QUORUM=0.80 remain frozen; dry_run=True default preserved
+
+**Implication**: Phase 207 GRADUATION_SEQUENCE (ruling_enforcement_agent → session_adjudicator
+→ tournament_activation_chain) sits idle 1+ sprints after P0 clears with no agent observing
+the state change. check_graduation_preconditions() already reads all_pairs_p0_ok via
+get_tournament_preflight_status() — but only runs when activate_stage() is called manually.
+
+**W1 mitigation (Phase 214 candidate — GraduationAutowatchBridge)**:
+- `SeparationRatioMonitorAgent._check_and_record()`: read `get_separation_defensibility_status()`
+  for `all_pairs_above_1`; track `_all_pairs_prev`; fire `graduation_readiness_check` bus
+  event on False→True transition; insert `graduation_autowatch_log` entry
+- `StagedDryRunGraduationAgent.run_poll_loop()`: when `graduation_autowatch_enabled=True`,
+  auto-call `check_graduation_preconditions()` on each new unprocessed autowatch log entry
+- Config: `graduation_autowatch_enabled=True` (GRADUATION_AUTOWATCH_ENABLED env)
+- Bridge: +8 tests. SDK: +4 tests. No Hardhat needed.
+
+**W2 opportunity (Phase 215 candidate — PerPairProbeSelector)**:
+Per-pair probe selector: analyze historical Mahalanobis distances per probe_type in
+`separation_defensibility_log` per player pair; select optimal probe for each pair
+(P2/P3: grip-force or trigger-resistance; P1/P3 post-213: tremor_resting);
+feed into `EnrollmentAutoGuidanceAgent` capture guidance. Exclusive to VAPI: requires
+PITL 9-level stack + per-player centroid tracking + per-probe separation history.
+L6B_ENABLED=false / GSR_ENABLED=false invariants unaffected (separation analysis only).
+
+**Status**: OPEN — Phase 214 candidate. Filed 2026-04-15.
+[VAPI:Phase214:autoresearch_cycle33:PROPOSED:score=0.793]
+
+---
+
+**Document Version**: 2.5 (WIF-041 filed 2026-04-15; Graduation Autowatch Gap Phase 214; WIF-040 Skill Drift CLOSED Phase 212; WIF-039 CLOSED Phase 208)
+**Last Updated**: 2026-04-15
+**W1 Count**: 37 entries (WIF-041 GraduationAutowatchGap OPEN Phase 214; WIF-040 Skill Drift CLOSED Phase 212; WIF-039 CorpusRatioRegressionGuard CLOSED Phase 208)
+**W2 Count**: 28 entries (WIF-041 W2 PerPairProbeSelector Phase 215 OPEN; WIF-040 W2 vapi_skill_state_sync CLOSED Phase 212)
 **W3 Count**: 5 entries
 **Update Method**: Append-only, status updates inline
-**Key Phase 202/203 Updates**: WIF-037 tremor convergence velocity regression CLOSED; WIF-036 agent context drift CLOSED; WIF-038 ioSwarm adjudication gap filed (autoresearch cycle31 score=1.000)
+**Key Phase 213/214 Updates**: WIF-041 Graduation Autowatch Gap filed (cycle33); AccelTremorFFT FFT resolution fix COMPLETE (Phase 213); P1vP3=0.032 code fix deployed; tremor_resting=1.177 (N=27) — all_pairs_p0_ok=False pending hardware recapture

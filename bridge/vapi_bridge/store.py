@@ -2849,6 +2849,33 @@ class Store:
                 " VALUES (?, ?, ?)",
                 (208, "corpus_ratio_regression_guard", time.time()),
             )
+            # Phase 214: graduation_autowatch_log — tracks all_pairs_p0_ok state transitions
+            # observed by SeparationRatioMonitorAgent and the precondition evaluation results
+            # from StagedDryRunGraduationAgent (WIF-041 mitigation).
+            # Rows with trigger_fired=True indicate a False→True transition was detected.
+            # preconditions_evaluated=True rows record the automated check result.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS graduation_autowatch_log (
+                    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+                    probe_type              TEXT    NOT NULL DEFAULT 'tremor_resting',
+                    ratio                   REAL    NOT NULL DEFAULT 0.0,
+                    all_pairs_above_1       INTEGER NOT NULL DEFAULT 0,
+                    trigger_fired           INTEGER NOT NULL DEFAULT 0,
+                    preconditions_evaluated INTEGER NOT NULL DEFAULT 0,
+                    preconditions_met       INTEGER,
+                    blockers_json           TEXT    NOT NULL DEFAULT '[]',
+                    created_at              REAL    NOT NULL DEFAULT (unixepoch('now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_graduation_autowatch_probe
+                ON graduation_autowatch_log(probe_type, created_at DESC)
+            """)
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                " VALUES (?, ?, ?)",
+                (214, "graduation_autowatch", time.time()),
+            )
 
     # --- Device operations ---
 
@@ -11852,3 +11879,80 @@ class Store:
                 "ORDER BY stage_number ASC, id ASC"
             ).fetchall()
         return [dict(r) for r in rows]
+
+    # --- Phase 214: GraduationAutowatchBridge ---
+
+    def insert_graduation_autowatch_log(
+        self,
+        probe_type: str,
+        ratio: float,
+        all_pairs_above_1: bool,
+        trigger_fired: bool,
+        preconditions_evaluated: bool = False,
+        preconditions_met: "bool | None" = None,
+        blockers_json: str = "[]",
+    ) -> int:
+        """Insert a graduation autowatch event (Phase 214 — WIF-041 mitigation).
+
+        Called by SeparationRatioMonitorAgent when all_pairs_p0_ok transitions False→True
+        (trigger_fired=True) and by StagedDryRunGraduationAgent after evaluating
+        preconditions (preconditions_evaluated=True).
+        """
+        import time as _t214
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO graduation_autowatch_log "
+                "(probe_type, ratio, all_pairs_above_1, trigger_fired, "
+                " preconditions_evaluated, preconditions_met, blockers_json, created_at) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (
+                    probe_type,
+                    float(ratio),
+                    int(bool(all_pairs_above_1)),
+                    int(bool(trigger_fired)),
+                    int(bool(preconditions_evaluated)),
+                    int(bool(preconditions_met)) if preconditions_met is not None else None,
+                    blockers_json,
+                    _t214.time(),
+                ),
+            )
+            return int(cur.lastrowid)
+
+    def get_graduation_autowatch_status(
+        self, probe_type: str | None = None, limit: int = 10
+    ) -> "dict":
+        """Return graduation autowatch summary: latest trigger + precondition results (Phase 214)."""
+        import json as _json214
+        import time as _t214
+
+        with self._conn() as conn:
+            if probe_type:
+                rows = conn.execute(
+                    "SELECT * FROM graduation_autowatch_log "
+                    "WHERE probe_type=? ORDER BY id DESC LIMIT ?",
+                    (probe_type, limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM graduation_autowatch_log "
+                    "ORDER BY id DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+
+        entries = [dict(r) for r in rows]
+        trigger_count   = sum(1 for e in entries if e.get("trigger_fired"))
+        evaluated_count = sum(1 for e in entries if e.get("preconditions_evaluated"))
+        last_trigger    = next((e for e in entries if e.get("trigger_fired")), None)
+        last_evaluated  = next((e for e in entries if e.get("preconditions_evaluated")), None)
+
+        return {
+            "total_entries":            len(entries),
+            "trigger_count":            trigger_count,
+            "evaluated_count":          evaluated_count,
+            "last_trigger_ratio":       last_trigger["ratio"] if last_trigger else None,
+            "last_trigger_probe_type":  last_trigger["probe_type"] if last_trigger else None,
+            "last_preconditions_met":   bool(last_evaluated["preconditions_met"]) if last_evaluated and last_evaluated.get("preconditions_met") is not None else None,
+            "last_blockers":            _json214.loads(last_evaluated["blockers_json"]) if last_evaluated else [],
+            "entries":                  entries,
+            "timestamp":                _t214.time(),
+        }

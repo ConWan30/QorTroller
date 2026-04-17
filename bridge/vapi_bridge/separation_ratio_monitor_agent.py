@@ -10,6 +10,13 @@ W1: False breakthrough from single outlier snapshot.
   Mitigation: require 2 consecutive snapshots >= 1.0 before declaring breakthrough.
   Rationale: one anomalous snapshot can arise from a bad calibration run; two
   consecutive crossings indicate a genuine and stable improvement.
+
+Phase 214 extension — GraduationAutowatchBridge (WIF-041 mitigation):
+  Also reads get_separation_defensibility_status(session_type="tremor_resting") on each
+  poll to detect all_pairs_p0_ok False→True transition.  When transition fires:
+    - inserts graduation_autowatch_log entry (trigger_fired=True)
+    - fires graduation_readiness_check bus event
+  This wires Phase 213 FFT outcome to Phase 207 graduation pipeline automatically.
 """
 
 import asyncio
@@ -22,7 +29,7 @@ POLL_INTERVAL_S = 300  # 5 minutes
 
 
 class SeparationRatioMonitorAgent:
-    """Monitor agent #15 — polls separation ratio; fires breakthrough event."""
+    """Monitor agent #15 — polls separation ratio; fires breakthrough + autowatch events."""
 
     def __init__(self, cfg, store, bus=None):
         self._cfg   = cfg
@@ -32,6 +39,8 @@ class SeparationRatioMonitorAgent:
         self._prev_crossed: bool = False       # was previous snapshot >= 1.0?
         self._prev_ratio: float = 0.0          # previous pooled_ratio value
         self._breakthrough_fired: bool = False  # one-shot guard — never re-fire
+        # Phase 214: all_pairs_p0_ok transition detection (WIF-041 mitigation)
+        self._all_pairs_prev: bool = False     # previous all_pairs_above_1 state
 
     async def run_poll_loop(self) -> None:
         """Continuous poll loop — never raises."""
@@ -46,7 +55,11 @@ class SeparationRatioMonitorAgent:
             await asyncio.sleep(POLL_INTERVAL_S)
 
     async def _check_and_record(self) -> None:
-        """Read latest snapshot; detect breakthrough with 2-consecutive guard."""
+        """Read latest snapshot; detect breakthrough with 2-consecutive guard.
+
+        Phase 214 extension: also check all_pairs_p0_ok transition via
+        get_separation_defensibility_status(session_type='tremor_resting').
+        """
         snaps = self._store.get_separation_ratio_status(limit=2)
         if not snaps:
             return
@@ -68,6 +81,11 @@ class SeparationRatioMonitorAgent:
 
         self._prev_ratio   = current_ratio
         self._prev_crossed = current_crossed
+
+        # --- Phase 214: GraduationAutowatchBridge ---
+        # Watch all_pairs_p0_ok for False→True transition (WIF-041 mitigation)
+        if bool(getattr(self._cfg, "graduation_autowatch_enabled", True)):
+            await self._check_all_pairs_transition()
 
     async def _fire_breakthrough(
         self,
@@ -116,3 +134,77 @@ class SeparationRatioMonitorAgent:
                 )
             except Exception as exc:
                 _log.warning("Phase 129: bus publish error: %s", exc)
+
+    # ------------------------------------------------------------------
+    # Phase 214: GraduationAutowatchBridge — all_pairs_p0_ok watcher
+    # ------------------------------------------------------------------
+
+    async def _check_all_pairs_transition(self) -> None:
+        """Detect all_pairs_p0_ok False→True transition; fire graduation_readiness_check.
+
+        Reads the latest separation_defensibility_log entry for 'tremor_resting'
+        probe type.  When all_pairs_above_1 transitions from False to True (compared to
+        the previous poll value in self._all_pairs_prev):
+          - inserts graduation_autowatch_log entry (trigger_fired=True)
+          - fires graduation_readiness_check bus event
+        """
+        try:
+            defensibility = self._store.get_separation_defensibility_status(
+                session_type="tremor_resting"
+            )
+        except Exception as exc:
+            _log.debug("Phase 214: get_separation_defensibility_status error: %s", exc)
+            return
+
+        if not defensibility:
+            return
+
+        current_all_pairs = bool(defensibility.get("all_pairs_above_1", False))
+        probe_type        = str(defensibility.get("probe_type", "tremor_resting"))
+        current_ratio     = float(defensibility.get("ratio", 0.0))
+
+        if current_all_pairs and not self._all_pairs_prev:
+            # Transition: False → True — fire once per crossing
+            await self._fire_graduation_readiness_check(
+                probe_type=probe_type,
+                ratio=current_ratio,
+            )
+
+        self._all_pairs_prev = current_all_pairs
+
+    async def _fire_graduation_readiness_check(
+        self,
+        probe_type: str,
+        ratio: float,
+    ) -> None:
+        """Insert autowatch log + fire graduation_readiness_check bus event (Phase 214)."""
+        _log.info(
+            "Phase 214: all_pairs_p0_ok transition False→True detected "
+            "(probe=%s ratio=%.3f) — firing graduation_readiness_check",
+            probe_type, ratio,
+        )
+
+        # 1. Persist autowatch trigger entry
+        try:
+            self._store.insert_graduation_autowatch_log(
+                probe_type=probe_type,
+                ratio=ratio,
+                all_pairs_above_1=True,
+                trigger_fired=True,
+            )
+        except Exception as exc:
+            _log.warning("Phase 214: failed to insert autowatch log: %s", exc)
+
+        # 2. Fire bus event
+        if self._bus is not None:
+            try:
+                self._bus.publish_sync(
+                    "graduation_readiness_check",
+                    {
+                        "probe_type": probe_type,
+                        "ratio":      ratio,
+                        "ts":         time.time(),
+                    },
+                )
+            except Exception as exc:
+                _log.warning("Phase 214: bus publish error on graduation_readiness_check: %s", exc)

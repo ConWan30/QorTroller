@@ -1224,6 +1224,15 @@ class Config:
     compute per-player neurological tremor peak frequencies instead of returning 0.0.
     Default True.  Set ACCEL_TREMOR_FALLBACK_ENABLED=false to disable."""
 
+    # --- Phase 213: AccelTremorFFT FFT Resolution ---
+    accel_fft_nfft: int = field(
+        default_factory=lambda: int(_env("ACCEL_FFT_NFFT", "4096"))
+    )
+    """Phase 213 — Zero-padded FFT point count for accel tremor peak resolution.
+    At 1000 Hz: 4096-point FFT → 0.244 Hz/bin vs 1024-point raw → 0.977 Hz/bin.
+    Resolves P1 (3.1 Hz) / P3 (3.7 Hz) aliasing: 0.6 Hz gap becomes ~2.5 bins.
+    Default 4096.  Set ACCEL_FFT_NFFT=<N> to override."""
+
     # --- Phase 207: StagedDryRunGraduationGate ---
     staged_graduation_enabled: bool = field(
         default_factory=lambda: _env("STAGED_GRADUATION_ENABLED", "false").lower() == "true"
@@ -1245,6 +1254,18 @@ class Config:
     )
     """Phase 207 — Maximum tolerated false positives within graduation_rollback_window_sessions
     before automatic rollback is triggered.  Default 2 (≥2 false positives → rollback)."""
+
+    # --- Phase 214: GraduationAutowatchBridge ---
+    graduation_autowatch_enabled: bool = field(
+        default_factory=lambda: _env("GRADUATION_AUTOWATCH_ENABLED", "true").lower() == "true"
+    )
+    """Phase 214 — Enable GraduationAutowatchBridge (WIF-041 mitigation).  When True,
+    SeparationRatioMonitorAgent watches all_pairs_p0_ok state via get_separation_defensibility_status()
+    and fires graduation_readiness_check bus event on False→True transition; inserts
+    graduation_autowatch_log entry.  StagedDryRunGraduationAgent auto-evaluates
+    check_graduation_preconditions() when a new trigger_fired entry is found.
+    Default True (always-on monitoring — does NOT auto-activate graduation, only observes
+    and evaluates; staged_graduation_enabled=False still gates actual stage activation)."""
 
     # --- Phase 208: CorpusRatioRegressionGuard ---
     corpus_ratio_regression_guard_enabled: bool = field(

@@ -6031,11 +6031,15 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         _check_rate(x_api_key)
         import time as _t205
         _enabled205 = bool(getattr(cfg, "accel_tremor_fallback_enabled", True))
+        _nfft213    = int(getattr(cfg, "accel_fft_nfft", 4096))
+        _bin_hz     = round(1000.0 / _nfft213, 4)  # at 1000 Hz nominal sampling rate
         return {
             "accel_tremor_fallback_enabled": _enabled205,
             "still_hold_var_threshold":      4.0,
             "fallback_source":               "accel_magnitude_fft" if _enabled205 else "stick_fft_only",
             "tremor_search_range_hz":        [1.0, 15.0],
+            "accel_fft_nfft":                _nfft213,
+            "bin_width_hz":                  _bin_hz,
             "timestamp":                     _t205.time(),
         }
 
@@ -6134,6 +6138,55 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "agent_id":        _agent_id207,
             "preconditions":   _result207.get("preconditions", {}),
             "timestamp":       _t207p.time(),
+        }
+
+    # ------------------------------------------------------------------
+    # Phase 214 — GET /agent/graduation-autowatch-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/graduation-autowatch-status")
+    async def get_graduation_autowatch_status(
+        probe_type: str = "",
+        x_api_key: str = Header(default=""),
+    ):
+        """GraduationAutowatchBridge status (Phase 214 — WIF-041 mitigation).
+
+        Reports whether the graduation autowatch is enabled and the history of
+        all_pairs_p0_ok transition events observed by SeparationRatioMonitorAgent.
+        When a trigger_fired entry exists, StagedDryRunGraduationAgent has been
+        notified to evaluate graduation preconditions automatically.
+
+        Returns 6 keys:
+          graduation_autowatch_enabled / trigger_count / evaluated_count /
+          last_trigger_probe_type / last_preconditions_met / timestamp
+        """
+        _check_rate(x_api_key)
+        import time as _t214
+        _enabled214 = bool(getattr(cfg, "graduation_autowatch_enabled", True))
+        _status214: dict = {
+            "total_entries": 0,
+            "trigger_count": 0,
+            "evaluated_count": 0,
+            "last_trigger_ratio": None,
+            "last_trigger_probe_type": None,
+            "last_preconditions_met": None,
+            "last_blockers": [],
+            "entries": [],
+            "timestamp": _t214.time(),
+        }
+        try:
+            _status214 = store.get_graduation_autowatch_status(
+                probe_type=probe_type or None,
+                limit=10,
+            )
+        except Exception:
+            pass
+        return {
+            "graduation_autowatch_enabled": _enabled214,
+            "trigger_count":               _status214.get("trigger_count", 0),
+            "evaluated_count":             _status214.get("evaluated_count", 0),
+            "last_trigger_probe_type":     _status214.get("last_trigger_probe_type"),
+            "last_preconditions_met":      _status214.get("last_preconditions_met"),
+            "timestamp":                   _status214.get("timestamp", _t214.time()),
         }
 
     # ------------------------------------------------------------------
