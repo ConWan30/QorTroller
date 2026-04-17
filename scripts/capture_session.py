@@ -190,6 +190,61 @@ def _default_output() -> str:
     return os.path.join("sessions", f"session_{ts}.json")
 
 
+def _auto_increment_path(path: str) -> str:
+    """Return a path that does not already exist on disk.
+
+    If *path* does not exist, returns *path* unchanged.  If it does exist,
+    finds the highest existing counter suffix (_NNN) in the same directory
+    for the same stem and returns the next available filename.
+
+    Example: tremor_resting_P1_001.json → tremor_resting_P1_002.json (if 001 exists)
+
+    This prevents silent overwrites when the user runs multiple captures with
+    the same --output path (e.g. repeating the SEPARATION_DECISION_FRAMEWORK
+    capture commands verbatim).
+    """
+    import re as _re
+
+    if not os.path.exists(path):
+        return path
+
+    # Decompose: dir / stem _NNN .json
+    dirpart  = os.path.dirname(os.path.abspath(path))
+    basename = os.path.basename(path)
+    # Match optional _NNN suffix before .json
+    m = _re.match(r"^(.*?)(_\d+)?(\.json)$", basename, _re.IGNORECASE)
+    if not m:
+        # Cannot parse — append timestamp to avoid overwrite
+        ts = datetime.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        root, ext = os.path.splitext(path)
+        return f"{root}_{ts}{ext}"
+
+    stem_base = m.group(1)   # e.g. "tremor_resting_P1"
+    ext       = m.group(3)   # ".json"
+
+    # Scan existing files to find highest counter
+    max_n = 0
+    try:
+        for fname in os.listdir(dirpart):
+            mm = _re.match(
+                rf"^{_re.escape(stem_base)}_(\d+){_re.escape(ext)}$",
+                fname, _re.IGNORECASE,
+            )
+            if mm:
+                max_n = max(max_n, int(mm.group(1)))
+    except OSError:
+        pass
+
+    next_n = max_n + 1
+    new_name = f"{stem_base}_{next_n:03d}{ext}"
+    new_path = os.path.join(dirpart, new_name)
+    print(
+        f"[auto-increment] Output '{basename}' already exists — "
+        f"saving to '{new_name}' instead."
+    )
+    return new_path
+
+
 # ---------------------------------------------------------------------------
 # Capture loop
 # ---------------------------------------------------------------------------
@@ -325,6 +380,7 @@ def run(duration_s: int, output_path: str, notes: str, transport_arg: str = "aut
 def main() -> int:
     args = _parse_args()
     output = args.output if args.output else _default_output()
+    output = _auto_increment_path(output)
     return run(args.duration, output, args.notes, transport_arg=args.transport)
 
 

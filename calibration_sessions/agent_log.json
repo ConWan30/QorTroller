@@ -1,9 +1,5 @@
 [
   {
-    "ts": "2026-03-29T16:39:45Z",
-    "event": "milestone: Session 99: touch_variance=0.2193"
-  },
-  {
     "ts": "2026-03-29T16:54:02Z",
     "event": "milestone: Session 100: touch_variance=0.2193"
   },
@@ -197,6 +193,10 @@
   },
   {
     "ts": "2026-04-12T07:19:35Z",
+    "event": "controller_connected: DualSense Edge Wireless Controller"
+  },
+  {
+    "ts": "2026-04-13T03:25:52Z",
     "event": "controller_connected: DualSense Edge Wireless Controller"
   }
 ]

@@ -501,4 +501,4 @@ When prioritizing work:
 **Last Updated**: 2026-04-09
 **Update Trigger**: Phase 180 COMPLETE — WIF-029 W1/W2 + WIF-030 W1 closed; Autoresearch Cycle 8 applied (WIF-031 filed); agent fleet 26; bridge 1998→2022; SDK 325→337; Hardhat 468→482; Contracts 39→40 (CeremonyAuditRegistry.sol code-complete, deploy deferred)
 **Update Method**: sync_vapi_workflow.py + manual edit 2026-04-09
-**AutoResearch Last Run**: 2026-04-09 (cycle 8, WIF-031 W1/W2, score=0.752)
+**Maturity Loop Last Run**: 2026-04-09 (cycle 8, WIF-031 W1/W2, score=0.752)

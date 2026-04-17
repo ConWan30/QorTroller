@@ -6865,6 +6865,8 @@ class AccelTremorFFTResult:
                                        is detected (default 4.0 LSB²).
         fallback_source:               "accel_magnitude_fft" when enabled; "stick_fft_only" when not.
         tremor_search_range_hz:        [min_hz, max_hz] used in accel tremor peak search.
+        accel_fft_nfft:                Phase 213 — zero-padded FFT point count (default 4096).
+        bin_width_hz:                  Phase 213 — frequency resolution in Hz/bin (default 0.244).
         timestamp:                     Unix timestamp of status query.
         error:                         Non-None when HTTP/parse error occurred.
     """
@@ -6872,6 +6874,8 @@ class AccelTremorFFTResult:
     still_hold_var_threshold:      float
     fallback_source:               str
     tremor_search_range_hz:        list
+    accel_fft_nfft:                int          = 4096
+    bin_width_hz:                  float        = 0.244
     timestamp:                     float        = 0.0
     error:                         "str | None" = None
 
@@ -6913,6 +6917,8 @@ class VAPIAccelTremorFFT:
                 still_hold_var_threshold      = float(body.get("still_hold_var_threshold", 4.0)),
                 fallback_source               = str(body.get("fallback_source", "accel_magnitude_fft")),
                 tremor_search_range_hz        = list(body.get("tremor_search_range_hz", [1.0, 15.0])),
+                accel_fft_nfft                = int(body.get("accel_fft_nfft", 4096)),
+                bin_width_hz                  = float(body.get("bin_width_hz", 0.244)),
                 timestamp                     = float(body.get("timestamp", 0.0)),
             )
         except Exception as exc:
@@ -7082,4 +7088,81 @@ class VAPICorpusRegressionGuard:
                 provenance_hash  = None,
                 override_count   = 0,
                 error            = str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Phase 214 — GraduationAutowatchBridge
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class GraduationAutowatchResult:
+    """Result from VAPIGraduationAutowatch.get_status() (Phase 214).
+
+    Fields
+    ------
+    graduation_autowatch_enabled  : bool — True when monitor is active (default True)
+    trigger_count                 : int  — Number of all_pairs_p0_ok False→True transitions detected
+    evaluated_count               : int  — Number of autowatch precondition evaluations completed
+    last_trigger_probe_type       : str | None — probe_type of last trigger event
+    last_preconditions_met        : bool | None — None if no evaluation yet; else True/False
+    timestamp                     : float — UTC epoch of last status read
+    error                         : str | None — exception message on HTTP/parse failure
+    """
+    graduation_autowatch_enabled : bool        = True
+    trigger_count                : int         = 0
+    evaluated_count              : int         = 0
+    last_trigger_probe_type      : "str | None" = None
+    last_preconditions_met       : "bool | None" = None
+    timestamp                    : float       = 0.0
+    error                        : "str | None" = None
+
+
+class VAPIGraduationAutowatch:
+    """SDK client for Phase 214 GraduationAutowatchBridge endpoint.
+
+    Reads GET /agent/graduation-autowatch-status to report autowatch state.
+
+    Example::
+
+        watch = VAPIGraduationAutowatch("http://localhost:8080", api_key)
+        result = watch.get_status()
+        if result.trigger_count > 0:
+            print(f"P0 transition detected — preconditions_met={result.last_preconditions_met}")
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self, probe_type: str = "") -> GraduationAutowatchResult:
+        """Return GraduationAutowatchResult from GET /agent/graduation-autowatch-status.
+
+        On error: returns GraduationAutowatchResult with error set and trigger_count=0.
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            _params = f"api_key={self._key}"
+            if probe_type:
+                _params += f"&probe_type={probe_type}"
+            url = f"{self._base}/agent/graduation-autowatch-status?{_params}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            _last_met = body.get("last_preconditions_met")
+            return GraduationAutowatchResult(
+                graduation_autowatch_enabled = bool(body.get("graduation_autowatch_enabled", True)),
+                trigger_count                = int(body.get("trigger_count", 0)),
+                evaluated_count              = int(body.get("evaluated_count", 0)),
+                last_trigger_probe_type      = body.get("last_trigger_probe_type"),
+                last_preconditions_met       = bool(_last_met) if _last_met is not None else None,
+                timestamp                    = float(body.get("timestamp", 0.0)),
+            )
+        except Exception as exc:
+            return GraduationAutowatchResult(
+                graduation_autowatch_enabled = True,
+                trigger_count                = 0,
+                evaluated_count              = 0,
+                last_trigger_probe_type      = None,
+                last_preconditions_met       = None,
+                error                        = str(exc),
             )

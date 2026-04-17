@@ -58,12 +58,18 @@ from vapi_bridge.sub_protocol_registry import SubProtocolRegistry, SubProtocolCo
 SubProtocolRegistry.instance().register(SubProtocolConfig(
     name="PRAGMA_JUDGE",
     event_namespace="pragma.",         # All events must be prefixed "pragma."
-    agent_range=(37, 60),              # Agents #37–#60 owned by PRAGMA_JUDGE
-    tool_range=(150, 200),             # Tools #150–#200 owned by PRAGMA_JUDGE
+    agent_range=(61, 80),              # Agents #61–#80 owned by PRAGMA_JUDGE
+                                       # (37–60 reserved for VAPI_MOBILE)
+    tool_range=(201, 250),             # Tools #201–#250 owned by PRAGMA_JUDGE
+                                       # (150–200 reserved for VAPI_MOBILE)
     table_prefix="pj_",               # All SQLite tables must start "pj_"
     contract_source_type="PRAGMA",    # AdjudicationRegistry sourceType value
     version="0.1",
     dry_run=True,                      # Start in dry_run; disable when live
+    permitted_vapi_interfaces=[        # Explicit isolation contract — PRAGMA_JUDGE
+        "VAPIProtocolLens.isFullyEligible",       #   may ONLY call these VAPI APIs.
+        "AdjudicationRegistry.anchorAdjudication", #  Any call not on this list is a
+    ],                                 #   boundary violation (see Section 3, Rule 8).
 ))
 ```
 
@@ -186,14 +192,14 @@ from vapi_bridge._noop_handler import _noop
 
 PRAGMA_JUDGE_TOOLS = [
     ToolDefinition(
-        number=150,
+        number=201,
         name="get_commitment_status",
         description="Get the prompt commitment status for a device.",
         handler=_noop,                 # Real handler wired in PragmaJudgeAgent
         sub_protocol="PRAGMA_JUDGE",
         phase_introduced=205,
     ),
-    # ... more tools up to the declared tool_range upper bound
+    # ... more tools up to the declared tool_range upper bound (201–250)
 ]
 
 ToolRegistry.instance().register_tool_range(PRAGMA_JUDGE_TOOLS)
@@ -237,6 +243,20 @@ and breaks the isolation contract that makes sub-protocols safe to deploy.
 
 7. **No registering sourceType strings that conflict with registered sub-protocols.**
    The `AdjudicationRegistry.anchorAdjudication(podHash, sourceType)` `sourceType` parameter
+
+8. **No calling VAPI APIs not listed in `permitted_vapi_interfaces`.** The
+   `SubProtocolConfig.permitted_vapi_interfaces` field is the explicit isolation contract
+   for each sub-protocol. When Claude Code builds a new sub-protocol feature, it must
+   verify that any VAPI API call it writes appears in the sub-protocol's
+   `permitted_vapi_interfaces` list. If it does not appear there, do NOT call it —
+   instead, either (a) add it to the list explicitly with justification, or (b) find
+   an integration-point-based solution (migration, coherence rule, bus event) that does
+   not require a direct VAPI API call. The most common violation is calling `store.py`
+   methods directly to query enrollment status — the correct path is publishing a
+   `pragma.eligibility_check_requested` bus event and consuming the
+   `enrollment_complete` response, or reading the VHP credential via
+   `isFullyEligible()` which is already permitted. This rule is enforced by code
+   review and architecture doc reference, not at runtime.
    must match the `contract_source_type` declared in SubProtocolConfig.
 
 ---

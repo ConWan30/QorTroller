@@ -73,6 +73,133 @@ gate status before implementing vault disbursements or PRAGMA minting:
 PragmaJudge infrastructure can be built and tested before these gates. Real economic
 operations (vault disbursements, token minting) activate only after gates clear.
 
+**RULE 0.8 — COHERENCE RULE GUARD CONVENTION.**
+Every PragmaJudge coherence rule injected into FleetSignalCoherenceAgent via
+`CoherenceRuleLoader.inject_rules()` MUST carry at minimum the following guard:
+
+```python
+guard=lambda cfg: getattr(cfg, "pragma_judge_enabled", False)
+```
+
+This ensures that all PRAGMA_JUDGE rules are registered at bridge startup but
+silently skipped until an operator explicitly enables PragmaJudge. Rules for specific
+PragmaJudge features (e.g., vault enforcement) must use compound guards:
+
+```python
+guard=lambda cfg: (
+    getattr(cfg, "pragma_judge_enabled", False) and
+    getattr(cfg, "commitment_enforcement_enabled", False)
+)
+```
+
+No PragmaJudge coherence rule may omit the `pragma_judge_enabled` guard. The only
+exception is rules at CRITICAL severity that are safety-relevant regardless of
+feature-flag state — but such rules must be explicitly documented and approved.
+This convention provides production-grade feature flagging at zero infrastructure cost,
+enabled by the guard mechanism introduced in Phase 204 (Section 4 of
+VAPI_SUBPROTOCOL_ARCHITECTURE.md).
+
+**CONFIRMED NAMESPACE ALLOCATION (VAPI-EXT Phase 204+):**
+- VAPI_MOBILE: agents #37–#60, tools #150–#200, namespace `mobile.`
+- PRAGMA_JUDGE: agents #61–#80, tools #201–#250, namespace `pragma.`
+
+These ranges are non-overlapping and confirmed by SubProtocolRegistry. PRAGMA_JUDGE
+must register with `agent_range=(61, 80)` and `tool_range=(201, 250)` — not the
+approximate ranges that appeared in earlier drafts of this document.
+
+**RULE 0.9 — APPEALABILITY.**
+Every PragmaJudge ruling that produces an adverse outcome (BLOCK, FLAG, DISQUALIFY,
+VAULT_DENY) MUST be appealable. The appeal pathway must be designed into the ruling
+contracts and agent logic from Phase 1 — retrofit is not acceptable because issued
+on-chain verdicts reference contract ABI that cannot be changed post-deployment.
+
+**Appeal mechanism (canonical design):**
+
+```solidity
+// PromptVerdictRegistry.sol — required on every BLOCK/FLAG verdict record
+struct AppealWindow {
+    uint64  deadline;             // block.timestamp + appealWindowSeconds
+    bytes32 counterEvidenceHash;  // SHA-256(counter_evidence_json), set at appeal open
+    bool    resolved;             // True once second-round quorum completes
+    uint8   outcome;              // 0=pending, 1=upheld, 2=overturned
+}
+mapping(bytes32 => AppealWindow) public appealWindows;  // verdictHash → window
+
+// SubProtocolConfig-level parameters (Gap 4 fix: not frozen constants)
+// Set at construction from PragmaJudgeSubProtocolConfig; changeable via governance
+// timelock (same pattern as VAPIGovernanceTimelock.sol, CEI, co-signer cancel).
+// Higher-stakes deployments (esports finals, cash prize tournaments) extend
+// appealWindowSeconds without contract upgrade.
+uint256 public appealWindowSeconds;         // default 86400 (24 hours)
+uint256 public appealConsensusTimeout;      // default 3600 (1 hour, Gap 2 fix)
+uint256 public constant APPEAL_QUORUM_NUMERATOR   = 90;   // 90% — never lowered
+uint256 public constant APPEAL_QUORUM_DENOMINATOR = 100;
+```
+
+**Default values (PragmaJudgeSubProtocolConfig):**
+```python
+appeal_window_seconds:      int = 86400   # 24 hours — minimum for standard tournaments
+appeal_consensus_timeout_s: int = 3600    # 1 hour — IoSwarm second round deadline
+```
+
+These are registered in `SubProtocolRegistry` when PragmaJudge is initialized.
+They can be queried at runtime via `GET /pragma/appeal-config-status` (Phase 208+).
+
+**IoSwarm second round (APPEAL_QUORUM=0.90):**
+- On appeal filed: `PragmaJudgeAppealAgent` triggers a fresh IoSwarm round with the
+  counter-evidence JSON included in the task payload.
+- The second round uses `APPEAL_QUORUM=0.90` — stricter than `BLOCK_QUORUM=0.67` —
+  because overturning a verdict is a more consequential action than issuing one.
+- The second round must complete within `appeal_consensus_timeout_s` (default 3600s).
+  If the round does not reach APPEAL_QUORUM=0.90 within the timeout, the verdict is
+  automatically UPHELD (`outcome=1`) — **TIMEOUT_UPHELD** — not left pending.
+  Rationale: leaving appeals indefinitely pending blocks tournament operator operations
+  and creates a griefing vector where appeals are filed to delay enforcement.
+- If the second round reaches 0.90 with opposing verdict before timeout, the ruling is
+  OVERTURNED (`outcome=2`). Overturned verdicts record the second-round PoAd hash.
+- VAPI's `MINT_QUORUM=0.80` remains unchanged — appeal is a PragmaJudge internal rule.
+
+**TIMEOUT_UPHELD protocol:**
+```python
+# PragmaJudgeAppealAgent internal logic
+if elapsed_seconds >= appeal_consensus_timeout_s and not quorum_reached:
+    verdict = "UPHELD"                  # TIMEOUT_UPHELD — fail-closed
+    outcome_code = 1
+    appeal_window.resolved = True
+    record_on_chain(verdict_hash, outcome=1, resolution_reason="TIMEOUT_UPHELD")
+    emit("pragma_appeal_timeout_upheld", {
+        "verdict_hash": verdict_hash,
+        "elapsed_s": elapsed_seconds,
+        "nodes_responding": nodes_count,
+        "quorum_needed": APPEAL_QUORUM_NUMERATOR,
+    })
+```
+
+**Invariants:**
+- `APPEAL_QUORUM=0.90` — frozen; never lowered (would invert the security asymmetry
+  between issuing verdicts at 0.67 and overturning them at 0.90).
+- `appeal_window_seconds` >= 3600 at all times — no shorter than 1 hour.
+- `appeal_consensus_timeout_s` < `appeal_window_seconds` always — the IoSwarm round
+  must complete within the appeal window, not after it closes.
+- Counter-evidence hash must be submitted on-chain before the appeal window closes.
+  Appeal without on-chain hash is automatically UPHELD (prevents griefing loops).
+- Appeals are available only to the ruling's subject (device operator who held the VHP
+  at ruling time). Third-party appeals are not permitted.
+- `dry_run=True` default applies to appeal processing — no on-chain state changes until
+  operator explicitly enables live appeal mode.
+- `PragmaJudgeAppealAgent` carries the `PRAGMA_` event prefix (RULE 0.5) and the
+  `pragma_judge_enabled` guard (RULE 0.8).
+- Governance changes to `appealWindowSeconds` or `appealConsensusTimeout` go through
+  a timelock with minimum 48h delay — same CEI + co-signer cancel pattern as
+  `VAPIGovernanceTimelock.sol`.
+
+**Why this rule must be designed before Phase 208:**
+Phase 208 deploys `PromptVerdictRegistry.sol` and `PragmaJudgeRulingAgent`. If appeal
+fields are not in the registry schema at deploy time, overturning a verdict requires
+deploying a new contract — all prior verdicts become permanently non-appealable. This is
+legally and reputationally unacceptable for a competitive gaming adjudication protocol.
+RULE 0.9 is therefore a P0 pre-condition for Phase 208, not a future enhancement.
+
 ---
 
 ## SECTION 1 — WHAT VAPI HAS ALREADY BUILT (CONSUMED BY PRAGMAJUDGE)
@@ -479,7 +606,7 @@ Public signals (nPublic=5, mirrors VAPI's nPublic=5):
 4. `sessionId` — links to on-chain PragmaJudge session
 5. `verdictCode` — must match consensus output from agent fleet
 
-### 2.3 New Agents (Agents #37–#41)
+### 2.3 New Agents (Agents #61–#65)
 
 All new agents are implemented as Python asyncio classes in `pragmajudge/agents/`.
 They follow VAPI's exact agent architecture: polling cycle, federation_bus subscription,
@@ -488,7 +615,7 @@ store interaction, tool bindings, LLM backing where appropriate. All initialize 
 
 ---
 
-**Agent #37 — PromptIntentExtractor**
+**Agent #61 — PromptIntentExtractor**
 
 *Role:* Receives raw prompt text (off-chain, never stored), extracts three-layer intent
 graph, classifies speech act, extracts Gricean implicatures, and produces the structured
@@ -515,13 +642,13 @@ class IntentGraph:
     confidence: float                       # 0.0–1.0
 ```
 
-*Tools:* 6 tools (#150–#155 in catalog)
+*Tools:* 6 tools (#201–#206 in catalog)
 *Bus events published:* `PRAGMA_INTENT_EXTRACTED`
 *Bus events consumed:* `PRAGMA_SESSION_INITIATED`
 
 ---
 
-**Agent #38 — OutputFidelityJudge (×3 instances: OFJ-1, OFJ-2, OFJ-3)**
+**Agent #62 — OutputFidelityJudge (×3 instances: OFJ-1, OFJ-2, OFJ-3)**
 
 *Role:* Each instance independently evaluates whether the AI output's semantic
 embedding satisfies the committed intent embedding within the fidelity threshold.
@@ -561,13 +688,13 @@ automatically files a `pragma_minority_reports` record containing its full Reaso
 Tree and the CDP that caused divergence. After 3 occurrences of the same CDP pattern,
 FleetSignalCoherenceAgent auto-promotes to `PRAGMA_WHAT_IF.md`.
 
-*Tools:* 9 tools per instance (#156–#164 for OFJ-1, #165–#173 for OFJ-2, #174–#182 for OFJ-3)
+*Tools:* 9 tools per instance (#207–#215 for OFJ-1, #216–#224 for OFJ-2, #225–#233 for OFJ-3)
 *Bus events published:* `PRAGMA_OFJ_VERDICT_{1|2|3}`
 *Bus events consumed:* `PRAGMA_INTENT_EXTRACTED`, `PRAGMA_OUTPUT_RECEIVED`
 
 ---
 
-**Agent #39 — PragmaConsensusArbiter**
+**Agent #63 — PragmaConsensusArbiter**
 
 *Role:* Aggregates OFJ verdicts, integrates PIL human-presence signal, applies the
 weighted consensus formula, produces the final PragmaJudge verdict, triggers
@@ -605,13 +732,13 @@ collects partial BLS signatures from each agreeing agent and aggregates into a s
 hinTS construction applied to PragmaJudge's 3-agent sub-consensus. The full 36-agent
 fleet threshold remains at 0.65 × 36 = 24 agents for ioSwarm confirmation.
 
-*Tools:* 12 tools (#183–#194 in catalog)
+*Tools:* 12 tools (#234–#245 in catalog)
 *Bus events published:* `PRAGMA_VERDICT_FINAL`, `PRAGMA_VAULT_TRIGGER`
 *Bus events consumed:* `PRAGMA_OFJ_VERDICT_1`, `PRAGMA_OFJ_VERDICT_2`, `PRAGMA_OFJ_VERDICT_3`, `PRAGMA_PIL_SIGNAL`
 
 ---
 
-**Agent #40 — PILMonitorAgent (Physical Input Layer Monitor)**
+**Agent #64 — PILMonitorAgent (Physical Input Layer Monitor)**
 
 *Role:* Monitors keyboard, mouse, and touchpad signals from the user's PC during
 AI interaction sessions. Computes the PIL biometric features that distinguish human
@@ -661,13 +788,13 @@ Model updates flow via W3bstream secure aggregation with differential privacy (�
 *Consent gate:* `PIL_MONITORING_CONSENT_REQUIRED=True` — PIL monitoring activates only
 after explicit user consent recorded in `PragmaDataSovereigntyRegistry.sol`.
 
-*Tools:* 8 tools (#195–#202 in catalog)
+*Tools:* 8 tools (#246–#253 in catalog)
 *Bus events published:* `PRAGMA_PIL_SIGNAL`
 *Bus events consumed:* `PRAGMA_SESSION_INITIATED`
 
 ---
 
-**Agent #41 — PragmaFleetMonitor**
+**Agent #65 — PragmaFleetMonitor**
 
 *Role:* Health monitoring for the PragmaJudge sub-system. Tracks PragmaVault balance,
 PRAGMA token flows, verdict distribution statistics, PIL calibration staleness, and
@@ -692,7 +819,7 @@ PRAGMA_MATURITY_WEIGHTS = {
 }
 ```
 
-*Tools:* 6 tools (#203–#208 in catalog)
+*Tools:* 6 tools (#254–#259 in catalog)
 *Bus events published:* `PRAGMA_MATURITY_SCORE`, `PRAGMA_FLEET_HEALTH`
 *Bus events consumed:* All PRAGMA_* events (observer pattern)
 
@@ -813,7 +940,7 @@ PIL_X (mobile) = cross_modal_coherence()       # tap + IMU temporal binding
 # AUToSen: F1-score 98% on accelerometer+gyroscope+magnetometer
 ```
 
-The `PILMonitorAgent` (Agent #40) has a `device_mode` configuration:
+The `PILMonitorAgent` (Agent #64) has a `device_mode` configuration:
 - `device_mode = "desktop"` — reads keyboard/mouse HID events
 - `device_mode = "mobile"` — reads touchscreen/IMU events via mobile SDK
 
@@ -883,22 +1010,22 @@ PRAGMAJUDGE LAYER (Phase 201+, NEW CODE IN pragmajudge/)
 ┌─────────────────────────────────────────────────────────────────┐
 │                                                                   │
 │  Input Surfaces:                                                  │
-│  [PC Keyboard/Mouse] → PILMonitorAgent (#40) → PoHI (212B)      │
-│  [Mobile Touch/IMU]  → PILMonitorAgent (#40) → PoHI (212B)      │
+│  [PC Keyboard/Mouse] → PILMonitorAgent (#64) → PoHI (212B)      │
+│  [Mobile Touch/IMU]  → PILMonitorAgent (#64) → PoHI (212B)      │
 │                                     │                             │
 │  Session Layer:                     │                             │
 │  PromptCommitmentRegistry.sol ←─────┘                            │
-│  PromptIntentExtractor (#37)                                      │
+│  PromptIntentExtractor (#61)                                      │
 │  IntentGraph (384-dim embedding, speech act, implicature)        │
 │  PragmaIntentProof.circom (Groth16, C1+C2+C3)                   │
 │                                     │                             │
 │  Judgment Layer:                    │                             │
-│  OutputFidelityJudge ×3 (#38)       │                             │
+│  OutputFidelityJudge ×3 (#62)       │                             │
 │  [RBTS scoring + AgentAuditor Reasoning Trees]                   │
 │  [Minority Report on dissent]       │                             │
 │                                     │                             │
 │  Consensus Layer:                   │                             │
-│  PragmaConsensusArbiter (#39)       │                             │
+│  PragmaConsensusArbiter (#63)       │                             │
 │  [0.65 threshold, inherited frozen] │                             │
 │  IoSwarmPragmaVerdictCoordinator    │                             │
 │  [VAULT_QUORUM=0.80, VERDICT_QUORUM=0.67]                        │
@@ -910,7 +1037,7 @@ PRAGMAJUDGE LAYER (Phase 201+, NEW CODE IN pragmajudge/)
 │  [FAILED → disburse to user]        │                             │
 │                                     │                             │
 │  Monitoring Layer:                  │                             │
-│  PragmaFleetMonitor (#41)           │                             │
+│  PragmaFleetMonitor (#65)           │                             │
 │  [Maturity score, ELO, coherence]   │                             │
 │  AutoResearch → PRAGMA_WHAT_IF.md   │                             │
 │                                     │                             │
@@ -943,14 +1070,14 @@ No phase proceeds until the prior phase's test suite is green. VAPI's existing
 ### Phase 201 — Foundation (Build First)
 1. Create `pragmajudge/` folder structure
 2. Implement SQLite migrations (new tables only, additive)
-3. Implement `PILMonitorAgent` (Agent #40) — desktop mode only, dry_run=True
-4. Implement `PromptIntentExtractor` (Agent #37) — LLM-backed, dry_run=True
+3. Implement `PILMonitorAgent` (Agent #64) — desktop mode only, dry_run=True
+4. Implement `PromptIntentExtractor` (Agent #61) — LLM-backed, dry_run=True
 5. Implement `PromptCommitmentRegistry.sol` — deploy IoTeX Testnet
 6. Write Phase 201 test suite (target: 200+ tests)
 7. Verify VAPI 3,089 tests still green
 
 ### Phase 202 — Judgment Layer
-1. Implement `OutputFidelityJudge` ×3 (Agent #38) with RBTS scoring
+1. Implement `OutputFidelityJudge` ×3 (Agent #62) with RBTS scoring
 2. Implement AgentAuditor Reasoning Tree construction
 3. Implement Minority Report protocol and `pragma_minority_reports` table
 4. Implement `PragmaIntentProof.circom` circuit
@@ -958,7 +1085,7 @@ No phase proceeds until the prior phase's test suite is green. VAPI's existing
 6. Write Phase 202 test suite (target: 300+ tests)
 
 ### Phase 203 — Consensus and Vault
-1. Implement `PragmaConsensusArbiter` (Agent #39) with 5-layer consensus stack
+1. Implement `PragmaConsensusArbiter` (Agent #63) with 5-layer consensus stack
 2. Implement `IoSwarmPragmaVerdictCoordinator` (emulator mode)
 3. Implement `PragmaVault.sol` with dry_run protection
 4. Implement `PRAGMAToken.sol`
@@ -966,7 +1093,7 @@ No phase proceeds until the prior phase's test suite is green. VAPI's existing
 6. Write Phase 203 test suite (target: 300+ tests)
 
 ### Phase 204 — Monitoring and AutoResearch
-1. Implement `PragmaFleetMonitor` (Agent #41)
+1. Implement `PragmaFleetMonitor` (Agent #65)
 2. Implement `PragmaEloRegistry.sol`
 3. Implement PRAGMA_WHAT_IF.md AutoResearch loop
 4. Implement FleetSignalCoherenceAgent rule injection (PRAGMA-C1, C2, C3)
@@ -1117,11 +1244,11 @@ vapi-pebble-prototype/
 │   ├── config.py                    # Section 7 constants
 │   ├── agents/
 │   │   ├── __init__.py
-│   │   ├── prompt_intent_extractor.py   # Agent #37
-│   │   ├── output_fidelity_judge.py     # Agent #38 (instanced ×3)
-│   │   ├── pragma_consensus_arbiter.py  # Agent #39
-│   │   ├── pil_monitor_agent.py         # Agent #40
-│   │   └── pragma_fleet_monitor.py      # Agent #41
+│   │   ├── prompt_intent_extractor.py   # Agent #61
+│   │   ├── output_fidelity_judge.py     # Agent #62 (instanced ×3)
+│   │   ├── pragma_consensus_arbiter.py  # Agent #63
+│   │   ├── pil_monitor_agent.py         # Agent #64
+│   │   └── pragma_fleet_monitor.py      # Agent #65
 │   ├── circuits/
 │   │   ├── PragmaIntentProof.circom     # ZK circuit
 │   │   └── PragmaIntentProof_js/        # compiled artifacts

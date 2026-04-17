@@ -254,6 +254,17 @@ class BiometricFeatureExtractor:
 
     _FFT_RING_MAXLEN: int = 1025  # positions; yields up to 1024 velocity samples (0.977 Hz/bin)
 
+    # Phase 205: variance threshold for still-hold detection on right_stick_x ring.
+    # When ring variance < threshold the stick is at neutral (still-hold session like
+    # tremor_seed) and the accel magnitude FFT is used instead for tremor_peak_hz.
+    # 4.0 LSB² matches the existing accel entropy guard (line ~485) for consistency.
+    _STILL_HOLD_VAR_THRESHOLD: float = 4.0
+
+    # Phase 213: Zero-padded FFT point count for accel tremor peak resolution.
+    # At 1000 Hz: 4096-point FFT → 0.244 Hz/bin vs 1024-point → 0.977 Hz/bin.
+    # Resolves P1 (3.1 Hz) / P3 (3.7 Hz) aliasing: 0.6 Hz gap → ~2.5 bins separated.
+    _ACCEL_FFT_NFFT: int = 4096
+
     # Phase 57: button bit masks for jitter IBI tracking (raw HID bytes)
     _CROSS_BIT:    int = 0x20  # buttons_0 bit 5
     _L2_DIG_BIT:   int = 0x04  # buttons_1 bit 2
@@ -263,11 +274,20 @@ class BiometricFeatureExtractor:
     _TRIG_PRESS_THRESH:   int = 64
     _TRIG_RELEASE_THRESH: int = 30
 
-    def __init__(self) -> None:
+    def __init__(self, *, accel_tremor_fallback_enabled: bool = True, accel_fft_nfft: int = 4096) -> None:
+        # Phase 205: when True, still-hold detection triggers accel magnitude FFT
+        # fallback for tremor_peak_hz (tremor_seed sessions where right_stick_x
+        # stays at neutral=128 and produces a flat FFT at 0 Hz).
+        self.accel_tremor_fallback_enabled: bool = accel_tremor_fallback_enabled
+        # Phase 213: zero-padded FFT size for accel tremor peak resolution.
+        # Default 4096 → 0.244 Hz/bin at 1000 Hz (vs 0.977 Hz/bin raw 1024-point).
+        self.accel_fft_nfft: int = accel_fft_nfft
+
         # Separate ring buffer for right_stick_x positions used by tremor FFT.
         # Accumulates across calls; maxlen=1025 → up to 1024 velocity samples (0.977 Hz/bin).
         self._fft_ring: deque[float] = deque(maxlen=self._FFT_RING_MAXLEN)
-        # Ring buffer for accel magnitude used by spectral entropy (feature index 9).
+        # Ring buffer for accel magnitude used by spectral entropy (feature index 9)
+        # and accel tremor fallback (Phase 205 — section 5.5 populates before section 6).
         # 1024 samples → 513 frequency bins at 0.977 Hz/bin at 1000 Hz.
         self._accel_mag_ring: deque[float] = deque(maxlen=1024)
 
@@ -323,6 +343,30 @@ class BiometricFeatureExtractor:
             return 0.0
         normalised = arr / mean_ibi
         return float(np.var(normalised))
+
+    @staticmethod
+    def _parabolic_interp(mag: "np.ndarray", peak_idx: int) -> float:
+        """Phase 213: Sub-bin peak refinement via parabolic interpolation.
+
+        Fits a parabola through three points (peak_idx-1, peak_idx, peak_idx+1)
+        and returns the fractional bin index of the parabola's vertex.
+
+        At 1000 Hz / 4096-point FFT (0.244 Hz/bin): ~0.05 Hz resolution.
+        Resolves P1≈3.1 Hz and P3≈3.7 Hz from the same aliased 0.977 Hz bin.
+
+        Returns float(peak_idx) unchanged at array boundaries.
+        """
+        if peak_idx <= 0 or peak_idx >= len(mag) - 1:
+            return float(peak_idx)
+        alpha = float(mag[peak_idx - 1])
+        beta  = float(mag[peak_idx])
+        gamma = float(mag[peak_idx + 1])
+        # Standard parabolic interpolation denominator (always ≤ 0 at a true maximum).
+        denom = alpha - 2.0 * beta + gamma
+        if denom >= 0.0:
+            # Not a concave maximum — return coarse peak unchanged.
+            return float(peak_idx)
+        return peak_idx + 0.5 * (alpha - gamma) / denom
 
     @staticmethod
     def _touchpad_spatial_entropy(
@@ -438,25 +482,69 @@ class BiometricFeatureExtractor:
         autocorr_lag1 = _autocorr(stick_vels, lag=1)
         autocorr_lag5 = _autocorr(stick_vels, lag=5)
 
-        # 6. Right-stick tremor FFT (8-12 Hz physiological tremor)
+        # 5.5 (Phase 205) — Populate accel magnitude ring before section 6.
+        # Moved up from section 7 so _accel_mag_ring is available for the
+        # accel tremor fallback when still-hold is detected (tremor_seed sessions).
+        for s in snaps:
+            _ax = float(getattr(s, "accel_x", 0.0))
+            _ay = float(getattr(s, "accel_y", 0.0))
+            _az = float(getattr(s, "accel_z", 0.0))
+            self._accel_mag_ring.append(math.sqrt(_ax * _ax + _ay * _ay + _az * _az))
+
+        # 6. Right-stick tremor FFT (8-12 Hz) / Accel tremor fallback (Phase 205).
         # Estimate sampling frequency from current window timing.
         dt_vals = [max(_g(s, "inter_frame_us", 1000) / 1_000_000.0, 1e-6) for s in snaps[1:]]
         fs = 1.0 / max(float(np.median(dt_vals)), 1e-6) if dt_vals else 1000.0
 
         # Update the persistent ring buffer with right_stick_x positions from
         # this window's snapshots.  Duplicates are harmless: the ring is
-        # capped at _FFT_RING_MAXLEN=513; the caller's window slice already
+        # capped at _FFT_RING_MAXLEN=1025; the caller's window slice already
         # represents the most-recent frames so we append only those.
         for s in snaps:
             self._fft_ring.append(float(getattr(s, "right_stick_x", 0)))
 
         # Prefer the ring buffer when it has accumulated enough history;
         # otherwise fall back to the current window (activates immediately for
-        # large calibration windows >= 513 frames).
+        # large calibration windows >= 1025 frames).
         ring_arr = np.array(list(self._fft_ring), dtype=np.float32)
         rx_vels_src = np.diff(ring_arr) / 32768.0
 
-        if len(rx_vels_src) >= 1024:
+        # Phase 205: detect still-hold — right_stick_x ring near constant (neutral=128)
+        # means no gameplay motion; accel magnitude FFT captures neurological tremor origin.
+        _stick_var = float(np.var(ring_arr)) if len(ring_arr) > 1 else 0.0
+        _use_accel_tremor = (
+            self.accel_tremor_fallback_enabled
+            and _stick_var < self._STILL_HOLD_VAR_THRESHOLD
+            and len(self._accel_mag_ring) >= 1024
+        )
+
+        if _use_accel_tremor:
+            # Phase 213: Zero-padded FFT for accel tremor peak resolution.
+            # DC-remove accel magnitude ring, zero-pad to accel_fft_nfft (default 4096),
+            # find peak in 1-15 Hz using parabolic sub-bin interpolation.
+            # At 1000 Hz: 4096-point → 0.244 Hz/bin resolves P1 (3.1 Hz) vs P3 (3.7 Hz)
+            # which aliased to the same bin at 0.977 Hz/bin (Phase 205 1024-point baseline).
+            _am_arr   = np.array(list(self._accel_mag_ring), dtype=np.float64)
+            _am_dc    = _am_arr - float(np.mean(_am_arr))
+            _nfft     = self.accel_fft_nfft
+            _am_fft   = np.abs(np.fft.rfft(_am_dc, n=_nfft))
+            _am_freqs = np.fft.rfftfreq(_nfft, d=1.0 / fs)
+            _am_power = float(np.sum(_am_fft ** 2)) or 1e-9
+            _band_mask_accel = (_am_freqs >= 1.0) & (_am_freqs <= 15.0)
+            if _band_mask_accel.any():
+                # Coarse peak within 1-15 Hz band, then parabolic sub-bin refinement.
+                _band_indices = np.where(_band_mask_accel)[0]
+                _peak_in      = int(np.argmax(_am_fft[_band_mask_accel]))
+                _abs_peak     = int(_band_indices[_peak_in])
+                _refined_bin  = self._parabolic_interp(_am_fft, _abs_peak)
+                tremor_peak_hz    = float(_refined_bin * (fs / _nfft))
+                _power_mask       = (_am_freqs >= 1.0) & (_am_freqs <= 12.0)
+                tremor_band_power = float(np.sum(_am_fft[_power_mask] ** 2) / _am_power)
+            else:
+                tremor_peak_hz    = 0.0
+                tremor_band_power = 0.0
+        elif len(rx_vels_src) >= 1024:
+            # Standard right-stick tremor FFT path (gameplay sessions).
             # 1024 velocity samples → bin width ≈0.977 Hz at 1000 Hz; 4 bins across 8–12 Hz tremor band.
             fft_mag = np.abs(np.fft.rfft(rx_vels_src))
             freqs   = np.fft.rfftfreq(len(rx_vels_src), d=1.0 / fs)
@@ -471,13 +559,7 @@ class BiometricFeatureExtractor:
             tremor_band_power = 0.0
 
         # 7. Accel magnitude spectral entropy (gravity-invariant; 1000 Hz exclusive)
-        # Update ring buffer with magnitude samples from this window.
-        for s in snaps:
-            _ax = float(getattr(s, "accel_x", 0.0))
-            _ay = float(getattr(s, "accel_y", 0.0))
-            _az = float(getattr(s, "accel_z", 0.0))
-            self._accel_mag_ring.append(math.sqrt(_ax * _ax + _ay * _ay + _az * _az))
-
+        # Ring already populated in section 5.5 (Phase 205 refactor).
         # Compute entropy from ring when full (1024 samples); 0.0 during warm-up.
         if len(self._accel_mag_ring) >= 1024:
             _ring_arr = np.array(list(self._accel_mag_ring), dtype=np.float64)

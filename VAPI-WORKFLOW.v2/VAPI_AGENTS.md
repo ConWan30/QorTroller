@@ -843,7 +843,7 @@ signals across the 35-agent fleet and auto-promotes persistent contradictions to
     PERSONA_BREAK_ENROLLMENT_CONFLICT, SEPARATION_GATE_ACTIVATION_CONFLICT
 - **ORPHAN** (5 rules): Agent output not consumed by its downstream within 48h
   - PERSONA_BREAK_UNATTESTED, MATURITY_ELEVATION_UNACKNOWLEDGED, BIOMETRIC_EXPIRED_GATE_NOT_UPDATED,
-    ERASURE_CERT_NOT_ANCHORED, CORPUS_ENTROPY_WARNING_NO_AUTORESEARCH
+    ERASURE_CERT_NOT_ANCHORED, CORPUS_ENTROPY_WARNING_NO_MATURITY_LOOP
 - **INVERSION** (3 rules): Provenance DAG walk reveals temporal inversion
   - COMMITMENT_PREDATES_CONSENT, BADGE_WITHOUT_RENEWAL_PARENT, RULING_PREDATES_CALIBRATION
 
@@ -862,7 +862,7 @@ coherence_alert_on_high(True), coherence_alert_on_medium(False)
 **MCP**: `vapi_fleet_coherence` in knowledge_server.py (severity_filter parameter)
 **Wiki**: cmd_coherence_status() called at end of every cmd_phase_close()
 **SDK**: CoherenceSummaryResult + CoherenceEntryResult + VAPIFleetCoherence
-**AutoResearch**: "fleet_coherence_critical" + "fleet_coherence_orphan" priorities; score_phase_193_readiness() gate ≥0.80
+**Maturity Loop**: "fleet_coherence_critical" + "fleet_coherence_orphan" priorities; score_phase_193_readiness() gate ≥0.80
 
 ---
 
