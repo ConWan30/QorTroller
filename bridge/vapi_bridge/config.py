@@ -1277,6 +1277,58 @@ class Config:
     for that probe type, unless an override is registered.  Default False (infrastructure-first).
     Set CORPUS_RATIO_REGRESSION_GUARD_ENABLED=true once separation ratio exceeds 1.0."""
 
+    # --- Phase 215: L4DimSyncConfirmation ---
+    l4_dim_sync_enabled: bool = field(
+        default_factory=lambda: _env("L4_DIM_SYNC_ENABLED", "true").lower() == "true"
+    )
+    """Phase 215 — Enable L4 calibration dimension sync confirmation.  When True, the bridge
+    records a sync entry confirming that live_feature_dim=13 thresholds remain valid despite
+    calibration_feature_dim=12, because touchpad_spatial_entropy (index 12) is structurally
+    zero in gameplay sessions (NCAA CFB 26).  Default True (safe: sync-only, thresholds unchanged).
+    Closes G-003 L4 staleness gap from gap registry."""
+
+    # --- Phase 216: PerPairGapLog ---
+    per_pair_gap_log_enabled: bool = field(
+        default_factory=lambda: _env("PER_PAIR_GAP_LOG_ENABLED", "true").lower() == "true"
+    )
+    """Phase 216 — Enable per-pair Mahalanobis distance logging.  Stores individual
+    inter-player pair distances (e.g. P1vP3=0.032) from separation analysis runs so the
+    tournament blocker is visible in the live API and can be trended over time.  Default True."""
+
+    # --- Phase 217: PerPairGapTrend ---
+    per_pair_gap_trend_enabled: bool = field(
+        default_factory=lambda: _env("PER_PAIR_GAP_TREND_ENABLED", "true").lower() == "true"
+    )
+    """Phase 217 — Enable per-pair gap trend velocity analysis.  When True, the
+    GET /agent/per-pair-gap-trend endpoint computes distance velocity (delta per day) for
+    each pair key across recent analysis runs, classifying trend as IMPROVING/WORSENING/STABLE.
+    Also activates the PER_PAIR_GAP_BLOCKER_UNRESOLVED ORPHAN rule in FleetSignalCoherenceAgent.
+    Default True (safe: read-only analysis)."""
+
+    # --- Phase 218: CaptureVelocityOracle ---
+    capture_velocity_oracle_enabled: bool = field(
+        default_factory=lambda: _env("CAPTURE_VELOCITY_ORACLE_ENABLED", "true").lower() == "true"
+    )
+    """Phase 218 — Enable unified capture velocity oracle.  Synthesizes Phase 152 centroid
+    velocity + Phase 154 capture stagnation into one GET /agent/capture-velocity-oracle endpoint
+    with recommended_action.  Default True (safe: read-only synthesis)."""
+
+    # --- Phase 219: TournamentBlockerSummary ---
+    tournament_blocker_summary_enabled: bool = field(
+        default_factory=lambda: _env("TOURNAMENT_BLOCKER_SUMMARY_ENABLED", "true").lower() == "true"
+    )
+    """Phase 219 — Enable tournament blocker summary aggregation.  When True,
+    GET /agent/tournament-blocker-summary returns a consolidated list of all active
+    TGE blockers from preflight, per-pair gaps, and capture velocity.  Default True."""
+
+    # --- Phase 220: PerPairGapProjection ---
+    per_pair_gap_projection_enabled: bool = field(
+        default_factory=lambda: _env("PER_PAIR_GAP_PROJECTION_ENABLED", "true").lower() == "true"
+    )
+    """Phase 220 — Enable per-pair gap TGE timeline projection.  When True,
+    GET /agent/per-pair-gap-projection returns estimated days until each blocker
+    pair reaches distance=1.0, plus a projected TGE date.  Default True."""
+
     # --- Phase 154: Capture Stagnation Monitor ---
     capture_stagnation_threshold: float = field(
         default_factory=lambda: float(_env("CAPTURE_STAGNATION_THRESHOLD", "0.5"))

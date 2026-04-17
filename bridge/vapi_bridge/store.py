@@ -2876,6 +2876,128 @@ class Store:
                 " VALUES (?, ?, ?)",
                 (214, "graduation_autowatch", time.time()),
             )
+            # Phase 215: l4_dim_sync_log — confirms L4 calibration thresholds remain valid
+            # when live_feature_dim (13) > calibration_feature_dim (12).
+            # Phase 121 added touchpad_spatial_entropy (index 12) which is structurally
+            # zero in gameplay sessions, so thresholds (7.009/5.367) are unchanged.
+            # A sync entry confirms this without requiring a full recalibration run.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS l4_dim_sync_log (
+                    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+                    from_dim             INTEGER NOT NULL,
+                    to_dim               INTEGER NOT NULL,
+                    anomaly_threshold    REAL    NOT NULL,
+                    continuity_threshold REAL    NOT NULL,
+                    n_sessions           INTEGER NOT NULL DEFAULT 0,
+                    sync_reason          TEXT    NOT NULL DEFAULT '',
+                    sync_completed       INTEGER NOT NULL DEFAULT 1,
+                    created_at           REAL    NOT NULL DEFAULT (unixepoch('now'))
+                )
+            """)
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                " VALUES (?, ?, ?)",
+                (215, "l4_dim_sync", time.time()),
+            )
+            # Phase 216: per_pair_gap_log — stores individual Mahalanobis inter-pair distances.
+            # Phase 197 only stored all_pairs_above_1 (boolean). This table records per-pair
+            # distances (e.g. P1vP3=0.032) so the blocker is visible in the live API and
+            # can be trended over time to validate the Phase 213 AccelTremorFFT fix impact.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS per_pair_gap_log (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_type    TEXT    NOT NULL DEFAULT '',
+                    pair_key        TEXT    NOT NULL DEFAULT '',
+                    player_i        TEXT    NOT NULL DEFAULT '',
+                    player_j        TEXT    NOT NULL DEFAULT '',
+                    distance        REAL    NOT NULL DEFAULT 0.0,
+                    above_1_0       INTEGER NOT NULL DEFAULT 0,
+                    n_sessions_i    INTEGER NOT NULL DEFAULT 0,
+                    n_sessions_j    INTEGER NOT NULL DEFAULT 0,
+                    analysis_date   TEXT    NOT NULL DEFAULT '',
+                    created_at      REAL    NOT NULL DEFAULT (unixepoch('now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_per_pair_gap_session_pair
+                ON per_pair_gap_log(session_type, pair_key, created_at DESC)
+            """)
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                " VALUES (?, ?, ?)",
+                (216, "per_pair_gap_log", time.time()),
+            )
+            # Phase 217: per_pair_gap_trend_alert_log — records each time the
+            # PER_PAIR_GAP_BLOCKER_UNRESOLVED ORPHAN rule fires in FSCA.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS per_pair_gap_trend_alert_log (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    pair_key        TEXT    NOT NULL DEFAULT '',
+                    distance        REAL    NOT NULL DEFAULT 0.0,
+                    trend           TEXT    NOT NULL DEFAULT 'UNKNOWN',
+                    velocity_per_day REAL,
+                    alert_severity  TEXT    NOT NULL DEFAULT 'HIGH',
+                    created_at      REAL    NOT NULL DEFAULT (unixepoch('now'))
+                )
+            """)
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                " VALUES (?, ?, ?)",
+                (217, "per_pair_gap_trend_alert", time.time()),
+            )
+            # Phase 218: capture_velocity_oracle_log — unified oracle snapshots.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS capture_velocity_oracle_log (
+                    id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+                    probe_type               TEXT    NOT NULL DEFAULT 'touchpad_corners',
+                    sessions_per_day         REAL    NOT NULL DEFAULT 0.0,
+                    sessions_stagnant        INTEGER NOT NULL DEFAULT 1,
+                    ratio_velocity           REAL    NOT NULL DEFAULT 0.0,
+                    velocity_stagnant        INTEGER NOT NULL DEFAULT 1,
+                    overall_capture_healthy  INTEGER NOT NULL DEFAULT 0,
+                    recommended_action       TEXT    NOT NULL DEFAULT '',
+                    created_at               REAL    NOT NULL DEFAULT (unixepoch('now'))
+                )
+            """)
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                " VALUES (?, ?, ?)",
+                (218, "capture_velocity_oracle", time.time()),
+            )
+            # Phase 219: tournament_blocker_summary_log — aggregated TGE blocker snapshots.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS tournament_blocker_summary_log (
+                    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                    total_blockers   INTEGER NOT NULL DEFAULT 0,
+                    blockers_json    TEXT    NOT NULL DEFAULT '[]',
+                    overall_blocked  INTEGER NOT NULL DEFAULT 1,
+                    created_at       REAL    NOT NULL DEFAULT (unixepoch('now'))
+                )
+            """)
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                " VALUES (?, ?, ?)",
+                (219, "tournament_blocker_summary", time.time()),
+            )
+            # Phase 220: per_pair_gap_projection_log — TGE timeline projections.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS per_pair_gap_projection_log (
+                    id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+                    pair_key               TEXT    NOT NULL DEFAULT '',
+                    session_type           TEXT    NOT NULL DEFAULT '',
+                    current_distance       REAL    NOT NULL DEFAULT 0.0,
+                    velocity_per_day       REAL,
+                    estimated_days_to_1_0  REAL,
+                    projected_date         TEXT,
+                    projection_feasible    INTEGER NOT NULL DEFAULT 0,
+                    created_at             REAL    NOT NULL DEFAULT (unixepoch('now'))
+                )
+            """)
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                " VALUES (?, ?, ?)",
+                (220, "per_pair_gap_projection", time.time()),
+            )
 
     # --- Device operations ---
 
@@ -8362,6 +8484,242 @@ class Store:
             "timestamp":         _t208.time(),
         }
 
+    # --- Phase 215: l4_dim_sync_log ---
+
+    def insert_l4_dim_sync(
+        self,
+        from_dim: int,
+        to_dim: int,
+        anomaly_threshold: float,
+        continuity_threshold: float,
+        n_sessions: int = 0,
+        sync_reason: str = "",
+    ) -> int:
+        """Record an L4 dimension sync confirmation (Phase 215).
+
+        Called when live_feature_dim != calibration_feature_dim but the added feature is
+        structurally zero in gameplay sessions (touchpad_spatial_entropy, index 12),
+        confirming thresholds remain valid without a full recalibration run.
+
+        Returns the new row id.
+        """
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO l4_dim_sync_log "
+                "(from_dim, to_dim, anomaly_threshold, continuity_threshold, n_sessions, "
+                "sync_reason, sync_completed, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (int(from_dim), int(to_dim), float(anomaly_threshold),
+                 float(continuity_threshold), int(n_sessions), sync_reason, 1, time.time()),
+            )
+            return cur.lastrowid  # type: ignore[return-value]
+
+    def get_l4_dim_sync_status(self) -> dict:
+        """Return the latest L4 dimension sync status (Phase 215).
+
+        Returns 6 keys:
+          sync_completed / from_dim / to_dim / anomaly_threshold / continuity_threshold / timestamp
+        """
+        import time as _t215
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT from_dim, to_dim, anomaly_threshold, continuity_threshold, "
+                "sync_completed, created_at FROM l4_dim_sync_log ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+        if row is None:
+            return {
+                "sync_completed":        False,
+                "from_dim":              None,
+                "to_dim":                None,
+                "anomaly_threshold":     None,
+                "continuity_threshold":  None,
+                "timestamp":             _t215.time(),
+            }
+        return {
+            "sync_completed":        bool(row["sync_completed"]),
+            "from_dim":              int(row["from_dim"]),
+            "to_dim":                int(row["to_dim"]),
+            "anomaly_threshold":     float(row["anomaly_threshold"]),
+            "continuity_threshold":  float(row["continuity_threshold"]),
+            "timestamp":             _t215.time(),
+        }
+
+    # --- Phase 216: per_pair_gap_log ---
+
+    def insert_per_pair_gap(
+        self,
+        session_type: str,
+        pair_key: str,
+        player_i: str,
+        player_j: str,
+        distance: float,
+        above_1_0: bool,
+        n_sessions_i: int = 0,
+        n_sessions_j: int = 0,
+        analysis_date: str = "",
+    ) -> int:
+        """Insert a per-pair Mahalanobis distance record (Phase 216)."""
+        import time as _t216
+        if not analysis_date:
+            import datetime as _dt216
+            analysis_date = _dt216.date.today().isoformat()
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO per_pair_gap_log "
+                "(session_type, pair_key, player_i, player_j, distance, above_1_0, "
+                "n_sessions_i, n_sessions_j, analysis_date, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    session_type, pair_key, player_i, player_j,
+                    float(distance), int(bool(above_1_0)),
+                    int(n_sessions_i), int(n_sessions_j),
+                    analysis_date, _t216.time(),
+                ),
+            )
+            return cur.lastrowid  # type: ignore[return-value]
+
+    def get_per_pair_gap_status(self, session_type: str | None = None) -> dict:
+        """Return per-pair gap distances for the most recent analysis run (Phase 216).
+
+        Returns dict with keys:
+          all_pairs_above_1 / pairs / session_type / pair_count / timestamp
+        """
+        import time as _t216
+        with self._conn() as conn:
+            if session_type:
+                rows = conn.execute(
+                    "SELECT pair_key, player_i, player_j, distance, above_1_0, "
+                    "n_sessions_i, n_sessions_j, analysis_date FROM per_pair_gap_log "
+                    "WHERE session_type=? ORDER BY created_at DESC LIMIT 50",
+                    (session_type,),
+                ).fetchall()
+            else:
+                # Return rows from the most recent analysis_date across all session types
+                latest = conn.execute(
+                    "SELECT analysis_date FROM per_pair_gap_log ORDER BY created_at DESC LIMIT 1"
+                ).fetchone()
+                if latest is None:
+                    return {
+                        "all_pairs_above_1": False,
+                        "pairs": [],
+                        "session_type": None,
+                        "pair_count": 0,
+                        "timestamp": _t216.time(),
+                    }
+                rows = conn.execute(
+                    "SELECT pair_key, player_i, player_j, distance, above_1_0, "
+                    "n_sessions_i, n_sessions_j, analysis_date FROM per_pair_gap_log "
+                    "WHERE analysis_date=? ORDER BY distance ASC",
+                    (latest["analysis_date"],),
+                ).fetchall()
+
+        if not rows:
+            return {
+                "all_pairs_above_1": False,
+                "pairs": [],
+                "session_type": session_type,
+                "pair_count": 0,
+                "timestamp": _t216.time(),
+            }
+
+        pairs = [
+            {
+                "pair_key": r["pair_key"],
+                "player_i": r["player_i"],
+                "player_j": r["player_j"],
+                "distance": float(r["distance"]),
+                "above_1_0": bool(r["above_1_0"]),
+                "n_sessions_i": int(r["n_sessions_i"]),
+                "n_sessions_j": int(r["n_sessions_j"]),
+            }
+            for r in rows
+        ]
+        all_above = all(p["above_1_0"] for p in pairs)
+        return {
+            "all_pairs_above_1": all_above,
+            "pairs": pairs,
+            "session_type": rows[0]["analysis_date"],
+            "pair_count": len(pairs),
+            "timestamp": _t216.time(),
+        }
+
+    # --- Phase 217: per-pair gap trend ---
+
+    def get_per_pair_gap_trend(
+        self,
+        pair_key: str,
+        session_type: str | None = None,
+        n_runs: int = 5,
+    ) -> dict:
+        """Compute velocity (distance delta per day) for a specific pair over the last N analysis runs.
+
+        Returns dict with keys (Phase 217):
+          pair_key / session_type / distances / analysis_dates / velocity_per_day /
+          trend / n_runs / timestamp
+        """
+        import time as _t217
+        n_runs = max(2, min(20, int(n_runs)))
+        with self._conn() as conn:
+            if session_type:
+                rows = conn.execute(
+                    "SELECT distance, analysis_date, above_1_0, created_at "
+                    "FROM per_pair_gap_log "
+                    "WHERE pair_key=? AND session_type=? "
+                    "ORDER BY created_at DESC LIMIT ?",
+                    (pair_key, session_type, n_runs),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT distance, analysis_date, above_1_0, created_at "
+                    "FROM per_pair_gap_log "
+                    "WHERE pair_key=? "
+                    "ORDER BY created_at DESC LIMIT ?",
+                    (pair_key, n_runs),
+                ).fetchall()
+
+        if not rows:
+            return {
+                "pair_key":         pair_key,
+                "session_type":     session_type,
+                "distances":        [],
+                "analysis_dates":   [],
+                "velocity_per_day": None,
+                "trend":            "UNKNOWN",
+                "n_runs":           0,
+                "timestamp":        _t217.time(),
+            }
+
+        distances   = [float(r["distance"])      for r in rows]
+        dates       = [r["analysis_date"]         for r in rows]
+        created_ats = [float(r["created_at"])     for r in rows]
+
+        # Velocity = (latest - oldest) / elapsed_days  (positive = improving = farther apart)
+        if len(distances) >= 2:
+            dt_days = (created_ats[0] - created_ats[-1]) / 86400.0
+            if dt_days > 0:
+                vel = (distances[0] - distances[-1]) / dt_days
+            else:
+                vel = 0.0
+            if vel > 0.01:
+                trend = "IMPROVING"
+            elif vel < -0.01:
+                trend = "WORSENING"
+            else:
+                trend = "STABLE"
+        else:
+            vel = None
+            trend = "UNKNOWN"
+
+        return {
+            "pair_key":         pair_key,
+            "session_type":     session_type,
+            "distances":        distances,
+            "analysis_dates":   dates,
+            "velocity_per_day": vel,
+            "trend":            trend,
+            "n_runs":           len(distances),
+            "timestamp":        _t217.time(),
+        }
+
     def get_separation_defensibility_status(
         self, session_type: str | None = None
     ) -> "dict | None":
@@ -8656,6 +9014,270 @@ class Store:
             "sessions_per_day": spd,
             "stagnant": spd < threshold,
             "stagnation_threshold": threshold,
+        }
+
+    # --- Phase 218: CaptureVelocityOracle ---
+
+    def get_capture_velocity_oracle_status(
+        self,
+        probe_type: str = "touchpad_corners",
+        window_days: float = 7.0,
+        stagnation_threshold: float = 0.5,
+    ) -> dict:
+        """Synthesize capture stagnation + centroid velocity into a unified oracle (Phase 218).
+
+        Returns dict with keys:
+          probe_type / sessions_per_day / sessions_stagnant / ratio_velocity /
+          velocity_stagnant / overall_capture_healthy / recommended_action / timestamp
+        """
+        import time as _t218
+        # --- capture stagnation (Phase 154) ---
+        stag_row = self.get_capture_stagnation_status(probe_type)
+        if stag_row:
+            spd = float(stag_row.get("sessions_per_day", 0.0))
+            sessions_stagnant = bool(stag_row.get("stagnant", True))
+        else:
+            # compute live if no log entry
+            live = self.compute_capture_stagnation(
+                probe_type=probe_type,
+                window_days=window_days,
+                threshold=stagnation_threshold,
+            )
+            spd = float(live["sessions_per_day"])
+            sessions_stagnant = bool(live["stagnant"])
+
+        # --- centroid velocity (Phase 152) ---
+        vel_row = self.get_centroid_velocity_status(probe_type)
+        if vel_row:
+            ratio_vel = float(vel_row.get("velocity", 0.0))
+            velocity_stagnant = bool(vel_row.get("stagnant", True))
+        else:
+            ratio_vel = 0.0
+            velocity_stagnant = True
+
+        overall_healthy = not sessions_stagnant and not velocity_stagnant
+
+        # --- recommended action ---
+        if overall_healthy:
+            action = "CONTINUE_CURRENT_PROTOCOL"
+        elif sessions_stagnant and velocity_stagnant:
+            action = "URGENT_CAPTURE_SESSIONS_AND_REANALYZE"
+        elif sessions_stagnant:
+            action = "CAPTURE_MORE_SESSIONS"
+        else:
+            action = "RERUN_SEPARATION_ANALYSIS"
+
+        return {
+            "probe_type":            probe_type,
+            "sessions_per_day":      spd,
+            "sessions_stagnant":     sessions_stagnant,
+            "ratio_velocity":        ratio_vel,
+            "velocity_stagnant":     velocity_stagnant,
+            "overall_capture_healthy": overall_healthy,
+            "recommended_action":    action,
+            "timestamp":             _t218.time(),
+        }
+
+    # --- Phase 219: TournamentBlockerSummary ---
+
+    def get_tournament_blocker_summary(self) -> dict:
+        """Aggregate all active TGE blockers across preflight, per-pair gaps, and capture velocity (Phase 219).
+
+        Returns dict with keys:
+          total_blockers / blockers / overall_blocked /
+          preflight_pass / capture_healthy / all_pairs_above_1 / timestamp
+        """
+        import time as _t219
+        blockers = []
+
+        # --- Tournament preflight P0 failures ---
+        try:
+            preflight_rows = self.get_tournament_preflight_status(limit=1)
+            if preflight_rows:
+                pf = preflight_rows[0]
+                preflight_pass = bool(pf.get("overall_pass", False))
+                if not pf.get("separation_ok", True):
+                    blockers.append({
+                        "source": "tournament_preflight",
+                        "key":    "separation_ok",
+                        "detail": "Separation ratio below threshold (ratio < min_separation_ratio)",
+                        "severity": "P0",
+                    })
+                if not pf.get("l4_ok", True):
+                    blockers.append({
+                        "source": "tournament_preflight",
+                        "key":    "l4_ok",
+                        "detail": "L4 threshold staleness or calibration gap",
+                        "severity": "P0",
+                    })
+                if not pf.get("all_pairs_p0_ok", True):
+                    blockers.append({
+                        "source": "tournament_preflight",
+                        "key":    "all_pairs_p0_ok",
+                        "detail": "Not all per-pair Mahalanobis distances above 1.0",
+                        "severity": "P0",
+                    })
+                if not pf.get("biometric_ttl_ok", True):
+                    blockers.append({
+                        "source": "tournament_preflight",
+                        "key":    "biometric_ttl_ok",
+                        "detail": "Biometric credential TTL expired or no renewal chain",
+                        "severity": "P0",
+                    })
+            else:
+                preflight_pass = False
+                blockers.append({
+                    "source": "tournament_preflight",
+                    "key":    "no_preflight_run",
+                    "detail": "Tournament preflight has never been executed",
+                    "severity": "P0",
+                })
+        except Exception:
+            preflight_pass = False
+
+        # --- Per-pair gap blockers ---
+        try:
+            gap_status = self.get_per_pair_gap_status()
+            all_pairs_above_1 = bool(gap_status.get("all_pairs_above_1", False))
+            if not all_pairs_above_1:
+                for bp in gap_status.get("pairs", []):
+                    if not bp.get("above_1_0", True):
+                        blockers.append({
+                            "source":  "per_pair_gap",
+                            "key":     bp.get("pair_key", "UNKNOWN"),
+                            "detail":  f"Distance={bp.get('distance', 0.0):.4f} < 1.0 (tournament gate requires all pairs ≥ 1.0)",
+                            "severity": "P0",
+                        })
+        except Exception:
+            all_pairs_above_1 = False
+
+        # --- Capture velocity oracle ---
+        try:
+            cvo = self.get_capture_velocity_oracle_status()
+            capture_healthy = bool(cvo.get("overall_capture_healthy", False))
+            if not capture_healthy:
+                blockers.append({
+                    "source":  "capture_velocity",
+                    "key":     "overall_capture_healthy",
+                    "detail":  f"Recommended: {cvo.get('recommended_action', 'UNKNOWN')}; "
+                               f"sessions/day={cvo.get('sessions_per_day', 0.0):.2f}",
+                    "severity": "P1",
+                })
+        except Exception:
+            capture_healthy = False
+
+        return {
+            "total_blockers":   len(blockers),
+            "blockers":         blockers,
+            "overall_blocked":  len(blockers) > 0,
+            "preflight_pass":   preflight_pass,
+            "capture_healthy":  capture_healthy,
+            "all_pairs_above_1": all_pairs_above_1,
+            "timestamp":        _t219.time(),
+        }
+
+    # --- Phase 220: PerPairGapProjection ---
+
+    def get_per_pair_gap_projection(
+        self,
+        session_type: str | None = None,
+        n_runs: int = 5,
+    ) -> dict:
+        """Project how many days until each blocker pair reaches distance=1.0 (Phase 220).
+
+        Uses get_per_pair_gap_trend() to compute velocity for each known pair,
+        then estimates days_to_1_0 = (1.0 - current_distance) / velocity_per_day.
+        Returns None for WORSENING/STABLE pairs (infeasible without hardware change).
+
+        Returns dict with keys:
+          projections / any_feasible / max_days_to_1_0 / projected_tge_date /
+          session_type / timestamp
+        """
+        import time as _t220
+        import datetime as _dt220
+
+        # Get current gap status; deduplicate by pair_key keeping most recent entry
+        gap_status = self.get_per_pair_gap_status(session_type=session_type)
+        _all_pairs = gap_status.get("pairs", [])
+        # get_per_pair_gap_status may return multiple entries per pair_key when
+        # filtered by session_type; keep only the first (most recent, sorted DESC).
+        _seen: set = set()
+        pairs = []
+        for _p in _all_pairs:
+            _pk = _p.get("pair_key", "")
+            if _pk not in _seen:
+                _seen.add(_pk)
+                pairs.append(_p)
+
+        projections = []
+        max_days: float | None = None
+
+        for p in pairs:
+            pk = p.get("pair_key", "")
+            current_dist = float(p.get("distance", 0.0))
+            above = bool(p.get("above_1_0", False))
+
+            if above:
+                # Already resolved
+                projections.append({
+                    "pair_key":              pk,
+                    "current_distance":      current_dist,
+                    "velocity_per_day":      None,
+                    "estimated_days_to_1_0": 0,
+                    "projected_date":        _dt220.date.today().isoformat(),
+                    "projection_feasible":   True,
+                    "status":                "RESOLVED",
+                })
+                continue
+
+            # Get trend velocity
+            trend = self.get_per_pair_gap_trend(
+                pair_key=pk,
+                session_type=session_type,
+                n_runs=n_runs,
+            )
+            vel = trend.get("velocity_per_day")
+
+            if vel is not None and vel > 0.001:
+                # IMPROVING — project forward
+                days_needed = (1.0 - current_dist) / vel
+                proj_date = (_dt220.date.today() +
+                             _dt220.timedelta(days=days_needed)).isoformat()
+                feasible = True
+                if max_days is None or days_needed > max_days:
+                    max_days = days_needed
+            else:
+                days_needed = None
+                proj_date = None
+                feasible = False
+
+            projections.append({
+                "pair_key":              pk,
+                "current_distance":      current_dist,
+                "velocity_per_day":      vel,
+                "estimated_days_to_1_0": days_needed,
+                "projected_date":        proj_date,
+                "projection_feasible":   feasible,
+                "status":                trend.get("trend", "UNKNOWN"),
+            })
+
+        # projected TGE date = today + max_days across all blocker pairs
+        if max_days is not None:
+            tge_date = (_dt220.date.today() +
+                        _dt220.timedelta(days=max_days)).isoformat()
+        else:
+            tge_date = None
+
+        any_feasible = any(p.get("projection_feasible") for p in projections
+                          if p.get("status") != "RESOLVED")
+
+        return {
+            "projections":       projections,
+            "any_feasible":      any_feasible,
+            "max_days_to_1_0":   max_days,
+            "projected_tge_date": tge_date,
+            "session_type":      session_type,
+            "timestamp":         _t220.time(),
         }
 
     # Phase 155 — Controller Hardware Profiles
