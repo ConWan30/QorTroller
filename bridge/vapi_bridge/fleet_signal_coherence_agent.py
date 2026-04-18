@@ -44,7 +44,7 @@ if TYPE_CHECKING:
     from vapi_bridge.config import Config
 
 # ---------------------------------------------------------------------------
-# CONTRADICTION_RULES — 7 rules
+# CONTRADICTION_RULES — 10 rules
 # ---------------------------------------------------------------------------
 
 CONTRADICTION_RULES: dict = {
@@ -305,6 +305,56 @@ CONTRADICTION_RULES: dict = {
             "If the change is legitimate, re-run: "
             "python scripts/vapi_invariant_gate.py --generate "
             "--reason '<category>: <description>'"
+        ),
+    },
+
+    "GOVERNANCE_PROVENANCE_ANCHOR_DRIFT": {
+        # Phase 227: On-Chain Anchor Cross-Check — 10th CONTRADICTION rule.
+        # Fires when the live SQLite governance_provenance_chain latest hash diverges
+        # from the governance_provenance_hash stored in the most recent protocol_coherence_log
+        # row (which is written by ProtocolCoherenceAgent._anchor_cycle() on each cycle).
+        #
+        # This detects direct SQLite writes to governance_provenance_chain: if an adversary
+        # with filesystem access inserts a consistently-hashed row, the live chain appears
+        # intact (GOVERNANCE_CHAIN_BROKEN won't fire) but the on-chain anchor value won't
+        # match — the discrepancy is detected at the next anchor cycle (default every 1h).
+        #
+        # Only fires when protocol_coherence_log has a non-empty governance_provenance_hash
+        # (i.e., Phase 227 anchorCoherenceWithProvenance has been used at least once).
+        # Empty governance_provenance_hash in protocol_coherence_log → rule is silent.
+        "query": """
+            SELECT gpc.governance_provenance_hash AS live_hash,
+                   pcl.governance_provenance_hash AS anchored_hash
+            FROM governance_provenance_chain gpc
+            JOIN protocol_coherence_log pcl
+              ON pcl.id = (SELECT MAX(id) FROM protocol_coherence_log
+                            WHERE governance_provenance_hash != '')
+            WHERE gpc.id = (SELECT MAX(id) FROM governance_provenance_chain)
+              AND pcl.governance_provenance_hash != ''
+              AND gpc.governance_provenance_hash != pcl.governance_provenance_hash
+            LIMIT 1
+        """,
+        "params": lambda cfg: (),
+        "agents_involved": ["ProtocolCoherenceAgent", "VAPIInvariantGate"],
+        "severity": "CRITICAL",
+        "explanation": (
+            "The live governance_provenance_chain latest hash does not match the "
+            "governance_provenance_hash stored in the most recent protocol_coherence_log "
+            "anchor. This means the SQLite governance chain was modified after the last "
+            "on-chain anchor cycle — either by a direct database write (filesystem access "
+            "required, no API key needed) or by a race condition in the anchor pipeline. "
+            "GOVERNANCE_CHAIN_BROKEN detects broken hash links but cannot detect a "
+            "consistently-computed fake insertion. This cross-check closes that gap by "
+            "comparing the live SQLite state against the immutable on-chain record."
+        ),
+        "resolution": (
+            "Run GET /agent/allowlist-governance-history to inspect the full chain. "
+            "Compare the latest governance_provenance_hash against the on-chain value "
+            "from GET /agent/protocol-coherence-status. "
+            "If the chain was tampered, trigger an anchor cycle: set "
+            "protocol_coherence_enabled=True and wait for the next _anchor_cycle() "
+            "to write the current live hash. If the discrepancy is spurious (race condition "
+            "during anchor write), it will self-resolve on the next anchor cycle."
         ),
     },
 }

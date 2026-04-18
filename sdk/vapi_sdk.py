@@ -7856,3 +7856,16 @@ class VAPIAllowlistGovernance:
             return []
         except Exception as exc:
             return [{"error": str(exc)}]
+
+    def on_chain_provenance_hash(self) -> str:
+        """Return the governance_provenance_hash most recently anchored on-chain (Phase 227).
+
+        Calls GET /agent/protocol-coherence-status and extracts the
+        governance_provenance_hash field.  Returns "" when no Phase 227 anchor
+        has been performed yet, or on any error.
+        """
+        try:
+            body = self._get("/agent/protocol-coherence-status")
+            return str(body.get("governance_provenance_hash", ""))
+        except Exception:
+            return ""

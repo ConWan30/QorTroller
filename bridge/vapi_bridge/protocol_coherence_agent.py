@@ -210,20 +210,38 @@ class ProtocolCoherenceAgent:
         anchor_hash = ""
         on_chain    = False
 
+        # Phase 227: read latest governance provenance hash (fail-open: "" if unavailable)
+        gov_prov_hash = ""
+        try:
+            gov_prov_hash = self._store.get_latest_governance_provenance_hash()
+        except Exception as exc:
+            self._log.debug("Phase 227: get_latest_governance_provenance_hash failed: %s", exc)
+
         addr = getattr(self._cfg, "protocol_coherence_registry_address", "")
         if addr and self._chain is not None:
             try:
-                anchor_hash = await self._chain.anchor_coherence(
-                    root_hex, agent_count, ts_ns
-                )
+                if gov_prov_hash and gov_prov_hash != "0" * 64:
+                    # Phase 227: use new function when governance provenance is available
+                    anchor_hash = await self._chain.anchor_coherence_with_provenance(
+                        root_hex, gov_prov_hash, agent_count, ts_ns
+                    )
+                    self._log.info(
+                        "Phase 227: PoPC+provenance anchored: root=%s… prov=%s… tx=%s…",
+                        root_hex[:16], gov_prov_hash[:16], anchor_hash[:16],
+                    )
+                else:
+                    # Fallback: no governance events yet — use original function
+                    anchor_hash = await self._chain.anchor_coherence(
+                        root_hex, agent_count, ts_ns
+                    )
+                    self._log.info(
+                        "Phase 221: PoPC anchored on-chain: root=%s… tx=%s…",
+                        root_hex[:16], anchor_hash[:16],
+                    )
                 on_chain = True
-                self._log.info(
-                    "Phase 221: PoPC anchored on-chain: root=%s… tx=%s…",
-                    root_hex[:16], anchor_hash[:16],
-                )
             except Exception as exc:
                 self._log.warning(
-                    "Phase 221: on-chain anchor failed (local only): %s", exc
+                    "Phase 221/227: on-chain anchor failed (local only): %s", exc
                 )
 
         try:
@@ -233,6 +251,7 @@ class ProtocolCoherenceAgent:
                 anchor_hash=anchor_hash,
                 on_chain_confirmed=on_chain,
                 allowlist_hash=allowlist_hex,
+                governance_provenance_hash=gov_prov_hash,
             )
         except Exception as exc:
             self._log.error("Phase 221: insert_protocol_coherence_log failed: %s", exc)

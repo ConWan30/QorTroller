@@ -2991,6 +2991,71 @@ class ChainClient:
             "count": int(count_val),
         }
 
+    async def anchor_coherence_with_provenance(
+        self,
+        merkle_root_hex: str,
+        governance_provenance_hash_hex: str,
+        agent_count: int,
+        ts_ns: int,
+    ) -> str:
+        """Call ProtocolCoherenceRegistry.anchorCoherenceWithProvenance() (Phase 227).
+
+        Anchors the fleet Merkle root alongside the latest governance provenance hash,
+        enabling GOVERNANCE_PROVENANCE_ANCHOR_DRIFT cross-check in FSCA.
+
+        merkle_root_hex:                64-char hex string (no 0x prefix) of the Merkle root.
+        governance_provenance_hash_hex: 64-char hex string of latest governance provenance hash.
+        agent_count:                    Number of agents included in the Merkle tree.
+        ts_ns:                          Off-chain observation timestamp in nanoseconds.
+
+        ~120k gas. Raises RuntimeError on missing address or tx revert.
+        """
+        _ABI = [
+            {
+                "inputs": [
+                    {"internalType": "bytes32", "name": "merkleRoot",               "type": "bytes32"},
+                    {"internalType": "bytes32", "name": "governanceProvenanceHash", "type": "bytes32"},
+                    {"internalType": "uint256", "name": "agentCount",               "type": "uint256"},
+                    {"internalType": "uint256", "name": "tsNs",                     "type": "uint256"},
+                ],
+                "name": "anchorCoherenceWithProvenance",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function",
+            }
+        ]
+        _addr = getattr(self._cfg, "protocol_coherence_registry_address", "")
+        if not _addr:
+            raise RuntimeError(
+                "anchor_coherence_with_provenance: protocol_coherence_registry_address not configured"
+            )
+        _root_bytes = bytes.fromhex(merkle_root_hex.lstrip("0x"))[:32].ljust(32, b'\x00')
+        _prov_hex = governance_provenance_hash_hex.lstrip("0x")
+        _prov_bytes = bytes.fromhex(_prov_hex.zfill(64))[:32]
+        contract = self._w3.eth.contract(
+            address=self._w3.to_checksum_address(_addr),
+            abi=_ABI,
+        )
+        acct = self._w3.eth.account.from_key(self._private_key)
+        nonce = await self._w3.eth.get_transaction_count(acct.address)
+        gas_price = await self._w3.eth.gas_price
+        tx = contract.functions.anchorCoherenceWithProvenance(
+            _root_bytes, _prov_bytes, int(agent_count), int(ts_ns)
+        ).build_transaction({
+            "from":     acct.address,
+            "nonce":    nonce,
+            "gas":      120_000,
+            "gasPrice": gas_price,
+        })
+        signed = acct.sign_transaction(tx)
+        tx_hash = await self._w3.eth.send_raw_transaction(signed.raw_transaction)
+        receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+        if receipt["status"] != 1:
+            raise RuntimeError(
+                f"anchor_coherence_with_provenance: tx reverted root={merkle_root_hex[:16]}…"
+            )
+        return tx_hash.hex()
+
     async def bbg_propose(
         self,
         proposal_hash_hex: str,

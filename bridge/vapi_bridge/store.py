@@ -3074,6 +3074,15 @@ class Store:
             except Exception:
                 pass  # idempotent
 
+            # Phase 227: add governance_provenance_hash column (idempotent)
+            try:
+                conn.execute(
+                    "ALTER TABLE protocol_coherence_log "
+                    "ADD COLUMN governance_provenance_hash TEXT NOT NULL DEFAULT ''"
+                )
+            except Exception:
+                pass  # idempotent
+
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS allowlist_change_log (
                     id                    INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -9406,15 +9415,17 @@ class Store:
         anchor_hash: str = "",
         on_chain_confirmed: bool = False,
         allowlist_hash: str = "",
+        governance_provenance_hash: str = "",
     ) -> int:
-        """Insert a PoPC Merkle root anchor record (Phase 221/224).
+        """Insert a PoPC Merkle root anchor record (Phase 221/224/227).
 
         Args:
-            merkle_root:        Hex string of the Merkle root (64 chars).
-            agent_count:        Number of agents included in the Merkle tree.
-            anchor_hash:        On-chain tx hash if anchored; empty if local only.
-            on_chain_confirmed: True when the tx was confirmed on IoTeX testnet.
-            allowlist_hash:     SHA-256 of INVARIANTS_ALLOWLIST.json at anchor time (Phase 224).
+            merkle_root:               Hex string of the Merkle root (64 chars).
+            agent_count:               Number of agents included in the Merkle tree.
+            anchor_hash:               On-chain tx hash if anchored; empty if local only.
+            on_chain_confirmed:        True when the tx was confirmed on IoTeX testnet.
+            allowlist_hash:            SHA-256 of INVARIANTS_ALLOWLIST.json at anchor time (Phase 224).
+            governance_provenance_hash: Latest governance provenance hash anchored on-chain (Phase 227).
 
         Returns:
             Row id of the inserted record.
@@ -9423,8 +9434,9 @@ class Store:
         with self._conn() as conn:
             cur = conn.execute(
                 "INSERT INTO protocol_coherence_log "
-                "(merkle_root, agent_count, anchor_hash, on_chain_confirmed, created_at, allowlist_hash) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
+                "(merkle_root, agent_count, anchor_hash, on_chain_confirmed, created_at, "
+                "allowlist_hash, governance_provenance_hash) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (
                     str(merkle_root),
                     int(agent_count),
@@ -9432,16 +9444,17 @@ class Store:
                     1 if on_chain_confirmed else 0,
                     now,
                     str(allowlist_hash),
+                    str(governance_provenance_hash),
                 ),
             )
             return cur.lastrowid or 0
 
     def get_protocol_coherence_status(self) -> dict:
-        """Return the most recent PoPC anchor status (Phase 221).
+        """Return the most recent PoPC anchor status (Phase 221/227).
 
         Returns dict with keys:
             total_anchors / latest_merkle_root / agent_count /
-            on_chain_confirmed / last_anchor_ts / timestamp
+            on_chain_confirmed / last_anchor_ts / governance_provenance_hash / timestamp
         """
         import time as _t221
         with self._conn() as conn:
@@ -9449,25 +9462,28 @@ class Store:
                 "SELECT COUNT(*) FROM protocol_coherence_log"
             ).fetchone() or (0,))[0]
             row = conn.execute(
-                "SELECT merkle_root, agent_count, on_chain_confirmed, created_at "
+                "SELECT merkle_root, agent_count, on_chain_confirmed, created_at, "
+                "COALESCE(governance_provenance_hash, '') "
                 "FROM protocol_coherence_log ORDER BY created_at DESC LIMIT 1"
             ).fetchone()
         if row:
             return {
-                "total_anchors":      int(total),
-                "latest_merkle_root": str(row[0]),
-                "agent_count":        int(row[1]),
-                "on_chain_confirmed": bool(row[2]),
-                "last_anchor_ts":     float(row[3]),
-                "timestamp":          _t221.time(),
+                "total_anchors":              int(total),
+                "latest_merkle_root":         str(row[0]),
+                "agent_count":                int(row[1]),
+                "on_chain_confirmed":         bool(row[2]),
+                "last_anchor_ts":             float(row[3]),
+                "governance_provenance_hash": str(row[4]),
+                "timestamp":                  _t221.time(),
             }
         return {
-            "total_anchors":      0,
-            "latest_merkle_root": None,
-            "agent_count":        0,
-            "on_chain_confirmed": False,
-            "last_anchor_ts":     None,
-            "timestamp":          _t221.time(),
+            "total_anchors":              0,
+            "latest_merkle_root":         None,
+            "agent_count":                0,
+            "on_chain_confirmed":         False,
+            "last_anchor_ts":             None,
+            "governance_provenance_hash": "",
+            "timestamp":                  _t221.time(),
         }
 
     def get_protocol_coherence_history(self, limit: int = 10) -> list:
