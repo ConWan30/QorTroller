@@ -70,5 +70,21 @@
   "INV-018": {
     "digest": "b8614ed450c4297dc92b5b51afa21798e556c5f11ad9b0418f9a74101c43dca1",
     "description": "Audit script block-search \u2014 full-body scan via _AUTH_CALLS, no character-window limit"
+  },
+  "INV-019": {
+    "digest": "5bfb5210fd81e88aa27980d2e8123856d3f499674910715300308023bbeebf3d",
+    "description": "Provenance hash computation function exists in gate script (Phase 226)"
+  },
+  "INV-020": {
+    "digest": "eedfd15a070556e160429f49ed9491748e4ca79d819f87fd7bdd095f8176b65e",
+    "description": "ts_ns included as 8-byte big-endian in provenance hash \u2014 replay prevention (Phase 226)"
+  },
+  "INV-021": {
+    "digest": "81c93f5c726511e05eb99e13ae9ad9481ac207e75afd5ad7910cb0af35c137e6",
+    "description": "Latest provenance hash fetch function exists in gate script (Phase 226)"
+  },
+  "INV-022": {
+    "digest": "cb82e3235f67c26865d84a33f78c7f0e5c93a466e7b180a13d07000557189122",
+    "description": "governance_provenance_chain table + insert method in store (Phase 226)"
   }
 }

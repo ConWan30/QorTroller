@@ -1,5 +1,5 @@
 """
-vapi_invariant_gate.py — Phase 223/224 Protocol Invariant Gate
+vapi_invariant_gate.py — Phase 223/224/226 Protocol Invariant Gate
 
 Hashes critical protocol regions in the source tree and compares against
 an allowlist of known-good SHA-256 fingerprints.  Any drift signals a
@@ -9,13 +9,17 @@ Phase 224 addition: allowlist hash is anchored as a virtual leaf in
 ProtocolCoherenceAgent's Merkle tree.  Every --generate event requires
 --reason (tamper-evident governance log).
 
+Phase 226 addition: INV-019..INV-022 freeze the provenance hash computation
+code itself (_compute_governance_provenance_hash, ts_ns.to_bytes inclusion,
+_fetch_latest_provenance_hash, governance_provenance_chain store layer).
+
 USAGE:
     python scripts/vapi_invariant_gate.py              # gate check (exit 0=pass, 1=fail)
     python scripts/vapi_invariant_gate.py --generate --reason "refactor: description"
     python scripts/vapi_invariant_gate.py --generate --reason "invariant_change: ..." --confirm-governance
     python scripts/vapi_invariant_gate.py --report     # human-readable report, no exit code
 
-INVARIANTS CHECKED (18):
+INVARIANTS CHECKED (22):
   1.  PoAC wire format (228-byte body + 64-byte sig) in codec.py
   2.  Chain link hash = SHA-256(raw[:164]) in codec.py
   3.  L4 anomaly threshold literal in store.py (7.009 / 5.367)
@@ -34,6 +38,10 @@ INVARIANTS CHECKED (18):
   16. Allowlist hash included as virtual leaf in ProtocolCoherenceAgent (Phase 224)
   17. Audit script split regex — 4-space indent anchor, not column-0 (audit_endpoint_auth.py)
   18. Audit script block-search — full-body scan, no character-window limit (audit_endpoint_auth.py)
+  19. Provenance hash computation function exists in gate script (Phase 226)
+  20. ts_ns included as 8-byte big-endian in provenance hash — replay prevention (Phase 226)
+  21. Latest provenance hash fetch function exists in gate script (Phase 226)
+  22. governance_provenance_chain table + insert method in store (Phase 226)
 """
 
 import hashlib
@@ -185,6 +193,35 @@ INVARIANTS: list[Invariant] = [
         description="Audit script block-search — full-body scan via _AUTH_CALLS, no character-window limit",
         file="scripts/audit_endpoint_auth.py",
         pattern=r"has_auth.*any.*_AUTH_CALLS",
+        min_matches=1,
+    ),
+    # Phase 226 — freeze provenance hash computation code
+    Invariant(
+        id="INV-019",
+        description="Provenance hash computation function exists in gate script (Phase 226)",
+        file="scripts/vapi_invariant_gate.py",
+        pattern=r"_compute_governance_provenance_hash",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-020",
+        description="ts_ns included as 8-byte big-endian in provenance hash — replay prevention (Phase 226)",
+        file="scripts/vapi_invariant_gate.py",
+        pattern=r"ts_ns.*to_bytes.*8.*big|to_bytes.*8.*big.*ts_ns",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-021",
+        description="Latest provenance hash fetch function exists in gate script (Phase 226)",
+        file="scripts/vapi_invariant_gate.py",
+        pattern=r"_fetch_latest_provenance_hash",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-022",
+        description="governance_provenance_chain table + insert method in store (Phase 226)",
+        file="bridge/vapi_bridge/store.py",
+        pattern=r"governance_provenance_chain|insert_governance_provenance",
         min_matches=1,
     ),
 ]
