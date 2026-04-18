@@ -1925,10 +1925,66 @@ Phase 224 `allowlist_change_log` table, and Phase 221 ProtocolCoherenceRegistry 
 
 ---
 
-**Document Version**: 2.6 (WIF-042 filed 2026-04-17; GovernanceProvenanceChainVisualizer Phase 226; WIF-041 GraduationAutowatchGap Phase 214; WIF-040 CLOSED Phase 212; WIF-039 CLOSED Phase 208)
-**Last Updated**: 2026-04-17
+## WIF-043 — Query-Param Auth on 121 Legacy Endpoints: API Key Exposed in Logs, Referrers, and URL History (Phase 224)
+
+**Context**: Phase 224 audit (`scripts/audit_endpoint_auth.py`) confirmed all 154 `/agent/*`
+endpoints are authenticated. However, 121 of them use the pre-Phase-221 style:
+
+```python
+api_key: str = Query(..., description="Shared operator API key")
+_check_key(api_key)
+```
+
+This appends `?api_key=<secret>` to every request URL.
+
+**W1 failure mode**: Query-param secrets are exposed in:
+- Browser URL bar (visible to shoulder-surfers, saved in address-bar history)
+- `Referer` / `Referrer-Policy` headers on any subsequent navigation or resource load
+- Web server access logs (`combined` format logs the full URL including query string)
+- CDN and reverse-proxy cache logs
+- Browser developer tools Network tab (query params are not masked)
+
+The Phase 224 frontend (`frontend/src/api/client.js`) now calls all 154 endpoints from a
+browser context. Pre-Phase-221 endpoints received the `?api_key=` treatment because the
+frontend did not exist yet. Now that every `/agent/*` endpoint is frontend-callable, the
+query-param pattern is suboptimal for all 121 legacy routes.
+
+Note: this is a transport-layer hygiene issue, not an authentication gap. The key IS
+validated — it is just sent via query param rather than a request header. Severity: LOW.
+Phase 224 W1 (`_check_read_key` fix) closed the authentication gap; this is the follow-on
+hygiene pass.
+
+**W2 opportunity (Phase 230+ candidate — QueryParamAuthMigration)**:
+Migrate all 121 `_check_key(api_key: str = Query(...))` endpoints to
+`_check_read_key(x_api_key: str = Header(default=""))`.
+
+Scope of change:
+- `bridge/vapi_bridge/operator_api.py`: 121 function signatures — remove `api_key: str = Query(...)`
+  parameter, add `x_api_key: str = Header(default="")` parameter, replace `_check_key(api_key)`
+  with `_check_read_key(x_api_key)`. Mechanical find-and-replace via sed or regex edit.
+- `frontend/src/api/client.js`: already sends both `x-api-key` header AND `?api_key=` query
+  param (Phase 224 W1 patch). After migration, drop the `?api_key=` query-param append —
+  header alone is sufficient.
+- `sdk/openapi.yaml`: update 121 endpoint `security` entries from `ApiKeyQuery` to
+  `ApiKeyHeader` scheme.
+- Run `scripts/audit_endpoint_auth.py` — PASS with 154 `_check_read_key` and 0 `_check_key`.
+- Run Skill 14 PostCode Sweep to confirm no regressions.
+
+Estimated effort: ~2h. Zero semantic change — the key is already validated on every endpoint;
+only the HTTP transport layer changes. No new tests required beyond audit script re-run.
+
+Not blocking any phase. Purely hygienic. Defer until Phase 230+ when no higher-priority
+gap work is queued.
+
+**Status**: OPEN — Phase 230+ candidate. Filed 2026-04-18.
+[VAPI:Phase230:WIF043:W2:QueryParamAuthMigration:PROPOSED]
+
+---
+
+**Document Version**: 2.7 (WIF-043 filed 2026-04-18; QueryParamAuthMigration Phase 230+; WIF-042 GovernanceProvenanceChainVisualizer Phase 226; WIF-041 GraduationAutowatchGap Phase 214; WIF-040 CLOSED Phase 212)
+**Last Updated**: 2026-04-18
 **W1 Count**: 37 entries (WIF-041 GraduationAutowatchGap OPEN Phase 214; WIF-040 Skill Drift CLOSED Phase 212; WIF-039 CorpusRatioRegressionGuard CLOSED Phase 208)
-**W2 Count**: 29 entries (WIF-042 GovernanceProvenanceChainVisualizer Phase 226 OPEN; WIF-041 W2 PerPairProbeSelector Phase 215 OPEN; WIF-040 W2 vapi_skill_state_sync CLOSED Phase 212)
+**W2 Count**: 30 entries (WIF-043 QueryParamAuthMigration Phase 230+ OPEN; WIF-042 GovernanceProvenanceChainVisualizer Phase 226 OPEN; WIF-041 W2 PerPairProbeSelector Phase 215 OPEN; WIF-040 W2 vapi_skill_state_sync CLOSED Phase 212)
 **W3 Count**: 5 entries
 **Update Method**: Append-only, status updates inline
 **Key Phase 213/214 Updates**: WIF-041 Graduation Autowatch Gap filed (cycle33); AccelTremorFFT FFT resolution fix COMPLETE (Phase 213); P1vP3=0.032 code fix deployed; tremor_resting=1.177 (N=27) — all_pairs_p0_ok=False pending hardware recapture
