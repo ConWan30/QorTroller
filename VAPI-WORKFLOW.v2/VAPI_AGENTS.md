@@ -29,7 +29,7 @@
 
 VAPI operates **36 specialized agents** in the bridge service. Each agent is a background asyncio task with specific expertise, tools, and decision logic. This document maps them for Claude Code expert spawning.
 
-> **SYNC NOTE**: Agents 23–36 added in Phases 182–200. Synced 2026-04-12. Separation ratio updated to 0.728 (N=35, Phase 200). Protocol at Phase 200 COMPLETE.
+> **SYNC NOTE**: Agents 37–38 added in Phases 221–222. Synced 2026-04-17. Phase 223 PV-CI gate live. Protocol at Phase 226 COMPLETE.
 
 ### Agent Table
 
