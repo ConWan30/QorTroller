@@ -2897,6 +2897,31 @@ class ChainClient:
             raise RuntimeError(f"renew_vhp: tx reverted token_id={token_id}")
         return tx_hash.hex()
 
+    async def is_vhp_valid(self, token_id: int) -> bool:
+        """Call VAPIVerifiedHumanProof.isValid(tokenId) → bool (Phase 228).
+
+        Returns True when the token is not expired (block.timestamp < expiresAt).
+        Returns False when the token is invalid or expired.
+        Raises RuntimeError when vhp_contract_address is not configured.
+        """
+        _ABI = [
+            {
+                "inputs": [{"internalType": "uint256", "name": "tokenId", "type": "uint256"}],
+                "name": "isValid",
+                "outputs": [{"internalType": "bool", "name": "", "type": "bool"}],
+                "stateMutability": "view",
+                "type": "function",
+            }
+        ]
+        vhp_addr = getattr(self._cfg, "vhp_contract_address", "")
+        if not vhp_addr:
+            raise RuntimeError("is_vhp_valid: vhp_contract_address not configured")
+        contract = self._w3.eth.contract(
+            address=self._w3.to_checksum_address(vhp_addr),
+            abi=_ABI,
+        )
+        return bool(await contract.functions.isValid(token_id).call())
+
     async def anchor_coherence(
         self,
         merkle_root_hex: str,

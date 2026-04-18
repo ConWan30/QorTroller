@@ -1378,6 +1378,15 @@ class Config:
     GET /agent/invariant-gate-status reports 15 frozen protocol invariant checks.
     POST /agent/run-invariant-gate triggers a manual gate run.  Default True."""
 
+    # --- Phase 228: VHP-Gated Invariant Change ---
+    vhp_gated_invariant_change_enabled: bool = field(
+        default_factory=lambda: _env("VHP_GATED_INVARIANT_CHANGE_ENABLED", "false").lower() == "true"
+    )
+    """Phase 228 — When True, POST /agent/allowlist-governance-event with
+    reason_category='invariant_change' requires a vhp_token_id in the request body.
+    The bridge verifies VHP validity on-chain (fail-open if chain unreachable).
+    Default False (requires enrolled VHP to activate)."""
+
     # --- Phase 154: Capture Stagnation Monitor ---
     capture_stagnation_threshold: float = field(
         default_factory=lambda: float(_env("CAPTURE_STAGNATION_THRESHOLD", "0.5"))
