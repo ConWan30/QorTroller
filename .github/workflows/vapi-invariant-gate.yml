@@ -1,0 +1,81 @@
+name: VAPI Protocol Invariant Gate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "bridge/vapi_bridge/codec.py"
+      - "bridge/vapi_bridge/config.py"
+      - "bridge/vapi_bridge/store.py"
+      - "bridge/vapi_bridge/chain.py"
+      - "bridge/vapi_bridge/dualshock_integration.py"
+      - "bridge/vapi_bridge/session_adjudicator.py"
+      - "bridge/vapi_bridge/ioswarm_consensus_aggregator.py"
+      - "contracts/circuits/PitlSessionProof.circom"
+      - ".github/INVARIANTS_ALLOWLIST.json"
+  pull_request:
+    paths:
+      - "bridge/vapi_bridge/codec.py"
+      - "bridge/vapi_bridge/config.py"
+      - "bridge/vapi_bridge/store.py"
+      - "bridge/vapi_bridge/chain.py"
+      - "bridge/vapi_bridge/dualshock_integration.py"
+      - "bridge/vapi_bridge/session_adjudicator.py"
+      - "bridge/vapi_bridge/ioswarm_consensus_aggregator.py"
+      - "contracts/circuits/PitlSessionProof.circom"
+      - ".github/INVARIANTS_ALLOWLIST.json"
+  workflow_dispatch:
+
+jobs:
+  invariant-gate:
+    name: "PV-CI: 15 Protocol Invariants"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run invariant gate
+        run: python scripts/vapi_invariant_gate.py
+
+      - name: Report (on failure)
+        if: failure()
+        run: python scripts/vapi_invariant_gate.py --report
+
+      - name: Comment on PR (on failure)
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = `## VAPI Protocol Invariant Gate Failed
+
+            One or more of the 16 frozen protocol invariants has drifted.
+            **Every allowlist change is a tamper-evident governance event.**
+
+            Choose the appropriate action:
+
+            **1. Legitimate refactor** (semantic-preserving code movement):
+            \`\`\`
+            python scripts/vapi_invariant_gate.py --generate --reason "refactor: <description>"
+            \`\`\`
+
+            **2. Bug fix** (fixing incorrect implementation):
+            \`\`\`
+            python scripts/vapi_invariant_gate.py --generate --reason "bugfix: <description>"
+            \`\`\`
+
+            **3. Intentional invariant change** (REQUIRES governance confirmation):
+            \`\`\`
+            python scripts/vapi_invariant_gate.py --generate --reason "invariant_change: <description>" --confirm-governance
+            \`\`\`
+
+            Run \`python scripts/vapi_invariant_gate.py --report\` to see which invariant(s) broke.`;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body
+            });

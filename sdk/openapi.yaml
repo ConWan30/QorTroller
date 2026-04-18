@@ -4721,6 +4721,35 @@ paths:
               schema:
                 $ref: "#/components/schemas/CorpusRegressionGuardStatus"
 
+  /agent/invariant-gate-status:
+    get:
+      summary: PV-CI protocol invariant gate status (Phase 223)
+      description: >
+        Returns the latest PV-CI gate run result: whether all 15 frozen protocol
+        invariants passed, total checked, failure count, and failure descriptions.
+        Use POST /agent/run-invariant-gate to trigger a fresh run.
+      responses:
+        "200":
+          description: Invariant gate status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvariantGateStatus"
+
+  /agent/run-invariant-gate:
+    post:
+      summary: Trigger a PV-CI invariant gate run (Phase 223)
+      description: >
+        Executes all 15 invariant checks inline and stores the result.
+        Returns the same 7-key payload as GET /agent/invariant-gate-status.
+      responses:
+        "200":
+          description: Invariant gate result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvariantGateStatus"
+
   /agent/accel-tremor-fft-status:
     get:
       summary: AccelTremorFFT fallback status (Phase 205)
@@ -9287,6 +9316,93 @@ webhooks:
           items:
             type: number
           description: "[min_hz, max_hz] physiological tremor search range used in accel FFT (default [1.0, 15.0])"
+        timestamp:
+          type: number
+          description: "Unix timestamp of status query"
+
+    InvariantGateStatus:
+      type: object
+      description: "Phase 223 PV-CI protocol invariant gate status — 15 frozen invariants verified"
+      properties:
+        pv_ci_enabled:
+          type: boolean
+          description: "True when PV_CI_ENABLED=true (default True)"
+        gate_pass:
+          type: boolean
+          nullable: true
+          description: "True when all invariants passed; null when no run recorded yet"
+        total_checked:
+          type: integer
+          description: "Number of invariants evaluated in the last run"
+        failure_count:
+          type: integer
+          description: "Number of invariant violations detected in the last run"
+        last_failures:
+          type: array
+          items:
+            type: string
+          description: "List of failure description strings from the last run"
+        last_run_ts:
+          type: number
+          nullable: true
+          description: "Unix timestamp of the last gate run (null if never run)"
+        timestamp:
+          type: number
+          description: "Unix timestamp of status query"
+
+    BBGStatus:
+      type: object
+      description: "Phase 222 BiometricBoundGovernance (BBG) — VHP-gated governance proposal status"
+      properties:
+        bbg_enabled:
+          type: boolean
+          description: "True when BBG_ENABLED=true (default False)"
+        total_proposals:
+          type: integer
+          description: "Total BBG proposals recorded in bbg_proposal_log"
+        latest_proposal_hash:
+          type: string
+          nullable: true
+          description: "SHA-256 hex string of the most recent proposal (null if no proposals)"
+        latest_proposer:
+          type: string
+          nullable: true
+          description: "Ethereum address of the most recent proposer (null if no proposals)"
+        on_chain_confirmed:
+          type: boolean
+          description: "True when the most recent proposal was confirmed on-chain"
+        last_proposal_ts:
+          type: number
+          nullable: true
+          description: "Unix timestamp of the most recent proposal (null if no proposals)"
+        timestamp:
+          type: number
+          description: "Unix timestamp of status query"
+
+    ProtocolCoherenceStatus:
+      type: object
+      description: "Phase 221 ProtocolCoherence (PoPC) — Merkle root anchor over 36-agent fleet"
+      properties:
+        protocol_coherence_enabled:
+          type: boolean
+          description: "True when PROTOCOL_COHERENCE_ENABLED=true (default False)"
+        total_anchors:
+          type: integer
+          description: "Total PoPC Merkle root anchors recorded in protocol_coherence_log"
+        latest_merkle_root:
+          type: string
+          nullable: true
+          description: "Hex string of most recent Merkle root over 36 agent observations (null if no anchors)"
+        agent_count:
+          type: integer
+          description: "Number of agents in the most recent Merkle tree (0 if no anchors)"
+        on_chain_confirmed:
+          type: boolean
+          description: "True when the most recent anchor was confirmed on-chain via ProtocolCoherenceRegistry"
+        last_anchor_ts:
+          type: number
+          nullable: true
+          description: "Unix timestamp of the most recent local anchor (null if no anchors)"
         timestamp:
           type: number
           description: "Unix timestamp of status query"

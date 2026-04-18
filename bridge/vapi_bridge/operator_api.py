@@ -6283,6 +6283,279 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         }
 
     # ------------------------------------------------------------------
+    # Phase 222 — GET /agent/bbg-status  +  POST /agent/bbg-propose
+    # ------------------------------------------------------------------
+    @app.get("/agent/bbg-status")
+    async def get_bbg_status(
+        x_api_key: str = Header(default=""),
+    ):
+        """BiometricBoundGovernance status (Phase 222).
+
+        Returns the latest BBG proposal record plus configuration state.
+
+        Returns 7 keys: bbg_enabled / total_proposals / latest_proposal_hash /
+                        latest_proposer / on_chain_confirmed / last_proposal_ts / timestamp
+        """
+        _check_rate(x_api_key)
+        import time as _t222
+        _enabled222 = bool(getattr(cfg, "bbg_enabled", False))
+        try:
+            _status222 = store.get_bbg_status()
+        except Exception:
+            _status222 = {
+                "total_proposals": 0, "latest_proposal_hash": None,
+                "latest_proposer": None, "on_chain_confirmed": False,
+                "last_proposal_ts": None, "timestamp": _t222.time(),
+            }
+        return {
+            "bbg_enabled":           _enabled222,
+            "total_proposals":       _status222.get("total_proposals", 0),
+            "latest_proposal_hash":  _status222.get("latest_proposal_hash"),
+            "latest_proposer":       _status222.get("latest_proposer"),
+            "on_chain_confirmed":    _status222.get("on_chain_confirmed", False),
+            "last_proposal_ts":      _status222.get("last_proposal_ts"),
+            "timestamp":             _t222.time(),
+        }
+
+    @app.post("/agent/bbg-propose")
+    async def post_bbg_propose(
+        x_api_key:        str   = Header(default=""),
+        proposal_hash:    str   = "",
+        proposer_address: str   = "",
+        vhp_token_id:     int   = 0,
+        vhp_expires_at:   float = 0.0,
+    ):
+        """Submit a biometric-bound governance proposal (Phase 222).
+
+        Validates the proposal against the proposer's VHP freshness, records locally,
+        and optionally submits on-chain if BBG_CONTRACT_ADDRESS is configured.
+
+        Returns 5 keys: valid / on_chain / tx_hash / row_id / rejection_reason
+        """
+        _check_rate(x_api_key)
+        import time as _t222p
+        try:
+            from .biometric_governance_agent import BiometricGovernanceAgent as _BGA222
+            _bga = _BGA222(store, cfg, chain=None)
+            _result222 = await _bga.submit_proposal(
+                proposal_hash=str(proposal_hash),
+                proposer_address=str(proposer_address),
+                vhp_token_id=int(vhp_token_id),
+                vhp_expires_at=float(vhp_expires_at),
+            )
+        except Exception as _exc222:
+            _result222 = {
+                "valid": False, "on_chain": False,
+                "tx_hash": "", "row_id": 0,
+                "rejection_reason": str(_exc222),
+            }
+        return {
+            "valid":            _result222.get("valid", False),
+            "on_chain":         _result222.get("on_chain", False),
+            "tx_hash":          _result222.get("tx_hash", ""),
+            "row_id":           _result222.get("row_id", 0),
+            "rejection_reason": _result222.get("rejection_reason"),
+        }
+
+    # Phase 223 — GET /agent/invariant-gate-status  +  POST /agent/run-invariant-gate
+    # ------------------------------------------------------------------
+    @app.get("/agent/invariant-gate-status")
+    async def get_invariant_gate_status(
+        x_api_key: str = Header(default=""),
+    ):
+        """PV-CI protocol invariant gate status (Phase 223).
+
+        Returns the latest gate run result: pass/fail, checked count, failure list.
+
+        Returns 7 keys: pv_ci_enabled / gate_pass / total_checked / failure_count /
+                        last_failures / last_run_ts / timestamp
+        """
+        _check_rate(x_api_key)
+        _enabled223 = bool(getattr(cfg, "pv_ci_enabled", True))
+        try:
+            _status223 = store.get_invariant_gate_status()
+        except Exception as _e223:
+            import time as _t223e
+            _status223 = {
+                "pv_ci_enabled": _enabled223, "gate_pass": None,
+                "total_checked": 0, "failure_count": 0,
+                "last_failures": [str(_e223)], "last_run_ts": None,
+                "timestamp": _t223e.time(),
+            }
+        _status223["pv_ci_enabled"] = _enabled223
+        return _status223
+
+    @app.post("/agent/run-invariant-gate")
+    async def run_invariant_gate(
+        x_api_key: str = Header(default=""),
+    ):
+        """Trigger a PV-CI invariant gate run (Phase 223).
+
+        Executes vapi_invariant_gate.check_invariants() inline, stores result,
+        returns same 7 keys as GET /agent/invariant-gate-status.
+        """
+        _check_rate(x_api_key)
+        import json as _json223
+        import sys as _sys223
+        import time as _t223p
+        from pathlib import Path as _Path223
+
+        _gate_mod_path = str(_Path223(__file__).parent.parent.parent / "scripts")
+        if _gate_mod_path not in _sys223.path:
+            _sys223.path.insert(0, _gate_mod_path)
+        try:
+            import importlib, importlib.util
+            _spec = importlib.util.spec_from_file_location(
+                "vapi_invariant_gate",
+                str(_Path223(__file__).parent.parent.parent / "scripts" / "vapi_invariant_gate.py"),
+            )
+            _gate_mod = importlib.util.module_from_spec(_spec)
+            _spec.loader.exec_module(_gate_mod)
+            _results = _gate_mod.check_invariants()
+            _allowlist = _gate_mod.load_allowlist()
+            _failures = []
+            for _r in _results:
+                if not _r["file_found"]:
+                    _failures.append(f"{_r['id']} FILE_NOT_FOUND")
+                elif not _r["pattern_matched"]:
+                    _failures.append(f"{_r['id']} PATTERN_NOT_MATCHED")
+                elif _allowlist and _r["id"] in _allowlist:
+                    if _r["digest"] != _allowlist[_r["id"]]["digest"]:
+                        _failures.append(f"{_r['id']} DIGEST_DRIFT")
+            _pass = len(_failures) == 0
+            _row_id = store.insert_invariant_gate_log(
+                gate_pass=_pass,
+                total_checked=len(_results),
+                failures_json=_json223.dumps(_failures),
+                run_source="api",
+            )
+        except Exception as _ex223:
+            _failures = [str(_ex223)]
+            _pass = False
+            _row_id = store.insert_invariant_gate_log(
+                gate_pass=False,
+                total_checked=0,
+                failures_json=_json223.dumps(_failures),
+                run_source="api",
+            )
+
+        return {
+            "pv_ci_enabled":  bool(getattr(cfg, "pv_ci_enabled", True)),
+            "gate_pass":      _pass,
+            "total_checked":  len(_results) if "_results" in dir() else 0,
+            "failure_count":  len(_failures),
+            "last_failures":  _failures,
+            "last_run_ts":    _t223p.time(),
+            "timestamp":      _t223p.time(),
+        }
+
+    # Phase 224 — POST /agent/allowlist-governance-event
+    # ------------------------------------------------------------------
+    @app.post("/agent/allowlist-governance-event")
+    async def post_allowlist_governance_event(
+        request: Request,
+        x_api_key: str = Header(default=""),
+    ):
+        """Record an allowlist governance event (Phase 224).
+
+        Called by vapi_invariant_gate.py --generate after writing the allowlist.
+        Validates reason_category and stores the event in invariant_gate_log.
+        Returns 422 on invalid category or reason_text length.
+
+        Body JSON: previous_hash, new_hash, reason_category, reason_text
+        Returns: row_id, accepted, category
+        """
+        _check_rate(x_api_key)
+        import time as _t224
+        _VALID_CATS_224 = {"refactor", "bugfix", "invariant_change", "ceremony_update"}
+        try:
+            _body224 = await request.json()
+        except Exception:
+            from fastapi.responses import JSONResponse as _JR224
+            return _JR224({"error": "invalid JSON body"}, status_code=422)
+        _prev224  = str(_body224.get("previous_hash", ""))
+        _new224   = str(_body224.get("new_hash", ""))
+        _cat224   = str(_body224.get("reason_category", ""))
+        _text224  = str(_body224.get("reason_text", ""))
+
+        from fastapi.responses import JSONResponse as _JR224
+        if _cat224 not in _VALID_CATS_224:
+            return _JR224(
+                {"error": f"invalid reason_category: {_cat224!r}. "
+                 f"Must be one of: {sorted(_VALID_CATS_224)}"},
+                status_code=422,
+            )
+        if not (10 <= len(_text224) <= 200):
+            return _JR224(
+                {"error": "reason_text must be 10-200 characters"},
+                status_code=422,
+            )
+
+        _row_id224 = store.insert_invariant_gate_log(
+            gate_pass=True,
+            total_checked=0,
+            failures_json="[]",
+            run_source=f"governance:{_cat224}:{_text224[:40]}",
+            previous_allowlist_hash=_prev224,
+            new_allowlist_hash=_new224,
+            reason_category=_cat224,
+            reason_text=_text224,
+        )
+
+        # Fire bus event for invariant_change category (fail-open)
+        if _cat224 == "invariant_change":
+            try:
+                _bus224 = getattr(cfg, "_federation_bus", None)
+                if _bus224 is not None:
+                    import asyncio as _aio224
+                    _aio224.create_task(
+                        _bus224.publish("invariant_governance_change", {
+                            "category": _cat224,
+                            "text": _text224,
+                            "new_hash": _new224,
+                            "ts": _t224.time(),
+                        })
+                    )
+            except Exception:
+                pass  # fail-open
+
+        return {"row_id": _row_id224, "accepted": True, "category": _cat224}
+
+    # Phase 221 — GET /agent/protocol-coherence-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/protocol-coherence-status")
+    async def get_protocol_coherence_status(
+        x_api_key: str = Header(default=""),
+    ):
+        """Proof of Protocol Coherence (PoPC) status (Phase 221).
+
+        Returns the latest Merkle root anchor over 36 VAPI agent fleet observations,
+        plus on-chain confirmation status.
+
+        Returns 7 keys: protocol_coherence_enabled / total_anchors / latest_merkle_root /
+                        agent_count / on_chain_confirmed / last_anchor_ts / timestamp
+        """
+        _check_rate(x_api_key)
+        import time as _t221
+        _enabled221 = bool(getattr(cfg, "protocol_coherence_enabled", False))
+        try:
+            _status221 = store.get_protocol_coherence_status()
+        except Exception:
+            _status221 = {
+                "total_anchors": 0, "latest_merkle_root": None,
+                "agent_count": 0, "on_chain_confirmed": False,
+                "last_anchor_ts": None, "timestamp": _t221.time(),
+            }
+        return {
+            "protocol_coherence_enabled": _enabled221,
+            "total_anchors":       _status221.get("total_anchors", 0),
+            "latest_merkle_root":  _status221.get("latest_merkle_root"),
+            "agent_count":         _status221.get("agent_count", 0),
+            "on_chain_confirmed":  _status221.get("on_chain_confirmed", False),
+            "last_anchor_ts":      _status221.get("last_anchor_ts"),
+            "timestamp":           _t221.time(),
+        }
+
     # Phase 220 — GET /agent/per-pair-gap-projection
     # ------------------------------------------------------------------
     @app.get("/agent/per-pair-gap-projection")
