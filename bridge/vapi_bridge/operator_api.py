@@ -6597,19 +6597,24 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "timestamp":     _t225.time(),
         }
 
-    # Phase 221 — GET /agent/protocol-coherence-status
+    # Phase 221/227 — GET /agent/protocol-coherence-status
     # ------------------------------------------------------------------
     @app.get("/agent/protocol-coherence-status")
     async def get_protocol_coherence_status(
         x_api_key: str = Header(default=""),
     ):
-        """Proof of Protocol Coherence (PoPC) status (Phase 221).
+        """Proof of Protocol Coherence (PoPC) status (Phase 221/227).
 
         Returns the latest Merkle root anchor over 36 VAPI agent fleet observations,
         plus on-chain confirmation status.
 
-        Returns 7 keys: protocol_coherence_enabled / total_anchors / latest_merkle_root /
-                        agent_count / on_chain_confirmed / last_anchor_ts / timestamp
+        Phase 227: adds governance_provenance_hash field (latest provenance hash
+        stored alongside the Merkle root at last anchor time; empty when no Phase 227
+        anchor has been performed yet).
+
+        Returns 8 keys: protocol_coherence_enabled / total_anchors / latest_merkle_root /
+                        agent_count / on_chain_confirmed / last_anchor_ts /
+                        governance_provenance_hash / timestamp
         """
         _check_read_key(x_api_key)
         import time as _t221
@@ -6620,16 +6625,18 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             _status221 = {
                 "total_anchors": 0, "latest_merkle_root": None,
                 "agent_count": 0, "on_chain_confirmed": False,
-                "last_anchor_ts": None, "timestamp": _t221.time(),
+                "last_anchor_ts": None, "governance_provenance_hash": "",
+                "timestamp": _t221.time(),
             }
         return {
-            "protocol_coherence_enabled": _enabled221,
-            "total_anchors":       _status221.get("total_anchors", 0),
-            "latest_merkle_root":  _status221.get("latest_merkle_root"),
-            "agent_count":         _status221.get("agent_count", 0),
-            "on_chain_confirmed":  _status221.get("on_chain_confirmed", False),
-            "last_anchor_ts":      _status221.get("last_anchor_ts"),
-            "timestamp":           _t221.time(),
+            "protocol_coherence_enabled":  _enabled221,
+            "total_anchors":               _status221.get("total_anchors", 0),
+            "latest_merkle_root":          _status221.get("latest_merkle_root"),
+            "agent_count":                 _status221.get("agent_count", 0),
+            "on_chain_confirmed":          _status221.get("on_chain_confirmed", False),
+            "last_anchor_ts":              _status221.get("last_anchor_ts"),
+            "governance_provenance_hash":  _status221.get("governance_provenance_hash", ""),
+            "timestamp":                   _t221.time(),
         }
 
     # Phase 220 — GET /agent/per-pair-gap-projection
