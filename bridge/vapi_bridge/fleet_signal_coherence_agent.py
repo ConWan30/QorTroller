@@ -1169,7 +1169,14 @@ class FleetSignalCoherenceAgent:
                         (entry["coherence_id"],),
                     )
                     if already and not already[0].get("promoted_to_wif", 0):
-                        self._promote_to_wif(entry)
+                        # Rule-level dedup: skip if any row for this rule is already promoted
+                        rule_promoted = self._db_query(
+                            "SELECT COUNT(*) as n FROM fleet_coherence_log "
+                            "WHERE rule_name=? AND promoted_to_wif=1",
+                            (entry["rule_name"],),
+                        )
+                        if not (rule_promoted and rule_promoted[0].get("n", 0) > 0):
+                            self._promote_to_wif(entry)
             except Exception as e:
                 self._logger.warning(f"[FSCA] promotion check failed: {e}")
 

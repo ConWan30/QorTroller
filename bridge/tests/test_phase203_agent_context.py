@@ -168,13 +168,13 @@ def test_T203_7_context_hash_mismatch_inversion_rule():
     assert "prompt" in rule["explanation"].lower() or "hash" in rule["explanation"].lower()
 
 
-# ── T203-8: FSCA now has 4 INVERSION rules ────────────────────────────────
+# ── T203-8: FSCA INVERSION rule count (Phase 225 added GOVERNANCE_CHAIN_BROKEN → 5) ─────
 def test_T203_8_fsca_has_four_inversion_rules():
     from vapi_bridge.fleet_signal_coherence_agent import INVERSION_RULES, ORPHAN_RULES
-    assert len(INVERSION_RULES) == 4  # 3 original + CONTEXT_HASH_MISMATCH
+    assert len(INVERSION_RULES) == 5  # 3 original + CONTEXT_HASH_MISMATCH + GOVERNANCE_CHAIN_BROKEN
     assert "COMMITMENT_PREDATES_CONSENT" in INVERSION_RULES
     assert "BADGE_WITHOUT_RENEWAL_PARENT" in INVERSION_RULES
     assert "RULING_PREDATES_CALIBRATION" in INVERSION_RULES
     assert "CONTEXT_HASH_MISMATCH" in INVERSION_RULES
     # Also verify total ORPHAN count
-    assert len(ORPHAN_RULES) == 6  # 5 original + RATIO_VELOCITY_NEGATIVE
+    assert len(ORPHAN_RULES) == 7  # 5 original + RATIO_VELOCITY_NEGATIVE + PER_PAIR_GAP_BLOCKER_UNRESOLVED
