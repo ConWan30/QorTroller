@@ -1048,24 +1048,22 @@ class Bridge:
             import hashlib as _hashlib203
             _phase203_agents: list = []
             try:
-                from .bridge_agent import BridgeAgent as _BA203
-                _ba_prompt = getattr(_BA203, "_SYSTEM_PROMPT", None)
+                from . import bridge_agent as _ba_mod203
+                _ba_prompt = getattr(_ba_mod203, "_SYSTEM_PROMPT", None)
                 if _ba_prompt:
                     _phase203_agents.append(("bridge_agent", _ba_prompt))
             except Exception:
                 pass
             try:
-                from .session_adjudicator import SessionAdjudicator as _SA203
-                _sa_prompt = getattr(_SA203, "_SYSTEM_PROMPT", None)
+                from . import session_adjudicator as _sa_mod203
+                _sa_prompt = getattr(_sa_mod203, "_SYSTEM_PROMPT", None)
                 if _sa_prompt:
                     _phase203_agents.append(("session_adjudicator", _sa_prompt))
             except Exception:
                 pass
             try:
-                from .calibration_intelligence_agent import (
-                    CalibrationIntelligenceAgent as _CIA203,
-                )
-                _cia_prompt = getattr(_CIA203, "_CALIB_SYSTEM_PROMPT", None)
+                from . import calibration_intelligence_agent as _cia_mod203
+                _cia_prompt = getattr(_cia_mod203, "_CALIB_SYSTEM_PROMPT", None)
                 if _cia_prompt:
                     _phase203_agents.append(("calibration_intelligence_agent", _cia_prompt))
             except Exception:
