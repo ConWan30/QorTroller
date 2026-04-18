@@ -364,13 +364,13 @@ class AgentCalibrationMonitor:
     async def _test_agent_13(self) -> dict:
         """Agent #13 — IoSwarmAdjudicationAgent: BLOCK_QUORUM=0.67, MINT_QUORUM=0.80."""
         try:
-            from .ioswarm_adjudication_coordinator import IoSwarmAdjudicationCoordinator
-            block_quorum = float(getattr(IoSwarmAdjudicationCoordinator, "CLASSJ_BLOCK_QUORUM",
-                                         getattr(IoSwarmAdjudicationCoordinator, "BLOCK_QUORUM", 0.0)))
+            from . import ioswarm_adjudication_coordinator as _ioswarm_adj_mod
+            block_quorum = float(getattr(_ioswarm_adj_mod, "CLASSJ_BLOCK_QUORUM",
+                                         getattr(_ioswarm_adj_mod, "BLOCK_QUORUM", 0.0)))
             ok = abs(block_quorum - 0.67) < 0.001
-            # Also check mint quorum constant
-            from .ioswarm_vhp_mint_coordinator import IoSwarmVHPMintCoordinator
-            mint_quorum = float(getattr(IoSwarmVHPMintCoordinator, "MINT_QUORUM", 0.0))
+            # Also check mint quorum constant (module-level, not class attribute)
+            from . import ioswarm_vhp_mint_coordinator as _ioswarm_mint_mod
+            mint_quorum = float(getattr(_ioswarm_mint_mod, "MINT_QUORUM", 0.0))
             mint_ok = abs(mint_quorum - 0.80) < 0.001
             passed = ok and mint_ok
             return {

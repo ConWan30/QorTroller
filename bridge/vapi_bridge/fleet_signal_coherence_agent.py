@@ -1022,6 +1022,7 @@ class FleetSignalCoherenceAgent:
     def _write_contradict_entry(self, entry: dict) -> None:
         """Append to wiki/contradictions.md via _locked_append (WIKI_CONTRADICT path)."""
         try:
+            import sys as _sys228; _sys228.path.insert(0, str(Path(__file__).parents[2]))
             from vapi_wiki_engine import WIKI_CONTRADICT, _locked_append, prov
             ts = datetime.now(timezone.utc).isoformat()
             provenance = prov(entry["phase_detected"], self.NAME, "MEASURED")
@@ -1054,6 +1055,7 @@ class FleetSignalCoherenceAgent:
     def _promote_to_wif(self, entry: dict) -> None:
         """Auto-promote a persistent contradiction (N_PROMOTE_THRESHOLD occurrences) to WIF."""
         try:
+            import sys as _sys228; _sys228.path.insert(0, str(Path(__file__).parents[2]))
             from vapi_wiki_engine import CORPUS, _locked_append, prov
             import re as _re
 
@@ -1139,7 +1141,7 @@ class FleetSignalCoherenceAgent:
                             "resolution":   entry["resolution"],
                             "coherence_id": entry["coherence_id"],
                             "provenance":   f"[VAPI:Phase193:{self.NAME}:MEASURED]",
-                        })
+                        }, source=self.NAME)
                     self._store.db_execute(
                         "UPDATE fleet_coherence_log SET alert_published=1 "
                         "WHERE coherence_id=?",
@@ -1196,7 +1198,7 @@ class FleetSignalCoherenceAgent:
                     "critical_open":       summary["by_severity"].get("CRITICAL", 0),
                     "promoted_to_wif":     summary["promoted_to_wif"],
                     "provenance":          f"[VAPI:Phase193:{self.NAME}:MEASURED]",
-                })
+                }, source=self.NAME)
             except Exception:
                 pass
 
