@@ -87,23 +87,34 @@ def test_T224_SDK_2_allowlist_governance_result_slots():
 
 # ── T224-SDK-3: previous_changes() parses governance entries ─────────────────
 def test_T224_SDK_3_previous_changes_parses_governance():
-    """previous_changes() parses governance entries from mock response."""
+    """previous_changes() returns governance entries from GET /agent/allowlist-governance-history.
+
+    Phase 225 updated previous_changes() to call the dedicated history endpoint
+    rather than the gate-status endpoint. This test mocks the history endpoint.
+    """
     from vapi_sdk import VAPIAllowlistGovernance
 
-    _gate_payload = {
-        "pv_ci_enabled": True,
-        "gate_pass": True,
-        "total_checked": 16,
-        "failure_count": 0,
-        "last_failures": [],
-        "last_run_ts": 1714200000.0,
-        "run_source": "governance:refactor:renamed helper function",
+    # Phase 225: history endpoint format
+    _history_payload = {
+        "entries": [
+            {
+                "id": 1,
+                "governance_provenance_hash": "a" * 64,
+                "previous_provenance_hash":   "0" * 64,
+                "new_allowlist_hash":         "b" * 64,
+                "reason_category":            "refactor",
+                "reason_text":                "renamed helper function",
+                "created_at":                 1714200000.0,
+            }
+        ],
+        "total_entries": 1,
+        "chain_intact": True,
         "timestamp": 1714200001.0,
     }
 
     class _Handler(BaseHTTPRequestHandler):
         def do_GET(self):
-            body = json.dumps(_gate_payload).encode()
+            body = json.dumps(_history_payload).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
@@ -122,9 +133,10 @@ def test_T224_SDK_3_previous_changes_parses_governance():
         assert isinstance(changes, list)
         assert len(changes) >= 1
         first = changes[0]
-        assert "run_source" in first or "error" in first
-        if "run_source" in first:
-            assert first["run_source"].startswith("governance:")
+        # Phase 225 format: provenance chain keys
+        assert "governance_provenance_hash" in first or "error" in first
+        if "governance_provenance_hash" in first:
+            assert first["reason_category"] == "refactor"
     finally:
         server.shutdown()
 
