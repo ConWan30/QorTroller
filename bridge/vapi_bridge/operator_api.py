@@ -143,6 +143,23 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                 headers={"Retry-After": "60"},
             )
 
+    def _check_read_key(x_api_key: str) -> None:
+        """Phase 224 W1 fix: for read-only /agent/* status endpoints using x-api-key header.
+
+        Validates the key when OPERATOR_API_KEY is configured (fail-open when not configured,
+        so dev environments without a key still work). Always applies rate limiting.
+        Returns 403 when key is wrong, never 503 (status endpoints are read-only).
+        """
+        if cfg.operator_api_key:
+            if not hmac.compare_digest(x_api_key, cfg.operator_api_key):
+                raise HTTPException(403, "Invalid x-api-key header")
+        if not _limiter.is_allowed(x_api_key):
+            raise HTTPException(
+                status_code=429,
+                detail="Rate limit exceeded",
+                headers={"Retry-After": "60"},
+            )
+
     def _sign(device_id: str, eligible: bool, ts: int) -> str:
         """Produce HMAC-SHA256 signature over device_id:eligible:timestamp."""
         msg = f"{device_id}:{int(eligible)}:{ts}".encode()
@@ -5594,7 +5611,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         x_api_key: str = Header(default=""),
     ):
         """Tool #136 — Provenance DAG chain walk from leaf to root (Phase 192)."""
-        _check_rate(x_api_key)
+        _check_read_key(x_api_key)
         import time as _t192_1
         max_depth = getattr(cfg, "provenance_max_chain_depth", 20)
         if not leaf_node_id:
@@ -5634,7 +5651,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         x_api_key: str = Header(default=""),
     ):
         """Tool #137 — Corpus entropy monitor status (Phase 192)."""
-        _check_rate(x_api_key)
+        _check_read_key(x_api_key)
         import time as _t192_2
         row = store.get_latest_corpus_entropy()
         threshold = getattr(cfg, "corpus_entropy_warning_threshold", 1.5)
@@ -5670,7 +5687,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         x_api_key: str = Header(default=""),
     ):
         """Tool #138 — GDPR Art.17 erasure certificate for a device (Phase 192)."""
-        _check_rate(x_api_key)
+        _check_read_key(x_api_key)
         import time as _t192_3
         if not device_id:
             raise HTTPException(status_code=422, detail="device_id required")
@@ -5694,7 +5711,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         x_api_key: str = Header(default=""),
     ):
         """Tool #139 — Anchor erasure certificate to AdjudicationRegistry.sol (Phase 192)."""
-        _check_rate(x_api_key)
+        _check_read_key(x_api_key)
         import time as _t192_3b
         body = await request.json() if request.headers.get("content-type") else {}
         cert_hash = body.get("certificate_hash", "")
@@ -5716,7 +5733,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         x_api_key: str = Header(default=""),
     ):
         """Tool #140 — Federated corpus quality aggregator status (Phase 192)."""
-        _check_rate(x_api_key)
+        _check_read_key(x_api_key)
         import time as _t192_4
         enabled = getattr(cfg, "federated_corpus_quality_enabled", False)
         records = store.get_federated_corpus_quality(limit=10)
@@ -5735,7 +5752,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         x_api_key: str = Header(default=""),
     ):
         """Tool #141 — Per-player 13x13 correlation matrix status (Phase 192)."""
-        _check_rate(x_api_key)
+        _check_read_key(x_api_key)
         import time as _t192_5
         threshold = getattr(cfg, "correlation_separability_threshold", 0.5)
         row = store.get_feature_correlation(player_id=player_id)
@@ -5770,7 +5787,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         x_api_key: str = Header(default=""),
     ):
         """Tool #142 — 8-dimension pre-tournament data readiness certificate (Phase 192)."""
-        _check_rate(x_api_key)
+        _check_read_key(x_api_key)
         import time as _t192_6
         cert = store.get_latest_data_readiness_certificate()
         if cert is None:
@@ -5805,7 +5822,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         x_api_key: str = Header(default=""),
     ):
         """Tool #143 — Anchor data readiness certificate on-chain (Phase 192)."""
-        _check_rate(x_api_key)
+        _check_read_key(x_api_key)
         import time as _t192_6b
         body = await request.json() if request.headers.get("content-type") else {}
         cert_hash = body.get("certificate_hash", "")
@@ -5830,7 +5847,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         """Tool #144 — TBD-decay session contribution weights (Phase 192).
         FROZEN: lambda=ln(2)/90 (BP-001 TBD half-life=90 days).
         """
-        _check_rate(x_api_key)
+        _check_read_key(x_api_key)
         import time as _t192_7
         import math as _math192
         weights = store.get_session_weights(player_id=player_id, limit=30)
@@ -5854,7 +5871,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         Returns total open contradictions/orphans/inversions, severity counts,
         WIF promotion count. CRITICAL entries mean two agents report incompatible states.
         """
-        _check_rate(x_api_key)
+        _check_read_key(x_api_key)
         import time as _t193_1
         enabled = getattr(cfg, "fleet_coherence_enabled", True)
         summary = store.get_coherence_summary()
@@ -5879,7 +5896,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         x_api_key: str = Header(default=""),
     ):
         """Tool #146 — Fleet coherence open entries, filterable by failure_mode and severity (Phase 193)."""
-        _check_rate(x_api_key)
+        _check_read_key(x_api_key)
         import time as _t193_2
         entries = store.get_open_coherence_entries(
             severity=severity or None,
@@ -5900,7 +5917,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         x_api_key: str = Header(default=""),
     ):
         """Resolve a fleet coherence entry by coherence_id (Phase 193)."""
-        _check_rate(x_api_key)
+        _check_read_key(x_api_key)
         import time as _t193_3
         body = await request.json() if request.headers.get("content-type") else {}
         coherence_id = body.get("coherence_id", "")
@@ -5923,7 +5940,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         x_api_key: str = Header(default=""),
     ):
         """Tool #147 — Fleet coherence history for a specific rule (Phase 193)."""
-        _check_rate(x_api_key)
+        _check_read_key(x_api_key)
         import time as _t193_4
         import sqlite3 as _sq193
         try:
@@ -5965,7 +5982,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         maturity_penalty = min(1.0, persistent_count × 0.10) — applied to
         ProtocolMaturityScoringAgent threat_forecast_accuracy_component.
         """
-        _check_rate(x_api_key)
+        _check_read_key(x_api_key)
         import time as _t194
         status = store.get_coherence_fingerprint_status()
         return {
@@ -5999,7 +6016,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
           mean_resolution_hours_critical / pmi_score / orphan_count_open /
           orphan_count_resolved / domain / timestamp
         """
-        _check_rate(x_api_key)
+        _check_read_key(x_api_key)
         import time as _t195
         stats = store.get_orphan_resolution_stats(domain=domain)
         return {
@@ -6028,7 +6045,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
           accel_tremor_fallback_enabled / still_hold_var_threshold /
           fallback_source / tremor_search_range_hz / timestamp
         """
-        _check_rate(x_api_key)
+        _check_read_key(x_api_key)
         import time as _t205
         _enabled205 = bool(getattr(cfg, "accel_tremor_fallback_enabled", True))
         _nfft213    = int(getattr(cfg, "accel_fft_nfft", 4096))
@@ -6058,7 +6075,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
           staged_graduation_enabled / rollback_window_sessions / fp_threshold /
           stages / active_stage_count / timestamp
         """
-        _check_rate(x_api_key)
+        _check_read_key(x_api_key)
         import time as _t207
         _enabled207   = bool(getattr(cfg, "staged_graduation_enabled", False))
         _window207    = int(getattr(cfg, "graduation_rollback_window_sessions", 10))
@@ -6110,7 +6127,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                     "and ensure tournament_preflight overall_pass=True before activating."
                 ),
             )
-        _check_rate(x_api_key)
+        _check_read_key(x_api_key)
         _body207 = {}
         try:
             _body207 = await request.json()
@@ -6159,7 +6176,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
           graduation_autowatch_enabled / trigger_count / evaluated_count /
           last_trigger_probe_type / last_preconditions_met / timestamp
         """
-        _check_rate(x_api_key)
+        _check_read_key(x_api_key)
         import time as _t214
         _enabled214 = bool(getattr(cfg, "graduation_autowatch_enabled", True))
         _status214: dict = {
@@ -6212,7 +6229,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
           corpus_ratio_regression_guard_enabled / guard_active / breakthrough_ratio /
           breakthrough_n / provenance_hash / override_count / timestamp
         """
-        _check_rate(x_api_key)
+        _check_read_key(x_api_key)
         import time as _t208
         _guard_enabled208 = bool(getattr(cfg, "corpus_ratio_regression_guard_enabled", False))
         try:
@@ -6258,7 +6275,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
           l4_dim_sync_enabled / sync_completed / from_dim / to_dim /
           anomaly_threshold / continuity_threshold / timestamp
         """
-        _check_rate(x_api_key)
+        _check_read_key(x_api_key)
         import time as _t215
         _enabled215 = bool(getattr(cfg, "l4_dim_sync_enabled", True))
         try:
@@ -6296,7 +6313,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         Returns 7 keys: bbg_enabled / total_proposals / latest_proposal_hash /
                         latest_proposer / on_chain_confirmed / last_proposal_ts / timestamp
         """
-        _check_rate(x_api_key)
+        _check_read_key(x_api_key)
         import time as _t222
         _enabled222 = bool(getattr(cfg, "bbg_enabled", False))
         try:
@@ -6332,7 +6349,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
 
         Returns 5 keys: valid / on_chain / tx_hash / row_id / rejection_reason
         """
-        _check_rate(x_api_key)
+        _check_read_key(x_api_key)
         import time as _t222p
         try:
             from .biometric_governance_agent import BiometricGovernanceAgent as _BGA222
@@ -6370,7 +6387,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         Returns 7 keys: pv_ci_enabled / gate_pass / total_checked / failure_count /
                         last_failures / last_run_ts / timestamp
         """
-        _check_rate(x_api_key)
+        _check_read_key(x_api_key)
         _enabled223 = bool(getattr(cfg, "pv_ci_enabled", True))
         try:
             _status223 = store.get_invariant_gate_status()
@@ -6394,7 +6411,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         Executes vapi_invariant_gate.check_invariants() inline, stores result,
         returns same 7 keys as GET /agent/invariant-gate-status.
         """
-        _check_rate(x_api_key)
+        _check_read_key(x_api_key)
         import json as _json223
         import sys as _sys223
         import time as _t223p
@@ -6465,7 +6482,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         Body JSON: previous_hash, new_hash, reason_category, reason_text
         Returns: row_id, accepted, category
         """
-        _check_rate(x_api_key)
+        _check_read_key(x_api_key)
         import time as _t224
         _VALID_CATS_224 = {"refactor", "bugfix", "invariant_change", "ceremony_update"}
         try:
@@ -6559,7 +6576,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
 
         Returns: {entries, total_entries, chain_intact, timestamp}
         """
-        _check_rate(x_api_key)
+        _check_read_key(x_api_key)
         import time as _t225
         _lim225 = max(1, min(100, int(limit)))
         _entries225 = store.get_governance_provenance_history(limit=_lim225)
@@ -6594,7 +6611,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         Returns 7 keys: protocol_coherence_enabled / total_anchors / latest_merkle_root /
                         agent_count / on_chain_confirmed / last_anchor_ts / timestamp
         """
-        _check_rate(x_api_key)
+        _check_read_key(x_api_key)
         import time as _t221
         _enabled221 = bool(getattr(cfg, "protocol_coherence_enabled", False))
         try:
@@ -6632,7 +6649,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                         any_feasible / max_days_to_1_0 / projected_tge_date /
                         session_type / timestamp
         """
-        _check_rate(x_api_key)
+        _check_read_key(x_api_key)
         import time as _t220
         _enabled220 = bool(getattr(cfg, "per_pair_gap_projection_enabled", True))
         _st220 = session_type.strip() or None
@@ -6672,7 +6689,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                         overall_blocked / preflight_pass / capture_healthy /
                         all_pairs_above_1 / timestamp
         """
-        _check_rate(x_api_key)
+        _check_read_key(x_api_key)
         import time as _t219
         _enabled219 = bool(getattr(cfg, "tournament_blocker_summary_enabled", True))
         try:
@@ -6715,7 +6732,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                         sessions_stagnant / ratio_velocity / velocity_stagnant /
                         overall_capture_healthy / recommended_action / timestamp
         """
-        _check_rate(x_api_key)
+        _check_read_key(x_api_key)
         import time as _t218
         _enabled218 = bool(getattr(cfg, "capture_velocity_oracle_enabled", True))
         _pt218 = probe_type.strip() or "touchpad_corners"
@@ -6762,7 +6779,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         Returns 8 keys: per_pair_gap_trend_enabled / pair_key / distances /
                         velocity_per_day / trend / n_runs / blocker_resolved / timestamp
         """
-        _check_rate(x_api_key)
+        _check_read_key(x_api_key)
         import time as _t217
         _enabled217 = bool(getattr(cfg, "per_pair_gap_trend_enabled", True))
         _pk217 = pair_key.strip() or "P1vP3"
@@ -6806,7 +6823,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         Returns 7 keys: per_pair_gap_log_enabled / all_pairs_above_1 / pairs /
                         session_type / pair_count / blocker_pairs / timestamp
         """
-        _check_rate(x_api_key)
+        _check_read_key(x_api_key)
         import time as _t216
         _enabled216 = bool(getattr(cfg, "per_pair_gap_log_enabled", True))
         _stype216 = session_type.strip() or None
