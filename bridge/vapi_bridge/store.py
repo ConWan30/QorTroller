@@ -57,6 +57,11 @@ class Store:
         finally:
             conn.close()
 
+    def db_execute(self, sql: str, params: tuple = ()) -> None:
+        """Execute a raw SQL write statement (Phase 193 — used by FleetSignalCoherenceAgent)."""
+        with self._conn() as conn:
+            conn.execute(sql, params)
+
     _PITL_MIGRATION_COLS = [
         "ALTER TABLE records ADD COLUMN pitl_l4_distance REAL",
         "ALTER TABLE records ADD COLUMN pitl_l4_warmed INTEGER",

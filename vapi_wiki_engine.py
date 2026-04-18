@@ -98,7 +98,7 @@ from typing import Optional
 # Paths
 # ─────────────────────────────────────────────────────────────
 
-ROOT          = Path(".")
+ROOT          = Path(__file__).parent
 WIKI          = ROOT / "wiki"
 WIKI_PHASES   = WIKI / "phases"
 WIKI_ENTITIES = WIKI / "entities"
