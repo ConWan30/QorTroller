@@ -1,0 +1,36 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --vapi-bg: #020408;
+  --vapi-bg1: #040810;
+  --gamer-cyan: #00d4ff;
+  --gamer-green: #00ff88;
+  --dev-orange: #ff6b00;
+  --dev-amber: #ffaa44;
+  --mfr-blue: #4a9eff;
+  --mfr-gold: #ffd700;
+  --alert-red: #ff3b5c;
+}
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { background: var(--vapi-bg); color: #c8d8e8; overflow: hidden; }
+body { font-family: 'Syne', system-ui, sans-serif; }
+
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: #040608; }
+::-webkit-scrollbar-thumb { background: #1e3a5a; border-radius: 2px; }
+
+@keyframes vapi-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.25; }
+}
+@keyframes vapi-enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes vapi-glow-pulse {
+  0%, 100% { filter: drop-shadow(0 0 4px currentColor); }
+  50%       { filter: drop-shadow(0 0 12px currentColor); }
+}
