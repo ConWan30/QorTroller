@@ -15,7 +15,7 @@ USAGE:
     python scripts/vapi_invariant_gate.py --generate --reason "invariant_change: ..." --confirm-governance
     python scripts/vapi_invariant_gate.py --report     # human-readable report, no exit code
 
-INVARIANTS CHECKED (16):
+INVARIANTS CHECKED (18):
   1.  PoAC wire format (228-byte body + 64-byte sig) in codec.py
   2.  Chain link hash = SHA-256(raw[:164]) in codec.py
   3.  L4 anomaly threshold literal in store.py (7.009 / 5.367)
@@ -32,6 +32,8 @@ INVARIANTS CHECKED (16):
   14. MINT_QUORUM=0.80 in ioswarm VHP mint
   15. 228-byte record in chain.py record_on_chain calls
   16. Allowlist hash included as virtual leaf in ProtocolCoherenceAgent (Phase 224)
+  17. Audit script split regex — 4-space indent anchor, not column-0 (audit_endpoint_auth.py)
+  18. Audit script block-search — full-body scan, no character-window limit (audit_endpoint_auth.py)
 """
 
 import hashlib
@@ -169,6 +171,20 @@ INVARIANTS: list[Invariant] = [
         description="Allowlist hash included as virtual leaf in ProtocolCoherenceAgent Merkle root",
         file="bridge/vapi_bridge/protocol_coherence_agent.py",
         pattern=r"allowlist.*leaf|virtual.*leaf|compute_allowlist_hash",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-017",
+        description="Audit script split regex — 4-space indent anchor (not column-0), prevents 800-char regression",
+        file="scripts/audit_endpoint_auth.py",
+        pattern=r"blocks.*re\.split|re\.split.*\(\?m\)",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-018",
+        description="Audit script block-search — full-body scan via _AUTH_CALLS, no character-window limit",
+        file="scripts/audit_endpoint_auth.py",
+        pattern=r"has_auth.*any.*_AUTH_CALLS",
         min_matches=1,
     ),
 ]

@@ -62,5 +62,13 @@
   "INV-016": {
     "digest": "1a0e162b220bb71a752abc9081e4014752039dcb521723567c71a5ede34843ad",
     "description": "Allowlist hash included as virtual leaf in ProtocolCoherenceAgent Merkle root"
+  },
+  "INV-017": {
+    "digest": "adfd04b017999b15e01849228336ab5c8a592bce6f17c94e403eb9a2311fd43c",
+    "description": "Audit script split regex \u2014 4-space indent anchor (not column-0), prevents 800-char regression"
+  },
+  "INV-018": {
+    "digest": "b8614ed450c4297dc92b5b51afa21798e556c5f11ad9b0418f9a74101c43dca1",
+    "description": "Audit script block-search \u2014 full-body scan via _AUTH_CALLS, no character-window limit"
   }
 }
