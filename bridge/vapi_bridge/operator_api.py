@@ -6502,6 +6502,21 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             reason_text=_text224,
         )
 
+        # Phase 225: store provenance chain entry if hashes provided.
+        _prov_hash225  = str(_body224.get("governance_provenance_hash", ""))
+        _prev_prov225  = str(_body224.get("previous_provenance_hash", ""))
+        if _prov_hash225:
+            try:
+                store.insert_governance_provenance(
+                    governance_provenance_hash=_prov_hash225,
+                    previous_provenance_hash=_prev_prov225,
+                    new_allowlist_hash=_new224,
+                    reason_category=_cat224,
+                    reason_text=_text224,
+                )
+            except Exception:
+                pass  # fail-open — governance record still in invariant_gate_log
+
         # Fire bus event for invariant_change category (fail-open)
         if _cat224 == "invariant_change":
             try:
@@ -6519,7 +6534,51 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             except Exception:
                 pass  # fail-open
 
-        return {"row_id": _row_id224, "accepted": True, "category": _cat224}
+        return {
+            "row_id":   _row_id224,
+            "accepted": True,
+            "category": _cat224,
+            "governance_provenance_hash": _prov_hash225 or None,
+        }
+
+    # Phase 225 — GET /agent/allowlist-governance-history
+    # ------------------------------------------------------------------
+    @app.get("/agent/allowlist-governance-history")
+    async def get_allowlist_governance_history(
+        limit: int = 20,
+        x_api_key: str = Header(default=""),
+    ):
+        """Paginated governance provenance chain (Phase 225).
+
+        Returns the hash-linked audit trail of every --generate governance event.
+        Each entry includes the provenance hash that cryptographically chains to the
+        previous entry, enabling tamper detection without on-chain anchoring.
+
+        Query params:
+            limit: max entries to return (default 20, max 100)
+
+        Returns: {entries, total_entries, chain_intact, timestamp}
+        """
+        _check_rate(x_api_key)
+        import time as _t225
+        _lim225 = max(1, min(100, int(limit)))
+        _entries225 = store.get_governance_provenance_history(limit=_lim225)
+        # Verify chain integrity: each entry's previous_provenance_hash must equal
+        # the governance_provenance_hash of the next-older entry.
+        _chain_intact = True
+        if len(_entries225) > 1:
+            for _i225 in range(len(_entries225) - 1):
+                _newer = _entries225[_i225]
+                _older = _entries225[_i225 + 1]
+                if _newer["previous_provenance_hash"] != _older["governance_provenance_hash"]:
+                    _chain_intact = False
+                    break
+        return {
+            "entries":       _entries225,
+            "total_entries": len(_entries225),
+            "chain_intact":  _chain_intact,
+            "timestamp":     _t225.time(),
+        }
 
     # Phase 221 — GET /agent/protocol-coherence-status
     # ------------------------------------------------------------------

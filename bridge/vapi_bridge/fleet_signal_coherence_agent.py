@@ -570,6 +570,54 @@ INVERSION_RULES: dict = {
         "resolution": "Audit DataCuratorAgent Task 1 register_calibration_session() timestamp sourcing.",
     },
 
+    "GOVERNANCE_CHAIN_BROKEN": {
+        # Phase 225: Provenance Chain Integrity — 4th INVERSION rule.
+        # Fires when governance_provenance_chain has a non-genesis entry whose
+        # previous_provenance_hash does NOT match the governance_provenance_hash
+        # of the next-older entry.  This is a causal inversion: if an operator
+        # inserts a governance event that claims to chain from hash X, but the
+        # stored chain shows the preceding event had hash Y ≠ X, the audit trail
+        # has been tampered with — either by retroactive insertion, log replay, or
+        # direct DB edit.
+        #
+        # The genesis entry (previous_provenance_hash = '0'*64) is always valid.
+        # Only non-genesis entries are checked.
+        "dag_query": """
+            SELECT newer.id         AS newer_id,
+                   newer.governance_provenance_hash  AS newer_hash,
+                   newer.previous_provenance_hash    AS newer_prev,
+                   older.governance_provenance_hash  AS older_hash
+            FROM governance_provenance_chain newer
+            JOIN governance_provenance_chain older
+              ON older.id = (
+                  SELECT MAX(id) FROM governance_provenance_chain
+                  WHERE id < newer.id
+              )
+            WHERE newer.previous_provenance_hash != '0000000000000000000000000000000000000000000000000000000000000000'
+              AND newer.previous_provenance_hash != older.governance_provenance_hash
+            LIMIT 1
+        """,
+        "agents_involved": ["VAPIInvariantGate", "ProtocolCoherenceAgent"],
+        "severity": "CRITICAL",
+        "explanation": (
+            "governance_provenance_chain contains a broken link: a governance entry's "
+            "previous_provenance_hash does not match the governance_provenance_hash of "
+            "the preceding entry. This means the tamper-evident audit trail for allowlist "
+            "governance events has been corrupted — either by retroactive log insertion, "
+            "replay of a stale governance event, or direct database modification. "
+            "Every --generate event chains cryptographically to the prior event; a broken "
+            "link proves the chain has been altered since the governance events were written."
+        ),
+        "resolution": (
+            "Run GET /agent/allowlist-governance-history to inspect the full chain. "
+            "Identify the broken link and investigate git log / SQLite write-ahead log "
+            "for unauthorized DB modifications. If the chain was corrupted by a replay "
+            "attack, re-run: python scripts/vapi_invariant_gate.py --generate "
+            "--reason '<category>: chain repair after tamper investigation' and document "
+            "the incident in VAPI_WHAT_IF.md."
+        ),
+    },
+
     "CONTEXT_HASH_MISMATCH": {
         # Phase 203: AgentContextRegistry — 4th INVERSION rule.
         # Detects when a live agent system prompt SHA-256 diverges from the committed

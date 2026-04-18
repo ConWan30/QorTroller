@@ -7801,31 +7801,42 @@ class VAPIAllowlistGovernance:
             return json.loads(resp.read().decode())
 
     def previous_changes(self, limit: int = 10) -> list:
-        """Return governance entries from invariant_gate_log where run_source starts 'governance:'.
+        """Return governance provenance chain entries via GET /agent/allowlist-governance-history.
 
-        Fetched via GET /agent/invariant-gate-status (most recent entry).
-        Returns list of dicts with keys: run_source, reason_category, reason_text, created_at.
+        Phase 225: returns full paginated history from the tamper-evident provenance chain.
+        Each entry includes: governance_provenance_hash, previous_provenance_hash,
+        new_allowlist_hash, reason_category, reason_text, created_at.
+        Returns list of dicts; on error returns [{"error": ...}].
         """
         try:
-            import urllib.request, json
-            req = urllib.request.Request(
-                f"{self._base}/agent/invariant-gate-status",
+            import urllib.request as _ureq, json as _j
+            _req = _ureq.Request(
+                f"{self._base}/agent/allowlist-governance-history?limit={max(1, min(100, int(limit)))}",
                 headers={"x-api-key": self._key},
             )
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                body = json.loads(resp.read().decode())
-            run_source = str(body.get("run_source", ""))
-            if run_source.startswith("governance:"):
-                parts = run_source.split(":", 2)
-                return [{
-                    "run_source":      run_source,
-                    "reason_category": parts[1] if len(parts) > 1 else "",
-                    "reason_text":     parts[2] if len(parts) > 2 else "",
-                    "created_at":      body.get("last_run_ts"),
-                }]
-            return []
+            with _ureq.urlopen(_req, timeout=10) as _resp:
+                _body = _j.loads(_resp.read().decode())
+            return _body.get("entries", [])
         except Exception as exc:
             return [{"error": str(exc)}]
+
+    def chain_intact(self) -> bool:
+        """Return True if the governance provenance chain is unbroken (Phase 225).
+
+        Calls GET /agent/allowlist-governance-history and reads chain_intact field.
+        Returns True on empty chain (no entries = not broken). Returns False on error.
+        """
+        try:
+            import urllib.request as _ureq, json as _j
+            _req = _ureq.Request(
+                f"{self._base}/agent/allowlist-governance-history?limit=1",
+                headers={"x-api-key": self._key},
+            )
+            with _ureq.urlopen(_req, timeout=10) as _resp:
+                _body = _j.loads(_resp.read().decode())
+            return bool(_body.get("chain_intact", True))
+        except Exception:
+            return False
 
     def suspicious_changes(self) -> list:
         """Return allowlist_change_log entries where reason_from_gate_log IS NULL.

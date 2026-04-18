@@ -3090,6 +3090,32 @@ class Store:
                 (224, "allowlist_governance", time.time()),
             )
 
+            # Phase 225: governance_provenance_hash on invariant_gate_log + chain table.
+            try:
+                conn.execute(
+                    "ALTER TABLE invariant_gate_log "
+                    "ADD COLUMN governance_provenance_hash TEXT NOT NULL DEFAULT ''"
+                )
+            except Exception:
+                pass  # idempotent
+
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS governance_provenance_chain (
+                    id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+                    governance_provenance_hash TEXT NOT NULL DEFAULT '',
+                    previous_provenance_hash TEXT NOT NULL DEFAULT '',
+                    new_allowlist_hash       TEXT NOT NULL DEFAULT '',
+                    reason_category          TEXT NOT NULL DEFAULT '',
+                    reason_text              TEXT NOT NULL DEFAULT '',
+                    created_at               REAL NOT NULL DEFAULT 0
+                )
+            """)
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                " VALUES (?, ?, ?)",
+                (225, "governance_provenance_chain", time.time()),
+            )
+
     # --- Device operations ---
 
     def upsert_device(self, device_id: str, pubkey_hex: str):
@@ -9698,6 +9724,82 @@ class Store:
                 (cutoff,),
             ).fetchone()
         return str(row[0]) if row and row[0] else None
+
+    # --- Phase 225: Governance Provenance Chain ---
+
+    def insert_governance_provenance(
+        self,
+        governance_provenance_hash: str,
+        previous_provenance_hash: str,
+        new_allowlist_hash: str,
+        reason_category: str,
+        reason_text: str,
+    ) -> int:
+        """Record a provenance chain entry for an allowlist governance event (Phase 225).
+
+        The governance_provenance_hash is SHA-256(prev_prov || new_hash || category || text || ts_ns_8b),
+        forming a tamper-evident hash-linked audit trail.
+
+        Returns:
+            Row id of the inserted record.
+        """
+        import time as _t225
+        ts = _t225.time()
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO governance_provenance_chain "
+                "(governance_provenance_hash, previous_provenance_hash, new_allowlist_hash, "
+                "reason_category, reason_text, created_at) VALUES (?,?,?,?,?,?)",
+                (governance_provenance_hash, previous_provenance_hash, new_allowlist_hash,
+                 reason_category, reason_text, ts),
+            )
+            row_id = int(cur.lastrowid or 0)
+            # Also stamp the most recent invariant_gate_log row with the hash
+            conn.execute(
+                "UPDATE invariant_gate_log SET governance_provenance_hash = ? "
+                "WHERE id = (SELECT MAX(id) FROM invariant_gate_log)",
+                (governance_provenance_hash,),
+            )
+        return row_id
+
+    def get_governance_provenance_history(self, limit: int = 20) -> list:
+        """Return the most recent governance provenance chain entries (Phase 225).
+
+        Returns list of dicts ordered newest-first with keys:
+            id / governance_provenance_hash / previous_provenance_hash / new_allowlist_hash /
+            reason_category / reason_text / created_at
+        """
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT id, governance_provenance_hash, previous_provenance_hash, "
+                "new_allowlist_hash, reason_category, reason_text, created_at "
+                "FROM governance_provenance_chain ORDER BY id DESC LIMIT ?",
+                (max(1, int(limit)),),
+            ).fetchall()
+        return [
+            {
+                "id":                         int(r["id"]),
+                "governance_provenance_hash":  str(r["governance_provenance_hash"]),
+                "previous_provenance_hash":    str(r["previous_provenance_hash"]),
+                "new_allowlist_hash":          str(r["new_allowlist_hash"]),
+                "reason_category":             str(r["reason_category"]),
+                "reason_text":                 str(r["reason_text"]),
+                "created_at":                  float(r["created_at"]),
+            }
+            for r in rows
+        ]
+
+    def get_latest_governance_provenance_hash(self) -> str:
+        """Return the most recent governance_provenance_hash from governance_provenance_chain (Phase 225).
+
+        Returns '0' * 64 (genesis sentinel) when no entries exist.
+        """
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT governance_provenance_hash FROM governance_provenance_chain "
+                "ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+        return str(row["governance_provenance_hash"]) if row else "0" * 64
 
     def get_invariant_gate_status(self) -> dict:
         """Return PV-CI invariant gate summary (Phase 223).

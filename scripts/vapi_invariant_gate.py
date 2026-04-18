@@ -219,14 +219,57 @@ def load_allowlist() -> dict:
     return json.loads(ALLOWLIST_PATH.read_text(encoding="utf-8"))
 
 
+def _fetch_latest_provenance_hash() -> str:
+    """GET latest governance_provenance_hash from bridge. Returns '0'*64 if unreachable."""
+    import urllib.request as _urlreq
+    try:
+        req = _urlreq.Request(
+            "http://localhost:8080/agent/allowlist-governance-history?limit=1",
+            headers={"Content-Type": "application/json"},
+        )
+        with _urlreq.urlopen(req, timeout=5) as resp:
+            body = json.loads(resp.read().decode())
+            entries = body.get("entries", [])
+            if entries:
+                return str(entries[0].get("governance_provenance_hash", "0" * 64))
+    except Exception:
+        pass
+    return "0" * 64
+
+
+def _compute_governance_provenance_hash(
+    prev_prov: str, new_hash: str, category: str, text: str
+) -> str:
+    """SHA-256(prev_prov_bytes || new_hash_bytes || category_bytes || text_bytes || ts_ns_8b).
+
+    Forms a tamper-evident hash-linked audit trail (Phase 225).
+    """
+    ts_ns = time.time_ns()
+    digest = hashlib.sha256(
+        prev_prov.encode() +
+        new_hash.encode() +
+        category.encode() +
+        text.encode() +
+        ts_ns.to_bytes(8, "big")
+    ).hexdigest()
+    return digest
+
+
 def _post_governance_event(prev: str, new: str, category: str, text: str) -> None:
     """POST governance event to bridge. Fail-open: logs warning if bridge unreachable."""
     import urllib.request as _urlreq
+    # Phase 225: build tamper-evident provenance chain hash before POSTing.
+    prev_prov_hash = _fetch_latest_provenance_hash()
+    governance_provenance_hash = _compute_governance_provenance_hash(
+        prev_prov_hash, new, category, text
+    )
     payload = json.dumps({
         "previous_hash": prev,
         "new_hash": new,
         "reason_category": category,
         "reason_text": text,
+        "governance_provenance_hash": governance_provenance_hash,
+        "previous_provenance_hash":  prev_prov_hash,
     }).encode()
     try:
         req = _urlreq.Request(
@@ -236,7 +279,7 @@ def _post_governance_event(prev: str, new: str, category: str, text: str) -> Non
             method="POST",
         )
         _urlreq.urlopen(req, timeout=5)
-        print("[invariant_gate] Governance event posted to bridge.")
+        print(f"[invariant_gate] Governance event posted to bridge (prov_hash={governance_provenance_hash[:12]}...).")
     except Exception as exc:
         print(
             f"[invariant_gate] WARNING: bridge not reachable ({exc}). "
