@@ -1,0 +1,14 @@
+# Build output
+dist/
+dist-ssr/
+
+# Dependencies
+node_modules/
+
+# Local env — contains OPERATOR_API_KEY — never commit
+.env.local
+.env.*.local
+
+# Editor artifacts
+.DS_Store
+*.local

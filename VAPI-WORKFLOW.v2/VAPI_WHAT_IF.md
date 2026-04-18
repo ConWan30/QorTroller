@@ -1906,10 +1906,29 @@ L6B_ENABLED=false / GSR_ENABLED=false invariants unaffected (separation analysis
 
 ---
 
-**Document Version**: 2.5 (WIF-041 filed 2026-04-15; Graduation Autowatch Gap Phase 214; WIF-040 Skill Drift CLOSED Phase 212; WIF-039 CLOSED Phase 208)
-**Last Updated**: 2026-04-15
+## WIF-042: GovernanceProvenanceChainVisualizer
+
+**W2 opportunity (Phase 226 candidate — Governance Provenance Chain Visualizer)**:
+Timeline view of `GET /agent/allowlist-governance-history` events in ManufacturerView.
+Each event rendered as a node on a horizontal chain: `reason_category` color-coded
+(refactor=blue, bugfix=amber, invariant_change=red, ceremony_update=gold); `chain_intact`
+field drives a green/red status badge at chain head; `governance_provenance_hash` shown
+as truncated hex with copy-to-clipboard; on-chain anchor badge appears when Phase 227
+ships a dedicated `GovernanceProvenanceRegistry.sol`. Entry count + last change timestamp
+shown in ManufacturerView header row alongside existing Merkle root display.
+Estimated effort: ~2h on top of existing ManufacturerView once Phase 226 shell is live.
+Exclusive to VAPI: requires Phase 225 `_compute_governance_provenance_hash()` chain,
+Phase 224 `allowlist_change_log` table, and Phase 221 ProtocolCoherenceRegistry address.
+
+**Status**: OPEN — Phase 226 candidate. Filed 2026-04-17.
+[VAPI:Phase226:WIF042:W2:GovernanceProvenanceChainVisualizer:PROPOSED]
+
+---
+
+**Document Version**: 2.6 (WIF-042 filed 2026-04-17; GovernanceProvenanceChainVisualizer Phase 226; WIF-041 GraduationAutowatchGap Phase 214; WIF-040 CLOSED Phase 212; WIF-039 CLOSED Phase 208)
+**Last Updated**: 2026-04-17
 **W1 Count**: 37 entries (WIF-041 GraduationAutowatchGap OPEN Phase 214; WIF-040 Skill Drift CLOSED Phase 212; WIF-039 CorpusRatioRegressionGuard CLOSED Phase 208)
-**W2 Count**: 28 entries (WIF-041 W2 PerPairProbeSelector Phase 215 OPEN; WIF-040 W2 vapi_skill_state_sync CLOSED Phase 212)
+**W2 Count**: 29 entries (WIF-042 GovernanceProvenanceChainVisualizer Phase 226 OPEN; WIF-041 W2 PerPairProbeSelector Phase 215 OPEN; WIF-040 W2 vapi_skill_state_sync CLOSED Phase 212)
 **W3 Count**: 5 entries
 **Update Method**: Append-only, status updates inline
 **Key Phase 213/214 Updates**: WIF-041 Graduation Autowatch Gap filed (cycle33); AccelTremorFFT FFT resolution fix COMPLETE (Phase 213); P1vP3=0.032 code fix deployed; tremor_resting=1.177 (N=27) — all_pairs_p0_ok=False pending hardware recapture

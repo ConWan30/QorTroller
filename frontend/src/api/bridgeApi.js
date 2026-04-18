@@ -1,16 +1,19 @@
 import { useQuery } from '@tanstack/react-query'
 import { activateMock, deactivateMock, isMockActive, MOCK } from './mockBridge'
-
-const BASE = ''  // vite proxy handles /agent/* → localhost:8080
+import { apiGet, ApiKeyError, BridgeOfflineError } from './client'
 
 async function get(path, mockKey) {
   if (isMockActive()) return MOCK[mockKey]?.()
   try {
-    const res = await fetch(path, { signal: AbortSignal.timeout(5000) })
-    if (!res.ok) { activateMock(); return MOCK[mockKey]?.() }
+    const data = await apiGet(path)
     deactivateMock()
-    return res.json()
-  } catch {
+    return data
+  } catch (err) {
+    if (err instanceof ApiKeyError) {
+      // Key is wrong — don't activate mock, surface the error to the UI
+      throw err
+    }
+    // Bridge offline or any other network error → activate mock
     activateMock()
     return MOCK[mockKey]?.()
   }
