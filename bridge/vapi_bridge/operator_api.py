@@ -6508,6 +6508,29 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                 status_code=422,
             )
 
+        # Phase 228: VHP gate for invariant_change category (fail-open when chain unreachable)
+        _vhp228_token = str(_body224.get("vhp_token_id", ""))
+        _vhp228_enabled = getattr(cfg, "vhp_gated_invariant_change_enabled", False)
+        if _cat224 == "invariant_change" and _vhp228_enabled:
+            from fastapi.responses import JSONResponse as _JR228
+            if not _vhp228_token:
+                return _JR228(
+                    {"error": "invariant_change requires vhp_token_id when vhp_gated_invariant_change_enabled=True"},
+                    status_code=403,
+                )
+            # Verify VHP is live (fail-open: only hard-block on confirmed invalid)
+            _vhp228_valid = None
+            try:
+                import asyncio as _aio228
+                _vhp228_valid = await chain.is_vhp_valid(int(_vhp228_token))
+            except Exception:
+                pass  # fail-open — chain may be unreachable; allow governance event
+            if _vhp228_valid is False:
+                return _JR228(
+                    {"error": "VHP token expired or invalid — invariant_change blocked"},
+                    status_code=403,
+                )
+
         _row_id224 = store.insert_invariant_gate_log(
             gate_pass=True,
             total_checked=0,
@@ -6517,6 +6540,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             new_allowlist_hash=_new224,
             reason_category=_cat224,
             reason_text=_text224,
+            vhp_token_id=_vhp228_token,
         )
 
         # Phase 225: store provenance chain entry if hashes provided.
@@ -6556,6 +6580,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "accepted": True,
             "category": _cat224,
             "governance_provenance_hash": _prov_hash225 or None,
+            "vhp_token_id": _vhp228_token or None,
         }
 
     # Phase 225 — GET /agent/allowlist-governance-history

@@ -44,7 +44,7 @@ if TYPE_CHECKING:
     from vapi_bridge.config import Config
 
 # ---------------------------------------------------------------------------
-# CONTRADICTION_RULES — 10 rules
+# CONTRADICTION_RULES — 11 rules
 # ---------------------------------------------------------------------------
 
 CONTRADICTION_RULES: dict = {
@@ -357,10 +357,59 @@ CONTRADICTION_RULES: dict = {
             "during anchor write), it will self-resolve on the next anchor cycle."
         ),
     },
+
+    "INVARIANT_CHANGE_WITHOUT_VHP": {
+        # Phase 228: VHP-Gated Invariant Change — 11th CONTRADICTION rule.
+        # Fires when an invariant_gate_log row with reason_category='invariant_change'
+        # has an empty vhp_token_id within the last 24 hours.
+        #
+        # The highest-impact governance category (modifying frozen protocol invariant digests)
+        # requires biometric presence when vhp_gated_invariant_change_enabled=True.
+        # An empty vhp_token_id on an invariant_change row means either: (a) the event
+        # was recorded before Phase 228 deployed (expected pre-228), or (b) the gate was
+        # bypassed — a direct POST to /agent/allowlist-governance-event without vhp_token_id
+        # field when gating was expected to be enforced.
+        #
+        # Severity HIGH (not CRITICAL) because the default is
+        # vhp_gated_invariant_change_enabled=False; absence is expected on new deployments.
+        "query": """
+            SELECT id, reason_category, reason_text, vhp_token_id, created_at
+            FROM invariant_gate_log
+            WHERE reason_category = 'invariant_change'
+              AND (vhp_token_id IS NULL OR vhp_token_id = '')
+              AND (CAST(strftime('%s','now') AS INTEGER)
+                   - CAST(created_at AS INTEGER)) < 86400
+            ORDER BY id DESC
+            LIMIT 1
+        """,
+        "params": lambda cfg: (),
+        "agents_involved": ["VAPIInvariantGate", "BiometricGovernanceAgent"],
+        "severity": "HIGH",
+        "explanation": (
+            "invariant_gate_log has an invariant_change governance event with an empty "
+            "vhp_token_id recorded within the last 24 hours. "
+            "When vhp_gated_invariant_change_enabled=True, every invariant_change event "
+            "must include the operator's live VHP token ID (biometric presence proof). "
+            "An empty vhp_token_id means either the gate is not yet enabled (expected), "
+            "or the event bypassed the gate (investigate immediately). "
+            "The highest-impact governance category (modifying frozen protocol invariant "
+            "digests) currently lacks biometric authentication on this event."
+        ),
+        "resolution": (
+            "If vhp_gated_invariant_change_enabled=False (default): enable the gate by "
+            "setting VHP_GATED_INVARIANT_CHANGE_ENABLED=true in bridge/.env and restarting "
+            "the bridge. Future invariant_change events will require a valid vhp_token_id. "
+            "If vhp_gated_invariant_change_enabled=True: the event bypassed the gate — "
+            "audit POST /agent/allowlist-governance-event access logs for the unauthorized "
+            "request origin. Rotate the operator API key and review the invariant digests "
+            "in .github/INVARIANTS_ALLOWLIST.json for tampering. "
+            "Run: python scripts/vapi_invariant_gate.py (no --generate) to verify current digests."
+        ),
+    },
 }
 
 # ---------------------------------------------------------------------------
-# ORPHAN_RULES — 5 rules
+# ORPHAN_RULES — 7 rules
 # ---------------------------------------------------------------------------
 
 ORPHAN_RULES: dict = {
@@ -536,6 +585,7 @@ ORPHAN_RULES: dict = {
             "Do NOT advance dry_run=False while any pair remains below 1.0."
         ),
     },
+
 }
 
 # ---------------------------------------------------------------------------

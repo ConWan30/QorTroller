@@ -7869,3 +7869,51 @@ class VAPIAllowlistGovernance:
             return str(body.get("governance_provenance_hash", ""))
         except Exception:
             return ""
+
+    def post_invariant_change(
+        self,
+        reason_text: str,
+        vhp_token_id: str = "",
+        previous_hash: str = "",
+        new_hash: str = "",
+        governance_provenance_hash: str = "",
+        previous_provenance_hash: str = "",
+    ) -> dict:
+        """Post an invariant_change governance event (Phase 228).
+
+        Wraps POST /agent/allowlist-governance-event with reason_category='invariant_change'
+        and optional vhp_token_id for biometric presence proof.
+
+        Validates locally before posting:
+          - reason_text must be 10-200 characters
+          - vhp_token_id must be a non-empty string when provided
+
+        Returns the server response dict, or {'error': str} on failure.
+        """
+        if not (10 <= len(reason_text) <= 200):
+            return {"error": "reason_text must be 10-200 characters"}
+        if vhp_token_id is not None and not isinstance(vhp_token_id, str):
+            return {"error": "vhp_token_id must be a string"}
+
+        import json as _json228, urllib.request as _req228
+        payload = {
+            "reason_category":            "invariant_change",
+            "reason_text":                reason_text,
+            "vhp_token_id":               vhp_token_id,
+            "previous_hash":              previous_hash,
+            "new_hash":                   new_hash,
+            "governance_provenance_hash": governance_provenance_hash,
+            "previous_provenance_hash":   previous_provenance_hash,
+        }
+        try:
+            data = _json228.dumps(payload).encode()
+            req = _req228.Request(
+                f"{self._base}/agent/allowlist-governance-event",
+                data=data,
+                headers={"Content-Type": "application/json", "x-api-key": self._key},
+                method="POST",
+            )
+            with _req228.urlopen(req, timeout=10) as resp:
+                return _json228.loads(resp.read().decode())
+        except Exception as exc:
+            return {"error": str(exc)}

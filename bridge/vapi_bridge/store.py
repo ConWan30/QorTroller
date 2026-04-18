@@ -3125,6 +3125,15 @@ class Store:
                 (225, "governance_provenance_chain", time.time()),
             )
 
+            # Phase 228: vhp_token_id on invariant_gate_log (idempotent)
+            try:
+                conn.execute(
+                    "ALTER TABLE invariant_gate_log "
+                    "ADD COLUMN vhp_token_id TEXT NOT NULL DEFAULT ''"
+                )
+            except Exception:
+                pass  # idempotent
+
     # --- Device operations ---
 
     def upsert_device(self, device_id: str, pubkey_hex: str):
@@ -9616,8 +9625,9 @@ class Store:
         new_allowlist_hash: str = "",
         reason_category: str = "",
         reason_text: str = "",
+        vhp_token_id: str = "",
     ) -> int:
-        """Record a PV-CI invariant gate run result (Phase 223/224).
+        """Record a PV-CI invariant gate run result (Phase 223/224/228).
 
         Args:
             gate_pass:               True if all invariants passed.
@@ -9628,6 +9638,7 @@ class Store:
             new_allowlist_hash:      SHA-256 of allowlist after --generate (Phase 224).
             reason_category:         Governance category (refactor/bugfix/...) (Phase 224).
             reason_text:             Human-readable governance rationale (Phase 224).
+            vhp_token_id:            VHP token ID supplied for invariant_change events (Phase 228).
         Returns:
             row id of the inserted record.
         """
@@ -9636,8 +9647,9 @@ class Store:
             cur = conn.execute(
                 "INSERT INTO invariant_gate_log "
                 "(gate_pass, total_checked, failures_json, run_source, created_at, "
-                "previous_allowlist_hash, new_allowlist_hash, reason_category, reason_text) "
-                "VALUES (?,?,?,?,?,?,?,?,?)",
+                "previous_allowlist_hash, new_allowlist_hash, reason_category, reason_text, "
+                "vhp_token_id) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
                 (
                     int(bool(gate_pass)),
                     int(total_checked),
@@ -9648,6 +9660,7 @@ class Store:
                     str(new_allowlist_hash),
                     str(reason_category),
                     str(reason_text),
+                    str(vhp_token_id),
                 ),
             )
             return int(cur.lastrowid)
