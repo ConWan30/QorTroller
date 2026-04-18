@@ -48,7 +48,7 @@
     "description": "MINT_QUORUM=0.80 in ioswarm VHP mint"
   },
   "INV-013": {
-    "digest": "598f46dbf5636c67b6bf3488c54b4fdaa202f6e394d2cc474d6133093fc1dee9",
+    "digest": "3b0c931ca269ad4c5172220fa97039abefc00ac1e64fc8d83e120f3106b60878",
     "description": "PoAC record total 228 bytes in chain.py"
   },
   "INV-014": {
