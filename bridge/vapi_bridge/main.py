@@ -988,6 +988,58 @@ class Bridge:
                 "Phase 193: FleetSignalCoherenceAgent unavailable: %s", _fsca193_exc
             )
 
+        # Phase 222: BiometricGovernanceAgent (agent #38) — BBG VHP-gated governance.
+        # Validates governance proposals against the proposer's live VHP.
+        # bbg_enabled=False default — requires BBG_CONTRACT_ADDRESS to activate.
+        if getattr(self.cfg, "bbg_enabled", False):
+            try:
+                from .biometric_governance_agent import BiometricGovernanceAgent
+                _bga222 = BiometricGovernanceAgent(
+                    self.store, self.cfg,
+                    chain=self.chain if getattr(self.cfg, "bbg_contract_address", "") else None,
+                    logger=log,
+                )
+                _bga222_task = asyncio.ensure_future(_bga222.run_poll_loop())
+                _bga222_task.set_name("BiometricGovernanceAgent")
+                self._tasks.append(_bga222_task)
+                log.info(
+                    "Phase 222: BiometricGovernanceAgent started (agent #38; "
+                    "bbg_max_age_sec=%d)",
+                    getattr(self.cfg, "bbg_max_age_seconds", 3600),
+                )
+            except Exception as _bga222_exc:
+                log.warning(
+                    "Phase 222: BiometricGovernanceAgent unavailable: %s", _bga222_exc
+                )
+        else:
+            log.info("Phase 222: BiometricGovernanceAgent skipped (BBG_ENABLED=false)")
+
+        # Phase 221: ProtocolCoherenceAgent (agent #37) — PoPC Merkle root anchor.
+        # Computes Merkle root over 36 agent fleet observations; anchors on-chain when
+        # protocol_coherence_registry_address is set.  protocol_coherence_enabled=False default.
+        if getattr(self.cfg, "protocol_coherence_enabled", False):
+            try:
+                from .protocol_coherence_agent import ProtocolCoherenceAgent
+                _pca221 = ProtocolCoherenceAgent(
+                    self.store, self.cfg,
+                    chain=self.chain if getattr(self.cfg, "protocol_coherence_registry_address", "") else None,
+                    logger=log,
+                )
+                _pca221_task = asyncio.ensure_future(_pca221.run_poll_loop())
+                _pca221_task.set_name("ProtocolCoherenceAgent")
+                self._tasks.append(_pca221_task)
+                log.info(
+                    "Phase 221: ProtocolCoherenceAgent started (agent #37; "
+                    "poll=%ss)",
+                    getattr(self.cfg, "protocol_coherence_anchor_interval_s", 3600),
+                )
+            except Exception as _pca221_exc:
+                log.warning(
+                    "Phase 221: ProtocolCoherenceAgent unavailable: %s", _pca221_exc
+                )
+        else:
+            log.info("Phase 221: ProtocolCoherenceAgent skipped (PROTOCOL_COHERENCE_ENABLED=false)")
+
         # Phase 203: AgentContextRegistry — commit SHA-256 of each LLM agent system
         # prompt to agent_context_log at startup. Enables CONTEXT_HASH_MISMATCH INVERSION
         # rule in FleetSignalCoherenceAgent to detect unregistered or drifted prompts.

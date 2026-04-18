@@ -1329,6 +1329,55 @@ class Config:
     GET /agent/per-pair-gap-projection returns estimated days until each blocker
     pair reaches distance=1.0, plus a projected TGE date.  Default True."""
 
+    # --- Phase 221: ProtocolCoherence (PoPC) ---
+    protocol_coherence_enabled: bool = field(
+        default_factory=lambda: _env("PROTOCOL_COHERENCE_ENABLED", "false").lower() == "true"
+    )
+    """Phase 221 — Enable ProtocolCoherenceAgent (agent #37).  When True, the agent
+    periodically computes a Merkle root over all 36 VAPI agent fleet observations and
+    anchors it on-chain via ProtocolCoherenceRegistry.anchorCoherence().
+    Default False (on-chain anchor requires PROTOCOL_COHERENCE_REGISTRY_ADDRESS)."""
+
+    protocol_coherence_anchor_interval_s: int = field(
+        default_factory=lambda: int(_env("PROTOCOL_COHERENCE_ANCHOR_INTERVAL_S", "3600"))
+    )
+    """Phase 221 — Interval in seconds between PoPC Merkle root anchor cycles.
+    Default 3600 (1 hour).  Lower values increase on-chain gas cost."""
+
+    protocol_coherence_registry_address: str = field(
+        default_factory=lambda: _env("PROTOCOL_COHERENCE_REGISTRY_ADDRESS", "")
+    )
+    """Phase 221 — Deployed ProtocolCoherenceRegistry address on IoTeX testnet.
+    Empty string = on-chain anchoring disabled; local protocol_coherence_log only."""
+
+    # --- Phase 222: BiometricBoundGovernance (BBG) ---
+    bbg_enabled: bool = field(
+        default_factory=lambda: _env("BBG_ENABLED", "false").lower() == "true"
+    )
+    """Phase 222 — Enable BiometricGovernanceAgent (agent #38).  When True, the agent
+    validates governance proposals against the proposer's live VHP before accepting.
+    Default False (requires BBG_CONTRACT_ADDRESS on IoTeX testnet)."""
+
+    bbg_max_age_seconds: int = field(
+        default_factory=lambda: int(_env("BBG_MAX_AGE_SECONDS", "3600"))
+    )
+    """Phase 222 — Minimum VHP freshness required for a governance proposal to be accepted.
+    VHP must not expire within bbg_max_age_seconds from proposal time.  Default 3600 (1 hour)."""
+
+    bbg_contract_address: str = field(
+        default_factory=lambda: _env("BBG_CONTRACT_ADDRESS", "")
+    )
+    """Phase 222 — Deployed VAPIBiometricGovernance contract address on IoTeX testnet.
+    Empty string = on-chain BBG proposal submission disabled."""
+
+    # --- Phase 223: PV-CI Invariant Gate ---
+    pv_ci_enabled: bool = field(
+        default_factory=lambda: _env("PV_CI_ENABLED", "true").lower() == "true"
+    )
+    """Phase 223 — Enable Protocol Verification CI invariant gate.  When True,
+    GET /agent/invariant-gate-status reports 15 frozen protocol invariant checks.
+    POST /agent/run-invariant-gate triggers a manual gate run.  Default True."""
+
     # --- Phase 154: Capture Stagnation Monitor ---
     capture_stagnation_threshold: float = field(
         default_factory=lambda: float(_env("CAPTURE_STAGNATION_THRESHOLD", "0.5"))

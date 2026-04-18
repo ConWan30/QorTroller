@@ -2896,3 +2896,178 @@ class ChainClient:
         if receipt["status"] != 1:
             raise RuntimeError(f"renew_vhp: tx reverted token_id={token_id}")
         return tx_hash.hex()
+
+    async def anchor_coherence(
+        self,
+        merkle_root_hex: str,
+        agent_count: int,
+        ts_ns: int,
+    ) -> str:
+        """Call ProtocolCoherenceRegistry.anchorCoherence(merkleRoot, agentCount, tsNs) (Phase 221).
+
+        merkle_root_hex: 64-char hex string (no 0x prefix) of the Merkle root.
+        agent_count:     Number of agents included in the Merkle tree.
+        ts_ns:           Off-chain observation timestamp in nanoseconds.
+
+        ~100k gas. Raises RuntimeError on missing address or tx revert.
+        """
+        _ABI = [
+            {
+                "inputs": [
+                    {"internalType": "bytes32", "name": "merkleRoot",  "type": "bytes32"},
+                    {"internalType": "uint256", "name": "agentCount",  "type": "uint256"},
+                    {"internalType": "uint256", "name": "tsNs",        "type": "uint256"},
+                ],
+                "name": "anchorCoherence",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function",
+            }
+        ]
+        _addr = getattr(self._cfg, "protocol_coherence_registry_address", "")
+        if not _addr:
+            raise RuntimeError(
+                "anchor_coherence: protocol_coherence_registry_address not configured"
+            )
+        _root_bytes = bytes.fromhex(merkle_root_hex.lstrip("0x"))[:32]
+        # Pad to 32 bytes if needed
+        _root_bytes = _root_bytes.ljust(32, b'\x00')
+        contract = self._w3.eth.contract(
+            address=self._w3.to_checksum_address(_addr),
+            abi=_ABI,
+        )
+        acct = self._w3.eth.account.from_key(self._private_key)
+        nonce = await self._w3.eth.get_transaction_count(acct.address)
+        gas_price = await self._w3.eth.gas_price
+        tx = contract.functions.anchorCoherence(
+            _root_bytes, int(agent_count), int(ts_ns)
+        ).build_transaction({
+            "from":     acct.address,
+            "nonce":    nonce,
+            "gas":      100_000,
+            "gasPrice": gas_price,
+        })
+        signed = acct.sign_transaction(tx)
+        tx_hash = await self._w3.eth.send_raw_transaction(signed.raw_transaction)
+        receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+        if receipt["status"] != 1:
+            raise RuntimeError(
+                f"anchor_coherence: tx reverted root={merkle_root_hex[:16]}…"
+            )
+        return tx_hash.hex()
+
+    async def get_latest_coherence(self) -> dict:
+        """Call ProtocolCoherenceRegistry.getLatestCoherence() view (Phase 221).
+
+        Returns dict with keys: root (hex str), ts (int), count (int).
+        Raises RuntimeError when registry address is not configured.
+        """
+        _ABI = [
+            {
+                "inputs": [],
+                "name": "getLatestCoherence",
+                "outputs": [
+                    {"internalType": "bytes32", "name": "root",  "type": "bytes32"},
+                    {"internalType": "uint256", "name": "ts",    "type": "uint256"},
+                    {"internalType": "uint256", "name": "count", "type": "uint256"},
+                ],
+                "stateMutability": "view",
+                "type": "function",
+            }
+        ]
+        _addr = getattr(self._cfg, "protocol_coherence_registry_address", "")
+        if not _addr:
+            raise RuntimeError(
+                "get_latest_coherence: protocol_coherence_registry_address not configured"
+            )
+        contract = self._w3.eth.contract(
+            address=self._w3.to_checksum_address(_addr),
+            abi=_ABI,
+        )
+        root_bytes, ts_val, count_val = await contract.functions.getLatestCoherence().call()
+        return {
+            "root":  root_bytes.hex(),
+            "ts":    int(ts_val),
+            "count": int(count_val),
+        }
+
+    async def bbg_propose(
+        self,
+        proposal_hash_hex: str,
+        vhp_token_id: int,
+    ) -> str:
+        """Call VAPIBiometricGovernance.proposeWithVHP(proposalHash, vhpTokenId) (Phase 222).
+
+        proposal_hash_hex: 64-char hex string (no 0x prefix) of the proposal SHA-256 hash.
+        vhp_token_id:      Soulbound VHP token ID held by the deployer wallet.
+
+        ~120k gas. Raises RuntimeError on missing address or tx revert.
+        """
+        _ABI = [
+            {
+                "inputs": [
+                    {"internalType": "bytes32", "name": "proposalHash", "type": "bytes32"},
+                    {"internalType": "uint256", "name": "vhpTokenId",   "type": "uint256"},
+                ],
+                "name": "proposeWithVHP",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function",
+            }
+        ]
+        _addr = getattr(self._cfg, "bbg_contract_address", "")
+        if not _addr:
+            raise RuntimeError("bbg_propose: bbg_contract_address not configured")
+        _hash_bytes = bytes.fromhex(proposal_hash_hex.lstrip("0x"))[:32]
+        _hash_bytes = _hash_bytes.ljust(32, b'\x00')
+        contract = self._w3.eth.contract(
+            address=self._w3.to_checksum_address(_addr),
+            abi=_ABI,
+        )
+        acct = self._w3.eth.account.from_key(self._private_key)
+        nonce = await self._w3.eth.get_transaction_count(acct.address)
+        gas_price = await self._w3.eth.gas_price
+        tx = contract.functions.proposeWithVHP(
+            _hash_bytes, int(vhp_token_id)
+        ).build_transaction({
+            "from":     acct.address,
+            "nonce":    nonce,
+            "gas":      120_000,
+            "gasPrice": gas_price,
+        })
+        signed = acct.sign_transaction(tx)
+        tx_hash = await self._w3.eth.send_raw_transaction(signed.raw_transaction)
+        receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+        if receipt["status"] != 1:
+            raise RuntimeError(
+                f"bbg_propose: tx reverted proposal_hash={proposal_hash_hex[:16]}…"
+            )
+        return tx_hash.hex()
+
+    async def bbg_check_proposal(self, proposal_hash_hex: str) -> bool:
+        """Call VAPIBiometricGovernance.isProposed(proposalHash) view (Phase 222).
+
+        Returns True if the proposal has already been submitted on-chain.
+        Raises RuntimeError when bbg_contract_address is not configured.
+        """
+        _ABI = [
+            {
+                "inputs": [
+                    {"internalType": "bytes32", "name": "proposalHash", "type": "bytes32"},
+                ],
+                "name": "isProposed",
+                "outputs": [{"internalType": "bool", "name": "", "type": "bool"}],
+                "stateMutability": "view",
+                "type": "function",
+            }
+        ]
+        _addr = getattr(self._cfg, "bbg_contract_address", "")
+        if not _addr:
+            raise RuntimeError("bbg_check_proposal: bbg_contract_address not configured")
+        _hash_bytes = bytes.fromhex(proposal_hash_hex.lstrip("0x"))[:32]
+        _hash_bytes = _hash_bytes.ljust(32, b'\x00')
+        contract = self._w3.eth.contract(
+            address=self._w3.to_checksum_address(_addr),
+            abi=_ABI,
+        )
+        return bool(await contract.functions.isProposed(_hash_bytes).call())

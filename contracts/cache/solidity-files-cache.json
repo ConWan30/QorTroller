@@ -2475,8 +2475,8 @@
       ]
     },
     "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\AdjudicationRegistry.sol": {
-      "lastModificationDate": 1774488136147,
-      "contentHash": "9c581fb9ad00ead4471e6624b4ee8828",
+      "lastModificationDate": 1776033751589,
+      "contentHash": "67318f63dde8afdc9173a47d16aa351c",
       "sourceName": "contracts/AdjudicationRegistry.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -2628,8 +2628,8 @@
       ]
     },
     "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\SeparationRatioRegistry.sol": {
-      "lastModificationDate": 1775732108933,
-      "contentHash": "827ba1153d78ce4912e3088fac885bad",
+      "lastModificationDate": 1775912681519,
+      "contentHash": "4f2791b3fd800e5db73e936bd687d4fb",
       "sourceName": "contracts/SeparationRatioRegistry.sol",
       "solcConfig": {
         "version": "0.8.20",
@@ -2704,6 +2704,164 @@
       ],
       "artifacts": [
         "CeremonyAuditRegistry"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\VHPReenrollmentBadge.sol": {
+      "lastModificationDate": 1775817630447,
+      "contentHash": "93050e7398dbe56690e226e9503d56fd",
+      "sourceName": "contracts/VHPReenrollmentBadge.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts/access/Ownable.sol",
+        "@openzeppelin/contracts/utils/ReentrancyGuard.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "VHPReenrollmentBadge"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\ProtocolCoherenceRegistry.sol": {
+      "lastModificationDate": 1776462676362,
+      "contentHash": "da17e7d5d317ab1985baa10f42fd9a23",
+      "sourceName": "contracts/ProtocolCoherenceRegistry.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts/access/Ownable.sol",
+        "@openzeppelin/contracts/utils/ReentrancyGuard.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "ProtocolCoherenceRegistry"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\VAPIBiometricGovernance.sol": {
+      "lastModificationDate": 1776464304410,
+      "contentHash": "7215c5a645fc6c7ac76c23fa42a5fdfd",
+      "sourceName": "contracts/VAPIBiometricGovernance.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts/access/Ownable.sol",
+        "@openzeppelin/contracts/utils/ReentrancyGuard.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "IVHP222",
+        "VAPIBiometricGovernance"
+      ]
+    },
+    "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\MockVHP222.sol": {
+      "lastModificationDate": 1776464283808,
+      "contentHash": "5731539dd05c68e79d6e3ed0a7b52840",
+      "sourceName": "contracts/MockVHP222.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "viaIR": true,
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "MockVHP222"
       ]
     }
   }

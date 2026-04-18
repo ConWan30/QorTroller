@@ -80,5 +80,11 @@
   "_phase112_status": "CODE COMPLETE (POAD_ON_CHAIN_ENABLED=true + real AdjudicationRegistry address required to activate)",
   "VAPIDualPrimitiveGate": "0xd7b1465Aad8F815C67b24681c9c022CED24FB876",
   "_phase113_note": "Phase 113: VAPIDualPrimitiveGate — dual-primitive composability gate (PoAC + PoAd)",
-  "_phase113_status": "LIVE (testnet)"
+  "_phase113_status": "LIVE (testnet)",
+  "ProtocolCoherenceRegistry": "0xfAfe4E8BEE45be22836b90D542045510dDd927Dd",
+  "_phase221_status": "deployed",
+  "_phase221_note": "Phase 221: PoPC — Merkle root anchor over 36-agent fleet; isCoherent(maxAgeSec) wired into VAPIProtocolLens",
+  "VAPIBiometricGovernance": "0x06782293F1CFC1AA30C0Baee0437c2B336796A00",
+  "_phase222_status": "deployed",
+  "_phase222_note": "Phase 222: BBG — governance proposals gated on live VHP; blocks STOLEN_KEY+VHP_EXPIRY+FLASH_LOAN attacks"
 }

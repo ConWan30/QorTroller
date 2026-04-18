@@ -1,0 +1,66 @@
+{
+  "INV-001": {
+    "digest": "42be55d9fc9c072835c939b55fab3afde51b8ab9c9de3a1953c952f13bd4a172",
+    "description": "PoAC body = 164 bytes (wire format frozen)"
+  },
+  "INV-002": {
+    "digest": "d8c945b68cb94aefd9f4d3b8c8eafc5f19ba1f616865e0b49e8487d64d11f994",
+    "description": "Chain link hash = SHA-256(raw[:164])"
+  },
+  "INV-003": {
+    "digest": "730ca335ea72c95ad604bc138516415915a01a2dd5d39c57f5ccdf1b2005ae29",
+    "description": "L4 anomaly threshold literal 7.009"
+  },
+  "INV-004": {
+    "digest": "0712952736fd36b68a9caabd3caca50b4e592a5be1a10c2044e8dd159c747dff",
+    "description": "L4 continuity threshold literal 5.367"
+  },
+  "INV-005": {
+    "digest": "ac3ddda3e6da847a30c2162e9de9d2fcdbe1a08f6f29b98159efda2753b0cd10",
+    "description": "Phase 62 ZK: Poseidon(8) / nPublic=5"
+  },
+  "INV-006": {
+    "digest": "d5d8f84cd56350f2d565733264373e1ed0ff66aba393880bb8608c59cc8252a9",
+    "description": "Hard cheat codes 0x28/0x29/0x2A in dualshock"
+  },
+  "INV-007": {
+    "digest": "89053bad74171bdb79a0073b5696bda81afbe6f002a75fdef021f661c202e101",
+    "description": "Stable EMA updates NOMINAL sessions only"
+  },
+  "INV-008": {
+    "digest": "cd9d8de14810294c9fb426c97abe1b1f291bd813a4c3e4f6af5aac284d1598dc",
+    "description": "L6_CHALLENGES_ENABLED default=False"
+  },
+  "INV-009": {
+    "digest": "d028f18f610b0135a115d8d16fd08c67668ca2264a30183d158b2366a1829621",
+    "description": "GSR_ENABLED default=False"
+  },
+  "INV-010": {
+    "digest": "5b457c556c50999eefc71b41fd4fe4f18253d4a2187c096e09bbdc5dc53b9d6c",
+    "description": "L6B_ENABLED default=False"
+  },
+  "INV-011": {
+    "digest": "ca67ccad5724060d25786d260286b4937f09b115b8ab6eebbbcf92ae97539cae",
+    "description": "BLOCK_QUORUM=0.67 in ioswarm modules"
+  },
+  "INV-012": {
+    "digest": "d20c7c4bf45f9f4c04fc144512dd6c94d1dc5efbf984d802c2cac103117d4302",
+    "description": "MINT_QUORUM=0.80 in ioswarm VHP mint"
+  },
+  "INV-013": {
+    "digest": "598f46dbf5636c67b6bf3488c54b4fdaa202f6e394d2cc474d6133093fc1dee9",
+    "description": "PoAC record total 228 bytes in chain.py"
+  },
+  "INV-014": {
+    "digest": "89b4fc1de2ee0e5e3f383007cba153e9a773f5687ac7449a2c778f54d98cbdc5",
+    "description": "Phase 66 commitment hash formula (verdict+evidence+attestation)"
+  },
+  "INV-015": {
+    "digest": "1dc3ac634b8fc3619ecb65e6dd42fcc5feda0328ae1f870436c3a189e64e89b7",
+    "description": "Phase 67 circuitId = sha3_256(circuitName.encode())"
+  },
+  "INV-016": {
+    "digest": "1a0e162b220bb71a752abc9081e4014752039dcb521723567c71a5ede34843ad",
+    "description": "Allowlist hash included as virtual leaf in ProtocolCoherenceAgent Merkle root"
+  }
+}

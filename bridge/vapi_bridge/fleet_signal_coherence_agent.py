@@ -273,6 +273,40 @@ CONTRADICTION_RULES: dict = {
             "ioswarm_enabled=True active."
         ),
     },
+
+    "ALLOWLIST_CHANGE_WITHOUT_GOVERNANCE": {
+        # Phase 224: WIF — invariant drift attack surface closure.
+        # Fires when allowlist_change_log contains an entry with reason_from_gate_log IS NULL.
+        # This means INVARIANTS_ALLOWLIST.json was modified without a matching governance event
+        # in invariant_gate_log within 60 seconds — indicating a direct file edit, git merge,
+        # or unlogged --generate bypassing the mandatory --reason flag.
+        #
+        # Silent allowlist changes are a class of invariant drift attack: a subtle semantic
+        # change that passes CI can be introduced without any operator audit trail.
+        "query": """
+            SELECT id, previous_hash, new_hash, detected_at, reason_from_gate_log
+            FROM allowlist_change_log
+            WHERE reason_from_gate_log IS NULL
+            ORDER BY id DESC LIMIT 1
+        """,
+        "params": lambda cfg: (),
+        "agents_involved": ["ProtocolCoherenceAgent", "VAPIInvariantGate"],
+        "severity": "CRITICAL",
+        "explanation": (
+            "INVARIANTS_ALLOWLIST.json was modified without a matching governance event "
+            "in invariant_gate_log within 60 seconds. This means the allowlist was changed "
+            "by direct file edit, git merge, or an unlogged --generate. Every allowlist "
+            "change must be logged with --reason. Silent allowlist changes are a class of "
+            "invariant drift attack: a subtle semantic change that passes CI can be "
+            "introduced without any operator audit trail."
+        ),
+        "resolution": (
+            "Investigate git log for allowlist changes without accompanying governance events. "
+            "If the change is legitimate, re-run: "
+            "python scripts/vapi_invariant_gate.py --generate "
+            "--reason '<category>: <description>'"
+        ),
+    },
 }
 
 # ---------------------------------------------------------------------------

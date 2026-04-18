@@ -2999,6 +2999,97 @@ class Store:
                 (220, "per_pair_gap_projection", time.time()),
             )
 
+            # Phase 221: protocol_coherence_log — PoPC Merkle root anchors.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS protocol_coherence_log (
+                    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+                    merkle_root        TEXT    NOT NULL DEFAULT '',
+                    agent_count        INTEGER NOT NULL DEFAULT 0,
+                    anchor_hash        TEXT    NOT NULL DEFAULT '',
+                    on_chain_confirmed INTEGER NOT NULL DEFAULT 0,
+                    created_at         REAL    NOT NULL DEFAULT (unixepoch('now'))
+                )
+            """)
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                " VALUES (?, ?, ?)",
+                (221, "protocol_coherence", time.time()),
+            )
+
+            # Phase 222: bbg_proposal_log — BiometricBoundGovernance proposal records.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS bbg_proposal_log (
+                    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+                    proposal_hash      TEXT    NOT NULL DEFAULT '',
+                    proposer_address   TEXT    NOT NULL DEFAULT '',
+                    vhp_token_id       INTEGER NOT NULL DEFAULT 0,
+                    vhp_expires_at     REAL    NOT NULL DEFAULT 0.0,
+                    on_chain_confirmed INTEGER NOT NULL DEFAULT 0,
+                    tx_hash            TEXT    NOT NULL DEFAULT '',
+                    created_at         REAL    NOT NULL DEFAULT (unixepoch('now'))
+                )
+            """)
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                " VALUES (?, ?, ?)",
+                (222, "bbg_proposal", time.time()),
+            )
+
+            # Phase 223: invariant_gate_log — PV-CI protocol invariant gate results.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS invariant_gate_log (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    gate_pass       INTEGER NOT NULL DEFAULT 0,
+                    total_checked   INTEGER NOT NULL DEFAULT 0,
+                    failures_json   TEXT    NOT NULL DEFAULT '[]',
+                    run_source      TEXT    NOT NULL DEFAULT 'manual',
+                    created_at      REAL    NOT NULL DEFAULT (unixepoch('now'))
+                )
+            """)
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                " VALUES (?, ?, ?)",
+                (223, "invariant_gate", time.time()),
+            )
+
+            # Phase 224: allowlist governance columns + allowlist_change_log.
+            for _col224, _def224 in [
+                ("previous_allowlist_hash", "TEXT NOT NULL DEFAULT ''"),
+                ("new_allowlist_hash",      "TEXT NOT NULL DEFAULT ''"),
+                ("reason_category",         "TEXT NOT NULL DEFAULT ''"),
+                ("reason_text",             "TEXT NOT NULL DEFAULT ''"),
+            ]:
+                try:
+                    conn.execute(
+                        f"ALTER TABLE invariant_gate_log ADD COLUMN {_col224} {_def224}"
+                    )
+                except Exception:
+                    pass  # column already exists — idempotent
+
+            try:
+                conn.execute(
+                    "ALTER TABLE protocol_coherence_log "
+                    "ADD COLUMN allowlist_hash TEXT NOT NULL DEFAULT ''"
+                )
+            except Exception:
+                pass  # idempotent
+
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS allowlist_change_log (
+                    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+                    previous_hash         TEXT NOT NULL DEFAULT '',
+                    new_hash              TEXT NOT NULL DEFAULT '',
+                    merkle_root_at_change TEXT NOT NULL DEFAULT '',
+                    detected_at           TEXT NOT NULL DEFAULT '',
+                    reason_from_gate_log  TEXT
+                )
+            """)
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                " VALUES (?, ?, ?)",
+                (224, "allowlist_governance", time.time()),
+            )
+
     # --- Device operations ---
 
     def upsert_device(self, device_id: str, pubkey_hex: str):
@@ -9278,6 +9369,371 @@ class Store:
             "projected_tge_date": tge_date,
             "session_type":      session_type,
             "timestamp":         _t220.time(),
+        }
+
+    # --- Phase 221: ProtocolCoherence (PoPC) ---
+
+    def insert_protocol_coherence_log(
+        self,
+        merkle_root: str,
+        agent_count: int,
+        anchor_hash: str = "",
+        on_chain_confirmed: bool = False,
+        allowlist_hash: str = "",
+    ) -> int:
+        """Insert a PoPC Merkle root anchor record (Phase 221/224).
+
+        Args:
+            merkle_root:        Hex string of the Merkle root (64 chars).
+            agent_count:        Number of agents included in the Merkle tree.
+            anchor_hash:        On-chain tx hash if anchored; empty if local only.
+            on_chain_confirmed: True when the tx was confirmed on IoTeX testnet.
+            allowlist_hash:     SHA-256 of INVARIANTS_ALLOWLIST.json at anchor time (Phase 224).
+
+        Returns:
+            Row id of the inserted record.
+        """
+        now = time.time()
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO protocol_coherence_log "
+                "(merkle_root, agent_count, anchor_hash, on_chain_confirmed, created_at, allowlist_hash) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    str(merkle_root),
+                    int(agent_count),
+                    str(anchor_hash),
+                    1 if on_chain_confirmed else 0,
+                    now,
+                    str(allowlist_hash),
+                ),
+            )
+            return cur.lastrowid or 0
+
+    def get_protocol_coherence_status(self) -> dict:
+        """Return the most recent PoPC anchor status (Phase 221).
+
+        Returns dict with keys:
+            total_anchors / latest_merkle_root / agent_count /
+            on_chain_confirmed / last_anchor_ts / timestamp
+        """
+        import time as _t221
+        with self._conn() as conn:
+            total = (conn.execute(
+                "SELECT COUNT(*) FROM protocol_coherence_log"
+            ).fetchone() or (0,))[0]
+            row = conn.execute(
+                "SELECT merkle_root, agent_count, on_chain_confirmed, created_at "
+                "FROM protocol_coherence_log ORDER BY created_at DESC LIMIT 1"
+            ).fetchone()
+        if row:
+            return {
+                "total_anchors":      int(total),
+                "latest_merkle_root": str(row[0]),
+                "agent_count":        int(row[1]),
+                "on_chain_confirmed": bool(row[2]),
+                "last_anchor_ts":     float(row[3]),
+                "timestamp":          _t221.time(),
+            }
+        return {
+            "total_anchors":      0,
+            "latest_merkle_root": None,
+            "agent_count":        0,
+            "on_chain_confirmed": False,
+            "last_anchor_ts":     None,
+            "timestamp":          _t221.time(),
+        }
+
+    def get_protocol_coherence_history(self, limit: int = 10) -> list:
+        """Return the most recent PoPC anchor records (Phase 221).
+
+        Returns list of dicts with keys:
+            id / merkle_root / agent_count / on_chain_confirmed / created_at
+        """
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT id, merkle_root, agent_count, on_chain_confirmed, created_at "
+                "FROM protocol_coherence_log ORDER BY created_at DESC LIMIT ?",
+                (int(limit),),
+            ).fetchall()
+        return [
+            {
+                "id":                int(r[0]),
+                "merkle_root":       str(r[1]),
+                "agent_count":       int(r[2]),
+                "on_chain_confirmed": bool(r[3]),
+                "created_at":        float(r[4]),
+            }
+            for r in rows
+        ]
+
+    # --- Phase 222: BiometricBoundGovernance (BBG) ---
+
+    def insert_bbg_proposal_log(
+        self,
+        proposal_hash: str,
+        proposer_address: str = "",
+        vhp_token_id: int = 0,
+        vhp_expires_at: float = 0.0,
+        on_chain_confirmed: bool = False,
+        tx_hash: str = "",
+    ) -> int:
+        """Insert a BBG governance proposal record (Phase 222).
+
+        Returns:
+            Row id of the inserted record.
+        """
+        now = time.time()
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO bbg_proposal_log "
+                "(proposal_hash, proposer_address, vhp_token_id, vhp_expires_at, "
+                "on_chain_confirmed, tx_hash, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    str(proposal_hash),
+                    str(proposer_address),
+                    int(vhp_token_id),
+                    float(vhp_expires_at),
+                    1 if on_chain_confirmed else 0,
+                    str(tx_hash),
+                    now,
+                ),
+            )
+            return cur.lastrowid or 0
+
+    def get_bbg_status(self) -> dict:
+        """Return the BBG proposal status (Phase 222).
+
+        Returns dict with keys:
+            total_proposals / latest_proposal_hash / latest_proposer /
+            on_chain_confirmed / last_proposal_ts / timestamp
+        """
+        import time as _t222
+        with self._conn() as conn:
+            total = (conn.execute(
+                "SELECT COUNT(*) FROM bbg_proposal_log"
+            ).fetchone() or (0,))[0]
+            row = conn.execute(
+                "SELECT proposal_hash, proposer_address, on_chain_confirmed, created_at "
+                "FROM bbg_proposal_log ORDER BY created_at DESC LIMIT 1"
+            ).fetchone()
+        if row:
+            return {
+                "total_proposals":     int(total),
+                "latest_proposal_hash": str(row[0]),
+                "latest_proposer":     str(row[1]),
+                "on_chain_confirmed":  bool(row[2]),
+                "last_proposal_ts":    float(row[3]),
+                "timestamp":           _t222.time(),
+            }
+        return {
+            "total_proposals":     0,
+            "latest_proposal_hash": None,
+            "latest_proposer":     None,
+            "on_chain_confirmed":  False,
+            "last_proposal_ts":    None,
+            "timestamp":           _t222.time(),
+        }
+
+    def get_bbg_proposal_history(self, limit: int = 10) -> list:
+        """Return the most recent BBG proposal records (Phase 222).
+
+        Returns list of dicts with keys:
+            id / proposal_hash / proposer_address / vhp_token_id /
+            on_chain_confirmed / created_at
+        """
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT id, proposal_hash, proposer_address, vhp_token_id, "
+                "on_chain_confirmed, created_at "
+                "FROM bbg_proposal_log ORDER BY created_at DESC LIMIT ?",
+                (int(limit),),
+            ).fetchall()
+        return [
+            {
+                "id":               int(r[0]),
+                "proposal_hash":    str(r[1]),
+                "proposer_address": str(r[2]),
+                "vhp_token_id":     int(r[3]),
+                "on_chain_confirmed": bool(r[4]),
+                "created_at":       float(r[5]),
+            }
+            for r in rows
+        ]
+
+    # --- Phase 223: PV-CI Invariant Gate ---
+
+    def insert_invariant_gate_log(
+        self,
+        gate_pass: bool,
+        total_checked: int,
+        failures_json: str = "[]",
+        run_source: str = "manual",
+        previous_allowlist_hash: str = "",
+        new_allowlist_hash: str = "",
+        reason_category: str = "",
+        reason_text: str = "",
+    ) -> int:
+        """Record a PV-CI invariant gate run result (Phase 223/224).
+
+        Args:
+            gate_pass:               True if all invariants passed.
+            total_checked:           Number of invariants evaluated.
+            failures_json:           JSON-encoded list of failure description strings.
+            run_source:              'manual', 'ci', 'api', or 'governance:<cat>:<text>'.
+            previous_allowlist_hash: SHA-256 of allowlist before --generate (Phase 224).
+            new_allowlist_hash:      SHA-256 of allowlist after --generate (Phase 224).
+            reason_category:         Governance category (refactor/bugfix/...) (Phase 224).
+            reason_text:             Human-readable governance rationale (Phase 224).
+        Returns:
+            row id of the inserted record.
+        """
+        import time as _t223
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO invariant_gate_log "
+                "(gate_pass, total_checked, failures_json, run_source, created_at, "
+                "previous_allowlist_hash, new_allowlist_hash, reason_category, reason_text) "
+                "VALUES (?,?,?,?,?,?,?,?,?)",
+                (
+                    int(bool(gate_pass)),
+                    int(total_checked),
+                    failures_json,
+                    run_source,
+                    _t223.time(),
+                    str(previous_allowlist_hash),
+                    str(new_allowlist_hash),
+                    str(reason_category),
+                    str(reason_text),
+                ),
+            )
+            return int(cur.lastrowid)
+
+    # --- Phase 224: Allowlist Governance ---
+
+    def insert_allowlist_change_log(
+        self,
+        previous_hash: str,
+        new_hash: str,
+        merkle_root_at_change: str = "",
+        reason_from_gate_log: "str | None" = None,
+    ) -> int:
+        """Record a detected allowlist hash change (Phase 224).
+
+        Called by ProtocolCoherenceAgent when allowlist_hash changes between anchor cycles.
+        reason_from_gate_log is fetched from the most recent invariant_gate_log entry
+        within 60 seconds; NULL if no matching governance event was found (suspicious).
+
+        Returns:
+            Row id of the inserted record.
+        """
+        import time as _t224
+        detected_at = str(_t224.time())
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO allowlist_change_log "
+                "(previous_hash, new_hash, merkle_root_at_change, detected_at, reason_from_gate_log) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    str(previous_hash),
+                    str(new_hash),
+                    str(merkle_root_at_change),
+                    detected_at,
+                    reason_from_gate_log,
+                ),
+            )
+            return cur.lastrowid or 0
+
+    def get_allowlist_change_status(self) -> dict:
+        """Return allowlist change log summary (Phase 224).
+
+        Returns dict with keys:
+            total_changes / suspicious_count / latest_previous_hash /
+            latest_new_hash / latest_detected_at / timestamp
+        """
+        import time as _t224
+        with self._conn() as conn:
+            total = (conn.execute(
+                "SELECT COUNT(*) FROM allowlist_change_log"
+            ).fetchone() or (0,))[0]
+            suspicious = (conn.execute(
+                "SELECT COUNT(*) FROM allowlist_change_log WHERE reason_from_gate_log IS NULL"
+            ).fetchone() or (0,))[0]
+            row = conn.execute(
+                "SELECT previous_hash, new_hash, detected_at, reason_from_gate_log "
+                "FROM allowlist_change_log ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+        if row:
+            return {
+                "total_changes":       int(total),
+                "suspicious_count":    int(suspicious),
+                "latest_previous_hash": str(row[0]),
+                "latest_new_hash":     str(row[1]),
+                "latest_detected_at":  str(row[2]),
+                "timestamp":           _t224.time(),
+            }
+        return {
+            "total_changes":       0,
+            "suspicious_count":    0,
+            "latest_previous_hash": None,
+            "latest_new_hash":     None,
+            "latest_detected_at":  None,
+            "timestamp":           _t224.time(),
+        }
+
+    def get_latest_governance_reason(self, within_seconds: float = 60.0) -> "str | None":
+        """Return reason_text from the most recent governance entry within within_seconds (Phase 224).
+
+        Used by ProtocolCoherenceAgent to correlate allowlist hash changes with governance events.
+        Returns None if no matching entry found (indicates suspicious unlogged change).
+        """
+        import time as _t224
+        cutoff = _t224.time() - within_seconds
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT reason_text FROM invariant_gate_log "
+                "WHERE reason_category != '' AND created_at >= ? "
+                "ORDER BY created_at DESC LIMIT 1",
+                (cutoff,),
+            ).fetchone()
+        return str(row[0]) if row and row[0] else None
+
+    def get_invariant_gate_status(self) -> dict:
+        """Return PV-CI invariant gate summary (Phase 223).
+
+        Returns dict with keys:
+            pv_ci_enabled / gate_pass / total_checked / failure_count /
+            last_failures / last_run_ts / timestamp
+        """
+        import json as _json223
+        import time as _t223
+
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT gate_pass, total_checked, failures_json, created_at "
+                "FROM invariant_gate_log ORDER BY created_at DESC LIMIT 1"
+            ).fetchone()
+
+        if row:
+            failures = _json223.loads(row[1] if False else row["failures_json"])
+            return {
+                "pv_ci_enabled":  True,
+                "gate_pass":      bool(row["gate_pass"]),
+                "total_checked":  int(row["total_checked"]),
+                "failure_count":  len(failures),
+                "last_failures":  failures,
+                "last_run_ts":    float(row["created_at"]),
+                "timestamp":      _t223.time(),
+            }
+        return {
+            "pv_ci_enabled":  True,
+            "gate_pass":      None,
+            "total_checked":  0,
+            "failure_count":  0,
+            "last_failures":  [],
+            "last_run_ts":    None,
+            "timestamp":      _t223.time(),
         }
 
     # Phase 155 — Controller Hardware Profiles

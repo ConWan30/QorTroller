@@ -7550,3 +7550,298 @@ class VAPIPerPairGapProjection:
                 any_feasible                    = False,
                 error                           = str(exc),
             )
+
+
+# ---------------------------------------------------------------------------
+# Phase 221 — ProtocolCoherence (PoPC)
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class ProtocolCoherenceResult:
+    """Result from VAPIProtocolCoherence.get_status() (Phase 221)."""
+    protocol_coherence_enabled: bool           = False
+    total_anchors:              int            = 0
+    latest_merkle_root:         "str | None"   = None
+    agent_count:                int            = 0
+    on_chain_confirmed:         bool           = False
+    last_anchor_ts:             "float | None" = None
+    error:                      "str | None"   = None
+
+
+class VAPIProtocolCoherence:
+    """SDK client for Phase 221 ProtocolCoherence (PoPC) endpoint.
+
+    Reads GET /agent/protocol-coherence-status to return the latest Merkle root
+    anchor over the 36-agent fleet and on-chain confirmation status.
+
+    Example::
+
+        popc = VAPIProtocolCoherence("http://localhost:8080", api_key)
+        result = popc.get_status()
+        print(f"Total PoPC anchors: {result.total_anchors}")
+        print(f"On-chain confirmed: {result.on_chain_confirmed}")
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self) -> ProtocolCoherenceResult:
+        """Return ProtocolCoherenceResult from GET /agent/protocol-coherence-status.
+
+        On error: returns ProtocolCoherenceResult with error set and total_anchors=0.
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/agent/protocol-coherence-status"
+            req = _ur.Request(url, headers={"x-api-key": self._key})
+            with _ur.urlopen(req, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return ProtocolCoherenceResult(
+                protocol_coherence_enabled = bool(body.get("protocol_coherence_enabled", False)),
+                total_anchors              = int(body.get("total_anchors", 0)),
+                latest_merkle_root         = body.get("latest_merkle_root"),
+                agent_count                = int(body.get("agent_count", 0)),
+                on_chain_confirmed         = bool(body.get("on_chain_confirmed", False)),
+                last_anchor_ts             = body.get("last_anchor_ts"),
+            )
+        except Exception as exc:
+            return ProtocolCoherenceResult(
+                protocol_coherence_enabled = False,
+                error                      = str(exc),
+            )
+
+
+# ---------------------------------------------------------------------------
+# Phase 222 — BiometricBoundGovernance (BBG)
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class BBGProposalResult:
+    """Result from VAPIBiometricGovernance.get_status() (Phase 222)."""
+    bbg_enabled:           bool           = False
+    total_proposals:       int            = 0
+    latest_proposal_hash:  "str | None"   = None
+    latest_proposer:       "str | None"   = None
+    on_chain_confirmed:    bool           = False
+    last_proposal_ts:      "float | None" = None
+    error:                 "str | None"   = None
+
+
+class VAPIBiometricGovernance:
+    """SDK client for Phase 222 BiometricBoundGovernance (BBG) endpoint.
+
+    Reads GET /agent/bbg-status to return the latest BBG proposal status.
+    Submits proposals via POST /agent/bbg-propose.
+
+    Example::
+
+        bbg = VAPIBiometricGovernance("http://localhost:8080", api_key)
+        status = bbg.get_status()
+        print(f"BBG enabled: {status.bbg_enabled}")
+        print(f"Total proposals: {status.total_proposals}")
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self) -> BBGProposalResult:
+        """Return BBGProposalResult from GET /agent/bbg-status.
+
+        On error: returns BBGProposalResult with error set and total_proposals=0.
+        """
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/agent/bbg-status"
+            req = _ur.Request(url, headers={"x-api-key": self._key})
+            with _ur.urlopen(req, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return BBGProposalResult(
+                bbg_enabled          = bool(body.get("bbg_enabled", False)),
+                total_proposals      = int(body.get("total_proposals", 0)),
+                latest_proposal_hash = body.get("latest_proposal_hash"),
+                latest_proposer      = body.get("latest_proposer"),
+                on_chain_confirmed   = bool(body.get("on_chain_confirmed", False)),
+                last_proposal_ts     = body.get("last_proposal_ts"),
+            )
+        except Exception as exc:
+            return BBGProposalResult(
+                bbg_enabled = False,
+                error       = str(exc),
+            )
+
+
+# ── Phase 223 — PV-CI Invariant Gate ──────────────────────────────────────────
+
+@dataclass(slots=True)
+class InvariantGateResult:
+    """Result from VAPIInvariantGate.get_status() (Phase 223)."""
+    pv_ci_enabled:  bool        = False
+    gate_pass:      "bool|None" = None
+    total_checked:  int         = 0
+    failure_count:  int         = 0
+    last_failures:  "list"      = field(default_factory=list)
+    last_run_ts:    "float|None"= None
+    error:          "str|None"  = None
+
+
+class VAPIInvariantGate:
+    """Client for the PV-CI invariant gate endpoint (Phase 223).
+
+    Usage::
+        gate = VAPIInvariantGate("http://localhost:8080", api_key)
+        result = gate.get_status()
+        assert result.gate_pass is not False
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(self) -> InvariantGateResult:
+        """Return InvariantGateResult from GET /agent/invariant-gate-status.
+
+        On error: returns InvariantGateResult with error set and gate_pass=None.
+        """
+        try:
+            import urllib.request, json
+            req = urllib.request.Request(
+                f"{self._base}/agent/invariant-gate-status",
+                headers={"x-api-key": self._key} if self._key else {},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                body = json.loads(resp.read().decode())
+            return InvariantGateResult(
+                pv_ci_enabled  = bool(body.get("pv_ci_enabled", False)),
+                gate_pass      = body.get("gate_pass"),
+                total_checked  = int(body.get("total_checked", 0)),
+                failure_count  = int(body.get("failure_count", 0)),
+                last_failures  = list(body.get("last_failures", [])),
+                last_run_ts    = body.get("last_run_ts"),
+            )
+        except Exception as exc:
+            return InvariantGateResult(
+                pv_ci_enabled = False,
+                error         = str(exc),
+            )
+
+
+# ── Phase 224 — Allowlist Governance ──────────────────────────────────────────
+
+@dataclass(slots=True)
+class AllowlistGovernanceResult:
+    """Result from VAPIAllowlistGovernance methods (Phase 224)."""
+    current_hash:          str        = ""
+    last_change_ts:        "str|None" = None
+    last_change_reason:    "str|None" = None
+    last_change_category:  "str|None" = None
+    suspicious_change_count: int      = 0
+    on_chain_anchor_ts:    "float|None" = None
+    error:                 "str|None" = None
+
+
+class VAPIAllowlistGovernance:
+    """Client for allowlist governance state (Phase 224).
+
+    Surfaces the current INVARIANTS_ALLOWLIST.json SHA-256 hash as anchored
+    in ProtocolCoherenceAgent's Merkle tree, and lists all governance events.
+
+    Usage::
+        gov = VAPIAllowlistGovernance("http://localhost:8080", api_key)
+        result = gov.status()
+        print(result.current_hash, result.suspicious_change_count)
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def _get(self, path: str) -> dict:
+        import urllib.request, json
+        req = urllib.request.Request(
+            f"{self._base}{path}",
+            headers={"x-api-key": self._key},
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read().decode())
+
+    def status(self) -> AllowlistGovernanceResult:
+        """Return allowlist governance status from GET /agent/protocol-coherence-status.
+
+        Extracts allowlist_hash (the current virtual leaf value) and change summary.
+        On error: returns AllowlistGovernanceResult with error set.
+        """
+        try:
+            body = self._get("/agent/protocol-coherence-status")
+            change_body = self._get("/agent/allowlist-change-status") if False else {}
+            try:
+                change_body = self._get_allowlist_change_status_raw()
+            except Exception:
+                change_body = {}
+            return AllowlistGovernanceResult(
+                current_hash            = str(body.get("allowlist_hash", "")),
+                last_change_ts          = change_body.get("latest_detected_at"),
+                last_change_reason      = None,
+                last_change_category    = None,
+                suspicious_change_count = int(change_body.get("suspicious_count", 0)),
+                on_chain_anchor_ts      = body.get("last_anchor_ts"),
+            )
+        except Exception as exc:
+            return AllowlistGovernanceResult(error=str(exc))
+
+    def _get_allowlist_change_status_raw(self) -> dict:
+        """Internal: fetch allowlist change log summary."""
+        import urllib.request, json
+        req = urllib.request.Request(
+            f"{self._base}/agent/allowlist-change-status",
+            headers={"x-api-key": self._key},
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read().decode())
+
+    def previous_changes(self, limit: int = 10) -> list:
+        """Return governance entries from invariant_gate_log where run_source starts 'governance:'.
+
+        Fetched via GET /agent/invariant-gate-status (most recent entry).
+        Returns list of dicts with keys: run_source, reason_category, reason_text, created_at.
+        """
+        try:
+            import urllib.request, json
+            req = urllib.request.Request(
+                f"{self._base}/agent/invariant-gate-status",
+                headers={"x-api-key": self._key},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                body = json.loads(resp.read().decode())
+            run_source = str(body.get("run_source", ""))
+            if run_source.startswith("governance:"):
+                parts = run_source.split(":", 2)
+                return [{
+                    "run_source":      run_source,
+                    "reason_category": parts[1] if len(parts) > 1 else "",
+                    "reason_text":     parts[2] if len(parts) > 2 else "",
+                    "created_at":      body.get("last_run_ts"),
+                }]
+            return []
+        except Exception as exc:
+            return [{"error": str(exc)}]
+
+    def suspicious_changes(self) -> list:
+        """Return allowlist_change_log entries where reason_from_gate_log IS NULL.
+
+        These represent allowlist modifications that bypassed the governance log.
+        Returns list of dicts with keys: previous_hash, new_hash, detected_at.
+        """
+        try:
+            body = self._get_allowlist_change_status_raw()
+            if body.get("suspicious_count", 0) > 0:
+                return [{
+                    "previous_hash": body.get("latest_previous_hash"),
+                    "new_hash":      body.get("latest_new_hash"),
+                    "detected_at":   body.get("latest_detected_at"),
+                    "reason":        None,
+                }]
+            return []
+        except Exception as exc:
+            return [{"error": str(exc)}]
