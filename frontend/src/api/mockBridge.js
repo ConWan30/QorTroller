@@ -134,6 +134,34 @@ export const MOCK = {
     timestamp: now(),
   }),
 
+  // Phase 235-FINAL: grind-critical live indicators
+  captureHealth: () => ({
+    pcc_enabled: true,
+    capture_state: 'NOMINAL',
+    host_state: 'EXCLUSIVE_USB',
+    poll_rate_hz: drift(1002.0, 0.002),
+    sustained_duration_s: drift(180.0, 0.01),
+    grind_mode: true,
+    grind_ready: true,
+    grind_target: 100,
+    consecutive_clean_toward_target: Math.floor(drift(12, 0.1)),
+    session_counting_paused: false,
+    gameplay_context_enabled: true,
+    latest_gameplay_context: 'ACTIVE_GAMEPLAY',
+    timestamp: now(),
+  }),
+
+  grindChain: () => ({
+    grind_session_id: 'grind_phase235_v1',
+    chain_length: Math.floor(drift(12, 0.1)),
+    latest_gic_hash: 'a3b2c1d4e5f6' + Math.random().toString(16).slice(2, 54),
+    chain_intact: true,
+    genesis_ts: Date.now() / 1000 - 3600 * 24,
+    latest_ts: Date.now() / 1000 - 120,
+    latest_gameplay_context: 'ACTIVE_GAMEPLAY',
+    timestamp: now(),
+  }),
+
   tournamentPreflight: () => ({
     separation_ok: false,
     l4_ok: true,

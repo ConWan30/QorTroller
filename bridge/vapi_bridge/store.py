@@ -13593,7 +13593,7 @@ class Store:
                 "FROM ruling_validation_log AS rvl "
                 "JOIN agent_rulings AS ar ON ar.id = rvl.ruling_id "
                 "WHERE rvl.grind_chain_hash IS NOT NULL "
-                "ORDER BY rvl.created_at ASC"
+                "ORDER BY rvl.gic_ts_ns ASC"
             ).fetchall()
         return [dict(r) for r in rows]
 
@@ -13627,8 +13627,9 @@ class Store:
             stored_hex = row.get("grind_chain_hash") or ""
 
             if i == 0:
-                # First row stores genesis_gic() output directly
-                expected = genesis_gic(grind_session_id, ts_ns)
+                # Session 1: genesis_gic anchors with same ts_ns; compute_gic folds in session data.
+                genesis = genesis_gic(grind_session_id, ts_ns)
+                expected = compute_gic(genesis, commitment_hex, pcc_host, verdict, ts_ns)
             else:
                 expected = compute_gic(
                     bytes.fromhex(rows[i - 1]["grind_chain_hash"]),

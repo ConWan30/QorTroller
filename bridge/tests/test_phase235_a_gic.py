@@ -197,7 +197,8 @@ def test_t235a_7_non_clean_session_skips_chain(tmp_path):
     ts_ns_1 = int(time.time() * 1e9)
     prev = store.get_prev_grind_chain_hash(_GRIND_SID)
     assert prev is None  # No prior hash yet
-    gic_1 = genesis_gic(_GRIND_SID, ts_ns_1)
+    _gen_1 = genesis_gic(_GRIND_SID, ts_ns_1)
+    gic_1 = compute_gic(_gen_1, commitment, "EXCLUSIVE_USB", "FLAG", ts_ns_1)
     store.update_grind_chain_hash(_row1_id, gic_1.hex(), ts_ns_1)
 
     # Insert a CONTESTED session (no GIC should be written)
@@ -230,14 +231,15 @@ def test_t235a_8_store_round_trip(tmp_path):
     # Insert directly via store._conn to bypass agent_rulings FK (SQLite has no FK enforcement by default)
     ts_base = int(time.time() * 1e9)
 
-    # Session 1 → genesis
+    # Session 1 → genesis anchors chain; compute_gic folds in session 1 data
     row1_id = store.insert_validation_record(
         ruling_id=100, device_id="dev", llm_verdict="FLAG", fallback_verdict="FLAG",
         llm_confidence=0.5, fallback_confidence=0.05, divergence=0,
         pcc_state="NOMINAL", pcc_host_state="EXCLUSIVE_USB",
     )
     ts1 = ts_base
-    gic_1 = genesis_gic(_GRIND_SID, ts1)
+    _gen_1 = genesis_gic(_GRIND_SID, ts1)
+    gic_1 = compute_gic(_gen_1, commitment, "EXCLUSIVE_USB", "FLAG", ts1)
     store.update_grind_chain_hash(row1_id, gic_1.hex(), ts1)
 
     # Session 2
