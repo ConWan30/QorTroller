@@ -118,6 +118,8 @@ class TestValidationStore(unittest.TestCase):
             llm_confidence=0.05,
             fallback_confidence=0.05,
             divergence=0,
+            pcc_state="NOMINAL",
+            pcc_host_state="EXCLUSIVE_USB",
         )
         self.assertGreater(record_id, 0)
 
@@ -146,6 +148,8 @@ class TestValidationStore(unittest.TestCase):
                 llm_confidence=0.1,
                 fallback_confidence=0.1,
                 divergence=0,
+                pcc_state="NOMINAL",
+                pcc_host_state="EXCLUSIVE_USB",
             )
 
         summary = store.get_validation_summary(gate_n=10)
@@ -175,6 +179,8 @@ class TestValidationStore(unittest.TestCase):
                 llm_confidence=0.9 if div else 0.1,
                 fallback_confidence=0.1,
                 divergence=div,
+                pcc_state="NOMINAL" if not div else None,
+                pcc_host_state="EXCLUSIVE_USB" if not div else None,
             )
 
         summary = store.get_validation_summary(gate_n=20)

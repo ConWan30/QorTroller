@@ -70,11 +70,13 @@ def _insert_clean_validation_records(store: Store, n: int) -> None:
             conn.execute(
                 "INSERT INTO ruling_validation_log "
                 "(ruling_id, device_id, llm_verdict, fallback_verdict, "
-                "llm_confidence, fallback_confidence, divergence, created_at) "
-                "VALUES (?,?,?,?,?,?,?,?)",
+                "llm_confidence, fallback_confidence, divergence, "
+                "pcc_state, pcc_host_state, created_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
                 (
                     i + 1000, f"dev_clean_{i}", "CERTIFY", "CERTIFY",
-                    0.9, 0.9, 0, time.time() - (n - i),
+                    0.9, 0.9, 0, "NOMINAL", "EXCLUSIVE_USB",
+                    time.time() - (n - i),
                 ),
             )
 
