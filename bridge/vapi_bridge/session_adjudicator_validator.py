@@ -236,7 +236,10 @@ class SessionAdjudicatorValidationAgent:
                 if _ts_ns <= _prev_ts:
                     _ts_ns = _prev_ts + 1
                 if _prev is None:
-                    _gic = genesis_gic(_grind_sid, _ts_ns)
+                    # Session 1: genesis anchors the chain; compute_gic incorporates session data.
+                    # Both steps use the same ts_ns so verification can reconstruct the genesis.
+                    _genesis = genesis_gic(_grind_sid, _ts_ns)
+                    _gic = compute_gic(_genesis, _commitment_hash, _pcc_host, fb_verdict, _ts_ns)
                 else:
                     _gic = compute_gic(_prev, _commitment_hash, _pcc_host, fb_verdict, _ts_ns)
                 self._store.update_grind_chain_hash(_val_row_id, _gic.hex(), _ts_ns)

@@ -108,6 +108,7 @@ class CorpusDataCuratorAgent:
             "[CorpusDataCuratorAgent] Agent #35 started — 7-task data coherence "
             f"layer (poll={_POLL_INTERVAL_S}s)"
         )
+        await asyncio.sleep(30)  # allow bridge HTTP server to fully warm before first run
         while True:
             try:
                 await self._run_once()
@@ -128,6 +129,7 @@ class CorpusDataCuratorAgent:
                 self._logger.warning(
                     f"[CorpusDataCuratorAgent] Task {task_name} failed (fail-open): {exc}"
                 )
+            await asyncio.sleep(0)  # yield after each task so HTTP handlers get turns
 
         # Publish unified status to "curator" bus channel after all tasks
         if self._bus is not None:

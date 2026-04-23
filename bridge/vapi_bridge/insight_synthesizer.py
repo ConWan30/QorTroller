@@ -112,7 +112,7 @@ class InsightSynthesizer:
                 log.warning("InsightSynthesizer: cycle error (non-fatal): %s", exc)
 
     async def _synthesis_cycle(self) -> None:
-        """Run all five synthesis modes + housekeeping, each isolated."""
+        """Run all six synthesis modes + housekeeping, each isolated."""
         try:
             await self._synthesize_temporal_windows()
         except Exception as exc:
