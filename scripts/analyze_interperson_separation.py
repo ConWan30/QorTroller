@@ -312,6 +312,350 @@ def _extract_features_inline(snaps: list[_SnapProxy]) -> np.ndarray:
 
 
 # ---------------------------------------------------------------------------
+# Phase 229: AIT (Active Isometric Trigger) 4-feature pipeline
+# ---------------------------------------------------------------------------
+
+AIT_FEATURE_NAMES = ["accel_tremor_peak_hz", "roll_cos", "roll_sin", "pitch_cos"]
+_AIT_NFFT       = 4096
+_AIT_HZ_LOW     = 4.0    # Hz — lower bound for physiological tremor search
+_AIT_HZ_HIGH    = 15.0   # Hz — upper bound
+_AIT_FORCE_MIN  = 90     # L2 analog lower bound for hold-phase filter
+_AIT_FORCE_MAX  = 180    # L2 analog upper bound
+_AIT_MIN_FRAMES = 512    # minimum hold frames to attempt FFT
+
+
+def _extract_ait_features_from_file(fpath: "Path | str") -> "dict | None":
+    """Extract 4-feature AIT vector from a capture_session.py output file.
+
+    Pipeline:
+      1. Filter reports to L2 force hold window (l2_trigger in [90, 180]).
+      2. Compute accel magnitude DC-removed FFT (4096-pt zero-padded).
+      3. Find tremor peak in 4-15 Hz with parabolic sub-bin interpolation.
+      4. Compute gravity vector from mean(accel_x/y/z) -> roll_cos/sin, pitch_cos.
+
+    Returns None when the file has too few hold frames or extraction fails.
+    """
+    import math as _math
+
+    try:
+        with open(fpath, encoding="utf-8") as _f:
+            data = json.load(_f)
+    except Exception:
+        return None
+
+    reports = data.get("reports", [])
+    if not reports:
+        return None
+
+    # --- Estimate sampling rate from timestamps ---
+    _tss = [r.get("timestamp_ms", 0) for r in reports[:200] if r.get("timestamp_ms", 0) > 0]
+    if len(_tss) >= 2:
+        _diffs = [_tss[i] - _tss[i - 1] for i in range(1, len(_tss)) if _tss[i] > _tss[i - 1]]
+        _fs = 1000.0 / float(np.median(_diffs)) if _diffs else 1000.0
+    else:
+        _fs = 1000.0
+
+    # --- Filter to force hold: L2 analog in [_AIT_FORCE_MIN, _AIT_FORCE_MAX] ---
+    held = [
+        r for r in reports
+        if _AIT_FORCE_MIN <= (r.get("features") or r).get("l2_trigger", 0) <= _AIT_FORCE_MAX
+    ]
+    if len(held) < _AIT_MIN_FRAMES:
+        return None
+
+    feats_key = "features" if "features" in held[0] else None
+
+    def _get(r: dict, key: str, default: float = 0.0) -> float:
+        src = r.get("features", r) if feats_key else r
+        v = src.get(key, default)
+        return float(v) if v is not None else default
+
+    ax = np.array([_get(r, "accel_x") for r in held], dtype=np.float64)
+    ay = np.array([_get(r, "accel_y") for r in held], dtype=np.float64)
+    az = np.array([_get(r, "accel_z") for r in held], dtype=np.float64)
+
+    # --- Accel magnitude FFT for tremor peak ---
+    mag     = np.sqrt(ax ** 2 + ay ** 2 + az ** 2)
+    mag_dc  = mag - mag.mean()
+    spectrum = np.abs(np.fft.rfft(mag_dc, n=_AIT_NFFT))
+    freqs    = np.fft.rfftfreq(_AIT_NFFT, d=1.0 / _fs)
+
+    band_mask  = (freqs >= _AIT_HZ_LOW) & (freqs <= _AIT_HZ_HIGH)
+    if not np.any(band_mask):
+        return None
+    band_spec  = spectrum[band_mask]
+    band_freqs = freqs[band_mask]
+    peak_idx   = int(np.argmax(band_spec))
+
+    # Parabolic sub-bin interpolation (same as Phase 213 AccelTremorFFT)
+    if 0 < peak_idx < len(band_spec) - 1:
+        alpha  = band_spec[peak_idx - 1]
+        beta   = band_spec[peak_idx]
+        gamma  = band_spec[peak_idx + 1]
+        denom  = alpha - 2.0 * beta + gamma
+        offset = 0.5 * (alpha - gamma) / denom if abs(denom) > 1e-10 else 0.0
+        bin_w  = freqs[1] - freqs[0] if len(freqs) > 1 else _fs / _AIT_NFFT
+        tremor_peak_hz = float(band_freqs[peak_idx] + offset * bin_w)
+    else:
+        tremor_peak_hz = float(band_freqs[peak_idx])
+
+    # --- Gravity fingerprint from mean accel vector ---
+    ax_m = float(ax.mean())
+    ay_m = float(ay.mean())
+    az_m = float(az.mean())
+
+    # Roll: rotation around Y axis (atan2(ax, az)); circular-safe cos/sin encoding
+    roll_rad  = _math.atan2(ax_m, az_m)
+    roll_cos  = _math.cos(roll_rad)
+    roll_sin  = _math.sin(roll_rad)
+
+    # Pitch: rotation around X axis (atan2(-ay, az)); cos only (symmetric)
+    pitch_rad = _math.atan2(-ay_m, az_m)
+    pitch_cos = _math.cos(pitch_rad)
+
+    return {
+        "accel_tremor_peak_hz": tremor_peak_hz,
+        "roll_cos":              roll_cos,
+        "roll_sin":              roll_sin,
+        "pitch_cos":             pitch_cos,
+    }
+
+
+def run_analysis_ait() -> dict:
+    """AIT separation analysis: 4-feature [tremor_hz, roll_cos, roll_sin, pitch_cos] pipeline.
+
+    Scans terminal_cal_P* directories for ait_*.json files, extracts features with
+    _extract_ait_features_from_file(), then runs Mahalanobis separation analysis.
+
+    Returns the same top-level keys as run_analysis() so callers can treat results uniformly.
+    """
+    print("=" * 60)
+    print("VAPI AIT Separation Analysis (Phase 229)")
+    print("4-feature pipeline: accel_tremor_peak_hz + roll_cos + roll_sin + pitch_cos")
+    print("=" * 60)
+    print()
+
+    player_sessions_ait: dict[str, list[dict]] = {}
+
+    tcal_dirs = sorted(
+        d for d in SESSIONS_DIR.iterdir()
+        if d.is_dir() and d.name.startswith("terminal_cal_P")
+    )
+    if not tcal_dirs:
+        raise RuntimeError(f"No terminal_cal_P* directories found in {SESSIONS_DIR}")
+
+    for tcal_dir in tcal_dirs:
+        suffix = tcal_dir.name[len("terminal_cal_P"):]
+        player = f"Player {suffix}"
+        player_sessions_ait.setdefault(player, [])
+
+        ait_files = sorted(tcal_dir.glob("ait_*.json"))
+        if not ait_files:
+            print(f"  [{tcal_dir.name}] No ait_*.json files found.")
+            continue
+
+        print(f"AIT sessions — {tcal_dir.name} ({player})")
+        print("-" * 50)
+        for jpath in ait_files:
+            feats = _extract_ait_features_from_file(jpath)
+            if feats is None:
+                print(f"  [SKIP] {jpath.name} — extraction failed (too few hold frames?)")
+                continue
+            vec = np.array(
+                [feats["accel_tremor_peak_hz"], feats["roll_cos"],
+                 feats["roll_sin"], feats["pitch_cos"]],
+                dtype=np.float64,
+            )
+            player_sessions_ait[player].append({
+                "session_name": f"{tcal_dir.name}/{jpath.stem}",
+                "player":       player,
+                "features":     feats,
+                "_vec":         vec,
+            })
+            print(
+                f"  {jpath.name}: tremor={feats['accel_tremor_peak_hz']:.2f} Hz  "
+                f"roll_cos={feats['roll_cos']:.3f}  roll_sin={feats['roll_sin']:.3f}  "
+                f"pitch_cos={feats['pitch_cos']:.3f}"
+            )
+        print()
+
+    # Drop players with no sessions
+    player_sessions_ait = {p: sl for p, sl in player_sessions_ait.items() if sl}
+
+    if not player_sessions_ait:
+        raise RuntimeError(
+            "No AIT sessions found in any terminal_cal_P* directory. "
+            "Run capture_ait.ps1 first (at least 3 sessions per player)."
+        )
+
+    n_per_player = {p: len(sl) for p, sl in player_sessions_ait.items()}
+    n_total      = sum(n_per_player.values())
+    print(f"Loaded: {n_total} AIT sessions total")
+    for p, n in sorted(n_per_player.items()):
+        print(f"  {p}: {n} sessions")
+    print()
+
+    qualifying = [p for p, n in n_per_player.items() if n >= MIN_SESSIONS_FOR_TYPE_FILTER]
+    if len(qualifying) < 2:
+        raise RuntimeError(
+            f"Need >=2 players with >={MIN_SESSIONS_FOR_TYPE_FILTER} AIT sessions each. "
+            f"Current: {n_per_player}. Capture more sessions."
+        )
+
+    # --- Build feature matrix ---
+    included    = [s for sl in player_sessions_ait.values() for s in sl]
+    all_vecs    = np.array([s["_vec"] for s in included])     # shape (N, 4)
+    player_labels = [s["player"] for s in included]
+
+    # Phase 142 small-N guard: use diagonal covariance when N/p < COV_MIN_RATIO
+    _n, _p = all_vecs.shape
+    _cov_ratio = _n / _p if _p > 0 else float("inf")
+    _use_diag  = _cov_ratio < COV_MIN_RATIO
+
+    if _use_diag:
+        print(f"[Phase 142 guard] N/p={_cov_ratio:.2f} < {COV_MIN_RATIO:.1f} -> diagonal covariance")
+        diag_vars    = np.maximum(np.var(all_vecs, axis=0), 1e-9)
+        cov_global   = np.diag(diag_vars)
+        cov_inv      = np.diag(1.0 / diag_vars)
+    else:
+        cov_global, cov_inv = robust_cov_inv(all_vecs)
+
+    print(f"Covariance: {'diagonal' if _use_diag else 'full'}, N={_n}, p={_p}")
+    print()
+
+    # --- Per-player centroids ---
+    player_means:   dict[str, np.ndarray] = {}
+    player_vectors: dict[str, list[np.ndarray]] = {}
+    for p, sl in player_sessions_ait.items():
+        vecs = np.array([s["_vec"] for s in sl])
+        player_means[p]   = np.mean(vecs, axis=0)
+        player_vectors[p] = [s["_vec"] for s in sl]
+
+    # --- Intra-player distances ---
+    print("INTRA-PLAYER DISTANCES (each session -> player centroid)")
+    print("-" * 55)
+    intra_stats: dict[str, dict] = {}
+    for p, sl in player_sessions_ait.items():
+        mu    = player_means[p]
+        dists = [mahalanobis_distance(s["_vec"], mu, cov_inv) for s in sl]
+        intra_stats[p] = {
+            "n_sessions": len(sl),
+            "distances":  dists,
+            "mean":       float(np.mean(dists)),
+            "std":        float(np.std(dists)),
+            "median":     float(np.median(dists)),
+            "min":        float(np.min(dists)),
+            "max":        float(np.max(dists)),
+        }
+        print(f"  {p}: N={len(sl)}, mean={np.mean(dists):.3f}, "
+              f"std={np.std(dists):.3f}, range=[{np.min(dists):.3f},{np.max(dists):.3f}]")
+
+    overall_intra = float(np.mean([s["mean"] for s in intra_stats.values()]))
+    print(f"\n  Overall mean intra-player distance: {overall_intra:.3f}")
+    print()
+
+    # --- Inter-player distances ---
+    print("INTER-PLAYER DISTANCES (between player centroids)")
+    print("-" * 55)
+    players_with_data = sorted(player_means.keys())
+    n_players         = len(players_with_data)
+    inter_dist_matrix = np.zeros((n_players, n_players))
+    inter_stats: dict[str, dict] = {}
+    inter_distances: list[float] = []
+
+    for i, pa in enumerate(players_with_data):
+        for j, pb in enumerate(players_with_data):
+            if i == j:
+                continue
+            d = mahalanobis_distance(player_means[pa], player_means[pb], cov_inv)
+            inter_dist_matrix[i, j] = d
+            if j > i:
+                pair_key = f"{pa} vs {pb}"
+                inter_stats[pair_key] = {"distance": d, "players": [pa, pb]}
+                inter_distances.append(d)
+                _flag = " +" if d >= 1.0 else "  "
+                print(f"{_flag} {pair_key}: {d:.3f}")
+
+    overall_inter = float(np.mean(inter_distances)) if inter_distances else 0.0
+    print(f"\n  Overall mean inter-player distance: {overall_inter:.3f}")
+    print()
+
+    # --- Separation ratio ---
+    sep_ratio = overall_inter / overall_intra if overall_intra > 1e-9 else 0.0
+
+    print("=" * 55)
+    print(f"AIT SEPARATION RATIO (inter / intra): {sep_ratio:.3f}")
+    all_pairs_above_1 = all(d >= 1.0 for d in inter_distances)
+    _label = "ALL_PAIRS_OK" if all_pairs_above_1 else "BLOCKER_PAIR_EXISTS"
+    print(f"All pairs > 1.0: {all_pairs_above_1}  [{_label}]")
+    if sep_ratio >= 1.0:
+        print("CONCLUSION: SEPARATION ACHIEVED -- AIT probe PASSES tournament gate")
+    else:
+        print("CONCLUSION: SEPARATION BELOW 1.0 -- more sessions needed")
+    print("=" * 55)
+    print()
+
+    # --- LOO classification ---
+    print("LOO CLASSIFICATION (leave-one-out)")
+    print("-" * 40)
+    n_correct = 0
+    n_total_loo = 0
+    loo_details: list[dict] = []
+    for s in included:
+        true_p = s["player"]
+        # Compute LOO centroid: exclude this session from its player's centroid
+        loo_vecs = [x["_vec"] for x in player_sessions_ait[true_p] if x is not s]
+        if not loo_vecs:
+            continue
+        loo_centroid = np.mean(loo_vecs, axis=0)
+        loo_player_means = {p: (loo_centroid if p == true_p else player_means[p])
+                            for p in players_with_data}
+        dists = {p: mahalanobis_distance(s["_vec"], loo_player_means[p], cov_inv)
+                 for p in players_with_data}
+        pred_p  = min(dists, key=dists.get)
+        correct = pred_p == true_p
+        n_correct  += int(correct)
+        n_total_loo += 1
+        loo_details.append({"session": s["session_name"], "true": true_p,
+                             "predicted": pred_p, "correct": correct})
+
+    loo_acc = n_correct / n_total_loo if n_total_loo > 0 else 0.0
+    print(f"  LOO accuracy: {n_correct}/{n_total_loo} = {loo_acc:.1%}")
+    print()
+
+    # --- Per-feature means per player ---
+    print("PER-FEATURE MEANS PER PLAYER")
+    print("-" * 50)
+    for fn in AIT_FEATURE_NAMES:
+        print(f"  {fn}:")
+        for p in sorted(player_means.keys()):
+            idx = AIT_FEATURE_NAMES.index(fn)
+            val = float(player_means[p][idx])
+            print(f"    {p}: {val:.4f}")
+    print()
+
+    return {
+        "session_type":         "ait",
+        "n_sessions":           n_total,
+        "player_session_counts": n_per_player,
+        "players":              players_with_data,
+        "separation_ratio":     round(sep_ratio, 4),
+        "intra_player_mean":    round(overall_intra, 4),
+        "inter_player_mean":    round(overall_inter, 4),
+        "all_pairs_above_1":    all_pairs_above_1,
+        "cov_mode":             "diagonal" if _use_diag else "full",
+        "inter_distance_matrix": {
+            "players": players_with_data,
+            "values":  inter_dist_matrix.tolist(),
+        },
+        "intra_player_stats":   intra_stats,
+        "classification":       {"accuracy": loo_acc, "n_correct": n_correct,
+                                  "n_total": n_total_loo},
+        "feature_names":        AIT_FEATURE_NAMES,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Battery type detection (Phase 121: --battery-stratified)
 # ---------------------------------------------------------------------------
 
@@ -395,6 +739,7 @@ _TERMINAL_CAL_ONLY_TYPES = frozenset({
     "tremor_seed",     # Phase 139+ warmup: right-thumb-on-stick before touchpad phases
     "tremor_resting",  # Phase 199: 30s still-hold; primary tremor_peak_hz discriminator
     "mixed_biometric_probe",  # Phase 166: 2-min multi-feature probe activating all 13 features
+    "ait",             # Phase 229: Active Isometric Trigger; uses separate 4-feature pipeline
 })
 
 
@@ -434,6 +779,8 @@ def _detect_session_type(session_name: str) -> str:
         return "tremor_seed"   # Phase 202: 30s still-hold tremor_resting probe sessions
     if stem.startswith("tremor_resting"):
         return "tremor_resting"
+    if stem.startswith("ait_"):
+        return "ait"           # Phase 229: Active Isometric Trigger sessions
     return "gameplay"
 
 
@@ -1979,6 +2326,50 @@ def main() -> int:
              "variance). Default: False.",
     )
     args = parser.parse_args()
+
+    # Phase 229: AIT uses a dedicated 4-feature pipeline — short-circuit here
+    # Phase 231: wire --write-snapshot through AIT path so insert_ait_session() is reachable
+    if args.session_type == "ait":
+        try:
+            _ait_result = run_analysis_ait()
+        except RuntimeError as _e:
+            print(f"ERROR: {_e}", file=sys.stderr)
+            return 1
+        if args.write_snapshot:
+            import os as _os231
+            _db_path231 = args.db or _os231.path.expanduser("~/.vapi/bridge.db")
+            try:
+                import sys as _sys231
+                _br231 = str((_os231.path.dirname(_os231.path.abspath(__file__)) or ".") + "/../bridge")
+                if _br231 not in _sys231.path:
+                    _sys231.path.insert(0, _br231)
+                from vapi_bridge.store import Store as _Store231
+                _store231 = _Store231(_db_path231)
+                _nppl231  = _ait_result.get("player_session_counts", {})
+                _row231   = _store231.insert_ait_session(
+                    n_sessions        = _ait_result["n_sessions"],
+                    n_per_player      = _nppl231,
+                    separation_ratio  = _ait_result["separation_ratio"],
+                    all_pairs_above_1 = _ait_result["all_pairs_above_1"],
+                    inter_player_mean = _ait_result.get("inter_player_mean", 0.0),
+                    intra_player_mean = _ait_result.get("intra_player_mean", 0.0),
+                    loo_accuracy      = _ait_result.get("classification", {}).get("accuracy", 0.0),
+                    analysis_date     = __import__("datetime").date.today().isoformat(),
+                )
+                _n_players231 = _ait_result.get("players", [])
+                _def231 = (
+                    _ait_result["all_pairs_above_1"]
+                    and all(v >= 10 for v in _nppl231.values())
+                )
+                print(
+                    f"[AIT snapshot] Written to {_db_path231} "
+                    f"(row_id={_row231}, ratio={_ait_result['separation_ratio']:.4f}, "
+                    f"N={_ait_result['n_sessions']}, defensible={_def231})"
+                )
+            except Exception as _snap_exc231:
+                print(f"[AIT snapshot] WARNING: could not write snapshot: {_snap_exc231}",
+                      file=sys.stderr)
+        return 0
 
     # Phase 140: probe-comparison mode — run all viable structured probe types
     if args.probe_comparison:

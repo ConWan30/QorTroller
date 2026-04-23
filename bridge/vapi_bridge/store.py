@@ -142,6 +142,10 @@ class Store:
                     ON records(status);
                 CREATE INDEX IF NOT EXISTS idx_records_device
                     ON records(device_id, counter);
+                CREATE INDEX IF NOT EXISTS idx_records_created_at
+                    ON records(created_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_records_inference_ts
+                    ON records(inference, timestamp_ms DESC);
                 CREATE INDEX IF NOT EXISTS idx_submissions_status
                     ON submissions(status);
 
@@ -1418,6 +1422,17 @@ class Store:
                 conn.execute(
                     "ALTER TABLE tournament_preflight_log ADD COLUMN "
                     "all_pairs_p0_ok INTEGER NOT NULL DEFAULT 0"
+                )
+            except Exception:
+                pass  # Column already exists
+            # Phase 231: idempotent ALTER TABLE — add ait_defensibility_ok (P0 condition 11)
+            # ait_defensibility_ok=1 when AIT all_pairs_above_1=True AND all players have >=10 sessions.
+            # Closes the gap where all_pairs_p0_ok could be True with <10 sessions per player.
+            # 0 (fail-closed) when no AIT defensibility data exists.
+            try:
+                conn.execute(
+                    "ALTER TABLE tournament_preflight_log ADD COLUMN "
+                    "ait_defensibility_ok INTEGER NOT NULL DEFAULT 0"
                 )
             except Exception:
                 pass  # Column already exists
@@ -3139,6 +3154,99 @@ class Store:
             except Exception:
                 pass  # idempotent
 
+            # Phase 229: AIT (Active Isometric Trigger) separation log.
+            # Stores per-run AIT separation analysis results so the bridge can
+            # surface AIT separation status via API and the tournament preflight
+            # can gate on all_pairs_above_1 for the 'ait' probe type.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS ait_session_log (
+                    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+                    probe_type           TEXT    NOT NULL DEFAULT 'ait',
+                    n_sessions           INTEGER NOT NULL DEFAULT 0,
+                    n_per_player_json    TEXT    NOT NULL DEFAULT '{}',
+                    separation_ratio     REAL    NOT NULL DEFAULT 0.0,
+                    all_pairs_above_1    INTEGER NOT NULL DEFAULT 0,
+                    inter_player_mean    REAL    NOT NULL DEFAULT 0.0,
+                    intra_player_mean    REAL    NOT NULL DEFAULT 0.0,
+                    loo_accuracy         REAL    NOT NULL DEFAULT 0.0,
+                    cov_mode             TEXT    NOT NULL DEFAULT 'diagonal',
+                    pair_distances_json  TEXT    NOT NULL DEFAULT '{}',
+                    analysis_date        TEXT    NOT NULL DEFAULT '',
+                    created_at           REAL    NOT NULL DEFAULT 0.0
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_ait_session_log_probe
+                ON ait_session_log(probe_type, created_at DESC)
+            """)
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                " VALUES (?, ?, ?)",
+                (229, "ait_session_log", time.time()),
+            )
+
+        # Phase 234.7 — Physical Capture Continuity log (idempotent)
+        with self._conn() as conn:
+            conn.executescript("""
+                CREATE TABLE IF NOT EXISTS capture_health_log (
+                    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                    capture_state   TEXT    NOT NULL DEFAULT 'DISCONNECTED',
+                    host_state      TEXT    NOT NULL DEFAULT 'UNKNOWN',
+                    poll_rate_hz    REAL    NOT NULL DEFAULT 0.0,
+                    transition_reason TEXT  NOT NULL DEFAULT '',
+                    grind_mode      INTEGER NOT NULL DEFAULT 0,
+                    session_id      TEXT    NOT NULL DEFAULT '',
+                    prev_session_id TEXT    NOT NULL DEFAULT '',
+                    gap_duration_ms REAL    NOT NULL DEFAULT 0.0,
+                    created_at      REAL    NOT NULL DEFAULT 0.0
+                );
+                CREATE INDEX IF NOT EXISTS idx_capture_health_log_ts
+                    ON capture_health_log(created_at DESC);
+            """)
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                " VALUES (?, ?, ?)",
+                (2347, "capture_health_log", time.time()),
+            )
+
+        # Phase 2350 (pre-235): PCC attestation + GIC slot on ruling_validation_log (idempotent)
+        for _col_sql in [
+            "ALTER TABLE ruling_validation_log ADD COLUMN pcc_state TEXT",
+            "ALTER TABLE ruling_validation_log ADD COLUMN pcc_host_state TEXT",
+            "ALTER TABLE ruling_validation_log ADD COLUMN grind_chain_hash TEXT",
+            "ALTER TABLE ruling_validation_log ADD COLUMN gic_ts_ns INTEGER",
+        ]:
+            try:
+                with self._conn() as conn:
+                    conn.execute(_col_sql)
+            except Exception:
+                pass  # idempotent — column already exists
+
+        # Phase 235-GAD: Gameplay Activity Discrimination (idempotent)
+        for _col_sql in [
+            "ALTER TABLE records ADD COLUMN trigger_active INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE ruling_validation_log ADD COLUMN gameplay_context TEXT",
+        ]:
+            try:
+                with self._conn() as conn:
+                    conn.execute(_col_sql)
+            except Exception:
+                pass  # idempotent — column already exists
+        try:
+            with self._conn() as conn:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS gameplay_classification_disagreements (
+                        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                        ruling_validation_log_id INTEGER NOT NULL,
+                        device_id       TEXT NOT NULL DEFAULT '',
+                        automatic_context TEXT NOT NULL DEFAULT '',
+                        override_reason TEXT NOT NULL DEFAULT '',
+                        created_at      REAL NOT NULL
+                    )
+                """)
+        except Exception:
+            pass
+
     # --- Device operations ---
 
     def upsert_device(self, device_id: str, pubkey_hex: str):
@@ -3209,8 +3317,9 @@ class Store:
                          pitl_l4_distance, pitl_l4_warmed, pitl_l4_features,
                          pitl_l5_cv, pitl_l5_entropy, pitl_l5_quant, pitl_l5_signals,
                          pitl_l5_rhythm_humanity, pitl_l4_drift_velocity,
-                         pitl_e4_cognitive_drift, pitl_humanity_prob)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         pitl_e4_cognitive_drift, pitl_humanity_prob,
+                         trigger_active)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     record.record_hash_hex,
                     record.device_id_hex,
@@ -3237,6 +3346,7 @@ class Store:
                     getattr(record, "pitl_l4_drift_velocity", None),
                     getattr(record, "pitl_e4_cognitive_drift", None),
                     getattr(record, "pitl_humanity_prob", None),
+                    int(getattr(record, "pitl_trigger_active", 0) or 0),
                 ))
             return True
         except sqlite3.IntegrityError:
@@ -4738,6 +4848,8 @@ class Store:
 
     # --- Phase 61: Frame Replay Checkpoints ---
 
+    _FRAME_CHECKPOINT_MAX_ROWS = 2_000  # keep last N rows; prevents DB bloat
+
     def store_frame_checkpoint(
         self, device_id: str, record_hash: str, frames: list
     ) -> None:
@@ -4752,6 +4864,14 @@ class Store:
                 "(device_id, record_hash, frames_json, frame_count, checkpoint_ts, created_at) "
                 "VALUES (?, ?, ?, ?, ?, ?)",
                 (device_id, record_hash, frames_json, frame_count, now, now),
+            )
+            # Prune oldest rows to stay within max; runs fast via rowid index
+            conn.execute(
+                "DELETE FROM frame_checkpoints WHERE id IN ("
+                "  SELECT id FROM frame_checkpoints ORDER BY id DESC"
+                "  LIMIT -1 OFFSET ?"
+                ")",
+                (self._FRAME_CHECKPOINT_MAX_ROWS,),
             )
 
     def get_frame_checkpoint(
@@ -5268,11 +5388,20 @@ class Store:
         fallback_confidence: float,
         divergence: int,
         divergence_reason: str | None = None,
+        pcc_state: str | None = None,
+        pcc_host_state: str | None = None,
+        gameplay_context: str | None = None,
     ) -> int:
         """Insert a validation comparison record. Returns row id.
 
         divergence_reason (Phase 88): JSON string of non-nominal evidence fields that
         may explain why LLM and _rule_fallback disagreed. None for non-diverging records.
+
+        pcc_state / pcc_host_state (Phase 235-B): capture health at adjudication time.
+        NULL = fail-closed (session does not count toward consecutive_clean in grind mode).
+
+        gameplay_context (Phase 235-GAD): 'ACTIVE_GAMEPLAY' | 'MENU_DETECTED' | None.
+        NULL = unknown (pass-through). 'MENU_DETECTED' = confirmed non-gameplay (blocked).
         """
         if self._consent_ledger_enabled:
             self._check_consent_gate(device_id, "insert_validation_record")
@@ -5281,10 +5410,12 @@ class Store:
             cur = conn.execute(
                 "INSERT INTO ruling_validation_log "
                 "(ruling_id, device_id, llm_verdict, fallback_verdict, "
-                "llm_confidence, fallback_confidence, divergence, divergence_reason, created_at) "
-                "VALUES (?,?,?,?,?,?,?,?,?)",
+                "llm_confidence, fallback_confidence, divergence, divergence_reason, "
+                "pcc_state, pcc_host_state, gameplay_context, created_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                 (ruling_id, device_id, llm_verdict, fallback_verdict,
-                 llm_confidence, fallback_confidence, divergence, divergence_reason, now),
+                 llm_confidence, fallback_confidence, divergence, divergence_reason,
+                 pcc_state, pcc_host_state, gameplay_context, now),
             )
             return cur.lastrowid
 
@@ -5314,15 +5445,26 @@ class Store:
 
             # Walk the most recent gate_n records for both consecutive_clean and window rate
             window_rows = conn.execute(
-                "SELECT divergence FROM ruling_validation_log "
+                "SELECT divergence, pcc_state, pcc_host_state, gameplay_context "
+                "FROM ruling_validation_log "
                 "ORDER BY created_at DESC LIMIT ?",
                 (gate_n,),
             ).fetchall()
 
-        # consecutive_clean: leading non-divergent streak from most recent
+        # consecutive_clean: leading non-divergent + PCC-attested + gameplay-active streak
+        # Phase 235-B: pcc_state=NULL → fail-closed
+        # Phase 235-GAD: gameplay_context='MENU_DETECTED' → fail-closed;
+        #                gameplay_context=NULL → pass-through (pre-GAD rows, benefit of doubt)
         consecutive_clean = 0
         for row in window_rows:
-            if row["divergence"] == 0:
+            pcc_s = row["pcc_state"]
+            pcc_ok = (
+                pcc_s == "NOMINAL"
+                and row["pcc_host_state"] in ("EXCLUSIVE_USB", "UNKNOWN")
+            ) if pcc_s is not None else False
+            gameplay_ctx = row["gameplay_context"] if "gameplay_context" in row.keys() else None
+            gameplay_ok = gameplay_ctx != "MENU_DETECTED"  # NULL = pass-through
+            if row["divergence"] == 0 and pcc_ok and gameplay_ok:
                 consecutive_clean += 1
             else:
                 break  # streak broken
@@ -5338,6 +5480,14 @@ class Store:
         divergence_rate_ok = divergence_rate <= max_divergence_rate
         gate_passed = (consecutive_clean >= gate_n) and divergence_rate_ok
 
+        latest_pcc_state = window_rows[0]["pcc_state"] if window_rows else None
+        latest_pcc_host_state = window_rows[0]["pcc_host_state"] if window_rows else None
+        latest_gameplay_context = (
+            window_rows[0]["gameplay_context"]
+            if window_rows and "gameplay_context" in window_rows[0].keys()
+            else None
+        )
+
         return {
             "total": total,
             "divergence_count": divergence_count,
@@ -5348,7 +5498,41 @@ class Store:
             "divergence_rate_ok": divergence_rate_ok,
             "max_divergence_rate": max_divergence_rate,
             "window_size": window_size,
+            "latest_pcc_state": latest_pcc_state,
+            "latest_pcc_host_state": latest_pcc_host_state,
+            "latest_gameplay_context": latest_gameplay_context,
         }
+
+    def override_gameplay_context(
+        self, row_id: int, reason: str, device_id: str = ""
+    ) -> None:
+        """Phase 235-GAD — Operator override: set gameplay_context='ACTIVE_GAMEPLAY'.
+
+        Logs to gameplay_classification_disagreements for post-hoc analysis.
+        Use when automatic MENU_DETECTED classification was incorrect (e.g., analog
+        stick fault caused false classification during competitive match).
+        """
+        with self._conn() as conn:
+            conn.execute(
+                "SELECT gameplay_context FROM ruling_validation_log WHERE id = ?",
+                (row_id,),
+            )
+            old_ctx_row = conn.execute(
+                "SELECT gameplay_context FROM ruling_validation_log WHERE id = ?",
+                (row_id,),
+            ).fetchone()
+            old_ctx = old_ctx_row["gameplay_context"] if old_ctx_row else None
+        with self._conn() as conn:
+            conn.execute(
+                "UPDATE ruling_validation_log SET gameplay_context = 'ACTIVE_GAMEPLAY' WHERE id = ?",
+                (row_id,),
+            )
+            conn.execute(
+                "INSERT INTO gameplay_classification_disagreements "
+                "(ruling_validation_log_id, device_id, automatic_context, override_reason, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (row_id, device_id, old_ctx or "", reason, time.time()),
+            )
 
     def get_validation_gate_status(
         self, gate_n: int = 100, max_divergence_rate: float = 1.0
@@ -7924,8 +8108,9 @@ class Store:
         conditions_json: str = "{}",
         biometric_ttl_ok: bool = True,
         all_pairs_p0_ok: bool = False,
+        ait_defensibility_ok: bool = False,
     ) -> int:
-        """Insert a tournament preflight run record (Phase 127; Phase 196 biometric_ttl_ok; Phase 197 all_pairs_p0_ok).
+        """Insert a tournament preflight run record (Phase 127; Phase 196 biometric_ttl_ok; Phase 197 all_pairs_p0_ok; Phase 231 ait_defensibility_ok).
 
         Returns the new row id.
         """
@@ -7934,26 +8119,29 @@ class Store:
                 """INSERT INTO tournament_preflight_log
                    (separation_ok, l4_ok, gate_ok, cert_ok, audit_ok,
                     dual_gate_warned, epoch_window_warned, ioswarm_warned,
-                    overall_pass, conditions_json, biometric_ttl_ok, all_pairs_p0_ok, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    overall_pass, conditions_json, biometric_ttl_ok, all_pairs_p0_ok,
+                    ait_defensibility_ok, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     int(separation_ok), int(l4_ok), int(gate_ok),
                     int(cert_ok), int(audit_ok),
                     int(dual_gate_warned), int(epoch_window_warned), int(ioswarm_warned),
                     int(overall_pass), conditions_json,
                     int(biometric_ttl_ok), int(all_pairs_p0_ok),
+                    int(ait_defensibility_ok),
                     time.time(),
                 ),
             )
             return cur.lastrowid
 
     def get_tournament_preflight_status(self, limit: int = 5) -> "list[dict]":
-        """Return recent tournament preflight run records, newest first (Phase 127; Phase 196; Phase 197)."""
+        """Return recent tournament preflight run records, newest first (Phase 127; Phase 196; Phase 197; Phase 231)."""
         with self._conn() as conn:
             rows = conn.execute(
                 """SELECT id, separation_ok, l4_ok, gate_ok, cert_ok, audit_ok,
                           dual_gate_warned, epoch_window_warned, ioswarm_warned,
-                          overall_pass, conditions_json, biometric_ttl_ok, all_pairs_p0_ok, created_at
+                          overall_pass, conditions_json, biometric_ttl_ok, all_pairs_p0_ok,
+                          ait_defensibility_ok, created_at
                    FROM tournament_preflight_log
                    ORDER BY id DESC
                    LIMIT ?""",
@@ -7972,9 +8160,10 @@ class Store:
                 "ioswarm_warned":        bool(r[8]),
                 "overall_pass":          bool(r[9]),
                 "conditions_json":       r[10],
-                "biometric_ttl_ok":      bool(r[11]) if r[11] is not None else True,
-                "all_pairs_p0_ok":       bool(r[12]) if r[12] is not None else False,
-                "created_at":            r[13],
+                "biometric_ttl_ok":       bool(r[11]) if r[11] is not None else True,
+                "all_pairs_p0_ok":        bool(r[12]) if r[12] is not None else False,
+                "ait_defensibility_ok":   bool(r[13]) if r[13] is not None else False,
+                "created_at":             r[14],
             }
             for r in rows
         ]
@@ -8405,6 +8594,7 @@ class Store:
         "touchpad_swipes",
         "mixed_biometric_probe",  # Phase 166: 2-min multi-feature probe (touchpad+trigger+button+stick)
         "tremor_resting",         # Phase 199: 30s still-hold; isolates neurological tremor signal
+        "ait",                    # Phase 229: Active Isometric Trigger; 4-feature accel+postural pipeline
     })
 
     def insert_separation_defensibility_log(
@@ -13170,3 +13360,306 @@ class Store:
             "entries":                  entries,
             "timestamp":                _t214.time(),
         }
+
+    # --- Phase 229: AIT Separation Log ---
+
+    def insert_ait_session(
+        self,
+        n_sessions:        int,
+        n_per_player:      dict,
+        separation_ratio:  float,
+        all_pairs_above_1: bool,
+        inter_player_mean: float,
+        intra_player_mean: float,
+        loo_accuracy:      float,
+        cov_mode:          str,
+        pair_distances:    dict,
+        analysis_date:     str = "",
+    ) -> int:
+        """Insert AIT separation analysis result (Phase 229).
+
+        Phase 230: also mirrors into separation_defensibility_log with session_type='ait'
+        so tournament_preflight all_pairs_p0_ok reads AIT data instead of being locked to
+        touchpad_corners history.  guard_enabled=False (regression guard off by default).
+
+        Called by analyze_interperson_separation.py --session-type ait --write-snapshot
+        and by POST /agent/run-ait-analysis bridge endpoint.
+        """
+        import json  as _j229
+        import time  as _t229
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO ait_session_log "
+                "(probe_type, n_sessions, n_per_player_json, separation_ratio, "
+                " all_pairs_above_1, inter_player_mean, intra_player_mean, "
+                " loo_accuracy, cov_mode, pair_distances_json, analysis_date, created_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    "ait",
+                    int(n_sessions),
+                    _j229.dumps(n_per_player),
+                    float(separation_ratio),
+                    int(bool(all_pairs_above_1)),
+                    float(inter_player_mean),
+                    float(intra_player_mean),
+                    float(loo_accuracy),
+                    str(cov_mode),
+                    _j229.dumps(pair_distances),
+                    str(analysis_date),
+                    _t229.time(),
+                ),
+            )
+            row_id = int(cur.lastrowid)
+
+        # Phase 230: mirror into separation_defensibility_log so all_pairs_p0_ok
+        # tournament_preflight gate reads AIT results instead of touchpad_corners.
+        _min_n230 = 10
+        _n_vals230 = list(n_per_player.values()) if n_per_player else []
+        _defensible230 = (
+            all_pairs_above_1
+            and bool(_n_vals230)
+            and all(v >= _min_n230 for v in _n_vals230)
+        )
+        self.insert_separation_defensibility_log_guarded(
+            session_type      = "ait",
+            n_sessions_total  = n_sessions,
+            n_per_player      = n_per_player,
+            min_n_per_player  = _min_n230,
+            defensible        = _defensible230,
+            ratio             = separation_ratio,
+            all_pairs_above_1 = all_pairs_above_1,
+            guard_enabled     = False,
+        )
+        return row_id
+
+    def get_ait_separation_status(self) -> dict:
+        """Return AIT separation analysis summary (Phase 229).
+
+        Returns dict with keys:
+            ait_separation_enabled: bool (always True when table has rows)
+            n_sessions: int
+            separation_ratio: float
+            all_pairs_above_1: bool
+            inter_player_mean: float
+            intra_player_mean: float
+            loo_accuracy: float
+            pair_distances: dict
+            analysis_date: str
+            last_run_ts: float | None
+            timestamp: float
+        """
+        import json as _j229s
+        import time as _t229s
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM ait_session_log ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+
+        _now = _t229s.time()
+        if row is None:
+            return {
+                "ait_separation_enabled": False,
+                "n_sessions":             0,
+                "separation_ratio":       0.0,
+                "all_pairs_above_1":      False,
+                "inter_player_mean":      0.0,
+                "intra_player_mean":      0.0,
+                "loo_accuracy":           0.0,
+                "pair_distances":         {},
+                "analysis_date":          "",
+                "last_run_ts":            None,
+                "timestamp":              _now,
+            }
+
+        d = dict(row)
+        try:
+            pd = _j229s.loads(d.get("pair_distances_json") or "{}")
+        except Exception:
+            pd = {}
+        try:
+            npp = _j229s.loads(d.get("n_per_player_json") or "{}")
+        except Exception:
+            npp = {}
+
+        return {
+            "ait_separation_enabled": True,
+            "n_sessions":             int(d.get("n_sessions", 0)),
+            "n_per_player":           npp,
+            "separation_ratio":       float(d.get("separation_ratio", 0.0)),
+            "all_pairs_above_1":      bool(d.get("all_pairs_above_1", 0)),
+            "inter_player_mean":      float(d.get("inter_player_mean", 0.0)),
+            "intra_player_mean":      float(d.get("intra_player_mean", 0.0)),
+            "loo_accuracy":           float(d.get("loo_accuracy", 0.0)),
+            "pair_distances":         pd,
+            "analysis_date":          str(d.get("analysis_date") or ""),
+            "last_run_ts":            float(d.get("created_at", 0.0)),
+            "timestamp":              _now,
+        }
+
+    # -----------------------------------------------------------------------
+    # Phase 234.7 — Physical Capture Continuity (PCC)
+    # -----------------------------------------------------------------------
+
+    def insert_capture_health_event(
+        self,
+        capture_state: str,
+        host_state: str,
+        poll_rate_hz: float,
+        transition_reason: str = "",
+        grind_mode: bool = False,
+        session_id: str = "",
+        prev_session_id: str = "",
+        gap_duration_ms: float = 0.0,
+    ) -> int:
+        """Log a PCC state transition or periodic health snapshot."""
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO capture_health_log "
+                "(capture_state, host_state, poll_rate_hz, transition_reason, "
+                " grind_mode, session_id, prev_session_id, gap_duration_ms, created_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?)",
+                (capture_state, host_state, float(poll_rate_hz), transition_reason,
+                 int(grind_mode), session_id, prev_session_id,
+                 float(gap_duration_ms), time.time()),
+            )
+            return cur.lastrowid or 0
+
+    def get_capture_health_status(self, limit: int = 10) -> dict:
+        """Return latest capture health event + recent history."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM capture_health_log ORDER BY created_at DESC LIMIT 1"
+            ).fetchone()
+            n_total = conn.execute(
+                "SELECT COUNT(*) FROM capture_health_log"
+            ).fetchone()[0]
+            history = conn.execute(
+                "SELECT capture_state, host_state, poll_rate_hz, transition_reason, created_at "
+                "FROM capture_health_log ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+
+        if row is None:
+            return {
+                "capture_state":    "DISCONNECTED",
+                "host_state":       "UNKNOWN",
+                "poll_rate_hz":     0.0,
+                "grind_mode":       False,
+                "n_events":         0,
+                "history":          [],
+                "timestamp":        time.time(),
+            }
+        d = dict(row)
+        return {
+            "capture_state":    d.get("capture_state", "DISCONNECTED"),
+            "host_state":       d.get("host_state", "UNKNOWN"),
+            "poll_rate_hz":     float(d.get("poll_rate_hz", 0.0)),
+            "grind_mode":       bool(d.get("grind_mode", 0)),
+            "last_event_ts":    float(d.get("created_at", 0.0)),
+            "n_events":         int(n_total),
+            "history":          [dict(r) for r in history],
+            "timestamp":        time.time(),
+        }
+
+    # --- Phase 235-A: Grind Integrity Chain (GIC) ---
+
+    def get_prev_grind_chain_hash(self, grind_session_id: str) -> bytes | None:
+        """Return the most recent GIC hash bytes for the given grind session, or None."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT grind_chain_hash FROM ruling_validation_log "
+                "WHERE grind_chain_hash IS NOT NULL "
+                "ORDER BY created_at DESC LIMIT 1"
+            ).fetchone()
+        if row is None:
+            return None
+        return bytes.fromhex(row["grind_chain_hash"])
+
+    def update_grind_chain_hash(self, row_id: int, gic_hex: str, ts_ns: int) -> None:
+        """Stamp a completed GIC hash and its nanosecond timestamp on a validation row."""
+        with self._conn() as conn:
+            conn.execute(
+                "UPDATE ruling_validation_log SET grind_chain_hash = ?, gic_ts_ns = ? WHERE id = ?",
+                (gic_hex, ts_ns, row_id),
+            )
+
+    def get_ruling_rows_for_chain(self) -> list[dict]:
+        """Return all GIC-stamped validation rows ordered by creation time (ASC)."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT rvl.id, rvl.grind_chain_hash, rvl.pcc_host_state, "
+                "       rvl.fallback_verdict, rvl.gic_ts_ns, "
+                "       ar.commitment_hash "
+                "FROM ruling_validation_log AS rvl "
+                "JOIN agent_rulings AS ar ON ar.id = rvl.ruling_id "
+                "WHERE rvl.grind_chain_hash IS NOT NULL "
+                "ORDER BY rvl.created_at ASC"
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_grind_chain_status(self, grind_session_id: str, cfg=None) -> dict:
+        """Recompute and verify the full GIC chain.
+
+        Returns:
+            grind_session_id, chain_length, latest_gic_hash (hex), chain_intact (bool),
+            genesis_ts (float), latest_ts (float).
+        """
+        from .grind_chain import compute_gic, genesis_gic
+
+        rows = self.get_ruling_rows_for_chain()
+        if not rows:
+            return {
+                "grind_session_id":  grind_session_id,
+                "chain_length":      0,
+                "latest_gic_hash":   "",
+                "chain_intact":      True,  # empty chain is vacuously intact
+                "genesis_ts":        0.0,
+                "latest_ts":         0.0,
+            }
+
+        chain_intact = True
+
+        for i, row in enumerate(rows):
+            ts_ns = int(row.get("gic_ts_ns") or 0)
+            commitment_hex = row.get("commitment_hash") or ""
+            pcc_host = row.get("pcc_host_state") or "DISCONNECTED"
+            verdict = row.get("fallback_verdict") or "FLAG"
+            stored_hex = row.get("grind_chain_hash") or ""
+
+            if i == 0:
+                # First row stores genesis_gic() output directly
+                expected = genesis_gic(grind_session_id, ts_ns)
+            else:
+                expected = compute_gic(
+                    bytes.fromhex(rows[i - 1]["grind_chain_hash"]),
+                    commitment_hex, pcc_host, verdict, ts_ns,
+                )
+
+            if expected.hex() != stored_hex:
+                chain_intact = False
+                break
+
+        genesis_ts = float(rows[0].get("gic_ts_ns", 0)) / 1e9 if rows[0].get("gic_ts_ns") else 0.0
+        latest_ts = float(rows[-1].get("gic_ts_ns", 0)) / 1e9 if rows[-1].get("gic_ts_ns") else 0.0
+
+        return {
+            "grind_session_id":  grind_session_id,
+            "chain_length":      len(rows),
+            "latest_gic_hash":   rows[-1]["grind_chain_hash"],
+            "chain_intact":      chain_intact,
+            "genesis_ts":        genesis_ts,
+            "latest_ts":         latest_ts,
+        }
+
+    def get_prev_gic_ts_ns(self) -> int:
+        """Return the maximum gic_ts_ns across all GIC-stamped rows (0 if none).
+
+        Used to enforce monotonicity in GIC timestamp sequence.
+        """
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT MAX(gic_ts_ns) FROM ruling_validation_log WHERE gic_ts_ns IS NOT NULL"
+            ).fetchone()
+        if row and row[0] is not None:
+            return int(row[0])
+        return 0

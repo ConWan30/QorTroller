@@ -57,6 +57,8 @@ def _insert_ruling(store: Store, ruling_id: int, device_id: str = "dev001",
         fallback_confidence=0.8,
         divergence=divergence,
         divergence_reason=divergence_reason,
+        pcc_state="NOMINAL" if not divergence else None,
+        pcc_host_state="EXCLUSIVE_USB" if not divergence else None,
     )
 
 

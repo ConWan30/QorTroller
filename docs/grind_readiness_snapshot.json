@@ -1,0 +1,79 @@
+{
+  "generated_at": "2026-04-23T03:18:31.047848+00:00",
+  "commit_sha": "e886184d",
+  "db_path": "C:\\Users\\Contr\\.vapi\\bridge.db",
+  "test_counts": {
+    "bridge": "tests/test_adaptive_l4.py::TestStorePolicyMethods::test_1_active_policy_returned_with_correct_multiplier",
+    "sdk": "sdk/tests/test_phase102_tournament_sdk.py::test_1_player_eligibility_slots"
+  },
+  "preflight_latest": {
+    "id": 1,
+    "separation_ok": 1,
+    "l4_ok": 1,
+    "gate_ok": 0,
+    "cert_ok": 0,
+    "audit_ok": 0,
+    "dual_gate_warned": 0,
+    "epoch_window_warned": 0,
+    "ioswarm_warned": 0,
+    "overall_pass": 0,
+    "conditions_json": "{}",
+    "created_at": 1776730011.3921177,
+    "touchpad_n_ok": 1,
+    "biometric_ttl_ok": 1,
+    "all_pairs_p0_ok": 1,
+    "ait_defensibility_ok": 1
+  },
+  "grind_chain_db": {
+    "error": "no such column: grind_chain_hash"
+  },
+  "ait_status_db": {
+    "id": 1,
+    "probe_type": "ait",
+    "n_sessions": 37,
+    "n_per_player_json": "{\"P1\": 13, \"P2\": 10, \"P3\": 14}",
+    "separation_ratio": 1.199,
+    "all_pairs_above_1": 1,
+    "inter_player_mean": 1.682,
+    "intra_player_mean": 0.85,
+    "loo_accuracy": 0.667,
+    "cov_mode": "full",
+    "pair_distances_json": "{\"P1vP2\": 1.85, \"P1vP3\": 1.846, \"P2vP3\": 1.349}",
+    "analysis_date": "2026-04-20",
+    "created_at": 1776728733.4008615
+  },
+  "capture_health": {
+    "skipped": "offline mode"
+  },
+  "grind_chain_live": {
+    "skipped": "offline mode"
+  },
+  "tournament_preflight_live": {
+    "skipped": "offline mode"
+  },
+  "ait_status_live": {
+    "skipped": "offline mode"
+  },
+  "phases_completed": [
+    "Phase 234 \u2014 InsightSynthesizer HTTP timeout fix (asyncio.to_thread)",
+    "Phase 234.5 \u2014 Consecutive clean semantics audit",
+    "Phase 234.7 \u2014 Physical Capture Continuity (PCC)",
+    "Phase 235-B \u2014 PCC Attestation Slot",
+    "Phase 235-A \u2014 Grind Integrity Chain (GIC)",
+    "Phase 235-GPC \u2014 Pre-Grind Validation",
+    "Phase 235-GAD \u2014 Gameplay Activity Discrimination",
+    "Phase 235-FINAL \u2014 Hardware Validation & Dashboard Readiness"
+  ],
+  "readiness_gates": {
+    "preflight_overall_pass": null,
+    "ait_defensibility_ok": null,
+    "all_pairs_p0_ok": null,
+    "pcc_nominal": null,
+    "host_exclusive_usb": null,
+    "grind_ready": null,
+    "chain_intact": null,
+    "chain_empty_for_real_grind": null,
+    "gameplay_context_enabled": null
+  },
+  "overall_ready": false
+}

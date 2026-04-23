@@ -117,26 +117,32 @@ class InsightSynthesizer:
             await self._synthesize_temporal_windows()
         except Exception as exc:
             log.warning("InsightSynthesizer: temporal mode error: %s", exc)
+        await asyncio.sleep(0)
         try:
             await self._synthesize_device_trajectories()
         except Exception as exc:
             log.warning("InsightSynthesizer: trajectory mode error: %s", exc)
+        await asyncio.sleep(0)
         try:
             await self._synthesize_federation_topology()
         except Exception as exc:
             log.warning("InsightSynthesizer: federation mode error: %s", exc)
+        await asyncio.sleep(0)
         try:
             await self._synthesize_detection_policies()
         except Exception as exc:
             log.warning("InsightSynthesizer Mode 4 (detection policies) failed: %s", exc)
+        await asyncio.sleep(0)
         try:
             await self._synthesize_credential_enforcement()
         except Exception as exc:
             log.warning("InsightSynthesizer Mode 5 (credential enforcement) failed: %s", exc)
+        await asyncio.sleep(0)
         try:
             await self._synthesize_living_calibration()
         except Exception as exc:
             log.warning("InsightSynthesizer Mode 6 (living calibration) failed: %s", exc)
+        await asyncio.sleep(0)
         try:
             await self._run_housekeeping()
         except Exception as exc:
@@ -435,6 +441,44 @@ class InsightSynthesizer:
     # ------------------------------------------------------------------
 
     async def _synthesize_living_calibration(self) -> None:
+        """Mode 6 wrapper — runs compute in thread pool, writes in event loop.
+
+        Phase 234: moved to asyncio.to_thread to avoid 54s event loop stall.
+        Phase 234+: all DB writes extracted from the thread back to the event
+        loop to avoid WAL write-lock contention (thread write + event-loop write
+        both block on timeout=10s, freezing HTTP handlers).
+        """
+        result = await asyncio.to_thread(self._synthesize_living_calibration_sync)
+        if result is None:
+            return
+        # Write device calibration profiles (sync in event loop — no WAL conflict)
+        for args in result.get("device_profiles", []):
+            try:
+                self._store.upsert_player_calibration_profile(*args)
+            except Exception as _exc:
+                log.warning("Mode 6: upsert_player_calibration_profile error: %s", _exc)
+        # Write protocol insights (sync in event loop)
+        for args in result.get("insights", []):
+            try:
+                self._store.store_protocol_insight(*args)
+            except Exception as _exc:
+                log.warning("Mode 6: store_protocol_insight error: %s", _exc)
+        # Notify BridgeAgent callback (Phase 50)
+        _new_anomaly    = result.get("new_anomaly")
+        _new_continuity = result.get("new_continuity")
+        if _new_anomaly is not None:
+            object.__setattr__(self._cfg, "l4_anomaly_threshold",    _new_anomaly)
+            object.__setattr__(self._cfg, "l4_continuity_threshold", _new_continuity)
+        if self._on_mode6_complete is not None and _new_anomaly is not None:
+            try:
+                self._on_mode6_complete(
+                    float(self._cfg.l4_anomaly_threshold),
+                    float(self._cfg.l4_continuity_threshold),
+                )
+            except Exception as exc:
+                log.warning("InsightSynthesizer Mode 6 post-hook error: %s", exc)
+
+    def _synthesize_living_calibration_sync(self) -> dict | None:
         """Auto-evolve L4 thresholds from verified NOMINAL records (Phase 38).
 
         Uses exponential decay weighting (alpha=0.95) so recent sessions carry
@@ -495,6 +539,7 @@ class InsightSynthesizer:
         object.__setattr__(self._cfg, "l4_continuity_threshold", new_continuity)
 
         # --- Step 6: Per-device profiles ---
+        device_profiles: list = []
         by_device: dict[str, list[float]] = defaultdict(list)
         for r in records:
             by_device[r["device_id"]].append(r["pitl_l4_distance"])
@@ -507,27 +552,24 @@ class InsightSynthesizer:
             s = float(np.std(d))
             personal_anomaly    = min(round(m + 3.0 * s, 3), new_anomaly)
             personal_continuity = min(round(m + 2.0 * s, 3), new_continuity)
-            self._store.upsert_player_calibration_profile(
-                device_id,
-                personal_anomaly,
-                personal_continuity,
-                round(m, 3),
-                round(s, 3),
-                len(dev_dists),
-            )
+            device_profiles.append((
+                device_id, personal_anomaly, personal_continuity,
+                round(m, 3), round(s, 3), len(dev_dists),
+            ))
 
-        # --- Step 7: Health checks ---
+        # --- Step 7: Health checks (collect; written by async wrapper) ---
+        insights: list[tuple] = []
         # Check 1: Data freshness
         newest_ts_ms = max(r["timestamp_ms"] for r in records)
         age_s = (time.time() * 1000 - newest_ts_ms) / 1000.0
         if age_s > _DATA_STALE_S:
-            self._store.store_protocol_insight(
+            insights.append((
                 "calibration_health_stale",
                 f"Mode 6: newest NOMINAL record is {age_s/3600:.1f}h old (threshold 48h). "
                 "Device may be offline or not sending NOMINAL records.",
-                device_id="__global__",
-                severity="warning",
-            )
+                "__global__",
+                "warning",
+            ))
 
         # Check 2: Distribution shift (recent 20 vs historical 80)
         if len(records) >= 100:
@@ -536,14 +578,14 @@ class InsightSynthesizer:
             if historical_mean > 1e-6:
                 shift = abs(recent_mean - historical_mean) / historical_mean
                 if shift > _SHIFT_ALERT_PCT:
-                    self._store.store_protocol_insight(
+                    insights.append((
                         "calibration_health_distribution_shift",
                         f"Mode 6: L4 distance distribution shifted {shift:.1%} "
                         f"(recent mean {recent_mean:.3f} vs historical {historical_mean:.3f}). "
                         "Possible population change or sensor drift.",
-                        device_id="__global__",
-                        severity="warning",
-                    )
+                        "__global__",
+                        "warning",
+                    ))
 
         # --- Step 8: Write live profile JSON + log calibration_update insight ---
         delta_pct = (new_anomaly - prev_anomaly) / max(prev_anomaly, 1e-6)
@@ -566,15 +608,15 @@ class InsightSynthesizer:
         except OSError as exc:
             log.warning("Mode 6: could not write calibration_profile_live.json: %s", exc)
 
-        self._store.store_protocol_insight(
+        insights.append((
             "calibration_update",
             f"Mode 6: L4 anomaly {prev_anomaly:.3f}\u2192{new_anomaly:.3f} ({delta_pct:+.1%}), "
             f"continuity {prev_continuity:.3f}\u2192{new_continuity:.3f}. "
             f"Source: {len(records)} records, {len(by_device)} device(s). "
             f"Confidence: {profile['confidence']}.",
-            device_id="__global__",
-            severity="info",
-        )
+            "__global__",
+            "info",
+        ))
         log.info(
             "Mode 6: L4 anomaly %.3f->%.3f, continuity %.3f->%.3f "
             "(%d records, %d devices)",
@@ -582,15 +624,13 @@ class InsightSynthesizer:
             len(records), len(by_device),
         )
 
-        # Phase 50: notify BridgeAgent so it can check drift and write agent_events
-        if self._on_mode6_complete is not None:
-            try:
-                self._on_mode6_complete(
-                    float(self._cfg.l4_anomaly_threshold),
-                    float(self._cfg.l4_continuity_threshold),
-                )
-            except Exception as exc:
-                log.warning("InsightSynthesizer Mode 6 post-hook error: %s", exc)
+        # Return write data to async wrapper (all DB writes happen there, not in this thread)
+        return {
+            "device_profiles": device_profiles,
+            "insights":        insights,
+            "new_anomaly":     new_anomaly,
+            "new_continuity":  new_continuity,
+        }
 
     # ------------------------------------------------------------------
     # Housekeeping
@@ -598,7 +638,11 @@ class InsightSynthesizer:
     async def _run_housekeeping(self) -> None:
         """Prune old digests and stale insights per configured retention windows."""
         digest_age  = float(getattr(self._cfg, "digest_retention_days", 90.0))
-        insight_age = 30.0  # matches existing prune_old_insights default
+        insight_age = 30.0
+        # Run synchronously — these are fast DELETEs on small tables.
+        # asyncio.to_thread would hold the SQLite write lock in a thread, causing
+        # WAL write-lock contention against the event loop's insert_record calls
+        # and freezing HTTP handlers for up to timeout=10s.
         pd = self._store.prune_old_digests(age_days=digest_age)
         pi = self._store.prune_old_insights(age_days=insight_age)
         if pd or pi:
