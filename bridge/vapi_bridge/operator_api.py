@@ -7078,6 +7078,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             )
         _was_broken = bool(getattr(app, "_gic_chain_broken", False))
         app._gic_chain_broken = False
+        store.set_gic_chain_broken(False)
         try:
             store.write_agent_event(
                 event_type="gic_chain_reset",

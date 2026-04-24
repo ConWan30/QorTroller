@@ -299,8 +299,10 @@ class Bridge:
                     _grind_sid, _chain["chain_length"],
                 )
                 self._gic_chain_broken = True
+                self.store.set_gic_chain_broken(True)
             else:
                 self._gic_chain_broken = False
+                self.store.set_gic_chain_broken(False)
                 if _chain["chain_length"] > 0:
                     log.info(
                         "GIC chain intact — grind_session_id=%s chain_length=%d",
@@ -309,6 +311,7 @@ class Bridge:
         except Exception as _gic_e:
             log.warning("GIC startup check failed (non-fatal): %s", _gic_e)
             self._gic_chain_broken = False
+            self.store.set_gic_chain_broken(False)
 
         log.info("IoTeX RPC: %s (chain_id=%d)", self.cfg.iotex_rpc_url, self.cfg.chain_id)
         log.info("Bridge wallet: %s", self.chain.bridge_address)

@@ -38,9 +38,18 @@ class Store:
     def __init__(self, db_path: str, consent_ledger_enabled: bool = False) -> None:
         self._db_path = db_path
         self._consent_ledger_enabled = consent_ledger_enabled
+        # INV-GIC-003: fail-closed flag — set by main.py startup chain check;
+        # read by get_validation_summary() and session_adjudicator_validator.
+        self._gic_chain_broken: bool = False
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self._init_schema()
         from .migrations.runner import MigrationRunner; MigrationRunner(db_path).run_pending()  # VAPI-EXT
+
+    def set_gic_chain_broken(self, value: bool) -> None:
+        """Set the GIC chain-broken flag (INV-GIC-003).  Called by main.py at startup
+        and by /operator/gic-reset.  When True, get_validation_summary() returns
+        gate_passed=False / consecutive_clean=0 regardless of DB state."""
+        self._gic_chain_broken = bool(value)
 
     @contextmanager
     def _conn(self):
@@ -3210,11 +3219,13 @@ class Store:
             )
 
         # Phase 2350 (pre-235): PCC attestation + GIC slot on ruling_validation_log (idempotent)
+        # grind_session_id added by INV-GIC-001 fix (Ultrareview Commit 1) to scope chains.
         for _col_sql in [
             "ALTER TABLE ruling_validation_log ADD COLUMN pcc_state TEXT",
             "ALTER TABLE ruling_validation_log ADD COLUMN pcc_host_state TEXT",
             "ALTER TABLE ruling_validation_log ADD COLUMN grind_chain_hash TEXT",
             "ALTER TABLE ruling_validation_log ADD COLUMN gic_ts_ns INTEGER",
+            "ALTER TABLE ruling_validation_log ADD COLUMN grind_session_id TEXT",
         ]:
             try:
                 with self._conn() as conn:
@@ -5432,6 +5443,24 @@ class Store:
 
         gate_passed = (consecutive_clean >= gate_n) AND (divergence_rate <= max_divergence_rate)
         """
+        # INV-GIC-003: fail-closed — broken chain blocks the gate regardless of DB state.
+        if self._gic_chain_broken:
+            return {
+                "total": 0,
+                "divergence_count": 0,
+                "consecutive_clean": 0,
+                "gate_n": gate_n,
+                "gate_passed": False,
+                "divergence_rate": 0.0,
+                "divergence_rate_ok": False,
+                "max_divergence_rate": max_divergence_rate,
+                "window_size": 0,
+                "latest_pcc_state": None,
+                "latest_pcc_host_state": None,
+                "latest_gameplay_context": None,
+                "chain_broken": True,
+            }
+
         with self._conn() as conn:
             total_row = conn.execute(
                 "SELECT COUNT(*) as cnt FROM ruling_validation_log"
@@ -13564,37 +13593,77 @@ class Store:
     # --- Phase 235-A: Grind Integrity Chain (GIC) ---
 
     def get_prev_grind_chain_hash(self, grind_session_id: str) -> bytes | None:
-        """Return the most recent GIC hash bytes for the given grind session, or None."""
+        """Return the most recent GIC hash bytes for the given grind session, or None.
+
+        INV-GIC-001 fix: filters by grind_session_id so day-boundary rotation cannot
+        chain new sessions onto a prior session's tail.
+        INV-GIC-002 fix: orders by gic_ts_ns (not created_at) so a backward NTP step
+        does not desynchronise writer and verifier orderings.
+        """
         with self._conn() as conn:
-            row = conn.execute(
-                "SELECT grind_chain_hash FROM ruling_validation_log "
-                "WHERE grind_chain_hash IS NOT NULL "
-                "ORDER BY created_at DESC LIMIT 1"
-            ).fetchone()
+            if grind_session_id:
+                row = conn.execute(
+                    "SELECT grind_chain_hash FROM ruling_validation_log "
+                    "WHERE grind_chain_hash IS NOT NULL "
+                    "AND grind_session_id = ? "
+                    "ORDER BY gic_ts_ns DESC LIMIT 1",
+                    (grind_session_id,),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT grind_chain_hash FROM ruling_validation_log "
+                    "WHERE grind_chain_hash IS NOT NULL "
+                    "ORDER BY gic_ts_ns DESC LIMIT 1",
+                ).fetchone()
         if row is None:
             return None
         return bytes.fromhex(row["grind_chain_hash"])
 
-    def update_grind_chain_hash(self, row_id: int, gic_hex: str, ts_ns: int) -> None:
-        """Stamp a completed GIC hash and its nanosecond timestamp on a validation row."""
+    def update_grind_chain_hash(
+        self, row_id: int, gic_hex: str, ts_ns: int, grind_session_id: str = ""
+    ) -> None:
+        """Stamp a completed GIC hash, timestamp, and session ID on a validation row.
+
+        INV-GIC-001 fix: grind_session_id is now persisted so get_prev_grind_chain_hash
+        can scope lookups to the correct session.
+        """
         with self._conn() as conn:
             conn.execute(
-                "UPDATE ruling_validation_log SET grind_chain_hash = ?, gic_ts_ns = ? WHERE id = ?",
-                (gic_hex, ts_ns, row_id),
+                "UPDATE ruling_validation_log "
+                "SET grind_chain_hash = ?, gic_ts_ns = ?, grind_session_id = ? "
+                "WHERE id = ?",
+                (gic_hex, ts_ns, grind_session_id or None, row_id),
             )
 
-    def get_ruling_rows_for_chain(self) -> list[dict]:
-        """Return all GIC-stamped validation rows ordered by creation time (ASC)."""
+    def get_ruling_rows_for_chain(self, grind_session_id: str = "") -> list[dict]:
+        """Return GIC-stamped validation rows ordered by gic_ts_ns ASC.
+
+        INV-GIC-001 fix: when grind_session_id is provided, only rows belonging to
+        that session are returned, preventing cross-session chain reconstruction.
+        """
         with self._conn() as conn:
-            rows = conn.execute(
-                "SELECT rvl.id, rvl.grind_chain_hash, rvl.pcc_host_state, "
-                "       rvl.fallback_verdict, rvl.gic_ts_ns, "
-                "       ar.commitment_hash "
-                "FROM ruling_validation_log AS rvl "
-                "JOIN agent_rulings AS ar ON ar.id = rvl.ruling_id "
-                "WHERE rvl.grind_chain_hash IS NOT NULL "
-                "ORDER BY rvl.gic_ts_ns ASC"
-            ).fetchall()
+            if grind_session_id:
+                rows = conn.execute(
+                    "SELECT rvl.id, rvl.grind_chain_hash, rvl.pcc_host_state, "
+                    "       rvl.fallback_verdict, rvl.gic_ts_ns, "
+                    "       ar.commitment_hash "
+                    "FROM ruling_validation_log AS rvl "
+                    "JOIN agent_rulings AS ar ON ar.id = rvl.ruling_id "
+                    "WHERE rvl.grind_chain_hash IS NOT NULL "
+                    "AND rvl.grind_session_id = ? "
+                    "ORDER BY rvl.gic_ts_ns ASC",
+                    (grind_session_id,),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT rvl.id, rvl.grind_chain_hash, rvl.pcc_host_state, "
+                    "       rvl.fallback_verdict, rvl.gic_ts_ns, "
+                    "       ar.commitment_hash "
+                    "FROM ruling_validation_log AS rvl "
+                    "JOIN agent_rulings AS ar ON ar.id = rvl.ruling_id "
+                    "WHERE rvl.grind_chain_hash IS NOT NULL "
+                    "ORDER BY rvl.gic_ts_ns ASC",
+                ).fetchall()
         return [dict(r) for r in rows]
 
     def get_grind_chain_status(self, grind_session_id: str, cfg=None) -> dict:
@@ -13606,7 +13675,7 @@ class Store:
         """
         from .grind_chain import compute_gic, genesis_gic
 
-        rows = self.get_ruling_rows_for_chain()
+        rows = self.get_ruling_rows_for_chain(grind_session_id)
         if not rows:
             return {
                 "grind_session_id":  grind_session_id,
