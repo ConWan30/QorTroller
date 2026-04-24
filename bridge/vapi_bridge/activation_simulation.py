@@ -40,6 +40,8 @@ class ActivationSimulator:
                     fallback_confidence=0.95,
                     divergence=0,
                     divergence_reason="{}",
+                    pcc_state="NOMINAL",
+                    pcc_host_state="EXCLUSIVE_USB",
                 )
             except Exception:
                 pass

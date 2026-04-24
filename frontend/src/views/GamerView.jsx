@@ -4,7 +4,7 @@ import { Environment, MeshTransmissionMaterial, Float } from '@react-three/drei'
 import * as THREE from 'three'
 import { HeartbeatWaveform } from '../heartbeat/HeartbeatWaveform'
 import { useHeartbeatStore } from '../heartbeat/useHeartbeat'
-import { useSeparationDefensibility, useTournamentPreflight } from '../api/bridgeApi'
+import { useSeparationDefensibility, useTournamentPreflight, useCaptureHealth, useGrindChain } from '../api/bridgeApi'
 import { ProvenanceTag } from '../provenance/ProvenanceTag'
 import { FONTS, GAMER } from '../shared/design/tokens'
 
@@ -102,11 +102,128 @@ function TremorGlowRing({ ratio }) {
   )
 }
 
+// Phase 235-FINAL: Grind Integrity Panel
+function GrindPanel({ captureHealth, grindChain }) {
+  const cc      = captureHealth?.consecutive_clean_toward_target ?? 0
+  const target  = captureHealth?.grind_target ?? 100
+  const pct     = Math.min(1, cc / Math.max(1, target))
+  const state   = captureHealth?.capture_state ?? '—'
+  const host    = captureHealth?.host_state ?? '—'
+  const ready   = captureHealth?.grind_ready ?? false
+  const paused  = captureHealth?.session_counting_paused ?? false
+  const gctx    = captureHealth?.latest_gameplay_context ?? null
+  const chainLen  = grindChain?.chain_length ?? 0
+  const intact    = grindChain?.chain_intact ?? true
+  const sessionId = grindChain?.grind_session_id ?? '—'
+
+  const hostColor = host === 'EXCLUSIVE_USB' ? GAMER.green
+    : host === 'CONTESTED'    ? GAMER.red
+    : host === 'DEGRADED'     ? '#ff9500'
+    : 'rgba(200,216,232,0.4)'
+
+  const stateColor = state === 'NOMINAL' ? GAMER.green
+    : state === 'DEGRADED'    ? '#ff9500'
+    : state === 'DISCONNECTED'? GAMER.red
+    : 'rgba(200,216,232,0.4)'
+
+  const gctxColor = gctx === 'ACTIVE_GAMEPLAY' ? GAMER.green
+    : gctx === 'MENU_DETECTED' ? GAMER.red
+    : 'rgba(200,216,232,0.4)'
+
+  return (
+    <div style={{
+      border:       `1px solid rgba(0,212,255,0.12)`,
+      borderRadius: 5,
+      padding:      '7px 10px',
+      background:   'rgba(0,212,255,0.03)',
+      display:      'flex',
+      flexDirection:'column',
+      gap:          6,
+    }}>
+      {/* Header row */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ fontFamily: FONTS.mono, fontSize: 7.5, color: 'rgba(0,212,255,0.45)', letterSpacing: '0.12em' }}>
+          GRIND INTEGRITY CHAIN
+        </span>
+        <span style={{
+          fontFamily: FONTS.mono,
+          fontSize:   7,
+          color:      intact ? GAMER.green : GAMER.red,
+          background: intact ? 'rgba(0,255,136,0.06)' : 'rgba(255,59,92,0.08)',
+          padding:    '1px 5px',
+          borderRadius: 2,
+          border:     `1px solid ${intact ? 'rgba(0,255,136,0.2)' : 'rgba(255,59,92,0.3)'}`,
+        }}>
+          {intact ? '● INTACT' : '⚠ BROKEN'}
+        </span>
+      </div>
+
+      {/* Progress bar */}
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+          <span style={{ fontFamily: FONTS.mono, fontSize: 8, color: 'rgba(200,216,232,0.5)' }}>
+            consecutive_clean
+          </span>
+          <span style={{ fontFamily: FONTS.mono, fontSize: 10, color: GAMER.cyan, fontWeight: 600 }}>
+            {cc} / {target}
+          </span>
+        </div>
+        <div style={{ height: 5, background: 'rgba(255,255,255,0.06)', borderRadius: 3, overflow: 'hidden' }}>
+          <div style={{
+            height:     '100%',
+            width:      `${pct * 100}%`,
+            background: pct >= 1 ? GAMER.green : `linear-gradient(90deg, ${GAMER.cyan}, #4a9eff)`,
+            borderRadius: 3,
+            transition: 'width 0.5s ease',
+            boxShadow:  pct > 0 ? `0 0 6px rgba(0,212,255,0.4)` : 'none',
+          }} />
+        </div>
+        {paused && (
+          <div style={{ fontFamily: FONTS.mono, fontSize: 7, color: '#ff9500', marginTop: 2 }}>
+            ⚠ COUNTING PAUSED — waiting for EXCLUSIVE_USB + NOMINAL
+          </div>
+        )}
+      </div>
+
+      {/* State row */}
+      <div style={{ display: 'flex', gap: 12 }}>
+        <MiniStat label="PCC" value={state} color={stateColor} />
+        <MiniStat label="HOST" value={host} color={hostColor} />
+        <MiniStat label="READY" value={ready ? 'YES' : 'NO'} color={ready ? GAMER.green : '#ff9500'} />
+        <MiniStat label="CHAIN" value={`${chainLen} links`} color={GAMER.cyan} />
+      </div>
+
+      {/* GAD + session */}
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+        <MiniStat
+          label="GAMEPLAY"
+          value={gctx ?? 'NULL'}
+          color={gctxColor}
+        />
+        <div style={{ marginLeft: 'auto', fontFamily: FONTS.mono, fontSize: 7, color: 'rgba(0,212,255,0.3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 120 }}>
+          {sessionId}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function MiniStat({ label, value, color }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+      <span style={{ fontFamily: FONTS.mono, fontSize: 6.5, color: 'rgba(200,216,232,0.3)', letterSpacing: '0.08em' }}>{label}</span>
+      <span style={{ fontFamily: FONTS.mono, fontSize: 8, color: color || 'rgba(200,216,232,0.6)', fontWeight: 500 }}>{value}</span>
+    </div>
+  )
+}
+
 export function GamerView() {
   const magnitude  = useHeartbeatStore((s) => s.magnitude)
   const merkleRoot = useHeartbeatStore((s) => s.merkleRoot)
-  const { data: defensibility } = useSeparationDefensibility()
-  const { data: preflight }     = useTournamentPreflight()
+  const { data: defensibility }  = useSeparationDefensibility()
+  const { data: preflight }      = useTournamentPreflight()
+  const { data: captureHealth }  = useCaptureHealth()
+  const { data: grindChain }     = useGrindChain()
 
   const ratio   = defensibility?.ratio ?? 1.177
   const blocked = !(preflight?.overall_pass ?? false)
@@ -184,6 +301,9 @@ export function GamerView() {
           gap:        8,
           overflowY:  'auto',
         }}>
+
+          {/* Grind Integrity Panel — Phase 235-FINAL */}
+          <GrindPanel captureHealth={captureHealth} grindChain={grindChain} />
 
           {/* Heartbeat waveform */}
           <div>

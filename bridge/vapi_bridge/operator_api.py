@@ -2217,6 +2217,8 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                     _p0_fails.append("biometric_ttl_expired_or_no_renewal_chain")
                 if not _latest_pf.get("all_pairs_p0_ok", False):
                     _p0_fails.append("per_pair_separation_below_1.0")
+                if not _latest_pf.get("ait_defensibility_ok", False):
+                    _p0_fails.append("ait_defensibility_not_confirmed")
                 if _p0_fails:
                     result["error"] = (
                         f"preflight_p0_blocked: {_p0_fails}. "
@@ -3302,9 +3304,9 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         # P0: biometric_ttl_ok — credential not expired AND renewal chain has ≥1 entry (Phase 196)
         _ttl196     = float(getattr(cfg, "biometric_credential_ttl_days", 90.0))
         _ttl_status = store.get_biometric_credential_age_status(ttl_days=_ttl196)
-        _renewal_ch = store.get_biometric_renewal_chain_status(limit=1)
+        _renewal_ch = store.get_biometric_renewal_chain_status()
         _ttl_expired      = bool(_ttl_status.get("ttl_expired", False)) if _ttl_status else False
-        _renewal_has_entry = len(_renewal_ch) > 0
+        _renewal_has_entry = int(_renewal_ch.get("total_renewals", 0)) > 0
         biometric_ttl_ok  = (not _ttl_expired) and _renewal_has_entry
 
         # P0: all_pairs_p0_ok — every inter-player pair has separation ratio >= 1.0 (Phase 197)
@@ -3317,6 +3319,20 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         else:
             all_pairs_p0_ok = bool(_def197.get("all_pairs_above_1", False)) if _def197 else False
 
+        # P0: ait_defensibility_ok — AIT all_pairs_above_1=True AND all players have >=10 sessions (Phase 231)
+        # Closes the gap where all_pairs_p0_ok could be True with <10 sessions/player.
+        # Reads from ait_session_log (latest row). Fail-closed: False when no AIT data.
+        _ait231 = store.get_ait_separation_status()
+        if _ait231:
+            _ait_all_pairs231 = bool(_ait231.get("all_pairs_above_1", False))
+            _ait_npp231      = _ait231.get("n_per_player", {}) or {}
+            _ait_all_min231  = bool(_ait_npp231) and all(
+                int(v) >= 10 for v in _ait_npp231.values()
+            )
+            ait_defensibility_ok = _ait_all_pairs231 and _ait_all_min231
+        else:
+            ait_defensibility_ok = False
+
         # P1 warnings
         dual_gate_warned    = not bool(getattr(cfg, "dual_primitive_gate_enabled", False))
         epoch_window_warned = not bool(getattr(cfg, "epoch_window_enabled", False))
@@ -3324,7 +3340,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
 
         overall_pass = (
             separation_ok and l4_ok and gate_ok and cert_ok and audit_ok
-            and biometric_ttl_ok and all_pairs_p0_ok
+            and biometric_ttl_ok and all_pairs_p0_ok and ait_defensibility_ok
         )
 
         conditions = {
@@ -3341,6 +3357,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "biometric_renewal_entries": len(_renewal_ch),
             "biometric_ttl_ok": biometric_ttl_ok,
             "all_pairs_p0_ok": all_pairs_p0_ok,
+            "ait_defensibility_ok": ait_defensibility_ok,
             "dual_primitive_gate_enabled": not dual_gate_warned,
             "epoch_window_enabled": not epoch_window_warned,
             "ioswarm_vhp_mint_enabled": not ioswarm_warned,
@@ -3359,6 +3376,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             conditions_json=_json127.dumps(conditions),
             biometric_ttl_ok=biometric_ttl_ok,
             all_pairs_p0_ok=all_pairs_p0_ok,
+            ait_defensibility_ok=ait_defensibility_ok,
         )
         return {
             "run_id":               row_id,
@@ -3369,6 +3387,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "audit_ok":             audit_ok,
             "biometric_ttl_ok":     biometric_ttl_ok,
             "all_pairs_p0_ok":      all_pairs_p0_ok,
+            "ait_defensibility_ok": ait_defensibility_ok,
             "dual_gate_warned":     dual_gate_warned,
             "epoch_window_warned":  epoch_window_warned,
             "ioswarm_warned":       ioswarm_warned,
@@ -3417,9 +3436,10 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                     "gate_ok":             latest["gate_ok"],
                     "cert_ok":             latest["cert_ok"],
                     "audit_ok":            latest["audit_ok"],
-                    "biometric_ttl_ok":    latest.get("biometric_ttl_ok", True),
-                    "all_pairs_p0_ok":     latest.get("all_pairs_p0_ok", False),
-                    "dual_gate_warned":    latest["dual_gate_warned"],
+                    "biometric_ttl_ok":      latest.get("biometric_ttl_ok", True),
+                    "all_pairs_p0_ok":       latest.get("all_pairs_p0_ok", False),
+                    "ait_defensibility_ok":  latest.get("ait_defensibility_ok", False),
+                    "dual_gate_warned":      latest["dual_gate_warned"],
                     "epoch_window_warned": latest["epoch_window_warned"],
                     "ioswarm_warned":      latest["ioswarm_warned"],
                     "overall_pass":        latest["overall_pass"],
@@ -3432,6 +3452,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                 "separation_ok": False, "l4_ok": False,
                 "gate_ok": False, "cert_ok": False, "audit_ok": False,
                 "biometric_ttl_ok": True, "all_pairs_p0_ok": False,
+                "ait_defensibility_ok": False,
                 "timestamp": time.time(),
             }
         except Exception as exc:
@@ -6880,5 +6901,225 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "blocker_pairs":            _blockers216,
             "timestamp":                _t216.time(),
         }
+
+    # Phase 229 — GET /agent/ait-separation-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/ait-separation-status")
+    async def get_ait_separation_status(
+        x_api_key: str = Header(default=""),
+    ):
+        """AIT (Active Isometric Trigger) separation status (Phase 229).
+
+        Returns the latest AIT separation analysis from ait_session_log.
+        Populated by:
+          - python scripts/analyze_interperson_separation.py --session-type ait
+            --write-snapshot
+          - POST /agent/run-ait-analysis
+
+        Returns (11 keys): ait_separation_enabled, n_sessions, separation_ratio,
+        all_pairs_above_1, inter_player_mean, intra_player_mean, loo_accuracy,
+        pair_distances, analysis_date, last_run_ts, timestamp.
+
+        separation_ratio >= 1.199 (N=24, 2026-04-18) — Phase 229 breakthrough result:
+        all inter-player distances > 1.0 for the first time across all probe types.
+        """
+        _check_read_key(x_api_key)
+        import time as _t229
+        try:
+            _enabled229 = bool(getattr(cfg, "ait_separation_enabled", True))
+            _status229  = store.get_ait_separation_status()
+            _status229["ait_separation_enabled"] = _enabled229
+            return _status229
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 234.7 — GET /bridge/capture-health
+    # ------------------------------------------------------------------
+    @app.get("/bridge/capture-health")
+    async def get_capture_health(
+        x_api_key: str = Header(default=""),
+    ):
+        """Physical Capture Continuity status (Phase 234.7).
+
+        Returns real-time HID poll rate, controller host arbitration state,
+        and grind-mode readiness gate.  Updated each _session_loop iteration
+        (~1 Hz).
+
+        Returns (11 keys): pcc_enabled, capture_state, host_state, poll_rate_hz,
+        sustained_duration_s, grind_mode, grind_ready, grind_target,
+        consecutive_clean_toward_target, session_counting_paused, timestamp.
+
+        capture_state: NOMINAL (>=950 Hz) | DEGRADED | DISCONNECTED
+        host_state:    EXCLUSIVE_USB | EXCLUSIVE_BT | CONTESTED | UNKNOWN
+        grind_ready:   True only when NOMINAL + EXCLUSIVE_USB + 30s sustained
+        session_counting_paused: grind_mode=True AND grind_ready=False
+        """
+        _check_read_key(x_api_key)
+        import time as _t2347
+        _pcc_enabled = bool(getattr(cfg, "pcc_enabled", True))
+        _grind_mode  = bool(getattr(cfg, "grind_mode", False))
+        _grind_target = int(getattr(cfg, "grind_target", 100))
+
+        # Live monitor status (if monitor is wired via pcc_monitor kwarg at startup)
+        _monitor = getattr(app, "_pcc_monitor", None)
+        if _monitor is not None:
+            _live = _monitor.get_status()
+            _capture_state = _live["capture_state"]
+            _host_state    = _live["host_state"]
+            _poll_rate_hz  = _live["poll_rate_hz"]
+            _sustained     = _live["sustained_duration_s"]
+            _grind_ready   = _live["grind_ready"]
+            # Flush transitions to store
+            for t in _monitor.pop_transitions():
+                try:
+                    store.insert_capture_health_event(
+                        capture_state=t["new_state"],
+                        host_state=t["host_state"],
+                        poll_rate_hz=t["poll_rate_hz"],
+                        transition_reason=t["reason"],
+                        grind_mode=_grind_mode,
+                    )
+                except Exception:
+                    pass
+        else:
+            # Fallback: read last DB entry (controller not connected or monitor not wired)
+            _db_status = store.get_capture_health_status()
+            _capture_state = _db_status.get("capture_state", "DISCONNECTED")
+            _host_state    = _db_status.get("host_state", "UNKNOWN")
+            _poll_rate_hz  = float(_db_status.get("poll_rate_hz", 0.0))
+            _sustained     = 0.0
+            _grind_ready   = False
+
+        # Grind progress from validation summary
+        _val_summary: dict = {}
+        try:
+            _val_summary = store.get_validation_summary(gate_n=_grind_target)
+            _consec_clean = int(_val_summary.get("consecutive_clean", 0))
+        except Exception:
+            _consec_clean = 0
+
+        _session_counting_paused = _grind_mode and not _grind_ready
+
+        _gameplay_disc_enabled = bool(getattr(cfg, "gameplay_discrimination_enabled", True))
+        _latest_gameplay_ctx = _val_summary.get("latest_gameplay_context")
+
+        return {
+            "pcc_enabled":                   _pcc_enabled,
+            "capture_state":                 _capture_state,
+            "host_state":                    _host_state,
+            "poll_rate_hz":                  _poll_rate_hz,
+            "sustained_duration_s":          _sustained,
+            "grind_mode":                    _grind_mode,
+            "grind_ready":                   _grind_ready,
+            "grind_target":                  _grind_target,
+            "consecutive_clean_toward_target": _consec_clean,
+            "session_counting_paused":       _session_counting_paused,
+            "gameplay_context_enabled":      _gameplay_disc_enabled,
+            "latest_gameplay_context":       _latest_gameplay_ctx,
+            "timestamp":                     _t2347.time(),
+        }
+
+    # Phase 235-GAD — POST /operator/override-gameplay-context
+    # ------------------------------------------------------------------
+    @app.post("/operator/override-gameplay-context")
+    async def override_gameplay_context(
+        ruling_validation_log_id: int = Query(...),
+        reason: str = Query(default=""),
+        api_key: str = Query(default=""),
+    ):
+        """Override automatic MENU_DETECTED classification to ACTIVE_GAMEPLAY.
+
+        Use when the automatic classification was incorrect (e.g., controller analog
+        stick fault caused false MENU_DETECTED during a competitive match).
+        Logs to gameplay_classification_disagreements for post-hoc analysis.
+
+        Returns: {accepted, ruling_validation_log_id, reason, timestamp}
+        """
+        _check_key(api_key)
+        import time as _tgad
+        if len(reason.strip()) < 10:
+            raise HTTPException(
+                status_code=422,
+                detail="reason must be at least 10 characters"
+            )
+        store.override_gameplay_context(ruling_validation_log_id, reason)
+        log.info(
+            "Gameplay context overridden for ruling_validation_log_id=%d reason='%s'",
+            ruling_validation_log_id, reason,
+        )
+        return {
+            "accepted":                True,
+            "ruling_validation_log_id": ruling_validation_log_id,
+            "reason":                  reason,
+            "timestamp":               _tgad.time(),
+        }
+
+    # Phase 235-PGV — POST /operator/gic-reset (Pre-Grind Validation Category 5)
+    # ------------------------------------------------------------------
+    @app.post("/operator/gic-reset")
+    async def operator_gic_reset(
+        reason: str = Query(default=""),
+        api_key: str = Query(default=""),
+    ):
+        """Clear app._gic_chain_broken flag after operator investigation and repair.
+
+        Requires operator api_key. reason must be at least 10 characters.
+        Logs the reason for audit trail. Does NOT repair the chain — the operator
+        must fix the underlying DB issue or start a new GRIND_SESSION_ID first.
+
+        Returns: {accepted, was_broken, reason, timestamp}
+        """
+        _check_key(api_key)
+        import time as _tgic
+        if len(reason.strip()) < 10:
+            raise HTTPException(
+                status_code=422,
+                detail="reason must be at least 10 characters (e.g., 'DB restored from backup')"
+            )
+        _was_broken = bool(getattr(app, "_gic_chain_broken", False))
+        app._gic_chain_broken = False
+        store.set_gic_chain_broken(False)
+        try:
+            store.write_agent_event(
+                event_type="gic_chain_reset",
+                payload=_json.dumps({"reason": reason, "was_broken": _was_broken}),
+                source="operator",
+                target="bridge_agent",
+                device_id="",
+            )
+        except Exception:
+            pass
+        log.warning(
+            "GIC chain broken flag RESET by operator — was_broken=%s reason='%s'",
+            _was_broken, reason,
+        )
+        return {
+            "accepted":   True,
+            "was_broken": _was_broken,
+            "reason":     reason,
+            "timestamp":  _tgic.time(),
+        }
+
+    # Phase 235-A — GET /bridge/grind-chain-status
+    # ------------------------------------------------------------------
+    @app.get("/bridge/grind-chain-status")
+    async def get_grind_chain_status(
+        x_api_key: str = Header(default=""),
+    ):
+        """Grind Integrity Chain status (Phase 235-A).
+
+        Returns (7 keys): grind_session_id, chain_length, latest_gic_hash,
+        chain_intact, genesis_ts, latest_ts, timestamp.
+        """
+        _check_read_key(x_api_key)
+        import time as _t235a
+        try:
+            _grind_sid = getattr(cfg, "grind_session_id", "")
+            _status = store.get_grind_chain_status(_grind_sid, cfg)
+            _gad_summary = store.get_validation_summary(gate_n=1)
+            _latest_gctx = _gad_summary.get("latest_gameplay_context")
+            return {**_status, "latest_gameplay_context": _latest_gctx, "timestamp": _t235a.time()}
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     return app

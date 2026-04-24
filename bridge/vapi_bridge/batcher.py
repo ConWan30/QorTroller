@@ -88,9 +88,13 @@ class Batcher:
             self._cfg.max_retries,
         )
 
+        # Phase 235-UR: yield to event loop so Uvicorn finishes binding before
+        # we issue a potentially-slow startup DB scan.
+        await asyncio.sleep(5)
+
         # Phase 36: Startup recovery — re-enqueue pending records from DB
         try:
-            pending = self._store.get_pending_records(limit=500)
+            pending = await asyncio.to_thread(self._store.get_pending_records, 500)
             if pending:
                 log.info("Batcher: re-enqueuing %d pending records from DB", len(pending))
             _skipped = 0
@@ -113,6 +117,8 @@ class Batcher:
                               row.get("id", "?"), _rec_exc)
             if _skipped:
                 log.warning("Batcher startup: %d corrupt record(s) skipped", _skipped)
+            # Yield after processing DB rows so HTTP requests can be serviced
+            await asyncio.sleep(0)
         except Exception as exc:
             log.warning("Batcher: startup recovery failed (non-fatal): %s", exc)
 

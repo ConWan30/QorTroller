@@ -1981,10 +1981,367 @@ gap work is queued.
 
 ---
 
-**Document Version**: 2.7 (WIF-043 filed 2026-04-18; QueryParamAuthMigration Phase 230+; WIF-042 GovernanceProvenanceChainVisualizer Phase 226; WIF-041 GraduationAutowatchGap Phase 214; WIF-040 CLOSED Phase 212)
+**Document Version**: 2.8 (WIF-056 filed 2026-04-18; StructuralProbeNonStationarity + HPSP + AIT probes Phase 229; WIF-043 QueryParamAuthMigration Phase 230+; WIF-040 CLOSED Phase 212)
 **Last Updated**: 2026-04-18
-**W1 Count**: 37 entries (WIF-041 GraduationAutowatchGap OPEN Phase 214; WIF-040 Skill Drift CLOSED Phase 212; WIF-039 CorpusRatioRegressionGuard CLOSED Phase 208)
-**W2 Count**: 30 entries (WIF-043 QueryParamAuthMigration Phase 230+ OPEN; WIF-042 GovernanceProvenanceChainVisualizer Phase 226 OPEN; WIF-041 W2 PerPairProbeSelector Phase 215 OPEN; WIF-040 W2 vapi_skill_state_sync CLOSED Phase 212)
+**W1 Count**: 38 entries (WIF-056 StructuralProbeNonStationarity OPEN Phase 229; WIF-041 GraduationAutowatchGap OPEN Phase 214; WIF-040 Skill Drift CLOSED Phase 212; WIF-039 CorpusRatioRegressionGuard CLOSED Phase 208)
+**W2 Count**: 32 entries (WIF-056 W2A HPSP + W2B AIT Phase 229 OPEN; WIF-043 QueryParamAuthMigration Phase 230+ OPEN; WIF-042 GovernanceProvenanceChainVisualizer Phase 226 OPEN; WIF-041 W2 PerPairProbeSelector Phase 215 OPEN)
 **W3 Count**: 5 entries
 **Update Method**: Append-only, status updates inline
-**Key Phase 213/214 Updates**: WIF-041 Graduation Autowatch Gap filed (cycle33); AccelTremorFFT FFT resolution fix COMPLETE (Phase 213); P1vP3=0.032 code fix deployed; tremor_resting=1.177 (N=27) — all_pairs_p0_ok=False pending hardware recapture
+**Key Phase 228 Updates**: WIF-056 filed 2026-04-18 — structural probe non-stationarity confirmed empirically (tremor_resting 1.177→0.689 N=27→42; touchpad_corners 1.261→0.728 N=11→35); HPSP + AIT novel probes proposed; MCP autoresearch cycle 1
+
+---
+
+## WIF-044 — Auto-Promoted Fleet Coherence Failure: CORPUS_ENTROPY_WARNING_NO_AUTORESEARCH (Phase 193)
+
+**W1 — Failure mode**: DataCuratorAgent detected a corpus entropy CLUSTERING_WARNING more than 24 hours ago but no AutoResearch cycle with priority 'corpus_entropy_health' has been run. The wiki engine is not triggering AutoResearch after entropy warnings.
+
+**Agents involved**: DataCuratorAgent, vapi_autoresearch.py
+**Failure mode class**: ORPHAN
+**First detected**: Cycle 1 (auto-promoted after 3 occurrences)
+
+**Implication**: This coherence failure appeared in 3 consecutive FleetSignalCoherenceAgent cycles, confirming it is a persistent structural gap in the fleet's inter-agent signal topology — not a transient timing artifact.
+
+**Mitigation**: Run: python vapi_autoresearch.py --cycle 1 --priority corpus_entropy_health
+
+**W2 — Novel opportunity**: Resolving this contradiction enables a new inter-agent protocol invariant: the FSCA can add the validated fix as a permanent COHERENCE_RULE to its rule set, preventing the same class of contradiction from recurring as the fleet scales beyond Agent #36. This creates a self-expanding invariant set grounded in live fleet behavior — the RSI contribution exclusive to VAPI's 30+ agent topology.
+
+**Status**: AUTO-PROMOTED — Phase 193 (FleetSignalCoherenceAgent)
+[VAPI:Phase193:FleetSignalCoherenceAgent:AUTO_PROMOTED]
+
+
+---
+
+## WIF-045 — Auto-Promoted Fleet Coherence Failure: CORPUS_ENTROPY_WARNING_NO_AUTORESEARCH (Phase 193)
+
+**W1 — Failure mode**: DataCuratorAgent detected a corpus entropy CLUSTERING_WARNING more than 24 hours ago but no AutoResearch cycle with priority 'corpus_entropy_health' has been run. The wiki engine is not triggering AutoResearch after entropy warnings.
+
+**Agents involved**: DataCuratorAgent, vapi_autoresearch.py
+**Failure mode class**: ORPHAN
+**First detected**: Cycle 1 (auto-promoted after 3 occurrences)
+
+**Implication**: This coherence failure appeared in 3 consecutive FleetSignalCoherenceAgent cycles, confirming it is a persistent structural gap in the fleet's inter-agent signal topology — not a transient timing artifact.
+
+**Mitigation**: Run: python vapi_autoresearch.py --cycle 1 --priority corpus_entropy_health
+
+**W2 — Novel opportunity**: Resolving this contradiction enables a new inter-agent protocol invariant: the FSCA can add the validated fix as a permanent COHERENCE_RULE to its rule set, preventing the same class of contradiction from recurring as the fleet scales beyond Agent #36. This creates a self-expanding invariant set grounded in live fleet behavior — the RSI contribution exclusive to VAPI's 30+ agent topology.
+
+**Status**: AUTO-PROMOTED — Phase 193 (FleetSignalCoherenceAgent)
+[VAPI:Phase193:FleetSignalCoherenceAgent:AUTO_PROMOTED]
+
+
+---
+
+## WIF-046 — Auto-Promoted Fleet Coherence Failure: CORPUS_ENTROPY_WARNING_NO_AUTORESEARCH (Phase 193)
+
+**W1 — Failure mode**: DataCuratorAgent detected a corpus entropy CLUSTERING_WARNING more than 24 hours ago but no AutoResearch cycle with priority 'corpus_entropy_health' has been run. The wiki engine is not triggering AutoResearch after entropy warnings.
+
+**Agents involved**: DataCuratorAgent, vapi_autoresearch.py
+**Failure mode class**: ORPHAN
+**First detected**: Cycle 1 (auto-promoted after 3 occurrences)
+
+**Implication**: This coherence failure appeared in 3 consecutive FleetSignalCoherenceAgent cycles, confirming it is a persistent structural gap in the fleet's inter-agent signal topology — not a transient timing artifact.
+
+**Mitigation**: Run: python vapi_autoresearch.py --cycle 1 --priority corpus_entropy_health
+
+**W2 — Novel opportunity**: Resolving this contradiction enables a new inter-agent protocol invariant: the FSCA can add the validated fix as a permanent COHERENCE_RULE to its rule set, preventing the same class of contradiction from recurring as the fleet scales beyond Agent #36. This creates a self-expanding invariant set grounded in live fleet behavior — the RSI contribution exclusive to VAPI's 30+ agent topology.
+
+**Status**: AUTO-PROMOTED — Phase 193 (FleetSignalCoherenceAgent)
+[VAPI:Phase193:FleetSignalCoherenceAgent:AUTO_PROMOTED]
+
+
+---
+
+## WIF-047 — Auto-Promoted Fleet Coherence Failure: CORPUS_ENTROPY_WARNING_NO_AUTORESEARCH (Phase 193)
+
+**W1 — Failure mode**: DataCuratorAgent detected a corpus entropy CLUSTERING_WARNING more than 24 hours ago but no AutoResearch cycle with priority 'corpus_entropy_health' has been run. The wiki engine is not triggering AutoResearch after entropy warnings.
+
+**Agents involved**: DataCuratorAgent, vapi_autoresearch.py
+**Failure mode class**: ORPHAN
+**First detected**: Cycle 1 (auto-promoted after 3 occurrences)
+
+**Implication**: This coherence failure appeared in 3 consecutive FleetSignalCoherenceAgent cycles, confirming it is a persistent structural gap in the fleet's inter-agent signal topology — not a transient timing artifact.
+
+**Mitigation**: Run: python vapi_autoresearch.py --cycle 1 --priority corpus_entropy_health
+
+**W2 — Novel opportunity**: Resolving this contradiction enables a new inter-agent protocol invariant: the FSCA can add the validated fix as a permanent COHERENCE_RULE to its rule set, preventing the same class of contradiction from recurring as the fleet scales beyond Agent #36. This creates a self-expanding invariant set grounded in live fleet behavior — the RSI contribution exclusive to VAPI's 30+ agent topology.
+
+**Status**: AUTO-PROMOTED — Phase 193 (FleetSignalCoherenceAgent)
+[VAPI:Phase193:FleetSignalCoherenceAgent:AUTO_PROMOTED]
+
+
+---
+
+## WIF-048 — Auto-Promoted Fleet Coherence Failure: CORPUS_ENTROPY_WARNING_NO_AUTORESEARCH (Phase 193)
+
+**W1 — Failure mode**: DataCuratorAgent detected a corpus entropy CLUSTERING_WARNING more than 24 hours ago but no AutoResearch cycle with priority 'corpus_entropy_health' has been run. The wiki engine is not triggering AutoResearch after entropy warnings.
+
+**Agents involved**: DataCuratorAgent, vapi_autoresearch.py
+**Failure mode class**: ORPHAN
+**First detected**: Cycle 1 (auto-promoted after 3 occurrences)
+
+**Implication**: This coherence failure appeared in 3 consecutive FleetSignalCoherenceAgent cycles, confirming it is a persistent structural gap in the fleet's inter-agent signal topology — not a transient timing artifact.
+
+**Mitigation**: Run: python vapi_autoresearch.py --cycle 1 --priority corpus_entropy_health
+
+**W2 — Novel opportunity**: Resolving this contradiction enables a new inter-agent protocol invariant: the FSCA can add the validated fix as a permanent COHERENCE_RULE to its rule set, preventing the same class of contradiction from recurring as the fleet scales beyond Agent #36. This creates a self-expanding invariant set grounded in live fleet behavior — the RSI contribution exclusive to VAPI's 30+ agent topology.
+
+**Status**: AUTO-PROMOTED — Phase 193 (FleetSignalCoherenceAgent)
+[VAPI:Phase193:FleetSignalCoherenceAgent:AUTO_PROMOTED]
+
+
+---
+
+## WIF-049 — Auto-Promoted Fleet Coherence Failure: CONTEXT_HASH_MISMATCH (Phase 193)
+
+**W1 — Failure mode**: agent_context_log contains LLM agent system prompt hashes from a prior phase. The live prompt SHA-256 (computed at startup) diverges from the committed hash, meaning the agent is either running a stale prompt (knowledge regression) or an unauthorized prompt edit was made without updating the phase number. Rulings produced while the prompt is stale may recommend actions appropriate for the old protocol state, not the current one.
+
+**Agents involved**: BridgeAgent, SessionAdjudicatorAgent, CalibrationIntelligenceAgent
+**Failure mode class**: INVERSION
+**First detected**: Cycle 1 (auto-promoted after 3 occurrences)
+
+**Implication**: This coherence failure appeared in 3 consecutive FleetSignalCoherenceAgent cycles, confirming it is a persistent structural gap in the fleet's inter-agent signal topology — not a transient timing artifact.
+
+**Mitigation**: Run Skill 14 PostCode sweep to recompute and store current prompt hashes. If delta_phase=0 (same phase, different hash): investigate unauthorized edit. If delta_phase>=1: update agent system prompt to Phase N state and re-run sweep.
+
+**W2 — Novel opportunity**: Resolving this contradiction enables a new inter-agent protocol invariant: the FSCA can add the validated fix as a permanent COHERENCE_RULE to its rule set, preventing the same class of contradiction from recurring as the fleet scales beyond Agent #36. This creates a self-expanding invariant set grounded in live fleet behavior — the RSI contribution exclusive to VAPI's 30+ agent topology.
+
+**Status**: AUTO-PROMOTED — Phase 193 (FleetSignalCoherenceAgent)
+[VAPI:Phase193:FleetSignalCoherenceAgent:AUTO_PROMOTED]
+
+
+---
+
+## WIF-050 — Auto-Promoted Fleet Coherence Failure: CORPUS_ENTROPY_WARNING_NO_AUTORESEARCH (Phase 193)
+
+**W1 — Failure mode**: DataCuratorAgent detected a corpus entropy CLUSTERING_WARNING more than 24 hours ago but no AutoResearch cycle with priority 'corpus_entropy_health' has been run. The wiki engine is not triggering AutoResearch after entropy warnings.
+
+**Agents involved**: DataCuratorAgent, vapi_autoresearch.py
+**Failure mode class**: ORPHAN
+**First detected**: Cycle 1 (auto-promoted after 3 occurrences)
+
+**Implication**: This coherence failure appeared in 3 consecutive FleetSignalCoherenceAgent cycles, confirming it is a persistent structural gap in the fleet's inter-agent signal topology — not a transient timing artifact.
+
+**Mitigation**: Run: python vapi_autoresearch.py --cycle 1 --priority corpus_entropy_health
+
+**W2 — Novel opportunity**: Resolving this contradiction enables a new inter-agent protocol invariant: the FSCA can add the validated fix as a permanent COHERENCE_RULE to its rule set, preventing the same class of contradiction from recurring as the fleet scales beyond Agent #36. This creates a self-expanding invariant set grounded in live fleet behavior — the RSI contribution exclusive to VAPI's 30+ agent topology.
+
+**Status**: AUTO-PROMOTED — Phase 193 (FleetSignalCoherenceAgent)
+[VAPI:Phase193:FleetSignalCoherenceAgent:AUTO_PROMOTED]
+
+
+---
+
+## WIF-051 — Auto-Promoted Fleet Coherence Failure: CORPUS_ENTROPY_WARNING_NO_AUTORESEARCH (Phase 193)
+
+**W1 — Failure mode**: DataCuratorAgent detected a corpus entropy CLUSTERING_WARNING more than 24 hours ago but no AutoResearch cycle with priority 'corpus_entropy_health' has been run. The wiki engine is not triggering AutoResearch after entropy warnings.
+
+**Agents involved**: DataCuratorAgent, vapi_autoresearch.py
+**Failure mode class**: ORPHAN
+**First detected**: Cycle 1 (auto-promoted after 3 occurrences)
+
+**Implication**: This coherence failure appeared in 3 consecutive FleetSignalCoherenceAgent cycles, confirming it is a persistent structural gap in the fleet's inter-agent signal topology — not a transient timing artifact.
+
+**Mitigation**: Run: python vapi_autoresearch.py --cycle 1 --priority corpus_entropy_health
+
+**W2 — Novel opportunity**: Resolving this contradiction enables a new inter-agent protocol invariant: the FSCA can add the validated fix as a permanent COHERENCE_RULE to its rule set, preventing the same class of contradiction from recurring as the fleet scales beyond Agent #36. This creates a self-expanding invariant set grounded in live fleet behavior — the RSI contribution exclusive to VAPI's 30+ agent topology.
+
+**Status**: AUTO-PROMOTED — Phase 193 (FleetSignalCoherenceAgent)
+[VAPI:Phase193:FleetSignalCoherenceAgent:AUTO_PROMOTED]
+
+
+---
+
+## WIF-052 — Auto-Promoted Fleet Coherence Failure: CORPUS_ENTROPY_WARNING_NO_AUTORESEARCH (Phase 193)
+
+**W1 — Failure mode**: DataCuratorAgent detected a corpus entropy CLUSTERING_WARNING more than 24 hours ago but no AutoResearch cycle with priority 'corpus_entropy_health' has been run. The wiki engine is not triggering AutoResearch after entropy warnings.
+
+**Agents involved**: DataCuratorAgent, vapi_autoresearch.py
+**Failure mode class**: ORPHAN
+**First detected**: Cycle 1 (auto-promoted after 3 occurrences)
+
+**Implication**: This coherence failure appeared in 3 consecutive FleetSignalCoherenceAgent cycles, confirming it is a persistent structural gap in the fleet's inter-agent signal topology — not a transient timing artifact.
+
+**Mitigation**: Run: python vapi_autoresearch.py --cycle 1 --priority corpus_entropy_health
+
+**W2 — Novel opportunity**: Resolving this contradiction enables a new inter-agent protocol invariant: the FSCA can add the validated fix as a permanent COHERENCE_RULE to its rule set, preventing the same class of contradiction from recurring as the fleet scales beyond Agent #36. This creates a self-expanding invariant set grounded in live fleet behavior — the RSI contribution exclusive to VAPI's 30+ agent topology.
+
+**Status**: AUTO-PROMOTED — Phase 193 (FleetSignalCoherenceAgent)
+[VAPI:Phase193:FleetSignalCoherenceAgent:AUTO_PROMOTED]
+
+
+---
+
+## WIF-053 — Auto-Promoted Fleet Coherence Failure: CORPUS_ENTROPY_WARNING_NO_AUTORESEARCH (Phase 193)
+
+**W1 — Failure mode**: DataCuratorAgent detected a corpus entropy CLUSTERING_WARNING more than 24 hours ago but no AutoResearch cycle with priority 'corpus_entropy_health' has been run. The wiki engine is not triggering AutoResearch after entropy warnings.
+
+**Agents involved**: DataCuratorAgent, vapi_autoresearch.py
+**Failure mode class**: ORPHAN
+**First detected**: Cycle 1 (auto-promoted after 3 occurrences)
+
+**Implication**: This coherence failure appeared in 3 consecutive FleetSignalCoherenceAgent cycles, confirming it is a persistent structural gap in the fleet's inter-agent signal topology — not a transient timing artifact.
+
+**Mitigation**: Run: python vapi_autoresearch.py --cycle 1 --priority corpus_entropy_health
+
+**W2 — Novel opportunity**: Resolving this contradiction enables a new inter-agent protocol invariant: the FSCA can add the validated fix as a permanent COHERENCE_RULE to its rule set, preventing the same class of contradiction from recurring as the fleet scales beyond Agent #36. This creates a self-expanding invariant set grounded in live fleet behavior — the RSI contribution exclusive to VAPI's 30+ agent topology.
+
+**Status**: AUTO-PROMOTED — Phase 193 (FleetSignalCoherenceAgent)
+[VAPI:Phase193:FleetSignalCoherenceAgent:AUTO_PROMOTED]
+
+
+---
+
+## WIF-054 — Auto-Promoted Fleet Coherence Failure: CORPUS_ENTROPY_WARNING_NO_AUTORESEARCH (Phase 193)
+
+**W1 — Failure mode**: DataCuratorAgent detected a corpus entropy CLUSTERING_WARNING more than 24 hours ago but no AutoResearch cycle with priority 'corpus_entropy_health' has been run. The wiki engine is not triggering AutoResearch after entropy warnings.
+
+**Agents involved**: DataCuratorAgent, vapi_autoresearch.py
+**Failure mode class**: ORPHAN
+**First detected**: Cycle 1 (auto-promoted after 3 occurrences)
+
+**Implication**: This coherence failure appeared in 3 consecutive FleetSignalCoherenceAgent cycles, confirming it is a persistent structural gap in the fleet's inter-agent signal topology — not a transient timing artifact.
+
+**Mitigation**: Run: python vapi_autoresearch.py --cycle 1 --priority corpus_entropy_health
+
+**W2 — Novel opportunity**: Resolving this contradiction enables a new inter-agent protocol invariant: the FSCA can add the validated fix as a permanent COHERENCE_RULE to its rule set, preventing the same class of contradiction from recurring as the fleet scales beyond Agent #36. This creates a self-expanding invariant set grounded in live fleet behavior — the RSI contribution exclusive to VAPI's 30+ agent topology.
+
+**Status**: AUTO-PROMOTED — Phase 193 (FleetSignalCoherenceAgent)
+[VAPI:Phase193:FleetSignalCoherenceAgent:AUTO_PROMOTED]
+
+
+---
+
+## WIF-055 — Auto-Promoted Fleet Coherence Failure: CONTEXT_HASH_MISMATCH (Phase 193)
+
+**W1 — Failure mode**: agent_context_log contains LLM agent system prompt hashes from a prior phase. The live prompt SHA-256 (computed at startup) diverges from the committed hash, meaning the agent is either running a stale prompt (knowledge regression) or an unauthorized prompt edit was made without updating the phase number. Rulings produced while the prompt is stale may recommend actions appropriate for the old protocol state, not the current one.
+
+**Agents involved**: BridgeAgent, SessionAdjudicatorAgent, CalibrationIntelligenceAgent
+**Failure mode class**: INVERSION
+**First detected**: Cycle 1 (auto-promoted after 3 occurrences)
+
+**Implication**: This coherence failure appeared in 3 consecutive FleetSignalCoherenceAgent cycles, confirming it is a persistent structural gap in the fleet's inter-agent signal topology — not a transient timing artifact.
+
+**Mitigation**: Run Skill 14 PostCode sweep to recompute and store current prompt hashes. If delta_phase=0 (same phase, different hash): investigate unauthorized edit. If delta_phase>=1: update agent system prompt to Phase N state and re-run sweep.
+
+**W2 — Novel opportunity**: Resolving this contradiction enables a new inter-agent protocol invariant: the FSCA can add the validated fix as a permanent COHERENCE_RULE to its rule set, preventing the same class of contradiction from recurring as the fleet scales beyond Agent #36. This creates a self-expanding invariant set grounded in live fleet behavior — the RSI contribution exclusive to VAPI's 30+ agent topology.
+
+**Status**: AUTO-PROMOTED — Phase 193 (FleetSignalCoherenceAgent)
+[VAPI:Phase193:FleetSignalCoherenceAgent:AUTO_PROMOTED]
+
+
+
+---
+
+## WIF-056 - Structural Probe Non-Stationarity: Self-Paced and Passive Probes Show Ratio Decline as P3 Centroid Drifts with N Growth (Phase 229 candidate)
+
+**Filed**: 2026-04-18 -- MCP AutoResearch Cycle 1 (Phase 228, synergistic tools)
+
+**W1 -- Failure mode**: Both tremor_resting (ratio: 1.177->0.689, N=27->42) and touchpad_corners (ratio: 1.261->0.728, N=11->35) show structural ratio DECLINE as corpus grows. Root cause: P3 intra-player Mahalanobis variance=1.154 (mean, range=[0.164,2.024]) -- P3 centroid shifts session-to-session because ALL current probes are self-paced or passive:
+- tremor_resting: passive still-hold -- P3 muscular effort, temperature, arousal vary per session
+- touchpad_corners: voluntary tapping -- P3 grip style, posture, engagement vary per session
+- gameplay: free-form -- dominated by game-state variation (WIF-009 plateau regime)
+
+P3 centroid drift widens P2/P3 cluster overlap. P2vP3=0.401, P1vP3=0.032 -- both pairs blocked. TGE gate: all_pairs_p0_ok=False; indefinite blocker if probe type unchanged. WIF-039 CorpusRatioRegressionGuard (Phase 208) cannot address pre-breakthrough structural divergence. Adding more sessions of same probe type accelerates ratio decline.
+
+**Mechanism**: P3 behavioral variability in voluntary/passive tasks expands P3 cluster ellipsoid toward P2 cluster. AccelTremorFFT features also affected: resting tremor frequency varies with sympathetic arousal state (root cause of tremor_resting P3 intra-variance=1.154 vs P2=0.502).
+
+---
+
+**W2A -- HPSP: Haptic-Paced Sensorimotor Synchrony Protocol (Phase 230 candidate)**
+
+Protocol: 60-second session. External metronome at 2 Hz (phone metronome app, or L6 haptic pulse via l6_trigger_driver.py). Player taps R2 synchronized to each beat (120 taps total). No gameplay required.
+
+Features from R2 press timestamps vs. beat timestamps:
+- mean_tap_asynchrony (ms): mean(tap_ts - beat_ts) -- negative=anticipatory, positive=reactive; cerebellar-stable
+- asynchrony_sd (ms): std(tap_ts - beat_ts) -- motor timing precision
+- phase_correction_gain: linear regression coefficient a_n+1 / -a_n -- cerebellar error-correction gain
+- synchrony_index: 1 - (asynchrony_sd / ITI), where ITI=500ms at 2 Hz
+
+Multi-rate variant: three 20s blocks at 1Hz/2Hz/4Hz. Asynchrony-vs-tempo scaling curve is the biometric fingerprint. At 4 Hz (near voluntary tap ceiling), individual performance differences maximized.
+
+**Why stable for P3**: Sensorimotor synchronization driven by cerebellum/basal ganglia/SMA -- subcortical circuits independent of voluntary motor planning. P3 non-stationarity is in VOLUNTARY behavior. P3 cerebellar timing signature should remain session-stable.
+
+**Why separates P2/P3**: P2/P3 passive signatures nearly identical (touchpad_spatial_entropy gap=0.006, P2vP3=0.401). Cerebellar timing accuracy and phase_correction_gain are individual-specific, uncorrelated with passive grip metrics. Soft version (no code change needed): phone metronome + R2 taps + offline sync analysis.
+
+**Hardware**: L6 haptic infrastructure already implemented (l6_trigger_driver.py, Phases 43/63). R2 analog captured at 1000 Hz.
+
+---
+
+**W2B -- AIT: Active Isometric Trigger Tremor (Phase 229 candidate -- FIRST PRIORITY)**
+
+Protocol: 30-second session. Player presses and holds L2 at ~50% deflection (analog ~127/255). No haptic required. No game context needed.
+
+Features from L2 analog time series at 1000 Hz (FFT 4096-point zero-padded, parabolic interpolation):
+- task_tremor_peak_hz: FFT of detrended L2 signal, search 4-15 Hz (task tremor range)
+- task_tremor_band_power: power in 8-12 Hz band (motor unit synchronization range)
+- isometric_hold_accuracy: mean |L2_analog - 127| over session
+- hold_variance: var(L2_analog)
+
+**Why better than tremor_resting**: Task tremor frequency under isometric contraction is determined by motor unit synchronization -- anatomically-fixed per individual. Resting tremor varies with sympathetic arousal state. At 50% voluntary contraction the recruited motor unit pool has characteristic synchronization frequency per player.
+
+**Direct implementation**: Extends AccelTremorFFT infrastructure (Phase 205/213) to L2 analog domain. BiometricFeatureExtractor already has _ACCEL_FFT_NFFT=4096 and _parabolic_interp(). New capture script: capture_ait.ps1 (30s hold L2 at half). Minimal code delta.
+
+---
+
+**Recommended Phase 229 sequence**:
+1. AIT first: extend BiometricFeatureExtractor for L2 isometric FFT + capture_ait.ps1 + collect N=10/player + analyze
+2. HPSP second (Phase 230): if AIT insufficient, add HPSP features to feature space
+3. Joint AIT+HPSP feature fusion as L4 extension (4-8 new features, tractable at N>=30)
+
+**Status**: OPEN -- Phase 229 candidate (AIT) + Phase 230 candidate (HPSP)
+[VAPI:Phase229:WIF056:W2B:AIT:ActiveIsometricTrigger:PROPOSED]
+[VAPI:Phase230:WIF056:W2A:HPSP:ProbeDesign:PROPOSED]
+
+
+## WIF-057 -- Haptic Metronome Synchrony Protocol (HMSP): DualShock Edge-Exclusive Cerebellar Timing Probe
+
+**Source**: MCP autoresearch cycle 2 (Phase 228->229), decision synthesis from AIT+HPSP failure analysis
+**Phase**: 228 -> 229 candidate
+**Validation**: APPROVED (0 violations, 13 invariants checked)
+
+---
+
+**W1 -- Failure mode**: All self-paced and passive probes fail P2/P3 separation because P3 is structurally
+non-stationary -- P3's intra-player centroid shifts with arousal state AND posture session-to-session.
+AIT accel (P2vP3=0.365), HPSP phone-metronome (CV=0.5+, players not synchronizing), touchpad_corners
+(0.401), tremor_resting (declined 1.177->0.689 N=27->42) -- all fail the same way. 4-feature
+(tremor+postural) combination improves to P2vP3=0.916 but fails because P3's postural angle
+varies by 150+ degrees session-to-session (sessions 002-006: roll~163deg; sessions 008-009: roll~-16deg).
+Root cause: ANY probe requiring consistent voluntary behavior or posture from P3 accumulates
+intra-player variance faster than inter-player distances grow.
+Implication: tournament gate indefinitely blocked unless probe targets a postural-INDEPENDENT
+biometric mechanism with external timing ground truth computable by the bridge.
+
+**W2 -- Opportunity (HMSP)**: Bridge fires DualShock Edge haptic motor at exactly 2 Hz (500ms interval)
+via HID output command during a 60s capture session. Player taps R2 once per haptic beat.
+Bridge records both haptic_fire_timestamp_ms (bridge-side, authoritative) and R2_onset_timestamp_ms
+(from HID report stream). Asynchrony = R2_onset - haptic_fire per tap is computed to sub-ms precision.
+Features: mean_asynchrony_ms (anticipation/lag bias ~-20ms to +40ms), asynchrony_SD (synchrony
+stability, target <30ms for clean data), phase_correction_gain (alpha of IBI correction model,
+0.1-0.4 for humans), tap_rate_hz (should be 2.0+/-0.05 for valid sessions).
+Cerebellar timing is subcortical and postural-independent -- does not change when P3 shifts grip
+or leans differently. P2/P3 may differ in ANTICIPATION BIAS (some people consistently tap
+15-20ms early, others late) and CORRECTION GAIN (how fast they resync after drift).
+DualShock Edge-exclusive because: (1) requires haptic motor output via HID write -- no other
+gaming controller supports sub-50ms haptic latency via USB HID; (2) bridge controls timing
+ground truth -- competitor hardware has no equivalent internal metronomic cue with bridge-side
+timestamp; (3) 1000 Hz USB polling enables sub-ms asynchrony measurement.
+Phase candidate: Phase 229 (FIRST). Minimal code delta: HID haptic output + asynchrony feature
+extraction. Does NOT modify BiometricFeatureExtractor hot path until N>=30 calibration.
+
+**Key implementation details**:
+- HID haptic output: DualSense output report 0x02 (USB) with vibration bytes at offsets 3-4
+- Haptic profile: short (50ms) strong pulse at each 500ms beat mark
+- Capture protocol: 5s countdown after haptic starts, 60s recording, 10 discarded warm-up beats
+- Valid session gate: tap_count in [100,140] (120 expected); asynchrony_SD < 50ms
+- 'hmsp' added to STRUCTURED_PROBE_TYPES (Phase 151 whitelist)
+- New capture script: capture_hmsp_v2.ps1 (replaces capture_hpsp.ps1)
+
+**Why HMSP solves what HPSP could not**:
+- HPSP v1 CV=0.5+: players tapping freely, no reliable sync to phone metronome
+- HMSP: bridge fires haptic at known timestamp; R2 onset is measured from same 1000Hz clock
+- Asynchrony is COMPUTABLE to <1ms; no phone, no BPM confusion, no human-metronome latency
+- Internal cue eliminates ~100-200ms perceptual delay of phone audio -> player ear -> motor response
+
+**Status**: OPEN. Phase 229 FIRST candidate (replaces AIT as primary novel probe).
+AIT sessions retained as training data for accel_tremor_peak_hz feature.

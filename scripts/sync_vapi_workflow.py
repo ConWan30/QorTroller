@@ -1,5 +1,5 @@
 """
-sync_vapi_workflow.py — VAPI WORKFLOW.v2 Sync Recovery Script
+sync_vapi_workflow.py — VAPI WORKFLOW.v2 Sync Recovery Script (Phase 223 rewrite)
 
 PURPOSE: Keeps VAPI-WORKFLOW.v2 context files synchronized with CLAUDE.md (single source of truth).
          Run after every phase completion. Prevents drift after Claude session disconnects.
@@ -16,6 +16,14 @@ TRIGGERS:
 
 WIF-026 MITIGATION: Closes context drift after Claude session disconnect.
 Pattern: CLAUDE.md is the single source of truth; WORKFLOW.v2 files are derived views.
+
+Phase 223 FIXES:
+  - SDK regex now matches 3+ digits (was 2-3 digits, missed 484+)
+  - Bridge regex now matches 4+ digits (was 3-4 digits, missed 2308+)
+  - update_context_test_counts() uses actual table format with bold+comma counts
+  - Added update_agents_md() for VAPI_AGENTS.md phase header sync
+  - Added update_invariants_md() for VAPI_INVARIANTS.md phase header sync
+  - PostToolUse hook should NOT use head -5 (errors were being suppressed)
 """
 
 import re
@@ -49,27 +57,39 @@ def extract_claude_md_state(claude_md_path: Path) -> dict:
         state["phase_num"] = int(m.group(1))
         state["phase_desc"] = m.group(2).strip()
 
-    # Bridge test count: "Bridge 1934 | ..." or "Bridge: 1934"
-    m = re.search(r"Bridge[:\s]+(\d{3,4})\b", text)
+    # Bridge test count — matches "Bridge: 2328" or "Bridge 2328" (4+ digits)
+    m = re.search(r"Bridge[:\s]+(\d{4,})\b", text)
     if m:
         state["bridge"] = int(m.group(1))
 
-    # Hardhat: "Hardhat: 468" or "Hardhat 468"
-    m = re.search(r"Hardhat[:\s]+(\d{3})\b", text)
+    # Hardhat: "Hardhat: 496" or "Hardhat 496" (3+ digits)
+    m = re.search(r"Hardhat[:\s]+(\d{3,})\b", text)
     if m:
         state["hardhat"] = int(m.group(1))
 
-    # SDK: "SDK: 297" or "SDK 297"
-    m = re.search(r"SDK[:\s]+(\d{2,3})\b", text)
+    # SDK: "SDK: 484" or "SDK 484" (3+ digits — Phase 223 fix: was \d{2,3})
+    m = re.search(r"\bSDK[:\s]+(\d{3,})\b", text)
     if m:
         state["sdk"] = int(m.group(1))
 
-    # Agent count from fleet description
-    m = re.search(r"agent fleet (\d+)", text, re.IGNORECASE)
-    if m:
-        state["agents"] = int(m.group(1))
+    # Agent count from header: "agents NN unchanged" or "agents NN→NN" in Current phase line
+    # Search the Current phase line specifically to avoid matching buried phase descriptions
+    _phase_line_m = re.search(r"Current phase:.*?agents\s+(\d+)", text)
+    if _phase_line_m:
+        state["agents"] = int(_phase_line_m.group(1))
+    else:
+        m = re.search(r"(\d+)\s+agents\b", text)
+        if m:
+            state["agents"] = int(m.group(1))
 
-    # Separation ratio
+    # Contracts count: "45 contracts" or "contracts 45"
+    m = re.search(r"(\d+)\s+contracts?\b", text, re.IGNORECASE)
+    if not m:
+        m = re.search(r"contracts?\s+(\d+)\b", text, re.IGNORECASE)
+    if m:
+        state["contracts"] = int(m.group(1))
+
+    # Separation ratio — touchpad_corners latest
     m = re.search(r"separation ratio.*?(\d+\.\d+).*?touchpad_corners", text, re.IGNORECASE)
     if m:
         state["separation_touchpad"] = float(m.group(1))
@@ -79,6 +99,8 @@ def extract_claude_md_state(claude_md_path: Path) -> dict:
 
 def extract_workflow_state(context_md_path: Path) -> dict:
     """Extracts current state from VAPI_CONTEXT.md for drift comparison."""
+    if not context_md_path.exists():
+        return {}
     text = context_md_path.read_text(encoding="utf-8")
     state = {}
 
@@ -86,13 +108,18 @@ def extract_workflow_state(context_md_path: Path) -> dict:
     if m:
         state["phase_num"] = int(m.group(1))
 
-    m = re.search(r"Bridge pytest \| (\d+)", text)
+    # Table format: | Bridge pytest | **2,184** | or | Bridge pytest | 2184 |
+    m = re.search(r"\| Bridge pytest \| \*?\*?[\d,]+\*?\*?", text)
     if m:
-        state["bridge"] = int(m.group(1))
+        digits = re.search(r"[\d,]+", m.group(0).split("|")[-1])
+        if digits:
+            state["bridge"] = int(digits.group(0).replace(",", ""))
 
-    m = re.search(r"SDK tests \| (\d+)", text)
+    m = re.search(r"\| SDK tests \| \*?\*?[\d,]+", text)
     if m:
-        state["sdk"] = int(m.group(1))
+        digits = re.search(r"[\d,]+", m.group(0).split("|")[-1])
+        if digits:
+            state["sdk"] = int(digits.group(0).replace(",", ""))
 
     return state
 
@@ -138,29 +165,41 @@ def update_context_phase(context_md_path: Path, claude_state: dict) -> bool:
 
 
 def update_context_test_counts(context_md_path: Path, claude_state: dict) -> bool:
-    """Updates the test suite status table in VAPI_CONTEXT.md."""
+    """Updates the test suite status table in VAPI_CONTEXT.md.
+
+    Handles both bold-comma format: | Bridge pytest | **2,336** | ✅ PASS | 2026-04-17 |
+    and plain format:               | Bridge pytest | 2336 | ✅ PASS | 2026-04-17 |
+    """
     text = context_md_path.read_text(encoding="utf-8")
     today = datetime.now().strftime("%Y-%m-%d")
     bridge = claude_state.get("bridge", "?")
     sdk = claude_state.get("sdk", "?")
     hardhat = claude_state.get("hardhat", "?")
 
-    # Replace Bridge pytest row
+    # Format large numbers with comma and bold: **2,336**
+    def _fmt(n):
+        if isinstance(n, int) and n >= 1000:
+            return f"**{n:,}**"
+        return str(n)
+
+    updated = text
+
+    # Bridge pytest — matches both bold-comma and plain formats
     updated = re.sub(
-        r"(\| Bridge pytest \|) [\d,]+ (\| ✅ PASS \|) [^\|]+(\|)",
-        rf"\1 {bridge} \2 {today} \3",
-        text,
-    )
-    # Replace SDK tests row
-    updated = re.sub(
-        r"(\| SDK tests \|) [\d,]+ (\| ✅ PASS \|) [^\|]+(\|)",
-        rf"\1 {sdk} \2 {today} \3",
+        r"(\| Bridge pytest \|) \*?\*?[\d,]+\*?\*? (\| ✅ PASS \|) [^\|]+(\|)",
+        rf"\1 {_fmt(bridge)} \2 {today} \3",
         updated,
     )
-    # Replace Hardhat tests row
+    # SDK tests
     updated = re.sub(
-        r"(\| Hardhat tests \|) [\d,]+ (\| ✅ PASS \|) [^\|]+(\|)",
-        rf"\1 {hardhat} \2 {today} \3",
+        r"(\| SDK tests \|) \*?\*?[\d,]+\*?\*?(?:\s*\([^)]+\))? (\| ✅ PASS \|) [^\|]+(\|)",
+        rf"\1 {_fmt(sdk)} \2 {today} \3",
+        updated,
+    )
+    # Hardhat tests
+    updated = re.sub(
+        r"(\| Hardhat tests \|) \*?\*?[\d,]+\*?\*? (\| ✅ PASS \|) [^\|]+(\|)",
+        rf"\1 {_fmt(hardhat)} \2 {today} \3",
         updated,
     )
     if updated == text:
@@ -184,9 +223,72 @@ def update_context_next_phase(context_md_path: Path, claude_state: dict) -> bool
     return True
 
 
+def update_agents_md(agents_md_path: Path, claude_state: dict) -> bool:
+    """Updates phase reference in VAPI_AGENTS.md SYNC NOTE line.
+
+    Targets: > **SYNC NOTE**: ... Protocol at Phase NNN COMPLETE.
+    """
+    if not agents_md_path.exists():
+        return False
+    text = agents_md_path.read_text(encoding="utf-8")
+    phase = claude_state.get("phase_num", "?")
+    agents = claude_state.get("agents", "?")
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    # Update SYNC NOTE line (may contain "Protocol at Phase NNN COMPLETE")
+    updated = re.sub(
+        r"(> \*\*SYNC NOTE\*\*:.*?Protocol at Phase )\d+( COMPLETE\.)",
+        rf"\g<1>{phase}\2",
+        text,
+    )
+    # Update agent fleet count line: "VAPI operates **36 specialized agents**"
+    updated = re.sub(
+        r"VAPI operates \*\*\d+ specialized agents\*\*",
+        f"VAPI operates **{agents} specialized agents**",
+        updated,
+    )
+    # Update header dry_run/agents/phase summary line if present
+    updated = re.sub(
+        r"(dry_run=True.*?agents.*?;.*?Phase )\d+( COMPLETE)",
+        rf"\g<1>{phase}\2",
+        updated,
+    )
+    if updated == text:
+        return False
+    agents_md_path.write_text(updated, encoding="utf-8")
+    return True
+
+
+def update_invariants_md(invariants_md_path: Path, claude_state: dict) -> bool:
+    """Updates phase reference in VAPI_INVARIANTS.md SYNC NOTE line."""
+    if not invariants_md_path.exists():
+        return False
+    text = invariants_md_path.read_text(encoding="utf-8")
+    phase = claude_state.get("phase_num", "?")
+
+    # Look for any "Phase NNN COMPLETE" in sync-note lines
+    updated = re.sub(
+        r"(> \*\*SYNC NOTE\*\*:.*?Phase )\d+( COMPLETE)",
+        rf"\g<1>{phase}\2",
+        text,
+    )
+    # Also update any "Protocol at Phase NNN" reference
+    updated = re.sub(
+        r"(Protocol at Phase )\d+( COMPLETE)",
+        rf"\g<1>{phase}\2",
+        updated,
+    )
+    if updated == text:
+        return False
+    invariants_md_path.write_text(updated, encoding="utf-8")
+    return True
+
+
 def append_memory_sync_note(memory_md_path: Path, claude_state: dict, drifts: list[str]) -> bool:
     """Appends a sync recovery note to VAPI_MEMORY.md if there was drift."""
     if not drifts:
+        return False
+    if not memory_md_path.exists():
         return False
     text = memory_md_path.read_text(encoding="utf-8")
     today = datetime.now().strftime("%Y-%m-%d")
@@ -218,29 +320,29 @@ def main():
     check_only = "--check" in sys.argv
     phase_only = "--phase-only" in sys.argv
 
-    print(f"[sync_vapi_workflow] Reading CLAUDE.md...")
+    print(f"[sync_vapi_workflow] Reading CLAUDE.md...", flush=True)
     if not CLAUDE_MD.exists():
-        print(f"ERROR: CLAUDE.md not found at {CLAUDE_MD}")
+        print(f"ERROR: CLAUDE.md not found at {CLAUDE_MD}", file=sys.stderr)
         sys.exit(1)
 
     claude_state = extract_claude_md_state(CLAUDE_MD)
     workflow_state = extract_workflow_state(CONTEXT_MD)
 
-    print(f"[sync_vapi_workflow] CLAUDE.md state: {claude_state}")
-    print(f"[sync_vapi_workflow] CONTEXT.md state: {workflow_state}")
+    print(f"[sync_vapi_workflow] CLAUDE.md state: {claude_state}", flush=True)
+    print(f"[sync_vapi_workflow] CONTEXT.md state: {workflow_state}", flush=True)
 
     drifts = check_drift(claude_state, workflow_state)
 
     if not drifts:
-        print("[sync_vapi_workflow] ✅ No drift detected — WORKFLOW.v2 files are current.")
+        print("[sync_vapi_workflow] No drift detected — WORKFLOW.v2 files are current.", flush=True)
         return
 
-    print(f"[sync_vapi_workflow] ⚠️  DRIFT DETECTED ({len(drifts)} items):")
+    print(f"[sync_vapi_workflow] DRIFT DETECTED ({len(drifts)} items):", flush=True)
     for d in drifts:
-        print(f"  {d}")
+        print(f"  {d}", flush=True)
 
     if check_only:
-        print("[sync_vapi_workflow] --check mode: no writes performed.")
+        print("[sync_vapi_workflow] --check mode: no writes performed.", flush=True)
         sys.exit(1)
 
     # Apply updates
@@ -254,12 +356,20 @@ def main():
     if not phase_only:
         if append_memory_sync_note(MEMORY_MD, claude_state, drifts):
             changed.append("MEMORY.md sync note")
+        if update_agents_md(AGENTS_MD, claude_state):
+            changed.append("AGENTS.md phase ref")
+        if update_invariants_md(INVARIANTS_MD, claude_state):
+            changed.append("INVARIANTS.md phase ref")
 
     if changed:
-        print(f"[sync_vapi_workflow] ✅ Updated: {', '.join(changed)}")
+        print(f"[sync_vapi_workflow] Updated: {', '.join(changed)}", flush=True)
     else:
-        print("[sync_vapi_workflow] ⚠️  Drift found but no patterns matched for auto-update.")
-        print("    Manual sync required. Run /vapi sync-workflow for guided update.")
+        print(
+            "[sync_vapi_workflow] WARNING: Drift found but no table patterns matched.\n"
+            "    Run manually: python scripts/sync_vapi_workflow.py --check",
+            file=sys.stderr,
+            flush=True,
+        )
 
 
 if __name__ == "__main__":

@@ -182,6 +182,8 @@ def _parse_args() -> argparse.Namespace:
                    help="User notes embedded in session metadata")
     p.add_argument("--transport", choices=["usb", "bt", "auto"], default="auto",
                    help="HID transport override: usb (64B), bt (78B), auto=detect (default: auto)")
+    p.add_argument("--live-l2", action="store_true", default=False,
+                   help="Print live L2 trigger analog value every 2s during AIT capture")
     return p.parse_args()
 
 
@@ -249,7 +251,7 @@ def _auto_increment_path(path: str) -> str:
 # Capture loop
 # ---------------------------------------------------------------------------
 
-def run(duration_s: int, output_path: str, notes: str, transport_arg: str = "auto") -> int:
+def run(duration_s: int, output_path: str, notes: str, transport_arg: str = "auto", live_l2: bool = False) -> int:
     if not _HID_AVAILABLE:
         print("ERROR: 'hid' package not installed. Run: pip install hidapi", file=sys.stderr)
         return 1
@@ -322,7 +324,12 @@ def run(duration_s: int, output_path: str, notes: str, transport_arg: str = "aut
 
             if now - t_last >= _PROGRESS_INTERVAL:
                 rate = len(captured) / elapsed if elapsed > 0 else 0.0
-                print(f"  {elapsed:.0f}s / {duration_s}s — {len(captured)} reports ({rate:.1f} Hz)")
+                _prog = f"  {elapsed:.0f}s / {duration_s}s — {len(captured)} reports ({rate:.1f} Hz)"
+                if live_l2 and captured:
+                    _l2 = captured[-1]["features"].get("l2_trigger", 0)
+                    _zone = "OK" if 100 <= _l2 <= 150 else ("LIGHT" if _l2 < 100 else "HEAVY")
+                    _prog += f"  |  L2={_l2:3d}  [{_zone}]"
+                print(_prog)
                 t_last = now
 
             raw = h.read(_READ_BUFFER_SIZE, timeout_ms=_READ_TIMEOUT_MS)
@@ -381,7 +388,7 @@ def main() -> int:
     args = _parse_args()
     output = args.output if args.output else _default_output()
     output = _auto_increment_path(output)
-    return run(args.duration, output, args.notes, transport_arg=args.transport)
+    return run(args.duration, output, args.notes, transport_arg=args.transport, live_l2=args.live_l2)
 
 
 if __name__ == "__main__":

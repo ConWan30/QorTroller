@@ -1387,6 +1387,71 @@ class Config:
     The bridge verifies VHP validity on-chain (fail-open if chain unreachable).
     Default False (requires enrolled VHP to activate)."""
 
+    # --- Phase 234.7: Physical Capture Continuity (PCC) ---
+    pcc_enabled: bool = field(
+        default_factory=lambda: _env_bool("PCC_ENABLED", True)
+    )
+    """Phase 234.7 — Enable CaptureHealthMonitor (always-on by default; monitoring only)."""
+
+    pcc_nominal_hz: int = field(
+        default_factory=lambda: _env_int("PCC_NOMINAL_HZ", 950)
+    )
+    """Phase 234.7 — HID poll rate threshold for NOMINAL capture state. Default 950 Hz."""
+
+    pcc_degraded_hz: int = field(
+        default_factory=lambda: _env_int("PCC_DEGRADED_HZ", 100)
+    )
+    """Phase 234.7 — HID poll rate floor for DEGRADED state. Below this → DISCONNECTED."""
+
+    pcc_stable_window_s: int = field(
+        default_factory=lambda: _env_int("PCC_STABLE_WINDOW_S", 30)
+    )
+    """Phase 234.7 — Seconds of sustained NOMINAL required before grind_ready=True."""
+
+    grind_mode: bool = field(
+        default_factory=lambda: _env_bool("GRIND_MODE", False)
+    )
+    """Phase 234.7 — Activate grind-mode fail-closed enforcement.
+    When True: session_counting_paused=True if capture is not NOMINAL+EXCLUSIVE_USB.
+    Set via GRIND_MODE=true in bridge/.env or --grind-mode CLI flag (startup).
+    Default False. Only activate for calibration grind sessions."""
+
+    grind_target: int = field(
+        default_factory=lambda: _env_int("GRIND_TARGET", 100)
+    )
+    """Phase 234.7 — Target consecutive_clean count for grind completion.
+    Reported in GET /bridge/capture-health as progress N/target.
+    Default 100 (matches validation_gate_n default)."""
+
+    grind_session_id: str = field(
+        default_factory=lambda: os.environ.get(
+            "GRIND_SESSION_ID",
+            f"grind_{__import__('datetime').date.today().strftime('%Y%m%d')}",
+        )
+    )
+    """Phase 235-A — Stable identifier for this grind run used as GIC chain root.
+    Set GRIND_SESSION_ID in bridge/.env for multi-day grinds. Auto-generated
+    as grind_YYYYMMDD if not set. A new value starts a new chain (new genesis)."""
+
+    # --- Phase 235-GAD: Gameplay Activity Discrimination ---
+    gameplay_discrimination_enabled: bool = field(
+        default_factory=lambda: _env_bool("GAMEPLAY_DISCRIMINATION_ENABLED", True)
+    )
+    """Phase 235-GAD — Require trigger activity evidence for grind consecutive_clean.
+    When True: gameplay_context=MENU_DETECTED breaks the streak (fail-closed on confirmed menu).
+    NULL gameplay_context (pre-GAD or discrimination disabled) passes through.
+    Default True (correctness gate, not optional feature)."""
+
+    # --- Phase 229: AIT Separation ---
+    ait_separation_enabled: bool = field(
+        default_factory=lambda: _env("AIT_SEPARATION_ENABLED", "true").lower() == "true"
+    )
+    """Phase 229 — Enable AIT (Active Isometric Trigger) separation status API.
+    When True, GET /agent/ait-separation-status returns the latest AIT separation
+    analysis result from ait_session_log.  Default True (infrastructure always on;
+    data populated by analyze_interperson_separation.py --session-type ait --write-snapshot
+    or POST /agent/run-ait-analysis)."""
+
     # --- Phase 154: Capture Stagnation Monitor ---
     capture_stagnation_threshold: float = field(
         default_factory=lambda: float(_env("CAPTURE_STAGNATION_THRESHOLD", "0.5"))

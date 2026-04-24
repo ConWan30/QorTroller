@@ -355,6 +355,7 @@ class DualShockTransport:
         self._on_record   = on_record_cb
         self._chain       = chain_client
         self._interval    = float(getattr(cfg, "dualshock_record_interval_s", 1.0))
+        self._pcc_monitor = None  # set via set_pcc_monitor() (Phase 234.7)
         self._oracle_addr = getattr(cfg, "skill_oracle_address", "")
         self._bounty_cfg  = getattr(cfg, "dualshock_active_bounties", "")
         self._key_dir     = Path(getattr(cfg, "dualshock_key_dir",
@@ -518,6 +519,10 @@ class DualShockTransport:
                 personal_thresh = global_thresh
             self._player_profile_cache[device_id_hex] = min(global_thresh, personal_thresh)
         return self._player_profile_cache[device_id_hex]
+
+    def set_pcc_monitor(self, monitor) -> None:  # Phase 234.7
+        """Wire a CaptureHealthMonitor instance for physical capture continuity."""
+        self._pcc_monitor = monitor
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -969,17 +974,27 @@ class DualShockTransport:
                     self._interval * 4, _loop_iter,
                     getattr(self, "_is_sim_mode", "?"),
                 )
+                if self._pcc_monitor is not None:  # Phase 234.7 Layer 2
+                    self._pcc_monitor.signal_disconnect("hid_timeout")
                 await asyncio.sleep(self._interval)
                 continue
             except Exception as _poll_exc:
                 log.warning("_poll_frames error (non-fatal, session continues): %s", _poll_exc)
+                if self._pcc_monitor is not None:  # Phase 234.7 Layer 2
+                    self._pcc_monitor.signal_disconnect("poll_error")
                 await asyncio.sleep(self._interval)
                 continue
 
             if not frames:
                 log.debug("Session loop iter=%d: no frames, sleeping", _loop_iter)
+                if self._pcc_monitor is not None:  # Phase 234.7 Layer 1
+                    self._pcc_monitor.update_sample(0, self._interval)
                 await asyncio.sleep(self._interval)
                 continue
+
+            # Phase 234.7 Layer 1 — report frame count for poll rate tracking
+            if self._pcc_monitor is not None:
+                self._pcc_monitor.update_sample(len(frames), self._interval)
 
             # Phase 53: reset pitl_meta at the start of each iteration so Bridge.on_record()
             # never reads stale values from the previous cycle if an exception fires mid-loop.
@@ -1452,6 +1467,20 @@ class DualShockTransport:
             # Phase 59: IBI snapshot for Biometric Heartbeat visualization
             if hasattr(self._bio_extractor, "get_ibi_snapshot"):
                 self._pending_pitl_meta["ibi_snapshot"] = self._bio_extractor.get_ibi_snapshot(last_n=20)
+
+            # Phase 235-GAD: trigger_active = 1 iff any L2/R2 onset occurred this cycle.
+            # trigger_onset_velocity > 0.0 iff at least one trigger onset event was detected.
+            # Returns exactly 0.0 when no presses occurred (formula zero point, not a threshold).
+            _gad_feats: dict = {}
+            if _l4_features_json:
+                try:
+                    _gad_feats = json.loads(_l4_features_json)
+                except Exception:
+                    pass
+            self._pending_pitl_meta["trigger_active"] = int(
+                _gad_feats.get("trigger_onset_velocity_l2", 0.0) > 0.0
+                or _gad_feats.get("trigger_onset_velocity_r2", 0.0) > 0.0
+            )
 
             inf_name = GAMING_INFERENCE_NAMES.get(inference, f"0x{inference:02x}")
 
@@ -2061,16 +2090,19 @@ class DualShockTransport:
         except Exception as exc:
             log.warning("Bridge on_record error: %s", exc)
         # Phase 61: store frame checkpoint for session replay
-        try:
-            import hashlib as _hl
-            _rh = _hl.sha256(raw[:164]).hexdigest()
-            self._store.store_frame_checkpoint(
-                device_id=self._device_id.hex() if self._device_id is not None else "",
-                record_hash=_rh,
-                frames=list(self._replay_ring),
-            )
-        except Exception:
-            pass
+        # Skip during grind_mode — frame replay is diagnostic-only; writing it creates
+        # SQLite write-lock contention with the async thread pool and starves HTTP handlers.
+        if not getattr(self._cfg, "grind_mode", False):
+            try:
+                import hashlib as _hl
+                _rh = _hl.sha256(raw[:164]).hexdigest()
+                self._store.store_frame_checkpoint(
+                    device_id=self._device_id.hex() if self._device_id is not None else "",
+                    record_hash=_rh,
+                    frames=list(self._replay_ring),
+                )
+            except Exception:
+                pass
 
     async def _shutdown_cleanup(self):
         """Submit final SkillOracle update and reset controller state."""

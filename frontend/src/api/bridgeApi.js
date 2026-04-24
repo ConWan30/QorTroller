@@ -99,3 +99,22 @@ export function useTournamentPreflight() {
     staleTime: 10000,
   })
 }
+
+// Phase 235-FINAL: grind-critical live indicators
+export function useCaptureHealth() {
+  return useQuery({
+    queryKey: ['captureHealth'],
+    queryFn: () => get('/bridge/capture-health', 'captureHealth'),
+    refetchInterval: 3000,
+    staleTime: 2000,
+  })
+}
+
+export function useGrindChain() {
+  return useQuery({
+    queryKey: ['grindChain'],
+    queryFn: () => get('/bridge/grind-chain-status', 'grindChain'),
+    refetchInterval: 5000,
+    staleTime: 3000,
+  })
+}
