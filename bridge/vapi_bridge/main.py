@@ -8,6 +8,7 @@ as concurrent asyncio tasks. Handles graceful shutdown on SIGINT/SIGTERM.
 import asyncio
 import json
 import logging
+import os
 import signal
 import sys
 
@@ -95,6 +96,8 @@ class Bridge:
         self.batcher = Batcher(cfg, self.store, self.chain)
         self._tasks: list[asyncio.Task] = []
         self._ds_transport = None  # DualShockTransport, set in run() if dualshock_enabled
+        # In-memory cache: prev_poac_hash_hex -> pubkey_bytes  (avoids 392ms list_devices() call per record)
+        self._pubkey_cache: dict[str, bytes] = {}
 
     async def on_record(self, raw_data: bytes, source: str):
         """
@@ -152,6 +155,8 @@ class Bridge:
                 record.pitl_l4_drift_velocity  = pitl_meta.get("l4_drift_velocity")
                 record.pitl_e4_cognitive_drift = pitl_meta.get("e4_cognitive_drift")
                 record.pitl_humanity_prob      = pitl_meta.get("humanity_prob")
+                # Phase 235-GAD: trigger activity flag (1 = any L2/R2 press detected)
+                record.pitl_trigger_active     = pitl_meta.get("trigger_active", 0)
 
         if pubkey_bytes:
             device_id = compute_device_id(pubkey_bytes)
@@ -215,22 +220,43 @@ class Bridge:
         Attempt to find the public key for a record's signing device.
 
         Resolution order:
-        1. Local store (device whose chain_head matches record.prev_poac_hash)
-        2. On-chain DeviceRegistry
+        1. In-memory cache keyed by prev_poac_hash_hex — pre-populated after each resolved record
+           so that the NEXT record (whose prev_poac_hash == current record_hash) is a cache hit.
+        2. Local store (device whose chain_head matches record.prev_poac_hash)
+        3. On-chain DeviceRegistry
         """
-        # Check all known devices for chain continuity
+        prev_hex = record.prev_poac_hash.hex()
+
+        # Fast path: cache hit (every record after the first)
+        if prev_hex in self._pubkey_cache:
+            pk = self._pubkey_cache[prev_hex]
+            # Pre-populate for the NEXT record in the chain
+            self._pubkey_cache[record.record_hash_hex] = pk
+            return pk
+
+        # Slow path: scan DB — only on cache miss (first record or restart)
         devices = self.store.list_devices()
         for dev in devices:
             if dev["pubkey_hex"] == "unknown":
                 continue
-            if dev["chain_head"] == record.prev_poac_hash.hex():
-                return bytes.fromhex(dev["pubkey_hex"])
+            if dev["chain_head"] == prev_hex:
+                pk = bytes.fromhex(dev["pubkey_hex"])
+                self._pubkey_cache[prev_hex] = pk
+                # Pre-populate for the next record in the chain
+                self._pubkey_cache[record.record_hash_hex] = pk
+                # Bound cache size to avoid unbounded growth
+                if len(self._pubkey_cache) > 4096:
+                    self._pubkey_cache.pop(next(iter(self._pubkey_cache)))
+                return pk
 
         # For genesis records (prev_hash all zeros), check all registered devices
         if record.prev_poac_hash == b"\x00" * 32:
             for dev in devices:
                 if dev["pubkey_hex"] != "unknown":
-                    return bytes.fromhex(dev["pubkey_hex"])
+                    pk = bytes.fromhex(dev["pubkey_hex"])
+                    self._pubkey_cache[prev_hex] = pk
+                    self._pubkey_cache[record.record_hash_hex] = pk
+                    return pk
 
         # Try on-chain registry (brute-force check is impractical; need device_id)
         # In production, the uplink message should include the device_id as a header
@@ -249,6 +275,44 @@ class Bridge:
         log.info("VAPI Bridge v0.2.0-rc1 starting")
         log.info("=" * 60)
         _log_startup_diagnostics(self.cfg)
+
+        # Phase 235-A: GIC chain integrity check at startup
+        try:
+            _grind_sid = getattr(self.cfg, "grind_session_id", "")
+            _grind_mode = bool(getattr(self.cfg, "grind_mode", False))
+            log.info("=" * 60)
+            log.info("GRIND SESSION ID : %s", _grind_sid or "(not set)")
+            log.info("GRIND MODE       : %s", "ACTIVE" if _grind_mode else "INACTIVE")
+            if _grind_mode and not os.environ.get("GRIND_SESSION_ID"):
+                log.warning(
+                    "GRIND_SESSION_ID not set in environment — auto-generated ID '%s'. "
+                    "Set GRIND_SESSION_ID=grind_phase235_v1 in bridge/.env to persist "
+                    "the same grind session ID across bridge restarts.",
+                    _grind_sid,
+                )
+            log.info("=" * 60)
+            _chain = self.store.get_grind_chain_status(_grind_sid, self.cfg)
+            if _chain["chain_length"] > 0 and not _chain["chain_intact"]:
+                log.critical(
+                    "GIC CHAIN BROKEN — grind_session_id=%s chain_length=%d "
+                    "Refusing to advance consecutive_clean until chain is repaired.",
+                    _grind_sid, _chain["chain_length"],
+                )
+                self._gic_chain_broken = True
+                self.store.set_gic_chain_broken(True)
+            else:
+                self._gic_chain_broken = False
+                self.store.set_gic_chain_broken(False)
+                if _chain["chain_length"] > 0:
+                    log.info(
+                        "GIC chain intact — grind_session_id=%s chain_length=%d",
+                        _grind_sid, _chain["chain_length"],
+                    )
+        except Exception as _gic_e:
+            log.warning("GIC startup check failed (non-fatal): %s", _gic_e)
+            self._gic_chain_broken = False
+            self.store.set_gic_chain_broken(False)
+
         log.info("IoTeX RPC: %s (chain_id=%d)", self.cfg.iotex_rpc_url, self.cfg.chain_id)
         log.info("Bridge wallet: %s", self.chain.bridge_address)
         log.info("Verifier: %s", self.cfg.verifier_address)
@@ -358,11 +422,13 @@ class Bridge:
             mon_app = create_monitoring_app(cfg=self.cfg, state=monitor_state, store=self.store)
             app.mount("/monitor", mon_app)
             app.mount("/dash", create_dashboard_app(self.store, _arch, _net_det))
-            app.mount("/operator", create_operator_app(
+            _op_app = create_operator_app(
                 self.cfg, self.store,
                 _agent=_agent_instance,
                 _calib_agent=_calib_intel_agent,
-            ))
+            )
+            _op_app._gic_chain_broken = getattr(self, "_gic_chain_broken", False)
+            app.mount("/operator", _op_app)
             config = uvicorn.Config(
                 app,
                 host=self.cfg.http_host,

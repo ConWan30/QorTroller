@@ -63,6 +63,8 @@ def _insert_val(store, ruling_id, divergence=0):
         llm_confidence=0.05,
         fallback_confidence=0.05,
         divergence=divergence,
+        pcc_state="NOMINAL" if not divergence else None,
+        pcc_host_state="EXCLUSIVE_USB" if not divergence else None,
     )
 
 

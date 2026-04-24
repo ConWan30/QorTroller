@@ -56,6 +56,8 @@ def _insert_ruling(store, ruling_id, verdict="CERTIFY", divergence=0, divergence
         fallback_confidence=0.8,
         divergence=divergence,
         divergence_reason=divergence_reason,
+        pcc_state="NOMINAL" if not divergence else None,
+        pcc_host_state="EXCLUSIVE_USB" if not divergence else None,
     )
 
 

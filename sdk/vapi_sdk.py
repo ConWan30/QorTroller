@@ -3148,6 +3148,8 @@ class TournamentPreflightResult:
     biometric_ttl_ok: bool = True
     # Phase 197: all_pairs_p0_ok — 10th P0 condition (per-pair separation gate)
     all_pairs_p0_ok: bool = False
+    # Phase 231: ait_defensibility_ok — 11th P0 condition (AIT all_pairs + >=10 sessions/player)
+    ait_defensibility_ok: bool = False
 
     def __post_init__(self):
         if self.conditions_detail is None:
@@ -3183,12 +3185,14 @@ class VAPITournamentPreflight:
                 conditions_detail=body.get("conditions", {}),
                 biometric_ttl_ok=bool(body.get("biometric_ttl_ok", True)),
                 all_pairs_p0_ok=bool(body.get("all_pairs_p0_ok", False)),
+                ait_defensibility_ok=bool(body.get("ait_defensibility_ok", False)),
             )
         except Exception as exc:
             return TournamentPreflightResult(
                 separation_ok=False, l4_ok=False, gate_ok=False,
                 cert_ok=False, audit_ok=False, overall_pass=False,
-                conditions_detail={}, biometric_ttl_ok=True, all_pairs_p0_ok=False, error=str(exc),
+                conditions_detail={}, biometric_ttl_ok=True, all_pairs_p0_ok=False,
+                ait_defensibility_ok=False, error=str(exc),
             )
 
     def get_status(self) -> TournamentPreflightResult:
@@ -3209,12 +3213,14 @@ class VAPITournamentPreflight:
                 conditions_detail=body.get("conditions", {}),
                 biometric_ttl_ok=bool(body.get("biometric_ttl_ok", True)),
                 all_pairs_p0_ok=bool(body.get("all_pairs_p0_ok", False)),
+                ait_defensibility_ok=bool(body.get("ait_defensibility_ok", False)),
             )
         except Exception as exc:
             return TournamentPreflightResult(
                 separation_ok=False, l4_ok=False, gate_ok=False,
                 cert_ok=False, audit_ok=False, overall_pass=False,
-                conditions_detail={}, biometric_ttl_ok=True, all_pairs_p0_ok=False, error=str(exc),
+                conditions_detail={}, biometric_ttl_ok=True, all_pairs_p0_ok=False,
+                ait_defensibility_ok=False, error=str(exc),
             )
 
 
@@ -7917,3 +7923,186 @@ class VAPIAllowlistGovernance:
                 return _json228.loads(resp.read().decode())
         except Exception as exc:
             return {"error": str(exc)}
+
+
+# ---------------------------------------------------------------------------
+# Phase 229 — AIT Separation
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class AITSeparationResult:
+    """Result from VAPIAITSeparation.status() (Phase 229)."""
+    ait_separation_enabled: bool  = False
+    n_sessions:             int   = 0
+    separation_ratio:       float = 0.0
+    all_pairs_above_1:      bool  = False
+    inter_player_mean:      float = 0.0
+    intra_player_mean:      float = 0.0
+    loo_accuracy:           float = 0.0
+    error:                  str   = ""
+
+
+class VAPIAITSeparation:
+    """Client for Phase 229 AIT (Active Isometric Trigger) separation API.
+
+    AIT uses a 4-feature biometric pipeline:
+      [accel_tremor_peak_hz, roll_cos, roll_sin, pitch_cos]
+
+    Phase 229 breakthrough: separation_ratio=1.199, all_pairs_above_1=True (N=24, 2026-04-18).
+    This is the first probe type to achieve all inter-player distances > 1.0.
+
+    Example::
+
+        ait = VAPIAITSeparation("http://localhost:8080", api_key)
+        result = ait.status()
+        print(result.separation_ratio, result.all_pairs_above_1)
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def status(self) -> AITSeparationResult:
+        """GET /agent/ait-separation-status — returns latest AIT analysis result.
+
+        On error: returns AITSeparationResult with error set.
+        """
+        import json as _j229, urllib.request as _r229
+        try:
+            url = f"{self._base}/agent/ait-separation-status?api_key={self._key}"
+            with _r229.urlopen(url, timeout=10) as resp:
+                d = _j229.loads(resp.read().decode())
+            return AITSeparationResult(
+                ait_separation_enabled = bool(d.get("ait_separation_enabled", False)),
+                n_sessions             = int(d.get("n_sessions", 0)),
+                separation_ratio       = float(d.get("separation_ratio", 0.0)),
+                all_pairs_above_1      = bool(d.get("all_pairs_above_1", False)),
+                inter_player_mean      = float(d.get("inter_player_mean", 0.0)),
+                intra_player_mean      = float(d.get("intra_player_mean", 0.0)),
+                loo_accuracy           = float(d.get("loo_accuracy", 0.0)),
+            )
+        except Exception as exc:
+            return AITSeparationResult(error=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Phase 234.7 — Physical Capture Continuity (PCC)
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class CaptureHealthResult:
+    """Result from VAPICaptureContinuity.status() (Phase 234.7).
+
+    capture_state: NOMINAL | DEGRADED | DISCONNECTED
+    host_state:    EXCLUSIVE_USB | EXCLUSIVE_BT | CONTESTED | UNKNOWN
+    grind_ready:   True only when NOMINAL + EXCLUSIVE_USB + 30s sustained
+    session_counting_paused: grind_mode=True AND grind_ready=False
+    """
+    pcc_enabled:                    bool  = True
+    capture_state:                  str   = "DISCONNECTED"
+    host_state:                     str   = "UNKNOWN"
+    poll_rate_hz:                   float = 0.0
+    sustained_duration_s:           float = 0.0
+    grind_mode:                     bool  = False
+    grind_ready:                    bool  = False
+    grind_target:                   int   = 100
+    consecutive_clean_toward_target: int  = 0
+    session_counting_paused:        bool  = False
+    error:                          str   = ""
+
+
+class VAPICaptureContinuity:
+    """Client for Phase 234.7 Physical Capture Continuity API.
+
+    Monitors HID poll rate, controller host arbitration state, and grind-mode
+    readiness.  The bridge calls update_sample() every session-loop iteration
+    (~1 Hz) so this endpoint reflects near-real-time capture health.
+
+    Example::
+
+        pcc = VAPICaptureContinuity("http://localhost:8080", api_key)
+        result = pcc.status()
+        if not result.grind_ready:
+            print("Capture not ready for grind:", result.capture_state, result.host_state)
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def status(self) -> CaptureHealthResult:
+        """GET /bridge/capture-health — returns current PCC status.
+
+        On error: returns CaptureHealthResult with error set.
+        """
+        import json as _j2347, urllib.request as _r2347
+        try:
+            url = f"{self._base}/bridge/capture-health"
+            req = _r2347.Request(url, headers={"x-api-key": self._key})
+            with _r2347.urlopen(req, timeout=10) as resp:
+                d = _j2347.loads(resp.read().decode())
+            return CaptureHealthResult(
+                pcc_enabled                    = bool(d.get("pcc_enabled", True)),
+                capture_state                  = str(d.get("capture_state", "DISCONNECTED")),
+                host_state                     = str(d.get("host_state", "UNKNOWN")),
+                poll_rate_hz                   = float(d.get("poll_rate_hz", 0.0)),
+                sustained_duration_s           = float(d.get("sustained_duration_s", 0.0)),
+                grind_mode                     = bool(d.get("grind_mode", False)),
+                grind_ready                    = bool(d.get("grind_ready", False)),
+                grind_target                   = int(d.get("grind_target", 100)),
+                consecutive_clean_toward_target = int(d.get("consecutive_clean_toward_target", 0)),
+                session_counting_paused        = bool(d.get("session_counting_paused", False)),
+            )
+        except Exception as exc:
+            return CaptureHealthResult(error=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Phase 235-A — Grind Integrity Chain (GIC)
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class GrindChainResult:
+    """Result from VAPIGrindChain.status() (Phase 235-A).
+
+    chain_intact: False if any stored GIC hash fails recomputation — indicates tampering.
+    latest_gic_hash: hex-encoded SHA-256 GIC output of the most recent grind session.
+    genesis_ts / latest_ts: Unix timestamps (seconds) of first and latest chain entries.
+    """
+    grind_session_id: str   = ""
+    chain_length:     int   = 0
+    latest_gic_hash:  str   = ""
+    chain_intact:     bool  = False
+    genesis_ts:       float = 0.0
+    latest_ts:        float = 0.0
+    error:            str   = ""
+
+
+class VAPIGrindChain:
+    """Client for Phase 235-A Grind Integrity Chain API."""
+
+    def __init__(self, base_url: str, api_key: str) -> None:
+        self._base_url = base_url.rstrip("/")
+        self._api_key = api_key
+
+    def status(self) -> GrindChainResult:
+        """GET /bridge/grind-chain-status → GrindChainResult."""
+        import urllib.request as _ur
+        import urllib.error as _ue
+        try:
+            req = _ur.Request(
+                f"{self._base_url}/bridge/grind-chain-status",
+                headers={"x-api-key": self._api_key},
+            )
+            with _ur.urlopen(req, timeout=10) as resp:
+                d = json.loads(resp.read())
+            return GrindChainResult(
+                grind_session_id = str(d.get("grind_session_id", "")),
+                chain_length     = int(d.get("chain_length", 0)),
+                latest_gic_hash  = str(d.get("latest_gic_hash", "")),
+                chain_intact     = bool(d.get("chain_intact", False)),
+                genesis_ts       = float(d.get("genesis_ts", 0.0)),
+                latest_ts        = float(d.get("latest_ts", 0.0)),
+            )
+        except Exception as exc:
+            return GrindChainResult(error=str(exc), chain_intact=False)

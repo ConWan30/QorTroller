@@ -10,6 +10,9 @@ on:
       - "bridge/vapi_bridge/chain.py"
       - "bridge/vapi_bridge/dualshock_integration.py"
       - "bridge/vapi_bridge/session_adjudicator.py"
+      - "bridge/vapi_bridge/session_adjudicator_validator.py"
+      - "bridge/vapi_bridge/grind_chain.py"
+      - "bridge/vapi_bridge/capture_continuity.py"
       - "bridge/vapi_bridge/ioswarm_consensus_aggregator.py"
       - "contracts/circuits/PitlSessionProof.circom"
       - ".github/INVARIANTS_ALLOWLIST.json"
@@ -21,6 +24,9 @@ on:
       - "bridge/vapi_bridge/chain.py"
       - "bridge/vapi_bridge/dualshock_integration.py"
       - "bridge/vapi_bridge/session_adjudicator.py"
+      - "bridge/vapi_bridge/session_adjudicator_validator.py"
+      - "bridge/vapi_bridge/grind_chain.py"
+      - "bridge/vapi_bridge/capture_continuity.py"
       - "bridge/vapi_bridge/ioswarm_consensus_aggregator.py"
       - "contracts/circuits/PitlSessionProof.circom"
       - ".github/INVARIANTS_ALLOWLIST.json"
@@ -28,7 +34,7 @@ on:
 
 jobs:
   invariant-gate:
-    name: "PV-CI: 15 Protocol Invariants"
+    name: "PV-CI: 26 Protocol Invariants"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -52,7 +58,7 @@ jobs:
           script: |
             const body = `## VAPI Protocol Invariant Gate Failed
 
-            One or more of the 16 frozen protocol invariants has drifted.
+            One or more of the 26 frozen protocol invariants has drifted.
             **Every allowlist change is a tamper-evident governance event.**
 
             Choose the appropriate action:
@@ -79,3 +85,20 @@ jobs:
               repo: context.repo.repo,
               body
             });
+
+  http-cold-start-smoke:
+    name: "HTTP Cold-Start Smoke Tests"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r bridge/requirements.txt
+
+      - name: Run HTTP cold-start smoke tests
+        run: python -m pytest bridge/tests/test_http_cold_start_smoke.py -v -m smoke

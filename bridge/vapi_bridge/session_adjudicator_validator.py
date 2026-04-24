@@ -186,7 +186,23 @@ class SessionAdjudicatorValidationAgent:
             _extract_divergence_fields(evidence) if divergence else None
         )
 
-        self._store.insert_validation_record(
+        # Phase 235-B: capture PCC state at adjudication time (fail-closed if unavailable)
+        _pcc_snap = self._store.get_capture_health_status()
+        _pcc_state = _pcc_snap.get("capture_state") if _pcc_snap else None
+        _pcc_host = _pcc_snap.get("host_state") if _pcc_snap else None
+
+        # Phase 235-GAD: derive gameplay_context from trigger activity in evidence
+        _gameplay_disc = bool(getattr(self._cfg, "gameplay_discrimination_enabled", True))
+        _taf = float(evidence.get("trigger_active_fraction", -1.0))
+        if _taf < 0.0:
+            # evidence missing trigger_active_fraction → pre-GAD row or no records
+            _gameplay_ctx = None
+        elif _gameplay_disc:
+            _gameplay_ctx = "ACTIVE_GAMEPLAY" if _taf > 0.0 else "MENU_DETECTED"
+        else:
+            _gameplay_ctx = "ACTIVE_GAMEPLAY"  # discrimination disabled → treat as active
+
+        _val_row_id = self._store.insert_validation_record(
             ruling_id=ruling_id,
             device_id=device_id,
             llm_verdict=llm_verdict,
@@ -195,7 +211,52 @@ class SessionAdjudicatorValidationAgent:
             fallback_confidence=fb_confidence,
             divergence=int(divergence),
             divergence_reason=divergence_reason,
+            pcc_state=_pcc_state,
+            pcc_host_state=_pcc_host,
+            gameplay_context=_gameplay_ctx,
         )
+
+        # Phase 235-A: compute and stamp GIC for count-eligible sessions
+        _grind_mode = bool(getattr(self._cfg, "grind_mode", False))
+        _pcc_eligible = (
+            _pcc_state == "NOMINAL"
+            and _pcc_host in ("EXCLUSIVE_USB", "UNKNOWN")
+        ) if _pcc_state is not None else False
+        _gameplay_ok = _gameplay_ctx != "MENU_DETECTED"  # NULL = pass-through
+        # INV-GIC-003: skip GIC stamp entirely when chain is broken — do not extend
+        # a corrupt chain.  Row will have NULL grind_chain_hash.
+        if _grind_mode and getattr(self._store, "_gic_chain_broken", False):
+            log.warning(
+                "SessionAdjudicatorValidationAgent: GIC chain broken — "
+                "skipping GIC stamp ruling_id=%d",
+                ruling_id,
+            )
+        elif _grind_mode and _pcc_eligible and not divergence and _gameplay_ok:
+            try:
+                from .grind_chain import compute_gic, genesis_gic
+                _grind_sid = getattr(self._cfg, "grind_session_id", "grind_unknown")
+                _commitment_hash = row.get("commitment_hash") or ("00" * 32)
+                _prev = self._store.get_prev_grind_chain_hash(_grind_sid)
+                _ts_ns = time.time_ns()
+                # Monotonicity guard: GIC ts_ns must be strictly > last stamped ts_ns.
+                # Protects against backward NTP corrections creating audit confusion.
+                _prev_ts = self._store.get_prev_gic_ts_ns()
+                if _ts_ns <= _prev_ts:
+                    _ts_ns = _prev_ts + 1
+                if _prev is None:
+                    # Session 1: genesis anchors the chain; compute_gic incorporates session data.
+                    # Both steps use the same ts_ns so verification can reconstruct the genesis.
+                    _genesis = genesis_gic(_grind_sid, _ts_ns)
+                    _gic = compute_gic(_genesis, _commitment_hash, _pcc_host, fb_verdict, _ts_ns)
+                else:
+                    _gic = compute_gic(_prev, _commitment_hash, _pcc_host, fb_verdict, _ts_ns)
+                # INV-GIC-001: pass grind_session_id so the row is scoped to this session.
+                self._store.update_grind_chain_hash(_val_row_id, _gic.hex(), _ts_ns, _grind_sid)
+            except Exception as _gic_exc:
+                log.warning(
+                    "SessionAdjudicatorValidationAgent: GIC stamp failed ruling_id=%d: %s",
+                    ruling_id, _gic_exc,
+                )
 
         # Check gate condition (emit once per bridge lifetime)
         # Phase 78: pass max_divergence_rate so gate logic is consistent with operator_api

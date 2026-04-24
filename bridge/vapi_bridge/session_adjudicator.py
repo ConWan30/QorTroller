@@ -201,6 +201,12 @@ class SessionAdjudicator:
         advisories = [c for c in inference_codes if c in (0x2B, 0x30, 0x31, 0x32)]
         evidence_hashes = [r.get("record_hash", "") for r in records]
 
+        # Phase 235-GAD: count trigger-active records in evidence window
+        _trigger_active_count = sum(1 for r in records if int(r.get("trigger_active", 0) or 0) == 1)
+        _trigger_active_fraction = (
+            _trigger_active_count / len(records) if records else 0.0
+        )
+
         evidence_summary = {
             "device_id": device_id,
             "hard_cheat_codes": hard_cheats,
@@ -210,6 +216,8 @@ class SessionAdjudicator:
             "avg_humanity": enrollment.get("avg_humanity", 0.0),
             "risk_label": trajectory.get("risk_label", "unknown"),
             "l6b_probes": l6b.get("probe_count", 0),
+            "trigger_active_count": _trigger_active_count,
+            "trigger_active_fraction": round(_trigger_active_fraction, 4),
         }
 
         # Phase 73: ceremony integrity enrichment (cached per circuit, 1h TTL)

@@ -18,3 +18,10 @@ Append-only ledger of wiki state — equivalent to VAPI's ceremony beacon.
 | 2026-04-11T18:02:44.688443+00:00 | sha256:de8d08b8b82cc34ff0bb01c7...eb67dec7 | 62 | anchor_failed (timed out) |
 | 2026-04-11T18:24:31.837370+00:00 | sha256:42f090eb12adddd57e01ee93...09489c04 | 62 | anchor_failed (timed out) |
 | 2026-04-11T18:24:51.578619+00:00 | sha256:aecf50345820331e66b925ce...05aacb4c | 64 | anchor_failed (timed out) |
+| 2026-04-18T15:36:13.197319+00:00 | sha256:d6da958ba07cc5515edb4ec8...81d3bc99 | 69 | anchor_failed (<urlopen error [WinError 10061] No conne) |
+| 2026-04-18T15:39:47.342349+00:00 | sha256:e43bca918b43dd4937a953aa...b235a01f | 73 | local only |
+| 2026-04-18T15:58:29.134247+00:00 | sha256:50ad213aad69dadc4b5d8df1...b336de8c | 73 | local only |
+| 2026-04-18T15:58:33.194243+00:00 | sha256:0b02baa63d206aa9750272af...b9f8b46e | 73 | anchor_failed (<urlopen error [WinError 10061] No conne) |
+| 2026-04-18T16:06:54.067510+00:00 | sha256:f693291adc90bcb3994efa26...2ee7448a | 73 | anchor_failed (<urlopen error [WinError 10061] No conne) |
+| 2026-04-18T16:08:58.386725+00:00 | sha256:97661ee9753c1af83177f4cc...853274bb | 73 | anchor_failed (HTTP Error 404: Not Found) |
+| 2026-04-20T01:01:55.851761+00:00 | sha256:ef6e3c3579ca9aab4bf00d66...72aab086 | 73 | anchor_failed (<urlopen error [WinError 10061] No conne) |

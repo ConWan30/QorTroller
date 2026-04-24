@@ -4602,6 +4602,84 @@ paths:
         "403":
           description: Forbidden
 
+  /bridge/capture-health:
+    get:
+      summary: Physical Capture Continuity status (Phase 234.7)
+      description: >
+        Real-time HID poll rate, controller host arbitration state, and grind-mode
+        readiness gate. Updated each _session_loop iteration (~1 Hz).
+        capture_state: NOMINAL (>=950 Hz) | DEGRADED | DISCONNECTED.
+        host_state: EXCLUSIVE_USB | EXCLUSIVE_BT | CONTESTED | UNKNOWN (Layer 4 inference).
+        grind_ready: True only when NOMINAL + EXCLUSIVE_USB + 30s sustained.
+        session_counting_paused: grind_mode=True AND grind_ready=False.
+      tags: [Bridge]
+      parameters:
+        - name: x-api-key
+          in: header
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: PCC status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CaptureHealthStatus"
+        "403":
+          description: Forbidden
+
+  /bridge/grind-chain-status:
+    get:
+      summary: Grind Integrity Chain status (Phase 235-A)
+      description: >
+        Returns the current state of the cryptographic Grind Integrity Chain (GIC).
+        Each count-eligible grind session (NOMINAL + EXCLUSIVE_USB/UNKNOWN + non-divergent)
+        is linked by SHA-256(prev_gic || commitment_hash || verdict_code || host_code || ts_ns_be).
+        chain_intact=False indicates stored hashes diverge from recomputation — tamper signal.
+        latest_gic_hash is the GIC_100 headline artifact for Phase 236 Zenodo deposit.
+      tags: [Bridge]
+      parameters:
+        - name: x-api-key
+          in: header
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: GIC status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GrindChainStatus"
+        "403":
+          description: Forbidden
+
+  /agent/ait-separation-status:
+    get:
+      summary: AIT separation analysis status (Phase 229)
+      description: >
+        Returns the latest AIT (Active Isometric Trigger) separation analysis result.
+        Phase 229 breakthrough: 4-feature pipeline [accel_tremor_peak_hz, roll_cos,
+        roll_sin, pitch_cos] achieves separation_ratio=1.199 and all_pairs_above_1=True
+        at N=24 (P1=6, P2=5, P3=13) — first probe type to pass tournament gate.
+      tags: [Agent]
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: AIT separation status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AITSeparationStatus"
+        "403":
+          description: Forbidden
+
   /agent/tremor-convergence-status:
     get:
       summary: TremorRestingConvergenceOracle status (Phase 202)
@@ -7729,6 +7807,9 @@ components:
         all_pairs_p0_ok:
           type: boolean
           description: "Phase 197 P0: all inter-player Mahalanobis pair distances > 1.0 (fail-closed)"
+        ait_defensibility_ok:
+          type: boolean
+          description: "Phase 231 P0: AIT all_pairs_above_1=True AND all players have >=10 AIT sessions (fail-closed)"
         dual_gate_warned:
           type: boolean
         epoch_window_warned:
@@ -9403,6 +9484,111 @@ webhooks:
           type: number
           nullable: true
           description: "Unix timestamp of the most recent local anchor (null if no anchors)"
+        timestamp:
+          type: number
+          description: "Unix timestamp of status query"
+
+    AITSeparationStatus:
+      type: object
+      description: "Phase 229 AIT (Active Isometric Trigger) separation analysis status"
+      properties:
+        ait_separation_enabled:
+          type: boolean
+          description: "True when AIT_SEPARATION_ENABLED=true (default True)"
+        n_sessions:
+          type: integer
+          description: "Total AIT sessions included in the latest analysis"
+        separation_ratio:
+          type: number
+          description: "Inter/intra Mahalanobis ratio from latest AIT analysis (1.199 at N=24, 2026-04-18)"
+        all_pairs_above_1:
+          type: boolean
+          description: "True when all inter-player pair distances exceed 1.0 — tournament gate"
+        inter_player_mean:
+          type: number
+          description: "Mean inter-player Mahalanobis distance (latest analysis)"
+        intra_player_mean:
+          type: number
+          description: "Mean intra-player Mahalanobis distance (latest analysis)"
+        loo_accuracy:
+          type: number
+          description: "LOO classification accuracy (0.0-1.0) — 66.7% at N=24"
+        pair_distances:
+          type: object
+          description: "Per-pair Mahalanobis distances dict from latest analysis"
+        analysis_date:
+          type: string
+          description: "ISO date string of analysis run"
+        last_run_ts:
+          type: number
+          nullable: true
+          description: "Unix timestamp of last analysis run (null if no analysis yet)"
+        timestamp:
+          type: number
+          description: "Unix timestamp of status query"
+
+    GrindChainStatus:
+      type: object
+      description: "Phase 235-A Grind Integrity Chain (GIC) status"
+      properties:
+        grind_session_id:
+          type: string
+          description: "Stable identifier for this grind run (auto-generated grind_YYYYMMDD)"
+        chain_length:
+          type: integer
+          description: "Number of count-eligible sessions with GIC stamps"
+        latest_gic_hash:
+          type: string
+          description: "Hex SHA-256 GIC output for the most recent session (GIC_100 at grind completion)"
+        chain_intact:
+          type: boolean
+          description: "False if any stored hash fails recomputation — indicates DB tampering"
+        genesis_ts:
+          type: number
+          description: "Unix timestamp (seconds) of the first GIC-stamped session"
+        latest_ts:
+          type: number
+          description: "Unix timestamp (seconds) of the most recent GIC-stamped session"
+        timestamp:
+          type: number
+          description: "Unix timestamp of status query"
+
+    CaptureHealthStatus:
+      type: object
+      description: "Phase 234.7 Physical Capture Continuity (PCC) status"
+      properties:
+        pcc_enabled:
+          type: boolean
+          description: "True when PCC monitoring is active (default True)"
+        capture_state:
+          type: string
+          enum: [NOMINAL, DEGRADED, DISCONNECTED]
+          description: "HID poll rate state: NOMINAL>=950Hz, DEGRADED 100-950Hz, DISCONNECTED<100Hz"
+        host_state:
+          type: string
+          enum: [EXCLUSIVE_USB, EXCLUSIVE_BT, CONTESTED, UNKNOWN]
+          description: "Inferred controller host arbitration state (Layer 4 pattern analysis)"
+        poll_rate_hz:
+          type: number
+          description: "Rolling average HID poll rate in Hz (nominal ~1000 Hz)"
+        sustained_duration_s:
+          type: number
+          description: "Seconds elapsed in current capture_state"
+        grind_mode:
+          type: boolean
+          description: "True when GRIND_MODE=true in config (fail-closed calibration enforcement)"
+        grind_ready:
+          type: boolean
+          description: "True when NOMINAL + EXCLUSIVE_USB + 30s sustained — safe to start grind"
+        grind_target:
+          type: integer
+          description: "Target consecutive_clean count for grind completion (default 100)"
+        consecutive_clean_toward_target:
+          type: integer
+          description: "Current consecutive_clean count from validation_gate — progress toward target"
+        session_counting_paused:
+          type: boolean
+          description: "True when grind_mode=True AND grind_ready=False (capture degraded)"
         timestamp:
           type: number
           description: "Unix timestamp of status query"

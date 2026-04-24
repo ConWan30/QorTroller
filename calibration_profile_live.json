@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-04-11T16:04:07Z",
+  "generated_at": "2026-04-23T18:57:59Z",
   "source": "mode6_living_calibration",
   "total_records": 200,
   "device_count": 1,
   "thresholds": {
-    "l4_anomaly": 5.95765,
-    "l4_continuity": 4.5619499999999995,
-    "l4_anomaly_previous": 7.009,
-    "l4_continuity_previous": 5.367
+    "l4_anomaly": 3.0,
+    "l4_continuity": 3.0,
+    "l4_anomaly_previous": 3.0,
+    "l4_continuity_previous": 3.0
   },
   "confidence": "high"
 }

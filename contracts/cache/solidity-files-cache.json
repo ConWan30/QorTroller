@@ -2747,8 +2747,8 @@
       ]
     },
     "C:\\Users\\Contr\\vapi-pebble-prototype\\contracts\\contracts\\ProtocolCoherenceRegistry.sol": {
-      "lastModificationDate": 1776462676362,
-      "contentHash": "da17e7d5d317ab1985baa10f42fd9a23",
+      "lastModificationDate": 1776506853178,
+      "contentHash": "fe6db5ae215d07d1760b360ae8aaad82",
       "sourceName": "contracts/ProtocolCoherenceRegistry.sol",
       "solcConfig": {
         "version": "0.8.20",
