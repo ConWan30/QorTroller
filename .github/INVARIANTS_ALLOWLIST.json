@@ -86,5 +86,21 @@
   "INV-022": {
     "digest": "cb82e3235f67c26865d84a33f78c7f0e5c93a466e7b180a13d07000557189122",
     "description": "governance_provenance_chain table + insert method in store (Phase 226)"
+  },
+  "INV-023": {
+    "digest": "aa4f9198e0f76b92eb92e059194daf0da2d53a3acdef3bd70acf22d7eccb7646",
+    "description": "GIC formula v1 byte layout frozen: prev(32)||ch(32)||verdict(1)||host(1)||ts_ns(8) (INV-GIC-001)"
+  },
+  "INV-024": {
+    "digest": "50506957e7525ebbfe9035629b2c1022bc63d04c89666f215de3e891943a8bd6",
+    "description": "GIC ts_ns ordering: get_prev_grind_chain_hash orders by gic_ts_ns DESC (INV-GIC-002)"
+  },
+  "INV-025": {
+    "digest": "721b2772476b575b858c23e01994a2362096cff7367751170356166c1c969eb6",
+    "description": "GIC chain-broken flag on Store class with set method (INV-GIC-003)"
+  },
+  "INV-026": {
+    "digest": "6c3664bd7ad2a14fe4c7c4ca0fd40c0e88cd4aa4ad2f8af3a5fe3490119e93e7",
+    "description": "PCC get_status and is_grind_ready call _recompute before reading state (INV-PCC-001)"
   }
 }
