@@ -1,5 +1,5 @@
 """
-vapi_invariant_gate.py — Phase 223/224/226 Protocol Invariant Gate
+vapi_invariant_gate.py — Phase 223/224/226/235-UR Protocol Invariant Gate
 
 Hashes critical protocol regions in the source tree and compares against
 an allowlist of known-good SHA-256 fingerprints.  Any drift signals a
@@ -12,6 +12,11 @@ ProtocolCoherenceAgent's Merkle tree.  Every --generate event requires
 Phase 226 addition: INV-019..INV-022 freeze the provenance hash computation
 code itself (_compute_governance_provenance_hash, ts_ns.to_bytes inclusion,
 _fetch_latest_provenance_hash, governance_provenance_chain store layer).
+
+Phase 235-ULTRAREVIEW addition: INV-023..INV-026 freeze the GIC formula
+(grind_chain.py genesis/compute functions), gic_ts_ns ordering in store,
+_gic_chain_broken flag on Store, and _recompute() read-path enforcement in
+capture_continuity.py.
 
 USAGE:
     python scripts/vapi_invariant_gate.py              # gate check (exit 0=pass, 1=fail)
@@ -223,6 +228,35 @@ INVARIANTS: list[Invariant] = [
         file="bridge/vapi_bridge/store.py",
         pattern=r"governance_provenance_chain|insert_governance_provenance",
         min_matches=1,
+    ),
+    # Phase 235-ULTRAREVIEW — freeze GIC formula and PCC read-path invariants
+    Invariant(
+        id="INV-023",
+        description="GIC formula v1 byte layout frozen: prev(32)||ch(32)||verdict(1)||host(1)||ts_ns(8) (INV-GIC-001)",
+        file="bridge/vapi_bridge/grind_chain.py",
+        pattern=r"VAPI-GIC-GENESIS-v1|genesis_gic|compute_gic",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-024",
+        description="GIC ts_ns ordering: get_prev_grind_chain_hash orders by gic_ts_ns DESC (INV-GIC-002)",
+        file="bridge/vapi_bridge/store.py",
+        pattern=r"gic_ts_ns\s+DESC|ORDER\s+BY\s+gic_ts_ns",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-025",
+        description="GIC chain-broken flag on Store class with set method (INV-GIC-003)",
+        file="bridge/vapi_bridge/store.py",
+        pattern=r"_gic_chain_broken|set_gic_chain_broken",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-026",
+        description="PCC get_status and is_grind_ready call _recompute before reading state (INV-PCC-001)",
+        file="bridge/vapi_bridge/capture_continuity.py",
+        pattern=r"_recompute\(now\)",
+        min_matches=2,
     ),
 ]
 
