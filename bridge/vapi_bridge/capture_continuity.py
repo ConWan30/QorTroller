@@ -130,6 +130,9 @@ class CaptureHealthMonitor:
         """Return a snapshot dict suitable for JSON serialisation."""
         now = time.monotonic()
         with self._lock:
+            # INV-PCC-001: recompute before reading cached state so a HID stall
+            # that occurred since the last update_sample() call is reflected here.
+            self._recompute(now)
             sustained = round(now - self._state_entered, 1)
             grind_ready = self._is_grind_ready_locked(now)
             return {
@@ -145,6 +148,8 @@ class CaptureHealthMonitor:
     def is_grind_ready(self) -> bool:
         now = time.monotonic()
         with self._lock:
+            # INV-PCC-001: recompute before reading cached state.
+            self._recompute(now)
             return self._is_grind_ready_locked(now)
 
     def pop_transitions(self) -> list[dict]:

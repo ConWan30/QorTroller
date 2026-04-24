@@ -10,6 +10,7 @@ T234_7-7:  config fields grind_mode and grind_target exist with correct defaults
 T234_7-8:  store insert_capture_health_event and get_capture_health_status round-trip
 T234_7-9:  DualShockIntegration has set_pcc_monitor method and _pcc_monitor attribute
 T234_7-10: session_counting_paused = grind_mode AND NOT grind_ready (logic gate)
+T234_7-11: INV-PCC-001 get_status and is_grind_ready call _recompute before reading state
 """
 import os
 import sys
@@ -239,3 +240,55 @@ def test_t234_7_10_session_counting_paused_logic():
             f"grind_mode={grind_mode}, grind_ready={grind_ready} → "
             f"expected paused={expected_paused}, got {result}"
         )
+
+
+# ---------------------------------------------------------------------------
+# T234_7-11: INV-PCC-001 — get_status() and is_grind_ready() recompute state
+# ---------------------------------------------------------------------------
+
+def test_t234_7_11_inv_pcc_001_stale_read():
+    """get_status() and is_grind_ready() must call _recompute(now) before reading
+    cached state, so a HID stall that occurred since the last update_sample() is
+    detected at read time rather than at the next update_sample() call.
+
+    Arrange: bring monitor to NOMINAL via update_sample.  Then let time advance
+    without any further update_sample calls (simulating a HID stall).  The
+    _recompute staleness check (> 3s since last sample) should flip the state
+    to DISCONNECTED, and get_status() must reflect this WITHOUT any further
+    update_sample() call.
+    """
+    import time as _time
+    from unittest.mock import patch
+
+    from vapi_bridge.capture_continuity import (
+        CaptureHealthMonitor, CaptureState,
+    )
+
+    monitor = _make_monitor(nominal_hz=950, degraded_hz=100, stable_s=1)
+
+    # Bring to NOMINAL
+    monitor.update_sample(n_frames=1000, window_s=1.0)
+    status_before = monitor.get_status()
+    assert status_before["capture_state"] == CaptureState.NOMINAL.value, (
+        "Baseline: after nominal update, state must be NOMINAL"
+    )
+
+    # Simulate 5 seconds of wall-clock time passing without any update_sample.
+    # We patch time.monotonic so _recompute sees enough elapsed time to trigger
+    # the staleness path (> 3 s since last sample).
+    fake_now = _time.monotonic() + 5.0
+    with patch("vapi_bridge.capture_continuity.time") as mock_time:
+        mock_time.monotonic.return_value = fake_now
+        mock_time.time.return_value = _time.time() + 5.0
+
+        status_stale = monitor.get_status()
+        grind_ready = monitor.is_grind_ready()
+
+    assert status_stale["capture_state"] == CaptureState.DISCONNECTED.value, (
+        "INV-PCC-001: get_status() must detect stale samples (>3s gap) and report "
+        "DISCONNECTED — stale NOMINAL is a grind integrity risk during HID stall"
+    )
+    assert grind_ready is False, (
+        "INV-PCC-001: is_grind_ready() must return False when recomputed state is "
+        "DISCONNECTED (stale read would have incorrectly returned True)"
+    )
