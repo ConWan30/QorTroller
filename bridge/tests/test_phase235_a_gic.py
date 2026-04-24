@@ -199,7 +199,7 @@ def test_t235a_7_non_clean_session_skips_chain(tmp_path):
     assert prev is None  # No prior hash yet
     _gen_1 = genesis_gic(_GRIND_SID, ts_ns_1)
     gic_1 = compute_gic(_gen_1, commitment, "EXCLUSIVE_USB", "FLAG", ts_ns_1)
-    store.update_grind_chain_hash(_row1_id, gic_1.hex(), ts_ns_1)
+    store.update_grind_chain_hash(_row1_id, gic_1.hex(), ts_ns_1, _GRIND_SID)
 
     # Insert a CONTESTED session (no GIC should be written)
     _row2_id = store.insert_validation_record(
@@ -240,7 +240,7 @@ def test_t235a_8_store_round_trip(tmp_path):
     ts1 = ts_base
     _gen_1 = genesis_gic(_GRIND_SID, ts1)
     gic_1 = compute_gic(_gen_1, commitment, "EXCLUSIVE_USB", "FLAG", ts1)
-    store.update_grind_chain_hash(row1_id, gic_1.hex(), ts1)
+    store.update_grind_chain_hash(row1_id, gic_1.hex(), ts1, _GRIND_SID)
 
     # Session 2
     row2_id = store.insert_validation_record(
@@ -249,14 +249,14 @@ def test_t235a_8_store_round_trip(tmp_path):
         pcc_state="NOMINAL", pcc_host_state="EXCLUSIVE_USB",
     )
     ts2 = ts_base + 1
-    # get_prev_grind_chain_hash returns genesis hash
+    # get_prev_grind_chain_hash returns genesis hash (scoped to _GRIND_SID)
     prev2 = store.get_prev_grind_chain_hash(_GRIND_SID)
     assert prev2 == gic_1
 
     # Without a real agent_rulings row the JOIN returns nothing, so use a simplified
     # test path that bypasses the JOIN. Test the methods that don't require the JOIN:
     gic_2 = compute_gic(gic_1, commitment, "EXCLUSIVE_USB", "FLAG", ts2)
-    store.update_grind_chain_hash(row2_id, gic_2.hex(), ts2)
+    store.update_grind_chain_hash(row2_id, gic_2.hex(), ts2, _GRIND_SID)
 
     # get_prev_grind_chain_hash now returns gic_2
     prev3 = store.get_prev_grind_chain_hash(_GRIND_SID)
@@ -270,7 +270,7 @@ def test_t235a_8_store_round_trip(tmp_path):
     )
     ts3 = ts_base + 2
     gic_3 = compute_gic(gic_2, commitment, "EXCLUSIVE_USB", "FLAG", ts3)
-    store.update_grind_chain_hash(row3_id, gic_3.hex(), ts3)
+    store.update_grind_chain_hash(row3_id, gic_3.hex(), ts3, _GRIND_SID)
 
     # Verify get_prev_grind_chain_hash returns the latest
     assert store.get_prev_grind_chain_hash(_GRIND_SID) == gic_3

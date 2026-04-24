@@ -223,7 +223,15 @@ class SessionAdjudicatorValidationAgent:
             and _pcc_host in ("EXCLUSIVE_USB", "UNKNOWN")
         ) if _pcc_state is not None else False
         _gameplay_ok = _gameplay_ctx != "MENU_DETECTED"  # NULL = pass-through
-        if _grind_mode and _pcc_eligible and not divergence and _gameplay_ok:
+        # INV-GIC-003: skip GIC stamp entirely when chain is broken — do not extend
+        # a corrupt chain.  Row will have NULL grind_chain_hash.
+        if _grind_mode and getattr(self._store, "_gic_chain_broken", False):
+            log.warning(
+                "SessionAdjudicatorValidationAgent: GIC chain broken — "
+                "skipping GIC stamp ruling_id=%d",
+                ruling_id,
+            )
+        elif _grind_mode and _pcc_eligible and not divergence and _gameplay_ok:
             try:
                 from .grind_chain import compute_gic, genesis_gic
                 _grind_sid = getattr(self._cfg, "grind_session_id", "grind_unknown")
@@ -242,7 +250,8 @@ class SessionAdjudicatorValidationAgent:
                     _gic = compute_gic(_genesis, _commitment_hash, _pcc_host, fb_verdict, _ts_ns)
                 else:
                     _gic = compute_gic(_prev, _commitment_hash, _pcc_host, fb_verdict, _ts_ns)
-                self._store.update_grind_chain_hash(_val_row_id, _gic.hex(), _ts_ns)
+                # INV-GIC-001: pass grind_session_id so the row is scoped to this session.
+                self._store.update_grind_chain_hash(_val_row_id, _gic.hex(), _ts_ns, _grind_sid)
             except Exception as _gic_exc:
                 log.warning(
                     "SessionAdjudicatorValidationAgent: GIC stamp failed ruling_id=%d: %s",
