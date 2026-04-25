@@ -219,11 +219,32 @@ class SessionAdjudicatorValidationAgent:
 
         # Phase 235-A: compute and stamp GIC for count-eligible sessions
         _grind_mode = bool(getattr(self._cfg, "grind_mode", False))
-        _pcc_eligible = (
-            _pcc_state == "NOMINAL"
-            and _pcc_host in ("EXCLUSIVE_USB", "UNKNOWN")
-        ) if _pcc_state is not None else False
-        _gameplay_ok = _gameplay_ctx != "MENU_DETECTED"  # NULL = pass-through
+        # Phase 235-SMOKE-BYPASS: when PCC_SMOKE_BYPASS=true, force BOTH
+        # _pcc_eligible=True AND _gameplay_ok=True so chain stamping can be
+        # validated end-to-end on hardware where USB enumeration is degraded
+        # (PCC) and adjudications are triggered while not actively snapping
+        # triggers (gameplay_context=MENU_DETECTED).  SMOKE-ONLY — this
+        # disables both the USB-vs-BT discrimination AND the gameplay-vs-menu
+        # discrimination which together are the entire reason these layers
+        # exist. Must be removed before the real 100-session grind. Logged
+        # as WARNING on every stamp so it cannot be silently left enabled.
+        _pcc_smoke_bypass = bool(getattr(self._cfg, "pcc_smoke_bypass", False))
+        if _pcc_smoke_bypass:
+            _pcc_eligible = True
+            log.warning(
+                "SessionAdjudicatorValidationAgent: PCC_SMOKE_BYPASS=true — "
+                "GIC stamp bypassing capture_state/host_state AND "
+                "gameplay_context checks. DISABLE before real grind."
+            )
+        else:
+            _pcc_eligible = (
+                _pcc_state == "NOMINAL"
+                and _pcc_host in ("EXCLUSIVE_USB", "UNKNOWN")
+            ) if _pcc_state is not None else False
+        # Phase 235-SMOKE-BYPASS: when bypass is on, treat every gameplay
+        # context (including MENU_DETECTED) as eligible.  Otherwise the
+        # default rule applies: MENU_DETECTED blocks; NULL passes through.
+        _gameplay_ok = True if _pcc_smoke_bypass else (_gameplay_ctx != "MENU_DETECTED")
         # INV-GIC-003: skip GIC stamp entirely when chain is broken — do not extend
         # a corrupt chain.  Row will have NULL grind_chain_hash.
         if _grind_mode and getattr(self._store, "_gic_chain_broken", False):
