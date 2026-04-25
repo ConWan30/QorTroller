@@ -78,10 +78,11 @@ class SessionAdjudicatorValidationAgent:
     Once threshold is reached with zero divergences, emits dry_run_gate_passed event.
     """
 
-    def __init__(self, cfg, store, bus=None) -> None:
+    def __init__(self, cfg, store, bus=None, pcc_monitor=None) -> None:
         self._cfg = cfg
         self._store = store
         self._bus = bus
+        self._pcc_monitor = pcc_monitor  # Phase 235-SBD-PCC: live monitor preferred over stale DB log
         self._threshold = float(getattr(cfg, "validation_divergence_threshold", 0.3))
         self._gate_n = int(getattr(cfg, "validation_gate_n", 100))
         self._gate_already_emitted = False
@@ -184,11 +185,17 @@ class SessionAdjudicatorValidationAgent:
             _extract_divergence_fields(evidence) if divergence else None
         )
 
-        # Phase 235-B: capture PCC state at adjudication time (fail-closed if unavailable)
-        # Phase 235-BRIDGE-WEDGE-FIX: SQLite read off the event loop thread.
-        _pcc_snap = await asyncio.to_thread(self._store.get_capture_health_status)
-        _pcc_state = _pcc_snap.get("capture_state") if _pcc_snap else None
-        _pcc_host = _pcc_snap.get("host_state") if _pcc_snap else None
+        # Phase 235-B: capture PCC state at adjudication time (fail-closed if unavailable).
+        # Phase 235-SBD-PCC: prefer live in-memory monitor over stale SQLite log.
+        if self._pcc_monitor is not None:
+            _pcc_live = self._pcc_monitor.get_status()
+            _pcc_state = _pcc_live.get("capture_state")
+            _pcc_host  = _pcc_live.get("host_state")
+        else:
+            # Phase 235-BRIDGE-WEDGE-FIX: SQLite read off the event loop thread.
+            _pcc_snap = await asyncio.to_thread(self._store.get_capture_health_status)
+            _pcc_state = _pcc_snap.get("capture_state") if _pcc_snap else None
+            _pcc_host = _pcc_snap.get("host_state") if _pcc_snap else None
 
         # Phase 235-GAD: derive gameplay_context from trigger activity in evidence
         _gameplay_disc = bool(getattr(self._cfg, "gameplay_discrimination_enabled", True))
