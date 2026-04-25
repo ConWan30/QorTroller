@@ -2878,6 +2878,81 @@ async def handle(msg: dict) -> str:
     return mcp_error(id_, -32601, f"Unknown method: {method}")
 
 
+# ── Tool 18 ── vapi_bt_contention_intelligence ────────────────────────────────
+
+@tool(
+    name="vapi_bt_contention_intelligence",
+    description=(
+        "Phase 235-CONTENTION: BT contention pattern intelligence for the live grind. "
+        "Reads capture_health_log to compute how many times the PS5 has reclaimed "
+        "the controller over BT during menu idle (USB rate collapses to ~117 Hz), "
+        "mean and longest episode durations, and how many times the self-healing "
+        "hidapi counter thread has needed to reconnect (hid_counter_restarts). "
+        "Use to diagnose recurring PCC DEGRADED/DISCONNECTED patterns during grind "
+        "and assess whether the self-healing fix is working autonomously. "
+        "Returns zero-state when capture_health_log is empty (bridge never run or "
+        "no state transitions logged yet). "
+        "IMPORTANT: Uses bridge_get() — requires bridge to be running at BRIDGE_URL."
+    ),
+    schema={
+        "type": "object",
+        "properties": {},
+        "required": [],
+    }
+)
+async def vapi_bt_contention_intelligence(**_):
+    try:
+        data = await bridge_get("/operator/grind/pcc-intelligence")
+        return data
+    except Exception as exc:
+        return {
+            "error": str(exc),
+            "total_episodes": 0,
+            "mean_recovery_s": 0.0,
+            "longest_episode_s": 0.0,
+            "hid_counter_restarts": 0,
+            "host_state_distribution": {},
+        }
+
+
+# ── Tool 19 ── vapi_grind_analytics ───────────────────────────────────────────
+
+@tool(
+    name="vapi_grind_analytics",
+    description=(
+        "Phase 235-ANALYTICS: Aggregate grind pipeline analytics for grind_phase235_v1. "
+        "Returns: success_rate (stamped / total_validated), blocking_reason_counts "
+        "(distribution of why sessions were NOT stamped to the GIC chain — e.g. "
+        "PCC_NOT_NOMINAL:DISCONNECTED, MENU_DETECTED, DIVERGENT), sessions_per_day "
+        "velocity since first validation, and projected_gic100_date (ISO date when "
+        "GIC_100 is expected at current velocity, or 'unknown' if velocity=0). "
+        "Use to answer: 'how is this grind going?', 'when will it finish?', "
+        "'what is blocking the most sessions?'. "
+        "IMPORTANT: Uses bridge_get() — requires bridge to be running at BRIDGE_URL."
+    ),
+    schema={
+        "type": "object",
+        "properties": {},
+        "required": [],
+    }
+)
+async def vapi_grind_analytics(**_):
+    try:
+        data = await bridge_get("/operator/grind/analytics")
+        return data
+    except Exception as exc:
+        return {
+            "error": str(exc),
+            "grind_session_id": "",
+            "total_validated": 0,
+            "stamped_count": 0,
+            "success_rate": 0.0,
+            "blocking_reason_counts": {},
+            "sessions_per_day": 0.0,
+            "projected_gic100_date": "unknown",
+        }
+
+
 async def main():
     # Preload workflow corpus files into mtime cache
     for key in WORKFLOW_FILES:

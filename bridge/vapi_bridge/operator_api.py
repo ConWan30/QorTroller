@@ -7221,4 +7221,56 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
+    # Phase 235-CONTENTION — GET /grind/pcc-intelligence
+    # ------------------------------------------------------------------
+    # BT contention episode analytics: how often does the PS5 reclaim BT
+    # during menu idle, how long does recovery take, and how many times
+    # has the self-healing hidapi counter thread needed to reconnect.
+    @app.get("/grind/pcc-intelligence")
+    async def get_pcc_intelligence(
+        x_api_key: str = Header(default=""),
+    ):
+        """BT contention pattern intelligence (Phase 235-CONTENTION).
+
+        Returns capture_health_log episode analytics plus hid_counter_restarts
+        from the live DualShockTransport instance (fail-open 0 when not wired).
+        """
+        _check_read_key(x_api_key)
+        import time as _tcon
+        try:
+            analytics = await asyncio.to_thread(store.get_bt_contention_analytics)
+            transport = getattr(app, "_transport", None)
+            analytics["hid_counter_restarts"] = (
+                getattr(transport, "_hid_counter_restarts", 0) if transport is not None else 0
+            )
+            analytics["timestamp"] = _tcon.time()
+            return analytics
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 235-ANALYTICS — GET /grind/analytics
+    # ------------------------------------------------------------------
+    # Aggregate grind pipeline analytics: success rate, blocking reason
+    # distribution, sessions-per-day velocity, projected GIC_100 date.
+    @app.get("/grind/analytics")
+    async def get_grind_analytics(
+        x_api_key: str = Header(default=""),
+    ):
+        """Grind pipeline aggregate analytics (Phase 235-ANALYTICS).
+
+        Reads ruling_validation_log for the current grind session and returns
+        success_rate, blocking_reason_counts, sessions_per_day, and
+        projected_gic100_date.
+        """
+        _check_read_key(x_api_key)
+        _grind_sid = getattr(cfg, "grind_session_id", "")
+        _gate_n    = int(getattr(cfg, "grind_target", 100))
+        try:
+            result = await asyncio.to_thread(
+                store.get_grind_analytics, _grind_sid, _gate_n
+            )
+            return result
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
     return app
