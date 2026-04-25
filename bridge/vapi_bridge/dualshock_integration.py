@@ -453,7 +453,7 @@ class DualShockTransport:
                 if _proj_root not in sys.path:
                     sys.path.insert(0, _proj_root)
                 from bridge.controller.l6_trigger_driver import L6TriggerDriver, L6_CAPTURE_MODE
-                from vapi_bridge.l6_response_analyzer import L6ResponseAnalyzer
+                from .l6_response_analyzer import L6ResponseAnalyzer
                 _capture_store = self._store if L6_CAPTURE_MODE else None
                 self._l6_driver = L6TriggerDriver(store=_capture_store)
                 self._l6_analyzer = L6ResponseAnalyzer()
@@ -646,7 +646,13 @@ class DualShockTransport:
         backend_type = getattr(self._cfg, "identity_backend", "software")
         signing_backend = None
         try:
-            from vapi_bridge.hardware_identity import create_backend
+            # Phase 235-BRIDGE-WEDGE-FIX: relative import works whether the
+            # bridge is run as `python -m bridge.vapi_bridge.main` (current
+            # package = bridge.vapi_bridge) or any other entry point.  The
+            # absolute `vapi_bridge.X` form was assuming a different package
+            # layout and failed at every startup, dropping signing backend
+            # to None and triggering a `No module named 'vapi_bridge'` log.
+            from .hardware_identity import create_backend
             if backend_type == "software":
                 key_path = str(self._key_dir / "dualshock_device_key.json")
                 signing_backend = create_backend("software", key_path=key_path)
@@ -675,7 +681,7 @@ class DualShockTransport:
         except Exception as exc:
             log.warning("Hardware backend init failed (%s) — software fallback", exc)
             try:
-                from vapi_bridge.hardware_identity import create_backend
+                from .hardware_identity import create_backend  # Phase 235-BRIDGE-WEDGE-FIX (relative)
                 key_path = str(self._key_dir / "dualshock_device_key.json")
                 signing_backend = create_backend("software", key_path=key_path)
                 signing_backend.setup()
@@ -767,7 +773,7 @@ class DualShockTransport:
                 from bridge.vapi_bridge.hid_xinput_oracle import HidXInputOracle
             except ImportError:
                 try:
-                    from vapi_bridge.hid_xinput_oracle import HidXInputOracle
+                    from .hid_xinput_oracle import HidXInputOracle
                 except ImportError:
                     HidXInputOracle = None  # type: ignore
 
@@ -854,7 +860,7 @@ class DualShockTransport:
 
         # --- Phase 51: Game Profile ---
         try:
-            from vapi_bridge.game_profile import get_profile_or_none  # type: ignore
+            from .game_profile import get_profile_or_none  # type: ignore
             _gp_id = getattr(self._cfg, "game_profile_id", "")
             if _gp_id:
                 self._game_profile = get_profile_or_none(_gp_id)
@@ -894,7 +900,7 @@ class DualShockTransport:
 
         # Phase 19: Resolve device profile (DeviceProfileRegistry)
         try:
-            from vapi_bridge.device_registry import DeviceProfileRegistry
+            from .device_registry import DeviceProfileRegistry
             _reg = DeviceProfileRegistry(controller_dir)
             self._device_profile = _reg.resolve(self._cfg)
             log.info(
@@ -921,7 +927,7 @@ class DualShockTransport:
         # Phase 53: broadcast controller presence immediately on registration
         # so the frontend knows a device is connected before the first PoAC record
         try:
-            from vapi_bridge.transports.http import ws_broadcast as _ws_bcast
+            from .transports.http import ws_broadcast as _ws_bcast
             import asyncio as _asyncio
             import json as _json
             _asyncio.get_running_loop().call_soon_threadsafe(
