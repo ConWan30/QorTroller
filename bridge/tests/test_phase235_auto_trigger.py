@@ -82,6 +82,9 @@ def _store_mock(*, pcc_state="NOMINAL", pcc_host="EXCLUSIVE_USB",
     }
     s.get_recent_records.return_value = recent or []
     s.write_agent_event.return_value = 99  # fake event_id
+    # Phase 235-OBSERVABILITY: default to None so existing tests are unaffected
+    # by the new throttle-recovery logic in __init__.
+    s.get_last_sbd_fire_ts.return_value = None
     return s
 
 

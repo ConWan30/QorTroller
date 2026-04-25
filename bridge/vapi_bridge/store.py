@@ -4682,6 +4682,21 @@ class Store:
                 (time.time(), consumed_by, event_id),
             )
 
+    def get_last_sbd_fire_ts(self) -> float | None:
+        """Return wall-clock created_at of the most recent SBD ruling_request, or None.
+
+        Phase 235-OBSERVABILITY: used by SessionBoundaryDetectorAgent on startup to
+        recover last_fire_at so the 300s throttle survives bridge restart.
+        """
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT created_at FROM agent_events "
+                "WHERE event_type='ruling_request' "
+                "AND source_agent='session_boundary_detector_agent' "
+                "ORDER BY created_at DESC LIMIT 1"
+            ).fetchone()
+        return float(row["created_at"]) if row else None
+
     def write_threshold_history(
         self,
         threshold_type: str,
@@ -13749,3 +13764,66 @@ class Store:
         if row and row[0] is not None:
             return int(row[0])
         return 0
+
+    def get_grind_session_history(
+        self, limit: int = 20, grind_session_id: str = ""
+    ) -> list:
+        """Return last N ruling_validation_log rows with a derived blocking_reason field.
+
+        Phase 235-OBSERVABILITY: exposes existing persisted state so operators can
+        understand why specific sessions did or did not advance the GIC chain —
+        without requiring direct SQLite access (which is blocked by Windows exclusive
+        lock while the bridge runs).
+
+        Each returned dict contains:
+          validation_id, ruling_id, created_at, pcc_state, pcc_host_state,
+          gameplay_context, divergence, grind_chain_hash (or ""), llm_verdict,
+          fallback_verdict, grind_session_id, stamped (bool), blocking_reason (str|None).
+
+        blocking_reason is None when stamped=True; otherwise one of:
+          PCC_STATE_UNKNOWN      — pcc_state was NULL at validation time (fail-closed)
+          PCC_NOT_NOMINAL:<s>    — pcc_state was present but not NOMINAL
+          PCC_HOST_INELIGIBLE:<h>— pcc_state=NOMINAL but host not EXCLUSIVE_USB/UNKNOWN
+          MENU_DETECTED          — gameplay_context='MENU_DETECTED'
+          DIVERGENT              — llm_verdict differed from fallback_verdict beyond threshold
+          GRIND_MODE_OFF         — no PCC/GAD/divergence blocker found; grind_mode was False
+          or a "+" combination of multiple concurrent blockers.
+        """
+        # Non-stamped rows have grind_session_id=NULL (update_grind_chain_hash only
+        # sets it on GIC-eligible rows).  Filtering by session would silently drop all
+        # diagnostic rows — exactly the opposite of what this method is for.  Return
+        # the most recent N rows globally; the caller uses the response envelope
+        # grind_session_id field for context.
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT id, ruling_id, created_at, pcc_state, pcc_host_state, "
+                "gameplay_context, divergence, grind_chain_hash, llm_verdict, "
+                "fallback_verdict, grind_session_id "
+                "FROM ruling_validation_log ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            stamped = bool(d.get("grind_chain_hash"))
+            if stamped:
+                blocking_reason = None
+            else:
+                reasons = []
+                pcc_s = d.get("pcc_state")
+                pcc_h = d.get("pcc_host_state")
+                if pcc_s is None:
+                    reasons.append("PCC_STATE_UNKNOWN")
+                elif pcc_s != "NOMINAL":
+                    reasons.append(f"PCC_NOT_NOMINAL:{pcc_s}")
+                elif pcc_h not in ("EXCLUSIVE_USB", "UNKNOWN"):
+                    reasons.append(f"PCC_HOST_INELIGIBLE:{pcc_h}")
+                if d.get("gameplay_context") == "MENU_DETECTED":
+                    reasons.append("MENU_DETECTED")
+                if d.get("divergence"):
+                    reasons.append("DIVERGENT")
+                blocking_reason = "+".join(reasons) if reasons else "GRIND_MODE_OFF"
+            d["stamped"] = stamped
+            d["blocking_reason"] = blocking_reason
+            result.append(d)
+        return result
