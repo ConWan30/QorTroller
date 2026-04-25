@@ -1061,12 +1061,44 @@ class Bridge:
             self._tasks.append(_fsca193_task)
             log.info(
                 "Phase 193: FleetSignalCoherenceAgent started (agent #36; "
-                "7 CONTRADICTION + 5 ORPHAN + 3 INVERSION rules; poll=%ss)",
+                "12 CONTRADICTION + 7 ORPHAN + 5 INVERSION rules; poll=%ss)",
                 getattr(self.cfg, "coherence_poll_interval_seconds", 900),
             )
         except Exception as _fsca193_exc:
             log.warning(
                 "Phase 193: FleetSignalCoherenceAgent unavailable: %s", _fsca193_exc
+            )
+
+        # Phase 235-AUTO-TRIGGER: SessionBoundaryDetectorAgent (agent #38).
+        # Heuristic detector that publishes ruling_request events on detected
+        # session-end (sustained gameplay activity followed by extended trigger
+        # quiescence) provided PCC is NOMINAL+EXCLUSIVE_USB.  Replaces manual
+        # /agent/adjudicate POSTs during the 100-session grind.
+        # Off by default (auto_trigger_enabled=False); operator opts in via
+        # AUTO_TRIGGER_ENABLED=true in bridge/.env when starting the grind.
+        # Safe to enable in idle bridges — does nothing without prior gameplay.
+        if getattr(self.cfg, "auto_trigger_enabled", False):
+            try:
+                from .session_boundary_detector_agent import SessionBoundaryDetectorAgent
+                _sbda = SessionBoundaryDetectorAgent(self.cfg, self.store, bus=_bus)
+                _sbda_task = asyncio.ensure_future(_sbda.run_poll_loop())
+                _sbda_task.set_name("SessionBoundaryDetectorAgent")
+                self._tasks.append(_sbda_task)
+                log.info(
+                    "Phase 235-AUTO-TRIGGER: SessionBoundaryDetectorAgent started "
+                    "(agent #38; poll=%ds; min_interval=%ds)",
+                    SessionBoundaryDetectorAgent.POLL_INTERVAL_S,
+                    int(getattr(self.cfg, "auto_trigger_min_interval_s", 300)),
+                )
+            except Exception as _sbda_exc:
+                log.warning(
+                    "Phase 235-AUTO-TRIGGER: SessionBoundaryDetectorAgent unavailable: %s",
+                    _sbda_exc,
+                )
+        else:
+            log.info(
+                "Phase 235-AUTO-TRIGGER: SessionBoundaryDetectorAgent skipped "
+                "(AUTO_TRIGGER_ENABLED=false; manual /agent/adjudicate triggers required)"
             )
 
         # Phase 222: BiometricGovernanceAgent (agent #38) — BBG VHP-gated governance.

@@ -44,7 +44,7 @@ if TYPE_CHECKING:
     from vapi_bridge.config import Config
 
 # ---------------------------------------------------------------------------
-# CONTRADICTION_RULES — 11 rules
+# CONTRADICTION_RULES — 12 rules
 # ---------------------------------------------------------------------------
 
 CONTRADICTION_RULES: dict = {
@@ -358,6 +358,68 @@ CONTRADICTION_RULES: dict = {
         ),
     },
 
+    "AUTO_TRIGGER_RATE_LIMIT_VIOLATION": {
+        # Phase 235-AUTO-TRIGGER: 12th CONTRADICTION rule.
+        # Fires when more than 12 ruling_request events from
+        # source_agent='session_boundary_detector_agent' occur within a
+        # rolling 1-hour window.
+        #
+        # Math: at the steady-state 5-minute trigger interval (matches
+        # SessionAdjudicator's poll cadence), the agent fires at most 12
+        # times per hour.  Anything above that ceiling indicates either:
+        #   (a) auto_trigger_min_interval_s was lowered without updating
+        #       this rule (config drift) — operator should restore default
+        #       300s, OR
+        #   (b) the agent is in a tight retry loop on a malformed event —
+        #       investigate logs for write_agent_event errors, OR
+        #   (c) an adversary is publishing crafted ruling_request events
+        #       to inflate chain_length without genuine gameplay — rotate
+        #       OPERATOR_API_KEY and audit /agent/adjudicate access.
+        #
+        # CRITICAL severity: any of the three causes warrants immediate
+        # halt of auto-triggering pending review.  The W1 mitigation for
+        # the auto-trigger phase relies on this rate-limit holding.
+        "query": """
+            SELECT COUNT(*) AS n
+            FROM agent_events
+            WHERE event_type = 'ruling_request'
+              AND source_agent = 'session_boundary_detector_agent'
+              AND (CAST(strftime('%s','now') AS REAL)
+                   - CAST(created_at AS REAL)) < 3600
+        """,
+        "params": lambda cfg: (),
+        # post_check: COUNT(*) always returns one row; the rule only fires
+        # when that count exceeds the steady-state ceiling of 12 events/hour.
+        "post_check": lambda row: int(row.get("n", 0)) > 12,
+        "agents_involved": ["SessionBoundaryDetectorAgent", "SessionAdjudicator"],
+        "severity": "CRITICAL",
+        "explanation": (
+            "agent_events shows more than 12 ruling_request events from "
+            "session_boundary_detector_agent in the last hour. The agent "
+            "is throttled to one trigger per auto_trigger_min_interval_s "
+            "(default 300s = 12/hr ceiling). Exceeding this indicates "
+            "config drift, a tight retry loop, or an adversarial event "
+            "injection attempting to inflate chain_length without genuine "
+            "gameplay. Auto-triggering should be halted pending review."
+        ),
+        "resolution": (
+            "1. Verify cfg.auto_trigger_min_interval_s == 300 (default). "
+            "If lowered, restore to 300 and update this rule's per-hour "
+            "ceiling accordingly. "
+            "2. Inspect bridge log for SessionBoundaryDetectorAgent "
+            "errors around write_agent_event — a tight retry loop will "
+            "show repeated 'write_agent_event failed' WARNING entries. "
+            "3. Set AUTO_TRIGGER_ENABLED=false in bridge/.env and restart "
+            "the bridge to halt auto-triggering. "
+            "4. Audit recent /agent/adjudicate access via the operator "
+            "audit log (operator_audit_log table); rotate OPERATOR_API_KEY "
+            "if suspicious. "
+            "5. Review the corresponding ruling_validation_log rows — "
+            "GIC stamps from rapid-fire events still chain cryptographically "
+            "but the count claim is suspect; the chain may need to be "
+            "audited for correlation with actual gameplay records."
+        ),
+    },
     "INVARIANT_CHANGE_WITHOUT_VHP": {
         # Phase 228: VHP-Gated Invariant Change — 11th CONTRADICTION rule.
         # Fires when an invariant_gate_log row with reason_category='invariant_change'
