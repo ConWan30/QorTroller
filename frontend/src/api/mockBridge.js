@@ -110,6 +110,21 @@ export const MOCK = {
     ],
   }),
 
+  // Phase 235-DASH-UPGRADE — auto-trigger telemetry mock (off by default
+  // so dev-mode renders an OFF chip without triggering false ARMED state)
+  autoTriggerStatus: () => ({
+    auto_trigger_enabled: false,
+    agent_alive:          false,
+    fires_this_run:       0,
+    last_fire_age_s:      null,
+    next_eligible_in_s:   0,
+    min_interval_s:       300,
+    quiescence_window:    60,
+    activity_window:      120,
+    stopped:              false,
+    timestamp:            now(),
+  }),
+
   protocolCoherenceHistory: () => ({
     entries: Array.from({ length: 8 }, (_, i) => ({
       merkle_root: Math.random().toString(16).slice(2, 18),

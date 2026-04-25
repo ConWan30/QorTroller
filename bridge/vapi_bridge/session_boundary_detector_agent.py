@@ -199,6 +199,35 @@ class SessionBoundaryDetectorAgent:
         return recent[0].get("device_id") or None
 
     # ------------------------------------------------------------------
+    # Telemetry — read-only snapshot for /operator/agent/auto-trigger-status
+    # ------------------------------------------------------------------
+
+    def get_telemetry(self) -> dict:
+        """Return a JSON-serialisable snapshot of agent state for the operator
+        endpoint.  Phase 235-DASH-UPGRADE: surfaces last-fire age and
+        next-eligible-in seconds so the gamer dashboard can show a live
+        status chip during the 5-min throttle windows where chain_length
+        appears static.
+
+        Monotonic timestamps are not portable across the API boundary, so
+        we convert to relative seconds (last_fire_age_s) on the way out.
+        """
+        now = time.monotonic()
+        last_age = (now - self._last_fire_at) if self._last_fire_at else None
+        min_iv   = float(getattr(self._cfg, "auto_trigger_min_interval_s", 300))
+        next_in  = max(0.0, min_iv - last_age) if last_age is not None else 0.0
+        return {
+            "auto_trigger_enabled": bool(getattr(self._cfg, "auto_trigger_enabled", False)),
+            "fires_this_run":       int(self._fires_this_run),
+            "last_fire_age_s":      round(last_age, 1) if last_age is not None else None,
+            "next_eligible_in_s":   round(next_in, 1),
+            "min_interval_s":       int(min_iv),
+            "quiescence_window":    int(getattr(self._cfg, "auto_trigger_quiescence_window", 60)),
+            "activity_window":      int(getattr(self._cfg, "auto_trigger_activity_window", 120)),
+            "stopped":              bool(self._stopped),
+        }
+
+    # ------------------------------------------------------------------
     # Long-running poll loop — main.py awaits this via _run_*_with_restart
     # ------------------------------------------------------------------
 

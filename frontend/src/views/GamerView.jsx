@@ -16,7 +16,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useHeartbeatStore } from '../heartbeat/useHeartbeat'
-import { useCaptureHealth, useGrindChain, useTournamentPreflight } from '../api/bridgeApi'
+import {
+  useCaptureHealth, useGrindChain, useTournamentPreflight,
+  useFleetCoherenceStatus, useAutoTriggerStatus,
+} from '../api/bridgeApi'
 import { FONTS, GAMER } from '../shared/design/tokens'
 
 // ---------------------------------------------------------------------------
@@ -286,7 +289,52 @@ function StatusChip({ label, value, color }) {
   )
 }
 
-function StatusBar({ host, state, gctx, ready }) {
+function StatusBar({ host, state, gctx, ready, coherence, autoTrigger }) {
+  // Phase 235-DASH-UPGRADE: GAMEPLAY chip — `WAITING` instead of ambiguous
+  // `NULL`.  Pre-first-stamp shows muted t2; once a ruling lands, color
+  // flips to green (ACTIVE_GAMEPLAY) or red (MENU_DETECTED) per GCTX_TONE.
+  const gctxValue = gctx ?? 'WAITING'
+  const gctxColor = gctx ? tone(GCTX_TONE, gctx) : GAMER.t2
+  const gctxTitle = gctx
+    ? undefined
+    : 'No rulings validated yet — chip populates after the first GIC stamp lands'
+
+  // Phase 235-DASH-UPGRADE: COHERENCE chip surfaces FleetSignalCoherenceAgent
+  // contradiction / orphan / inversion state.  Critical signals here include
+  // the new AUTO_TRIGGER_RATE_LIMIT_VIOLATION rule (>12 events/hour from the
+  // SessionBoundaryDetectorAgent → CRITICAL halt-state).
+  const cohC = coherence?.active_contradictions ?? coherence?.critical_count ?? 0
+  const cohH = coherence?.active_orphans ?? coherence?.high_count ?? 0
+  const cohI = coherence?.active_inversions ?? 0
+  const cohValue = (cohC === 0 && cohH === 0 && cohI === 0)
+    ? 'CLEAN'
+    : `${cohC}C·${cohH}H·${cohI}I`
+  const cohColor =
+    cohC > 0 ? GAMER.red
+    : cohH > 0 ? GAMER.orange
+    : GAMER.green
+
+  // Phase 235-DASH-UPGRADE: AUTO-TRIGGER chip surfaces SessionBoundary
+  // DetectorAgent live state.  Resolves the 5–15 min "static dashboard"
+  // window between gameplay-end and chain_length advance — operator can
+  // see ARMED / NEXT ~Ns / queued count without waiting for a stamp.
+  let atValue, atColor
+  if (!autoTrigger || autoTrigger.agent_alive === false) {
+    atValue = 'OFF';   atColor = GAMER.t3
+  } else if (autoTrigger.stopped) {
+    atValue = 'DONE';  atColor = GAMER.green
+  } else if (autoTrigger.next_eligible_in_s > 0) {
+    atValue = `NEXT ~${Math.round(autoTrigger.next_eligible_in_s)}s`
+    atColor = GAMER.cyan
+  } else {
+    atValue = 'ARMED'; atColor = GAMER.green
+  }
+  const atTitle = autoTrigger
+    ? `fires_this_run=${autoTrigger.fires_this_run} · `
+      + `min_interval=${autoTrigger.min_interval_s}s · `
+      + `quiescence_window=${autoTrigger.quiescence_window} records`
+    : undefined
+
   return (
     <div style={{
       position:  'absolute',
@@ -296,15 +344,21 @@ function StatusBar({ host, state, gctx, ready }) {
       display:   'flex',
       gap:       8,
       zIndex:    9,
+      flexWrap:  'wrap',
+      maxWidth:  'calc(100vw - 64px)',
+      justifyContent: 'center',
     }}>
-      <StatusChip label="HOST"     value={host  ?? '—'}        color={tone(HOST_TONE,  host)} />
-      <StatusChip label="PCC"      value={state ?? '—'}        color={tone(STATE_TONE, state)} />
-      <StatusChip label="GAMEPLAY" value={gctx  ?? 'NULL'}     color={tone(GCTX_TONE,  gctx)} />
-      <StatusChip
-        label="READY"
-        value={ready ? 'YES' : 'NO'}
-        color={ready ? GAMER.green : GAMER.orange}
-      />
+      <StatusChip label="HOST"         value={host  ?? '—'}    color={tone(HOST_TONE,  host)} />
+      <StatusChip label="PCC"          value={state ?? '—'}    color={tone(STATE_TONE, state)} />
+      <span title={gctxTitle}>
+        <StatusChip label="GAMEPLAY"   value={gctxValue}       color={gctxColor} />
+      </span>
+      <StatusChip label="READY"        value={ready ? 'YES' : 'NO'}
+                                       color={ready ? GAMER.green : GAMER.orange} />
+      <StatusChip label="COHERENCE"    value={cohValue}        color={cohColor} />
+      <span title={atTitle}>
+        <StatusChip label="AUTO-TRIGGER" value={atValue}       color={atColor} />
+      </span>
     </div>
   )
 }
@@ -509,6 +563,10 @@ export function GamerView() {
   const { data: captureHealth } = useCaptureHealth()
   const { data: grindChain }    = useGrindChain()
   const { data: preflight }     = useTournamentPreflight()
+  // Phase 235-DASH-UPGRADE: surface FSCA contradiction count + auto-trigger
+  // agent telemetry on the bottom status strip.
+  const { data: coherence }     = useFleetCoherenceStatus()
+  const { data: autoTrigger }   = useAutoTriggerStatus()
 
   const chainLen  = grindChain?.chain_length ?? 0
   const target    = captureHealth?.grind_target ?? grindChain?.grind_target ?? 100
@@ -581,6 +639,8 @@ export function GamerView() {
         state={state}
         gctx={gctx}
         ready={ready}
+        coherence={coherence}
+        autoTrigger={autoTrigger}
       />
       <PCCDrawer
         captureHealth={captureHealth}

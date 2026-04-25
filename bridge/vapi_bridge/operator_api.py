@@ -7140,4 +7140,52 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
+    # Phase 235-DASH-UPGRADE — GET /agent/auto-trigger-status
+    # ------------------------------------------------------------------
+    # Read-only telemetry for the SessionBoundaryDetectorAgent (Phase
+    # 235-AUTO-TRIGGER, agent #38).  Exists so the gamer dashboard can
+    # surface live agent state during the 5-min throttle windows where
+    # chain_length appears static — without it, the user sees a frozen
+    # dashboard for 5–15 minutes between every stamp and may push manual
+    # triggers that trip the FSCA AUTO_TRIGGER_RATE_LIMIT_VIOLATION rule.
+    #
+    # The agent instance is attached to app._sbda from main.py.  Returns
+    # `agent_alive: false` when the agent isn't wired (auto_trigger_enabled
+    # =false at startup) so the dashboard can render a muted "OFF" chip.
+    @app.get("/agent/auto-trigger-status")
+    async def get_auto_trigger_status(
+        x_api_key: str = Header(default=""),
+    ):
+        """SessionBoundaryDetectorAgent telemetry.  Returns (10 keys):
+        auto_trigger_enabled, agent_alive, fires_this_run, last_fire_age_s,
+        next_eligible_in_s, min_interval_s, quiescence_window,
+        activity_window, stopped, timestamp.
+
+        Throttle math: next_eligible_in_s = max(0, min_interval_s -
+        last_fire_age_s).  Counts down every 5s on the dashboard side.
+        """
+        _check_read_key(x_api_key)
+        import time as _tat
+        agent = getattr(app, "_sbda", None)
+        if agent is None:
+            return {
+                "auto_trigger_enabled": bool(getattr(cfg, "auto_trigger_enabled", False)),
+                "agent_alive":          False,
+                "fires_this_run":       0,
+                "last_fire_age_s":      None,
+                "next_eligible_in_s":   0.0,
+                "min_interval_s":       int(getattr(cfg, "auto_trigger_min_interval_s", 300)),
+                "quiescence_window":    int(getattr(cfg, "auto_trigger_quiescence_window", 60)),
+                "activity_window":      int(getattr(cfg, "auto_trigger_activity_window", 120)),
+                "stopped":              False,
+                "timestamp":            _tat.time(),
+            }
+        try:
+            telem = agent.get_telemetry()
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"telemetry failed: {exc}") from exc
+        telem["agent_alive"] = True
+        telem["timestamp"]   = _tat.time()
+        return telem
+
     return app
