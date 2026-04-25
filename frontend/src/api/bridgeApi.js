@@ -122,6 +122,19 @@ export function useTournamentPreflight() {
   })
 }
 
+// Phase 235-DASH-UPGRADE: SessionBoundaryDetectorAgent telemetry.
+// Polls every 5s; noMock so the live throttle countdown can't get
+// hijacked by stale mock data during a live grind.
+export function useAutoTriggerStatus() {
+  return useQuery({
+    queryKey: ['autoTriggerStatus'],
+    queryFn: () => get('/agent/auto-trigger-status', 'autoTriggerStatus', { noMock: true }),
+    refetchInterval: 5000,
+    staleTime: 3000,
+    retry: 1,
+  })
+}
+
 // Phase 235-FINAL: grind-critical live indicators.
 // noMock=true: on transient failure react-query holds the last successful
 // response.  Without this, a single 5s timeout under DataCuratorAgent
