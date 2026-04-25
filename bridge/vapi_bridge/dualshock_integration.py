@@ -356,6 +356,18 @@ class DualShockTransport:
         self._chain       = chain_client
         self._interval    = float(getattr(cfg, "dualshock_record_interval_s", 1.0))
         self._pcc_monitor = None  # set via set_pcc_monitor() (Phase 234.7)
+        # Phase 235-PCC-RATE-FIX: PCC needs the TRUE USB HID delivery rate
+        # (~1000 Hz on interface 3 for DualSense Edge), not the bridge's
+        # biometric-sample rate (~120 Hz, throttled to dt_ms=8 in _poll_frames
+        # so the L4 tremor FFT bin spacing stays valid).  This counter is
+        # incremented by a background thread (_start_hid_rate_counter) that
+        # reads directly from hidapi interface 3 in parallel with pydualsense's
+        # internal read loop.  Single producer / single consumer => safe with
+        # CPython's GIL; no lock needed for the increment-only int.
+        self._hid_report_total      = 0
+        self._last_hid_report_total = 0
+        self._hid_counter_thread    = None
+        self._hid_counter_running   = False
         self._oracle_addr = getattr(cfg, "skill_oracle_address", "")
         self._bounty_cfg  = getattr(cfg, "dualshock_active_bounties", "")
         self._key_dir     = Path(getattr(cfg, "dualshock_key_dir",
@@ -523,6 +535,77 @@ class DualShockTransport:
     def set_pcc_monitor(self, monitor) -> None:  # Phase 234.7
         """Wire a CaptureHealthMonitor instance for physical capture continuity."""
         self._pcc_monitor = monitor
+
+    def _start_hid_rate_counter(self) -> None:
+        """Phase 235-PCC-RATE-FIX — open hidapi interface 3 in a daemon
+        thread and increment self._hid_report_total per HID report.
+
+        Why: _poll_frames sleeps dt_ms=8 between pydualsense state samples
+        (so the L4 tremor FFT bin spacing stays valid), capping its loop
+        at ~120 Hz.  PCC, however, is supposed to detect the TRUE USB HID
+        delivery rate to discriminate USB-1000Hz from BT-250Hz.  This
+        thread reads raw reports from interface 3 in parallel with
+        pydualsense (Windows hidapi allows multiple read handles on the
+        same device path).  The session loop reads `_hid_report_total -
+        _last_hid_report_total` per interval to feed PCC the real rate.
+        """
+        import threading
+        try:
+            import hid
+        except ImportError:
+            log.warning("Phase 235-PCC-RATE-FIX: hidapi not installed — "
+                        "PCC will use throttled bridge sample rate (~120 Hz)")
+            return
+
+        # Find the high-speed vendor channel (interface 3 on DualSense Edge).
+        # Fallback: any interface matching VID/PID.  poll_test.py uses the
+        # same selection logic.
+        target = None
+        for d in hid.enumerate(0x054C, 0x0DF2):
+            if d.get("interface_number") == 3:
+                target = d
+                break
+        if target is None:
+            candidates = list(hid.enumerate(0x054C, 0x0DF2))
+            if not candidates:
+                log.warning("Phase 235-PCC-RATE-FIX: DualSense Edge not found "
+                            "in hidapi enumeration; PCC rate fallback")
+                return
+            target = candidates[0]
+            log.info("Phase 235-PCC-RATE-FIX: interface 3 not exposed; "
+                     "using interface %s", target.get("interface_number"))
+
+        def _drain_loop():
+            handle = None
+            try:
+                handle = hid.device()
+                handle.open_path(target["path"])
+                handle.set_nonblocking(False)
+                log.info("Phase 235-PCC-RATE-FIX: hidapi rate counter live "
+                         "on interface %s", target.get("interface_number"))
+                while self._hid_counter_running:
+                    data = handle.read(128, timeout_ms=200)
+                    if data:
+                        # Increment-only int.  CPython's GIL makes single
+                        # producer / single consumer safe without a lock.
+                        self._hid_report_total += 1
+            except Exception as exc:
+                log.warning("Phase 235-PCC-RATE-FIX: rate counter thread "
+                            "exited: %s", exc)
+            finally:
+                if handle is not None:
+                    try:
+                        handle.close()
+                    except Exception:
+                        pass
+
+        self._hid_counter_running = True
+        self._hid_counter_thread  = threading.Thread(
+            target=_drain_loop,
+            daemon=True,
+            name="pcc_hid_rate_counter",
+        )
+        self._hid_counter_thread.start()
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -747,6 +830,14 @@ class DualShockTransport:
         self._is_sim_mode = not connected
         if connected:
             log.info("DualSense Edge connected (device_id=%s...)", self._device_id.hex()[:16])
+            # Phase 235-PCC-RATE-FIX: start the parallel hidapi rate counter
+            # so PCC sees the true USB HID delivery rate, not the throttled
+            # bridge sample rate.  Best-effort; failure is non-fatal — PCC
+            # falls back to len(frames) which is the old behavior.
+            try:
+                self._start_hid_rate_counter()
+            except Exception as _hr_exc:
+                log.warning("Phase 235-PCC-RATE-FIX: hidapi counter init failed: %s", _hr_exc)
         else:
             log.warning(
                 "DualSense Edge not found — running in simulation mode "
@@ -998,9 +1089,22 @@ class DualShockTransport:
                 await asyncio.sleep(self._interval)
                 continue
 
-            # Phase 234.7 Layer 1 — report frame count for poll rate tracking
+            # Phase 234.7 Layer 1 — report poll rate for PCC.
+            # Phase 235-PCC-RATE-FIX: prefer the TRUE USB HID rate from the
+            # parallel hidapi counter on interface 3 (~1000 Hz on USB high-
+            # speed) over `len(frames)` (capped at ~120 Hz by the dt_ms=8
+            # sleep in _poll_frames, which is required to keep the L4
+            # tremor FFT bin spacing valid).  Falls back to len(frames) if
+            # the hidapi counter never started (no hidapi installed, or
+            # interface 3 unavailable).
             if self._pcc_monitor is not None:
-                self._pcc_monitor.update_sample(len(frames), self._interval)
+                if self._hid_counter_thread is not None and self._hid_counter_thread.is_alive():
+                    _total = self._hid_report_total
+                    _delta = _total - self._last_hid_report_total
+                    self._last_hid_report_total = _total
+                    self._pcc_monitor.update_sample(_delta, self._interval)
+                else:
+                    self._pcc_monitor.update_sample(len(frames), self._interval)
 
             # Phase 53: reset pitl_meta at the start of each iteration so Bridge.on_record()
             # never reads stale values from the previous cycle if an exception fires mid-loop.
@@ -2116,6 +2220,9 @@ class DualShockTransport:
 
     async def _shutdown_cleanup(self):
         """Submit final SkillOracle update and reset controller state."""
+        # Phase 235-PCC-RATE-FIX: stop the parallel hidapi counter thread
+        # so it releases its handle on interface 3 cleanly.
+        self._hid_counter_running = False
         summary = self._oracle.summary()
         log.info(
             "Session complete | records=%d rating=%d tier=%s cheats=%d",
