@@ -1432,6 +1432,49 @@ class Config:
     Reported in GET /bridge/capture-health as progress N/target.
     Default 100 (matches validation_gate_n default)."""
 
+    auto_trigger_enabled: bool = field(
+        default_factory=lambda: _env_bool("AUTO_TRIGGER_ENABLED", False)
+    )
+    """Phase 235-AUTO-TRIGGER — Activate the SessionBoundaryDetectorAgent.
+    When True: agent #38 polls every 60s; on detected session-end
+    (gameplay activity in the recent window followed by extended trigger
+    quiescence) and PCC NOMINAL+EXCLUSIVE_USB, publishes a ruling_request
+    event to the bus.  Throttled to one trigger per auto_trigger_min
+    _interval_s.  Off by default — operator opts in via env var when
+    starting the grind."""
+
+    auto_trigger_min_interval_s: int = field(
+        default_factory=lambda: _env_int("AUTO_TRIGGER_MIN_INTERVAL_S", 300)
+    )
+    """Phase 235-AUTO-TRIGGER — Minimum seconds between consecutive
+    auto-fired ruling_request events.  Default 300s matches Session
+    Adjudicator's 5-min poll cadence; firing faster has zero throughput
+    gain and weakens the W1 rate-limit mitigation.  Lowering this
+    requires a corresponding update to the FleetSignalCoherenceAgent
+    AUTO_TRIGGER_RATE_LIMIT_VIOLATION rule's per-hour ceiling."""
+
+    auto_trigger_quiescence_window: int = field(
+        default_factory=lambda: _env_int("AUTO_TRIGGER_QUIESCENCE_WINDOW", 60)
+    )
+    """Phase 235-AUTO-TRIGGER — Number of trailing records that must all
+    have trigger_active=0 to classify as game-end (return-to-menu)
+    quiescence rather than between-play quiescence.  At ~1 record per
+    second from the session loop, default 60 = ~60 seconds of no
+    trigger activity.  NCAA CFB 26 has natural ~30s quiescence between
+    plays (huddle / play-call); the window must be long enough to skip
+    those without firing.  Tune during live grind verification — raise
+    if firing too frequently between plays, lower if firing too rarely
+    (e.g. only when player fully exits to home)."""
+
+    auto_trigger_activity_window: int = field(
+        default_factory=lambda: _env_int("AUTO_TRIGGER_ACTIVITY_WINDOW", 120)
+    )
+    """Phase 235-AUTO-TRIGGER — Number of preceding records to scan for
+    gameplay activity evidence (>=20% trigger_active==1) before the
+    quiescence tail.  Confirms a gameplay session actually happened
+    rather than triggering on bridge-startup quiescence with no prior
+    play.  Default 120 records ~ 2 minutes."""
+
     grind_session_id: str = field(
         default_factory=lambda: os.environ.get(
             "GRIND_SESSION_ID",
