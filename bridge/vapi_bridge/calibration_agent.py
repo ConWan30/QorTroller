@@ -104,16 +104,25 @@ class CalibrationAgent:
         if time.time() - self._last_run < self.MIN_INTERVAL_SECS:
             return None
 
-        # Enumerate valid session files (quality-filtered)
-        all_files = sorted(self._sessions_dir.glob("hw_*.json"))
+        # Phase 235-BRIDGE-WEDGE-FIX: enumerate + filter sessions on a worker
+        # thread.  glob() walks the filesystem and _filter_sessions reads /
+        # parses every hw_*.json file via json.load() — easily >1s with the
+        # current corpus, which py-spy caught wedging the event loop while
+        # the proactive_monitor 60s tick was running.
+        import asyncio
+        all_files = await asyncio.to_thread(
+            lambda: sorted(self._sessions_dir.glob("hw_*.json"))
+        )
         if not all_files:
             return None
 
-        valid_files, quality_flags = self._filter_sessions(all_files)
+        valid_files, quality_flags = await asyncio.to_thread(
+            self._filter_sessions, all_files
+        )
         if quality_flags:
             log.info("Session quality: %d anomalous sessions excluded from calibration",
                      len(quality_flags))
-            self._persist_quality_flags(quality_flags)
+            await asyncio.to_thread(self._persist_quality_flags, quality_flags)
 
         count = len(valid_files)
         if count - self._last_count < self.RECALIB_SESSION_DELTA:

@@ -113,14 +113,10 @@ class SessionAdjudicatorValidationAgent:
 
     async def _consume_pending_rulings(self) -> None:
         """Fetch unvalidated rulings (not yet in ruling_validation_log) and validate each."""
+        # Phase 235-BRIDGE-WEDGE-FIX: SQLite open + LEFT JOIN scan must run on
+        # a worker thread, not the event loop.  See Store.get_unvalidated_rulings.
         try:
-            with self._store._conn() as conn:
-                rows = conn.execute(
-                    "SELECT ar.* FROM agent_rulings ar "
-                    "LEFT JOIN ruling_validation_log rvl ON ar.id = rvl.ruling_id "
-                    "WHERE rvl.id IS NULL "
-                    "ORDER BY ar.created_at ASC LIMIT 50"
-                ).fetchall()
+            rows = await asyncio.to_thread(self._store.get_unvalidated_rulings, 50)
         except Exception as exc:
             log.warning("SessionAdjudicatorValidationAgent: query failed: %s", exc)
             return
@@ -167,7 +163,9 @@ class SessionAdjudicatorValidationAgent:
                 llm_verdict, llm_confidence,
                 fb_verdict, fb_confidence, delta_conf,
             )
-            self._store.write_agent_event(
+            # Phase 235-BRIDGE-WEDGE-FIX: SQLite write must not run on event loop.
+            await asyncio.to_thread(
+                self._store.write_agent_event,
                 event_type="validation_divergence",
                 payload=json.dumps({
                     "ruling_id": ruling_id,
@@ -187,7 +185,8 @@ class SessionAdjudicatorValidationAgent:
         )
 
         # Phase 235-B: capture PCC state at adjudication time (fail-closed if unavailable)
-        _pcc_snap = self._store.get_capture_health_status()
+        # Phase 235-BRIDGE-WEDGE-FIX: SQLite read off the event loop thread.
+        _pcc_snap = await asyncio.to_thread(self._store.get_capture_health_status)
         _pcc_state = _pcc_snap.get("capture_state") if _pcc_snap else None
         _pcc_host = _pcc_snap.get("host_state") if _pcc_snap else None
 
@@ -202,7 +201,9 @@ class SessionAdjudicatorValidationAgent:
         else:
             _gameplay_ctx = "ACTIVE_GAMEPLAY"  # discrimination disabled → treat as active
 
-        _val_row_id = self._store.insert_validation_record(
+        # Phase 235-BRIDGE-WEDGE-FIX: SQLite write off the event loop thread.
+        _val_row_id = await asyncio.to_thread(
+            self._store.insert_validation_record,
             ruling_id=ruling_id,
             device_id=device_id,
             llm_verdict=llm_verdict,
@@ -236,11 +237,14 @@ class SessionAdjudicatorValidationAgent:
                 from .grind_chain import compute_gic, genesis_gic
                 _grind_sid = getattr(self._cfg, "grind_session_id", "grind_unknown")
                 _commitment_hash = row.get("commitment_hash") or ("00" * 32)
-                _prev = self._store.get_prev_grind_chain_hash(_grind_sid)
+                # Phase 235-BRIDGE-WEDGE-FIX: SQLite reads / writes off the event loop.
+                _prev = await asyncio.to_thread(
+                    self._store.get_prev_grind_chain_hash, _grind_sid
+                )
                 _ts_ns = time.time_ns()
                 # Monotonicity guard: GIC ts_ns must be strictly > last stamped ts_ns.
                 # Protects against backward NTP corrections creating audit confusion.
-                _prev_ts = self._store.get_prev_gic_ts_ns()
+                _prev_ts = await asyncio.to_thread(self._store.get_prev_gic_ts_ns)
                 if _ts_ns <= _prev_ts:
                     _ts_ns = _prev_ts + 1
                 if _prev is None:
@@ -251,7 +255,10 @@ class SessionAdjudicatorValidationAgent:
                 else:
                     _gic = compute_gic(_prev, _commitment_hash, _pcc_host, fb_verdict, _ts_ns)
                 # INV-GIC-001: pass grind_session_id so the row is scoped to this session.
-                self._store.update_grind_chain_hash(_val_row_id, _gic.hex(), _ts_ns, _grind_sid)
+                await asyncio.to_thread(
+                    self._store.update_grind_chain_hash,
+                    _val_row_id, _gic.hex(), _ts_ns, _grind_sid,
+                )
             except Exception as _gic_exc:
                 log.warning(
                     "SessionAdjudicatorValidationAgent: GIC stamp failed ruling_id=%d: %s",
@@ -262,10 +269,14 @@ class SessionAdjudicatorValidationAgent:
         # Phase 78: pass max_divergence_rate so gate logic is consistent with operator_api
         _max_rate = float(getattr(self._cfg, "validation_max_divergence_rate", 1.0))
         if not self._gate_already_emitted:
-            summary = self._store.get_validation_summary(self._gate_n, _max_rate)
+            # Phase 235-BRIDGE-WEDGE-FIX: SQLite reads / writes off the event loop.
+            summary = await asyncio.to_thread(
+                self._store.get_validation_summary, self._gate_n, _max_rate
+            )
             if summary["gate_passed"]:
                 self._gate_already_emitted = True
-                self._store.write_agent_event(
+                await asyncio.to_thread(
+                    self._store.write_agent_event,
                     event_type="dry_run_gate_passed",
                     payload=json.dumps({
                         "consecutive_clean": summary["consecutive_clean"],

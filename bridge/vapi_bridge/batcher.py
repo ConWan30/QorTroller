@@ -193,11 +193,12 @@ class Batcher:
         record_hashes = [r.record_hash_hex for r in records]
         device_ids = [r.device_id for r in records]
 
-        # Mark records as batched
-        self._store.batch_update_status(record_hashes, STATUS_BATCHED)
-
-        # Create submission tracking entry
-        sub_id = self._store.create_submission(record_hashes)
+        # Phase 235-BRIDGE-WEDGE-FIX: every Store call below is a SQLite write
+        # that contended with the operator endpoint reads through the WAL,
+        # making /operator/bridge/* endpoints time out during batch cycles.
+        # All Store calls in this method now run on a worker thread.
+        await asyncio.to_thread(self._store.batch_update_status, record_hashes, STATUS_BATCHED)
+        sub_id = await asyncio.to_thread(self._store.create_submission, record_hashes)
 
         try:
             if len(records) == 1:
@@ -227,20 +228,23 @@ class Batcher:
                 else:
                     tx_hash = await self._chain.verify_batch(device_ids, records)
 
-            self._store.update_submission(
-                sub_id, status=STATUS_SUBMITTED, tx_hash=tx_hash
+            await asyncio.to_thread(
+                self._store.update_submission,
+                sub_id, status=STATUS_SUBMITTED, tx_hash=tx_hash,
             )
-            self._store.batch_update_status(record_hashes, STATUS_SUBMITTED)
+            await asyncio.to_thread(self._store.batch_update_status, record_hashes, STATUS_SUBMITTED)
 
             # Wait for confirmation
             try:
                 receipt = await self._chain.wait_for_receipt(tx_hash, timeout=60)
                 if receipt.get("status") == 1:
-                    self._store.update_submission(
-                        sub_id, status=STATUS_VERIFIED
+                    await asyncio.to_thread(
+                        self._store.update_submission,
+                        sub_id, status=STATUS_VERIFIED,
                     )
-                    self._store.batch_update_status(
-                        record_hashes, STATUS_VERIFIED
+                    await asyncio.to_thread(
+                        self._store.batch_update_status,
+                        record_hashes, STATUS_VERIFIED,
                     )
                     # Update per-device verified counts (NOMINAL records only)
                     device_counts: dict[str, int] = {}
@@ -249,7 +253,7 @@ class Batcher:
                             did = r.device_id_hex
                             device_counts[did] = device_counts.get(did, 0) + 1
                     for did, count in device_counts.items():
-                        self._store.increment_device_verified(did, count)
+                        await asyncio.to_thread(self._store.increment_device_verified, did, count)
 
                     log.info(
                         "Batch verified: %d records, tx=%s",
@@ -267,10 +271,11 @@ class Batcher:
 
             except asyncio.TimeoutError:
                 log.warning("Tx confirmation timeout: %s", tx_hash[:16])
-                self._store.update_submission(
-                    sub_id, status=STATUS_FAILED, error="confirmation timeout"
+                await asyncio.to_thread(
+                    self._store.update_submission,
+                    sub_id, status=STATUS_FAILED, error="confirmation timeout",
                 )
-                self._store.batch_update_status(record_hashes, STATUS_FAILED)
+                await asyncio.to_thread(self._store.batch_update_status, record_hashes, STATUS_FAILED)
 
         except Exception as e:
             err_str = str(e)
@@ -289,10 +294,11 @@ class Batcher:
                     self._no_key_logged = True
                 else:
                     log.debug("Batch dead-lettered: no signing key (suppressed repeat)")
-                self._store.update_submission(
-                    sub_id, status=STATUS_DEAD_LETTER, error="no signing key (dry_run mode)"
+                await asyncio.to_thread(
+                    self._store.update_submission,
+                    sub_id, status=STATUS_DEAD_LETTER, error="no signing key (dry_run mode)",
                 )
-                self._store.batch_update_status(record_hashes, STATUS_DEAD_LETTER)
+                await asyncio.to_thread(self._store.batch_update_status, record_hashes, STATUS_DEAD_LETTER)
             elif "f46a06ea" in err_str:
                 # Phase 130A: log WARNING only on first occurrence per session;
                 # subsequent occurrences are DEBUG to avoid log spam.
@@ -305,18 +311,20 @@ class Batcher:
                     self._p256_unavailable = True
                 else:
                     log.debug("Batch dead-lettered: P256 precompile unavailable (suppressed repeat)")
-                self._store.update_submission(
-                    sub_id, status=STATUS_DEAD_LETTER, error="P256PrecompileEmptyReturn (testnet)"
+                await asyncio.to_thread(
+                    self._store.update_submission,
+                    sub_id, status=STATUS_DEAD_LETTER, error="P256PrecompileEmptyReturn (testnet)",
                 )
-                self._store.batch_update_status(record_hashes, STATUS_DEAD_LETTER)
+                await asyncio.to_thread(self._store.batch_update_status, record_hashes, STATUS_DEAD_LETTER)
             elif "insufficient funds" in err_str:
                 # Dead-letter immediately — retrying won't help without more gas.
                 # Local PITL pipeline is unaffected; top up wallet to re-enable on-chain anchoring.
                 log.debug("Batch dead-lettered: insufficient funds for gas (top up wallet to re-enable on-chain anchoring)")
-                self._store.update_submission(
-                    sub_id, status=STATUS_DEAD_LETTER, error="insufficient funds for gas"
+                await asyncio.to_thread(
+                    self._store.update_submission,
+                    sub_id, status=STATUS_DEAD_LETTER, error="insufficient funds for gas",
                 )
-                self._store.batch_update_status(record_hashes, STATUS_DEAD_LETTER)
+                await asyncio.to_thread(self._store.batch_update_status, record_hashes, STATUS_DEAD_LETTER)
             elif any(pat in err_str.lower() for pat in (
                 "out of gas", "intrinsic gas too low", "gas required exceeds allowance",
                 "transaction reverted", "execution reverted", "contract revert",
@@ -324,16 +332,18 @@ class Batcher:
                 # Phase 52: EVM gas/revert errors that are permanent (not transient network).
                 # Dead-letter rather than burning retry budget on guaranteed failures.
                 log.warning("Batch dead-lettered: EVM revert/gas error — %s", err_str[:200])
-                self._store.update_submission(
-                    sub_id, status=STATUS_DEAD_LETTER, error=err_str[:500]
+                await asyncio.to_thread(
+                    self._store.update_submission,
+                    sub_id, status=STATUS_DEAD_LETTER, error=err_str[:500],
                 )
-                self._store.batch_update_status(record_hashes, STATUS_DEAD_LETTER)
+                await asyncio.to_thread(self._store.batch_update_status, record_hashes, STATUS_DEAD_LETTER)
             else:
                 log.error("Batch submission failed: %s", e)
-                self._store.update_submission(
-                    sub_id, status=STATUS_FAILED, error=err_str[:500]
+                await asyncio.to_thread(
+                    self._store.update_submission,
+                    sub_id, status=STATUS_FAILED, error=err_str[:500],
                 )
-                self._store.batch_update_status(record_hashes, STATUS_FAILED)
+                await asyncio.to_thread(self._store.batch_update_status, record_hashes, STATUS_FAILED)
 
     async def _maybe_commit_phg_checkpoints(self, records: list[PoACRecord]):
         """Commit PHG checkpoints for devices that crossed the interval boundary.

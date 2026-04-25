@@ -21,6 +21,7 @@ Security:
   - 403 if key is wrong
 """
 
+import asyncio
 import collections
 import hashlib
 import hmac
@@ -6969,21 +6970,28 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             _poll_rate_hz  = _live["poll_rate_hz"]
             _sustained     = _live["sustained_duration_s"]
             _grind_ready   = _live["grind_ready"]
-            # Flush transitions to store
-            for t in _monitor.pop_transitions():
-                try:
-                    store.insert_capture_health_event(
-                        capture_state=t["new_state"],
-                        host_state=t["host_state"],
-                        poll_rate_hz=t["poll_rate_hz"],
-                        transition_reason=t["reason"],
-                        grind_mode=_grind_mode,
-                    )
-                except Exception:
-                    pass
+            # Phase 235-BRIDGE-WEDGE-FIX: flush transitions to store on a worker
+            # thread.  Each insert is a SQLite write — running them on the event
+            # loop made every capture-health poll wait on WAL contention.
+            _transitions = _monitor.pop_transitions()
+            if _transitions:
+                def _flush_transitions(rows):
+                    for r in rows:
+                        try:
+                            store.insert_capture_health_event(
+                                capture_state=r["new_state"],
+                                host_state=r["host_state"],
+                                poll_rate_hz=r["poll_rate_hz"],
+                                transition_reason=r["reason"],
+                                grind_mode=_grind_mode,
+                            )
+                        except Exception:
+                            pass
+                await asyncio.to_thread(_flush_transitions, _transitions)
         else:
             # Fallback: read last DB entry (controller not connected or monitor not wired)
-            _db_status = store.get_capture_health_status()
+            # Phase 235-BRIDGE-WEDGE-FIX: SQLite read off the event loop.
+            _db_status = await asyncio.to_thread(store.get_capture_health_status)
             _capture_state = _db_status.get("capture_state", "DISCONNECTED")
             _host_state    = _db_status.get("host_state", "UNKNOWN")
             _poll_rate_hz  = float(_db_status.get("poll_rate_hz", 0.0))
@@ -6991,9 +6999,14 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             _grind_ready   = False
 
         # Grind progress from validation summary
+        # Phase 235-BRIDGE-WEDGE-FIX: get_validation_summary scans
+        # ruling_validation_log; py-spy caught it blocking the event loop here
+        # at store.py:5480 inside _conn().
         _val_summary: dict = {}
         try:
-            _val_summary = store.get_validation_summary(gate_n=_grind_target)
+            _val_summary = await asyncio.to_thread(
+                store.get_validation_summary, _grind_target
+            )
             _consec_clean = int(_val_summary.get("consecutive_clean", 0))
         except Exception:
             _consec_clean = 0
@@ -7113,10 +7126,15 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         """
         _check_read_key(x_api_key)
         import time as _t235a
+        # Phase 235-BRIDGE-WEDGE-FIX: both Store reads run on a worker thread
+        # so this endpoint stays responsive while the DB scans (which can be
+        # >1s on large ruling_validation_log tables).
         try:
             _grind_sid = getattr(cfg, "grind_session_id", "")
-            _status = store.get_grind_chain_status(_grind_sid, cfg)
-            _gad_summary = store.get_validation_summary(gate_n=1)
+            _status = await asyncio.to_thread(
+                store.get_grind_chain_status, _grind_sid, cfg
+            )
+            _gad_summary = await asyncio.to_thread(store.get_validation_summary, 1)
             _latest_gctx = _gad_summary.get("latest_gameplay_context")
             return {**_status, "latest_gameplay_context": _latest_gctx, "timestamp": _t235a.time()}
         except Exception as exc:
