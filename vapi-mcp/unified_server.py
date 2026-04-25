@@ -144,11 +144,13 @@ def _parse_claude_md() -> dict:
     if m5:
         s["hardhat"] = m5.group(1)
 
-    # Agent count
-    m6 = re.search(r"(\d+)\s+(?:ACTIVE\s+)?agents?\s", text, re.IGNORECASE)
-    if not m6:
-        m6 = re.search(r"agents?[:\s]+(\d+)", text, re.IGNORECASE)
-    s["agents"] = m6.group(1) if m6 else "36"
+    # Agent count: max across "N agents" prose and "agent #N" references.
+    # Prose phrases stop at older totals (e.g. "36 agents") while explicit
+    # references (e.g. "agent #38" in Phase 222 / 235) carry the latest number.
+    prose_refs = re.findall(r"(\d+)\s+(?:ACTIVE\s+)?agents?\s", text, re.IGNORECASE)
+    hash_refs  = re.findall(r"agent\s+#(\d+)", text, re.IGNORECASE)
+    candidates = [int(n) for n in prose_refs] + [int(n) for n in hash_refs]
+    s["agents"] = str(max(candidates)) if candidates else "36"
 
     # Contract count
     m7 = re.search(r"(\d+)\s+contracts?\s+ALL\s+LIVE", text, re.IGNORECASE)

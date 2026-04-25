@@ -29,7 +29,7 @@
 
 VAPI operates **36 specialized agents** in the bridge service. Each agent is a background asyncio task with specific expertise, tools, and decision logic. This document maps them for Claude Code expert spawning.
 
-> **SYNC NOTE**: Agents 37–38 added in Phases 221–222. Synced 2026-04-17. Phase 223 PV-CI gate live. Protocol at Phase 234 COMPLETE.
+> **SYNC NOTE**: Agents 37–38 added in Phases 221–222. Synced 2026-04-17. Phase 223 PV-CI gate live. Protocol at Phase 235 COMPLETE.
 
 ### Agent Table
 
@@ -866,9 +866,94 @@ coherence_alert_on_high(True), coherence_alert_on_medium(False)
 
 ---
 
-**Document Version**: 1.6 (Phase 193)
-**Last Updated**: 2026-04-11
+---
+
+## Agent #37 — ProtocolCoherenceAgent (Phase 221)
+
+**Phase**: 221 COMPLETE (2026-04-17)
+**Class**: `ProtocolCoherenceAgent` in `bridge/vapi_bridge/protocol_coherence_agent.py`
+**Role**: Computes a Merkle root over the entire fleet (sorted SHA-256 leaves per agent) and
+anchors it on IoTeX L1 via `ProtocolCoherenceRegistry.sol` (contract #44, address
+`0xfAfe4E8BEE45be22836b90D542045510dDd927Dd`). Produces Proof of Protocol Coherence (PoPC) —
+a single on-chain commitment to the fleet's structural identity at each anchor cycle.
+
+**Key Invariants**:
+- Leaf format: `sha256(agent_id || ts_ns_8b)` per agent in `_AGENT_IDS`; tree built with
+  sorted leaves + duplicate-promotion (binary Merkle, no salt — frozen formula)
+- Phase 224 extension: virtual leaf at index 37 = `sha256(b"allowlist" + allowlist_hash[:16] + ts_ns_8b)`
+  → 38 total Merkle leaves (37 fleet + 1 virtual allowlist), `agent_count=37` on-chain
+- Phase 227 extension: `anchorCoherenceWithProvenance(merkleRoot, governance_provenance_hash, ...)`
+  ties fleet identity to the latest governance provenance hash
+- Anchor interval: `protocol_coherence_anchor_interval_s=3600` (1h default)
+- `protocol_coherence_enabled=False` DEFAULT (must be opted in via env)
+- Fail-open: anchor failures log + skip; never blocks bridge startup
+
+**Store**: `protocol_coherence_log` table
+**Config**: protocol_coherence_enabled, protocol_coherence_anchor_interval_s, protocol_coherence_registry_address
+**Endpoint**: `GET /agent/protocol-coherence-status` (8 keys; +governance_provenance_hash Phase 227)
+**SDK**: `ProtocolCoherenceResult` (7 slots) + `VAPIProtocolCoherence`
+**FSCA bridge**: feeds CONTRADICTION rule #10 GOVERNANCE_PROVENANCE_ANCHOR_DRIFT (Phase 227)
+
+---
+
+## Agent #38 — BiometricGovernanceAgent (Phase 222) / SessionBoundaryDetectorAgent (Phase 235)
+
+**Phase**: 222 COMPLETE (2026-04-17) — BiometricGovernanceAgent (BBG)
+**Class**: `BiometricGovernanceAgent` in `bridge/vapi_bridge/biometric_governance_agent.py`
+**Contract**: `VAPIBiometricGovernance.sol` (#45) `0x06782293F1CFC1AA30C0Baee0437c2B336796A00`
+**Role**: VHP-gated governance proposals — `proposeWithVHP(proposalHash, vhpTokenId)` requires
+the proposer to hold a live VHP soulbound token. Blocks STOLEN_KEY / VHP_EXPIRY / FLASH_LOAN
+attacks on the governance pathway.
+
+**Key Invariants**:
+- Anti-replay: `proposalHash` UNIQUE on-chain
+- Local validation: `validate_proposal_locally()` before submission (proposer eligibility,
+  VHP age within `bbg_max_age_seconds=3600`)
+- `bbg_enabled=False` DEFAULT (governance pathway off until activated by operator)
+
+**Store**: `bbg_proposal_log` table
+**Endpoint**: `GET /agent/bbg-status` / `POST /agent/bbg-propose`
+**SDK**: `BBGProposalResult` (7 slots) + `VAPIBiometricGovernance`
+
+### Slot #38 (live): SessionBoundaryDetectorAgent (Phase 235)
+
+**Phase**: 235-AUTO-TRIGGER COMPLETE (2026-04-25)
+**Class**: `SessionBoundaryDetectorAgent` in `bridge/vapi_bridge/session_boundary_detector_agent.py`
+**Role**: Replaces the 100 manual `POST /agent/adjudicate` calls during the Phase 235 GIC grind.
+Detects natural session boundaries (gameplay-active head + extended trigger-quiescence tail)
+and fires a `ruling_request` event so SessionAdjudicator picks up the cycle.
+
+**Heuristic (all 4 must hold)**:
+1. Gameplay activity: ≥20% `trigger_active=1` records in head window (`activity_window=120` records)
+2. Quiescence: ≥`quiescence_window=60` consecutive trailing records with `trigger_active=0`
+   (calibrated for game-end / menu return, not between-play pauses)
+3. PCC NOMINAL + EXCLUSIVE_USB sustained
+4. Throttle: ≥`min_interval_s=300` since last fire
+
+**FSCA integration**: 12th CONTRADICTION rule `AUTO_TRIGGER_RATE_LIMIT_VIOLATION` (CRITICAL)
+fires when this agent emits >12 events/hour — defends against rate-limit bypass attacks
+(WIF-AT-W1, see `wiki/what_if/wif_phase235_auto_trigger.md`).
+
+**Telemetry**: `get_telemetry()` exposed via `GET /operator/agent/auto-trigger-status`
+(Phase 235-DASH-UPGRADE); dashboard renders 6th status chip (OFF / ARMED / NEXT ~Ns / DONE).
+
+**Store**: emits to `agent_events` channel `ruling_request` — no dedicated table
+**Config**: `auto_trigger_enabled` (default False; True in `bridge/.env` for live grind),
+`auto_trigger_min_interval_s=300`, `auto_trigger_quiescence_window=60`,
+`auto_trigger_activity_window=120`
+**Endpoint**: `GET /operator/agent/auto-trigger-status`
+
+**Slot-sharing note**: BBG (Phase 222) and SessionBoundaryDetector (Phase 235) both bind to
+slot #38. BBG is `bbg_enabled=False` by default, so SessionBoundaryDetector is the effective
+live #38 agent during the GIC grind. They never run simultaneously in any deployment
+configuration to date.
+
+---
+
+**Document Version**: 1.8 (Phase 235)
+**Last Updated**: 2026-04-25
 **Update Method**: Add new agents as phases complete
-**Agent Count**: 36 (Phase 193 — FleetSignalCoherenceAgent agent #36)
-**SYNC NOTE**: Agents 27–36 added in Phases 182/183/185/186/187(×2)/188/189/190/191/192/193.
-**Next agents**: #37 TBD (Phase 194 candidate — WIF-032 erasure cert replay or WIF-033 correlation gate bypass).
+**Agent Count**: 38 (Phase 222 BiometricGovernanceAgent / Phase 235 SessionBoundaryDetectorAgent share slot #38)
+**SYNC NOTE**: Agents 27–36 added in Phases 182/183/185/186/187(×2)/188/189/190/191/192/193;
+agent #37 ProtocolCoherenceAgent in Phase 221; agent #38 in Phase 222 (BBG, dormant) /
+Phase 235 (SessionBoundaryDetectorAgent, live during GIC grind).

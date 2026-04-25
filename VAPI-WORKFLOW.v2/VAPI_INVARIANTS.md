@@ -340,10 +340,52 @@ If ANY check fails, BLOCK proposal and explain invariant violation.
 
 ---
 
-**Document Version**: 1.1 (Phase 149)
-**Last Updated**: 2026-04-03
-**Next Review**: Phase 150 completion
+## 8. PV-CI Invariant Gate Registry (Phase 223+)
+
+`scripts/vapi_invariant_gate.py` enforces a SHA-256-hashed allow-list of code regions that
+must remain byte-stable. Any drift fails CI (`.github/workflows/vapi-invariant-gate.yml`).
+Registry digests live in `.github/INVARIANTS_ALLOWLIST.json` (regenerate with
+`python scripts/vapi_invariant_gate.py --generate --reason "<category>: <text>"`).
+Allow-list changes are governance-bound: `invariant_change` requires an explicit
+`--confirm-governance` phrase + VHP token (Phase 228) when `vhp_gated_invariant_change_enabled=True`.
+
+**Phase 223 — INV-001..015** — initial 15 frozen-region invariants
+(PoAC wire format, chain hash formula, ZK Poseidon arity, L4 thresholds, etc.).
+
+**Phase 224 — INV-016 added** (16 total). Freezes virtual-leaf code in
+`protocol_coherence_agent.py`: the allowlist Merkle leaf at index 37
+(`sha256(b"allowlist" + allowlist_hash[:16] + ts_ns_8b)`) MUST remain identical so
+on-chain ProtocolCoherence anchors stay verifiable across releases.
+
+**Phase 225 — InvariantGate Provenance Chain** added (no new INVs; chains all governance
+events with `governance_provenance_hash = sha256(prev_prov || new_hash || category || text || ts_ns_8b)`).
+Audit pass added INV-017 (audit split regex) + INV-018 (audit block-search) → 18 total.
+
+**Phase 226 — INV-019..022 added** (22 total). Freezes the provenance-chain code itself
+so a future drift cannot silently desync the chain:
+
+- **INV-019** — `_compute_governance_provenance_hash()` function exists in `vapi_invariant_gate.py`
+- **INV-020** — `ts_ns.to_bytes(8, "big")` replay-prevention input in the hash computation
+  (any shorter byte length, different endianness, or omitted timestamp → fails the gate)
+- **INV-021** — `_fetch_latest_provenance_hash()` function exists in `vapi_invariant_gate.py`
+- **INV-022** — `governance_provenance_chain` table + `insert_governance_provenance()`
+  method exist in `bridge/vapi_bridge/store.py`
+
+**Invariant count history**: 15 (Phase 223) → 16 (Phase 224) → 18 (Phase 225 audit) → 22 (Phase 226).
+
+**Phase 228 — VHP-gated invariant change**: `vhp_gated_invariant_change_enabled=False` default;
+when enabled, `POST /agent/allowlist-governance-event` for `invariant_change` requires
+`vhp_token_id` (missing or expired → 403). FSCA 11th CONTRADICTION rule
+`INVARIANT_CHANGE_WITHOUT_VHP` (HIGH) fires on bypass.
+
+---
+
+**Document Version**: 1.3 (Phase 235)
+**Last Updated**: 2026-04-25
+**Next Review**: Phase 236 (post-grind Zenodo deposit)
 **Immutable Sections**: 1-3 (PoAC, Crypto, Thresholds)
-**Mutable Sections**: 4-5 (State flags update per phase)
+**Mutable Sections**: 4-5, 8 (State flags + INV registry update per phase)
+**Key Phase 226 Change**: invariant scope expanded from 16 → 22 entries (INV-019..022 freeze provenance-chain code itself)
+**Key Phase 228 Change**: `vhp_gated_invariant_change_enabled` config — biometric presence required for invariant_change governance
 **Key Phase 147 Change**: epistemic_consensus_threshold 0.60→0.65; triage_prereq_required=True (closes Phase 98 W1)
 **Key Phase 143 Change**: Separation ratio 1.261 (touchpad_corners diagonal+LOO) — ABOVE gate but N=11 thin

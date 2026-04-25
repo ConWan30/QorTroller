@@ -27,10 +27,10 @@
 
 ## 1. Current Phase Status
 
-**Active Phase**: Phase 234 — COMPLETE
+**Active Phase**: Phase 235 — REAL GRIND CLEARED 2026-04-25
 **Phase Start**: 2026-04-11
 **Phase Status**: COMPLETE
-**Next Phase**: Phase 235 (TBD — user approval required)
+**Next Phase**: Phase 236 (TBD — user approval required)
 
 > **SYNC NOTE**: Phases 181–198 completed 2026-04-08/11 (Autoresearch Cycles 9–28). Files synced 2026-04-11.
 
@@ -232,9 +232,9 @@ When proposing on-chain operations:
 
 | Component | Test Count | Status | Last Run |
 |-----------|------------|--------|----------|
-| Bridge pytest | **2,408** | ✅ PASS | 2026-04-21 |
-| SDK tests | 515 | ✅ PASS | 2026-04-21 |
-| Hardhat tests | 522 | ✅ PASS | 2026-04-21 |
+| Bridge pytest | **2,447** | ✅ PASS | 2026-04-25 |
+| SDK tests | 527 | ✅ PASS | 2026-04-25 |
+| Hardhat tests | 522 | ✅ PASS | 2026-04-25 |
 | Hardware tests | 37 | ⚠️ HARDWARE-ONLY | Manual |
 | E2E tests | 14 | ⚠️ REQUIRES NODE | Manual |
 
@@ -497,8 +497,13 @@ When prioritizing work:
 
 ---
 
-**Document Version**: 1.5 (Phase 180)
-**Last Updated**: 2026-04-09
-**Update Trigger**: Phase 180 COMPLETE — WIF-029 W1/W2 + WIF-030 W1 closed; Autoresearch Cycle 8 applied (WIF-031 filed); agent fleet 26; bridge 1998→2022; SDK 325→337; Hardhat 468→482; Contracts 39→40 (CeremonyAuditRegistry.sol code-complete, deploy deferred)
-**Update Method**: sync_vapi_workflow.py + manual edit 2026-04-09
-**Maturity Loop Last Run**: 2026-04-09 (cycle 8, WIF-031 W1/W2, score=0.752)
+**Document Version**: 1.7 (Phase 235)
+**Last Updated**: 2026-04-25
+**Update Trigger**: Phase 235 milestone — REAL GRIND CLEARED 2026-04-25 (PCC-RATE-FIX → 1152 Hz USB poll;
+auto-trigger agent #38 SessionBoundaryDetectorAgent live; 12th CONTRADICTION rule
+AUTO_TRIGGER_RATE_LIMIT_VIOLATION; dashboard six-chip strip + COHERENCE + AUTO-TRIGGER + WAITING gameplay state).
+Bridge 2447 / SDK 527 / Hardhat 502 / Contracts 45 ALL LIVE. Agent fleet 38 (Phase 222 BBG dormant /
+Phase 235 SessionBoundaryDetectorAgent live share slot #38; Phase 221 ProtocolCoherenceAgent #37).
+**Update Method**: sync_vapi_workflow.py + manual edit 2026-04-25 (regex agent-count bug fixed in
+3 MCP servers; corpus narrative caught up Phase 181→235; INV-016 + INV-019..022 documented).
+**Maturity Loop Last Run**: 2026-04-09 (cycle 8, WIF-031 W1/W2, score=0.752; next cycle pending unified-server activation)

@@ -122,13 +122,13 @@ def _parse_claude_md() -> dict:
     m = _re.search(r"(\d+)\s+contracts\s+ALL\s+LIVE", text)
     s["contracts_live"] = int(m.group(1)) if m else 43
 
-    # Agent count: largest M in "agents N→M" transitions
+    # Agent count: max across both signal sources — "agents N→M" transitions
+    # and explicit "agent #N" references. Either alone misses recent phases:
+    # transitions stop at 36 (Phase 193) while `agent #38` lives in Phase 222/235.
     arrows = _re.findall(r"agents\s+(\d+)→(\d+)", text)
-    if arrows:
-        s["agents"] = max(int(pair[1]) for pair in arrows)
-    else:
-        agent_refs = _re.findall(r"agent\s+#(\d+)", text)
-        s["agents"] = max((int(n) for n in agent_refs), default=36)
+    agent_refs = _re.findall(r"agent\s+#(\d+)", text)
+    candidates = [int(p[1]) for p in arrows] + [int(n) for n in agent_refs]
+    s["agents"] = max(candidates) if candidates else 36
 
     # L4 thresholds
     m = _re.search(r"L4 anomaly threshold:\s*\*\*([0-9.]+)\*\*", text)
