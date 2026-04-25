@@ -1080,7 +1080,8 @@ class Bridge:
         if getattr(self.cfg, "auto_trigger_enabled", False):
             try:
                 from .session_boundary_detector_agent import SessionBoundaryDetectorAgent
-                _sbda = SessionBoundaryDetectorAgent(self.cfg, self.store, bus=_bus)
+                _sbda = SessionBoundaryDetectorAgent(self.cfg, self.store, bus=_bus,
+                                                     pcc_monitor=getattr(self, "_pcc_monitor", None))
                 # Phase 235-DASH-UPGRADE: attach the agent instance to the
                 # operator sub-app so /operator/agent/auto-trigger-status can
                 # read live telemetry (mirrors how _pcc_monitor is attached).
