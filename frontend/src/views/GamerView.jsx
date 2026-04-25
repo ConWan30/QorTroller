@@ -1,368 +1,592 @@
-import { Suspense, useRef } from 'react'
-import { Canvas, useFrame } from '@react-three/fiber'
-import { Environment, MeshTransmissionMaterial, Float } from '@react-three/drei'
-import * as THREE from 'three'
-import { HeartbeatWaveform } from '../heartbeat/HeartbeatWaveform'
+// VAPI Gamer Dashboard — Phase 235-GAMER-REDESIGN
+//
+// Design intent (per operator request, 2026-04-24):
+//   - The 3D controller twin is the entire canvas. No split screen.
+//   - Glass-morphism HUD overlays float ABOVE the twin, never compete with it.
+//   - Critical-during-grind data is dominant: chain_length, chain_intact,
+//     host_state, latest_gameplay_context.
+//   - PCC details collapse off-screen when state is healthy; auto-reveal
+//     drawer slides in only when the protocol fails closed
+//     (capture_state != NOMINAL OR host_state ∉ {EXCLUSIVE_USB, UNKNOWN}
+//     OR session_counting_paused == true).
+//   - Removed: VHP red diamond, TouchpadHeatmap, TremorGlowRing, separation
+//     ratio row, merkle root row, eligibility gate row, heartbeat waveform
+//     (heartbeat moved into the diagnostic drawer).
+
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { useHeartbeatStore } from '../heartbeat/useHeartbeat'
-import { useSeparationDefensibility, useTournamentPreflight, useCaptureHealth, useGrindChain } from '../api/bridgeApi'
-import { ProvenanceTag } from '../provenance/ProvenanceTag'
+import { useCaptureHealth, useGrindChain, useTournamentPreflight } from '../api/bridgeApi'
 import { FONTS, GAMER } from '../shared/design/tokens'
 
-// VHP physical object: floating glass octahedron representing the soulbound credential
-function VHPObject({ magnitude = 0.5, blocked = true }) {
-  const meshRef = useRef()
-  const glowRef = useRef()
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
-  useFrame(({ clock }) => {
-    const t = clock.getElapsedTime()
-    if (meshRef.current) {
-      meshRef.current.rotation.y = t * 0.4
-      meshRef.current.rotation.x = Math.sin(t * 0.3) * 0.2
-      meshRef.current.position.y = Math.sin(t * 0.8) * 0.08
-    }
-    if (glowRef.current) {
-      glowRef.current.material.opacity = 0.04 + magnitude * 0.12 + Math.sin(t * 2) * 0.02
-    }
-  })
-
-  const color = blocked ? '#ff3b5c' : '#00ff88'
-
-  return (
-    <Float speed={1.5} rotationIntensity={0.3} floatIntensity={0.4}>
-      <group>
-        {/* Outer glow sphere */}
-        <mesh ref={glowRef}>
-          <sphereGeometry args={[0.72, 16, 16]} />
-          <meshBasicMaterial color={color} transparent side={THREE.BackSide} opacity={0.06} />
-        </mesh>
-        {/* Glass octahedron: VHP credential */}
-        <mesh ref={meshRef}>
-          <octahedronGeometry args={[0.52, 0]} />
-          <MeshTransmissionMaterial
-            transmission={0.97}
-            thickness={0.4}
-            ior={1.52}
-            roughness={0.06}
-            metalness={0.0}
-            color={blocked ? '#ff1a3a' : '#00d4ff'}
-            emissive={blocked ? '#800015' : '#003366'}
-            emissiveIntensity={0.3}
-            chromaticAberration={0.04}
-            distortionScale={0.15}
-            temporalDistortion={0.05}
-          />
-        </mesh>
-        {/* Inner crystal core */}
-        <mesh scale={0.28}>
-          <icosahedronGeometry args={[1, 0]} />
-          <meshStandardMaterial
-            color={blocked ? '#ff3b5c' : '#00d4ff'}
-            emissive={blocked ? '#ff3b5c' : '#00d4ff'}
-            emissiveIntensity={0.8}
-            wireframe
-          />
-        </mesh>
-      </group>
-    </Float>
-  )
+const HOST_TONE = {
+  EXCLUSIVE_USB: GAMER.green,
+  UNKNOWN:       GAMER.t2,
+  EXCLUSIVE_BT:  GAMER.orange,
+  CONTESTED:     GAMER.red,
+  DEGRADED:      GAMER.orange,
+  DISCONNECTED:  GAMER.red,
+}
+const STATE_TONE = {
+  NOMINAL:      GAMER.green,
+  DEGRADED:     GAMER.orange,
+  DISCONNECTED: GAMER.red,
+}
+const GCTX_TONE = {
+  ACTIVE_GAMEPLAY: GAMER.green,
+  MENU_DETECTED:   GAMER.red,
 }
 
-// Touchpad heat gradient rendered as canvas overlay
-function TouchpadHeatmap({ ratio }) {
-  const pct = Math.min(1, Math.max(0, ratio ?? 0))
-  const gradient = `linear-gradient(135deg,
-    rgba(74,158,255,${0.08 + pct * 0.25}) 0%,
-    rgba(0,212,255,${0.04 + pct * 0.18}) 50%,
-    rgba(0,255,136,${pct * 0.15}) 100%)`
-  return (
-    <div style={{
-      position:     'absolute',
-      inset:        0,
-      background:   gradient,
-      borderRadius: 8,
-      pointerEvents:'none',
-      transition:   'background 1s ease',
-    }} />
-  )
+function tone(map, value, fallback = GAMER.t3) {
+  if (value == null) return fallback
+  return map[value] ?? fallback
 }
 
-// Tremor glow ring — glows brighter as tremor_peak_hz is more discriminative
-function TremorGlowRing({ ratio }) {
-  const pct = Math.min(1, Math.max(0, (ratio ?? 0) - 0.8) / 0.4)
+// ---------------------------------------------------------------------------
+// Glass card — translucent, blurred, used for every overlay
+// ---------------------------------------------------------------------------
+
+function Glass({ children, style, accent = GAMER.cyan, intensity = 1 }) {
   return (
     <div style={{
-      position:     'absolute',
-      inset:        -12,
-      borderRadius: '50%',
-      border:       `1px solid rgba(0,212,255,${0.1 + pct * 0.5})`,
-      boxShadow:    `0 0 ${8 + pct * 24}px rgba(0,212,255,${0.1 + pct * 0.4})`,
-      pointerEvents:'none',
-      transition:   'all 0.6s ease',
-    }} />
-  )
-}
-
-// Phase 235-FINAL: Grind Integrity Panel
-function GrindPanel({ captureHealth, grindChain }) {
-  const cc      = captureHealth?.consecutive_clean_toward_target ?? 0
-  const target  = captureHealth?.grind_target ?? 100
-  const pct     = Math.min(1, cc / Math.max(1, target))
-  const state   = captureHealth?.capture_state ?? '—'
-  const host    = captureHealth?.host_state ?? '—'
-  const ready   = captureHealth?.grind_ready ?? false
-  const paused  = captureHealth?.session_counting_paused ?? false
-  const gctx    = captureHealth?.latest_gameplay_context ?? null
-  const chainLen  = grindChain?.chain_length ?? 0
-  const intact    = grindChain?.chain_intact ?? true
-  const sessionId = grindChain?.grind_session_id ?? '—'
-
-  const hostColor = host === 'EXCLUSIVE_USB' ? GAMER.green
-    : host === 'CONTESTED'    ? GAMER.red
-    : host === 'DEGRADED'     ? '#ff9500'
-    : 'rgba(200,216,232,0.4)'
-
-  const stateColor = state === 'NOMINAL' ? GAMER.green
-    : state === 'DEGRADED'    ? '#ff9500'
-    : state === 'DISCONNECTED'? GAMER.red
-    : 'rgba(200,216,232,0.4)'
-
-  const gctxColor = gctx === 'ACTIVE_GAMEPLAY' ? GAMER.green
-    : gctx === 'MENU_DETECTED' ? GAMER.red
-    : 'rgba(200,216,232,0.4)'
-
-  return (
-    <div style={{
-      border:       `1px solid rgba(0,212,255,0.12)`,
-      borderRadius: 5,
-      padding:      '7px 10px',
-      background:   'rgba(0,212,255,0.03)',
-      display:      'flex',
-      flexDirection:'column',
-      gap:          6,
+      background:      `linear-gradient(180deg, rgba(8,18,24,${0.55 * intensity}) 0%, rgba(5,10,15,${0.72 * intensity}) 100%)`,
+      backdropFilter:  'blur(14px) saturate(140%)',
+      WebkitBackdropFilter: 'blur(14px) saturate(140%)',
+      border:          `1px solid ${accent}26`,
+      borderRadius:    8,
+      boxShadow:       `0 0 24px ${accent}1a, inset 0 1px 0 rgba(255,255,255,0.04)`,
+      ...style,
     }}>
-      {/* Header row */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontFamily: FONTS.mono, fontSize: 7.5, color: 'rgba(0,212,255,0.45)', letterSpacing: '0.12em' }}>
-          GRIND INTEGRITY CHAIN
-        </span>
+      {children}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Top-left: session badge — small, never blocks anything
+// ---------------------------------------------------------------------------
+
+function SessionBadge({ sessionId, magnitude }) {
+  return (
+    <Glass style={{
+      position:  'absolute',
+      top:       16,
+      left:      16,
+      padding:   '6px 12px',
+      zIndex:    10,
+    }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <span style={{
-          fontFamily: FONTS.mono,
-          fontSize:   7,
-          color:      intact ? GAMER.green : GAMER.red,
-          background: intact ? 'rgba(0,255,136,0.06)' : 'rgba(255,59,92,0.08)',
-          padding:    '1px 5px',
-          borderRadius: 2,
-          border:     `1px solid ${intact ? 'rgba(0,255,136,0.2)' : 'rgba(255,59,92,0.3)'}`,
+          fontFamily:    FONTS.mono,
+          fontSize:      7,
+          letterSpacing: '0.18em',
+          color:         GAMER.t3,
         }}>
-          {intact ? '● INTACT' : '⚠ BROKEN'}
+          GRIND SESSION
+        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{
+            display:        'inline-block',
+            width:          5,
+            height:         5,
+            borderRadius:   '50%',
+            background:     GAMER.cyan,
+            boxShadow:      `0 0 ${4 + magnitude * 8}px ${GAMER.cyan}`,
+            transition:     'box-shadow 0.4s ease',
+          }} />
+          <span style={{
+            fontFamily:    FONTS.mono,
+            fontSize:      11,
+            color:         GAMER.t1,
+            letterSpacing: '0.04em',
+          }}>
+            {sessionId}
+          </span>
+        </div>
+      </div>
+    </Glass>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Top-right: live status — chain integrity badge + agent count
+// ---------------------------------------------------------------------------
+
+function LiveStatusBadge({ intact, onChain, agentCount, merkleRoot }) {
+  return (
+    <Glass style={{
+      position:  'absolute',
+      top:       16,
+      right:     16,
+      padding:   '6px 12px',
+      zIndex:    10,
+    }} accent={intact ? GAMER.green : GAMER.red}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+        <span style={{
+          fontFamily:    FONTS.mono,
+          fontSize:      9,
+          fontWeight:    600,
+          color:         intact ? GAMER.green : GAMER.red,
+          letterSpacing: '0.12em',
+        }}>
+          {intact ? '● CHAIN INTACT' : '⚠ CHAIN BROKEN'}
+        </span>
+        <span style={{ fontFamily: FONTS.mono, fontSize: 7, color: GAMER.t3, letterSpacing: '0.08em' }}>
+          {agentCount} AGENTS · {onChain ? 'ON-CHAIN' : 'PENDING'}
+          {merkleRoot && ` · ${merkleRoot.slice(-8)}`}
         </span>
       </div>
+    </Glass>
+  )
+}
 
-      {/* Progress bar */}
-      <div>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-          <span style={{ fontFamily: FONTS.mono, fontSize: 8, color: 'rgba(200,216,232,0.5)' }}>
-            consecutive_clean
+// ---------------------------------------------------------------------------
+// Top-center: GRIND PROGRESS — compact horizontal bar at the top edge.
+//
+// Design note: the previous version put a ~520×170px box in the bottom
+// center and physically covered the lower half of the controller twin.
+// The redesign moves it to the top edge as a slim full-width strip; the
+// big chain number lives there in 36px display font (still dominant, but
+// only ~64px tall total).  The entire vertical center of the screen is
+// now empty for the 3D twin.
+// ---------------------------------------------------------------------------
+
+function GrindProgressBar({ chainLen, target, intact, magnitude, paused }) {
+  const pct = Math.min(1, chainLen / Math.max(1, target))
+  const completed = chainLen >= target
+  const barColor = completed
+    ? GAMER.green
+    : paused
+      ? GAMER.orange
+      : GAMER.cyan
+
+  const glow = 4 + magnitude * 12
+
+  return (
+    <div style={{
+      position:  'absolute',
+      top:       60,
+      left:      '50%',
+      transform: 'translateX(-50%)',
+      width:     440,
+      maxWidth:  'calc(100vw - 360px)', // leave room for top-left & top-right badges
+      zIndex:    9,
+    }}>
+      <Glass accent={barColor} intensity={1.0} style={{ padding: '8px 14px' }}>
+        <div style={{
+          display:        'flex',
+          alignItems:     'center',
+          justifyContent: 'space-between',
+          gap:            16,
+          marginBottom:   6,
+        }}>
+          <span style={{
+            fontFamily:    FONTS.mono,
+            fontSize:      7,
+            color:         GAMER.t3,
+            letterSpacing: '0.18em',
+            whiteSpace:    'nowrap',
+          }}>
+            GRIND INTEGRITY CHAIN
           </span>
-          <span style={{ fontFamily: FONTS.mono, fontSize: 10, color: GAMER.cyan, fontWeight: 600 }}>
-            {cc} / {target}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
+            <span style={{
+              fontFamily:    FONTS.display,
+              fontSize:      32,
+              fontWeight:    700,
+              lineHeight:    1,
+              color:         barColor,
+              letterSpacing: '-0.02em',
+              textShadow:    `0 0 ${glow}px ${barColor}aa`,
+              transition:    'color 0.4s ease, text-shadow 0.4s ease',
+            }}>
+              {chainLen}
+            </span>
+            <span style={{
+              fontFamily: FONTS.display,
+              fontSize:   16,
+              fontWeight: 500,
+              color:      GAMER.t2,
+            }}>
+              / {target}
+            </span>
+          </div>
         </div>
-        <div style={{ height: 5, background: 'rgba(255,255,255,0.06)', borderRadius: 3, overflow: 'hidden' }}>
-          <div style={{
-            height:     '100%',
-            width:      `${pct * 100}%`,
-            background: pct >= 1 ? GAMER.green : `linear-gradient(90deg, ${GAMER.cyan}, #4a9eff)`,
-            borderRadius: 3,
-            transition: 'width 0.5s ease',
-            boxShadow:  pct > 0 ? `0 0 6px rgba(0,212,255,0.4)` : 'none',
-          }} />
+
+        {/* Progress bar (slim) */}
+        <div style={{
+          height:       4,
+          background:   'rgba(255,255,255,0.05)',
+          borderRadius: 2,
+          overflow:     'hidden',
+        }}>
+          <motion.div
+            initial={false}
+            animate={{ width: `${pct * 100}%` }}
+            transition={{ duration: 0.8, ease: 'easeInOut' }}
+            style={{
+              height:     '100%',
+              background: completed
+                ? `linear-gradient(90deg, ${GAMER.green}, ${GAMER.cyan})`
+                : `linear-gradient(90deg, ${barColor}, ${GAMER.cyan})`,
+              boxShadow:  pct > 0 ? `0 0 ${4 + magnitude * 6}px ${barColor}` : 'none',
+            }}
+          />
         </div>
+
         {paused && (
-          <div style={{ fontFamily: FONTS.mono, fontSize: 7, color: '#ff9500', marginTop: 2 }}>
-            ⚠ COUNTING PAUSED — waiting for EXCLUSIVE_USB + NOMINAL
+          <div style={{
+            marginTop:     5,
+            fontFamily:    FONTS.mono,
+            fontSize:      7.5,
+            color:         GAMER.orange,
+            textAlign:     'center',
+            letterSpacing: '0.08em',
+          }}>
+            ⚠ PAUSED — needs NOMINAL + EXCLUSIVE_USB
           </div>
         )}
-      </div>
-
-      {/* State row */}
-      <div style={{ display: 'flex', gap: 12 }}>
-        <MiniStat label="PCC" value={state} color={stateColor} />
-        <MiniStat label="HOST" value={host} color={hostColor} />
-        <MiniStat label="READY" value={ready ? 'YES' : 'NO'} color={ready ? GAMER.green : '#ff9500'} />
-        <MiniStat label="CHAIN" value={`${chainLen} links`} color={GAMER.cyan} />
-      </div>
-
-      {/* GAD + session */}
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-        <MiniStat
-          label="GAMEPLAY"
-          value={gctx ?? 'NULL'}
-          color={gctxColor}
-        />
-        <div style={{ marginLeft: 'auto', fontFamily: FONTS.mono, fontSize: 7, color: 'rgba(0,212,255,0.3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 120 }}>
-          {sessionId}
-        </div>
-      </div>
+      </Glass>
     </div>
   )
 }
 
-function MiniStat({ label, value, color }) {
+// ---------------------------------------------------------------------------
+// Bottom edge: 4 status chips — host_state / pcc / gameplay / ready
+// ---------------------------------------------------------------------------
+
+function StatusChip({ label, value, color }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-      <span style={{ fontFamily: FONTS.mono, fontSize: 6.5, color: 'rgba(200,216,232,0.3)', letterSpacing: '0.08em' }}>{label}</span>
-      <span style={{ fontFamily: FONTS.mono, fontSize: 8, color: color || 'rgba(200,216,232,0.6)', fontWeight: 500 }}>{value}</span>
+    <Glass accent={color} style={{ padding: '6px 12px', minWidth: 100 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <span style={{
+          fontFamily:    FONTS.mono,
+          fontSize:      6.5,
+          letterSpacing: '0.16em',
+          color:         GAMER.t3,
+        }}>
+          {label}
+        </span>
+        <span style={{
+          fontFamily:    FONTS.mono,
+          fontSize:      10,
+          fontWeight:    600,
+          color:         color,
+          letterSpacing: '0.04em',
+          whiteSpace:    'nowrap',
+        }}>
+          {value}
+        </span>
+      </div>
+    </Glass>
+  )
+}
+
+function StatusBar({ host, state, gctx, ready }) {
+  return (
+    <div style={{
+      position:  'absolute',
+      bottom:    16,
+      left:      '50%',
+      transform: 'translateX(-50%)',
+      display:   'flex',
+      gap:       8,
+      zIndex:    9,
+    }}>
+      <StatusChip label="HOST"     value={host  ?? '—'}        color={tone(HOST_TONE,  host)} />
+      <StatusChip label="PCC"      value={state ?? '—'}        color={tone(STATE_TONE, state)} />
+      <StatusChip label="GAMEPLAY" value={gctx  ?? 'NULL'}     color={tone(GCTX_TONE,  gctx)} />
+      <StatusChip
+        label="READY"
+        value={ready ? 'YES' : 'NO'}
+        color={ready ? GAMER.green : GAMER.orange}
+      />
     </div>
   )
 }
+
+// ---------------------------------------------------------------------------
+// PCC drawer — auto-reveals on protocol stress, slides from right
+// ---------------------------------------------------------------------------
+
+function pccIsConcerning(captureHealth) {
+  if (!captureHealth) return false
+  const state = captureHealth.capture_state
+  const host  = captureHealth.host_state
+  if (state && state !== 'NOMINAL') return true
+  if (host && !['EXCLUSIVE_USB', 'UNKNOWN'].includes(host)) return true
+  if (captureHealth.session_counting_paused) return true
+  return false
+}
+
+function PCCDrawer({ captureHealth, manualOpen, onCloseManual }) {
+  const concerning = pccIsConcerning(captureHealth)
+  const open = concerning || manualOpen
+
+  const state = captureHealth?.capture_state ?? '—'
+  const host  = captureHealth?.host_state ?? '—'
+  const rate  = captureHealth?.poll_rate_hz ?? 0
+  const sustained = captureHealth?.sustained_duration_s ?? 0
+  const ready = captureHealth?.grind_ready ?? false
+  const paused = captureHealth?.session_counting_paused ?? false
+
+  return (
+    <>
+      {/* Collapsed handle on the right edge — always visible, click to manual-open */}
+      <div
+        onClick={() => onCloseManual(false === manualOpen ? true : !manualOpen)}
+        style={{
+          position:    'absolute',
+          top:         '50%',
+          right:       open ? 320 : 0,
+          transform:   'translateY(-50%)',
+          width:       28,
+          height:      96,
+          background:  concerning ? GAMER.red + 'cc' : GAMER.cyan + '26',
+          border:      `1px solid ${concerning ? GAMER.red : GAMER.cyan}66`,
+          borderRight: 'none',
+          borderRadius: '6px 0 0 6px',
+          cursor:      'pointer',
+          zIndex:      11,
+          display:     'flex',
+          alignItems:  'center',
+          justifyContent: 'center',
+          transition:  'right 0.32s ease, background 0.4s ease',
+          boxShadow:   concerning ? `0 0 16px ${GAMER.red}88` : 'none',
+        }}
+        title={concerning ? 'PCC alert — click to inspect' : 'PCC details'}
+      >
+        <span style={{
+          fontFamily:    FONTS.mono,
+          fontSize:      8,
+          color:         concerning ? '#fff' : GAMER.cyan,
+          letterSpacing: '0.16em',
+          writingMode:   'vertical-rl',
+          transform:     'rotate(180deg)',
+        }}>
+          {concerning ? '⚠ PCC' : 'PCC ▶'}
+        </span>
+      </div>
+
+      {/* The drawer itself */}
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ x: 320 }}
+            animate={{ x: 0 }}
+            exit={{ x: 320 }}
+            transition={{ duration: 0.32, ease: 'easeInOut' }}
+            style={{
+              position: 'absolute',
+              top:      0,
+              right:    0,
+              bottom:   0,
+              width:    320,
+              zIndex:   10,
+            }}
+          >
+            <Glass
+              accent={concerning ? GAMER.red : GAMER.cyan}
+              style={{
+                height:       '100%',
+                borderRadius: 0,
+                borderLeft:   `1px solid ${concerning ? GAMER.red : GAMER.cyan}33`,
+                padding:      '16px 16px',
+                overflow:     'auto',
+              }}
+            >
+              <div style={{
+                display:        'flex',
+                alignItems:     'center',
+                justifyContent: 'space-between',
+                marginBottom:   16,
+              }}>
+                <span style={{
+                  fontFamily:    FONTS.mono,
+                  fontSize:      9,
+                  letterSpacing: '0.16em',
+                  color:         concerning ? GAMER.red : GAMER.cyan,
+                  fontWeight:    600,
+                }}>
+                  PHYSICAL CAPTURE CONTINUITY
+                </span>
+                <button
+                  onClick={() => onCloseManual(false)}
+                  style={{
+                    background:  'transparent',
+                    border:      'none',
+                    color:       GAMER.t2,
+                    cursor:      'pointer',
+                    fontFamily:  FONTS.mono,
+                    fontSize:    14,
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+
+              {concerning && (
+                <div style={{
+                  background:    GAMER.red + '14',
+                  border:        `1px solid ${GAMER.red}44`,
+                  borderRadius:  4,
+                  padding:       '10px 12px',
+                  marginBottom:  16,
+                  fontFamily:    FONTS.mono,
+                  fontSize:      9,
+                  color:         GAMER.red,
+                  lineHeight:    1.5,
+                }}>
+                  ⚠ {paused
+                      ? 'Session counting paused. Sessions will not advance toward GIC_N until protocol returns to NOMINAL + EXCLUSIVE_USB.'
+                      : 'Protocol fail-closed. Verify USB cable, check Bluetooth pairing state, ensure controller is not in PS5 menu.'}
+                </div>
+              )}
+
+              <DrawerStat label="capture_state"        value={state} color={tone(STATE_TONE, state)} />
+              <DrawerStat label="host_state"           value={host}  color={tone(HOST_TONE,  host)} />
+              <DrawerStat label="poll_rate_hz"         value={rate.toFixed(1) + ' Hz'} color={GAMER.t1} />
+              <DrawerStat label="sustained_duration_s" value={sustained.toFixed(1) + 's'} color={GAMER.t1} />
+              <DrawerStat label="grind_ready"          value={ready ? 'true' : 'false'} color={ready ? GAMER.green : GAMER.orange} />
+              <DrawerStat label="session_counting_paused" value={paused ? 'true' : 'false'} color={paused ? GAMER.orange : GAMER.t2} />
+
+              <div style={{
+                marginTop:     20,
+                paddingTop:    14,
+                borderTop:     `1px solid ${GAMER.bd}`,
+                fontFamily:    FONTS.mono,
+                fontSize:      8,
+                color:         GAMER.t3,
+                lineHeight:    1.6,
+              }}>
+                <div style={{ marginBottom: 4, color: GAMER.t2 }}>HOST STATE LEGEND</div>
+                <div><span style={{ color: GAMER.green }}>EXCLUSIVE_USB</span> — USB poll ≥900 Hz, CV &lt;0.20</div>
+                <div><span style={{ color: GAMER.t2 }}>UNKNOWN</span> — bootstrap window or sample-starved</div>
+                <div><span style={{ color: GAMER.orange }}>EXCLUSIVE_BT</span> — BT host (200–350 Hz)</div>
+                <div><span style={{ color: GAMER.red }}>CONTESTED</span> — CV ≥0.40, host arbitration race</div>
+              </div>
+            </Glass>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  )
+}
+
+function DrawerStat({ label, value, color }) {
+  return (
+    <div style={{
+      display:        'flex',
+      justifyContent: 'space-between',
+      alignItems:     'baseline',
+      padding:        '6px 0',
+      borderBottom:   `1px solid ${GAMER.bd2}`,
+    }}>
+      <span style={{ fontFamily: FONTS.mono, fontSize: 8, color: GAMER.t3, letterSpacing: '0.06em' }}>
+        {label}
+      </span>
+      <span style={{ fontFamily: FONTS.mono, fontSize: 10, color: color, fontWeight: 500 }}>
+        {value}
+      </span>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Main view
+// ---------------------------------------------------------------------------
 
 export function GamerView() {
-  const magnitude  = useHeartbeatStore((s) => s.magnitude)
-  const merkleRoot = useHeartbeatStore((s) => s.merkleRoot)
-  const { data: defensibility }  = useSeparationDefensibility()
-  const { data: preflight }      = useTournamentPreflight()
-  const { data: captureHealth }  = useCaptureHealth()
-  const { data: grindChain }     = useGrindChain()
+  const magnitude     = useHeartbeatStore((s) => s.magnitude)
+  const merkleRoot    = useHeartbeatStore((s) => s.merkleRoot)
+  const onChain       = useHeartbeatStore((s) => s.onChainConfirmed)
+  const agentCount    = useHeartbeatStore((s) => s.agentCount)
 
-  const ratio   = defensibility?.ratio ?? 1.177
-  const blocked = !(preflight?.overall_pass ?? false)
+  const { data: captureHealth } = useCaptureHealth()
+  const { data: grindChain }    = useGrindChain()
+  const { data: preflight }     = useTournamentPreflight()
+
+  const chainLen  = grindChain?.chain_length ?? 0
+  const target    = captureHealth?.grind_target ?? grindChain?.grind_target ?? 100
+  const intact    = grindChain?.chain_intact ?? true
+  const sessionId = grindChain?.grind_session_id ?? '—'
+  const host      = captureHealth?.host_state
+  const state     = captureHealth?.capture_state
+  const gctx      = captureHealth?.latest_gameplay_context
+  const ready     = captureHealth?.grind_ready ?? false
+  const paused    = captureHealth?.session_counting_paused ?? false
+
+  // Manual override for the PCC drawer — null = follow auto-reveal logic,
+  // true/false = operator opened/closed it explicitly.
+  const [drawerManual, setDrawerManual] = useState(false)
 
   return (
-    <div style={{ display: 'flex', height: '100%', gap: 0, background: GAMER.bg }}>
+    <div style={{
+      position: 'relative',
+      width:    '100%',
+      height:   '100%',
+      background: GAMER.bg,
+      overflow: 'hidden',
+    }}>
+      {/* The 3D controller twin — full-bleed, MINIMAL mode (no header, no
+          side panels, no footer; just the Three.js Canvas) so the entire
+          viewport belongs to the floating pulsing controller. */}
+      <iframe
+        src="/controller-twin.html?minimal=1"
+        style={{
+          position: 'absolute',
+          inset:    0,
+          width:    '100%',
+          height:   '100%',
+          border:   'none',
+          background: 'transparent',
+          zIndex:   1,
+        }}
+        title="VAPI 3D Controller Twin"
+      />
 
-      {/* Left: controller twin iframe (preserved from Phase 59) */}
+      {/* Subtle edge vignette so HUD overlays read against bright twin
+          renders.  Center is fully transparent — controller stays sharp. */}
       <div style={{
-        flex:        '0 0 52%',
-        position:    'relative',
-        borderRight: '1px solid rgba(0,212,255,0.08)',
-        overflow:    'hidden',
-      }}>
-        <TouchpadHeatmap ratio={ratio} />
-        <iframe
-          src="/controller-twin.html"
-          style={{
-            width:        '100%',
-            height:       '100%',
-            border:       'none',
-            background:   'transparent',
-            position:     'relative',
-            zIndex:       1,
-          }}
-          title="Controller Digital Twin"
-        />
-        <div style={{ position: 'absolute', top: 8, left: 12, zIndex: 2 }}>
-          <TremorGlowRing ratio={ratio} />
-        </div>
-      </div>
+        position:      'absolute',
+        inset:         0,
+        pointerEvents: 'none',
+        background:    'radial-gradient(ellipse at center, transparent 55%, rgba(2,4,8,0.45) 100%)',
+        zIndex:        2,
+      }} />
 
-      {/* Right: VHP object + stats */}
-      <div style={{
-        flex:           '1',
-        display:        'flex',
-        flexDirection:  'column',
-        overflow:       'hidden',
-      }}>
-
-        {/* VHP 3D canvas */}
-        <div style={{ flex: '0 0 55%', position: 'relative' }}>
-          <div style={{
-            position: 'absolute',
-            top: 10, left: 12,
-            fontFamily: FONTS.mono,
-            fontSize: 9,
-            color: 'rgba(0,212,255,0.5)',
-            letterSpacing: '0.1em',
-            zIndex: 2,
-          }}>
-            VHP CREDENTIAL — {blocked ? 'BLOCKED' : 'ELIGIBLE'}
-          </div>
-          <Canvas
-            camera={{ position: [0, 0, 2.2], fov: 50 }}
-            style={{ background: 'transparent' }}
-          >
-            <Suspense fallback={null}>
-              <Environment preset="city" />
-              <ambientLight intensity={0.4} />
-              <pointLight position={[2, 2, 2]} intensity={0.8} color={GAMER.cyan} />
-              <pointLight position={[-2, -1, -1]} intensity={0.4} color={blocked ? '#ff3b5c' : '#00ff88'} />
-              <VHPObject magnitude={magnitude} blocked={blocked} />
-            </Suspense>
-          </Canvas>
-        </div>
-
-        {/* Stats panel */}
-        <div style={{
-          flex:       '1',
-          padding:    '10px 14px',
-          borderTop:  '1px solid rgba(0,212,255,0.08)',
-          display:    'flex',
-          flexDirection: 'column',
-          gap:        8,
-          overflowY:  'auto',
-        }}>
-
-          {/* Grind Integrity Panel — Phase 235-FINAL */}
-          <GrindPanel captureHealth={captureHealth} grindChain={grindChain} />
-
-          {/* Heartbeat waveform */}
-          <div>
-            <div style={{ fontFamily: FONTS.mono, fontSize: 8, color: 'rgba(0,212,255,0.4)', marginBottom: 3, letterSpacing: '0.1em' }}>
-              228-BYTE PoAC HEARTBEAT
-            </div>
-            <HeartbeatWaveform accent={GAMER.cyan} height={36} />
-          </div>
-
-          {/* Separation ratio */}
-          <StatRow
-            label="tremor_resting ratio"
-            value={<ProvenanceTag
-              value={ratio}
-              agentId="SeparationRatioMonitorAgent"
-              phase={129}
-              invariant="target >1.0 (TOURNAMENT BLOCKER)"
-              style={{ color: ratio >= 1.0 ? GAMER.green : GAMER.orange, fontFamily: FONTS.mono, fontSize: 13, fontWeight: 600 }}
-            />}
-            note={ratio >= 1.0 ? 'P1vP3 UNRESOLVED' : 'BELOW TARGET'}
-            noteColor={GAMER.orange}
-          />
-
-          {/* Merkle root */}
-          <StatRow
-            label="Merkle root"
-            value={<span style={{ fontFamily: FONTS.mono, fontSize: 10, color: GAMER.cyan }}>
-              {merkleRoot ? merkleRoot.slice(-16) : '—'}
-            </span>}
-            note="38-leaf fleet"
-            noteColor={GAMER.t3}
-          />
-
-          {/* Eligibility gate */}
-          <StatRow
-            label="isFullyEligible()"
-            value={<span style={{
-              fontFamily: FONTS.mono,
-              fontSize:   11,
-              fontWeight: 700,
-              color:      blocked ? GAMER.red : GAMER.green,
-            }}>{blocked ? 'FALSE' : 'TRUE'}</span>}
-            note={blocked ? 'per-pair P0 gate open' : 'tournament eligible'}
-            noteColor={blocked ? GAMER.red : GAMER.green}
-          />
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function StatRow({ label, value, note, noteColor }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <div style={{ fontFamily: FONTS.mono, fontSize: 8, color: 'rgba(200,216,232,0.35)', letterSpacing: '0.08em' }}>{label}</div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-        {value}
-        {note && <span style={{ fontFamily: FONTS.mono, fontSize: 8, color: noteColor || 'rgba(200,216,232,0.35)' }}>{note}</span>}
-      </div>
+      {/* HUD overlays — all confined to screen edges (top strip + bottom
+          strip + right edge drawer).  Vertical center is reserved for the
+          controller twin. */}
+      <SessionBadge sessionId={sessionId} magnitude={magnitude} />
+      <LiveStatusBadge
+        intact={intact}
+        onChain={onChain}
+        agentCount={agentCount}
+        merkleRoot={merkleRoot}
+      />
+      <GrindProgressBar
+        chainLen={chainLen}
+        target={target}
+        intact={intact}
+        magnitude={magnitude}
+        paused={paused}
+      />
+      <StatusBar
+        host={host}
+        state={state}
+        gctx={gctx}
+        ready={ready}
+      />
+      <PCCDrawer
+        captureHealth={captureHealth}
+        manualOpen={drawerManual}
+        onCloseManual={setDrawerManual}
+      />
     </div>
   )
 }
