@@ -39,27 +39,60 @@ DUALSENSE_PID = "0DF2"
 # ---------------------------------------------------------------------------
 
 def run_ps(script: str, *, elevated: bool = False, capture: bool = True) -> tuple[int, str]:
-    """Run a PowerShell snippet and return (exit_code, stdout+stderr)."""
-    cmd = ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command"]
+    """Run a PowerShell snippet and return (exit_code, stdout+stderr).
+
+    For elevated runs, encode the inner script as UTF-16LE base64 and pass
+    it via -EncodedCommand.  This is the canonical way to invoke
+    `Start-Process -Verb RunAs` with arbitrary script content — every
+    other approach (inline quoting, here-strings, &{}) breaks on
+    backslashes in registry paths like HKLM:\\SYSTEM\\... and silently
+    fails.  The original script had this bug; steps 2/4 of the
+    remediation never actually ran on the first attempt.
+    """
     if elevated:
-        # UAC self-elevation via Start-Process -Verb RunAs.  Output isn't
-        # captured because the elevated process runs in a separate window.
-        wrapped = (
-            "Start-Process powershell.exe -Verb RunAs -Wait -ArgumentList "
-            f"'-NoProfile','-NonInteractive','-Command',\"& {{ {script} }}\""
+        import base64
+        # Wrap the inner script so its stdout/stderr are written to a
+        # temp file the parent can read after the elevated process exits.
+        log_dir = REPO_ROOT / "scripts"
+        log_path = log_dir / "_usb_remediate_elevated.log"
+        wrapped_inner = (
+            f"$ErrorActionPreference='Continue'; "
+            f"Start-Transcript -Path '{log_path.as_posix()}' -Force | Out-Null; "
+            f"try {{ {script} }} catch {{ Write-Host \"EXC: $($_.Exception.Message)\" }} "
+            f"finally {{ Stop-Transcript | Out-Null }}"
         )
-        cmd.append(wrapped)
-    else:
-        cmd.append(script)
-    try:
-        r = subprocess.run(
-            cmd,
-            capture_output=capture,
-            text=True,
-            timeout=120,
+        encoded = base64.b64encode(wrapped_inner.encode("utf-16-le")).decode("ascii")
+        outer = (
+            f"$p = Start-Process powershell.exe -Verb RunAs -Wait -PassThru "
+            f"-ArgumentList '-NoProfile','-NonInteractive','-EncodedCommand','{encoded}'; "
+            f"$p.ExitCode"
         )
+        cmd = ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", outer]
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+        except subprocess.TimeoutExpired as exc:
+            return 124, f"timeout: {exc}"
+        # Read the elevated transcript so we can show what happened
+        transcript = ""
+        try:
+            transcript = log_path.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
         out = (r.stdout or "") + (r.stderr or "")
-        return r.returncode, out
+        # Trim the PowerShell transcript header noise
+        if transcript:
+            for marker in ("**********************\nCommand start time:",
+                           "**********************"):
+                if marker in transcript:
+                    transcript = transcript.split(marker, 1)[-1]
+                    break
+        return r.returncode, out + "\n--- elevated transcript ---\n" + transcript
+
+    # Non-elevated path
+    cmd = ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script]
+    try:
+        r = subprocess.run(cmd, capture_output=capture, text=True, timeout=120)
+        return r.returncode, (r.stdout or "") + (r.stderr or "")
     except subprocess.TimeoutExpired as exc:
         return 124, f"timeout: {exc}"
 
