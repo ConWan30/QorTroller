@@ -38,7 +38,15 @@ const FEATURE_ZERO_IDX = new Set([0, 10])
 
 const params     = new URLSearchParams(window.location.search)
 const DEVICE_ID  = params.get('device') || ''
-const BRIDGE_URL = params.get('bridge') || 'localhost:8080'
+// Use IPv4 literal — Node/browser on Windows resolves "localhost" to IPv6 ::1
+// first, but the bridge binds IPv4 only (0.0.0.0:8080). Direct fetches from
+// this iframe bypass the Vite proxy, so we hit the resolver issue head-on.
+// 127.0.0.1 sidesteps it entirely. Override via ?bridge=... query param.
+const BRIDGE_URL = params.get('bridge') || '127.0.0.1:8080'
+// Phase 235-GAMER-REDESIGN — `?minimal=1` drops every overlay (header, side
+// panels, footer, status pills) so only the 3D Canvas renders.  Used by
+// GamerView's iframe so the controller has the full viewport.
+const MINIMAL    = params.get('minimal') === '1'
 
 // ---------------------------------------------------------------------------
 // useAutoDiscover — resolves device_id from URL param or bridge /api/v1/devices
@@ -2186,6 +2194,7 @@ function ControllerTwinPage() {
       `}</style>
 
       {/* ── Header — dashboard-aligned ──────────────────────────────────── */}
+      {!MINIMAL && (
       <div style={{
         position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
         padding: '11px 24px',
@@ -2304,11 +2313,14 @@ function ControllerTwinPage() {
           ← DASHBOARD
         </a>
       </div>
+      )}
 
-      {/* Three.js Canvas — Phase 69: real CFI-ZCP1 GLB model */}
+      {/* Three.js Canvas — Phase 69: real CFI-ZCP1 GLB model.
+          Phase 235-GAMER-REDESIGN: in MINIMAL mode the Canvas takes the
+          full viewport (top:0) since the header is suppressed. */}
       <Canvas shadows camera={{ position: [0, 0.3, 7.2], fov: 36 }}
         gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.1 }}
-        style={{ position: 'absolute', top: 62, left: 0, right: 0, bottom: 0 }}>
+        style={{ position: 'absolute', top: MINIMAL ? 0 : 62, left: 0, right: 0, bottom: 0 }}>
         <color attach="background" args={[VOID_BG]} />
         <ambientLight intensity={0.08} />
         <OrbitControls
@@ -2326,6 +2338,10 @@ function ControllerTwinPage() {
         </Suspense>
       </Canvas>
 
+      {/* Phase 235-GAMER-REDESIGN: every overlay below is suppressed in
+          MINIMAL mode so the Canvas owns the entire viewport. */}
+      {!MINIMAL && (
+      <>
       {/* Proof Anchor Panel (top-right) */}
       <ProofAnchorPanel snap={snap} record={lockedRecord} mode={mode} deviceId={deviceId} />
 
@@ -2402,6 +2418,8 @@ function ControllerTwinPage() {
           })}
         </div>
       </div>
+      </>
+      )}
     </div>
   )
 }

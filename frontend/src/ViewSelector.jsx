@@ -41,7 +41,7 @@ export function ViewSelector({ activeView, onViewChange }) {
           fontSize:   9,
           color:      'rgba(74,158,255,0.5)',
           letterSpacing: '0.08em',
-        }}>PHASE 225</span>
+        }}>PHASE 235</span>
         {isMock && (
           <span style={{
             fontFamily:  FONTS.mono,

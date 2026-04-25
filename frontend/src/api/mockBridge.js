@@ -90,7 +90,7 @@ export const MOCK = {
   invariantGateStatus: () => ({
     pv_ci_enabled: true,
     gate_pass: true,
-    total_checked: 16,
+    total_checked: 26,
     failure_count: 0,
     last_failures: [],
     last_run_ts: now(),
