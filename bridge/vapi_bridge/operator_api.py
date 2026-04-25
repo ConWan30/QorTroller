@@ -7188,4 +7188,37 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         telem["timestamp"]   = _tat.time()
         return telem
 
+    # Phase 235-OBSERVABILITY — GET /grind/session-history
+    # ------------------------------------------------------------------
+    # Exposes ruling_validation_log data with a derived blocking_reason
+    # field so operators can diagnose why specific sessions did or did not
+    # advance the GIC chain — without direct SQLite access (which Windows
+    # exclusive-lock makes impossible while the bridge runs).
+    @app.get("/grind/session-history")
+    async def get_grind_session_history(
+        x_api_key: str = Header(default=""),
+        limit: int = Query(default=20, ge=1, le=200),
+    ):
+        """Per-session GIC eligibility history with blocking_reason (Phase 235-OBSERVABILITY).
+
+        Returns last N ruling_validation_log rows for the current grind session.
+        Each row includes stamped (bool) and blocking_reason (None when stamped,
+        otherwise a string explaining which gate blocked the GIC stamp).
+        """
+        _check_read_key(x_api_key)
+        import time as _tobs
+        _grind_sid = getattr(cfg, "grind_session_id", "")
+        try:
+            rows = await asyncio.to_thread(
+                store.get_grind_session_history, limit, _grind_sid
+            )
+            return {
+                "rows":             rows,
+                "count":            len(rows),
+                "grind_session_id": _grind_sid,
+                "timestamp":        _tobs.time(),
+            }
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
     return app

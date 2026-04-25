@@ -65,6 +65,24 @@ class SessionBoundaryDetectorAgent:
         self._last_fire_at   = 0.0
         self._fires_this_run = 0
         self._stopped        = False
+        # Phase 235-OBSERVABILITY: recover last_fire_at from agent_events so the
+        # 300s throttle survives bridge restart.  Without this, restart resets
+        # _last_fire_at=0 and the throttle allows an immediate refire even if
+        # the last ruling_request was filed 4 minutes ago.
+        # Wall-clock → monotonic conversion: last_fire_at = monotonic() - (time() - last_wall)
+        try:
+            _last_wall = store.get_last_sbd_fire_ts() if store is not None else None
+            if _last_wall is not None:
+                _age_s = time.time() - _last_wall
+                self._last_fire_at = time.monotonic() - _age_s
+                log.info(
+                    "SessionBoundaryDetectorAgent: recovered last_fire_at "
+                    "from agent_events (%.1f s ago)", _age_s,
+                )
+        except Exception as _exc:
+            log.debug(
+                "SessionBoundaryDetectorAgent: last_fire_at recovery failed: %s", _exc
+            )
 
     # ------------------------------------------------------------------
     # Decision logic — single tick, returns ("FIRE"|"SKIP", reason).
