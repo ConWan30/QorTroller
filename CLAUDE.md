@@ -391,6 +391,26 @@ DualShock Edge CFI-ZCP1, USB-C, Windows 11, hidapi VID=0x054C PID=0x0DF2 interfa
 USB polling: 1002 Hz. Injection margin: 14,000× (accel), 10,000× (gyro).
 Micro-tremor variance: 278,239 LSB².
 
+## roadmap_post_stage_1
+
+Captured ideas for post-grind / post-Stage-1 work. Do NOT implement
+or design further — these are intentionally minimal stubs preserved
+so they're not lost between phases. Promote to a real phase only
+after Stage 1 graduation activates and GIC_100 is deposited.
+
+- **Phase 240+ candidate — L6-Response (haptic-driven stimulus-response biometric layer)**:
+  Leverage DualSense Edge haptic motor commands and adaptive trigger
+  output as ambient stimuli during normal play. Capture player reflex
+  response in the 80–280 ms window post-stimulus (within human
+  voluntary-reaction-time band; faster = bot, slower = inattention).
+  Build per-player stimulus-response baselines from the GIC_100+
+  corpus once it exists. Activate `L6_CHALLENGES_ENABLED` only when
+  N≥50 calibration sessions exist per player. Do NOT activate before
+  GIC_100 lands — without that corpus the baselines are
+  unstable. Sub-perceptual amplitudes (≤60/255) so play experience is
+  unaffected. Exclusive to PS5-class haptic hardware; not replicable
+  on generic gamepads.
+
 ## Hard Rules
 
 - Never modify the 228-byte PoAC wire format
