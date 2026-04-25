@@ -109,23 +109,25 @@ class SessionBoundaryDetectorAgent:
             return ("SKIP", f"<{min_iv:.0f}s since last fire ({elapsed:.0f}s elapsed)")
 
         # Pull recent records from the active device.
-        # We need activity_window + quiescence_window records total — the
-        # quiescence_window is the trailing tail, activity_window is the
-        # preceding head.
-        q_window = int(getattr(cfg, "auto_trigger_quiescence_window", 60))
-        a_window = int(getattr(cfg, "auto_trigger_activity_window", 120))
-        total    = q_window + a_window
+        # quiescence_window: trailing tail that must ALL be trigger_active=0.
+        # lookback_window: how far back past the tail we search for ANY
+        # trigger_active=1 (anchors on last gameplay moment, not a fixed
+        # fraction window — fixes the "long menu session" skip bug where
+        # gameplay records fall outside the old fixed a_window of 120).
+        q_window  = int(getattr(cfg, "auto_trigger_quiescence_window", 60))
+        lookback  = int(getattr(cfg, "auto_trigger_activity_window", 600))
+        total     = q_window + lookback
         try:
             recent = self._store.get_recent_records(limit=total)
         except Exception as exc:
             return ("SKIP", f"get_recent_records failed: {exc}")
-        if len(recent) < total:
-            return ("SKIP", f"only {len(recent)}/{total} records — bridge starting up")
+        if len(recent) < q_window:
+            return ("SKIP", f"only {len(recent)}/{q_window} records — bridge starting up")
 
         # `recent` is ordered most-recent-first per Store convention.
-        # Tail (quiescence) = first q_window entries; head (activity) = the rest.
-        tail = recent[:q_window]
-        head = recent[q_window:q_window + a_window]
+        # Tail (quiescence) = first q_window entries; rest = lookback for activity.
+        tail     = recent[:q_window]
+        lookback_records = recent[q_window:]
 
         # Quiescence: every trailing record must be trigger_active=0
         tail_active = [int(r.get("trigger_active", 0) or 0) for r in tail]
@@ -134,18 +136,21 @@ class SessionBoundaryDetectorAgent:
                     f"quiescence not yet — {sum(tail_active)} trigger_active "
                     f"records in trailing {q_window}")
 
-        # Activity: head must contain enough trigger_active records to
-        # confirm a gameplay session actually happened
-        head_active = [int(r.get("trigger_active", 0) or 0) for r in head]
-        head_frac   = sum(head_active) / max(1, len(head_active))
-        if head_frac < ACTIVITY_FRACTION_MIN:
+        # Activity: find ANY trigger_active=1 in the lookback window.
+        # This correctly handles long post-game menu sessions where the
+        # old fixed head_frac check would silently fail (head_frac=0.00).
+        had_activity = any(
+            int(r.get("trigger_active", 0) or 0) == 1
+            for r in lookback_records
+        )
+        if not had_activity:
             return ("SKIP",
-                    f"insufficient activity in head window — "
-                    f"trigger_active_fraction={head_frac:.2f} "
-                    f"< {ACTIVITY_FRACTION_MIN}")
+                    f"no gameplay activity in lookback ({len(lookback_records)} records) "
+                    f"— no trigger_active=1 found")
 
-        return ("FIRE", f"session-end detected; head_frac={head_frac:.2f}, "
-                       f"quiescence={q_window} records all idle")
+        return ("FIRE", f"session-end detected; "
+                       f"quiescence={q_window} records all idle, "
+                       f"activity confirmed in lookback ({len(lookback_records)} records)")
 
     # ------------------------------------------------------------------
     # Trigger fire — wraps the existing write_agent_event path so the

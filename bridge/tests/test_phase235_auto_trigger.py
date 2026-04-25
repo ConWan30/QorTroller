@@ -125,21 +125,48 @@ def test_t235_at_2_pcc_failure_skips(state, host, expected_substr):
 
 
 # ---------------------------------------------------------------------------
-# T235-AT-3: skipped when no gameplay activity in head window
+# T235-AT-3: skipped when lookback contains zero trigger_active=1 records
+# (bridge startup / never played — not a long menu session)
+# Phase 235-SBD-FIX: check is now any() over lookback, not head_frac >= 0.20
 # ---------------------------------------------------------------------------
 
 def test_t235_at_3_no_activity_skips():
     cfg = _Cfg()
-    # 60 quiescence + 120 activity, but only 5% of head is trigger_active
-    # — well below ACTIVITY_FRACTION_MIN (0.20).
-    s = _store_mock(recent=_records(60, 120, activity_fraction=0.05))
+    # 60 quiescence + 120 lookback, all trigger_active=0 — no gameplay ever.
+    s = _store_mock(recent=_records(60, 120, activity_fraction=0.0))
     agent = SessionBoundaryDetectorAgent(cfg, s)
 
     verdict, reason = agent.evaluate(now_monotonic=1000.0)
 
     assert verdict == "SKIP"
-    assert "insufficient activity" in reason
+    assert "no gameplay activity in lookback" in reason
     s.write_agent_event.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# T235-SBD-1: Phase 235-SBD-FIX regression — long menu session still fires.
+# Player spends >2 min on menu post-game; gameplay records fall outside the
+# old 120-record head window but ARE in the 600-record lookback → must FIRE.
+# ---------------------------------------------------------------------------
+
+def test_t235_sbd_1_long_menu_session_fires():
+    cfg = _Cfg(auto_trigger_activity_window=600)
+    # 60 quiescent tail + 300 menu records (all zeros) + 240 gameplay records
+    # (50% trigger_active). Under old head_frac logic: head_frac=0.00 → SKIP.
+    # Under new any() lookback: gameplay in lookback → FIRE.
+    quiescence = [{"trigger_active": 0, "device_id": "DEV"}] * 60
+    long_menu  = [{"trigger_active": 0, "device_id": "DEV"}] * 300
+    gameplay   = [{"trigger_active": 1, "device_id": "DEV"}] * 120 + \
+                 [{"trigger_active": 0, "device_id": "DEV"}] * 120
+    recent = quiescence + long_menu + gameplay  # most-recent-first
+
+    s = _store_mock(recent=recent)
+    agent = SessionBoundaryDetectorAgent(cfg, s)
+
+    verdict, reason = agent.evaluate(now_monotonic=1000.0)
+
+    assert verdict == "FIRE", f"expected FIRE, got SKIP: {reason}"
+    assert "session-end detected" in reason
 
 
 # ---------------------------------------------------------------------------
