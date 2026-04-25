@@ -231,21 +231,20 @@ class CaptureHealthMonitor:
         std = math.sqrt(sum((r - mean) ** 2 for r in rates) / len(rates))
         cv = std / mean
 
-        # Stable ~1000 Hz, low variance
-        if mean >= 900 and cv < 0.20:
+        # At nominal USB rate, the host has exclusive control regardless of CV.
+        # Haptic feedback and adaptive trigger motors cause bursty HID delivery
+        # (high CV) at 1000+ Hz — this is not PS5 BT contention, which always
+        # drops rate to ~250 Hz. CV threshold only applies in the ambiguous zone.
+        if mean >= self._nominal_hz:
             return HostState.EXCLUSIVE_USB
-        # Contested: high variance or sudden dips amidst high-rate polling
-        if cv >= self._CONTESTED_CV and mean >= self._CONTESTED_MIN_RATE_HZ:
-            return HostState.CONTESTED
         # ~250 Hz stable = BT (not expected when USB-only)
         if self._BT_RATE_LOW <= mean <= self._BT_RATE_HIGH and cv < 0.20:
             return HostState.EXCLUSIVE_BT
-        # High CV at any rate
+        # Contested: high variance below nominal rate (genuine host arbitration)
+        if cv >= self._CONTESTED_CV and mean >= self._CONTESTED_MIN_RATE_HZ:
+            return HostState.CONTESTED
         if cv >= self._CONTESTED_CV:
             return HostState.CONTESTED
-        # Moderate rate, moderate variance
-        if mean >= 900:
-            return HostState.EXCLUSIVE_USB
         return HostState.UNKNOWN
 
     def _is_grind_ready_locked(self, now: float) -> bool:

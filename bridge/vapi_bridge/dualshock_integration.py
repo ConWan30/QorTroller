@@ -368,6 +368,7 @@ class DualShockTransport:
         self._last_hid_report_total = 0
         self._hid_counter_thread    = None
         self._hid_counter_running   = False
+        self._hid_counter_restarts  = 0  # Phase 235-CONTENTION: self-healing retry count
         self._oracle_addr = getattr(cfg, "skill_oracle_address", "")
         self._bounty_cfg  = getattr(cfg, "dualshock_active_bounties", "")
         self._key_dir     = Path(getattr(cfg, "dualshock_key_dir",
@@ -576,28 +577,51 @@ class DualShockTransport:
                      "using interface %s", target.get("interface_number"))
 
         def _drain_loop():
-            handle = None
-            try:
-                handle = hid.device()
-                handle.open_path(target["path"])
-                handle.set_nonblocking(False)
-                log.info("Phase 235-PCC-RATE-FIX: hidapi rate counter live "
-                         "on interface %s", target.get("interface_number"))
-                while self._hid_counter_running:
-                    data = handle.read(128, timeout_ms=200)
-                    if data:
-                        # Increment-only int.  CPython's GIL makes single
-                        # producer / single consumer safe without a lock.
-                        self._hid_report_total += 1
-            except Exception as exc:
-                log.warning("Phase 235-PCC-RATE-FIX: rate counter thread "
-                            "exited: %s", exc)
-            finally:
-                if handle is not None:
-                    try:
-                        handle.close()
-                    except Exception:
-                        pass
+            # Self-healing loop: re-enumerates the device on each attempt so
+            # that USB re-enumeration events (e.g. PS5 BT host arbitration)
+            # don't permanently kill the counter thread.
+            while self._hid_counter_running:
+                # Re-enumerate each attempt — path may change after re-enum.
+                _tgt = None
+                try:
+                    for _d in hid.enumerate(0x054C, 0x0DF2):
+                        if _d.get("interface_number") == 3:
+                            _tgt = _d
+                            break
+                    if _tgt is None:
+                        _cands = list(hid.enumerate(0x054C, 0x0DF2))
+                        if _cands:
+                            _tgt = _cands[0]
+                except Exception:
+                    pass
+                if _tgt is None:
+                    if self._hid_counter_running:
+                        time.sleep(2.0)
+                    continue
+                handle = None
+                try:
+                    handle = hid.device()
+                    handle.open_path(_tgt["path"])
+                    handle.set_nonblocking(False)
+                    log.info("Phase 235-PCC-RATE-FIX: hidapi rate counter live "
+                             "on interface %s", _tgt.get("interface_number"))
+                    while self._hid_counter_running:
+                        data = handle.read(128, timeout_ms=200)
+                        if data:
+                            # CPython GIL makes single-producer safe without lock.
+                            self._hid_report_total += 1
+                except Exception as exc:
+                    log.warning("Phase 235-PCC-RATE-FIX: rate counter reconnecting "
+                                "(%s)", exc)
+                    self._hid_counter_restarts += 1  # Phase 235-CONTENTION
+                finally:
+                    if handle is not None:
+                        try:
+                            handle.close()
+                        except Exception:
+                            pass
+                if self._hid_counter_running:
+                    time.sleep(1.0)
 
         self._hid_counter_running = True
         self._hid_counter_thread  = threading.Thread(

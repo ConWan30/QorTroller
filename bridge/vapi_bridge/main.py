@@ -475,6 +475,12 @@ class Bridge:
             ds.set_pcc_monitor(self._pcc_monitor)
             log.info("Phase 234.7: CaptureHealthMonitor wired to DualShock transport")
             self._ds_transport = ds
+            # Phase 235-CONTENTION: expose transport to operator app for hid_counter_restarts
+            if self.cfg.http_enabled:
+                try:
+                    _op_app._transport = ds
+                except NameError:
+                    pass
             _t = asyncio.create_task(_run_ds_with_restart(ds))
             _t.add_done_callback(_task_done_handler)
             self._tasks.append(_t)
