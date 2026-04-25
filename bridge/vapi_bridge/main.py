@@ -650,7 +650,8 @@ class Bridge:
         if getattr(self.cfg, "operator_api_key", ""):
             try:
                 from .session_adjudicator_validator import SessionAdjudicatorValidationAgent
-                _validator = SessionAdjudicatorValidationAgent(self.cfg, self.store, bus=_bus)
+                _validator = SessionAdjudicatorValidationAgent(self.cfg, self.store, bus=_bus,
+                                                               pcc_monitor=getattr(self, "_pcc_monitor", None))
                 _t = asyncio.create_task(_validator.run_event_consumer())
                 _t.set_name("SessionAdjudicatorValidationAgent")
                 _t.add_done_callback(_task_done_handler)
