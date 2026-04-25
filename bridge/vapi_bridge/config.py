@@ -1467,13 +1467,15 @@ class Config:
     (e.g. only when player fully exits to home)."""
 
     auto_trigger_activity_window: int = field(
-        default_factory=lambda: _env_int("AUTO_TRIGGER_ACTIVITY_WINDOW", 120)
+        default_factory=lambda: _env_int("AUTO_TRIGGER_ACTIVITY_WINDOW", 600)
     )
-    """Phase 235-AUTO-TRIGGER — Number of preceding records to scan for
-    gameplay activity evidence (>=20% trigger_active==1) before the
-    quiescence tail.  Confirms a gameplay session actually happened
-    rather than triggering on bridge-startup quiescence with no prior
-    play.  Default 120 records ~ 2 minutes."""
+    """Phase 235-SBD-FIX — Lookback window (records past the quiescence
+    tail) searched for ANY trigger_active==1.  Anchors on the last
+    gameplay moment rather than requiring a fraction in a fixed window —
+    fixes silent skip when player spends >2 minutes on menu post-game
+    (old 120-record head_frac check would silently return 0.00).
+    Default 600 records ~ 10 minutes; covers typical dynasty/menu
+    navigation time between games."""
 
     grind_session_id: str = field(
         default_factory=lambda: os.environ.get(
