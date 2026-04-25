@@ -1408,6 +1408,15 @@ class Config:
     )
     """Phase 234.7 — Seconds of sustained NOMINAL required before grind_ready=True."""
 
+    pcc_smoke_bypass: bool = field(
+        default_factory=lambda: _env_bool("PCC_SMOKE_BYPASS", False)
+    )
+    """Phase 235-SMOKE-BYPASS — when True, session_adjudicator_validator forces
+    _pcc_eligible=True regardless of capture_state/host_state.  Validates the
+    GIC chain-stamping pipeline end-to-end on hardware where USB enumeration
+    is unstable.  SMOKE-ONLY — disables USB-vs-BT discrimination.  Disable
+    before the real 100-session grind."""
+
     grind_mode: bool = field(
         default_factory=lambda: _env_bool("GRIND_MODE", False)
     )

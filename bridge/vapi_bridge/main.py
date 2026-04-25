@@ -411,6 +411,15 @@ class Bridge:
             except Exception as _cia_exc:
                 log.warning("Phase 50: CalibrationIntelligenceAgent unavailable: %s", _cia_exc)
 
+        # Phase 234.7 — instantiate CaptureHealthMonitor BEFORE both http_enabled
+        # and dualshock_enabled blocks so we can wire the same instance into
+        # the operator sub-app (read-only, for /bridge/capture-health) and into
+        # DualShockTransport (write-side, called by _session_loop).
+        # Without this wiring the monitor is None forever, /bridge/capture-health
+        # falls back to a stale DB read, and grind_ready never flips True.
+        from .capture_continuity import CaptureHealthMonitor
+        self._pcc_monitor = CaptureHealthMonitor(cfg=self.cfg)
+
         if self.cfg.http_enabled:
             from .transports.http import create_app
             from .monitoring import create_monitoring_app, state as monitor_state
@@ -428,6 +437,7 @@ class Bridge:
                 _calib_agent=_calib_intel_agent,
             )
             _op_app._gic_chain_broken = getattr(self, "_gic_chain_broken", False)
+            _op_app._pcc_monitor = self._pcc_monitor  # Phase 234.7 wiring
             app.mount("/operator", _op_app)
             config = uvicorn.Config(
                 app,
@@ -459,6 +469,11 @@ class Bridge:
             # Phase 27: inject PITLProver for session-end ZK proof generation (always active)
             ds._pitl_prover = PITLProver()
             log.info("Phase 27: PITLProver injected (zk_artifacts=%s)", PITL_ZK_ARTIFACTS_AVAILABLE)
+            # Phase 234.7: wire the shared CaptureHealthMonitor so _session_loop
+            # actually feeds poll-rate samples into PCC.  Same instance is read
+            # by /operator/bridge/capture-health.
+            ds.set_pcc_monitor(self._pcc_monitor)
+            log.info("Phase 234.7: CaptureHealthMonitor wired to DualShock transport")
             self._ds_transport = ds
             _t = asyncio.create_task(_run_ds_with_restart(ds))
             _t.add_done_callback(_task_done_handler)
