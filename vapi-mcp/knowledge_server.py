@@ -96,11 +96,9 @@ def _parse_claude_md() -> dict:
     s["contracts_live"] = int(m.group(1)) if m else 43
 
     arrows = re.findall(r"agents\s+(\d+)→(\d+)", text)
-    if arrows:
-        s["agents"] = max(int(pair[1]) for pair in arrows)
-    else:
-        agent_refs = re.findall(r"agent\s+#(\d+)", text)
-        s["agents"] = max((int(n) for n in agent_refs), default=36)
+    agent_refs = re.findall(r"agent\s+#(\d+)", text)
+    candidates = [int(p[1]) for p in arrows] + [int(n) for n in agent_refs]
+    s["agents"] = max(candidates) if candidates else 36
 
     m = re.search(r"L4 anomaly threshold:\s*\*\*([0-9.]+)\*\*", text)
     s["l4_anomaly"] = float(m.group(1)) if m else 7.009
