@@ -13827,3 +13827,182 @@ class Store:
             d["blocking_reason"] = blocking_reason
             result.append(d)
         return result
+
+    # --- Phase 235-CONTENTION: BT Contention Pattern Intelligence ---
+
+    def get_bt_contention_analytics(self) -> dict:
+        """Compute BT contention episode statistics from capture_health_log.
+
+        Episodes are sequences of consecutive non-NOMINAL state transitions.
+        A gap > 10s between non-NOMINAL rows starts a new episode.
+        Returns zero-state when no non-NOMINAL events have been recorded.
+        """
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT capture_state, host_state, created_at "
+                "FROM capture_health_log ORDER BY created_at ASC"
+            ).fetchall()
+
+        if not rows:
+            return {
+                "total_episodes":           0,
+                "mean_recovery_s":          0.0,
+                "longest_episode_s":        0.0,
+                "last_episode_ts":          0.0,
+                "last_episode_recovery_s":  0.0,
+                "host_state_distribution":  {},
+            }
+
+        rows = [dict(r) for r in rows]
+
+        # Host state distribution across all logged events
+        host_dist: dict[str, int] = {}
+        for r in rows:
+            hs = r.get("host_state", "UNKNOWN") or "UNKNOWN"
+            host_dist[hs] = host_dist.get(hs, 0) + 1
+
+        # Episode detection: group consecutive non-NOMINAL rows
+        episode_durations: list[float] = []
+        last_episode_ts: float = 0.0
+        in_episode = False
+        episode_start_ts: float = 0.0
+        prev_non_nominal_ts: float = 0.0
+
+        for r in rows:
+            state = r.get("capture_state", "NOMINAL") or "NOMINAL"
+            ts = float(r.get("created_at", 0.0))
+
+            if state != "NOMINAL":
+                if not in_episode:
+                    in_episode = True
+                    episode_start_ts = ts
+                    prev_non_nominal_ts = ts
+                else:
+                    # Gap > 10s between non-NOMINAL rows = new episode
+                    if ts - prev_non_nominal_ts > 10.0:
+                        duration = prev_non_nominal_ts - episode_start_ts
+                        episode_durations.append(max(duration, 1.0))
+                        last_episode_ts = prev_non_nominal_ts
+                        episode_start_ts = ts
+                    prev_non_nominal_ts = ts
+            else:
+                if in_episode:
+                    duration = ts - episode_start_ts
+                    episode_durations.append(max(duration, 1.0))
+                    last_episode_ts = ts
+                    in_episode = False
+
+        # Close any open episode at end of data
+        if in_episode:
+            duration = prev_non_nominal_ts - episode_start_ts
+            episode_durations.append(max(duration, 1.0))
+            last_episode_ts = prev_non_nominal_ts
+
+        n = len(episode_durations)
+        mean_s = sum(episode_durations) / n if n else 0.0
+        longest_s = max(episode_durations) if n else 0.0
+        last_s = episode_durations[-1] if n else 0.0
+
+        return {
+            "total_episodes":           n,
+            "mean_recovery_s":          round(mean_s, 2),
+            "longest_episode_s":        round(longest_s, 2),
+            "last_episode_ts":          last_episode_ts,
+            "last_episode_recovery_s":  round(last_s, 2),
+            "host_state_distribution":  host_dist,
+        }
+
+    # --- Phase 235-ANALYTICS: Grind Pipeline Analytics ---
+
+    def get_grind_analytics(self, grind_session_id: str = "", gate_n: int = 100) -> dict:
+        """Compute aggregate grind pipeline analytics for the given session.
+
+        Reads ruling_validation_log to compute success_rate, blocking_reason_counts,
+        sessions_per_day velocity, and projected GIC_100 completion date.
+        """
+        import datetime as _dt
+
+        with self._conn() as conn:
+            if grind_session_id:
+                # Include stamped rows for this session AND all unstamped rows
+                # (blocking rows have grind_session_id=NULL since update_grind_chain_hash
+                # only stamps eligible rows).  Excluding NULL rows would silently drop
+                # all diagnostic entries — the opposite of what analytics is for.
+                rows = conn.execute(
+                    "SELECT pcc_state, pcc_host_state, gameplay_context, divergence, "
+                    "grind_chain_hash, created_at "
+                    "FROM ruling_validation_log "
+                    "WHERE grind_session_id = ? OR grind_session_id IS NULL "
+                    "ORDER BY created_at ASC",
+                    (grind_session_id,),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT pcc_state, pcc_host_state, gameplay_context, divergence, "
+                    "grind_chain_hash, created_at "
+                    "FROM ruling_validation_log ORDER BY created_at ASC"
+                ).fetchall()
+
+        if not rows:
+            return {
+                "grind_session_id":        grind_session_id,
+                "total_validated":         0,
+                "stamped_count":           0,
+                "success_rate":            0.0,
+                "blocking_reason_counts":  {},
+                "sessions_per_day":        0.0,
+                "projected_gic100_date":   "unknown",
+                "timestamp":               time.time(),
+            }
+
+        rows = [dict(r) for r in rows]
+        total = len(rows)
+        stamped = sum(1 for r in rows if r.get("grind_chain_hash"))
+        success_rate = stamped / total if total else 0.0
+
+        # Blocking reason counts (mirrors get_grind_session_history logic)
+        reason_counts: dict[str, int] = {}
+        for r in rows:
+            if r.get("grind_chain_hash"):
+                continue
+            pcc_s = r.get("pcc_state")
+            pcc_h = r.get("pcc_host_state")
+            reasons = []
+            if pcc_s is None:
+                reasons.append("PCC_STATE_UNKNOWN")
+            elif pcc_s != "NOMINAL":
+                reasons.append(f"PCC_NOT_NOMINAL:{pcc_s}")
+            elif pcc_h not in ("EXCLUSIVE_USB", "UNKNOWN"):
+                reasons.append(f"PCC_HOST_INELIGIBLE:{pcc_h}")
+            if r.get("gameplay_context") == "MENU_DETECTED":
+                reasons.append("MENU_DETECTED")
+            if r.get("divergence"):
+                reasons.append("DIVERGENT")
+            key = "+".join(reasons) if reasons else "GRIND_MODE_OFF"
+            reason_counts[key] = reason_counts.get(key, 0) + 1
+
+        # Velocity: stamped sessions per day since first entry
+        first_ts = float(rows[0].get("created_at", 0.0))
+        now_ts = time.time()
+        days_elapsed = (now_ts - first_ts) / 86400.0 if first_ts else 0.0
+        sessions_per_day = stamped / days_elapsed if days_elapsed > 0.001 else 0.0
+
+        # Projected GIC_100 date
+        if sessions_per_day > 0:
+            remaining = max(0, gate_n - stamped)
+            days_left = remaining / sessions_per_day
+            target_date = _dt.datetime.utcnow() + _dt.timedelta(days=days_left)
+            projected = target_date.strftime("%Y-%m-%d")
+        else:
+            projected = "unknown"
+
+        return {
+            "grind_session_id":        grind_session_id,
+            "total_validated":         total,
+            "stamped_count":           stamped,
+            "success_rate":            round(success_rate, 4),
+            "blocking_reason_counts":  reason_counts,
+            "sessions_per_day":        round(sessions_per_day, 4),
+            "projected_gic100_date":   projected,
+            "timestamp":               now_ts,
+        }

@@ -4655,6 +4655,44 @@ paths:
         "403":
           description: Forbidden
 
+  /grind/pcc-intelligence:
+    get:
+      summary: BT contention pattern intelligence (Phase 235-CONTENTION)
+      description: >
+        Returns capture_health_log episode analytics: total PS5 BT contention episodes,
+        mean/longest recovery duration, host_state distribution, and hid_counter_restarts
+        (how many times the self-healing hidapi counter thread has reconnected).
+      security:
+        - ApiKeyAuth: []
+      responses:
+        "200":
+          description: BT contention analytics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PCCIntelligenceStatus"
+        "403":
+          description: Forbidden
+
+  /grind/analytics:
+    get:
+      summary: Grind pipeline aggregate analytics (Phase 235-ANALYTICS)
+      description: >
+        Aggregate analytics for the current grind session: success_rate (stamped/total),
+        blocking_reason_counts (distribution of GIC gate failures), sessions_per_day
+        velocity, and projected_gic100_date.
+      security:
+        - ApiKeyAuth: []
+      responses:
+        "200":
+          description: Grind analytics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GrindAnalyticsStatus"
+        "403":
+          description: Forbidden
+
   /agent/ait-separation-status:
     get:
       summary: AIT separation analysis status (Phase 229)
@@ -9589,6 +9627,64 @@ webhooks:
         session_counting_paused:
           type: boolean
           description: "True when grind_mode=True AND grind_ready=False (capture degraded)"
+        timestamp:
+          type: number
+          description: "Unix timestamp of status query"
+
+    PCCIntelligenceStatus:
+      type: object
+      description: "Phase 235-CONTENTION BT contention pattern intelligence"
+      properties:
+        total_episodes:
+          type: integer
+          description: "Number of DEGRADED/DISCONNECTED episodes since bridge start"
+        mean_recovery_s:
+          type: number
+          description: "Mean episode duration in seconds"
+        longest_episode_s:
+          type: number
+          description: "Worst-case outage duration in seconds"
+        last_episode_ts:
+          type: number
+          description: "Unix timestamp when the most recent episode ended"
+        last_episode_recovery_s:
+          type: number
+          description: "Duration of the most recent episode in seconds"
+        host_state_distribution:
+          type: object
+          description: "Count of capture_health_log entries by host_state"
+        hid_counter_restarts:
+          type: integer
+          description: "Number of times the self-healing hidapi counter thread has reconnected"
+        timestamp:
+          type: number
+          description: "Unix timestamp of status query"
+
+    GrindAnalyticsStatus:
+      type: object
+      description: "Phase 235-ANALYTICS grind pipeline aggregate analytics"
+      properties:
+        grind_session_id:
+          type: string
+          description: "Grind session identifier"
+        total_validated:
+          type: integer
+          description: "Total ruling_validation_log rows for this session"
+        stamped_count:
+          type: integer
+          description: "Rows with grind_chain_hash stamped (GIC-eligible)"
+        success_rate:
+          type: number
+          description: "Fraction of validated sessions that were stamped (0.0–1.0)"
+        blocking_reason_counts:
+          type: object
+          description: "Count of each blocking_reason string across unstamped rows"
+        sessions_per_day:
+          type: number
+          description: "Stamped session velocity since first validation entry"
+        projected_gic100_date:
+          type: string
+          description: "ISO date when GIC_100 is projected at current velocity, or 'unknown'"
         timestamp:
           type: number
           description: "Unix timestamp of status query"

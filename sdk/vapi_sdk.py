@@ -8106,3 +8106,61 @@ class VAPIGrindChain:
             )
         except Exception as exc:
             return GrindChainResult(error=str(exc), chain_intact=False)
+
+
+# ---------------------------------------------------------------------------
+# Phase 235-ANALYTICS — Grind Pipeline Analytics
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class GrindAnalyticsResult:
+    """Result from VAPIGrindAnalytics.status() (Phase 235-ANALYTICS).
+
+    success_rate: stamped_count / total_validated (0.0 when no sessions validated).
+    blocking_reason_counts: distribution of GIC gate failures (e.g. PCC_NOT_NOMINAL).
+    sessions_per_day: stamped session velocity since first validation entry.
+    projected_gic100_date: ISO date string, or "unknown" when velocity==0.
+    """
+    grind_session_id:       str   = ""
+    total_validated:        int   = 0
+    stamped_count:          int   = 0
+    success_rate:           float = 0.0
+    blocking_reason_counts: dict  = None  # type: ignore[assignment]
+    sessions_per_day:       float = 0.0
+    projected_gic100_date:  str   = "unknown"
+    error:                  str   = ""
+
+    def __post_init__(self):
+        if self.blocking_reason_counts is None:
+            object.__setattr__(self, "blocking_reason_counts", {})
+
+
+class VAPIGrindAnalytics:
+    """Client for Phase 235-ANALYTICS Grind Pipeline Analytics API."""
+
+    def __init__(self, base_url: str, api_key: str) -> None:
+        self._base_url = base_url.rstrip("/")
+        self._api_key = api_key
+
+    def status(self) -> GrindAnalyticsResult:
+        """GET /grind/analytics → GrindAnalyticsResult."""
+        import urllib.request as _ur
+        import urllib.error as _ue
+        try:
+            req = _ur.Request(
+                f"{self._base_url}/grind/analytics",
+                headers={"x-api-key": self._api_key},
+            )
+            with _ur.urlopen(req, timeout=10) as resp:
+                d = json.loads(resp.read())
+            return GrindAnalyticsResult(
+                grind_session_id       = str(d.get("grind_session_id", "")),
+                total_validated        = int(d.get("total_validated", 0)),
+                stamped_count          = int(d.get("stamped_count", 0)),
+                success_rate           = float(d.get("success_rate", 0.0)),
+                blocking_reason_counts = dict(d.get("blocking_reason_counts") or {}),
+                sessions_per_day       = float(d.get("sessions_per_day", 0.0)),
+                projected_gic100_date  = str(d.get("projected_gic100_date", "unknown")),
+            )
+        except Exception as exc:
+            return GrindAnalyticsResult(error=str(exc))
