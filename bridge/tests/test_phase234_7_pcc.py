@@ -168,7 +168,18 @@ def test_t234_7_6_pop_transitions():
 # T234_7-7: Config has grind_mode and grind_target with correct defaults
 # ---------------------------------------------------------------------------
 
-def test_t234_7_7_config_defaults():
+def test_t234_7_7_config_defaults(monkeypatch):
+    # Phase 235-BRIDGE-WEDGE-FIX: bridge/.env may set GRIND_MODE=true / other
+    # PCC vars during a smoke or grind run; this test asserts the CODE
+    # default, not the operator's runtime override.  setenv (not delenv) so
+    # any later dotenv reload still sees our values.  Same intent as T199-8.
+    monkeypatch.setenv("GRIND_MODE", "false")
+    monkeypatch.setenv("GRIND_TARGET", "100")
+    monkeypatch.setenv("PCC_ENABLED", "true")
+    monkeypatch.setenv("PCC_NOMINAL_HZ", "950")
+    monkeypatch.setenv("PCC_DEGRADED_HZ", "100")
+    monkeypatch.setenv("PCC_STABLE_WINDOW_S", "30")
+
     cfg = _make_config()
     assert hasattr(cfg, "grind_mode"), "Config must have grind_mode field"
     assert hasattr(cfg, "grind_target"), "Config must have grind_target field"

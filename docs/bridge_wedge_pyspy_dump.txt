@@ -1,0 +1,47 @@
+Process 9768: C:\Users\Contr\AppData\Local\Microsoft\WindowsApps\python.exe -m bridge.vapi_bridge.main
+Python v3.13.13 (C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.13_3.13.3568.0_x64__qbz5n2kfra8p0\python3.13.exe)
+
+Thread 10320 (active): "MainThread"
+    get_biometric_fingerprint (vapi_bridge\store.py:3695)
+    compute_distance (vapi_bridge\continuity_prover.py:74)
+    should_attest (vapi_bridge\continuity_prover.py:141)
+    _check_continuity (vapi_bridge\dualshock_integration.py:2244)
+    _run (asyncio\events.py:89)
+    _run_once (asyncio\base_events.py:2061)
+    run_forever (asyncio\base_events.py:683)
+    run_until_complete (asyncio\base_events.py:712)
+    main (vapi_bridge\main.py:1207)
+    <module> (vapi_bridge\main.py:1216)
+    _run_code (<frozen runpy>:88)
+    _run_module_as_main (<frozen runpy>:199)
+Thread 20428 (idle): "ThreadPoolExecutor-0_0"
+    _worker (concurrent\futures\thread.py:90)
+    run (threading.py:995)
+    _bootstrap_inner (threading.py:1044)
+    _bootstrap (threading.py:1015)
+Thread 7764 (idle): "asyncio_0"
+    _worker (concurrent\futures\thread.py:90)
+    run (threading.py:995)
+    _bootstrap_inner (threading.py:1044)
+    _bootstrap (threading.py:1015)
+Thread 15428 (idle): "asyncio_1"
+    _worker (concurrent\futures\thread.py:90)
+    run (threading.py:995)
+    _bootstrap_inner (threading.py:1044)
+    _bootstrap (threading.py:1015)
+Thread 15664 (active+gil): "Thread-1 (sendReport)"
+    readInput (pydualsense\pydualsense.py:395)
+    sendReport (pydualsense\pydualsense.py:261)
+    run (threading.py:995)
+    _bootstrap_inner (threading.py:1044)
+    _bootstrap (threading.py:1015)
+Thread 19628 (idle): "asyncio_2"
+    _worker (concurrent\futures\thread.py:90)
+    run (threading.py:995)
+    _bootstrap_inner (threading.py:1044)
+    _bootstrap (threading.py:1015)
+Thread 18296 (idle): "vapi_feedback_0"
+    _worker (concurrent\futures\thread.py:90)
+    run (threading.py:995)
+    _bootstrap_inner (threading.py:1044)
+    _bootstrap (threading.py:1015)

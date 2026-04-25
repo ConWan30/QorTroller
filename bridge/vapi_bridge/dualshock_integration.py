@@ -1327,7 +1327,11 @@ class DualShockTransport:
                         var_list  = self._biometric_classifier._var.tolist()
                         mean_dict = dict(zip(FEATURE_KEYS, mean_list))
                         var_dict  = dict(zip(FEATURE_KEYS, var_list))
-                        self._store.store_fingerprint_state(
+                        # Phase 235-BRIDGE-WEDGE-FIX: SQLite write must not run on
+                        # the event loop thread.  Same to_thread pattern as
+                        # batcher.py:97.
+                        await asyncio.to_thread(
+                            self._store.store_fingerprint_state,
                             self._device_id.hex(), mean_dict, var_dict,
                             getattr(self._biometric_classifier, "_n_sessions", 0),
                         )
@@ -2228,20 +2232,33 @@ class DualShockTransport:
         """
         if self._continuity_prover is None or self._chain is None:
             return
+        # Phase 235-BRIDGE-WEDGE-FIX: every store + prover call below issues at
+        # least one SQLite query (get_biometric_fingerprint scans `records`,
+        # ~195k rows without a covering index).  When this coroutine ran sync,
+        # the first should_attest() pinned the event loop for seconds and
+        # wedged Uvicorn / the session loop / every agent task.  Wrap each
+        # sync call in asyncio.to_thread() so the event loop stays responsive
+        # while the comparison runs on a worker thread.
         async with self._continuity_lock:
             new_device_id = self._device_id.hex()
             try:
-                devices = self._store.list_devices()
+                devices = await asyncio.to_thread(self._store.list_devices)
                 for dev in devices:
                     old_device_id = dev["device_id"]
                     if old_device_id == new_device_id:
                         continue
                     # Skip if either device is already claimed
-                    if (self._store.is_device_claimed(old_device_id)
-                            or self._store.is_device_claimed(new_device_id)):
+                    old_claimed = await asyncio.to_thread(
+                        self._store.is_device_claimed, old_device_id
+                    )
+                    new_claimed = await asyncio.to_thread(
+                        self._store.is_device_claimed, new_device_id
+                    )
+                    if old_claimed or new_claimed:
                         continue
-                    should, dist = self._continuity_prover.should_attest(
-                        old_device_id, new_device_id
+                    should, dist = await asyncio.to_thread(
+                        self._continuity_prover.should_attest,
+                        old_device_id, new_device_id,
                     )
                     if not should:
                         log.debug(
@@ -2253,8 +2270,9 @@ class DualShockTransport:
                         "Phase 23: biometric continuity detected! old=%s new=%s dist=%.4f",
                         old_device_id[:16], new_device_id[:16], dist,
                     )
-                    proof_hash = self._continuity_prover.make_proof_hash(
-                        old_device_id, new_device_id, dist
+                    proof_hash = await asyncio.to_thread(
+                        self._continuity_prover.make_proof_hash,
+                        old_device_id, new_device_id, dist,
                     )
                     tx_hash = await self._chain.attest_continuity(
                         old_device_id, new_device_id, proof_hash
@@ -2267,8 +2285,14 @@ class DualShockTransport:
                                 timeout=65.0,
                             )
                             if receipt.get("status") == 1:
-                                self._store.mark_device_claimed(old_device_id, new_device_id)
-                                self._store.mark_device_claimed(new_device_id, old_device_id)
+                                await asyncio.to_thread(
+                                    self._store.mark_device_claimed,
+                                    old_device_id, new_device_id,
+                                )
+                                await asyncio.to_thread(
+                                    self._store.mark_device_claimed,
+                                    new_device_id, old_device_id,
+                                )
                                 log.info(
                                     "Phase 23: ContinuityAttested on-chain. tx=%s", tx_hash[:16]
                                 )
