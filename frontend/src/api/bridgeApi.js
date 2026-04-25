@@ -2,18 +2,40 @@ import { useQuery } from '@tanstack/react-query'
 import { activateMock, deactivateMock, isMockActive, MOCK } from './mockBridge'
 import { apiGet, ApiKeyError, BridgeOfflineError } from './client'
 
-async function get(path, mockKey) {
-  if (isMockActive()) return MOCK[mockKey]?.()
+// All status endpoints hit by the dashboard live inside the operator sub-app,
+// which the bridge mounts at /operator (see bridge/vapi_bridge/main.py). The
+// declared route paths are e.g. "/bridge/capture-health" — but the actual URL
+// is "/operator/bridge/capture-health". Everything that flows through this
+// helper needs the prefix; legacy/shared modules that hit non-operator routes
+// (/health, /api/v1, /devices) use their own fetch helpers and are unaffected.
+const _OP_PREFIX = '/operator'
+
+async function get(path, mockKey, opts = {}) {
+  // Always try the live bridge first. If it succeeds, deactivate any sticky
+  // mock state and return live data. Only fall back to mock on network/offline
+  // errors — never short-circuit before the live call, otherwise mock becomes
+  // permanent until sessionStorage is manually cleared.
+  //
+  // opts.noMock — for grind-critical endpoints (capture-health, grind-chain
+  // -status) we MUST NOT swap in mock data on transient failure. Mock has
+  // hardcoded values (chain_length~12, target=100, session 'grind_phase235
+  // _v1') that visually compete with the real bridge state during an active
+  // grind, producing a 0/3 ↔ 11/100 flip-flop on every failed poll. Instead,
+  // re-throw so react-query keeps the last successful response in `data`.
   try {
-    const data = await apiGet(path)
-    deactivateMock()
+    const data = await apiGet(_OP_PREFIX + path)
+    if (isMockActive()) deactivateMock()
     return data
   } catch (err) {
     if (err instanceof ApiKeyError) {
       // Key is wrong — don't activate mock, surface the error to the UI
       throw err
     }
-    // Bridge offline or any other network error → activate mock
+    if (opts.noMock) {
+      // Grind-critical: rethrow so react-query holds the last successful
+      // value instead of swapping in mock fakes.
+      throw err
+    }
     activateMock()
     return MOCK[mockKey]?.()
   }
@@ -100,21 +122,27 @@ export function useTournamentPreflight() {
   })
 }
 
-// Phase 235-FINAL: grind-critical live indicators
+// Phase 235-FINAL: grind-critical live indicators.
+// noMock=true: on transient failure react-query holds the last successful
+// response.  Without this, a single 5s timeout under DataCuratorAgent
+// contention would swap in mock data ('grind_phase235_v1' / 11 / 100) and
+// produce a 0/3 ↔ 11/100 flip-flop on the GamerView during a real run.
 export function useCaptureHealth() {
   return useQuery({
     queryKey: ['captureHealth'],
-    queryFn: () => get('/bridge/capture-health', 'captureHealth'),
+    queryFn: () => get('/bridge/capture-health', 'captureHealth', { noMock: true }),
     refetchInterval: 3000,
     staleTime: 2000,
+    retry: 1,
   })
 }
 
 export function useGrindChain() {
   return useQuery({
     queryKey: ['grindChain'],
-    queryFn: () => get('/bridge/grind-chain-status', 'grindChain'),
+    queryFn: () => get('/bridge/grind-chain-status', 'grindChain', { noMock: true }),
     refetchInterval: 5000,
     staleTime: 3000,
+    retry: 1,
   })
 }
