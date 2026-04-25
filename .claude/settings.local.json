@@ -61,7 +61,26 @@
       "mcp__vapi__vapi_agent_fleet",
       "mcp__vapi__vapi_phase_context",
       "Bash(findstr /i \"passed failed error\")",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(curl *)",
+      "Bash(netstat -ano)",
+      "Bash(echo \"---EXIT $?---\")",
+      "Bash(rm _clear_pending.py)",
+      "Bash(awk '{print $NF}')",
+      "Bash(xargs -r -I{} taskkill //F //PID {})",
+      "Bash(python scripts/usb_remediate.py)",
+      "Bash(python scripts/usb_remediate.py:*)",
+      "Bash(powershell.exe:*)",
+      "Bash(powershell -Command:*)",
+      "Bash(powercfg:*)",
+      "Bash(taskkill:*)",
+      "Bash(Get-NetTCPConnection:*)",
+      "Bash(Get-PnpDevice:*)",
+      "Bash(Disable-PnpDevice:*)",
+      "Bash(Enable-PnpDevice:*)",
+      "Bash(Set-ItemProperty:*)",
+      "Read(//c/Users/Contr/vapi-pebble-prototype/scripts/_usb_remediate_bridge.log)",
+      "Write(//c/Users/Contr/vapi-pebble-prototype/scripts/_usb_remediate_bridge.log)"
     ]
   },
   "hooks": {
