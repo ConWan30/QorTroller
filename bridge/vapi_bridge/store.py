@@ -5389,6 +5389,22 @@ class Store:
 
     # --- Phase 75: Ruling validation log ---
 
+    def get_unvalidated_rulings(self, limit: int = 50) -> list[dict]:
+        """Phase 235-BRIDGE-WEDGE-FIX: agent_rulings rows with no matching
+        ruling_validation_log row.  Extracted from session_adjudicator_validator
+        so the entire connection-open / fetch / close lifecycle runs inside a
+        single asyncio.to_thread() worker thread instead of straddling the
+        event loop."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT ar.* FROM agent_rulings ar "
+                "LEFT JOIN ruling_validation_log rvl ON ar.id = rvl.ruling_id "
+                "WHERE rvl.id IS NULL "
+                "ORDER BY ar.created_at ASC LIMIT ?",
+                (limit,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
     def insert_validation_record(
         self,
         ruling_id: int,
