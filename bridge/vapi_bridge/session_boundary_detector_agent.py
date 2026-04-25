@@ -57,10 +57,11 @@ class SessionBoundaryDetectorAgent:
 
     POLL_INTERVAL_S = POLL_INTERVAL_S
 
-    def __init__(self, cfg, store, bus=None) -> None:
+    def __init__(self, cfg, store, bus=None, pcc_monitor=None) -> None:
         self._cfg            = cfg
         self._store          = store
         self._bus            = bus
+        self._pcc_monitor    = pcc_monitor  # Phase 235-SBD-PCC: live monitor preferred over stale DB log
         self._last_fire_at   = 0.0
         self._fires_this_run = 0
         self._stopped        = False
@@ -88,9 +89,14 @@ class SessionBoundaryDetectorAgent:
             self._stopped = True
             return ("SKIP", f"GIC_{target} reached (chain_length={chain_len}); self-stop")
 
-        # PCC eligibility — Phase 234.7 cross-layer attestation
+        # PCC eligibility — Phase 234.7 cross-layer attestation.
+        # Prefer live in-memory monitor (always current) over SQLite log
+        # (only written on transitions — can be stale by minutes during gameplay).
         try:
-            pcc = self._store.get_capture_health_status() or {}
+            if self._pcc_monitor is not None:
+                pcc = self._pcc_monitor.get_status()
+            else:
+                pcc = self._store.get_capture_health_status() or {}
         except Exception as exc:
             return ("SKIP", f"capture_health query failed: {exc}")
         pcc_state = pcc.get("capture_state")
