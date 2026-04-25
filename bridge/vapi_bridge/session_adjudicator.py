@@ -201,10 +201,14 @@ class SessionAdjudicator:
         advisories = [c for c in inference_codes if c in (0x2B, 0x30, 0x31, 0x32)]
         evidence_hashes = [r.get("record_hash", "") for r in records]
 
-        # Phase 235-GAD: count trigger-active records in evidence window
-        _trigger_active_count = sum(1 for r in records if int(r.get("trigger_active", 0) or 0) == 1)
+        # Phase 235-GAD / Phase 235-SBD-PCC: count trigger-active records over a wide
+        # lookback (400 records ≈ 6-7 min) so the fraction captures game-time activity
+        # even when the adjudicator processes the ruling_request 5 min after game end.
+        # The 20-record window above is kept for LLM evidence detail only.
+        _ta_records = self._store.get_recent_records(limit=400, device_id=device_id)
+        _trigger_active_count = sum(1 for r in _ta_records if int(r.get("trigger_active", 0) or 0) == 1)
         _trigger_active_fraction = (
-            _trigger_active_count / len(records) if records else 0.0
+            _trigger_active_count / len(_ta_records) if _ta_records else 0.0
         )
 
         evidence_summary = {
