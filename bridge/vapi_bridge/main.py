@@ -1081,6 +1081,17 @@ class Bridge:
             try:
                 from .session_boundary_detector_agent import SessionBoundaryDetectorAgent
                 _sbda = SessionBoundaryDetectorAgent(self.cfg, self.store, bus=_bus)
+                # Phase 235-DASH-UPGRADE: attach the agent instance to the
+                # operator sub-app so /operator/agent/auto-trigger-status can
+                # read live telemetry (mirrors how _pcc_monitor is attached).
+                if self.cfg.http_enabled:
+                    try:
+                        _op_app._sbda = _sbda
+                    except NameError:
+                        # _op_app exists only when http_enabled was true; if
+                        # the http block was skipped earlier, telemetry endpoint
+                        # is also unreachable so the attach is harmless.
+                        pass
                 _sbda_task = asyncio.ensure_future(_sbda.run_poll_loop())
                 _sbda_task.set_name("SessionBoundaryDetectorAgent")
                 self._tasks.append(_sbda_task)
