@@ -27,10 +27,10 @@
 
 ## 1. Current Phase Status
 
-**Active Phase**: Phase 238 COMPLETE 2026-04-26 — MetaLearner FSCA wiring (Decision A only); inaugural autoresearch wiki loop WIF entry filed (wif_058_ps5_compat_mode_dormant)
-**Phase Start**: 2026-04-11 (Phase 235); 2026-04-26 (Phase 236 + Phase 237-CONSENT + Phase 237-EXTEND + Phase 238)
-**Phase Status**: Phase 238 COMPLETE — autoresearch cycle prompt now embeds active FSCA contradictions (severity ≥ HIGH, last 24h, resolved=0, fail-open on missing DB/table); Decision B REJECTED (eval harness immutable); Decision C DEFERRED (re-evaluate after 5+ cycles); 46 contracts LIVE; FIVE chain primitives FROZEN-v1: GIC + WEC + VAME + CORPUS-SNAPSHOT + CONSENT
-**Next Phase**: 237-ZK-SEPPROOF (Groth16 proof-of-separation-ratio without revealing biometric vectors) → 239-READINESS (W2 — gated on GIC_100); Phase 238-evaluate gate after autoresearch runs 5+ cycles with FSCA prompt-context
+**Active Phase**: Phase 237.5 COMPLETE 2026-04-26 — CORPUS-SNAPSHOT on-chain anchoring via AdjudicationRegistry (open-enum sourceType="CORPUS_SNAPSHOT")
+**Phase Start**: 2026-04-11 (Phase 235); 2026-04-26 (Phase 236 + Phase 237-CONSENT + Phase 237-EXTEND + Phase 238 + Phase 237.5)
+**Phase Status**: Phase 237.5 COMPLETE — closes architectural gap (operator_api.py:7494-7496 hardcoded False) surfaced by Phase 237-ZK-SEPPROOF verification. Zero contract change (existing AdjudicationRegistry primitive sufficient); zero deploy cost; bridge wallet already owns contract. Refined Commit 2 order: anchor FIRST → insert with populated result (no UPDATE pattern). Inaugural anchor pending bridge restart. 46 contracts LIVE; FIVE chain primitives FROZEN-v1; PV-CI invariants 26 → 28 (+INV-CORPUS-001, +INV-CORPUS-002).
+**Next Phase**: 237-ZK-SEPPROOF (Groth16 proof-of-separation-ratio without revealing biometric vectors; binding foundation now in place via Phase 237.5) → 239-READINESS (W2 — gated on GIC_100)
 **VAPIConsentRegistry**: 0xA82dB0eF0bF7D15b6400EDd4A09C0D4338C948dA (deployed 2026-04-26, gas ~0.07 IOTX, wallet ~40.36 IOTX remaining)
 
 ### Grind Status (2026-04-26)
@@ -49,9 +49,10 @@
 ### Test Counts (2026-04-25, authoritative from CLAUDE.md)
 | Component | Delta Count | Empirical | Status |
 |-----------|-------------|-----------|--------|
-| Bridge pytest | **2,510** | ~2,565 passing | ✅ (+8 Phase 236-WATCHDOG, +8 Phase 236-VAME, +8 Phase 236-CORPUS-SNAPSHOT, +8 Phase 237-CONSENT, +1 Phase 237-EXTEND FSCA; Phase 238 added 0 bridge tests; 147 pre-existing failures: Phase 58 security + Phase 69 curator config) |
-| Autoresearch pytest | **7** | 7 | ✅ NEW Phase 238 (T238-FSCA-1, 1b, 2, 2b, 3, 3b, 3c — 0.27s) |
-| SDK pytest | **539** | 539 | ✅ +4 Phase 237-EXTEND (T237-S1..S4); Phase 238 unchanged |
+| Bridge pytest | **2,515** | ~2,570 passing | ✅ (+8 Phase 236-WATCHDOG, +8 Phase 236-VAME, +8 Phase 236-CORPUS-SNAPSHOT, +8 Phase 237-CONSENT, +1 Phase 237-EXTEND FSCA; Phase 238 added 0 bridge tests; +5 Phase 237.5 T237.5-1..5; 147 pre-existing failures: Phase 58 security + Phase 69 curator config) |
+| Autoresearch pytest | **7** | 7 | ✅ Phase 238 (T238-FSCA-1, 1b, 2, 2b, 3, 3b, 3c — 0.27s) |
+| SDK pytest | **539** | 539 | ✅ +4 Phase 237-EXTEND (T237-S1..S4); Phase 238/237.5 unchanged |
+| PV-CI invariants | **28** | 28 | ✅ +INV-CORPUS-001 (anchor_corpus_snapshot signature), +INV-CORPUS-002 ("CORPUS_SNAPSHOT" sourceType literal) |
 | SDK tests | **535** | 535 | ✅ PASS |
 | Hardhat tests | **502** (delta) | 522 | ✅ PASS (6 pre-existing Phase 186 failures excluded from delta) |
 | Hardware tests | 37 | — | ⚠️ HARDWARE-ONLY |
