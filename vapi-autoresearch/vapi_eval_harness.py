@@ -370,7 +370,7 @@ if __name__ == "__main__":
 
 
 # Auto-synced from VAPI_WHAT_IF.md by vapi_wiki_engine.py
-# Last sync: 2026-04-18T15:36:17.416621+00:00
+# Last sync: 2026-04-26T17:28:44.330488+00:00
 WIKI_KNOWN_W1 = {
     "W1-001": {
         "title": "ioSwarm Node-Pool Homogeneity",

@@ -91,6 +91,94 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
 
     app = FastAPI(title="VAPI Operator Gate API", version="1.0.0-phase50")
 
+    # Phase 236-VAME — Application-Layer Message Envelope
+    # Sidecar response-header authentication binding every JSON response to
+    # the GIC chain head. Provides app-layer integrity above TLS — survives
+    # decrypting proxies, rogue middle-boxes, browser-extension MITM, etc.
+    # Headers: X-VAME-Commitment / -Chain-Head / -TS-NS / -Version / -Endpoint.
+    # Skips: non-JSON responses, /health (cheap liveness), websocket upgrades.
+    # Cached chain-head with short TTL keeps middleware off the SQLite hot path.
+    from .vame import stamp_response_headers as _vame_stamp_headers
+    from starlette.middleware.base import BaseHTTPMiddleware
+    from starlette.responses import Response as _StarletteResponse
+
+    _vame_chain_head_cache = {"head": "", "expires_at": 0.0}
+    _VAME_CHAIN_HEAD_TTL_S = 5.0
+
+    def _vame_get_chain_head_hex() -> str:
+        """Return the 16-byte chain-head prefix as a 32-char hex string.
+
+        Cached for `_VAME_CHAIN_HEAD_TTL_S` seconds so we don't hammer SQLite
+        on every request. The chain only advances at GIC-stamp cadence (≥5
+        min), so a 5-second cache produces no observable staleness.
+        """
+        nonlocal _vame_chain_head_cache
+        _now = time.time()
+        if _now < _vame_chain_head_cache["expires_at"] and _vame_chain_head_cache["head"]:
+            return _vame_chain_head_cache["head"]
+        try:
+            _grind_sid = getattr(cfg, "grind_session_id", "")
+            prev = store.get_prev_grind_chain_hash(_grind_sid)
+            head_hex = prev.hex() if prev else ""
+        except Exception:
+            head_hex = ""
+        _vame_chain_head_cache["head"] = head_hex
+        _vame_chain_head_cache["expires_at"] = _now + _VAME_CHAIN_HEAD_TTL_S
+        return head_hex
+
+    class _VAMEMiddleware(BaseHTTPMiddleware):
+        """Stamp JSON responses with VAME v1 sidecar headers.
+
+        Skips:
+          - WebSocket upgrades and Server-Sent-Event streams
+          - Non-JSON responses (HTML errors, redirects, etc.)
+          - /health (cheap liveness probe; no chain binding to add)
+          - Already-streaming responses with no readable body
+        """
+
+        async def dispatch(self, request, call_next):
+            path = request.url.path or ""
+            response = await call_next(request)
+
+            # Skip rules — keep middleware lightweight
+            if path.endswith("/health"):
+                return response
+            content_type = (response.headers.get("content-type") or "").lower()
+            if "application/json" not in content_type:
+                return response
+            if response.status_code >= 500:
+                # 5xx already an error; skip stamping to keep error pass-through clean
+                return response
+
+            # Read the response body (consumes the iterator; rebuild a fresh response)
+            body_chunks: list[bytes] = []
+            async for chunk in response.body_iterator:
+                body_chunks.append(chunk)
+            body_bytes = b"".join(body_chunks)
+
+            # Compute and attach VAME headers
+            try:
+                head_hex = _vame_get_chain_head_hex()
+                vame_headers = _vame_stamp_headers(head_hex, path, body_bytes)
+            except Exception as e:
+                log.debug("VAME stamp failed for %s: %s — passing through unstamped", path, e)
+                vame_headers = {}
+
+            # Rebuild response with original headers + VAME sidecar
+            new_headers = dict(response.headers)
+            new_headers.update(vame_headers)
+            # content-length must reflect body_bytes if Starlette set one
+            if "content-length" in new_headers:
+                new_headers["content-length"] = str(len(body_bytes))
+            return _StarletteResponse(
+                content=body_bytes,
+                status_code=response.status_code,
+                headers=new_headers,
+                media_type=response.media_type,
+            )
+
+    app.add_middleware(_VAMEMiddleware)
+
     # Phase 36: Per-instance rate limiter (not a global singleton)
     _rpm = int(getattr(cfg, "rate_limit_per_minute", 60))
     _limiter = _RateLimiter(requests_per_minute=_rpm)
@@ -7137,6 +7225,291 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             _gad_summary = await asyncio.to_thread(store.get_validation_summary, 1)
             _latest_gctx = _gad_summary.get("latest_gameplay_context")
             return {**_status, "latest_gameplay_context": _latest_gctx, "timestamp": _t235a.time()}
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 236-WATCHDOG — GET /operator/watchdog-status
+    # ------------------------------------------------------------------
+    # Read-only audit surface for the Watchdog Event Chain (WEC).
+    # Bridge reads watchdog_event_log; the watchdog itself is the only writer.
+    # Pairs with /bridge/grind-chain-status: GIC tracks cognitive sessions,
+    # WEC tracks operational continuity. Together they prove a grind run.
+    @app.get("/operator/watchdog-status")
+    async def get_watchdog_status(
+        x_api_key: str = Header(default=""),
+    ):
+        """Watchdog Event Chain status (Phase 236-WATCHDOG).
+
+        Returns (10 keys):
+          grind_session_id, chain_length, latest_wec_hash, chain_intact,
+          last_event_code, last_event_name, last_event_ts,
+          restarts_last_hour, genesis_ts, timestamp.
+        """
+        _check_read_key(x_api_key)
+        import time as _t236w
+        try:
+            _grind_sid = getattr(cfg, "grind_session_id", "")
+            _status = await asyncio.to_thread(
+                store.get_watchdog_event_chain_status, _grind_sid, 200
+            )
+            return {**_status, "timestamp": _t236w.time()}
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 236-CORPUS-SNAPSHOT — GET /agent/corpus-snapshot-status
+    # ------------------------------------------------------------------
+    # Read-only audit surface for the corpus-snapshot chain (the third
+    # pillar alongside GIC + WEC). Surfaces the latest snapshot's commitment,
+    # wiki/fleet/ratio bindings, and whether it's been anchored on-chain.
+    @app.get("/agent/corpus-snapshot-status")
+    async def get_corpus_snapshot_status(
+        x_api_key: str = Header(default=""),
+    ):
+        """Corpus snapshot status (Phase 236-CORPUS-SNAPSHOT).
+
+        Returns (10 keys): total_snapshots, latest_commitment, wiki_hash,
+        agent_root, separation_ratio, corpus_n, last_snapshot_ts,
+        on_chain_confirmed, trigger_reason, timestamp.
+        """
+        _check_read_key(x_api_key)
+        try:
+            return await asyncio.to_thread(store.get_corpus_snapshot_status)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 237-CONSENT — GET /agent/gamer-consent-status
+    # ------------------------------------------------------------------
+    # Read-only audit surface for the per-category consent ledger.
+    # Returns each of the four ConsentCategory values' current state for a
+    # given device_id. Unknown devices report all-categories-not-granted.
+    @app.get("/agent/gamer-consent-status")
+    async def get_gamer_consent_status(
+        x_api_key: str = Header(default=""),
+        device_id: str = Query(default=""),
+        category: str = Query(default=""),
+    ):
+        """Per-category consent state for a device (Phase 237-CONSENT).
+
+        Args:
+            device_id: Device identifier (required; 422 on empty).
+            category:  Optional single-category filter (TOURNAMENT_GATE etc.).
+                       If empty, returns all four categories aggregated.
+
+        Returns either a single-category status dict (when `category` is
+        provided) or a {device_id, categories: {NAME: status, ...}} dict.
+        """
+        _check_read_key(x_api_key)
+        if not device_id.strip():
+            raise HTTPException(422, "device_id query param is required")
+        try:
+            cat = category.strip() or None
+            return await asyncio.to_thread(
+                store.get_category_consent_status, device_id, cat
+            )
+        except ValueError as exc:
+            # Unknown category name → 422
+            raise HTTPException(422, str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 237-CONSENT — POST /operator/record-category-consent
+    # ------------------------------------------------------------------
+    # Operator-recorded consent that was given out-of-band (e.g. via a
+    # companion app, paper consent form digitised, etc.). Writes ONLY to
+    # the local consent_ledger; does NOT submit on-chain — on-chain consent
+    # must be msg.sender-signed by the gamer's own wallet via
+    # VAPIConsentRegistry.grantConsent() (gamer-self-sovereign invariant).
+    @app.post("/operator/record-category-consent")
+    async def record_category_consent(
+        api_key: str = Query(default=""),
+        device_id: str = Query(default=""),
+        category: str = Query(default=""),
+        ttl_s: int = Query(default=0, ge=0),
+        consent_hash: str = Query(default=""),
+        reason: str = Query(default=""),
+    ):
+        """Record per-category consent in the local consent_ledger (Phase 237-CONSENT).
+
+        Args:
+            api_key:       Must match cfg.operator_api_key (full operator auth).
+            device_id:     Device identifier (required).
+            category:      Category name (TOURNAMENT_GATE / ANONYMIZED_RESEARCH /
+                           MANUFACTURER_CERT / MARKETPLACE).
+            ttl_s:         Consent TTL seconds (0 = no expiry; advisory only at this phase).
+            consent_hash:  Optional 64-char hex from compute_consent_hash().
+            reason:        Operator-provided audit string; minimum 10 characters.
+
+        Returns:
+            row_id, device_id, category, granted (True), consent_hash, ttl_s,
+            timestamp.
+
+        DOES NOT submit on-chain. The gamer must sign grantConsent() themselves.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        if not device_id.strip():
+            raise HTTPException(422, "device_id required")
+        _reason = (reason or "").strip()
+        if len(_reason) < 10:
+            raise HTTPException(
+                422, "reason must be at least 10 characters (operator audit field)"
+            )
+        try:
+            import time as _t237r
+            row_id = await asyncio.to_thread(
+                store.grant_category_consent,
+                device_id,
+                category,
+                ttl_s,
+                consent_hash,
+                _t237r.time_ns(),
+            )
+            return {
+                "row_id":       int(row_id),
+                "device_id":    device_id,
+                "category":     category,
+                "granted":      True,
+                "ttl_s":        int(ttl_s),
+                "consent_hash": consent_hash,
+                "reason":       _reason,
+                "on_chain":     False,
+                "timestamp":    _t237r.time(),
+            }
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 237-CONSENT — POST /operator/revoke-category-consent
+    # ------------------------------------------------------------------
+    # Operator-recorded revocation. Same self-sovereignty caveat: the gamer
+    # MUST also revoke on-chain via VAPIConsentRegistry.revokeConsent() for
+    # the on-chain state to update. This endpoint updates the bridge ledger
+    # so the local consent gate begins blocking immediately.
+    @app.post("/operator/revoke-category-consent")
+    async def revoke_category_consent(
+        api_key: str = Query(default=""),
+        device_id: str = Query(default=""),
+        category: str = Query(default=""),
+        reason: str = Query(default=""),
+    ):
+        """Revoke per-category consent in the local consent_ledger (Phase 237-CONSENT).
+
+        Returns: row_updated (bool), device_id, category, reason, timestamp.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        if not device_id.strip():
+            raise HTTPException(422, "device_id required")
+        _reason = (reason or "").strip()
+        if len(_reason) < 10:
+            raise HTTPException(
+                422, "reason must be at least 10 characters (operator audit field)"
+            )
+        try:
+            import time as _t237rv
+            updated = await asyncio.to_thread(
+                store.revoke_category_consent,
+                device_id,
+                category,
+                _reason,
+            )
+            return {
+                "row_updated": bool(updated),
+                "device_id":   device_id,
+                "category":    category,
+                "reason":      _reason,
+                "on_chain":    False,
+                "timestamp":   _t237rv.time(),
+            }
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 236-CORPUS-SNAPSHOT — POST /operator/force-corpus-snapshot
+    # ------------------------------------------------------------------
+    # Operator-triggered fresh snapshot. Computes wiki_hash + reads agent root
+    # and AIT separation status NOW, builds the FROZEN v1 commitment, persists
+    # to corpus_snapshot_log. Optional on_chain_confirm (Phase 221 anchor reuse)
+    # is config-gated and not auto-fired here — the snapshot exists locally
+    # always; on-chain anchoring is a separate operator action.
+    @app.post("/operator/force-corpus-snapshot")
+    async def force_corpus_snapshot(
+        api_key: str = Query(default=""),
+        reason: str = Query(default=""),
+    ):
+        """Operator-triggered corpus snapshot (Phase 236-CORPUS-SNAPSHOT).
+
+        Args:
+            api_key: Must match cfg.operator_api_key (full operator auth, not read-only).
+            reason:  Operator-provided audit string; minimum 10 characters.
+
+        Returns:
+            Dict with row_id, snapshot_commitment, wiki_hash, agent_root,
+            separation_ratio, corpus_n, ts_ns, trigger_reason, timestamp.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        _reason = (reason or "").strip()
+        if len(_reason) < 10:
+            raise HTTPException(
+                422, "reason must be at least 10 characters (operator audit field)"
+            )
+
+        import time as _t236snap
+        from .corpus_snapshot import (
+            agent_root_from_hex,
+            compute_corpus_commitment,
+            compute_wiki_snapshot_hash,
+        )
+        # wiki_dir resolves to <project_root>/wiki — Config has wiki_dir if present,
+        # else fall back to "wiki" relative to bridge cwd.
+        _wiki_dir = getattr(cfg, "wiki_dir", "wiki")
+
+        try:
+            # Compute inputs concurrently where possible
+            wiki_hash = await asyncio.to_thread(compute_wiki_snapshot_hash, _wiki_dir)
+            pcs = await asyncio.to_thread(store.get_protocol_coherence_status)
+            ait = await asyncio.to_thread(store.get_ait_separation_status)
+
+            agent_root = agent_root_from_hex(pcs.get("latest_merkle_root"))
+            ratio = float(ait.get("separation_ratio", 0.0))
+            corpus_n = int(ait.get("n_sessions", 0))
+            ts_ns = _t236snap.time_ns()
+
+            commitment = compute_corpus_commitment(
+                wiki_hash, agent_root, ratio, corpus_n, ts_ns
+            )
+
+            row_id = await asyncio.to_thread(
+                store.insert_corpus_snapshot,
+                commitment.hex(),
+                wiki_hash.hex(),
+                agent_root.hex(),
+                ratio,
+                corpus_n,
+                ts_ns,
+                _reason,
+                False,    # on_chain_confirmed
+                "",       # tx_hash
+                "",       # ipfs_cid (deferred)
+            )
+
+            return {
+                "row_id":              int(row_id),
+                "snapshot_commitment": commitment.hex(),
+                "wiki_hash":           wiki_hash.hex(),
+                "agent_root":          agent_root.hex(),
+                "separation_ratio":    ratio,
+                "corpus_n":            corpus_n,
+                "ts_ns":               ts_ns,
+                "trigger_reason":      _reason,
+                "on_chain_confirmed":  False,
+                "timestamp":           _t236snap.time(),
+            }
+        except HTTPException:
+            raise
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 

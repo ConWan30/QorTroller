@@ -1370,6 +1370,16 @@ class Config:
     """Phase 222 — Deployed VAPIBiometricGovernance contract address on IoTeX testnet.
     Empty string = on-chain BBG proposal submission disabled."""
 
+    # --- Phase 237-CONSENT: per-category gamer consent registry ---
+    consent_registry_address: str = field(
+        default_factory=lambda: _env("CONSENT_REGISTRY_ADDRESS", "")
+    )
+    """Phase 237-CONSENT — Deployed VAPIConsentRegistry address on IoTeX testnet.
+    Empty string = on-chain consent disabled; bridge uses local consent_ledger as
+    operational truth and chain.is_consent_valid() / get_consent_record() return
+    fail-open default values (False / empty dict).  Set after deploy-phase237.js
+    runs successfully."""
+
     # --- Phase 223: PV-CI Invariant Gate ---
     pv_ci_enabled: bool = field(
         default_factory=lambda: _env("PV_CI_ENABLED", "true").lower() == "true"

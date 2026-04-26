@@ -468,6 +468,63 @@ CONTRADICTION_RULES: dict = {
             "Run: python scripts/vapi_invariant_gate.py (no --generate) to verify current digests."
         ),
     },
+
+    # Phase 237-EXTEND — CONSENT_REVOKED_BUT_DATA_FLOWING
+    # Detects GDPR Art.17 violation candidate: a device has revoked consent
+    # in consent_ledger but the records table (PoAC ingestion surface) still
+    # contains rows created AFTER the revocation timestamp. This is the
+    # cleanest cross-agent contradiction FSCA can catch — bridge says
+    # "consent revoked", PoAC ingestion says "record stored", and temporal
+    # ordering proves the record post-dates the revocation.
+    #
+    # records.created_at and consent_ledger.revoked_at are both REAL (unix
+    # epoch seconds) so direct comparison is valid.
+    "CONSENT_REVOKED_BUT_DATA_FLOWING": {
+        "query": """
+            SELECT c.device_id,
+                   c.consent_type AS category,
+                   c.revoked_at,
+                   r.record_hash AS record_hash,
+                   r.created_at  AS record_created
+            FROM consent_ledger c
+            LEFT JOIN records r
+              ON r.device_id = c.device_id
+             AND r.created_at > c.revoked_at
+            WHERE c.revoked_at IS NOT NULL
+              AND r.record_hash IS NOT NULL
+            ORDER BY c.revoked_at DESC LIMIT 5
+        """,
+        "params": lambda cfg: (),
+        "agents_involved": [
+            "bridge",
+            "BiometricPrivacyComplianceAgent",
+            "ConsentLedger",
+        ],
+        "severity": "HIGH",
+        "explanation": (
+            "Device has revoked consent (consent_ledger.revoked_at IS NOT NULL) "
+            "but PoAC record(s) appear in `records` with created_at AFTER the "
+            "revocation timestamp. Under GDPR Art.17 (right to erasure) and "
+            "BIPA, biometric data MUST stop flowing the moment consent is "
+            "withdrawn. A record post-dating the revocation is an audit-trail "
+            "anomaly: either the bridge consent gate did not block ingestion "
+            "(Phase 161 gap), or the timestamp ordering is corrupted (clock "
+            "skew / NTP backstep), or the operator manually inserted a row. "
+            "Phase 237's per-category _check_consent_gate(category=...) gate "
+            "should have prevented this."
+        ),
+        "resolution": (
+            "IMMEDIATE: trigger the Phase 160 erasure pipeline for the affected "
+            "device_id(s): call store.anonymize_device_records(device_id) to "
+            "redact the offending `records` rows. Then audit "
+            "consent_gate_violation_log for the same device_id+category pair "
+            "to confirm whether the bridge gate fired or was bypassed. If the "
+            "gate did not fire, this is a Phase 237 escape and warrants a "
+            "hotfix to ensure record-ingestion paths call _check_consent_gate. "
+            "If clock skew is suspected, verify session_adjudicator_validator "
+            "monotonicity guard."
+        ),
+    },
 }
 
 # ---------------------------------------------------------------------------

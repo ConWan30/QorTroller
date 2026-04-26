@@ -27,10 +27,47 @@
 
 ## 1. Current Phase Status
 
-**Active Phase**: Phase 235 — REAL GRIND CLEARED 2026-04-25
-**Phase Start**: 2026-04-11
-**Phase Status**: COMPLETE
-**Next Phase**: Phase 236 (TBD — user approval required)
+**Active Phase**: Phase 238 COMPLETE 2026-04-26 — MetaLearner FSCA wiring (Decision A only); inaugural autoresearch wiki loop WIF entry filed (wif_058_ps5_compat_mode_dormant)
+**Phase Start**: 2026-04-11 (Phase 235); 2026-04-26 (Phase 236 + Phase 237-CONSENT + Phase 237-EXTEND + Phase 238)
+**Phase Status**: Phase 238 COMPLETE — autoresearch cycle prompt now embeds active FSCA contradictions (severity ≥ HIGH, last 24h, resolved=0, fail-open on missing DB/table); Decision B REJECTED (eval harness immutable); Decision C DEFERRED (re-evaluate after 5+ cycles); 46 contracts LIVE; FIVE chain primitives FROZEN-v1: GIC + WEC + VAME + CORPUS-SNAPSHOT + CONSENT
+**Next Phase**: 237-ZK-SEPPROOF (Groth16 proof-of-separation-ratio without revealing biometric vectors) → 239-READINESS (W2 — gated on GIC_100); Phase 238-evaluate gate after autoresearch runs 5+ cycles with FSCA prompt-context
+**VAPIConsentRegistry**: 0xA82dB0eF0bF7D15b6400EDd4A09C0D4338C948dA (deployed 2026-04-26, gas ~0.07 IOTX, wallet ~40.36 IOTX remaining)
+
+### Grind Status (2026-04-26)
+| Key | Value |
+|-----|-------|
+| grind_session_id | grind_phase235_v1 |
+| chain_length | 16 / 100 |
+| GIC_1 stamped | YES (genesis 1777142267.69 / hash 87ce52cd…) |
+| consecutive_clean | 1 |
+| capture_state | NOMINAL |
+| host_state | EXCLUSIVE_USB |
+| poll_rate_hz | ~1152 Hz (PCC-RATE-FIX c6e64229) |
+| grind_ready | True |
+| auto_grind.py | EXISTS (scripts root — drives adjudication autonomously) |
+
+### Test Counts (2026-04-25, authoritative from CLAUDE.md)
+| Component | Delta Count | Empirical | Status |
+|-----------|-------------|-----------|--------|
+| Bridge pytest | **2,510** | ~2,565 passing | ✅ (+8 Phase 236-WATCHDOG, +8 Phase 236-VAME, +8 Phase 236-CORPUS-SNAPSHOT, +8 Phase 237-CONSENT, +1 Phase 237-EXTEND FSCA; Phase 238 added 0 bridge tests; 147 pre-existing failures: Phase 58 security + Phase 69 curator config) |
+| Autoresearch pytest | **7** | 7 | ✅ NEW Phase 238 (T238-FSCA-1, 1b, 2, 2b, 3, 3b, 3c — 0.27s) |
+| SDK pytest | **539** | 539 | ✅ +4 Phase 237-EXTEND (T237-S1..S4); Phase 238 unchanged |
+| SDK tests | **535** | 535 | ✅ PASS |
+| Hardhat tests | **502** (delta) | 522 | ✅ PASS (6 pre-existing Phase 186 failures excluded from delta) |
+| Hardware tests | 37 | — | ⚠️ HARDWARE-ONLY |
+| E2E tests | 14 | — | ⚠️ REQUIRES NODE |
+
+### Phase 236+ Plan Summary
+See `VAPI_PHASE236_PLAN.md` (created 2026-04-26). Seven components:
+1. **236-WATCHDOG** — bridge process watchdog (2h, no test delta)
+2. **236-VAME** — VAPI Application-Layer Message Envelope, Poseidon-signed responses (3h)
+3. **236-CORPUS-SNAPSHOT** — CorpusDataCuratorAgent Task 8, ZK-attested corpus snapshots (3h, +8 bridge)
+4. **237-CONSENT** — IoID consent registry + W3bstream consent-gated pipeline (4h)
+5. **237-ZK-SEPPROOF** — ZK proof of separation ratio > 1.0, Groth16 SNARK (6h)
+6. **238-MARKETPLACE** — VAPIDataMarketplace.sol, post-GIC_100 (8h)
+7. **239-READINESS** — GamerReadinessAgent (#39), Personal Readiness Dashboard, post-GIC_100 (4h, +8 bridge +4 SDK)
+
+**GIC_100 gates 238 and 239.** Grind must complete before marketplace or readiness features ship.
 
 > **SYNC NOTE**: Phases 181–198 completed 2026-04-08/11 (Autoresearch Cycles 9–28). Files synced 2026-04-11.
 
@@ -173,10 +210,10 @@ When working on VAPI:
 
 | Wallet | Address | Balance | Status |
 |--------|---------|---------|--------|
-| Active Bridge | 0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692 | ~10.4 IOTX (funded 2026-04-11) | OPERATIONAL |
+| Active Bridge | 0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692 | ~40.43 IOTX (as of 2026-04-17; post Phase 221+222 deploys) | OPERATIONAL |
 | Deploy Requirement | — | ~0.13 IOTX per contract | UNBLOCKED |
 
-**Status**: 10.4 IOTX available. All 43 contracts live. VAPISwarmOperatorGate.sol deployed Phase 130 (0x969c0F1EFb28504a95Acf14331A59FBCb2944F98).
+**Status**: ~40.43 IOTX available. All **45** contracts live (ProtocolCoherenceRegistry Phase 221 + VAPIBiometricGovernance Phase 222 — both deployed 2026-04-17). VAPISwarmOperatorGate.sol LIVE 0x969c0F1EFb28504a95Acf14331A59FBCb2944F98.
 
 ### Live Contracts (43 Total)
 
@@ -232,8 +269,8 @@ When proposing on-chain operations:
 
 | Component | Test Count | Status | Last Run |
 |-----------|------------|--------|----------|
-| Bridge pytest | **2,447** | ✅ PASS | 2026-04-25 |
-| SDK tests | 527 | ✅ PASS | 2026-04-25 |
+| Bridge pytest | **2,477** | ✅ PASS | 2026-04-25 |
+| SDK tests | 535 | ✅ PASS | 2026-04-25 |
 | Hardhat tests | 522 | ✅ PASS | 2026-04-25 |
 | Hardware tests | 37 | ⚠️ HARDWARE-ONLY | Manual |
 | E2E tests | 14 | ⚠️ REQUIRES NODE | Manual |

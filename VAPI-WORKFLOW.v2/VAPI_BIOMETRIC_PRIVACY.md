@@ -1,13 +1,17 @@
-# VAPI Biometric Privacy Architecture (Phase 148+)
+# VAPI Biometric Privacy Architecture (Phase 148+ / Phase 237 LIVE)
 ## Novel Privacy-First Enforcement for Competitive Gaming Credentials
 
-**Status**: Design Phase — Primitives BP-001 to BP-007 IMMUTABLE (defined in VAPI_INVARIANTS.md §6)  
-**Agent**: **#19 BiometricPrivacyComplianceAgent (PROPOSED — TBD)**  
-  ⚠️ NOTE: Agent #18 is now **AgentCalibrationIntegrityMonitor (ACIM)**, implemented in Phase 148.  
-  BiometricPrivacyComplianceAgent is proposed as Agent #19 (pending Phase 150+ roadmap).  
-**Last Updated**: 2026-04-03  
-**PITL Layers Affected**: L0 (privacy layer), L4 (biometric fusion), L6 (active challenge)  
-**Regulatory Scope**: GDPR Art.9, CCPA/CPRA, BIPA, EU AI Act, PIPL, LGPD  
+**Status**: BP-001 + BP-002 LIVE (Phase 159 + Phase 237) — remaining primitives DESIGN
+  - **BP-001 Temporal Biometric Decay**: BiometricPrivacyComplianceAgent (#22) Phase 159
+  - **BP-002 ZK-Attested Consent**: per-category consent + on-chain anchor LIVE Phase 237
+    - VAPIConsentRegistry deployed at `0xA82dB0eF0bF7D15b6400EDd4A09C0D4338C948dA` (IoTeX testnet, 2026-04-26)
+    - Categories FROZEN: TOURNAMENT_GATE / ANONYMIZED_RESEARCH / MANUFACTURER_CERT / MARKETPLACE
+    - Gamer-self-sovereign (msg.sender writes); bridge reads-only
+    - FSCA `CONSENT_REVOKED_BUT_DATA_FLOWING` rule detects post-revocation data flow (GDPR Art.17)
+**Agent**: **#22 BiometricPrivacyComplianceAgent** — LIVE (Phase 159)
+**Last Updated**: 2026-04-26 (Phase 237-EXTEND complete)
+**PITL Layers Affected**: L0 (privacy layer), L4 (biometric fusion), L6 (active challenge)
+**Regulatory Scope**: GDPR Art.9, Art.17 (right to erasure), CCPA/CPRA, BIPA, EU AI Act, PIPL, LGPD  
 
 ---
 

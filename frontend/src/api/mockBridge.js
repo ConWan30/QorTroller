@@ -97,17 +97,48 @@ export const MOCK = {
     timestamp: now(),
   }),
 
+  // Phase 235-AUDIT: shape now matches GET /agent/fleet-coherence-summary
+  // Both top-level (active_*) and nested (by_mode) fields populated so live and
+  // mock paths render identically through the chip.
   fleetCoherenceStatus: () => ({
     fleet_coherence_enabled: true,
-    total_entries: 4,
+    total_open: 2,
+    by_severity: { CRITICAL: 0, HIGH: 1, MEDIUM: 1, LOW: 0 },
+    by_mode:     { CONTRADICTION: 1, ORPHAN: 1, INVERSION: 0 },
+    promoted_to_wif: 0,
+    last_cycle_findings: 2,
+    last_checked_at: now(),
+    // Pre-adapted convenience fields (chip reads these directly)
     active_contradictions: 1,
     active_orphans: 1,
     active_inversions: 0,
     timestamp: now(),
-    entries: [
-      { coherence_id: 'coh_a3b2c1', rule_name: 'PER_PAIR_GAP_BLOCKER_UNRESOLVED', severity: 'HIGH', type: 'ORPHAN', created_at: now() },
-      { coherence_id: 'coh_d4e5f6', rule_name: 'RATIO_VELOCITY_NEGATIVE', severity: 'MEDIUM', type: 'ORPHAN', created_at: now() },
-    ],
+  }),
+
+  // Phase 237-EXTEND — fallback shape for useConsentStatus when bridge is offline
+  // (only used when noMock guard is removed; default hook uses noMock=true).
+  consentStatus: () => ({
+    device_id: 'mock_device',
+    categories: {
+      TOURNAMENT_GATE:     { category: 'TOURNAMENT_GATE',     granted: false, found: false, revoked: false },
+      ANONYMIZED_RESEARCH: { category: 'ANONYMIZED_RESEARCH', granted: false, found: false, revoked: false },
+      MANUFACTURER_CERT:   { category: 'MANUFACTURER_CERT',   granted: false, found: false, revoked: false },
+      MARKETPLACE:         { category: 'MARKETPLACE',         granted: false, found: false, revoked: false },
+    },
+  }),
+
+  // Phase 236-WATCHDOG — Watchdog Event Chain status (surfaces in DeveloperView)
+  watchdogStatus: () => ({
+    grind_session_id: 'grind_phase235_v1',
+    chain_length: 3,
+    latest_wec_hash: 'cafebabedeadbeef' + Math.random().toString(16).slice(2, 50),
+    chain_intact: true,
+    last_event_code: 0x02,
+    last_event_name: 'BRIDGE_HEALTHY',
+    last_event_ts: Date.now() / 1000 - 30,
+    restarts_last_hour: 0,
+    genesis_ts: Date.now() / 1000 - 1800,
+    timestamp: now(),
   }),
 
   // Phase 235-DASH-UPGRADE — auto-trigger telemetry mock (off by default

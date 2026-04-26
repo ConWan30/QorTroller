@@ -105,22 +105,23 @@ def _parse_claude_md() -> dict:
     s["phase_num"] = m.group(1) if m else "207"
     s["phase"] = f"{s['phase_num']} COMPLETE"
 
-    # Test counts: "Bridge: 2252 passing. Contract: 482. SDK: 448. Hardware: 37. E2E: 14."
+    # Test counts: "Bridge: 2510 passing. Contract: 528. SDK: 539." (Phase 237-EXTEND, 2026-04-26)
+    # Fallbacks used only when CLAUDE.md parse fails — updated to current truth.
     m = _re.search(r"Bridge:\s*(\d+)\s*passing", text)
-    s["bridge"] = int(m.group(1)) if m else 2252
+    s["bridge"] = int(m.group(1)) if m else 2510
     m = _re.search(r"Contract:\s*(\d+)", text)
-    s["hardhat"] = int(m.group(1)) if m else 482
+    s["hardhat"] = int(m.group(1)) if m else 528
     m = _re.search(r"SDK:\s*(\d+)", text)
-    s["sdk"] = int(m.group(1)) if m else 448
+    s["sdk"] = int(m.group(1)) if m else 539
     m = _re.search(r"Hardware:\s*(\d+)", text)
     s["hardware"] = int(m.group(1)) if m else 37
     m = _re.search(r"E2E:\s*(\d+)", text)
     s["e2e"] = int(m.group(1)) if m else 14
     s["total_ci"] = s["bridge"] + s["hardhat"] + s["sdk"]
 
-    # Contracts: "43 contracts ALL LIVE on testnet"
+    # Contracts: "46 contracts ALL LIVE on testnet" (Phase 237-EXTEND deploy)
     m = _re.search(r"(\d+)\s+contracts\s+ALL\s+LIVE", text)
-    s["contracts_live"] = int(m.group(1)) if m else 43
+    s["contracts_live"] = int(m.group(1)) if m else 46
 
     # Agent count: max across both signal sources — "agents N→M" transitions
     # and explicit "agent #N" references. Either alone misses recent phases:
@@ -243,15 +244,15 @@ async def vapi_protocol_state(**_):
     # Parse CLAUDE.md for current state — auto-refreshes when file changes (every phase)
     s = _parse_claude_md()
     state = {
-        "phase": s.get("phase", "207 COMPLETE"),
+        "phase": s.get("phase", "238 COMPLETE"),  # Phase 238 fallback (MetaLearner FSCA wiring; Decision A only)
         "timestamp": datetime.utcnow().isoformat() + "Z",
         "test_counts": {
-            "bridge":   s.get("bridge",   2252),
-            "sdk":      s.get("sdk",       448),
-            "hardhat":  s.get("hardhat",   482),
+            "bridge":   s.get("bridge",   2510),  # Phase 237-EXTEND fallback
+            "sdk":      s.get("sdk",       539),  # +4 SDK Phase 237-EXTEND
+            "hardhat":  s.get("hardhat",   528),  # +6 Phase 237 core
             "hardware": s.get("hardware",   37),
             "e2e":      s.get("e2e",        14),
-            "total_ci": s.get("total_ci", 3182),
+            "total_ci": s.get("total_ci", 3577),  # 2510+539+528
         },
         "separation_ratio": {},
         "l4_thresholds": {},
@@ -348,7 +349,7 @@ async def vapi_protocol_state(**_):
     }
 
     state["contracts"] = {
-        "total_live": s.get("contracts_live", 43),
+        "total_live": s.get("contracts_live", 46),  # Phase 237-EXTEND deploy
         "network": "IoTeX Testnet 4690",
         "key_addresses": {
             "AdjudicationRegistry":    "0x44CF981f46a52ADE56476Ce894255954a7776fb4",
@@ -358,13 +359,16 @@ async def vapi_protocol_state(**_):
             "SeparationRatioRegistry": "0xB39CeE732cf91c93539Bd064D9426642a095a026",
             "VHPReenrollmentBadge":    "0x42E7A25d0E5667BBae45e5cF33a6e2CC6E42d45C",
             "GateAttestationAnchor":   "0xA39d00D3FF8C579840Fa02C01Adf06162630a449",
+            "ProtocolCoherenceRegistry": "0xfAfe4E8BEE45be22836b90D542045510dDd927Dd",  # Phase 221
+            "VAPIBiometricGovernance": "0x06782293F1CFC1AA30C0Baee0437c2B336796A00",   # Phase 222
+            "VAPIConsentRegistry":     "0xA82dB0eF0bF7D15b6400EDd4A09C0D4338C948dA",   # Phase 237-EXTEND (2026-04-26)
             "ZK_ceremony_beacon":      "IoTeX block #41723255"
         },
         "wallet": s.get("wallet", "0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692"),
     }
 
     state["agent_fleet"] = {
-        "total": s.get("agents", 36),
+        "total": s.get("agents", 38),  # Phase 235 fleet
         "note": f"Fleet size read from CLAUDE.md (auto-synced). Bridge offline — live agent status unavailable.",
         "key_agents": {
             "16": "TournamentActivationChainAgent (auto_activate=False PERMANENT)",
@@ -778,15 +782,16 @@ async def vapi_sync_memory(write_file=True, **_):
     ratio_data = state.get("separation_ratio", {})
     now = datetime.utcnow().strftime("%Y-%m-%d")
 
-    phase_num  = s.get("phase_num", "207")
-    bridge     = s.get("bridge",    2252)
-    sdk        = s.get("sdk",        448)
-    hardhat    = s.get("hardhat",    482)
+    # Phase 237-EXTEND fallbacks (2026-04-26)
+    phase_num  = s.get("phase_num", "237-EXTEND")
+    bridge     = s.get("bridge",    2510)
+    sdk        = s.get("sdk",        539)
+    hardhat    = s.get("hardhat",    528)
     hardware   = s.get("hardware",    37)
     e2e        = s.get("e2e",         14)
-    total_ci   = s.get("total_ci",  3182)
-    agents     = s.get("agents",      36)
-    contracts  = s.get("contracts_live", 43)
+    total_ci   = s.get("total_ci",  3577)
+    agents     = s.get("agents",      38)
+    contracts  = s.get("contracts_live", 46)
     l4_anom    = s.get("l4_anomaly",  7.009)
     l4_cont    = s.get("l4_continuity", 5.367)
     tr_ratio   = s.get("tremor_resting_ratio",  1.177)
@@ -1262,9 +1267,9 @@ async def vapi_autoresearch_seed(priority: str = "", cycle_num: int = 0, **_):
             "corpus_tremor_resting": f"P1=9/P2=6/P3=12 — N=27; P1vP3=0.032 structural blocker",
             "tge_blockers": ["all_pairs_p0_ok=False(P1vP3)", "dry_run=True", "l4_stale", "no_audit", "wif039_open"],
             "l4_stale": "12-feat calibration on 13-feat live (N=127 candidate: 6.613/5.143)",
-            "phase": _s.get("phase", "207 COMPLETE"),
-            "agents": _s.get("agents", 36),
-            "contracts": _s.get("contracts_live", 43),
+            "phase": _s.get("phase", "237-EXTEND TRULY COMPLETE"),
+            "agents": _s.get("agents", 38),
+            "contracts": _s.get("contracts_live", 46),
             "epistemic": "threshold=0.65 (Phase 147 hardened); triage_prereq_required=True",
             "staged_graduation": "Phase 207 COMPLETE; staged_graduation_enabled=False pending all_pairs_p0_ok",
         },

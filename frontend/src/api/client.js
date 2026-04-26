@@ -1,6 +1,11 @@
 // VAPI API client — every fetch goes through here
 // W1 fix (Phase 224): attaches x-api-key header on every request
 // Key is read from VITE_VAPI_API_KEY env var — never inlined as a string literal
+// Phase 236-VAME: every JSON response is validated against the X-VAME-Commitment
+// sidecar header so a MITM that mutates the body but can't forge the GIC-bound
+// commitment is detected at the application layer.
+
+import { validateVame } from './vame'
 
 const _key = import.meta.env.VITE_VAPI_API_KEY
 
@@ -40,7 +45,15 @@ export async function apiGet(path, options = {}) {
   if (res.status === 503 || res.status === 502 || res.status === 504) throw new BridgeOfflineError()
   if (!res.ok) throw new BridgeOfflineError()
 
-  return res.json()
+  // Phase 236-VAME: validate the sidecar commitment BEFORE parsing JSON.
+  // Read the body once as ArrayBuffer (so VAME can hash the exact bytes the
+  // server signed), then parse the same buffer as JSON. Browser caches handle
+  // the second read efficiently; we never refetch.
+  const bodyBuf  = await res.arrayBuffer()
+  const bodyView = new Uint8Array(bodyBuf)
+  // VAME validation runs but never throws — failures surface via vameFailureCount()
+  await validateVame(res.headers, path, bodyView)
+  return JSON.parse(new TextDecoder('utf-8').decode(bodyView))
 }
 
 export async function apiPost(path, body, options = {}) {

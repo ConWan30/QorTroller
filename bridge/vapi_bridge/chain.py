@@ -3161,3 +3161,99 @@ class ChainClient:
             abi=_ABI,
         )
         return bool(await contract.functions.isProposed(_hash_bytes).call())
+
+    # --- Phase 237-CONSENT: VAPIConsentRegistry view calls ---
+    #
+    # Both methods FAIL-OPEN when consent_registry_address is unset:
+    #   is_consent_valid()  → False
+    #   get_consent_record() → empty dict
+    # This deliberately diverges from the bbg_/dual_/swarm_ pattern (which
+    # raises RuntimeError on missing address). The reason: the bridge is a
+    # READER of consent state, not a writer; a missing on-chain registry
+    # should not block the bridge from operating against the local
+    # consent_ledger (Phase 160) which is the operational truth until deploy.
+
+    _CONSENT_REGISTRY_ABI = [
+        {
+            "name": "isConsentValid",
+            "type": "function",
+            "stateMutability": "view",
+            "inputs": [
+                {"name": "gamer",    "type": "address"},
+                {"name": "category", "type": "uint8"},
+            ],
+            "outputs": [{"name": "", "type": "bool"}],
+        },
+        {
+            "name": "getConsentRecord",
+            "type": "function",
+            "stateMutability": "view",
+            "inputs": [
+                {"name": "gamer",    "type": "address"},
+                {"name": "category", "type": "uint8"},
+            ],
+            "outputs": [
+                {"components": [
+                    {"name": "consentHash", "type": "bytes32"},
+                    {"name": "grantedAt",   "type": "uint64"},
+                    {"name": "expiresAt",   "type": "uint64"},
+                    {"name": "revoked",     "type": "bool"},
+                ], "name": "", "type": "tuple"},
+            ],
+        },
+    ]
+
+    async def is_consent_valid(self, gamer_address: str, category: int) -> bool:
+        """Query VAPIConsentRegistry.isConsentValid(address, uint8) — Phase 237 view (no gas).
+
+        Returns True iff the gamer has granted the category, it has not been
+        revoked, and (if expiresAt != 0) the expiry has not yet passed.
+
+        Fail-open: returns False when consent_registry_address is unset (no
+        registry deployed yet) — caller must check the local consent_ledger
+        as the operational truth.
+        """
+        addr = getattr(self._cfg, "consent_registry_address", "")
+        if not addr:
+            return False
+        try:
+            contract = self._w3.eth.contract(
+                address=self._w3.to_checksum_address(addr),
+                abi=self._CONSENT_REGISTRY_ABI,
+            )
+            checksum_gamer = self._w3.to_checksum_address(gamer_address)
+            return bool(await contract.functions.isConsentValid(
+                checksum_gamer, int(category)
+            ).call())
+        except Exception as e:
+            log.debug("is_consent_valid call failed: %s", e)
+            return False
+
+    async def get_consent_record(self, gamer_address: str, category: int) -> dict:
+        """Query VAPIConsentRegistry.getConsentRecord(address, uint8) — Phase 237 view.
+
+        Returns dict {consent_hash_hex, granted_at, expires_at, revoked} or
+        empty dict on missing record / unset address. Empty dict means
+        "no on-chain consent state" — caller should check local consent_ledger.
+        """
+        addr = getattr(self._cfg, "consent_registry_address", "")
+        if not addr:
+            return {}
+        try:
+            contract = self._w3.eth.contract(
+                address=self._w3.to_checksum_address(addr),
+                abi=self._CONSENT_REGISTRY_ABI,
+            )
+            checksum_gamer = self._w3.to_checksum_address(gamer_address)
+            tup = await contract.functions.getConsentRecord(
+                checksum_gamer, int(category)
+            ).call()
+            return {
+                "consent_hash_hex": tup[0].hex() if isinstance(tup[0], (bytes, bytearray)) else str(tup[0]),
+                "granted_at":       int(tup[1]),
+                "expires_at":       int(tup[2]),
+                "revoked":          bool(tup[3]),
+            }
+        except Exception as e:
+            log.debug("get_consent_record call failed: %s", e)
+            return {}

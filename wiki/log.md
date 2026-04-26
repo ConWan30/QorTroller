@@ -84,3 +84,9 @@ Format: timestamp | operation | pages | provenance | outcome
 2026-04-18T16:06:58.226719+00:00 | SNAPSHOT | wiki\snapshots.md | [SNAPSHOT:f693291adc90] | pages=73, anchor=anchor_failed (<urlopen error [WinError 10061] No conne)
 2026-04-18T16:09:00.534880+00:00 | SNAPSHOT | wiki\snapshots.md | [SNAPSHOT:97661ee9753c] | pages=73, anchor=anchor_failed (HTTP Error 404: Not Found)
 2026-04-20T01:02:00.502106+00:00 | SNAPSHOT | C:\Users\Contr\vapi-pebble-prototype\wiki\snapshots.md | [SNAPSHOT:ef6e3c3579ca] | pages=73, anchor=anchor_failed (<urlopen error [WinError 10061] No conne)
+2026-04-26T17:28:41.682496+00:00 | BRIEF | C:\Users\Contr\vapi-pebble-prototype\wiki\briefs\brief_MEMORY.md_238.md | [VAPI:Phase238:MEMORY.md:MEASURED] | domains=1, violations=0
+2026-04-26T17:28:41.714562+00:00 | BRIEF | C:\Users\Contr\vapi-pebble-prototype\wiki\briefs\brief_VAPI_WHAT_IF.md_238.md | [VAPI:Phase238:VAPI_WHAT_IF.md:MEASURED] | domains=8, violations=2
+2026-04-26T17:28:44.323225+00:00 | SNAPSHOT | C:\Users\Contr\vapi-pebble-prototype\wiki\snapshots.md | [SNAPSHOT:a458a0e7b7ef] | pages=80, anchor=anchor_failed (HTTP Error 404: Not Found)
+2026-04-26T17:28:44.334878+00:00 | SYNC_WHAT_IF | C:\Users\Contr\vapi-pebble-prototype\vapi-autoresearch\vapi_eval_harness.py | [VAPI:Phase237:VAPI_WHAT_IF.md:MEASURED] | 15 W1 entries synced to harness WIKI_KNOWN_W1
+2026-04-26T17:28:44.473283+00:00 | AR_FEED | C:\Users\Contr\vapi-pebble-prototype\vapi-autoresearch\experiments\log.jsonl | [VAPI:Phase237:vapi_wiki_engine.py:MEASURED] | gaps=43, ratio=None
+2026-04-26T17:28:55.217374+00:00 | SNAPSHOT | C:\Users\Contr\vapi-pebble-prototype\wiki\snapshots.md | [SNAPSHOT:813997b82c09] | pages=80, anchor=anchor_failed (HTTP Error 404: Not Found)

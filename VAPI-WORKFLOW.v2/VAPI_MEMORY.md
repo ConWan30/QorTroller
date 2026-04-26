@@ -28,6 +28,249 @@
 
 ## 1. Session Outcomes (Chronological, Newest First)
 
+### 2026-04-26: Phase 237-EXTEND COMPLETE — Phase 237 TRULY COMPLETE (6 honest additions shipped)
+
+**What was done** — six extensions to declare Phase 237 truly complete (not "core shipped, deferrals deferred"):
+
+A. **VAPIConsentRegistry deployed**: `0xA82dB0eF0bF7D15b6400EDd4A09C0D4338C948dA` on IoTeX testnet. Gas ~0.07 IOTX. Smoke calls (owner / totalGrants=0 / ioidRegistry=unset) all passed. bridge/.env CONSENT_REGISTRY_ADDRESS set; frontend/.env.local VITE_CONSENT_REGISTRY_ADDRESS set; deployed-addresses.json updated with `_phase237_status: deployed` marker.
+
+B. **W3bstream applet forward-compat stub**: `validate_poac_record.ts` extended with Phase 237-EXTEND consent-routing layer — top-of-file architectural comment block documenting routing matrix (TOURNAMENT_GATE=hard / ANONYMIZED_RESEARCH+MARKETPLACE=soft); return codes 4 (consent-absent hard refuse) / 5 (soft refuse routing skipped); `_check_consent_view()` helper with placeholder selector `0xCAFE0237` matching existing `0xDEADBEEF` stub-style; PLACEHOLDER ABI WARNING explicit. Documented architecture in code; ships when applet pipeline phase lands separately.
+
+C. **Frontend first-of-its-kind wallet-write**: `<WagmiProvider>` wired into `main.jsx` around `<QueryClientProvider>` (FIRST wagmi-write in this codebase). New `frontend/src/hooks/useConsentSubmit.js` (wagmi `useWriteContract` wrapper, inline 3-method ABI, CATEGORY_TO_UINT8 map, `ready=false` fail-open when address unset). `useConsentStatus(deviceId, category)` added to `api/bridgeApi.js` with `noMock: true`. New `frontend/src/components/ConsentPanel.jsx` (~260 LOC, mirrors PCCDrawer pattern, right-edge drawer offset top:50%+110px so it sits below PCC handle, slide-in 320px, wallet-connect via useConnect/useDisconnect, 4 ToggleRows with disclosure copy, contract-address transparency footer, error surface, refetch-after-tx pattern). Mounted in GamerView next to PCCDrawer. `npm run build` passes.
+
+D. **SDK Python `VAPIConsent` client class**: `GamerConsentResult @dataclass(slots=True)` with 8 slots; handles BOTH aggregated and single-category response shapes; `VAPIConsent.get_status(device_id, category="")` urllib pattern matching Phase 222 verbatim; never raises (returns Result(error=...) on any HTTP failure). Inserted after Phase 222 block in `sdk/vapi_sdk.py`.
+
+E. **OpenAPI 3.0.0-phase237**: version bumped 204→237 (33 phases caught up); 3 new paths (`/agent/gamer-consent-status` GET with category enum filter, `/operator/record-category-consent` POST with reason ≥10 chars + on_chain:false, `/operator/revoke-category-consent` POST mirror); 4 new schemas (`GamerConsentStatus` aggregated + `ConsentCategoryStatus` single + `CategoryConsentRecordResult` + `CategoryConsentRevokeResult`); paths=160, schemas=129; YAML parses cleanly via `yaml.safe_load`.
+
+F. **FSCA `CONSENT_REVOKED_BUT_DATA_FLOWING`**: pure data-add to `CONTRADICTION_RULES` in `fleet_signal_coherence_agent.py` (24 → 25 rules). LEFT JOIN `consent_ledger` ← `records` on device_id with `revoked_at IS NOT NULL AND records.created_at > revoked_at`. severity=HIGH GDPR Art.17 violation candidate. agents_involved=[bridge, BiometricPrivacyComplianceAgent, ConsentLedger]. resolution cites Phase 160 `anonymize_device_records` erasure pipeline. T237-CONSENT-9 test seeds revoked consent + post-revocation `records` row, runs `agent._check_contradictions()` via asyncio.get_event_loop().run_until_complete, asserts the rule fired.
+
+**Test counts**: Bridge 2509→2510 (+1) | SDK 535→539 (+4 T237-S1..S4) | Hardhat 528 unchanged | Contracts 45 LIVE → **46 LIVE** | Wallet ~40.43 → ~40.36 IOTX (0.17% spent).
+
+**What we learned**:
+- I was wrong to defer the deploy in the original plan. Wallet 40.43 IOTX vs 0.07 IOTX gas is a 570x ratio. The "isolate code-shipping risk from on-chain risk" framing was conservative theatre. Deploy worked first try, all smoke calls passed, no rollback needed.
+- I was wrong to call W3bstream applet extension "theatre". Adding the consent-routing branch to a placeholder-ABI stub is **preparation**, not theatre — when the applet pipeline phase lands, the consent enforcement is built in, not bolted on. Same convention as the existing `0xDEADBEEF` selector pattern.
+- `ait_session_log` does NOT have `player_id` — it stores per-analysis snapshots with `n_per_player_json` aggregate. The proper "data flowing" surface for the FSCA rule is `records` (the PoAC ingestion table). Always re-verify table schema assumptions in plan-mode rather than trusting the earlier plan's SQL.
+- WagmiProvider must wrap OUTSIDE QueryClientProvider per wagmi v2 docs so its internal queries reuse the same client. Wrong order silently produces double-mounted query clients.
+- ConsentPanel handle position offset (top: calc(50% + 110px)) avoids overlap with PCCDrawer's middle handle — small detail but the user-visible difference between "two handles" vs "one handle clipping the other".
+
+**Pattern identified [PATTERN-018]**: VAPI extension-completion accountability
+1. Original plan justified three deferrals as "honest scope". Two were conservative theatre.
+2. The phase was declared "shipped" while half-true. User pushed back on the deferrals.
+3. Re-examination identified six honest gaps (3 deferrals + 3 unmentioned: SDK, OpenAPI, FSCA).
+4. Extension closed all six in ~3-4h with zero new risk.
+5. **Lesson**: when in doubt about whether a "deferral" is legitimate scope-cut or unconscious caution, default to including it. The cost of inclusion is bounded; the cost of exclusion compounds across phases (Phase 238 inherits a half-built Phase 237).
+
+Phase 237 TRULY COMPLETE. Five FROZEN-v1 pillars live. Next: **237-ZK-SEPPROOF** (the harder Groth16 publishable primitive) — prerequisite for Phase 239 readiness with privacy.
+
+---
+
+### 2026-04-26: Phase 237-CONSENT COMPLETE — fifth FROZEN-v1 pillar (per-category gamer consent)
+
+**What was done**:
+- `bridge/vapi_bridge/consent_categories.py` NEW — fifth FROZEN-v1 cryptographic primitive, parallel to grind_chain.py / watchdog_chain.py / vame.py / corpus_snapshot.py.
+  - `compute_consent_hash(device, categories|bitmask, expires_at, ts_ns)` v1: SHA-256(b"VAPI-CONSENT-v1"(15) || dev_b32 || bitmask_be(4) || expires_be(8) || ts_ns_be(8)) = 67B → 32B
+  - `ConsentCategory` IntEnum: TOURNAMENT_GATE=0 / ANONYMIZED_RESEARCH=1 / MANUFACTURER_CERT=2 / MARKETPLACE=3 — position-frozen to match on-chain enum
+  - `categories_to_bitmask` / `bitmask_to_categories` round-trip with uint32 overflow guard
+  - `device_id_to_bytes32()` accepts hex (canonical) / raw 32B / freeform string (SHA-256 fallback for tests)
+- `bridge/vapi_bridge/store.py`:
+  - `_check_consent_gate()` extended with `category=None` default (Phase 161 backward-compat preserved exactly)
+  - 3 thin helpers: `grant_category_consent` / `revoke_category_consent` / `get_category_consent_status` wrap existing Phase 160 primitives — ZERO schema churn (UNIQUE(device_id, consent_type) handles per-category UPSERT natively)
+- `bridge/vapi_bridge/config.py`: `consent_registry_address` field with CONSENT_REGISTRY_ADDRESS env
+- `bridge/vapi_bridge/chain.py`: `is_consent_valid` + `get_consent_record` view methods FAIL-OPEN when address unset (deliberate divergence from bbg_/dual_/swarm_ which raise — bridge is reader of consent, not writer)
+- `bridge/vapi_bridge/operator_api.py`:
+  - `GET /agent/gamer-consent-status?device_id=...&category=...` (read-only; aggregated all-four when no category filter)
+  - `POST /operator/record-category-consent` (full operator auth + reason ≥10 chars; writes ONLY local consent_ledger; never on-chain — gamer-self-sovereign)
+  - `POST /operator/revoke-category-consent` (mirror revoke endpoint)
+- `contracts/contracts/VAPIConsentRegistry.sol` NEW: Phase 222 pattern (Ownable + ReentrancyGuard, anti-replay _recordedHashes, zero-hash + bad-category + double-revoke + no-consent-to-revoke guards, CEI, indexed events)
+  - `enum ConsentCategory` + `struct ConsentRecord(consentHash, grantedAt, expiresAt, revoked)`
+  - `mapping(address => mapping(uint8 => ConsentRecord)) _consents` — gamer (msg.sender) writes, bridge reads
+  - `grantConsent(category, expiresAt, consentHash)` / `revokeConsent(category)` gamer-only
+  - `isConsentValid` / `getConsentRecord` views with expiresAt check
+  - `setIoIDRegistry(addr)` onlyOwner with zero-address guard — optional Phase 55 composition
+- `contracts/scripts/deploy-phase237.js` NEW (NOT executed; reviewed for correctness)
+- `bridge/tests/test_phase237_consent.py`: 8 tests T237-CONSENT-1..8 all passing 17.0s
+- `contracts/test/Phase237.test.js`: 6 tests T237-HH-1..6 all passing 8s
+- 4 new Hard Rules in CLAUDE.md (formula FROZEN, gamer-self-sovereign invariant, fail-open chain views, position-frozen enum)
+
+**Test counts**: Bridge 2501→2509 (+8) | SDK 535 unchanged | Hardhat 522→528 (+6) | Contracts 45 LIVE + 1 code-complete (deploy deferred)
+
+**What we learned**:
+- Phase 160-164 pre-designed for category extension via `consent_ledger.UNIQUE(device_id, consent_type)` — by setting consent_type to a category name (e.g. "TOURNAMENT_GATE") instead of "biometric_processing", per-category UPSERT works without ANY schema change. This is the cleanest possible extension. The architectural foresight in Phase 160 paid back fully here.
+- `_check_consent_gate` had only ONE call site — backward-compat via `category=None` default is trivially safe. Aggressive surface analysis BEFORE adding a new param saved an hour of regression checking.
+- Hardhat `evm_increaseTime` + `evm_mine` is the canonical way to test on-chain expiry; T237-HH-4 uses it correctly.
+- VAPI `chain.py` pattern for new on-chain functions has TWO valid styles: raise-on-missing-address (bbg/dual/swarm — all writers) vs return-default (Phase 237 readers). Document the distinction explicitly so future readers don't mistake the inconsistency for a bug.
+
+**Pattern identified [PATTERN-017]**: VAPI five-pillar FROZEN-v1 cryptographic primitive family
+1. **GIC v1** — per-session cognitive integrity (Phase 235-A; one hash per count-eligible session)
+2. **WEC v1** — per-restart operational integrity (Phase 236-WATCHDOG; one hash per bridge lifecycle event)
+3. **VAME v1** — per-response HTTP integrity (Phase 236-VAME; one commitment per JSON response)
+4. **CORPUS-SNAPSHOT v1** — per-snapshot corpus integrity (Phase 236-CORPUS-SNAPSHOT; wiki + fleet + ratio + N + ts_ns)
+5. **CONSENT v1** — per-(gamer, category) privacy commitment (Phase 237-CONSENT; device + bitmask + expiry + ts_ns)
+
+All five: SHA-256, big-endian byte order, explicit domain tag (`VAPI-{NAME}-v{N}`), input range validation, integer encoding for variable-length floats/ratios, FROZEN at v1 with documented v2 path. Reviewers learn the pattern once. Together they cover: cognitive (GIC) + operational (WEC) + HTTP (VAME) + corpus (CORPUS-SNAPSHOT) + privacy (CONSENT) integrity surfaces. PATTERN-017 supersedes PATTERN-016 (which only listed three pillars; this is the canonical five-pillar form).
+
+Phase 237-CONSENT complete. Next: **237-ZK-SEPPROOF** (the harder phase: Groth16 SNARK proves separation_ratio>1.0 AND all_pairs_above_1=True without revealing biometric vectors — publishable scientific primitive, ~6h, prerequisite for Phase 239 readiness done with privacy).
+
+---
+
+### 2026-04-26: Phase 236-CORPUS-SNAPSHOT COMPLETE — third chain pillar shipped
+
+**What was done**:
+- `bridge/vapi_bridge/corpus_snapshot.py` NEW — CORPUS-SNAPSHOT FROZEN FORMULA v1 (parallel to grind_chain.py / watchdog_chain.py / vame.py).
+  - `commitment = SHA-256(b"VAPI-CORPUS-SNAPSHOT-v1"(23) || wiki_hash(32) || agent_root(32) || ratio_milli_be(8) || corpus_n_be(8) || ts_ns_be(8))` = 111B → 32B
+  - `compute_wiki_snapshot_hash()` walks `wiki/**/*.md` sorted by POSIX-lowercase rel path; explicit per-file `b"--FILE:" + path + b"\n"` separator catches renames AND content edits
+  - Ratio encoded as uint64 milliratio (×1e6 rounded) for OS-deterministic byte encoding regardless of float64 representation
+- `bridge/vapi_bridge/store.py`: `corpus_snapshot_log` table (Phase 236 migration; UNIQUE INDEX on snapshot_commitment for idempotency); `insert_corpus_snapshot()` returns existing row id on UNIQUE collision (duplicate triggers no-op); `get_corpus_snapshot_status()` 10-key latest summary; `get_corpus_snapshot_history(limit)` DESC ts_ns
+- `bridge/vapi_bridge/operator_api.py`: `GET /agent/corpus-snapshot-status` (read-only) + `POST /operator/force-corpus-snapshot` (full operator auth + reason ≥10 chars audit gate; computes wiki hash from cfg.wiki_dir, reads agent root from get_protocol_coherence_status(), reads ratio + N from get_ait_separation_status())
+- `bridge/tests/test_phase236_corpus_snapshot.py`: 8 tests T236-SNAP-1..8 all passing 4.7s
+- End-to-end smoke verified: live wiki/ tree hashes deterministically; 422 on short reason; 403 on wrong key; VAME headers stamped on snapshot endpoint too
+- 4 new Hard Rules in CLAUDE.md (formula FROZEN, reason gate, on-chain config-gating, three-pillar pairing — GIC+WEC+CORPUS-SNAPSHOT must never break)
+
+**Test counts**: Bridge 2493→2501 (+8) | SDK 535 unchanged | Hardhat 522 unchanged | Contracts 45
+
+**What we learned**:
+- `Config` is a frozen dataclass — must use `dataclasses.replace(Config(), ...)` not `cfg.x = y` for tests
+- `Config()` doesn't have a `wiki_dir` field; the endpoint `getattr(cfg, "wiki_dir", "wiki")` lets the default flow through without breaking. Adding `wiki_dir` to Config was unnecessary scope.
+- `dataclasses.replace()` with unrecognised kwarg raises TypeError immediately — useful for catching API drift in tests
+- Windows console default cp1252 encoding can't print arrow chars; smoke scripts need `PYTHONIOENCODING=utf-8` or ASCII-only output
+- Float ratios MUST be encoded deterministically (uint64 milliratio). Two machines computing the same `1.199 * 1_000_000` get the exact same int; their `struct.pack(">d", 1.199)` could diverge in lowest mantissa bits across float libraries. Always integer-encode for cross-platform commitment hashes.
+
+**Pattern identified [PATTERN-016]**: VAPI three-pillar provenance pattern
+1. **GIC v1** — per-session cognitive integrity (Phase 235-A; one hash per count-eligible session)
+2. **WEC v1** — per-restart operational integrity (Phase 236-WATCHDOG; one hash per bridge lifecycle event)
+3. **CORPUS-SNAPSHOT v1** — per-snapshot corpus integrity (Phase 236-CORPUS-SNAPSHOT; one hash per wiki+fleet+ratio+N+ts_ns tuple)
+
+All three: SHA-256, big-endian byte order, explicit domain tag (`VAPI-{NAME}-v{N}`), monotonicity guard, FROZEN at v1. Together they prove "what" (sessions = GIC), "how" (operational continuity = WEC), and "where" (corpus state at snapshot time = CORPUS-SNAPSHOT) for any grind run reviewed at any later date.
+
+Phase 236 complete. Next: 237-CONSENT + 237-ZK-SEPPROOF (Groth16 proof-of-separation-ratio without revealing biometric vectors).
+
+---
+
+### 2026-04-26: Phase 236-VAME COMPLETE — Application-Layer Message Envelope
+
+**What was done**:
+- `bridge/vapi_bridge/vame.py` NEW — VAME FROZEN FORMULA v1 (sidecar header design)
+- `compute_vame_commitment(chain_head, ts_ns, endpoint, body_bytes)` SHA-256 binding
+- `_VAMEMiddleware` (Starlette BaseHTTPMiddleware) stamps every JSON response; skips /health, non-JSON, 5xx, websocket upgrades
+- Chain-head 5s cache keeps middleware off SQLite hot path
+- `transports/http.py` CORS `expose_headers` extended with all 5 X-VAME-* keys
+- `frontend/src/api/vame.js` NEW — Web Crypto SHA-256 recompute; mismatches bump `sessionStorage.__vapiVameFailures`; never throws
+- `frontend/src/api/client.js` apiGet reads body via `arrayBuffer` first, validates VAME, then JSON-parses (exact byte-fidelity)
+- Body wire format UNCHANGED → zero breakage with existing readers
+- 8 tests T236-VAME-1..8 all passing
+- End-to-end smoke confirmed live commitment matches frontend recompute
+
+**Gamer dashboard audit (closed atomically)**:
+- HIGH: useFleetCoherenceStatus called /agent/fleet-coherence-status (404; bridge defines /agent/fleet-coherence-summary). COHERENCE chip silently rendered mock data unconditionally. Fixed: corrected path + by_mode → active_* adapter + noMock guard
+- MEDIUM: 3 grind-critical hooks lacked noMock — transient 5xx silently swapped fabricated values into dashboard mid-grind. Fixed: noMock added to useAITSeparation, useGrindAnalytics, usePCCIntelligence; MOCK-ACTIVE banner added to GamerView
+- LOW: stale "P0 fix" comment in GamerView claimed consecutive_clean is the true grind metric while code uses chain_length as bar primary. Comment rewritten to accurately describe dual-metric semantics
+- Validated as CORRECT: consecutive_clean=0 vs chain_length=20 disparity is the correct semantic behavior
+
+**Test counts**: Bridge 2485→2493 (+8) | SDK 535 unchanged | Hardhat 522 unchanged
+
+---
+
+### 2026-04-26: Phase 236-WATCHDOG COMPLETE — bridge supervisor + Watchdog Event Chain (WEC)
+
+**What was done**:
+- `bridge/vapi_bridge/watchdog_chain.py` NEW — WEC FROZEN FORMULA v1 parallel to grind_chain.py
+  - `WEC_N = SHA-256(prev(32) || event_code(1) || pid_be(4) || sid_hash(16) || ts_ns_be(8))` = 61B → 32B
+  - Genesis tag `VAPI-WEC-GENESIS-v1`; sid_hash = SHA-256(grind_session_id)[:16]
+  - 9 EVENT_CODES (BRIDGE_START 0x01 through WATCHDOG_HALT 0xFF)
+- `bridge/vapi_bridge/store.py` — `watchdog_event_log` table (idempotent, schema_versions(236)) + 3 helpers:
+  - `insert_watchdog_event()` — monotonicity guard bumps ts_ns ≤ prev to prev+1
+  - `get_prev_watchdog_event_hash()` — scoped by grind_session_id (parallels INV-GIC-001)
+  - `get_watchdog_event_chain_status()` — recomputes chain, reports restarts_last_hour
+- `scripts/bridge_watchdog.py` NEW — standalone supervisor (urllib stdlib only, no third-party deps)
+  - Polls `/health` + `/bridge/grind-chain-status` + `/bridge/capture-health` every 10s
+  - Spawns bridge via `subprocess.Popen([sys.executable, "-m", "bridge.vapi_bridge.main"])`
+  - Three VAPI-exclusive guards: refuses restart on `chain_intact=False`, on GRIND_SESSION_ID drift, on >3 restarts/hour
+  - Backoff schedule 5/10/30/60s — capped at auto_grind 60s poll cadence
+- `bridge/vapi_bridge/operator_api.py` — `GET /operator/watchdog-status` (10 keys; _check_read_key auth)
+- `bridge/tests/test_phase236_watchdog.py` — 8 tests (T236-WD-1..8) all passing in 4.0s
+- CLAUDE.md / VAPI_CONTEXT.md updated atomically; 4 new Hard Rules covering WEC formula, INV-GIC-003 ops enforcement, GRIND_SESSION_ID continuity, restart ceiling
+
+**Test counts**: Bridge 2477→2485 (+8) | SDK 535 unchanged | Hardhat 522 unchanged | Contracts 45
+
+**What we learned**:
+- `time.time_ns()` divided by 1e9 collapses adjacent ns into the same float64 second value — chain monotonicity must be verified at integer-ns resolution, not float seconds. Updated test 5.
+- The store's monotonicity guard makes it impossible to test "old event excluded by time window" using insert order — out-of-order inserts get bumped into the recent window. Tests must insert chronologically or query the underlying table directly. Updated test 7.
+- WEC events written from a separate process (the watchdog) write to the same SQLite as the bridge — Windows WAL mode handles this correctly; no shared-memory or IPC needed. The bridge reads watchdog_event_log via the read-only operator endpoint without writing to it.
+
+**Pattern identified [PATTERN-015]**: VAPI-architectural ops tooling pattern
+1. Standalone Python script in `scripts/` (urllib stdlib only — no asyncio, no httpx, runs without bridge import dependencies on hot path)
+2. Cryptographic event chain (parallel to GIC) for tamper-evident audit
+3. Refuses-to-act guards that enforce protocol invariants (INV-GIC-003 etc.) at the operational layer
+4. Bridge-side read-only endpoint surfaces the audit chain without coupling bridge to ops process
+5. Pinned at startup, drift-detected — never silently re-reads ambient state mid-run
+
+**Phase 236 remaining**: 236-VAME (~3h, no test delta) → 236-CORPUS-SNAPSHOT (~3h, +8 bridge). Then GIC_100 gate; then 237-CONSENT, 237-ZK-SEPPROOF; then 239-READINESS (W2 — Personal Readiness Dashboard, post-GIC_100).
+
+---
+
+### 2026-04-26: PHASE 236+ COMPREHENSIVE ARCHITECTURE PLAN — 7-Component Vision
+
+**Session outcome**: Comprehensive Phase 236+ development plan generated and filed at
+`VAPI-WORKFLOW.v2/VAPI_PHASE236_PLAN.md`. All context files updated.
+
+**Key decisions made:**
+- Component 1 (Backend reliability): `auto_grind.py` already exists; gap is process watchdog → 236-WATCHDOG (2h)
+- Component 2 (Decentralized wiki): Git IS the versioned store; novel part is ZK-attested corpus snapshots → CorpusDataCurator Task 8
+- Component 3 (ZK privacy): Don't encrypt wiki; ZK-SepProof (Groth16 SNARK proving ratio > 1.0 without revealing vectors) is novel → 237-ZK-SEPPROOF
+- Component 4 (IoID/W3bstream): IoID as consent anchor + W3bstream as consent-gated pipeline = VAPI's most achievable DePIN novelty → 237-CONSENT
+- Component 5 (Marketplace): Correct vision, post-GIC_100 only; VAPIDataMarketplace.sol gates on VAPIToken mainnet → 238-MARKETPLACE
+- Component 6 (VAPI protocol): Don't roll your own transport crypto; VAME (VAPI Application-Layer Message Envelope with Poseidon commitment) is the right application-layer play → 236-VAME
+- Component 7 (Personal Readiness): STANDOUT FEATURE. PersonaBreakDetectorAgent (agent #27) already computes the signal. GamerReadinessAgent (#39) maps it to consumer-legible fatigue/RSI metrics. Post-GIC_100. → 239-READINESS
+
+**Phase 235 grind state at session start:**
+- chain_length=16/100, consecutive_clean=1, NOMINAL+EXCLUSIVE_USB
+- Bridge 2477 | SDK 535 | Hardhat 502 | Agents 38 | Contracts 45 LIVE
+- AIT ratio=1.199 all_pairs_above_1=True (tournament blocker CLEARED for AIT)
+
+**Files updated this session:**
+- `VAPI-WORKFLOW.v2/VAPI_PHASE236_PLAN.md` — NEW comprehensive plan
+- `VAPI-WORKFLOW.v2/VAPI_CONTEXT.md` — Phase 235 grind status + wallet 40.43 IOTX + 45 contracts
+- `VAPI-WORKFLOW.v2/VAPI_AGENTS.md` — agent count 36→38, Phase 235 state, agent #39 planned
+- Project memory `project_state.md` — grind chain_length + plan reference
+
+**PATTERN — Personal Readiness as retention flywheel**: The insight that "VAPI is software that
+helps me as a gamer" (continuous use) vs "VAPI is software I use during tournaments" (episodic)
+is the correct framing for beta gamer adoption. PersonaBreakDetectorAgent's LOO centroid drift
+IS the fatigue signal. Re-label it for consumer UX after GIC_100.
+
+**PATTERN — auto_grind.py**: This file exists in the repo root (untracked). It autonomously
+drives adjudication. The manual trigger problem is already solved. New sessions should run
+`python auto_grind.py` in Terminal 2 alongside bridge and frontend.
+
+---
+
+### 2026-04-25: WORKFLOW SYNC — Phase 235 drift recovered
+
+**Trigger**: sync_vapi_workflow.py automatic recovery
+**Drift detected**: BRIDGE: CLAUDE.md=2477 CONTEXT.md=2469; SDK: CLAUDE.md=535 CONTEXT.md=531
+**Corrected to**: Phase 235 | Bridge 2477 | SDK 535
+**Action**: VAPI_CONTEXT.md phase/test counts updated from CLAUDE.md ground truth.
+
+---
+
+### 2026-04-25: WORKFLOW SYNC — Phase 235 drift recovered
+
+**Trigger**: sync_vapi_workflow.py automatic recovery
+**Drift detected**: BRIDGE: CLAUDE.md=2469 CONTEXT.md=2447; SDK: CLAUDE.md=531 CONTEXT.md=527
+**Corrected to**: Phase 235 | Bridge 2469 | SDK 531
+**Action**: VAPI_CONTEXT.md phase/test counts updated from CLAUDE.md ground truth.
+
+---
+
+### 2026-04-25: WORKFLOW SYNC — Phase 235 drift recovered
+
+**Trigger**: sync_vapi_workflow.py automatic recovery
+**Drift detected**: PHASE: CLAUDE.md=235 CONTEXT.md=234; BRIDGE: CLAUDE.md=2447 CONTEXT.md=2408; SDK: CLAUDE.md=527 CONTEXT.md=515
+**Corrected to**: Phase 235 | Bridge 2447 | SDK 527
+**Action**: VAPI_CONTEXT.md phase/test counts updated from CLAUDE.md ground truth.
+
+---
+
 ### 2026-04-21: WORKFLOW SYNC — Phase 234 drift recovered
 
 **Trigger**: sync_vapi_workflow.py automatic recovery
@@ -927,7 +1170,51 @@ Bridge 2128→2142 +14; SDK 390→394 +4; Hardhat 482 unchanged; agent fleet 35�
 
 ---
 
-**Document Version**: 1.4 (Phase 193)
-**Last Updated**: 2026-04-11
+## 8. Phase 238 — MetaLearner FSCA Wiring (2026-04-26)
+
+**Decision scope**: Decision A only. Decisions B and C explicitly rejected/deferred.
+
+**A — PROCEED**: Wire active FSCA contradictions into the autoresearch cycle prompt.
+- `vapi_autoresearch.py:46-47` — `import sqlite3` + `BRIDGE_DB_PATH = Path(os.environ.get("VAPI_DB_PATH", "bridge/vapi_store.db"))`
+- `vapi_autoresearch.py:51-92` — `load_fsca_findings(severity_min, age_hours, limit)` direct sqlite3 query against `fleet_coherence_log` (schema cited from `bridge/vapi_bridge/store.py:2281-2301`); fail-open on missing DB / missing table / sqlite3 error
+- `vapi_autoresearch.py:format_cycle_prompt()` signature gains `fsca_findings: Optional[list] = None`; section spliced between RECENT EXPERIMENT HISTORY and CURRENT SKILL.MD LENGTH
+- `vapi_autoresearch.py:run_cycle()` calls loader, passes through to formatter
+- 7 deterministic tests `vapi-autoresearch/tests/test_phase238_fsca_wiring.py` — temp SQLite seeded with 5 rows covering all filter conditions
+
+**B — REJECTED**: Add `contradiction_load` subscore to eval harness.
+- Reason: `vapi_eval_harness.py` is IMMUTABLE pure-function deterministic scorer over proposal_text + skill_md_after strings only
+- `SCORING_WEIGHTS` (vapi_eval_harness.py:64-73) sum=1.00 frozen
+- Mixing live runtime state (FSCA log) into a deterministic scorer breaks reproducibility — the harness can re-run on archived proposals indefinitely; coupling to a mutable DB voids that invariant
+- Code-level evidence at wiki/phases/phase_238_design_review.md §4
+
+**C — DEFERRED**: Add FSCA contradictions to `UnifiedWIFCorpus` dedup set.
+- Re-evaluate after 5+ autoresearch cycles run with FSCA prompt-context
+- Question to answer at gate: do the same contradictions get cited verbatim across cycles to a degree that warrants dedup? If yes → ship C with the same fingerprint pattern as the existing 3-source corpus. If no → leave as-is (FSCA prompt-context is sufficient).
+
+**Inaugural autoresearch wiki loop WIF entry**: `what_if_corpus/wif_058_ps5_compat_mode_dormant.md`
+- Operator-observed PS5 "controller modules not correct" disconnect during dual-host arbitration (USB to laptop + BT to PS5)
+- W1: `ps5_compat_mode` defaults False (`config.py:1059-1067`); `bridge/.env` doesn't override → HID writes active → USB drops on adjudication → PS5 prompts reconnect
+- Code documents fix at `dualshock_integration.py:2196-2209` and emits remediation log.warning at `:1684-1689` ("Set PS5_COMPAT_MODE=true")
+- W2: one-line `bridge/.env` edit + bridge restart
+- Why this is the inaugural entry: pure operator-experience gap invisible to FSCA / PV-CI / GIC chain — surfaces a dormant fix gated only on operator awareness
+
+**Verification standard applied**: every architectural claim in design review and verification report cites `file:line`. Three speculative claims retracted before implementation:
+1. "SDK/OpenAPI parity strengthens phase_coherence subscore" — RETRACTED (`vapi_eval_harness.py:213-233` hardcoded ioSwarm-only)
+2. "MetaLearner reads memory via _load_workflow_file('memory')" — RETRACTED (call never made structurally)
+3. "MetaLearner consumes FSCA via vapi_fleet_coherence" — CORRECTED (tool name doesn't exist; actual is `vapi_contradiction_status`; MetaLearner doesn't consume it — gap that Phase 238 closes via prompt-context, not via MetaLearner)
+
+**What we learned**:
+- The verification standard is recursive — apply it to your own design review until every positive claim survives. Hypotheses that sound architecturally elegant ("X strengthens Y") often contradict the actual code structure.
+- Immutability is a load-bearing property, not a stylistic choice. The eval harness MUST stay pure-function for the autoresearch loop's reproducibility guarantee to hold.
+- Inaugural WIF entries should be observed problems, not invented ones. The autoresearch loop's value compounds with real operator-reported gaps.
+
+**Test counts**: Bridge 2510 | Autoresearch 7 (NEW) | SDK 539 | Hardhat 528 | Contracts 46 LIVE
+**PV-CI**: 26/26 invariants pass (actual count post Phase 235-ULTRAREVIEW + Phase 226 expansion)
+**Snapshot SHA-256**: 813997b82c09ba3a09be04b16a5ff09fda0022260db8171904cc95b9a1a5b7cf (pages=80; on-chain anchor failed HTTP 404, bridge offline — local snapshot durable)
+
+---
+
+**Document Version**: 1.5 (Phase 238)
+**Last Updated**: 2026-04-26
 **Update Method**: Append-only, manual edit after significant sessions
 **Retention**: All entries preserved indefinitely
