@@ -634,6 +634,25 @@ def run_analysis_ait() -> dict:
             print(f"    {p}: {val:.4f}")
     print()
 
+    # Per-player feature means for live radar (per_player_features_json in DB)
+    per_player_features: dict = {}
+    for _p235, _mean_vec in player_means.items():
+        per_player_features[_p235] = {
+            "accel_tremor_peak_hz": float(_mean_vec[0]),
+            "roll_cos":             float(_mean_vec[1]),
+            "roll_sin":             float(_mean_vec[2]),
+            "pitch_cos":            float(_mean_vec[3]),
+        }
+
+    # Flat pair_distances dict for DB storage (e.g. {"P1vP2": 1.850, ...})
+    _pair_distances_flat: dict = {}
+    for _pk, _pv in inter_stats.items():
+        _pa, _pb = _pv["players"]
+        _key = (
+            _pa.replace("Player ", "P") + "v" + _pb.replace("Player ", "P")
+        )
+        _pair_distances_flat[_key] = round(float(_pv["distance"]), 4)
+
     return {
         "session_type":         "ait",
         "n_sessions":           n_total,
@@ -644,6 +663,7 @@ def run_analysis_ait() -> dict:
         "inter_player_mean":    round(overall_inter, 4),
         "all_pairs_above_1":    all_pairs_above_1,
         "cov_mode":             "diagonal" if _use_diag else "full",
+        "pair_distances":       _pair_distances_flat,
         "inter_distance_matrix": {
             "players": players_with_data,
             "values":  inter_dist_matrix.tolist(),
@@ -652,6 +672,7 @@ def run_analysis_ait() -> dict:
         "classification":       {"accuracy": loo_acc, "n_correct": n_correct,
                                   "n_total": n_total_loo},
         "feature_names":        AIT_FEATURE_NAMES,
+        "per_player_features":  per_player_features,
     }
 
 
@@ -2347,14 +2368,17 @@ def main() -> int:
                 _store231 = _Store231(_db_path231)
                 _nppl231  = _ait_result.get("player_session_counts", {})
                 _row231   = _store231.insert_ait_session(
-                    n_sessions        = _ait_result["n_sessions"],
-                    n_per_player      = _nppl231,
-                    separation_ratio  = _ait_result["separation_ratio"],
-                    all_pairs_above_1 = _ait_result["all_pairs_above_1"],
-                    inter_player_mean = _ait_result.get("inter_player_mean", 0.0),
-                    intra_player_mean = _ait_result.get("intra_player_mean", 0.0),
-                    loo_accuracy      = _ait_result.get("classification", {}).get("accuracy", 0.0),
-                    analysis_date     = __import__("datetime").date.today().isoformat(),
+                    n_sessions          = _ait_result["n_sessions"],
+                    n_per_player        = _nppl231,
+                    separation_ratio    = _ait_result["separation_ratio"],
+                    all_pairs_above_1   = _ait_result["all_pairs_above_1"],
+                    inter_player_mean   = _ait_result.get("inter_player_mean", 0.0),
+                    intra_player_mean   = _ait_result.get("intra_player_mean", 0.0),
+                    loo_accuracy        = _ait_result.get("classification", {}).get("accuracy", 0.0),
+                    cov_mode            = _ait_result.get("cov_mode", ""),
+                    pair_distances      = _ait_result.get("pair_distances", {}),
+                    analysis_date       = __import__("datetime").date.today().isoformat(),
+                    per_player_features = _ait_result.get("per_player_features", {}),
                 )
                 _n_players231 = _ait_result.get("players", [])
                 _def231 = (

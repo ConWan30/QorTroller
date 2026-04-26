@@ -7931,15 +7931,25 @@ class VAPIAllowlistGovernance:
 
 @dataclass(slots=True)
 class AITSeparationResult:
-    """Result from VAPIAITSeparation.status() (Phase 229)."""
-    ait_separation_enabled: bool  = False
-    n_sessions:             int   = 0
-    separation_ratio:       float = 0.0
-    all_pairs_above_1:      bool  = False
-    inter_player_mean:      float = 0.0
-    intra_player_mean:      float = 0.0
-    loo_accuracy:           float = 0.0
-    error:                  str   = ""
+    """Result from VAPIAITSeparation.status() (Phase 229 / 235-DASH)."""
+    ait_separation_enabled:     bool  = False
+    n_sessions:                 int   = 0
+    separation_ratio:           float = 0.0
+    all_pairs_above_1:          bool  = False
+    inter_player_mean:          float = 0.0
+    intra_player_mean:          float = 0.0
+    loo_accuracy:               float = 0.0
+    n_per_player:               dict  = None  # type: ignore[assignment]
+    per_player_tremor_hz:       dict  = None  # type: ignore[assignment]
+    per_player_roll_angle_deg:  dict  = None  # type: ignore[assignment]
+    per_player_pitch_angle_deg: dict  = None  # type: ignore[assignment]
+    error:                      str   = ""
+
+    def __post_init__(self):
+        for _attr in ("n_per_player", "per_player_tremor_hz",
+                      "per_player_roll_angle_deg", "per_player_pitch_angle_deg"):
+            if getattr(self, _attr) is None:
+                object.__setattr__(self, _attr, {})
 
 
 class VAPIAITSeparation:
@@ -7973,13 +7983,17 @@ class VAPIAITSeparation:
             with _r229.urlopen(url, timeout=10) as resp:
                 d = _j229.loads(resp.read().decode())
             return AITSeparationResult(
-                ait_separation_enabled = bool(d.get("ait_separation_enabled", False)),
-                n_sessions             = int(d.get("n_sessions", 0)),
-                separation_ratio       = float(d.get("separation_ratio", 0.0)),
-                all_pairs_above_1      = bool(d.get("all_pairs_above_1", False)),
-                inter_player_mean      = float(d.get("inter_player_mean", 0.0)),
-                intra_player_mean      = float(d.get("intra_player_mean", 0.0)),
-                loo_accuracy           = float(d.get("loo_accuracy", 0.0)),
+                ait_separation_enabled     = bool(d.get("ait_separation_enabled", False)),
+                n_sessions                 = int(d.get("n_sessions", 0)),
+                separation_ratio           = float(d.get("separation_ratio", 0.0)),
+                all_pairs_above_1          = bool(d.get("all_pairs_above_1", False)),
+                inter_player_mean          = float(d.get("inter_player_mean", 0.0)),
+                intra_player_mean          = float(d.get("intra_player_mean", 0.0)),
+                loo_accuracy               = float(d.get("loo_accuracy", 0.0)),
+                n_per_player               = dict(d.get("n_per_player") or {}),
+                per_player_tremor_hz       = dict(d.get("per_player_tremor_hz") or {}),
+                per_player_roll_angle_deg  = dict(d.get("per_player_roll_angle_deg") or {}),
+                per_player_pitch_angle_deg = dict(d.get("per_player_pitch_angle_deg") or {}),
             )
         except Exception as exc:
             return AITSeparationResult(error=str(exc))
@@ -8128,6 +8142,8 @@ class GrindAnalyticsResult:
     blocking_reason_counts: dict  = None  # type: ignore[assignment]
     sessions_per_day:       float = 0.0
     projected_gic100_date:  str   = "unknown"
+    last_validation_ts:     float = 0.0
+    last_stamp_ts:          float = 0.0
     error:                  str   = ""
 
     def __post_init__(self):
@@ -8161,6 +8177,8 @@ class VAPIGrindAnalytics:
                 blocking_reason_counts = dict(d.get("blocking_reason_counts") or {}),
                 sessions_per_day       = float(d.get("sessions_per_day", 0.0)),
                 projected_gic100_date  = str(d.get("projected_gic100_date", "unknown")),
+                last_validation_ts     = float(d.get("last_validation_ts", 0.0)),
+                last_stamp_ts          = float(d.get("last_stamp_ts", 0.0)),
             )
         except Exception as exc:
             return GrindAnalyticsResult(error=str(exc))
