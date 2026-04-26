@@ -27,17 +27,20 @@
 
 ## Agent Overview
 
-VAPI operates **36 specialized agents** in the bridge service. Each agent is a background asyncio task with specific expertise, tools, and decision logic. This document maps them for Claude Code expert spawning.
+VAPI operates **38 specialized agents** in the bridge service (agent #39 GamerReadinessAgent planned Phase 239). Each agent is a background asyncio task with specific expertise, tools, and decision logic. This document maps them for Claude Code expert spawning.
 
-> **SYNC NOTE**: Agents 37–38 added in Phases 221–222. Synced 2026-04-17. Phase 223 PV-CI gate live. Protocol at Phase 235 COMPLETE.
+> **SYNC NOTE**: Agents 37–38 added in Phases 221–222. Phase 235 COMPLETE 2026-04-25. Grind LIVE — chain_length=16/100. Synced 2026-04-26.
 
 ### Agent Table
 
-**PHASE 200 PROTOCOL STATE** (synced 2026-04-12):
-- Separation ratio: **0.728** (N=35, touchpad_corners, diagonal+LOO) — TOURNAMENT BLOCKER
-- ALL_PAIRS_GATE_ENABLED=false (prototype mode); tremor_resting probe is path to >1.0
+**PHASE 235 PROTOCOL STATE** (synced 2026-04-26):
+- AIT separation ratio: **1.199** (N=37, all_pairs_above_1=True) — TOURNAMENT BLOCKER CLEARED for AIT
+- tremor_resting: **1.177** (N=27, all_pairs_p0_ok=False — P1vP3=0.032 blocker)
+- ALL_PAIRS_GATE_ENABLED=True; staged_graduation_enabled=True (STAGED_GRADUATION activated Phase 231)
 - ioSwarm: ENABLED emulator mode (VAPISwarmOperatorGate.sol LIVE 0x969c0F1E)
-- dry_run=True (advisory rulings); 43 contracts ALL LIVE; 149 tools; Phase 200 COMPLETE
+- dry_run=True (advisory rulings); 45 contracts ALL LIVE; 149 MCP tools (#18+#19); Phase 235 COMPLETE
+- GIC_1 STAMPED @ grind_phase235_v1; chain_length=16; GRIND_TARGET=100; auto_grind.py drives adjudication
+- Planned agent #39: GamerReadinessAgent (Phase 239-READINESS, post-GIC_100)
 
 | # | Agent | LLM | Cycle | Expertise | Fail Mode | Tools |
 |---|-------|-----|-------|-----------|-----------|-------|
@@ -75,7 +78,7 @@ VAPI operates **36 specialized agents** in the bridge service. Each agent is a b
 | 32 | ProtocolIntelligenceRecordAgent | — | 60 min | PIR chain hash sequence; pir_chain_enabled=False; provides threat_forecast_accuracy_component | Advisory | 1 |
 | 33 | LivePresenceSignalingAgent | — | Event | Bidirectional VAPI presence; 8 signal types (LED+haptic); live_presence_signaling_enabled=False; 8 bus subscriptions | Advisory | 1 |
 | 34 | CorpusDataCuratorAgent | — | 6 hr | 7-task data coherence: Provenance DAG (20-hop), Corpus Entropy (threshold 1.5), Proof-of-Erasure (sha256), Federated Quality (BP-007), Feature Correlation, Data Readiness Cert (8-dim), Session Contribution Weights; Tools #136–#144 | Fail-open | 9 |
-| 35 | FleetSignalCoherenceAgent | — | 15 min | Fleet coherence observer; 15 rules: CONTRADICTION(7)+ORPHAN(5)+INVERSION(3); coherence_id=coh_+SHA-256[:16]; auto-promotes at N=3; fleet_coherence_enabled=True DEFAULT; RENEWAL_WITHOUT_ATTESTATION=CRITICAL; Tools #145–#147 | Advisory | 3 |
+| 35 | FleetSignalCoherenceAgent | — | 15 min | Fleet coherence observer; **25 rules: CONTRADICTION(13)+ORPHAN(7)+INVERSION(5)** (Phase 237-EXTEND added CONSENT_REVOKED_BUT_DATA_FLOWING); coherence_id=coh_+SHA-256[:16]; auto-promotes at N=3; fleet_coherence_enabled=True DEFAULT; RENEWAL_WITHOUT_ATTESTATION=CRITICAL; Tools #145–#147 | Advisory | 3 |
 | 36 | CoherenceFingerprintRegistry | — | Event | Persistent contradiction tracking; N_PROMOTE_THRESHOLD=3; score *= (1 − min(1.0, persistent_count×0.10)); maturity feedback loop; Tool #148 | Advisory | 1 |
 
 ---
@@ -836,16 +839,21 @@ prerequisite audit trail for FleetSignalCoherenceAgent (agent #36).
 **Role**: Fleet-level signal coherence observer. Detects contradictory, orphaned, or inverted
 signals across the 35-agent fleet and auto-promotes persistent contradictions to VAPI_WHAT_IF.md.
 
-**Failure Modes (3)**:
-- **CONTRADICTION** (7 rules): Cross-agent outputs that logically conflict
+**Failure Modes (3)** — current rule counts after Phase 237-EXTEND (2026-04-26):
+- **CONTRADICTION (13 rules)**: Cross-agent outputs that logically conflict
   - TTL_COMMITTED_AT_MISMATCH, DEFENSIBILITY_N_MISMATCH, CEREMONY_PARTICIPANT_MISMATCH,
     MATURITY_ELEVATION_READINESS_INVERSION, RENEWAL_WITHOUT_ATTESTATION (CRITICAL — highest severity),
-    PERSONA_BREAK_ENROLLMENT_CONFLICT, SEPARATION_GATE_ACTIVATION_CONFLICT
-- **ORPHAN** (5 rules): Agent output not consumed by its downstream within 48h
+    PERSONA_BREAK_ENROLLMENT_CONFLICT, SEPARATION_GATE_ACTIVATION_CONFLICT,
+    IOSWARM_ACTIVE_NO_ADJUDICATIONS (Phase 204), ALLOWLIST_CHANGE_WITHOUT_GOVERNANCE (Phase 224),
+    GOVERNANCE_PROVENANCE_ANCHOR_DRIFT (Phase 227), AUTO_TRIGGER_RATE_LIMIT_VIOLATION (Phase 235),
+    INVARIANT_CHANGE_WITHOUT_VHP (Phase 228), **CONSENT_REVOKED_BUT_DATA_FLOWING (Phase 237-EXTEND, HIGH — GDPR Art.17)**
+- **ORPHAN (7 rules)**: Agent output not consumed by its downstream within 48h
   - PERSONA_BREAK_UNATTESTED, MATURITY_ELEVATION_UNACKNOWLEDGED, BIOMETRIC_EXPIRED_GATE_NOT_UPDATED,
-    ERASURE_CERT_NOT_ANCHORED, CORPUS_ENTROPY_WARNING_NO_MATURITY_LOOP
-- **INVERSION** (3 rules): Provenance DAG walk reveals temporal inversion
-  - COMMITMENT_PREDATES_CONSENT, BADGE_WITHOUT_RENEWAL_PARENT, RULING_PREDATES_CALIBRATION
+    ERASURE_CERT_NOT_ANCHORED, CORPUS_ENTROPY_WARNING_NO_MATURITY_LOOP,
+    RATIO_VELOCITY_NEGATIVE (Phase 202), PER_PAIR_GAP_BLOCKER_UNRESOLVED (Phase 217)
+- **INVERSION (5 rules)**: Provenance DAG walk reveals temporal inversion
+  - COMMITMENT_PREDATES_CONSENT, BADGE_WITHOUT_RENEWAL_PARENT, RULING_PREDATES_CALIBRATION,
+    CONTEXT_HASH_MISMATCH (Phase 203), GOVERNANCE_CHAIN_BROKEN (Phase 225)
 
 **Key Invariants**:
 - `coherence_id` = "coh_" + SHA-256(rule_name + sorted_agents + ts_ns)[:16] — idempotent per cycle

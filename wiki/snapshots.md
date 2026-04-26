@@ -25,3 +25,5 @@ Append-only ledger of wiki state — equivalent to VAPI's ceremony beacon.
 | 2026-04-18T16:06:54.067510+00:00 | sha256:f693291adc90bcb3994efa26...2ee7448a | 73 | anchor_failed (<urlopen error [WinError 10061] No conne) |
 | 2026-04-18T16:08:58.386725+00:00 | sha256:97661ee9753c1af83177f4cc...853274bb | 73 | anchor_failed (HTTP Error 404: Not Found) |
 | 2026-04-20T01:01:55.851761+00:00 | sha256:ef6e3c3579ca9aab4bf00d66...72aab086 | 73 | anchor_failed (<urlopen error [WinError 10061] No conne) |
+| 2026-04-26T17:28:41.939976+00:00 | sha256:a458a0e7b7ef9fd20c2eb995...c42e406b | 80 | anchor_failed (HTTP Error 404: Not Found) |
+| 2026-04-26T17:28:52.829635+00:00 | sha256:813997b82c09ba3a09be04b1...a1a5b7cf | 80 | anchor_failed (HTTP Error 404: Not Found) |

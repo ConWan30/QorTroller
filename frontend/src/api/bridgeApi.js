@@ -95,12 +95,30 @@ export function useInvariantGateStatus() {
   })
 }
 
+// Phase 235-AUDIT fix: bridge endpoint is /agent/fleet-coherence-summary
+// (not -status — the -status path returns 404 and silently activates mock).
+// Response shape uses `by_mode` dict; we adapt to active_* fields the chip expects.
 export function useFleetCoherenceStatus() {
   return useQuery({
     queryKey: ['fleetCoherenceStatus'],
-    queryFn: () => get('/agent/fleet-coherence-status', 'fleetCoherenceStatus'),
+    queryFn: async () => {
+      const raw = await get('/agent/fleet-coherence-summary', 'fleetCoherenceStatus', { noMock: true })
+      // Adapt live shape → field names the GamerView coherence chip reads.
+      // Mock already returns the adapted shape, so we only adapt live data.
+      if (raw && typeof raw === 'object' && 'by_mode' in raw) {
+        const m = raw.by_mode || {}
+        return {
+          ...raw,
+          active_contradictions: m.CONTRADICTION ?? 0,
+          active_orphans:        m.ORPHAN ?? 0,
+          active_inversions:     m.INVERSION ?? 0,
+        }
+      }
+      return raw
+    },
     refetchInterval: 8000,
     staleTime: 5000,
+    retry: 1,
   })
 }
 
@@ -161,31 +179,80 @@ export function useGrindChain() {
 }
 
 // Phase 229 — AIT inter-player separation analysis
+// noMock=true: AIT separation is corpus state, not live telemetry.
+// Mock fakes (1.199 / all_pairs_above_1=true) would mislead during a real grind.
 export function useAITSeparation() {
   return useQuery({
     queryKey: ['aitSeparation'],
-    queryFn: () => get('/agent/ait-separation-status', 'aitSeparationStatus'),
+    queryFn: () => get('/agent/ait-separation-status', 'aitSeparationStatus', { noMock: true }),
     refetchInterval: 20000,
     staleTime: 15000,
+    retry: 1,
   })
 }
 
 // Phase 235-ANALYTICS — grind pipeline success rate + projection
+// noMock=true: projected_gic100_date and sessions_per_day feed the GamerView
+// progress sub-strip directly. Mock fallback would show fabricated ETAs.
 export function useGrindAnalytics() {
   return useQuery({
     queryKey: ['grindAnalytics'],
-    queryFn: () => get('/grind/analytics', 'grindAnalytics'),
+    queryFn: () => get('/grind/analytics', 'grindAnalytics', { noMock: true }),
     refetchInterval: 10000,
     staleTime: 8000,
+    retry: 1,
   })
 }
 
 // Phase 235-CONTENTION — BT contention episode intelligence
+// noMock=true: PCCDrawer surfaces hid_counter_restarts and episode counts.
+// Mock fallback would hide a real CONTESTED problem behind fake "0 episodes".
 export function usePCCIntelligence() {
   return useQuery({
     queryKey: ['pccIntelligence'],
-    queryFn: () => get('/grind/pcc-intelligence', 'pccIntelligence'),
+    queryFn: () => get('/grind/pcc-intelligence', 'pccIntelligence', { noMock: true }),
     refetchInterval: 8000,
     staleTime: 5000,
+    retry: 1,
+  })
+}
+
+// Phase 236-WATCHDOG — Watchdog Event Chain (WEC) status.
+// Surfaces in DeveloperView (operational tooling); not used by GamerView.
+// noMock=true: WEC must reflect actual watchdog state — mock has no chain.
+export function useWatchdogStatus() {
+  return useQuery({
+    queryKey: ['watchdogStatus'],
+    queryFn: () => get('/operator/watchdog-status', 'watchdogStatus', { noMock: true }),
+    refetchInterval: 15000,
+    staleTime: 10000,
+    retry: 1,
+  })
+}
+
+// UI-side mock-active indicator for the dashboard.
+// Returns true when bridge is unreachable AND we're showing fakes.
+// GamerView/DeveloperView should render a banner so operators don't mistake
+// fabricated values for live grind state.
+export { isMockActive } from './mockBridge'
+
+// Phase 237-EXTEND — Per-category consent status (read-side).
+// Pairs with useConsentSubmit() (wagmi-write side). The bridge endpoint
+// reads from local consent_ledger; on-chain state is queried separately
+// from the wallet via useReadContract if needed.
+// noMock: consent state is real privacy data — fakes would mislead.
+export function useConsentStatus(deviceId, category = '') {
+  return useQuery({
+    queryKey: ['consentStatus', deviceId, category],
+    queryFn: () => {
+      const path = category
+        ? `/agent/gamer-consent-status?device_id=${encodeURIComponent(deviceId)}&category=${encodeURIComponent(category)}`
+        : `/agent/gamer-consent-status?device_id=${encodeURIComponent(deviceId)}`
+      return get(path, 'consentStatus', { noMock: true })
+    },
+    enabled: Boolean(deviceId),
+    refetchInterval: 15000,
+    staleTime: 10000,
+    retry: 1,
   })
 }

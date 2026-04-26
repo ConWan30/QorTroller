@@ -86,5 +86,8 @@
   "_phase221_note": "Phase 221: PoPC — Merkle root anchor over 36-agent fleet; isCoherent(maxAgeSec) wired into VAPIProtocolLens",
   "VAPIBiometricGovernance": "0x06782293F1CFC1AA30C0Baee0437c2B336796A00",
   "_phase222_status": "deployed",
-  "_phase222_note": "Phase 222: BBG — governance proposals gated on live VHP; blocks STOLEN_KEY+VHP_EXPIRY+FLASH_LOAN attacks"
+  "_phase222_note": "Phase 222: BBG — governance proposals gated on live VHP; blocks STOLEN_KEY+VHP_EXPIRY+FLASH_LOAN attacks",
+  "VAPIConsentRegistry": "0xA82dB0eF0bF7D15b6400EDd4A09C0D4338C948dA",
+  "_phase237_status": "deployed",
+  "_phase237_note": "Phase 237: VAPIConsentRegistry — per-category gamer consent (TOURNAMENT_GATE / ANONYMIZED_RESEARCH / MANUFACTURER_CERT / MARKETPLACE), gamer-self-sovereign (msg.sender writes), bridge reads only"
 }
