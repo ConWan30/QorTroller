@@ -177,6 +177,47 @@ export const MOCK = {
     timestamp: now(),
   }),
 
+  aitSeparationStatus: () => ({
+    ait_separation_enabled: true,
+    n_sessions: 37,
+    separation_ratio: 1.199,
+    all_pairs_above_1: true,
+    inter_player_mean: drift(1.682, 0.01),
+    intra_player_mean: drift(0.520, 0.02),
+    loo_accuracy: 0.667,
+    pair_distances: { P1vP2: 1.850, P1vP3: 1.846, P2vP3: 1.349 },
+    analysis_date: '2026-04-18',
+    last_run_ts: now(),
+    n_per_player: { 'Player 1': 13, 'Player 2': 10, 'Player 3': 14 },
+    per_player_tremor_hz: { 'Player 1': 9.37, 'Player 2': 1.71, 'Player 3': 2.85 },
+    per_player_roll_angle_deg: { 'Player 1': 36.87, 'Player 2': 60.1, 'Player 3': 25.0 },
+    per_player_pitch_angle_deg: { 'Player 1': 18.19, 'Player 2': 45.6, 'Player 3': 36.9 },
+    timestamp: now(),
+  }),
+
+  grindAnalytics: () => ({
+    grind_session_id: 'grind_phase235_v1',
+    total_validated: Math.floor(drift(22, 0.1)),
+    stamped_count: Math.floor(drift(11, 0.1)),
+    success_rate: drift(0.60, 0.05),
+    blocking_reason_counts: { MENU_DETECTED: 4, 'PCC_NOT_NOMINAL:DISCONNECTED': 3 },
+    sessions_per_day: drift(3.2, 0.05),
+    projected_gic100_date: '2026-05-20',
+    last_validation_ts: Date.now() / 1000 - 180,
+    last_stamp_ts: Date.now() / 1000 - 900,
+    timestamp: now(),
+  }),
+
+  pccIntelligence: () => ({
+    total_episodes: 2,
+    mean_recovery_s: drift(18.5, 0.05),
+    longest_episode_s: drift(23.0, 0.03),
+    last_episode_ts: Date.now() / 1000 - 3600,
+    host_state_distribution: { EXCLUSIVE_USB: 142, DEGRADED: 3, DISCONNECTED: 1 },
+    hid_counter_restarts: 0,
+    timestamp: now(),
+  }),
+
   tournamentPreflight: () => ({
     separation_ok: false,
     l4_ok: true,
