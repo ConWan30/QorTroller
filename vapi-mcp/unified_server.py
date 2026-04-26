@@ -967,14 +967,14 @@ async def vapi_unified_state(include_bridge_live: bool = False, **_):
     s = _parse_claude_md()
 
     result: dict[str, Any] = {
-        "source": "CLAUDE.md + unified_server (Phase 211)",
+        "source": "CLAUDE.md + unified_server (Phase 211; fallbacks updated Phase 238)",
         "protocol": {
             "phase":        f"Phase {s.get('phase_num', '?')} COMPLETE",
-            "bridge":       s.get("bridge",    "2260"),
-            "sdk":          s.get("sdk",       "452"),
-            "hardhat":      s.get("hardhat",   "482"),
-            "agents":       s.get("agents",    "36"),
-            "contracts":    f"{s.get('contracts', '43')} ALL LIVE (IoTeX Testnet 4690)",
+            "bridge":       s.get("bridge",    "2510"),     # Phase 237-EXTEND fallback
+            "sdk":          s.get("sdk",       "539"),      # Phase 237-EXTEND fallback (+4 SDK)
+            "hardhat":      s.get("hardhat",   "528"),      # Phase 237 core fallback (+6)
+            "agents":       s.get("agents",    "38"),       # Phase 235 fleet
+            "contracts":    f"{s.get('contracts', '46')} ALL LIVE (IoTeX Testnet 4690)",  # Phase 237-EXTEND deploy
             "dry_run":      True,
             "ioswarm":      "emulator_only",
         },
@@ -1001,6 +1001,22 @@ async def vapi_unified_state(include_bridge_live: bool = False, **_):
             "mint_quorum":           0.80,
             "epistemic_threshold":   0.65,
             "tge_sequencing":        "ratio > 1.0 ALL pairs CONFIRMED before TGE — non-negotiable",
+            # Phase 237-EXTEND family of FROZEN-v1 cryptographic primitives (PATTERN-017)
+            "frozen_v1_primitives":  {
+                "GIC":             "SHA-256(prev||commit||verdict||host||ts) — Phase 235-A",
+                "WEC":             "SHA-256(prev||code||pid||sid_hash||ts) — Phase 236-WATCHDOG",
+                "VAME":            "SHA-256(VAPI-VAME-v1||chain_head||ts||endpoint||body) — Phase 236-VAME",
+                "CORPUS_SNAPSHOT": "SHA-256(VAPI-CORPUS-SNAPSHOT-v1||wiki||agent_root||ratio||N||ts) — Phase 236-CORPUS-SNAPSHOT",
+                "CONSENT":         "SHA-256(VAPI-CONSENT-v1||device||bitmask||expires||ts) — Phase 237 LIVE",
+            },
+            "consent_categories":    {
+                "TOURNAMENT_GATE":     0,  # FROZEN — must match VAPIConsentRegistry.sol enum
+                "ANONYMIZED_RESEARCH": 1,
+                "MANUFACTURER_CERT":   2,
+                "MARKETPLACE":         3,
+            },
+            "consent_registry_address": "0xA82dB0eF0bF7D15b6400EDd4A09C0D4338C948dA",  # IoTeX testnet, Phase 237-EXTEND
+            "bridge_consent_invariant": "bridge READS consent state, never writes on gamer's behalf — gamer-self-sovereign (msg.sender)",
         },
         "knowledge_sources": {
             "claude_md":        "LIVE (mtime-cached)",

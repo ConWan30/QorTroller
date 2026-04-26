@@ -378,14 +378,56 @@ when enabled, `POST /agent/allowlist-governance-event` for `invariant_change` re
 `vhp_token_id` (missing or expired → 403). FSCA 11th CONTRADICTION rule
 `INVARIANT_CHANGE_WITHOUT_VHP` (HIGH) fires on bypass.
 
+**Phase 235-ULTRAREVIEW — INV-023..026 added** (26 total). Freezes GIC formula and PCC read-path invariants:
+- **INV-023** — GIC formula v1 byte layout frozen: `VAPI-GIC-GENESIS-v1` / `genesis_gic` / `compute_gic`
+  present in `bridge/vapi_bridge/grind_chain.py` (INV-GIC-001)
+- **INV-024** — GIC ts_ns monotonicity: `ORDER BY gic_ts_ns DESC` present in `bridge/vapi_bridge/store.py`
+  (INV-GIC-002 — guards against backward NTP corrections breaking chain chronology)
+- **INV-025** — `_gic_chain_broken` / `set_gic_chain_broken` present in `bridge/vapi_bridge/store.py`
+  (INV-GIC-003 — chain-break detection flag must survive process restart via DB)
+- **INV-026** — `_recompute(now)` called ≥2 times in `bridge/vapi_bridge/capture_continuity.py`
+  (INV-PCC-001 — PCC status must always recompute before read; no stale state reads)
+
+**Phase 237-CONSENT — CONSENT formula v1 frozen** (fifth FROZEN-v1 cryptographic primitive
+in the PATTERN-017 family alongside GIC + WEC + VAME + CORPUS-SNAPSHOT). Documented invariants:
+- **INV-CONSENT-001** — Formula FROZEN: `consent_hash = SHA-256(b"VAPI-CONSENT-v1"(15) ||
+  device_id_b32 || category_bitmask_be(4) || expires_at_be(8) || ts_ns_be(8))` = 67 bytes →
+  32 bytes. Module: `bridge/vapi_bridge/consent_categories.py`. Any change to byte order,
+  domain tag, bitmask layout, or scaling factor requires v2 + new domain tag.
+- **INV-CONSENT-002** — `ConsentCategory` enum values FROZEN at TOURNAMENT_GATE=0 /
+  ANONYMIZED_RESEARCH=1 / MANUFACTURER_CERT=2 / MARKETPLACE=3 — values are part of the
+  bitmask domain AND must match the on-chain `enum ConsentCategory` in
+  `contracts/contracts/VAPIConsentRegistry.sol` position-for-position. Reordering or
+  inserting a category is a v2 break.
+- **INV-CONSENT-003** — Bridge is read-only on consent state. The bridge READS on-chain
+  consent via `chain.is_consent_valid()` view calls but NEVER writes on the gamer's behalf.
+  Grant/revoke must be msg.sender-signed by the gamer's wallet via
+  `VAPIConsentRegistry.grantConsent / revokeConsent`. The `POST /operator/record-category-consent`
+  and `/operator/revoke-category-consent` endpoints write ONLY to the local
+  `consent_ledger` (operational truth until on-chain catches up); they NEVER submit on-chain.
+- **INV-CONSENT-004** — `chain.is_consent_valid()` and `chain.get_consent_record()` FAIL-OPEN
+  when `consent_registry_address == ""` (return False / empty dict respectively). This
+  diverges from `bbg_check_proposal` / `is_dual_eligible` (which raise RuntimeError) — the
+  divergence is intentional: bridge is reader, not writer; missing on-chain registry must
+  not block local consent_ledger operation.
+
+**Phase 237-EXTEND deploy** — VAPIConsentRegistry deployed at
+`0xA82dB0eF0bF7D15b6400EDd4A09C0D4338C948dA` on IoTeX testnet (2026-04-26).
+Five FROZEN-v1 primitives now LIVE: GIC + WEC + VAME + CORPUS-SNAPSHOT + CONSENT.
+
+**Invariant count history**: 15 (Phase 223) → 16 (Phase 224) → 18 (Phase 225 audit) →
+22 (Phase 226) → 26 (Phase 235-ULTRAREVIEW) → **30 (Phase 237-EXTEND with INV-CONSENT-001..004)**.
+
 ---
 
-**Document Version**: 1.3 (Phase 235)
-**Last Updated**: 2026-04-25
-**Next Review**: Phase 236 (post-grind Zenodo deposit)
+**Document Version**: 1.5 (Phase 237-EXTEND)
+**Last Updated**: 2026-04-26
+**Next Review**: Phase 237-ZK-SEPPROOF (prerequisite for Phase 239 readiness with privacy)
 **Immutable Sections**: 1-3 (PoAC, Crypto, Thresholds)
 **Mutable Sections**: 4-5, 8 (State flags + INV registry update per phase)
+**Key Phase 237-EXTEND Change**: invariant scope 26 → 30 (INV-CONSENT-001..004 freeze CONSENT formula v1, category enum positions, bridge read-only invariant, fail-open chain views); VAPIConsentRegistry deployed on testnet
 **Key Phase 226 Change**: invariant scope expanded from 16 → 22 entries (INV-019..022 freeze provenance-chain code itself)
 **Key Phase 228 Change**: `vhp_gated_invariant_change_enabled` config — biometric presence required for invariant_change governance
+**Key Phase 235-ULTRAREVIEW Change**: invariant scope expanded 22 → 26 (INV-023..026 freeze GIC formula + PCC read-path)
 **Key Phase 147 Change**: epistemic_consensus_threshold 0.60→0.65; triage_prereq_required=True (closes Phase 98 W1)
 **Key Phase 143 Change**: Separation ratio 1.261 (touchpad_corners diagonal+LOO) — ABOVE gate but N=11 thin

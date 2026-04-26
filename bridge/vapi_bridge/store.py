@@ -3268,6 +3268,83 @@ class Store:
         except Exception:
             pass
 
+        # Phase 236-CORPUS-SNAPSHOT: ZK-attested corpus snapshot table.
+        # Sits below WEC and GIC in the chain stack. Each row binds the entire
+        # wiki tree + fleet Merkle root + AIT separation ratio + corpus size
+        # at one ts_ns into a single SHA-256 commitment. Surfaces as proof of
+        # what the corpus looked like at GIC_100 deposit time.
+        try:
+            with self._conn() as conn:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS corpus_snapshot_log (
+                        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                        snapshot_commitment TEXT NOT NULL,
+                        wiki_hash           TEXT NOT NULL,
+                        agent_root          TEXT NOT NULL DEFAULT '',
+                        separation_ratio    REAL NOT NULL DEFAULT 0.0,
+                        corpus_n            INTEGER NOT NULL DEFAULT 0,
+                        ts_ns               INTEGER NOT NULL,
+                        on_chain_confirmed  INTEGER NOT NULL DEFAULT 0,
+                        ipfs_cid            TEXT NOT NULL DEFAULT '',
+                        tx_hash             TEXT NOT NULL DEFAULT '',
+                        trigger_reason      TEXT NOT NULL DEFAULT '',
+                        created_at          REAL NOT NULL
+                    )
+                """)
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_corpus_snapshot_log_ts "
+                    "ON corpus_snapshot_log(ts_ns DESC)"
+                )
+                conn.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_corpus_snapshot_log_commit "
+                    "ON corpus_snapshot_log(snapshot_commitment)"
+                )
+                conn.execute(
+                    "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                    " VALUES (?, ?, ?)",
+                    (236, "corpus_snapshot_log", time.time()),
+                )
+        except Exception:
+            pass  # idempotent
+
+        # Phase 236-WATCHDOG: Watchdog Event Chain (WEC) audit table.
+        # Pairs with the GIC chain — GIC tracks cognitive-session continuity,
+        # WEC tracks operational continuity (bridge process lifetimes that
+        # produced those sessions). Together they constitute a tamper-evident
+        # provenance for a grind run.  The watchdog (scripts/bridge_watchdog.py)
+        # is the only writer; bridge endpoints read for status/audit.
+        try:
+            with self._conn() as conn:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS watchdog_event_log (
+                        id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                        event_code        INTEGER NOT NULL,
+                        event_name        TEXT NOT NULL DEFAULT '',
+                        pid               INTEGER NOT NULL DEFAULT 0,
+                        grind_session_id  TEXT NOT NULL DEFAULT '',
+                        wec_hash          TEXT NOT NULL,
+                        prev_wec_hash     TEXT NOT NULL DEFAULT '',
+                        metadata_json     TEXT NOT NULL DEFAULT '{}',
+                        ts_ns             INTEGER NOT NULL,
+                        created_at        REAL NOT NULL
+                    )
+                """)
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_watchdog_event_log_ts "
+                    "ON watchdog_event_log(ts_ns DESC)"
+                )
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_watchdog_event_log_session "
+                    "ON watchdog_event_log(grind_session_id, ts_ns DESC)"
+                )
+                conn.execute(
+                    "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                    " VALUES (?, ?, ?)",
+                    (236, "watchdog_event_log", time.time()),
+                )
+        except Exception:
+            pass  # idempotent
+
     # --- Device operations ---
 
     def upsert_device(self, device_id: str, pubkey_hex: str):
@@ -10600,14 +10677,25 @@ class Store:
     # Phase 161 — Consent Gate (BP-002 WIF-018/020 enforcement)
     # ------------------------------------------------------------------
 
-    def _check_consent_gate(self, device_id: str, operation: str) -> None:
+    def _check_consent_gate(
+        self,
+        device_id: str,
+        operation: str,
+        category: str | None = None,
+    ) -> None:
         """Raise ValueError + log if device has revoked consent or erasure_requested.
 
         Callers must check self._consent_ledger_enabled before calling this method.
         Fails open for unknown devices (no record = allowed) to avoid blocking new
         devices before consent is registered via POST /agent/register-consent.
+
+        Phase 237-CONSENT extension: when `category` is provided, the gate checks
+        the per-category record (consent_type=category) instead of the default
+        biometric_processing record. Backward-compatible: callers omitting
+        `category` retain Phase 161 semantics exactly.
         """
-        status = self.get_consent_status(device_id)
+        consent_type = category if category else "biometric_processing"
+        status = self.get_consent_status(device_id, consent_type)
         if status["erasure_requested"] or status["revoked"]:
             reason = "erasure_requested" if status["erasure_requested"] else "consent_revoked"
             with self._conn() as con:
@@ -10619,8 +10707,123 @@ class Store:
                 )
             raise ValueError(
                 f"Consent gate: device {device_id!r} blocked for operation "
-                f"{operation!r} — reason: {reason} (GDPR Art.7/17, Phase 161 BP-002)."
+                f"{operation!r} (category={consent_type!r}) — reason: {reason} "
+                f"(GDPR Art.7/17, Phase 161 BP-002 / Phase 237-CONSENT)."
             )
+
+    # --- Phase 237-CONSENT: per-category consent helpers ---
+    #
+    # Thin wrappers over the Phase 160 consent_ledger primitives. Each helper
+    # accepts a category (string name from consent_categories.CATEGORY_NAMES)
+    # and writes/reads `consent_ledger` with `consent_type=category`. The
+    # UNIQUE(device_id, consent_type) constraint plus the existing UPSERT in
+    # insert_consent_record means re-grant on the same category just updates
+    # the existing row.
+
+    def grant_category_consent(
+        self,
+        device_id: str,
+        category: str,
+        ttl_s: int = 0,
+        consent_hash: str = "",
+        ts_ns: int | None = None,
+    ) -> int:
+        """Grant per-category consent (Phase 237-CONSENT).
+
+        Args:
+            device_id:    Device identifier.
+            category:     Category name from consent_categories.CATEGORY_NAMES
+                          (TOURNAMENT_GATE / ANONYMIZED_RESEARCH / MANUFACTURER_CERT / MARKETPLACE).
+            ttl_s:        Consent TTL in seconds. 0 = no expiry. Stored as the
+                          consent_ts offset for now (full expiry enforcement at
+                          gate-check time is Phase 238 work).
+            consent_hash: Optional FROZEN-v1 hex commitment from
+                          consent_categories.compute_consent_hash() — 64 hex chars or "".
+            ts_ns:        Grant time in ns. Defaults to time.time_ns().
+
+        Returns:
+            Row id from the underlying consent_ledger.
+        """
+        from .consent_categories import NAME_TO_CATEGORY  # validate category name
+        if category not in NAME_TO_CATEGORY:
+            raise ValueError(
+                f"unknown consent category: {category!r}. "
+                f"Valid: {sorted(NAME_TO_CATEGORY.keys())}"
+            )
+        if consent_hash and len(consent_hash) != 64:
+            raise ValueError(f"consent_hash must be 64 hex chars or empty, got {len(consent_hash)}")
+        # Reuse Phase 160 UPSERT — re-grant updates the existing row.
+        # consent_ts persists the grant timestamp; ttl_s is advisory metadata
+        # for now (full expiry-at-gate-check is Phase 238 work).
+        consent_ts = (ts_ns / 1e9) if ts_ns is not None else None
+        return self.insert_consent_record(
+            device_id=device_id,
+            consent_type=category,
+            consent_given=True,
+            consent_ts=consent_ts,
+        )
+
+    def revoke_category_consent(
+        self,
+        device_id: str,
+        category: str,
+        reason: str = "",
+    ) -> bool:
+        """Revoke per-category consent (Phase 237-CONSENT). Returns True if a row updated.
+
+        Wraps Phase 160 revoke_consent() with category enum validation.
+        """
+        from .consent_categories import NAME_TO_CATEGORY
+        if category not in NAME_TO_CATEGORY:
+            raise ValueError(f"unknown consent category: {category!r}")
+        return self.revoke_consent(
+            device_id=device_id,
+            consent_type=category,
+            reason=reason,
+        )
+
+    def get_category_consent_status(
+        self,
+        device_id: str,
+        category: str | None = None,
+    ) -> dict:
+        """Return per-category consent state for a device (Phase 237-CONSENT).
+
+        When `category` is provided, returns the single-category status dict
+        (same shape as Phase 160 get_consent_status, with `category` key added).
+
+        When `category` is None, returns aggregated status across all four
+        categories: {"device_id": ..., "categories": {NAME: status_dict, ...}}.
+        Any category with no record reports `granted=False, found=False`
+        (fail-closed by absence — operationally safe).
+        """
+        from .consent_categories import ALL_CATEGORIES, CATEGORY_NAMES, NAME_TO_CATEGORY
+
+        if category is not None:
+            if category not in NAME_TO_CATEGORY:
+                raise ValueError(f"unknown consent category: {category!r}")
+            base = self.get_consent_status(device_id, consent_type=category)
+            return {
+                **base,
+                "category": category,
+                "granted": bool(base["consent_given"]) and not base["revoked"]
+                                                       and not base["erasure_requested"],
+            }
+
+        out: dict[str, dict] = {}
+        for cat in ALL_CATEGORIES:
+            name = CATEGORY_NAMES[cat]
+            base = self.get_consent_status(device_id, consent_type=name)
+            out[name] = {
+                **base,
+                "category": name,
+                "granted": bool(base["consent_given"]) and not base["revoked"]
+                                                       and not base["erasure_requested"],
+            }
+        return {
+            "device_id":  device_id,
+            "categories": out,
+        }
 
     def get_consent_gate_status(self) -> dict:
         """Return consent gate violation summary (Phase 161 BP-002)."""
@@ -13806,6 +14009,270 @@ class Store:
         if row and row[0] is not None:
             return int(row[0])
         return 0
+
+    # --- Phase 236-WATCHDOG: Watchdog Event Chain (WEC) ---
+
+    def get_prev_watchdog_event_hash(self, grind_session_id: str) -> bytes | None:
+        """Return the most recent WEC hash bytes for the given grind session, or None.
+
+        Scoped by grind_session_id so a new grind run starts a fresh WEC chain
+        (parallels INV-GIC-001 grind_session_id scoping).
+        """
+        with self._conn() as conn:
+            if grind_session_id:
+                row = conn.execute(
+                    "SELECT wec_hash FROM watchdog_event_log "
+                    "WHERE grind_session_id = ? "
+                    "ORDER BY ts_ns DESC LIMIT 1",
+                    (grind_session_id,),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT wec_hash FROM watchdog_event_log "
+                    "ORDER BY ts_ns DESC LIMIT 1"
+                ).fetchone()
+        if row is None:
+            return None
+        return bytes.fromhex(row["wec_hash"])
+
+    def insert_watchdog_event(
+        self,
+        event_code: int,
+        event_name: str,
+        pid: int,
+        grind_session_id: str,
+        ts_ns: int,
+        metadata_json: str = "{}",
+    ) -> str:
+        """Append one watchdog event to the WEC chain. Returns wec_hash hex.
+
+        WEC formula is delegated to watchdog_chain.compute_wec / genesis_wec —
+        the formula module is the single source of truth (parallels grind_chain).
+
+        Monotonicity guard: if ts_ns <= prev event ts_ns for this session,
+        bump to prev_ts + 1 to preserve chain ordering across NTP backsteps.
+        """
+        from .watchdog_chain import compute_wec, genesis_wec
+
+        # Monotonicity: ensure ts_ns strictly increases within a session
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT MAX(ts_ns) FROM watchdog_event_log WHERE grind_session_id = ?",
+                (grind_session_id,),
+            ).fetchone()
+        prev_ts = int(row[0]) if (row and row[0] is not None) else 0
+        if ts_ns <= prev_ts:
+            ts_ns = prev_ts + 1
+
+        prev_wec = self.get_prev_watchdog_event_hash(grind_session_id)
+        if prev_wec is None:
+            prev_wec = genesis_wec(grind_session_id, ts_ns)
+            prev_wec_hex = ""  # genesis link — no on-chain prior hash to record
+        else:
+            prev_wec_hex = prev_wec.hex()
+
+        wec = compute_wec(prev_wec, event_code, pid, grind_session_id, ts_ns)
+        wec_hex = wec.hex()
+
+        with self._conn() as conn:
+            conn.execute(
+                "INSERT INTO watchdog_event_log "
+                "(event_code, event_name, pid, grind_session_id, "
+                " wec_hash, prev_wec_hash, metadata_json, ts_ns, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    int(event_code), str(event_name)[:64], int(pid),
+                    str(grind_session_id),
+                    wec_hex, prev_wec_hex, str(metadata_json),
+                    int(ts_ns), time.time(),
+                ),
+            )
+        return wec_hex
+
+    def get_watchdog_event_chain_status(
+        self, grind_session_id: str = "", limit: int = 100
+    ) -> dict:
+        """Recompute and verify the WEC chain for a grind session.
+
+        Returns:
+            grind_session_id, chain_length, latest_wec_hash (hex), chain_intact (bool),
+            last_event_code (int|None), last_event_name (str), last_event_ts (float),
+            restarts_last_hour (int), genesis_ts (float).
+        """
+        from .watchdog_chain import compute_wec, genesis_wec, EVENT_CODES
+
+        with self._conn() as conn:
+            if grind_session_id:
+                rows = conn.execute(
+                    "SELECT event_code, event_name, pid, wec_hash, ts_ns "
+                    "FROM watchdog_event_log "
+                    "WHERE grind_session_id = ? "
+                    "ORDER BY ts_ns ASC LIMIT ?",
+                    (grind_session_id, int(limit)),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT event_code, event_name, pid, wec_hash, ts_ns, grind_session_id "
+                    "FROM watchdog_event_log "
+                    "ORDER BY ts_ns ASC LIMIT ?",
+                    (int(limit),),
+                ).fetchall()
+
+        if not rows:
+            return {
+                "grind_session_id":      grind_session_id,
+                "chain_length":          0,
+                "latest_wec_hash":       "",
+                "chain_intact":          True,  # vacuously intact
+                "last_event_code":       None,
+                "last_event_name":       "",
+                "last_event_ts":         0.0,
+                "restarts_last_hour":    0,
+                "genesis_ts":            0.0,
+            }
+
+        # Verify chain
+        rows = [dict(r) for r in rows]
+        sid_for_chain = grind_session_id or rows[-1].get("grind_session_id", "")
+        chain_intact = True
+        for i, row in enumerate(rows):
+            ts_ns = int(row["ts_ns"])
+            ec = int(row["event_code"])
+            pid = int(row["pid"])
+            stored_hex = row["wec_hash"]
+            if i == 0:
+                prev = genesis_wec(sid_for_chain, ts_ns)
+            else:
+                prev = bytes.fromhex(rows[i - 1]["wec_hash"])
+            expected = compute_wec(prev, ec, pid, sid_for_chain, ts_ns)
+            if expected.hex() != stored_hex:
+                chain_intact = False
+                break
+
+        # Restarts last hour: BRIDGE_RESTART_TRIGGERED events in last 3600s
+        restart_code = EVENT_CODES["BRIDGE_RESTART_TRIGGERED"]
+        now_ns = time.time_ns()
+        cutoff_ns = now_ns - 3_600_000_000_000  # 1 hour in ns
+        restarts_last_hour = sum(
+            1 for r in rows
+            if int(r["event_code"]) == restart_code and int(r["ts_ns"]) >= cutoff_ns
+        )
+
+        latest = rows[-1]
+        return {
+            "grind_session_id":      sid_for_chain,
+            "chain_length":          len(rows),
+            "latest_wec_hash":       latest["wec_hash"],
+            "chain_intact":          chain_intact,
+            "last_event_code":       int(latest["event_code"]),
+            "last_event_name":       str(latest.get("event_name", "")),
+            "last_event_ts":         float(latest["ts_ns"]) / 1e9,
+            "restarts_last_hour":    restarts_last_hour,
+            "genesis_ts":            float(rows[0]["ts_ns"]) / 1e9,
+        }
+
+    # --- Phase 236-CORPUS-SNAPSHOT ---
+
+    def insert_corpus_snapshot(
+        self,
+        snapshot_commitment: str,
+        wiki_hash: str,
+        agent_root: str,
+        separation_ratio: float,
+        corpus_n: int,
+        ts_ns: int,
+        trigger_reason: str = "",
+        on_chain_confirmed: bool = False,
+        tx_hash: str = "",
+        ipfs_cid: str = "",
+    ) -> int:
+        """Insert one corpus snapshot row. Returns row id.
+
+        UNIQUE(snapshot_commitment) enforced — duplicate inserts (e.g. two
+        triggers firing on the same wiki+ratio+corpus+fleet+ts_ns) are
+        idempotent: the duplicate raises sqlite3.IntegrityError which we
+        translate to "already recorded" by returning the existing row id.
+        """
+        try:
+            with self._conn() as conn:
+                cur = conn.execute(
+                    "INSERT INTO corpus_snapshot_log "
+                    "(snapshot_commitment, wiki_hash, agent_root, separation_ratio, "
+                    " corpus_n, ts_ns, on_chain_confirmed, ipfs_cid, tx_hash, "
+                    " trigger_reason, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        str(snapshot_commitment), str(wiki_hash), str(agent_root),
+                        float(separation_ratio), int(corpus_n), int(ts_ns),
+                        1 if on_chain_confirmed else 0,
+                        str(ipfs_cid), str(tx_hash), str(trigger_reason)[:128],
+                        time.time(),
+                    ),
+                )
+                return int(cur.lastrowid)
+        except Exception:
+            # Likely UNIQUE collision — return the existing row id
+            with self._conn() as conn:
+                row = conn.execute(
+                    "SELECT id FROM corpus_snapshot_log WHERE snapshot_commitment = ?",
+                    (str(snapshot_commitment),),
+                ).fetchone()
+            return int(row["id"]) if row else 0
+
+    def get_corpus_snapshot_status(self) -> dict:
+        """Return latest corpus snapshot with chain length.
+
+        Returns 10 keys: total_snapshots, latest_commitment, wiki_hash,
+        agent_root, separation_ratio, corpus_n, last_snapshot_ts,
+        on_chain_confirmed, trigger_reason, timestamp.
+        """
+        import time as _t236s
+        with self._conn() as conn:
+            total = (conn.execute(
+                "SELECT COUNT(*) FROM corpus_snapshot_log"
+            ).fetchone() or (0,))[0]
+            row = conn.execute(
+                "SELECT snapshot_commitment, wiki_hash, agent_root, separation_ratio, "
+                "       corpus_n, ts_ns, on_chain_confirmed, trigger_reason "
+                "FROM corpus_snapshot_log ORDER BY ts_ns DESC LIMIT 1"
+            ).fetchone()
+        if row is None:
+            return {
+                "total_snapshots":    0,
+                "latest_commitment":  "",
+                "wiki_hash":          "",
+                "agent_root":         "",
+                "separation_ratio":   0.0,
+                "corpus_n":           0,
+                "last_snapshot_ts":   0.0,
+                "on_chain_confirmed": False,
+                "trigger_reason":     "",
+                "timestamp":          _t236s.time(),
+            }
+        return {
+            "total_snapshots":    int(total),
+            "latest_commitment":  str(row[0]),
+            "wiki_hash":          str(row[1]),
+            "agent_root":         str(row[2]),
+            "separation_ratio":   float(row[3]),
+            "corpus_n":           int(row[4]),
+            "last_snapshot_ts":   float(row[5]) / 1e9,
+            "on_chain_confirmed": bool(row[6]),
+            "trigger_reason":     str(row[7]),
+            "timestamp":          _t236s.time(),
+        }
+
+    def get_corpus_snapshot_history(self, limit: int = 20) -> list[dict]:
+        """Return last N snapshots in DESC ts_ns order (newest first)."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT id, snapshot_commitment, wiki_hash, agent_root, "
+                "       separation_ratio, corpus_n, ts_ns, on_chain_confirmed, "
+                "       trigger_reason, created_at "
+                "FROM corpus_snapshot_log ORDER BY ts_ns DESC LIMIT ?",
+                (int(limit),),
+            ).fetchall()
+        return [dict(r) for r in rows]
 
     def get_grind_session_history(
         self, limit: int = 20, grind_session_id: str = ""

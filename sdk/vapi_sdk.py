@@ -7678,6 +7678,93 @@ class VAPIBiometricGovernance:
             )
 
 
+# ── Phase 237-CONSENT — Per-Category Gamer Consent ────────────────────────────
+
+@dataclass(slots=True)
+class GamerConsentResult:
+    """Result from VAPIConsent.get_status() (Phase 237-CONSENT).
+
+    Two shapes depending on whether `category` was supplied:
+      - Aggregated (no category):  device_id + categories: dict[name → category_dict]
+      - Single-category:           device_id + category + granted/revoked/...
+    """
+    device_id:  str  = ""
+    categories: dict = field(default_factory=dict)
+    category:   "str | None" = None  # populated when single-category query
+    granted:    bool = False
+    revoked:    bool = False
+    found:      bool = False
+    error:      "str | None" = None
+
+
+class VAPIConsent:
+    """SDK client for Phase 237 per-category gamer consent endpoint.
+
+    Reads the local consent_ledger via GET /agent/gamer-consent-status. To
+    grant or revoke consent, the gamer's wallet must call grantConsent /
+    revokeConsent on VAPIConsentRegistry directly (gamer-self-sovereign
+    invariant — the bridge never writes consent on behalf of a gamer).
+
+    Usage::
+        consent = VAPIConsent("http://localhost:8080", api_key)
+        agg = consent.get_status("device_abc")
+        # agg.categories == {"TOURNAMENT_GATE": {...}, "ANONYMIZED_RESEARCH": {...}, ...}
+
+        single = consent.get_status("device_abc", category="MARKETPLACE")
+        # single.granted == True | False
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def get_status(
+        self, device_id: str, category: str = ""
+    ) -> GamerConsentResult:
+        """Return GamerConsentResult from GET /agent/gamer-consent-status.
+
+        Args:
+            device_id: Required. 422 from bridge if empty.
+            category:  Optional. If provided, returns single-category status;
+                       if empty, returns aggregated status across all four
+                       categories.
+
+        Never raises: returns GamerConsentResult(error=...) on any failure
+        (consistent with VAPIBiometricGovernance / VAPIInvariantGate).
+        """
+        import urllib.request as _ur, urllib.parse as _up, json as _j
+        try:
+            qs = _up.urlencode(
+                {"device_id": device_id, "category": category}
+                if category else {"device_id": device_id}
+            )
+            url = f"{self._base}/agent/gamer-consent-status?{qs}"
+            req = _ur.Request(url, headers={"x-api-key": self._key})
+            with _ur.urlopen(req, timeout=10) as resp:
+                body = _j.loads(resp.read())
+            if category:
+                # single-category response — flat dict with `category` key
+                return GamerConsentResult(
+                    device_id  = device_id,
+                    category   = body.get("category"),
+                    granted    = bool(body.get("granted", False)),
+                    revoked    = bool(body.get("revoked", False)),
+                    found      = bool(body.get("found", False)),
+                    categories = {},
+                )
+            # aggregated — categories dict
+            return GamerConsentResult(
+                device_id  = body.get("device_id", device_id),
+                categories = body.get("categories", {}),
+                category   = None,
+            )
+        except Exception as exc:
+            return GamerConsentResult(
+                device_id = device_id,
+                error     = str(exc),
+            )
+
+
 # ── Phase 223 — PV-CI Invariant Gate ──────────────────────────────────────────
 
 @dataclass(slots=True)

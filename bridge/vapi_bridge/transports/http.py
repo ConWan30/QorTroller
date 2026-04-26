@@ -213,6 +213,16 @@ def create_app(cfg: Config, store: Store, on_record) -> FastAPI:
         allow_origins=_cors_origins,
         allow_methods=["GET", "POST"],
         allow_headers=["*"],
+        # Phase 236-VAME: expose sidecar headers so the browser can read them
+        # via fetch().headers.get('X-VAME-Commitment') etc. Without expose_headers,
+        # CORS hides everything except the safelisted set.
+        expose_headers=[
+            "X-VAME-Version",
+            "X-VAME-Commitment",
+            "X-VAME-Chain-Head",
+            "X-VAME-TS-NS",
+            "X-VAME-Endpoint",
+        ],
     )
 
     # --- WebSocket ---

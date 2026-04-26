@@ -2,7 +2,7 @@ openapi: "3.0.3"
 
 info:
   title: VAPI — Self-Verifying Integration SDK REST API
-  version: "3.0.0-phase204"
+  version: "3.0.0-phase237"
   description: |
     The VAPI REST API exposes Proof of Authentic Controller (PoAC) submission,
     on-chain verification, device PHCI certification, SDK self-attestation,
@@ -4891,6 +4891,152 @@ paths:
               schema:
                 $ref: "#/components/schemas/AccelTremorFFTStatus"
 
+  # ===========================================================================
+  # Phase 237-CONSENT — Per-Category Gamer Consent
+  # ===========================================================================
+  # Three endpoints exposing the consent ledger:
+  #   GET  /agent/gamer-consent-status          — read-only, x-api-key
+  #   POST /operator/record-category-consent    — operator auth, never on-chain
+  #   POST /operator/revoke-category-consent    — operator auth, never on-chain
+  #
+  # On-chain consent is gamer-self-sovereign: gamer signs grantConsent /
+  # revokeConsent on VAPIConsentRegistry from their own wallet (msg.sender).
+  # The bridge READS on-chain state via chain.is_consent_valid() (Phase 237 core)
+  # but never writes on the gamer's behalf.
+
+  /agent/gamer-consent-status:
+    get:
+      tags: [Agent]
+      summary: Per-category gamer consent state (Phase 237-CONSENT)
+      description: |
+        Returns per-(device, category) consent state from the local consent_ledger.
+        When `category` query param is provided, returns single-category status.
+        When omitted, returns aggregated status across all four categories.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: device_id
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Device identifier (required; 422 on empty)
+        - name: category
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [TOURNAMENT_GATE, ANONYMIZED_RESEARCH, MANUFACTURER_CERT, MARKETPLACE]
+          description: Optional single-category filter; omit for aggregated view
+      responses:
+        "200":
+          description: Consent status retrieved
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/GamerConsentStatus"
+                  - $ref: "#/components/schemas/ConsentCategoryStatus"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "422":
+          description: Missing device_id or unknown category name
+
+  /operator/record-category-consent:
+    post:
+      tags: [Operator]
+      summary: Record per-category consent in local ledger (Phase 237-CONSENT)
+      description: |
+        Operator records consent that was given out-of-band (e.g. via a
+        companion app, paper consent form digitised, etc.). Writes ONLY to
+        the local consent_ledger; does NOT submit on-chain. On-chain consent
+        must be msg.sender-signed by the gamer's own wallet via
+        VAPIConsentRegistry.grantConsent() (gamer-self-sovereign invariant).
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema: { type: string }
+        - name: device_id
+          in: query
+          required: true
+          schema: { type: string }
+        - name: category
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [TOURNAMENT_GATE, ANONYMIZED_RESEARCH, MANUFACTURER_CERT, MARKETPLACE]
+        - name: ttl_s
+          in: query
+          required: false
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: consent_hash
+          in: query
+          required: false
+          schema: { type: string }
+          description: Optional 64-char hex from compute_consent_hash()
+        - name: reason
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 10
+          description: Operator audit field; minimum 10 characters
+      responses:
+        "200":
+          description: Consent recorded locally
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryConsentRecordResult"
+        "403": { description: Invalid api_key }
+        "422": { description: Missing device_id, bad category, or reason < 10 chars }
+
+  /operator/revoke-category-consent:
+    post:
+      tags: [Operator]
+      summary: Revoke per-category consent in local ledger (Phase 237-CONSENT)
+      description: |
+        Operator-recorded revocation. The gamer MUST also revoke on-chain via
+        VAPIConsentRegistry.revokeConsent() for the on-chain state to update.
+        This endpoint updates the bridge ledger so the local consent gate
+        begins blocking immediately.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema: { type: string }
+        - name: device_id
+          in: query
+          required: true
+          schema: { type: string }
+        - name: category
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [TOURNAMENT_GATE, ANONYMIZED_RESEARCH, MANUFACTURER_CERT, MARKETPLACE]
+        - name: reason
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 10
+      responses:
+        "200":
+          description: Consent revoked locally
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryConsentRevokeResult"
+        "403": { description: Invalid api_key }
+        "422": { description: Missing device_id, bad category, or reason < 10 chars }
+
 # =============================================================================
 # Components
 # =============================================================================
@@ -8465,6 +8611,88 @@ components:
           type: object
           additionalProperties: true
           nullable: true
+
+    # =========================================================================
+    # Phase 237-CONSENT — Per-Category Gamer Consent schemas
+    # =========================================================================
+
+    GamerConsentStatus:
+      type: object
+      description: |
+        Phase 237-CONSENT — Aggregated per-(device, category) consent state.
+        Returned by GET /agent/gamer-consent-status when no `category` filter
+        is supplied. Each of the four ConsentCategory values has an entry
+        regardless of whether the device has a consent_ledger row for it
+        (categories with no record report granted=False, found=False).
+      required:
+        - device_id
+        - categories
+      properties:
+        device_id:
+          type: string
+          description: Device identifier
+        categories:
+          type: object
+          description: Map of category name to ConsentCategoryStatus
+          additionalProperties:
+            $ref: "#/components/schemas/ConsentCategoryStatus"
+
+    ConsentCategoryStatus:
+      type: object
+      description: |
+        Phase 237-CONSENT — Single-category consent status for a device.
+        Returned by GET /agent/gamer-consent-status when `category` filter
+        is supplied, or as a value within GamerConsentStatus.categories.
+      required:
+        - category
+        - granted
+      properties:
+        category:
+          type: string
+          enum: [TOURNAMENT_GATE, ANONYMIZED_RESEARCH, MANUFACTURER_CERT, MARKETPLACE]
+        granted:
+          type: boolean
+          description: True iff consent_given AND NOT revoked AND NOT erasure_requested
+        consent_given:
+          type: boolean
+        consent_ts:
+          type: number
+          nullable: true
+        revoked:
+          type: boolean
+        revocation_reason:
+          type: string
+        erasure_requested:
+          type: boolean
+        erasure_completed:
+          type: boolean
+        found:
+          type: boolean
+
+    CategoryConsentRecordResult:
+      type: object
+      description: Phase 237-CONSENT — Response from POST /operator/record-category-consent.
+      properties:
+        row_id:        { type: integer }
+        device_id:     { type: string }
+        category:      { type: string }
+        granted:       { type: boolean, default: true }
+        ttl_s:         { type: integer }
+        consent_hash:  { type: string }
+        reason:        { type: string }
+        on_chain:      { type: boolean, default: false }
+        timestamp:     { type: number }
+
+    CategoryConsentRevokeResult:
+      type: object
+      description: Phase 237-CONSENT — Response from POST /operator/revoke-category-consent.
+      properties:
+        row_updated: { type: boolean }
+        device_id:   { type: string }
+        category:    { type: string }
+        reason:      { type: string }
+        on_chain:    { type: boolean, default: false }
+        timestamp:   { type: number }
 
 webhooks:
   CheatDetected:
