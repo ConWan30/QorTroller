@@ -159,3 +159,33 @@ export function useGrindChain() {
     retry: 1,
   })
 }
+
+// Phase 229 — AIT inter-player separation analysis
+export function useAITSeparation() {
+  return useQuery({
+    queryKey: ['aitSeparation'],
+    queryFn: () => get('/agent/ait-separation-status', 'aitSeparationStatus'),
+    refetchInterval: 20000,
+    staleTime: 15000,
+  })
+}
+
+// Phase 235-ANALYTICS — grind pipeline success rate + projection
+export function useGrindAnalytics() {
+  return useQuery({
+    queryKey: ['grindAnalytics'],
+    queryFn: () => get('/grind/analytics', 'grindAnalytics'),
+    refetchInterval: 10000,
+    staleTime: 8000,
+  })
+}
+
+// Phase 235-CONTENTION — BT contention episode intelligence
+export function usePCCIntelligence() {
+  return useQuery({
+    queryKey: ['pccIntelligence'],
+    queryFn: () => get('/grind/pcc-intelligence', 'pccIntelligence'),
+    refetchInterval: 8000,
+    staleTime: 5000,
+  })
+}

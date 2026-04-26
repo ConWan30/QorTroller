@@ -105,6 +105,10 @@ def test_t229_sdk_3_dataclass_slots():
         "inter_player_mean",
         "intra_player_mean",
         "loo_accuracy",
+        "n_per_player",
+        "per_player_tremor_hz",
+        "per_player_roll_angle_deg",
+        "per_player_pitch_angle_deg",
         "error",
     }
     assert expected == slots, f"Slot mismatch: {expected.symmetric_difference(slots)}"

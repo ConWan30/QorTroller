@@ -60,3 +60,20 @@ export const RATIO_BAR = (ratio) => ({
   initial:  { width: '0%' },
   animate:  { width: `${ratio * 100}%`, transition: { duration: 1.6, ease: 'easeOut', delay: 0.3 } },
 })
+
+// Pipeline node stagger — 120ms apart, left-to-right reveal
+export const PIPELINE_NODE_CONTAINER = {
+  animate: { transition: { staggerChildren: 0.12, delayChildren: 0.08 } },
+}
+
+export const PIPELINE_NODE = {
+  initial: { opacity: 0, scale: 0.9, y: 6 },
+  animate: { opacity: 1, scale: 1, y: 0, transition: { duration: 0.22, ease: 'easeOut' } },
+}
+
+// Left-edge drawer — slides in from negative x (mirrors GamerView's right-edge pattern)
+export const DRAWER_SLIDE_LEFT = {
+  initial:  { x: -300, opacity: 0 },
+  animate:  { x: 0, opacity: 1, transition: { duration: 0.2, ease: 'easeOut' } },
+  exit:     { x: -300, opacity: 0, transition: { duration: 0.15 } },
+}

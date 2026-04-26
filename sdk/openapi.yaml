@@ -9561,6 +9561,18 @@ webhooks:
           type: number
           nullable: true
           description: "Unix timestamp of last analysis run (null if no analysis yet)"
+        n_per_player:
+          type: object
+          description: "Per-player AIT session counts (Phase 235-DASH)"
+        per_player_tremor_hz:
+          type: object
+          description: "Per-player mean tremor peak Hz from AIT sessions (Phase 235-DASH)"
+        per_player_roll_angle_deg:
+          type: object
+          description: "Per-player mean roll angle in degrees derived from roll_cos/roll_sin (Phase 235-DASH)"
+        per_player_pitch_angle_deg:
+          type: object
+          description: "Per-player mean pitch angle in degrees derived from pitch_cos (Phase 235-DASH)"
         timestamp:
           type: number
           description: "Unix timestamp of status query"
@@ -9685,6 +9697,12 @@ webhooks:
         projected_gic100_date:
           type: string
           description: "ISO date when GIC_100 is projected at current velocity, or 'unknown'"
+        last_validation_ts:
+          type: number
+          description: "Unix timestamp of the most recent ruling_validation_log entry (Phase 235-DASH)"
+        last_stamp_ts:
+          type: number
+          description: "Unix timestamp of the most recent GIC-stamped session (Phase 235-DASH)"
         timestamp:
           type: number
           description: "Unix timestamp of status query"

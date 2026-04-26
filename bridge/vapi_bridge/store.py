@@ -3233,6 +3233,16 @@ class Store:
             except Exception:
                 pass  # idempotent — column already exists
 
+        # Phase 235-DASH: per-player AIT feature means for live radar (idempotent)
+        try:
+            with self._conn() as conn:
+                conn.execute(
+                    "ALTER TABLE ait_session_log "
+                    "ADD COLUMN per_player_features_json TEXT NOT NULL DEFAULT '{}'"
+                )
+        except Exception:
+            pass  # idempotent — column already exists
+
         # Phase 235-GAD: Gameplay Activity Discrimination (idempotent)
         for _col_sql in [
             "ALTER TABLE records ADD COLUMN trigger_active INTEGER NOT NULL DEFAULT 0",
@@ -13425,16 +13435,17 @@ class Store:
 
     def insert_ait_session(
         self,
-        n_sessions:        int,
-        n_per_player:      dict,
-        separation_ratio:  float,
-        all_pairs_above_1: bool,
-        inter_player_mean: float,
-        intra_player_mean: float,
-        loo_accuracy:      float,
-        cov_mode:          str,
-        pair_distances:    dict,
-        analysis_date:     str = "",
+        n_sessions:          int,
+        n_per_player:        dict,
+        separation_ratio:    float,
+        all_pairs_above_1:   bool,
+        inter_player_mean:   float,
+        intra_player_mean:   float,
+        loo_accuracy:        float,
+        cov_mode:            str  = "",
+        pair_distances:      dict = None,
+        analysis_date:       str  = "",
+        per_player_features: dict = None,
     ) -> int:
         """Insert AIT separation analysis result (Phase 229).
 
@@ -13447,13 +13458,16 @@ class Store:
         """
         import json  as _j229
         import time  as _t229
+        _pair_dist_229  = pair_distances or {}
+        _ppf_229        = per_player_features or {}
         with self._conn() as conn:
             cur = conn.execute(
                 "INSERT INTO ait_session_log "
                 "(probe_type, n_sessions, n_per_player_json, separation_ratio, "
                 " all_pairs_above_1, inter_player_mean, intra_player_mean, "
-                " loo_accuracy, cov_mode, pair_distances_json, analysis_date, created_at)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " loo_accuracy, cov_mode, pair_distances_json, analysis_date, "
+                " per_player_features_json, created_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     "ait",
                     int(n_sessions),
@@ -13464,8 +13478,9 @@ class Store:
                     float(intra_player_mean),
                     float(loo_accuracy),
                     str(cov_mode),
-                    _j229.dumps(pair_distances),
+                    _j229.dumps(_pair_dist_229),
                     str(analysis_date),
+                    _j229.dumps(_ppf_229),
                     _t229.time(),
                 ),
             )
@@ -13531,6 +13546,7 @@ class Store:
                 "timestamp":              _now,
             }
 
+        import math as _math229s
         d = dict(row)
         try:
             pd = _j229s.loads(d.get("pair_distances_json") or "{}")
@@ -13540,20 +13556,46 @@ class Store:
             npp = _j229s.loads(d.get("n_per_player_json") or "{}")
         except Exception:
             npp = {}
+        try:
+            ppf = _j229s.loads(d.get("per_player_features_json") or "{}")
+        except Exception:
+            ppf = {}
+
+        # Derive per-player biometric means for live radar visualisation.
+        # Existing rows without per_player_features_json return empty dicts.
+        _tremor_hz:  dict = {}
+        _roll_deg:   dict = {}
+        _pitch_deg:  dict = {}
+        for _p, _feats in ppf.items():
+            if not isinstance(_feats, dict):
+                continue
+            _hz = _feats.get("accel_tremor_peak_hz")
+            if _hz is not None:
+                _tremor_hz[_p] = float(_hz)
+            _rs = _feats.get("roll_sin")
+            _rc = _feats.get("roll_cos")
+            if _rs is not None and _rc is not None:
+                _roll_deg[_p] = round(_math229s.degrees(_math229s.atan2(float(_rs), float(_rc))), 2)
+            _pc = _feats.get("pitch_cos")
+            if _pc is not None:
+                _pitch_deg[_p] = round(_math229s.degrees(_math229s.acos(max(-1.0, min(1.0, float(_pc))))), 2)
 
         return {
-            "ait_separation_enabled": True,
-            "n_sessions":             int(d.get("n_sessions", 0)),
-            "n_per_player":           npp,
-            "separation_ratio":       float(d.get("separation_ratio", 0.0)),
-            "all_pairs_above_1":      bool(d.get("all_pairs_above_1", 0)),
-            "inter_player_mean":      float(d.get("inter_player_mean", 0.0)),
-            "intra_player_mean":      float(d.get("intra_player_mean", 0.0)),
-            "loo_accuracy":           float(d.get("loo_accuracy", 0.0)),
-            "pair_distances":         pd,
-            "analysis_date":          str(d.get("analysis_date") or ""),
-            "last_run_ts":            float(d.get("created_at", 0.0)),
-            "timestamp":              _now,
+            "ait_separation_enabled":   True,
+            "n_sessions":               int(d.get("n_sessions", 0)),
+            "n_per_player":             npp,
+            "separation_ratio":         float(d.get("separation_ratio", 0.0)),
+            "all_pairs_above_1":        bool(d.get("all_pairs_above_1", 0)),
+            "inter_player_mean":        float(d.get("inter_player_mean", 0.0)),
+            "intra_player_mean":        float(d.get("intra_player_mean", 0.0)),
+            "loo_accuracy":             float(d.get("loo_accuracy", 0.0)),
+            "pair_distances":           pd,
+            "analysis_date":            str(d.get("analysis_date") or ""),
+            "last_run_ts":              float(d.get("created_at", 0.0)),
+            "per_player_tremor_hz":     _tremor_hz,
+            "per_player_roll_angle_deg": _roll_deg,
+            "per_player_pitch_angle_deg": _pitch_deg,
+            "timestamp":                _now,
         }
 
     # -----------------------------------------------------------------------
@@ -13952,6 +13994,8 @@ class Store:
                 "blocking_reason_counts":  {},
                 "sessions_per_day":        0.0,
                 "projected_gic100_date":   "unknown",
+                "last_validation_ts":      0.0,
+                "last_stamp_ts":           0.0,
                 "timestamp":               time.time(),
             }
 
@@ -13996,6 +14040,10 @@ class Store:
         else:
             projected = "unknown"
 
+        last_validation_ts = float(rows[-1].get("created_at", 0.0)) if rows else 0.0
+        stamped_rows = [r for r in rows if r.get("grind_chain_hash")]
+        last_stamp_ts = float(stamped_rows[-1].get("created_at", 0.0)) if stamped_rows else 0.0
+
         return {
             "grind_session_id":        grind_session_id,
             "total_validated":         total,
@@ -14004,5 +14052,7 @@ class Store:
             "blocking_reason_counts":  reason_counts,
             "sessions_per_day":        round(sessions_per_day, 4),
             "projected_gic100_date":   projected,
+            "last_validation_ts":      last_validation_ts,
+            "last_stamp_ts":           last_stamp_ts,
             "timestamp":               now_ts,
         }

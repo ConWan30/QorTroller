@@ -1,347 +1,565 @@
-import { useEffect, useRef, useMemo } from 'react'
-import * as d3 from 'd3'
+import { useState, useEffect, useMemo } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
-  useTournamentBlockerSummary,
-  usePerPairGapProjection,
+  useCaptureHealth,
+  useGrindChain,
+  useGrindAnalytics,
   useTournamentPreflight,
-  usePerPairGapStatus,
+  useFleetCoherenceStatus,
+  useProtocolCoherence,
 } from '../api/bridgeApi'
-import { HeartbeatWaveform } from '../heartbeat/HeartbeatWaveform'
-import { ProvenanceTag } from '../provenance/ProvenanceTag'
 import { FONTS, DEVELOPER } from '../shared/design/tokens'
+import { PIPELINE_NODE_CONTAINER, PIPELINE_NODE, DRAWER_SLIDE_LEFT } from '../shared/design/animations'
 
-// D3 force-directed blocker graph
-function BlockerGraph({ blockers = [] }) {
-  const svgRef = useRef(null)
+// ─── Design primitives ───────────────────────────────────────────────────────
 
-  const { nodes, links } = useMemo(() => {
-    const center = { id: 'isFullyEligible()', type: 'gate' }
-    const nodes = [center]
-    const links = []
+function Glass({ children, style, accent = DEVELOPER.orange, intensity = 1 }) {
+  return (
+    <div style={{
+      background: `linear-gradient(180deg, rgba(12,6,2,${0.60 * intensity}) 0%, rgba(3,5,7,${0.78 * intensity}) 100%)`,
+      backdropFilter: 'blur(14px) saturate(130%)',
+      border: `1px solid ${accent}26`,
+      borderRadius: 8,
+      boxShadow: `0 0 24px ${accent}1a, inset 0 1px 0 rgba(255,255,255,0.03)`,
+      ...style,
+    }}>
+      {children}
+    </div>
+  )
+}
 
-    blockers.forEach((b, i) => {
-      const nodeId = `${b.source}_${b.key}`
-      nodes.push({ id: nodeId, label: b.key, severity: b.severity, detail: b.detail, type: 'blocker' })
-      links.push({
-        source: 'isFullyEligible()',
-        target: nodeId,
-        weight: b.severity === 'P0' ? 1.0 : 0.5,
-        severity: b.severity,
-      })
-    })
+function StatusChip({ label, value, accent = DEVELOPER.orange, onClick, active }) {
+  return (
+    <Glass
+      accent={accent}
+      style={{
+        padding: '5px 10px',
+        cursor: onClick ? 'pointer' : 'default',
+        outline: active ? `1px solid ${accent}55` : 'none',
+      }}
+      onClick={onClick}
+    >
+      <div style={{ fontFamily: FONTS.mono, letterSpacing: '0.16em', fontSize: 6.5, color: DEVELOPER.t3, textTransform: 'uppercase', marginBottom: 2 }}>{label}</div>
+      <div style={{ fontFamily: FONTS.mono, fontSize: 10, fontWeight: 600, color: accent, whiteSpace: 'nowrap' }}>{value}</div>
+    </Glass>
+  )
+}
 
-    // Add known static nodes for context
-    const contextNodes = [
-      { id: 'TournamentPreflight', type: 'context', label: 'Preflight' },
-      { id: 'PerPairGate', type: 'context', label: 'Per-Pair P0' },
-      { id: 'L4Calibration', type: 'context', label: 'L4 Thresh' },
-    ]
-    contextNodes.forEach((n) => {
-      nodes.push(n)
-      links.push({ source: 'isFullyEligible()', target: n.id, weight: 0.3, severity: 'INFO' })
-    })
+function DrawerStat({ label, value, accent = DEVELOPER.orange }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: `1px solid ${DEVELOPER.bd}` }}>
+      <span style={{ fontFamily: FONTS.mono, fontSize: 8, color: DEVELOPER.t3 }}>{label}</span>
+      <span style={{ fontFamily: FONTS.mono, fontSize: 10, fontWeight: 600, color: accent }}>{value}</span>
+    </div>
+  )
+}
 
-    return { nodes, links }
-  }, [blockers])
+// ─── Pipeline canvas ──────────────────────────────────────────────────────────
 
-  useEffect(() => {
-    const svg = d3.select(svgRef.current)
-    svg.selectAll('*').remove()
+const NODE_LABELS = ['CAPTURE', 'ADJUDICATE', 'VALIDATE', 'GIC STAMP', 'ON-CHAIN']
+// x-center of each node as fraction of canvas width (for connector + particle calc)
+const NODE_X = [0.09, 0.29, 0.49, 0.69, 0.89]
+const NODE_Y = 0.50   // vertical center fraction
 
-    const W = svgRef.current.clientWidth  || 420
-    const H = svgRef.current.clientHeight || 300
+function PipelineConnector({ x0, x1, y, width, height, active, accent, particleCount = 3 }) {
+  const px0 = x0 * width
+  const px1 = x1 * width
+  const py  = y  * height
 
-    const color = d3.scaleOrdinal()
-      .domain(['P0', 'P1', 'INFO'])
-      .range([DEVELOPER.red || '#ff3b5c', DEVELOPER.amber || '#ffaa44', 'rgba(200,216,232,0.2)'])
+  return (
+    <g>
+      {/* Connector line */}
+      <line
+        x1={px0} y1={py}
+        x2={px1} y2={py}
+        stroke={active ? `${accent}55` : `${accent}18`}
+        strokeWidth={active ? 1.5 : 1}
+        strokeDasharray={active ? 'none' : '4 6'}
+      />
+      {/* Animated particles */}
+      {active && Array.from({ length: particleCount }, (_, i) => (
+        <motion.circle
+          key={i}
+          cx={px0}
+          cy={py}
+          r={2}
+          fill={accent}
+          filter={`drop-shadow(0 0 3px ${accent})`}
+          animate={{ cx: [px0, px1] }}
+          transition={{
+            duration: 2.4,
+            delay: i * (2.4 / particleCount),
+            repeat: Infinity,
+            ease: 'linear',
+          }}
+          opacity={0.85}
+        />
+      ))}
+    </g>
+  )
+}
 
-    const sim = d3.forceSimulation(nodes)
-      .force('link',   d3.forceLink(links).id((d) => d.id).distance((d) => d.weight < 0.5 ? 90 : 70))
-      .force('charge', d3.forceManyBody().strength(-220))
-      .force('center', d3.forceCenter(W / 2, H / 2))
-      .force('collide', d3.forceCollide(28))
-
-    const g = svg.append('g')
-
-    // Defs: arrow markers
-    const defs = svg.append('defs')
-    ;['P0','P1','INFO'].forEach((sev) => {
-      defs.append('marker')
-        .attr('id', `arrow-${sev}`)
-        .attr('viewBox', '0 -5 10 10')
-        .attr('refX', 22)
-        .attr('markerWidth', 4)
-        .attr('markerHeight', 4)
-        .attr('orient', 'auto')
-        .append('path')
-        .attr('d', 'M0,-5L10,0L0,5')
-        .attr('fill', color(sev))
-    })
-
-    const link = g.selectAll('.link')
-      .data(links)
-      .join('line')
-      .attr('class', 'link')
-      .attr('stroke', (d) => color(d.severity))
-      .attr('stroke-width', (d) => d.weight * 1.5)
-      .attr('stroke-opacity', 0.55)
-      .attr('marker-end', (d) => `url(#arrow-${d.severity})`)
-
-    const node = g.selectAll('.node')
-      .data(nodes)
-      .join('g')
-      .attr('class', 'node')
-      .call(d3.drag()
-        .on('start', (ev, d) => { if (!ev.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y })
-        .on('drag',  (ev, d) => { d.fx = ev.x; d.fy = ev.y })
-        .on('end',   (ev, d) => { if (!ev.active) sim.alphaTarget(0); d.fx = null; d.fy = null })
-      )
-
-    // Gate node: hexagon
-    node.filter((d) => d.type === 'gate').append('polygon')
-      .attr('points', hexPoints(20))
-      .attr('fill',   'rgba(255,107,0,0.12)')
-      .attr('stroke', DEVELOPER.orange || '#ff6b00')
-      .attr('stroke-width', 1.5)
-
-    // Blocker nodes: circle
-    node.filter((d) => d.type === 'blocker').append('circle')
-      .attr('r', 16)
-      .attr('fill', (d) => `${color(d.severity)}18`)
-      .attr('stroke', (d) => color(d.severity))
-      .attr('stroke-width', 1.5)
-
-    // Context nodes: small square
-    node.filter((d) => d.type === 'context').append('rect')
-      .attr('x', -10).attr('y', -10).attr('width', 20).attr('height', 20)
-      .attr('fill', 'rgba(200,216,232,0.04)')
-      .attr('stroke', 'rgba(200,216,232,0.2)')
-      .attr('stroke-width', 0.8)
-      .attr('rx', 2)
-
-    // Labels
-    node.append('text')
-      .attr('text-anchor', 'middle')
-      .attr('dy', (d) => d.type === 'gate' ? 4 : (d.type === 'blocker' ? 4 : 4))
-      .style('font-family', FONTS.mono)
-      .style('font-size', (d) => d.type === 'gate' ? '8px' : '7px')
-      .style('fill', (d) => d.type === 'gate' ? (DEVELOPER.orange || '#ff6b00') : (DEVELOPER.t1 || '#ffe8d4'))
-      .style('pointer-events', 'none')
-      .text((d) => d.label || d.id)
-
-    sim.on('tick', () => {
-      link
-        .attr('x1', (d) => d.source.x)
-        .attr('y1', (d) => d.source.y)
-        .attr('x2', (d) => d.target.x)
-        .attr('y2', (d) => d.target.y)
-      node.attr('transform', (d) => `translate(${d.x},${d.y})`)
-    })
-
-    return () => sim.stop()
-  }, [nodes, links])
+function PipelineCanvas({ stages, width, height }) {
+  const accent = DEVELOPER.orange
 
   return (
     <svg
-      ref={svgRef}
-      style={{ width: '100%', height: '100%' }}
-    />
-  )
-}
-
-function hexPoints(r) {
-  return Array.from({ length: 6 }, (_, i) => {
-    const a = (Math.PI / 3) * i - Math.PI / 6
-    return `${r * Math.cos(a)},${r * Math.sin(a)}`
-  }).join(' ')
-}
-
-// TGE timeline bar chart
-function TGETimeline({ projections = [] }) {
-  const W = 100
-  const maxDays = 365
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-      {projections.map((p) => {
-        const days = p.days_to_1_0
-        const pct  = days ? Math.min(1, days / maxDays) : null
-        const color = p.trend === 'IMPROVING' ? '#ff6b00' : p.trend === 'WORSENING' ? '#ff3b5c' : 'rgba(200,216,232,0.25)'
+      width={width}
+      height={height}
+      style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}
+    >
+      {/* Connectors between nodes */}
+      {NODE_X.slice(0, -1).map((x, i) => {
+        const stageActive = stages[i]?.status === 'ACTIVE' && stages[i + 1]?.status !== 'DEAD'
         return (
-          <div key={p.pair_key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontFamily: FONTS.mono, fontSize: 8, color: 'rgba(200,216,232,0.5)', width: 40 }}>{p.pair_key}</span>
-            <div style={{ flex: 1, height: 4, background: 'rgba(255,255,255,0.05)', borderRadius: 2, overflow: 'hidden' }}>
-              {pct !== null
-                ? <div style={{ width: `${(1 - pct) * 100}%`, height: '100%', background: color, borderRadius: 2, transition: 'width 0.5s' }} />
-                : <div style={{ width: '100%', height: '100%', background: 'rgba(255,59,92,0.3)', borderRadius: 2 }} />
-              }
-            </div>
-            <span style={{ fontFamily: FONTS.mono, fontSize: 7, color, width: 36, textAlign: 'right' }}>
-              {days ? `${days}d` : p.trend}
-            </span>
-          </div>
+          <PipelineConnector
+            key={i}
+            x0={x + 0.063}
+            x1={NODE_X[i + 1] - 0.063}
+            y={NODE_Y}
+            width={width}
+            height={height}
+            active={stageActive}
+            accent={accent}
+            particleCount={stageActive ? 3 : 0}
+          />
         )
       })}
-    </div>
+    </svg>
   )
 }
 
-// PITL layer drill-down chip
-function PITLChip({ code, label, type, active }) {
-  const bg    = type === 'hard' ? 'rgba(255,59,92,0.12)' : 'rgba(255,170,68,0.08)'
-  const border = type === 'hard' ? 'rgba(255,59,92,0.4)' : 'rgba(255,170,68,0.25)'
-  const color  = type === 'hard' ? '#ff3b5c' : '#ffaa44'
+// ─── Right drawer — isFullyEligible() gate conditions ─────────────────────────
+
+const PREFLIGHT_LABELS = {
+  separation_ok:         'Separation ratio > min',
+  l4_ok:                 'L4 calibration valid',
+  gate_ok:               'Dual primitive gate',
+  cert_ok:               'Device cert registered',
+  audit_ok:              'Ceremony audit clean',
+  biometric_ttl_ok:      'Biometric TTL valid',
+  all_pairs_p0_ok:       'All pairs > 1.0',
+  ait_defensibility_ok:  'AIT defensibility (N≥10)',
+}
+
+function GateDrawer({ open, onClose, preflight }) {
   return (
-    <div style={{
-      padding: '3px 7px',
-      background: active ? bg : 'rgba(255,255,255,0.03)',
-      border: `1px solid ${active ? border : 'rgba(255,255,255,0.06)'}`,
-      borderRadius: 3,
-      fontFamily: FONTS.mono,
-      fontSize: 8,
-      color: active ? color : 'rgba(200,216,232,0.3)',
-      display: 'inline-flex',
-      gap: 4,
-      alignItems: 'center',
-    }}>
-      <span style={{ opacity: 0.6 }}>{code}</span>
-      <span>{label}</span>
-    </div>
+    <AnimatePresence>
+      {open && (
+        <>
+          <motion.div
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 30 }}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={onClose}
+          />
+          <motion.div
+            style={{
+              position: 'fixed', top: '50%', right: 16,
+              transform: 'translateY(-50%)',
+              width: 280, zIndex: 31,
+            }}
+            initial={{ x: 320, opacity: 0 }}
+            animate={{ x: 0, opacity: 1, transition: { duration: 0.2, ease: 'easeOut' } }}
+            exit={{ x: 320, opacity: 0, transition: { duration: 0.15 } }}
+          >
+            <Glass accent={DEVELOPER.orange} style={{ padding: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <span style={{ fontFamily: FONTS.display, fontSize: 13, fontWeight: 600, color: DEVELOPER.t1, letterSpacing: '0.08em' }}>isFullyEligible() GATE</span>
+                <span
+                  style={{ fontFamily: FONTS.mono, fontSize: 8, color: DEVELOPER.t3, cursor: 'pointer', padding: '2px 6px' }}
+                  onClick={onClose}
+                >✕</span>
+              </div>
+
+              {preflight ? (
+                <div>
+                  {Object.entries(PREFLIGHT_LABELS).map(([key, label]) => {
+                    const val = preflight[key]
+                    return (
+                      <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: `1px solid ${DEVELOPER.bd}` }}>
+                        <span style={{ fontFamily: FONTS.mono, fontSize: 8, color: DEVELOPER.t2 }}>{label}</span>
+                        <span style={{
+                          fontFamily: FONTS.mono, fontSize: 9, fontWeight: 700,
+                          color: val === true ? DEVELOPER.green : val === false ? DEVELOPER.red : DEVELOPER.t3,
+                        }}>
+                          {val === true ? 'PASS' : val === false ? 'FAIL' : '–'}
+                        </span>
+                      </div>
+                    )
+                  })}
+
+                  <div style={{ marginTop: 10 }}>
+                    <DrawerStat
+                      label="OVERALL"
+                      value={preflight.overall_pass ? 'PASS' : 'FAIL'}
+                      accent={preflight.overall_pass ? DEVELOPER.green : DEVELOPER.red}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div style={{ fontFamily: FONTS.mono, fontSize: 9, color: DEVELOPER.t3, textAlign: 'center', padding: 16 }}>Loading…</div>
+              )}
+            </Glass>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
   )
 }
+
+// ─── Left drawer — PITL signal weights ────────────────────────────────────────
+
+const PITL_SIGNALS = [
+  { label: 'L4 Mahalanobis',   weight: 0.28, key: 'l4' },
+  { label: 'L5 Temporal',      weight: 0.27, key: 'l5' },
+  { label: 'L2B IMU-Press',    weight: 0.15, key: 'l2b' },
+  { label: 'L2C Stick-IMU',    weight: 0.10, key: 'l2c' },
+  { label: 'IoSwarm (emu)',     weight: 0.35, key: 'sw', note: 'off' },
+]
+
+const VERDICT_COLORS = {
+  CERTIFY: DEVELOPER.green,
+  FLAG: DEVELOPER.amber,
+  HOLD: DEVELOPER.orange,
+  BLOCK: DEVELOPER.red,
+}
+
+function PITLDrawer({ open, onClose, analytics }) {
+  return (
+    <AnimatePresence>
+      {open && (
+        <>
+          <motion.div
+            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)', zIndex: 30 }}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            onClick={onClose}
+          />
+          <motion.div
+            style={{
+              position: 'fixed', top: '50%', left: 16,
+              transform: 'translateY(-50%)',
+              width: 260, zIndex: 31,
+            }}
+            variants={DRAWER_SLIDE_LEFT}
+            initial="initial" animate="animate" exit="exit"
+          >
+            <Glass accent={DEVELOPER.amber} style={{ padding: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <span style={{ fontFamily: FONTS.display, fontSize: 13, fontWeight: 600, color: DEVELOPER.t1, letterSpacing: '0.08em' }}>PITL SIGNAL WEIGHTS</span>
+                <span style={{ fontFamily: FONTS.mono, fontSize: 8, color: DEVELOPER.t3, cursor: 'pointer', padding: '2px 6px' }} onClick={onClose}>✕</span>
+              </div>
+
+              {PITL_SIGNALS.map((sig) => (
+                <div key={sig.key} style={{ marginBottom: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                    <span style={{ fontFamily: FONTS.mono, fontSize: 8, color: sig.note ? DEVELOPER.t3 : DEVELOPER.t2 }}>
+                      {sig.label}{sig.note ? ` (${sig.note})` : ''}
+                    </span>
+                    <span style={{ fontFamily: FONTS.mono, fontSize: 9, fontWeight: 700, color: sig.note ? DEVELOPER.t3 : DEVELOPER.amber }}>{sig.weight.toFixed(2)}</span>
+                  </div>
+                  <div style={{ height: 3, background: DEVELOPER.bd, borderRadius: 2 }}>
+                    <motion.div
+                      style={{ height: '100%', borderRadius: 2, background: sig.note ? DEVELOPER.t3 : DEVELOPER.amber }}
+                      initial={{ width: 0 }}
+                      animate={{ width: `${sig.weight * 100}%` }}
+                      transition={{ duration: 1.2, ease: 'easeOut', delay: 0.1 }}
+                    />
+                  </div>
+                </div>
+              ))}
+
+              {analytics && (
+                <div style={{ marginTop: 14, paddingTop: 10, borderTop: `1px solid ${DEVELOPER.bd}` }}>
+                  <div style={{ fontFamily: FONTS.mono, fontSize: 7, color: DEVELOPER.t3, letterSpacing: '0.12em', marginBottom: 6 }}>BLOCKING REASONS</div>
+                  {Object.entries(analytics.blocking_reason_counts ?? {}).map(([reason, count]) => (
+                    <DrawerStat key={reason} label={reason} value={count} accent={DEVELOPER.red} />
+                  ))}
+                  {Object.keys(analytics.blocking_reason_counts ?? {}).length === 0 && (
+                    <div style={{ fontFamily: FONTS.mono, fontSize: 8, color: DEVELOPER.green, textAlign: 'center', padding: 8 }}>No blockers</div>
+                  )}
+                </div>
+              )}
+            </Glass>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  )
+}
+
+// ─── Node component ────────────────────────────────────────────────────────────
+
+function PipelineNode({ label, count, countLabel, ageLabel, status, accent, index }) {
+  const statusColor = status === 'ACTIVE' ? DEVELOPER.green : status === 'STALLED' ? DEVELOPER.amber : DEVELOPER.red
+
+  return (
+    <motion.div variants={PIPELINE_NODE} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      {/* Status indicator dot */}
+      <div style={{ width: 6, height: 6, borderRadius: '50%', background: statusColor, boxShadow: `0 0 8px ${statusColor}`, marginBottom: 6 }} />
+
+      <Glass accent={accent} style={{ width: 112, padding: '8px 10px', textAlign: 'center' }}>
+        <div style={{ fontFamily: FONTS.display, fontWeight: 600, fontSize: 11, letterSpacing: '0.1em', color: DEVELOPER.t1, marginBottom: 4 }}>{label}</div>
+        <div style={{ fontFamily: FONTS.mono, fontSize: 18, fontWeight: 700, color: accent, lineHeight: 1, marginBottom: 2 }}>{count ?? '–'}</div>
+        <div style={{ fontFamily: FONTS.mono, fontSize: 7, color: DEVELOPER.t3, letterSpacing: '0.1em' }}>{countLabel}</div>
+        {ageLabel && (
+          <div style={{ fontFamily: FONTS.mono, fontSize: 7, color: ageLabel.includes('stall') || ageLabel.includes('dead') ? DEVELOPER.red : DEVELOPER.t2, marginTop: 3 }}>{ageLabel}</div>
+        )}
+      </Glass>
+    </motion.div>
+  )
+}
+
+// ─── Main view ────────────────────────────────────────────────────────────────
 
 export function DeveloperView() {
-  const { data: blockerSummary }   = useTournamentBlockerSummary()
-  const { data: gapProjection }    = usePerPairGapProjection()
-  const { data: preflight }        = useTournamentPreflight()
-  const { data: pairGap }          = usePerPairGapStatus()
+  const [gateOpen,  setGateOpen]  = useState(false)
+  const [pitlOpen,  setPitlOpen]  = useState(false)
+  const [dims,      setDims]      = useState({ w: window.innerWidth, h: window.innerHeight })
 
-  const blockers    = blockerSummary?.blockers ?? []
-  const projections = gapProjection?.projections ?? []
-  const overallPass = preflight?.overall_pass ?? false
+  const { data: ch } = useCaptureHealth()
+  const { data: gc } = useGrindChain()
+  const { data: ga } = useGrindAnalytics()
+  const { data: pf } = useTournamentPreflight()
+  const { data: fs } = useFleetCoherenceStatus()
+  const { data: pc } = useProtocolCoherence()
+
+  useEffect(() => {
+    const onResize = () => setDims({ w: window.innerWidth, h: window.innerHeight })
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+
+  // Auto-open gate drawer when preflight fails
+  useEffect(() => {
+    if (pf && !pf.overall_pass) setGateOpen(true)
+  }, [pf?.overall_pass])
+
+  // Auto-open PITL drawer on contradictions
+  useEffect(() => {
+    if (fs && fs.active_contradictions > 0) setPitlOpen(true)
+  }, [fs?.active_contradictions])
+
+  // Derive pipeline stage states
+  const captureActive  = ch?.capture_state === 'NOMINAL'
+  const validated      = ga?.total_validated ?? 0
+  const stamped        = ga?.stamped_count   ?? 0
+  const chainLen       = gc?.chain_length     ?? 0
+  const chainIntact    = gc?.chain_intact     ?? true
+  const successRate    = ga?.success_rate     ?? 0
+  const sessPerDay     = ga?.sessions_per_day ?? 0
+  const agentCount     = pc?.agent_count      ?? fs?.total_entries ?? 38
+  const contradictions = fs?.active_contradictions ?? 0
+  const merkleRoot     = pc?.latest_merkle_root ?? ''
+  const merkleShort    = merkleRoot ? merkleRoot.slice(0, 12) : '–'
+  const sessionId      = gc?.grind_session_id ?? '–'
+  const grindTarget    = ch?.grind_target     ?? 100
+  const consClean      = ch?.consecutive_clean_toward_target ?? 0
+
+  // Format seconds-ago into human-readable label
+  const fmtAge = (ts) => {
+    if (!ts || ts === 0) return null
+    const s = Math.floor(Date.now() / 1000 - ts)
+    if (s < 0) return 'just now'
+    if (s < 60) return `${s}s ago`
+    if (s < 3600) return `${Math.floor(s / 60)}m ago`
+    return `${Math.floor(s / 3600)}h ago`
+  }
+
+  const lastValidAge = fmtAge(ga?.last_validation_ts)
+  const lastStampAge = fmtAge(ga?.last_stamp_ts)
+  const lastGicAge   = fmtAge(gc?.latest_ts)
+  const lastChainAge = fmtAge(pc?.last_anchor_ts)
+
+  const stages = useMemo(() => [
+    {
+      label: 'CAPTURE',
+      count: ch?.poll_rate_hz ? Math.round(ch.poll_rate_hz) : '–',
+      countLabel: 'Hz POLL',
+      ageLabel: captureActive ? 'NOMINAL' : (ch?.capture_state ?? 'offline'),
+      status: captureActive ? 'ACTIVE' : 'STALLED',
+    },
+    {
+      label: 'ADJUDICATE',
+      count: validated,
+      countLabel: 'VALIDATED',
+      ageLabel: lastValidAge ?? (validated > 0 ? 'live' : 'waiting'),
+      status: validated > 0 ? 'ACTIVE' : 'WAITING',
+    },
+    {
+      label: 'VALIDATE',
+      count: stamped,
+      countLabel: 'STAMPED',
+      ageLabel: lastStampAge ?? (stamped > 0 ? `${(successRate * 100).toFixed(0)}% rate` : 'waiting'),
+      status: stamped > 0 ? 'ACTIVE' : 'WAITING',
+    },
+    {
+      label: 'GIC STAMP',
+      count: chainLen,
+      countLabel: `/ ${grindTarget} CHAIN`,
+      ageLabel: lastGicAge ?? (chainIntact ? 'INTACT' : 'BROKEN'),
+      status: chainLen > 0 ? (chainIntact ? 'ACTIVE' : 'STALLED') : 'WAITING',
+    },
+    {
+      label: 'ON-CHAIN',
+      count: pc?.total_anchors ?? '–',
+      countLabel: 'ANCHORS',
+      ageLabel: lastChainAge ?? (pc?.on_chain_confirmed ? 'confirmed' : 'pending'),
+      status: pc?.on_chain_confirmed ? 'ACTIVE' : 'WAITING',
+    },
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], [ch, gc, ga, pc, captureActive, validated, stamped, chainLen, chainIntact, successRate, grindTarget, lastValidAge, lastStampAge, lastGicAge, lastChainAge])
+
+  // Bottom bar chip states
+  const pipelineStatus = captureActive ? 'ACTIVE' : (ch ? 'STALLED' : 'DEAD')
+  const pipelineColor  = pipelineStatus === 'ACTIVE' ? DEVELOPER.green : pipelineStatus === 'STALLED' ? DEVELOPER.amber : DEVELOPER.red
+  const chainStatus    = `${chainLen}/${grindTarget}`
+  const chainColor     = chainIntact ? DEVELOPER.orange : DEVELOPER.red
+  const gatePass       = pf?.overall_pass
+  const gateColor      = gatePass ? DEVELOPER.green : DEVELOPER.red
+  const fleetLabel     = `${agentCount} · ${contradictions} CONTRA`
+  const fleetColor     = contradictions > 0 ? DEVELOPER.amber : DEVELOPER.green
+  const successLabel   = `${(successRate * 100).toFixed(0)}% PASS`
+  const velocityLabel  = sessPerDay > 0 ? `${sessPerDay.toFixed(1)}/day` : '–'
 
   return (
-    <div style={{ display: 'flex', height: '100%', background: DEVELOPER.bg }}>
+    <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden', background: DEVELOPER.bg }}>
 
-      {/* Left: D3 blocker force graph */}
+      {/* Circuit board grid background */}
       <div style={{
-        flex:         '0 0 46%',
-        borderRight:  '1px solid rgba(255,107,0,0.08)',
-        display:      'flex',
-        flexDirection:'column',
-      }}>
-        <SectionHeader color={DEVELOPER.orange} label="TOURNAMENT BLOCKER GRAPH" />
-        <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-          <BlockerGraph blockers={blockers} />
+        position: 'absolute', inset: 0, pointerEvents: 'none',
+        backgroundImage: [
+          `repeating-linear-gradient(0deg, transparent, transparent 39px, ${DEVELOPER.orange}0d 39px, ${DEVELOPER.orange}0d 40px)`,
+          `repeating-linear-gradient(90deg, transparent, transparent 39px, ${DEVELOPER.orange}0d 39px, ${DEVELOPER.orange}0d 40px)`,
+        ].join(', '),
+      }} />
+
+      {/* Radial vignette */}
+      <div style={{
+        position: 'absolute', inset: 0, pointerEvents: 'none',
+        background: `radial-gradient(ellipse 70% 60% at 50% 50%, transparent 40%, ${DEVELOPER.bg} 100%)`,
+      }} />
+
+      {/* Pipeline SVG connectors + particles */}
+      <PipelineCanvas stages={stages} width={dims.w} height={dims.h} />
+
+      {/* Pipeline nodes — horizontally centered at 50% height */}
+      <motion.div
+        variants={PIPELINE_NODE_CONTAINER}
+        initial="initial" animate="animate"
+        style={{
+          position: 'absolute',
+          top: `${NODE_Y * 100}%`,
+          left: 0, right: 0,
+          transform: 'translateY(-50%)',
+          display: 'flex',
+          justifyContent: 'space-around',
+          alignItems: 'center',
+          padding: '0 4%',
+          pointerEvents: 'none',
+        }}
+      >
+        {stages.map((stage, i) => (
+          <PipelineNode
+            key={stage.label}
+            index={i}
+            label={stage.label}
+            count={stage.count}
+            countLabel={stage.countLabel}
+            ageLabel={stage.ageLabel}
+            status={stage.status}
+            accent={i === 3 ? DEVELOPER.amber : DEVELOPER.orange}
+          />
+        ))}
+      </motion.div>
+
+      {/* ── TOP-LEFT: session badge ── */}
+      <div style={{ position: 'absolute', top: 16, left: 16, display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <Glass accent={DEVELOPER.orange} style={{ padding: '8px 12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{
+              width: 6, height: 6, borderRadius: '50%',
+              background: ch ? DEVELOPER.green : DEVELOPER.red,
+              boxShadow: `0 0 6px ${ch ? DEVELOPER.green : DEVELOPER.red}`,
+            }} />
+            <span style={{ fontFamily: FONTS.mono, fontSize: 9, color: DEVELOPER.t2 }}>BRIDGE</span>
+          </div>
+          <div style={{ fontFamily: FONTS.mono, fontSize: 9, fontWeight: 600, color: DEVELOPER.orange, marginTop: 4 }}>{sessionId}</div>
+        </Glass>
+      </div>
+
+      {/* ── TOP-RIGHT: fleet badge ── */}
+      <div style={{ position: 'absolute', top: 16, right: 16 }}>
+        <Glass accent={DEVELOPER.amber} style={{ padding: '8px 12px', textAlign: 'right' }}>
+          <div style={{ fontFamily: FONTS.mono, fontSize: 9, color: DEVELOPER.t3 }}>FLEET</div>
+          <div style={{ fontFamily: FONTS.mono, fontSize: 11, fontWeight: 700, color: DEVELOPER.amber }}>
+            {agentCount} <span style={{ fontWeight: 400, color: DEVELOPER.t2 }}>agents</span>
+          </div>
+          <div style={{ fontFamily: FONTS.mono, fontSize: 8, color: contradictions > 0 ? DEVELOPER.red : DEVELOPER.t3, marginTop: 2 }}>
+            {contradictions} contra · {merkleShort}
+          </div>
+        </Glass>
+      </div>
+
+      {/* ── TOP-CENTER: hero number ── */}
+      <div style={{ position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)', textAlign: 'center', pointerEvents: 'none' }}>
+        <div style={{ fontFamily: FONTS.display, fontSize: 36, fontWeight: 700, color: DEVELOPER.orange, lineHeight: 1, textShadow: `0 0 40px ${DEVELOPER.orange}88` }}>
+          {consClean} <span style={{ fontSize: 20, color: DEVELOPER.t3 }}>/ {grindTarget}</span>
         </div>
         <div style={{
-          padding:    '6px 10px',
-          borderTop:  '1px solid rgba(255,107,0,0.06)',
-          fontFamily: FONTS.mono,
-          fontSize:   8,
-          color:      overallPass ? '#00ff88' : '#ff3b5c',
-          display:    'flex',
-          alignItems: 'center',
-          gap:        6,
+          fontFamily: FONTS.mono, fontSize: 8, letterSpacing: '0.18em',
+          color: chainIntact ? DEVELOPER.green : DEVELOPER.red, marginTop: 4,
         }}>
-          <span style={{ fontSize: 6 }}>●</span>
-          isFullyEligible() = {overallPass ? 'TRUE' : 'FALSE'}
-          <span style={{ marginLeft: 'auto', color: 'rgba(200,216,232,0.3)' }}>
-            {blockers.length} active blockers
-          </span>
+          {chainIntact ? 'PIPELINE VERIFIED' : 'CHAIN BROKEN'}
         </div>
       </div>
 
-      {/* Right: TGE timeline + PITL + heartbeat */}
+      {/* ── LEFT DRAWER HANDLE ── */}
+      <motion.div
+        style={{
+          position: 'absolute', left: 0, top: '50%', transform: 'translateY(-50%)',
+          width: 20, height: 60,
+          background: `${DEVELOPER.amber}22`, border: `1px solid ${DEVELOPER.amber}33`,
+          borderRadius: '0 4px 4px 0', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}
+        whileHover={{ width: 26, background: `${DEVELOPER.amber}44` }}
+        onClick={() => setPitlOpen(v => !v)}
+      >
+        <span style={{ fontFamily: FONTS.mono, fontSize: 7, color: DEVELOPER.amber, writingMode: 'vertical-rl', letterSpacing: '0.1em' }}>PITL</span>
+      </motion.div>
+
+      {/* ── RIGHT DRAWER HANDLE ── */}
+      <motion.div
+        style={{
+          position: 'absolute', right: 0, top: '50%', transform: 'translateY(-50%)',
+          width: 20, height: 60,
+          background: gatePass ? `${DEVELOPER.green}22` : `${DEVELOPER.red}22`,
+          border: `1px solid ${gatePass ? DEVELOPER.green : DEVELOPER.red}33`,
+          borderRadius: '4px 0 0 4px', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}
+        whileHover={{ width: 26 }}
+        onClick={() => setGateOpen(v => !v)}
+      >
+        <span style={{ fontFamily: FONTS.mono, fontSize: 7, color: gatePass ? DEVELOPER.green : DEVELOPER.red, writingMode: 'vertical-rl', letterSpacing: '0.1em' }}>GATE</span>
+      </motion.div>
+
+      {/* ── BOTTOM STATUS BAR ── */}
       <div style={{
-        flex:          '1',
-        display:       'flex',
-        flexDirection: 'column',
-        overflow:      'hidden',
+        position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)',
+        display: 'flex', gap: 6, alignItems: 'center',
       }}>
-
-        {/* TGE timeline */}
-        <div style={{ flex: '0 0 auto', padding: '8px 12px', borderBottom: '1px solid rgba(255,107,0,0.06)' }}>
-          <SectionHeader color={DEVELOPER.orange} label="TGE TIMELINE PROJECTION" small />
-          <div style={{ marginTop: 6 }}>
-            <TGETimeline projections={projections} />
-          </div>
-          {gapProjection?.any_feasible === false && (
-            <div style={{ marginTop: 5, fontFamily: FONTS.mono, fontSize: 8, color: '#ff3b5c' }}>
-              ⚠ No feasible TGE date — WORSENING/STABLE pairs present
-            </div>
-          )}
-        </div>
-
-        {/* PITL layer drill-down */}
-        <div style={{ flex: '0 0 auto', padding: '8px 12px', borderBottom: '1px solid rgba(255,107,0,0.06)' }}>
-          <SectionHeader color={DEVELOPER.orange} label="PITL NINE-LEVEL STACK" small />
-          <div style={{ marginTop: 5, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-            <PITLChip code="L0"   label="HID presence"       type="info"     active />
-            <PITLChip code="L1"   label="chain integrity"    type="info"     active />
-            <PITLChip code="0x28" label="DRIVER_INJECT"      type="hard"     active />
-            <PITLChip code="0x29" label="WALLHACK"           type="hard"     active />
-            <PITLChip code="0x2A" label="AIMBOT"             type="hard"     active />
-            <PITLChip code="0x31" label="IMU_PRESS"          type="advisory" active={false} />
-            <PITLChip code="0x32" label="STICK_IMU"         type="advisory" active={false} />
-            <PITLChip code="0x30" label="BIO_ANOMALY"        type="advisory" active />
-            <PITLChip code="0x2B" label="TEMPORAL_BOT"      type="advisory" active />
-            <PITLChip code="0x33" label="GSR_ABSENT"         type="advisory" active={false} />
-          </div>
-        </div>
-
-        {/* Per-pair distances */}
-        <div style={{ flex: '0 0 auto', padding: '8px 12px', borderBottom: '1px solid rgba(255,107,0,0.06)' }}>
-          <SectionHeader color={DEVELOPER.orange} label="PER-PAIR MAHALANOBIS" small />
-          <div style={{ marginTop: 5, display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {(pairGap?.pairs ?? []).map((p) => (
-              <div key={p.pair_key} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontFamily: FONTS.mono, fontSize: 8, color: 'rgba(200,216,232,0.4)', width: 36 }}>{p.pair_key}</span>
-                <div style={{ flex: 1, height: 3, background: 'rgba(255,255,255,0.05)', borderRadius: 2 }}>
-                  <div style={{
-                    width: `${Math.min(100, (p.distance / 2.0) * 100)}%`,
-                    height: '100%',
-                    background: p.above_1_0 ? '#00ff88' : '#ff3b5c',
-                    borderRadius: 2,
-                    transition: 'width 0.4s',
-                  }} />
-                </div>
-                <ProvenanceTag
-                  value={p.distance}
-                  agentId="PerPairGapLog"
-                  phase={216}
-                  invariant="target >1.0 for tournament gate"
-                  style={{ fontFamily: FONTS.mono, fontSize: 9, color: p.above_1_0 ? '#00ff88' : '#ff3b5c' }}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Heartbeat */}
-        <div style={{ flex: '0 0 auto', padding: '8px 12px' }}>
-          <div style={{ fontFamily: FONTS.mono, fontSize: 8, color: 'rgba(255,107,0,0.4)', marginBottom: 3, letterSpacing: '0.1em' }}>
-            228-BYTE PoAC HEARTBEAT
-          </div>
-          <HeartbeatWaveform accent={DEVELOPER.orange} height={32} />
-        </div>
+        <StatusChip label="PIPELINE" value={pipelineStatus}    accent={pipelineColor} />
+        <StatusChip label="SUCCESS"  value={successLabel}      accent={DEVELOPER.orange} />
+        <StatusChip label="CHAIN"    value={chainStatus}       accent={chainColor} onClick={() => setGateOpen(v => !v)} active={gateOpen} />
+        <StatusChip label="FLEET"    value={fleetLabel}        accent={fleetColor} onClick={() => setPitlOpen(v => !v)} active={pitlOpen} />
+        <StatusChip label="GATE"     value={gatePass ? 'PASS' : 'FAIL'} accent={gateColor} onClick={() => setGateOpen(v => !v)} active={gateOpen} />
+        <StatusChip label="VELOCITY" value={velocityLabel}    accent={DEVELOPER.amber} />
       </div>
-    </div>
-  )
-}
 
-function SectionHeader({ color, label, small = false }) {
-  return (
-    <div style={{
-      fontFamily:    FONTS.mono,
-      fontSize:      small ? 7 : 8,
-      color:         color ? `${color}80` : 'rgba(200,216,232,0.35)',
-      letterSpacing: '0.12em',
-      paddingBottom: small ? 0 : 6,
-      borderBottom:  small ? 'none' : `1px solid ${color}18`,
-      padding:       small ? '0' : '6px 12px',
-    }}>
-      {label}
+      {/* Drawers */}
+      <GateDrawer open={gateOpen} onClose={() => setGateOpen(false)} preflight={pf} />
+      <PITLDrawer open={pitlOpen} onClose={() => setPitlOpen(false)} analytics={ga} />
     </div>
   )
 }
