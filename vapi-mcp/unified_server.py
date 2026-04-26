@@ -967,7 +967,7 @@ async def vapi_unified_state(include_bridge_live: bool = False, **_):
     s = _parse_claude_md()
 
     result: dict[str, Any] = {
-        "source": "CLAUDE.md + unified_server (Phase 211; fallbacks updated Phase 238)",
+        "source": "CLAUDE.md + unified_server (Phase 211; fallbacks updated Phase 237.5)",
         "protocol": {
             "phase":        f"Phase {s.get('phase_num', '?')} COMPLETE",
             "bridge":       s.get("bridge",    "2510"),     # Phase 237-EXTEND fallback

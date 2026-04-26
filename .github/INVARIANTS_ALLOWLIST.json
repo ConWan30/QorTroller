@@ -102,5 +102,13 @@
   "INV-026": {
     "digest": "6c3664bd7ad2a14fe4c7c4ca0fd40c0e88cd4aa4ad2f8af3a5fe3490119e93e7",
     "description": "PCC get_status and is_grind_ready call _recompute before reading state (INV-PCC-001)"
+  },
+  "INV-CORPUS-001": {
+    "digest": "66c71d8f4d5d0da0a689d8dbf75b8f4f5659ae7d04d71aaf70bd62dd3bdc626a",
+    "description": "anchor_corpus_snapshot async function exists in chain.py (Phase 237.5)"
+  },
+  "INV-CORPUS-002": {
+    "digest": "f0c3995af9e62844c0514d73d06e67040b7de41e20e6960ff8ca913b8b7d281e",
+    "description": "CORPUS_SNAPSHOT sourceType literal pinned in chain.py (Phase 237.5)"
   }
 }
