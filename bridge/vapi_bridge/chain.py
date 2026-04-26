@@ -2528,6 +2528,91 @@ class ChainClient:
                  tx_hash.hex()[:16], device_id[:16], poad_hash_hex[:16])
         return tx_hash.hex()
 
+    # ------------------------------------------------------------------
+    # Phase 237.5 — CORPUS-SNAPSHOT on-chain anchoring
+    # ------------------------------------------------------------------
+    # Pure addition. Never raises. Mirrors record_adjudication scaffolding
+    # but targets AdjudicationRegistry's 2-arg sourceType-attributed API
+    # added in Phase 204+ (anchorAdjudication(bytes32, string)). Called
+    # from operator_api.py:force_corpus_snapshot before the local DB
+    # insert so the row records the live anchor result in one call. The
+    # legacy record_adjudication path above (Phase 112 PoAd anchoring) is
+    # UNAFFECTED — those call sites continue using the 3-arg
+    # recordAdjudication ABI.
+    async def anchor_corpus_snapshot(
+        self,
+        snapshot_commitment_hex: str,
+    ) -> "tuple[str | None, bool]":
+        """Anchor a CORPUS-SNAPSHOT commitment in AdjudicationRegistry (Phase 237.5).
+
+        Targets anchorAdjudication(bytes32 podHash, string sourceType) at
+        contracts/contracts/AdjudicationRegistry.sol:79-99 with sourceType
+        "CORPUS_SNAPSHOT". Returns (tx_hash_hex, True) on success;
+        (None, False) on missing config / wallet error / tx revert /
+        duplicate ("PoAd: already recorded"). Never raises — graceful
+        degradation per Phase 237.5 D1.
+        """
+        addr = getattr(self._cfg, "adjudication_registry_address", "")
+        if not addr:
+            log.warning(
+                "anchor_corpus_snapshot: adjudication_registry_address not "
+                "configured — snapshot will record on_chain_confirmed=False"
+            )
+            return (None, False)
+        try:
+            commitment_bytes32 = bytes.fromhex(snapshot_commitment_hex.lstrip("0x"))[:32]
+            commitment_bytes32 = commitment_bytes32.ljust(32, b"\x00")
+        except Exception as exc:
+            log.warning("anchor_corpus_snapshot: bad commitment hex: %s", exc)
+            return (None, False)
+        _ABI = [{
+            "name": "anchorAdjudication", "type": "function",
+            "stateMutability": "nonpayable",
+            "inputs": [
+                {"name": "podHash",    "type": "bytes32"},
+                {"name": "sourceType", "type": "string"},
+            ],
+            "outputs": [],
+        }]
+        try:
+            contract = self._w3.eth.contract(
+                address=self._w3.to_checksum_address(addr), abi=_ABI
+            )
+            nonce = await self._w3.eth.get_transaction_count(self._account.address)
+            tx = await contract.functions.anchorAdjudication(
+                commitment_bytes32, "CORPUS_SNAPSHOT",
+            ).build_transaction({
+                "from": self._account.address, "nonce": nonce, "gas": 100_000,
+            })
+            signed = self._account.sign_transaction(tx)
+            tx_hash = await self._w3.eth.send_raw_transaction(signed.rawTransaction)
+            receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+            if receipt.status != 1:
+                log.warning(
+                    "anchor_corpus_snapshot: tx reverted commitment=%s tx=%s",
+                    snapshot_commitment_hex[:16], tx_hash.hex()[:16],
+                )
+                return (None, False)
+            log.info(
+                "anchor_corpus_snapshot: tx=%s commitment=%s",
+                tx_hash.hex()[:16], snapshot_commitment_hex[:16],
+            )
+            return (tx_hash.hex(), True)
+        except Exception as exc:
+            _msg = str(exc)
+            if "PoAd: already recorded" in _msg:
+                log.info(
+                    "anchor_corpus_snapshot: idempotent no-op — commitment=%s "
+                    "already anchored",
+                    snapshot_commitment_hex[:16],
+                )
+                return (None, False)
+            log.warning(
+                "anchor_corpus_snapshot: anchor failed commitment=%s err=%s",
+                snapshot_commitment_hex[:16], _msg[:120],
+            )
+            return (None, False)
+
     async def is_dual_eligible(
         self,
         device_id_hash_hex: str,

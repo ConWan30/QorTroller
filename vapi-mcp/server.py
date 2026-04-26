@@ -244,7 +244,7 @@ async def vapi_protocol_state(**_):
     # Parse CLAUDE.md for current state — auto-refreshes when file changes (every phase)
     s = _parse_claude_md()
     state = {
-        "phase": s.get("phase", "238 COMPLETE"),  # Phase 238 fallback (MetaLearner FSCA wiring; Decision A only)
+        "phase": s.get("phase", "237.5 COMPLETE"),  # Phase 237.5 fallback (CORPUS-SNAPSHOT on-chain anchoring via AdjudicationRegistry)
         "timestamp": datetime.utcnow().isoformat() + "Z",
         "test_counts": {
             "bridge":   s.get("bridge",   2510),  # Phase 237-EXTEND fallback

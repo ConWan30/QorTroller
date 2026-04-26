@@ -7429,11 +7429,15 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
 
     # Phase 236-CORPUS-SNAPSHOT — POST /operator/force-corpus-snapshot
     # ------------------------------------------------------------------
-    # Operator-triggered fresh snapshot. Computes wiki_hash + reads agent root
-    # and AIT separation status NOW, builds the FROZEN v1 commitment, persists
-    # to corpus_snapshot_log. Optional on_chain_confirm (Phase 221 anchor reuse)
-    # is config-gated and not auto-fired here — the snapshot exists locally
-    # always; on-chain anchoring is a separate operator action.
+    # Phase 237.5: on-chain anchoring is now active. Order of operations:
+    # compute commitment → anchor via AdjudicationRegistry.anchorAdjudication(
+    # commitment, "CORPUS_SNAPSHOT") → insert row with anchor result already
+    # populated in the same insert call (no post-insert UPDATE pattern).
+    # Anchor failure does not block the snapshot insert — row records
+    # (tx_hash="", on_chain_confirmed=False) for graceful audit-trail
+    # degradation. The local snapshot is always authoritative; the on-chain
+    # anchor adds tamper-evidence at the inter-database layer for future
+    # ZK-SEPPROOF binding (PHASE_237_5_DESIGN.md §4).
     @app.post("/operator/force-corpus-snapshot")
     async def force_corpus_snapshot(
         api_key: str = Query(default=""),
@@ -7482,6 +7486,14 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                 wiki_hash, agent_root, ratio, corpus_n, ts_ns
             )
 
+            # Phase 237.5: anchor FIRST so the insert can record the live
+            # result in one call. anchor_corpus_snapshot never raises;
+            # returns (None, False) on any failure path so the snapshot
+            # insert always proceeds (graceful degradation).
+            tx_hash_hex, anchored = await chain.anchor_corpus_snapshot(
+                commitment.hex(),
+            )
+
             row_id = await asyncio.to_thread(
                 store.insert_corpus_snapshot,
                 commitment.hex(),
@@ -7491,9 +7503,9 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                 corpus_n,
                 ts_ns,
                 _reason,
-                False,    # on_chain_confirmed
-                "",       # tx_hash
-                "",       # ipfs_cid (deferred)
+                bool(anchored),                # on_chain_confirmed
+                tx_hash_hex or "",             # tx_hash
+                "",                            # ipfs_cid (deferred)
             )
 
             return {
@@ -7505,7 +7517,8 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                 "corpus_n":            corpus_n,
                 "ts_ns":               ts_ns,
                 "trigger_reason":      _reason,
-                "on_chain_confirmed":  False,
+                "on_chain_confirmed":  bool(anchored),
+                "tx_hash":             tx_hash_hex or "",
                 "timestamp":           _t236snap.time(),
             }
         except HTTPException:

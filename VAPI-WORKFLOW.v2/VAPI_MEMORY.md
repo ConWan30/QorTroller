@@ -1214,7 +1214,56 @@ Bridge 2128→2142 +14; SDK 390→394 +4; Hardhat 482 unchanged; agent fleet 35�
 
 ---
 
-**Document Version**: 1.5 (Phase 238)
+## 9. Phase 237.5 — CORPUS-SNAPSHOT On-Chain Anchoring (2026-04-26)
+
+**Why this phase**: Closing the architectural gap surfaced by Phase 237-ZK-SEPPROOF
+verification. `force-corpus-snapshot` was hardcoding `on_chain_confirmed=False`
+and `tx_hash=""` at `operator_api.py:7494-7496` despite the schema fields
+existing. Any future ZK proof binding to corpus state needed the hash to be
+on-chain, not just in SQLite.
+
+**Decisions made**:
+- A — PROCEED with milestone-only anchoring (operator-triggered IS the
+  milestone filter — no autonomous trigger exists today per V2 grep).
+- Reuse existing AdjudicationRegistry instead of deploying a new contract
+  (V5 finding). Open-enum sourceType lets `"CORPUS_SNAPSHOT"` slot in
+  with zero code change.
+- Refined Commit 2 order: anchor FIRST → insert with populated result.
+  Removes the post-insert UPDATE pattern entirely.
+
+**Three-commit shape**:
+- Commit 1 — chain.py:anchor_corpus_snapshot pure addition (50-70 LOC).
+  Legacy record_adjudication path UNAFFECTED (explicitly stated in
+  commit message per user refinement).
+- Commit 2 — operator_api.py refined-order patch (~30 LOC). No new
+  store method needed.
+- Commit 3 — 5 bridge tests + 2 PV-CI invariants. No Hardhat (no
+  contract change). No SDK (no SDK surface).
+
+**What we learned**:
+- AdjudicationRegistry's open-enum sourceType (line 96 stores any string)
+  is a reusable VAPI primitive for tamper-evident inter-database
+  anchoring. Future protocols that need to anchor a 32-byte hash with
+  source attribution can reuse this contract by picking a unique
+  sourceType literal. Pattern documented for downstream phases.
+- The Phase 237-ZK-SEPPROOF verification's surprise findings (Q3) drove
+  a precursor phase that strengthens an existing primitive without
+  adding scope to the eventual ZK design. Recursive verification
+  discipline at the architecture layer pays compounding dividends.
+- On-chain RPC confirmation matters: V5 verification used `eth_call` to
+  selector 0x8da5cb5b (owner()) to confirm the bridge wallet had the
+  ownership we needed. Skipping that check would have left a "the
+  contract probably accepts our calls" assumption that the deploy
+  history alone couldn't ground.
+
+**Test counts**: Bridge 2510 → 2515 (+5) | Autoresearch 7 | SDK 539 | Hardhat 528 | Contracts 46 LIVE | PV-CI 26 → 28 (+INV-CORPUS-001, +INV-CORPUS-002)
+**Skill 14 PostCode Sweep**: PASS (12/12 steps; monitoring/skill14_phase237_5.json; ingested as wiki/sweeps/sweep_20260426_clean.md)
+**phase_close 2375 snapshot SHA-256**: 2e174075db7b... (pages=82; bridge offline, local snapshot durable)
+**Wallet**: 18.4995 IOTX live (no deploy cost; per-anchor cost ~0.00008 IOTX)
+
+---
+
+**Document Version**: 1.6 (Phase 237.5)
 **Last Updated**: 2026-04-26
 **Update Method**: Append-only, manual edit after significant sessions
 **Retention**: All entries preserved indefinitely

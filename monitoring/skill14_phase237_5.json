@@ -1,0 +1,181 @@
+{
+  "skill_id": 14,
+  "skill_name": "PostCode Mitigation Sweep",
+  "skill_version": "2.1",
+  "phase": "237.5",
+  "phase_summary": "CORPUS-SNAPSHOT on-chain anchoring via AdjudicationRegistry",
+  "ts": "2026-04-26T19:45:00Z",
+  "verdict": "PASS",
+  "steps": [
+    {
+      "n": 1,
+      "name": "MCP Invariant Gate",
+      "status": "PASS",
+      "scanned_files": [
+        "bridge/vapi_bridge/chain.py",
+        "bridge/vapi_bridge/operator_api.py",
+        "bridge/tests/test_phase237_5_corpus_anchor.py",
+        "scripts/vapi_invariant_gate.py"
+      ],
+      "violations": [],
+      "checks": {
+        "228 bytes": "untouched",
+        "SHA-256(raw[:164])": "untouched",
+        "separation ratio 0.362": "untouched",
+        "BLOCK_QUORUM=0.67": "untouched",
+        "ratio > 1.0": "untouched",
+        "TOURNAMENT BLOCKER": "untouched",
+        "MINT_QUORUM=0.80": "untouched",
+        "dry_run=True": "untouched",
+        "ioswarm_enabled=False": "untouched",
+        "nPublic=5": "untouched",
+        "L6_CHALLENGES_ENABLED=false": "untouched",
+        "GSR_ENABLED=false": "untouched",
+        "L6B_ENABLED=false": "untouched",
+        "auto_activate_on_breakthrough=False": "untouched",
+        "epistemic_consensus_threshold=0.65": "untouched",
+        "triage_prereq_required=True": "untouched",
+        "WIF-011 STRUCTURED_PROBE_TYPES": "untouched",
+        "SeparationRatioRegistry SHA-256(...)": "untouched",
+        "Agent #19 tier mapping": "untouched",
+        "enrollment_complete != defensible": "untouched"
+      },
+      "phase156_extra_checks": {
+        "CHAIN_HASH_SLICE": "no raw[:228] usage",
+        "AUTO_ACTIVATE": "auto_activate_on_breakthrough not modified",
+        "EPISTEMIC_REGRESSION": "thresholds not modified",
+        "ENROLLMENT_QUALITY_BYPASS": "n/a",
+        "BT_THRESHOLD_POLLUTION": "n/a",
+        "SEPARATION_HARDCODE": "n/a"
+      }
+    },
+    {
+      "n": 2,
+      "name": "Targeted Test Execution",
+      "status": "PASS",
+      "command": "python -m pytest bridge/tests/test_phase237_5_corpus_anchor.py bridge/tests/test_phase236_corpus_snapshot.py bridge/tests/test_phase112_poad_onchain.py -q",
+      "passed": 22,
+      "failed": 0,
+      "duration_s": 17.04,
+      "new_tests": 5,
+      "new_test_ids": ["T237.5-1", "T237.5-2", "T237.5-3", "T237.5-4", "T237.5-5"]
+    },
+    {
+      "n": 3,
+      "name": "Root Cause Classification",
+      "status": "PASS",
+      "note": "No failures in step 2; classification not required."
+    },
+    {
+      "n": 4,
+      "name": "Separation Ratio Impact Assessment",
+      "status": "PASS",
+      "level": "NEUTRAL",
+      "rationale": "Phase 237.5 touches only the corpus snapshot anchor path (chain.py + operator_api.py:7430-7515). No separation analysis files modified. analyze_interperson_separation.py untouched. STRUCTURED_PROBE_TYPES untouched. min_n_per_player untouched. defensible logic untouched."
+    },
+    {
+      "n": 5,
+      "name": "Enrollment Quality Gate Check",
+      "status": "PASS",
+      "level": "NEUTRAL",
+      "rationale": "Phase 237.5 does not touch enrollment_auto_guidance_agent.py, separation_defensibility_log, calibration_intelligence_agent.py, or session_adjudicator_validator.py."
+    },
+    {
+      "n": 6,
+      "name": "ACIM Cross-Validation",
+      "status": "PASS",
+      "rationale": "Phase 237.5 does not touch any of the 16 self-test invariants tracked by AgentCalibrationIntegrityMonitor. Invariant gate refresh produced 28/28 PASS."
+    },
+    {
+      "n": 7,
+      "name": "WHAT_IF Corpus Delta Evaluation",
+      "status": "PASS",
+      "verdict": "no_new_w1_required",
+      "rationale": "Phase 237.5 closes a known gap surfaced by Phase 237-ZK-SEPPROOF verification. Closes architecture, does not surface new failure mode. Does enable a future ZK-SEPPROOF binding pattern documented in PHASE_237_5_DESIGN.md Section 4.",
+      "candidate_w1": null,
+      "candidate_w2": "Open-enum sourceType pattern in AdjudicationRegistry.sol could host other VAPI primitives requiring tamper-evident inter-database anchoring (e.g., future per-player consent state hashes). Documented as a reusable pattern, not yet a phase candidate."
+    },
+    {
+      "n": 8,
+      "name": "Memory Loop / Skill Registry Consistency",
+      "status": "PASS",
+      "rationale": "No new skills introduced. /memory updates limited to phase docs (project_state.md, phase237_5.md to be added with the commit). No skill registry collisions."
+    },
+    {
+      "n": 9,
+      "name": "Documentation Atomicity",
+      "status": "DEFERRED_TO_COMMIT",
+      "rationale": "CLAUDE.md / VAPI_CONTEXT.md / VAPI_MEMORY.md updates land atomically with the Phase 237.5 commit per Step 5 of plan. wiki/phases/phase_237_5.md to be written after phase_close 2375."
+    },
+    {
+      "n": 10,
+      "name": "Hard Rules Audit",
+      "status": "PASS",
+      "frozen_primitives_check": {
+        "CORPUS-SNAPSHOT v1 hash formula": "untouched (corpus_snapshot.py unchanged)",
+        "legacy record_adjudication": "untouched (chain.py:2487-2529 verified by line read)",
+        "GIC v1": "untouched",
+        "WEC v1": "untouched",
+        "VAME v1": "untouched",
+        "CONSENT v1": "untouched"
+      }
+    },
+    {
+      "n": 11,
+      "name": "Test Counts Atomicity Plan",
+      "status": "READY_TO_COMMIT",
+      "deltas": {
+        "bridge": "2510 -> 2515 (+5 new T237.5-1..5)",
+        "sdk": "539 (no change)",
+        "hardhat": "528 (no change — no contract code modified)",
+        "autoresearch": "7 (no change)",
+        "invariants": "26 -> 28 (+INV-CORPUS-001, +INV-CORPUS-002)",
+        "contracts": "46 LIVE (no change)"
+      }
+    },
+    {
+      "n": 12,
+      "name": "Final Verdict",
+      "status": "PASS",
+      "blocking_issues": 0,
+      "warnings": 0,
+      "next_action": "proceed_to_phase_close_2375_then_atomic_commit"
+    }
+  ],
+  "modified_files": [
+    {
+      "path": "bridge/vapi_bridge/chain.py",
+      "change": "Pure addition: anchor_corpus_snapshot async function inserted after record_adjudication. record_adjudication path UNAFFECTED."
+    },
+    {
+      "path": "bridge/vapi_bridge/operator_api.py",
+      "change": "Refined order in force_corpus_snapshot endpoint: anchor first → insert with populated tx_hash + on_chain_confirmed. Comment block at :7430-7440 rewritten to document Phase 237.5 behavior. tx_hash field added to response."
+    },
+    {
+      "path": "bridge/tests/test_phase237_5_corpus_anchor.py",
+      "change": "NEW. 5 tests T237.5-1..5 (config-missing, bad-hex, success, idempotent-duplicate, ZK-SEPPROOF binding feasibility)."
+    },
+    {
+      "path": "scripts/vapi_invariant_gate.py",
+      "change": "Added INV-CORPUS-001 (anchor_corpus_snapshot signature) + INV-CORPUS-002 ('CORPUS_SNAPSHOT' literal). Total 26 -> 28 invariants."
+    },
+    {
+      "path": ".github/INVARIANTS_ALLOWLIST.json",
+      "change": "Regenerated via --generate --reason 'invariant_change: ...' --confirm-governance. 28 entries. Bridge governance event POST returned 404 (operator route prefix issue, not blocking)."
+    }
+  ],
+  "preconditions_check": {
+    "claude_md_readable": true,
+    "bridge_test_suite_runnable": true,
+    "vapi_skills_md_accessible": true,
+    "vapi_invariants_md_accessible": true,
+    "phase_ge_156": true,
+    "all_passed": true
+  },
+  "operator_actions_pending_post_commit": [
+    "Bridge restart to load new chain.py + operator_api.py",
+    "Inaugural CORPUS_SNAPSHOT anchor via POST /operator/operator/force-corpus-snapshot",
+    "Verify on-chain via AdjudicationRegistry.isRecorded(commitment) + getSourceType(commitment)",
+    "Optional follow-up doc commit recording inaugural tx_hash in wiki/phases/phase_237_5.md"
+  ]
+}

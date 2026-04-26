@@ -258,6 +258,23 @@ INVARIANTS: list[Invariant] = [
         pattern=r"_recompute\(now\)",
         min_matches=2,
     ),
+    # Phase 237.5 — freeze CORPUS-SNAPSHOT on-chain anchor primitives.
+    # ZK-SEPPROOF eventual binding requires the anchor function signature
+    # and the sourceType literal to be tamper-evident in the gate.
+    Invariant(
+        id="INV-CORPUS-001",
+        description="anchor_corpus_snapshot async function exists in chain.py (Phase 237.5)",
+        file="bridge/vapi_bridge/chain.py",
+        pattern=r"async def anchor_corpus_snapshot",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-CORPUS-002",
+        description="CORPUS_SNAPSHOT sourceType literal pinned in chain.py (Phase 237.5)",
+        file="bridge/vapi_bridge/chain.py",
+        pattern=r'"CORPUS_SNAPSHOT"',
+        min_matches=1,
+    ),
 ]
 
 
