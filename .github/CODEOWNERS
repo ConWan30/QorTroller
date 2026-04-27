@@ -1,0 +1,71 @@
+# VAPI repository CODEOWNERS — Operator series Phase O0+ lane discipline
+#
+# Establishes path-based ownership for the two-agent partnership between
+# Anchor Sentry and Guardian, plus the human operator (ConWan30) as
+# fallback owner for any path not explicitly assigned to an agent.
+#
+# Anchor Sentry stewards off-chain provenance: wiki/, provenance/, events/.
+# Guardian stewards operational health: audits/, sweeps/, ops/, invariants/.
+#
+# Architectural references:
+#   wiki/proposals/PHASE_O0_DESIGN_PASS_1.md (Conflict 3 Option A) —
+#     lane assignment rationale.
+#   wiki/proposals/PHASE_O0_DESIGN_PASS_2C.md (Section 5.2; commit
+#     b9ddeeb2) — implementation contract; the path-scope gate (next
+#     session) will read this CODEOWNERS file as its source of truth
+#     for path ownership.
+#
+# Phase O0 status note:
+#   The agent identities @vapi-anchor-sentry and @vapi-guardian refer
+#   to GitHub App slugs that will be registered in Phase O0 Section 6.3.
+#   Until that registration completes, these CODEOWNERS rules are
+#   declaratively in place but do not actively control commits — the
+#   App accounts do not yet exist on GitHub. The rules become live
+#   enforcement once the GitHub Apps register and the path-scope gate
+#   workflow runs in CI.
+#
+# Pattern semantics:
+#   - Directory shorthand (wiki/) matches all files under that directory
+#     recursively (equivalent to wiki/**).
+#   - Last-match-wins: rules later in the file override earlier rules
+#     for the same path. Bridge-managed special cases below the Sentry
+#     lane block override Sentry's wiki/ ownership for specific files.
+#   - GitHub App slugs are referenced without the [bot] suffix per
+#     GitHub's CODEOWNERS lookup convention.
+
+# ─────────────────────────────────────────────────────────────────
+# Anchor Sentry lane (off-chain provenance)
+# ─────────────────────────────────────────────────────────────────
+wiki/                          @vapi-anchor-sentry
+provenance/                    @vapi-anchor-sentry
+events/                        @vapi-anchor-sentry
+
+# ─────────────────────────────────────────────────────────────────
+# Guardian lane (operational health)
+# ─────────────────────────────────────────────────────────────────
+audits/                        @vapi-guardian
+sweeps/                        @vapi-guardian
+ops/                           @vapi-guardian
+invariants/                    @vapi-guardian
+
+# ─────────────────────────────────────────────────────────────────
+# Bridge-managed special cases — must follow the Sentry lane block
+# so last-match-wins overrides Sentry's wiki/ ownership.
+#
+# Five files written by the bridge wiki engine (vapi_wiki_engine.py)
+# rather than by Anchor Sentry the agent: log.md, index.md,
+# contradictions.md, blocked_updates.md, snapshots.md. Plus
+# lint_report.md treated as a stray pending classification.
+# ─────────────────────────────────────────────────────────────────
+wiki/contradictions.md         @ConWan30
+wiki/log.md                    @ConWan30
+wiki/index.md                  @ConWan30
+wiki/blocked_updates.md        @ConWan30
+wiki/snapshots.md              @ConWan30
+wiki/lint_report.md            @ConWan30
+
+# ─────────────────────────────────────────────────────────────────
+# Catch-all fallback — human operator owns any path not explicitly
+# assigned to an agent above.
+# ─────────────────────────────────────────────────────────────────
+*                              @ConWan30
