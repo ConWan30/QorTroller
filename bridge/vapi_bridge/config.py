@@ -1066,6 +1066,21 @@ class Config:
     Trade-off: no LED colour or haptic feedback during gameplay.
     PoAC biometric capture is completely unaffected — read-only, zero data impact."""
 
+    chain_submission_paused: bool = field(
+        default_factory=lambda: _env("CHAIN_SUBMISSION_PAUSED", "false").lower() == "true"
+    )
+    """Phase 237.5 Path C+ — Global on-chain submission kill-switch (default False).
+    When True: every chain.* method that sends a transaction short-circuits
+    with (None, False) instead of submitting. Gates DualShock per-PITL-proof
+    fire-and-forget chain calls (dualshock_integration.py:2324-2335) and the
+    central _send_tx chokepoint (chain.py:_send_tx). Eliminates wallet drain
+    against IoTeX testnet's broken P256 precompile (which causes silent
+    failed-tx gas burn at ~3 IOTX/hour). Read-only paths (eth_call, view
+    functions) are unaffected. Local PoAC capture, GIC chain stamping, and
+    PITL pipeline continue normally — only the optional on-chain anchoring
+    is suspended. Restore via CHAIN_SUBMISSION_PAUSED=false in bridge/.env
+    + bridge restart when wallet is funded."""
+
     ioswarm_node_secret: str = field(
         default_factory=lambda: _env("IOSWARM_NODE_SECRET", "")
     )

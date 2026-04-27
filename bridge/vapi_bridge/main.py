@@ -435,6 +435,9 @@ class Bridge:
                 self.cfg, self.store,
                 _agent=_agent_instance,
                 _calib_agent=_calib_intel_agent,
+                chain=self.chain,   # Phase 237.5: wire ChainClient so anchor_corpus_snapshot
+                                    # (and other previously-broken chain.* endpoints in
+                                    # operator_api.py) can reach the bridge wallet.
             )
             _op_app._gic_chain_broken = getattr(self, "_gic_chain_broken", False)
             _op_app._pcc_monitor = self._pcc_monitor  # Phase 234.7 wiring
