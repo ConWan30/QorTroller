@@ -162,7 +162,7 @@ first post-deploy snapshot fires.
 ## Verification artifacts
 
 - Skill 14 sweep: `monitoring/skill14_phase237_5.json` (verdict CLEAN)
-- Wiki sweep page: `wiki/sweeps/sweep_20260426_clean.md`
+- Wiki sweep page: `sweeps/sweep_20260426_clean.md`
 - Wiki briefs: `wiki/briefs/brief_MEMORY.md_2375.md`,
   `wiki/briefs/brief_VAPI_WHAT_IF.md_2375.md`
 - Phase_close snapshot SHA-256: `2e174075db7b...`

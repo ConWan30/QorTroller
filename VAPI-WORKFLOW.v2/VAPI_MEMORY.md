@@ -1257,7 +1257,7 @@ on-chain, not just in SQLite.
   history alone couldn't ground.
 
 **Test counts**: Bridge 2510 → 2515 (+5) | Autoresearch 7 | SDK 539 | Hardhat 528 | Contracts 46 LIVE | PV-CI 26 → 28 (+INV-CORPUS-001, +INV-CORPUS-002)
-**Skill 14 PostCode Sweep**: PASS (12/12 steps; monitoring/skill14_phase237_5.json; ingested as wiki/sweeps/sweep_20260426_clean.md)
+**Skill 14 PostCode Sweep**: PASS (12/12 steps; monitoring/skill14_phase237_5.json; ingested as sweeps/sweep_20260426_clean.md)
 **phase_close 2375 snapshot SHA-256**: 2e174075db7b... (pages=82; bridge offline, local snapshot durable)
 **Wallet**: 18.4995 IOTX live (no deploy cost; per-anchor cost ~0.00008 IOTX)
 

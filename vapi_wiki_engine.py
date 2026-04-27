@@ -49,7 +49,7 @@ Integration map (no duplication, all on existing infrastructure):
   Skill 14 PostCode Sweep (output JSON)
        v
   vapi_wiki_engine.py ingest_sweep()
-       v writes wiki/sweeps/sweep_{ts}.md
+       v writes sweeps/sweep_{ts}.md
        v appends W1 to VAPI_WHAT_IF.md (if new failure class found)
        v calls sync_what_if_to_harness()
 
@@ -105,7 +105,7 @@ WIKI_ENTITIES = WIKI / "entities"
 WIKI_CONCEPTS = WIKI / "concepts"
 WIKI_SYNTH    = WIKI / "synthesis"
 WIKI_WHATIF   = WIKI / "what_if"
-WIKI_SWEEPS   = WIKI / "sweeps"
+SWEEPS_DIR    = ROOT / "sweeps"
 WIKI_BRIEFS   = WIKI / "briefs"
 WIKI_LOG      = WIKI / "log.md"
 WIKI_INDEX    = WIKI / "index.md"
@@ -326,7 +326,7 @@ def _probe_db_schema() -> bool:
 
 def cmd_init():
     dirs = [WIKI_PHASES, WIKI_ENTITIES, WIKI_CONCEPTS,
-            WIKI_SYNTH, WIKI_WHATIF, WIKI_SWEEPS, WIKI_BRIEFS]
+            WIKI_SYNTH, WIKI_WHATIF, SWEEPS_DIR, WIKI_BRIEFS]
     for d in dirs:
         d.mkdir(parents=True, exist_ok=True)
 
@@ -633,7 +633,7 @@ auto_activate_on_breakthrough=False PERMANENT — operator confirms manually.
 def cmd_ingest_sweep(sweep_json_path: str):
     """
     Consumes Skill 14 PostCode Mitigation Sweep JSON output.
-    - Writes sweep record to wiki/sweeps/
+    - Writes sweep record to sweeps/
     - Appends W1 entry to VAPI_WHAT_IF.md if new failure class found
     - Feeds gaps to AutoResearch experiment log
     - Updates MEMORY.md sweep summary
@@ -698,7 +698,7 @@ Regression: {ratio_impact.get('regression', False)}
         print(f"  BLOCKED: {violations[0]}")
         return
 
-    sweep_path = WIKI_SWEEPS / f"sweep_{ts[:10].replace('-', '')}_{status.lower()}.md"
+    sweep_path = SWEEPS_DIR / f"sweep_{ts[:10].replace('-', '')}_{status.lower()}.md"
     write(sweep_path, page)
     _update_index(sweep_path)
 
@@ -721,7 +721,7 @@ Regression: {ratio_impact.get('regression', False)}
     log_op("SWEEP", [str(sweep_path)], provenance,
            f"status={status}, failure_class={failure_class}")
 
-    print(f"\n[SWEEP] wiki/sweeps/{sweep_path.name}")
+    print(f"\n[SWEEP] sweeps/{sweep_path.name}")
     print(f"  Status: {status}")
     if failure_class and status != "CLEAN":
         print(f"  W1 appended to VAPI_WHAT_IF.md: {failure_class}")
