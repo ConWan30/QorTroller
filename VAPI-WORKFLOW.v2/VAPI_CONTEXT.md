@@ -27,10 +27,10 @@
 
 ## 1. Current Phase Status
 
-**Active Phase**: Phase 237.5 COMPLETE 2026-04-26 — CORPUS-SNAPSHOT on-chain anchoring via AdjudicationRegistry (open-enum sourceType="CORPUS_SNAPSHOT")
-**Phase Start**: 2026-04-11 (Phase 235); 2026-04-26 (Phase 236 + Phase 237-CONSENT + Phase 237-EXTEND + Phase 238 + Phase 237.5)
-**Phase Status**: Phase 237.5 COMPLETE — closes architectural gap (operator_api.py:7494-7496 hardcoded False) surfaced by Phase 237-ZK-SEPPROOF verification. Zero contract change (existing AdjudicationRegistry primitive sufficient); zero deploy cost; bridge wallet already owns contract. Refined Commit 2 order: anchor FIRST → insert with populated result (no UPDATE pattern). Inaugural anchor pending bridge restart. 46 contracts LIVE; FIVE chain primitives FROZEN-v1; PV-CI invariants 26 → 28 (+INV-CORPUS-001, +INV-CORPUS-002).
-**Next Phase**: 237-ZK-SEPPROOF (Groth16 proof-of-separation-ratio without revealing biometric vectors; binding foundation now in place via Phase 237.5) → 239-READINESS (W2 — gated on GIC_100)
+**Active Phase**: Phase 237.5 Path C+ COMPLETE 2026-04-26 — CORPUS-SNAPSHOT anchor via legacy recordAdjudication ABI (deployed bytecode reality); CHAIN_SUBMISSION_PAUSED kill-switch shipped; inaugural anchor DEFERRED (wallet funding gap)
+**Phase Start**: 2026-04-11 (Phase 235); 2026-04-26 (Phase 236 + Phase 237-CONSENT + Phase 237-EXTEND + Phase 238 + Phase 237.5 + Phase 237.5 Path C+)
+**Phase Status**: Phase 237.5 Path C+ COMPLETE — same-day verification recursion surfaced (a) deployed-vs-source bytecode mismatch on AdjudicationRegistry (Path X: rewrote chain.anchor_corpus_snapshot to use legacy recordAdjudication with constant deviceIdHash=SHA-256(b"VAPI_CORPUS_SNAPSHOT_v1")), (b) latent main.py chain=None wiring bug (fixed), (c) IoTeX P256 precompile-driven wallet drain (~17.95 IOTX/session) traced to dualshock_integration.py:2324-2335 fire-and-forget chain calls + batcher retry loop (kill-switch shipped). Bridge halted at 0.5525 IOTX; wallet stable post-halt; CHAIN_SUBMISSION_PAUSED=true in bridge/.env so restart is safe during funding gap. Inaugural anchor restored when wallet ≥1 IOTX + flag flipped. 46 contracts LIVE; FIVE chain primitives FROZEN-v1; PV-CI invariants 28 (INV-CORPUS-002 retargeted to b"VAPI_CORPUS_SNAPSHOT_v1" deviceIdHash literal via governance event).
+**Next Phase**: 237-ZK-SEPPROOF (binding foundation in place — kill-switch now part of binding contract: ZK proofs verify on-chain anchor IS recorded, kill-switch ensures the anchor reflects intentional operator action not silent retry burn) → 239-READINESS (W2 — gated on GIC_100)
 **VAPIConsentRegistry**: 0xA82dB0eF0bF7D15b6400EDd4A09C0D4338C948dA (deployed 2026-04-26, gas ~0.07 IOTX, wallet ~40.36 IOTX remaining)
 
 ### Grind Status (2026-04-26)
@@ -49,10 +49,10 @@
 ### Test Counts (2026-04-25, authoritative from CLAUDE.md)
 | Component | Delta Count | Empirical | Status |
 |-----------|-------------|-----------|--------|
-| Bridge pytest | **2,515** | ~2,570 passing | ✅ (+8 Phase 236-WATCHDOG, +8 Phase 236-VAME, +8 Phase 236-CORPUS-SNAPSHOT, +8 Phase 237-CONSENT, +1 Phase 237-EXTEND FSCA; Phase 238 added 0 bridge tests; +5 Phase 237.5 T237.5-1..5; 147 pre-existing failures: Phase 58 security + Phase 69 curator config) |
+| Bridge pytest | **2,517** | ~2,572 passing | ✅ (+8 Phase 236-WATCHDOG, +8 Phase 236-VAME, +8 Phase 236-CORPUS-SNAPSHOT, +8 Phase 237-CONSENT, +1 Phase 237-EXTEND FSCA; Phase 238 added 0 bridge tests; +7 Phase 237.5 T237.5-1..6 (T237.5-6 has 2 sub-tests); 147 pre-existing failures: Phase 58 security + Phase 69 curator config) |
 | Autoresearch pytest | **7** | 7 | ✅ Phase 238 (T238-FSCA-1, 1b, 2, 2b, 3, 3b, 3c — 0.27s) |
 | SDK pytest | **539** | 539 | ✅ +4 Phase 237-EXTEND (T237-S1..S4); Phase 238/237.5 unchanged |
-| PV-CI invariants | **28** | 28 | ✅ +INV-CORPUS-001 (anchor_corpus_snapshot signature), +INV-CORPUS-002 ("CORPUS_SNAPSHOT" sourceType literal) |
+| PV-CI invariants | **28** | 28 | ✅ +INV-CORPUS-001 (anchor_corpus_snapshot signature), +INV-CORPUS-002 (b"VAPI_CORPUS_SNAPSHOT_v1" deviceIdHash literal — Path X retargeted) |
 | SDK tests | **535** | 535 | ✅ PASS |
 | Hardhat tests | **502** (delta) | 522 | ✅ PASS (6 pre-existing Phase 186 failures excluded from delta) |
 | Hardware tests | 37 | — | ⚠️ HARDWARE-ONLY |

@@ -270,9 +270,9 @@ INVARIANTS: list[Invariant] = [
     ),
     Invariant(
         id="INV-CORPUS-002",
-        description="CORPUS_SNAPSHOT sourceType literal pinned in chain.py (Phase 237.5)",
+        description="VAPI_CORPUS_SNAPSHOT_v1 deviceIdHash literal pinned in chain.py (Phase 237.5 Path X — deployed bytecode reality)",
         file="bridge/vapi_bridge/chain.py",
-        pattern=r'"CORPUS_SNAPSHOT"',
+        pattern=r'b"VAPI_CORPUS_SNAPSHOT_v1"',
         min_matches=1,
     ),
 ]

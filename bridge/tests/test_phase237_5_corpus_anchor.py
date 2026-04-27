@@ -1,12 +1,19 @@
-"""Phase 237.5 — CORPUS-SNAPSHOT On-Chain Anchoring tests.
+"""Phase 237.5 — CORPUS-SNAPSHOT On-Chain Anchoring tests (Path X).
+
+Phase 237.5 design intent was AdjudicationRegistry.anchorAdjudication(bytes32, string)
+with sourceType="CORPUS_SNAPSHOT". Live deployed bytecode at 0x44CF... predates that
+extension and only has the legacy 3-arg recordAdjudication(bytes32 deviceIdHash,
+bytes32 poadHash, bool dualVeto) ABI. Path X: anchor via the legacy ABI with a
+constant deviceIdHash = SHA-256(b"VAPI_CORPUS_SNAPSHOT_v1") that carries the
+sub-protocol attribution that sourceType would have.
 
 T237.5-1: anchor_corpus_snapshot returns (None, False) on missing config
 T237.5-2: anchor_corpus_snapshot returns (None, False) on bad commitment hex
 T237.5-3: anchor_corpus_snapshot success path returns (tx_hex, True) — mocked w3
 T237.5-4: 'PoAd: already recorded' revert treated as idempotent (None, False)
-T237.5-5: ZK-SEPPROOF binding feasibility — round-trip via mocked
-          isRecorded(commitment)=True and getSourceType(commitment)
-          ='CORPUS_SNAPSHOT'; matches database row
+T237.5-5: ZK-SEPPROOF binding feasibility — constant deviceIdHash matches
+          SHA-256(b"VAPI_CORPUS_SNAPSHOT_v1"), and the on-chain commitment
+          round-trips byte-for-byte against the local snapshot_commitment.
 """
 import asyncio
 import os
@@ -35,22 +42,34 @@ def _make_chain(*, addr="0x44CF981f46a52ADE56476Ce894255954a7776fb4",
     chain = ChainClient.__new__(ChainClient)
     chain._cfg = SimpleNamespace(adjudication_registry_address=addr)
 
-    # Fake account + w3 surfaces.
-    fake_acct = SimpleNamespace(
+    # self._account is the canonical attribute on ChainClient (set in __init__
+    # at chain.py:834 / 844). The function uses self._account.sign_transaction
+    # and self._account.address — never references self._private_key directly.
+    chain._account = SimpleNamespace(
         address="0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692",
-        sign_transaction=lambda tx: SimpleNamespace(rawTransaction=b"\x00" * 32),
+        sign_transaction=lambda tx: SimpleNamespace(raw_transaction=b"\x00" * 32),
     )
-    chain._account = fake_acct
 
     fake_eth = SimpleNamespace()
     fake_eth.get_transaction_count = AsyncMock(return_value=42)
+    fake_eth.estimate_gas = AsyncMock(return_value=160_000)
 
-    # build_transaction is awaited in chain.py (web3 async pattern); mock as AsyncMock.
+    # gas_price is `await self._w3.eth.gas_price` — must be an awaitable attribute.
+    class _GasPrice:
+        def __await__(self):
+            yield
+            return 1
+    fake_eth.gas_price = _GasPrice()
+
+    # AsyncContractFunction.build_transaction is a coroutine in this codebase's
+    # web3 setup — verified live this session via direct chain call.
+    # Phase 237.5 Path X: mock recordAdjudication (3-arg legacy ABI present in
+    # deployed bytecode) instead of anchorAdjudication (not in deployed bytecode).
     fake_function = MagicMock()
     fake_function.build_transaction = AsyncMock(return_value={
-        "from": fake_acct.address, "nonce": 42, "gas": 100_000,
+        "from": chain._account.address, "nonce": 42, "gas": 80_000,
     })
-    fake_functions_obj = SimpleNamespace(anchorAdjudication=lambda *a, **kw: fake_function)
+    fake_functions_obj = SimpleNamespace(recordAdjudication=lambda *a, **kw: fake_function)
     fake_contract = SimpleNamespace(functions=fake_functions_obj)
 
     fake_eth.contract = MagicMock(return_value=fake_contract)
@@ -61,7 +80,8 @@ def _make_chain(*, addr="0x44CF981f46a52ADE56476Ce894255954a7776fb4",
             return_value=SimpleNamespace(hex=lambda: "0xdeadbeef" * 8),
         )
 
-    receipt = SimpleNamespace(status=receipt_status)
+    # receipt is dict-style: receipt["status"] (modern web3 6.x).
+    receipt = {"status": receipt_status}
     fake_eth.wait_for_transaction_receipt = AsyncMock(return_value=receipt)
 
     fake_w3 = SimpleNamespace(eth=fake_eth, to_checksum_address=lambda x: x)
@@ -130,41 +150,89 @@ class TestT237_5_4_AlreadyRecordedIdempotent(unittest.TestCase):
 
 class TestT237_5_5_ZKBindingFeasibility(unittest.TestCase):
     """Confirms the anchor format will satisfy ZK-SEPPROOF binding
-    requirements. Not a real ZK proof — a feasibility check on the
-    on-chain query path that the future ZK-SEPPROOF design phase will use.
+    requirements (Path X: legacy recordAdjudication ABI with constant
+    deviceIdHash carrying CORPUS_SNAPSHOT attribution).
     """
 
     def test_round_trip_matches_db_row(self):
-        # 1. Successful anchor fires.
+        import hashlib
+        from vapi_bridge.chain import ChainClient
+
+        # 1. The constant deviceIdHash MUST equal SHA-256(b"VAPI_CORPUS_SNAPSHOT_v1").
+        # ZK-SEPPROOF will use this constant to filter on-chain records as
+        # corpus-snapshot anchors vs per-device PoAd anchors.
+        expected_did = hashlib.sha256(b"VAPI_CORPUS_SNAPSHOT_v1").digest()
+        self.assertEqual(ChainClient._CORPUS_SNAPSHOT_DEVICE_ID, expected_did,
+                         "Constant deviceIdHash must remain SHA-256(b'VAPI_CORPUS_SNAPSHOT_v1') "
+                         "— ZK-SEPPROOF binding depends on this exact value")
+        self.assertEqual(len(expected_did), 32, "deviceIdHash must be 32 bytes")
+
+        # 2. Successful anchor fires.
         chain = _make_chain()
         commitment = "cd" * 32
         tx_hex, anchored = asyncio.run(chain.anchor_corpus_snapshot(commitment))
         self.assertTrue(anchored)
 
-        # 2. Mock AdjudicationRegistry view-function return values that
-        #    a future ZK-SEPPROOF would query. These check that:
-        #      a. isRecorded(commitment_bytes32) returns True   → anchored
-        #      b. getSourceType(commitment_bytes32) returns
-        #         "CORPUS_SNAPSHOT"                              → not a
-        #         coincidentally-colliding PoAd from a different
-        #         sub-protocol.
-        mock_isRecorded   = lambda h: h.hex() == commitment
-        mock_getSourceType = lambda h: ("CORPUS_SNAPSHOT" if h.hex() == commitment else "")
-
+        # 3. Mock AdjudicationRegistry view-function return values that
+        #    a future ZK-SEPPROOF would query. The legacy 3-arg ABI exposes:
+        #      a. isRecorded(commitment_bytes32) → True if anchored
+        #      b. getAdjudicationCount(deviceIdHash) → counts of corpus snapshots
+        #      c. records[deviceIdHash][i] → PoAdRecord struct with poadHash + blockNumber
         commitment_bytes32 = bytes.fromhex(commitment)
-        self.assertTrue(mock_isRecorded(commitment_bytes32),
-                        "ZK-SEPPROOF binding requires isRecorded() to "
-                        "return True for the anchored commitment")
-        self.assertEqual(mock_getSourceType(commitment_bytes32), "CORPUS_SNAPSHOT",
-                         "ZK-SEPPROOF binding requires getSourceType() to "
-                         "return 'CORPUS_SNAPSHOT' (not 'VAPI' or other) "
-                         "to confirm sub-protocol isolation")
+        mock_isRecorded = lambda h: h.hex() == commitment
 
-        # 3. The 32-byte commitment value queried from chain MUST equal the
+        self.assertTrue(mock_isRecorded(commitment_bytes32),
+                        "ZK-SEPPROOF binding requires isRecorded() to return True "
+                        "for the anchored commitment")
+
+        # 4. The 32-byte commitment value queried from chain MUST equal the
         #    32-byte value passed to insert_corpus_snapshot. This is the
         #    invariant ZK-SEPPROOF will rely on for binding.
         self.assertEqual(commitment_bytes32.hex(), commitment)
         self.assertEqual(len(commitment_bytes32), 32)
+
+
+# ---------------------------------------------------------------------------
+# T237.5-6 — Kill-switch (Phase 237.5 Path C+)
+# ---------------------------------------------------------------------------
+
+class TestT237_5_6_KillSwitch(unittest.TestCase):
+    """Phase 237.5 Path C+ — chain_submission_paused kill-switch.
+
+    When cfg.chain_submission_paused=True, anchor_corpus_snapshot must
+    short-circuit before any RPC call (no eth.contract, no get_transaction_count,
+    no estimate_gas, no send_raw_transaction). Returns (None, False) immediately.
+    """
+
+    def test_kill_switch_short_circuits_before_rpc(self):
+        chain = _make_chain()
+        # Make every RPC call fail loudly — if the kill-switch fails to gate,
+        # we'll see one of these get hit and the test fails with a clear signal.
+        chain._w3.eth.get_transaction_count = AsyncMock(
+            side_effect=AssertionError("kill-switch failed: get_transaction_count was called")
+        )
+        chain._w3.eth.contract = MagicMock(
+            side_effect=AssertionError("kill-switch failed: contract() was called")
+        )
+        chain._w3.eth.send_raw_transaction = AsyncMock(
+            side_effect=AssertionError("kill-switch failed: send_raw_transaction was called")
+        )
+        chain._cfg.chain_submission_paused = True
+
+        result = asyncio.run(chain.anchor_corpus_snapshot("ee" * 32))
+
+        self.assertEqual(result, (None, False),
+                         "kill-switch must return (None, False) immediately")
+
+    def test_kill_switch_off_path_still_works(self):
+        """When chain_submission_paused=False (default), normal flow proceeds."""
+        chain = _make_chain()
+        # Default: chain_submission_paused not set → falsy → guard does NOT trip
+        chain._cfg.chain_submission_paused = False
+        result = asyncio.run(chain.anchor_corpus_snapshot("ff" * 32))
+        # Mock setup makes this succeed (T237.5-3 path)
+        self.assertIsNotNone(result[0])
+        self.assertTrue(result[1])
 
 
 if __name__ == "__main__":

@@ -11,6 +11,7 @@ Handles:
 """
 
 import asyncio
+import hashlib
 import logging
 from typing import Sequence
 
@@ -1060,6 +1061,22 @@ class ChainClient:
 
     async def _send_tx(self, tx_func, *args, value: int = 0) -> str:
         """Build, sign, and send a transaction. Returns tx hash hex."""
+        # Phase 237.5 Path C+ — global chain submission kill-switch.
+        # When CHAIN_SUBMISSION_PAUSED=true in bridge/.env, every transaction
+        # path that goes through this chokepoint short-circuits. Gates the
+        # batcher's PoAC submissions, retry loop, and most chain.* methods
+        # that wrap _send_tx. The high-frequency DualShock per-PITL-proof
+        # path is gated separately at dualshock_integration.py:2324-2335
+        # (it bypasses _send_tx via direct chain.* method calls).
+        if getattr(self._cfg, "chain_submission_paused", False):
+            log.warning(
+                "_send_tx: chain_submission_paused=true — transaction "
+                "suppressed (CHAIN_SUBMISSION_PAUSED kill-switch active)"
+            )
+            raise RuntimeError(
+                "chain_submission_paused: on-chain transactions are paused "
+                "via CHAIN_SUBMISSION_PAUSED=true in bridge/.env"
+            )
         if self._account is None:
             raise RuntimeError(
                 "Bridge private key not set — cannot sign transactions (read-only mode)."
@@ -2529,34 +2546,64 @@ class ChainClient:
         return tx_hash.hex()
 
     # ------------------------------------------------------------------
-    # Phase 237.5 — CORPUS-SNAPSHOT on-chain anchoring
+    # Phase 237.5 — CORPUS-SNAPSHOT on-chain anchoring (Path X)
     # ------------------------------------------------------------------
-    # Pure addition. Never raises. Mirrors record_adjudication scaffolding
-    # but targets AdjudicationRegistry's 2-arg sourceType-attributed API
-    # added in Phase 204+ (anchorAdjudication(bytes32, string)). Called
-    # from operator_api.py:force_corpus_snapshot before the local DB
-    # insert so the row records the live anchor result in one call. The
-    # legacy record_adjudication path above (Phase 112 PoAd anchoring) is
-    # UNAFFECTED — those call sites continue using the 3-arg
-    # recordAdjudication ABI.
+    # Pure addition. Never raises. Targets the LEGACY 3-arg
+    # recordAdjudication(bytes32 deviceIdHash, bytes32 poadHash, bool dualVeto)
+    # ABI which is what's actually present in the deployed AdjudicationRegistry
+    # bytecode at 0x44CF98... (Phase 111 original deploy 2026-03-27). The
+    # design-intent 2-arg anchorAdjudication(bytes32, string) is in repo source
+    # but was never re-deployed; eth_getCode confirms selectors 0xae7cd267 +
+    # 0x79dcce3f are NOT in deployed bytecode while 0x5fa83f4b (recordAdjudication)
+    # IS. See wiki/phases/phase_237_5.md "Path X" section.
+    #
+    # CORPUS_SNAPSHOT attribution is carried by a constant deviceIdHash =
+    # SHA-256(b"VAPI_CORPUS_SNAPSHOT_v1") that distinguishes corpus-snapshot
+    # records from per-device PoAd records (which use SHA-256(device_id)).
+    # ZK-SEPPROOF will filter on-chain records by this constant deviceIdHash.
+    #
+    # Phase 112's record_adjudication wrapper above (chain.py:2487-2529) targets
+    # the same recordAdjudication function with per-device deviceIdHash — its
+    # call path is UNAFFECTED (it's been code-complete-deferred since Phase 112
+    # per deployed-addresses.json:80; Phase 237.5 doesn't touch it).
+    _CORPUS_SNAPSHOT_DEVICE_ID = hashlib.sha256(b"VAPI_CORPUS_SNAPSHOT_v1").digest()
+
     async def anchor_corpus_snapshot(
         self,
         snapshot_commitment_hex: str,
     ) -> "tuple[str | None, bool]":
-        """Anchor a CORPUS-SNAPSHOT commitment in AdjudicationRegistry (Phase 237.5).
+        """Anchor a CORPUS-SNAPSHOT commitment via legacy recordAdjudication ABI (Phase 237.5 Path X).
 
-        Targets anchorAdjudication(bytes32 podHash, string sourceType) at
-        contracts/contracts/AdjudicationRegistry.sol:79-99 with sourceType
-        "CORPUS_SNAPSHOT". Returns (tx_hash_hex, True) on success;
-        (None, False) on missing config / wallet error / tx revert /
-        duplicate ("PoAd: already recorded"). Never raises — graceful
-        degradation per Phase 237.5 D1.
+        Calls recordAdjudication(deviceIdHash, poadHash, dualVeto) on the deployed
+        AdjudicationRegistry contract with:
+          - deviceIdHash = self._CORPUS_SNAPSHOT_DEVICE_ID (constant; carries
+            CORPUS_SNAPSHOT attribution as the design-intent sourceType would have)
+          - poadHash     = the 32-byte snapshot_commitment from corpus_snapshot.py
+          - dualVeto     = False (corpus snapshots are not adjudication verdicts)
+
+        Returns (tx_hash_hex, True) on success; (None, False) on missing config /
+        wallet error / tx revert / duplicate ("PoAd: already recorded"). Never
+        raises — graceful degradation per Phase 237.5 D1.
         """
+        # Phase 237.5 Path C+ kill-switch — short-circuit before any RPC call
+        # when CHAIN_SUBMISSION_PAUSED=true is set in bridge/.env.
+        if getattr(self._cfg, "chain_submission_paused", False):
+            log.info(
+                "anchor_corpus_snapshot: chain_submission_paused=true — "
+                "snapshot will record on_chain_confirmed=False (kill-switch active)"
+            )
+            return (None, False)
         addr = getattr(self._cfg, "adjudication_registry_address", "")
         if not addr:
             log.warning(
                 "anchor_corpus_snapshot: adjudication_registry_address not "
                 "configured — snapshot will record on_chain_confirmed=False"
+            )
+            return (None, False)
+        if self._account is None:
+            log.warning(
+                "anchor_corpus_snapshot: self._account is None (no bridge "
+                "private key loaded) — snapshot will record on_chain_confirmed=False"
             )
             return (None, False)
         try:
@@ -2566,11 +2613,12 @@ class ChainClient:
             log.warning("anchor_corpus_snapshot: bad commitment hex: %s", exc)
             return (None, False)
         _ABI = [{
-            "name": "anchorAdjudication", "type": "function",
+            "name": "recordAdjudication", "type": "function",
             "stateMutability": "nonpayable",
             "inputs": [
-                {"name": "podHash",    "type": "bytes32"},
-                {"name": "sourceType", "type": "string"},
+                {"name": "deviceIdHash", "type": "bytes32"},
+                {"name": "poadHash",     "type": "bytes32"},
+                {"name": "dualVeto",     "type": "bool"},
             ],
             "outputs": [],
         }]
@@ -2579,15 +2627,22 @@ class ChainClient:
                 address=self._w3.to_checksum_address(addr), abi=_ABI
             )
             nonce = await self._w3.eth.get_transaction_count(self._account.address)
-            tx = await contract.functions.anchorAdjudication(
-                commitment_bytes32, "CORPUS_SNAPSHOT",
+            tx = await contract.functions.recordAdjudication(
+                self._CORPUS_SNAPSHOT_DEVICE_ID, commitment_bytes32, False,
             ).build_transaction({
-                "from": self._account.address, "nonce": nonce, "gas": 100_000,
+                "from": self._account.address, "nonce": nonce,
             })
+            # Dynamic gas estimate with 25% safety buffer. IoTeX requires more
+            # gas than naive Ethereum estimates suggest for storage-heavy ops
+            # (live measurement: ~160k for recordAdjudication's two SSTORE +
+            # array push + counter increment). Static 80k budget hits IoTeX
+            # status=101 (out-of-gas).
+            gas_estimate = await self._w3.eth.estimate_gas(tx)
+            tx["gas"] = int(gas_estimate * 1.25)
             signed = self._account.sign_transaction(tx)
-            tx_hash = await self._w3.eth.send_raw_transaction(signed.rawTransaction)
+            tx_hash = await self._w3.eth.send_raw_transaction(signed.raw_transaction)
             receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
-            if receipt.status != 1:
+            if receipt["status"] != 1:
                 log.warning(
                     "anchor_corpus_snapshot: tx reverted commitment=%s tx=%s",
                     snapshot_commitment_hex[:16], tx_hash.hex()[:16],
