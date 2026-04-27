@@ -2321,7 +2321,14 @@ class DualShockTransport:
                     features, dev_hex, l5, e4, infer, epoch
                 )
                 self._store.store_pitl_proof(dev_hex, hex(null), hex(fc), hp_int)
-                if self._chain is not None:
+                # Phase 237.5 Path C+ kill-switch: gate the high-frequency
+                # per-PITL-proof chain calls before tasks are created. Without
+                # this, the bridge burned ~3 IOTX/hour against IoTeX testnet's
+                # broken P256 precompile (each fire-and-forget call attempts
+                # send_raw_transaction, consumes gas on revert, no error
+                # propagates back). Local PITL proof storage above is unaffected.
+                _chain_paused = getattr(self._cfg, "chain_submission_paused", False)
+                if self._chain is not None and not _chain_paused:
                     asyncio.create_task(
                         self._chain.submit_pitl_proof(dev_hex, proof, fc, hp_int, infer, null, epoch)
                     )

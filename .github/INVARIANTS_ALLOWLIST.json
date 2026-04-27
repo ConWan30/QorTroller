@@ -108,7 +108,7 @@
     "description": "anchor_corpus_snapshot async function exists in chain.py (Phase 237.5)"
   },
   "INV-CORPUS-002": {
-    "digest": "f0c3995af9e62844c0514d73d06e67040b7de41e20e6960ff8ca913b8b7d281e",
-    "description": "CORPUS_SNAPSHOT sourceType literal pinned in chain.py (Phase 237.5)"
+    "digest": "c06c340a97679c2be73db76f0a18bd7a6f237c4b87d8c1faa7781d86ece6d1a6",
+    "description": "VAPI_CORPUS_SNAPSHOT_v1 deviceIdHash literal pinned in chain.py (Phase 237.5 Path X \u2014 deployed bytecode reality)"
   }
 }

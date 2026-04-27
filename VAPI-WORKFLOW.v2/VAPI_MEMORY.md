@@ -1267,3 +1267,78 @@ on-chain, not just in SQLite.
 **Last Updated**: 2026-04-26
 **Update Method**: Append-only, manual edit after significant sessions
 **Retention**: All entries preserved indefinitely
+
+---
+
+## 10. Phase 237.5 Path C+ — Three findings, one atomic commit (2026-04-26)
+
+**Why this section exists**: The Phase 237.5 ship commit (`f9c6ec11`) was
+materially correct in intent but exposed three real protocol-level
+findings the same day. The Path C+ correction landed all three in one
+follow-up commit alongside an inaugural-anchor deferral honest about the
+wallet funding gap.
+
+**Findings**:
+
+1. **V5 verification missed deployed-vs-source bytecode parity.**
+   Verification doc cited `AdjudicationRegistry.sol:79-99` for
+   `anchorAdjudication(bytes32, string)` — source-correct, but live
+   `eth_getCode` query proved the deployed contract is the Phase 111
+   original (selector `0x5fa83f4b` only; `0xae7cd267` and `0x79dcce3f`
+   absent). The repo's VAPI-EXT extension was added but never re-deployed.
+
+2. **Latent `chain=None` bug in `main.py:434-438`.** Every chain-dependent
+   operator endpoint added since Phase 72 silently ran against `None`.
+   Mostly invisible because the endpoints have try/except wrappers that
+   swallow `AttributeError`. Phase 237.5's wrapper had no such wrapper,
+   which is what surfaced it.
+
+3. **Wallet drain ~17.95 IOTX in one session.** Traced via Explore agent
+   to `dualshock_integration.py:2324-2335` (3 fire-and-forget chain
+   calls per PITL proof, no dry_run check) and `batcher.py:471-527`
+   (retry loop ignores P256 dead-letter flag). Both compound while IoTeX
+   testnet's P256 precompile is broken.
+
+**Path C+ shipped**:
+- Path X: `chain.anchor_corpus_snapshot` rewritten to use deployed
+  `recordAdjudication` ABI with constant `deviceIdHash =
+  SHA-256(b"VAPI_CORPUS_SNAPSHOT_v1")` carrying the attribution
+- main.py wired `chain=self.chain` to `create_operator_app`
+- Global `chain_submission_paused` kill-switch (config + 3 guard sites)
+- INV-CORPUS-002 retargeted to freeze `b"VAPI_CORPUS_SNAPSHOT_v1"` literal
+- T237.5-6 kill-switch test (2 sub-tests, on + off paths)
+- WIF-059 entry documents the drain class as protocol-side risk
+- Inaugural anchor explicit DEFERRED — wallet funding gap
+
+**What we learned**:
+- The verification standard is recursive AND extends to deployed bytecode.
+  Reading source code IS necessary; reading live `eth_getCode` selectors
+  IS also necessary. A "modern pattern" function in source can be
+  unreachable in production if the contract was never re-deployed.
+- Silent economic drain is a protocol-side risk class. Failed-but-gas-
+  consuming transactions look like nothing in agent logs (just the dead-
+  letter flag), but they actively burn the wallet at thousands of gas
+  units per failed attempt × hundreds of attempts per hour. Detection
+  signal lives in wallet balance over time, NOT in agent state.
+- Kill-switches at chokepoints (`_send_tx`) are higher-leverage than
+  kill-switches at caller sites — but caller-site guards are still
+  necessary when callers bypass the chokepoint (DualShock's fire-and-
+  forget path is one such bypass).
+
+**Cost of session**: ~17.95 IOTX wallet drain. Roughly $X.XX in IoTeX
+testnet equivalent. This is the literal economic cost of insufficient
+verification recursion, surfaced in the same session that shipped the
+verification finding's remediation. The cost is recoverable (testnet
+faucet) but the lesson is durable.
+
+**Test counts**: Bridge 2515 → 2517 (+2) | Autoresearch 7 | SDK 539 | Hardhat 528 | Contracts 46 LIVE | PV-CI 28 (INV-CORPUS-002 retargeted)
+**Skill 14 PostCode Sweep**: PASS (12/12 steps; same monitoring/skill14_phase237_5.json carries over since Path C+ is a same-day correction within the same phase)
+**Bridge state at commit**: HALTED at user authorization; wallet 0.5525 IOTX; CHAIN_SUBMISSION_PAUSED=true ready for safe restart
+**Inaugural anchor**: DEFERRED — restoration when wallet ≥1 IOTX + flag flipped
+
+---
+
+**Document Version**: 1.7 (Phase 237.5 Path C+)
+**Last Updated**: 2026-04-26
+**Update Method**: Append-only, manual edit after significant sessions
+**Retention**: All entries preserved indefinitely
