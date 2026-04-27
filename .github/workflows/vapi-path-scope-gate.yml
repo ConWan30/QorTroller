@@ -1,0 +1,90 @@
+name: VAPI Path Scope Gate
+
+# Phase O0 path-scope CI gate per Pass 2A V5 Option B and Pass 2C
+# Section 5.2 (commit b9ddeeb2). Reads .github/CODEOWNERS at commit
+# cdfa0ae6 as source of truth and enforces path-author scope checking
+# on every pull request.
+#
+# No `paths:` filter — the gate runs on EVERY pull request regardless
+# of which paths the PR touches, because every file's author-vs-owner
+# alignment matters.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  path-scope-gate:
+    name: "Path Scope Gate (CODEOWNERS enforcement)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need full history to compute diff between PR base and head.
+          fetch-depth: 0
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pytest (sanity-check dependency)
+        run: pip install pytest
+
+      - name: Sanity-check the gate logic against test scenarios
+        run: |
+          python -m pytest bridge/tests/test_vapi_path_scope_gate.py -v
+
+      - name: Compute modified file list
+        id: modified
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          echo "PR author:    ${{ github.event.pull_request.user.login }}"
+          echo "PR base SHA:  $BASE_SHA"
+          echo "PR head SHA:  $HEAD_SHA"
+          echo ""
+          echo "Modified files:"
+          git diff --name-only "$BASE_SHA..$HEAD_SHA" | sed 's/^/  /'
+          # Comma-separated list for the gate script's --modified-files flag
+          FILES=$(git diff --name-only "$BASE_SHA..$HEAD_SHA" | tr '\n' ',' | sed 's/,$//')
+          echo "files=$FILES" >> "$GITHUB_OUTPUT"
+
+      - name: Run path-scope gate
+        run: |
+          python scripts/vapi_path_scope_gate.py \
+            --pr-author "${{ github.event.pull_request.user.login }}" \
+            --modified-files "${{ steps.modified.outputs.files }}"
+
+      - name: Comment on PR (on failure)
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = `## VAPI Path Scope Gate Failed
+
+            One or more modified files violate the path-scope rules defined in [\`.github/CODEOWNERS\`](../blob/main/.github/CODEOWNERS).
+
+            **Cause**: the PR author lacks ownership scope for at least one modified file under VAPI's two-agent partnership lane discipline.
+
+            **What to do**:
+
+            1. Inspect the gate output in the workflow log to see which path(s) violated scope, the matched CODEOWNERS pattern, and the expected owners.
+            2. Either revert the change to the out-of-scope file(s), OR update \`.github/CODEOWNERS\` to grant the author scope. Updating CODEOWNERS to expand an agent's lane is a governance decision that requires operator review.
+
+            **Architectural references**:
+            - Design Pass 1 Conflict 3 Option A — lane reorganization (commit 30181951)
+            - Pass 2A V5 Option B — separate path-scope gate decision (commit 6751bf9a)
+            - Pass 2C Section 5.2 — implementation contract (commit b9ddeeb2)
+            - CODEOWNERS — current source of truth (commit cdfa0ae6)
+            `;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body
+            });
