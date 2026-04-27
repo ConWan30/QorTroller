@@ -7,31 +7,70 @@
 # Anchor Sentry stewards off-chain provenance: wiki/, provenance/, events/.
 # Guardian stewards operational health: audits/, sweeps/, ops/, invariants/.
 #
-# Architectural references:
+# ─────────────────────────────────────────────────────────────────
+# CRITICAL: rule ordering follows GitHub's last-match-wins semantics
+# ─────────────────────────────────────────────────────────────────
+# Per https://docs.github.com/en/repositories/managing-your-repositories-settings-and-security/customizing-your-repository/about-code-owners
+# "If multiple patterns match a particular path, the last matching
+#  pattern takes the most precedence."
+#
+# Therefore the rule order in this file is:
+#
+#   1. Catch-all `*` FIRST — establishes ConWan30 as default owner of
+#      any file. Subsequent specific rules override this.
+#
+#   2. Agent lane blocks (Sentry, Guardian) NEXT — each lane's
+#      directory rules override the catch-all for paths under that
+#      lane.
+#
+#   3. Bridge-managed and stray special cases LAST — exact-file rules
+#      that override the Sentry lane for engine-written files inside
+#      wiki/.
+#
+# DO NOT regress this ordering. Placing the catch-all last (a
+# previously-shipped error in commit cdfa0ae6, fixed by this commit)
+# defeats the entire lane-discipline system: every specific rule is
+# beaten by the catch-all under last-match-wins, leaving Sentry and
+# Guardian with no effective scope.
+#
+# ─────────────────────────────────────────────────────────────────
+# Architectural references
+# ─────────────────────────────────────────────────────────────────
 #   wiki/proposals/PHASE_O0_DESIGN_PASS_1.md (Conflict 3 Option A) —
 #     lane assignment rationale.
 #   wiki/proposals/PHASE_O0_DESIGN_PASS_2C.md (Section 5.2; commit
-#     b9ddeeb2) — implementation contract; the path-scope gate (next
-#     session) will read this CODEOWNERS file as its source of truth
-#     for path ownership.
+#     b9ddeeb2) — implementation contract; the path-scope gate reads
+#     this CODEOWNERS file as its source of truth for path ownership.
 #
-# Phase O0 status note:
-#   The agent identities @vapi-anchor-sentry and @vapi-guardian refer
-#   to GitHub App slugs that will be registered in Phase O0 Section 6.3.
-#   Until that registration completes, these CODEOWNERS rules are
-#   declaratively in place but do not actively control commits — the
-#   App accounts do not yet exist on GitHub. The rules become live
-#   enforcement once the GitHub Apps register and the path-scope gate
-#   workflow runs in CI.
+# ─────────────────────────────────────────────────────────────────
+# Phase O0 status note
+# ─────────────────────────────────────────────────────────────────
+# The agent identities @vapi-anchor-sentry and @vapi-guardian refer
+# to GitHub App slugs that will be registered in Phase O0 Section 6.3.
+# Until that registration completes, these CODEOWNERS rules are
+# declaratively in place but do not actively control commits — the
+# App accounts do not yet exist on GitHub. The rules become live
+# enforcement once the GitHub Apps register and the path-scope gate
+# workflow runs in CI.
 #
-# Pattern semantics:
-#   - Directory shorthand (wiki/) matches all files under that directory
-#     recursively (equivalent to wiki/**).
+# ─────────────────────────────────────────────────────────────────
+# Pattern semantics
+# ─────────────────────────────────────────────────────────────────
+#   - "*" matches any path (catch-all; placed first so specific rules
+#     below override it).
+#   - Directory shorthand "wiki/" matches all files under that
+#     directory recursively (equivalent to "wiki/**").
+#   - Exact file paths "wiki/foo.md" match exactly that file.
 #   - Last-match-wins: rules later in the file override earlier rules
-#     for the same path. Bridge-managed special cases below the Sentry
-#     lane block override Sentry's wiki/ ownership for specific files.
+#     for the same path.
 #   - GitHub App slugs are referenced without the [bot] suffix per
 #     GitHub's CODEOWNERS lookup convention.
+
+# ─────────────────────────────────────────────────────────────────
+# Catch-all fallback — must come first under last-match-wins so that
+# specific rules below override it.
+# ─────────────────────────────────────────────────────────────────
+*                              @ConWan30
 
 # ─────────────────────────────────────────────────────────────────
 # Anchor Sentry lane (off-chain provenance)
@@ -49,8 +88,9 @@ ops/                           @vapi-guardian
 invariants/                    @vapi-guardian
 
 # ─────────────────────────────────────────────────────────────────
-# Bridge-managed special cases — must follow the Sentry lane block
-# so last-match-wins overrides Sentry's wiki/ ownership.
+# Bridge-managed and stray special cases — must come last under
+# last-match-wins so exact-file rules override the Sentry lane for
+# these specific engine-written files inside wiki/.
 #
 # Five files written by the bridge wiki engine (vapi_wiki_engine.py)
 # rather than by Anchor Sentry the agent: log.md, index.md,
@@ -63,9 +103,3 @@ wiki/index.md                  @ConWan30
 wiki/blocked_updates.md        @ConWan30
 wiki/snapshots.md              @ConWan30
 wiki/lint_report.md            @ConWan30
-
-# ─────────────────────────────────────────────────────────────────
-# Catch-all fallback — human operator owns any path not explicitly
-# assigned to an agent above.
-# ─────────────────────────────────────────────────────────────────
-*                              @ConWan30
