@@ -1471,6 +1471,35 @@ class Config:
     Pass 2C Section 5.1 line 741 (Decision A4). Operator prompt's 60s
     suggestion was drift; Pass 2C is the design contract."""
 
+    # --- Phase O0 Stream 5-prep Session 2 — IPFS pinning (Pinata) ---
+    # Per Pass 2C Q7 (Pinata as IPFS pinning provider, operator approved
+    # 2026-04-27) + Decisions D1 (Bearer JWT) and D2 (urllib.request).
+    # Used by ipfs_pinning.PinataClient to pin populated DID documents
+    # during Phase O0 Section 6.4 agent registration after Stream 2-deploy.
+    pinata_jwt: str = field(
+        default_factory=lambda: _env("PINATA_JWT", "")
+    )
+    """Pinata Bearer JWT. Empty = IPFS pinning disabled; PinataClient
+    raises IpfsCredentialsNotConfigured on any pin_did_document call
+    (deferred-activation pattern matching Stream 3-prep chain wrappers
+    and Stream 4-prep OAuth issuer). Set after operator generates a
+    Pinata JWT at https://app.pinata.cloud/developers/api-keys."""
+
+    pinata_api_base_url: str = field(
+        default_factory=lambda: _env("PINATA_API_BASE_URL", "https://api.pinata.cloud")
+    )
+    """Pinata API base URL. Default https://api.pinata.cloud is the
+    canonical endpoint; override only for testing against an alternate
+    Pinata-compatible service."""
+
+    pinata_gateway_url: str = field(
+        default_factory=lambda: _env("PINATA_GATEWAY_URL", "https://gateway.pinata.cloud")
+    )
+    """Pinata gateway URL for pin verification (verify_pin reads
+    /ipfs/<hash> from this base). Default https://gateway.pinata.cloud
+    is the public gateway; operators with dedicated gateways can
+    override."""
+
     # --- Phase 223: PV-CI Invariant Gate ---
     pv_ci_enabled: bool = field(
         default_factory=lambda: _env("PV_CI_ENABLED", "true").lower() == "true"
