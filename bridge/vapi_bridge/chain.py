@@ -2803,6 +2803,160 @@ class ChainClient:
             )
             return (None, False)
 
+    async def anchor_pda_attestation(
+        self,
+        pda_commitment_hex: str,
+        agent_id_hex: str,
+        attestation_type: str,
+    ) -> "tuple[str | None, bool]":
+        """Anchor a PHYSICAL_DATA_ATTESTATION v1 commitment on
+        AgentAdjudicationRegistry.
+
+        Calls AgentAdjudicationRegistry.anchorAgentAction(agentId,
+        actionType, actionHash) on the deployed contract with:
+          - agentId    = bytes32 from agent_id_hex (Pass 2C Q9 encoding)
+          - actionType = ActionType.PHYSICAL_DATA_ATTESTATION (enum value 1
+                         — seventh FROZEN-v1 primitive's slot in the
+                         four-entry vocabulary per Pass 2C Section 4.3 +
+                         AgentAdjudicationRegistry.sol)
+          - actionHash = bytes32 from pda_commitment_hex (the SHA-256
+                         output of physical_data_attestation.compute_pda_hash())
+
+        The `attestation_type` string parameter is informational at the
+        chain wrapper layer — the on-chain discriminator is the uint8
+        ActionType enum (= 1 for PHYSICAL_DATA_ATTESTATION). The
+        canonical-string vocabulary distinguishing kinds of physical
+        data within PDA records (BIOMETRIC_CORPUS_SNAPSHOT,
+        POAC_CHAIN_INTEGRITY, TREMOR_FFT_FEATURE_VECTOR,
+        FLEET_COHERENCE_OBSERVATION, HARDWARE_CERTIFICATION) is captured
+        in the FROZEN PDA hash itself via attestation_type_hash and
+        stored in physical_data_attestation_log.attestation_type for
+        off-chain query convenience.
+
+        Stream 3-prep deferred-activation pattern (mirrors Session 1):
+          The contract address is read from cfg.agent_adjudication_registry_address.
+          If the address is missing (Stream 2-deploy not yet completed
+          because wallet is below the 3 IOTX threshold), this wrapper
+          logs at INFO level and returns (None, False). The caller's
+          insert_physical_data_attestation() proceeds to insert the row
+          with on_chain_confirmed=False; the row remains locally
+          durable and can be re-anchored once the contract is deployed.
+
+        Honors the Phase 237.5 Path C+ chain_submission_paused
+        kill-switch. Returns (tx_hash_hex, True) on success;
+        (None, False) on missing config / wallet error / tx revert /
+        duplicate (anti-replay enforced on-chain via
+        AgentAdjudicationRegistry's _anchorIdByHash).
+
+        Never raises — graceful degradation per the Phase 237.5 Path C+
+        pattern.
+        """
+        # Phase 237.5 Path C+ kill-switch — short-circuit before any RPC call
+        # when CHAIN_SUBMISSION_PAUSED=true is set in bridge/.env.
+        if getattr(self._cfg, "chain_submission_paused", False):
+            log.info(
+                "anchor_pda_attestation: chain_submission_paused=true — "
+                "attestation will record on_chain_confirmed=False (kill-switch active)"
+            )
+            return (None, False)
+
+        # Stream 3-prep deferred-activation: AgentAdjudicationRegistry is not
+        # yet deployed (Stream 2-deploy gated on wallet ≥3 IOTX). When the
+        # config field is empty, this is the expected Phase O0 state — log at
+        # INFO and return (None, False) so the caller's local insert proceeds.
+        addr = getattr(self._cfg, "agent_adjudication_registry_address", "")
+        if not addr:
+            log.info(
+                "anchor_pda_attestation: agent_adjudication_registry_address not "
+                "configured (Stream 2-deploy pending) — attestation will record "
+                "on_chain_confirmed=False (attestation_type=%s)",
+                attestation_type,
+            )
+            return (None, False)
+
+        if self._account is None:
+            log.warning(
+                "anchor_pda_attestation: self._account is None (no bridge "
+                "private key loaded) — attestation will record on_chain_confirmed=False"
+            )
+            return (None, False)
+
+        try:
+            pda_bytes32 = bytes.fromhex(pda_commitment_hex.lstrip("0x"))[:32]
+            pda_bytes32 = pda_bytes32.ljust(32, b"\x00")
+            agent_bytes32 = bytes.fromhex(agent_id_hex.lstrip("0x"))[:32]
+            agent_bytes32 = agent_bytes32.ljust(32, b"\x00")
+        except Exception as exc:
+            log.warning("anchor_pda_attestation: bad hex input: %s", exc)
+            return (None, False)
+
+        # AgentAdjudicationRegistry ABI fragment for anchorAgentAction.
+        # Signature: anchorAgentAction(bytes32 agentId, ActionType actionType,
+        #                              bytes32 actionHash) returns (uint256 anchorId)
+        # ActionType enum is uint8 on-chain.
+        _ABI = [{
+            "name": "anchorAgentAction", "type": "function",
+            "stateMutability": "nonpayable",
+            "inputs": [
+                {"name": "agentId",    "type": "bytes32"},
+                {"name": "actionType", "type": "uint8"},   # ActionType enum
+                {"name": "actionHash", "type": "bytes32"},
+            ],
+            "outputs": [
+                {"name": "anchorId", "type": "uint256"},
+            ],
+        }]
+        # AgentAdjudicationRegistry.ActionType.PHYSICAL_DATA_ATTESTATION
+        _ACTION_TYPE_PHYSICAL_DATA_ATTESTATION = 1
+
+        try:
+            contract = self._w3.eth.contract(
+                address=self._w3.to_checksum_address(addr), abi=_ABI
+            )
+            nonce = await self._w3.eth.get_transaction_count(self._account.address)
+            tx = await contract.functions.anchorAgentAction(
+                agent_bytes32,
+                _ACTION_TYPE_PHYSICAL_DATA_ATTESTATION,
+                pda_bytes32,
+            ).build_transaction({
+                "from": self._account.address, "nonce": nonce,
+            })
+            # Dynamic gas estimate with 25% safety buffer per Phase 237.5 Path X
+            # IoTeX gas-surprise mitigation.
+            gas_estimate = await self._w3.eth.estimate_gas(tx)
+            tx["gas"] = int(gas_estimate * 1.25)
+            signed = self._account.sign_transaction(tx)
+            tx_hash = await self._w3.eth.send_raw_transaction(signed.raw_transaction)
+            receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+            if receipt["status"] != 1:
+                log.warning(
+                    "anchor_pda_attestation: tx reverted pda=%s tx=%s",
+                    pda_commitment_hex[:16], tx_hash.hex()[:16],
+                )
+                return (None, False)
+            log.info(
+                "anchor_pda_attestation: tx=%s pda=%s attestation_type=%s",
+                tx_hash.hex()[:16], pda_commitment_hex[:16], attestation_type,
+            )
+            return (tx_hash.hex(), True)
+        except Exception as exc:
+            _msg = str(exc)
+            # AgentAdjudicationRegistry's DuplicateActionHash custom error
+            # surfaces as a revert message in some web3 clients. Treat as
+            # idempotent rather than failure.
+            if "DuplicateActionHash" in _msg:
+                log.info(
+                    "anchor_pda_attestation: idempotent no-op — pda=%s "
+                    "already anchored",
+                    pda_commitment_hex[:16],
+                )
+                return (None, False)
+            log.warning(
+                "anchor_pda_attestation: anchor failed pda=%s err=%s",
+                pda_commitment_hex[:16], _msg[:120],
+            )
+            return (None, False)
+
     async def is_dual_eligible(
         self,
         device_id_hash_hex: str,
