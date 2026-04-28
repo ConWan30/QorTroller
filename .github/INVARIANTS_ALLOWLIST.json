@@ -110,5 +110,21 @@
   "INV-CORPUS-002": {
     "digest": "c06c340a97679c2be73db76f0a18bd7a6f237c4b87d8c1faa7781d86ece6d1a6",
     "description": "VAPI_CORPUS_SNAPSHOT_v1 deviceIdHash literal pinned in chain.py (Phase 237.5 Path X \u2014 deployed bytecode reality)"
+  },
+  "INV-AGENT-COMMIT-001": {
+    "digest": "07da4e7615bd2033ffa6169fe3c10b3aa0d2bb334b03b93a043414d4775e4669",
+    "description": "compute_agent_commit_hash function exists in agent_commit.py (Pass 2C Section 4.1 \u2014 sixth FROZEN-v1 primitive hash determinism)"
+  },
+  "INV-AGENT-COMMIT-002": {
+    "digest": "80cd68a89bf5c9222f5730dff540f60a594f72dbda7d1a967e59a236158a5e4c",
+    "description": "VAPI-AGENT-COMMIT-v1 domain tag literal pinned in agent_commit.py (Pass 2C Section 4.1 \u2014 DELTA-Pass2C)"
+  },
+  "INV-PDA-001": {
+    "digest": "30bd740e3417fa9358a1c602573a0b604cbf71bc4635cfd1d8136b77a34f8a5a",
+    "description": "compute_pda_hash function exists in physical_data_attestation.py (Pass 2C Section 4.2 \u2014 seventh FROZEN-v1 primitive hash determinism)"
+  },
+  "INV-PDA-002": {
+    "digest": "baf5df5bef04d686cbf217c97e13ba092958bdf9883b98c60a0952c0f15dc47c",
+    "description": "VAPI-PHYSICAL-DATA-ATTESTATION-v1 domain tag literal pinned in physical_data_attestation.py (Pass 2C Section 4.2 \u2014 DELTA2-Pass2C)"
   }
 }
