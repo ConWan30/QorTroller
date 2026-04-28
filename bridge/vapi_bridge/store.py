@@ -3307,6 +3307,49 @@ class Store:
         except Exception:
             pass  # idempotent
 
+        # Phase O0 Stream 3-prep Session 1 — AGENT_COMMIT v1 store table.
+        # Sixth FROZEN-v1 primitive in the family. Each row records a git
+        # commit attestation produced by an Operator Agent, with the computed
+        # AGENT_COMMIT v1 hash as the chain anchor primary key. UNIQUE constraint
+        # on commit_hash enforces anti-replay locally; AgentAdjudicationRegistry
+        # enforces it on-chain via _anchorIdByHash.
+        try:
+            with self._conn() as conn:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS agent_commit_log (
+                        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                        commit_hash         TEXT NOT NULL UNIQUE,    -- hex of AGENT_COMMIT v1 hash
+                        agent_id            TEXT NOT NULL,           -- hex of bytes32 agent_id
+                        commit_sha          TEXT NOT NULL,           -- hex of git SHA-1 (40 chars)
+                        prev_commit_hash    TEXT NOT NULL,           -- hex; "0"*64 for genesis
+                        repo_uri_sha        TEXT NOT NULL,           -- hex of SHA-256(repo_uri)
+                        ts_ns               INTEGER NOT NULL,
+                        tx_hash             TEXT NOT NULL DEFAULT '',
+                        on_chain_confirmed  INTEGER NOT NULL DEFAULT 0,
+                        anchor_id           INTEGER NOT NULL DEFAULT -1,
+                        created_at          REAL NOT NULL
+                    )
+                """)
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_agent_commit_log_agent_id "
+                    "ON agent_commit_log(agent_id)"
+                )
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_agent_commit_log_ts_ns "
+                    "ON agent_commit_log(ts_ns)"
+                )
+                conn.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_commit_log_commit_hash "
+                    "ON agent_commit_log(commit_hash)"
+                )
+                conn.execute(
+                    "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                    " VALUES (?, ?, ?)",
+                    (238, "agent_commit_log", time.time()),
+                )
+        except Exception:
+            pass  # idempotent
+
         # Phase 236-WATCHDOG: Watchdog Event Chain (WEC) audit table.
         # Pairs with the GIC chain — GIC tracks cognitive-session continuity,
         # WEC tracks operational continuity (bridge process lifetimes that
@@ -14272,6 +14315,117 @@ class Store:
                 "FROM corpus_snapshot_log ORDER BY ts_ns DESC LIMIT ?",
                 (int(limit),),
             ).fetchall()
+        return [dict(r) for r in rows]
+
+    # --- Phase O0 Stream 3-prep Session 1 — AGENT_COMMIT v1 ---
+
+    def insert_agent_commit(
+        self,
+        commit_hash: str,
+        agent_id: str,
+        commit_sha: str,
+        prev_commit_hash: str,
+        repo_uri_sha: str,
+        ts_ns: int,
+        tx_hash: str = "",
+        on_chain_confirmed: bool = False,
+        anchor_id: int = -1,
+    ) -> int:
+        """Insert one AGENT_COMMIT v1 row into agent_commit_log. Returns row id.
+
+        UNIQUE(commit_hash) enforced — duplicate inserts (same agent_commit
+        hash from re-running the same git commit attestation) are idempotent:
+        the duplicate raises sqlite3.IntegrityError which we translate to
+        "already recorded" by returning the existing row id. Mirrors the
+        pattern from insert_corpus_snapshot.
+        """
+        try:
+            with self._conn() as conn:
+                cur = conn.execute(
+                    "INSERT INTO agent_commit_log "
+                    "(commit_hash, agent_id, commit_sha, prev_commit_hash, "
+                    " repo_uri_sha, ts_ns, tx_hash, on_chain_confirmed, "
+                    " anchor_id, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        str(commit_hash), str(agent_id), str(commit_sha),
+                        str(prev_commit_hash), str(repo_uri_sha), int(ts_ns),
+                        str(tx_hash), 1 if on_chain_confirmed else 0,
+                        int(anchor_id), time.time(),
+                    ),
+                )
+                return int(cur.lastrowid)
+        except Exception:
+            # Likely UNIQUE collision — return the existing row id
+            with self._conn() as conn:
+                row = conn.execute(
+                    "SELECT id FROM agent_commit_log WHERE commit_hash = ?",
+                    (str(commit_hash),),
+                ).fetchone()
+            return int(row["id"]) if row else 0
+
+    def get_agent_commit_status(self) -> dict:
+        """Return latest AGENT_COMMIT v1 record summary.
+
+        Returns 8 keys: total_commits, latest_hash, latest_agent_id,
+        latest_commit_sha, latest_ts_ns, on_chain_confirmed, anchor_id,
+        timestamp.
+        """
+        import time as _tac
+        with self._conn() as conn:
+            total = conn.execute(
+                "SELECT COUNT(*) AS n FROM agent_commit_log"
+            ).fetchone()["n"]
+            row = conn.execute(
+                "SELECT commit_hash, agent_id, commit_sha, ts_ns, "
+                "       on_chain_confirmed, anchor_id "
+                "FROM agent_commit_log ORDER BY ts_ns DESC LIMIT 1"
+            ).fetchone()
+        if row is None:
+            return {
+                "total_commits":      0,
+                "latest_hash":        "",
+                "latest_agent_id":    "",
+                "latest_commit_sha":  "",
+                "latest_ts_ns":       0,
+                "on_chain_confirmed": False,
+                "anchor_id":          -1,
+                "timestamp":          _tac.time(),
+            }
+        return {
+            "total_commits":      int(total),
+            "latest_hash":        str(row["commit_hash"]),
+            "latest_agent_id":    str(row["agent_id"]),
+            "latest_commit_sha":  str(row["commit_sha"]),
+            "latest_ts_ns":       int(row["ts_ns"]),
+            "on_chain_confirmed": bool(row["on_chain_confirmed"]),
+            "anchor_id":          int(row["anchor_id"]),
+            "timestamp":          _tac.time(),
+        }
+
+    def get_agent_commit_history(self, agent_id: str = "", limit: int = 20) -> list[dict]:
+        """Return last N AGENT_COMMIT v1 records, optionally filtered by agent_id.
+
+        DESC ts_ns ordering (newest first). agent_id="" means all agents.
+        """
+        with self._conn() as conn:
+            if agent_id:
+                rows = conn.execute(
+                    "SELECT id, commit_hash, agent_id, commit_sha, "
+                    "       prev_commit_hash, repo_uri_sha, ts_ns, "
+                    "       tx_hash, on_chain_confirmed, anchor_id, created_at "
+                    "FROM agent_commit_log WHERE agent_id = ? "
+                    "ORDER BY ts_ns DESC LIMIT ?",
+                    (str(agent_id), int(limit)),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT id, commit_hash, agent_id, commit_sha, "
+                    "       prev_commit_hash, repo_uri_sha, ts_ns, "
+                    "       tx_hash, on_chain_confirmed, anchor_id, created_at "
+                    "FROM agent_commit_log ORDER BY ts_ns DESC LIMIT ?",
+                    (int(limit),),
+                ).fetchall()
         return [dict(r) for r in rows]
 
     def get_grind_session_history(

@@ -1395,6 +1395,19 @@ class Config:
     fail-open default values (False / empty dict).  Set after deploy-phase237.js
     runs successfully."""
 
+    # --- Phase O0 Stream 3-prep — AgentAdjudicationRegistry (sixth FROZEN-v1 host) ---
+    agent_adjudication_registry_address: str = field(
+        default_factory=lambda: _env("AGENT_ADJUDICATION_REGISTRY_ADDRESS", "")
+    )
+    """Phase O0 Stream 2 / Stream 3-prep — Deployed AgentAdjudicationRegistry
+    contract address on IoTeX testnet. Empty string = AgentAdjudicationRegistry
+    not yet deployed (Stream 2-deploy gated on wallet ≥3 IOTX per Pass 2A V8);
+    chain.anchor_agent_commit and chain.anchor_pda_attestation log at INFO and
+    return (None, False), permitting the bridge to record AGENT_COMMIT v1 +
+    PHYSICAL_DATA_ATTESTATION v1 rows locally with on_chain_confirmed=False
+    while deployment is pending. Set after deploy-agent-adjudication-registry.js
+    runs successfully."""
+
     # --- Phase 223: PV-CI Invariant Gate ---
     pv_ci_enabled: bool = field(
         default_factory=lambda: _env("PV_CI_ENABLED", "true").lower() == "true"

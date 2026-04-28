@@ -2668,6 +2668,141 @@ class ChainClient:
             )
             return (None, False)
 
+    # --- Phase O0 Stream 3-prep Session 1 — AGENT_COMMIT v1 chain wrapper ---
+
+    async def anchor_agent_commit(
+        self,
+        commit_hash_hex: str,
+        agent_id_hex: str,
+    ) -> "tuple[str | None, bool]":
+        """Anchor an AGENT_COMMIT v1 commitment on AgentAdjudicationRegistry.
+
+        Calls AgentAdjudicationRegistry.anchorAgentAction(agentId, actionType,
+        actionHash) on the deployed contract with:
+          - agentId    = bytes32 from agent_id_hex (Pass 2C Q9 encoding)
+          - actionType = ActionType.AGENT_COMMIT (enum value 0 — sixth FROZEN-v1
+                         primitive's slot in the four-entry vocabulary per
+                         Pass 2C Section 4.3 + AgentAdjudicationRegistry.sol)
+          - actionHash = bytes32 from commit_hash_hex (the SHA-256 output of
+                         agent_commit.compute_agent_commit_hash())
+
+        Stream 3-prep deferred-activation pattern:
+          The contract address is read from cfg.agent_adjudication_registry_address.
+          If the address is missing (Stream 2-deploy not yet completed because
+          wallet is below the 3 IOTX threshold), this wrapper logs at INFO level
+          and returns (None, False). The caller's record_agent_commit() proceeds
+          to insert the row with on_chain_confirmed=False; the row remains
+          locally durable and can be re-anchored once the contract is deployed.
+
+        Honors the Phase 237.5 Path C+ chain_submission_paused kill-switch.
+        Returns (tx_hash_hex, True) on success; (None, False) on missing
+        config / wallet error / tx revert / duplicate (anti-replay enforced
+        on-chain via AgentAdjudicationRegistry's _anchorIdByHash).
+
+        Never raises — graceful degradation per the Phase 237.5 Path C+ pattern.
+        """
+        # Phase 237.5 Path C+ kill-switch — short-circuit before any RPC call
+        # when CHAIN_SUBMISSION_PAUSED=true is set in bridge/.env.
+        if getattr(self._cfg, "chain_submission_paused", False):
+            log.info(
+                "anchor_agent_commit: chain_submission_paused=true — "
+                "commit will record on_chain_confirmed=False (kill-switch active)"
+            )
+            return (None, False)
+
+        # Stream 3-prep deferred-activation: AgentAdjudicationRegistry is not
+        # yet deployed (Stream 2-deploy gated on wallet ≥3 IOTX). When the
+        # config field is empty, this is the expected Phase O0 state — log at
+        # INFO and return (None, False) so the caller's local insert proceeds.
+        addr = getattr(self._cfg, "agent_adjudication_registry_address", "")
+        if not addr:
+            log.info(
+                "anchor_agent_commit: agent_adjudication_registry_address not "
+                "configured (Stream 2-deploy pending) — commit will record "
+                "on_chain_confirmed=False"
+            )
+            return (None, False)
+
+        if self._account is None:
+            log.warning(
+                "anchor_agent_commit: self._account is None (no bridge "
+                "private key loaded) — commit will record on_chain_confirmed=False"
+            )
+            return (None, False)
+
+        try:
+            commit_bytes32 = bytes.fromhex(commit_hash_hex.lstrip("0x"))[:32]
+            commit_bytes32 = commit_bytes32.ljust(32, b"\x00")
+            agent_bytes32 = bytes.fromhex(agent_id_hex.lstrip("0x"))[:32]
+            agent_bytes32 = agent_bytes32.ljust(32, b"\x00")
+        except Exception as exc:
+            log.warning("anchor_agent_commit: bad hex input: %s", exc)
+            return (None, False)
+
+        # AgentAdjudicationRegistry ABI fragment for anchorAgentAction.
+        # Signature: anchorAgentAction(bytes32 agentId, ActionType actionType,
+        #                              bytes32 actionHash) returns (uint256 anchorId)
+        # ActionType enum is uint8 on-chain.
+        _ABI = [{
+            "name": "anchorAgentAction", "type": "function",
+            "stateMutability": "nonpayable",
+            "inputs": [
+                {"name": "agentId",    "type": "bytes32"},
+                {"name": "actionType", "type": "uint8"},   # ActionType enum
+                {"name": "actionHash", "type": "bytes32"},
+            ],
+            "outputs": [
+                {"name": "anchorId", "type": "uint256"},
+            ],
+        }]
+        _ACTION_TYPE_AGENT_COMMIT = 0  # AgentAdjudicationRegistry.ActionType.AGENT_COMMIT
+
+        try:
+            contract = self._w3.eth.contract(
+                address=self._w3.to_checksum_address(addr), abi=_ABI
+            )
+            nonce = await self._w3.eth.get_transaction_count(self._account.address)
+            tx = await contract.functions.anchorAgentAction(
+                agent_bytes32, _ACTION_TYPE_AGENT_COMMIT, commit_bytes32,
+            ).build_transaction({
+                "from": self._account.address, "nonce": nonce,
+            })
+            # Dynamic gas estimate with 25% safety buffer per Phase 237.5 Path X
+            # IoTeX gas-surprise mitigation.
+            gas_estimate = await self._w3.eth.estimate_gas(tx)
+            tx["gas"] = int(gas_estimate * 1.25)
+            signed = self._account.sign_transaction(tx)
+            tx_hash = await self._w3.eth.send_raw_transaction(signed.raw_transaction)
+            receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+            if receipt["status"] != 1:
+                log.warning(
+                    "anchor_agent_commit: tx reverted commit_hash=%s tx=%s",
+                    commit_hash_hex[:16], tx_hash.hex()[:16],
+                )
+                return (None, False)
+            log.info(
+                "anchor_agent_commit: tx=%s commit_hash=%s",
+                tx_hash.hex()[:16], commit_hash_hex[:16],
+            )
+            return (tx_hash.hex(), True)
+        except Exception as exc:
+            _msg = str(exc)
+            # AgentAdjudicationRegistry's DuplicateActionHash custom error
+            # surfaces as a revert message in some web3 clients. Treat as
+            # idempotent rather than failure.
+            if "DuplicateActionHash" in _msg:
+                log.info(
+                    "anchor_agent_commit: idempotent no-op — commit_hash=%s "
+                    "already anchored",
+                    commit_hash_hex[:16],
+                )
+                return (None, False)
+            log.warning(
+                "anchor_agent_commit: anchor failed commit_hash=%s err=%s",
+                commit_hash_hex[:16], _msg[:120],
+            )
+            return (None, False)
+
     async def is_dual_eligible(
         self,
         device_id_hash_hex: str,
