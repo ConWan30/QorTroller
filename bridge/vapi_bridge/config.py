@@ -1408,6 +1408,57 @@ class Config:
     while deployment is pending. Set after deploy-agent-adjudication-registry.js
     runs successfully."""
 
+    # --- Phase O0 Stream 4-prep — OAuth 2.1 + HMAC agent authentication ---
+    # Per Pass 2C Section 5.1 + Decisions A1..A7 (Stream 4-prep Session 1).
+    # Operational infrastructure for /agent/* endpoint authentication —
+    # NOT a FROZEN-v1 primitive. Session 1 ships oauth_issuer.py +
+    # hmac_middleware.py as standalone primitives; Session 2 will wire
+    # them into bridge endpoints via a FastAPI Depends(_check_agent_token)
+    # dependency. Existing _check_key / _check_read_key patterns for the
+    # 154+ operator endpoints stay UNCHANGED — the new layers compose
+    # alongside, not replace.
+    oauth_issuer_secret: str = field(
+        default_factory=lambda: _env("OAUTH_ISSUER_SECRET", "")
+    )
+    """HS256 JWT signing secret for the OAuth 2.1 token issuer. Empty =
+    OAuth disabled (issuer cannot be constructed; agent endpoints will
+    reject all requests once Session 2 wires the dependency)."""
+
+    oauth_token_ttl_seconds: int = field(
+        default_factory=lambda: _env_int("OAUTH_TOKEN_TTL_SECONDS", 300)
+    )
+    """JWT token TTL in seconds. Default 300 (top of Pass 2C's 60-300s
+    range per Decision A5). Pass 2C Section 5.1 line 713 freezes this
+    range; OAuthIssuer rejects values outside [60, 300]."""
+
+    oauth_issuer_url: str = field(
+        default_factory=lambda: _env("OAUTH_ISSUER_URL", "vapi-bridge-oauth")
+    )
+    """JWT 'iss' claim value. Default 'vapi-bridge-oauth' per Pass 2C
+    Section 5.1 line 711 (FROZEN). Override only for multi-bridge
+    federation tests."""
+
+    oauth_audience: str = field(
+        default_factory=lambda: _env("OAUTH_AUDIENCE", "vapi-bridge-agent-endpoints")
+    )
+    """JWT 'aud' claim value. Default 'vapi-bridge-agent-endpoints' per
+    Pass 2C Section 5.1 line 712 (FROZEN). Override only for multi-
+    bridge federation tests."""
+
+    hmac_nonce_window_seconds: int = field(
+        default_factory=lambda: _env_int("HMAC_NONCE_WINDOW_SECONDS", 600)
+    )
+    """NonceDedupTracker TTL in seconds. Default 600 per Pass 2C
+    Section 5.1 line 750 (twice the ±300s clock skew window per
+    Decision A4)."""
+
+    hmac_timestamp_tolerance_seconds: int = field(
+        default_factory=lambda: _env_int("HMAC_TIMESTAMP_TOLERANCE_SECONDS", 300)
+    )
+    """check_timestamp_freshness tolerance in seconds. Default 300 per
+    Pass 2C Section 5.1 line 741 (Decision A4). Operator prompt's 60s
+    suggestion was drift; Pass 2C is the design contract."""
+
     # --- Phase 223: PV-CI Invariant Gate ---
     pv_ci_enabled: bool = field(
         default_factory=lambda: _env("PV_CI_ENABLED", "true").lower() == "true"
@@ -1964,6 +2015,43 @@ class Config:
     )
     """Phase 193 — Publish to alert bus channel on MEDIUM coherence failures. Default False
     (advisory only — reduce noise; MEDIUM contradictions logged to wiki but not alerted)."""
+
+    def get_oauth_clients(
+        self,
+        agent_names: "tuple[str, ...]" = ("SENTRY", "GUARDIAN"),
+    ) -> "dict[str, tuple[str, list[str]]]":
+        """Read OAUTH_CLIENT_ID_<AGENT> / OAUTH_CLIENT_SECRET_<AGENT> env vars.
+
+        Phase O0 Stream 4-prep Decision A6: env-var-per-agent client
+        credentials matching the existing OPERATOR_API_KEY pattern. Both
+        SENTRY and GUARDIAN agents are issued the read-only Phase O0
+        scope `bridge:agent:phases:read` per Pass 2C Section 5.1 line 801.
+
+        Returns a dict {client_id: (client_secret, allowed_scopes)}. An
+        agent is included only when both its CLIENT_ID and CLIENT_SECRET
+        env vars are set; otherwise it is silently omitted. Empty dict
+        means OAuth issuer cannot mint any tokens (will raise
+        OAuthClientNotFound for every issue_token call).
+
+        Read at call time (not at Config construction) so operators can
+        rotate credentials without bridge restart by re-invoking the
+        accessor — though FastAPI dependencies typically construct the
+        OAuthIssuer once at app startup, so rotation in the live process
+        is a Session 2 operational concern.
+        """
+        # Phase O0 scope vocabulary per Pass 2C Section 5.1 line 801.
+        # Write scopes deferred to P1+; both agents share read-only scope.
+        _PHASE_O0_AGENT_SCOPES = ["bridge:agent:phases:read"]
+
+        clients: "dict[str, tuple[str, list[str]]]" = {}
+        for agent_name in agent_names:
+            client_id_env = f"OAUTH_CLIENT_ID_{agent_name.upper()}"
+            client_secret_env = f"OAUTH_CLIENT_SECRET_{agent_name.upper()}"
+            client_id = _env(client_id_env, "")
+            client_secret = _env(client_secret_env, "")
+            if client_id and client_secret:
+                clients[client_id] = (client_secret, list(_PHASE_O0_AGENT_SCOPES))
+        return clients
 
     def validate(self) -> list[str]:
         """Return list of configuration errors (empty = valid)."""
