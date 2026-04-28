@@ -3350,6 +3350,56 @@ class Store:
         except Exception:
             pass  # idempotent
 
+        # Phase O0 Stream 3-prep Session 2 — PHYSICAL_DATA_ATTESTATION v1
+        # (seventh and final FROZEN-v1 primitive). Per Pass 2C Section 4.2.
+        # Stores agents' off-chain certifications of physical-data artifacts
+        # (biometric corpus snapshots, PoAC chain roots, tremor FFT feature
+        # vectors, fleet-coherence observations, hardware-certification
+        # proofs). UNIQUE(pda_commitment) enforces local idempotency in
+        # parallel with AgentAdjudicationRegistry's on-chain anti-replay
+        # tracker. attestation_type stored as canonical string (queryable);
+        # attestation_type_hash stored as hex of keccak256(string) (audit).
+        try:
+            with self._conn() as conn:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS physical_data_attestation_log (
+                        id                     INTEGER PRIMARY KEY AUTOINCREMENT,
+                        pda_commitment         TEXT NOT NULL UNIQUE,    -- hex of PDA v1 hash
+                        hardware_data_hash     TEXT NOT NULL,           -- hex of SHA-256(physical data)
+                        agent_id               TEXT NOT NULL,           -- hex of bytes32 agent_id
+                        attestation_type       TEXT NOT NULL,           -- canonical string
+                        attestation_type_hash  TEXT NOT NULL,           -- hex of keccak256(string)
+                        ts_ns                  INTEGER NOT NULL,
+                        tx_hash                TEXT NOT NULL DEFAULT '',
+                        on_chain_confirmed     INTEGER NOT NULL DEFAULT 0,
+                        anchor_id              INTEGER NOT NULL DEFAULT -1,
+                        created_at             REAL NOT NULL
+                    )
+                """)
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_pda_log_agent_id "
+                    "ON physical_data_attestation_log(agent_id)"
+                )
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_pda_log_ts_ns "
+                    "ON physical_data_attestation_log(ts_ns)"
+                )
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_pda_log_attestation_type "
+                    "ON physical_data_attestation_log(attestation_type)"
+                )
+                conn.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_pda_log_commitment "
+                    "ON physical_data_attestation_log(pda_commitment)"
+                )
+                conn.execute(
+                    "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                    " VALUES (?, ?, ?)",
+                    (239, "physical_data_attestation_log", time.time()),
+                )
+        except Exception:
+            pass  # idempotent
+
         # Phase 236-WATCHDOG: Watchdog Event Chain (WEC) audit table.
         # Pairs with the GIC chain — GIC tracks cognitive-session continuity,
         # WEC tracks operational continuity (bridge process lifetimes that
@@ -14424,6 +14474,142 @@ class Store:
                     "       prev_commit_hash, repo_uri_sha, ts_ns, "
                     "       tx_hash, on_chain_confirmed, anchor_id, created_at "
                     "FROM agent_commit_log ORDER BY ts_ns DESC LIMIT ?",
+                    (int(limit),),
+                ).fetchall()
+        return [dict(r) for r in rows]
+
+    def insert_physical_data_attestation(
+        self,
+        pda_commitment: str,
+        hardware_data_hash: str,
+        agent_id: str,
+        attestation_type: str,
+        attestation_type_hash: str,
+        ts_ns: int,
+        tx_hash: str = "",
+        on_chain_confirmed: bool = False,
+        anchor_id: int = -1,
+    ) -> int:
+        """Insert one PHYSICAL_DATA_ATTESTATION v1 row into
+        physical_data_attestation_log. Returns row id.
+
+        UNIQUE(pda_commitment) enforced — duplicate inserts (same PDA
+        hash from re-attesting the same physical-data artifact) are
+        idempotent: the duplicate raises sqlite3.IntegrityError which
+        we translate to "already recorded" by returning the existing
+        row id. Mirrors insert_agent_commit / insert_corpus_snapshot.
+
+        Phase O0 Stream 3-prep Session 2 — Pass 2C Section 4.2.
+        """
+        try:
+            with self._conn() as conn:
+                cur = conn.execute(
+                    "INSERT INTO physical_data_attestation_log "
+                    "(pda_commitment, hardware_data_hash, agent_id, "
+                    " attestation_type, attestation_type_hash, ts_ns, "
+                    " tx_hash, on_chain_confirmed, anchor_id, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        str(pda_commitment), str(hardware_data_hash),
+                        str(agent_id), str(attestation_type),
+                        str(attestation_type_hash), int(ts_ns),
+                        str(tx_hash), 1 if on_chain_confirmed else 0,
+                        int(anchor_id), time.time(),
+                    ),
+                )
+                return int(cur.lastrowid)
+        except Exception:
+            # Likely UNIQUE collision — return the existing row id
+            with self._conn() as conn:
+                row = conn.execute(
+                    "SELECT id FROM physical_data_attestation_log "
+                    "WHERE pda_commitment = ?",
+                    (str(pda_commitment),),
+                ).fetchone()
+            return int(row["id"]) if row else 0
+
+    def get_physical_data_attestation_status(self) -> dict:
+        """Return latest PHYSICAL_DATA_ATTESTATION v1 record summary.
+
+        Returns 8 keys: total_attestations, latest_pda_commitment,
+        latest_agent_id, latest_attestation_type, latest_ts_ns,
+        on_chain_confirmed, anchor_id, timestamp.
+        """
+        import time as _tac
+        with self._conn() as conn:
+            total = conn.execute(
+                "SELECT COUNT(*) AS n FROM physical_data_attestation_log"
+            ).fetchone()["n"]
+            row = conn.execute(
+                "SELECT pda_commitment, agent_id, attestation_type, ts_ns, "
+                "       on_chain_confirmed, anchor_id "
+                "FROM physical_data_attestation_log ORDER BY ts_ns DESC LIMIT 1"
+            ).fetchone()
+        if row is None:
+            return {
+                "total_attestations":       0,
+                "latest_pda_commitment":    "",
+                "latest_agent_id":          "",
+                "latest_attestation_type":  "",
+                "latest_ts_ns":             0,
+                "on_chain_confirmed":       False,
+                "anchor_id":                -1,
+                "timestamp":                _tac.time(),
+            }
+        return {
+            "total_attestations":       int(total),
+            "latest_pda_commitment":    str(row["pda_commitment"]),
+            "latest_agent_id":          str(row["agent_id"]),
+            "latest_attestation_type":  str(row["attestation_type"]),
+            "latest_ts_ns":             int(row["ts_ns"]),
+            "on_chain_confirmed":       bool(row["on_chain_confirmed"]),
+            "anchor_id":                int(row["anchor_id"]),
+            "timestamp":                _tac.time(),
+        }
+
+    def get_physical_data_attestation_history(
+        self,
+        agent_id: str = "",
+        attestation_type: str = "",
+        limit: int = 20,
+    ) -> list[dict]:
+        """Return last N PHYSICAL_DATA_ATTESTATION v1 records.
+
+        Filterable by agent_id and/or attestation_type. DESC ts_ns
+        ordering (newest first). Empty filter strings disable that
+        filter. Mirrors get_agent_commit_history() pattern with the
+        added attestation_type filter (Pass 2C Section 4.2 indexed).
+        """
+        cols = (
+            "SELECT id, pda_commitment, hardware_data_hash, agent_id, "
+            "       attestation_type, attestation_type_hash, ts_ns, "
+            "       tx_hash, on_chain_confirmed, anchor_id, created_at "
+            "FROM physical_data_attestation_log "
+        )
+        with self._conn() as conn:
+            if agent_id and attestation_type:
+                rows = conn.execute(
+                    cols
+                    + "WHERE agent_id = ? AND attestation_type = ? "
+                      "ORDER BY ts_ns DESC LIMIT ?",
+                    (str(agent_id), str(attestation_type), int(limit)),
+                ).fetchall()
+            elif agent_id:
+                rows = conn.execute(
+                    cols
+                    + "WHERE agent_id = ? ORDER BY ts_ns DESC LIMIT ?",
+                    (str(agent_id), int(limit)),
+                ).fetchall()
+            elif attestation_type:
+                rows = conn.execute(
+                    cols
+                    + "WHERE attestation_type = ? "
+                      "ORDER BY ts_ns DESC LIMIT ?",
+                    (str(attestation_type), int(limit)),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    cols + "ORDER BY ts_ns DESC LIMIT ?",
                     (int(limit),),
                 ).fetchall()
         return [dict(r) for r in rows]
