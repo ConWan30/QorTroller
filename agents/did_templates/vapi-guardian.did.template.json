@@ -1,0 +1,39 @@
+{
+  "_template_metadata": {
+    "_comment": "Phase O0 Stream 5-prep Session 1 — DID document template for vapi-guardian. Ships with placeholder fields; populated during Phase O0 Section 6.4 agent registration after Stream 2-deploy lands AgentRegistry on IoTeX testnet (gated on wallet >= 3 IOTX). Per Pass 2C Section 6.1 line 1024-1046 specification + Q8 modelClass inclusion (operator approved 2026-04-27). Placeholders use the form <name> for clarity; the IPFS pinning script (Stream 5-prep Session 2) substitutes real values at registration time.",
+    "_pass_2c_section": "6.1",
+    "_stream_5_prep_session": 1,
+    "_status": "TEMPLATE — placeholders populated during Phase O0 Section 6.4 work"
+  },
+  "@context": ["https://www.w3.org/ns/did/v1"],
+  "id": "did:io:0x<address>",
+  "controller": "did:io:0x<address>",
+  "verificationMethod": [
+    {
+      "id": "did:io:0x<address>#kms-key-1",
+      "type": "EcdsaSecp256k1VerificationKey2019",
+      "controller": "did:io:0x<address>",
+      "publicKeyHex": "0x<pubkey>"
+    }
+  ],
+  "authentication": ["did:io:0x<address>#kms-key-1"],
+  "assertionMethod": ["did:io:0x<address>#kms-key-1"],
+  "service": [
+    {
+      "id": "did:io:0x<address>#vapi-agent",
+      "type": "VAPIOperatorAgent",
+      "serviceEndpoint": "https://github.com/apps/vapi-guardian"
+    }
+  ],
+  "alsoKnownAs": [
+    "https://github.com/apps/vapi-guardian",
+    "vapi-agent-id:0x<agent_id_bytes32_hex>",
+    "erc6551-tba:0x<tba_address>"
+  ],
+  "metadata": {
+    "agentRole": "Guardian",
+    "vapiPhase": "O0",
+    "modelClass": "claude-sonnet-4-6",
+    "createdAt": "<iso8601>"
+  }
+}
