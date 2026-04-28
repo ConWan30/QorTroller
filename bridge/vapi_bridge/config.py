@@ -1408,6 +1408,18 @@ class Config:
     while deployment is pending. Set after deploy-agent-adjudication-registry.js
     runs successfully."""
 
+    # --- Phase O0 Stream 4-prep Session 2 — AgentRegistry ---
+    agent_registry_address: str = field(
+        default_factory=lambda: _env("AGENT_REGISTRY_ADDRESS", "")
+    )
+    """Phase O0 Stream 2-prep / Stream 4-prep Session 2 — Deployed
+    AgentRegistry contract address on IoTeX testnet. Empty string =
+    AgentRegistry not yet deployed (Stream 2-deploy gated on wallet
+    ≥3 IOTX). The /agent/agent-registry-status endpoint returns a
+    deferred-activation response when this is empty (mirrors the
+    chain.anchor_agent_commit / anchor_pda_attestation pattern from
+    Stream 3-prep). Set after deploy-agent-registry.js runs."""
+
     # --- Phase O0 Stream 4-prep — OAuth 2.1 + HMAC agent authentication ---
     # Per Pass 2C Section 5.1 + Decisions A1..A7 (Stream 4-prep Session 1).
     # Operational infrastructure for /agent/* endpoint authentication —

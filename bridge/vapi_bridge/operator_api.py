@@ -29,9 +29,14 @@ import json as _json
 import logging
 import time
 
-from fastapi import FastAPI, Header, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+
+# Phase O0 Stream 4-prep Session 2 — agent token authentication.
+from .agent_auth import AgentIdentity, make_check_agent_token
+from .hmac_middleware import NonceDedupTracker
+from .oauth_issuer import OAuthIssuer
 
 log = logging.getLogger(__name__)
 
@@ -248,6 +253,55 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                 detail="Rate limit exceeded",
                 headers={"Retry-After": "60"},
             )
+
+    # ------------------------------------------------------------------
+    # Phase O0 Stream 4-prep Session 2 — agent token dependency setup.
+    #
+    # Builds the OAuthIssuer + NonceDedupTracker + _check_agent_token
+    # FastAPI dependency at app construction time. Closure-captured by
+    # the five Phase O0 read-only /agent/agent-* endpoints below; the
+    # 154+ existing operator endpoints are unchanged and continue to
+    # use _check_key / _check_read_key.
+    #
+    # If OAUTH_ISSUER_SECRET is unset OR no OAUTH_CLIENT_ID_<AGENT> /
+    # OAUTH_CLIENT_SECRET_<AGENT> pair is configured, the issuer is
+    # None and _check_agent_token raises 503 ("OAuth not configured")
+    # for every agent endpoint request — mirrors the _check_key
+    # not-configured pattern. Bridge dev environments without auth
+    # setup remain runnable; only agent endpoints are gated.
+    # ------------------------------------------------------------------
+    _oauth_clients_dict: "dict[str, tuple[str, list[str]]]" = {}
+    _oauth_issuer: "OAuthIssuer | None" = None
+    # Defensive type checks: existing tests use MagicMock for cfg, where
+    # attribute access auto-creates truthy MagicMock objects. Skip OAuth
+    # setup unless the fields are real, non-empty literals of the
+    # expected types. Real Config (frozen dataclass) trivially passes.
+    _oauth_secret_raw = getattr(cfg, "oauth_issuer_secret", "")
+    if isinstance(_oauth_secret_raw, str) and _oauth_secret_raw:
+        _clients_raw = cfg.get_oauth_clients() if hasattr(cfg, "get_oauth_clients") else {}
+        if isinstance(_clients_raw, dict) and _clients_raw:
+            _ttl_raw = getattr(cfg, "oauth_token_ttl_seconds", 300)
+            _ttl = int(_ttl_raw) if isinstance(_ttl_raw, int) else 300
+            _iss_raw = getattr(cfg, "oauth_issuer_url", "vapi-bridge-oauth")
+            _iss = _iss_raw if isinstance(_iss_raw, str) and _iss_raw else "vapi-bridge-oauth"
+            _aud_raw = getattr(cfg, "oauth_audience", "vapi-bridge-agent-endpoints")
+            _aud = _aud_raw if isinstance(_aud_raw, str) and _aud_raw else "vapi-bridge-agent-endpoints"
+            _oauth_clients_dict = _clients_raw
+            _oauth_issuer = OAuthIssuer(
+                secret=_oauth_secret_raw, clients=_oauth_clients_dict,
+                issuer=_iss, audience=_aud, ttl_seconds=_ttl,
+            )
+    _nonce_window_raw = getattr(cfg, "hmac_nonce_window_seconds", 600)
+    _nonce_tracker = NonceDedupTracker(
+        ttl_seconds=int(_nonce_window_raw) if isinstance(_nonce_window_raw, int) else 600,
+    )
+    _ts_tol_raw = getattr(cfg, "hmac_timestamp_tolerance_seconds", 300)
+    _check_agent_token = make_check_agent_token(
+        oauth_issuer=_oauth_issuer,
+        oauth_clients=_oauth_clients_dict,
+        nonce_tracker=_nonce_tracker,
+        timestamp_tolerance_seconds=int(_ts_tol_raw) if isinstance(_ts_tol_raw, int) else 300,
+    )
 
     def _sign(device_id: str, eligible: bool, ts: int) -> str:
         """Produce HMAC-SHA256 signature over device_id:eligible:timestamp."""
@@ -7658,5 +7712,162 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             return result
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # ------------------------------------------------------------------
+    # Phase O0 Stream 4-prep Session 2 — five read-only agent endpoints.
+    #
+    # Per Pass 2C Section 5.1 lines 794-799 (Decision B3: agent- prefix
+    # path naming preserved). All five require Depends(_check_agent_token)
+    # which composes OAuth 2.1 token verification + HMAC request signing
+    # verification + nonce dedup + timestamp freshness (Decisions A1..A7
+    # from Stream 4-prep Session 1 + B1..B4 from Session 2).
+    #
+    # Phase O0 scope: bridge:agent:phases:read (read-only). Write scopes
+    # deferred to P1+ when agents gain write authority.
+    #
+    # The 154+ existing /operator/* and /agent/* endpoints with x-api-key
+    # auth are UNCHANGED. Only these five new endpoints accept agent
+    # tokens; mixing operator keys with these endpoints is rejected via
+    # the dependency's missing-Authorization check.
+    # ------------------------------------------------------------------
+
+    @app.get("/agent/agent-commit-history")
+    async def agent_commit_history_endpoint(
+        agent_id: str = "",
+        limit: int = 20,
+        auth: AgentIdentity = Depends(_check_agent_token),
+    ):
+        """Read AGENT_COMMIT v1 history from agent_commit_log.
+
+        Phase O0 Stream 3-prep Session 1 + Session 2 wire-up.
+        Returns the last `limit` commits (default 20), DESC ts_ns,
+        optionally filtered by agent_id. Stream 3-prep Session 1's
+        store.get_agent_commit_history() backs this endpoint.
+        """
+        try:
+            rows = await asyncio.to_thread(
+                store.get_agent_commit_history,
+                agent_id, int(limit),
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        return {
+            "client_id":     auth.client_id,
+            "filter_agent":  agent_id,
+            "limit":         int(limit),
+            "count":         len(rows),
+            "commits":       rows,
+            "timestamp":     time.time(),
+        }
+
+    @app.get("/agent/agent-commit-status")
+    async def agent_commit_status_endpoint(
+        auth: AgentIdentity = Depends(_check_agent_token),
+    ):
+        """Latest AGENT_COMMIT v1 record summary (8 keys per Session 1).
+
+        Returns the same shape as store.get_agent_commit_status():
+          total_commits / latest_hash / latest_agent_id /
+          latest_commit_sha / latest_ts_ns / on_chain_confirmed /
+          anchor_id / timestamp.
+        """
+        try:
+            status = await asyncio.to_thread(store.get_agent_commit_status)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        # Augment with the authenticated client_id for audit trail.
+        status["client_id"] = auth.client_id
+        return status
+
+    @app.get("/agent/physical-data-attestation-history")
+    async def pda_history_endpoint(
+        agent_id: str = "",
+        attestation_type: str = "",
+        limit: int = 20,
+        auth: AgentIdentity = Depends(_check_agent_token),
+    ):
+        """Read PHYSICAL_DATA_ATTESTATION v1 history from
+        physical_data_attestation_log. Filterable by agent_id and/or
+        attestation_type per Stream 3-prep Session 2's
+        get_physical_data_attestation_history().
+        """
+        try:
+            rows = await asyncio.to_thread(
+                store.get_physical_data_attestation_history,
+                agent_id, attestation_type, int(limit),
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        return {
+            "client_id":               auth.client_id,
+            "filter_agent":            agent_id,
+            "filter_attestation_type": attestation_type,
+            "limit":                   int(limit),
+            "count":                   len(rows),
+            "attestations":            rows,
+            "timestamp":               time.time(),
+        }
+
+    @app.get("/agent/physical-data-attestation-status")
+    async def pda_status_endpoint(
+        auth: AgentIdentity = Depends(_check_agent_token),
+    ):
+        """Latest PHYSICAL_DATA_ATTESTATION v1 record summary (8 keys
+        per Session 2). Returns the same shape as
+        store.get_physical_data_attestation_status().
+        """
+        try:
+            status = await asyncio.to_thread(
+                store.get_physical_data_attestation_status,
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        status["client_id"] = auth.client_id
+        return status
+
+    @app.get("/agent/agent-registry-status")
+    async def agent_registry_status_endpoint(
+        auth: AgentIdentity = Depends(_check_agent_token),
+    ):
+        """Read AgentRegistry contract state.
+
+        Decision B2: deferred-activation pattern. When
+        cfg.agent_registry_address is empty (Stream 2-deploy not yet
+        landed AgentRegistry on IoTeX testnet), returns:
+            {
+              "registry_address": "",
+              "deployed":         false,
+              "client_id":        ...,
+              "timestamp":        ...,
+              "status":           "AgentRegistry not yet deployed
+                                   (Stream 2-deploy gated on wallet ≥3 IOTX)"
+            }
+
+        When the address is populated, would query the contract for
+        registered-agent count and other read-only state. The on-chain
+        read path is left as a TODO until Stream 2-deploy lands the
+        contract — at that point, an `agent_registry_count` and similar
+        view-call wrappers will be added to chain.py and surfaced here.
+        """
+        addr = getattr(cfg, "agent_registry_address", "")
+        if not addr:
+            return {
+                "registry_address": "",
+                "deployed":         False,
+                "client_id":        auth.client_id,
+                "timestamp":        time.time(),
+                "status": (
+                    "AgentRegistry not yet deployed "
+                    "(Stream 2-deploy gated on wallet ≥3 IOTX per Pass 2A V8)"
+                ),
+            }
+        # Live path — populated when Stream 2-deploy lands the contract.
+        return {
+            "registry_address": addr,
+            "deployed":         True,
+            "client_id":        auth.client_id,
+            "timestamp":        time.time(),
+            "status":           "AgentRegistry deployed; live read path TBD",
+        }
 
     return app
