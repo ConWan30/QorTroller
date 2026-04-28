@@ -18,13 +18,19 @@ Phase 235-ULTRAREVIEW addition: INV-023..INV-026 freeze the GIC formula
 _gic_chain_broken flag on Store, and _recompute() read-path enforcement in
 capture_continuity.py.
 
+Phase O0 Stream 3-prep Session 3 addition: INV-AGENT-COMMIT-001/002 and
+INV-PDA-001/002 freeze the AGENT_COMMIT v1 and PHYSICAL_DATA_ATTESTATION v1
+FROZEN-v1 primitives shipped in commits a7b61160 and 412a6f0e respectively.
+Total allowlist entries: 32 (28 prior + 4 Phase O0). Per Pass 2C Section 1
+commitment to expand allowlist 28 -> 32.
+
 USAGE:
     python scripts/vapi_invariant_gate.py              # gate check (exit 0=pass, 1=fail)
     python scripts/vapi_invariant_gate.py --generate --reason "refactor: description"
     python scripts/vapi_invariant_gate.py --generate --reason "invariant_change: ..." --confirm-governance
     python scripts/vapi_invariant_gate.py --report     # human-readable report, no exit code
 
-INVARIANTS CHECKED (22):
+INVARIANTS CHECKED (32):
   1.  PoAC wire format (228-byte body + 64-byte sig) in codec.py
   2.  Chain link hash = SHA-256(raw[:164]) in codec.py
   3.  L4 anomaly threshold literal in store.py (7.009 / 5.367)
@@ -47,6 +53,13 @@ INVARIANTS CHECKED (22):
   20. ts_ns included as 8-byte big-endian in provenance hash — replay prevention (Phase 226)
   21. Latest provenance hash fetch function exists in gate script (Phase 226)
   22. governance_provenance_chain table + insert method in store (Phase 226)
+  29. INV-AGENT-COMMIT-001 — compute_agent_commit_hash exists in agent_commit.py (Phase O0 Stream 3-prep Session 1)
+  30. INV-AGENT-COMMIT-002 — VAPI-AGENT-COMMIT-v1 domain tag literal pinned in agent_commit.py (Phase O0)
+  31. INV-PDA-001 — compute_pda_hash exists in physical_data_attestation.py (Phase O0 Stream 3-prep Session 2)
+  32. INV-PDA-002 — VAPI-PHYSICAL-DATA-ATTESTATION-v1 domain tag literal pinned in physical_data_attestation.py (Phase O0)
+  Note: items 23-28 (INV-023..026, INV-CORPUS-001/002) were added without
+  enumeration entries by their respective sessions; back-filling that gap
+  is intentionally out-of-scope for Session 3 (per Decision F5).
 """
 
 import hashlib
@@ -273,6 +286,40 @@ INVARIANTS: list[Invariant] = [
         description="VAPI_CORPUS_SNAPSHOT_v1 deviceIdHash literal pinned in chain.py (Phase 237.5 Path X — deployed bytecode reality)",
         file="bridge/vapi_bridge/chain.py",
         pattern=r'b"VAPI_CORPUS_SNAPSHOT_v1"',
+        min_matches=1,
+    ),
+    # Phase O0 Stream 3-prep — freeze AGENT_COMMIT v1 and
+    # PHYSICAL_DATA_ATTESTATION v1 primitives. Pass 2C Section 4.1 + 4.2
+    # specify these four invariants. AGENT_COMMIT v1 shipped in commit
+    # a7b61160 (Stream 3-prep Session 1, sixth FROZEN-v1 primitive);
+    # PHYSICAL_DATA_ATTESTATION v1 shipped in commit 412a6f0e (Stream
+    # 3-prep Session 2, seventh and final FROZEN-v1 primitive).
+    Invariant(
+        id="INV-AGENT-COMMIT-001",
+        description="compute_agent_commit_hash function exists in agent_commit.py (Pass 2C Section 4.1 — sixth FROZEN-v1 primitive hash determinism)",
+        file="bridge/vapi_bridge/agent_commit.py",
+        pattern=r"def compute_agent_commit_hash",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-AGENT-COMMIT-002",
+        description="VAPI-AGENT-COMMIT-v1 domain tag literal pinned in agent_commit.py (Pass 2C Section 4.1 — DELTA-Pass2C)",
+        file="bridge/vapi_bridge/agent_commit.py",
+        pattern=r'b"VAPI-AGENT-COMMIT-v1"',
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-PDA-001",
+        description="compute_pda_hash function exists in physical_data_attestation.py (Pass 2C Section 4.2 — seventh FROZEN-v1 primitive hash determinism)",
+        file="bridge/vapi_bridge/physical_data_attestation.py",
+        pattern=r"def compute_pda_hash",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-PDA-002",
+        description="VAPI-PHYSICAL-DATA-ATTESTATION-v1 domain tag literal pinned in physical_data_attestation.py (Pass 2C Section 4.2 — DELTA2-Pass2C)",
+        file="bridge/vapi_bridge/physical_data_attestation.py",
+        pattern=r'b"VAPI-PHYSICAL-DATA-ATTESTATION-v1"',
         min_matches=1,
     ),
 ]
