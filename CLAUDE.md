@@ -40,6 +40,31 @@ Active wallet (bridge + deployer): `0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692` 
 Previous bridge wallet (no longer accessible): `0xfCF4681e57C8de9650c3Eb4dA8e26dC9441A5EF1` (deployed original 14 contracts — addresses unchanged, still valid on-chain)
 Chain ID: 4690 (IoTeX Testnet)
 Current phase: Phase 237-EXTEND COMPLETE 2026-04-26 — Phase 237 TRULY COMPLETE: VAPIConsentRegistry LIVE 0xA82dB0eF0bF7D15b6400EDd4A09C0D4338C948dA / W3bstream applet stub extended / WagmiProvider wired (first wallet-write precedent) / ConsentPanel drawer mounted in GamerView / SDK VAPIConsent + OpenAPI 3.0.0-phase237 / FSCA CONSENT_REVOKED_BUT_DATA_FLOWING rule (25 contradictions). Phase 236 fully shipped (WATCHDOG + VAME + CORPUS-SNAPSHOT). Three-terminal setup: T0=`python scripts/bridge_watchdog.py`, T2=`python auto_grind.py`, T3=frontend. Grind continues at chain_length=20/100. Next phase: 237-ZK-SEPPROOF (Groth16 proof-of-separation-ratio without revealing biometric vectors) → 238-MARKETPLACE → 239-READINESS (W2 — gated on GIC_100).
+
+## Phase O0 — PAUSED 2026-04-29
+
+The Operator series initiative's Phase O0 is paused at completion of Section 6.2.
+Pause is **operator-initiated based on wallet refill availability constraint**, not
+blocked on technical issue.
+
+**State summary**:
+- **Source-and-tests work COMPLETE**: 16 commits across Streams 1, 2-prep, 3-prep, 4-prep, 5-prep
+- **Dry-run verification COMPLETE**: commit `b261b546` (`docs/phase-o0-stream-2-deploy-dryrun.md`)
+- **Section 6.2 GitHub Apps registration COMPLETE**: `vapi-anchor-sentry` and `vapi-guardian` registered; ten artifacts at canonical bridge locations (`bridge/.env` + `bridge/secrets/`, gitignored)
+
+**Remaining Phase O0 work (gated)**:
+- Stream 2-deploy: gated on wallet refill to 5 IOTX target per Pass 2A V8 (current 0.5525 IOTX)
+- Section 6.3 KMS provisioning: gated on KMS provider access (independent of wallet refill)
+- Section 6.4 agent registration: gated on Stream 2-deploy AND Section 6.3
+- Section 8 exit criteria verification: gated on prior Phase O0 work
+
+**References**:
+- `docs/phase-o0-pause-point.md` — full pause-point detail (commit roster, dependency graph, resumption checklist)
+- `docs/phase-o0-stream-2-deploy-dryrun.md` — Stream 2-deploy execution reference
+
+Phase O0 is a parallel track to the main protocol's phase progression (Phase 237/238/239 above).
+Phase O0 resumption begins when wallet refill or KMS provider access becomes available.
+
 Phase 235 — REAL GRIND UNDERWAY 2026-04-26 (chain_length=16/100; smoke @ chain_length=5 complete; PCC-RATE-FIX commit c6e64229 brought bridge poll_rate_hz from 118 → 1152 Hz; capture_state=NOMINAL + host_state=EXCLUSIVE_USB stable under DEFAULT thresholds; bridge running grind_phase235_v1 / GRIND_TARGET=100 with PCC_SMOKE_BYPASS unset; auto_grind.py (repo root, untracked) drives autonomous adjudication — polls bridge every 60s, fires POST /agent/adjudicate when grind_ready=True and ctx != MENU_DETECTED, throttles to 5-min minimum, stops at chain_length>=grind_target)
 Phase 235-PCC-RATE-FIX — COMPLETE 2026-04-25 (commit c6e64229; parallel hidapi counter on interface 3 reads true USB HID delivery rate independent of pydualsense's biometric pipeline; pydualsense lives on interface 0, counter on interface 3, no contention; pydualsense's 8ms-throttled _poll_frames continues feeding the L4 tremor FFT at ~120 Hz so frequency bin spacing stays valid; PCC sees ~1000 Hz and classifies EXCLUSIVE_USB; new Transport fields _hid_report_total/_last_hid_report_total/_hid_counter_thread/_hid_counter_running; _start_hid_rate_counter() daemon thread spawns on connect; _shutdown_cleanup releases handle; falls back to len(frames) if hidapi missing or interface 3 unavailable; resolves the only remaining blocker for the real 100-session grind under default thresholds)
 Phase 235-GAD — COMPLETE (Gameplay Activity Discrimination — binary trigger-active gate gates consecutive_clean on actual gameplay; MENU_DETECTED breaks streak; NULL passes through; operator override logs to gameplay_classification_disagreements)
