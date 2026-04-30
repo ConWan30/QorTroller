@@ -228,7 +228,7 @@ PragmaJudge MV reuses for any future `pragma-chain-reset`
 recovery action.
 
 **Novelty enhancement for PragmaJudge** — *PragmaJudge Integrity
-Chain (PIC) v1 — Ninth FROZEN-v1 Primitive*: directly mirror GIC
+Chain (PIC) v1 — Candidate FROZEN-v1 Primitive*: directly mirror GIC
 v1's structure for PragmaJudge sessions. Per-deviceId cryptographic
 chain:
 `PIC_N = SHA-256(prev_pic(32) || pragma_verdict_commitment(32) || verdict_code(1) || vhp_state_code(1) || ts_ns_be(8))`.
@@ -236,9 +236,9 @@ Genesis tag: `b"VAPI-PRAGMA-PIC-GENESIS-v1"`. Domain tag:
 `b"VAPI-PRAGMA-PIC-v1"`. VHP_STATE_CODES = `{ELIGIBLE: 0x01,
 ELIGIBLE_PENDING_RENEWAL: 0x02, INELIGIBLE: 0x10}`. Adds
 INV-PRAGMA-05..07 for the FROZEN formula, monotonicity guard, and
-chain-break detection. Becomes the ninth FROZEN-v1 primitive (after
-GIC, WEC, VAME, CORPUS-SNAPSHOT, CONSENT, AGENT_COMMIT,
-PHYSICAL_DATA_ATTESTATION, PRAGMA-VERDICT). Per-deviceId chain
+chain-break detection. Would join the FROZEN-v1 primitive family at
+whatever position is then-current when MV+N ships, subject to PV-CI
+ceremony at that time. Per-deviceId chain
 attests "this user had N consecutive defensible PragmaJudge
 sessions" — equivalent of `chain_length` for grind. The metric
 becomes EU AI Act buyer's "uninterrupted compliance record" KPI.
@@ -293,7 +293,7 @@ switch automatic (Section 2.11). ANONYMIZED_RESEARCH consent
 binding (PJ12-A, Section 2.6).
 
 **Novelty enhancement for PragmaJudge** — *PragmaJudge Watchdog
-Chain (P-WD) — Tenth FROZEN-v1 Primitive*: extend Phase 236-
+Chain (P-WD) — Candidate FROZEN-v1 Primitive*: extend Phase 236-
 WATCHDOG to a parallel PragmaJudge supervisor that monitors the
 `OutputFidelityJudge` agent specifically. P-WEC (PragmaJudge
 Watchdog Event Chain) records each OFJ proof-generation cycle:
@@ -380,8 +380,8 @@ without a fresh PHYSICAL_DATA_ATTESTATION proof is detectable.
 | B — Capture    | None (separate analytic surface)                                  | Per-Speech-Act Fidelity Gap Analytics              | Parabolic interpolation in circuit (constraint budget tradeoff)                 |
 | C — Governance | Sections 2.8, 2.9 (sub-Merkle, INV-PRAGMA-01..04)                 | VHP-Gated Threshold Recalibration                  | P-PCA (PragmaJudge Sub-Coherence Anchor)                                        |
 | D — AIT        | Section 2.1 (VHP gate inheritance)                                | Pragma Staged Live-Mode Graduation                 | (Stream 3 becomes programmatic, not manual)                                     |
-| E — Grind      | None (audit-only character)                                       | PIC v1 (ninth FROZEN-v1 primitive)                 | EAD (Engagement Activity Discrimination) + P-ANALYTICS                          |
-| F — FROZEN     | Sections 2.10, 2.11 (VAME, kill-switch)                           | P-WD (tenth FROZEN-v1) + P-CS                      | CONSENT v2 enum proposal pre-work                                               |
+| E — Grind      | None (audit-only character)                                       | PIC v1 (candidate FROZEN-v1 primitive, position TBD at MV+N) | EAD (Engagement Activity Discrimination) + P-ANALYTICS                |
+| F — FROZEN     | Sections 2.10, 2.11 (VAME, kill-switch)                           | P-WD (candidate FROZEN-v1, position TBD at MV+N) + P-CS      | CONSENT v2 enum proposal pre-work                                     |
 | G — FSCA/O0    | Section 2.5 (PRAGMA-C1 picked up by FSCA)                         | (auto-inherits when Phase O0 unpauses)             | AGENT_COMMIT + PHYSICAL_DATA_ATTESTATION binding closes T5 substantially         |
 
 **Hardest dependency**: Cluster G novelty closes threat T5
@@ -395,9 +395,10 @@ Mode Graduation). Mirrors Phase 207 verbatim; ~150 lines of code;
 converts Stream 3's manual flag-flip into a programmatic state
 machine with auto-rollback. Drop-in for MV+1.
 
-**Highest-novelty addition**: Cluster E PIC v1 — joins the
-FROZEN-v1 primitive family as the ninth member, gives PragmaJudge a
-per-user audit chain isomorphic to GIC. Shifts PragmaJudge from
+**Highest-novelty addition**: Cluster E PIC v1 — would join the
+FROZEN-v1 primitive family at whatever position is then-current when
+MV+N ships, subject to PV-CI ceremony at that time. Gives PragmaJudge
+a per-user audit chain isomorphic to GIC. Shifts PragmaJudge from
 "audit log per session" to "audit chain per user" — a meaningful
 product upgrade for EU AI Act / Moffatt compliance buyers.
 
