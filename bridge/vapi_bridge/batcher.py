@@ -46,6 +46,9 @@ class Batcher:
         self._p256_unavailable: bool = False
         # Phase 201: suppress repeated no-signing-key warnings (dry_run mode)
         self._no_key_logged: bool = False
+        # Phase 237.5 Path C+ secondary fix: suppress repeated kill-switch
+        # dead-letter warnings (operator-set state via CHAIN_SUBMISSION_PAUSED env).
+        self._chain_paused_logged: bool = False
 
     async def enqueue(self, record: PoACRecord, raw_data: bytes):
         """Add a validated record to the batch queue.
@@ -323,6 +326,30 @@ class Batcher:
                 await asyncio.to_thread(
                     self._store.update_submission,
                     sub_id, status=STATUS_DEAD_LETTER, error="insufficient funds for gas",
+                )
+                await asyncio.to_thread(self._store.batch_update_status, record_hashes, STATUS_DEAD_LETTER)
+            elif "chain_submission_paused" in err_str.lower():
+                # Phase 237.5 Path C+ secondary fix: kill-switch errors dead-letter
+                # immediately. Retrying does not resolve them; CHAIN_SUBMISSION_PAUSED
+                # is operator-set state (bridge/.env) that only an operator can clear
+                # after wallet refill. Recovery: see commit message body for the
+                # one-line SQL UPDATE that re-queues these dead-lettered submissions.
+                # Local PITL + GIC pipelines unaffected.
+                if not self._chain_paused_logged:
+                    log.warning(
+                        "Batch dead-lettered: chain_submission_paused=true "
+                        "(kill-switch active). On-chain submission disabled for this "
+                        "session. Local PITL + GIC pipelines unaffected."
+                    )
+                    self._chain_paused_logged = True
+                else:
+                    log.debug(
+                        "Batch dead-lettered: chain_submission_paused (suppressed repeat)"
+                    )
+                await asyncio.to_thread(
+                    self._store.update_submission,
+                    sub_id, status=STATUS_DEAD_LETTER,
+                    error="chain_submission_paused (kill-switch active)",
                 )
                 await asyncio.to_thread(self._store.batch_update_status, record_hashes, STATUS_DEAD_LETTER)
             elif any(pat in err_str.lower() for pat in (
