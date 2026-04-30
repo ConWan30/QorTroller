@@ -450,6 +450,45 @@ after Stage 1 graduation activates and GIC_100 is deposited.
   unaffected. Exclusive to PS5-class haptic hardware; not replicable
   on generic gamepads.
 
+## Verification-First Discipline
+
+Canonical name for the work pattern that has shaped VAPI's protocol commits. Joins the existing protocol vocabulary (FROZEN-v1, PV-CI, AGaaS, deferred-activation) without redefining those terms.
+
+The pattern structures consequential architectural work as six ordered steps:
+
+1. **Pre-implementation verification** (V-numbered checks). Read state, confirm assumptions, identify drift between the operator's brief and observable reality.
+2. **Hold for operator review at the verification checkpoint.** Surface findings, including any drift; the operator decides whether to proceed, refine the brief, or abort.
+3. **Implementation.** Execute against the corrected brief.
+4. **Post-implementation verification** (P-numbered checks). Confirm the change matches intent and the working tree is in the expected shape.
+5. **Hold for operator review before staging.** No commit happens without explicit approval.
+6. **Atomic commit with architectural reasoning preserved in the message body**, then push.
+
+What the pattern produces:
+- Drift correction in both directions. V-checks catch wrong assumptions in the prompt (the brief revises against reality); P-checks catch divergence during execution (the implementation revises against the brief).
+- Architectural reasoning preserved in the permanent record. Decision blocks, rejected alternatives, and "why this rather than that" land in commit bodies — not in chat scrollback that disappears at the next compaction.
+- Operator authority over architectural decisions enforced procedurally. Holds are not optional; the pattern fails closed if a checkpoint is skipped.
+
+Demonstrating commits (Phase O0 pause-period work, 2026-04-27 → 2026-04-29):
+- The eighteen-commit Phase O0 implementation arc (Streams 1–5 source-and-tests).
+- `b261b546` — Stream 2-deploy local Hardhat dry-run runbook.
+- `f8c577ab` — Phase O0 pause-point capture (commit roster, dependency graph, resumption checklist).
+- `e3fbebd4` — Phase 237.5 Path C+ residual: batcher dead-letters `chain_submission_paused` errors immediately.
+- `97a0eab4` — Frontend connectivity verification report.
+- `29b57707` — Dead frontend code cleanup identified by the connectivity verification.
+- `9ee11471` — Chain wrapper verification report.
+
+Where the pattern applies:
+- Consequential architectural work (new primitives, contract changes, agent additions, invariant edits).
+- Multi-step atomic commits where the diff alone doesn't carry the reasoning.
+- Verification-reference documents that future sessions read instead of re-deriving state.
+
+Where it does not apply:
+- Conversational discussion, brief-clarification, brainstorming.
+- Operational coordination (scheduling agents, drafting messages, status updates).
+- Read-only information gathering with no resulting commit.
+
+The pattern itself is the canonical name's claim: protocol commits ship through it, including the commit that introduces this section.
+
 ## Hard Rules
 
 - Never modify the 228-byte PoAC wire format
