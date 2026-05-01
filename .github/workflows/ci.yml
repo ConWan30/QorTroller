@@ -72,11 +72,28 @@ jobs:
           python -m pytest bridge/tests/ \
             --ignore=bridge/tests/test_e2e_simulation.py \
             -m "not hardware" \
+            --cov=bridge/vapi_bridge \
+            --cov-report=term-missing:skip-covered \
+            --cov-report=xml:coverage-bridge.xml \
             -q
 
       - name: Run SDK tests
         run: |
-          python -m pytest sdk/tests/ -q
+          python -m pytest sdk/tests/ \
+            --cov=sdk \
+            --cov-report=term-missing:skip-covered \
+            --cov-report=xml:coverage-sdk.xml \
+            -q
+
+      - name: Upload coverage XML artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-py${{ matrix.python-version }}
+          path: |
+            coverage-bridge.xml
+            coverage-sdk.xml
+          if-no-files-found: ignore
 
   # ── Job 3: OpenAPI YAML lint ────────────────────────────────────────────────
   yaml-lint:
