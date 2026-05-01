@@ -1178,40 +1178,75 @@ async def export_chain(format: str = "json"):
 
 # ── Bounty Marketplace ──
 
+_PLACEHOLDER_BOUNTIES = [
+    {
+        "bounty_id": 1001,
+        "type": "anti_cheat_proof",
+        "description": "Play 100 clean matches (all NOMINAL/SKILLED inference)",
+        "reward_micro_iotx": 50000000,
+        "reward_iotx": 50.0,
+        "min_samples": 100,
+        "status": "available",
+    },
+    {
+        "bounty_id": 1002,
+        "type": "speedrun_verify",
+        "description": "Complete Elden Ring Margit fight in <90 seconds with PoAC chain",
+        "reward_micro_iotx": 25000000,
+        "reward_iotx": 25.0,
+        "min_samples": 180,
+        "status": "available",
+    },
+    {
+        "bounty_id": 1003,
+        "type": "tournament_integrity",
+        "description": "Provide complete PoAC chain for 1 tournament bracket match",
+        "reward_micro_iotx": 100000000,
+        "reward_iotx": 100.0,
+        "min_samples": 1200,
+        "status": "available",
+    },
+]
+
+
+_BOUNTY_STATUS_NAMES = {0: "none", 1: "available", 2: "fulfilled", 3: "expired"}
+
+
+def _format_chain_bounty(b: dict) -> dict:
+    reward_wei = int(b.get("reward_wei", 0))
+    return {
+        "bounty_id":         int(b.get("bounty_id", 0)),
+        "type":              "on_chain",
+        "description":       f"BountyMarket #{b.get('bounty_id')} (creator {str(b.get('creator', ''))[:10]}…)",
+        "reward_micro_iotx": reward_wei // (10 ** 12),
+        "reward_iotx":       reward_wei / 1e18,
+        "min_samples":       int(b.get("min_samples", 0)),
+        "deadline_ms":       int(b.get("deadline_ms", 0)),
+        "creator":           b.get("creator", ""),
+        "status":            _BOUNTY_STATUS_NAMES.get(int(b.get("status", 0)), "unknown"),
+    }
+
+
 @app.get("/api/bounties")
 async def list_bounties():
-    """List available gaming bounties."""
-    # TODO: Fetch from IoTeX BountyMarket contract via bridge
-    # Placeholder bounties for development:
-    return {"bounties": [
-        {
-            "bounty_id": 1001,
-            "type": "anti_cheat_proof",
-            "description": "Play 100 clean matches (all NOMINAL/SKILLED inference)",
-            "reward_micro_iotx": 50000000,
-            "reward_iotx": 50.0,
-            "min_samples": 100,
-            "status": "available",
-        },
-        {
-            "bounty_id": 1002,
-            "type": "speedrun_verify",
-            "description": "Complete Elden Ring Margit fight in <90 seconds with PoAC chain",
-            "reward_micro_iotx": 25000000,
-            "reward_iotx": 25.0,
-            "min_samples": 180,
-            "status": "available",
-        },
-        {
-            "bounty_id": 1003,
-            "type": "tournament_integrity",
-            "description": "Provide complete PoAC chain for 1 tournament bracket match",
-            "reward_micro_iotx": 100000000,
-            "reward_iotx": 100.0,
-            "min_samples": 1200,
-            "status": "available",
-        },
-    ]}
+    """List available gaming bounties.
+
+    Reads BountyMarket via the bridge `/api/v1/bounties` endpoint.
+    Falls back to placeholder bounties when the bridge is unreachable
+    or BountyMarket is not configured on the bridge.
+    """
+    if HAS_HTTPX:
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get(f"{BRIDGE_URL}/api/v1/bounties")
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if data.get("configured") and data.get("bounties"):
+                        return {"bounties": [_format_chain_bounty(b) for b in data["bounties"]],
+                                "source": "chain"}
+        except Exception as exc:
+            logger.info("BountyMarket fetch via bridge failed: %s — using placeholders", exc)
+    return {"bounties": list(_PLACEHOLDER_BOUNTIES), "source": "placeholder"}
 
 @app.post("/api/bounties/accept")
 async def accept_bounty(bounty: BountyInject):

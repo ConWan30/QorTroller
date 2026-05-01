@@ -195,7 +195,7 @@ def _record_to_ws_msg(record, pitl_meta=None) -> str:
 # App factory
 # ---------------------------------------------------------------------------
 
-def create_app(cfg: Config, store: Store, on_record) -> FastAPI:
+def create_app(cfg: Config, store: Store, on_record, chain=None) -> FastAPI:
     """Create the FastAPI application with all routes."""
 
     app = FastAPI(title="VAPI Bridge", version="0.2.0-rc1")
@@ -318,6 +318,16 @@ def create_app(cfg: Config, store: Store, on_record) -> FastAPI:
     @app.get("/api/v1/records/recent")
     async def recent_records(limit: int = 50, device_id: str | None = None):
         return store.get_recent_records(min(limit, 200), device_id=device_id)
+
+    @app.get("/api/v1/bounties")
+    async def list_bounties_endpoint(active_only: bool = True):
+        if chain is None or not getattr(cfg, "bounty_market_address", ""):
+            return {"bounties": [], "configured": False}
+        try:
+            bounties = await chain.list_bounties(active_only=active_only)
+        except Exception as exc:
+            raise HTTPException(503, f"BountyMarket read failed: {exc}")
+        return {"bounties": bounties, "configured": True}
 
     # --- Health ---
 

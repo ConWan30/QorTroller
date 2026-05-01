@@ -427,7 +427,7 @@ class Bridge:
             from .operator_api import create_operator_app
             import uvicorn
 
-            app = create_app(self.cfg, self.store, self.on_record)
+            app = create_app(self.cfg, self.store, self.on_record, chain=self.chain)
             mon_app = create_monitoring_app(cfg=self.cfg, state=monitor_state, store=self.store)
             app.mount("/monitor", mon_app)
             app.mount("/dash", create_dashboard_app(self.store, _arch, _net_det))

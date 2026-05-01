@@ -143,6 +143,13 @@ BOUNTY_MARKET_ABI = [
             },
         ],
     },
+    {
+        "name": "nextBountyId",
+        "type": "function",
+        "stateMutability": "view",
+        "inputs": [],
+        "outputs": [{"name": "", "type": "uint256"}],
+    },
 ]
 
 REGISTRY_ABI = [
@@ -1194,13 +1201,43 @@ class ChainClient:
         try:
             result = await self._bounty_market.functions.getBounty(bounty_id).call()
             return {
-                "bounty_id": result[0],
-                "creator": result[1],
-                "reward_wei": result[2],
-                "status": result[15],
+                "bounty_id":            result[0],
+                "creator":              result[1],
+                "reward_wei":           result[2],
+                "sensor_requirements":  result[3],
+                "min_samples":          result[4],
+                "sample_interval_s":    result[5],
+                "duration_s":           result[6],
+                "deadline_ms":          result[7],
+                "status":               result[15],
+                "created_at":           result[16],
             }
         except ContractLogicError:
             return None
+
+    async def list_bounties(self, active_only: bool = True) -> list[dict]:
+        """Enumerate bounties posted to BountyMarket.
+
+        Reads `nextBountyId` then iterates from 1 to nextBountyId-1.
+        Returns [] when BountyMarket is not configured. With
+        `active_only=True` (default) only BountyStatus.Active (uint8 1)
+        bounties are returned.
+        """
+        if not self._bounty_market:
+            return []
+        try:
+            next_id = await self._bounty_market.functions.nextBountyId().call()
+        except ContractLogicError:
+            return []
+        bounties: list[dict] = []
+        for bid in range(1, int(next_id)):
+            entry = await self.get_bounty(bid)
+            if entry is None:
+                continue
+            if active_only and entry.get("status") != 1:
+                continue
+            bounties.append(entry)
+        return bounties
 
     # --- DeviceRegistry ---
 
