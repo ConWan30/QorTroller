@@ -1092,59 +1092,98 @@ Both apps installed on the `ConWan30/vapi-pebble-prototype` repository.
 
 ### Section 6.3 — KMS Key Provisioning
 
-**KMS provider decision** (AMENDED 2026-05-01 — see Section 11):
-Lit Protocol PKPs (Programmable Key Pairs) per the 2026-05-01
-amendment. *Original Pass 2C provisional (preserved for historical
+**KMS provider decision** (AMENDED 2026-05-02 — see Section 12 —
+supersedes 2026-05-01 amendment in Section 11): AWS KMS in `us-east-1`
+per the 2026-05-02 amendment, reverting the 2026-05-01 substitution
+to Lit Protocol after Q1-Q5 expanded investigation revealed Lit
+Protocol's iteration velocity (Datil V0 → Naga V1 → Chipotle V3 in
+approximately 12 months, with Naga V1 production lifespan only ~3.5
+months) and absence of formal stability commitments to production
+users (no SLA, no LTS, no deprecation policy). VAPI's operator
+agents are an outer governance layer; the protocol trust root is
+hardware-anchored to DualShock Edge ECDSA-P256 PoAC chain and
+remains unaffected by KMS provider choice. AWS KMS's 12-year API
+stability + formal SLA + minimal API churn outweigh DePIN thesis
+preservation at the operator-agent layer for VAPI's specific use
+case (long-lived agent identity for permanent on-chain attestation).
+
+*Original Pass 2C provisional (2026-04-27, preserved for historical
 context)*: AWS KMS preferred per architecture document section 7.
 Operator must have AWS account with KMS access. If AWS unavailable
 to the operator, alternative providers (GCP KMS, Azure Key Vault,
 HashiCorp Vault) require equivalent capabilities (asymmetric ECDSA
-key generation, signing API, audit logging). The amendment revises
-this to Lit Protocol after V2 verification eliminated the P-256 KMS
-migration path; only secp256k1 commit-signing keys remain in KMS
-scope, and Lit Protocol's MPC TSS network natively supports secp256k1
-PKPs while preserving the DePIN thesis at the highest-leverage point
-(agent commits become protocol truth claims). See Section 11 for
-full revision rationale.
+key generation, signing API, audit logging).
 
-**Phase O0 KMS provisioning steps** (AMENDED 2026-05-01 — see Section 11):
-1. Mint Lit Protocol PKP per agent (2 PKPs total) on Lit Naga V1
-   mainnet: secp256k1 curve, NFT-controlled by VAPI bridge wallet.
-   PKP tokenIds: logical aliases `vapi-anchor-sentry-pkp` and
-   `vapi-guardian-pkp` (actual identity is the PKP NFT tokenId on
-   Lit Chronicle L3). [Original: `KeySpec=ECC_NIST_P256` AWS KMS key.]
-2. Configure Lit Access Control Conditions (ACCs) per PKP: signing
-   gated on bridge wallet authorization. Future P1+ ACCs may compose
-   with on-chain VAPI governance (`AgentScope.scopeRoot`,
-   `AgentSlashing` pending status). [Original: AWS IAM role + key
-   policy with `kms:Sign` permissions.]
-3. Retrieve PKP public key via Lit Protocol `getPublicKey` API
-   (always-available read; key material itself never leaves Lit MPC
-   TSS network). [Original: AWS KMS one-time public key export.]
-4. Use the PKP public key as the agent's ioID DID `publicKeyHex` in
+*2026-05-01 substitution to Lit Protocol (superseded by 2026-05-02
+amendment — historical record at Section 11)*: Lit Protocol PKPs
+were chosen on DePIN-thesis-preservation grounds at the
+highest-leverage point (agent commits become protocol truth
+claims). The 2026-05-02 amendment reverts this based on Q1-Q5
+findings; see Section 12 for full revision rationale and Section 11
+for the 2026-05-01 reasoning preserved as historical record.
+
+**Phase O0 KMS provisioning steps** (AMENDED 2026-05-02 — see
+Section 12 — supersedes 2026-05-01 amendment in Section 11):
+1. Create AWS KMS key per agent (2 keys total) in `us-east-1`:
+   `KeySpec=ECC_SECG_P256K1` (curve correction preserved from
+   2026-05-01 amendment matching DID template's
+   `EcdsaSecp256k1VerificationKey2019` declaration + IoTeX EVM
+   secp256k1 native compatibility; original Pass 2C 2026-04-27
+   specified `ECC_NIST_P256` which V1 verification revealed
+   inconsistent with the DID template), `KeyUsage=SIGN_VERIFY`. Key
+   aliases: `alias/vapi-anchor-sentry-signing` and
+   `alias/vapi-guardian-signing`.
+2. Configure key policy + IAM credentials: only the bridge IAM role
+   can `kms:Sign` on these 2 specific KMS keys (minimum-privilege
+   scoping); only the operator's IAM user can
+   `kms:UpdateKeyDescription`, `kms:DisableKey`, `kms:DeleteKey`,
+   etc. (administrative actions). Bridge IAM user credentials
+   delivered as long-lived `AWS_ACCESS_KEY_ID` +
+   `AWS_SECRET_ACCESS_KEY` + `AWS_REGION=us-east-1` env vars in
+   `bridge/.env` (gitignored, mode 600 directory; matches existing
+   pattern for `BRIDGE_PRIVATE_KEY` IoTeX wallet, GitHub App PEM
+   paths at `bridge/secrets/`, and `ANTHROPIC_API_KEY` placeholders).
+3. Export public key from KMS via `aws kms get-public-key` (one-time,
+   post-creation). DER-encoded SubjectPublicKeyInfo; convert to hex
+   for the DID document.
+4. Use the public key as the agent's ioID DID `publicKeyHex` in
    Section 6.1 minting flow (matches DID template's
    `EcdsaSecp256k1VerificationKey2019` declaration).
-5. **GitHub App authentication unchanged from Section 6.2** — the
-   GitHub-issued RSA-2048 PEMs at
-   `bridge/secrets/vapi-anchor-sentry.pem` and
-   `bridge/secrets/vapi-guardian.pem` (mode 600, gitignored) are the
-   GitHub App authentication credentials. **No KMS migration. No
-   Option B export ceremony.** V2 verification (2026-05-01) confirmed
-   Section 6.2 already issued RSA-2048 PEMs satisfying GitHub's
-   PEM-format auth requirement. Pass 2C's original step 5 KMS-managed
-   migration was solving a problem Section 6.2 had already implicitly
-   resolved.
+5. **GitHub App authentication unchanged from Section 6.2** (per
+   2026-05-01 amendment, reaffirmed 2026-05-02) — the GitHub-issued
+   RSA-2048 PEMs at `bridge/secrets/vapi-anchor-sentry.pem` and
+   `bridge/secrets/vapi-guardian.pem` (mode 600, gitignored) are
+   the GitHub App authentication credentials. **No KMS migration.
+   No Option B export ceremony.** V2 verification (2026-05-01)
+   confirmed Section 6.2 already issued RSA-2048 PEMs satisfying
+   GitHub's PEM-format auth requirement; the original Pass 2C step
+   5 KMS-managed migration was solving a problem Section 6.2 had
+   already implicitly resolved.
 
-**KMS-vs-import constraint** (AMENDED 2026-05-01 — see Section 11 —
-MOOT under amendment): The Option (a)/(b) split below applied to the
-GitHub App auth key, which the 2026-05-01 amendment removes from KMS
-scope entirely (V2 finding: Section 6.2 already issued RSA-2048 PEMs
-satisfying GitHub's PEM-format auth requirement; no migration needed).
-The commit-signing key (now Lit Protocol PKP, secp256k1) is
-non-exportable by Lit's MPC TSS architecture — there is no
-KMS-vs-import choice for that key because Lit PKPs cannot be exported.
-The original constraint analysis below is preserved for historical
-reference of the design phase reasoning.
+**Backup/DR posture** (per D2 in 2026-05-02 amendment): single-region
+AWS KMS deployment in `us-east-1`. Recovery from AWS account loss via
+DID rotation per Section 10 Note 6 — provision new KMS keys in a new
+AWS account, mint replacement DID with new public keys (derived from
+new KMS keys), register replacement in AgentRegistry. The TBA
+persists; only the signing capability rotates. Multi-region replica
+considered and rejected: AWS KMS supports multi-region replicas
+natively but this addresses regional outage, not the realistic
+failure mode (AWS account loss). Consistent with VAPI's existing
+trust model where bridge wallet IoTeX private key in `bridge/.env`
+has the same single-point-of-failure profile on a single host.
+
+**KMS-vs-import constraint** (AMENDED 2026-05-02 — see Section 12 —
+MOOT under amendments, reasoning updated from 2026-05-01): The
+Option (a)/(b) split below applied to the GitHub App auth key, which
+the 2026-05-01 amendment removed from KMS scope entirely (V2 finding:
+Section 6.2 already issued RSA-2048 PEMs satisfying GitHub's
+PEM-format auth requirement; no migration needed). The commit-signing
+key (now AWS KMS in `us-east-1` per the 2026-05-02 amendment) uses
+**Option (a)**: KMS-generated, signed via `kms:Sign` API call, key
+material never leaves AWS KMS HSM. No export ceremony needed because
+GitHub App auth keys are out of KMS scope (RSA PEMs retained per
+2026-05-01 amendment). The original constraint analysis below is
+preserved for historical reference of the design phase reasoning.
 
 *Original constraint analysis (preserved as historical record)*:
 GitHub Apps require a private key in PEM format for app authentication
@@ -1908,6 +1947,308 @@ document for historical record (in-line edits at items 1-4 carry
 "AMENDED 2026-05-01 — see Section 11" callouts pointing here); the
 2026-04-27 operator decisions block at line 1441 remains untouched
 as historical record of the original design phase confirmation.
+
+**[NOTE 2026-05-02]: Section 11 is itself superseded by Section 12
+(2026-05-02 amendment) which reverts the Lit Protocol provider
+substitution to AWS KMS following Q1-Q5 expanded investigation that
+revealed Lit Protocol Naga V1 had been sunset April 1, 2026 (~1 month
+before the 2026-05-01 amendment landed) and that Lit Protocol provides
+no formal stability commitments to production users. Section 11
+content is preserved verbatim as historical record per the discipline
+pattern; readers should consult Section 12 for the current canonical
+KMS architecture (AWS KMS, secp256k1 curve preserved, RSA-2048 PEM
+GitHub App auth lifecycle preserved).**
+
+---
+
+## Section 12 — Section 6.3 Second Amendment (2026-05-02) — Provider Revision Reversal
+
+This section is the second amendment to Section 6.3 of the original
+Pass 2C design phase specification. It supersedes the 2026-05-01
+amendment in Section 11 specifically on the KMS provider choice (Lit
+Protocol → AWS KMS reversal) while preserving the curve correction
+(`ECC_SECG_P256K1`) and GitHub App auth lifecycle fix (RSA-2048 PEMs
+retained) that emerged from V1-V7 verification in the 2026-05-01
+amendment. The amendment ships through Verification-First Discipline
+(canonicalized in commit `94bed715`): pre-implementation verification
+(V1-V7) with operator approval at the verification checkpoint,
+implementation against approved scope, post-implementation
+verification, operator approval before commit, atomic commit with
+architectural reasoning preserved, push to origin/main.
+
+### 12.1 — Verification trail (Q1-Q5 expanded investigation findings)
+
+The 2026-05-01 amendment specified Lit Protocol Naga V1 mainnet as
+the KMS provider. Section 6.3 prerequisite investigation initiated
+2026-05-02 surfaced that Naga V1 had been sunset on April 1, 2026 —
+approximately one month before the 2026-05-01 amendment landed.
+Expanded Q1-Q5 investigation produced the following empirical
+findings:
+
+- **Q1 — Chipotle V3 longevity**: No public stability commitment.
+  No V4/V5 mentions but also no "Chipotle is final architecture"
+  statement. Lit Protocol's version timeline (Datil V0 ~2 years,
+  Naga V1 ~3.5 months production lifespan, V2 skipped, Chipotle V3
+  launched March 25, 2026) signals architectural iteration is the
+  norm, not the exception.
+
+- **Q2 — PKP migration across Lit network versions**: Confirmed PKPs
+  do NOT migrate across Lit network versions. Lit's official Datil
+  sunset documentation states explicitly: "PKPs will not be migrated
+  from Datil to Naga, meaning you'll need to mint new PKPs on the
+  Naga network." Each Lit network transition forces re-minting + DID
+  rotation + AgentRegistry re-registration.
+
+- **Q3 — Lit Protocol stability commitments**: NONE FORMAL. No SLA,
+  no LTS, no deprecation policy, no breaking-change communication
+  protocol. Governance via Lit Association (Swiss non-profit
+  multisig) with Lit Improvement Proposals (LIPs) process.
+  Production users have no contractual recourse for breaking changes.
+
+- **Q4 — Decentralized KMS alternative comparison**: No decentralized
+  KMS is BOTH more stable than Lit AND VAPI-compatible. Ika
+  (dWallet) is more stable (~2 years, only feature additions) but
+  Sui-native and not VAPI-compatible. Self-hosted FROST is
+  research-grade with curve mismatch (Schnorr-only). The viable
+  production-stable options are all centralized (AWS KMS 12 years,
+  GCP KMS 9 years, Azure Key Vault 10 years, Turnkey 3 years) or
+  self-hosted (HashiCorp Vault 10 years).
+
+- **Q5 — AWS KMS reassessment under Q1-Q3 findings**: AWS KMS's
+  12-year production track record + formal SLA + minimal API churn
+  (zero major architecture transitions in 12 years) outweigh DePIN
+  thesis preservation at the operator-agent layer for VAPI's
+  specific use case. The DePIN thesis preservation at VAPI's protocol
+  trust root (DualShock Edge ECDSA-P256 hardware-anchored PoAC
+  chain) remains unaffected by KMS provider choice for the
+  operator-agent layer.
+
+### 12.2 — Architectural reassessment summary
+
+| Dimension | Original Pass 2C (2026-04-27) | 1st Amendment (2026-05-01) | 2nd Amendment (2026-05-02) |
+|-----------|-------------------------------|----------------------------|----------------------------|
+| KMS provider | AWS KMS (provisional) | Lit Protocol PKPs (Naga V1 mainnet) | **AWS KMS in `us-east-1`** (revert) |
+| KMS keys | 4 (2 commit-signing + 2 GitHub App auth) | 2 (commit-signing only) | **2 (commit-signing only)** (preserved) |
+| Curve | NIST P-256 (`ECC_NIST_P256`) | secp256k1 (Lit-specific) | **secp256k1 (`ECC_SECG_P256K1`)** (preserved) |
+| GitHub App auth | KMS-managed Option B export ceremony | RSA-2048 PEMs retained from Section 6.2 | **RSA-2048 PEMs retained** (preserved) |
+| Backup/DR posture | Not explicitly addressed | Lit MPC TSS resilience + DID rotation | **Single-region (us-east-1) + DID rotation per Section 10 Note 6** |
+| IAM credentials delivery | Not explicitly addressed | N/A (Lit auth model) | **Long-lived AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY in bridge/.env (mode 600 gitignored), kms:Sign minimum-privilege scoping** |
+| Architectural risk | Verification gaps in P-256 + GitHub App auth assumptions | Naga V1 sunset risk (unverified at amendment time) | **Stable production infrastructure (12-year AWS KMS API stability)** |
+| First-of-its-kind precedent risk | Yes (Web3 KMS → GitHub App JWT) | None (RSA-2048 standard auth) | **None preserved** |
+| DePIN thesis at operator-agent layer | Compromised (AWS centralization) | Preserved (Lit decentralization) | **Compromised, but bounded — protocol trust root remains hardware-anchored** |
+
+### 12.3 — Provider revision reversal: Lit Protocol → AWS KMS
+
+The 2026-05-01 amendment substituted AWS KMS with Lit Protocol on
+DePIN-thesis-preservation grounds at "the highest-leverage point —
+agent commits become protocol truth claims." Q1-Q5 findings
+demonstrate this framing was incomplete:
+
+1. **No Lit Protocol stability commitments to production users**
+   means VAPI's Operator agents would inherit Lit's iteration
+   velocity as recurring operational maintenance work (estimated
+   ~3-4hr per Lit network transition × ~3-4 transitions per year at
+   Lit's observed velocity = ~10-15 hr/year ongoing maintenance
+   beyond initial implementation).
+
+2. **PKP non-portability across Lit network versions** means each
+   Lit transition forces DID rotation, breaking the "single signing
+   key per agent identity" simplicity that long-lived agent identity
+   for permanent on-chain attestation requires.
+
+3. **Lit Protocol iteration velocity uniquely high** means the
+   provider that the original survey called "production-ready" is
+   in active architectural transition. The empirical pattern (Naga
+   V1 production lifespan ~3.5 months) does not support assuming
+   Chipotle's lifespan will be different.
+
+4. **AWS KMS 12-year API stability with formal SLA** provides the
+   operational stability that long-lived agent identity requires.
+   AWS KMS's deprecation cadence (multi-year notice for SDK v1 EOL)
+   matches VAPI's multi-year phase progression timescales.
+
+5. **VAPI operator agents are outer governance layer, not protocol
+   trust root**. The PoAC chain hardware-anchored to DualShock Edge
+   ECDSA-P256 is the trust root and remains unaffected by KMS
+   provider choice. Compromising DePIN thesis at the operator-agent
+   layer (centralized AWS KMS) does NOT compromise VAPI's core
+   DePIN claims for the protocol itself. The "first decentralized
+   KMS for agent commit signing" framing was a marketing
+   consideration, not an architectural one.
+
+### 12.4 — Backup/DR posture (D2 from 2026-05-02 operator decisions)
+
+Single-region AWS KMS deployment in `us-east-1`. Recovery from AWS
+account loss via DID rotation per Pass 2C Section 10 Note 6 —
+provision new KMS keys in a new account, mint replacement DID with
+new public keys (derived from new KMS keys), register replacement
+in AgentRegistry. The TBA persists; only the signing capability
+rotates.
+
+**Multi-region replica considered and rejected**: AWS KMS supports
+multi-region replicas natively (replicate keys across us-east-1 +
+us-west-2 with key material remaining non-exportable in each region).
+This addresses regional outage but does NOT address the realistic
+failure mode (AWS account loss). The cost ($4/month vs $2/month) adds
+complexity without addressing the actual risk. Consistent with VAPI's
+existing trust model where bridge wallet IoTeX private key has the
+same single-point-of-failure profile on a single host.
+
+### 12.5 — Architectural drift acknowledgment as discipline pattern record
+
+The 2026-05-01 amendment was based on the original Lit Protocol
+research synthesis which treated Lit Protocol's stability as
+established fact rather than verifiable claim. The Q1-Q5 expanded
+investigation revealed external service state had changed (Naga V1
+sunset, Chipotle V3 launch) since the research was conducted in
+April 2026.
+
+**Discipline pattern lesson preserved**: External service state
+warrants verification when architectural decisions depend on that
+state, particularly for services with limited stability commitments
+(no SLA, no LTS, no formal deprecation policy). Future amendments
+to design phase documents that target external services should
+include external state verification as part of pre-amendment
+V-checks. Specific pattern: when a design phase document references
+an external service version or network (e.g., "Lit Protocol Naga V1
+mainnet"), pre-amendment verification should re-confirm that the
+referenced version/network is still the live production target at
+amendment time.
+
+This is the same Verification-First Discipline pattern that caught
+the RSA-2048 finding in 2026-05-01 V2 verification, applied at
+external service state level rather than internal repository state
+level. The cost of NOT catching the Naga sunset finding before
+implementation: ~6-7 hr of Section 6.3 implementation work targeting
+a sunset network, with implementation failing at first SDK call when
+Naga endpoints returned 404. The Q1-Q5 investigation cost ~1 hr and
+saved that.
+
+The cumulative discipline pattern across the 2026-05-01 and
+2026-05-02 amendments: three Verification-First Discipline findings
+in this design pass arc — (1) PS5 stick-attachment recurrence under
+PS5_COMPAT_MODE=true (operator field observation, separate
+diagnostic thread), (2) RSA-2048 PEMs already in place (Pass 2C
+Section 6.3 P-256 spec was unverified — caught by V2 in pre-amendment
+verification, 2026-05-01), (3) Naga V1 sunset (Pass 2C amendment
+Section 11 content unverified against current Lit Protocol state —
+caught by Q1-Q5 in prerequisite investigation, 2026-05-02). Each
+finding was caught at a verification step before architectural
+commitment compounded into wasted implementation work.
+
+### 12.6 — 2026-05-02 operator decisions block (sibling to 2026-04-27 and 2026-05-01)
+
+The operator confirmed the Section 6.3 second amendment 2026-05-02.
+Original 2026-04-27 operator decisions block (line 1441) and
+2026-05-01 operator decisions block (Section 11.6) preserved
+verbatim as historical record. This 2026-05-02 block documents what
+changed and why, by sibling reference rather than overwriting prior
+decisions.
+
+**Q2 final resolution (KMS key for GitHub App auth: KMS-backed or
+imported)**:
+- 2026-04-27: Provisional split (Option A for commit-signing,
+  Option B for GitHub App auth) confirmed.
+- 2026-05-01: Option A confirmed and migrated from AWS KMS to Lit
+  Protocol PKP. Option B eliminated entirely (V2 finding:
+  GitHub-issued RSA-2048 PEMs satisfy GitHub App auth without KMS).
+- 2026-05-02: Option A reaffirmed; provider reverted from Lit
+  Protocol to AWS KMS in us-east-1 with `KeySpec=ECC_SECG_P256K1`
+  (the curve correction from 2026-05-01 preserved). Option B
+  remains eliminated (RSA-2048 PEM retention from 2026-05-01
+  preserved).
+
+**D1 (AWS region)**: us-east-1. Default ecosystem; latency immaterial
+to bridge agent operation; broadest tooling/docs.
+
+**D2 (Backup/DR posture)**: Single-region (us-east-1) + DID rotation
+recovery per Pass 2C Section 10 Note 6. Multi-region replica
+considered and rejected (does not address AWS account loss failure
+mode).
+
+**D3 (IAM credentials delivery)**: Long-lived AWS IAM user access
+keys delivered as `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` +
+`AWS_REGION=us-east-1` env vars in `bridge/.env` (gitignored, mode
+600 directory). Bridge IAM user has `kms:Sign` minimum-privilege
+scoping on the 2 specific KMS keys only; operator IAM user retains
+administrative actions.
+
+**D4 (KMS-vs-import constraint block treatment)**: Preserve MOOT
+callout. Update reasoning from Lit-specific "non-exportable by MPC
+TSS architecture" to AWS KMS Option (a) reasoning: commit-signing
+keys KMS-generated, signed via `kms:Sign` API, key material never
+leaves AWS KMS HSM. No export ceremony needed because GitHub App
+auth keys are out of KMS scope.
+
+**Curve correction (`ECC_SECG_P256K1`)**: Reaffirmed from 2026-05-01
+amendment. Matches DID template's `EcdsaSecp256k1VerificationKey2019`
+declaration + IoTeX EVM secp256k1 native compatibility.
+
+**GitHub App auth lifecycle (RSA-2048 PEMs retained in
+`bridge/secrets/`)**: Reaffirmed from 2026-05-01 amendment. No KMS
+migration. No Option B export ceremony.
+
+**Anthropic API key plane (Q3) Option (b) per-agent env-var keys**:
+Reaffirmed from 2026-05-01 amendment. Implementation deferred to P1
+prep.
+
+### 12.7 — Phase O0 Section 8 exit criterion #14 update
+
+Original Section 8 exit criterion #14: "KMS keys provisioned for
+both agents | KMS key aliases exist; signing capability tested via
+test signature."
+
+2026-05-01 amendment specified: "Lit Protocol PKPs minted for both
+agents | PKP tokenIds exist on Lit Chronicle L3; signing capability
+tested via test signature against secp256k1 PKP."
+
+**2026-05-02 amendment (supersedes 2026-05-01)**: "AWS KMS keys
+provisioned for both agents in us-east-1 | KMS key aliases
+`alias/vapi-anchor-sentry-signing` and `alias/vapi-guardian-signing`
+exist; signing capability tested via `aws kms sign --key-id
+alias/vapi-anchor-sentry-signing --message <test-payload>
+--message-type RAW --signing-algorithm ECDSA_SHA_256` returning a
+valid secp256k1 ECDSA signature."
+
+The verification method for criterion #14 reverts from Lit Protocol
+PKP query + Lit `executeJs` test signature to standard AWS CLI
+`aws kms sign` test signature.
+
+### 12.8 — Implementation effort revision
+
+| Metric | Original Pass 2C | 1st Amendment (Lit) | 2nd Amendment (AWS KMS) |
+|--------|------------------|---------------------|--------------------------|
+| Implementation effort | ~9-11 hr (with Lit + Turnkey) | ~6-7 hr (Lit only) | **~5-6 hr** (AWS KMS only) |
+| Bridge modules | 2 (`lit_client.py` + `turnkey_client.py`) | 1 (`lit_client.py`) | **1 (`kms_client.py` boto3 wrapper)** |
+| Bridge tests added | +12 | +6 | **+6** (same count, simpler implementation) |
+| KMS keys | 4 | 2 | **2** (preserved) |
+| Providers | 2 | 1 (Lit) | **1 (AWS)** |
+| External dependencies | Lit JS SDK + Node.js v19.9+ | Lit Python SDK Node.js bridge wrapper | **boto3 native Python (no Node.js)** |
+| Maintenance overhead | TBD | ~10-15 hr/year (Lit network transitions) | **Negligible (AWS KMS rarely requires migration)** |
+
+The 2026-05-02 amendment reduces Phase O0 Section 6.3 implementation
+cost relative to the 2026-05-01 amendment (~5-6 hr vs ~6-7 hr) due
+to mature boto3 SDK and well-documented patterns versus Lit Protocol
+Python SDK Node.js bridge complexity. More significantly, the
+2nd amendment eliminates the ~10-15 hr/year ongoing maintenance
+overhead that would have accumulated under the 1st amendment from
+Lit network transitions.
+
+---
+
+This Section 12 second amendment is the canonical reference for
+Section 6.3 implementation work. Section 6.3's original text remains
+in this document for historical record (in-line edits at lines 1095,
+1110, 1138 carry "AMENDED 2026-05-02 — see Section 12" callouts
+pointing here, layered on top of the 2026-05-01 callouts which
+themselves remain as historical record); the 2026-04-27 operator
+decisions block at line 1441 and the 2026-05-01 operator decisions
+block in Section 11.6 both remain untouched as historical record of
+the design phase confirmation and first-amendment confirmation
+respectively. The discipline pattern preserves both Section 11 and
+Section 12 as siblings, with Section 12 superseding Section 11 on
+the specific provider choice while preserving Section 11's curve
+correction and GitHub App auth lifecycle fixes.
 
 ---
 
