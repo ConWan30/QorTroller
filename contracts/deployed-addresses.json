@@ -89,5 +89,20 @@
   "_phase222_note": "Phase 222: BBG — governance proposals gated on live VHP; blocks STOLEN_KEY+VHP_EXPIRY+FLASH_LOAN attacks",
   "VAPIConsentRegistry": "0xA82dB0eF0bF7D15b6400EDd4A09C0D4338C948dA",
   "_phase237_status": "deployed",
-  "_phase237_note": "Phase 237: VAPIConsentRegistry — per-category gamer consent (TOURNAMENT_GATE / ANONYMIZED_RESEARCH / MANUFACTURER_CERT / MARKETPLACE), gamer-self-sovereign (msg.sender writes), bridge reads only"
+  "_phase237_note": "Phase 237: VAPIConsentRegistry — per-category gamer consent (TOURNAMENT_GATE / ANONYMIZED_RESEARCH / MANUFACTURER_CERT / MARKETPLACE), gamer-self-sovereign (msg.sender writes), bridge reads only",
+  "AgentRegistry": "0x9548E9d17c2d40350629b1b88ff1D2c01B0414a4",
+  "_phase_o0_agent_registry_status": "deployed",
+  "_phase_o0_agent_registry_note": "Phase O0 Stream 2: AgentRegistry — agent identity (agentId → publicKey, scopeHash, status); Ownable + ReentrancyGuard pattern matching VAPIBiometricGovernance Phase 222; owner is bridge wallet 0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692; no agents registered at deploy (first registration in Phase O0 Section 6.4 after GitHub Apps registration completes).",
+  "AgentScope": "0xc694692a69bbf1cDAda87d5bc43D345C4579FF13",
+  "_phase_o0_agent_scope_status": "deployed",
+  "_phase_o0_agent_scope_note": "Phase O0 Stream 2: AgentScope — operational scope storage (agentId → scopeRoot); Ownable + ReentrancyGuard pattern matching AgentRegistry; owner is bridge wallet 0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692; agentRegistry reference immutable at 0x9548E9d17c2d40350629b1b88ff1D2c01B0414a4; two-layer scope enforcement: AgentRegistry.scopeHash = governance commitment, AgentScope.scopeRoot = operational state, deliberately allowed to differ.",
+  "AuditLog": "0xb7059391323eACFcb3d150a7EBFd80275a77E25F",
+  "_phase_o0_audit_log_status": "deployed",
+  "_phase_o0_audit_log_note": "Phase O0 Stream 2: AuditLog — system-level Tessera signed-tree-head anchor; Ownable + ReentrancyGuard pattern; owner is bridge wallet 0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692; no contract dependencies (Y-A design, distinct from per-agent contracts); ships empty in P0; first checkpoint occurs in P1+ when Tessera upstream feed is wired.",
+  "AgentSlashing": "0x0994666D0a307968BAA3f38B59756187164155e0",
+  "_phase_o0_agent_slashing_status": "deployed",
+  "_phase_o0_agent_slashing_note": "Phase O0 Stream 2: AgentSlashing — VetoSlasher-pattern economic accountability (bond → propose → 24h veto → burn); Z-A pure burn (slashed amounts to 0xdead); W-A partial slashing (per-proposal slashAmount); Ownable + ReentrancyGuard pattern; owner is bridge wallet 0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692; agentRegistry reference immutable at 0x9548E9d17c2d40350629b1b88ff1D2c01B0414a4; vetoWindowSeconds immutable at 86400 (24h).",
+  "AgentAdjudicationRegistry": "0x4767c5Ab7ed705E810903BE764fa4090B639C10A",
+  "_phase_o0_agent_adjudication_registry_status": "deployed",
+  "_phase_o0_agent_adjudication_registry_note": "Phase O0 Stream 2: AgentAdjudicationRegistry — agent-scoped action anchor; hosts AGENT_COMMIT v1 (Pass 2A V10) and PHYSICAL_DATA_ATTESTATION v1 (Pass 2B Path 3) via U-Enum FROZEN four-entry actionType vocabulary; V-A reserved-as-documentation; UNION storage (anchorId-keyed array + per-agent index + actionHash anti-replay); Ownable + ReentrancyGuard pattern; owner is bridge wallet 0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692; agentRegistry immutable at 0x9548E9d17c2d40350629b1b88ff1D2c01B0414a4; agentScope immutable at 0xc694692a69bbf1cDAda87d5bc43D345C4579FF13; requireAgentScope modifier reads operational truth (Decision C, Session 2)."
 }
