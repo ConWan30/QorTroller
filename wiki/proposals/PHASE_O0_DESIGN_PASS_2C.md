@@ -1004,20 +1004,150 @@ is enforced in Stream 1 of the operational order in Section 1.
 | ioID NFT | `0x45Ce3E6f526e597628c73B731a3e9Af7Fc32f5b7` | DID NFT collection |
 | ERC-6551 Registry | `0x000000006551c19487814612e58FE06813775758` | Token-bound account registry |
 
-**Mint sequence per agent** (executed twice, once for each agent):
+**Mint sequence** (AMENDED 2026-05-02 — see Section 13 — corrected per
+read-only investigation findings against deployed ioIDRegistry,
+ProjectRegistry, and ERC-6551 Registry contracts on IoTeX testnet
+cross-referenced against ioID-contracts canonical source at commit
+`b94ad092b84f83fba068ed83bc28b72dd6f2cc4f`; the original mint
+sequence below is preserved as historical record):
 
-1. Register agent project on ProjectRegistry. Project name:
-   `"vapi-anchor-sentry"` for Sentry; `"vapi-guardian"` for Guardian.
-   Output: project_id (uint256).
-2. Mint ioID DID via ioIDRegistry. Input: project_id, deviceAddress
-   (the agent's ECDSA public key, derived from KMS-backed signing
-   key — see Section 6.3).
-   Output: did:io:<address> identifier + ioID NFT tokenId.
-3. Bind ERC-6551 TBA via the ERC-6551 Registry. Input: ioID NFT
-   contract address (`0x45Ce3E6f526e597628c73B731a3e9Af7Fc32f5b7`),
-   tokenId (from step 2), salt=bytes32(0), implementation address
-   (standard ERC-6551 Account implementation).
-   Output: TBA address (the agent's on-chain account).
+1. Register the **VAPI Operator Agents project** on ProjectRegistry
+   **once per VAPI deployment** (not per agent — both agents share
+   the project NFT distinguished by per-agent ERC-6551 salts per
+   K1a + I2b 2026-05-02 operator decisions). Call:
+
+   ```solidity
+   ProjectRegistry.register("VAPI Operator Agents", <projectType>)
+       // selector 0x767b79ed
+   ```
+
+   Exact `projectType` uint8 value empirically verified during
+   amendment implementation session against ioID-contracts canonical
+   source at commit `b94ad092` (`contracts/ProjectRegistry.sol`) and
+   on-chain enum query (delegated per Section 13.6 OQ2). Output:
+   project_id (uint256). The bridge wallet receives one IProject NFT
+   at contract `0xf07336e1c77319b4e740b666eb0c2b19d11fc14f` (the
+   canonical NFT contract for ERC-6551 binding per Section 13.4 K3
+   clarification — distinct from the per-DID NFT infrastructure
+   referenced in the original mint sequence).
+
+   [NOTE 2026-05-02 third amendment: original Section 6.1 step 1
+   specified two project registrations (one per agent). Per K1a
+   architectural reconciliation, ioIDRegistry binds devices to
+   project NFTs distinguished by unique device addresses (multiple
+   devices register against the same project NFT); capability-level
+   distinction lives at the agent layer (capability specs at commit
+   52978771), not at the project NFT layer. One project + per-agent
+   salts is operationally and cost-simpler than two projects +
+   shared salt and preserves the same security properties.]
+
+2. **Pin the agent's DID document JSON-LD to IPFS** via Pinata
+   (Q7 / Section 6.4 implementation at commit `dcaf5015`). Compute
+   the content hash (`keccak256` over canonical content per
+   ioID-contracts hash convention). Output: IPFS CID (the URI),
+   bytes32 content hash.
+
+   [NOTE 2026-05-02 third amendment: this step is new — the
+   original mint sequence implied register-then-pin ordering,
+   but the corrected ioIDRegistry.register signature (step 3)
+   requires both the URI and content hash as inputs. Pin must
+   precede register. Corrected orchestration documented in
+   Section 13.5.]
+
+3. Mint ioID DID via ioIDRegistry. Call:
+
+   ```solidity
+   ioIDRegistry.register(
+       address deviceContract,    // IProject = 0xf07336e1c77319b4e740b666eb0c2b19d11fc14f
+       uint256 tokenId,           // project_id from step 1
+       address device,            // agent's ECDSA-secp256k1 ETH address (KMS-derived)
+       bytes32 hash,              // content hash from step 2
+       string calldata uri,       // IPFS URI from step 2
+       uint8 v, bytes32 r, bytes32 s   // EIP-712 signature by `device`
+   )
+       // selector 0x39a4a241
+   ```
+
+   The 8-param signature with EIP-712 `(v, r, s)` components is the
+   canonical ioIDRegistry.register signature, verified empirically
+   in deployed bytecode (selector `0x39a4a241` present in the
+   dispatch table; the original 2-param `register(uint256, address)`
+   selector `0xdbbdf083` is NOT in deployed bytecode). EIP-712
+   signature flow detailed in Section 13.3. Output: `did:io:<device>`
+   identifier (the device address itself).
+
+   [NOTE 2026-05-02 third amendment: original 2-parameter signature
+   `ioIDRegistry.register(uint256, address)` was assumed without
+   empirical verification against deployed bytecode; corrected per
+   Section 13.2 against ioID-contracts canonical source at commit
+   `b94ad092` (`contracts/ioIDRegistry.sol`). The EIP-712 signature
+   flow (uint8 v, bytes32 r, bytes32 s) is new functionality not
+   present in the original specification — see Section 13.3 for
+   implementation requirements.]
+
+4. Bind ERC-6551 TBA via the ERC-6551 Registry singleton
+   (`0x000000006551c19487814612e58FE06813775758`). Call:
+
+   ```solidity
+   ERC6551Registry.createAccount(
+       implementation,       // standard ERC-6551 Account implementation
+       <salt>,               // per-agent salt:
+                             //   keccak256("vapi-anchor-sentry") for Sentry
+                             //   keccak256("vapi-guardian") for Guardian
+                             //   per I2b
+       chainId,              // 4690 (IoTeX testnet)
+       0xf07336e1c77319b4e740b666eb0c2b19d11fc14f,  // IProject NFT per K3
+       project_id            // from step 1 (same project NFT for both agents)
+   )
+       // selector 0x8a54c52f
+   ```
+
+   Per K1a + I2b: the same project NFT (one tokenId for the entire
+   VAPI Operator Agents project) is bound to two distinct TBAs via
+   per-agent salts. Sentry's TBA ≠ Guardian's TBA despite the
+   shared (deviceContract, tokenId) pair — the salt distinguishes
+   them, preserving identity distinction at the on-chain level
+   matching the capability spec distinction at commit `52978771`
+   (Sentry's wiki/provenance/attestation lane vs Guardian's
+   audits/sweeps/operational-stewardship lane). Output: distinct
+   TBA address per agent.
+
+   [NOTE 2026-05-02 third amendment: per-agent salts replace the
+   original `salt=bytes32(0)` per I2b. NFT contract address
+   corrected to IProject `0xf07336e1c77319b4e740b666eb0c2b19d11fc14f`
+   per K3 — the original address `0x45Ce3E6f526e597628c73B731a3e9Af7Fc32f5b7`
+   is per-DID infrastructure (per-DID NFTs minted internally by
+   ioIDRegistry, not ERC-6551-bindable). The original Section 6.1
+   step 3 conflated these two NFT contracts. See Section 13.4 for
+   canonical NFT address clarification.]
+
+*Original mint sequence per agent (executed twice, once for each
+agent), preserved for historical record of design phase reasoning
+that produced the original Pass 2C 2026-04-27 specification:*
+
+> 1. Register agent project on ProjectRegistry. Project name:
+>    `"vapi-anchor-sentry"` for Sentry; `"vapi-guardian"` for
+>    Guardian. Output: project_id (uint256).
+>    [SUPERSEDED 2026-05-02 — per K1a, one project NFT shared
+>    across both agents replaces two-project architecture]
+>
+> 2. Mint ioID DID via ioIDRegistry. Input: project_id,
+>    deviceAddress (the agent's ECDSA public key, derived from
+>    KMS-backed signing key — see Section 6.3). Output:
+>    did:io:<address> identifier + ioID NFT tokenId.
+>    [SUPERSEDED 2026-05-02 — 2-param signature does not match
+>    deployed bytecode per Section 13.2; EIP-712 signature flow
+>    missing per Section 13.3]
+>
+> 3. Bind ERC-6551 TBA via the ERC-6551 Registry. Input: ioID NFT
+>    contract address (`0x45Ce3E6f526e597628c73B731a3e9Af7Fc32f5b7`),
+>    tokenId (from step 2), salt=bytes32(0), implementation address
+>    (standard ERC-6551 Account implementation). Output: TBA
+>    address (the agent's on-chain account).
+>    [SUPERSEDED 2026-05-02 — NFT contract address corrected to
+>    IProject `0xf07336e1c77319b4e740b666eb0c2b19d11fc14f` per K3
+>    + Section 13.4; salt=bytes32(0) replaced by per-agent salts
+>    per I2b]
 
 **DID document JSON-LD structure** (stored on IPFS):
 
@@ -2249,6 +2379,519 @@ respectively. The discipline pattern preserves both Section 11 and
 Section 12 as siblings, with Section 12 superseding Section 11 on
 the specific provider choice while preserving Section 11's curve
 correction and GitHub App auth lifecycle fixes.
+
+---
+
+## Section 13 — Section 6.4 Corrections — Third Amendment (2026-05-02) — On-Chain Registration Architectural Drift
+
+This section is the third amendment to the Pass 2C design phase
+specification. Unlike Sections 11 and 12 (which both edit Section 6.3),
+this amendment's in-line edits land in **Section 6.1** because that is
+where the affected specifications (ioIDRegistry.register signature,
+ERC-6551 binding salt, NFT contract address, mint sequence ordering)
+were originally written. The amendment retains the "Section 6.4" label
+to reflect the implementation lifecycle stage (operator agent on-chain
+registration in AgentRegistry) that surfaced the findings — matching
+the single-label precedent established by Sections 11 and 12 (which
+carry "Section 6.3 Amendment" labels even when their operator decisions
+blocks at Sections 11.6 and 12.6 sit in different layout positions
+from the Section 6.3 text they amend).
+
+The amendment ships through Verification-First Discipline (canonicalized
+in commit `94bed715`): pre-implementation read-only investigation against
+deployed IoTeX testnet contracts cross-referenced against canonical source,
+operator approval at the verification checkpoint, atomic amendment commit
+with architectural reasoning preserved, push to origin/main. The
+implementation session that follows this amendment commit will produce
+corrected `agent_registration.py` referencing this Section 13 as canonical
+specification.
+
+### 13.1 — Investigation methodology
+
+The investigation session that preceded this amendment performed
+read-only RPC introspection against deployed IoTeX testnet contracts
+(`https://babel-api.testnet.iotex.io`) cross-referenced against the
+canonical ioID-contracts source at
+`github.com/iotexproject/ioID-contracts` at commit
+`b94ad092b84f83fba068ed83bc28b72dd6f2cc4f` (2025-02-12, message:
+"feat: add multicall for verifying proxy"). Five prerequisite checks
+P1-P5 covered ABI verification (P1), project NFT prerequisite (P2),
+agent NFT semantics (P3), wallet balance (P4), and post-execution
+verification path (P5).
+
+The investigation cost approximately 30 minutes of read-only work.
+The saved cost was the on-chain registration session that would have
+failed at first contract call against deployed ioIDRegistry, wasting
+gas and producing no useful state. The investigation surfaced five
+blocking issues prevented from reaching irreversible on-chain
+commitment by the H1a "test-first, defer on-chain to operator
+session" decision (commit `dcaf5015`).
+
+The in-line corrections produced by this amendment land in Section 6.1
+(lines 1007 onward) because that is where the affected specifications
+were originally written. The amendment retains the "Section 6.4"
+label to reflect the lifecycle stage of the implementation that
+surfaced the findings (operator agent on-chain registration), matching
+the single-label precedent established by Sections 11 and 12 per K2
+operator decision.
+
+### 13.2 — ABI mismatch findings
+
+Two contracts had inline ABIs in `bridge/vapi_bridge/agent_registration.py`
+at commit `dcaf5015` that did not match deployed bytecode:
+
+**ioIDRegistry at `0x0A7e595C7889dF3652A19aF52C18377bF17e027D`**
+(proxy implementation `0x66152a6be42600903b87b6292016496b6dbabf53`):
+
+```solidity
+// dcaf5015 inline ABI (WRONG — selector NOT in deployed bytecode):
+function register(uint256 projectId, address deviceAddress)
+    external returns (address didAddress);
+    // selector 0xdbbdf083 — not in dispatch table
+
+// Actual deployed signature (verified empirically — selector
+// 0x39a4a241 found in deployed bytecode dispatch table):
+function register(
+    address deviceContract,    // The IProject NFT contract address
+    uint256 tokenId,           // The project's NFT tokenId
+    address device,            // The agent's ETH address (KMS-derived)
+    bytes32 hash,              // Content hash of the DID document
+    string calldata uri,       // IPFS URI for the DID document
+    uint8 v, bytes32 r, bytes32 s   // EIP-712 signature by `device`
+) external;
+    // selector 0x39a4a241
+```
+
+Canonical source: `github.com/iotexproject/ioID-contracts` at commit
+`b94ad092` path `contracts/ioIDRegistry.sol`.
+
+**ProjectRegistry at `0x060581AA1A4e0cC92FBd74d251913238De2F13cd`**
+(proxy implementation `0x16c250eb91b475447f1048d8f454ba6ae0e51287`):
+
+```solidity
+// dcaf5015 inline ABI (EMPTY PLACEHOLDER):
+PROJECT_REGISTRY_ABI: list = []
+
+// Actual functions found in deployed bytecode dispatch table:
+function register(string memory name, uint8 projectType) external;
+    // selector 0x767b79ed (canonical)
+function register(string memory name) external;
+    // selector 0xf2c298be (overload variant)
+function register() external;
+    // selector 0x1aa3a008 (deprecated)
+function project() external view returns (address);
+    // selector 0xf60ca60d (returns IProject NFT contract address)
+function initialize(address) external;
+    // selector 0xc4d66de8 (initializer)
+```
+
+Canonical source: `github.com/iotexproject/ioID-contracts` at commit
+`b94ad092` path `contracts/ProjectRegistry.sol`.
+
+**ERC-6551 Registry at `0x000000006551c19487814612e58FE06813775758`**
+(canonical singleton per EIP-6551): inline ABI matches deployed
+bytecode (selectors `0x246a0021` for `account` view + `0x8a54c52f`
+for `createAccount` confirmed in dispatch table). No correction
+required.
+
+**AgentRegistry at `0x9548E9d17c2d40350629b1b88ff1D2c01B0414a4`**
+(Stream 2-deploy): ABI loaded from Hardhat artifact at
+`contracts/artifacts/contracts/AgentRegistry.sol/AgentRegistry.json`;
+signatures verified via direct introspection. No correction required.
+
+(IoTeXScan verified-source links for ioIDRegistry and ProjectRegistry
+deferred to amendment implementation session — V4 verification
+during the pre-amendment checkpoint encountered IoTeXScan SPA loading
+state, inconclusive. Implementation session uses IoTeXScan API
+directly or waits for full SPA render to add verified-source callouts
+where available.)
+
+### 13.3 — Missing EIP-712 signature flow
+
+The corrected ioIDRegistry.register signature requires EIP-712
+signature components `(uint8 v, bytes32 r, bytes32 s)` signed by
+the device (the agent's KMS-derived ETH address). The original
+Section 6.1 specification did not include EIP-712 signature flow.
+The amendment implementation session must add the following
+components to `bridge/vapi_bridge/agent_registration.py`:
+
+**EIP-712 domain construction**:
+
+```python
+domain = {
+    "name": "ioIDRegistry",     # empirically verified during amendment
+                                # implementation against DOMAIN_SEPARATOR()
+                                # view call return value
+    "version": "1",             # empirically verified
+    "chainId": 4690,            # IoTeX testnet
+    "verifyingContract": "0x0A7e595C7889dF3652A19aF52C18377bF17e027D",
+}
+```
+
+**Digest computation**: matches ioIDRegistry's expected hash format
+(typed data structure for the `Register` message containing
+`device`, `hash`, and `uri` fields per ioID-contracts source at
+commit `b94ad092`). The exact `EIP712Domain` + `Register` typed
+data structures are empirically verified during amendment
+implementation session against `DOMAIN_SEPARATOR()` view call and
+canonical source cross-reference.
+
+**KMS signing invocation**: `kms_client.sign(agent, digest)` — the
+existing async method at `bridge/vapi_bridge/kms_client.py` (commit
+`d3b30d58`) returns DER-encoded ECDSA signature. The signing
+identifier is the agent's KMS alias (`alias/vapi-anchor-sentry-signing`
+or `alias/vapi-guardian-signing` per Section 12 operator decisions).
+
+**DER-to-(v, r, s) parsing**: the `eth_account` or `eth_keys` libraries
+provide DER-to-(v, r, s) helpers. The `v` value is computed as the
+recovery ID (0 or 1) by attempting recovery against the known device
+public key; libraries like `eth_keys.KeyAPI.ecdsa_to_signature` handle
+this. Output: `uint8 v, bytes32 r, bytes32 s` ready for the
+ioIDRegistry.register call.
+
+The `kms_client.get_public_key` method already produces the agent's
+ETH address via the `derive_eth_address_from_kms_public_key` helper
+at `bridge/vapi_bridge/agent_registration.py` (per `dcaf5015` G2
+operator decision — dual-purpose helper for both ETH address and
+DID document `publicKeyHex` derivation). The same KMS key signs via
+`kms_client.sign`, producing the EIP-712 signature components.
+This composes natively with existing infrastructure; no new KMS
+key material is required.
+
+### 13.4 — Project NFT prerequisite + canonical NFT address clarification
+
+The corrected ioIDRegistry.register signature binds devices to a
+project NFT (the `(deviceContract, tokenId)` pair) distinguished
+by unique device addresses. ioIDRegistry requires the project NFT
+to exist before any device can be registered against it. The bridge
+wallet at `0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692` owned
+zero project NFTs at investigation time (`IProject.balanceOf(bridge_wallet)`
+returned `0`).
+
+**Project NFT prerequisite resolution path**: operator-driven session
+(separate from the amendment implementation session) executes:
+
+```solidity
+ProjectRegistry.register("VAPI Operator Agents", <projectType>);
+```
+
+once per VAPI deployment, minting one IProject NFT to the bridge
+wallet. The returned `tokenId` becomes the canonical
+`project_token_id` used in all subsequent agent registrations
+(both Sentry and Guardian register against the same `project_token_id`
+distinguished by their unique device addresses + per-agent ERC-6551
+salts per K1a + I2b).
+
+The exact `projectType` uint8 value is empirically verified during
+amendment implementation against ioID-contracts canonical source
+at commit `b94ad092` and on-chain enum query (delegated per
+Section 13.6 OQ2). Likely value is `0 = generic`; ioID-contracts
+source documents the canonical type enum.
+
+**Canonical NFT address clarification (per K3 operator decision)**:
+
+Two distinct NFT contracts appear in the ioID architecture, and the
+original Section 6.1 conflated them:
+
+| Contract | Address | Role | ERC-6551-bindable? |
+|----------|---------|------|---------------------|
+| **IProject NFT** (canonical) | `0xf07336e1c77319b4e740b666eb0c2b19d11fc14f` | Project NFTs minted via `ProjectRegistry.register`. Returned by `ProjectRegistry.project()` view call. | **YES — this is the contract bound by ERC-6551 createAccount per the corrected ioID architecture** |
+| ioID NFT (per-DID) | `0x45Ce3E6f526e597628c73B731a3e9Af7Fc32f5b7` | Per-DID NFTs minted internally by ioIDRegistry as a side effect of device registration. | NO — this is internal ioID infrastructure, not ERC-6551-bindable |
+
+The original Section 6.1 step 3 specified the per-DID address
+(`0x45Ce...`) as the ERC-6551 binding target. The corrected step 4
+(in-line edit at line 1018 region) targets the IProject contract
+(`0xf07336e1c77319b4e740b666eb0c2b19d11fc14f`).
+
+The IProject contract address was discovered empirically by calling
+`ProjectRegistry.project()` view (selector `0xf60ca60d`) on the
+deployed ProjectRegistry. This is the operator-canonical method
+for resolving the IProject contract address; future operators can
+verify the address remains current by re-running this view call.
+
+### 13.5 — Orchestration order correction
+
+The original Section 6.1 mint sequence implied a register-then-pin
+ordering (step 2 mints the ioID DID, with no IPFS pin step shown
+before it). The corrected ioIDRegistry.register signature requires
+the IPFS URI and content hash as inputs, meaning IPFS pin must
+precede the on-chain register call.
+
+**Corrected orchestration** (the amendment implementation session
+encodes this as the new `register_full_flow` implementation in
+`agent_registration.py`):
+
+```
+1.  populate_did_document
+       Read DID document template (frozen JSON-LD shape per Section 6.1).
+       Populate verificationMethod from kms_client.get_public_key(agent).
+       Populate metadata.createdAt with ISO 8601 timestamp.
+       Output: DID document dict ready for canonical serialization.
+
+2.  mint_project_nft (ONE-TIME, separate operator session, NOT per agent)
+       ProjectRegistry.register("VAPI Operator Agents", <projectType>)
+       Output: project_token_id (uint256). Captured once; reused for
+       both agents.
+
+3.  pin_did_document
+       PinataClient.pin_json(did_document, name=<agent>)
+       Output: IPFS CID (string).
+
+4.  compute_did_content_hash
+       canonical = json.dumps(did_document, sort_keys=True,
+                              separators=(",", ":")).encode("utf-8")
+       hash = keccak256(canonical)
+       Output: bytes32 content hash matching ioID-contracts hash
+       convention (empirically verified during amendment implementation).
+
+5.  compute_eip712_digest
+       Per Section 13.3 — EIP-712 domain + Register typed data
+       message containing (device, hash, uri).
+       Output: bytes32 digest ready for KMS signing.
+
+6.  kms_sign_eip712_digest
+       kms_client.sign(agent, digest)
+       Output: DER-encoded ECDSA signature (bytes).
+
+7.  parse_eip712_signature
+       DER → (v, r, s) via eth_keys helper (per Section 13.3).
+       Output: (uint8 v, bytes32 r, bytes32 s).
+
+8.  mint_ioid_did
+       ioIDRegistry.register(
+           IProject_address,           # 0xf07336e1c77319b4e740b666eb0c2b19d11fc14f
+           project_token_id,           # from step 2
+           agent_eth_address,          # from kms_client.get_public_key()
+           content_hash,               # from step 4
+           uri,                        # CID from step 3
+           v, r, s                     # from step 7
+       )
+       Output: did:io:<agent_eth_address> identifier (the device address itself).
+
+9.  derive_erc6551_tba
+       ERC6551Registry.account(
+           implementation,
+           per_agent_salt,             # keccak256("vapi-anchor-sentry") for Sentry
+                                       # keccak256("vapi-guardian") for Guardian
+                                       # per I2b
+           4690,                       # IoTeX testnet chainId
+           IProject_address,           # 0xf07336e1c77319b4e740b666eb0c2b19d11fc14f
+           project_token_id            # from step 2 (same project NFT for both agents)
+       )
+       Output: TBA address (distinct per agent due to per-agent salt).
+
+10. compute_agent_id
+       agent_id = keccak256(abi.encode(did_address, tba_address))
+       per Pass 2C Q9 FROZEN encoding (unchanged from original).
+
+11. register_agent
+       AgentRegistry.registerAgent(agent_id, publicKey, scopeHash, status)
+       per Section 6.4 (unchanged from original; P5 verification confirmed
+       these specs match deployed AgentRegistry bytecode).
+```
+
+The pin-then-register inversion at the agent-registration boundary
+(steps 3-8) is the orchestration correction. Steps 1, 2, 9, 10, 11
+are unchanged from the original architectural intent (though step 2
+is newly prerequisite, step 9 uses per-agent salt + corrected NFT
+address per K1a + I2b + K3, and step 10 was already correct per
+Q9).
+
+### 13.6 — Open questions resolved during investigation + delegated empirical sub-tasks
+
+Three OQs surfaced during investigation; all delegated to amendment
+implementation per Section 12 Q5 precedent of delegating empirical
+verification work to implementation sessions.
+
+**OQ1 (shared TBA versus per-agent TBAs)**: resolved as **I2b** —
+per-agent TBA derivation with distinct salts. Preserves identity
+distinction at the on-chain level matching the capability spec
+distinction (Sentry's wiki / provenance / attestation lane vs
+Guardian's audits / sweeps / operational stewardship lane) at
+commit `52978771`. Per K1a, this layers onto a single shared
+project NFT (one IProject token) — distinct salt per agent
+produces distinct TBA addresses despite shared `(deviceContract,
+tokenId)`. Architectural rationale: ioIDRegistry binds devices to
+project NFTs distinguished by unique device addresses (multiple
+devices register against same project NFT); capability-level
+distinction lives at the agent layer (capability specs at commit
+`52978771`), not at the project NFT layer; one project + per-agent
+salts is operationally and cost-simpler than two projects + shared
+salt while preserving the same security properties.
+
+**OQ2 (project type uint8 value for ProjectRegistry.register)**:
+delegated to amendment implementation session as empirical
+verification against ioID-contracts canonical source at commit
+`b94ad092` (`contracts/ProjectRegistry.sol` — type enum
+declaration) and on-chain enum query if ProjectRegistry exposes a
+projectType-listing view. Likely value `0 = generic`. Resolution
+captured in amendment implementation commit message as a
+sub-finding.
+
+**OQ3 (EIP-712 domain parameters for ioIDRegistry signature)**:
+delegated to amendment implementation session as empirical
+verification via `DOMAIN_SEPARATOR()` view call return value (if
+exposed) and canonical source cross-reference at commit `b94ad092`
+(`contracts/ioIDRegistry.sol`). The Section 13.3 placeholder values
+(`name="ioIDRegistry"`, `version="1"`, `chainId=4690`) are
+provisional pending empirical verification.
+
+**Multicall delegation note (NEW; surfaced 2026-05-02)**: the
+canonical ioID-contracts commit `b94ad092` carries the message
+"feat: add multicall for verifying proxy", suggesting multicall
+functionality exists in the canonical ioID flow. Amendment
+implementation session determines empirically whether canonical
+ioID device registration uses multicall to batch proxy verification
+with device registration (potentially reducing per-agent gas cost
++ atomicity surface), or whether direct ioIDRegistry.register
+calls per agent remain the canonical path. The decision matters
+for the orchestration sequence at Section 13.5 (steps 3-8 may
+collapse into a single multicall) and for the per-agent gas
+estimate at the wallet-balance check (currently 1.5 IOTX × 1.5
+buffer = 2.25 IOTX per Section 13.7). Sub-task delegated per
+Section 12 Q5 precedent.
+
+### 13.7 — 2026-05-02 third amendment operator decisions block (sibling to 2026-04-27, 2026-05-01, and 2026-05-02 second amendment)
+
+The operator confirmed the Section 6.4 third amendment 2026-05-02.
+The original 2026-04-27 operator decisions block at line 1515 (not
+1441 as Sections 11 and 12 reference; the correct line is 1515 —
+the 1441 reference in Sections 11 and 12 is pre-existing drift in
+those amendments that this third amendment leaves untouched per
+the "do not modify Section 11 or Section 12 contents" constraint),
+the 2026-05-01 first amendment operator decisions block at
+Section 11.6, and the 2026-05-02 second amendment operator decisions
+block at Section 12.6 are all preserved verbatim as historical
+record. This third-amendment 13.7 block documents what changed and
+why, by sibling reference rather than overwriting prior decisions.
+
+**I1a (commit shape)**: Single amendment commit superseding
+`dcaf5015` with a comprehensive commit message documenting the
+architectural drift `dcaf5015` had and the corrections this
+amendment applies. `dcaf5015` stays in git history; force-push
+reversion would compromise the audit trail. The discipline pattern
+preserves erroneous commits alongside their corrections rather
+than rewriting history.
+
+**I2b (TBA derivation strategy)**: Per-agent TBA derivation with
+distinct salts. Sentry: `keccak256("vapi-anchor-sentry")`.
+Guardian: `keccak256("vapi-guardian")`. Preserves identity
+distinction at the on-chain level matching the capability spec
+distinction (Sentry's wiki / provenance / attestation lane vs
+Guardian's audits / sweeps / operational stewardship lane) at
+commit `52978771`.
+
+**J1b (Section 13 cross-reference shape)**: Section 13 cross-
+references include both Solidity function signatures (Section 13.2)
+and canonical source links to `github.com/iotexproject/ioID-contracts`
+at commit `b94ad092b84f83fba068ed83bc28b72dd6f2cc4f`. Future
+operators can verify against canonical source via two independent
+paths: the GitHub URL at the pinned commit and the on-chain
+deployed bytecode (via `eth_getCode` + selector matching).
+
+**K1a (project NFT architecture)**: One-project architecture
+confirmed. One `ProjectRegistry.register` call per VAPI deployment,
+producing one IProject NFT named `"VAPI Operator Agents"` (or
+similar; exact name confirmed at amendment implementation time
+against any ProjectRegistry name uniqueness constraints). Both
+agents share the project NFT, distinguished by per-agent salts in
+ERC-6551 derivation per I2b. The in-line edit at the original
+Section 6.1 lines 1009-1011 replaces the two-project step with a
+one-project step.
+
+**K2 option (a) (in-line edit location + Section 13 label)**: Apply
+in-line edits to **Section 6.1** where affected specifications were
+originally written (lines 1009-1011 project registration, line 1012
+ioIDRegistry.register signature, line 1018 ERC-6551 binding with
+salt and address corrections). Keep Section 13 title as
+"Section 6.4 corrections — third amendment" reflecting the
+implementation lifecycle stage that surfaced findings. Section 13.1
+narrative documents the location reasoning explicitly. Matches
+Sections 11/12 single-label precedent (which carry "Section 6.3
+Amendment" labels even when their operator decisions blocks at
+Sections 11.6 and 12.6 sit in different layout positions from the
+Section 6.3 text they amend).
+
+**K3 (NFT address clarification)**: Explicit NFT address
+clarification at Section 13.4. The IProject contract at
+`0xf07336e1c77319b4e740b666eb0c2b19d11fc14f` is the canonical NFT
+contract for ERC-6551 binding per the corrected ioID architecture;
+project NFTs minted via `ProjectRegistry.register` are held in
+IProject. The ioID NFT contract at
+`0x45Ce3E6f526e597628c73B731a3e9Af7Fc32f5b7` mentioned in the
+original Section 6.1 step 3 is per-DID NFT infrastructure (minted
+internally by ioIDRegistry as a side effect of device registration,
+not ERC-6551-bindable); the original Section 6.1 conflated these
+two NFT contracts. The in-line edit at the original Section 6.1
+line 1018 region corrects the address reference to point at
+IProject.
+
+**Multicall sub-task delegation (NEW)**: per Section 13.6 closing
+note, amendment implementation session determines empirically
+whether canonical ioID device registration uses multicall to batch
+proxy verification with device registration. Sub-task delegated
+per Section 12 Q5 precedent.
+
+### 13.8 — Discipline pattern note
+
+The H1a "test-first, defer on-chain to operator session" decision
+(dcaf5015) protected the protocol from executing broken code
+against real testnet contracts. The Section 6.4 implementation
+pre-implementation V9 verification produced an assertion (we will
+use minimal inline ABIs based on EIP-6551 spec and IoTeX docs)
+rather than empirical verification (the inline ABIs match deployed
+contract bytecode). The implementation tested correctly against
+mocks because the mocks did not replicate deployed bytecode
+behavior; mock fidelity is bounded by the assertion shape mocks
+encode.
+
+The investigation session that preceded this amendment produced
+the empirical verification V9 should have produced. The findings
+caught architectural drift before it produced irreversible state.
+The investigation cost approximately 30 minutes of read-only RPC
+introspection; the saved cost was the on-chain registration
+session that would have failed at first contract call (wasting
+gas + diagnostic time + emotional cost of debugging on-chain
+failures).
+
+**Lesson preserved**: pre-implementation verification of contract
+interfaces against deployed bytecode is required when the
+implementation will execute against real testnet contracts.
+Documentation-based ABI assumptions warrant empirical verification
+before being canonized in implementation code. The Verification-
+First Discipline pattern's V-numbered checks must include
+"empirically verify ABIs against deployed bytecode" as a standard
+V-check whenever the implementation will perform on-chain
+state-changing calls. This V-check joins the existing protocol
+vocabulary of pre-implementation verifications (read state,
+confirm assumptions, identify drift) with a specific empirical
+mode for on-chain integration code.
+
+The dcaf5015 commit stays in git history (per I1a) as a worked
+example of the failure mode this lesson protects against. Future
+operators encountering this lesson can read both the erroneous
+commit and the third amendment that corrects it, learning from
+the pair.
+
+---
+
+This Section 13 third amendment is the canonical reference for
+Section 6.4 implementation work. Section 6.1's original mint
+sequence remains in this document for historical record (the
+in-line edit at the original Section 6.1 lines 1007-1021 replaced
+the original mint sequence with the corrected version + AMENDED
+2026-05-02 callout pointing here, with the original three-step
+sequence preserved verbatim as a quoted historical-record block);
+the 2026-04-27 operator decisions block at line 1515, the
+2026-05-01 first amendment operator decisions block in Section
+11.6, and the 2026-05-02 second amendment operator decisions
+block in Section 12.6 all remain untouched as historical record
+of the design phase confirmation, first-amendment confirmation,
+and second-amendment confirmation respectively. The discipline
+pattern preserves Sections 11, 12, and 13 as siblings, with
+Section 13 amending Section 6.1 (a different section than Sections
+11 and 12 amend) while sharing their layout convention and
+amendment-shape precedent.
 
 ---
 
