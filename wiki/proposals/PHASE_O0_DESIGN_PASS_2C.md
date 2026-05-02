@@ -1092,29 +1092,63 @@ Both apps installed on the `ConWan30/vapi-pebble-prototype` repository.
 
 ### Section 6.3 — KMS Key Provisioning
 
-**KMS provider decision**: AWS KMS preferred per architecture document
-section 7. Operator must have AWS account with KMS access. If AWS
-unavailable to the operator, alternative providers (GCP KMS, Azure Key
-Vault, HashiCorp Vault) require equivalent capabilities (asymmetric
-ECDSA key generation, signing API, audit logging).
+**KMS provider decision** (AMENDED 2026-05-01 — see Section 11):
+Lit Protocol PKPs (Programmable Key Pairs) per the 2026-05-01
+amendment. *Original Pass 2C provisional (preserved for historical
+context)*: AWS KMS preferred per architecture document section 7.
+Operator must have AWS account with KMS access. If AWS unavailable
+to the operator, alternative providers (GCP KMS, Azure Key Vault,
+HashiCorp Vault) require equivalent capabilities (asymmetric ECDSA
+key generation, signing API, audit logging). The amendment revises
+this to Lit Protocol after V2 verification eliminated the P-256 KMS
+migration path; only secp256k1 commit-signing keys remain in KMS
+scope, and Lit Protocol's MPC TSS network natively supports secp256k1
+PKPs while preserving the DePIN thesis at the highest-leverage point
+(agent commits become protocol truth claims). See Section 11 for
+full revision rationale.
 
-**Phase O0 KMS provisioning steps**:
-1. Create AWS KMS key per agent (2 keys total): `KeySpec=ECC_NIST_P256`,
-   `KeyUsage=SIGN_VERIFY`. Key alias:
-   `alias/vapi-anchor-sentry-signing` and `alias/vapi-guardian-signing`.
-2. Configure key policy: only the bridge IAM role can `kms:Sign`; only
-   the operator's IAM user can `kms:UpdateKeyDescription` etc.
-3. Export public key from KMS (one-time, post-creation).
-4. Use the public key as the agent's ioID DID public key in Section
-   6.1 minting flow.
-5. Configure GitHub Apps to use KMS-backed signing for git commit
-   signature verification. GitHub Apps' built-in signing supports
-   external key material via App private key import; the import format
-   is PEM-encoded private key.
+**Phase O0 KMS provisioning steps** (AMENDED 2026-05-01 — see Section 11):
+1. Mint Lit Protocol PKP per agent (2 PKPs total) on Lit Naga V1
+   mainnet: secp256k1 curve, NFT-controlled by VAPI bridge wallet.
+   PKP tokenIds: logical aliases `vapi-anchor-sentry-pkp` and
+   `vapi-guardian-pkp` (actual identity is the PKP NFT tokenId on
+   Lit Chronicle L3). [Original: `KeySpec=ECC_NIST_P256` AWS KMS key.]
+2. Configure Lit Access Control Conditions (ACCs) per PKP: signing
+   gated on bridge wallet authorization. Future P1+ ACCs may compose
+   with on-chain VAPI governance (`AgentScope.scopeRoot`,
+   `AgentSlashing` pending status). [Original: AWS IAM role + key
+   policy with `kms:Sign` permissions.]
+3. Retrieve PKP public key via Lit Protocol `getPublicKey` API
+   (always-available read; key material itself never leaves Lit MPC
+   TSS network). [Original: AWS KMS one-time public key export.]
+4. Use the PKP public key as the agent's ioID DID `publicKeyHex` in
+   Section 6.1 minting flow (matches DID template's
+   `EcdsaSecp256k1VerificationKey2019` declaration).
+5. **GitHub App authentication unchanged from Section 6.2** — the
+   GitHub-issued RSA-2048 PEMs at
+   `bridge/secrets/vapi-anchor-sentry.pem` and
+   `bridge/secrets/vapi-guardian.pem` (mode 600, gitignored) are the
+   GitHub App authentication credentials. **No KMS migration. No
+   Option B export ceremony.** V2 verification (2026-05-01) confirmed
+   Section 6.2 already issued RSA-2048 PEMs satisfying GitHub's
+   PEM-format auth requirement. Pass 2C's original step 5 KMS-managed
+   migration was solving a problem Section 6.2 had already implicitly
+   resolved.
 
-**KMS-vs-import constraint**: GitHub Apps require a private key in PEM
-format for app authentication (JWT signing for App-to-GitHub auth).
-KMS can either:
+**KMS-vs-import constraint** (AMENDED 2026-05-01 — see Section 11 —
+MOOT under amendment): The Option (a)/(b) split below applied to the
+GitHub App auth key, which the 2026-05-01 amendment removes from KMS
+scope entirely (V2 finding: Section 6.2 already issued RSA-2048 PEMs
+satisfying GitHub's PEM-format auth requirement; no migration needed).
+The commit-signing key (now Lit Protocol PKP, secp256k1) is
+non-exportable by Lit's MPC TSS architecture — there is no
+KMS-vs-import choice for that key because Lit PKPs cannot be exported.
+The original constraint analysis below is preserved for historical
+reference of the design phase reasoning.
+
+*Original constraint analysis (preserved as historical record)*:
+GitHub Apps require a private key in PEM format for app authentication
+(JWT signing for App-to-GitHub auth). KMS can either:
 - (a) Generate the private key and never expose it; the bridge
   proxies signing requests through KMS API. This requires
   modifying the bridge's GitHub App auth flow to call KMS instead
@@ -1124,10 +1158,11 @@ KMS can either:
   audit trail) for import to GitHub. Simpler but loses some KMS
   benefits.
 
-**Phase O0 recommendation**: Option (a) for the agent's commit signing
-key (high-security); Option (b) for the GitHub App auth key (lower
-sensitivity since GitHub already validates app-to-app). Decision logged
-in Section 9 Open Question 3.
+*Original Phase O0 recommendation (now superseded by Section 11
+amendment)*: Option (a) for the agent's commit signing key
+(high-security); Option (b) for the GitHub App auth key (lower
+sensitivity since GitHub already validates app-to-app). Decision
+logged in Section 9 Open Question 3.
 
 ### Section 6.4 — Agent Registration in AgentRegistry
 
@@ -1668,6 +1703,211 @@ requires DID document update with new modelClass, and the old DID
 attestations remain valid for the period when the agent ran on the
 old model. Auditors checking attestation validity must consider model
 class at attestation time, not current model class.
+
+---
+
+## Section 11 — Section 6.3 Amendment (2026-05-01) — Architectural Revision
+
+This section amends Section 6.3 of the original Pass 2C design phase
+specification based on V1-V7 verification findings completed
+2026-05-01. The amendment ships through Verification-First Discipline
+(canonicalized in commit `94bed715`): pre-implementation verification
+with operator approval at the verification checkpoint, implementation
+against approved scope, post-implementation verification, operator
+approval before commit, atomic commit with architectural reasoning
+preserved, push to origin/main.
+
+### 11.1 — Verification trail
+
+V1-V7 verification (Pattern C hybrid amendment session, 2026-05-01)
+surfaced the following empirical findings:
+
+- **V1 — DID template P-256 dependency: NONE.**
+  `agents/did_templates/vapi-anchor-sentry.did.template.json` and
+  `vapi-guardian.did.template.json` declare verification methods using
+  only `EcdsaSecp256k1VerificationKey2019`. Zero P-256, Ed25519, or RSA
+  cryptographic verification methods. The DID templates are
+  secp256k1-pure.
+
+- **V2 — GitHub App PEM key type: RSA-2048, NOT P-256.**
+  Both `bridge/secrets/vapi-anchor-sentry.pem` and
+  `bridge/secrets/vapi-guardian.pem` are RSA-2048 (PKCS#1 BEGIN/END
+  RSA PRIVATE KEY headers; openssl confirms 2048-bit, 2 primes).
+  GitHub issued these PEMs by default during Section 6.2 App
+  registration; no operator action overrode the default. **The
+  Pass 2C Section 6.3 step 1 specification of `KeySpec=ECC_NIST_P256`
+  was made architecturally WITHOUT verifying what Section 6.2 had
+  already issued.**
+
+- **V3 — Bridge GitHub library imports: NONE.**
+  Phase O0 GitHub App authentication code is not yet written; agents
+  are DORMANT, no GitHub API calls happen from the bridge runtime.
+  Library choice for P1+ implementation remains open.
+
+- **V4 — Pass 2C Section 6.3 step 1 wording: architectural choice,
+  not GitHub requirement.** Section 6.3 step 5 says "PEM-encoded
+  private key" — RSA-2048 satisfies this requirement. The
+  `ECC_NIST_P256` specification in step 1 has no documented
+  justification beyond the architecture document's general AWS KMS
+  preference (which is provider-level, not curve-level).
+
+V5-V7 re-confirmed V1-V2 evidence and verified amendment-session
+prerequisites: clean canonical state at `d019c067`, no PV-CI gate
+impact (Pass 2C is not in `.github/INVARIANTS_ALLOWLIST.json`), no
+governance_provenance_chain entry required (this is documentation
+revision of a design proposal, not an `invariant_change` category
+governance event).
+
+### 11.2 — Architectural revision summary
+
+| Dimension | Original Pass 2C (2026-04-27) | Amended (2026-05-01) |
+|-----------|-------------------------------|----------------------|
+| KMS keys | 4 (2 commit-signing + 2 GitHub App auth) | **2** (2 commit-signing only) |
+| KMS providers | 2 (commit-signing + GitHub App auth providers) | **1** (Lit Protocol) |
+| Curve for commit-signing | NIST P-256 (`ECC_NIST_P256`) | **secp256k1** (matches DID template + IoTeX EVM) |
+| GitHub App auth key handling | Option B export ceremony from KMS to GitHub | **Retain GitHub-issued RSA-2048 PEMs in `bridge/secrets/`** |
+| Provider for commit-signing | AWS KMS | **Lit Protocol PKPs (Naga V1 mainnet)** |
+| First-of-its-kind precedent risk | Yes (Web3 KMS → GitHub App JWT) | **None** (RSA-2048 PEMs use GitHub's standard auth) |
+
+### 11.3 — Amendment Section 1 — Backup/DR posture for simplified architecture
+
+**Lit Protocol PKP recovery**: PKPs are non-exportable by design (MPC
+TSS network never assembles the full key in any single location). Loss
+of the bridge wallet's NFT-control over a PKP requires DID rotation
+per Section 10 Note 6 — provision new PKP, mint replacement DID with
+new public key, register replacement in AgentRegistry. The TBA
+persists; only the signing capability rotates. Lit Naga V1's MPC TSS
+network distribution across the operator-set selected by the
+December 2025 Stake Weight Contest provides resilience without
+operator-side multi-region replica.
+
+**GitHub App PEM rotation**: Standard GitHub App key rotation
+procedure applies — generate new key in App settings UI, replace
+`bridge/secrets/<agent>.pem`, restart bridge. No KMS dependency. The
+RSA-2048 PEM lifecycle remains operator-managed per VAPI's existing
+trust model (the bridge wallet IoTeX private key in `bridge/.env` has
+the same risk profile and is operationally accepted; GitHub App PEM
+KMS-isolation would be inconsistent with the bridge wallet's current
+on-disk storage).
+
+### 11.4 — Amendment Section 2 — Q3 (Anthropic API key plane) status update
+
+**Resolution unchanged from 2026-04-27**: Option (b) per-agent env-var
+keys (`ANTHROPIC_API_KEY_SENTRY`, `ANTHROPIC_API_KEY_GUARDIAN`) is
+the resolved decision, with implementation deferred to P1 prep.
+Reasoning: Anthropic API keys are bearer tokens, not signing keys;
+KMS adds no cryptographic value (KMS protects against key extraction;
+bearer tokens transit in cleartext over TLS). Per-agent isolation
+matters operationally for billing and rate-limit blast radius. The
+amendment logs this Option (b) confirmation explicitly so future
+operators reading the audit trail see the path was decided rather
+than left ambiguous.
+
+### 11.5 — Amendment Section 3 — Verification Gap Acknowledgment
+
+**Pattern**: Pass 2C Section 6.3 step 1 specified `ECC_NIST_P256`
+architecturally without empirically verifying that Section 6.2 had
+already issued RSA-2048 PEMs. The verification gap propagated through
+downstream architectural reasoning (the operator's empirical KMS
+provider survey researched provider P-256 support extensively, and
+the in-session "path c" recommendation inherited the P-256 commitment)
+before being caught by V2 in the pre-amendment verification checkpoint.
+
+**Discipline pattern observation**: The 5-minute V-check sequence
+(V1-V7) caught the gap at the verification step, by design.
+Verification-First Discipline (canonical name from commit `94bed715`)
+operates through pre-implementation verification before architectural
+commitments compound. The amendment preserves this pattern in the
+protocol's permanent record: future operators reading the audit trail
+will see how an unverified design phase commitment was caught before
+implementation, what evidence verification produced, and how the
+architectural revision flowed from empirical findings rather than from
+re-debate of the original architectural reasoning.
+
+**Cost of the verification gap had it propagated unchecked**: ~3-4
+hours additional implementation, one additional KMS provider
+integration (Turnkey or AWS KMS for P-256), one additional bridge
+module (`turnkey_client.py` or `aws_kms_client.py`), six additional
+bridge tests, and a first-of-its-kind precedent risk (no production
+deployment of decentralized KMS signing GitHub App JWTs exists). The
+verification checkpoint eliminated all of these costs.
+
+### 11.6 — Amendment Section 4 — Operator decisions (2026-05-01)
+
+The operator confirmed the Section 6.3 amendment 2026-05-01. The
+2026-04-27 operator decisions block at line 1441 is preserved
+verbatim as historical record; this 2026-05-01 block documents what
+changed and why, by sibling reference rather than overwriting the
+prior decisions.
+
+**Q2 revision (KMS key for GitHub App auth: KMS-backed or imported)**:
+
+- 2026-04-27 confirmation: Option A for commit-signing (KMS-generated,
+  never exported), Option B for GitHub App auth (KMS-generated,
+  exported once for import to GitHub). Provisional split confirmed.
+- 2026-05-01 amendment: Option A confirmed and migrated from AWS KMS
+  to Lit Protocol PKP (secp256k1 commit-signing). **Option B
+  eliminated entirely** — V2 finding showed Section 6.2 already
+  issued RSA-2048 PEMs satisfying GitHub App PEM-format requirement;
+  the Option B ceremony Pass 2C originally specified was solving a
+  problem already resolved by Section 6.2's GitHub App registration
+  default behavior.
+
+**Q-curve (NEW; 2026-05-01)**: KMS curve selection for commit-signing
+keys. **secp256k1 confirmed** matching the DID template's
+`EcdsaSecp256k1VerificationKey2019` declaration and IoTeX EVM
+secp256k1 native compatibility. The original `ECC_NIST_P256`
+specification was an architectural drift from the DID template that
+V1 verification surfaced.
+
+**Q-provider (NEW; 2026-05-01)**: KMS provider for commit-signing
+keys. **Lit Protocol confirmed** based on the operator's Lit Protocol
+empirical research and the architectural fit (DePIN thesis
+preservation at the highest-leverage point — agent commits become
+protocol truth claims; Lit's MPC TSS network with on-chain access
+control conditions composes natively with VAPI's existing IoTeX
+governance contracts; PKP NFTs holdable by ERC-6551 TBAs make agent
+signing capability literally an asset under on-chain governance).
+
+### 11.7 — Phase O0 Section 8 exit criterion #14 update
+
+Original Section 8 exit criterion #14: "KMS keys provisioned for both
+agents | KMS key aliases exist; signing capability tested via test
+signature."
+
+**Amended (2026-05-01)**: "Lit Protocol PKPs minted for both agents |
+PKP tokenIds exist on Lit Chronicle L3; signing capability tested via
+test signature against secp256k1 PKP. GitHub App auth keys remain the
+GitHub-issued RSA-2048 PEMs at `bridge/secrets/<agent>.pem`."
+
+The verification method for criterion #14 changes from
+`aws kms list-keys` + `aws kms sign` to a Lit Protocol PKP query +
+Lit `executeJs` test signature.
+
+### 11.8 — Implementation effort revision
+
+| Metric | Original Pass 2C (path c v2 with Lit + Turnkey) | Amended (Lit only) |
+|--------|--------------------------------------------------|--------------------|
+| Implementation effort | ~9-11 hr | **~6-7 hr** |
+| Bridge modules | 2 (`lit_client.py` + `turnkey_client.py`) | **1** (`lit_client.py`) |
+| Bridge tests added | +12 | **+6** |
+| KMS keys | 4 | **2** |
+| Providers | 2 | **1** |
+
+The amendment reduces Phase O0 Section 6.3 implementation cost by
+roughly one-third while strengthening the DePIN thesis alignment
+(single decentralized KMS provider for the load-bearing commit-signing
+key) and eliminating the first-of-its-kind precedent risk that the
+original 4-key architecture would have incurred.
+
+---
+
+This Section 11 amendment is the canonical reference for Section 6.3
+implementation work. Section 6.3's original text remains in this
+document for historical record (in-line edits at items 1-4 carry
+"AMENDED 2026-05-01 — see Section 11" callouts pointing here); the
+2026-04-27 operator decisions block at line 1441 remains untouched
+as historical record of the original design phase confirmation.
 
 ---
 
