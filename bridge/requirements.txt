@@ -24,8 +24,13 @@ python-dotenv>=1.0.0
 # AWS KMS (Phase O0 Section 6.3 — operator agent signing per Pass 2C Section 12)
 boto3>=1.34.0
 
+# Pinata IPFS pinning + rate limit handling (Phase O0 Section 6.4 —
+# operator agent registration; both already installed transitively but
+# explicit-add for manifest reproducibility)
+httpx>=0.25.0
+tenacity>=8.0.0
+
 # Test framework (pytest already implicit via dev tooling; pytest-asyncio
 # explicit-add for manifest reproducibility — used by Phase O0 Section 6.3
-# tests at bridge/tests/test_kms_client.py and 3 prior async test files;
-# pytest.ini line 8 already configures asyncio_mode = strict)
+# and 6.4 tests; pytest.ini line 8 already configures asyncio_mode = strict)
 pytest-asyncio>=0.23.0
