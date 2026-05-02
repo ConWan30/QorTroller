@@ -2536,6 +2536,17 @@ data structures are empirically verified during amendment
 implementation session against `DOMAIN_SEPARATOR()` view call and
 canonical source cross-reference.
 
+[NOTE 2026-05-02 fourth amendment: original specification was
+empirically wrong; corrected per Section 14.3. Canonical signing
+is permit-style (`Permit(address owner, uint256 nonce)` type hash;
+signed data is `(user, nonce(device))`; recovered signer must
+equal device) — NOT data-attestation over `(device, hash, uri)`
+as this section originally implied. The `(hash, uri)` content is
+NOT cryptographically bound to the signature; replay protection
+comes from per-device nonce auto-incremented inside
+`_useNonce(device)`. EIP-712 domain parameters confirmed empirically:
+computed DOMAIN_SEPARATOR matches on-chain value byte-for-byte.]
+
 **KMS signing invocation**: `kms_client.sign(agent, digest)` — the
 existing async method at `bridge/vapi_bridge/kms_client.py` (commit
 `d3b30d58`) returns DER-encoded ECDSA signature. The signing
@@ -2581,6 +2592,23 @@ wallet. The returned `tokenId` becomes the canonical
 (both Sentry and Guardian register against the same `project_token_id`
 distinguished by their unique device addresses + per-agent ERC-6551
 salts per K1a + I2b).
+
+[NOTE 2026-05-02 fourth amendment: this specification was
+canonically infeasible at three independent layers. Layer 1 —
+ioIDRegistry consumes the `(deviceContract, tokenId)` pair via
+`registeredNFT` mapping plus `safeTransferFrom` (cannot be reused
+across agents; NFT is transferred away from bridge_wallet on first
+registration). Layer 2 — ioIDStore enforces bidirectional 1:1
+`deviceContract`-to-`projectId` mapping (IProject contract cannot
+be registered as deviceContract for two projects). Layer 3 —
+empirical RPC confirmation: `deviceContractProject(IProject)`
+returns `0` (IProject is the project-NFT contract, not a registered
+device-NFT contract). Corrected per Section 14.4 to N2 β-canonical:
+deploy a custom DeviceNFT contract per `contracts/examples/DeviceNFT.sol`
+pattern; mint per-agent device tokenIds; identity distinction at
+device-tokenId and TBA-tokenId layers rather than salt layer. K1a's
+spirit ("one project for both agents") is preserved at the project
+NFT layer; the implementation route changes.]
 
 The exact `projectType` uint8 value is empirically verified during
 amendment implementation against ioID-contracts canonical source
@@ -2751,6 +2779,19 @@ estimate at the wallet-balance check (currently 1.5 IOTX × 1.5
 buffer = 2.25 IOTX per Section 13.7). Sub-task delegated per
 Section 12 Q5 precedent.
 
+[NOTE 2026-05-02 fourth amendment: multicall sub-task resolved
+empirically — Block A confirmed canonical ioID-contracts repository
+contains NO multicall files; the "feat: add multicall for verifying
+proxy" commit refers to `contracts/proxies/VerifyingProxy.sol`
+(separate proxy verification flow), NOT to ioIDRegistry. Pattern A
+(direct register call per agent) is canonical. Additionally, the
+parenthetical 1.5 IOTX × 1.5 buffer = 2.25 IOTX budget did NOT
+include `activeIoID` fee (0.1 IOTX per device = 0.2 IOTX for two
+agents) or DeviceNFT contract deployment cost (~0.3 IOTX per N2 β
+resolution at Section 14.4). Reassessed per Section 14.6 to
+~1.73 IOTX total with 50% safety buffer; bridge wallet balance
+16.973199 IOTX provides 9.8x headroom. Sufficient.]
+
 ### 13.7 — 2026-05-02 third amendment operator decisions block (sibling to 2026-04-27, 2026-05-01, and 2026-05-02 second amendment)
 
 The operator confirmed the Section 6.4 third amendment 2026-05-02.
@@ -2781,6 +2822,17 @@ distinction (Sentry's wiki / provenance / attestation lane vs
 Guardian's audits / sweeps / operational stewardship lane) at
 commit `52978771`.
 
+[NOTE 2026-05-02 fourth amendment: I2b per-agent salts are
+canonically infeasible per Section 14.6 M6 finding — the salt
+parameter is hardcoded to `0` inside `ioID.mint` and not exposed
+to bridge code. No code path allows bridge to specify per-agent
+salts. Identity distinction at TBA layer is preserved through
+distinct ioID tokenIds (auto-incremented per registration), which
+produce distinct TBA addresses regardless of salt (different
+last argument to ERC-6551 derivation). I2b's intent (per-agent
+distinct TBAs) is honored by the canonical mechanic; only the
+salt-based implementation route is superseded.]
+
 **J1b (Section 13 cross-reference shape)**: Section 13 cross-
 references include both Solidity function signatures (Section 13.2)
 and canonical source links to `github.com/iotexproject/ioID-contracts`
@@ -2798,6 +2850,19 @@ agents share the project NFT, distinguished by per-agent salts in
 ERC-6551 derivation per I2b. The in-line edit at the original
 Section 6.1 lines 1009-1011 replaces the two-project step with a
 one-project step.
+
+[NOTE 2026-05-02 fourth amendment: K1a was empirically infeasible
+in its specified implementation route ("agents share the project
+NFT directly"); superseded by N2 β-canonical at Section 14.7. K1a's
+spirit ("one project for both agents") is preserved at the project
+NFT layer per Section 14.4 — ProjectRegistry.register is still
+called once per VAPI deployment, producing one IProject NFT for
+"VAPI Operator Agents" — but the implementation route changes from
+"shared project NFT serves both agents directly as deviceContract"
+to "shared project NFT plus custom DeviceNFT contract holding
+per-agent device tokenIds." See Section 14.4 for the canonical
+NFT consumption model and Section 14.5 for the ioIDStore prerequisite
+chain that must execute before any agent registration.]
 
 **K2 option (a) (in-line edit location + Section 13 label)**: Apply
 in-line edits to **Section 6.1** where affected specifications were
@@ -2825,6 +2890,26 @@ not ERC-6551-bindable); the original Section 6.1 conflated these
 two NFT contracts. The in-line edit at the original Section 6.1
 line 1018 region corrects the address reference to point at
 IProject.
+
+[NOTE 2026-05-02 fourth amendment: K3's correction was directionally
+reversed. Original Section 6.1 step 3 named
+`0x45Ce3E6f526e597628c73B731a3e9Af7Fc32f5b7` (ioID contract) as
+the ERC-6551 binding target — actually CORRECT per `ioID.mint`
+canonical source (TBA token contract = `address(this)` = ioID
+contract; verified at Section 14.6 M6). K3 "corrected" it to
+IProject `0xf07336e1c77319b4e740b666eb0c2b19d11fc14f` which is
+correct as `deviceContract` parameter of `ioIDRegistry.register`
+ONLY IF IProject were also registered via
+`ioIDStore.setDeviceContract` — which it is NOT, and cannot be
+under N2 β resolution (the registered deviceContract is the custom
+VAPIOperatorAgentNFT deployed during Block B). Per Section 14.7
+N4 clarification: both addresses are real and serve different
+layers of the ioID architecture. The actual `deviceContract`
+used in agent registration (per N2 β at Section 14.4) is the
+custom DeviceNFT contract, NOT IProject. The TBA token contract
+read via `ioID.wallet(ioID_tokenId)` is the ioID contract
+`0x45Ce3E6f526e597628c73B731a3e9Af7Fc32f5b7` (matching original
+Section 6.1's address before K3's reversal).]
 
 **Multicall sub-task delegation (NEW)**: per Section 13.6 closing
 note, amendment implementation session determines empirically
@@ -2891,6 +2976,666 @@ and second-amendment confirmation respectively. The discipline
 pattern preserves Sections 11, 12, and 13 as siblings, with
 Section 13 amending Section 6.1 (a different section than Sections
 11 and 12 amend) while sharing their layout convention and
+amendment-shape precedent.
+
+---
+
+## Section 14 — Section 6.4 Block A Empirical Refinements — Fourth Amendment (2026-05-02) — Canonical Architectural Drift
+
+This section is the fourth amendment to the Pass 2C design phase
+specification. Like Section 13 (third amendment), this amendment
+captures architectural drift surfaced by L4a empirical verification
+at amendment implementation session start. Unlike Section 13's
+single investigation pass, this amendment captures TWO verification
+passes: Block A (canonical source function-body reading for
+`ioIDRegistry.register`) and Block A extension (canonical source
+function-body reading for `ioIDStore`, `ioID.mint`, `Project`,
+plus on-chain RPC introspection for fee structure and prerequisite
+mappings).
+
+The fourth amendment supersedes Section 13's substantive specifications
+on six points (M1 register overload selection, M2 EIP-712 signing
+semantics, M3 NFT consumption model, M4 ioIDStore prerequisite chain,
+M5 fee structure, M6 TBA creation locus) plus one direction-reversal
+clarification (K3 NFT address conflation). Section 13 stays in this
+document as historical record per the Pattern C precedent established
+by Sections 11 and 12; supersession callouts at affected lines
+(2531-2537, 2581-2583, 2750-2752, 2776-2782, 2792-2800, 2815-2827
+per Section 13's pre-fourth-amendment line numbering) point forward
+to this Section 14.
+
+The amendment ships through Verification-First Discipline (canonicalized
+in commit `94bed715`): pre-implementation read-only investigation
+across two verification passes, operator approval at multiple
+checkpoints (Block A end, Block A extension end, V1-V5 end, P1-P9
+end), atomic amendment commit with architectural reasoning preserved.
+Block B implementation is OUT OF SCOPE for the session that ships
+this amendment; per Option B session pacing decision, Block B is
+deferred to a separate session for fresh focus.
+
+### 14.1 — Investigation methodology
+
+L4a empirical verification at amendment implementation session start
+across two layers:
+
+**Block A** (Section 13 third amendment investigation pass) read
+function bodies for `ioIDRegistry.register` at canonical
+`github.com/iotexproject/ioID-contracts` commit
+`b94ad092b84f83fba068ed83bc28b72dd6f2cc4f`. The third amendment
+investigation captured ABI selectors via deployed bytecode dispatch
+table introspection but did not exercise function body semantics.
+Block A revealed:
+
+- Both 8-param and 9-param register overloads are deployed; the
+  8-param version is a wrapper that calls 9-param with
+  `user = msg.sender` (M1)
+- The signed digest uses `Permit(address owner, uint256 nonce)`
+  type hash, NOT a `Register` data-attestation struct as Section
+  13.3 specified (M2)
+- `ioIDRegistry.register` consumes the `(deviceContract, tokenId)`
+  pair via `registeredNFT` mapping plus `safeTransferFrom` —
+  invalidating K1a "shared project NFT" specification (M3)
+
+**Block A extension** read function bodies for `ioIDStore` (the
+prerequisite contract that `ioIDRegistry.register` queries),
+`ioID.mint` (the per-DID NFT minter that `ioIDRegistry.register`
+calls internally), and `Project` / `IProject` (the project NFT
+implementation). Combined with on-chain RPC introspection of
+`ioIDStore.price()` and `ioIDStore.deviceContractProject(IProject)`,
+the extension revealed:
+
+- `ioIDStore.setDeviceContract` enforces bidirectional 1:1
+  `deviceContract`-to-`projectId` mapping — invalidating M3-arch γ
+  alternative (M4)
+- `ioIDStore.price` returns 0.1 IOTX per device registration globally
+  (no per-project pricing) — quantifying M5
+- `ioID.mint` internally calls `ERC6551Registry.createAccount` with
+  salt hardcoded to `0` and token contract = `address(this)` (the
+  ioID contract address) — invalidating I2b per-agent salts and
+  reversing K3 directional clarification (M6)
+
+Investigation cost: ~30 minutes Block A + ~30 minutes Block A
+extension = under one hour of read-only work. Saved cost: Block B
+implementation against incorrect specifications producing transactions
+that would have failed at first contract call ("nft already used"
+revert from M3, "invalid signature" revert from M2, or
+"only hardware project" revert from M4).
+
+### 14.2 — M1 finding: register overload selection
+
+Both 8-param and 9-param register overloads are deployed in
+`ioIDRegistry` bytecode dispatch table at implementation address
+`0x66152a6be42600903b87b6292016496b6dbabf53` (verified empirically
+via `eth_getCode`):
+
+```
+Selector 0x39a4a241 (8-param)  ✓ present in dispatch table
+Selector 0xb20187f1 (9-param)  ✓ present in dispatch table
+```
+
+Canonical source `contracts/ioIDRegistry.sol` lines 69-92 at commit
+`b94ad092`:
+
+```solidity
+function register(
+    address deviceContract,
+    uint256 tokenId,
+    address device,
+    bytes32 hash,
+    string calldata uri,
+    uint8 v,
+    bytes32 r,
+    bytes32 s
+) external payable override {
+    register(deviceContract, tokenId, msg.sender, device, hash, uri, v, r, s);
+}
+
+function register(
+    address deviceContract,
+    uint256 tokenId,
+    address user,
+    address device,
+    bytes32 hash,
+    string calldata uri,
+    uint8 v,
+    bytes32 r,
+    bytes32 s
+) public payable override { ... }
+```
+
+The 8-param version is a wrapper that calls the 9-param version
+with `user = msg.sender`. For VAPI Operator Agents where the bridge
+wallet IS the intended `user`, the 8-param wrapper is operationally
+equivalent to the 9-param explicit call.
+
+**Operator decision M1**: 8-param wrapper canonical. No information
+loss when bridge_wallet is the intended user; matches Section 13.2
+investigation finding (selector `0x39a4a241`); call-shape is simpler.
+
+### 14.3 — M2 finding: canonical permit-style signing semantics
+
+Section 13.3 specified a data-attestation signature signing
+`(device, hash, uri)`. This was empirically wrong. Canonical source
+`contracts/ioIDRegistry.sol` lines 22-26 + 103-110 at commit
+`b94ad092`:
+
+```solidity
+bytes32 public constant EIP712DOMAIN_TYPEHASH =
+    keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
+
+bytes32 internal constant PERMIT_TYPE_HASH =
+    keccak256("Permit(address owner,uint256 nonce)");
+
+// inside register():
+bytes32 digest = keccak256(
+    abi.encodePacked(
+        "\x19\x01",
+        DOMAIN_SEPARATOR,
+        keccak256(abi.encode(PERMIT_TYPE_HASH, user, _useNonce(device)))
+    )
+);
+require(ecrecover(digest, v, r, s) == device, "invalid signature");
+```
+
+The signed struct is `Permit(address owner, uint256 nonce)`
+matching ERC-2612 pattern. Only `(user, nonce(device))` is signed;
+the `(hash, uri)` content is NOT cryptographically bound to the
+signature. The recovered signer must equal `device` (the agent's
+KMS-derived ETH address).
+
+**EIP-712 domain confirmed empirically**:
+
+```
+name              = "ioIDRegistry"                                 (canonical source)
+version           = "1"                                            (canonical source)
+chainId           = 4690 (eth_chainId returned 0x1252)             (RPC)
+verifyingContract = 0x0A7e595C7889dF3652A19aF52C18377bF17e027D     (canonical address)
+
+EIP712DOMAIN_TYPEHASH = 0x8b73c3c69bb8fe3d512ecc4cf759cc79239f7b179b0ffacaa9a75d522b39400f
+PERMIT_TYPE_HASH      = 0xe36c3d5cb707dcfeb19a6a4b1d7b82c8c20d841769c752e659da03b2a8b729f9
+
+Computed DOMAIN_SEPARATOR = 0x4e31e01d4e41f6c9dc9d68103971ef473adf267bd74326f72170daac66329bcc
+On-chain DOMAIN_SEPARATOR = 0x4e31e01d4e41f6c9dc9d68103971ef473adf267bd74326f72170daac66329bcc
+                            ✓ MATCH (confirms domain construction)
+```
+
+**VAPI threat model accepts permit-style signing** because
+bridge_wallet IS the trusted relayer in VAPI's architecture (matches
+existing pattern from BridgePoolV2 and broader IoTeX ecosystem
+ioID flows). The `(hash, uri)` content is operator-controlled —
+the bridge knows what DID document it pinned to IPFS; substitution
+by a malicious relayer would require compromising the bridge itself,
+which already controls the entire registration flow. The protection
+this signing pattern provides is anti-replay (per-device nonce)
+and anti-spoofing (recovered signer must equal device).
+
+**Implementation requirements per M2** (Block B will encode these):
+
+- Read current nonce via `ioIDRegistry.nonces(device)` view before signing
+- Compute Permit struct hash: `keccak256(abi.encode(PERMIT_TYPE_HASH, user, nonce))`
+- Compose final digest with EIP-712 envelope: `keccak256("\x19\x01" || DOMAIN_SEPARATOR || struct_hash)`
+- KMS signs the digest; `eth_account` or `eth_keys` parses the DER signature into `(v, r, s)`
+- Defensive check: locally verify recovered signer == device address before submitting transaction
+- Replay protection comes from per-device nonce auto-incremented inside `_useNonce(device)`
+
+### 14.4 — M3 finding: NFT consumption model and N2 β-canonical resolution
+
+Section 13 K1a "shared project NFT" specification was canonically
+infeasible at three independent layers:
+
+**Layer 1**: ioIDRegistry consumes the `(deviceContract, tokenId)`
+pair (canonical source `contracts/ioIDRegistry.sol` lines 95, 117):
+
+```solidity
+require(!registeredNFT[deviceContract][tokenId], "nft already used");
+// ...
+IERC721(deviceContract).safeTransferFrom(user, _wallet, tokenId);
+```
+
+Each successful registration marks the pair as registered (preventing
+re-registration) AND transfers the NFT away from the user (the
+bridge wallet) to the device's IoID-bound TBA wallet. Sentry's
+registration would consume `(IProject, X)` and remove it from
+bridge wallet ownership; Guardian's subsequent registration of
+`(IProject, X)` would revert with "nft already used" AND bridge
+wallet wouldn't own the NFT to transfer.
+
+**Layer 2**: ioIDStore enforces bidirectional 1:1
+`deviceContract`-to-`projectId` mapping (canonical source
+`contracts/ioIDStore.sol`):
+
+```solidity
+function setDeviceContract(uint256 _projectId, address _contract) external override {
+    require(IERC721(project).ownerOf(_projectId) == msg.sender, "invald project owner");
+    require(projectDeviceContract[_projectId] == address(0), "project setted");
+    require(deviceContractProject[_contract] == 0, "contract setted");
+    projectDeviceContract[_projectId] = _contract;
+    deviceContractProject[_contract] = _projectId;
+}
+```
+
+A given `deviceContract` address can map to AT MOST ONE `_projectId`.
+This invalidates M3-arch γ alternative (which proposed two
+ProjectRegistry.register calls producing two IProject tokenIds X
+and Y, each used as `(IProject, X)` and `(IProject, Y)` pairs):
+the IProject contract address can be set as `deviceContract` for
+AT MOST one project, regardless of how many tokenIds it holds.
+
+**Layer 3**: empirical RPC confirmation. `deviceContractProject`
+view called against IProject `0xf07336e1c77319b4e740b666eb0c2b19d11fc14f`
+returns `0` — IProject is NOT a registered deviceContract for any
+project. This is consistent with IProject being the project-NFT
+contract (holding project identifiers), distinct from the
+device-NFT contract (holding device identifiers, registered via
+`setDeviceContract`).
+
+**Architectural alternatives evaluated**:
+
+| Option | Description | Status |
+|--------|-------------|--------|
+| α | Two separate ProjectRegistry projects (one per agent), each with its own DeviceNFT | More expensive (2× project NFTs + 2× DeviceNFT contracts); against K1a's spirit |
+| β | One project (shared "VAPI Operator Agents") + one custom DeviceNFT contract holding per-agent tokenIds | **Closest to K1a's spirit; canonical pattern per `examples/DeviceNFT.sol`** |
+| γ | Two IProject tokenIds (X, Y) used as `(IProject, X)` and `(IProject, Y)` pairs | Canonically infeasible (Layer 2 — IProject can map to only one project) |
+| skip-ioID | Bypass ioID entirely; use AgentRegistry + KMS keys as identity primitives | Compromises DePIN-thesis alignment for operator agents |
+
+**Operator decision N2 β-canonical**:
+
+```
+Step 1: ProjectRegistry.register("VAPI Operator Agents", 0)
+        → mints IProject NFT tokenId X (project identifier; bridge_wallet owns)
+
+Step 2: Bridge_wallet deploys VAPIOperatorAgentNFT contract
+        → custom DeviceNFT instance per contracts/examples/DeviceNFT.sol pattern
+        → at address Y
+
+Step 3: VAPIOperatorAgentNFT.initialize("VAPI Operator Agent NFT", "VOA")
+        → standard ERC-721 initialization
+
+Step 4: VAPIOperatorAgentNFT.configureMinter(bridge_wallet, 2)
+        → grants bridge_wallet allowance to mint 2 device NFTs
+
+Step 5: ioIDStore.setDeviceContract(X, Y)
+        → sets deviceContractProject[Y] = X (bidirectional 1:1 mapping established)
+        → callable only by bridge_wallet (X's owner)
+
+Step 6: ioIDStore.applyIoIDs(X, 2) {value: 0.2 IOTX}  [OPTIONAL pre-pay]
+        → pre-pays 0.2 IOTX for 2 device activations
+        → OR pay-as-you-go via activeIoID at 0.1 IOTX each
+
+Step 7: VAPIOperatorAgentNFT.mint(bridge_wallet) × 2
+        → mints device tokenId 1 (Sentry) and tokenId 2 (Guardian)
+
+Step 8: For Sentry — ioIDRegistry.register(VAPIOperatorAgentNFT, 1, sentry_device, ...)
+        → consumes (Y, 1); transfers device NFT to Sentry's TBA wallet
+        → ioID contract mints per-DID NFT for Sentry; ERC-6551 TBA created internally
+
+Step 9: For Guardian — ioIDRegistry.register(VAPIOperatorAgentNFT, 2, guardian_device, ...)
+        → consumes (Y, 2); transfers device NFT to Guardian's TBA wallet
+        → ioID contract mints per-DID NFT for Guardian; ERC-6551 TBA created internally
+```
+
+**Identity distinction at four layers** (corrected from K1a's
+three-layer + on-chain-shared model):
+
+| Layer | Sentry | Guardian | Distinct? |
+|-------|--------|----------|-----------|
+| Capability lane (commit `52978771`) | wiki/provenance/attestation | audits/sweeps/operational stewardship | ✓ |
+| Cryptographic capability (commit `d3b30d58`) | KMS alias `vapi-anchor-sentry-signing` | KMS alias `vapi-guardian-signing` | ✓ |
+| Off-chain attribution (commit `fc61d93d` Section 6.2) | GitHub App `vapi-anchor-sentry[bot]` | GitHub App `vapi-guardian[bot]` | ✓ |
+| On-chain identity (this amendment N2 β + M6) | Device tokenId 1 → ioID tokenId N → TBA address | Device tokenId 2 → ioID tokenId N+1 → TBA address | ✓ (via tokenId) |
+
+K1a's intent ("one project for both agents") is preserved at the
+project NFT layer (Step 1 mints one IProject NFT; both agents
+register against the same project per `setDeviceContract` mapping).
+K1a's failure (per-agent on-chain distinction collapsed to salt-only)
+is corrected at the device-tokenId layer (distinct device NFTs from
+the same custom contract) and the ioID-tokenId layer (auto-incremented
+per registration). Identity distinction is now load-bearing at FOUR
+layers, not three.
+
+### 14.5 — M4 finding: ioIDStore prerequisite chain
+
+Two ioIDStore functions enable a project to register devices.
+Canonical source `contracts/ioIDStore.sol` at commit `b94ad092`:
+
+**`applyIoIDs(uint256 _projectId, uint256 _amount) external payable`**:
+
+```solidity
+function applyIoIDs(uint256 _projectId, uint256 _amount) external payable override {
+    require(IProject(project).projectType(_projectId) == 0, "only hardware project");
+    require(msg.value >= _amount * price, "insufficient fund");
+    if (feeReceiver != address(0)) {
+        (bool success, ) = feeReceiver.call{value: msg.value}("");
+        require(success, "collect fee fail");
+    }
+    unchecked {
+        projectAppliedAmount[_projectId] += _amount;
+    }
+    emit ApplyIoIDs(_projectId, _amount);
+}
+```
+
+Anyone can call this function (no access restriction beyond payment).
+Pre-pays activeIoID fees at 0.1 IOTX per device. **Type constraint**:
+`projectType` must equal `0` ("only hardware project") — confirms
+Section 13's M3 OQ2 recommendation that VAPI Operator Agents project
+should use `_type=0` in the ProjectRegistry.register call.
+
+**`setDeviceContract(uint256 _projectId, address _contract) external`**:
+
+```solidity
+function setDeviceContract(uint256 _projectId, address _contract) external override {
+    require(IERC721(project).ownerOf(_projectId) == msg.sender, "invald project owner");
+    require(projectDeviceContract[_projectId] == address(0), "project setted");
+    require(deviceContractProject[_contract] == 0, "contract setted");
+    projectDeviceContract[_projectId] = _contract;
+    deviceContractProject[_contract] = _projectId;
+    emit SetDeviceContract(_projectId, _contract);
+}
+```
+
+Only the project NFT owner (bridge wallet, after ProjectRegistry.register
+mints the project to it) can call this function. Sets the
+**bidirectional 1:1 mapping** between projectId and deviceContract
+address. Once set, neither side can be replaced without a separate
+`changeDeviceContract` call.
+
+**Operator-driven prerequisite chain per N2 β** (must execute before
+any agent registration; encoded as a separate operator-driven session,
+NOT in `agent_registration.py` register_full_flow):
+
+1. `ProjectRegistry.register("VAPI Operator Agents", 0)` — mints
+   IProject NFT tokenId X to bridge_wallet
+2. Deploy VAPIOperatorAgentNFT (custom DeviceNFT contract) — gets
+   address Y
+3. Initialize VAPIOperatorAgentNFT + configure bridge_wallet as
+   minter with allowance 2
+4. `ioIDStore.setDeviceContract(X, Y)` — establishes the 1:1 mapping
+5. (Optional) `ioIDStore.applyIoIDs(X, 2) {value: 0.2 IOTX}` —
+   pre-pay for 2 device slots
+6. `VAPIOperatorAgentNFT.mint(bridge_wallet)` × 2 — mints device
+   tokenIds 1 and 2
+
+After steps 1-6, `ioIDRegistry.register` calls can succeed for both
+Sentry and Guardian. The `agent_registration.py` register_full_flow
+covers steps 7-9 from the Section 14.4 sequence (the per-agent
+registration steps); the operator-driven prerequisite session covers
+steps 1-6.
+
+### 14.6 — M5 finding: activeIoID fee structure + M6 finding: TBA creation internal to ioID.mint
+
+**M5 fee structure**:
+
+Single global `price` value in ioIDStore (no per-project differentiation):
+
+```
+ioIDStore.price() returned 0x000000000000000000000000000000000000000000000000016345785d8a0000
+                         = 100,000,000,000,000,000 wei
+                         = 0.1 IOTX per device registration
+```
+
+Two payment paths:
+- **Pay-as-you-go**: each `ioIDRegistry.register` call forwards
+  `msg.value >= price` through `ioIDStore.activeIoID`. Bridge sends
+  0.1 IOTX with each agent registration.
+- **Pre-pay batch**: `ioIDStore.applyIoIDs(projectId, amount)` pays
+  `amount × price` upfront. Subsequent `activeIoID` calls don't
+  require payment until the pre-paid balance is exhausted (logic
+  at `ioIDStore.activeIoID`: `if (_projectAppliedAmount == _projectActivedAmount)`
+  triggers the fee charge; otherwise no msg.value required).
+
+For two-agent registration: 0.2 IOTX in registration fees regardless
+of payment path.
+
+**Reassessed wallet budget for full N2 β registration flow**:
+
+| Step | Action | Cost (IOTX) |
+|------|--------|------|
+| 1 | Deploy VAPIOperatorAgentNFT contract | ~0.30 |
+| 2 | DeviceNFT.initialize + configureMinter | ~0.05 |
+| 3 | ProjectRegistry.register("VAPI Operator Agents", 0) | ~0.04 |
+| 4 | ioIDStore.setDeviceContract(projectId, deviceNFT) | ~0.03 |
+| 5 | ioIDStore.applyIoIDs(projectId, 2) {value: 0.2 IOTX} (optional pre-pay) | 0.20 + 0.02 gas |
+| 6 | VAPIOperatorAgentNFT.mint(bridge_wallet) × 2 | ~0.05 |
+| 7 | ioIDRegistry.register × 2 (8-param) | ~0.40 |
+| 8 | AgentRegistry.registerAgent × 2 | ~0.06 |
+| **Subtotal** | | **~1.15** |
+| **Safety buffer 50%** | | **~0.58** |
+| **Total budget** | | **~1.73 IOTX** |
+
+Bridge wallet balance: **16.973199 IOTX** (queried live during Block A
+extension via `eth_getBalance`). Headroom: **9.8x over budget**.
+**SUFFICIENT.**
+
+Section 13.6 wallet budget parenthetical (1.5 IOTX × 1.5 buffer =
+2.25 IOTX) was understated because it didn't include `activeIoID`
+fees (M5) or DeviceNFT deployment cost (M3 β). The reassessed
+budget accounts for both.
+
+**M6 TBA creation internal to ioID.mint**:
+
+ERC-6551 TBA creation happens INSIDE `ioID.mint`, not as an external
+orchestration step. Canonical source `contracts/ioID.sol` at commit
+`b94ad092`:
+
+```solidity
+address _wallet = IERC6551Registry(walletRegistry).createAccount(
+    walletImplementation,
+    0,                       // salt HARDCODED to 0
+    block.chainid,
+    address(this),           // token contract = ioID contract (0x45Ce...)
+    id_                      // token ID = newly minted ioID tokenId
+);
+```
+
+The `walletRegistry` and `walletImplementation` addresses are set
+during `ioID.initialize` and immutable thereafter. The salt is
+**hardcoded to `0`** and not exposed to bridge code. The TBA token
+contract is `address(this)` — the ioID contract address
+`0x45Ce3E6f526e597628c73B731a3e9Af7Fc32f5b7`, NOT the IProject
+address that Section 13 K3 corrected to.
+
+**Implications for `agent_registration.py`** (Block B will encode
+these):
+
+1. **Bridge code MUST NOT call `ERC6551Registry.createAccount`**.
+   Section 13.5 step 9 (`derive_erc6551_tba` calling
+   `ERC6551Registry.createAccount` or `account` view) was wrong as
+   an external bridge call. The TBA is created automatically inside
+   `ioIDRegistry.register → ioID.mint`. Bridge code reads back the
+   TBA address via `ioID.wallet(ioID_tokenId)` (read-only view that
+   internally calls `ERC6551Registry.account`).
+
+2. **I2b per-agent salts are canonically infeasible**. The salt
+   parameter is hardcoded to `0` inside `ioID.mint` and not exposed.
+   No code path allows bridge to specify per-agent salts.
+
+3. **Identity distinction at TBA layer comes from distinct ioID
+   tokenIds**, NOT from per-agent salts. Sentry's registration
+   produces ioID tokenId N; Guardian's produces N+1. Different last
+   argument to ERC-6551 derivation produces different TBA addresses
+   regardless of salt. I2b's intent (per-agent distinct TBAs) is
+   preserved by the canonical mechanic; only the implementation
+   route changes.
+
+4. **TBA token contract is the ioID contract**
+   (`0x45Ce3E6f526e597628c73B731a3e9Af7Fc32f5b7`), NOT IProject
+   (`0xf07336e1c77319b4e740b666eb0c2b19d11fc14f`). Per N4 directional
+   reversal clarification at Section 14.7: K3 conflated these two
+   addresses in the opposite direction from the original Section
+   6.1's conflation.
+
+### 14.7 — 2026-05-02 fourth amendment operator decisions block (sibling to 2026-04-27, 2026-05-01, 2026-05-02 second amendment, and 2026-05-02 third amendment)
+
+The operator confirmed the Section 6.4 fourth amendment 2026-05-02.
+The original 2026-04-27 operator decisions block at line 1645 (post
+prior-amendment shifts; was 1515 pre-Section-13), the 2026-05-01
+first amendment block at Section 11.6, the 2026-05-02 second amendment
+block at Section 12.6, and the 2026-05-02 third amendment block at
+Section 13.7 are all preserved verbatim as historical record. This
+fourth-amendment 14.7 block documents what changed and why, by
+sibling reference rather than overwriting prior decisions.
+
+**M1 (8-param register wrapper canonical)**: Both 8-param (selector
+`0x39a4a241`) and 9-param (selector `0xb20187f1`) overloads are
+deployed; 8-param is the canonical source-provided wrapper that
+calls 9-param with `user = msg.sender`. For VAPI's bridge-wallet-
+as-relayer model, the 8-param wrapper is operationally equivalent
+to the 9-param explicit call.
+
+**M2 (canonical permit-style signing semantics)**: Section 13.3
+specification was empirically wrong; canonical signing uses
+`Permit(address owner, uint256 nonce)` type hash signing
+`(user, nonce(device))`. Implementation reads nonce via
+`ioIDRegistry.nonces(device)` view, computes Permit struct hash,
+composes EIP-712 envelope, KMS signs, recovered signer must equal
+device. VAPI threat model accepts permit-style signing because
+bridge_wallet IS the trusted relayer in VAPI's architecture.
+
+**N2 (β-canonical NFT consumption resolution)**: Deploy custom
+DeviceNFT contract per `contracts/examples/DeviceNFT.sol` pattern.
+ProjectRegistry.register produces ONE project NFT for "VAPI Operator
+Agents" (preserving K1a's spirit). VAPIOperatorAgentNFT contract
+holds per-agent device tokenIds (corrects K1a's per-agent on-chain
+distinction). ioIDStore.setDeviceContract maps project to DeviceNFT
+contract. ioIDRegistry.register consumes (DeviceNFT, tokenId) per
+agent. Identity distinction at four layers (capability + cryptographic +
+off-chain attribution + on-chain via tokenId).
+
+**N3 (M6-acknowledge — per-agent salts canonically infeasible)**:
+ERC-6551 salt is hardcoded to `0` inside `ioID.mint` and not
+exposed to bridge code. I2b per-agent salts cannot be implemented.
+Identity distinction at TBA layer is preserved through distinct
+ioID tokenIds (auto-incremented per registration). I2b's intent
+(per-agent distinct TBAs) honored by canonical mechanic.
+
+**N4 (K3 directional reversal clarification)**: Both NFT addresses
+serve different purposes. The IProject contract
+`0xf07336e1c77319b4e740b666eb0c2b19d11fc14f` is correct as
+`deviceContract` parameter of `ioIDRegistry.register` IF and ONLY
+IF IProject were also registered via `ioIDStore.setDeviceContract`
+— which it is NOT, and cannot be (per N2 β, the registered
+deviceContract is the custom VAPIOperatorAgentNFT). The ioID
+contract `0x45Ce3E6f526e597628c73B731a3e9Af7Fc32f5b7` is the TBA
+token contract (the second-to-last argument to ERC-6551 derivation
+inside `ioID.mint`). K3's correction conflated the two addresses
+in the opposite direction from the original Section 6.1's
+conflation. Both addresses are real and serve different layers
+of the ioID architecture.
+
+**M4 (ioIDStore deviceContractProject prerequisite chain)**:
+Two-function prerequisite (`setDeviceContract` + optional
+`applyIoIDs`) that must execute before any agent registration.
+`setDeviceContract` enforces bidirectional 1:1 mapping. `applyIoIDs`
+requires `projectType == 0`. Both are operator-driven steps
+(state-changing, not in `agent_registration.py` register_full_flow).
+
+**M5 (activeIoID fee structure + reassessed wallet budget)**:
+`ioIDStore.price` returns 0.1 IOTX per device globally. Pay-as-you-go
+or pre-pay via `applyIoIDs`. Reassessed total budget for N2 β
+registration flow: ~1.73 IOTX with 50% safety buffer. Bridge wallet
+balance 16.973199 IOTX provides 9.8x headroom. SUFFICIENT.
+
+**Path 1.5-prime (sequencing)**: Section 14 fourth amendment lands
+before Block B implementation references it as canonical specification.
+Spec-then-implement pattern preserved per Phase O0's design-document-
+precedes-implementation convention.
+
+**N1b (structural choice)**: Section 14 as sibling top-level
+amendment matching Sections 11, 12, 13 precedent. Each amendment
+lives at its own navigable section with operator decisions block,
+supersession markers at affected earlier sections, and architectural
+reasoning preserved.
+
+**Option B (session pacing)**: Block B implementation deferred to
+a separate session for fresh focus. The session that ships this
+amendment ends after commit and push; Block B begins fresh.
+
+### 14.8 — Discipline pattern note
+
+Each verification layer surfaces architectural patterns the prior
+layer did not exercise:
+
+| Layer | Verification depth | Findings caught |
+|-------|--------------------|-----------------|
+| Pre-implementation V9 (Section 6.4 dcaf5015) | Documentation assumption | (none — assumption shape only) |
+| Third amendment investigation | ABI selector match against deployed bytecode | M1 (selector existence) |
+| Block A function-body reading | `ioIDRegistry.register` body semantics | M2 (permit signing), M3 (NFT consumption) |
+| Block A extension function-body reading | `ioIDStore`, `ioID.mint`, `Project` body semantics + on-chain RPC for fee + prerequisite mapping | M4 (prerequisite chain), M5 (fee structure), M6 (TBA internal), K3 reversal |
+
+The pattern of "operator decisions made at insufficient depth of
+canonical verification" happened **twice** in this amendment chain:
+
+- **Third amendment K1a**: captured "shared project NFT" without
+  verifying NFT consumption mechanic in `ioIDRegistry.register`
+  body. Block A reading caught the infeasibility.
+- **Fourth amendment brief M3-arch γ**: captured "two IProject
+  tokenIds" without verifying bidirectional 1:1 `deviceContractProject`
+  mapping in `ioIDStore.setDeviceContract` body. Block A extension
+  caught the infeasibility.
+
+Each error was caught by the next verification layer, but the
+pattern suggests humility about whether canonical specifications
+are feasible until empirically verified at function body depth.
+ABI selector verification confirms function existence; function
+body verification confirms architectural feasibility. **Both are
+required for amendment specifications targeting on-chain contract
+interactions.**
+
+**Lesson preserved**: operator decisions on architectural alternatives
+that depend on canonical contract interactions warrant empirical
+verification at function body depth before being canonized in
+amendment specifications. Future amendment specifications targeting
+on-chain contract interactions should include function body reading
+at canonical source as a **pre-amendment verification step**, not
+as an amendment-implementation-session verification step.
+
+The verification sequence for canonical-source-dependent amendments:
+
+1. ABI selector match against deployed bytecode (confirms function
+   exists)
+2. Function body reading at canonical source commit (confirms what
+   the function does)
+3. Cross-check against ALL related contracts the function calls
+   internally (confirms architectural feasibility across the
+   prerequisite chain)
+4. On-chain RPC introspection for state-dependent values (fees,
+   ownership, mapping content) at the time of amendment authoring
+
+The L4a empirical verification at amendment implementation session
+start caught what investigation should have caught at amendment
+writing session start. The discipline pattern caught the errors
+before Block B implementation built on incorrect specifications.
+Cost was ~30 minutes Block A + ~30 minutes Block A extension = under
+one hour of read-only work. Saved cost was Block B implementation
+against incorrect spec plus operator-driven on-chain session that
+would have failed at first contract call.
+
+The fourth amendment ships through the same Pattern C hybrid
+shape as Sections 11/12/13. Section 13 stays in this document as
+historical record per the discipline pattern's "preserve erroneous
+specifications alongside their corrections rather than rewriting
+history" precedent. The supersession callouts at Section 13's
+affected lines point forward to Section 14 subsections. Future
+operators reading Section 13 see the supersession callouts and
+follow them to Section 14 for the canonical specification.
+
+---
+
+This Section 14 fourth amendment is the canonical reference for
+Section 6.4 Block B implementation work. Section 13's main body
+remains in this document for historical record (in-line supersession
+callouts at lines 2531-2537 / 2581-2583 / 2750-2752 / 2776-2782 /
+2792-2800 / 2815-2827 carry "[NOTE 2026-05-02 fourth amendment]"
+markers pointing here). The 2026-04-27 original operator decisions
+block at line 1645, the 2026-05-01 first amendment operator decisions
+block in Section 11.6, the 2026-05-02 second amendment operator
+decisions block in Section 12.6, and the 2026-05-02 third amendment
+operator decisions block in Section 13.7 all remain untouched as
+historical record. The discipline pattern preserves Sections 11,
+12, 13, and 14 as siblings, with Section 14 superseding Section 13
+on six substantive points (M1, M2, M3, M4, M5, M6) plus one
+clarification (N4 K3 directional reversal) while sharing the same
 amendment-shape precedent.
 
 ---
