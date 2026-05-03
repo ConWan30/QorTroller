@@ -236,6 +236,87 @@ export function useWatchdogStatus() {
 // fabricated values for live grind state.
 export { isMockActive } from './mockBridge'
 
+// ─── BRP renderer hooks (post-milestone incorporation per OQ-7) ─────────────
+// These hooks adapt live bridge telemetry to the BrpMount prop contract
+// (frontend/src/brp/telemetry/contracts.ts). They live in bridgeApi.js
+// (the host page's wiring layer) NOT in src/brp/ — preserves D2
+// mount-agnostic: the renderer never imports a fetch URL; the host wires.
+
+/**
+ * useBrpFrozenOutput — derives the renderer's `frozenOutput: Uint8Array`
+ * from the bridge's GIC chain hash. Reuses useGrindChain's 5s polling
+ * cadence (no new pattern; per LATENCY_BUDGET.md).
+ *
+ * Returns: { bytes, hashHex, source, isLoading, error }
+ *   - bytes:   32-byte Uint8Array on success, null when chain isn't ready
+ *   - hashHex: the raw hex string (audit-readable, surfaced in BrpView indicator)
+ *   - source:  'live' when bridge returned a hash; 'unavailable' otherwise
+ *
+ * Per OQ-1 (canonical frozenOutput hash family), GIC chain hash is one of
+ * five candidates the integration ceremony will pick from. Pre-ceremony
+ * incorporation uses GIC for visibility; ceremony may switch.
+ */
+export function useBrpFrozenOutput() {
+  const grind = useGrindChain()
+  const hashHex = grind.data?.latest_gic_hash || null
+  let bytes = null
+  if (hashHex && /^[0-9a-fA-F]{64}$/.test(hashHex)) {
+    bytes = new Uint8Array(32)
+    for (let i = 0; i < 32; i++) {
+      bytes[i] = parseInt(hashHex.slice(i * 2, i * 2 + 2), 16)
+    }
+  }
+  return {
+    bytes,
+    hashHex,
+    source: bytes ? 'live' : 'unavailable',
+    isLoading: grind.isLoading,
+    error: grind.error,
+  }
+}
+
+/**
+ * useEnrollmentStatus — fetches /enrollment/status/{deviceId} and adapts
+ * the bridge's snake_case response to the renderer's EnrollmentSession
+ * shape.
+ *
+ * Note on path prefix: this endpoint lives on the MAIN bridge app
+ * (transports/http.py:819), NOT under the /operator sub-app. So we use
+ * apiGet() directly instead of the get() helper which prepends /operator.
+ * Vite proxies /enrollment → bridge:8080 (see frontend/vite.config.js).
+ *
+ * The bridge endpoint always returns 200 with status='pending' for
+ * unknown devices, so an HTTP 404 path isn't needed — but BridgeOffline
+ * is, in case the bridge is down. We let the error propagate so
+ * react-query holds the last successful response.
+ *
+ * Polling: 30s (slower cadence per LATENCY_BUDGET.md — enrollment progresses
+ * on a per-NOMINAL-session basis, ~10 sessions before credentialing).
+ */
+export function useEnrollmentStatus(deviceId) {
+  return useQuery({
+    queryKey: ['brpEnrollmentStatus', deviceId],
+    queryFn: async () => {
+      const res = await apiGet(`/enrollment/status/${encodeURIComponent(deviceId)}`)
+      // Adapter: snake_case → camelCase to match BRP contracts.ts
+      // EnrollmentSession shape. Bridge fields per
+      // bridge/vapi_bridge/transports/http.py:819+.
+      return {
+        deviceId: res.device_id || deviceId,
+        sessionsNominal: res.sessions_nominal ?? 0,
+        avgHumanity: res.avg_humanity ?? 0,
+        status: res.status || 'pending',
+        requiredSessions: res.sessions_required ?? 10,
+        requiredHumanity: res.humanity_required ?? 0.6,
+      }
+    },
+    enabled: Boolean(deviceId),
+    refetchInterval: 30000,
+    staleTime: 25000,
+    retry: 1,
+  })
+}
+
 // Phase 237-EXTEND — Per-category consent status (read-side).
 // Pairs with useConsentSubmit() (wagmi-write side). The bridge endpoint
 // reads from local consent_ledger; on-chain state is queried separately
