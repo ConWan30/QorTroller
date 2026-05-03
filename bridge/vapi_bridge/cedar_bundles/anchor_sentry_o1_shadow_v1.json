@@ -1,0 +1,114 @@
+{
+  "$schema": "vapi-cedar-bundle-v1",
+  "agent_id": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c",
+  "phase": "O1_SHADOW",
+  "version": 1,
+  "issued_at_iso": "2026-05-03T22:00:00Z",
+  "lane_prefixes": [
+    "events/",
+    "provenance/",
+    "wiki/"
+  ],
+  "policies": [
+    {
+      "id": "P-001",
+      "effect": "permit",
+      "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"},
+      "action": "skill:read",
+      "resource": "lane://wiki/**"
+    },
+    {
+      "id": "P-002",
+      "effect": "permit",
+      "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"},
+      "action": "skill:read",
+      "resource": "lane://provenance/**"
+    },
+    {
+      "id": "P-003",
+      "effect": "permit",
+      "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"},
+      "action": "skill:read",
+      "resource": "lane://events/**"
+    },
+    {
+      "id": "P-004",
+      "effect": "permit",
+      "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"},
+      "action": "tool:iotex-rpc-query",
+      "resource": "chain://iotex-testnet"
+    },
+    {
+      "id": "P-005",
+      "effect": "permit",
+      "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"},
+      "action": "tool:kms-sign",
+      "resource": "draft://shadow_log/*",
+      "constraint": {"shadow_mode": true}
+    },
+    {
+      "id": "P-006",
+      "effect": "permit",
+      "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"},
+      "action": "skill:event-correlation",
+      "resource": "lane://events/**"
+    },
+    {
+      "id": "P-007",
+      "effect": "permit",
+      "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"},
+      "action": "skill:provenance-recording",
+      "resource": "draft://shadow_log/*",
+      "constraint": {"shadow_mode": true}
+    },
+    {
+      "id": "F-001",
+      "effect": "forbid",
+      "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"},
+      "action": "tool:ipfs-pin",
+      "resource": "*"
+    },
+    {
+      "id": "F-002",
+      "effect": "forbid",
+      "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"},
+      "action": "tool:pda-attestation-anchor",
+      "resource": "*"
+    },
+    {
+      "id": "F-003",
+      "effect": "forbid",
+      "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"},
+      "action": "tool:git-push",
+      "resource": "*"
+    },
+    {
+      "id": "F-004",
+      "effect": "forbid",
+      "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"},
+      "action": "tool:git-commit",
+      "resource": "*"
+    },
+    {
+      "id": "F-005",
+      "effect": "forbid",
+      "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"},
+      "action": "endpoint:write",
+      "resource": "*"
+    },
+    {
+      "id": "F-006",
+      "effect": "forbid",
+      "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"},
+      "action": "skill:audit-drafting",
+      "resource": "*"
+    },
+    {
+      "id": "F-007",
+      "effect": "forbid",
+      "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"},
+      "action": "skill:operational-diagnostic",
+      "resource": "*"
+    }
+  ]
+}

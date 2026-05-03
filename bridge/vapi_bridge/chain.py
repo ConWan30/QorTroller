@@ -3686,3 +3686,192 @@ class ChainClient:
         except Exception as e:
             log.debug("get_consent_record call failed: %s", e)
             return {}
+
+    # ------------------------------------------------------------------
+    # Phase O1 C1 — AgentScope (operational) + AgentRegistry (governance) anchors
+    # ------------------------------------------------------------------
+    #
+    # Per V-checks 2026-05-03: deployed AgentScope at
+    # 0xc694692a69bbf1cDAda87d5bc43D345C4579FF13 exposes:
+    #   - getScopeRoot(bytes32 agentId) view returns (bytes32)        [selector 0xa8e82f6c]
+    #   - setAgentScopeRoot(bytes32 agentId, bytes32 scopeRoot) onlyOwner  [selector 0x32a757fd]
+    #   - event AgentScopeRootSet(bytes32 indexed agentId, bytes32 oldRoot, bytes32 newRoot, uint256 ts)
+    #
+    # Deployed AgentRegistry at 0x9548E9d17c2d40350629b1b88ff1D2c01B0414a4 exposes:
+    #   - updateAgentScope(bytes32 agentId, bytes32 newScope) onlyOwner  [selector 0x906516f0]
+    #   - event AgentScopeUpdated(bytes32 indexed agentId, bytes32 oldScope, bytes32 newScope)
+    #
+    # Per D4 + INV-OPERATOR-AGENT-001: cedar_bundle_anchor.anchor_bundle calls
+    # set_agent_scope_root FIRST (operational layer), then
+    # update_agent_scope_governance SECOND (governance layer).  Both inherit
+    # the Phase 237.5 Path C+ chain_submission_paused kill-switch via
+    # _send_tx; reads (get_agent_scope_root) bypass the kill-switch since
+    # they're eth_call (no transaction).
+    #
+    # FAIL-CLOSED on missing address: Phase O1 cannot operate without scope
+    # state, so unlike consent (read-only fail-open), these methods raise
+    # RuntimeError when agent_scope_address / agent_registry_address are unset.
+
+    _AGENT_SCOPE_ABI = [
+        {
+            "name": "owner", "type": "function", "stateMutability": "view",
+            "inputs": [], "outputs": [{"name": "", "type": "address"}],
+        },
+        {
+            "name": "getScopeRoot", "type": "function", "stateMutability": "view",
+            "inputs": [{"name": "agentId", "type": "bytes32"}],
+            "outputs": [{"name": "", "type": "bytes32"}],
+        },
+        {
+            "name": "setAgentScopeRoot", "type": "function", "stateMutability": "nonpayable",
+            "inputs": [
+                {"name": "agentId",   "type": "bytes32"},
+                {"name": "scopeRoot", "type": "bytes32"},
+            ],
+            "outputs": [],
+        },
+        {
+            "anonymous": False, "type": "event", "name": "AgentScopeRootSet",
+            "inputs": [
+                {"indexed": True,  "name": "agentId", "type": "bytes32"},
+                {"indexed": False, "name": "oldRoot", "type": "bytes32"},
+                {"indexed": False, "name": "newRoot", "type": "bytes32"},
+                {"indexed": False, "name": "ts",      "type": "uint256"},
+            ],
+        },
+    ]
+
+    _AGENT_REGISTRY_SCOPE_ABI = [
+        {
+            "name": "updateAgentScope", "type": "function", "stateMutability": "nonpayable",
+            "inputs": [
+                {"name": "agentId",  "type": "bytes32"},
+                {"name": "newScope", "type": "bytes32"},
+            ],
+            "outputs": [],
+        },
+        {
+            "anonymous": False, "type": "event", "name": "AgentScopeUpdated",
+            "inputs": [
+                {"indexed": True,  "name": "agentId",  "type": "bytes32"},
+                {"indexed": False, "name": "oldScope", "type": "bytes32"},
+                {"indexed": False, "name": "newScope", "type": "bytes32"},
+            ],
+        },
+    ]
+
+    @staticmethod
+    def _agent_id_bytes32(agent_id_hex: str) -> bytes:
+        """Accept 0x-prefixed 32-byte hex agentId; return raw bytes32."""
+        s = agent_id_hex.lower()
+        if s.startswith("0x"):
+            s = s[2:]
+        if len(s) != 64:
+            raise RuntimeError(
+                f"agent_id must be 32-byte (64 hex char) value, got {len(s)} chars"
+            )
+        return bytes.fromhex(s)
+
+    async def get_agent_scope_root(self, agent_id_hex: str) -> bytes:
+        """Phase O1 C1 — view: AgentScope.getScopeRoot(bytes32) → bytes32.
+
+        Read-only; bypasses chain_submission_paused (no tx).  Fail-closed:
+        raises RuntimeError if agent_scope_address is unset (Phase O1 cannot
+        operate without scope state).  Returns 32 raw bytes (bytes32(0) if
+        no scope set yet — agents at Phase O0 entry).
+        """
+        addr = getattr(self._cfg, "agent_scope_address", "")
+        if not addr:
+            raise RuntimeError(
+                "get_agent_scope_root: agent_scope_address is not configured "
+                "(Phase O1 cannot operate without on-chain scope state)"
+            )
+        agent_id_bytes = self._agent_id_bytes32(agent_id_hex)
+        contract = self._w3.eth.contract(
+            address=self._w3.to_checksum_address(addr),
+            abi=self._AGENT_SCOPE_ABI,
+        )
+        result = await contract.functions.getScopeRoot(agent_id_bytes).call()
+        return bytes(result)
+
+    async def set_agent_scope_root(self, agent_id_hex: str, root_hex: str) -> dict:
+        """Phase O1 C1 — owner-only: AgentScope.setAgentScopeRoot(bytes32, bytes32).
+
+        OPERATIONAL layer (live read path used by AgentAdjudicationRegistry).
+        Per INV-OPERATOR-AGENT-001, called BEFORE update_agent_scope_governance.
+
+        Returns {tx_hash, block_number, status} on success.
+        Inherits chain_submission_paused kill-switch via _send_tx chokepoint
+        (Phase 237.5 Path C+).
+        """
+        addr = getattr(self._cfg, "agent_scope_address", "")
+        if not addr:
+            raise RuntimeError(
+                "set_agent_scope_root: agent_scope_address is not configured"
+            )
+        agent_id_bytes = self._agent_id_bytes32(agent_id_hex)
+        # Convert root hex (with or without 0x) to bytes32
+        rs = root_hex.lower()
+        if rs.startswith("0x"):
+            rs = rs[2:]
+        if len(rs) != 64:
+            raise RuntimeError(f"root must be 32-byte hex, got {len(rs)} chars")
+        root_bytes = bytes.fromhex(rs)
+        contract = self._w3.eth.contract(
+            address=self._w3.to_checksum_address(addr),
+            abi=self._AGENT_SCOPE_ABI,
+        )
+        # _send_tx expects the function reference + args (not pre-constructed call).
+        # Pattern matches verify_single (line 1127-1132).
+        tx_hash_hex = await self._send_tx(
+            contract.functions.setAgentScopeRoot,
+            agent_id_bytes,
+            root_bytes,
+        )
+        # _send_tx returns hex str; wait_for_transaction_receipt accepts hex str via to_bytes.
+        receipt = await self._w3.eth.wait_for_transaction_receipt(
+            bytes.fromhex(tx_hash_hex.removeprefix("0x"))
+        )
+        return {
+            "tx_hash":      tx_hash_hex,
+            "block_number": int(receipt["blockNumber"]),
+            "status":       int(receipt["status"]),
+        }
+
+    async def update_agent_scope_governance(self, agent_id_hex: str, root_hex: str) -> dict:
+        """Phase O1 C1 — owner-only: AgentRegistry.updateAgentScope(bytes32, bytes32).
+
+        GOVERNANCE layer (slow, change-controlled audit commitment).  Per
+        INV-OPERATOR-AGENT-001, called AFTER set_agent_scope_root.
+
+        Returns {tx_hash, block_number, status} on success.
+        """
+        addr = getattr(self._cfg, "agent_registry_address", "")
+        if not addr:
+            raise RuntimeError(
+                "update_agent_scope_governance: agent_registry_address is not configured"
+            )
+        agent_id_bytes = self._agent_id_bytes32(agent_id_hex)
+        rs = root_hex.lower()
+        if rs.startswith("0x"):
+            rs = rs[2:]
+        if len(rs) != 64:
+            raise RuntimeError(f"root must be 32-byte hex, got {len(rs)} chars")
+        root_bytes = bytes.fromhex(rs)
+        contract = self._w3.eth.contract(
+            address=self._w3.to_checksum_address(addr),
+            abi=self._AGENT_REGISTRY_SCOPE_ABI,
+        )
+        tx_hash_hex = await self._send_tx(
+            contract.functions.updateAgentScope,
+            agent_id_bytes,
+            root_bytes,
+        )
+        receipt = await self._w3.eth.wait_for_transaction_receipt(
+            bytes.fromhex(tx_hash_hex.removeprefix("0x"))
+        )
+        return {
+            "tx_hash":      tx_hash_hex,
+            "block_number": int(receipt["blockNumber"]),
+            "status":       int(receipt["status"]),
+        }

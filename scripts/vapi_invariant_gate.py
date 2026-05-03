@@ -354,6 +354,46 @@ INVARIANTS: list[Invariant] = [
         pattern=r"self\._haptic_tremor_min_hz\s*<=\s*tp\s*<=\s*self\._haptic_tremor_max_hz",
         min_matches=1,
     ),
+    # Phase O1 C1 — freeze Cedar bundle parser primitives (canonicalization,
+    # Merkle root domain tag, frozen enum sets) and dual-anchor sequence.
+    # The bundle Merkle root is the on-chain commitment for each phase
+    # boundary; tampering with these regions silently invalidates every
+    # bundle ever anchored.
+    Invariant(
+        id="INV-CEDAR-001",
+        description="canonical_bytes function in cedar_parser.py — deterministic JSON encoding for Merkle root computation (Phase O1 C1 FROZEN-v1)",
+        file="bridge/vapi_bridge/cedar_parser.py",
+        pattern=r"def canonical_bytes\(bundle: dict\) -> bytes:",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-CEDAR-002",
+        description="VAPI-CEDAR-BUNDLE-v1 domain tag literal pinned in cedar_parser.py — any change requires Cedar bundle v2 + new tag (Phase O1 C1)",
+        file="bridge/vapi_bridge/cedar_parser.py",
+        pattern=r'b"VAPI-CEDAR-BUNDLE-v1"',
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-CEDAR-003",
+        description="VALID_EFFECTS / VALID_CATEGORIES / VALID_SCHEMES / VALID_PHASES frozensets in cedar_parser.py — schema enums frozen, any addition is a bundle v2 break (Phase O1 C1)",
+        file="bridge/vapi_bridge/cedar_parser.py",
+        pattern=r"VALID_EFFECTS\s*=\s*frozenset|VALID_CATEGORIES\s*=\s*frozenset|VALID_SCHEMES\s*=\s*frozenset|VALID_PHASES\s*=\s*frozenset",
+        min_matches=4,
+    ),
+    Invariant(
+        id="INV-OPERATOR-AGENT-001",
+        description="cedar_bundle_anchor.py operational-FIRST sequence: AgentScope.setAgentScopeRoot fires BEFORE AgentRegistry.updateAgentScope (D4 dual-anchor; reversal weakens governance trail)",
+        file="bridge/vapi_bridge/cedar_bundle_anchor.py",
+        pattern=r"AgentScope\.setAgentScopeRoot\s+—\s+operational layer FIRST",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-OPERATOR-AGENT-002",
+        description="operator_agent_activation_log UNIQUE(agent_id, to_scope_root) anti-replay constraint in store.py — each (agent, scope_root) tuple activated exactly once (Phase O1 C1)",
+        file="bridge/vapi_bridge/store.py",
+        pattern=r"UNIQUE\(agent_id, to_scope_root\)",
+        min_matches=1,
+    ),
 ]
 
 
