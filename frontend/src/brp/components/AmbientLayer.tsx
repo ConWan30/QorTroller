@@ -32,7 +32,11 @@ import { Instances, Instance } from "@react-three/drei";
 import type { Group, MeshStandardMaterial } from "three";
 import { deriveBrpSeed } from "../hash/deriveBrpSeed";
 import { mulberry32 } from "../hash/mulberry32";
-import type { OrientationSignal, PulseSignal } from "../telemetry/contracts";
+import type {
+  HostStateSignal,
+  OrientationSignal,
+  PulseSignal,
+} from "../telemetry/contracts";
 
 // -----------------------------------------------------------------------------
 // Pure-function instance-parameter generator.
@@ -96,6 +100,8 @@ export interface AmbientLayerProps {
   readonly pulse?: PulseSignal;
   /** Optional commit-ζ orientation signal; lerped X/Z tilt overlay. */
   readonly orientation?: OrientationSignal;
+  /** Optional commit-ι host-state signal; selects emissive palette. */
+  readonly hostState?: HostStateSignal;
 }
 
 /**
@@ -151,16 +157,71 @@ const PULSE_DURATION_MS = 500;
 const ORIENTATION_TILT_SCALE = 0.5;
 const ORIENTATION_LERP_RATE = 5.0;
 
+/**
+ * Commit ι host-state palette.
+ *
+ * The mesh's resting `color` (diffuse) and `emissive` (glow) are selected
+ * from this lookup based on the host-state classification. Each palette
+ * entry is pre-validated against the WCAG 2.3.1 saturated-red guard
+ * (no entry has R-channel dominance > 0.6 of total RGB sum).
+ *
+ * EXCLUSIVE_USB and UNKNOWN share the base steel-blue palette (commit δ
+ * baseline) because UNKNOWN is the bridge's "no signal yet" state — using
+ * the healthy palette as the optimistic default avoids false alarm on
+ * cold-start. Phase 234.7 PCC explicitly classifies UNKNOWN as
+ * grind-eligible alongside EXCLUSIVE_USB.
+ *
+ * Color transition is one-shot per host-state change (capped at 3s
+ * polling cadence — well under G19 3 Hz cap). This is a step transition
+ * on the material color property, NOT an oscillating animation, so the
+ * sceneFlashBudget AMBIENT_LAYER_MATERIAL frequency_hz descriptor (0.5)
+ * still bounds the worst case.
+ */
+interface PaletteEntry {
+  readonly color: string;
+  readonly emissive: string;
+}
+
+const BASE_PALETTE: PaletteEntry = { color: "#5a8fb8", emissive: "#1a3a5a" };
+const BT_PALETTE: PaletteEntry = { color: "#b8965a", emissive: "#5a3e1a" };
+const CONTESTED_PALETTE: PaletteEntry = { color: "#888888", emissive: "#333333" };
+const DISCONNECTED_PALETTE: PaletteEntry = { color: "#444444", emissive: "#1a1a1a" };
+
+function paletteFor(kind: string): PaletteEntry {
+  switch (kind) {
+    case "EXCLUSIVE_USB":
+    case "UNKNOWN":
+      return BASE_PALETTE;
+    case "EXCLUSIVE_BT":
+      return BT_PALETTE;
+    case "CONTESTED":
+    case "DEGRADED":
+      return CONTESTED_PALETTE;
+    case "DISCONNECTED":
+      return DISCONNECTED_PALETTE;
+    default:
+      return BASE_PALETTE;
+  }
+}
+
 export function AmbientLayer({
   frozenOutput,
   instanceCount = DEFAULT_INSTANCE_COUNT,
   pulse,
   orientation,
+  hostState,
 }: AmbientLayerProps): JSX.Element {
   const seed = useMemo(() => deriveBrpSeed(frozenOutput), [frozenOutput]);
   const params = useMemo(
     () => seedToInstanceParams(seed, instanceCount),
     [seed, instanceCount],
+  );
+
+  // Commit ι: select palette based on host-state. Falls back to
+  // base steel-blue when prop is omitted or kind is unrecognized.
+  const palette = useMemo(
+    () => (hostState ? paletteFor(hostState.kind) : BASE_PALETTE),
+    [hostState],
   );
 
   // Group ref allows a single transform on all instances. drei's <Instances>
@@ -238,8 +299,8 @@ export function AmbientLayer({
         <icosahedronGeometry args={[0.04, 0]} />
         <meshStandardMaterial
           ref={materialRef}
-          color="#5a8fb8"
-          emissive="#1a3a5a"
+          color={palette.color}
+          emissive={palette.emissive}
           emissiveIntensity={BASE_EMISSIVE_INTENSITY}
           metalness={0.2}
           roughness={0.7}

@@ -27,6 +27,7 @@ import {
   useBrpFrozenOutput,
   useBrpRecentRecords,
   useBrpRecordPulse,
+  useCaptureHealth,
   useEnrollmentStatus,
 } from '../api/bridgeApi'
 
@@ -135,6 +136,7 @@ export function BrpView() {
   const recordPulse = useBrpRecordPulse()
   const controllerOrientation = useBrpControllerOrientation(activeDeviceId)
   const recentRecords = useBrpRecentRecords(activeDeviceId)
+  const captureHealth = useCaptureHealth()
 
   // Resolve frozenOutput: live bytes when chain has a hash; locked-seed
   // canonical fallback otherwise.
@@ -243,6 +245,36 @@ export function BrpView() {
     return `${recordsData.records.length} recent · ${rate} · ${ageStr}${anomalyTag}`
   })()
 
+  // Commit ι: capture-health palette wiring. The bridge's PCC subsystem
+  // (Phase 234.7) classifies host-state from HID poll-rate CV. We forward
+  // the kind to BrpMount so the ambient mesh's emissive palette reflects
+  // controller<->bridge link health. Omit prop when no health data exists
+  // so the renderer stays on the base steel-blue palette.
+  const captureData = captureHealth.data
+  const hostState = captureData?.host_state
+    ? {
+        kind: captureData.host_state,
+        captureState: captureData.capture_state || 'NOMINAL',
+      }
+    : undefined
+  const hostStateSourceKind = captureData?.host_state
+    ? 'live'
+    : captureHealth.error
+      ? 'live-fallback'
+      : 'synth'
+  const hostStateLabel = (() => {
+    if (!captureData) {
+      return captureHealth.isLoading ? 'loading capture-health…' : 'no capture-health data'
+    }
+    const host = captureData.host_state || 'UNKNOWN'
+    const cap = captureData.capture_state || 'UNKNOWN'
+    const rate = typeof captureData.poll_rate_hz === 'number'
+      ? `${captureData.poll_rate_hz.toFixed(0)}Hz`
+      : '—'
+    const ready = captureData.grind_ready ? 'grind-ready' : 'not-ready'
+    return `${host} · ${cap} · ${rate} · ${ready}`
+  })()
+
   return (
     <div
       data-testid="brp-view-root"
@@ -321,6 +353,11 @@ export function BrpView() {
           <span style={{ color: '#aab' }}>session</span>
           <span style={{ color: '#dde' }}>{sessionLabel}</span>
         </div>
+        <div style={ROW_STYLE}>
+          <SourceBadge kind={hostStateSourceKind} />
+          <span style={{ color: '#aab' }}>host-state</span>
+          <span style={{ color: '#dde' }}>{hostStateLabel}</span>
+        </div>
       </header>
 
       {/* The actual renderer.
@@ -342,6 +379,7 @@ export function BrpView() {
               liveness={liveness}
               {...(pulse ? { pulse } : {})}
               {...(orientation ? { orientation } : {})}
+              {...(hostState ? { hostState } : {})}
             />
           </Suspense>
         </div>
