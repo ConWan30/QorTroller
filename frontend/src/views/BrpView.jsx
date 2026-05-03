@@ -25,6 +25,7 @@ import {
   useBrpControllerOrientation,
   useBrpDeviceDiscovery,
   useBrpFrozenOutput,
+  useBrpRecentRecords,
   useBrpRecordPulse,
   useEnrollmentStatus,
 } from '../api/bridgeApi'
@@ -133,6 +134,7 @@ export function BrpView() {
   const enrollmentQuery = useEnrollmentStatus(activeDeviceId)
   const recordPulse = useBrpRecordPulse()
   const controllerOrientation = useBrpControllerOrientation(activeDeviceId)
+  const recentRecords = useBrpRecentRecords(activeDeviceId)
 
   // Resolve frozenOutput: live bytes when chain has a hash; locked-seed
   // canonical fallback otherwise.
@@ -214,6 +216,33 @@ export function BrpView() {
         ? 'discovering…'
         : 'no devices in bridge → using placeholder device_id'
 
+  // Commit θ: per-device recent-records indicator. liveDeviceId gates LIVE
+  // posture; placeholder fallback reads the synthetic device's records
+  // (bridge returns []) which we surface as 'no recent records'.
+  const recordsData = recentRecords.data
+  const sessionSourceKind = liveDeviceId && recordsData?.records?.length > 0
+    ? 'live'
+    : recentRecords.error
+      ? 'live-fallback'
+      : 'synth'
+  const sessionLabel = (() => {
+    if (!recordsData) return recentRecords.isLoading ? 'loading…' : 'no data'
+    if (recordsData.records.length === 0) {
+      return liveDeviceId ? 'no records yet for this device' : 'no records (placeholder device)'
+    }
+    const ageS = recordsData.lastRecordAgeMs != null
+      ? Math.round(recordsData.lastRecordAgeMs / 1000)
+      : null
+    const ageStr = ageS != null ? `last ${ageS}s ago` : 'no timestamp'
+    const rate = recordsData.recordsPerMinute > 0
+      ? `~${recordsData.recordsPerMinute}/min`
+      : 'no rate'
+    const anomalyTag = recordsData.anomalyCount > 0
+      ? ` · ${recordsData.anomalyCount} anomaly`
+      : ''
+    return `${recordsData.records.length} recent · ${rate} · ${ageStr}${anomalyTag}`
+  })()
+
   return (
     <div
       data-testid="brp-view-root"
@@ -286,6 +315,11 @@ export function BrpView() {
           <SourceBadge kind={orientationSourceKind} />
           <span style={{ color: '#aab' }}>orientation</span>
           <span style={{ color: '#dde' }}>{orientationLabel}</span>
+        </div>
+        <div style={ROW_STYLE}>
+          <SourceBadge kind={sessionSourceKind} />
+          <span style={{ color: '#aab' }}>session</span>
+          <span style={{ color: '#dde' }}>{sessionLabel}</span>
         </div>
       </header>
 
