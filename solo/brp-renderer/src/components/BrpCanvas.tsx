@@ -30,6 +30,7 @@
 import { Canvas } from "@react-three/fiber";
 import { useMotionContext } from "./AccessibilityShell";
 import { AmbientLayer } from "./AmbientLayer";
+import type { PulseSignal } from "../telemetry/contracts";
 
 /**
  * Pure helper: mode mapping. Extracted as a named export so unit tests can
@@ -46,11 +47,14 @@ export function computeFrameloop(motionShouldPause: boolean): "always" | "never"
 export interface BrpCanvasProps {
   readonly frozenOutput: Uint8Array;
   readonly instanceCount?: number;
+  /** Optional commit-ε pulse signal threaded through to AmbientLayer. */
+  readonly pulse?: PulseSignal;
 }
 
 export function BrpCanvas({
   frozenOutput,
   instanceCount,
+  pulse,
 }: BrpCanvasProps): JSX.Element {
   const { motionShouldPause } = useMotionContext();
   const frameloop = computeFrameloop(motionShouldPause);
@@ -75,6 +79,7 @@ export function BrpCanvas({
         <AmbientLayer
           frozenOutput={frozenOutput}
           {...(instanceCount !== undefined ? { instanceCount } : {})}
+          {...(pulse ? { pulse } : {})}
         />
       </Canvas>
     </div>

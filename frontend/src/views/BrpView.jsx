@@ -21,7 +21,11 @@ import {
   getMockEnrollmentSession,
   getMockPitlSnapshot,
 } from '../brp/mocks/loaders'
-import { useBrpFrozenOutput, useEnrollmentStatus } from '../api/bridgeApi'
+import {
+  useBrpFrozenOutput,
+  useBrpRecordPulse,
+  useEnrollmentStatus,
+} from '../api/bridgeApi'
 
 // Synthetic device_id from the vendored fixture. Bridge will return
 // 'pending' status for unknown device — the hook's adapter shapes
@@ -113,6 +117,7 @@ function LiveFalseBadge() {
 export function BrpView() {
   const frozen = useBrpFrozenOutput()
   const enrollmentQuery = useEnrollmentStatus(PLACEHOLDER_DEVICE_ID)
+  const recordPulse = useBrpRecordPulse()
 
   // Resolve frozenOutput: live bytes when chain has a hash; locked-seed
   // canonical fallback otherwise.
@@ -143,6 +148,25 @@ export function BrpView() {
 
   // Per Block W: liveness flags all false until ceremony audit.
   const liveness = { ambient: false, legibility: false, telemetry: false }
+
+  // Pulse prop is forwarded to BrpMount only when the WebSocket has produced
+  // at least one event. lastPulseTs starts at 0; sending pulse={ts:0,...} on
+  // first render would trigger a no-op pulse (ts > 0 check inside AmbientLayer
+  // skips it), but we omit the prop entirely to keep the wiring honest:
+  // when no pulse stream exists, the renderer is in rotation-only mode.
+  const pulse = recordPulse.lastPulseTs > 0
+    ? { ts: recordPulse.lastPulseTs, intensity: 1 }
+    : undefined
+  const pulseSourceKind = recordPulse.connected
+    ? 'live'
+    : recordPulse.lastPulseTs > 0
+      ? 'live-fallback'
+      : 'synth'
+  const pulseLabel = recordPulse.connected
+    ? `WS connected · ${recordPulse.pulseCount} records`
+    : recordPulse.lastPulseTs > 0
+      ? `WS dropped · last ${recordPulse.pulseCount} records, reconnecting`
+      : 'WS not connected (no /ws/records broadcast yet)'
 
   return (
     <div
@@ -202,19 +226,34 @@ export function BrpView() {
           <span style={{ color: '#aab' }}>aidThreshold</span>
           <span style={{ color: '#dde' }}>{AID_THRESHOLD} · Block Z placeholder</span>
         </div>
+        <div style={ROW_STYLE}>
+          <SourceBadge kind={pulseSourceKind} />
+          <span style={{ color: '#aab' }}>pulse</span>
+          <span style={{ color: '#dde' }}>{pulseLabel}</span>
+        </div>
       </header>
 
-      {/* The actual renderer */}
-      <main style={{ flex: 1, position: 'relative' }}>
-        <Suspense fallback={null}>
-          <BrpMount
-            frozenOutput={frozenBytes}
-            pitlSnapshot={pitlSnapshot}
-            enrollmentSession={enrollmentSession}
-            aidThreshold={AID_THRESHOLD}
-            liveness={liveness}
-          />
-        </Suspense>
+      {/* The actual renderer.
+          AccessibilityShell's outer <div role="presentation"> has no width/
+          height styling (it's DOM-only by design). When BrpMount nests a
+          height:100% div inside it, the percentage resolves against `auto`
+          and collapses to 0 — the WebGL canvas renders into a 0x0 box and
+          appears blank. Wrapping in a position:absolute inset:0 div forces
+          explicit pixel dimensions from <main>'s position:relative, so the
+          height:100% cascade has a real reference. */}
+      <main style={{ flex: 1, position: 'relative', minHeight: 0 }}>
+        <div style={{ position: 'absolute', inset: 0 }}>
+          <Suspense fallback={null}>
+            <BrpMount
+              frozenOutput={frozenBytes}
+              pitlSnapshot={pitlSnapshot}
+              enrollmentSession={enrollmentSession}
+              aidThreshold={AID_THRESHOLD}
+              liveness={liveness}
+              {...(pulse ? { pulse } : {})}
+            />
+          </Suspense>
+        </div>
       </main>
     </div>
   )
