@@ -1,0 +1,31 @@
+{
+  "name": "vapi-brp-renderer-solo",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Out-of-band solo track for the BRP Calibration-Legibility & Hash-Seeded Ambient Renderer. NOT a phase. NOT in the sequential VAPI protocol chain. Every surface ships live: false until integration ceremony.",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint \"src/**/*.ts\" \"pv-ci-drafts/**/*.ts\""
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^9.0.0",
+    "typescript": "^5.6.0",
+    "viem": "^2.18.0",
+    "vitest": "^2.0.0"
+  },
+  "dependencies": {},
+  "engines": {
+    "node": ">=20"
+  },
+  "_isolation": {
+    "monorepo_dependency_edges": "none",
+    "submodule": "none",
+    "symlink": "none",
+    "decision_ref": "D1 (1-A) — solo/brp-renderer/ sibling to frontend/, no edges into protocol monorepo"
+  }
+}
