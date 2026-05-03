@@ -17,6 +17,7 @@
 
 import { Suspense, useState } from 'react'
 import { BrpMount } from '../brp/components/BrpMount'
+import { FONTS } from '../shared/design/tokens'
 import {
   getMockEnrollmentSession,
   getMockPitlSnapshot,
@@ -374,12 +375,13 @@ export function BrpView() {
         >
           <span
             style={{
-              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+              fontFamily: FONTS.mono,
               fontSize: 8,
               color: '#5a8fb8',
               letterSpacing: '0.16em',
               writingMode: 'vertical-rl',
               transform: 'rotate(180deg)',
+              fontWeight: 500,
             }}
           >
             {drawerOpen ? 'BRP ▶' : 'BRP ◀'}
@@ -399,7 +401,7 @@ export function BrpView() {
             background: '#0a0e14',
             borderRight: '1px solid rgba(90, 143, 184, 0.25)',
             color: '#cce',
-            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+            fontFamily: FONTS.mono,
             fontSize: '0.78rem',
             padding: '16px 16px',
             overflowY: 'auto',

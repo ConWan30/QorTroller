@@ -296,7 +296,7 @@ export function AmbientLayer({
     <group ref={groupRef}>
       <Instances limit={instanceCount} range={instanceCount}>
         {/* Low-poly icosahedron — 12 vertices, 20 faces. */}
-        <icosahedronGeometry args={[0.12, 0]} />
+        <icosahedronGeometry args={[0.08, 0]} />
         <meshStandardMaterial
           ref={materialRef}
           color={palette.color}
