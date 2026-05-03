@@ -31,13 +31,15 @@
     },
     "BrpCanvas": {
       "live": false,
-      "reason": "not-yet-implemented",
-      "implemented": false
+      "reason": "implemented-pre-ceremony",
+      "implemented": true,
+      "path": "src/components/BrpCanvas.tsx"
     },
     "AmbientLayer": {
       "live": false,
-      "reason": "not-yet-implemented",
-      "implemented": false
+      "reason": "implemented-pre-ceremony",
+      "implemented": true,
+      "path": "src/components/AmbientLayer.tsx"
     },
     "LegibilityOverlay": {
       "live": false,
@@ -74,6 +76,12 @@
       "reason": "implemented-pure-function-form-no-r3f-yet",
       "implemented": true,
       "path": "src/hash/flashBudget.ts"
+    },
+    "sceneFlashBudget": {
+      "live": false,
+      "reason": "implemented-pre-ceremony",
+      "implemented": true,
+      "path": "src/hash/sceneFlashBudget.ts"
     }
   },
   "fixtures": {},

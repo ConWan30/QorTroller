@@ -5,48 +5,56 @@
 // main.tsx — the protocol monorepo's apps/gamer-portal/ build is the eventual
 // production entry; this file is the renderer's standalone dev harness.
 //
-// 4a ships the AccessibilityShell wrapping a placeholder text block so the
-// shell wiring, prop contract, and tsx build pipeline are end-to-end testable
-// in a real browser via `npm run dev`. The R3F canvas surface arrives in 4b.
+// 4b mounts <BrpCanvas /> inside <AccessibilityShell /> with a deterministic
+// 32-zero-byte frozenOutput. The locked seed (0x87b0f938 per
+// deriveBrpSeed.test.ts canonical-vector lock) is what the dev surface
+// visualizes — every reload produces the same 64-instance ambient mesh,
+// so the operator can verify the seed→visual chain by eye.
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { AccessibilityShell } from "./components/AccessibilityShell";
+import { BrpCanvas } from "./components/BrpCanvas";
 
 const rootEl = document.getElementById("root");
 if (!rootEl) {
   throw new Error("missing #root element in index.html");
 }
 
+// Canonical 32-zero-byte demo input. Locked seed per
+// deriveBrpSeed.test.ts: 0x87b0f938.
+const DEMO_FROZEN_OUTPUT = new Uint8Array(32);
+
 createRoot(rootEl).render(
   <StrictMode>
-    <AccessibilityShell>
-      <div
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "#0a0e14",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      <header
         style={{
-          padding: "1rem",
+          padding: "0.75rem 1rem",
           fontFamily: "system-ui, -apple-system, sans-serif",
-          maxWidth: "60ch",
-          lineHeight: 1.5,
+          fontSize: "0.85rem",
+          color: "#aab",
+          background: "#0c1320",
+          borderBottom: "1px solid #1a2030",
         }}
       >
-        <h1 style={{ fontSize: "1.25rem", marginBottom: "0.5rem" }}>
-          BRP Renderer — dev surface
-        </h1>
-        <p>
-          Track classification: <strong>out-of-band-solo</strong>. This is the
-          standalone dev harness for the BRP renderer. No R3F canvas mounts at
-          this commit (4a); the canvas surface arrives in 4b. See{" "}
-          <code>solo/brp-renderer/README.md</code> for per-commit scope.
-        </p>
-        <p>
-          The visible "Motion: ON / OFF" button above is the WCAG 2.2.2
-          photosensitivity-safety mechanism. The shell&apos;s root carries{" "}
-          <code>role=&quot;presentation&quot;</code> +{" "}
-          <code>data-live=&quot;false&quot;</code>. Both invariants are
-          asserted by{" "}
-          <code>src/components/__tests__/AccessibilityShell.test.tsx</code>.
-        </p>
-      </div>
-    </AccessibilityShell>
+        BRP Renderer — out-of-band-solo dev surface. live:false. seed=
+        <code>0x87b0f938</code> (32-zero-byte canonical vector). See{" "}
+        <code>solo/brp-renderer/README.md</code>.
+      </header>
+      <main style={{ flex: 1, position: "relative" }}>
+        <AccessibilityShell>
+          <BrpCanvas frozenOutput={DEMO_FROZEN_OUTPUT} />
+        </AccessibilityShell>
+      </main>
+    </div>
   </StrictMode>,
 );
