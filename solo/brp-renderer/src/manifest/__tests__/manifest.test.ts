@@ -153,4 +153,16 @@ describe("brp.manifest.json — schema and honesty-first posture", () => {
       expect((docs[required]!["path"] as string).endsWith(".md")).toBe(true);
     }
   });
+
+  // --- Commit 4a addition: implementation-progression assertion ---
+
+  it("Commit 4a — AccessibilityShell.implemented flips to true; live stays false", () => {
+    const m = manifest as Record<string, unknown>;
+    const components = m["components"] as Record<string, Record<string, unknown>>;
+    const shell = components["AccessibilityShell"]!;
+    expect(shell["implemented"]).toBe(true);
+    expect(shell["live"]).toBe(false);
+    expect(typeof shell["path"]).toBe("string");
+    expect(shell["path"]).toBe("src/components/AccessibilityShell.tsx");
+  });
 });
