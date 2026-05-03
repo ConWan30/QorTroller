@@ -23,14 +23,17 @@ import {
 } from '../brp/mocks/loaders'
 import {
   useBrpControllerOrientation,
+  useBrpDeviceDiscovery,
   useBrpFrozenOutput,
   useBrpRecordPulse,
   useEnrollmentStatus,
 } from '../api/bridgeApi'
 
-// Synthetic device_id from the vendored fixture. Bridge will return
-// 'pending' status for unknown device — the hook's adapter shapes
-// that into a valid EnrollmentSession either way.
+// Synthetic device_id from the vendored fixture. Used as fallback when
+// useBrpDeviceDiscovery (commit η) cannot resolve a live device_id from
+// the bridge — e.g., when the bridge is offline OR no controller has ever
+// connected. Bridge returns 'pending' status for unknown device IDs, so
+// the synthetic placeholder still produces valid EnrollmentSession shapes.
 const PLACEHOLDER_DEVICE_ID =
   '0x0000000000000000000000000000000000000000000000000000000000000001'
 
@@ -116,10 +119,20 @@ function LiveFalseBadge() {
 }
 
 export function BrpView() {
+  // Commit η: device discovery first; downstream hooks consume the
+  // discovered ID. When discovery returns null (bridge offline OR no
+  // controller seen), fall back to PLACEHOLDER_DEVICE_ID — the bridge
+  // returns synthetic-shaped data for unknown IDs, so downstream hooks
+  // continue working without errors. Per-prop indicator badges show
+  // whether each is on a live or fallback device_id.
+  const deviceQuery = useBrpDeviceDiscovery()
+  const liveDeviceId = deviceQuery.data?.deviceId ?? null
+  const activeDeviceId = liveDeviceId ?? PLACEHOLDER_DEVICE_ID
+
   const frozen = useBrpFrozenOutput()
-  const enrollmentQuery = useEnrollmentStatus(PLACEHOLDER_DEVICE_ID)
+  const enrollmentQuery = useEnrollmentStatus(activeDeviceId)
   const recordPulse = useBrpRecordPulse()
-  const controllerOrientation = useBrpControllerOrientation(PLACEHOLDER_DEVICE_ID)
+  const controllerOrientation = useBrpControllerOrientation(activeDeviceId)
 
   // Resolve frozenOutput: live bytes when chain has a hash; locked-seed
   // canonical fallback otherwise.
@@ -184,8 +197,22 @@ export function BrpView() {
   const orientationLabel = controllerOrientation.orientation
     ? `pitch ${controllerOrientation.orientation.pitch.toFixed(2)}rad · roll ${controllerOrientation.orientation.roll.toFixed(2)}rad · ${controllerOrientation.framesReceived} frames`
     : controllerOrientation.connected
-      ? 'WS connected · no twin frames for placeholder device_id yet'
+      ? `WS connected · no twin frames yet (device ${liveDeviceId ? 'discovered' : 'placeholder'})`
       : 'WS not connected (no /ws/twin broadcast)'
+
+  // Commit η: device discovery indicator.
+  const deviceSourceKind = liveDeviceId
+    ? 'live'
+    : deviceQuery.error
+      ? 'live-fallback'
+      : 'synth'
+  const deviceLabel = liveDeviceId
+    ? `${liveDeviceId.slice(0, 10)}…${liveDeviceId.slice(-8)} · ${deviceQuery.data.deviceCount} device(s) seen`
+    : deviceQuery.error
+      ? 'bridge offline → using placeholder device_id'
+      : deviceQuery.isLoading
+        ? 'discovering…'
+        : 'no devices in bridge → using placeholder device_id'
 
   return (
     <div
@@ -223,6 +250,11 @@ export function BrpView() {
           <LiveFalseBadge />
         </div>
 
+        <div style={ROW_STYLE}>
+          <SourceBadge kind={deviceSourceKind} />
+          <span style={{ color: '#aab' }}>device</span>
+          <span style={{ color: '#dde' }}>{deviceLabel}</span>
+        </div>
         <div style={ROW_STYLE}>
           <SourceBadge kind={frozenSourceKind} />
           <span style={{ color: '#aab' }}>frozenOutput</span>
