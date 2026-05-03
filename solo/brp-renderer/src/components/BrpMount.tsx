@@ -80,6 +80,7 @@ export function BrpMount(props: BrpMountProps): JSX.Element {
     aidThreshold,
     liveness,
     pulse,
+    orientation,
   } = props;
 
   return (
@@ -98,7 +99,11 @@ export function BrpMount(props: BrpMountProps): JSX.Element {
           minHeight: "320px",
         }}
       >
-        <BrpCanvas frozenOutput={frozenOutput} {...(pulse ? { pulse } : {})} />
+        <BrpCanvas
+          frozenOutput={frozenOutput}
+          {...(pulse ? { pulse } : {})}
+          {...(orientation ? { orientation } : {})}
+        />
         <LegibilityOverlay
           pitlSnapshot={pitlSnapshot}
           aidThreshold={aidThreshold}
