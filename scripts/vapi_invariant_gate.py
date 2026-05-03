@@ -322,6 +322,38 @@ INVARIANTS: list[Invariant] = [
         pattern=r'b"VAPI-PHYSICAL-DATA-ATTESTATION-v1"',
         min_matches=1,
     ),
+    # Phase 235-PCC-SPC — freeze SPC classifier interface and 3-signal haptic-tolerance binding.
+    # The SPC bands + outlier trim (INV-PCC-002), fail-closed disconnect precedence (INV-PCC-003),
+    # 3-signal binding (INV-PCC-004), and frequency-band gate (INV-PCC-005) are all load-bearing
+    # against bot exploits.  Tampering with any of these regions weakens the PCC integrity gate.
+    Invariant(
+        id="INV-PCC-002",
+        description="update_sample signature includes kw-only-with-default game-context params (trigger_active, accel_var, tremor_peak_hz) preserving Phase 234.7 backward compat (Phase 235-PCC-SPC)",
+        file="bridge/vapi_bridge/capture_continuity.py",
+        pattern=r"trigger_active:\s*bool\s*=\s*False|accel_var:\s*float\s*=\s*0\.0|tremor_peak_hz:\s*float\s*=\s*0\.0",
+        min_matches=3,
+    ),
+    Invariant(
+        id="INV-PCC-003",
+        description="signal_disconnect ALWAYS overrides SPC classification — explicit disconnect cannot be masked by in-control capability or haptic-tolerance binding (Phase 235-PCC-SPC fail-closed)",
+        file="bridge/vapi_bridge/capture_continuity.py",
+        pattern=r"if self\._spc_enabled and not self\._disconnect_reason:",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-PCC-004",
+        description="3-signal haptic-tolerance binding requires ALL of: trigger_active=True AND accel_var>=threshold AND frequency-band-valid AND tolerance_window<=cap (Phase 235-PCC-SPC Assurance A)",
+        file="bridge/vapi_bridge/capture_continuity.py",
+        pattern=r"def _haptic_tolerance_active",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-PCC-005",
+        description="haptic-tolerance frequency-band gate constrains tremor_peak_hz to [pcc_haptic_tremor_min_hz, pcc_haptic_tremor_max_hz] (Phase 235-PCC-SPC OTHER-class exclusion against low-frequency spoofing)",
+        file="bridge/vapi_bridge/capture_continuity.py",
+        pattern=r"self\._haptic_tremor_min_hz\s*<=\s*tp\s*<=\s*self\._haptic_tremor_max_hz",
+        min_matches=1,
+    ),
 ]
 
 
