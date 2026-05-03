@@ -1,0 +1,127 @@
+{
+  "version": "0.1.0",
+  "track_classification": "out-of-band-solo",
+  "phase_number": null,
+  "track_disclaimer": "This is the BRP Calibration-Legibility & Hash-Seeded Ambient Renderer solo track. NOT Phase 241. NOT in the sequential VAPI protocol chain. Integrates downstream of Phase O0 (vapi-anchor-sentry + vapi-guardian) once that foundation is live.",
+  "hash_library": {
+    "name": "viem",
+    "version_constraint": "^2.18.0",
+    "exports_used": ["keccak256", "toBytes", "concat"],
+    "substituted_from": "ethers@6",
+    "substitution_reason": "bundle-budget — viem already provides keccak256; adding ethers would cost ~280 KB. Decision D3 from verification checkpoint. Bit-equivalence to ethers form is enforced by deriveBrpSeed.test.ts canonical-vector test."
+  },
+  "hash_domain": {
+    "string": "VAPI-BRP-RENDER-v1",
+    "purpose": "domain separation between renderer-side hashes and any FROZEN-v1 protocol primitive preimage space",
+    "reserved_at_ceremony": false,
+    "collision_check_against_existing_v1_tags": [
+      "VAPI-CONSENT-v1",
+      "VAPI-CORPUS-SNAPSHOT-v1",
+      "VAPI-VAME-v1",
+      "VAPI-WEC-GENESIS-v1",
+      "VAPI-GIC-GENESIS-v1"
+    ],
+    "collision_status": "no-prefix-overlap"
+  },
+  "components": {
+    "BrpMount": {
+      "live": false,
+      "reason": "awaiting-O0-integration",
+      "implemented": false
+    },
+    "BrpCanvas": {
+      "live": false,
+      "reason": "not-yet-implemented",
+      "implemented": false
+    },
+    "AmbientLayer": {
+      "live": false,
+      "reason": "not-yet-implemented",
+      "implemented": false
+    },
+    "LegibilityOverlay": {
+      "live": false,
+      "reason": "not-yet-implemented",
+      "implemented": false
+    },
+    "AccessibilityShell": {
+      "live": false,
+      "reason": "not-yet-implemented",
+      "implemented": false
+    },
+    "PerfOverlay": {
+      "live": false,
+      "reason": "not-yet-implemented",
+      "implemented": false
+    }
+  },
+  "modules": {
+    "deriveBrpSeed": {
+      "live": false,
+      "reason": "implemented-but-no-live-telemetry-source",
+      "implemented": true,
+      "path": "src/hash/deriveBrpSeed.ts"
+    },
+    "mulberry32": {
+      "live": false,
+      "reason": "implemented-but-no-live-telemetry-source",
+      "implemented": true,
+      "path": "src/hash/mulberry32.ts"
+    },
+    "flashBudget": {
+      "live": false,
+      "reason": "implemented-pure-function-form-no-r3f-yet",
+      "implemented": true,
+      "path": "src/hash/flashBudget.ts"
+    }
+  },
+  "fixtures": {},
+  "adapters": {},
+  "pv_ci_drafts": {
+    "INV-BRP-1": {
+      "live": false,
+      "reason": "drafted-not-adopted — PV-CI gate at N=28 at this commit; ceremony adopts at N+5",
+      "summary": "Live-flag honesty: every BRP-namespaced React component must render data-live attribute matching its manifest entry.",
+      "drafted_at": "pv-ci-drafts/inv-brp-1.spec.ts",
+      "added_to_pv_ci_gate": false
+    },
+    "INV-BRP-2": {
+      "live": false,
+      "reason": "drafted-not-adopted — PV-CI gate at N=28 at this commit; ceremony adopts at N+5",
+      "summary": "Verification-downstream import boundary: no module under src/brp/** may import poac/vhp/consensus/zk modules.",
+      "drafted_at": "pv-ci-drafts/inv-brp-2.spec.ts",
+      "added_to_pv_ci_gate": false
+    },
+    "INV-BRP-3": {
+      "live": false,
+      "reason": "drafted-not-adopted — PV-CI gate at N=28 at this commit; ceremony adopts at N+5",
+      "summary": "Hash-domain isolation: every keccak256/poseidon call from BRP code must pass through deriveBrpSeed which prepends VAPI-BRP-RENDER-v1.",
+      "drafted_at": "pv-ci-drafts/inv-brp-3.spec.ts",
+      "added_to_pv_ci_gate": false
+    },
+    "INV-BRP-4": {
+      "live": false,
+      "reason": "drafted-not-adopted — PV-CI gate at N=28 at this commit; ceremony adopts at N+5",
+      "summary": "Photosensitivity budget: flashBudget analyzer must pass — <3 Hz luminance OR |ΔL| < 0.10 OR area < 87,296 CSS px² for every animated material.",
+      "drafted_at": "pv-ci-drafts/inv-brp-4.spec.ts",
+      "added_to_pv_ci_gate": false
+    },
+    "INV-BRP-5": {
+      "live": false,
+      "reason": "drafted-not-adopted — PV-CI gate at N=28 at this commit; ceremony adopts at N+5",
+      "summary": "Accessibility surface: every BRP canvas root must carry role=presentation aria-hidden=true with sibling DOM description; axe-core zero violations on non-canvas chrome.",
+      "drafted_at": "pv-ci-drafts/inv-brp-5.spec.ts",
+      "added_to_pv_ci_gate": false
+    }
+  },
+  "live_flag_transition_rules": {
+    "summary": "Transition to live:true is gated on three preconditions that must all hold at the integration ceremony.",
+    "preconditions": [
+      "(a) the upstream telemetry source for this surface is itself live:true in the post-O0 manifest",
+      "(b) the surface has been audited at the ceremony as honesty-first compliant",
+      "(c) PV-CI INV-BRP-1 (the live-flag invariant) has been added and is passing"
+    ],
+    "no_unilateral_flip": true,
+    "default_state_until_ceremony": false
+  }
+}
