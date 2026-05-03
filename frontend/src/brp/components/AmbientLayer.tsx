@@ -36,6 +36,7 @@ import type {
   HostStateSignal,
   OrientationSignal,
   PulseSignal,
+  TrustSignal,
 } from "../telemetry/contracts";
 
 // -----------------------------------------------------------------------------
@@ -102,6 +103,8 @@ export interface AmbientLayerProps {
   readonly orientation?: OrientationSignal;
   /** Optional commit-ι host-state signal; selects emissive palette. */
   readonly hostState?: HostStateSignal;
+  /** Optional commit-λ trust signal; modulates resting emissive floor. */
+  readonly trust?: TrustSignal;
 }
 
 /**
@@ -138,6 +141,26 @@ const ROTATION_RAD_PER_SEC = 0.628;
 const BASE_EMISSIVE_INTENSITY = 0.15;
 const PULSE_PEAK_INTENSITY = 0.45;
 const PULSE_DURATION_MS = 500;
+
+/**
+ * Commit λ trust-modulated emissive-floor bounds.
+ *
+ * humanityProbAvg ∈ [0, 1] lerps the resting floor between TRUST_FLOOR_MIN
+ * (low trust) and TRUST_FLOOR_MAX (high trust). The default static floor
+ * (BASE_EMISSIVE_INTENSITY = 0.15) sits at humanity=0.5 — neutral.
+ *
+ * Bounds chosen so that:
+ *   - PULSE_PEAK_INTENSITY (0.45) > TRUST_FLOOR_MAX (0.20): pulse bump is
+ *     always visible above any trust floor (operator never loses the
+ *     'telemetry alive' cue regardless of trust state)
+ *   - TRUST_FLOOR_MIN (0.05) > 0: even untrusted devices keep the mesh
+ *     legible — no "device went dark" failure mode
+ *   - TRUST_FLOOR_MAX (0.20) < ΔL cap (0.10 above black bg) when combined
+ *     with the diffuse color contribution: defense-in-depth on the
+ *     photosensitivity descriptor
+ */
+const TRUST_FLOOR_MIN = 0.05;
+const TRUST_FLOOR_MAX = 0.20;
 
 /**
  * Commit ζ orientation-overlay parameters.
@@ -210,6 +233,7 @@ export function AmbientLayer({
   pulse,
   orientation,
   hostState,
+  trust,
 }: AmbientLayerProps): JSX.Element {
   const seed = useMemo(() => deriveBrpSeed(frozenOutput), [frozenOutput]);
   const params = useMemo(
@@ -223,6 +247,16 @@ export function AmbientLayer({
     () => (hostState ? paletteFor(hostState.kind) : BASE_PALETTE),
     [hostState],
   );
+
+  // Commit λ: trust-modulated emissive floor. humanityProbAvg ∈ [0, 1]
+  // is clamped before lerp so a malformed upstream value can't escape
+  // the WCAG-validated bounds. When prop is omitted, fall back to the
+  // static BASE_EMISSIVE_INTENSITY for backward compat.
+  const emissiveFloor = useMemo(() => {
+    if (!trust) return BASE_EMISSIVE_INTENSITY;
+    const h = Math.max(0, Math.min(1, trust.humanityProbAvg));
+    return TRUST_FLOOR_MIN + (TRUST_FLOOR_MAX - TRUST_FLOOR_MIN) * h;
+  }, [trust]);
 
   // Group ref allows a single transform on all instances. drei's <Instances>
   // doesn't accept ref directly; wrapping in <group> gives a transformable
@@ -270,9 +304,10 @@ export function AmbientLayer({
       pulseIntensityRef.current = Math.max(0, Math.min(1, pulse.intensity));
     }
 
-    // Pulse animation: sin-shaped envelope BASE → PEAK → BASE over
+    // Pulse animation: sin-shaped envelope FLOOR → PEAK → FLOOR over
     // PULSE_DURATION_MS, scaled by pulseIntensityRef. When no active
-    // pulse is in flight, snap back to BASE_EMISSIVE_INTENSITY.
+    // pulse is in flight, snap back to emissiveFloor (commit λ — trust-
+    // modulated; falls back to BASE_EMISSIVE_INTENSITY when no trust prop).
     if (materialRef.current) {
       const now = performance.now();
       if (now < pulseEndTimeRef.current) {
@@ -281,13 +316,12 @@ export function AmbientLayer({
         const t = 1 - remaining; // 0 → 1
         const factor = Math.sin(t * Math.PI); // 0 → 1 → 0
         const bump =
-          (PULSE_PEAK_INTENSITY - BASE_EMISSIVE_INTENSITY) *
+          (PULSE_PEAK_INTENSITY - emissiveFloor) *
           factor *
           pulseIntensityRef.current;
-        materialRef.current.emissiveIntensity =
-          BASE_EMISSIVE_INTENSITY + bump;
+        materialRef.current.emissiveIntensity = emissiveFloor + bump;
       } else {
-        materialRef.current.emissiveIntensity = BASE_EMISSIVE_INTENSITY;
+        materialRef.current.emissiveIntensity = emissiveFloor;
       }
     }
   });
@@ -301,7 +335,7 @@ export function AmbientLayer({
           ref={materialRef}
           color={palette.color}
           emissive={palette.emissive}
-          emissiveIntensity={BASE_EMISSIVE_INTENSITY}
+          emissiveIntensity={emissiveFloor}
           metalness={0.2}
           roughness={0.7}
         />

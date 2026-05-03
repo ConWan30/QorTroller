@@ -82,6 +82,7 @@ export function BrpMount(props: BrpMountProps): JSX.Element {
     pulse,
     orientation,
     hostState,
+    trust,
   } = props;
 
   return (
@@ -105,6 +106,7 @@ export function BrpMount(props: BrpMountProps): JSX.Element {
           {...(pulse ? { pulse } : {})}
           {...(orientation ? { orientation } : {})}
           {...(hostState ? { hostState } : {})}
+          {...(trust ? { trust } : {})}
         />
         <LegibilityOverlay
           pitlSnapshot={pitlSnapshot}
