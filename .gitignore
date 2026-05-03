@@ -88,6 +88,11 @@ bridge/.env.passport-verifier
 bridge/.env.pitl-verifier
 bridge/.env.pitl-verifier-v2
 
+# Phase O0 Block-B-prime — operator-driven on-chain registration
+# session-state file (per V6.1 + P3a-with-session-state). Wildcard
+# covers atomic-write temp file (.tmp suffix) + operator backups.
+bridge/scripts/.operator_session_state*
+
 # OS
 .DS_Store
 Thumbs.db
