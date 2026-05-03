@@ -22,6 +22,7 @@ import {
   getMockPitlSnapshot,
 } from '../brp/mocks/loaders'
 import {
+  useBrpControllerOrientation,
   useBrpFrozenOutput,
   useBrpRecordPulse,
   useEnrollmentStatus,
@@ -118,6 +119,7 @@ export function BrpView() {
   const frozen = useBrpFrozenOutput()
   const enrollmentQuery = useEnrollmentStatus(PLACEHOLDER_DEVICE_ID)
   const recordPulse = useBrpRecordPulse()
+  const controllerOrientation = useBrpControllerOrientation(PLACEHOLDER_DEVICE_ID)
 
   // Resolve frozenOutput: live bytes when chain has a hash; locked-seed
   // canonical fallback otherwise.
@@ -167,6 +169,23 @@ export function BrpView() {
     : recordPulse.lastPulseTs > 0
       ? `WS dropped · last ${recordPulse.pulseCount} records, reconnecting`
       : 'WS not connected (no /ws/records broadcast yet)'
+
+  // Orientation prop wiring: only forward when the hook has actually
+  // received frames (controllerOrientation.orientation !== null).
+  // When connected but no frames yet (e.g., placeholder device_id with
+  // no matching server-side _ws_twin_clients key), we leave orientation
+  // unset so AmbientLayer stays in rotation-only mode (commit δ behavior).
+  const orientation = controllerOrientation.orientation ?? undefined
+  const orientationSourceKind = controllerOrientation.orientation
+    ? 'live'
+    : controllerOrientation.connected
+      ? 'live-fallback'
+      : 'synth'
+  const orientationLabel = controllerOrientation.orientation
+    ? `pitch ${controllerOrientation.orientation.pitch.toFixed(2)}rad · roll ${controllerOrientation.orientation.roll.toFixed(2)}rad · ${controllerOrientation.framesReceived} frames`
+    : controllerOrientation.connected
+      ? 'WS connected · no twin frames for placeholder device_id yet'
+      : 'WS not connected (no /ws/twin broadcast)'
 
   return (
     <div
@@ -231,6 +250,11 @@ export function BrpView() {
           <span style={{ color: '#aab' }}>pulse</span>
           <span style={{ color: '#dde' }}>{pulseLabel}</span>
         </div>
+        <div style={ROW_STYLE}>
+          <SourceBadge kind={orientationSourceKind} />
+          <span style={{ color: '#aab' }}>orientation</span>
+          <span style={{ color: '#dde' }}>{orientationLabel}</span>
+        </div>
       </header>
 
       {/* The actual renderer.
@@ -251,6 +275,7 @@ export function BrpView() {
               aidThreshold={AID_THRESHOLD}
               liveness={liveness}
               {...(pulse ? { pulse } : {})}
+              {...(orientation ? { orientation } : {})}
             />
           </Suspense>
         </div>

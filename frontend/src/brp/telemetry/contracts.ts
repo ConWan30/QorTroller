@@ -138,6 +138,35 @@ export interface PulseSignal {
 }
 
 // -----------------------------------------------------------------------------
+// Orientation signal (optional, commit ζ).
+//
+// When the host page subscribes to a controller IMU stream (e.g., the bridge's
+// /ws/twin/{device_id} fusion endpoint, Phase 59), it can pass an `orientation`
+// prop with derived pitch + roll + yaw radians. The renderer's ambient mesh
+// applies the orientation as an X/Z-axis tilt overlaid on its existing 0.1 Hz
+// Y-axis spin (commit δ). The overlay is lerped per-frame so 1 Hz target
+// updates produce smooth 60 fps interpolated motion.
+//
+// Optional. Renderer remains mount-agnostic per D2: when omitted, the mesh
+// continues with rotation-only mode (commit δ).
+//
+// Per WCAG 2.3.1: orientation is spatial movement (no luminance change).
+// flashBudget descriptor unchanged. AccessibilityShell's motionShouldPause
+// halts the entire useFrame loop including orientation lerping.
+// -----------------------------------------------------------------------------
+
+export interface OrientationSignal {
+  /** Pitch in radians: forward/back tilt. Positive = nose up. */
+  readonly pitch: number;
+  /** Roll in radians: left/right tilt. Positive = right side down. */
+  readonly roll: number;
+  /** Yaw in radians: rotation around vertical axis. Positive = clockwise. */
+  readonly yaw: number;
+  /** Monotonically advancing timestamp of the source frame, for staleness detection. */
+  readonly ts: number;
+}
+
+// -----------------------------------------------------------------------------
 // The full prop contract for <BrpMount />.
 //
 // 4a ships the type. 4c ships the matching <BrpMount /> component. The
@@ -156,4 +185,11 @@ export interface BrpMountProps {
    * the mesh in base-rotation-only mode (commit δ behavior).
    */
   readonly pulse?: PulseSignal;
+  /**
+   * Optional. When present, the ambient mesh applies pitch/roll/yaw as
+   * an X/Z-axis tilt overlay on the base 0.1 Hz Y-spin (commit ζ).
+   * Lerped per-frame for smooth interpolation when source updates at
+   * 1 Hz. Omit for rotation-only mode (commit δ behavior).
+   */
+  readonly orientation?: OrientationSignal;
 }

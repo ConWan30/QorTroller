@@ -405,6 +405,129 @@ export function useBrpRecordPulse() {
   return { pulseCount, lastPulseTs, connected }
 }
 
+/**
+ * useBrpControllerOrientation — WebSocket subscriber to /ws/twin/{deviceId}
+ * (commit ζ). Parses ~20 Hz frame batches; derives pitch + roll from accel
+ * (gravity reference). Yaw is currently 0 (not derivable from accel alone;
+ * gyro integration would drift; magnetometer not exposed). The renderer
+ * lerps toward the latest target at 60 fps so 1 Hz batch arrival still
+ * feels smooth.
+ *
+ * Each /ws/twin/{deviceId} message has shape:
+ *   { type: "frame", data: { type: "frames", frames: [ ... ] } }
+ * with up to 20 frames per batch. Each frame includes accel_{x,y,z} and
+ * gyro_{x,y,z}. We use the LAST frame in each batch as the freshest
+ * orientation target.
+ *
+ * SECOND active-SPA WebSocket consumer (commit ε added the first via
+ * /ws/records). Per BACKEND_CONTRACT.md F-9 / OQ-2: this is a deliberate
+ * scope shift toward gameplay-frequency feedback. The two channels are
+ * independent: /ws/records provides per-event pulses; /ws/twin/{deviceId}
+ * provides continuous orientation. They can run simultaneously without
+ * coordination.
+ *
+ * deviceId: in pre-ceremony incorporation, the bridge's actual device_id
+ * (keccak256 of pubkey for the connected DualShock Edge) is unknown to
+ * the frontend without a discovery endpoint. With the placeholder
+ * device_id, the WS connects but receives no broadcasts (the bridge's
+ * _ws_twin_clients dict has no matching key). Hook returns connected=true
+ * but yields no orientation updates — visible in the indicator panel as
+ * "[LIVE-FALLBACK] WS connected but no twin frames yet" while the renderer
+ * stays in rotation-only mode. Discovery via a future /devices endpoint
+ * is a follow-up enhancement.
+ */
+export function useBrpControllerOrientation(deviceId) {
+  const [orientation, setOrientation] = useState(null)
+  const [connected, setConnected] = useState(false)
+  const [framesReceived, setFramesReceived] = useState(0)
+  const wsRef = useRef(null)
+  const reconnectAttemptsRef = useRef(0)
+
+  useEffect(() => {
+    if (!deviceId) return undefined
+    let cleanup = false
+
+    function deriveOrientation(frame) {
+      // Gravity-derived pitch + roll. accel components are in g-units
+      // (or arbitrary scaled units; sign convention from controller's
+      // body frame). When the controller is at rest, the accel vector
+      // points along gravity.
+      //
+      // Pitch: rotation around X-axis (forward/back tilt). Derived from
+      // ax + sqrt(ay² + az²) projection.
+      // Roll: rotation around Z-axis (left/right tilt). Derived from
+      // ay vs az.
+      const ax = frame.accel_x ?? 0
+      const ay = frame.accel_y ?? 0
+      const az = frame.accel_z ?? 0
+      const pitch = Math.atan2(-ax, Math.sqrt(ay * ay + az * az))
+      const roll = Math.atan2(ay, az)
+      return {
+        pitch,
+        roll,
+        yaw: 0,
+        ts: typeof frame.ts_ms === 'number' ? frame.ts_ms : Date.now(),
+      }
+    }
+
+    function connect() {
+      if (cleanup) return
+      try {
+        const host = window.location.hostname || 'localhost'
+        const ws = new WebSocket(`ws://${host}:8080/ws/twin/${encodeURIComponent(deviceId)}`)
+        wsRef.current = ws
+
+        ws.onopen = () => {
+          if (cleanup) {
+            ws.close()
+            return
+          }
+          setConnected(true)
+          reconnectAttemptsRef.current = 0
+        }
+
+        ws.onmessage = (event) => {
+          if (cleanup) return
+          try {
+            const msg = JSON.parse(event.data)
+            // Filter for frame batches; ignore record messages.
+            if (msg?.type !== 'frame') return
+            const frames = msg?.data?.frames
+            if (!Array.isArray(frames) || frames.length === 0) return
+            const latest = frames[frames.length - 1]
+            setOrientation(deriveOrientation(latest))
+            setFramesReceived((n) => n + frames.length)
+          } catch {
+            // Malformed payload; skip frame, hold last orientation.
+          }
+        }
+
+        ws.onclose = () => {
+          if (cleanup) return
+          setConnected(false)
+          const attempt = reconnectAttemptsRef.current++
+          const delay = Math.min(1000 * Math.pow(2, attempt), 30000)
+          setTimeout(connect, delay)
+        }
+
+        ws.onerror = () => {
+          // close handler fires after error; retry handled there.
+        }
+      } catch {
+        if (!cleanup) setConnected(false)
+      }
+    }
+
+    connect()
+    return () => {
+      cleanup = true
+      try { wsRef.current?.close() } catch { /* fail-silent */ }
+    }
+  }, [deviceId])
+
+  return { orientation, connected, framesReceived }
+}
+
 // Phase 237-EXTEND — Per-category consent status (read-side).
 // Pairs with useConsentSubmit() (wagmi-write side). The bridge endpoint
 // reads from local consent_ledger; on-chain state is queried separately
