@@ -528,6 +528,42 @@ export function useBrpRecentRecords(deviceId) {
 }
 
 /**
+ * useBrpPhgProfile — per-device PHG Trust Score + humanity stats (commit κ).
+ *
+ * Polls /dash/api/v1/player/{device_id}/profile (dashboard_api.py:53-75;
+ * delegates to store.get_player_profile which aggregates over the records
+ * table for the device). Returns the PHG Trust Score (Σ confidence_i/255 × 10
+ * over NOMINAL records) plus humanity_prob_avg, l5_rhythm_humanity_avg, and
+ * confidence_mean — the per-player legitimacy ledger that backs VHP credentialing.
+ *
+ * The endpoint returns 404 when the device_id is unknown to the bridge — for
+ * the placeholder device this is the steady state, surfaced as 'no profile yet'.
+ *
+ * Polling cadence: 10s. PHG score updates monotonically with each NOMINAL
+ * record (~1/sec at gameplay rate), so a 10s poll gives ~10-record granularity
+ * — fast enough to feel live, slow enough not to thrash the SQL aggregator.
+ */
+export function useBrpPhgProfile(deviceId) {
+  return useQuery({
+    queryKey: ['brpPhgProfile', deviceId],
+    queryFn: async () => {
+      try {
+        const profile = await apiGet(`/dash/api/v1/player/${encodeURIComponent(deviceId)}/profile`)
+        return profile
+      } catch (e) {
+        // 404 (device unknown) and BridgeOffline both surface as null;
+        // the UI distinguishes via the query's error/isLoading flags.
+        return null
+      }
+    },
+    enabled: Boolean(deviceId),
+    refetchInterval: 10000,
+    staleTime: 8000,
+    retry: 1,
+  })
+}
+
+/**
  * useBrpControllerOrientation — WebSocket subscriber to /ws/twin/{deviceId}
  * (commit ζ). Parses ~20 Hz frame batches; derives pitch + roll from accel
  * (gravity reference). Yaw is currently 0 (not derivable from accel alone;
