@@ -18,6 +18,17 @@ share/python-wheels/
 .installed.cfg
 *.egg-info
 MANIFEST
+
+# BRP solo-track exception (commit 3a repair):
+# the Python sdist `MANIFEST` rule above silently matches the BRP
+# renderer's `solo/brp-renderer/src/manifest/` directory on Windows
+# (core.ignorecase=true), which caused commit 8da89b59 to drop three
+# claimed files (brp.manifest.json + validate.ts + manifest.test.ts).
+# This narrow negation re-includes that specific directory tree only;
+# the original Python sdist intent for top-level MANIFEST is preserved.
+!solo/brp-renderer/src/manifest/
+!solo/brp-renderer/src/manifest/**
+
 .env
 .venv
 env/
