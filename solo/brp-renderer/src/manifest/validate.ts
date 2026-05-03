@@ -52,6 +52,7 @@ export interface BrpManifest {
   readonly modules: Readonly<Record<string, ManifestEntry>>;
   readonly fixtures: Readonly<Record<string, ManifestEntry>>;
   readonly adapters: Readonly<Record<string, ManifestEntry>>;
+  readonly docs: Readonly<Record<string, ManifestEntry>>;
   readonly pv_ci_drafts: Readonly<Record<string, PvCiDraftEntry>>;
   readonly live_flag_transition_rules: LiveFlagTransitionRules;
 }
@@ -72,11 +73,12 @@ const REQUIRED_TOP_LEVEL_KEYS = [
   "modules",
   "fixtures",
   "adapters",
+  "docs",
   "pv_ci_drafts",
   "live_flag_transition_rules",
 ] as const;
 
-const ENTRY_BUCKETS = ["components", "modules", "fixtures", "adapters"] as const;
+const ENTRY_BUCKETS = ["components", "modules", "fixtures", "adapters", "docs"] as const;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

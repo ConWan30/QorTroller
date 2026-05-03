@@ -77,6 +77,26 @@
   },
   "fixtures": {},
   "adapters": {},
+  "docs": {
+    "BACKEND_CONTRACT": {
+      "live": false,
+      "reason": "documentation-pending-ceremony-confirmation",
+      "implemented": true,
+      "path": "BACKEND_CONTRACT.md"
+    },
+    "LATENCY_BUDGET": {
+      "live": false,
+      "reason": "documentation-pending-ceremony-confirmation",
+      "implemented": true,
+      "path": "LATENCY_BUDGET.md"
+    },
+    "OPEN_QUESTIONS": {
+      "live": false,
+      "reason": "documentation-pending-ceremony-confirmation",
+      "implemented": true,
+      "path": "OPEN_QUESTIONS.md"
+    }
+  },
   "pv_ci_drafts": {
     "INV-BRP-1": {
       "live": false,

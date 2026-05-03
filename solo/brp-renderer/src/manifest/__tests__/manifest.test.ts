@@ -122,4 +122,35 @@ describe("brp.manifest.json — schema and honesty-first posture", () => {
     const result = validateManifest(tampered);
     expect(result.ok).toBe(false);
   });
+
+  // --- Commit 3 additions: docs bucket ---
+
+  it("every docs entry has live: false (Commit 3 honesty-first default)", () => {
+    const m = manifest as Record<string, unknown>;
+    const docs = m["docs"] as Record<string, { live: boolean }>;
+    expect(Object.keys(docs).length).toBeGreaterThan(0);
+    for (const [key, entry] of Object.entries(docs)) {
+      expect(typeof entry.live, `docs.${key}.live`).toBe("boolean");
+      expect(entry.live, `docs.${key}.live`).toBe(false);
+    }
+  });
+
+  it("rejects a manifest missing the 'docs' bucket", () => {
+    const m = { ...(manifest as Record<string, unknown>) };
+    delete m["docs"];
+    const result = validateManifest(m);
+    expect(result.ok).toBe(false);
+    expect(result.violations.some((v) => v.includes("docs"))).toBe(true);
+  });
+
+  it("Commit 3 docs entries cover BACKEND_CONTRACT, LATENCY_BUDGET, OPEN_QUESTIONS", () => {
+    const m = manifest as Record<string, unknown>;
+    const docs = m["docs"] as Record<string, Record<string, unknown>>;
+    for (const required of ["BACKEND_CONTRACT", "LATENCY_BUDGET", "OPEN_QUESTIONS"]) {
+      expect(docs[required], `docs.${required}`).toBeDefined();
+      expect(docs[required]!["live"], `docs.${required}.live`).toBe(false);
+      expect(typeof docs[required]!["path"], `docs.${required}.path`).toBe("string");
+      expect((docs[required]!["path"] as string).endsWith(".md")).toBe(true);
+    }
+  });
 });
