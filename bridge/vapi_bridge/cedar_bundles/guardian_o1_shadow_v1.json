@@ -1,0 +1,130 @@
+{
+  "$schema": "vapi-cedar-bundle-v1",
+  "agent_id": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1",
+  "phase": "O1_SHADOW",
+  "version": 1,
+  "issued_at_iso": "2026-05-03T22:00:00Z",
+  "lane_prefixes": [
+    "audits/",
+    "invariants/",
+    "ops/",
+    "sweeps/"
+  ],
+  "policies": [
+    {
+      "id": "P-001",
+      "effect": "permit",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "skill:read",
+      "resource": "lane://audits/**"
+    },
+    {
+      "id": "P-002",
+      "effect": "permit",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "skill:read",
+      "resource": "lane://sweeps/**"
+    },
+    {
+      "id": "P-003",
+      "effect": "permit",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "skill:read",
+      "resource": "lane://ops/**"
+    },
+    {
+      "id": "P-004",
+      "effect": "permit",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "skill:read",
+      "resource": "lane://invariants/**"
+    },
+    {
+      "id": "P-005",
+      "effect": "permit",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "tool:audit-log-query",
+      "resource": "chain://iotex-testnet"
+    },
+    {
+      "id": "P-006",
+      "effect": "permit",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "tool:agent-registry-query",
+      "resource": "chain://iotex-testnet"
+    },
+    {
+      "id": "P-007",
+      "effect": "permit",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "tool:kms-sign",
+      "resource": "draft://shadow_log/*",
+      "constraint": {"shadow_mode": true}
+    },
+    {
+      "id": "P-008",
+      "effect": "permit",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "skill:audit-drafting",
+      "resource": "draft://shadow_log/*",
+      "constraint": {"shadow_mode": true}
+    },
+    {
+      "id": "P-009",
+      "effect": "permit",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "skill:operational-diagnostic",
+      "resource": "draft://shadow_log/*",
+      "constraint": {"shadow_mode": true}
+    },
+    {
+      "id": "F-001",
+      "effect": "forbid",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "tool:ipfs-pin",
+      "resource": "*"
+    },
+    {
+      "id": "F-002",
+      "effect": "forbid",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "tool:pda-attestation-anchor",
+      "resource": "*"
+    },
+    {
+      "id": "F-003",
+      "effect": "forbid",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "tool:git-push",
+      "resource": "*"
+    },
+    {
+      "id": "F-004",
+      "effect": "forbid",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "tool:git-commit",
+      "resource": "*"
+    },
+    {
+      "id": "F-005",
+      "effect": "forbid",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "endpoint:write",
+      "resource": "*"
+    },
+    {
+      "id": "F-006",
+      "effect": "forbid",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "skill:event-correlation",
+      "resource": "*"
+    },
+    {
+      "id": "F-007",
+      "effect": "forbid",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "skill:provenance-recording",
+      "resource": "*"
+    }
+  ]
+}
