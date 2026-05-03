@@ -32,7 +32,7 @@ import { Instances, Instance } from "@react-three/drei";
 import type { Group, MeshStandardMaterial } from "three";
 import { deriveBrpSeed } from "../hash/deriveBrpSeed";
 import { mulberry32 } from "../hash/mulberry32";
-import type { PulseSignal } from "../telemetry/contracts";
+import type { OrientationSignal, PulseSignal } from "../telemetry/contracts";
 
 // -----------------------------------------------------------------------------
 // Pure-function instance-parameter generator.
@@ -94,6 +94,8 @@ export interface AmbientLayerProps {
   readonly instanceCount?: number;
   /** Optional commit-ε pulse signal; emissive bumps when ts changes. */
   readonly pulse?: PulseSignal;
+  /** Optional commit-ζ orientation signal; lerped X/Z tilt overlay. */
+  readonly orientation?: OrientationSignal;
 }
 
 /**
@@ -131,10 +133,29 @@ const BASE_EMISSIVE_INTENSITY = 0.15;
 const PULSE_PEAK_INTENSITY = 0.45;
 const PULSE_DURATION_MS = 500;
 
+/**
+ * Commit ζ orientation-overlay parameters.
+ *
+ * ORIENTATION_TILT_SCALE: dampen target rotations so a full ±π controller
+ * tilt maps to a more contained ±π/2 mesh tilt. Visually contained but
+ * still clearly responsive.
+ *
+ * ORIENTATION_LERP_RATE: per-second lerp factor toward target. Higher =
+ * snappier (less smoothing). 5.0 means after 1 second the mesh has moved
+ * ~99% of the way to its target — fast enough for real-time feel,
+ * smooth enough to absorb jittery accel readings.
+ *
+ * Orientation is spatial movement (no luminance change). flashBudget
+ * AMBIENT_LAYER_MATERIAL is unaffected; sceneFlashBudget unchanged.
+ */
+const ORIENTATION_TILT_SCALE = 0.5;
+const ORIENTATION_LERP_RATE = 5.0;
+
 export function AmbientLayer({
   frozenOutput,
   instanceCount = DEFAULT_INSTANCE_COUNT,
   pulse,
+  orientation,
 }: AmbientLayerProps): JSX.Element {
   const seed = useMemo(() => deriveBrpSeed(frozenOutput), [frozenOutput]);
   const params = useMemo(
@@ -158,7 +179,23 @@ export function AmbientLayer({
 
   useFrame((_, delta) => {
     if (groupRef.current) {
+      // Base 0.1 Hz Y-spin (commit δ).
       groupRef.current.rotation.y += delta * ROTATION_RAD_PER_SEC;
+
+      // Commit ζ orientation overlay: lerp X (pitch) + Z (roll) toward
+      // dampened target. Yaw is folded INTO the base Y-spin via additive
+      // offset rather than overriding it, so the spin continues unaffected
+      // when a yaw signal arrives. Lerp factor clamped to [0, 1] so high
+      // delta (e.g., a frame-rate hiccup) doesn't overshoot the target.
+      if (orientation) {
+        const lerpFactor = Math.min(1, delta * ORIENTATION_LERP_RATE);
+        const targetPitch = orientation.pitch * ORIENTATION_TILT_SCALE;
+        const targetRoll = orientation.roll * ORIENTATION_TILT_SCALE;
+        groupRef.current.rotation.x +=
+          (targetPitch - groupRef.current.rotation.x) * lerpFactor;
+        groupRef.current.rotation.z +=
+          (targetRoll - groupRef.current.rotation.z) * lerpFactor;
+      }
     }
 
     // Pulse trigger detection: pulse.ts strictly greater than the last
