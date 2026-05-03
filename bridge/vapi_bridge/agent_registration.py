@@ -135,7 +135,7 @@ AGENT_REGISTRY_ADDR = "0x9548E9d17c2d40350629b1b88ff1D2c01B0414a4"
 # transaction hash. register_full_flow raises AgentRegistrationConfigError if
 # this constant is still the placeholder when invoked, forcing operator awareness
 # before any per-agent registration.
-VAPI_OPERATOR_AGENT_NFT_ADDR = "0x0000000000000000000000000000000000000000"
+VAPI_OPERATOR_AGENT_NFT_ADDR = "0xa0CDD2B3E292c56030185c66a3d423278A4c467b"
 
 # ---------------------------------------------------------------------------
 # EIP-712 constants per Section 14.3 (verified empirically — DOMAIN_SEPARATOR
