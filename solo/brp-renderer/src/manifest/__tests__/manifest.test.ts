@@ -165,4 +165,31 @@ describe("brp.manifest.json — schema and honesty-first posture", () => {
     expect(typeof shell["path"]).toBe("string");
     expect(shell["path"]).toBe("src/components/AccessibilityShell.tsx");
   });
+
+  // --- Commit 4b addition: BrpCanvas + AmbientLayer + sceneFlashBudget ---
+
+  it("Commit 4b — BrpCanvas + AmbientLayer flip to implemented:true; live stays false", () => {
+    const m = manifest as Record<string, unknown>;
+    const components = m["components"] as Record<string, Record<string, unknown>>;
+
+    const canvas = components["BrpCanvas"]!;
+    expect(canvas["implemented"]).toBe(true);
+    expect(canvas["live"]).toBe(false);
+    expect(canvas["path"]).toBe("src/components/BrpCanvas.tsx");
+
+    const layer = components["AmbientLayer"]!;
+    expect(layer["implemented"]).toBe(true);
+    expect(layer["live"]).toBe(false);
+    expect(layer["path"]).toBe("src/components/AmbientLayer.tsx");
+  });
+
+  it("Commit 4b — modules.sceneFlashBudget added (implemented:true, live:false)", () => {
+    const m = manifest as Record<string, unknown>;
+    const modules = m["modules"] as Record<string, Record<string, unknown>>;
+    const scene = modules["sceneFlashBudget"]!;
+    expect(scene).toBeDefined();
+    expect(scene["implemented"]).toBe(true);
+    expect(scene["live"]).toBe(false);
+    expect(scene["path"]).toBe("src/hash/sceneFlashBudget.ts");
+  });
 });
