@@ -5,16 +5,24 @@
 // main.tsx — the protocol monorepo's apps/gamer-portal/ build is the eventual
 // production entry; this file is the renderer's standalone dev harness.
 //
-// 4b mounts <BrpCanvas /> inside <AccessibilityShell /> with a deterministic
-// 32-zero-byte frozenOutput. The locked seed (0x87b0f938 per
-// deriveBrpSeed.test.ts canonical-vector lock) is what the dev surface
-// visualizes — every reload produces the same 64-instance ambient mesh,
-// so the operator can verify the seed→visual chain by eye.
+// 4c mounts <BrpMount /> with synthetic fixture data:
+//   frozenOutput      — 32-zero-byte canonical vector (locked seed 0x87b0f938)
+//   pitlSnapshot      — getMockPitlSnapshot() (7 PITL rows, deterministic)
+//   enrollmentSession — getMockEnrollmentSession() (status="pending", 7/10)
+//   aidThreshold      — 0.65 (placeholder per Block Z, ceremony picks)
+//   liveness          — all false (default until ceremony confirms upstream)
+//
+// Reload the dev surface (`npm run dev`) to verify deterministic seed→visual
+// chain plus the calibration-aid HUD rendering against the fixture.
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { AccessibilityShell } from "./components/AccessibilityShell";
-import { BrpCanvas } from "./components/BrpCanvas";
+import { BrpMount } from "./components/BrpMount";
+import {
+  getMockEnrollmentSession,
+  getMockPitlSnapshot,
+} from "./mocks/loaders";
+import type { BrpMountProps } from "./telemetry/contracts";
 
 const rootEl = document.getElementById("root");
 if (!rootEl) {
@@ -24,6 +32,14 @@ if (!rootEl) {
 // Canonical 32-zero-byte demo input. Locked seed per
 // deriveBrpSeed.test.ts: 0x87b0f938.
 const DEMO_FROZEN_OUTPUT = new Uint8Array(32);
+
+const DEV_PROPS: BrpMountProps = {
+  frozenOutput: DEMO_FROZEN_OUTPUT,
+  pitlSnapshot: getMockPitlSnapshot(),
+  enrollmentSession: getMockEnrollmentSession(),
+  aidThreshold: 0.65,
+  liveness: { ambient: false, legibility: false, telemetry: false },
+};
 
 createRoot(rootEl).render(
   <StrictMode>
@@ -47,13 +63,12 @@ createRoot(rootEl).render(
         }}
       >
         BRP Renderer — out-of-band-solo dev surface. live:false. seed=
-        <code>0x87b0f938</code> (32-zero-byte canonical vector). See{" "}
+        <code>0x87b0f938</code> (32-zero-byte canonical vector). Fixture data
+        from <code>src/mocks/fixtures/</code>. See{" "}
         <code>solo/brp-renderer/README.md</code>.
       </header>
       <main style={{ flex: 1, position: "relative" }}>
-        <AccessibilityShell>
-          <BrpCanvas frozenOutput={DEMO_FROZEN_OUTPUT} />
-        </AccessibilityShell>
+        <BrpMount {...DEV_PROPS} />
       </main>
     </div>
   </StrictMode>,

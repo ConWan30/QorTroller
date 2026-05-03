@@ -1,0 +1,63 @@
+{
+  "_synthetic": true,
+  "_purpose": "shape-validation-only — ceremony replaces with real production telemetry",
+  "snapshotTsNs": "1700000000123456789",
+  "rows": [
+    {
+      "layer": "L0",
+      "inferenceCode": 32,
+      "_inferenceCodeName": "NOMINAL",
+      "active": true,
+      "score": 0.92,
+      "tsNs": "1700000000000000000"
+    },
+    {
+      "layer": "L1",
+      "inferenceCode": 32,
+      "_inferenceCodeName": "NOMINAL",
+      "active": true,
+      "score": 0.88,
+      "tsNs": "1700000000010000000"
+    },
+    {
+      "layer": "L2",
+      "inferenceCode": 32,
+      "_inferenceCodeName": "NOMINAL",
+      "active": true,
+      "score": 0.81,
+      "tsNs": "1700000000020000000"
+    },
+    {
+      "layer": "L3",
+      "inferenceCode": 32,
+      "_inferenceCodeName": "NOMINAL",
+      "active": true,
+      "score": 0.76,
+      "tsNs": "1700000000030000000"
+    },
+    {
+      "layer": "L4",
+      "inferenceCode": 48,
+      "_inferenceCodeName": "BIOMETRIC_ANOMALY",
+      "active": true,
+      "score": 0.42,
+      "tsNs": "1700000000040000000"
+    },
+    {
+      "layer": "L5",
+      "inferenceCode": 32,
+      "_inferenceCodeName": "NOMINAL",
+      "active": true,
+      "score": 0.69,
+      "tsNs": "1700000000050000000"
+    },
+    {
+      "layer": "L6",
+      "inferenceCode": 32,
+      "_inferenceCodeName": "NOMINAL",
+      "active": false,
+      "score": 0.50,
+      "tsNs": "1700000000060000000"
+    }
+  ]
+}

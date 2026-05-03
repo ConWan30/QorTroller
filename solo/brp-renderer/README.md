@@ -116,6 +116,45 @@ corrected from N=28 → N=32 to match `.github/INVARIANTS_ALLOWLIST.json`
 ground truth at commit time, with provenance recorded in the document
 itself (see the "Provenance note" sub-paragraph in `INTEGRATION_CONTRACT.md`).
 
+## Commit 4c scope (LegibilityOverlay + BrpMount + fixtures)
+
+Third sub-commit of the four-step Step 4 R3F surface. Lands the
+calibration-aid HUD, the top-level public component, and the
+synthetic shape-validation fixtures.
+
+- `src/components/LegibilityOverlay.tsx` — plain-HTML 7-row PITL
+  state panel, `position: absolute` over `BrpCanvas`. Deliberately
+  NOT drei `<Html>` (deviation from PDF §"Component structure"
+  documented in commit message): keeps the overlay as a DOM
+  sibling of the canvas, decoupled from `BrpCanvas`'s lifecycle,
+  testable in isolation. `role="region"` + `aria-label` +
+  `data-live="false"` + `data-brp-overlay="true"`.
+  `aidThreshold` gate is a placeholder per Block Z (deferred);
+  ceremony picks the real metric. Pure helper `isActiveAidMode`
+  exported for unit testing.
+- `src/components/BrpMount.tsx` — top-level public component.
+  Accepts the full `BrpMountProps` contract from
+  `telemetry/contracts.ts`. Composes `<AccessibilityShell>` →
+  layout root → `<BrpCanvas>` + `<LegibilityOverlay>` +
+  optional `<EnrollmentBadge>`. This is the slot the integration
+  ceremony mounts at `/gamer/twin` per Block T.
+- `src/mocks/fixtures/{pitl.snapshot,enrollment.session}.json` —
+  synthetic shape-validation fixtures. JSON encodes BigInt fields
+  as decimal strings; loaders convert at load time.
+- `src/mocks/loaders.ts` — typed loaders
+  `getMockPitlSnapshot()` + `getMockEnrollmentSession()`. Validate
+  shape at module load (throws loudly on malformed fixtures).
+  Return frozen, deterministic references.
+- `main.tsx` updated: mounts `<BrpMount {...devProps}>` with
+  fixture data instead of bare `<BrpCanvas>`. Dev surface now
+  shows canvas + overlay + enrollment badge together.
+
+MSW deferred to 4d (where Storybook stories will need
+network-level mocking for non-static fixture variations).
+
+Tests: 94 → 107 (+13: 5 LegibilityOverlay + 5 BrpMount +
+3 loaders + 3 manifest progression). tsc --noEmit clean.
+
 ## Commit 4b scope (R3F core: BrpCanvas + AmbientLayer + sceneFlashBudget)
 
 Second sub-commit of the four-step Step 4 R3F surface. Lands the actual
