@@ -43,10 +43,19 @@ At ceremony time, the Phase-O0-integrated VAPI must expose the following, all
 `INV-BRP-1` through `INV-BRP-5` (drafted in `pv-ci-drafts/inv-brp-*.spec.ts`)
 are added to PV-CI as part of the ceremony, raising the gate count by 5.
 
-> **Gate count note**: PV-CI is currently at **N=28** (28 at the time of this
-> commit, per CLAUDE.md; verify current value at ceremony time). The ceremony
-> raises the gate to **N+5**. This commit does NOT modify the gate; it only
-> ships the draft specs ready for ceremony adoption verbatim.
+> **Gate count note**: PV-CI is currently at **N=32** at commit time, per
+> `.github/INVARIANTS_ALLOWLIST.json` (the binding ground-truth file:
+> INV-001..INV-026 + INV-CORPUS-001/002 + INV-AGENT-COMMIT-001/002 +
+> INV-PDA-001/002). The ceremony raises the gate to **N+5**. Verify current
+> value at ceremony time, since the allowlist may have grown since this commit.
+> This commit does NOT modify the gate; it only ships the draft specs ready
+> for ceremony adoption verbatim.
+>
+> **Provenance note**: commit `8da89b59` (the foundation commit) shipped this
+> paragraph with N=28, sourced from a CLAUDE.md NOTE block that itself contains
+> internal contradictions (line 16 says 28, line 19 says 26). The actual file
+> ground truth is the allowlist JSON, which had 32 entries at commit time. This
+> amend corrects the number; the verification-at-ceremony-time clause is preserved.
 
 The five drafts:
 
