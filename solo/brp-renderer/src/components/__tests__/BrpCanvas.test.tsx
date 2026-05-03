@@ -34,6 +34,10 @@ vi.mock("@react-three/fiber", () => ({
       {children}
     </div>
   ),
+  // useFrame stub: AmbientLayer (commit δ) calls useFrame for continuous
+  // rotation. In jsdom there's no R3F render loop, so the callback never
+  // fires; the stub just no-ops to satisfy the import.
+  useFrame: vi.fn(),
 }));
 
 // drei's Instances + Instance also need WebGL; mock them as plain divs so the
@@ -66,8 +70,11 @@ beforeEach(() => {
 describe("BrpCanvas — R3F Canvas wrapper React surface", () => {
   const demoBytes = new Uint8Array(32);
 
-  it("T-4b-10: computeFrameloop returns 'demand' when motion is on, 'never' when paused", () => {
-    expect(computeFrameloop(false)).toBe("demand");
+  it("T-4b-10: computeFrameloop returns 'always' when motion is on, 'never' when paused", () => {
+    // commit δ: switched 'demand' → 'always' to drive AmbientLayer's
+    // useFrame continuous rotation. WCAG 2.2.2 pause-mechanism preserved
+    // via 'never' when motion is paused.
+    expect(computeFrameloop(false)).toBe("always");
     expect(computeFrameloop(true)).toBe("never");
   });
 
@@ -89,14 +96,14 @@ describe("BrpCanvas — R3F Canvas wrapper React surface", () => {
       </AccessibilityShell>,
     );
 
-    // Default: motion on, frameloop demand.
+    // Default: motion on, frameloop always (commit δ).
     expect(screen.getByTestId("r3f-canvas")).toHaveAttribute(
       "data-frameloop",
-      "demand",
+      "always",
     );
     expect(
       container.querySelector("[data-brp-canvas]"),
-    ).toHaveAttribute("data-frameloop", "demand");
+    ).toHaveAttribute("data-frameloop", "always");
     expect(
       container.querySelector("[data-brp-canvas]"),
     ).toHaveAttribute("data-live", "false");

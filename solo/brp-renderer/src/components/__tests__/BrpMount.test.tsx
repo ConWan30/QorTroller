@@ -18,6 +18,8 @@ vi.mock("@react-three/fiber", () => ({
       {children}
     </div>
   ),
+  // commit δ: AmbientLayer calls useFrame for rotation; mock no-op.
+  useFrame: vi.fn(),
 }));
 
 vi.mock("@react-three/drei", () => ({

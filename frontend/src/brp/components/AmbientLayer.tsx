@@ -26,8 +26,10 @@
 // PDF reference: §"Block A1", §"Component structure", §"Hash-derivation
 // function", §"Performance budget".
 
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
+import { useFrame } from "@react-three/fiber";
 import { Instances, Instance } from "@react-three/drei";
+import type { Group } from "three";
 import { deriveBrpSeed } from "../hash/deriveBrpSeed";
 import { mulberry32 } from "../hash/mulberry32";
 
@@ -91,6 +93,21 @@ export interface AmbientLayerProps {
   readonly instanceCount?: number;
 }
 
+/**
+ * Continuous rotation rate for the ambient mesh group.
+ *
+ * 0.1 Hz = 1 full revolution every 10 seconds = 0.628 rad/s.
+ * Well under WCAG 2.3.1's G19 3 Hz cap. The rotation is spatial movement
+ * (no luminance oscillation), so flashBudget descriptor stays valid;
+ * sceneFlashBudget AMBIENT_LAYER_MATERIAL is unchanged.
+ *
+ * The rotation only runs when the parent BrpCanvas has frameloop="always"
+ * (motion enabled). When the AccessibilityShell motion toggle pauses
+ * motion, BrpCanvas sets frameloop="never" and useFrame stops being
+ * called — rotation freezes deterministically.
+ */
+const ROTATION_RAD_PER_SEC = 0.628;
+
 export function AmbientLayer({
   frozenOutput,
   instanceCount = DEFAULT_INSTANCE_COUNT,
@@ -101,25 +118,38 @@ export function AmbientLayer({
     [seed, instanceCount],
   );
 
+  // Group ref allows a single transform on all instances. drei's <Instances>
+  // doesn't accept ref directly; wrapping in <group> gives a transformable
+  // parent that doesn't change the instanced-mesh draw count (still 1 call).
+  const groupRef = useRef<Group | null>(null);
+
+  useFrame((_, delta) => {
+    if (groupRef.current) {
+      groupRef.current.rotation.y += delta * ROTATION_RAD_PER_SEC;
+    }
+  });
+
   return (
-    <Instances limit={instanceCount} range={instanceCount}>
-      {/* Low-poly icosahedron — 12 vertices, 20 faces. */}
-      <icosahedronGeometry args={[0.04, 0]} />
-      <meshStandardMaterial
-        color="#5a8fb8"
-        emissive="#1a3a5a"
-        emissiveIntensity={0.15}
-        metalness={0.2}
-        roughness={0.7}
-      />
-      {params.map((p, i) => (
-        <Instance
-          key={i}
-          position={p.position as [number, number, number]}
-          rotation={p.rotation as [number, number, number]}
-          scale={p.scale}
+    <group ref={groupRef}>
+      <Instances limit={instanceCount} range={instanceCount}>
+        {/* Low-poly icosahedron — 12 vertices, 20 faces. */}
+        <icosahedronGeometry args={[0.04, 0]} />
+        <meshStandardMaterial
+          color="#5a8fb8"
+          emissive="#1a3a5a"
+          emissiveIntensity={0.15}
+          metalness={0.2}
+          roughness={0.7}
         />
-      ))}
-    </Instances>
+        {params.map((p, i) => (
+          <Instance
+            key={i}
+            position={p.position as [number, number, number]}
+            rotation={p.rotation as [number, number, number]}
+            scale={p.scale}
+          />
+        ))}
+      </Instances>
+    </group>
   );
 }
