@@ -7870,4 +7870,110 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "status":           "AgentRegistry deployed; live read path TBD",
         }
 
+    # ------------------------------------------------------------------
+    # Phase O1 C1 — Operator Agent activation arc (Cedar bundle dual-anchor)
+    # ------------------------------------------------------------------
+
+    @app.post("/operator/anchor-cedar-bundle")
+    async def anchor_cedar_bundle(
+        api_key: str = Query(default=""),
+        bundle_path: str = Query(default=""),
+        reason: str = Query(default=""),
+    ):
+        """Operator-triggered Phase O1 Cedar bundle dual on-chain anchor.
+
+        Fires the dual anchor per D4 + INV-OPERATOR-AGENT-001:
+          1. AgentScope.setAgentScopeRoot   (operational layer FIRST)
+          2. AgentRegistry.updateAgentScope (governance layer SECOND)
+        Inserts operator_agent_activation_log row with both tx hashes.
+
+        Args:
+            api_key:     Must match cfg.operator_api_key (full operator auth).
+            bundle_path: Repo-relative or absolute path to Cedar bundle JSON.
+                         Resolved against cfg.cedar_bundle_dir if relative.
+            reason:      Operator audit string; minimum 10 characters.
+
+        Returns:
+            Dict shape of cedar_bundle_anchor.AnchorResult (success, agent_id,
+            from_phase, to_phase, from_scope_root, to_scope_root, bundle_path,
+            governance_tx_hash, operational_tx_hash, governance_block_number,
+            operational_block_number, activation_log_id, error).
+
+        Raises:
+            HTTPException(401) on bad api_key.
+            HTTPException(422) on missing bundle_path or reason < 10 chars.
+            HTTPException(500) on bundle parse / chain failures.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        _bp = (bundle_path or "").strip()
+        _reason = (reason or "").strip()
+        if not _bp:
+            raise HTTPException(422, "bundle_path is required (repo-relative or absolute)")
+        if len(_reason) < 10:
+            raise HTTPException(422, "reason must be at least 10 characters (operator audit field)")
+
+        from .cedar_bundle_anchor import CedarBundleAnchor, CedarBundleAnchorError
+        from pathlib import Path as _Path
+        anchor = CedarBundleAnchor(
+            chain=chain,
+            store=store,
+            bundle_dir=_Path(getattr(cfg, "cedar_bundle_dir", "bridge/vapi_bridge/cedar_bundles")),
+        )
+        try:
+            result = await anchor.anchor_bundle(
+                bundle_path=_bp,
+                reason_text=_reason,
+                operator_api_key=api_key,
+            )
+        except CedarBundleAnchorError as e:
+            raise HTTPException(500, f"anchor_bundle failed: {e}")
+
+        # AnchorResult is a slots dataclass; serialize via __slots__ projection
+        return {
+            "success":                  result.success,
+            "agent_id":                 result.agent_id,
+            "from_phase":               result.from_phase,
+            "to_phase":                 result.to_phase,
+            "from_scope_root":          result.from_scope_root,
+            "to_scope_root":            result.to_scope_root,
+            "bundle_path":              result.bundle_path,
+            "governance_tx_hash":       result.governance_tx_hash,
+            "operational_tx_hash":      result.operational_tx_hash,
+            "governance_block_number":  result.governance_block_number,
+            "operational_block_number": result.operational_block_number,
+            "activation_log_id":        result.activation_log_id,
+            "error":                    result.error,
+            "timestamp":                time.time(),
+        }
+
+    @app.get("/operator/operator-agent-activation-log")
+    async def get_operator_agent_activation_log(
+        x_api_key: str = Header(default=""),
+        agent_id: str = Query(default=""),
+        limit: int = Query(default=20, ge=1, le=200),
+    ):
+        """Phase O1 C1 — paginated activation history (read-only audit).
+
+        Args:
+            x_api_key: Read-key auth (match cfg.operator_api_key).
+            agent_id:  Optional filter to specific Q9-frozen agentId. Empty
+                       returns rows for all agents.
+            limit:     1-200; default 20; most recent first by activated_at.
+        """
+        _check_read_key(x_api_key)
+        _aid = agent_id.strip() if agent_id else None
+        rows = await asyncio.to_thread(
+            store.get_operator_agent_activation_log,
+            _aid,
+            int(limit),
+        )
+        return {
+            "agent_id_filter":  _aid,
+            "limit":            int(limit),
+            "row_count":        len(rows),
+            "activations":      rows,
+            "timestamp":        time.time(),
+        }
+
     return app

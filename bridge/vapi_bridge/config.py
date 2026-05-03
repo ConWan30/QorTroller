@@ -1693,6 +1693,53 @@ class Config:
     Set GRIND_SESSION_ID in bridge/.env for multi-day grinds. Auto-generated
     as grind_YYYYMMDD if not set. A new value starts a new chain (new genesis)."""
 
+    # --- Phase O1 C1: Operator Agent activation arc (Cedar bundle dual-anchor) ---
+    agent_scope_address: str = field(
+        default_factory=lambda: _env("AGENT_SCOPE_ADDRESS", "")
+    )
+    """Phase O1 C1 — VAPI AgentScope contract address (operational layer).
+    Deployed Phase O0 at 0xc694692a69bbf1cDAda87d5bc43D345C4579FF13. Live
+    read path used by AgentAdjudicationRegistry.requireAgentScope. Cedar
+    bundle anchor (cedar_bundle_anchor.py) calls setAgentScopeRoot here
+    FIRST per INV-OPERATOR-AGENT-001. Empty default = chain.get/set methods
+    raise RuntimeError (fail-closed; Phase O1 cannot operate without scope state)."""
+
+    agent_registry_address: str = field(
+        default_factory=lambda: _env("AGENT_REGISTRY_ADDRESS", "")
+    )
+    """Phase O1 C1 — VAPI AgentRegistry contract address (governance layer).
+    Deployed Phase O0 at 0x9548E9d17c2d40350629b1b88ff1D2c01B0414a4. Stores
+    per-agentId scopeHash governance commitment. Cedar bundle anchor calls
+    updateAgentScope here SECOND per INV-OPERATOR-AGENT-001."""
+
+    cedar_bundle_dir: str = field(
+        default_factory=lambda: _env("CEDAR_BUNDLE_DIR", "bridge/vapi_bridge/cedar_bundles")
+    )
+    """Phase O1 C1 — Repo-relative directory containing Cedar bundle JSON files
+    (per Pass 2C Q10 Option B: bundles stored in repo, Merkle root anchored
+    on-chain via AgentScope). cedar_bundle_anchor.anchor_bundle resolves
+    relative bundle_path arguments against this directory."""
+
+    operator_agent_anchor_sentry_id: str = field(
+        default_factory=lambda: _env(
+            "OPERATOR_AGENT_ANCHOR_SENTRY_ID",
+            "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c",
+        )
+    )
+    """Phase O1 C1 — Q9-frozen agentId for the Anchor Sentry operator agent.
+    FROZEN per Pass 2C Q9 — registered on AgentRegistry Phase O0 (2026-05-03,
+    commit 44c26ce0). Any change here breaks bundle anchoring."""
+
+    operator_agent_guardian_id: str = field(
+        default_factory=lambda: _env(
+            "OPERATOR_AGENT_GUARDIAN_ID",
+            "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1",
+        )
+    )
+    """Phase O1 C1 — Q9-frozen agentId for the Guardian operator agent.
+    FROZEN per Pass 2C Q9 — registered on AgentRegistry Phase O0 (2026-05-03,
+    commit 44c26ce0). Any change here breaks bundle anchoring."""
+
     # --- Phase 235-GAD: Gameplay Activity Discrimination ---
     gameplay_discrimination_enabled: bool = field(
         default_factory=lambda: _env_bool("GAMEPLAY_DISCRIMINATION_ENABLED", True)

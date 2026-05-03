@@ -3307,6 +3307,46 @@ class Store:
         except Exception:
             pass  # idempotent
 
+        # Phase O1 C1 — operator_agent_activation_log table.
+        # Mirrors the on-chain AgentScopeRootSet + AgentScopeUpdated events
+        # for each Cedar bundle anchor cycle (D4 dual-anchor).  UNIQUE
+        # constraint on (agent_id, to_scope_root) enforces anti-replay
+        # (INV-OPERATOR-AGENT-002): each (agent, scope_root) tuple can be
+        # activated exactly once.  Phase number 1001 distinguishes the
+        # Operator-track migrations from the main protocol-track sequence.
+        try:
+            with self._conn() as conn:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS operator_agent_activation_log (
+                        id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+                        agent_id                 TEXT    NOT NULL,
+                        from_phase               TEXT    NOT NULL,
+                        to_phase                 TEXT    NOT NULL,
+                        from_scope_root          TEXT    NOT NULL,
+                        to_scope_root            TEXT    NOT NULL,
+                        bundle_path              TEXT    NOT NULL,
+                        governance_tx_hash       TEXT    NOT NULL,
+                        operational_tx_hash      TEXT    NOT NULL,
+                        governance_block_number  INTEGER NOT NULL,
+                        operational_block_number INTEGER NOT NULL,
+                        operator_authority_hash  TEXT    NOT NULL,
+                        reason_text              TEXT    NOT NULL,
+                        activated_at             REAL    NOT NULL,
+                        UNIQUE(agent_id, to_scope_root)
+                    )
+                """)
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_oaal_agent_time "
+                    "ON operator_agent_activation_log(agent_id, activated_at DESC)"
+                )
+                conn.execute(
+                    "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                    " VALUES (?, ?, ?)",
+                    (1001, "operator_agent_activation_log", time.time()),
+                )
+        except Exception:
+            pass  # idempotent
+
         # Phase O0 Stream 3-prep Session 1 — AGENT_COMMIT v1 store table.
         # Sixth FROZEN-v1 primitive in the family. Each row records a git
         # commit attestation produced by an Operator Agent, with the computed
@@ -13958,6 +13998,93 @@ class Store:
             "history":          [dict(r) for r in history],
             "timestamp":        time.time(),
         }
+
+    # --- Phase O1 C1: Operator Agent activation log helpers ---
+
+    def insert_operator_agent_activation(
+        self,
+        *,
+        agent_id: str,
+        from_phase: str,
+        to_phase: str,
+        from_scope_root: str,
+        to_scope_root: str,
+        bundle_path: str,
+        governance_tx_hash: str,
+        operational_tx_hash: str,
+        governance_block_number: int,
+        operational_block_number: int,
+        operator_authority_hash: str,
+        reason_text: str,
+    ) -> int:
+        """Insert one row into operator_agent_activation_log; return new row id.
+
+        UNIQUE(agent_id, to_scope_root) constraint per INV-OPERATOR-AGENT-002:
+        if a row already exists for this (agent_id, to_scope_root) tuple, the
+        INSERT raises sqlite3.IntegrityError — caller (cedar_bundle_anchor.py)
+        treats this as a "duplicate anchor attempt" signal.  Anti-replay
+        ensures each (agent, scope_root) pair is activated exactly once.
+        """
+        with self._conn() as conn:
+            cursor = conn.execute(
+                "INSERT INTO operator_agent_activation_log "
+                "(agent_id, from_phase, to_phase, from_scope_root, to_scope_root, "
+                " bundle_path, governance_tx_hash, operational_tx_hash, "
+                " governance_block_number, operational_block_number, "
+                " operator_authority_hash, reason_text, activated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    agent_id, from_phase, to_phase, from_scope_root, to_scope_root,
+                    bundle_path, governance_tx_hash, operational_tx_hash,
+                    int(governance_block_number), int(operational_block_number),
+                    operator_authority_hash, reason_text, time.time(),
+                ),
+            )
+            return int(cursor.lastrowid)
+
+    def get_operator_agent_activation_log(
+        self,
+        agent_id: str | None = None,
+        limit: int = 20,
+    ) -> list[dict]:
+        """Return paginated activation history (most recent first).
+
+        If agent_id is None, returns rows for all agents.  Otherwise filters
+        to the specific Q9-frozen agentId.  Caps at 200 rows regardless of
+        requested limit to prevent unbounded queries.
+        """
+        limit = max(1, min(200, int(limit)))
+        with self._conn() as conn:
+            if agent_id is None:
+                rows = conn.execute(
+                    "SELECT * FROM operator_agent_activation_log "
+                    "ORDER BY activated_at DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM operator_agent_activation_log "
+                    "WHERE agent_id = ? ORDER BY activated_at DESC LIMIT ?",
+                    (agent_id, limit),
+                ).fetchall()
+            return [dict(r) for r in rows]
+
+    def get_current_operational_phase(self, agent_id: str) -> str:
+        """Return latest to_phase for the agent, or 'O0_DORMANT' if no activations.
+
+        This is the off-chain mirror of the agent's on-chain operational state.
+        FSCA SCOPE_HASH_GOVERNANCE_DRIFT (Phase O1 C2/C3 deferred) cross-checks
+        this against AgentScope.getScopeRoot to detect divergence.
+        """
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT to_phase FROM operator_agent_activation_log "
+                "WHERE agent_id = ? ORDER BY activated_at DESC LIMIT 1",
+                (agent_id,),
+            ).fetchone()
+            if row is None:
+                return "O0_DORMANT"
+            return str(row["to_phase"])
 
     # --- Phase 235-A: Grind Integrity Chain (GIC) ---
 
