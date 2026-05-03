@@ -161,3 +161,32 @@ contracts/artifacts/build-info/
 # re-shadow the BRP workspace. New patterns belong above this block.
 !solo/brp-renderer/
 !solo/brp-renderer/**
+
+# ----------------------------------------------------------------------------
+# BRP renderer vendored copy at frontend/src/brp/ — third recurrence repair.
+# ----------------------------------------------------------------------------
+#
+# Per OPEN_QUESTIONS.md OQ-7 (post-milestone incorporation), the BRP solo-track
+# artifact is also vendored into frontend/src/brp/ as a 4th additive view in
+# the existing frontend workspace. The previous repair (commit 3dda7ae6) added
+# !solo/brp-renderer/** as a workspace-wide exception, which protected the solo
+# workspace cleanly. It did NOT anticipate vendoring into a NEW workspace.
+#
+# Caught at incorporation commit β's Hold-2 check-ignore enforcement:
+# `*.session.json` (line 73) matched
+# frontend/src/brp/mocks/fixtures/enrollment.session.json — same exact rule that
+# bit at 4c, just at a new location. Same single-concern repair shape as
+# fc89ae85 + 3dda7ae6: append a workspace-scoped exception at end-of-file.
+#
+# GENERALIZED LESSON (third repair, recorded in commit message):
+#   Workspace-wide exceptions protect named workspaces, not file classes.
+#   Each new vendored location requires its own exception. Future vendoring
+#   of BRP code (or any solo-track artifact) into a new workspace MUST be
+#   preceded by a .gitignore exception for that location, validated by
+#   `git check-ignore -v` against every vendored path.
+#
+# Same precedence rule applies: this exception MUST stay at end-of-file
+# (last-match-wins). New exclusion patterns belong above the BRP exception
+# blocks, not below them.
+!frontend/src/brp/
+!frontend/src/brp/**
