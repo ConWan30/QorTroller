@@ -1,0 +1,10 @@
+{
+  "_synthetic": true,
+  "_purpose": "shape-validation-only — ceremony replaces with real production telemetry",
+  "deviceId": "0x0000000000000000000000000000000000000000000000000000000000000001",
+  "sessionsNominal": 7,
+  "avgHumanity": 0.74,
+  "status": "pending",
+  "requiredSessions": 10,
+  "requiredHumanity": 0.6
+}
