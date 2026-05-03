@@ -306,6 +306,21 @@ export function BrpView() {
     return `score ${score} (weighted ${weighted}) · humanity ${humanity} · ${nominal}/${total} nominal`
   })()
 
+  // Commit λ: promote PHG profile from drawer-text to renderer-side trust
+  // modulation. humanityProbAvg lerps the ambient mesh's resting emissive
+  // floor; low-trust devices render dimmer, high-trust devices brighter.
+  // Omit prop entirely when no live profile exists so the mesh stays on
+  // the static BASE_EMISSIVE_INTENSITY (commit ε behavior).
+  const trust = phgData
+    ? {
+        humanityProbAvg: typeof phgData.humanity_prob_avg === 'number' ? phgData.humanity_prob_avg : 0,
+        phgScore: phgData.phg_score ?? 0,
+        phgScoreWeighted: phgData.phg_score_weighted ?? 0,
+        nominalRecords: phgData.nominal_records ?? 0,
+        totalRecords: phgData.total_records ?? 0,
+      }
+    : undefined
+
   const indicatorRows = [
     { kind: deviceSourceKind, label: 'device', value: deviceLabel },
     { kind: frozenSourceKind, label: 'frozenOutput', value: frozenLabel },
@@ -346,6 +361,7 @@ export function BrpView() {
               {...(pulse ? { pulse } : {})}
               {...(orientation ? { orientation } : {})}
               {...(hostState ? { hostState } : {})}
+              {...(trust ? { trust } : {})}
             />
           </Suspense>
         </div>

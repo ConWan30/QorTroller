@@ -188,6 +188,42 @@ export interface OrientationSignal {
 // values are pre-validated against the saturated-red guard.
 // -----------------------------------------------------------------------------
 
+// -----------------------------------------------------------------------------
+// Trust signal (optional, commit λ).
+//
+// Surfaces the bridge's PHG (Player Humanity Glyph) Trust Ledger — the same
+// per-device legitimacy stat that backs VHP credentialing — as a visual
+// modulation. humanityProbAvg lerps the ambient mesh's resting emissive
+// intensity floor: low trust dims the mesh; high trust brightens it.
+// nominalRecords / totalRecords are exposed for future surface bindings
+// (instance-count modulation, etc.) but the v1 commit only consumes
+// humanityProbAvg.
+//
+// Optional. Renderer remains mount-agnostic per D2: when omitted, the mesh
+// uses the static BASE_EMISSIVE_INTENSITY (commit ε behavior).
+//
+// Per WCAG 2.3.1: emissive floor is bounded to [0.05, 0.20] — well under the
+// ΔL 0.10 luminance-delta cap relative to the dark canvas bg. Updates are
+// driven by the 10s PHG profile poll, far below G19 3 Hz cap. The pulse
+// animation (commit ε) still operates on top of this floor; the bump goes
+// from `floor → PEAK_INTENSITY` so a high-trust mesh has a smaller bump
+// magnitude (its baseline is already brighter) — preserves the ΔL
+// invariant in both directions.
+// -----------------------------------------------------------------------------
+
+export interface TrustSignal {
+  /** Mean humanity probability in [0, 1] over recent NOMINAL records. */
+  readonly humanityProbAvg: number;
+  /** PHG score (raw cumulative, monotonic). */
+  readonly phgScore: number;
+  /** PHG score weighted by humanity probability. */
+  readonly phgScoreWeighted: number;
+  /** Count of NOMINAL records in the trust ledger. */
+  readonly nominalRecords: number;
+  /** Total record count for the device (NOMINAL + advisory + hard). */
+  readonly totalRecords: number;
+}
+
 export type HostStateKind =
   | "EXCLUSIVE_USB"
   | "EXCLUSIVE_BT"
@@ -236,4 +272,10 @@ export interface BrpMountProps {
    * desaturated grey; DISCONNECTED → dim charcoal. Omit to keep base palette.
    */
   readonly hostState?: HostStateSignal;
+  /**
+   * Optional. When present, humanityProbAvg lerps the ambient mesh's
+   * resting emissive intensity floor between dim (low trust) and bright
+   * (high trust). Pulse bumps still operate on top of this floor.
+   */
+  readonly trust?: TrustSignal;
 }

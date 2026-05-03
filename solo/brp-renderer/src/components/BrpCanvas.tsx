@@ -34,6 +34,7 @@ import type {
   HostStateSignal,
   OrientationSignal,
   PulseSignal,
+  TrustSignal,
 } from "../telemetry/contracts";
 
 /**
@@ -57,6 +58,8 @@ export interface BrpCanvasProps {
   readonly orientation?: OrientationSignal;
   /** Optional commit-ι host-state signal threaded through to AmbientLayer. */
   readonly hostState?: HostStateSignal;
+  /** Optional commit-λ trust signal threaded through to AmbientLayer. */
+  readonly trust?: TrustSignal;
 }
 
 export function BrpCanvas({
@@ -65,6 +68,7 @@ export function BrpCanvas({
   pulse,
   orientation,
   hostState,
+  trust,
 }: BrpCanvasProps): JSX.Element {
   const { motionShouldPause } = useMotionContext();
   const frameloop = computeFrameloop(motionShouldPause);
@@ -92,6 +96,7 @@ export function BrpCanvas({
           {...(pulse ? { pulse } : {})}
           {...(orientation ? { orientation } : {})}
           {...(hostState ? { hostState } : {})}
+          {...(trust ? { trust } : {})}
         />
       </Canvas>
     </div>
