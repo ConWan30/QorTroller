@@ -7,6 +7,10 @@ const VIEWS = [
   { id: 'gamer',        label: 'GAMER',        accent: GAMER.cyan,          icon: '◈' },
   { id: 'developer',   label: 'DEVELOPER',    accent: DEVELOPER.orange,    icon: '◇' },
   { id: 'manufacturer',label: 'MANUFACTURER', accent: MANUFACTURER.blue,   icon: '⬡' },
+  // 4th tab: BRP renderer post-milestone incorporation (OQ-7).
+  // Pre-ceremony, live: false. Distinct accent + small live:false dot
+  // surfaced in the tab so the operator can identify the audit-state at a glance.
+  { id: 'brp',         label: 'BRP',          accent: '#9bc4e8',           icon: '◉', liveFalse: true },
 ]
 
 export function ViewSelector({ activeView, onViewChange }) {
@@ -83,6 +87,19 @@ export function ViewSelector({ activeView, onViewChange }) {
             >
               <span style={{ fontSize: 9 }}>{v.icon}</span>
               {v.label}
+              {v.liveFalse && (
+                <span
+                  title="live: false (Block W — pre-ceremony)"
+                  style={{
+                    width:        5,
+                    height:       5,
+                    borderRadius: '50%',
+                    background:   '#e85a5a',
+                    boxShadow:    '0 0 4px rgba(232,90,90,0.6)',
+                    marginLeft:   2,
+                  }}
+                />
+              )}
               {active && (
                 <motion.span
                   layoutId="tab-indicator"
