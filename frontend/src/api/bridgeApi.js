@@ -406,6 +406,59 @@ export function useBrpRecordPulse() {
 }
 
 /**
+ * useBrpDeviceDiscovery — resolves the active controller's device_id by
+ * polling the bridge's /api/v1/devices endpoint (commit η).
+ *
+ * Mirrors the long-established pattern from frontend/legacy/ControllerTwin.jsx
+ * `useAutoDiscover` (lines 54-76) which has been the working device-discovery
+ * pattern in this repo since the initial commit. The bridge's
+ * store.list_devices() returns rows sorted by last_seen DESC, so the first
+ * entry is the most recently active controller. /api/v1/devices is on the
+ * MAIN bridge app (NOT under /operator), so we use apiGet directly — same
+ * approach as useEnrollmentStatus.
+ *
+ * 5s polling cadence matches LATENCY_BUDGET.md's "fast loop" pattern
+ * (useCaptureHealth at 3s, useGrindChain at 5s) — devices come and go on
+ * the order of seconds when a controller is plugged in or unplugged.
+ *
+ * Returns null when bridge is offline OR no devices have ever been seen.
+ * Consumers should treat null as "fall back to placeholder/synthetic".
+ */
+export function useBrpDeviceDiscovery() {
+  return useQuery({
+    queryKey: ['brpDeviceDiscovery'],
+    queryFn: async () => {
+      const devices = await apiGet('/api/v1/devices')
+      if (!Array.isArray(devices) || devices.length === 0) {
+        return null
+      }
+      // First entry = most recently active per store.list_devices()
+      // ORDER BY last_seen DESC.
+      const first = devices[0]
+      if (!first?.device_id) {
+        return null
+      }
+      return {
+        deviceId: first.device_id,
+        deviceCount: devices.length,
+        // Bridge schema for devices table includes:
+        //   device_id (TEXT) — keccak256(pubkey) hex
+        //   pubkey (TEXT)    — ECDSA-P256 pubkey hex
+        //   first_seen (INTEGER, ms) | last_seen (INTEGER, ms)
+        //   record_count (INTEGER)
+        // Forward whatever the bridge actually returns; null for missing.
+        firstSeen: first.first_seen ?? null,
+        lastSeen: first.last_seen ?? null,
+        recordCount: first.record_count ?? null,
+      }
+    },
+    refetchInterval: 5000,
+    staleTime: 4000,
+    retry: 1,
+  })
+}
+
+/**
  * useBrpControllerOrientation — WebSocket subscriber to /ws/twin/{deviceId}
  * (commit ζ). Parses ~20 Hz frame batches; derives pitch + roll from accel
  * (gravity reference). Yaw is currently 0 (not derivable from accel alone;
