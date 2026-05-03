@@ -26,8 +26,9 @@
   "components": {
     "BrpMount": {
       "live": false,
-      "reason": "awaiting-O0-integration",
-      "implemented": false
+      "reason": "implemented-pre-ceremony",
+      "implemented": true,
+      "path": "src/components/BrpMount.tsx"
     },
     "BrpCanvas": {
       "live": false,
@@ -43,8 +44,9 @@
     },
     "LegibilityOverlay": {
       "live": false,
-      "reason": "not-yet-implemented",
-      "implemented": false
+      "reason": "implemented-pre-ceremony",
+      "implemented": true,
+      "path": "src/components/LegibilityOverlay.tsx"
     },
     "AccessibilityShell": {
       "live": false,
@@ -82,9 +84,28 @@
       "reason": "implemented-pre-ceremony",
       "implemented": true,
       "path": "src/hash/sceneFlashBudget.ts"
+    },
+    "mockLoaders": {
+      "live": false,
+      "reason": "synthetic-fixture-loaders-shape-validation-only",
+      "implemented": true,
+      "path": "src/mocks/loaders.ts"
     }
   },
-  "fixtures": {},
+  "fixtures": {
+    "pitlSnapshot": {
+      "live": false,
+      "reason": "synthetic-shape-validation-only",
+      "implemented": true,
+      "path": "src/mocks/fixtures/pitl.snapshot.json"
+    },
+    "enrollmentSession": {
+      "live": false,
+      "reason": "synthetic-shape-validation-only",
+      "implemented": true,
+      "path": "src/mocks/fixtures/enrollment.session.json"
+    }
+  },
   "adapters": {},
   "docs": {
     "BACKEND_CONTRACT": {
