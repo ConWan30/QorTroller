@@ -116,6 +116,47 @@ corrected from N=28 → N=32 to match `.github/INVARIANTS_ALLOWLIST.json`
 ground truth at commit time, with provenance recorded in the document
 itself (see the "Provenance note" sub-paragraph in `INTEGRATION_CONTRACT.md`).
 
+## Commit 4b scope (R3F core: BrpCanvas + AmbientLayer + sceneFlashBudget)
+
+Second sub-commit of the four-step Step 4 R3F surface. Lands the actual
+R3F mount: a hash-seeded ambient mesh under the AccessibilityShell context.
+
+- `src/components/BrpCanvas.tsx` — `@react-three/fiber` Canvas wrapper.
+  Consumes `motionShouldPause` from AccessibilityShell context →
+  `frameloop="never"` when paused, `"demand"` otherwise (PDF §A1).
+  Sets `role="presentation"` + `aria-hidden="true"` on the Canvas root
+  (PDF Block X PITL row coexistence). `data-live="false"` on the wrapper.
+  Pure helper `computeFrameloop(motionShouldPause)` exported for unit
+  testing without R3F.
+- `src/components/AmbientLayer.tsx` — pure `seedToInstanceParams(seed,
+  count)` generates 64 deterministic instances from Mulberry32 with
+  audit-readable bounds (positions ∈ [-1,1]³, rotations ∈ [0, 2π)³,
+  scale ∈ [0.5, 1.5]). drei `<Instances>` mesh, single draw call,
+  low-poly icosahedron geometry.
+- `src/hash/sceneFlashBudget.ts` — INV-BRP-4 progression hook. Bridges
+  scene-data to the existing pure-function `flashBudget.evaluateScene`.
+  Exports `AMBIENT_LAYER_MATERIAL` static descriptor (frequency_hz=0.5,
+  area_css_px2=50,000, delta_luminance=0.05, not red) — passes WCAG
+  2.3.1 by construction with 6× / 1.7× / 2× margins on the three
+  pathways simultaneously.
+- `src/main.tsx` updated: mounts `<BrpCanvas frozenOutput={32-zero-bytes}>`
+  inside `<AccessibilityShell>` for dev surface. The locked seed
+  `0x87b0f938` (per `deriveBrpSeed.test.ts` canonical-vector lock) is
+  what the dev surface visualizes — operator verifies the seed→visual
+  chain by reload.
+
+R3F deps added (versions match `frontend/package.json` for ceremony
+portability): `@react-three/fiber@^8.17.10`, `@react-three/drei@^9.117.3`,
+`three@^0.170.0`, `@types/three@^0.170.0`.
+
+Tests: 79 → 90 (+11). All R3F-WebGL-dependent assertions are deferred
+to 4d's Storybook + Playwright; component tests in 4b mock
+`@react-three/fiber` and `@react-three/drei` to assert React surface
+without WebGL.
+
+PerformanceMonitor (drei) deferred to 4d alongside its Storybook
+visual validation.
+
 ## Commit 4a scope (TS contracts + Vite + AccessibilityShell)
 
 First sub-commit of the four-step Step 4 R3F surface (4a/4b/4c/4d).
