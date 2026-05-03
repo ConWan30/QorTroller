@@ -46,8 +46,9 @@
     },
     "AccessibilityShell": {
       "live": false,
-      "reason": "not-yet-implemented",
-      "implemented": false
+      "reason": "implemented-pre-ceremony",
+      "implemented": true,
+      "path": "src/components/AccessibilityShell.tsx"
     },
     "PerfOverlay": {
       "live": false,
