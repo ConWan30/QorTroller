@@ -15,7 +15,7 @@
 // each prop's data source distinctly from Block W's audit-state badge.
 // Two distinct claims, both surfaced visibly.
 
-import { Suspense } from 'react'
+import { Suspense, useState } from 'react'
 import { BrpMount } from '../brp/components/BrpMount'
 import {
   getMockEnrollmentSession,
@@ -122,6 +122,10 @@ function LiveFalseBadge() {
 }
 
 export function BrpView() {
+  // Pull-out indicator drawer; collapsed by default so the renderer
+  // claims the full view (matches GamerView PCCDrawer pattern).
+  const [drawerOpen, setDrawerOpen] = useState(false)
+
   // Commit η: device discovery first; downstream hooks consume the
   // discovered ID. When discovery returns null (bridge offline OR no
   // controller seen), fall back to PLACEHOLDER_DEVICE_ID — the bridge
@@ -301,6 +305,19 @@ export function BrpView() {
     return `score ${score} (weighted ${weighted}) · humanity ${humanity} · ${nominal}/${total} nominal`
   })()
 
+  const indicatorRows = [
+    { kind: deviceSourceKind, label: 'device', value: deviceLabel },
+    { kind: frozenSourceKind, label: 'frozenOutput', value: frozenLabel },
+    { kind: 'synth', label: 'pitlSnapshot', value: 'getMockPitlSnapshot · 7 rows · live composition adapter pending' },
+    { kind: enrollmentSourceKind, label: 'enrollmentSession', value: enrollmentLabel },
+    { kind: 'operator', label: 'aidThreshold', value: `${AID_THRESHOLD} · Block Z placeholder` },
+    { kind: pulseSourceKind, label: 'pulse', value: pulseLabel },
+    { kind: orientationSourceKind, label: 'orientation', value: orientationLabel },
+    { kind: sessionSourceKind, label: 'session', value: sessionLabel },
+    { kind: hostStateSourceKind, label: 'host-state', value: hostStateLabel },
+    { kind: phgSourceKind, label: 'phg-profile', value: phgLabel },
+  ]
+
   return (
     <div
       data-testid="brp-view-root"
@@ -310,95 +327,12 @@ export function BrpView() {
         flex: 1,
         background: '#020408',
         overflow: 'hidden',
+        position: 'relative',
       }}
     >
-      {/* Honesty-first indicator panel — shown at top, separate from BrpMount */}
-      <header
-        style={{
-          padding: '0.75rem 1rem',
-          background: '#0a0e14',
-          borderBottom: '1px solid rgba(90, 143, 184, 0.18)',
-          color: '#cce',
-          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-          fontSize: '0.78rem',
-        }}
-      >
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: '0.5rem',
-          }}
-        >
-          <strong style={{ fontSize: '0.72rem', letterSpacing: '0.08em', textTransform: 'uppercase', color: '#aab' }}>
-            BRP Renderer · post-milestone incorporation (OQ-7)
-          </strong>
-          <LiveFalseBadge />
-        </div>
-
-        <div style={ROW_STYLE}>
-          <SourceBadge kind={deviceSourceKind} />
-          <span style={{ color: '#aab' }}>device</span>
-          <span style={{ color: '#dde' }}>{deviceLabel}</span>
-        </div>
-        <div style={ROW_STYLE}>
-          <SourceBadge kind={frozenSourceKind} />
-          <span style={{ color: '#aab' }}>frozenOutput</span>
-          <span style={{ color: '#dde' }}>{frozenLabel}</span>
-        </div>
-        <div style={ROW_STYLE}>
-          <SourceBadge kind="synth" />
-          <span style={{ color: '#aab' }}>pitlSnapshot</span>
-          <span style={{ color: '#dde' }}>
-            getMockPitlSnapshot · 7 rows · live composition adapter pending
-          </span>
-        </div>
-        <div style={ROW_STYLE}>
-          <SourceBadge kind={enrollmentSourceKind} />
-          <span style={{ color: '#aab' }}>enrollmentSession</span>
-          <span style={{ color: '#dde' }}>{enrollmentLabel}</span>
-        </div>
-        <div style={ROW_STYLE}>
-          <SourceBadge kind="operator" />
-          <span style={{ color: '#aab' }}>aidThreshold</span>
-          <span style={{ color: '#dde' }}>{AID_THRESHOLD} · Block Z placeholder</span>
-        </div>
-        <div style={ROW_STYLE}>
-          <SourceBadge kind={pulseSourceKind} />
-          <span style={{ color: '#aab' }}>pulse</span>
-          <span style={{ color: '#dde' }}>{pulseLabel}</span>
-        </div>
-        <div style={ROW_STYLE}>
-          <SourceBadge kind={orientationSourceKind} />
-          <span style={{ color: '#aab' }}>orientation</span>
-          <span style={{ color: '#dde' }}>{orientationLabel}</span>
-        </div>
-        <div style={ROW_STYLE}>
-          <SourceBadge kind={sessionSourceKind} />
-          <span style={{ color: '#aab' }}>session</span>
-          <span style={{ color: '#dde' }}>{sessionLabel}</span>
-        </div>
-        <div style={ROW_STYLE}>
-          <SourceBadge kind={hostStateSourceKind} />
-          <span style={{ color: '#aab' }}>host-state</span>
-          <span style={{ color: '#dde' }}>{hostStateLabel}</span>
-        </div>
-        <div style={ROW_STYLE}>
-          <SourceBadge kind={phgSourceKind} />
-          <span style={{ color: '#aab' }}>phg-profile</span>
-          <span style={{ color: '#dde' }}>{phgLabel}</span>
-        </div>
-      </header>
-
-      {/* The actual renderer.
-          AccessibilityShell's outer <div role="presentation"> has no width/
-          height styling (it's DOM-only by design). When BrpMount nests a
-          height:100% div inside it, the percentage resolves against `auto`
-          and collapses to 0 — the WebGL canvas renders into a 0x0 box and
-          appears blank. Wrapping in a position:absolute inset:0 div forces
-          explicit pixel dimensions from <main>'s position:relative, so the
-          height:100% cascade has a real reference. */}
+      {/* Renderer fills the whole view; the indicator panel is now a
+          right-edge pull-out drawer (matches PCCDrawer / ConsentPanel
+          pattern from GamerView). */}
       <main style={{ flex: 1, position: 'relative', minHeight: 0 }}>
         <div style={{ position: 'absolute', inset: 0 }}>
           <Suspense fallback={null}>
@@ -413,6 +347,112 @@ export function BrpView() {
               {...(hostState ? { hostState } : {})}
             />
           </Suspense>
+        </div>
+
+        {/* Pull-out tab — always visible, anchored to right edge */}
+        <div
+          onClick={() => setDrawerOpen(!drawerOpen)}
+          style={{
+            position: 'absolute',
+            top: '50%',
+            right: drawerOpen ? 320 : 0,
+            transform: 'translateY(-50%)',
+            width: 28,
+            height: 96,
+            background: 'rgba(90, 143, 184, 0.18)',
+            border: '1px solid rgba(90, 143, 184, 0.4)',
+            borderRight: 'none',
+            borderRadius: '6px 0 0 6px',
+            cursor: 'pointer',
+            zIndex: 11,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'right 0.32s ease',
+          }}
+          title={drawerOpen ? 'Hide BRP indicators' : 'Show BRP indicators'}
+        >
+          <span
+            style={{
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+              fontSize: 8,
+              color: '#5a8fb8',
+              letterSpacing: '0.16em',
+              writingMode: 'vertical-rl',
+              transform: 'rotate(180deg)',
+            }}
+          >
+            {drawerOpen ? 'BRP ◀' : 'BRP ▶'}
+          </span>
+        </div>
+
+        {/* Slide-in drawer */}
+        <div
+          aria-hidden={!drawerOpen}
+          style={{
+            position: 'absolute',
+            top: 0,
+            right: drawerOpen ? 0 : -320,
+            bottom: 0,
+            width: 320,
+            zIndex: 10,
+            background: '#0a0e14',
+            borderLeft: '1px solid rgba(90, 143, 184, 0.25)',
+            color: '#cce',
+            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+            fontSize: '0.78rem',
+            padding: '16px 16px',
+            overflowY: 'auto',
+            transition: 'right 0.32s ease',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'flex-start',
+              marginBottom: '0.75rem',
+              gap: '0.5rem',
+            }}
+          >
+            <strong
+              style={{
+                fontSize: '0.68rem',
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                color: '#aab',
+                lineHeight: 1.4,
+              }}
+            >
+              BRP Renderer · post-milestone (OQ-7)
+            </strong>
+            <button
+              onClick={() => setDrawerOpen(false)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#aab',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                fontSize: 14,
+                lineHeight: 1,
+                padding: 0,
+              }}
+              aria-label="Close indicator drawer"
+            >×</button>
+          </div>
+
+          <div style={{ marginBottom: '0.75rem' }}>
+            <LiveFalseBadge />
+          </div>
+
+          {indicatorRows.map((row) => (
+            <div key={row.label} style={ROW_STYLE}>
+              <SourceBadge kind={row.kind} />
+              <span style={{ color: '#aab' }}>{row.label}</span>
+              <span style={{ color: '#dde', wordBreak: 'break-word' }}>{row.value}</span>
+            </div>
+          ))}
         </div>
       </main>
     </div>
