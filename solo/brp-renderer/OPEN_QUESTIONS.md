@@ -62,6 +62,38 @@ This decision is **not deferred** — it is settled by design (D2 = 2-C, mount-a
 
 ---
 
+### OQ-5 — CI workflow placement (added Commit 4d)
+
+**Question.** Where does the GitHub Actions workflow live, given the workspace's D1 isolation guarantee?
+
+**Resolution.** **Deferred to integration ceremony Step 6 (Mount).** GitHub Actions only reads from repo-root `.github/workflows/`. Placing a workflow there would touch a path **outside** `solo/brp-renderer/`, violating Decision D1 (out-of-band isolation, no monorepo edges). Decision: defer to ceremony. At Step 6, when the artifact is vendored into the protocol monorepo's `apps/gamer-portal/src/brp/`, CI binding becomes natural — the protocol monorepo's existing CI infrastructure picks up the new path.
+
+**Local-time substitute.** `npm run test:e2e` runs Playwright + axe-core against a built Storybook locally. The 4d gate works without CI. Capture script `npm run capture` produces WebM artifacts on demand.
+
+**Who decides.** Integration ceremony, Step 6 (Mount).
+
+**When.** At ceremony time. Pre-ceremony CI binding would force a D1 exception with no offsetting benefit.
+
+---
+
+### OQ-6 — PEAT/Harding FPA conversion pipeline (added Commit 4d)
+
+**Question.** Captures from `npm run capture` are WebM (VP9). PEAT (Photosensitive Epilepsy Analysis Tool) requires 25fps uncompressed AVI. Is the conversion script part of the renderer or operator-driven?
+
+**Resolution.** **Operator-driven; documented but not committed as a script.** The conversion is a single ffmpeg invocation:
+```
+ffmpeg -i dist/captures/<story>.webm -an -vcodec rawvideo -y -r 25 output.avi
+```
+Documented in `README.md` §"Commit 4d scope" subsection. ffmpeg is not committed as a workspace dep (large binary; system-installed). Operator runs the conversion when a tagged-milestone PEAT audit is needed.
+
+**Why not ship the script?** Two reasons: (a) ffmpeg-side scripting is one line of bash, not script-worthy as a committed artifact; (b) PEAT itself is "retired" per UAMS Web Services (per CLAUDE.md / design-PDF research note); the W3C technique G19/G176/ΔL static analyzer (already shipped in 4a's `flashBudget.ts`) is the authoritative WCAG 2.3.1 conformance proof. PEAT is defense-in-depth.
+
+**Who decides.** Operator at any tagged-milestone audit.
+
+**When.** Ad-hoc, post-milestone.
+
+---
+
 ### OQ-4 — Phase 13X research artifact re-read
 
 **Question.** Should the Phase 13X research artifact's exact WebSocket prescription (`useRef`-managed WS with sequenced PoAC ingest, per the BRP design PDF's upstream context) be re-read before commit 4 (R3F surface)?

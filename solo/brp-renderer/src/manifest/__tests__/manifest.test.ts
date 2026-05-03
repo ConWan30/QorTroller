@@ -234,4 +234,54 @@ describe("brp.manifest.json — schema and honesty-first posture", () => {
     expect(loaders["live"]).toBe(false);
     expect(loaders["path"]).toBe("src/mocks/loaders.ts");
   });
+
+  // --- Commit 4d: PerfOverlay flip + tooling bucket + stories bucket ---
+
+  it("Commit 4d — PerfOverlay.implemented flips to true; live stays false", () => {
+    const m = manifest as Record<string, unknown>;
+    const components = m["components"] as Record<string, Record<string, unknown>>;
+    const perf = components["PerfOverlay"]!;
+    expect(perf["implemented"]).toBe(true);
+    expect(perf["live"]).toBe(false);
+    expect(perf["path"]).toBe("src/components/PerfOverlay.tsx");
+  });
+
+  it("Commit 4d — tooling bucket has storybook + playwright + mswHandlers + captureScript", () => {
+    const m = manifest as Record<string, unknown>;
+    const tooling = m["tooling"] as Record<string, Record<string, unknown>>;
+    for (const key of ["storybook", "playwright", "mswHandlers", "captureScript"]) {
+      expect(tooling[key], `tooling.${key}`).toBeDefined();
+      expect(tooling[key]!["live"], `tooling.${key}.live`).toBe(false);
+      expect(typeof tooling[key]!["path"]).toBe("string");
+    }
+  });
+
+  it("Commit 4d — stories bucket covers all 5 public components", () => {
+    const m = manifest as Record<string, unknown>;
+    const stories = m["stories"] as Record<string, Record<string, unknown>>;
+    for (const key of [
+      "AccessibilityShell",
+      "AmbientLayer",
+      "BrpCanvas",
+      "LegibilityOverlay",
+      "BrpMount",
+    ]) {
+      expect(stories[key], `stories.${key}`).toBeDefined();
+      expect(stories[key]!["live"], `stories.${key}.live`).toBe(false);
+      expect(stories[key]!["implemented"]).toBe(true);
+      expect((stories[key]!["path"] as string).endsWith(".stories.tsx")).toBe(true);
+    }
+  });
+
+  it("Commit 4d — every tooling and stories entry has live: false (honesty-first default)", () => {
+    const m = manifest as Record<string, unknown>;
+    for (const bucket of ["tooling", "stories"] as const) {
+      const entries = m[bucket] as Record<string, { live: boolean }>;
+      expect(Object.keys(entries).length).toBeGreaterThan(0);
+      for (const [key, entry] of Object.entries(entries)) {
+        expect(typeof entry.live, `${bucket}.${key}.live`).toBe("boolean");
+        expect(entry.live, `${bucket}.${key}.live`).toBe(false);
+      }
+    }
+  });
 });

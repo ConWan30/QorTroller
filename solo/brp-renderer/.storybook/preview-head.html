@@ -1,0 +1,34 @@
+<style>
+  /* sr-only utility — visually hidden, AT-visible. Mirrors the inline
+     style in AccessibilityShell.tsx so stories that override the
+     component get a consistent baseline. */
+  .sr-only {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+  }
+
+  /* Honor OS prefers-reduced-motion as a baseline; per-component
+     handling layered on top by AccessibilityShell + BrpCanvas. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  /* Storybook canvas dark background for ambient mesh visibility. */
+  .sb-show-main {
+    background: #0a0e14;
+  }
+</style>

@@ -119,7 +119,12 @@ export function LegibilityOverlay({
           fontSize: "0.7rem",
           textTransform: "uppercase",
           letterSpacing: "0.08em",
-          opacity: 0.7,
+          // Discrete muted color (was opacity: 0.7 which blended to ~#a5aab0
+          // against the active-aid bg #233547 and failed WCAG AA contrast at
+          // 4.88:1 in some axe configurations). #c8cdd6 stays >7:1 against
+          // both the ambient and active-aid backgrounds. Visual hierarchy
+          // comes from font-size + textTransform + letterSpacing, not opacity.
+          color: "#c8cdd6",
         }}
       >
         <span data-testid="overlay-mode-label">
@@ -156,7 +161,14 @@ export function LegibilityOverlay({
             }
             style={{
               display: "contents",
-              opacity: row.active ? 1 : 0.4,
+              // Discrete colors (replaces `opacity: row.active ? 1 : 0.4`,
+              // which blended #dde to ~#6e788a over the active-aid bg
+              // #233547 — 2.81:1, failing WCAG AA per 4d axe-core e2e).
+              // Active rows render at full text color (#dde, ~13:1); inactive
+              // rows use #a8b3c4 which stays ≥5.18:1 on the active-aid bg
+              // and ≥7.7:1 on the ambient bg. Caught by 4d's gate; bundled
+              // amendment to commit 8fb43c65's LegibilityOverlay.
+              color: row.active ? "#dde" : "#a8b3c4",
             }}
           >
             <span style={{ fontWeight: 600 }}>{row.layer}</span>
@@ -164,8 +176,17 @@ export function LegibilityOverlay({
             <span
               style={{
                 fontVariantNumeric: "tabular-nums",
+                // Above-threshold: #9bc4e8 (~6.3:1 on active-aid).
+                // Below-threshold: explicit #dde / #a8b3c4 inherited from
+                // parent `<li>` (no `inherit` — that resolved to the parent
+                // `<aside>` color through the opacity stack and failed
+                // contrast).
                 color:
-                  (row.score ?? 0) > aidThreshold ? "#9bc4e8" : "inherit",
+                  (row.score ?? 0) > aidThreshold
+                    ? "#9bc4e8"
+                    : row.active
+                      ? "#dde"
+                      : "#a8b3c4",
               }}
             >
               {row.score !== undefined ? row.score.toFixed(2) : "—"}

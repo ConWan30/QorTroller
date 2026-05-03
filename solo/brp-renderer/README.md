@@ -116,6 +116,79 @@ corrected from N=28 → N=32 to match `.github/INVARIANTS_ALLOWLIST.json`
 ground truth at commit time, with provenance recorded in the document
 itself (see the "Provenance note" sub-paragraph in `INTEGRATION_CONTRACT.md`).
 
+## Commit 4d scope (Storybook + Playwright + axe-core + capture + PerfOverlay)
+
+Final sub-commit of the four-step Step 4 R3F surface. Lands the
+visual validation surface that lets every prior commit's claim be
+verified end-to-end.
+
+**New tooling:**
+- **Storybook 8** (`@storybook/react-vite`) with `@storybook/addon-a11y`,
+  `@storybook/addon-essentials`, `msw-storybook-addon`. Config at
+  `.storybook/{main,preview,preview-head}`. Build artifact at
+  `storybook-static/` (gitignored).
+- **MSW v2** (`msw`) — service worker at `public/mockServiceWorker.js`,
+  handlers at `src/mocks/{handlers,browser}.ts`. Stub endpoints for
+  fixture variants (active-aid / degraded / enrollment-status).
+- **Playwright + axe-core** (`@playwright/test`, `@axe-core/playwright`)
+  — `playwright.config.ts` + `e2e/a11y.spec.ts`. Auto-builds Storybook,
+  serves via `http-server`, runs axe per story scoped to
+  `#storybook-root`. **22 tests pass** (21 stories + 1 meta).
+- **Capture script** (`scripts/capture.mjs`) — headless Playwright +
+  `canvas.captureStream(60)` + `MediaRecorder` per story → WebM at
+  `dist/captures/<story-id>.webm`. PEAT/Harding ingest is
+  operator-driven (`ffmpeg -i input.webm -an -vcodec rawvideo -y -r 25
+  output.avi`); see OPEN_QUESTIONS.md OQ-6.
+- **PerfOverlay** (`src/components/PerfOverlay.tsx`) — dev-only drei
+  `<PerformanceMonitor>` wrapper; tree-shaken in prod via
+  `import.meta.env.DEV`. +3 vitest tests.
+
+**Stories matrix (~21 stories across 5 components):**
+- AccessibilityShell (4): Default / WithReducedMotionOSPref /
+  WithUserMotionToggleOff / WithBothOnAndOff
+- AmbientLayer (4): DefaultSeed (locked `0x87b0f938`) /
+  NonDeterministicSeed / Count16 / Count256
+- BrpCanvas (4): Default / FrameloopNever / Count16 /
+  NonDeterministicSeed
+- LegibilityOverlay (4): AmbientMode / ActiveAidMode / AllRowsActive /
+  WithReducedMotion
+- BrpMount (5, design-PDF §A1 mandated): DefaultDevSurface /
+  EnrollmentEligible / EnrollmentCredentialed / TelemetryDegraded /
+  FullActiveAid
+
+**Bundled 4c amendment**: LegibilityOverlay color contrast fix.
+Caught by 4d's axe-core e2e gate — the original opacity-blended
+text rendered at 2.81:1 against the active-aid background, failing
+WCAG AA (4.5:1). Replaced opacity blending with discrete colors
+(active rows `#dde`, inactive rows `#a8b3c4`); both stay >5.18:1
+on active-aid bg and >7.7:1 on ambient bg. Header opacity replaced
+with explicit `#c8cdd6`. This is a real bug the verification-
+discipline-first axe gate caught — the source-component test in
+4c's commit was functionally correct (ARIA attributes, structure)
+but visually inaccessible.
+
+Tests: 111 → 118 vitest (+7) + 0 → 22 Playwright (+22).
+tsc --noEmit clean. `npm run build-storybook` clean.
+
+**Out of scope (deferred to ceremony / operator):**
+- GitHub Actions CI workflow — would touch repo-root
+  `.github/workflows/`, violating D1. OQ-5 added.
+- Visual regression baselines (commit-bloat trade-off).
+- PEAT/Harding 25fps AVI conversion script — operator-driven
+  ffmpeg one-liner. OQ-6 added.
+- `@storybook/test-runner` — separate Playwright spec is more
+  flexible per design PDF §"Layer 4".
+
+**Running the new tools:**
+```bash
+npm install                    # one-time, includes Chromium download for Playwright
+npm run storybook              # dev server on :6006
+npm run build-storybook        # produces storybook-static/
+npm run test:e2e:install       # one-time: download Chromium
+npm run test:e2e               # build + axe-core smoke per story
+npm run capture                # build storybook first, then capture all stories
+```
+
 ## Commit 4c scope (LegibilityOverlay + BrpMount + fixtures)
 
 Third sub-commit of the four-step Step 4 R3F surface. Lands the
