@@ -85,14 +85,21 @@ async function captureStory(browser, baseUrl, storyId, durationSeconds) {
   await page.waitForTimeout(750);
 
   // Drive canvas.captureStream + MediaRecorder in the page context.
-  const buffer = await page.evaluate(async (durMs) => {
+  //
+  // Serialization detail: Playwright's page.evaluate bridges return values
+  // as JSON-equivalent. ArrayBuffer / Blob / TypedArray do NOT survive — they
+  // arrive on the Node side as `{}`. Convert to a plain number array inside
+  // the page context; reconstruct as Buffer on the Node side.
+  // (Bug found at first real capture run after b3b7f39d; fix landed in this
+  // commit before the milestone-anchored capture archive was produced.)
+  const byteArray = await page.evaluate(async (durMs) => {
     return await new Promise((resolve, reject) => {
       try {
         const canvas = document.querySelector("canvas");
         if (!canvas || typeof canvas.captureStream !== "function") {
-          // No canvas (story is plain DOM). Capture a blank stream so the
+          // No canvas (story is plain DOM). Resolve to an empty array so the
           // output file still exists for completeness.
-          resolve(new ArrayBuffer(0));
+          resolve([]);
           return;
         }
         const stream = canvas.captureStream(60);
@@ -106,7 +113,9 @@ async function captureStory(browser, baseUrl, storyId, durationSeconds) {
         rec.onstop = async () => {
           const blob = new Blob(chunks, { type: "video/webm" });
           const ab = await blob.arrayBuffer();
-          resolve(ab);
+          // Number-array serializes across Playwright's bridge cleanly;
+          // Buffer.from(numberArray) reconstructs on the Node side.
+          resolve(Array.from(new Uint8Array(ab)));
         };
         rec.onerror = (e) => reject(e);
         rec.start();
@@ -118,7 +127,7 @@ async function captureStory(browser, baseUrl, storyId, durationSeconds) {
   }, durationSeconds * 1000);
 
   await context.close();
-  return Buffer.from(buffer);
+  return Buffer.from(byteArray);
 }
 
 async function main() {
@@ -129,7 +138,19 @@ async function main() {
   console.log(`base url: ${args.baseUrl}`);
   console.log(`output:   ${CAPTURE_DIR}`);
 
-  const browser = await chromium.launch({ headless: true });
+  // Headless Chromium needs explicit software GL for canvas.captureStream
+  // to yield frames. Without these flags, WebGL contexts initialize but
+  // never produce captureable frames; output WebM ends up as a zero-frame
+  // container header (~110 B) regardless of duration. swiftshader is
+  // bundled with Chromium and works without GPU drivers.
+  const browser = await chromium.launch({
+    headless: true,
+    args: [
+      "--use-gl=swiftshader",
+      "--use-angle=swiftshader",
+      "--enable-unsafe-swiftshader",
+    ],
+  });
   try {
     for (const story of stories) {
       const start = Date.now();
