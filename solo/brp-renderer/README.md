@@ -109,6 +109,39 @@ network call should escape; no chain RPC; no wallet operation.
 
 ---
 
+## Commit 2 scope (PV-CI gate-count amend, `3f538547`)
+
+Single-file amend: `INTEGRATION_CONTRACT.md` "Gate count note" paragraph
+corrected from N=28 → N=32 to match `.github/INVARIANTS_ALLOWLIST.json`
+ground truth at commit time, with provenance recorded in the document
+itself (see the "Provenance note" sub-paragraph in `INTEGRATION_CONTRACT.md`).
+
+## Commit 3 scope (backend contract / latency budget / open questions)
+
+Three new documents land alongside the foundation, plus a small manifest
+schema extension to track them:
+
+- `BACKEND_CONTRACT.md` — verified-as-of-commit endpoint inventory,
+  prop→endpoint mapping for `<BrpMount />`, Q-3 resolution
+  (interperson-separation v1 canonical), and an "Upstream spec drift"
+  section flagging F-5/F-6 for ceremony auditors.
+- `LATENCY_BUDGET.md` — per-prop staleness tolerance with REST polling
+  cadence references (matches existing `useCaptureHealth` 3s and
+  `useGrindChain` 5s patterns; no new pattern introduced).
+- `OPEN_QUESTIONS.md` — OQ-1 (canonical `frozenOutput` hash family;
+  five candidates), OQ-2 (PITL-snapshot consumption pattern; lean
+  toward `/agent/*`), OQ-3 (namespace agnosticism resolved-by-design),
+  OQ-4 (Phase 13X re-read deferred).
+
+Manifest extension: `brp.manifest.json` gains a `docs:` bucket with
+three `live: false` entries (one per new doc). Schema validator and
+manifest tests extended; total vitest count moves 67 → 70.
+
+R3F canvas surface (Commit 4+) is intentionally out-of-scope for
+Commit 3 and will be planned separately once these docs land.
+
+---
+
 ## What this commit must NOT do
 
 - Touch any file outside `solo/brp-renderer/`.
