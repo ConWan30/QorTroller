@@ -25,6 +25,7 @@ import {
   useBrpControllerOrientation,
   useBrpDeviceDiscovery,
   useBrpFrozenOutput,
+  useBrpPhgProfile,
   useBrpRecentRecords,
   useBrpRecordPulse,
   useCaptureHealth,
@@ -137,6 +138,7 @@ export function BrpView() {
   const controllerOrientation = useBrpControllerOrientation(activeDeviceId)
   const recentRecords = useBrpRecentRecords(activeDeviceId)
   const captureHealth = useCaptureHealth()
+  const phgProfile = useBrpPhgProfile(activeDeviceId)
 
   // Resolve frozenOutput: live bytes when chain has a hash; locked-seed
   // canonical fallback otherwise.
@@ -275,6 +277,30 @@ export function BrpView() {
     return `${host} · ${cap} · ${rate} · ${ready}`
   })()
 
+  // Commit κ: PHG profile indicator. Bridge returns 404 (→ null) for the
+  // placeholder device until first NOMINAL record arrives. liveDeviceId AND
+  // a non-null profile gate the LIVE posture.
+  const phgData = phgProfile.data
+  const phgSourceKind = liveDeviceId && phgData
+    ? 'live'
+    : phgProfile.error
+      ? 'live-fallback'
+      : 'synth'
+  const phgLabel = (() => {
+    if (phgProfile.isLoading) return 'loading…'
+    if (!phgData) {
+      return liveDeviceId ? 'no profile yet (no NOMINAL records)' : 'no profile (placeholder device)'
+    }
+    const score = phgData.phg_score ?? 0
+    const weighted = phgData.phg_score_weighted ?? 0
+    const humanity = typeof phgData.humanity_prob_avg === 'number'
+      ? phgData.humanity_prob_avg.toFixed(2)
+      : '—'
+    const nominal = phgData.nominal_records ?? 0
+    const total = phgData.total_records ?? 0
+    return `score ${score} (weighted ${weighted}) · humanity ${humanity} · ${nominal}/${total} nominal`
+  })()
+
   return (
     <div
       data-testid="brp-view-root"
@@ -357,6 +383,11 @@ export function BrpView() {
           <SourceBadge kind={hostStateSourceKind} />
           <span style={{ color: '#aab' }}>host-state</span>
           <span style={{ color: '#dde' }}>{hostStateLabel}</span>
+        </div>
+        <div style={ROW_STYLE}>
+          <SourceBadge kind={phgSourceKind} />
+          <span style={{ color: '#aab' }}>phg-profile</span>
+          <span style={{ color: '#dde' }}>{phgLabel}</span>
         </div>
       </header>
 
