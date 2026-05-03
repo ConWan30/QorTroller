@@ -116,6 +116,36 @@ corrected from N=28 → N=32 to match `.github/INVARIANTS_ALLOWLIST.json`
 ground truth at commit time, with provenance recorded in the document
 itself (see the "Provenance note" sub-paragraph in `INTEGRATION_CONTRACT.md`).
 
+## Commit 4a scope (TS contracts + Vite + AccessibilityShell)
+
+First sub-commit of the four-step Step 4 R3F surface (4a/4b/4c/4d).
+Lands the build/test infrastructure and the pure-DOM accessibility
+primitives that the R3F canvas (4b) will compose under:
+
+- `src/telemetry/contracts.ts` — TypeScript shapes for the renderer's
+  prop contract: `PitlRow`, `PitlSnapshot`, `EnrollmentSession`,
+  `LivenessFlags`, `BrpMountProps`. Mount-agnostic per Decision D2;
+  every value is opaque to the renderer.
+- `src/components/AccessibilityShell.tsx` — DOM-only component with
+  `role="presentation"` + `data-live="false"` shell root, sr-only
+  description sibling, `prefers-reduced-motion` matchMedia listener,
+  and a WCAG 2.2.2 photosensitivity-safety toggle persisted in
+  `localStorage` under the namespaced key `brp:motionDisabled`.
+  Exposes `motionShouldPause` to children via React context (4b's
+  `BrpCanvas` will consume).
+- `vite.config.ts` + `index.html` + `src/main.tsx` — Vite dev surface.
+  `npm run dev` mounts the AccessibilityShell with placeholder text;
+  `npm run build` produces a tsx build artifact.
+- `vitest.config.ts` switches `environment: node → jsdom` (math +
+  manifest tests still pass; required for component tests).
+- `tsconfig.json` adds `"jsx": "react-jsx"`.
+- AccessibilityShell.test.tsx ships +8 tests; manifest.test.ts ships
+  +1 progression assertion. Total vitest count: **78** (was 70).
+
+R3F deps (`@react-three/fiber`, `@react-three/drei`, `three`) arrive
+in 4b. MSW + fixtures arrive in 4c. Storybook + Playwright + axe-core
++ capture script arrive in 4d.
+
 ## Commit 3 scope (backend contract / latency budget / open questions)
 
 Three new documents land alongside the foundation, plus a small manifest
