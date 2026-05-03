@@ -1,0 +1,42 @@
+{
+  "root": true,
+  "rules": {
+    "no-restricted-imports": [
+      "error",
+      {
+        "patterns": [
+          {
+            "group": ["**/poac/**", "**/vhp/**", "**/consensus/**", "**/zk/**"],
+            "message": "INV-BRP-2 (vendored): BRP code must not import verification-side modules. Aesthetics are a consequence of verification, never an input. The renderer's flow contract is verification → frozen output → BRP renderer → pixels; no arrow goes the other direction."
+          },
+          {
+            "group": ["**/bridge/**", "**/contracts/**", "**/sdk/**", "**/agents/**"],
+            "message": "INV-BRP-2 (vendored): BRP code in src/brp/** must not import from sibling VAPI workspaces. Out-of-band isolation per Decision D1. Pre-ceremony incorporation (OQ-7) is bounded to vendoring + view wiring only."
+          },
+          {
+            "group": ["ethers", "ethers/*"],
+            "message": "Decision D3: hash library is viem. ethers is not a dep — see solo/brp-renderer/src/manifest/brp.manifest.json#hash_library.substituted_from."
+          }
+        ]
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["src/brp/**/*.ts", "src/brp/**/*.tsx"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["../../api/**", "../api/**", "**/frontend/src/api/**"],
+                "message": "INV-BRP-2 (vendored): BRP renderer code stays mount-agnostic per Decision D2. The frontend host page (e.g., views/BrpView.jsx) does telemetry wiring; src/brp/** never imports from src/api/."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
