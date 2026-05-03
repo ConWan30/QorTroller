@@ -39,31 +39,71 @@ NOTE: T199-8 (all_pairs_gate_enabled default=True) fixed to use os.environ.pop i
 Active wallet (bridge + deployer): `0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692` (~40.43 IOTX as of 2026-04-17; deployed Phase 221+222 contracts; all 45 contracts live)
 Previous bridge wallet (no longer accessible): `0xfCF4681e57C8de9650c3Eb4dA8e26dC9441A5EF1` (deployed original 14 contracts — addresses unchanged, still valid on-chain)
 Chain ID: 4690 (IoTeX Testnet)
-Current phase: Phase 237-EXTEND COMPLETE 2026-04-26 — Phase 237 TRULY COMPLETE: VAPIConsentRegistry LIVE 0xA82dB0eF0bF7D15b6400EDd4A09C0D4338C948dA / W3bstream applet stub extended / WagmiProvider wired (first wallet-write precedent) / ConsentPanel drawer mounted in GamerView / SDK VAPIConsent + OpenAPI 3.0.0-phase237 / FSCA CONSENT_REVOKED_BUT_DATA_FLOWING rule (25 contradictions). Phase 236 fully shipped (WATCHDOG + VAME + CORPUS-SNAPSHOT). Three-terminal setup: T0=`python scripts/bridge_watchdog.py`, T2=`python auto_grind.py`, T3=frontend. Grind continues at chain_length=20/100. Next phase: 237-ZK-SEPPROOF (Groth16 proof-of-separation-ratio without revealing biometric vectors) → 238-MARKETPLACE → 239-READINESS (W2 — gated on GIC_100).
+Current phase: Phase O0 ON-CHAIN COMPLETE 2026-05-03 — both Operator Agents permanently registered on IoTeX testnet (Sentry agentId 0xb21e1ec2... / Guardian agentId 0xbd8c7fba...). Pass 2C Section 14 specification → Block B implementation → Block-B-prime wrapper → eight-step on-chain registration arc with five empirical-finding commits preserved as permanent fixes. Phase O0 exit criteria 12-16 satisfied. Phase O1 unblocked (OAuth issuance + agent process startup + Cedar policy bundle authoring). Main protocol track: Phase 237-EXTEND remains the latest milestone (VAPIConsentRegistry LIVE 0xA82dB0eF0bF7D15b6400EDd4A09C0D4338C948dA, FSCA 25 contradictions, Phase 236 WATCHDOG+VAME+CORPUS-SNAPSHOT shipped). Three-terminal setup unchanged: T0=`python scripts/bridge_watchdog.py`, T2=`python auto_grind.py`, T3=frontend. Grind continues at chain_length=20/100. Next protocol-track phase: 237-ZK-SEPPROOF → 238-MARKETPLACE → 239-READINESS (W2, gated on GIC_100). Next operator-track phase: O1 (shadow mode — agents observe but don't act).
 
-## Phase O0 — PAUSED 2026-04-29
+## Phase O0 — ON-CHAIN REGISTRATION COMPLETE 2026-05-03
 
-The Operator series initiative's Phase O0 is paused at completion of Section 6.2.
-Pause is **operator-initiated based on wallet refill availability constraint**, not
-blocked on technical issue.
+The Operator series initiative's Phase O0 closed its on-chain registration arc on
+2026-05-03 with both Operator Agents (anchor-sentry and guardian) permanently
+registered on IoTeX testnet. Phase O0 exit criteria 12-16 satisfied. Phase O1 unblocked.
 
-**State summary**:
-- **Source-and-tests work COMPLETE**: 16 commits across Streams 1, 2-prep, 3-prep, 4-prep, 5-prep
-- **Dry-run verification COMPLETE**: commit `b261b546` (`docs/phase-o0-stream-2-deploy-dryrun.md`)
-- **Section 6.2 GitHub Apps registration COMPLETE**: `vapi-anchor-sentry` and `vapi-guardian` registered; ten artifacts at canonical bridge locations (`bridge/.env` + `bridge/secrets/`, gitignored)
+**Canonical Operator Agent identities (FROZEN per Pass 2C Q9 encoding)**:
 
-**Remaining Phase O0 work (gated)**:
-- Stream 2-deploy: gated on wallet refill to 5 IOTX target per Pass 2A V8 (current 0.5525 IOTX)
-- Section 6.3 KMS provisioning: gated on KMS provider access (independent of wallet refill)
-- Section 6.4 agent registration: gated on Stream 2-deploy AND Section 6.3
-- Section 8 exit criteria verification: gated on prior Phase O0 work
+| Field | Anchor Sentry | Guardian |
+|-------|---------------|----------|
+| agentId (Q9 frozen) | `0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c` | `0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1` |
+| Device address (DID) | `0xeaA6FD569a964C08D541F8e154aB3Ac8cD4e2743` | `0x9c577Fb2162824565ef57edd1B55a8EC5f58c181` |
+| ioID DID identifier | `did:io:0xeaa6fd569a964c08d541f8e154ab3ac8cd4e2743` | `did:io:0x9c577fb2162824565ef57edd1b55a8ec5f58c181` |
+| ioID tokenId | 495 | 496 |
+| ERC-6551 TBA | `0xCc59C57bB7746791Be0945BfB96Be408a73944e4` | `0xd7aDA37AdFC08Fed43c934aB3b9609697b739092` |
+| DID document CID (IPFS) | `bafkreiepyeeb5kck345uuc6u7amo5y4fgn2ijf7exdrs5zkm6e7yzvms2q` | `bafkreihvoogaqtrjsituky73fnphu2452mqdry2xsr3dgn56t32in33b7m` |
+| AgentRegistry status | DEFINED (0) | DEFINED (0) |
+
+Triple-verification of Q9-frozen agentIds passed for both agents:
+independent computation + wrapper return + AgentRegistered event emission all matched
+byte-for-byte. agentIds are now permanent for the rest of VAPI's lifetime.
+
+**Phase O0 footprint at session close**: 44 commits on origin/main. Final commit
+`44c26ce0` (chore(operator-agents): on-chain registration session 2026-05-03)
+contains the complete audit trail in its body (all 14 transaction hashes,
+empirical-finding commits, wallet reconciliation).
+
+**Five empirical-finding commits preserved as permanent fixes** (each captures a
+"verification at one layer didn't exercise behavior at the next layer" finding
+that surfaced during execution and warranted permanent code-level correction):
+
+| Commit | Fix |
+|--------|-----|
+| `8c0c8200` | V8.3 constant update post-deployment |
+| `fef267e9` | Recovery script for IoTeX OOG quirk (initialize gas-limit override) |
+| `300c49e4` | Deploy script permanent fix: explicit gas limits + receipt status checks + empirical gas baselines NatSpec |
+| `10288cc3` | IOID_STORE_ADDR EIP-55 checksum fix (web3.py 7.x strict validation) |
+| `a107d404` | step_7 ioID tokenId readback via tokenOfOwnerByIndex (deployed contract lacks `ids` public getter despite canonical b94ad092 source) |
+
+**Wallet reconciliation**:
+- Session start: 16.973199 IOTX
+- Session end: 12.292873 IOTX
+- Total consumed: 4.680326 IOTX (~2.7x original Section 14.6 estimate of 1.73 IOTX, driven by upgradeable contract gas + recovery overhead)
+
+**Phase O0 status**: COMPLETE for the on-chain identity infrastructure.
+Operator agents are registered but inactive per Section 7 design (no agent process startup,
+no OAuth tokens issued, scopeHash = bytes32(0)). Phase O1 next: issue OAuth tokens,
+turn on agent process startup, populate scopeHash with first Cedar policy bundle.
+
+**Pre-2026-05-03 Phase O0 state (preserved as historical context)**:
+The on-chain registration arc traversed (single day):
+- Pass 2C Section 14 fourth amendment (commit `d2911480`)
+- Block B implementation (commit `db9b4b97`)
+- Block-B-prime wrapper script (commit `06099677`)
+- External Action A (Hardhat deploy of VAPIOperatorAgentNFT to `0xa0CDD2B3E292c56030185c66a3d423278A4c467b`)
+- Wrapper-driven steps 3-8 with two adaptive-fix iterations + Q9 freeze for both agents
 
 **References**:
-- `docs/phase-o0-pause-point.md` — full pause-point detail (commit roster, dependency graph, resumption checklist)
-- `docs/phase-o0-stream-2-deploy-dryrun.md` — Stream 2-deploy execution reference
+- `docs/phase-o0-pause-point.md` — earlier pause-point detail (commit roster, dependency graph) — historical
+- `docs/phase-o0-stream-2-deploy-dryrun.md` — Stream 2-deploy execution reference — historical
+- Commit `44c26ce0` body — complete on-chain registration audit trail (canonical reference)
 
 Phase O0 is a parallel track to the main protocol's phase progression (Phase 237/238/239 above).
-Phase O0 resumption begins when wallet refill or KMS provider access becomes available.
 
 Phase 235 — REAL GRIND UNDERWAY 2026-04-26 (chain_length=16/100; smoke @ chain_length=5 complete; PCC-RATE-FIX commit c6e64229 brought bridge poll_rate_hz from 118 → 1152 Hz; capture_state=NOMINAL + host_state=EXCLUSIVE_USB stable under DEFAULT thresholds; bridge running grind_phase235_v1 / GRIND_TARGET=100 with PCC_SMOKE_BYPASS unset; auto_grind.py (repo root, untracked) drives autonomous adjudication — polls bridge every 60s, fires POST /agent/adjudicate when grind_ready=True and ctx != MENU_DETECTED, throttles to 5-min minimum, stops at chain_length>=grind_target)
 Phase 235-PCC-RATE-FIX — COMPLETE 2026-04-25 (commit c6e64229; parallel hidapi counter on interface 3 reads true USB HID delivery rate independent of pydualsense's biometric pipeline; pydualsense lives on interface 0, counter on interface 3, no contention; pydualsense's 8ms-throttled _poll_frames continues feeding the L4 tremor FFT at ~120 Hz so frequency bin spacing stays valid; PCC sees ~1000 Hz and classifies EXCLUSIVE_USB; new Transport fields _hid_report_total/_last_hid_report_total/_hid_counter_thread/_hid_counter_running; _start_hid_rate_counter() daemon thread spawns on connect; _shutdown_cleanup releases handle; falls back to len(frames) if hidapi missing or interface 3 unavailable; resolves the only remaining blocker for the real 100-session grind under default thresholds)
