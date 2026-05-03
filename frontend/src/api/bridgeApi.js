@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { activateMock, deactivateMock, isMockActive, MOCK } from './mockBridge'
 import { apiGet, ApiKeyError, BridgeOfflineError } from './client'
@@ -315,6 +316,93 @@ export function useEnrollmentStatus(deviceId) {
     staleTime: 25000,
     retry: 1,
   })
+}
+
+/**
+ * useBrpRecordPulse — WebSocket subscriber to /ws/records (commit ε).
+ *
+ * Connects to the bridge's PoAC record broadcast channel
+ * (bridge/vapi_bridge/transports/http.py:230). Each record-arrival message
+ * advances `lastPulseTs` and `pulseCount`, which the BrpView passes to
+ * <BrpMount pulse={...}> to drive the ambient mesh's emissive pulse.
+ *
+ * This is the FIRST active-SPA WebSocket consumer (per
+ * Backend State Assessment §F-9 — assessment.md F-9 noted that the
+ * existing 17 useQuery hooks are all REST polling; only frontend/legacy/
+ * ControllerTwin.jsx had a WS reference, in inactive legacy code).
+ * Documented as a deliberate scope shift; the BRP renderer matches the
+ * design PDF's gameplay-frequency mental model (~1 record/sec when
+ * grinding) which REST polling at 3-5s cadence cannot match.
+ *
+ * Direct WebSocket connection (not via Vite proxy): vite.config.js does
+ * not currently configure ws:true on its proxy entries, so we connect
+ * directly to ws://${hostname}:8080. Bridge accepts this without origin
+ * checks (no CSP enforced on the /ws/records handler).
+ *
+ * Auto-reconnect: exponential backoff capped at 30s. Connection state
+ * surfaced via `connected` so BrpView can show a pulse-source indicator.
+ */
+export function useBrpRecordPulse() {
+  const [pulseCount, setPulseCount] = useState(0)
+  const [lastPulseTs, setLastPulseTs] = useState(0)
+  const [connected, setConnected] = useState(false)
+  const wsRef = useRef(null)
+  const reconnectAttemptsRef = useRef(0)
+
+  useEffect(() => {
+    let cleanup = false
+
+    function connect() {
+      if (cleanup) return
+      try {
+        const host = window.location.hostname || 'localhost'
+        const ws = new WebSocket(`ws://${host}:8080/ws/records`)
+        wsRef.current = ws
+
+        ws.onopen = () => {
+          if (cleanup) {
+            ws.close()
+            return
+          }
+          setConnected(true)
+          reconnectAttemptsRef.current = 0
+        }
+
+        ws.onmessage = () => {
+          if (cleanup) return
+          // Each broadcast = one PoAC record. Increment + stamp.
+          // We don't parse the payload; the BRP renderer only needs the
+          // event arrival time, not the record contents (those flow
+          // through frozenOutput via the GIC chain hash separately).
+          setPulseCount((c) => c + 1)
+          setLastPulseTs(Date.now())
+        }
+
+        ws.onclose = () => {
+          if (cleanup) return
+          setConnected(false)
+          // Exponential backoff: 1s, 2s, 4s, 8s, 16s, capped at 30s.
+          const attempt = reconnectAttemptsRef.current++
+          const delay = Math.min(1000 * Math.pow(2, attempt), 30000)
+          setTimeout(connect, delay)
+        }
+
+        ws.onerror = () => {
+          // close handler fires after error; backoff handles retry there.
+        }
+      } catch {
+        if (!cleanup) setConnected(false)
+      }
+    }
+
+    connect()
+    return () => {
+      cleanup = true
+      try { wsRef.current?.close() } catch { /* fail-silent */ }
+    }
+  }, [])
+
+  return { pulseCount, lastPulseTs, connected }
 }
 
 // Phase 237-EXTEND — Per-category consent status (read-side).

@@ -29,9 +29,10 @@
 import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Instances, Instance } from "@react-three/drei";
-import type { Group } from "three";
+import type { Group, MeshStandardMaterial } from "three";
 import { deriveBrpSeed } from "../hash/deriveBrpSeed";
 import { mulberry32 } from "../hash/mulberry32";
+import type { PulseSignal } from "../telemetry/contracts";
 
 // -----------------------------------------------------------------------------
 // Pure-function instance-parameter generator.
@@ -91,6 +92,8 @@ export function seedToInstanceParams(
 export interface AmbientLayerProps {
   readonly frozenOutput: Uint8Array;
   readonly instanceCount?: number;
+  /** Optional commit-ε pulse signal; emissive bumps when ts changes. */
+  readonly pulse?: PulseSignal;
 }
 
 /**
@@ -108,9 +111,30 @@ export interface AmbientLayerProps {
  */
 const ROTATION_RAD_PER_SEC = 0.628;
 
+/**
+ * Commit ε pulse-animation parameters.
+ *
+ * Pulse rises from BASE → PEAK over PULSE_DURATION_MS via a sin-shaped
+ * envelope (smooth ramp up + symmetric ramp down). At gameplay-frequency
+ * PoAC arrival (~1/sec), this gives effectively 1 Hz oscillation — well
+ * under WCAG 2.3.1 G19's 3 Hz cap. Pulse animation only runs when the
+ * pulse prop is provided AND its `ts` field has changed since the last
+ * frame; the renderer remains static-rotation-only when no host page
+ * supplies the prop.
+ *
+ * BASE_EMISSIVE_INTENSITY matches the meshStandardMaterial's resting
+ * value (0.15). PEAK = 0.45 keeps ΔL well under 0.10 against the dark
+ * canvas bg, satisfying the ΔL clamp pathway as additional defense in
+ * depth on top of the G19 frequency-cap pathway.
+ */
+const BASE_EMISSIVE_INTENSITY = 0.15;
+const PULSE_PEAK_INTENSITY = 0.45;
+const PULSE_DURATION_MS = 500;
+
 export function AmbientLayer({
   frozenOutput,
   instanceCount = DEFAULT_INSTANCE_COUNT,
+  pulse,
 }: AmbientLayerProps): JSX.Element {
   const seed = useMemo(() => deriveBrpSeed(frozenOutput), [frozenOutput]);
   const params = useMemo(
@@ -123,9 +147,50 @@ export function AmbientLayer({
   // parent that doesn't change the instanced-mesh draw count (still 1 call).
   const groupRef = useRef<Group | null>(null);
 
+  // Commit ε: refs for pulse animation. Material ref to mutate emissive
+  // intensity per-frame. Last-pulse-ts ref to detect prop changes (we
+  // never call setState on every frame — useFrame is the canonical place
+  // for direct material mutation).
+  const materialRef = useRef<MeshStandardMaterial | null>(null);
+  const lastObservedPulseTsRef = useRef<number>(0);
+  const pulseEndTimeRef = useRef<number>(0);
+  const pulseIntensityRef = useRef<number>(0);
+
   useFrame((_, delta) => {
     if (groupRef.current) {
       groupRef.current.rotation.y += delta * ROTATION_RAD_PER_SEC;
+    }
+
+    // Pulse trigger detection: pulse.ts strictly greater than the last
+    // observed value means a new event arrived since the previous frame.
+    // Schedule the bump animation to end at now + PULSE_DURATION_MS.
+    if (pulse && pulse.ts > lastObservedPulseTsRef.current) {
+      lastObservedPulseTsRef.current = pulse.ts;
+      pulseEndTimeRef.current = performance.now() + PULSE_DURATION_MS;
+      // Clamp intensity to [0, 1] in case the host page passes an
+      // out-of-range value.
+      pulseIntensityRef.current = Math.max(0, Math.min(1, pulse.intensity));
+    }
+
+    // Pulse animation: sin-shaped envelope BASE → PEAK → BASE over
+    // PULSE_DURATION_MS, scaled by pulseIntensityRef. When no active
+    // pulse is in flight, snap back to BASE_EMISSIVE_INTENSITY.
+    if (materialRef.current) {
+      const now = performance.now();
+      if (now < pulseEndTimeRef.current) {
+        const remaining =
+          (pulseEndTimeRef.current - now) / PULSE_DURATION_MS;
+        const t = 1 - remaining; // 0 → 1
+        const factor = Math.sin(t * Math.PI); // 0 → 1 → 0
+        const bump =
+          (PULSE_PEAK_INTENSITY - BASE_EMISSIVE_INTENSITY) *
+          factor *
+          pulseIntensityRef.current;
+        materialRef.current.emissiveIntensity =
+          BASE_EMISSIVE_INTENSITY + bump;
+      } else {
+        materialRef.current.emissiveIntensity = BASE_EMISSIVE_INTENSITY;
+      }
     }
   });
 
@@ -135,9 +200,10 @@ export function AmbientLayer({
         {/* Low-poly icosahedron — 12 vertices, 20 faces. */}
         <icosahedronGeometry args={[0.04, 0]} />
         <meshStandardMaterial
+          ref={materialRef}
           color="#5a8fb8"
           emissive="#1a3a5a"
-          emissiveIntensity={0.15}
+          emissiveIntensity={BASE_EMISSIVE_INTENSITY}
           metalness={0.2}
           roughness={0.7}
         />

@@ -22,7 +22,10 @@
 import { AccessibilityShell } from "./AccessibilityShell";
 import { BrpCanvas } from "./BrpCanvas";
 import { LegibilityOverlay } from "./LegibilityOverlay";
-import type { BrpMountProps, EnrollmentSession } from "../telemetry/contracts";
+import type {
+  BrpMountProps,
+  EnrollmentSession,
+} from "../telemetry/contracts";
 
 interface EnrollmentBadgeProps {
   readonly session: EnrollmentSession;
@@ -76,6 +79,7 @@ export function BrpMount(props: BrpMountProps): JSX.Element {
     enrollmentSession,
     aidThreshold,
     liveness,
+    pulse,
   } = props;
 
   return (
@@ -94,7 +98,7 @@ export function BrpMount(props: BrpMountProps): JSX.Element {
           minHeight: "320px",
         }}
       >
-        <BrpCanvas frozenOutput={frozenOutput} />
+        <BrpCanvas frozenOutput={frozenOutput} {...(pulse ? { pulse } : {})} />
         <LegibilityOverlay
           pitlSnapshot={pitlSnapshot}
           aidThreshold={aidThreshold}

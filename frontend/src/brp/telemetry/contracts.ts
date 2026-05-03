@@ -104,6 +104,40 @@ export interface LivenessFlags {
 }
 
 // -----------------------------------------------------------------------------
+// Pulse signal (optional, commit ε).
+//
+// When the host page wires a live event stream (e.g., /ws/records WebSocket
+// for PoAC record arrivals at gameplay frequency), it can pass a `pulse`
+// prop whose `ts` field changes with each event. The renderer responds with
+// a brief emissive bump on the ambient mesh — visible "alive" feedback that
+// telemetry is flowing.
+//
+// Optional. Renderer remains mount-agnostic per D2: when omitted, the mesh
+// continues its base rotation (commit δ) without pulse animation.
+//
+// Per WCAG 2.3.1 (G19 < 3 Hz): the pulse animation duration + emissive
+// delta are bounded so the effective oscillation stays within budget. See
+// sceneFlashBudget AMBIENT_LAYER_MATERIAL frequency_hz documentation for
+// the worst-case rate (1 Hz at gameplay-frequency PoAC; 3× under cap).
+// -----------------------------------------------------------------------------
+
+export interface PulseSignal {
+  /**
+   * Monotonically advancing timestamp. The renderer triggers a pulse
+   * animation when this value differs from the previous frame's
+   * observed value. Suggested source: Date.now() at the time of the
+   * upstream event arrival.
+   */
+  readonly ts: number;
+  /**
+   * Pulse intensity in [0, 1]. 1 = full emissive bump; 0 = no animation.
+   * Allows the host page to throttle visual response by event class
+   * (e.g., damp pulses for low-confidence telemetry).
+   */
+  readonly intensity: number;
+}
+
+// -----------------------------------------------------------------------------
 // The full prop contract for <BrpMount />.
 //
 // 4a ships the type. 4c ships the matching <BrpMount /> component. The
@@ -116,4 +150,10 @@ export interface BrpMountProps {
   readonly enrollmentSession?: EnrollmentSession;
   readonly aidThreshold: number;
   readonly liveness: LivenessFlags;
+  /**
+   * Optional. When present, a change in `pulse.ts` triggers a brief
+   * emissive animation on the ambient mesh (commit ε). Omit to keep
+   * the mesh in base-rotation-only mode (commit δ behavior).
+   */
+  readonly pulse?: PulseSignal;
 }
