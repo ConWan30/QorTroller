@@ -184,6 +184,12 @@
       "reason": "documentation-pending-ceremony-confirmation",
       "implemented": true,
       "path": "OPEN_QUESTIONS.md"
+    },
+    "MILESTONE_4": {
+      "live": false,
+      "reason": "self-review-note-anchored-to-tag-brp-milestone-step4-complete",
+      "implemented": true,
+      "path": "MILESTONE_4.md"
     }
   },
   "pv_ci_drafts": {
