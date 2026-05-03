@@ -7,11 +7,15 @@ import { FONTS } from './shared/design/tokens'
 const GamerView        = lazy(() => import('./views/GamerView').then((m) => ({ default: m.GamerView })))
 const DeveloperView    = lazy(() => import('./views/DeveloperView').then((m) => ({ default: m.DeveloperView })))
 const ManufacturerView = lazy(() => import('./views/ManufacturerView').then((m) => ({ default: m.ManufacturerView })))
+// 4th view: BRP renderer post-milestone incorporation (OQ-7).
+// Pre-ceremony, live: false posture. See frontend/src/brp/VENDORED_FROM.md.
+const BrpView          = lazy(() => import('./views/BrpView').then((m) => ({ default: m.BrpView })))
 
 const VIEW_MAP = {
   gamer:        GamerView,
   developer:    DeveloperView,
   manufacturer: ManufacturerView,
+  brp:          BrpView,
 }
 
 function ViewLoader() {
