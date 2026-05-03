@@ -1,0 +1,42 @@
+{
+  "root": true,
+  "parser": "@typescript-eslint/parser",
+  "parserOptions": {
+    "ecmaVersion": 2022,
+    "sourceType": "module"
+  },
+  "plugins": ["@typescript-eslint"],
+  "rules": {
+    "no-restricted-imports": [
+      "error",
+      {
+        "patterns": [
+          {
+            "group": ["**/poac/**", "**/vhp/**", "**/consensus/**", "**/zk/**"],
+            "message": "INV-BRP-2 (draft): BRP code must not import verification-side modules. Aesthetics are a consequence of verification, never an input."
+          },
+          {
+            "group": [
+              "**/frontend/src/**",
+              "**/bridge/**",
+              "**/contracts/**",
+              "**/sdk/**",
+              "**/scripts/**",
+              "**/agents/**"
+            ],
+            "message": "INV-BRP-2 (draft): solo/brp-renderer must not import from any sibling VAPI workspace. Out-of-band isolation per Decision D1 (1-A)."
+          },
+          {
+            "group": ["ethers", "ethers/*"],
+            "message": "Decision D3: hash library is viem. ethers is intentionally not a dep — see brp.manifest.json#hash_library.substituted_from."
+          },
+          {
+            "group": ["hardhat", "@nomicfoundation/*", "foundry*"],
+            "message": "Out-of-scope: this workspace must not contain any deploy or chain-RPC tooling."
+          }
+        ]
+      }
+    ]
+  },
+  "ignorePatterns": ["node_modules", "dist", "*.json", "*.md"]
+}
