@@ -116,7 +116,7 @@ IOTEX_TESTNET_CHAIN_ID = 4690
 # IoTeX ioID infrastructure (Section 14.2 + Section 14.5 verified empirically)
 PROJECT_REGISTRY_ADDR = "0x060581AA1A4e0cC92FBd74d251913238De2F13cd"
 IOID_REGISTRY_ADDR = "0x0A7e595C7889dF3652A19aF52C18377bF17e027D"
-IOID_STORE_ADDR = "0x60cac5ce11cb2f98bf179be5fd3d801c3d5dbff2"
+IOID_STORE_ADDR = "0x60cac5CE11cb2F98bF179BE5fd3D801C3D5DBfF2"
 
 # IOID_CONTRACT_ADDR is the per-DID NFT contract; per N4 + M6 it is the
 # canonical TBA token contract used in ERC-6551 derivation INSIDE ioID.mint.

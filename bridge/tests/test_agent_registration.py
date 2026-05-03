@@ -641,7 +641,7 @@ def test_section_14_constants_match_pass_2c_specs():
     # Section 14 verified addresses (ioID infrastructure)
     assert PROJECT_REGISTRY_ADDR == "0x060581AA1A4e0cC92FBd74d251913238De2F13cd"
     assert IOID_REGISTRY_ADDR == "0x0A7e595C7889dF3652A19aF52C18377bF17e027D"
-    assert IOID_STORE_ADDR == "0x60cac5ce11cb2f98bf179be5fd3d801c3d5dbff2"
+    assert IOID_STORE_ADDR == "0x60cac5CE11cb2F98bF179BE5fd3D801C3D5DBfF2"
     # N4 — ioID contract is canonical TBA token contract (NOT IProject)
     assert IOID_CONTRACT_ADDR == "0x45Ce3E6f526e597628c73B731a3e9Af7Fc32f5b7"
     # Section 14 chain ID (IoTeX testnet)
