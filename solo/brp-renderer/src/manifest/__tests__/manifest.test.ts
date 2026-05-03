@@ -192,4 +192,46 @@ describe("brp.manifest.json — schema and honesty-first posture", () => {
     expect(scene["live"]).toBe(false);
     expect(scene["path"]).toBe("src/hash/sceneFlashBudget.ts");
   });
+
+  // --- Commit 4c: LegibilityOverlay + BrpMount + fixtures + mockLoaders ---
+
+  it("Commit 4c — LegibilityOverlay + BrpMount flip implemented:true; live stays false", () => {
+    const m = manifest as Record<string, unknown>;
+    const components = m["components"] as Record<string, Record<string, unknown>>;
+
+    const overlay = components["LegibilityOverlay"]!;
+    expect(overlay["implemented"]).toBe(true);
+    expect(overlay["live"]).toBe(false);
+    expect(overlay["path"]).toBe("src/components/LegibilityOverlay.tsx");
+
+    const mount = components["BrpMount"]!;
+    expect(mount["implemented"]).toBe(true);
+    expect(mount["live"]).toBe(false);
+    expect(mount["path"]).toBe("src/components/BrpMount.tsx");
+  });
+
+  it("Commit 4c — fixtures bucket has pitlSnapshot + enrollmentSession (live:false)", () => {
+    const m = manifest as Record<string, unknown>;
+    const fixtures = m["fixtures"] as Record<string, Record<string, unknown>>;
+
+    const pitl = fixtures["pitlSnapshot"]!;
+    expect(pitl).toBeDefined();
+    expect(pitl["live"]).toBe(false);
+    expect(pitl["path"]).toBe("src/mocks/fixtures/pitl.snapshot.json");
+
+    const enrollment = fixtures["enrollmentSession"]!;
+    expect(enrollment).toBeDefined();
+    expect(enrollment["live"]).toBe(false);
+    expect(enrollment["path"]).toBe("src/mocks/fixtures/enrollment.session.json");
+  });
+
+  it("Commit 4c — modules.mockLoaders added (implemented:true, live:false)", () => {
+    const m = manifest as Record<string, unknown>;
+    const modules = m["modules"] as Record<string, Record<string, unknown>>;
+    const loaders = modules["mockLoaders"]!;
+    expect(loaders).toBeDefined();
+    expect(loaders["implemented"]).toBe(true);
+    expect(loaders["live"]).toBe(false);
+    expect(loaders["path"]).toBe("src/mocks/loaders.ts");
+  });
 });
