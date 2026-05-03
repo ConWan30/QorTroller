@@ -25,6 +25,10 @@ def _env_bool(key: str, default: bool = False) -> bool:
     return os.environ.get(key, str(default)).lower() in ("1", "true", "yes")
 
 
+def _env_float(key: str, default: float = 0.0) -> float:
+    return float(os.environ.get(key, str(default)))
+
+
 @dataclass(frozen=True)
 class Config:
     """Immutable bridge configuration, loaded once at startup."""
@@ -1546,6 +1550,78 @@ class Config:
     GIC chain-stamping pipeline end-to-end on hardware where USB enumeration
     is unstable.  SMOKE-ONLY — disables USB-vs-BT discrimination.  Disable
     before the real 100-session grind."""
+
+    # --- Phase 235-PCC-SPC: Statistical Process Control + 3-signal haptic-tolerance binding ---
+    # Defaults DATA-ANCHORED from session 2026-05-03 (35.5 min, 887 PCC snapshots,
+    # 26.6K record obs). When pcc_spc_enabled=False, classifier behavior is
+    # byte-identical to pre-Phase-235-PCC-SPC (Phase 234.7).  Opt-in via
+    # PCC_SPC_ENABLED=true; rollback = set False + bridge restart.
+    pcc_spc_enabled: bool = field(
+        default_factory=lambda: _env_bool("PCC_SPC_ENABLED", False)
+    )
+    """Phase 235-PCC-SPC — opt-in SPC classifier (USL outlier trim + in-control
+    capability + 3-signal haptic-tolerance binding + frequency-band gate).
+    Default False; behavior identical to Phase 234.7 when disabled."""
+
+    pcc_upper_hz: int = field(
+        default_factory=lambda: _env_int("PCC_UPPER_HZ", 3500)
+    )
+    """Phase 235-PCC-SPC — Upper Spec Limit.  Samples above this trim from CV
+    calc (treated as outliers, not stability data).  Data-anchored: p99=3240,
+    max=7252 (reconnect bursts) → 3500 catches outliers without trimming
+    legitimate variance."""
+
+    pcc_haptic_tolerance_window_ms: int = field(
+        default_factory=lambda: _env_int("PCC_HAPTIC_TOLERANCE_WINDOW_MS", 500)
+    )
+    """Phase 235-PCC-SPC — Max duration of tolerated rate dip per 3-signal binding.
+    Sub-second haptic events get suppressed; >500ms dips fall through to
+    DEGRADED.  Bot exploit ceiling — longer dip indicates real degradation."""
+
+    pcc_haptic_min_dip_hz: int = field(
+        default_factory=lambda: _env_int("PCC_HAPTIC_MIN_DIP_HZ", 200)
+    )
+    """Phase 235-PCC-SPC — Floor for tolerated rate dip; below this, DEGRADED
+    classification fires regardless of haptic context.  Sub-200Hz cannot be
+    masked even with valid trigger_active+accel_var."""
+
+    pcc_spc_window_n: int = field(
+        default_factory=lambda: _env_int("PCC_SPC_WINDOW_N", 30)
+    )
+    """Phase 235-PCC-SPC — Sample count in capability window for in-control
+    calculation."""
+
+    pcc_spc_in_control_pct: float = field(
+        default_factory=lambda: _env_float("PCC_SPC_IN_CONTROL_PCT", 0.85)
+    )
+    """Phase 235-PCC-SPC — Fraction of last N samples that must be within
+    [LSL=pcc_nominal_hz, USL=pcc_upper_hz] for "in control" classification.
+    Data-anchored: 96.4% of snapshots NOMINAL → 0.85 tighter than initial 0.80
+    proposal (still permissive enough to absorb haptic-induced sub-window
+    jitter)."""
+
+    pcc_haptic_tremor_min_hz: float = field(
+        default_factory=lambda: _env_float("PCC_HAPTIC_TREMOR_MIN_HZ", 4.0)
+    )
+    """Phase 235-PCC-SPC INV-PCC-005 — Lower bound of valid tremor_peak_hz for
+    haptic-tolerance binding.  Excludes "OTHER" sub-tremor class (data:
+    69% of OTHER bursts had tremor_peak_hz < 4Hz; without this constraint a
+    bot could spoof low-frequency oscillations to satisfy accel_var threshold
+    without producing real motor or human-tremor signature)."""
+
+    pcc_haptic_tremor_max_hz: float = field(
+        default_factory=lambda: _env_float("PCC_HAPTIC_TREMOR_MAX_HZ", 60.0)
+    )
+    """Phase 235-PCC-SPC INV-PCC-005 — Upper bound of valid tremor_peak_hz for
+    haptic-tolerance binding.  Caps at high-motor band (rumble + adaptive
+    trigger motor signatures cluster 40-60 Hz); rejects aliased >60Hz."""
+
+    pcc_haptic_accel_threshold: float = field(
+        default_factory=lambda: _env_float("PCC_HAPTIC_ACCEL_THRESHOLD", 0.0003)
+    )
+    """Phase 235-PCC-SPC — Minimum micro_tremor_accel_variance for a sample to
+    qualify as a haptic burst.  Data-anchored: distribution p90=0.000323;
+    0.0003 captures top-decile bursts (motor + human + transient classes)."""
 
     grind_mode: bool = field(
         default_factory=lambda: _env_bool("GRIND_MODE", False)

@@ -82,9 +82,25 @@ class CaptureHealthMonitor:
         self._degraded_hz: int = getattr(cfg, "pcc_degraded_hz", 100) if cfg else 100
         self._stable_s: int = getattr(cfg, "pcc_stable_window_s", 30) if cfg else 30
 
+        # Phase 235-PCC-SPC: Statistical Process Control + 3-signal haptic-tolerance
+        self._spc_enabled: bool = bool(getattr(cfg, "pcc_spc_enabled", False)) if cfg else False
+        self._upper_hz: int = int(getattr(cfg, "pcc_upper_hz", 3500)) if cfg else 3500
+        self._haptic_tolerance_window_s: float = (
+            float(getattr(cfg, "pcc_haptic_tolerance_window_ms", 500)) / 1000.0
+            if cfg else 0.5
+        )
+        self._haptic_min_dip_hz: int = int(getattr(cfg, "pcc_haptic_min_dip_hz", 200)) if cfg else 200
+        self._spc_window_n: int = int(getattr(cfg, "pcc_spc_window_n", 30)) if cfg else 30
+        self._spc_in_control_pct: float = float(getattr(cfg, "pcc_spc_in_control_pct", 0.85)) if cfg else 0.85
+        self._haptic_tremor_min_hz: float = float(getattr(cfg, "pcc_haptic_tremor_min_hz", 4.0)) if cfg else 4.0
+        self._haptic_tremor_max_hz: float = float(getattr(cfg, "pcc_haptic_tremor_max_hz", 60.0)) if cfg else 60.0
+        self._haptic_accel_threshold: float = float(getattr(cfg, "pcc_haptic_accel_threshold", 0.0003)) if cfg else 0.0003
+
         self._lock = threading.Lock()
-        # Each sample: (rate_hz, monotonic_ts)
-        self._samples: deque[tuple[float, float]] = deque(maxlen=self._SAMPLE_MAXLEN)
+        # Each sample: (rate_hz, monotonic_ts, trigger_active, accel_var, tremor_peak_hz)
+        # Phase 235-PCC-SPC: extended from 2-tuple to 5-tuple to carry game-context.
+        # Backward-compat: existing unpack sites use `for r, _ts, *_ in samples`.
+        self._samples: deque[tuple[float, float, bool, float, float]] = deque(maxlen=self._SAMPLE_MAXLEN)
         self._poll_rate_hz: float = 0.0
         self._capture_state: CaptureState = CaptureState.DISCONNECTED
         self._host_state: HostState = HostState.UNKNOWN
@@ -98,30 +114,58 @@ class CaptureHealthMonitor:
     # Public API
     # ------------------------------------------------------------------
 
-    def update_sample(self, n_frames: int, window_s: float) -> str | None:
+    def update_sample(
+        self,
+        n_frames: int,
+        window_s: float,
+        *,
+        trigger_active: bool = False,
+        accel_var: float = 0.0,
+        tremor_peak_hz: float = 0.0,
+    ) -> str | None:
         """Record one collection interval result.  Returns new state if transition occurred.
 
         Args:
-            n_frames:  Number of HID frames collected in this interval.
-            window_s:  Duration of the collection interval in seconds (typically 1.0).
+            n_frames:       Number of HID frames collected in this interval.
+            window_s:       Duration of the collection interval in seconds (typically 1.0).
+            trigger_active: Phase 235-PCC-SPC kw-only — whether L2/R2 trigger fired
+                            in the most recent record.  Used by SPC haptic-tolerance
+                            binding (Signal 1).  Default False = no game-context.
+            accel_var:      Phase 235-PCC-SPC kw-only — micro_tremor_accel_variance
+                            from the most recent record.  Used by SPC haptic-tolerance
+                            binding (Signal 2).  Default 0.0 = no haptic event.
+            tremor_peak_hz: Phase 235-PCC-SPC kw-only — tremor_peak_hz from the most
+                            recent record.  Used by INV-PCC-005 frequency-band gate
+                            (must fall within [haptic_tremor_min_hz, haptic_tremor_max_hz]
+                            for tolerance to fire).  Default 0.0 = no spectral signature.
 
         Returns:
             New CaptureState.value if a state transition just occurred, else None.
+
+        Phase 235-PCC-SPC INV-PCC-002: kw-only-with-default signature preserves backward
+        compatibility — pre-Phase-235-PCC-SPC callers using update_sample(n_frames, window_s)
+        continue to work; defaults yield byte-identical behavior to Phase 234.7.
         """
         now = time.monotonic()
         rate = (n_frames / window_s) if window_s > 0 else 0.0
 
         with self._lock:
-            self._samples.append((rate, now))
+            self._samples.append((rate, now, bool(trigger_active), float(accel_var), float(tremor_peak_hz)))
             self._last_sample_ts = now
             self._disconnect_reason = ""
             return self._recompute(now)
 
     def signal_disconnect(self, reason: str = "timeout") -> None:
-        """Explicitly mark DISCONNECTED (call on HID timeout / poll error)."""
+        """Explicitly mark DISCONNECTED (call on HID timeout / poll error).
+
+        Phase 235-PCC-SPC INV-PCC-003: signal_disconnect ALWAYS overrides SPC
+        classification — explicit disconnect cannot be masked by in-control
+        capability or haptic-tolerance binding.  Fail-closed precedence preserved.
+        """
         now = time.monotonic()
         with self._lock:
-            self._samples.append((0.0, now))
+            # Phase 235-PCC-SPC: append zero-rate sample with no game-context (forced disconnect).
+            self._samples.append((0.0, now, False, 0.0, 0.0))
             self._last_sample_ts = now
             self._disconnect_reason = reason
             self._recompute(now)
@@ -168,27 +212,33 @@ class CaptureHealthMonitor:
         samples = list(self._samples)
 
         # Explicit disconnect overrides rate averaging immediately
+        # INV-PCC-003: this precedence is preserved regardless of _spc_enabled.
         if self._disconnect_reason:
             effective_rate = 0.0
         # Staleness: if no sample in 3× the expected interval, treat as disconnected
         elif samples and (now - samples[-1][1]) > 3.0:
             effective_rate = 0.0
         elif samples:
-            # Weighted recent average: use the last 10 samples for responsiveness
+            # Weighted recent average: use the last 10 samples for responsiveness.
+            # Phase 235-PCC-SPC: 5-tuple unpacking via `*_` to ignore game-context fields.
             recent = samples[-10:]
-            effective_rate = sum(r for r, _ in recent) / len(recent)
+            effective_rate = sum(r for r, _ts, *_ in recent) / len(recent)
         else:
             effective_rate = 0.0
 
         self._poll_rate_hz = effective_rate
 
-        # Classify capture state
-        if effective_rate >= self._nominal_hz:
-            new_state = CaptureState.NOMINAL
-        elif effective_rate >= self._degraded_hz:
-            new_state = CaptureState.DEGRADED
+        # Phase 235-PCC-SPC: branch classifier on _spc_enabled
+        if self._spc_enabled and not self._disconnect_reason:
+            new_state = self._classify_capture_state_spc(samples, effective_rate, now)
         else:
-            new_state = CaptureState.DISCONNECTED
+            # Classic classification (Phase 234.7) — byte-identical when _spc_enabled=False
+            if effective_rate >= self._nominal_hz:
+                new_state = CaptureState.NOMINAL
+            elif effective_rate >= self._degraded_hz:
+                new_state = CaptureState.DEGRADED
+            else:
+                new_state = CaptureState.DISCONNECTED
 
         # Classify host state
         new_host = self._infer_host_state(samples, effective_rate)
@@ -216,9 +266,85 @@ class CaptureHealthMonitor:
 
         return None
 
+    def _classify_capture_state_spc(self, samples: list, effective_rate: float, now: float) -> CaptureState:
+        """Phase 235-PCC-SPC alternative classifier.
+
+        Decision tree (top-down; first match wins):
+          1. Haptic-tolerance fires (3-signal binding + frequency-band gate per
+             INV-PCC-004 + INV-PCC-005)  → NOMINAL (suppress sub-second dip)
+          2. SPC capability: ≥ in_control_pct of last spc_window_n samples
+             within [LSL=nominal_hz, USL=upper_hz]                                → NOMINAL
+          3. Effective rate ≥ LSL                                                  → NOMINAL (classic path)
+          4. Effective rate ≥ degraded_hz                                          → DEGRADED
+          5. Else                                                                  → DISCONNECTED
+
+        Note: INV-PCC-003 fail-closed override (signal_disconnect → DISCONNECTED)
+        is checked at _recompute level *before* dispatching to this method.
+        """
+        # Step 1: haptic-tolerance gate
+        if self._haptic_tolerance_active(samples, now, effective_rate):
+            return CaptureState.NOMINAL
+
+        # Step 2: SPC in-control capability
+        recent_n = samples[-self._spc_window_n:] if len(samples) >= self._spc_window_n else samples
+        if recent_n:
+            # Trim outliers above USL from CV calc (treated as outliers, not stability data).
+            in_band = sum(
+                1 for r, _ts, *_ in recent_n
+                if self._nominal_hz <= r <= self._upper_hz
+            )
+            in_control_frac = in_band / len(recent_n)
+            mean_recent = sum(r for r, _ts, *_ in recent_n) / len(recent_n)
+            # In-control when fraction in spec ≥ threshold AND mean is in spec.
+            # Mean check prevents bot from sustaining 800 Hz baseline + 6 spike
+            # samples crossing LSL → would NOT be NOMINAL despite 6 in-band.
+            if in_control_frac >= self._spc_in_control_pct and self._nominal_hz <= mean_recent <= self._upper_hz:
+                return CaptureState.NOMINAL
+
+        # Step 3-5: classic classification (matches Phase 234.7 logic)
+        if effective_rate >= self._nominal_hz:
+            return CaptureState.NOMINAL
+        if effective_rate >= self._degraded_hz:
+            return CaptureState.DEGRADED
+        return CaptureState.DISCONNECTED
+
+    def _haptic_tolerance_active(self, samples: list, now: float, effective_rate: float) -> bool:
+        """Phase 235-PCC-SPC INV-PCC-004 + INV-PCC-005 — 3-signal haptic-tolerance binding.
+
+        ALL of the following must hold for tolerance to fire:
+          (a) Most recent sample(s) within tolerance window: trigger_active=True
+              AND accel_var ≥ haptic_accel_threshold AND
+              haptic_tremor_min_hz ≤ tremor_peak_hz ≤ haptic_tremor_max_hz
+          (b) Effective rate dip is bounded: rate ≥ haptic_min_dip_hz AND rate < nominal_hz
+              (sub-floor dips and full-NOMINAL rates don't need tolerance)
+          (c) Tolerance window has not been exceeded: a binding sample exists
+              within haptic_tolerance_window_s (i.e., the dip is sub-second)
+
+        Returns True iff ALL three hold; False otherwise (fall through to classic path).
+        """
+        # (b) — rate must be in DEGRADED band (between min_dip and LSL)
+        if effective_rate < self._haptic_min_dip_hz:
+            return False
+        if effective_rate >= self._nominal_hz:
+            return False
+
+        # (a) + (c) — find a binding sample within tolerance window
+        cutoff = now - self._haptic_tolerance_window_s
+        for rate, ts, ta, av, tp in reversed(samples):
+            if ts < cutoff:
+                break  # samples ordered chronologically; older ones can't bind
+            if (
+                ta
+                and av >= self._haptic_accel_threshold
+                and self._haptic_tremor_min_hz <= tp <= self._haptic_tremor_max_hz
+            ):
+                return True
+        return False
+
     def _infer_host_state(self, samples: list, rate: float) -> HostState:
         """Infer host arbitration state from per-sample rate variance."""
-        rates = [r for r, _ in samples if r > 0]
+        # Phase 235-PCC-SPC: 5-tuple unpacking via `*_` to ignore game-context fields.
+        rates = [r for r, _ts, *_ in samples if r > 0]
         if len(rates) < 5:
             return HostState.UNKNOWN
         if rate < self._degraded_hz:
