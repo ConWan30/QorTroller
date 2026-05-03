@@ -7,14 +7,49 @@
  * the bridge wallet allowance to mint two device NFTs (one per operator
  * agent: anchor-sentry → tokenId 1; guardian → tokenId 2).
  *
- * Gas estimate per Section 14.6:
- *   Deployment:     ~0.30 IOTX
- *   initialize:     part of ~0.05 IOTX initialize+configureMinter group
- *   configureMinter:part of same group
- *   Total:          ~0.35 IOTX
+ * Empirical gas baselines from third sitting External Action A + recovery
+ * (commit fef267e9). Future operators reference these baselines for cost
+ * estimation rather than Hardhat estimates which underestimate actual
+ * IoTeX testnet consumption by approximately 3-4x for upgradeable
+ * contract operations:
+ *   Deploy upgradeable contract:    ~2.17 IOTX (~2,165,909 gas at 1000 gwei)
+ *   Initialize upgradeable contract: ~0.13 IOTX (~126,053 gas at 1000 gwei)
+ *   configureMinter:                 ~0.07 IOTX (~65,216 gas at 1000 gwei)
+ *   Total deployment cost:          ~2.37 IOTX
+ *   Plus margin for any IoTeX-specific cost amplification:  ~3.0 IOTX
  *
- * Wallet: 0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692 (16.97 IOTX —
- *         9.8x headroom against full ~1.73 IOTX Section 14.6 budget)
+ * Empirical findings preserved as permanent corrections in this script:
+ *
+ *   Finding 1 (gas estimation underestimation): Hardhat automatic gas
+ *   estimation for upgradeable contract initializer underestimated
+ *   actual gas need on IoTeX testnet — Hardhat estimated ~127K gas;
+ *   actual need was 126K with overhead pushing past the chosen limit.
+ *   OpenZeppelin ERC721Upgradeable + OwnableUpgradeable use namespaced
+ *   storage per ERC-7201 with larger storage write costs than
+ *   non-upgradeable variants. Fix: explicit gasLimit overrides on
+ *   initialize (500000) and configureMinter (200000). See WIF-059
+ *   and Phase 237.5 Path C+ for IoTeX OOG (status 0x65) precedent.
+ *
+ *   Finding 2 (receipt status checking): Original script called
+ *   tx.wait() and proceeded without checking receipt.status. When
+ *   initialize reverted in External Action A, tx.wait() returned a
+ *   receipt (the tx was mined; just reverted) and the script proceeded
+ *   to configureMinter where pre-flight estimateGas aborted on
+ *   owner=0x0 condition. The script crashed with ProviderError but
+ *   the actual cause (initialize revert) was opaque without diagnostic
+ *   work. Fix: explicit receipt.status !== 1n checks after each
+ *   tx.wait() call (deploy + initialize + configureMinter). On failure:
+ *   throw with tx hash + explorer link + diagnostic context.
+ *
+ *   Finding 3 (cost estimation reliance on empirical observations):
+ *   Initial recovery cost framing of 0.05 IOTX was approximately 4x
+ *   lower than actual 0.19 IOTX because the framing relied on Hardhat
+ *   estimation patterns. Future cost estimation references the
+ *   empirical baselines documented in the NatSpec block above rather
+ *   than Hardhat estimates.
+ *
+ * Wallet: 0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692 (third sitting
+ *         start was 16.97 IOTX; ~3.0 IOTX safe budget per finding 3)
  *
  * Usage (run only when ready to deploy on testnet):
  *   npx hardhat run scripts/deploy-vapi-operator-agent-nft.js --network iotex_testnet
@@ -57,18 +92,84 @@ async function main() {
   const deployTx = contract.deploymentTransaction();
   console.log("  deploy tx:", deployTx ? deployTx.hash : "<unknown>");
 
+  // Finding 2: explicit receipt status check after deployment.
+  // Halts on first failure with diagnostic info rather than cascading
+  // to subsequent operations. See header NatSpec for failure-mode context.
+  if (deployTx) {
+    const deployReceipt = await deployTx.wait();
+    if (deployReceipt.status !== 1n) {
+      throw new Error(
+        `Deploy reverted: status=${deployReceipt.status} (expected 1n). ` +
+        `tx=${deployTx.hash} block=${deployReceipt.blockNumber} ` +
+        `gasUsed=${deployReceipt.gasUsed}. Explorer: ` +
+        `https://testnet.iotexscan.io/tx/${deployTx.hash}`
+      );
+    }
+    console.log(
+      "  deploy confirmed: block=" + deployReceipt.blockNumber +
+      " gasUsed=" + deployReceipt.gasUsed.toString() +
+      " status=" + deployReceipt.status,
+    );
+  }
+
   // 2. Initialize the contract (sets name, symbol, Ownable owner = deployer)
+  // Finding 1: explicit gasLimit override per IoTeX OOG quirk.
+  // Hardhat's automatic gas estimation underestimates upgradeable contract
+  // initializer gas need on IoTeX testnet (estimated ~127K vs actual 126K
+  // with overhead pushing past the chosen limit during execution).
+  // 500000 gives 3.9x margin. See WIF-059 + Phase 237.5 Path C+ for
+  // IoTeX OOG (status 0x65) precedent. Also see recovery commit fef267e9
+  // for the empirical finding that motivated this fix.
   const initTx = await contract.initialize(
     VAPI_OPERATOR_AGENT_NFT_NAME,
     VAPI_OPERATOR_AGENT_NFT_SYMBOL,
+    { gasLimit: 500000 },
   );
-  await initTx.wait();
-  console.log("initialize tx:", initTx.hash);
+  console.log("initialize tx submitted:", initTx.hash);
+  // Finding 2: explicit receipt status check.
+  const initReceipt = await initTx.wait();
+  if (initReceipt.status !== 1n) {
+    throw new Error(
+      `initialize reverted: status=${initReceipt.status} (expected 1n). ` +
+      `tx=${initTx.hash} block=${initReceipt.blockNumber} ` +
+      `gasUsed=${initReceipt.gasUsed}. Explorer: ` +
+      `https://testnet.iotexscan.io/tx/${initTx.hash}. ` +
+      `If status=0x65 (IoTeX OOG), increase gasLimit beyond 500000.`
+    );
+  }
+  console.log(
+    "  initialize confirmed: block=" + initReceipt.blockNumber +
+    " gasUsed=" + initReceipt.gasUsed.toString() +
+    " status=" + initReceipt.status,
+  );
 
   // 3. Configure bridge wallet (deployer) as minter with allowance for 2 NFTs
-  const configTx = await contract.configureMinter(deployer.address, MINTER_ALLOWANCE);
-  await configTx.wait();
-  console.log("configureMinter tx:", configTx.hash);
+  // Finding 1: explicit gasLimit override per IoTeX OOG quirk (same
+  // rationale as initialize call above). 200000 gives 4x margin against
+  // typical configureMinter cost (~50-65K). See header NatSpec.
+  const configTx = await contract.configureMinter(
+    deployer.address,
+    MINTER_ALLOWANCE,
+    { gasLimit: 200000 },
+  );
+  console.log("configureMinter tx submitted:", configTx.hash);
+  // Finding 2: explicit receipt status check.
+  const configReceipt = await configTx.wait();
+  if (configReceipt.status !== 1n) {
+    throw new Error(
+      `configureMinter reverted: status=${configReceipt.status} (expected 1n). ` +
+      `tx=${configTx.hash} block=${configReceipt.blockNumber} ` +
+      `gasUsed=${configReceipt.gasUsed}. Explorer: ` +
+      `https://testnet.iotexscan.io/tx/${configTx.hash}. ` +
+      `If owner is 0x0, the prior initialize call did not complete; ` +
+      `inspect that tx receipt for the actual failure cause.`
+    );
+  }
+  console.log(
+    "  configureMinter confirmed: block=" + configReceipt.blockNumber +
+    " gasUsed=" + configReceipt.gasUsed.toString() +
+    " status=" + configReceipt.status,
+  );
   console.log("  minter:", deployer.address, "allowance:", MINTER_ALLOWANCE);
 
   // 4. Smoke tests — verify state via view calls
