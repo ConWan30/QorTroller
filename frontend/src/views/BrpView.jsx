@@ -349,26 +349,26 @@ export function BrpView() {
           </Suspense>
         </div>
 
-        {/* Pull-out tab — always visible, anchored to right edge */}
+        {/* Pull-out tab — always visible, anchored to left edge */}
         <div
           onClick={() => setDrawerOpen(!drawerOpen)}
           style={{
             position: 'absolute',
             top: '50%',
-            right: drawerOpen ? 320 : 0,
+            left: drawerOpen ? 320 : 0,
             transform: 'translateY(-50%)',
             width: 28,
             height: 96,
             background: 'rgba(90, 143, 184, 0.18)',
             border: '1px solid rgba(90, 143, 184, 0.4)',
-            borderRight: 'none',
-            borderRadius: '6px 0 0 6px',
+            borderLeft: 'none',
+            borderRadius: '0 6px 6px 0',
             cursor: 'pointer',
             zIndex: 11,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            transition: 'right 0.32s ease',
+            transition: 'left 0.32s ease',
           }}
           title={drawerOpen ? 'Hide BRP indicators' : 'Show BRP indicators'}
         >
@@ -382,7 +382,7 @@ export function BrpView() {
               transform: 'rotate(180deg)',
             }}
           >
-            {drawerOpen ? 'BRP ◀' : 'BRP ▶'}
+            {drawerOpen ? 'BRP ▶' : 'BRP ◀'}
           </span>
         </div>
 
@@ -392,18 +392,18 @@ export function BrpView() {
           style={{
             position: 'absolute',
             top: 0,
-            right: drawerOpen ? 0 : -320,
+            left: drawerOpen ? 0 : -320,
             bottom: 0,
             width: 320,
             zIndex: 10,
             background: '#0a0e14',
-            borderLeft: '1px solid rgba(90, 143, 184, 0.25)',
+            borderRight: '1px solid rgba(90, 143, 184, 0.25)',
             color: '#cce',
             fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
             fontSize: '0.78rem',
             padding: '16px 16px',
             overflowY: 'auto',
-            transition: 'right 0.32s ease',
+            transition: 'left 0.32s ease',
           }}
         >
           <div
