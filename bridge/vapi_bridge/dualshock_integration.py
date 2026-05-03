@@ -356,6 +356,7 @@ class DualShockTransport:
         self._chain       = chain_client
         self._interval    = float(getattr(cfg, "dualshock_record_interval_s", 1.0))
         self._pcc_monitor = None  # set via set_pcc_monitor() (Phase 234.7)
+        self._last_bio_features = None  # Phase 235-PCC-SPC: previous-cycle BiometricFeatureFrame for SPC haptic-tolerance binding
         # Phase 235-PCC-RATE-FIX: PCC needs the TRUE USB HID delivery rate
         # (~1000 Hz on interface 3 for DualSense Edge), not the bridge's
         # biometric-sample rate (~120 Hz, throttled to dt_ms=8 in _poll_frames
@@ -1106,10 +1107,24 @@ class DualShockTransport:
                 await asyncio.sleep(self._interval)
                 continue
 
+            # Phase 235-PCC-SPC: read previous-cycle game-context for SPC haptic-tolerance binding.
+            # The previous cycle's haptic event temporally precedes the current rate observation,
+            # which is the correct semantic for the binding (motor fires → bandwidth dip after).
+            # All defaults are safe — when self._last_bio_features is None or _pending_pitl_meta
+            # is empty (first iteration / startup), the binding cannot fire (signal=0/False),
+            # which is fail-safe (falls through to classic classification).
+            _prev_meta = getattr(self, "_pending_pitl_meta", {}) or {}
+            _prev_bio = getattr(self, "_last_bio_features", None)
+            _spc_kwargs = {
+                "trigger_active": bool(_prev_meta.get("trigger_active", 0)),
+                "accel_var": float(getattr(_prev_bio, "micro_tremor_accel_variance", 0.0)) if _prev_bio is not None else 0.0,
+                "tremor_peak_hz": float(getattr(_prev_bio, "tremor_peak_hz", 0.0)) if _prev_bio is not None else 0.0,
+            }
+
             if not frames:
                 log.debug("Session loop iter=%d: no frames, sleeping", _loop_iter)
                 if self._pcc_monitor is not None:  # Phase 234.7 Layer 1
-                    self._pcc_monitor.update_sample(0, self._interval)
+                    self._pcc_monitor.update_sample(0, self._interval, **_spc_kwargs)
                 await asyncio.sleep(self._interval)
                 continue
 
@@ -1126,9 +1141,9 @@ class DualShockTransport:
                     _total = self._hid_report_total
                     _delta = _total - self._last_hid_report_total
                     self._last_hid_report_total = _total
-                    self._pcc_monitor.update_sample(_delta, self._interval)
+                    self._pcc_monitor.update_sample(_delta, self._interval, **_spc_kwargs)
                 else:
-                    self._pcc_monitor.update_sample(len(frames), self._interval)
+                    self._pcc_monitor.update_sample(len(frames), self._interval, **_spc_kwargs)
 
             # Phase 53: reset pitl_meta at the start of each iteration so Bridge.on_record()
             # never reads stale values from the previous cycle if an exception fires mid-loop.
@@ -1221,6 +1236,8 @@ class DualShockTransport:
                 # data would corrupt the per-player biometric baseline irreversibly.
                 try:
                     bio_features = self._bio_extractor.extract(frames)
+                    # Phase 235-PCC-SPC: snapshot for next-cycle PCC haptic-tolerance binding (Signal 2 + Signal 3 source).
+                    self._last_bio_features = bio_features
                     if not getattr(self, "_is_sim_mode", False):
                         self._biometric_classifier.update_fingerprint(bio_features)
                     bio_result = self._biometric_classifier.classify(bio_features)
