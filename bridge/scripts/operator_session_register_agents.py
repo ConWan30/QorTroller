@@ -858,21 +858,52 @@ async def step_7_register_full_flow(
         from_account=account, value=register_value,
     )
 
-    # 10. read back ioID tokenId from NewDevice event in receipt
-    # NewDevice(address indexed device, address indexed user, bytes32 hash, string uri)
-    # per canonical ioIDRegistry.sol — does NOT contain ioID tokenId. We need
-    # to query ioID.ids(device) view post-submission to get the tokenId.
-    ioid_abi_with_ids = [{
-        "type": "function", "name": "ids", "stateMutability": "view",
-        "inputs": [{"name": "device", "type": "address"}],
-        "outputs": [{"name": "", "type": "uint256"}],
-    }]
-    ioid_contract = w3.eth.contract(address=IOID_CONTRACT_ADDR, abi=ioid_abi_with_ids)
+    # 10. Read back ioID tokenId via ERC-721 Enumerable on ioID contract.
+    #
+    # Original approach was ioID.ids(device) per canonical b94ad092 source.
+    # Empirical finding from third sitting (2026-05-03): the deployed
+    # ioIDRegistry contract does NOT expose `ids` as a public getter (revert
+    # with 0x = function selector not in dispatch table). The deployed
+    # contract differs from canonical b94ad092 source on this view-method
+    # exposure.
+    #
+    # Fix: use ERC-721 Enumerable's tokenOfOwnerByIndex on the ioID per-DID
+    # NFT contract. The ioID NFT is minted to bridge wallet (per ioIDRegistry
+    # source line 114: `_id = _ioID.mint(_projectId, device, user)` where
+    # user = msg.sender = bridge wallet). bridge_wallet balance increments
+    # by 1 each successful register. Most recently minted ioID for bridge
+    # is at index (balance - 1) per ERC-721 Enumerable mint-order semantics.
+    # This is robust as long as bridge never transfers an ioID NFT away
+    # (which Block B does NOT do — only device NFTs transfer to TBA wallets
+    # during register; ioID NFTs stay with bridge).
+    ioid_abi_enum = [
+        {"type": "function", "name": "balanceOf", "stateMutability": "view",
+         "inputs": [{"name": "owner", "type": "address"}],
+         "outputs": [{"name": "", "type": "uint256"}]},
+        {"type": "function", "name": "tokenOfOwnerByIndex", "stateMutability": "view",
+         "inputs": [{"name": "owner", "type": "address"},
+                    {"name": "index", "type": "uint256"}],
+         "outputs": [{"name": "", "type": "uint256"}]},
+    ]
+    ioid_contract = w3.eth.contract(address=IOID_CONTRACT_ADDR, abi=ioid_abi_enum)
     try:
-        ioid_token_id = int(await ioid_contract.functions.ids(device_address).call())
+        bridge_ioid_balance = int(
+            await ioid_contract.functions.balanceOf(account.address).call()
+        )
+        if bridge_ioid_balance == 0:
+            raise OperatorSessionVerificationError(
+                f"step_7: bridge owns 0 ioID NFTs after register; expected >= 1"
+            )
+        ioid_token_id = int(
+            await ioid_contract.functions.tokenOfOwnerByIndex(
+                account.address, bridge_ioid_balance - 1
+            ).call()
+        )
+    except OperatorSessionVerificationError:
+        raise
     except Exception as exc:
         raise OperatorSessionVerificationError(
-            f"step_7: ioID.ids({device_address}) failed post-tx: {exc}"
+            f"step_7: ioID tokenId readback via tokenOfOwnerByIndex failed: {exc}"
         ) from exc
 
     # 11. read back TBA via ioID.wallet (per M6 + N4)

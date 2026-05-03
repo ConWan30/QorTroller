@@ -472,11 +472,18 @@ async def test_step_7_register_full_flow_orchestrates_correctly(monkeypatch, tmp
     ioid_registry_contract.functions.register = MagicMock(return_value=register_func)
     ioid_registry_contract.functions.nonces = MagicMock(return_value=nonces_func)
 
-    # ioID contract: ids() + wallet() views
+    # ioID contract: ERC-721 Enumerable (balanceOf + tokenOfOwnerByIndex)
+    # for tokenId readback per third-sitting empirical fix; wallet() for TBA.
+    # Original ids() approach replaced because deployed ioIDRegistry lacks
+    # the public ids getter. See operator_session_register_agents.py step_7
+    # NatSpec for the empirical-finding-as-permanent-fix rationale.
     ioid_contract = MagicMock()
-    ids_func = MagicMock()
-    ids_func.call = AsyncMock(return_value=42)  # ioID tokenId
-    ioid_contract.functions.ids = MagicMock(return_value=ids_func)
+    balance_func = MagicMock()
+    balance_func.call = AsyncMock(return_value=1)  # 1 ioID NFT after register
+    ioid_contract.functions.balanceOf = MagicMock(return_value=balance_func)
+    tofbi_func = MagicMock()
+    tofbi_func.call = AsyncMock(return_value=42)  # ioID tokenId at index 0
+    ioid_contract.functions.tokenOfOwnerByIndex = MagicMock(return_value=tofbi_func)
     wallet_func = MagicMock()
     wallet_func.call = AsyncMock(return_value=("0x" + "ab" * 20, "did:io:0xtest"))
     ioid_contract.functions.wallet = MagicMock(return_value=wallet_func)
