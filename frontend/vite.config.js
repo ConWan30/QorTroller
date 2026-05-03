@@ -18,6 +18,7 @@ export default defineConfig({
       '/proof':      { target: 'http://127.0.0.1:8080', changeOrigin: true },
       '/enrollment': { target: 'http://127.0.0.1:8080', changeOrigin: true },
       '/curator':    { target: 'http://127.0.0.1:8080', changeOrigin: true },
+      '/dash':       { target: 'http://127.0.0.1:8080', changeOrigin: true },
       '/federation': { target: 'http://127.0.0.1:8080', changeOrigin: true },
       '/health':     { target: 'http://127.0.0.1:8080', changeOrigin: true },
       '/operator':   { target: 'http://127.0.0.1:8080', changeOrigin: true },
