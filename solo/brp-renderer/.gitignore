@@ -4,3 +4,9 @@ coverage/
 .vitest-cache/
 *.tsbuildinfo
 .DS_Store
+
+# Step 4d additions:
+storybook-static/
+playwright-report/
+test-results/
+# dist/captures/ already covered by `dist/` above.

@@ -56,8 +56,9 @@
     },
     "PerfOverlay": {
       "live": false,
-      "reason": "not-yet-implemented",
-      "implemented": false
+      "reason": "implemented-pre-ceremony-dev-only",
+      "implemented": true,
+      "path": "src/components/PerfOverlay.tsx"
     }
   },
   "modules": {
@@ -107,6 +108,64 @@
     }
   },
   "adapters": {},
+  "tooling": {
+    "storybook": {
+      "live": false,
+      "reason": "dev-only-visual-validation-surface",
+      "implemented": true,
+      "path": ".storybook/main.ts"
+    },
+    "playwright": {
+      "live": false,
+      "reason": "dev-only-axe-core-e2e-gate",
+      "implemented": true,
+      "path": "playwright.config.ts"
+    },
+    "mswHandlers": {
+      "live": false,
+      "reason": "storybook-fixture-variation-stub-endpoints",
+      "implemented": true,
+      "path": "src/mocks/handlers.ts"
+    },
+    "captureScript": {
+      "live": false,
+      "reason": "operator-driven-offline-peat-ingest",
+      "implemented": true,
+      "path": "scripts/capture.mjs"
+    }
+  },
+  "stories": {
+    "AccessibilityShell": {
+      "live": false,
+      "reason": "dev-only-visual-state-coverage",
+      "implemented": true,
+      "path": "src/components/__stories__/AccessibilityShell.stories.tsx"
+    },
+    "AmbientLayer": {
+      "live": false,
+      "reason": "dev-only-visual-state-coverage",
+      "implemented": true,
+      "path": "src/components/__stories__/AmbientLayer.stories.tsx"
+    },
+    "BrpCanvas": {
+      "live": false,
+      "reason": "dev-only-visual-state-coverage",
+      "implemented": true,
+      "path": "src/components/__stories__/BrpCanvas.stories.tsx"
+    },
+    "LegibilityOverlay": {
+      "live": false,
+      "reason": "dev-only-visual-state-coverage",
+      "implemented": true,
+      "path": "src/components/__stories__/LegibilityOverlay.stories.tsx"
+    },
+    "BrpMount": {
+      "live": false,
+      "reason": "dev-only-design-pdf-A1-mandated-states",
+      "implemented": true,
+      "path": "src/components/__stories__/BrpMount.stories.tsx"
+    }
+  },
   "docs": {
     "BACKEND_CONTRACT": {
       "live": false,
