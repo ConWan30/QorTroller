@@ -4,6 +4,16 @@
 > **NOT** part of the sequential VAPI protocol development chain. Integrates
 > downstream of Phase O0 foundational integration (`vapi-anchor-sentry` +
 > `vapi-guardian`) once that foundation is live.
+>
+> **Pre-ceremony incorporation (post-milestone, operator-directed).** Per
+> `OPEN_QUESTIONS.md` OQ-7, the BRP renderer is also vendored into
+> `frontend/src/brp/` as a 4th additive view (`BrpView`) in
+> `frontend/src/ViewSelector.jsx`. Solo workspace remains source-of-truth
+> + test surface; vendored copy is the deployed instance. Block W
+> `live: false` posture preserved. Eventual ceremony Step 6 (Mount) to
+> `apps/gamer-portal/src/brp/` supersedes this incorporation. This
+> document continues to specify the **ceremony-time** integration; the
+> incorporation is bounded by OQ-7's exception scope.
 
 This is the explicit handoff specification. The solo track ships the guarantees
 in this document; the integration ceremony delivers the matching counterparts.

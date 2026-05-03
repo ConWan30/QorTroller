@@ -62,6 +62,32 @@ This decision is **not deferred** — it is settled by design (D2 = 2-C, mount-a
 
 ---
 
+### OQ-7 — Pre-ceremony incorporation into `frontend/` (added post-milestone)
+
+**Question.** With Phase O0 paused, the solo workspace's milestone artifact is shipped but not deployed anywhere visible. Should the BRP renderer be incorporated into the existing `frontend/` workspace as an additive 4th view (pre-ceremony), or held entirely until ceremony?
+
+**Resolution.** **Incorporated as additive 4th tab in `frontend/`.** Operator-directed post-milestone (commit α / β / γ triplet). This is a documented **D1 exception**: the workspace isolation guarantee originally specified that `solo/brp-renderer/` has no dependency edge into the protocol monorepo. Incorporating into `frontend/` violates that. The exception is bounded:
+
+- **Solo workspace remains source-of-truth + test surface.** All future BRP code edits land in `solo/brp-renderer/` first (where 118 vitest + 22 Playwright tests run). The vendored copy at `frontend/src/brp/` is the deployed instance — re-vendored on each upstream change.
+- **Block W `live: false` posture is preserved.** The incorporated `<BrpView>` ships a non-dismissible `live: false` badge per Block W contract. Per-prop indicators show the data source separately (live vs synthetic vs operator-set), so audit-state and operational-state are visibly distinct claims.
+- **D2 (mount-agnostic) is preserved.** The renderer itself remains mount-agnostic; the host page (`frontend/`) does the wiring via two hooks (`useBrpFrozenOutput` from GIC chain, `useEnrollmentStatus` with synthetic fallback).
+- **The eventual ceremony at Step 6 (Mount) supersedes this incorporation.** When Phase O0 unlocks, the artifact is relocated to `apps/gamer-portal/src/brp/` per the ceremony's Mount step. The frontend incorporation is either superseded entirely or kept as a parallel ceremony-historical surface — that decision happens at ceremony time.
+
+**Backend wiring connected:**
+- `frozenOutput` ← LIVE from `/bridge/grind-chain-status.latest_gic_hash` (existing `useGrindChain` hook, 5s polling).
+- `enrollmentSession` ← LIVE-with-synth-fallback from `/enrollment/status/{deviceId}` (new `useEnrollmentStatus` hook). Falls back to synthetic `getMockEnrollmentSession()` when bridge returns 404 for the placeholder device_id.
+- `pitlSnapshot` ← SYNTHETIC. No `/agent/*` endpoint returns a 7-row PITL snapshot directly; live composition adapter is a follow-up commit.
+- `aidThreshold` ← OPERATOR-SET (0.65 placeholder per Block Z).
+- `liveness: { ambient, legibility, telemetry }` ← all `false` (Block W: pre-ceremony, no audit).
+
+**Why incorporated despite the D1 exception cost.** The milestone artifact is otherwise invisible to the operator without running Storybook locally. Incorporation lets the renderer be exercised in the same context as the other 17 live data hooks — a more realistic pre-ceremony validation than Storybook alone provides. The honesty-first contract still holds because the audit-gate-claim (live: false) is shipped truthfully, and the data-source-claim (live | synthetic | operator-set) is shown per-prop.
+
+**Who decides** (when to relocate / merge). Integration ceremony, Step 6 (Mount), informed by what the frontend incorporation surfaces about real wiring patterns.
+
+**When.** Already done at the α/β/γ triplet of commits. Documented here for ceremony auditors and future readers.
+
+---
+
 ### OQ-5 — CI workflow placement (added Commit 4d)
 
 **Question.** Where does the GitHub Actions workflow live, given the workspace's D1 isolation guarantee?
