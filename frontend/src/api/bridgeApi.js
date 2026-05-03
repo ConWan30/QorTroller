@@ -459,6 +459,75 @@ export function useBrpDeviceDiscovery() {
 }
 
 /**
+ * useBrpRecentRecords — per-device session activity feed (commit θ).
+ *
+ * Polls /api/v1/records/recent?device_id=...&limit=10 (transports/http.py:318;
+ * delegates to store.get_recent_records which joins records + devices and
+ * returns rows ORDER BY r.created_at DESC). Each row carries the standard
+ * record schema: record_hash, device_id, counter, timestamp_ms, inference,
+ * action_code, confidence, plus the PITL feature columns.
+ *
+ * Bridge-level inference codes per CLAUDE.md FROZEN-v1:
+ *   0x20 NOMINAL          (clean) — does not count as anomaly
+ *   0x28 DRIVER_INJECT    (hard cheat — blocks tournament)
+ *   0x29 WALLHACK         (hard cheat)
+ *   0x2A AIMBOT           (hard cheat)
+ *   0x2B TEMPORAL_BOT     (advisory)
+ *   0x30 BIOMETRIC_ANOMALY (advisory)
+ *   0x31 IMU_PRESS_DECOUPLED (advisory)
+ *   0x32 STICK_IMU_DECOUPLED (advisory)
+ *   0x33 GSR_CORRELATION_ABSENT (advisory L7)
+ *
+ * Polling cadence: 5s (matches LATENCY_BUDGET.md standard loop). Records
+ * arrive at ~1 Hz when grinding so this gives ~5 fresh records per poll.
+ */
+export function useBrpRecentRecords(deviceId) {
+  return useQuery({
+    queryKey: ['brpRecentRecords', deviceId],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        limit: '10',
+        device_id: deviceId,
+      })
+      const records = await apiGet(`/api/v1/records/recent?${params.toString()}`)
+      if (!Array.isArray(records)) {
+        return { records: [], lastRecordTs: null, anomalyCount: 0, recordsPerMinute: 0 }
+      }
+      const now = Date.now()
+      // anomaly = any non-NOMINAL inference code (0x20 = 32 decimal)
+      const anomalyCount = records.filter((r) => {
+        const code = r?.inference
+        return typeof code === 'number' && code !== 0x20
+      }).length
+      // Newest record's timestamp (ORDER BY created_at DESC, so records[0] is latest)
+      const newest = records[0]
+      const lastRecordTs = newest?.timestamp_ms ?? null
+      // Records-per-minute estimate from how recent the 10-record window is.
+      // If the oldest record in the window is < 60s old, we have >10 r/m.
+      const oldest = records[records.length - 1]
+      let recordsPerMinute = 0
+      if (records.length > 0 && oldest?.timestamp_ms && newest?.timestamp_ms) {
+        const windowMs = newest.timestamp_ms - oldest.timestamp_ms
+        if (windowMs > 0) {
+          recordsPerMinute = Math.round((records.length / windowMs) * 60_000)
+        }
+      }
+      return {
+        records,
+        lastRecordTs,
+        lastRecordAgeMs: lastRecordTs ? now - lastRecordTs : null,
+        anomalyCount,
+        recordsPerMinute,
+      }
+    },
+    enabled: Boolean(deviceId),
+    refetchInterval: 5000,
+    staleTime: 4000,
+    retry: 1,
+  })
+}
+
+/**
  * useBrpControllerOrientation — WebSocket subscriber to /ws/twin/{deviceId}
  * (commit ζ). Parses ~20 Hz frame batches; derives pitch + roll from accel
  * (gravity reference). Yaw is currently 0 (not derivable from accel alone;
