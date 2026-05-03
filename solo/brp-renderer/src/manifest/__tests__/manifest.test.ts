@@ -1,0 +1,125 @@
+import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
+import { validateManifest } from "../validate";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const manifestPath = resolve(__dirname, "..", "brp.manifest.json");
+
+const raw = readFileSync(manifestPath, "utf8");
+const manifest: unknown = JSON.parse(raw);
+
+describe("brp.manifest.json — schema and honesty-first posture", () => {
+  it("parses as JSON and is a plain object", () => {
+    expect(typeof manifest).toBe("object");
+    expect(Array.isArray(manifest)).toBe(false);
+  });
+
+  it("validates against schema (validateManifest returns ok)", () => {
+    const result = validateManifest(manifest);
+    if (!result.ok) {
+      // Surface every violation in the failure output for honesty-first debugging.
+      // eslint-disable-next-line no-console
+      console.error("Manifest violations:\n" + result.violations.join("\n"));
+    }
+    expect(result.violations).toEqual([]);
+    expect(result.ok).toBe(true);
+  });
+
+  it("track_classification is exactly 'out-of-band-solo'", () => {
+    const m = manifest as Record<string, unknown>;
+    expect(m["track_classification"]).toBe("out-of-band-solo");
+  });
+
+  it("phase_number is exactly null (not 241, not any number)", () => {
+    const m = manifest as Record<string, unknown>;
+    expect(m["phase_number"]).toBeNull();
+  });
+
+  it("every component entry has live: false (honesty-first default)", () => {
+    const m = manifest as Record<string, unknown>;
+    const components = m["components"] as Record<string, { live: boolean }>;
+    for (const [key, entry] of Object.entries(components)) {
+      expect(typeof entry.live, `components.${key}.live`).toBe("boolean");
+      expect(entry.live, `components.${key}.live`).toBe(false);
+    }
+  });
+
+  it("every module entry has live: false (no live telemetry source yet)", () => {
+    const m = manifest as Record<string, unknown>;
+    const modules = m["modules"] as Record<string, { live: boolean }>;
+    for (const [key, entry] of Object.entries(modules)) {
+      expect(typeof entry.live, `modules.${key}.live`).toBe("boolean");
+      expect(entry.live, `modules.${key}.live`).toBe(false);
+    }
+  });
+
+  it("hash_library records the viem-for-ethers substitution per Decision D3", () => {
+    const m = manifest as Record<string, unknown>;
+    const hash = m["hash_library"] as Record<string, unknown>;
+    expect(hash["name"]).toBe("viem");
+    expect(hash["substituted_from"]).toBe("ethers@6");
+    expect(typeof hash["substitution_reason"]).toBe("string");
+    expect((hash["substitution_reason"] as string).length).toBeGreaterThan(20);
+  });
+
+  it("hash_domain string is exactly 'VAPI-BRP-RENDER-v1'", () => {
+    const m = manifest as Record<string, unknown>;
+    const dom = m["hash_domain"] as Record<string, unknown>;
+    expect(dom["string"]).toBe("VAPI-BRP-RENDER-v1");
+  });
+
+  it("hash_domain does not collide with any FROZEN-v1 protocol prefix", () => {
+    const m = manifest as Record<string, unknown>;
+    const dom = m["hash_domain"] as Record<string, unknown>;
+    const reserved = dom["collision_check_against_existing_v1_tags"] as readonly string[];
+    const renderDomain = dom["string"] as string;
+    for (const tag of reserved) {
+      // Neither a prefix of the other.
+      expect(renderDomain.startsWith(tag), `${renderDomain} starts with ${tag}`).toBe(false);
+      expect(tag.startsWith(renderDomain), `${tag} starts with ${renderDomain}`).toBe(false);
+    }
+  });
+
+  it("every PV-CI draft has added_to_pv_ci_gate: false (gate not modified by this commit)", () => {
+    const m = manifest as Record<string, unknown>;
+    const drafts = m["pv_ci_drafts"] as Record<string, Record<string, unknown>>;
+    for (const [key, entry] of Object.entries(drafts)) {
+      expect(entry["added_to_pv_ci_gate"], `pv_ci_drafts.${key}`).toBe(false);
+    }
+  });
+
+  it("INV-BRP-1 through INV-BRP-5 are all present in pv_ci_drafts", () => {
+    const m = manifest as Record<string, unknown>;
+    const drafts = m["pv_ci_drafts"] as Record<string, unknown>;
+    expect(drafts["INV-BRP-1"]).toBeDefined();
+    expect(drafts["INV-BRP-2"]).toBeDefined();
+    expect(drafts["INV-BRP-3"]).toBeDefined();
+    expect(drafts["INV-BRP-4"]).toBeDefined();
+    expect(drafts["INV-BRP-5"]).toBeDefined();
+  });
+
+  it("rejects a tampered manifest (track_classification flipped)", () => {
+    const tampered = { ...(manifest as Record<string, unknown>), track_classification: "phase" };
+    const result = validateManifest(tampered);
+    expect(result.ok).toBe(false);
+    expect(result.violations.some((v) => v.includes("track_classification"))).toBe(true);
+  });
+
+  it("rejects a tampered manifest (a component flipped to live: true without ceremony)", () => {
+    const m = manifest as Record<string, unknown>;
+    const components = m["components"] as Record<string, Record<string, unknown>>;
+    const firstKey = Object.keys(components)[0]!;
+    const tampered = {
+      ...m,
+      components: {
+        ...components,
+        [firstKey]: { ...components[firstKey], live: "true" }, // wrong type
+      },
+    };
+    const result = validateManifest(tampered);
+    expect(result.ok).toBe(false);
+  });
+});
