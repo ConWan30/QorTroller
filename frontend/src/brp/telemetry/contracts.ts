@@ -167,6 +167,43 @@ export interface OrientationSignal {
 }
 
 // -----------------------------------------------------------------------------
+// Host-state signal (optional, commit ι).
+//
+// Surfaces the bridge's PCC (Physical Capture Continuity, Phase 234.7)
+// host-state inference, derived from HID poll-rate coefficient of variation.
+// Drives the ambient mesh's emissive palette so the operator sees at a
+// glance whether the controller<->bridge link is healthy.
+//
+// Per PCC: host-state values are EXCLUSIVE_USB / EXCLUSIVE_BT / CONTESTED
+// / UNKNOWN / DEGRADED / DISCONNECTED. The bridge classifies these at
+// /operator/bridge/capture-health (already-consumed by useCaptureHealth
+// at 3s polling, no new endpoint needed).
+//
+// Optional. Renderer remains mount-agnostic per D2: when omitted, the mesh
+// uses its base palette (commit δ/ε/ζ behavior — steel-blue #5a8fb8).
+//
+// Per WCAG 2.3.1: palette change is a one-shot color transition on the
+// MATERIAL color (not a flashing oscillator), happens at most once per
+// 3s polling cycle, well under any G19 frequency concern. The color
+// values are pre-validated against the saturated-red guard.
+// -----------------------------------------------------------------------------
+
+export type HostStateKind =
+  | "EXCLUSIVE_USB"
+  | "EXCLUSIVE_BT"
+  | "CONTESTED"
+  | "DEGRADED"
+  | "DISCONNECTED"
+  | "UNKNOWN";
+
+export interface HostStateSignal {
+  /** Bridge-classified host-state per Phase 234.7 PCC. */
+  readonly kind: HostStateKind;
+  /** Capture-state classification: NOMINAL / DEGRADED / DISCONNECTED. */
+  readonly captureState: "NOMINAL" | "DEGRADED" | "DISCONNECTED";
+}
+
+// -----------------------------------------------------------------------------
 // The full prop contract for <BrpMount />.
 //
 // 4a ships the type. 4c ships the matching <BrpMount /> component. The
@@ -192,4 +229,11 @@ export interface BrpMountProps {
    * 1 Hz. Omit for rotation-only mode (commit δ behavior).
    */
   readonly orientation?: OrientationSignal;
+  /**
+   * Optional. When present, the ambient mesh's emissive palette reflects
+   * the host-state classification (commit ι). EXCLUSIVE_USB → cool steel-blue
+   * (base palette); EXCLUSIVE_BT → warm amber; CONTESTED/DEGRADED →
+   * desaturated grey; DISCONNECTED → dim charcoal. Omit to keep base palette.
+   */
+  readonly hostState?: HostStateSignal;
 }

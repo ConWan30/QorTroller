@@ -30,7 +30,11 @@
 import { Canvas } from "@react-three/fiber";
 import { useMotionContext } from "./AccessibilityShell";
 import { AmbientLayer } from "./AmbientLayer";
-import type { OrientationSignal, PulseSignal } from "../telemetry/contracts";
+import type {
+  HostStateSignal,
+  OrientationSignal,
+  PulseSignal,
+} from "../telemetry/contracts";
 
 /**
  * Pure helper: mode mapping. Extracted as a named export so unit tests can
@@ -51,6 +55,8 @@ export interface BrpCanvasProps {
   readonly pulse?: PulseSignal;
   /** Optional commit-ζ orientation signal threaded through to AmbientLayer. */
   readonly orientation?: OrientationSignal;
+  /** Optional commit-ι host-state signal threaded through to AmbientLayer. */
+  readonly hostState?: HostStateSignal;
 }
 
 export function BrpCanvas({
@@ -58,6 +64,7 @@ export function BrpCanvas({
   instanceCount,
   pulse,
   orientation,
+  hostState,
 }: BrpCanvasProps): JSX.Element {
   const { motionShouldPause } = useMotionContext();
   const frameloop = computeFrameloop(motionShouldPause);
@@ -84,6 +91,7 @@ export function BrpCanvas({
           {...(instanceCount !== undefined ? { instanceCount } : {})}
           {...(pulse ? { pulse } : {})}
           {...(orientation ? { orientation } : {})}
+          {...(hostState ? { hostState } : {})}
         />
       </Canvas>
     </div>
