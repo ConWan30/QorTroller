@@ -12,10 +12,13 @@
 //
 //   2. frameloop bound to AccessibilityShell's motion-context:
 //        motionShouldPause === true  → frameloop="never"
-//        motionShouldPause === false → frameloop="demand"
-//      "demand" means R3F renders only on invalidate() from telemetry change;
-//      no continuous render. Per PDF §"Performance budget", on-demand
-//      rendering "saves battery and keeps noisy fans in check."
+//        motionShouldPause === false → frameloop="always"
+//      Originally "demand" (PDF §"Performance budget" — on-demand "saves
+//      battery and keeps noisy fans in check"). Switched to "always" in
+//      commit δ to support AmbientLayer's continuous useFrame rotation
+//      (0.1 Hz, well under G19 3 Hz cap). Battery cost is opt-out via
+//      the WCAG 2.2.2 photosensitivity toggle, which remains the user's
+//      mechanism for halting render entirely (frameloop=never).
 //
 //   3. data-live="false" on the Canvas wrapper. Block W contract.
 //
@@ -31,9 +34,13 @@ import { AmbientLayer } from "./AmbientLayer";
 /**
  * Pure helper: mode mapping. Extracted as a named export so unit tests can
  * verify the semantic contract without rendering R3F.
+ *
+ * Returns "always" when motion is enabled — required by AmbientLayer's
+ * useFrame rotation hook (commit δ). Returns "never" when paused —
+ * deterministically stops all rendering, including the rotation.
  */
-export function computeFrameloop(motionShouldPause: boolean): "demand" | "never" {
-  return motionShouldPause ? "never" : "demand";
+export function computeFrameloop(motionShouldPause: boolean): "always" | "never" {
+  return motionShouldPause ? "never" : "always";
 }
 
 export interface BrpCanvasProps {
