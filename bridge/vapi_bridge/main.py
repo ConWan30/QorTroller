@@ -21,6 +21,7 @@ from .codec import (
     verify_signature,
 )
 from .config import Config
+from .pcc_persistence import run_pcc_persistence_loop
 from .store import Store
 
 log = logging.getLogger(__name__)
@@ -489,6 +490,15 @@ class Bridge:
             self._tasks.append(_t)
             log.info("DualShock Edge transport enabled (interval=%.1fs)",
                      self.cfg.dualshock_record_interval_s)
+            if getattr(self.cfg, "pcc_enabled", True):
+                _pcc_task = asyncio.create_task(
+                    run_pcc_persistence_loop(self.store, self._pcc_monitor, self.cfg)
+                )
+                _pcc_task.add_done_callback(_task_done_handler)
+                self._tasks.append(_pcc_task)
+                log.info(
+                    "Phase 235-PCC-PERSIST: capture-health persistence loop started"
+                )
 
             # Phase 26: WorldModelAttestation startup check (fix: _device_id_hex → _device_id.hex())
             _ewc = getattr(ds, "_ewc_model", None)
