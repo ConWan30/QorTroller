@@ -14,6 +14,7 @@ import { useHeartbeatStore } from '../heartbeat/useHeartbeat'
 import {
   useCaptureHealth, useGrindChain, useFleetCoherenceStatus,
   useAutoTriggerStatus, useGrindAnalytics, useAITSeparation, usePCCIntelligence,
+  useActivePlayOccupancy,
   isMockActive,
 } from '../api/bridgeApi'
 import { ConsentPanel } from '../components/ConsentPanel'
@@ -40,6 +41,29 @@ const GCTX_TONE = {
   ACTIVE_GAMEPLAY: GAMER.green,
   MENU_DETECTED:   GAMER.red,
 }
+
+// Phase 241-APOP — 5-state taxonomy color mapping (mirror INV-APOP-001).
+const APOP_TONE = {
+  ACTIVE_MATCH_PLAY:    GAMER.cyan,
+  COMPETITIVE_CONTROL:  GAMER.green,
+  MATCH_TRANSITION:     GAMER.t2,
+  NON_COMPETITIVE_MENU: GAMER.red,
+  UNKNOWN_LOW_EVIDENCE: GAMER.t3,
+}
+const APOP_GATE_TONE = {
+  shadow: GAMER.t3,
+  hybrid: GAMER.cyan,
+  strict: GAMER.orange,
+}
+// Frozen weights mirror INV-APOP-002 — keep prism segment widths in sync
+// with the bridge classifier's scoring formula.
+const APOP_AXES = [
+  { key: 'stick_score',     label: 'STICK',   weight: 0.35 },
+  { key: 'button_score',    label: 'BTN',     weight: 0.20 },
+  { key: 'trigger_score',   label: 'TRIG',    weight: 0.20 },
+  { key: 'imu_score',       label: 'IMU',     weight: 0.15 },
+  { key: 'physiology_score', label: 'PHYS',   weight: 0.10 },
+]
 
 function tone(map, value, fallback = GAMER.t3) {
   if (value == null) return fallback
@@ -288,7 +312,7 @@ function StatusChip({ label, value, color }) {
   )
 }
 
-function StatusBar({ host, state, gctx, ready, coherence, autoTrigger, ait }) {
+function StatusBar({ host, state, gctx, ready, coherence, autoTrigger, ait, apop }) {
   // GAMEPLAY chip
   const gctxValue = gctx ?? 'WAITING'
   const gctxColor = gctx ? tone(GCTX_TONE, gctx) : GAMER.t2
@@ -353,6 +377,129 @@ function StatusBar({ host, state, gctx, ready, coherence, autoTrigger, ait }) {
       <span title={aitTitle}>
         <StatusChip label="AIT"        value={aitValue}          color={aitColor} />
       </span>
+      {(() => {
+        // Phase 241-APOP — Active Play Occupancy chip.
+        // Compact: state value (or WAITING) + gate_mode pill.
+        if (!apop) {
+          return <StatusChip label="APOP" value="—" color={GAMER.t3} />
+        }
+        const apopState = apop.latest_state ?? 'WAITING'
+        const apopColor = apop.latest_state ? (APOP_TONE[apop.latest_state] ?? GAMER.t3) : GAMER.t2
+        const apopMode  = apop.gate_mode ?? 'shadow'
+        const apopGateColor = APOP_GATE_TONE[apopMode] ?? GAMER.t3
+        const apopConf  = (apop.latest_confidence ?? 0) > 0
+          ? ` · ${(apop.latest_confidence * 100).toFixed(0)}%` : ''
+        const apopTitle = apop.latest_state
+          ? `gate=${apopMode} · score=${(apop.latest_score ?? 0).toFixed(3)} · conf=${(apop.latest_confidence ?? 0).toFixed(3)} · total_logs=${apop.total_logs ?? 0}`
+          : `gate=${apopMode} · awaiting first ruling validation`
+        return (
+          <span title={apopTitle} style={{ position: 'relative' }}>
+            <StatusChip label="APOP" value={`${apopState}${apopConf}`} color={apopColor} />
+            <span style={{
+              position: 'absolute', top: -6, right: -6,
+              padding: '1px 5px', borderRadius: 3,
+              background: apopGateColor + 'd0', color: '#02060a',
+              fontFamily: FONTS.mono, fontSize: 6, fontWeight: 700,
+              letterSpacing: '0.12em', textTransform: 'uppercase',
+              boxShadow: `0 0 8px ${apopGateColor}66`,
+            }}>{apopMode}</span>
+          </span>
+        )
+      })()}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Phase 241-APOP — Evidence Prism
+// Novel multi-evidence visualization. Five horizontal segments — one per
+// scoring axis (stick/button/trigger/imu/physiology) — with widths exactly
+// matching the FROZEN INV-APOP-002 weights (0.35/0.20/0.20/0.15/0.10).
+// Each segment fills proportionally to its raw score; tinted by the active
+// APOP state color. Centered below StatusBar; transparent + low-profile so
+// it never visually competes with the GIC chain bar above.
+// ---------------------------------------------------------------------------
+
+function ApopEvidencePrism({ apop }) {
+  if (!apop || !apop.latest_state) return null
+  const evidence = apop.latest_evidence || {}
+  const stateColor = APOP_TONE[apop.latest_state] ?? GAMER.t2
+  const isCompetitive = apop.latest_state === 'ACTIVE_MATCH_PLAY' || apop.latest_state === 'COMPETITIVE_CONTROL'
+
+  // Each axis: {label, weight, score 0..1}
+  const segments = APOP_AXES.map(axis => ({
+    ...axis,
+    score: Math.max(0, Math.min(1, Number(evidence[axis.key] ?? 0))),
+  }))
+
+  return (
+    <div style={{
+      position:  'absolute',
+      bottom:    72,             // sits above StatusBar (which is bottom: 32)
+      left:      '50%',
+      transform: 'translateX(-50%)',
+      zIndex:    8,
+      width:     420,
+      pointerEvents: 'none',     // transparent to clicks; visual only
+    }}>
+      <Glass accent={stateColor} intensity={0.7} style={{ padding: '6px 10px' }}>
+        {/* Top label row: state + score + history */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 5 }}>
+          <span style={{
+            fontFamily: FONTS.mono, fontSize: 6.5, letterSpacing: '0.18em', color: GAMER.t3,
+          }}>
+            EVIDENCE PRISM · APOP
+          </span>
+          <span style={{
+            fontFamily: FONTS.mono, fontSize: 8, color: stateColor, letterSpacing: '0.04em',
+            fontWeight: 600,
+            textShadow: isCompetitive ? `0 0 6px ${stateColor}66` : 'none',
+          }}>
+            {(apop.latest_score ?? 0).toFixed(3)} · h{(evidence.history_score ?? 0).toFixed(2)}
+          </span>
+        </div>
+
+        {/* Prism: five horizontal segments, widths = FROZEN weights */}
+        <div style={{ display: 'flex', gap: 2, height: 8, alignItems: 'stretch' }}>
+          {segments.map(seg => (
+            <div key={seg.key} style={{
+              flex:           seg.weight,
+              background:     '#0a1620',
+              borderRadius:   2,
+              border:         `1px solid ${stateColor}26`,
+              position:       'relative',
+              overflow:       'hidden',
+            }}>
+              {/* Inner fill — proportional to score, tinted by state */}
+              <div style={{
+                position:   'absolute',
+                left:       0, top: 0, bottom: 0,
+                width:      `${seg.score * 100}%`,
+                background: `linear-gradient(90deg, ${stateColor}55 0%, ${stateColor}cc 100%)`,
+                boxShadow:  seg.score > 0.5 ? `inset 0 0 4px ${stateColor}88` : 'none',
+                transition: 'width 0.6s ease, background 0.4s ease',
+              }} />
+            </div>
+          ))}
+        </div>
+
+        {/* Axis labels — perfectly aligned with segments above */}
+        <div style={{ display: 'flex', gap: 2, marginTop: 3 }}>
+          {segments.map(seg => (
+            <div key={seg.key} style={{
+              flex: seg.weight,
+              fontFamily: FONTS.mono,
+              fontSize:   5.5,
+              letterSpacing: '0.14em',
+              color:      seg.score > 0.4 ? GAMER.t1 : GAMER.t3,
+              textAlign:  'center',
+              transition: 'color 0.4s ease',
+            }}>
+              {seg.label}
+            </div>
+          ))}
+        </div>
+      </Glass>
     </div>
   )
 }
@@ -595,6 +742,7 @@ export function GamerView() {
   const { data: grindAnalytics }  = useGrindAnalytics()
   const { data: ait }             = useAITSeparation()
   const { data: pccIntelligence } = usePCCIntelligence()
+  const { data: apop }            = useActivePlayOccupancy()
 
   // Two complementary grind metrics, both surfaced in the progress card:
   //   chain_length            — cumulative GIC stamps (Phase 235-A); monotonically grows.
@@ -695,7 +843,11 @@ export function GamerView() {
         coherence={coherence}
         autoTrigger={autoTrigger}
         ait={ait}
+        apop={apop}
       />
+
+      {/* Phase 241-APOP — Evidence Prism (novel weighted-evidence visualization). */}
+      <ApopEvidencePrism apop={apop} />
 
       <PCCDrawer
         captureHealth={captureHealth}

@@ -154,6 +154,20 @@ export function useAutoTriggerStatus() {
   })
 }
 
+// Phase 241-APOP — Active Play Occupancy Proof live status.
+// noMock=true: when gate_mode != "shadow" this is grind-critical (rescues
+// MENU false-positives + blocks confident NON_COMPETITIVE_MENU). Mock would
+// fabricate state/score/confidence — must not land mid-grind.
+export function useActivePlayOccupancy() {
+  return useQuery({
+    queryKey: ['activePlayOccupancy'],
+    queryFn: () => get('/agent/active-play-occupancy-status', 'activePlayOccupancy', { noMock: true }),
+    refetchInterval: 4000,
+    staleTime: 2500,
+    retry: 1,
+  })
+}
+
 // Phase 235-FINAL: grind-critical live indicators.
 // noMock=true: on transient failure react-query holds the last successful
 // response.  Without this, a single 5s timeout under DataCuratorAgent
