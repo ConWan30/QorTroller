@@ -180,6 +180,19 @@ export const MOCK = {
     timestamp: now(),
   }),
 
+  // Phase 241-APOP — Active Play Occupancy Proof shape (mock; first-load discovery only)
+  activePlayOccupancy: () => ({
+    active_play_occupancy_enabled: true,
+    gate_mode: 'shadow',
+    total_logs: 0,
+    latest_state: null,
+    latest_score: 0.0,
+    latest_confidence: 0.0,
+    latest_evidence: {},
+    latest_gameplay_context: null,
+    timestamp: now(),
+  }),
+
   // Phase 235-FINAL: grind-critical live indicators
   captureHealth: () => ({
     pcc_enabled: true,
