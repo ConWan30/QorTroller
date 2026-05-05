@@ -162,5 +162,13 @@
   "INV-OPERATOR-AGENT-002": {
     "digest": "861d0a897e9dcfb5572b48fdc031589312212d3fe900d92170d8744993d37921",
     "description": "operator_agent_activation_log UNIQUE(agent_id, to_scope_root) anti-replay constraint in store.py \u2014 each (agent, scope_root) tuple activated exactly once (Phase O1 C1)"
+  },
+  "INV-APOP-001": {
+    "digest": "f61f09ba4841efa2cffa1155a7071e971e01263f4aa7b9fcac522d5f5dde8282",
+    "description": "APOP_STATES + APOP_GATE_MODES frozensets in active_play_occupancy.py \u2014 5 occupancy states + 3 gate modes frozen, any addition is APOP v2 break (Phase 241-APOP)"
+  },
+  "INV-APOP-002": {
+    "digest": "0c3ae877466aaf96a080d9349192a70bca93ac6d957961d359c7f27f8cdf2a2f",
+    "description": "APOP scoring weights formula in classify_active_play_occupancy \u2014 0.35 stick + 0.20 button + 0.20 trigger + 0.15 imu + 0.10 physiology = 1.00 (sum invariant; weight rebalance is APOP v2)"
   }
 }

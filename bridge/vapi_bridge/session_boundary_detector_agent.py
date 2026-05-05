@@ -35,6 +35,13 @@ import json
 import logging
 import time
 
+from .active_play_occupancy import (
+    APOP_COMPETITIVE_STATES,
+    MATCH_TRANSITION,
+    classify_active_play_occupancy,
+    normalize_active_play_gate_mode,
+)
+
 log = logging.getLogger(__name__)
 
 POLL_INTERVAL_S       = 60        # check every minute
@@ -167,6 +174,25 @@ class SessionBoundaryDetectorAgent:
             int(r.get("trigger_active", 0) or 0) == 1
             for r in lookback_records
         )
+        if not had_activity:
+            apop_enabled = bool(getattr(cfg, "active_play_occupancy_enabled", True))
+            apop_mode = normalize_active_play_gate_mode(
+                getattr(cfg, "active_play_occupancy_gate_mode", "shadow")
+            )
+            if apop_enabled and apop_mode != "shadow":
+                try:
+                    hashes = [
+                        r.get("record_hash", "") for r in lookback_records[:30]
+                        if r.get("record_hash")
+                    ]
+                    checkpoints = self._store.get_frame_checkpoints_for_records(hashes, 30)
+                    apop = classify_active_play_occupancy(lookback_records, checkpoints)
+                    had_activity = (
+                        apop.state in APOP_COMPETITIVE_STATES
+                        or apop.state == MATCH_TRANSITION
+                    )
+                except Exception as exc:
+                    return ("SKIP", f"APOP activity check failed: {exc}")
         if not had_activity:
             return ("SKIP",
                     f"no gameplay activity in lookback ({len(lookback_records)} records) "

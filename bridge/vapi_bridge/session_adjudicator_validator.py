@@ -20,6 +20,12 @@ import json
 import logging
 import time
 
+from .active_play_occupancy import (
+    active_play_gate_allows,
+    classify_active_play_occupancy,
+    normalize_active_play_gate_mode,
+)
+
 log = logging.getLogger(__name__)
 
 _POLL_INTERVAL_S = 300  # 5 minutes
@@ -208,6 +214,33 @@ class SessionAdjudicatorValidationAgent:
         else:
             _gameplay_ctx = "ACTIVE_GAMEPLAY"  # discrimination disabled → treat as active
 
+        _apop_enabled = bool(getattr(self._cfg, "active_play_occupancy_enabled", True))
+        _apop_mode = normalize_active_play_gate_mode(
+            getattr(self._cfg, "active_play_occupancy_gate_mode", "shadow")
+        )
+        _apop_result = None
+        if _apop_enabled:
+            try:
+                _apop_records = await asyncio.to_thread(
+                    self._store.get_recent_records, 400, device_id
+                )
+                _apop_hashes = [
+                    r.get("record_hash", "") for r in _apop_records[:30]
+                    if r.get("record_hash")
+                ]
+                _apop_checkpoints = await asyncio.to_thread(
+                    self._store.get_frame_checkpoints_for_records, _apop_hashes, 30
+                )
+                _apop_result = classify_active_play_occupancy(
+                    _apop_records, _apop_checkpoints
+                )
+            except Exception as _apop_exc:
+                log.warning(
+                    "SessionAdjudicatorValidationAgent: APOP classify failed "
+                    "ruling_id=%d: %s",
+                    ruling_id, _apop_exc,
+                )
+
         # Phase 235-BRIDGE-WEDGE-FIX: SQLite write off the event loop thread.
         _val_row_id = await asyncio.to_thread(
             self._store.insert_validation_record,
@@ -223,6 +256,18 @@ class SessionAdjudicatorValidationAgent:
             pcc_host_state=_pcc_host,
             gameplay_context=_gameplay_ctx,
         )
+        if _apop_result is not None:
+            await asyncio.to_thread(
+                self._store.insert_active_play_occupancy_log,
+                _val_row_id,
+                ruling_id,
+                device_id,
+                _apop_result.state,
+                _apop_result.score,
+                _apop_result.confidence,
+                _apop_result.evidence_json(),
+                _apop_mode,
+            )
 
         # Phase 235-A: compute and stamp GIC for count-eligible sessions
         _grind_mode = bool(getattr(self._cfg, "grind_mode", False))
@@ -251,7 +296,17 @@ class SessionAdjudicatorValidationAgent:
         # Phase 235-SMOKE-BYPASS: when bypass is on, treat every gameplay
         # context (including MENU_DETECTED) as eligible.  Otherwise the
         # default rule applies: MENU_DETECTED blocks; NULL passes through.
-        _gameplay_ok = True if _pcc_smoke_bypass else (_gameplay_ctx != "MENU_DETECTED")
+        if _pcc_smoke_bypass:
+            _gameplay_ok = True
+        elif _apop_enabled:
+            _gameplay_ok = active_play_gate_allows(
+                _apop_result.state if _apop_result is not None else None,
+                _apop_result.confidence if _apop_result is not None else None,
+                _gameplay_ctx,
+                _apop_mode,
+            )
+        else:
+            _gameplay_ok = _gameplay_ctx != "MENU_DETECTED"
         # INV-GIC-003: skip GIC stamp entirely when chain is broken — do not extend
         # a corrupt chain.  Row will have NULL grind_chain_hash.
         if _grind_mode and getattr(self._store, "_gic_chain_broken", False):
@@ -299,7 +354,8 @@ class SessionAdjudicatorValidationAgent:
         if not self._gate_already_emitted:
             # Phase 235-BRIDGE-WEDGE-FIX: SQLite reads / writes off the event loop.
             summary = await asyncio.to_thread(
-                self._store.get_validation_summary, self._gate_n, _max_rate
+                self._store.get_validation_summary, self._gate_n, _max_rate,
+                _apop_mode if _apop_enabled else "shadow",
             )
             if summary["gate_passed"]:
                 self._gate_already_emitted = True

@@ -1749,6 +1749,17 @@ class Config:
     NULL gameplay_context (pre-GAD or discrimination disabled) passes through.
     Default True (correctness gate, not optional feature)."""
 
+    # --- Phase 241-APOP: Active Play Occupancy Proof ---
+    active_play_occupancy_enabled: bool = field(
+        default_factory=lambda: _env_bool("ACTIVE_PLAY_OCCUPANCY_ENABLED", True)
+    )
+    """Phase 241-APOP — compute controller-native active-play occupancy evidence."""
+
+    active_play_occupancy_gate_mode: str = field(
+        default_factory=lambda: _env("ACTIVE_PLAY_OCCUPANCY_GATE_MODE", "shadow")
+    )
+    """Phase 241-APOP — shadow|hybrid|strict. Default shadow preserves Phase 235-GAD."""
+
     # --- Phase 229: AIT Separation ---
     ait_separation_enabled: bool = field(
         default_factory=lambda: _env("AIT_SEPARATION_ENABLED", "true").lower() == "true"
