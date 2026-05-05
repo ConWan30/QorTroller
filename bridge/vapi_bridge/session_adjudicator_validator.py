@@ -224,12 +224,13 @@ class SessionAdjudicatorValidationAgent:
                 _apop_records = await asyncio.to_thread(
                     self._store.get_recent_records, 400, device_id
                 )
-                _apop_hashes = [
-                    r.get("record_hash", "") for r in _apop_records[:30]
-                    if r.get("record_hash")
-                ]
+                # Phase 241-APOP-FIX: time-based query (not per-hash join).
+                # In grind_mode, frame_checkpoints are sampled at ~10/sec —
+                # per-hash join would miss ~99% of recent records and APOP
+                # would always return UNKNOWN_LOW_EVIDENCE.
                 _apop_checkpoints = await asyncio.to_thread(
-                    self._store.get_frame_checkpoints_for_records, _apop_hashes, 30
+                    self._store.get_recent_frame_checkpoints_for_device,
+                    device_id, 30
                 )
                 _apop_result = classify_active_play_occupancy(
                     _apop_records, _apop_checkpoints
