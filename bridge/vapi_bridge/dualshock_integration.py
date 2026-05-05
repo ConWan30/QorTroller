@@ -2258,20 +2258,31 @@ class DualShockTransport:
             await self._on_record(raw, "dualshock")
         except Exception as exc:
             log.warning("Bridge on_record error: %s", exc)
-        # Phase 61: store frame checkpoint for session replay
-        # Skip during grind_mode — frame replay is diagnostic-only; writing it creates
-        # SQLite write-lock contention with the async thread pool and starves HTTP handlers.
-        if not getattr(self._cfg, "grind_mode", False):
-            try:
-                import hashlib as _hl
+        # Phase 61 / Phase 241-APOP-FIX: store frame checkpoint for session replay.
+        # Pre-241: skipped entirely during grind_mode for SQLite write-lock concerns.
+        # Phase 241-APOP needs these checkpoints to classify gameplay — without them
+        # the classifier always returns UNKNOWN_LOW_EVIDENCE and the hybrid gate
+        # contributes nothing. Resolution: sample at ~10/sec during grind_mode
+        # (negligible vs the 1000/sec hot path; Phase 235-PCC-PERSIST proved
+        # 1/5sec writes during grind do not cause contention) and write every
+        # record outside grind_mode (legacy diagnostic behavior).
+        try:
+            import hashlib as _hl
+            import time as _t
+            _grinding = bool(getattr(self._cfg, "grind_mode", False))
+            _now_mono = _t.monotonic()
+            _last_cp = getattr(self, "_last_checkpoint_mono", 0.0)
+            _should_write = (not _grinding) or (_now_mono - _last_cp >= 0.10)
+            if _should_write:
                 _rh = _hl.sha256(raw[:164]).hexdigest()
                 self._store.store_frame_checkpoint(
                     device_id=self._device_id.hex() if self._device_id is not None else "",
                     record_hash=_rh,
                     frames=list(self._replay_ring),
                 )
-            except Exception:
-                pass
+                self._last_checkpoint_mono = _now_mono
+        except Exception:
+            pass
 
     async def _shutdown_cleanup(self):
         """Submit final SkillOracle update and reset controller state."""

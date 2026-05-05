@@ -5179,7 +5179,14 @@ class Store:
     def get_frame_checkpoints_for_records(
         self, record_hashes: list[str], limit: int = 30
     ) -> list[dict]:
-        """Return parsed frame checkpoints for the given record hashes (Phase 241-APOP)."""
+        """Return parsed frame checkpoints for the given record hashes (Phase 241-APOP).
+
+        Phase 241-APOP-FIX (2026-05-04): preserved for callers that need exact
+        record_hash matching (e.g. session replay). For APOP gameplay
+        classification use get_recent_frame_checkpoints_for_device() instead —
+        record_hash matching gives near-zero hits when checkpoints are sampled
+        (which is the default in grind_mode).
+        """
         import json as _json
         hashes = [h for h in record_hashes if h][: max(0, min(int(limit), 200))]
         if not hashes:
@@ -5194,6 +5201,47 @@ class Store:
             ).fetchall()
         result = []
         for row in rows:
+            try:
+                frames = _json.loads(row["frames_json"])
+            except Exception:
+                frames = []
+            result.append({
+                "record_hash": row["record_hash"],
+                "frames": frames if isinstance(frames, list) else [],
+                "frame_count": row["frame_count"],
+                "checkpoint_ts": row["checkpoint_ts"],
+                "created_at": row["created_at"],
+            })
+        return result
+
+    def get_recent_frame_checkpoints_for_device(
+        self, device_id: str, limit: int = 30
+    ) -> list[dict]:
+        """Return most-recent N frame checkpoints for device by created_at DESC.
+
+        Phase 241-APOP-FIX (2026-05-04): when frame_checkpoints are sampled
+        during grind_mode (Phase 241-APOP-FIX writer change), the legacy
+        per-record-hash join in get_frame_checkpoints_for_records misses ~99%
+        of recent records. Time-based query gives APOP a stable evidence
+        window regardless of writer sampling rate.
+
+        Returns rows in ASC order (oldest first) so APOP _flatten_frames sees
+        chronological frame sequence — same shape contract as the per-hash
+        helper.
+        """
+        import json as _json
+        n = max(1, min(int(limit), 200))
+        if not device_id:
+            return []
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT record_hash, frames_json, frame_count, checkpoint_ts, created_at "
+                "FROM frame_checkpoints WHERE device_id = ? "
+                "ORDER BY created_at DESC LIMIT ?",
+                (str(device_id), n),
+            ).fetchall()
+        result = []
+        for row in reversed(rows):  # ASC order for downstream
             try:
                 frames = _json.loads(row["frames_json"])
             except Exception:

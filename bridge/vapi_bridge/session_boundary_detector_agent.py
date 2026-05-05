@@ -181,11 +181,14 @@ class SessionBoundaryDetectorAgent:
             )
             if apop_enabled and apop_mode != "shadow":
                 try:
-                    hashes = [
-                        r.get("record_hash", "") for r in lookback_records[:30]
-                        if r.get("record_hash")
-                    ]
-                    checkpoints = self._store.get_frame_checkpoints_for_records(hashes, 30)
+                    # Phase 241-APOP-FIX: time-based query (not per-hash join).
+                    # In grind_mode, frame_checkpoints are sampled at ~10/sec
+                    # — per-hash join misses ~99% of records and APOP always
+                    # returns UNKNOWN_LOW_EVIDENCE.
+                    _dev_id = ""
+                    if lookback_records:
+                        _dev_id = lookback_records[0].get("device_id", "") or ""
+                    checkpoints = self._store.get_recent_frame_checkpoints_for_device(_dev_id, 30) if _dev_id else []
                     apop = classify_active_play_occupancy(lookback_records, checkpoints)
                     had_activity = (
                         apop.state in APOP_COMPETITIVE_STATES
