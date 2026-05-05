@@ -394,6 +394,20 @@ INVARIANTS: list[Invariant] = [
         pattern=r"UNIQUE\(agent_id, to_scope_root\)",
         min_matches=1,
     ),
+    Invariant(
+        id="INV-APOP-001",
+        description="APOP_STATES + APOP_GATE_MODES frozensets in active_play_occupancy.py — 5 occupancy states + 3 gate modes frozen, any addition is APOP v2 break (Phase 241-APOP)",
+        file="bridge/vapi_bridge/active_play_occupancy.py",
+        pattern=r"APOP_STATES\s*=\s*frozenset|APOP_GATE_MODES\s*=\s*frozenset|APOP_COMPETITIVE_STATES\s*=\s*frozenset|APOP_STRICT_ELIGIBLE_STATES\s*=\s*frozenset",
+        min_matches=4,
+    ),
+    Invariant(
+        id="INV-APOP-002",
+        description="APOP scoring weights formula in classify_active_play_occupancy — 0.35 stick + 0.20 button + 0.20 trigger + 0.15 imu + 0.10 physiology = 1.00 (sum invariant; weight rebalance is APOP v2)",
+        file="bridge/vapi_bridge/active_play_occupancy.py",
+        pattern=r"0\.35\s*\*\s*frame_metrics\[\"stick_score\"\]|0\.20\s*\*\s*frame_metrics\[\"button_score\"\]|0\.20\s*\*\s*frame_metrics\[\"trigger_score\"\]|0\.15\s*\*\s*frame_metrics\[\"imu_score\"\]|0\.10\s*\*\s*physiology_score",
+        min_matches=5,
+    ),
 ]
 
 

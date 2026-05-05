@@ -3268,6 +3268,30 @@ class Store:
         except Exception:
             pass
 
+        # Phase 241-APOP: Active Play Occupancy Proof shadow/hybrid audit log.
+        try:
+            with self._conn() as conn:
+                conn.executescript("""
+                    CREATE TABLE IF NOT EXISTS active_play_occupancy_log (
+                        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                        ruling_validation_log_id INTEGER NOT NULL,
+                        ruling_id       INTEGER NOT NULL,
+                        device_id       TEXT NOT NULL DEFAULT '',
+                        state           TEXT NOT NULL DEFAULT 'UNKNOWN_LOW_EVIDENCE',
+                        score           REAL NOT NULL DEFAULT 0.0,
+                        confidence      REAL NOT NULL DEFAULT 0.0,
+                        evidence_json   TEXT NOT NULL DEFAULT '{}',
+                        gate_mode       TEXT NOT NULL DEFAULT 'shadow',
+                        created_at      REAL NOT NULL
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_apop_validation
+                        ON active_play_occupancy_log(ruling_validation_log_id);
+                    CREATE INDEX IF NOT EXISTS idx_apop_created
+                        ON active_play_occupancy_log(created_at DESC);
+                """)
+        except Exception:
+            pass
+
         # Phase 236-CORPUS-SNAPSHOT: ZK-attested corpus snapshot table.
         # Sits below WEC and GIC in the chain stack. Each row binds the entire
         # wiki tree + fleet Merkle root + AIT separation ratio + corpus size
@@ -5152,6 +5176,37 @@ class Store:
             ).fetchall()
         return [r["record_hash"] for r in rows]
 
+    def get_frame_checkpoints_for_records(
+        self, record_hashes: list[str], limit: int = 30
+    ) -> list[dict]:
+        """Return parsed frame checkpoints for the given record hashes (Phase 241-APOP)."""
+        import json as _json
+        hashes = [h for h in record_hashes if h][: max(0, min(int(limit), 200))]
+        if not hashes:
+            return []
+        placeholders = ",".join("?" for _ in hashes)
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT record_hash, frames_json, frame_count, checkpoint_ts, created_at "
+                f"FROM frame_checkpoints WHERE record_hash IN ({placeholders}) "
+                "ORDER BY created_at ASC",
+                tuple(hashes),
+            ).fetchall()
+        result = []
+        for row in rows:
+            try:
+                frames = _json.loads(row["frames_json"])
+            except Exception:
+                frames = []
+            result.append({
+                "record_hash": row["record_hash"],
+                "frames": frames if isinstance(frames, list) else [],
+                "frame_count": row["frame_count"],
+                "checkpoint_ts": row["checkpoint_ts"],
+                "created_at": row["created_at"],
+            })
+        return result
+
     # --- Phase 55: ioID Device Identity Registry ---
 
     def store_ioid_device(
@@ -5682,7 +5737,10 @@ class Store:
             return cur.lastrowid
 
     def get_validation_summary(
-        self, gate_n: int = 100, max_divergence_rate: float = 1.0
+        self,
+        gate_n: int = 100,
+        max_divergence_rate: float = 1.0,
+        active_play_gate_mode: str = "shadow",
     ) -> dict:
         """Return validation statistics, consecutive_clean count, and window divergence rate.
 
@@ -5695,6 +5753,9 @@ class Store:
         gate_passed = (consecutive_clean >= gate_n) AND (divergence_rate <= max_divergence_rate)
         """
         # INV-GIC-003: fail-closed — broken chain blocks the gate regardless of DB state.
+        from .active_play_occupancy import normalize_active_play_gate_mode
+        active_play_gate_mode = normalize_active_play_gate_mode(active_play_gate_mode)
+
         if self._gic_chain_broken:
             return {
                 "total": 0,
@@ -5725,11 +5786,17 @@ class Store:
 
             # Walk the most recent gate_n records for both consecutive_clean and window rate
             window_rows = conn.execute(
-                "SELECT divergence, pcc_state, pcc_host_state, gameplay_context "
+                "SELECT id, divergence, pcc_state, pcc_host_state, gameplay_context "
                 "FROM ruling_validation_log "
                 "ORDER BY created_at DESC LIMIT ?",
                 (gate_n,),
             ).fetchall()
+
+        apop_by_validation_id = {}
+        if active_play_gate_mode != "shadow" and window_rows:
+            apop_by_validation_id = self.get_active_play_logs_for_validation_ids(
+                [int(row["id"]) for row in window_rows]
+            )
 
         # consecutive_clean: leading non-divergent + PCC-attested + gameplay-active streak
         # Phase 235-B: pcc_state=NULL → fail-closed
@@ -5743,7 +5810,19 @@ class Store:
                 and row["pcc_host_state"] in ("EXCLUSIVE_USB", "UNKNOWN")
             ) if pcc_s is not None else False
             gameplay_ctx = row["gameplay_context"] if "gameplay_context" in row.keys() else None
-            gameplay_ok = gameplay_ctx != "MENU_DETECTED"  # NULL = pass-through
+            apop_row = apop_by_validation_id.get(int(row["id"]))
+            if apop_row:
+                from .active_play_occupancy import active_play_gate_allows
+                gameplay_ok = active_play_gate_allows(
+                    apop_row.get("state"),
+                    apop_row.get("confidence"),
+                    gameplay_ctx,
+                    active_play_gate_mode,
+                )
+            elif active_play_gate_mode == "strict":
+                gameplay_ok = False
+            else:
+                gameplay_ok = gameplay_ctx != "MENU_DETECTED"  # NULL = pass-through
             if row["divergence"] == 0 and pcc_ok and gameplay_ok:
                 consecutive_clean += 1
             else:
@@ -5813,6 +5892,108 @@ class Store:
                 "VALUES (?, ?, ?, ?, ?)",
                 (row_id, device_id, old_ctx or "", reason, time.time()),
             )
+
+    def insert_active_play_occupancy_log(
+        self,
+        ruling_validation_log_id: int,
+        ruling_id: int,
+        device_id: str,
+        state: str,
+        score: float,
+        confidence: float,
+        evidence_json: str,
+        gate_mode: str,
+    ) -> int:
+        """Persist Phase 241-APOP classifier output for a validation row."""
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO active_play_occupancy_log "
+                "(ruling_validation_log_id, ruling_id, device_id, state, score, "
+                "confidence, evidence_json, gate_mode, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    int(ruling_validation_log_id),
+                    int(ruling_id),
+                    device_id or "",
+                    state,
+                    float(score),
+                    float(confidence),
+                    evidence_json or "{}",
+                    gate_mode or "shadow",
+                    time.time(),
+                ),
+            )
+            return cur.lastrowid or 0
+
+    def get_active_play_logs_for_validation_ids(
+        self, validation_ids: list[int]
+    ) -> dict[int, dict]:
+        """Return latest APOP log per ruling_validation_log id."""
+        ids = [int(v) for v in validation_ids if v is not None]
+        if not ids:
+            return {}
+        placeholders = ",".join("?" for _ in ids)
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM active_play_occupancy_log "
+                f"WHERE ruling_validation_log_id IN ({placeholders}) "
+                "ORDER BY created_at DESC",
+                tuple(ids),
+            ).fetchall()
+        result: dict[int, dict] = {}
+        for row in rows:
+            d = dict(row)
+            key = int(d["ruling_validation_log_id"])
+            if key not in result:
+                result[key] = d
+        return result
+
+    def get_latest_active_play_occupancy_status(
+        self,
+        enabled: bool = True,
+        gate_mode: str = "shadow",
+        latest_gameplay_context: str | None = None,
+    ) -> dict:
+        """Return latest Phase 241-APOP status for the operator API."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM active_play_occupancy_log ORDER BY created_at DESC LIMIT 1"
+            ).fetchone()
+            total = conn.execute(
+                "SELECT COUNT(*) FROM active_play_occupancy_log"
+            ).fetchone()[0]
+        if row is None:
+            return {
+                "active_play_occupancy_enabled": bool(enabled),
+                "gate_mode": gate_mode,
+                "total_logs": int(total),
+                "latest_state": None,
+                "latest_score": 0.0,
+                "latest_confidence": 0.0,
+                "latest_evidence": {},
+                "latest_gameplay_context": latest_gameplay_context,
+                "timestamp": time.time(),
+            }
+        d = dict(row)
+        try:
+            evidence = json.loads(d.get("evidence_json") or "{}")
+        except Exception:
+            evidence = {}
+        return {
+            "active_play_occupancy_enabled": bool(enabled),
+            "gate_mode": gate_mode,
+            "total_logs": int(total),
+            "latest_state": d.get("state"),
+            "latest_score": float(d.get("score", 0.0) or 0.0),
+            "latest_confidence": float(d.get("confidence", 0.0) or 0.0),
+            "latest_evidence": evidence if isinstance(evidence, dict) else {},
+            "latest_gameplay_context": latest_gameplay_context,
+            "latest_ruling_validation_log_id": d.get("ruling_validation_log_id"),
+            "latest_ruling_id": d.get("ruling_id"),
+            "latest_device_id": d.get("device_id", ""),
+            "last_run_ts": d.get("created_at"),
+            "timestamp": time.time(),
+        }
 
     def get_validation_gate_status(
         self, gate_n: int = 100, max_divergence_rate: float = 1.0

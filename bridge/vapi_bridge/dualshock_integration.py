@@ -1157,6 +1157,7 @@ class DualShockTransport:
                 _out = []
                 for _i in range(0, len(frames), _stride):
                     _s = frames[_i]
+                    _buttons = int(getattr(_s, "buttons", 0) or 0)
                     _out.append({
                         "ts_ms":         int(_s.timestamp_ms) if hasattr(_s, "timestamp_ms") else 0,
                         "left_stick_x":  _s.left_stick_x,
@@ -1176,8 +1177,21 @@ class DualShockTransport:
                         "touch_active":  bool(_s.touch_active),
                         "touch0_x":      _s.touch0_x,
                         "touch0_y":      _s.touch0_y,
-                        "buttons_cross": (_s.buttons >> 5) & 1,
-                        "buttons_r2":    (_s.buttons >> 15) & 1 if _s.buttons > 0 else 0,
+                        "buttons_raw":   _buttons,
+                        "buttons_cross": (_buttons >> 0) & 1,
+                        "buttons_circle": (_buttons >> 1) & 1,
+                        "buttons_square": (_buttons >> 2) & 1,
+                        "buttons_triangle": (_buttons >> 3) & 1,
+                        "buttons_l1":    (_buttons >> 4) & 1,
+                        "buttons_r1":    (_buttons >> 5) & 1,
+                        "buttons_dpad_up": (_buttons >> 8) & 1,
+                        "buttons_dpad_down": (_buttons >> 9) & 1,
+                        "buttons_dpad_left": (_buttons >> 10) & 1,
+                        "buttons_dpad_right": (_buttons >> 11) & 1,
+                        "buttons_share": (_buttons >> 12) & 1,
+                        "buttons_options": (_buttons >> 13) & 1,
+                        "buttons_touch": (_buttons >> 15) & 1,
+                        "buttons_r2":    int(getattr(_s, "r2_trigger", 0) >= 16),
                     })
                 # Phase 61: accumulate downsampled frames for session replay
                 self._replay_ring.extend(_out)
