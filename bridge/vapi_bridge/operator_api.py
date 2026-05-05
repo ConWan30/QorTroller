@@ -7146,8 +7146,12 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         # at store.py:5480 inside _conn().
         _val_summary: dict = {}
         try:
+            from .active_play_occupancy import normalize_active_play_gate_mode
+            _apop_mode = normalize_active_play_gate_mode(
+                getattr(cfg, "active_play_occupancy_gate_mode", "shadow")
+            ) if bool(getattr(cfg, "active_play_occupancy_enabled", True)) else "shadow"
             _val_summary = await asyncio.to_thread(
-                store.get_validation_summary, _grind_target
+                store.get_validation_summary, _grind_target, 1.0, _apop_mode
             )
             _consec_clean = int(_val_summary.get("consecutive_clean", 0))
         except Exception:
@@ -7173,6 +7177,45 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "latest_gameplay_context":       _latest_gameplay_ctx,
             "timestamp":                     _t2347.time(),
         }
+
+    # Phase 241-APOP — GET /agent/active-play-occupancy-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/active-play-occupancy-status")
+    async def get_active_play_occupancy_status(
+        x_api_key: str = Header(default=""),
+    ):
+        """Latest Active Play Occupancy Proof status.
+
+        APOP is shadowed by default.  In hybrid/strict modes this endpoint shows
+        the exact controller-native evidence used alongside legacy GAD.
+        """
+        _check_read_key(x_api_key)
+        import time as _t241
+        from .active_play_occupancy import normalize_active_play_gate_mode
+
+        _enabled = bool(getattr(cfg, "active_play_occupancy_enabled", True))
+        _mode = normalize_active_play_gate_mode(
+            getattr(cfg, "active_play_occupancy_gate_mode", "shadow")
+        )
+        try:
+            _grind_target = int(getattr(cfg, "grind_target", 100))
+            _summary = await asyncio.to_thread(
+                store.get_validation_summary,
+                _grind_target,
+                1.0,
+                _mode if _enabled else "shadow",
+            )
+            _latest_gctx = _summary.get("latest_gameplay_context")
+            _status = await asyncio.to_thread(
+                store.get_latest_active_play_occupancy_status,
+                _enabled,
+                _mode,
+                _latest_gctx,
+            )
+            _status["timestamp"] = _t241.time()
+            return _status
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     # Phase 235-GAD — POST /operator/override-gameplay-context
     # ------------------------------------------------------------------
