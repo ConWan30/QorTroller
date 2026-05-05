@@ -7832,22 +7832,21 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         """Read AgentRegistry contract state.
 
         Decision B2: deferred-activation pattern. When
-        cfg.agent_registry_address is empty (Stream 2-deploy not yet
-        landed AgentRegistry on IoTeX testnet), returns:
+        cfg.agent_registry_address is empty, returns:
             {
               "registry_address": "",
               "deployed":         false,
               "client_id":        ...,
               "timestamp":        ...,
-              "status":           "AgentRegistry not yet deployed
-                                   (Stream 2-deploy gated on wallet ≥3 IOTX)"
+              "status":           "AgentRegistry not yet deployed ..."
             }
 
-        When the address is populated, would query the contract for
-        registered-agent count and other read-only state. The on-chain
-        read path is left as a TODO until Stream 2-deploy lands the
-        contract — at that point, an `agent_registry_count` and similar
-        view-call wrappers will be added to chain.py and surfaced here.
+        When the address is populated and a chain client is available,
+        queries the contract for totalAgents and the registration state of
+        the two canonical Operator Agents (Sentry, Guardian) per CLAUDE.md
+        Phase O0 ON-CHAIN COMPLETE.  Read failures are surfaced fail-open
+        via a `live_read_error` field — the endpoint never 5xx's on a
+        transient RPC blip during shadow-mode observation.
         """
         addr = getattr(cfg, "agent_registry_address", "")
         if not addr:
@@ -7861,14 +7860,59 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                     "(Stream 2-deploy gated on wallet ≥3 IOTX per Pass 2A V8)"
                 ),
             }
-        # Live path — populated when Stream 2-deploy lands the contract.
-        return {
+
+        # Live path — AgentRegistry deployed (Phase O0 ON-CHAIN COMPLETE
+        # 2026-05-03 per CLAUDE.md, address 0x9548E9d1...).
+        #
+        # Q9-frozen agentIds (CLAUDE.md "Phase O0 — ON-CHAIN REGISTRATION
+        # COMPLETE" table):
+        _SENTRY_AGENT_ID   = "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"
+        _GUARDIAN_AGENT_ID = "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"
+
+        body: dict = {
             "registry_address": addr,
             "deployed":         True,
             "client_id":        auth.client_id,
             "timestamp":        time.time(),
-            "status":           "AgentRegistry deployed; live read path TBD",
+            "status":           "AgentRegistry deployed; live read active",
         }
+
+        if chain is None:
+            # Bridge running without a chain client (e.g. test harness, or
+            # BRIDGE_PRIVATE_KEY unset).  Address is populated but we
+            # cannot perform view calls; report explicitly.
+            body["live_read_skipped"] = "chain client unavailable"
+            return body
+
+        try:
+            total = await chain.get_agent_registry_total()
+            sentry_record   = await chain.get_agent_record(_SENTRY_AGENT_ID)
+            guardian_record = await chain.get_agent_record(_GUARDIAN_AGENT_ID)
+        except Exception as exc:
+            log.warning("agent-registry-status live read failed: %s", exc)
+            body["live_read_error"] = str(exc)
+            return body
+
+        body["total_agents"] = int(total)
+        body["agents"] = {
+            "sentry": {
+                "agent_id":   _SENTRY_AGENT_ID,
+                "registered": sentry_record["public_key"]
+                              != "0x0000000000000000000000000000000000000000",
+                "public_key": sentry_record["public_key"],
+                "scope_hash": sentry_record["scope_hash"],
+                "status":     sentry_record["status"],
+            },
+            "guardian": {
+                "agent_id":   _GUARDIAN_AGENT_ID,
+                "registered": guardian_record["public_key"]
+                              != "0x0000000000000000000000000000000000000000",
+                "public_key": guardian_record["public_key"],
+                "scope_hash": guardian_record["scope_hash"],
+                "status":     guardian_record["status"],
+            },
+        }
+        return body
 
     # ------------------------------------------------------------------
     # Phase O1 C1 — Operator Agent activation arc (Cedar bundle dual-anchor)

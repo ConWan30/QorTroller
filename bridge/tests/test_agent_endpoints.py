@@ -132,13 +132,14 @@ def _make_store():
 def _make_client(
     oauth_configured: bool = True,
     agent_registry_address: str = "",
+    chain=None,
 ):
     cfg = _make_cfg(
         oauth_configured=oauth_configured,
         agent_registry_address=agent_registry_address,
     )
     store = _make_store()
-    app = create_operator_app(cfg, store)
+    app = create_operator_app(cfg, store, chain=chain)
     return TestClient(app), store, cfg
 
 
@@ -350,8 +351,9 @@ def test_t_ae_10_agent_registry_status_deferred_activation():
 # ---------------------------------------------------------------------------
 
 def test_t_ae_11_agent_registry_status_populated_address():
-    """When agent_registry_address is non-empty, the endpoint returns
-    deployed=True with the address.
+    """When agent_registry_address is non-empty but no chain client is
+    available, the endpoint returns deployed=True with the address and
+    a `live_read_skipped` marker (no 5xx).
     """
     populated = "0x" + "AB" * 20
     client, _, _ = _make_client(agent_registry_address=populated)
@@ -361,6 +363,9 @@ def test_t_ae_11_agent_registry_status_populated_address():
     body = r.json()
     assert body["registry_address"] == populated
     assert body["deployed"] is True
+    assert body["live_read_skipped"] == "chain client unavailable"
+    assert "live_read_error" not in body
+    assert "total_agents" not in body
 
 
 # ---------------------------------------------------------------------------
@@ -407,3 +412,104 @@ def test_t_ae_14_existing_health_endpoint_unchanged():
     client, _, _ = _make_client()
     r = client.get("/health")
     assert r.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# T-AE-15  (live read success path — Phase O0 ON-CHAIN COMPLETE)
+# ---------------------------------------------------------------------------
+
+class _AsyncMock:
+    """Minimal async-callable returning a fixed value (avoids depending on
+    AsyncMock symbol differences across MagicMock versions).
+    """
+    def __init__(self, value):
+        self._value = value
+        self.calls = 0
+
+    async def __call__(self, *args, **kwargs):
+        self.calls += 1
+        return self._value
+
+
+def test_t_ae_15_agent_registry_status_live_read_success():
+    """When chain client is wired and view calls succeed, the endpoint
+    surfaces total_agents + per-agent records for Sentry and Guardian.
+    """
+    populated = "0x" + "CD" * 20
+    sentry_pk   = "0xeaA6FD569a964C08D541F8e154aB3Ac8cD4e2743"
+    guardian_pk = "0x9c577Fb2162824565ef57edd1B55a8EC5f58c181"
+
+    chain = MagicMock()
+    chain.get_agent_registry_total = _AsyncMock(2)
+
+    async def _get_record(agent_id_hex: str):
+        if agent_id_hex.lower().startswith("0xb21e1ec2"):
+            return {
+                "public_key": sentry_pk,
+                "scope_hash": "0xebe899279b230ff5d71db22dc4b80282c810ff5bd1a9d249db6e6d309af52e41",
+                "status":     0,
+            }
+        if agent_id_hex.lower().startswith("0xbd8c7fba"):
+            return {
+                "public_key": guardian_pk,
+                "scope_hash": "0x46807e13dd1c81cefa784ab8b30f8cdcaefd60697de921aae46ac24dac000a50",
+                "status":     0,
+            }
+        raise AssertionError(f"unexpected agent_id={agent_id_hex}")
+
+    chain.get_agent_record = _get_record
+
+    client, _, _ = _make_client(
+        agent_registry_address=populated, chain=chain,
+    )
+    headers = _signed_headers("GET", "/agent/agent-registry-status")
+    r = client.get("/agent/agent-registry-status", headers=headers)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["registry_address"] == populated
+    assert body["deployed"] is True
+    assert body["total_agents"] == 2
+    assert "live_read_skipped" not in body
+    assert "live_read_error" not in body
+
+    sentry = body["agents"]["sentry"]
+    assert sentry["registered"] is True
+    assert sentry["public_key"] == sentry_pk
+    assert sentry["status"] == 0  # STATUS_DEFINED — Phase O0 exit state
+
+    guardian = body["agents"]["guardian"]
+    assert guardian["registered"] is True
+    assert guardian["public_key"] == guardian_pk
+    assert guardian["status"] == 0
+
+
+# ---------------------------------------------------------------------------
+# T-AE-16  (live read failure is fail-open)
+# ---------------------------------------------------------------------------
+
+def test_t_ae_16_agent_registry_status_live_read_failure_fails_open():
+    """A transient RPC failure during view calls must NOT 5xx the
+    endpoint — bridge surfaces the error in `live_read_error` and the
+    operator agents continue to observe in shadow mode.
+    """
+    populated = "0x" + "EF" * 20
+
+    async def _boom(*_a, **_kw):
+        raise RuntimeError("rpc unreachable")
+
+    chain = MagicMock()
+    chain.get_agent_registry_total = _boom
+    chain.get_agent_record = _boom
+
+    client, _, _ = _make_client(
+        agent_registry_address=populated, chain=chain,
+    )
+    headers = _signed_headers("GET", "/agent/agent-registry-status")
+    r = client.get("/agent/agent-registry-status", headers=headers)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["registry_address"] == populated
+    assert body["deployed"] is True
+    assert body["live_read_error"] == "rpc unreachable"
+    assert "total_agents" not in body
+    assert "agents" not in body

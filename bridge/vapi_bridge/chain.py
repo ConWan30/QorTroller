@@ -3875,3 +3875,89 @@ class ChainClient:
             "block_number": int(receipt["blockNumber"]),
             "status":       int(receipt["status"]),
         }
+
+    # AgentRegistry view ABI — read-only counterpart to _AGENT_REGISTRY_SCOPE_ABI.
+    # Mirrors the deployed contract at 0x9548E9d17c2d40350629b1b88ff1D2c01B0414a4
+    # (contracts/contracts/AgentRegistry.sol lines 65, 157-169).
+    _AGENT_REGISTRY_VIEW_ABI = [
+        {
+            "name": "totalAgents", "type": "function", "stateMutability": "view",
+            "inputs": [],
+            "outputs": [{"name": "", "type": "uint256"}],
+        },
+        {
+            "name": "getAgent", "type": "function", "stateMutability": "view",
+            "inputs": [{"name": "agentId", "type": "bytes32"}],
+            "outputs": [
+                {"name": "publicKey", "type": "address"},
+                {"name": "scopeHash", "type": "bytes32"},
+                {"name": "status",    "type": "uint8"},
+            ],
+        },
+        {
+            "name": "isRegistered", "type": "function", "stateMutability": "view",
+            "inputs": [{"name": "agentId", "type": "bytes32"}],
+            "outputs": [{"name": "", "type": "bool"}],
+        },
+    ]
+
+    async def get_agent_registry_total(self) -> int:
+        """View: AgentRegistry.totalAgents() → uint256.
+
+        Read-only; bypasses chain_submission_paused (no tx).  Fail-closed on
+        unconfigured address — sibling write paths (update_agent_scope_governance)
+        already raise RuntimeError; this matches.
+        """
+        addr = getattr(self._cfg, "agent_registry_address", "")
+        if not addr:
+            raise RuntimeError(
+                "get_agent_registry_total: agent_registry_address is not configured"
+            )
+        contract = self._w3.eth.contract(
+            address=self._w3.to_checksum_address(addr),
+            abi=self._AGENT_REGISTRY_VIEW_ABI,
+        )
+        result = await contract.functions.totalAgents().call()
+        return int(result)
+
+    async def is_agent_registered(self, agent_id_hex: str) -> bool:
+        """View: AgentRegistry.isRegistered(bytes32) → bool."""
+        addr = getattr(self._cfg, "agent_registry_address", "")
+        if not addr:
+            raise RuntimeError(
+                "is_agent_registered: agent_registry_address is not configured"
+            )
+        agent_id_bytes = self._agent_id_bytes32(agent_id_hex)
+        contract = self._w3.eth.contract(
+            address=self._w3.to_checksum_address(addr),
+            abi=self._AGENT_REGISTRY_VIEW_ABI,
+        )
+        result = await contract.functions.isRegistered(agent_id_bytes).call()
+        return bool(result)
+
+    async def get_agent_record(self, agent_id_hex: str) -> dict:
+        """View: AgentRegistry.getAgent(bytes32) → (address, bytes32, uint8).
+
+        Returns a dict with hex-encoded public_key + scope_hash and integer
+        status.  Per the contract, an unregistered agent returns
+        (address(0), bytes32(0), 0) — caller can detect via public_key.
+        """
+        addr = getattr(self._cfg, "agent_registry_address", "")
+        if not addr:
+            raise RuntimeError(
+                "get_agent_record: agent_registry_address is not configured"
+            )
+        agent_id_bytes = self._agent_id_bytes32(agent_id_hex)
+        contract = self._w3.eth.contract(
+            address=self._w3.to_checksum_address(addr),
+            abi=self._AGENT_REGISTRY_VIEW_ABI,
+        )
+        public_key, scope_hash, status = await contract.functions.getAgent(
+            agent_id_bytes,
+        ).call()
+        scope_bytes = bytes(scope_hash) if not isinstance(scope_hash, (bytes, bytearray)) else scope_hash
+        return {
+            "public_key": str(public_key),
+            "scope_hash": "0x" + scope_bytes.hex(),
+            "status":     int(status),
+        }
