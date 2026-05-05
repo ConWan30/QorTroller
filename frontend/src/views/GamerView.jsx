@@ -366,9 +366,16 @@ function StatusBar({ host, state, gctx, ready, coherence, autoTrigger, ait, apop
     }}>
       <StatusChip label="HOST"         value={host  ?? '—'} color={tone(HOST_TONE, host)} />
       <StatusChip label="PCC"          value={state ?? '—'} color={tone(STATE_TONE, state)} />
-      <span title={gctxTitle}>
-        <StatusChip label="GAMEPLAY"   value={gctxValue}         color={gctxColor} />
-      </span>
+      {/* Phase 241-APOP: GAMEPLAY chip is only authoritative in shadow mode.
+          In hybrid/strict, APOP is the actual gate — hiding GAMEPLAY here
+          prevents misleading red MENU_DETECTED when consecutive_clean is
+          actually advancing via APOP rescue. Legacy GAD data still in DB
+          for audit; surfaced in DeveloperView. */}
+      {(!apop || apop.gate_mode === 'shadow') && (
+        <span title={gctxTitle}>
+          <StatusChip label="GAMEPLAY"   value={gctxValue}         color={gctxColor} />
+        </span>
+      )}
       <StatusChip label="READY"        value={ready ? 'YES' : 'NO'} color={ready ? GAMER.green : GAMER.orange} />
       <StatusChip label="COHERENCE"    value={cohValue}          color={cohColor} />
       <span title={atTitle}>
