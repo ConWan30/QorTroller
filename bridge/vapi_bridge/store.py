@@ -3371,6 +3371,112 @@ class Store:
         except Exception:
             pass  # idempotent
 
+        # Phase O1 C2 — operator_agent_shadow_log table.
+        # Records every Cedar evaluation cycle in shadow mode:
+        # which agent attempted which (action, resource), what the
+        # Cedar bundle decided (CedarDecision enum), and the
+        # bundle's Merkle root at evaluation time (for drift audit
+        # against operator_agent_activation_log).  This is the
+        # observability foundation for the deferred Phase O1 C3
+        # agent-process-startup work — once we have shadow log data,
+        # FSCA rules can flag patterns and operator can decide on
+        # advancement to O2_SUGGEST.
+        #
+        # UNIQUE constraint on (agent_id, action, resource, evaluated_at_bucket)
+        # enforces idempotency at the second granularity (INV-OPERATOR-AGENT-003)
+        # — protects against double-write from retry loops without rejecting
+        # legitimate distinct evaluations.
+        #
+        # Phase 1002 distinguishes from Phase 1001 (activation log).
+        try:
+            with self._conn() as conn:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS operator_agent_shadow_log (
+                        id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+                        agent_id                 TEXT    NOT NULL,
+                        action                   TEXT    NOT NULL,
+                        resource                 TEXT    NOT NULL,
+                        context_json             TEXT    NOT NULL,
+                        decision                 TEXT    NOT NULL,
+                        bundle_merkle_root       TEXT    NOT NULL,
+                        bundle_path              TEXT    NOT NULL,
+                        draft_payload_hash       TEXT    NOT NULL,
+                        source                   TEXT    NOT NULL,
+                        evaluated_at             REAL    NOT NULL,
+                        evaluated_at_bucket      INTEGER NOT NULL,
+                        UNIQUE(agent_id, action, resource, evaluated_at_bucket)
+                    )
+                """)
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_oasl_agent_time "
+                    "ON operator_agent_shadow_log(agent_id, evaluated_at DESC)"
+                )
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_oasl_decision "
+                    "ON operator_agent_shadow_log(decision, evaluated_at DESC)"
+                )
+                conn.execute(
+                    "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                    " VALUES (?, ?, ?)",
+                    (1002, "operator_agent_shadow_log", time.time()),
+                )
+        except Exception:
+            pass  # idempotent
+
+        # Phase O1 C3 — operator_agent_drift_log table.
+        # Records drift findings from periodic operator-triggered sweeps:
+        #
+        #   BUNDLE_HASH_DRIFT             — cedar_bundles/{agent}.json file's
+        #                                   recomputed Merkle root != the
+        #                                   to_scope_root recorded in the agent's
+        #                                   most-recent activation_log row.
+        #                                   Means someone mutated the bundle
+        #                                   file post-anchor without re-anchoring.
+        #
+        #   SCOPE_HASH_GOVERNANCE_DRIFT   — AgentScope.getScopeRoot != the
+        #                                   AgentRegistry.getAgent.scopeHash.
+        #                                   Means the operational + governance
+        #                                   layers diverged on chain (D4 dual-
+        #                                   anchor invariant violation).
+        #
+        # Both are CRITICAL signals — the protocol's tamper-evidence rests on
+        # their alignment. UNIQUE(agent_id, drift_type, detected_at_bucket)
+        # deduplicates retry storms (INV-OPERATOR-AGENT-006).
+        #
+        # Phase 1003 distinguishes from 1001 (activation) + 1002 (shadow).
+        try:
+            with self._conn() as conn:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS operator_agent_drift_log (
+                        id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+                        agent_id                 TEXT    NOT NULL,
+                        drift_type               TEXT    NOT NULL,
+                        expected_value           TEXT    NOT NULL,
+                        actual_value             TEXT    NOT NULL,
+                        bundle_path              TEXT    NOT NULL,
+                        evidence_json            TEXT    NOT NULL,
+                        sweep_id                 TEXT    NOT NULL,
+                        detected_at              REAL    NOT NULL,
+                        detected_at_bucket       INTEGER NOT NULL,
+                        UNIQUE(agent_id, drift_type, detected_at_bucket)
+                    )
+                """)
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_oadl_agent_time "
+                    "ON operator_agent_drift_log(agent_id, detected_at DESC)"
+                )
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_oadl_drift_type "
+                    "ON operator_agent_drift_log(drift_type, detected_at DESC)"
+                )
+                conn.execute(
+                    "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                    " VALUES (?, ?, ?)",
+                    (1003, "operator_agent_drift_log", time.time()),
+                )
+        except Exception:
+            pass  # idempotent
+
         # Phase O0 Stream 3-prep Session 1 — AGENT_COMMIT v1 store table.
         # Sixth FROZEN-v1 primitive in the family. Each row records a git
         # commit attestation produced by an Operator Agent, with the computed
@@ -14306,14 +14412,190 @@ class Store:
         this against AgentScope.getScopeRoot to detect divergence.
         """
         with self._conn() as conn:
-            row = conn.execute(
+            row_get_to_phase = conn.execute(
                 "SELECT to_phase FROM operator_agent_activation_log "
                 "WHERE agent_id = ? ORDER BY activated_at DESC LIMIT 1",
                 (agent_id,),
             ).fetchone()
-            if row is None:
+            if row_get_to_phase is None:
                 return "O0_DORMANT"
-            return str(row["to_phase"])
+            return str(row_get_to_phase["to_phase"])
+
+    # --- Phase O1 C2: Operator Agent Shadow Log helpers ---
+
+    def insert_operator_agent_shadow_log(
+        self,
+        *,
+        agent_id: str,
+        action: str,
+        resource: str,
+        context_json: str,
+        decision: str,
+        bundle_merkle_root: str,
+        bundle_path: str,
+        draft_payload_hash: str,
+        source: str,
+    ) -> int:
+        """Persist one Cedar evaluation event in shadow mode.
+
+        evaluated_at_bucket is `int(time.time())` (second-granularity) so
+        UNIQUE(agent_id, action, resource, evaluated_at_bucket) deduplicates
+        retry storms while still permitting ≥1 distinct evaluation per second.
+        """
+        now = time.time()
+        bucket = int(now)
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO operator_agent_shadow_log "
+                "(agent_id, action, resource, context_json, decision, "
+                "bundle_merkle_root, bundle_path, draft_payload_hash, source, "
+                "evaluated_at, evaluated_at_bucket) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (
+                    agent_id, action, resource, context_json, decision,
+                    bundle_merkle_root, bundle_path, draft_payload_hash, source,
+                    now, bucket,
+                ),
+            )
+            if cur.lastrowid:
+                return int(cur.lastrowid)
+            # UNIQUE collision — return existing row id for idempotency
+            existing = conn.execute(
+                "SELECT id FROM operator_agent_shadow_log "
+                "WHERE agent_id=? AND action=? AND resource=? AND evaluated_at_bucket=?",
+                (agent_id, action, resource, bucket),
+            ).fetchone()
+            return int(existing["id"]) if existing else 0
+
+    def get_operator_agent_shadow_log(
+        self,
+        agent_id: str | None = None,
+        decision_filter: str | None = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        """Paginated shadow log read (most recent first).
+
+        Args:
+            agent_id: filter to one agent or None for all
+            decision_filter: filter to one CedarDecision value or None for all
+            limit: capped at 500 to prevent unbounded queries
+        """
+        limit = max(1, min(500, int(limit)))
+        with self._conn() as conn:
+            sql = "SELECT * FROM operator_agent_shadow_log WHERE 1=1"
+            args: list = []
+            if agent_id is not None:
+                sql += " AND agent_id = ?"
+                args.append(agent_id)
+            if decision_filter is not None:
+                sql += " AND decision = ?"
+                args.append(decision_filter)
+            sql += " ORDER BY evaluated_at DESC LIMIT ?"
+            args.append(limit)
+            rows = conn.execute(sql, tuple(args)).fetchall()
+            return [dict(r) for r in rows]
+
+    def get_operator_agent_shadow_summary(
+        self,
+        agent_id: str | None = None,
+    ) -> dict:
+        """Aggregated decision counts for an agent (or fleet-wide).
+
+        Returns:
+            {
+                "total": int,
+                "by_decision": {decision: count, ...},
+                "latest_at": float | None,
+                "earliest_at": float | None,
+            }
+        """
+        with self._conn() as conn:
+            base_where = "WHERE agent_id = ?" if agent_id else ""
+            base_args = (agent_id,) if agent_id else ()
+            total = conn.execute(
+                f"SELECT COUNT(*) FROM operator_agent_shadow_log {base_where}",
+                base_args,
+            ).fetchone()[0]
+            by_dec_rows = conn.execute(
+                f"SELECT decision, COUNT(*) as n FROM operator_agent_shadow_log "
+                f"{base_where} GROUP BY decision",
+                base_args,
+            ).fetchall()
+            by_decision = {r["decision"]: int(r["n"]) for r in by_dec_rows}
+            ts_row = conn.execute(
+                f"SELECT MIN(evaluated_at) as earliest, MAX(evaluated_at) as latest "
+                f"FROM operator_agent_shadow_log {base_where}",
+                base_args,
+            ).fetchone()
+            return {
+                "total":       int(total),
+                "by_decision": by_decision,
+                "latest_at":   ts_row["latest"] if ts_row else None,
+                "earliest_at": ts_row["earliest"] if ts_row else None,
+            }
+
+    # --- Phase O1 C3: Operator Agent Drift Log helpers ---
+
+    def insert_operator_agent_drift(
+        self,
+        *,
+        agent_id: str,
+        drift_type: str,
+        expected_value: str,
+        actual_value: str,
+        bundle_path: str,
+        evidence_json: str,
+        sweep_id: str,
+    ) -> int:
+        """Persist one drift finding from an operator sweep.
+
+        UNIQUE(agent_id, drift_type, detected_at_bucket) at second-granularity
+        — sweep retries within the same second collapse to one row.
+        """
+        now = time.time()
+        bucket = int(now)
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO operator_agent_drift_log "
+                "(agent_id, drift_type, expected_value, actual_value, "
+                "bundle_path, evidence_json, sweep_id, "
+                "detected_at, detected_at_bucket) "
+                "VALUES (?,?,?,?,?,?,?,?,?)",
+                (
+                    agent_id, drift_type, expected_value, actual_value,
+                    bundle_path, evidence_json, sweep_id,
+                    now, bucket,
+                ),
+            )
+            if cur.lastrowid:
+                return int(cur.lastrowid)
+            existing = conn.execute(
+                "SELECT id FROM operator_agent_drift_log "
+                "WHERE agent_id=? AND drift_type=? AND detected_at_bucket=?",
+                (agent_id, drift_type, bucket),
+            ).fetchone()
+            return int(existing["id"]) if existing else 0
+
+    def get_operator_agent_drift_log(
+        self,
+        agent_id: str | None = None,
+        drift_type: str | None = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        """Paginated drift log read (most recent first)."""
+        limit = max(1, min(500, int(limit)))
+        with self._conn() as conn:
+            sql = "SELECT * FROM operator_agent_drift_log WHERE 1=1"
+            args: list = []
+            if agent_id is not None:
+                sql += " AND agent_id = ?"
+                args.append(agent_id)
+            if drift_type is not None:
+                sql += " AND drift_type = ?"
+                args.append(drift_type)
+            sql += " ORDER BY detected_at DESC LIMIT ?"
+            args.append(limit)
+            return [dict(r) for r in conn.execute(sql, tuple(args)).fetchall()]
 
     # --- Phase 235-A: Grind Integrity Chain (GIC) ---
 
