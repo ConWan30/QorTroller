@@ -3426,11 +3426,25 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         calib_dim = int(getattr(cfg, "calibration_feature_dim", 12))
         l4_ok = (live_dim == calib_dim)
 
-        # P0: gate_passed (consecutive_clean ≥ gate_n)
+        # P0: gate_passed (chain_length ≥ gate_n is the GIC_N milestone semantic).
+        # Phase 239 fix 2026-05-05: GIC_100 is the cumulative achievement preserved
+        # in chain_length. consecutive_clean is the leading-streak instantaneous
+        # health signal — it can break to 1 after any PCC DISCONNECT despite the
+        # chain having already accumulated 100 gold-standard stamps. Use either
+        # signal: leading-streak satisfies (live, no recent break) OR cumulative
+        # chain has reached the milestone (GIC_N achieved at any point).
         gate_n   = int(getattr(cfg, "validation_gate_n", 100))
         max_div  = float(getattr(cfg, "validation_max_divergence_rate", 1.0))
         gate_s   = store.get_validation_summary(gate_n, max_div)
-        gate_ok  = bool(gate_s.get("gate_passed", False))
+        chain_length = 0
+        try:
+            _grind_sid = str(getattr(cfg, "grind_session_id", "") or "")
+            if _grind_sid:
+                _chain = store.get_grind_chain_status(_grind_sid, cfg=cfg) or {}
+                chain_length = int(_chain.get("chain_length", 0))
+        except Exception:
+            chain_length = 0
+        gate_ok  = bool(gate_s.get("gate_passed", False)) or chain_length >= gate_n
 
         # P0: cert_valid
         cert     = store.get_latest_enforcement_certificate()
@@ -3493,6 +3507,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "l4_calib_dim": calib_dim,
             "l4_ok": l4_ok,
             "consecutive_clean": gate_s.get("consecutive_clean", 0),
+            "chain_length": chain_length,
             "gate_ok": gate_ok,
             "cert_ok": cert_ok,
             "audit_ok": audit_ok,
