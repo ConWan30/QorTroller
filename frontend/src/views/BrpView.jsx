@@ -23,6 +23,7 @@ import {
   getMockPitlSnapshot,
 } from '../brp/mocks/loaders'
 import {
+  useActivePlayOccupancy,
   useBrpControllerOrientation,
   useBrpDeviceDiscovery,
   useBrpFrozenOutput,
@@ -144,6 +145,7 @@ export function BrpView() {
   const recentRecords = useBrpRecentRecords(activeDeviceId)
   const captureHealth = useCaptureHealth()
   const phgProfile = useBrpPhgProfile(activeDeviceId)
+  const apopQuery = useActivePlayOccupancy()
 
   // Resolve frozenOutput: live bytes when chain has a hash; locked-seed
   // canonical fallback otherwise.
@@ -362,6 +364,16 @@ export function BrpView() {
               {...(orientation ? { orientation } : {})}
               {...(hostState ? { hostState } : {})}
               {...(trust ? { trust } : {})}
+              {...(apopQuery.data && apopQuery.data.latest_state
+                ? {
+                    apop: {
+                      state: apopQuery.data.latest_state,
+                      score: apopQuery.data.latest_score ?? 0,
+                      confidence: apopQuery.data.latest_confidence ?? 0,
+                      evidence: apopQuery.data.latest_evidence ?? {},
+                    },
+                  }
+                : {})}
             />
           </Suspense>
         </div>

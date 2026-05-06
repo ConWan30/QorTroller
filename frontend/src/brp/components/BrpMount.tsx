@@ -83,6 +83,7 @@ export function BrpMount(props: BrpMountProps): JSX.Element {
     orientation,
     hostState,
     trust,
+    apop,
   } = props;
 
   return (
@@ -107,6 +108,7 @@ export function BrpMount(props: BrpMountProps): JSX.Element {
           {...(orientation ? { orientation } : {})}
           {...(hostState ? { hostState } : {})}
           {...(trust ? { trust } : {})}
+          {...(apop ? { apop } : {})}
         />
         <LegibilityOverlay
           pitlSnapshot={pitlSnapshot}
