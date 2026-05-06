@@ -30,6 +30,8 @@
 import { Canvas } from "@react-three/fiber";
 import { useMotionContext } from "./AccessibilityShell";
 import { AmbientLayer } from "./AmbientLayer";
+import { ApopEvidenceRays } from "./ApopEvidenceRays";
+import type { ApopSignal } from "./ApopEvidenceRays";
 import type {
   HostStateSignal,
   OrientationSignal,
@@ -60,6 +62,8 @@ export interface BrpCanvasProps {
   readonly hostState?: HostStateSignal;
   /** Optional commit-λ trust signal threaded through to AmbientLayer. */
   readonly trust?: TrustSignal;
+  /** Phase 241-APOP active play occupancy signal — drives Evidence Rays. */
+  readonly apop?: ApopSignal;
 }
 
 export function BrpCanvas({
@@ -69,6 +73,7 @@ export function BrpCanvas({
   orientation,
   hostState,
   trust,
+  apop,
 }: BrpCanvasProps): JSX.Element {
   const { motionShouldPause } = useMotionContext();
   const frameloop = computeFrameloop(motionShouldPause);
@@ -98,6 +103,10 @@ export function BrpCanvas({
           {...(hostState ? { hostState } : {})}
           {...(trust ? { trust } : {})}
         />
+        {/* Phase 241-APOP — 3D Evidence Rays.  Hidden when no apop or no
+            state yet (renders null). When live, five cones radiate from
+            origin, lengths driven by per-axis scores, color by APOP state. */}
+        <ApopEvidenceRays {...(apop ? { apop } : {})} />
       </Canvas>
     </div>
   );

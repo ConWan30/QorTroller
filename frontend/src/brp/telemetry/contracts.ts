@@ -278,4 +278,33 @@ export interface BrpMountProps {
    * (high trust). Pulse bumps still operate on top of this floor.
    */
   readonly trust?: TrustSignal;
+  /**
+   * Phase 241-APOP optional signal. When present and apop.state is set,
+   * the BRP renders five Evidence Rays (cones) emanating from origin —
+   * lengths driven by per-axis scores (stick/button/trigger/imu/physiology),
+   * widths preserve the FROZEN INV-APOP-002 weights, color reflects the
+   * current APOP state. Omit for no APOP visualization.
+   */
+  readonly apop?: ApopSignal;
+}
+
+/**
+ * Phase 241-APOP — Active Play Occupancy snapshot. Mirrors the bridge
+ * /operator/agent/active-play-occupancy-status response shape.
+ *
+ * `state` is one of the FROZEN INV-APOP-001 5-state taxonomy values
+ * (ACTIVE_MATCH_PLAY / COMPETITIVE_CONTROL / MATCH_TRANSITION /
+ *  NON_COMPETITIVE_MENU / UNKNOWN_LOW_EVIDENCE) or null when no
+ * validation has run yet.
+ *
+ * `evidence` carries per-axis raw scores (0..1) for the FROZEN
+ * INV-APOP-002 weighted formula: 0.35*stick + 0.20*button + 0.20*trigger
+ * + 0.15*imu + 0.10*physiology = 1.00. Other evidence keys (history_score,
+ * trigger_active_fraction, etc) may be present and are passed through.
+ */
+export interface ApopSignal {
+  readonly state: string | null;
+  readonly score: number;
+  readonly confidence: number;
+  readonly evidence: Readonly<Record<string, number | string | undefined>>;
 }
