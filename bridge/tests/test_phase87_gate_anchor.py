@@ -103,7 +103,8 @@ class TestRecordGateAttestationOnChain(unittest.TestCase):
 
         mock_account = MagicMock()
         mock_account.address = "0x1234"
-        mock_account.sign_transaction = MagicMock(return_value=MagicMock(rawTransaction=b"signed"))
+        # web3.py 7.x: signed_transaction.raw_transaction (snake_case)
+        mock_account.sign_transaction = MagicMock(return_value=MagicMock(raw_transaction=b"signed"))
 
         cfg = _make_cfg(anchor_addr="0xAnchor")
         from vapi_bridge import chain as chain_mod
