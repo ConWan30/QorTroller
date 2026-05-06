@@ -8034,4 +8034,105 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "timestamp":        time.time(),
         }
 
+    @app.get("/operator/operator-agent-shadow-log")
+    async def get_operator_agent_shadow_log(
+        x_api_key: str = Header(default=""),
+        agent_id: str = Query(default=""),
+        decision: str = Query(default=""),
+        limit: int = Query(default=50, ge=1, le=500),
+    ):
+        """Phase O1 C2 — paginated shadow log + per-agent decision summary.
+
+        Returns the most recent N Cedar evaluations across one agent or all,
+        plus an aggregate decision-distribution summary for analysis.  Used
+        by operator review of shadow-mode behavior + future FSCA rules.
+
+        Args:
+            x_api_key:  Read-key auth (match cfg.operator_api_key).
+            agent_id:   Optional Q9-frozen agentId filter; empty = fleet.
+            decision:   Optional CedarDecision filter (permit /
+                        permit_with_shadow_constraint /
+                        forbid_lane_violation / forbid_capability_inactive /
+                        forbid_agent_not_principal / forbid_explicit_policy /
+                        forbid_default_deny); empty = all decisions.
+            limit:      1-500; default 50; most recent first by evaluated_at.
+        """
+        _check_read_key(x_api_key)
+        _aid = agent_id.strip() if agent_id else None
+        _dec = decision.strip() if decision else None
+        rows = await asyncio.to_thread(
+            store.get_operator_agent_shadow_log,
+            _aid,
+            _dec,
+            int(limit),
+        )
+        summary = await asyncio.to_thread(
+            store.get_operator_agent_shadow_summary,
+            _aid,
+        )
+        return {
+            "agent_id_filter":  _aid,
+            "decision_filter":  _dec,
+            "limit":            int(limit),
+            "row_count":        len(rows),
+            "summary":          summary,
+            "evaluations":      rows,
+            "timestamp":        time.time(),
+        }
+
+    @app.post("/operator/evaluate-agent-action")
+    async def evaluate_agent_action_endpoint(
+        api_key: str = Query(...),
+        agent_id: str = Query(...),
+        action: str = Query(...),
+        resource: str = Query(...),
+        reason: str = Query(...),
+        shadow_mode: bool = Query(default=True),
+        draft_payload_hash: str = Query(default=""),
+    ):
+        """Phase O1 C2 — operator-triggered Cedar evaluation (synthetic, audit).
+
+        Full operator auth (api_key as Query, not Header — same pattern as
+        /operator/anchor-cedar-bundle).  reason MUST be ≥10 chars (audit
+        gate).
+
+        Returns the ShadowEvalResult shape PLUS the persisted shadow_log row.
+        Used by operator to:
+          - Test that bundles are correctly mapped + parseable
+          - Probe specific (action, resource) combinations against current
+            policy bundle without waiting for real agent activity
+          - Generate baseline shadow log entries for FSCA rule validation
+        """
+        if api_key != cfg.operator_api_key:
+            raise HTTPException(status_code=403, detail="invalid api_key")
+        if len(reason.strip()) < 10:
+            raise HTTPException(
+                status_code=422,
+                detail="reason must be ≥10 chars (audit gate)",
+            )
+        from .cedar_shadow_runtime import evaluate_agent_action
+        result = await evaluate_agent_action(
+            agent_id=agent_id,
+            action=action,
+            resource=resource,
+            context={"shadow_mode": shadow_mode},
+            draft_payload_hash=draft_payload_hash,
+            source="operator_endpoint",
+            cfg=cfg,
+            store=store,
+        )
+        return {
+            "agent_id":               result.agent_id,
+            "action":                 result.action,
+            "resource":               result.resource,
+            "decision":               result.decision.value,
+            "is_permit":              result.is_permit,
+            "bundle_merkle_root":     result.bundle_merkle_root_hex,
+            "bundle_path":            result.bundle_path,
+            "shadow_log_row_id":      result.shadow_log_row_id,
+            "error":                  result.error,
+            "reason":                 reason.strip(),
+            "timestamp":              time.time(),
+        }
+
     return app

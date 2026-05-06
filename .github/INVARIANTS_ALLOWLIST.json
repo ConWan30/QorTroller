@@ -170,5 +170,25 @@
   "INV-APOP-002": {
     "digest": "0c3ae877466aaf96a080d9349192a70bca93ac6d957961d359c7f27f8cdf2a2f",
     "description": "APOP scoring weights formula in classify_active_play_occupancy \u2014 0.35 stick + 0.20 button + 0.20 trigger + 0.15 imu + 0.10 physiology = 1.00 (sum invariant; weight rebalance is APOP v2)"
+  },
+  "INV-OPERATOR-AGENT-003": {
+    "digest": "a7111d4e07e2bcd69d7822ee47a64a302a33fc9f0b9254106d2b5226eb8586c1",
+    "description": "operator_agent_shadow_log UNIQUE(agent_id, action, resource, evaluated_at_bucket) idempotency at second granularity \u2014 protects against retry-storm duplication while permitting distinct evaluations per second (Phase O1 C2)"
+  },
+  "INV-OPERATOR-AGENT-004": {
+    "digest": "914e3446cf4347c8918f079d01460345888a02738f7836b8028b04dc4be93924",
+    "description": "cedar_shadow_runtime.evaluate_agent_action FAILS OPEN \u2014 any error path returns CedarDecision.FORBID_DEFAULT_DENY (safe default) but never raises; higher-level callers must not assume permission (Phase O1 C2)"
+  },
+  "INV-OPERATOR-AGENT-005": {
+    "digest": "de675a6c20643e7abcb573e855c1cbf478ed888531af0e85850adb20c96733b0",
+    "description": "cedar_shadow_runtime recomputes Bundle Merkle root every evaluation (not cached) \u2014 required for FSCA BUNDLE_HASH_DRIFT detection (Phase O1 C2/C3)"
+  },
+  "INV-OPERATOR-AGENT-006": {
+    "digest": "1f2e3db117848c0d6b66103f4ce3672b7bd6aab9422b56206d02d4cfa31c23e8",
+    "description": "operator_agent_drift_log UNIQUE(agent_id, drift_type, detected_at_bucket) sweep idempotency \u2014 same drift in same second collapses to one row (Phase O1 C3)"
+  },
+  "INV-OPERATOR-AGENT-007": {
+    "digest": "137403563b473d1d5ac4844c65cd944eea9205de92904ae61a066dca0db05455",
+    "description": "cedar_shadow_runtime drift_type literals frozen \u2014 BUNDLE_HASH_DRIFT + SCOPE_HASH_GOVERNANCE_DRIFT are the canonical Phase O1 C3 drift signatures; new types are protocol additions requiring governance (Phase O1 C3)"
   }
 }

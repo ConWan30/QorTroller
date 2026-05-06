@@ -408,6 +408,41 @@ INVARIANTS: list[Invariant] = [
         pattern=r"0\.35\s*\*\s*frame_metrics\[\"stick_score\"\]|0\.20\s*\*\s*frame_metrics\[\"button_score\"\]|0\.20\s*\*\s*frame_metrics\[\"trigger_score\"\]|0\.15\s*\*\s*frame_metrics\[\"imu_score\"\]|0\.10\s*\*\s*physiology_score",
         min_matches=5,
     ),
+    Invariant(
+        id="INV-OPERATOR-AGENT-003",
+        description="operator_agent_shadow_log UNIQUE(agent_id, action, resource, evaluated_at_bucket) idempotency at second granularity — protects against retry-storm duplication while permitting distinct evaluations per second (Phase O1 C2)",
+        file="bridge/vapi_bridge/store.py",
+        pattern=r"UNIQUE\(agent_id, action, resource, evaluated_at_bucket\)",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-OPERATOR-AGENT-004",
+        description="cedar_shadow_runtime.evaluate_agent_action FAILS OPEN — any error path returns CedarDecision.FORBID_DEFAULT_DENY (safe default) but never raises; higher-level callers must not assume permission (Phase O1 C2)",
+        file="bridge/vapi_bridge/cedar_shadow_runtime.py",
+        pattern=r"INV-OPERATOR-AGENT-004",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-OPERATOR-AGENT-005",
+        description="cedar_shadow_runtime recomputes Bundle Merkle root every evaluation (not cached) — required for FSCA BUNDLE_HASH_DRIFT detection (Phase O1 C2/C3)",
+        file="bridge/vapi_bridge/cedar_shadow_runtime.py",
+        pattern=r"INV-OPERATOR-AGENT-005",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-OPERATOR-AGENT-006",
+        description="operator_agent_drift_log UNIQUE(agent_id, drift_type, detected_at_bucket) sweep idempotency — same drift in same second collapses to one row (Phase O1 C3)",
+        file="bridge/vapi_bridge/store.py",
+        pattern=r"UNIQUE\(agent_id, drift_type, detected_at_bucket\)",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-OPERATOR-AGENT-007",
+        description="cedar_shadow_runtime drift_type literals frozen — BUNDLE_HASH_DRIFT + SCOPE_HASH_GOVERNANCE_DRIFT are the canonical Phase O1 C3 drift signatures; new types are protocol additions requiring governance (Phase O1 C3)",
+        file="bridge/vapi_bridge/cedar_shadow_runtime.py",
+        pattern=r"\"BUNDLE_HASH_DRIFT\"|\"SCOPE_HASH_GOVERNANCE_DRIFT\"",
+        min_matches=2,
+    ),
 ]
 
 
