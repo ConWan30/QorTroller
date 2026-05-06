@@ -117,29 +117,47 @@ class ProtocolIntelligenceAgent:
             gate_passed = True
 
         # Component 2: Fleet Health
-        # Phase 239 fix-3 2026-05-06: supervisor_health_log has NO 'fleet_health'
-        # column. Per-agent rows carry only 'health' (HEALTHY / DEGRADED / STALE /
-        # UNKNOWN). Pre-fix code read r.get("fleet_health") which always returned
-        # None — fleet_health stayed "UNKNOWN" regardless of actual agent state.
-        # Now aggregate across all tracked agents:
-        #   ALL agents HEALTHY              → ALL_HEALTHY
-        #   SOME DEGRADED, none CRITICAL    → DEGRADED
-        #   ANY CRITICAL / UNKNOWN / STALE  → UNKNOWN (preserve fail-closed)
-        # This is a bug correction — score behavior may not change (fleet may be
-        # genuinely unhealthy) but the metric now reflects real per-agent state
-        # rather than always reading None.
+        # Phase 239 G2.1 fix 2026-05-06: aggregate only over CORE_AGENTS, not
+        # the full agent fleet. Pre-fix-3 code read non-existent 'fleet_health'
+        # column. Fix-3 aggregated all 10 tracked agents, including config-
+        # disabled (federation_broadcast_enabled=False) + chain-submission-
+        # gated (ruling_enforcement, ruling_provenance_anchor — silent when
+        # CHAIN_SUBMISSION_PAUSED=true) + ceremony-driven (ceremony_watchdog
+        # — idle by design unless ceremony in progress). UNKNOWN/STALE of
+        # those agents does NOT mean fleet unhealthy — they're expected-
+        # quiet under their respective conditions. Aggregating over them
+        # locked fleet_health=UNKNOWN regardless of actual core-agent state.
+        #
+        # Phase 239 G2.1: aggregate only over CORE_AGENTS — the on-demand
+        # adjudication-layer agents that should always be reachable. For
+        # these, STALE means "fired in the past, currently idle" which is
+        # the EXPECTED state outside active grind windows. UNKNOWN of a
+        # core agent (never fired) IS a real concern.
+        #
+        # Mirrors the _CORE_AGENTS concept already present in
+        # agent_supervisor.py:40 — extends it to PIA aggregation.
+        CORE_AGENTS = frozenset({
+            "session_adjudicator",
+            "session_adjudicator_validator",
+        })
         fleet_health = "UNKNOWN"
         try:
-            health_rows = self._store.get_latest_supervisor_health()
-            if health_rows:
-                states = [(r.get("health") or "").upper() for r in health_rows]
-                if states and all(s == "HEALTHY" for s in states):
+            health_rows = self._store.get_latest_supervisor_health() or []
+            core_states = [
+                (r.get("health") or "").upper()
+                for r in health_rows
+                if r.get("agent_name") in CORE_AGENTS
+            ]
+            if core_states:
+                # Both HEALTHY and STALE count as "has activity" — STALE is
+                # expected idle for on-demand adjudication agents.
+                active = sum(1 for s in core_states if s in ("HEALTHY", "STALE"))
+                total = len(core_states)
+                if active == total:
                     fleet_health = "ALL_HEALTHY"
-                elif states and not any(
-                    s in ("UNKNOWN", "STALE", "CRITICAL", "") for s in states
-                ):
+                elif active * 2 >= total:
                     fleet_health = "DEGRADED"
-                # else: keep "UNKNOWN" (fail-closed)
+                # else: keep "UNKNOWN" (fail-closed when most cores never fired)
         except Exception:
             pass
         fleet_health_score = {"ALL_HEALTHY": 1.0, "DEGRADED": 0.5}.get(fleet_health, 0.0)
