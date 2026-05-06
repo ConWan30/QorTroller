@@ -117,16 +117,29 @@ class ProtocolIntelligenceAgent:
             gate_passed = True
 
         # Component 2: Fleet Health
+        # Phase 239 fix-3 2026-05-06: supervisor_health_log has NO 'fleet_health'
+        # column. Per-agent rows carry only 'health' (HEALTHY / DEGRADED / STALE /
+        # UNKNOWN). Pre-fix code read r.get("fleet_health") which always returned
+        # None — fleet_health stayed "UNKNOWN" regardless of actual agent state.
+        # Now aggregate across all tracked agents:
+        #   ALL agents HEALTHY              → ALL_HEALTHY
+        #   SOME DEGRADED, none CRITICAL    → DEGRADED
+        #   ANY CRITICAL / UNKNOWN / STALE  → UNKNOWN (preserve fail-closed)
+        # This is a bug correction — score behavior may not change (fleet may be
+        # genuinely unhealthy) but the metric now reflects real per-agent state
+        # rather than always reading None.
         fleet_health = "UNKNOWN"
         try:
             health_rows = self._store.get_latest_supervisor_health()
             if health_rows:
-                # get the most recent fleet_health value
-                for r in sorted(health_rows, key=lambda x: x.get("checked_at", 0), reverse=True):
-                    fh = r.get("fleet_health")
-                    if fh:
-                        fleet_health = fh
-                        break
+                states = [(r.get("health") or "").upper() for r in health_rows]
+                if states and all(s == "HEALTHY" for s in states):
+                    fleet_health = "ALL_HEALTHY"
+                elif states and not any(
+                    s in ("UNKNOWN", "STALE", "CRITICAL", "") for s in states
+                ):
+                    fleet_health = "DEGRADED"
+                # else: keep "UNKNOWN" (fail-closed)
         except Exception:
             pass
         fleet_health_score = {"ALL_HEALTHY": 1.0, "DEGRADED": 0.5}.get(fleet_health, 0.0)
