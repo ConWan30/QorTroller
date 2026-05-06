@@ -2091,7 +2091,7 @@ class ChainClient:
             "gas":   120_000,
         })
         signed  = self._account.sign_transaction(tx)
-        tx_hash = await self._w3.eth.send_raw_transaction(signed.rawTransaction)
+        tx_hash = await self._w3.eth.send_raw_transaction(signed.raw_transaction)
         receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
         if receipt.status != 1:
             raise RuntimeError(f"record_ruling_on_chain: tx reverted {tx_hash.hex()}")
@@ -2157,7 +2157,7 @@ class ChainClient:
             "gas":   200_000,
         })
         signed  = self._account.sign_transaction(tx)
-        tx_hash = await self._w3.eth.send_raw_transaction(signed.rawTransaction)
+        tx_hash = await self._w3.eth.send_raw_transaction(signed.raw_transaction)
         receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
         if receipt.status != 1:
             raise RuntimeError(f"record_ceremony_on_chain: tx reverted {tx_hash.hex()}")
@@ -2221,7 +2221,7 @@ class ChainClient:
             l5_cv_x1000,
         ).build_transaction({"from": self._account.address, "nonce": nonce, "gas": 80_000})
         signed = self._account.sign_transaction(tx)
-        tx_hash = await self._w3.eth.send_raw_transaction(signed.rawTransaction)
+        tx_hash = await self._w3.eth.send_raw_transaction(signed.raw_transaction)
         receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
         if receipt.status != 1:
             raise RuntimeError(f"update_humanity_oracle: tx reverted {tx_hash.hex()}")
@@ -2271,7 +2271,7 @@ class ChainClient:
             last_b32,
         ).build_transaction({"from": self._account.address, "nonce": nonce, "gas": 80_000})
         signed = self._account.sign_transaction(tx)
-        tx_hash = await self._w3.eth.send_raw_transaction(signed.rawTransaction)
+        tx_hash = await self._w3.eth.send_raw_transaction(signed.raw_transaction)
         receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
         if receipt.status != 1:
             raise RuntimeError(f"update_ruling_oracle: tx reverted {tx_hash.hex()}")
@@ -2318,7 +2318,7 @@ class ChainClient:
             session_count,
         ).build_transaction({"from": self._account.address, "nonce": nonce, "gas": 80_000})
         signed = self._account.sign_transaction(tx)
-        tx_hash = await self._w3.eth.send_raw_transaction(signed.rawTransaction)
+        tx_hash = await self._w3.eth.send_raw_transaction(signed.raw_transaction)
         receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
         if receipt.status != 1:
             raise RuntimeError(f"update_passport_oracle: tx reverted {tx_hash.hex()}")
@@ -2364,7 +2364,7 @@ class ChainClient:
             schema_bytes, declaration
         ).build_transaction({"from": self._account.address, "nonce": nonce, "gas": 150_000})
         signed = self._account.sign_transaction(tx)
-        tx_hash = await self._w3.eth.send_raw_transaction(signed.rawTransaction)
+        tx_hash = await self._w3.eth.send_raw_transaction(signed.raw_transaction)
         receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
         if receipt.status != 1:
             raise RuntimeError(f"publish_sovereignty_pledge: tx reverted {tx_hash.hex()}")
@@ -2428,7 +2428,7 @@ class ChainClient:
             timestamp_s,
         ).build_transaction({"from": self._account.address, "nonce": nonce, "gas": 100_000})
         signed = self._account.sign_transaction(tx)
-        tx_hash = await self._w3.eth.send_raw_transaction(signed.rawTransaction)
+        tx_hash = await self._w3.eth.send_raw_transaction(signed.raw_transaction)
         receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
         if receipt.status != 1:
             raise RuntimeError(
@@ -2491,7 +2491,7 @@ class ChainClient:
             int(timestamp),
         ).build_transaction({"from": self._account.address, "nonce": nonce, "gas": 80_000})
         signed = self._account.sign_transaction(tx)
-        tx_hash = await self._w3.eth.send_raw_transaction(signed.rawTransaction)
+        tx_hash = await self._w3.eth.send_raw_transaction(signed.raw_transaction)
         receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
         if receipt.status != 1:
             raise RuntimeError(f"record_gsr_sample_on_chain: tx reverted {tx_hash.hex()}")
@@ -2537,7 +2537,7 @@ class ChainClient:
             device_id_bytes32, poad_hash_bytes32, dual_veto,
         ).build_transaction({"from": self._account.address, "nonce": nonce, "gas": 80_000})
         signed = self._account.sign_transaction(tx)
-        tx_hash = await self._w3.eth.send_raw_transaction(signed.rawTransaction)
+        tx_hash = await self._w3.eth.send_raw_transaction(signed.raw_transaction)
         receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
         if receipt.status != 1:
             raise RuntimeError(f"record_adjudication: tx reverted {tx_hash.hex()}")
@@ -3091,7 +3091,7 @@ class ChainClient:
             self._w3.to_checksum_address(to), vhp_data
         ).build_transaction({"from": self._account.address, "nonce": nonce, "gas": 150_000})
         signed = self._account.sign_transaction(tx)
-        tx_hash = await self._w3.eth.send_raw_transaction(signed.rawTransaction)
+        tx_hash = await self._w3.eth.send_raw_transaction(signed.raw_transaction)
         receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
         if receipt.status != 1:
             raise RuntimeError(f"mint_vhp: tx reverted {tx_hash.hex()}")
@@ -3121,7 +3121,7 @@ class ChainClient:
             int(amount_wei)
         ).build_transaction({"from": self._account.address, "nonce": nonce, "gas": 120_000})
         signed = self._account.sign_transaction(tx)
-        tx_hash = await self._w3.eth.send_raw_transaction(signed.rawTransaction)
+        tx_hash = await self._w3.eth.send_raw_transaction(signed.raw_transaction)
         receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
         if receipt.status != 1:
             raise RuntimeError(f"lock_stiotx_collateral: tx reverted {tx_hash.hex()}")
@@ -3144,7 +3144,7 @@ class ChainClient:
         tx = await contract.functions.unlockCollateral(
         ).build_transaction({"from": self._account.address, "nonce": nonce, "gas": 80_000})
         signed = self._account.sign_transaction(tx)
-        tx_hash = await self._w3.eth.send_raw_transaction(signed.rawTransaction)
+        tx_hash = await self._w3.eth.send_raw_transaction(signed.raw_transaction)
         receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
         if receipt.status != 1:
             raise RuntimeError(f"unlock_stiotx_collateral: tx reverted {tx_hash.hex()}")
