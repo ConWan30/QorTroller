@@ -174,7 +174,11 @@ class Watchdog:
 
         # Lazy imports so a missing bridge install gives a clear error
         Config, Store, EVENT_CODES = _import_store_and_chain()
-        self._cfg = Config.from_env()
+        # Phase 236-WATCHDOG-FIX 2026-05-06: Config has no from_env() classmethod;
+        # field defaults already read from env via _env*() helpers, so plain Config()
+        # is the canonical load pattern (mirrors bridge main.py:94 self.cfg = cfg
+        # which receives Config()).
+        self._cfg = Config()
         self._store = Store(self._cfg.db_path)
         self._event_codes = EVENT_CODES
 
