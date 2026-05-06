@@ -95,10 +95,26 @@ class ProtocolIntelligenceAgent:
         gate_n = self._gate_n
 
         # Component 1: Gate Progress
+        # Phase 239 fix 2026-05-06: chain_length is the cumulative GIC_N
+        # milestone semantic; consecutive_clean is the leading-streak signal
+        # that breaks on PCC DISCONNECT. Use max(consecutive_clean, chain_length)
+        # so the score reflects either (live streak) OR (cumulative achievement).
+        # Mirrors the preflight gate_ok fix (commit 5c7dff73).
         summary = self._store.get_validation_summary(gate_n, self._max_rate)
         consecutive_clean = int(summary.get("consecutive_clean", 0))
         gate_passed = bool(summary.get("gate_passed", False))
-        gate_progress_score = min(1.0, consecutive_clean / max(1, gate_n))
+        chain_length = 0
+        try:
+            _grind_sid = str(getattr(self._cfg, "grind_session_id", "") or "")
+            if _grind_sid:
+                _chain = self._store.get_grind_chain_status(_grind_sid, cfg=self._cfg) or {}
+                chain_length = int(_chain.get("chain_length", 0))
+        except Exception:
+            chain_length = 0
+        progress_count = max(consecutive_clean, chain_length)
+        gate_progress_score = min(1.0, progress_count / max(1, gate_n))
+        if not gate_passed and chain_length >= gate_n:
+            gate_passed = True
 
         # Component 2: Fleet Health
         fleet_health = "UNKNOWN"
