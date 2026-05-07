@@ -44,7 +44,7 @@ if TYPE_CHECKING:
     from vapi_bridge.config import Config
 
 # ---------------------------------------------------------------------------
-# CONTRADICTION_RULES — 12 rules
+# CONTRADICTION_RULES — 14 rules (Phase O1 C6 added BUNDLE_HASH_DRIFT_DETECTED + SCOPE_HASH_GOVERNANCE_DRIFT_DETECTED)
 # ---------------------------------------------------------------------------
 
 CONTRADICTION_RULES: dict = {
@@ -523,6 +523,94 @@ CONTRADICTION_RULES: dict = {
             "hotfix to ensure record-ingestion paths call _check_consent_gate. "
             "If clock skew is suspected, verify session_adjudicator_validator "
             "monotonicity guard."
+        ),
+    },
+
+    # Phase O1 C6 — FSCA wiring of drift findings.
+    # CedarDriftSweeper (Phase O1 C4) writes findings to operator_agent_drift_log.
+    # These rules query that log within a 1-hour window. When the sweep stops
+    # firing (drift resolved), older rows age out and FSCA stops flagging.
+    # When drift persists, FSCA keeps producing the same coherence_id (deterministic
+    # from rule_name + agents_involved) so it appears as a single active
+    # contradiction in the FSCA output, not many duplicates.
+    "BUNDLE_HASH_DRIFT_DETECTED": {
+        "query": """
+            SELECT id, agent_id, drift_type, expected_value, actual_value,
+                   bundle_path, detected_at, evidence_json
+            FROM operator_agent_drift_log
+            WHERE drift_type = 'BUNDLE_HASH_DRIFT'
+              AND detected_at >= ?
+            ORDER BY detected_at DESC LIMIT 5
+        """,
+        "params": lambda cfg: (time.time() - 3600,),
+        "agents_involved": [
+            "AnchorSentry",
+            "Guardian",
+            "CedarDriftSweeper",
+        ],
+        "severity": "HIGH",
+        "explanation": (
+            "CedarDriftSweeper detected BUNDLE_HASH_DRIFT — at least one "
+            "operator-agent's anchored Cedar bundle file no longer hashes to "
+            "the on-chain anchored Merkle root. Possible causes: (a) bundle "
+            "JSON edited post-anchor without re-anchoring, (b) bundle file "
+            "replaced or corrupted on disk, (c) cedar_parser regression "
+            "broke deterministic Merkle root computation. Operator policy "
+            "decisions made under this bundle may not match the on-chain "
+            "governance record — INV-OPERATOR-AGENT-005 (Merkle recomputed "
+            "every evaluation, never cached) means callers will see the "
+            "ON-DISK root, not the anchored one."
+        ),
+        "resolution": (
+            "Either restore the bundle to its anchored content (recover from "
+            "git history; canonical source is the bundle_path in evidence_json) "
+            "OR re-anchor the modified bundle via "
+            "POST /operator/anchor-cedar-bundle with reason ≥10 chars. "
+            "If cedar_parser regression suspected, run "
+            "scripts/cedar_bundle_validate.py against the bundle to compare "
+            "computed vs anchored Merkle root."
+        ),
+    },
+
+    "SCOPE_HASH_GOVERNANCE_DRIFT_DETECTED": {
+        "query": """
+            SELECT id, agent_id, drift_type, expected_value, actual_value,
+                   detected_at, evidence_json
+            FROM operator_agent_drift_log
+            WHERE drift_type = 'SCOPE_HASH_GOVERNANCE_DRIFT'
+              AND detected_at >= ?
+            ORDER BY detected_at DESC LIMIT 5
+        """,
+        "params": lambda cfg: (time.time() - 3600,),
+        "agents_involved": [
+            "AnchorSentry",
+            "Guardian",
+            "CedarDriftSweeper",
+        ],
+        "severity": "CRITICAL",
+        "explanation": (
+            "CedarDriftSweeper detected SCOPE_HASH_GOVERNANCE_DRIFT — "
+            "AgentScope.scopeRoot != AgentRegistry.getAgent.scopeHash for "
+            "this operator agent. The operational and governance views of "
+            "the same agent's policy bundle have diverged on-chain. "
+            "Possible causes: (a) partial-success deploy where one of the "
+            "Phase O1 C1 D4 dual-anchor txs landed but the other did not, "
+            "(b) external setAgentScopeRoot or updateAgentScope call by "
+            "another contract owner that bypassed the dual-anchor invariant, "
+            "(c) chain reorg discarded one of the dual-anchor txs. "
+            "CRITICAL severity: agent actions evaluated under operational "
+            "scope may be denied or accepted in conflict with governance "
+            "intent."
+        ),
+        "resolution": (
+            "Inspect both contracts via cast call AgentScope.getScopeRoot + "
+            "AgentRegistry.getAgent. Re-run the dual-anchor via "
+            "POST /operator/anchor-cedar-bundle to restore parity. If "
+            "governance has the newer value, locate the bundle that produced "
+            "the governance hash and re-anchor it to operational. If "
+            "operational is newer, governance must catch up via separate "
+            "AgentRegistry.updateAgentScope call. Phase O1 C1 D4 dual-anchor "
+            "must be re-asserted before any further policy decisions are made."
         ),
     },
 }
