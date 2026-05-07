@@ -1083,17 +1083,24 @@ class DualShockTransport:
 
             # --- Collect frames for one interval (sync poll in thread) ---
             try:
-                # Timeout = 4× interval. Prevents deadlock if pydualsense HID thread
-                # stalls on USB disconnect (the executor thread would hang forever otherwise).
+                # Timeout = N× interval (configurable via dualshock_poll_timeout_multiplier).
+                # Phase 235.x-STABILITY 2026-05-07: bumped default 4× → 10×. Empirical
+                # finding: 4× was too aggressive on Windows USB stacks; transient USB
+                # hiccups (~1-3s) triggered timeouts that compounded into event-loop
+                # pressure (each timeout schedules signal_disconnect + retries).
+                # 10× tolerates real USB hiccup windows without triggering the watchdog
+                # zombie cascade. Operator can tune via DUALSHOCK_POLL_TIMEOUT_MULTIPLIER.
+                _timeout_mult = int(getattr(self._cfg, "dualshock_poll_timeout_multiplier", 10))
+                _timeout_s = self._interval * _timeout_mult
                 frames = await asyncio.wait_for(
                     loop.run_in_executor(None, self._poll_frames, self._interval),
-                    timeout=self._interval * 4,
+                    timeout=_timeout_s,
                 )
             except asyncio.TimeoutError:
                 log.warning(
                     "_poll_frames timed out after %.1fs — possible USB freeze or disconnect "
                     "(iter=%d, is_sim_mode=%s)",
-                    self._interval * 4, _loop_iter,
+                    _timeout_s, _loop_iter,
                     getattr(self, "_is_sim_mode", "?"),
                 )
                 if self._pcc_monitor is not None:  # Phase 234.7 Layer 2
