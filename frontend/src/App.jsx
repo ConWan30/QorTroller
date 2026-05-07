@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { ViewSelector } from './ViewSelector'
 import { HeartbeatProvider } from './heartbeat/HeartbeatProvider'
 import { FONTS } from './shared/design/tokens'
+import { DriftAlertBadge } from './components/DriftAlertBadge'
 
 const GamerView        = lazy(() => import('./views/GamerView').then((m) => ({ default: m.GamerView })))
 const DeveloperView    = lazy(() => import('./views/DeveloperView').then((m) => ({ default: m.DeveloperView })))
@@ -49,6 +50,15 @@ export function App() {
         background:    '#020408',
       }}>
         <ViewSelector activeView={activeView} onViewChange={setActiveView} />
+
+        {/* Phase O1 C8 — cross-view drift alert. Hidden by default; renders
+            only when O1 SHADOW agents are anchored AND drift findings exist
+            in the last 24h AND operator is NOT already in DeveloperView
+            (where the dedicated drawer is). Click navigates to DeveloperView. */}
+        <DriftAlertBadge
+          activeView={activeView}
+          onClick={() => setActiveView('developer')}
+        />
 
         <AnimatePresence mode="wait">
           <motion.div
