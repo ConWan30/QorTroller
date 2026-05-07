@@ -11,6 +11,7 @@ Handles:
 """
 
 import asyncio
+import functools
 import hashlib
 import logging
 from typing import Sequence
@@ -24,6 +25,33 @@ from .config import Config
 from .zk_verifier import ZKVerifier
 
 log = logging.getLogger(__name__)
+
+
+# Phase 237.5.1 Path C+ kill-switch decorator — gates legacy chain submission
+# methods that bypass the _send_tx chokepoint. Without this, setting
+# CHAIN_SUBMISSION_PAUSED=true in bridge/.env only stops _send_tx callers
+# (batcher, anchor_corpus_snapshot, anchor_agent_commit) but legacy methods
+# (record_ruling_on_chain, record_adjudication, mint_vhp, etc.) still
+# fire-and-forget on every call. On IoTeX testnet's broken P256 precompile
+# these revert and consume gas anyway, draining the wallet (incident
+# 2026-05-06: ~6.27 IOTX drained from 6.42 → 0.13 IOTX after rawTransaction
+# fix re-enabled previously-broken submission paths).
+#
+# Apply @_gated_submission to every async method whose body calls
+# self._w3.eth.send_raw_transaction. Returns "" sentinel (matches str return
+# convention; callers already treat empty tx_hash as "not on chain").
+def _gated_submission(fn):
+    @functools.wraps(fn)
+    async def wrapper(self, *args, **kwargs):
+        if getattr(self._cfg, "chain_submission_paused", False):
+            log.warning(
+                "%s: chain_submission_paused=true — transaction skipped "
+                "(CHAIN_SUBMISSION_PAUSED kill-switch active)",
+                fn.__name__,
+            )
+            return ""
+        return await fn(self, *args, **kwargs)
+    return wrapper
 
 # Minimal ABIs — only the functions the bridge calls.
 # Generated from the exact Solidity signatures in the contracts.
@@ -2038,6 +2066,7 @@ class ChainClient:
 
     # --- Phase 66: RulingRegistry on-chain commitment ---
 
+    @_gated_submission
     async def record_ruling_on_chain(
         self,
         commitment_hash_bytes: bytes,
@@ -2100,6 +2129,7 @@ class ChainClient:
 
     # --- Phase 67: CeremonyRegistry on-chain commitment ---
 
+    @_gated_submission
     async def record_ceremony_on_chain(
         self,
         circuit_name: str,
@@ -2182,6 +2212,7 @@ class ChainClient:
         raw = bytes.fromhex(device_id_hex.replace("0x", ""))
         return raw.ljust(32, b"\x00")[:32]
 
+    @_gated_submission
     async def update_humanity_oracle(
         self,
         device_id_hex: str,
@@ -2228,6 +2259,7 @@ class ChainClient:
         log.info("update_humanity_oracle: tx=%s device=%s", tx_hash.hex()[:16], device_id_hex[:16])
         return tx_hash.hex()
 
+    @_gated_submission
     async def update_ruling_oracle(
         self,
         device_id_hex: str,
@@ -2278,6 +2310,7 @@ class ChainClient:
         log.info("update_ruling_oracle: tx=%s device=%s", tx_hash.hex()[:16], device_id_hex[:16])
         return tx_hash.hex()
 
+    @_gated_submission
     async def update_passport_oracle(
         self,
         device_id_hex: str,
@@ -2325,6 +2358,7 @@ class ChainClient:
         log.info("update_passport_oracle: tx=%s device=%s", tx_hash.hex()[:16], device_id_hex[:16])
         return tx_hash.hex()
 
+    @_gated_submission
     async def publish_sovereignty_pledge(self, schema_hash_hex: str) -> str:
         """Commit the immutable data sovereignty pledge to DataSovereigntyRegistry.sol (Phase 69).
 
@@ -2371,6 +2405,7 @@ class ChainClient:
         log.info("publish_sovereignty_pledge: tx=%s schema=%s...", tx_hash.hex()[:16], schema_hash_hex[:16])
         return tx_hash.hex()
 
+    @_gated_submission
     async def record_gate_attestation_on_chain(
         self,
         attestation_hash_hex: str,
@@ -2441,6 +2476,7 @@ class ChainClient:
         )
         return tx_hash.hex()
 
+    @_gated_submission
     async def record_gsr_sample_on_chain(
         self,
         device_id_bytes32: bytes,
@@ -2501,6 +2537,7 @@ class ChainClient:
         )
         return tx_hash.hex()
 
+    @_gated_submission
     async def record_adjudication(
         self,
         device_id: str,
@@ -3018,6 +3055,7 @@ class ChainClient:
         result = await contract.functions.isQuorumValid(node_addresses).call()
         return bool(result)
 
+    @_gated_submission
     async def mint_vhp(
         self,
         to: str,
@@ -3101,6 +3139,7 @@ class ChainClient:
         )
         return tx_hash.hex()
 
+    @_gated_submission
     async def lock_stiotx_collateral(self, amount_wei: int) -> str:
         """Lock stIOTX in VAPIQuickSilverCollateral.sol (Phase 101).
         Returns tx_hash hex. Raises RuntimeError on revert.
@@ -3128,6 +3167,7 @@ class ChainClient:
         log.info("lock_stiotx_collateral: tx=%s amount=%d", tx_hash.hex()[:16], amount_wei)
         return tx_hash.hex()
 
+    @_gated_submission
     async def unlock_stiotx_collateral(self) -> str:
         """Request unlock cooldown for stIOTX collateral (Phase 101)."""
         addr = getattr(self._cfg, "quicksilver_collateral_address", None)
@@ -3174,6 +3214,7 @@ class ChainClient:
         except Exception:
             return False
 
+    @_gated_submission
     async def commit_separation_ratio(
         self,
         ratio: float,
@@ -3229,6 +3270,7 @@ class ChainClient:
             raise RuntimeError(f"commit_separation_ratio: tx reverted commit_hash={commit_hash_hex[:16]}…")
         return tx_hash.hex()
 
+    @_gated_submission
     async def renew_separation_ratio_commitment(
         self,
         prev_hash_hex: str,
@@ -3290,6 +3332,7 @@ class ChainClient:
             )
         return tx_hash.hex()
 
+    @_gated_submission
     async def renew_vhp(self, token_id: int) -> str:
         """Call VAPIVerifiedHumanProof.renew(tokenId). Extends expiresAt +90 days. 60k gas.
         Phase 102: VHPRenewalAgent uses this to refresh expiring soulbound tokens.
@@ -3351,6 +3394,7 @@ class ChainClient:
         )
         return bool(await contract.functions.isValid(token_id).call())
 
+    @_gated_submission
     async def anchor_coherence(
         self,
         merkle_root_hex: str,
@@ -3445,6 +3489,7 @@ class ChainClient:
             "count": int(count_val),
         }
 
+    @_gated_submission
     async def anchor_coherence_with_provenance(
         self,
         merkle_root_hex: str,
@@ -3510,6 +3555,7 @@ class ChainClient:
             )
         return tx_hash.hex()
 
+    @_gated_submission
     async def bbg_propose(
         self,
         proposal_hash_hex: str,
