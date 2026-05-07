@@ -40,6 +40,7 @@ def _make_cfg(anchor_addr="0xDeAdBeEf" * 5, gate_n=100, max_dr=1.0):
     cfg.validation_gate_n = gate_n
     cfg.validation_max_divergence_rate = max_dr
     cfg.warm_up_batch_size = 1
+    cfg.chain_submission_paused = False
     return cfg
 
 
