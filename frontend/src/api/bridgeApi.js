@@ -732,10 +732,17 @@ export function useConsentStatus(deviceId, category = '') {
 // is hidden in DeveloperView and the other two hooks set enabled:false
 // (zero polling cost for operators not running Phase O1 SHADOW agents).
 
+// NOTE: bridge operator app is mounted at /operator AND its individual
+// route declarations carry the "/operator/" prefix (codebase convention —
+// see watchdog-status / suspension/* / gic-reset for precedent). The get()
+// helper prepends _OP_PREFIX="/operator", so the path passed here must
+// include the inner "/operator/" segment. Final URL becomes
+// /operator/operator/operator-agent-* which matches the route definitions.
+// Empirical bug caught at C9 activation 2026-05-07.
 export function useOperatorActivation() {
   return useQuery({
     queryKey: ['operatorActivation'],
-    queryFn: () => get('/operator-agent-activation-log?limit=1', 'operatorActivation', { noMock: true }),
+    queryFn: () => get('/operator/operator-agent-activation-log?limit=1', 'operatorActivation', { noMock: true }),
     refetchInterval: 60000, // 1 min — activation events are rare
     staleTime: 30000,
     retry: 1,
@@ -749,7 +756,7 @@ export function useShadowLog({ agentId = '', decision = '', limit = 50, enabled 
   params.set('limit', String(Math.max(1, Math.min(500, limit))))
   return useQuery({
     queryKey: ['operatorAgentShadowLog', agentId, decision, limit],
-    queryFn: () => get(`/operator-agent-shadow-log?${params.toString()}`, 'operatorAgentShadowLog', { noMock: true }),
+    queryFn: () => get(`/operator/operator-agent-shadow-log?${params.toString()}`, 'operatorAgentShadowLog', { noMock: true }),
     enabled,
     refetchInterval: 30000, // shadow events not grind-critical; 30s is plenty
     staleTime: 15000,
@@ -766,7 +773,7 @@ export function useDriftLog({ agentId = '', driftType = '', sinceMinutes = 1440,
   params.set('limit', String(Math.max(1, Math.min(500, limit))))
   return useQuery({
     queryKey: ['operatorAgentDriftLog', agentId, driftType, sinceMinutes, limit],
-    queryFn: () => get(`/operator-agent-drift-log?${params.toString()}`, 'operatorAgentDriftLog', { noMock: true }),
+    queryFn: () => get(`/operator/operator-agent-drift-log?${params.toString()}`, 'operatorAgentDriftLog', { noMock: true }),
     enabled,
     refetchInterval: 30000,
     staleTime: 15000,
