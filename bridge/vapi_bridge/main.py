@@ -449,6 +449,13 @@ class Bridge:
                 port=self.cfg.http_port,
                 log_level=self.cfg.log_level.lower(),
                 access_log=False,
+                # Phase 235.x-STABILITY 2026-05-07 — extended keep-alive.
+                # Default is 5s; under frontend polling load (~3s capture-health
+                # + 5s grind-chain + 30s drift-log) this churns connections
+                # constantly, triggering the Windows _ProactorBasePipeTransport
+                # connection-lost bug. 120s amortizes connection cost and
+                # dramatically reduces close events.
+                timeout_keep_alive=int(getattr(self.cfg, "uvicorn_timeout_keep_alive_s", 120)),
             )
             server = uvicorn.Server(config)
             _t = asyncio.create_task(server.serve())
@@ -1303,6 +1310,36 @@ def main():
 
     # Handle signals for graceful shutdown
     loop = asyncio.new_event_loop()
+
+    # Phase 235.x-STABILITY 2026-05-07 — defensive exception handler.
+    # Suppresses cascading event-loop crashes from Windows
+    # _ProactorBasePipeTransport._call_connection_lost when uvicorn HTTP
+    # connections close mid-flight (chronic Windows asyncio bug; cause of
+    # the "bridge zombie" pattern documented across multiple sessions).
+    # Without this handler, repeated connection-close errors accumulate
+    # until uvicorn stops accepting connections while the loop spins on
+    # other tasks. With this handler, each error is logged + the loop
+    # continues serving requests.
+    def _stability_exception_handler(_loop, ctx):
+        exc = ctx.get("exception")
+        msg = ctx.get("message", "")
+        is_proactor_close = (
+            "_call_connection_lost" in msg
+            or (exc is not None and "_call_connection_lost" in repr(exc))
+        )
+        if is_proactor_close:
+            # Known Windows asyncio bug — log and continue.
+            log.warning(
+                "Phase 235.x-STABILITY: suppressed Proactor connection-lost "
+                "callback (msg=%s exc=%s)",
+                msg[:80], type(exc).__name__ if exc else "None",
+            )
+            return
+        # Unknown error — defer to default handler (logs + may crash loop)
+        _loop.default_exception_handler(ctx)
+
+    loop.set_exception_handler(_stability_exception_handler)
+
     for sig_name in (signal.SIGINT, signal.SIGTERM):
         try:
             loop.add_signal_handler(sig_name, bridge.shutdown)
