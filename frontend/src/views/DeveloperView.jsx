@@ -7,9 +7,12 @@ import {
   useTournamentPreflight,
   useFleetCoherenceStatus,
   useProtocolCoherence,
+  useOperatorActivation,
+  useDriftLog,
 } from '../api/bridgeApi'
 import { FONTS, DEVELOPER } from '../shared/design/tokens'
 import { PIPELINE_NODE_CONTAINER, PIPELINE_NODE, DRAWER_SLIDE_LEFT } from '../shared/design/animations'
+import { OperatorAgentsDrawer, OperatorAgentsDrawerHandle } from '../components/OperatorAgentsDrawer'
 
 // ─── Design primitives ───────────────────────────────────────────────────────
 
@@ -314,6 +317,7 @@ function PipelineNode({ label, count, countLabel, ageLabel, status, accent, inde
 export function DeveloperView() {
   const [gateOpen,  setGateOpen]  = useState(false)
   const [pitlOpen,  setPitlOpen]  = useState(false)
+  const [opAgentsOpen, setOpAgentsOpen] = useState(false)
   const [dims,      setDims]      = useState({ w: window.innerWidth, h: window.innerHeight })
 
   const { data: ch } = useCaptureHealth()
@@ -322,6 +326,18 @@ export function DeveloperView() {
   const { data: pf } = useTournamentPreflight()
   const { data: fs } = useFleetCoherenceStatus()
   const { data: pc } = useProtocolCoherence()
+
+  // Phase O1 C5 — Operator Agents shadow visibility.
+  // Activation gate: only show drawer/handle when at least one Cedar bundle
+  // has been anchored (operator_agent_activation_log row_count > 0).
+  // Drift count: 24h window — only polled when an O1 agent is activated, so
+  // operators on the main protocol track incur zero polling cost.
+  const { data: opActivation } = useOperatorActivation()
+  const o1Active = (opActivation?.row_count ?? 0) > 0
+  const { data: driftSummary } = useDriftLog({
+    sinceMinutes: 1440, limit: 1, enabled: o1Active,
+  })
+  const driftCount24h = driftSummary?.row_count ?? 0
 
   useEffect(() => {
     const onResize = () => setDims({ w: window.innerWidth, h: window.innerHeight })
@@ -560,6 +576,21 @@ export function DeveloperView() {
       {/* Drawers */}
       <GateDrawer open={gateOpen} onClose={() => setGateOpen(false)} preflight={pf} />
       <PITLDrawer open={pitlOpen} onClose={() => setPitlOpen(false)} analytics={ga} />
+
+      {/* Phase O1 C5 — Operator Agents shadow drawer (only when O1 active). */}
+      {o1Active && (
+        <>
+          <OperatorAgentsDrawerHandle
+            onClick={() => setOpAgentsOpen(v => !v)}
+            driftCount={driftCount24h}
+          />
+          <OperatorAgentsDrawer
+            open={opAgentsOpen}
+            onClose={() => setOpAgentsOpen(false)}
+            driftCount={driftCount24h}
+          />
+        </>
+      )}
     </div>
   )
 }

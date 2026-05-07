@@ -720,3 +720,56 @@ export function useConsentStatus(deviceId, category = '') {
     retry: 1,
   })
 }
+
+// Phase O1 C5 — Operator Agents shadow-mode visibility hooks.
+//
+// All three hooks set noMock: true — operator audit data must never be
+// silently replaced with fabricated mock state. Empty/offline behavior:
+// react-query holds last successful value or shows undefined → component
+// renders explicit "BRIDGE OFFLINE" / "no findings" empty states.
+//
+// useOperatorActivation is the gate query. When row_count=0, the C5 drawer
+// is hidden in DeveloperView and the other two hooks set enabled:false
+// (zero polling cost for operators not running Phase O1 SHADOW agents).
+
+export function useOperatorActivation() {
+  return useQuery({
+    queryKey: ['operatorActivation'],
+    queryFn: () => get('/operator-agent-activation-log?limit=1', 'operatorActivation', { noMock: true }),
+    refetchInterval: 60000, // 1 min — activation events are rare
+    staleTime: 30000,
+    retry: 1,
+  })
+}
+
+export function useShadowLog({ agentId = '', decision = '', limit = 50, enabled = true } = {}) {
+  const params = new URLSearchParams()
+  if (agentId)  params.set('agent_id', agentId)
+  if (decision) params.set('decision', decision)
+  params.set('limit', String(Math.max(1, Math.min(500, limit))))
+  return useQuery({
+    queryKey: ['operatorAgentShadowLog', agentId, decision, limit],
+    queryFn: () => get(`/operator-agent-shadow-log?${params.toString()}`, 'operatorAgentShadowLog', { noMock: true }),
+    enabled,
+    refetchInterval: 30000, // shadow events not grind-critical; 30s is plenty
+    staleTime: 15000,
+    retry: 1,
+  })
+}
+
+export function useDriftLog({ agentId = '', driftType = '', sinceMinutes = 1440, limit = 50, enabled = true } = {}) {
+  const params = new URLSearchParams()
+  if (agentId)    params.set('agent_id', agentId)
+  if (driftType)  params.set('drift_type', driftType)
+  // since_minutes capped at 30d (43200) by backend; mirror that here for safety
+  params.set('since_minutes', String(Math.max(0, Math.min(43200, sinceMinutes))))
+  params.set('limit', String(Math.max(1, Math.min(500, limit))))
+  return useQuery({
+    queryKey: ['operatorAgentDriftLog', agentId, driftType, sinceMinutes, limit],
+    queryFn: () => get(`/operator-agent-drift-log?${params.toString()}`, 'operatorAgentDriftLog', { noMock: true }),
+    enabled,
+    refetchInterval: 30000,
+    staleTime: 15000,
+    retry: 1,
+  })
+}
