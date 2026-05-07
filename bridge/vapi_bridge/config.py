@@ -87,6 +87,28 @@ class Config:
     )
     http_port: int = field(default_factory=lambda: _env_int("HTTP_PORT", 8080))
 
+    # --- Phase 235.x-STABILITY (2026-05-07): bridge zombie root cause fix ---
+    uvicorn_timeout_keep_alive_s: int = field(
+        default_factory=lambda: _env_int("UVICORN_TIMEOUT_KEEP_ALIVE_S", 120)
+    )
+    """Phase 235.x-STABILITY — uvicorn HTTP keep-alive timeout (seconds).
+    Default raised from uvicorn's 5s to 120s. Under frontend polling load
+    (capture-health every 3s, grind-chain 5s, drift-log 30s) the 5s default
+    causes constant connection cycling, triggering Windows asyncio
+    _ProactorBasePipeTransport._call_connection_lost crashes (the chronic
+    'bridge zombie' pattern). 120s amortizes connection cost dramatically."""
+
+    dualshock_poll_timeout_multiplier: int = field(
+        default_factory=lambda: _env_int("DUALSHOCK_POLL_TIMEOUT_MULTIPLIER", 10)
+    )
+    """Phase 235.x-STABILITY — multiplier on dualshock_record_interval_s
+    used as the _poll_frames asyncio.wait_for timeout. Default raised
+    4x → 10x. Empirical finding: 4× was too aggressive for real Windows
+    USB stacks; transient 1-3s USB hiccups triggered timeouts that
+    compounded into event-loop pressure (each timeout schedules
+    signal_disconnect + retries). 10x tolerates real hiccup windows
+    without triggering the watchdog zombie cascade."""
+
     # --- Batching ---
     batch_size: int = field(default_factory=lambda: _env_int("BATCH_SIZE", 10))
     batch_timeout_s: int = field(
