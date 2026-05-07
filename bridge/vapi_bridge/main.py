@@ -1089,6 +1089,34 @@ class Bridge:
                 "Phase 193: FleetSignalCoherenceAgent unavailable: %s", _fsca193_exc
             )
 
+        # Phase O1 C4: Cedar drift auto-sweep scheduler.
+        # Operationalizes the C3 detect_*_drift primitives by running them on
+        # monotonic interval gates (bundle 60s, scope 600s — INV-OPERATOR-AGENT-008
+        # frozen dual-cadence). Without this, drift only surfaces on operator-
+        # triggered POST. Default disabled (cedar_drift_sweep_enabled=False);
+        # operator opts in via CEDAR_DRIFT_SWEEP_ENABLED=true in bridge/.env.
+        # Fail-open: any sweep error is caught + logged; loop continues.
+        if getattr(self.cfg, "cedar_drift_sweep_enabled", False):
+            try:
+                from .cedar_drift_sweeper import run_drift_sweep_loop
+                _drift_sweep_task = asyncio.ensure_future(
+                    run_drift_sweep_loop(
+                        cfg=self.cfg, store=self.store, chain=self.chain,
+                    )
+                )
+                _drift_sweep_task.set_name("CedarDriftSweeper")
+                self._tasks.append(_drift_sweep_task)
+                log.info(
+                    "Phase O1 C4: cedar_drift_sweeper started "
+                    "(bundle=%ds, scope=%ds)",
+                    getattr(self.cfg, "cedar_drift_sweep_interval_bundle_s", 60),
+                    getattr(self.cfg, "cedar_drift_sweep_interval_scope_s", 600),
+                )
+            except Exception as _drift_exc:
+                log.warning(
+                    "Phase O1 C4: cedar_drift_sweeper unavailable: %s", _drift_exc
+                )
+
         # Phase 235-AUTO-TRIGGER: SessionBoundaryDetectorAgent (agent #38).
         # Heuristic detector that publishes ruling_request events on detected
         # session-end (sustained gameplay activity followed by extended trigger

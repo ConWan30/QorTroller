@@ -8080,6 +8080,56 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "timestamp":        time.time(),
         }
 
+    @app.get("/operator/operator-agent-drift-log")
+    async def get_operator_agent_drift_log(
+        x_api_key: str = Header(default=""),
+        agent_id: str = Query(default=""),
+        drift_type: str = Query(default=""),
+        since_minutes: int = Query(default=0, ge=0, le=43200),
+        limit: int = Query(default=50, ge=1, le=500),
+    ):
+        """Phase O1 C4 — paginated drift findings log + since-window filter.
+
+        Returns the most recent N drift findings from operator_agent_drift_log
+        across one agent or all, optionally filtered by drift_type and a
+        time-since-now window. Used by operator review of accumulated drift
+        events captured by the C4 auto-sweep scheduler.
+
+        Args:
+            x_api_key:      Read-key auth (match cfg.operator_api_key).
+            agent_id:       Optional Q9-frozen agentId filter; empty = fleet.
+            drift_type:     Optional filter — BUNDLE_HASH_DRIFT or
+                            SCOPE_HASH_GOVERNANCE_DRIFT (INV-OPERATOR-AGENT-007
+                            frozen literals); empty = all types.
+            since_minutes:  0-43200 (0 = no time filter; 43200 = 30 days);
+                            filters detected_at >= (now - since_minutes*60).
+            limit:          1-500; default 50; most recent first.
+        """
+        _check_read_key(x_api_key)
+        _aid = agent_id.strip() if agent_id else None
+        _dt = drift_type.strip() if drift_type else None
+        rows = await asyncio.to_thread(
+            store.get_operator_agent_drift_log,
+            _aid,
+            _dt,
+            int(limit),
+        )
+        if since_minutes > 0:
+            cutoff = time.time() - (since_minutes * 60)
+            rows = [
+                r for r in rows
+                if float(r.get("detected_at", 0) or 0) >= cutoff
+            ]
+        return {
+            "agent_id_filter":  _aid,
+            "drift_type_filter": _dt,
+            "since_minutes":    int(since_minutes),
+            "limit":            int(limit),
+            "row_count":        len(rows),
+            "findings":         rows,
+            "timestamp":        time.time(),
+        }
+
     @app.post("/operator/evaluate-agent-action")
     async def evaluate_agent_action_endpoint(
         api_key: str = Query(...),

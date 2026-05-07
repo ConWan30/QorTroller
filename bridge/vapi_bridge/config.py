@@ -1740,6 +1740,29 @@ class Config:
     FROZEN per Pass 2C Q9 — registered on AgentRegistry Phase O0 (2026-05-03,
     commit 44c26ce0). Any change here breaks bundle anchoring."""
 
+    # --- Phase O1 C4: Drift Auto-Sweep Scheduler ---
+    cedar_drift_sweep_enabled: bool = field(
+        default_factory=lambda: _env_bool("CEDAR_DRIFT_SWEEP_ENABLED", False)
+    )
+    """Phase O1 C4 — Enable cedar_drift_sweeper background task. When False
+    (default), drift detection only runs on operator-triggered POST. When True,
+    runs at dual cadence (bundle 60s, scope 600s) catching mutations within
+    one sweep window. Default False = opt-in observability."""
+
+    cedar_drift_sweep_interval_bundle_s: int = field(
+        default_factory=lambda: int(_env("CEDAR_DRIFT_SWEEP_INTERVAL_BUNDLE_S", "60"))
+    )
+    """Phase O1 C4 — Bundle hash drift sweep interval. Cheap path (local file
+    SHA-256 + 1 DB read per agent). 60s default. INV-OPERATOR-AGENT-008
+    freezes the cheap+frequent / expensive+rare cadence split."""
+
+    cedar_drift_sweep_interval_scope_s: int = field(
+        default_factory=lambda: int(_env("CEDAR_DRIFT_SWEEP_INTERVAL_SCOPE_S", "600"))
+    )
+    """Phase O1 C4 — Scope hash governance drift sweep interval. Expensive
+    path (2 chain RPC reads per agent). 600s default to bound testnet RPC
+    quota. INV-OPERATOR-AGENT-008 freezes the dual-cadence shape."""
+
     # --- Phase 235-GAD: Gameplay Activity Discrimination ---
     gameplay_discrimination_enabled: bool = field(
         default_factory=lambda: _env_bool("GAMEPLAY_DISCRIMINATION_ENABLED", True)

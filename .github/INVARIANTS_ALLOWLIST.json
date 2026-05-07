@@ -190,5 +190,9 @@
   "INV-OPERATOR-AGENT-007": {
     "digest": "137403563b473d1d5ac4844c65cd944eea9205de92904ae61a066dca0db05455",
     "description": "cedar_shadow_runtime drift_type literals frozen \u2014 BUNDLE_HASH_DRIFT + SCOPE_HASH_GOVERNANCE_DRIFT are the canonical Phase O1 C3 drift signatures; new types are protocol additions requiring governance (Phase O1 C3)"
+  },
+  "INV-OPERATOR-AGENT-008": {
+    "digest": "516aaed34aae8e80e3bbdb27373b583cbe4277c3a22766a78e744bfc02305ff9",
+    "description": "cedar_drift_sweeper dual-cadence default constants frozen \u2014 bundle 60s (cheap+frequent: local file SHA-256 + DB read) / scope 600s (expensive+rare: 2 chain RPC reads/agent). The split is invariant; the specific seconds are configurable (Phase O1 C4)"
   }
 }
