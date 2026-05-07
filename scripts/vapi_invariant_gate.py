@@ -443,6 +443,13 @@ INVARIANTS: list[Invariant] = [
         pattern=r"\"BUNDLE_HASH_DRIFT\"|\"SCOPE_HASH_GOVERNANCE_DRIFT\"",
         min_matches=2,
     ),
+    Invariant(
+        id="INV-OPERATOR-AGENT-008",
+        description="cedar_drift_sweeper dual-cadence default constants frozen — bundle 60s (cheap+frequent: local file SHA-256 + DB read) / scope 600s (expensive+rare: 2 chain RPC reads/agent). The split is invariant; the specific seconds are configurable (Phase O1 C4)",
+        file="bridge/vapi_bridge/cedar_drift_sweeper.py",
+        pattern=r"_BUNDLE_DRIFT_INTERVAL_DEFAULT_S = 60|_SCOPE_DRIFT_INTERVAL_DEFAULT_S = 600",
+        min_matches=2,
+    ),
 ]
 
 
