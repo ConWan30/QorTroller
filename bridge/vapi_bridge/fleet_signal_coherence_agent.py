@@ -1091,6 +1091,14 @@ class FleetSignalCoherenceAgent:
     # -----------------------------------------------------------------------
 
     async def _check_contradictions(self) -> list:
+        # Phase 235.x-STABILITY-2 2026-05-08: delegate to sync inner via to_thread.
+        # Original body ran 14+ SQL queries SYNCHRONOUSLY on the event loop thread
+        # per 15-min poll cycle; empirically this contributed to bridge zombie
+        # windows (WIF-064). Pushing the entire iteration to a worker thread yields
+        # the event loop so uvicorn can keep serving HTTP throughout the FSCA scan.
+        return await asyncio.to_thread(self._check_contradictions_sync)
+
+    def _check_contradictions_sync(self) -> list:
         found = []
         for rule_name, rule in CONTRADICTION_RULES.items():
             try:
@@ -1159,6 +1167,10 @@ class FleetSignalCoherenceAgent:
             return len(response_rows) > 0
 
     async def _check_orphans(self) -> list:
+        # Phase 235.x-STABILITY-2 2026-05-08: delegate to sync inner via to_thread (WIF-064).
+        return await asyncio.to_thread(self._check_orphans_sync)
+
+    def _check_orphans_sync(self) -> list:
         found = []
         for rule_name, rule in ORPHAN_RULES.items():
             try:
@@ -1199,6 +1211,10 @@ class FleetSignalCoherenceAgent:
     # -----------------------------------------------------------------------
 
     async def _check_inversions(self) -> list:
+        # Phase 235.x-STABILITY-2 2026-05-08: delegate to sync inner via to_thread (WIF-064).
+        return await asyncio.to_thread(self._check_inversions_sync)
+
+    def _check_inversions_sync(self) -> list:
         found = []
         for rule_name, rule in INVERSION_RULES.items():
             try:

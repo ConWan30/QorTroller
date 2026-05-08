@@ -1340,6 +1340,26 @@ def main():
 
     loop.set_exception_handler(_stability_exception_handler)
 
+    # Phase 235.x-STABILITY-2 2026-05-08 — asyncio loop-block instrumentation
+    # per WIF-064. Empirical finding: bridge zombie pattern is loop-blocking
+    # sync work (12-30s windows where event loop can't accept new HTTP
+    # connections), NOT the Proactor _call_connection_lost crashes that
+    # 235.x-STABILITY targeted. Setting asyncio.slow_callback_duration to
+    # 1.0s logs every callback that exceeds that threshold, identifying the
+    # culprit by name. opt-in via ASYNCIO_DEBUG_ENABLED=true.
+    _slow_threshold = float(getattr(cfg, "asyncio_slow_callback_threshold_s", 1.0))
+    if getattr(cfg, "asyncio_debug_enabled", False):
+        loop.set_debug(True)
+        loop.slow_callback_duration = _slow_threshold
+        log.warning(
+            "Phase 235.x-STABILITY-2: asyncio debug ENABLED, slow_callback_duration=%.1fs",
+            _slow_threshold,
+        )
+    else:
+        # Even without debug mode, raise the slow-callback threshold so
+        # asyncio's built-in warning fires for our zombie pattern signature.
+        loop.slow_callback_duration = _slow_threshold
+
     for sig_name in (signal.SIGINT, signal.SIGTERM):
         try:
             loop.add_signal_handler(sig_name, bridge.shutdown)
