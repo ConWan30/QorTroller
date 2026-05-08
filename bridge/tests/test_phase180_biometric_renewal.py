@@ -31,17 +31,17 @@ def _make_store(tmp):
 # ---------------------------------------------------------------------------
 
 def test_t180_1_insert_stores_record():
-    with tempfile.TemporaryDirectory() as tmp:
-        s = _make_store(tmp)
-        row_id = s.insert_biometric_renewal_chain_log(
-            prev_commit_hash="sha256:aabbcc",
-            new_commit_hash="sha256:ddeeff",
-            n_consented=3,
-            n_sessions=20,
-            ttl_days=90.0,
-            dry_run=True,
-        )
-        assert row_id >= 1
+    tmp = tempfile.mkdtemp()
+    s = _make_store(tmp)
+    row_id = s.insert_biometric_renewal_chain_log(
+        prev_commit_hash="sha256:aabbcc",
+        new_commit_hash="sha256:ddeeff",
+        n_consented=3,
+        n_sessions=20,
+        ttl_days=90.0,
+        dry_run=True,
+    )
+    assert row_id >= 1
 
 
 # ---------------------------------------------------------------------------
@@ -49,15 +49,15 @@ def test_t180_1_insert_stores_record():
 # ---------------------------------------------------------------------------
 
 def test_t180_2_get_status_returns_7_keys():
-    with tempfile.TemporaryDirectory() as tmp:
-        s = _make_store(tmp)
-        status = s.get_biometric_renewal_chain_status()
-        expected_keys = {
-            "renewal_enabled", "total_renewals", "latest_renewal_ts",
-            "prev_commit_hash", "new_commit_hash", "ttl_days", "timestamp",
-        }
-        assert expected_keys == set(status.keys()), f"Missing keys: {expected_keys - set(status.keys())}"
-        assert len(status) == 7
+    tmp = tempfile.mkdtemp()
+    s = _make_store(tmp)
+    status = s.get_biometric_renewal_chain_status()
+    expected_keys = {
+        "renewal_enabled", "total_renewals", "latest_renewal_ts",
+        "prev_commit_hash", "new_commit_hash", "ttl_days", "timestamp",
+    }
+    assert expected_keys == set(status.keys()), f"Missing keys: {expected_keys - set(status.keys())}"
+    assert len(status) == 7
 
 
 # ---------------------------------------------------------------------------
@@ -65,14 +65,14 @@ def test_t180_2_get_status_returns_7_keys():
 # ---------------------------------------------------------------------------
 
 def test_t180_3_empty_chain_defaults():
-    with tempfile.TemporaryDirectory() as tmp:
-        s = _make_store(tmp)
-        status = s.get_biometric_renewal_chain_status()
-        assert status["total_renewals"] == 0
-        assert status["prev_commit_hash"] == ""
-        assert status["new_commit_hash"] == ""
-        assert status["ttl_days"] == 90.0
-        assert status["latest_renewal_ts"] == 0.0
+    tmp = tempfile.mkdtemp()
+    s = _make_store(tmp)
+    status = s.get_biometric_renewal_chain_status()
+    assert status["total_renewals"] == 0
+    assert status["prev_commit_hash"] == ""
+    assert status["new_commit_hash"] == ""
+    assert status["ttl_days"] == 90.0
+    assert status["latest_renewal_ts"] == 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -80,17 +80,17 @@ def test_t180_3_empty_chain_defaults():
 # ---------------------------------------------------------------------------
 
 def test_t180_4_status_reflects_insert():
-    with tempfile.TemporaryDirectory() as tmp:
-        s = _make_store(tmp)
-        # Insert two renewals
-        s.insert_biometric_renewal_chain_log("sha256:aa", "sha256:bb", 3, 20, 90.0)
-        s.insert_biometric_renewal_chain_log("sha256:bb", "sha256:cc", 3, 22, 90.0)
-        status = s.get_biometric_renewal_chain_status()
-        assert status["total_renewals"] == 2
-        assert status["prev_commit_hash"] == "sha256:bb"
-        assert status["new_commit_hash"] == "sha256:cc"
-        assert status["ttl_days"] == 90.0
-        assert status["latest_renewal_ts"] > 0.0
+    tmp = tempfile.mkdtemp()
+    s = _make_store(tmp)
+    # Insert two renewals
+    s.insert_biometric_renewal_chain_log("sha256:aa", "sha256:bb", 3, 20, 90.0)
+    s.insert_biometric_renewal_chain_log("sha256:bb", "sha256:cc", 3, 22, 90.0)
+    status = s.get_biometric_renewal_chain_status()
+    assert status["total_renewals"] == 2
+    assert status["prev_commit_hash"] == "sha256:bb"
+    assert status["new_commit_hash"] == "sha256:cc"
+    assert status["ttl_days"] == 90.0
+    assert status["latest_renewal_ts"] > 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -98,21 +98,25 @@ def test_t180_4_status_reflects_insert():
 # ---------------------------------------------------------------------------
 
 def test_t180_5_anti_replay_duplicate_raises():
-    with tempfile.TemporaryDirectory() as tmp:
-        s = _make_store(tmp)
-        s.insert_biometric_renewal_chain_log("sha256:prev1", "sha256:new1", 3, 20, 90.0)
-        try:
-            s.insert_biometric_renewal_chain_log("sha256:prev2", "sha256:new1", 3, 20, 90.0)
-            assert False, "Expected IntegrityError on duplicate new_commit_hash"
-        except sqlite3.IntegrityError:
-            pass  # expected
+    tmp = tempfile.mkdtemp()
+    s = _make_store(tmp)
+    s.insert_biometric_renewal_chain_log("sha256:prev1", "sha256:new1", 3, 20, 90.0)
+    try:
+        s.insert_biometric_renewal_chain_log("sha256:prev2", "sha256:new1", 3, 20, 90.0)
+        assert False, "Expected IntegrityError on duplicate new_commit_hash"
+    except sqlite3.IntegrityError:
+        pass  # expected
 
 
 # ---------------------------------------------------------------------------
 # T180-6  renewal_enabled config default is False (infrastructure-first)
 # ---------------------------------------------------------------------------
 
-def test_t180_6_renewal_enabled_default_false():
+def test_t180_6_renewal_enabled_default_false(monkeypatch):
+    # Phase 180 documented default is False. Tests must isolate from
+    # bridge/.env which may set RENEWAL_ENABLED=true for live operation
+    # (per CLAUDE.md T199-8 env-isolation precedent).
+    monkeypatch.delenv("RENEWAL_ENABLED", raising=False)
     from vapi_bridge.config import Config
     cfg = Config(
         verifier_address="0x1234",
@@ -127,35 +131,35 @@ def test_t180_6_renewal_enabled_default_false():
 # ---------------------------------------------------------------------------
 
 def test_t180_7_new_commit_hash_sha256_format():
-    with tempfile.TemporaryDirectory() as tmp:
-        s = _make_store(tmp)
-        # Compute expected hash matching operator_api.py logic
-        prev_hash  = "sha256:aabbcc112233"
-        ratio      = 1.261
-        n_sessions = 20
-        n_consented = 3
-        ttl_days   = 90.0
-        ts_ns      = time.time_ns()
-        preimage = (
-            prev_hash
-            + f"{ratio:.6f}"
-            + str(n_sessions)
-            + str(n_consented)
-            + f"{ttl_days:.1f}"
-            + str(ts_ns)
-        ).encode()
-        expected_hash = "sha256:" + hashlib.sha256(preimage).hexdigest()
-        s.insert_biometric_renewal_chain_log(
-            prev_commit_hash=prev_hash,
-            new_commit_hash=expected_hash,
-            n_consented=n_consented,
-            n_sessions=n_sessions,
-            ttl_days=ttl_days,
-        )
-        status = s.get_biometric_renewal_chain_status()
-        assert status["new_commit_hash"] == expected_hash
-        assert expected_hash.startswith("sha256:")
-        assert len(expected_hash) == len("sha256:") + 64  # 7 + 64 hex chars
+    tmp = tempfile.mkdtemp()
+    s = _make_store(tmp)
+    # Compute expected hash matching operator_api.py logic
+    prev_hash  = "sha256:aabbcc112233"
+    ratio      = 1.261
+    n_sessions = 20
+    n_consented = 3
+    ttl_days   = 90.0
+    ts_ns      = time.time_ns()
+    preimage = (
+        prev_hash
+        + f"{ratio:.6f}"
+        + str(n_sessions)
+        + str(n_consented)
+        + f"{ttl_days:.1f}"
+        + str(ts_ns)
+    ).encode()
+    expected_hash = "sha256:" + hashlib.sha256(preimage).hexdigest()
+    s.insert_biometric_renewal_chain_log(
+        prev_commit_hash=prev_hash,
+        new_commit_hash=expected_hash,
+        n_consented=n_consented,
+        n_sessions=n_sessions,
+        ttl_days=ttl_days,
+    )
+    status = s.get_biometric_renewal_chain_status()
+    assert status["new_commit_hash"] == expected_hash
+    assert expected_hash.startswith("sha256:")
+    assert len(expected_hash) == len("sha256:") + 64  # 7 + 64 hex chars
 
 
 # ---------------------------------------------------------------------------
@@ -164,16 +168,16 @@ def test_t180_7_new_commit_hash_sha256_format():
 
 def test_t180_8_endpoint_returns_7_keys():
     """Smoke test: the renewal chain status dict from store has all expected keys."""
-    with tempfile.TemporaryDirectory() as tmp:
-        s = _make_store(tmp)
-        # Simulate what the endpoint returns: store.get_biometric_renewal_chain_status()
-        # with renewal_enabled overlaid from cfg
-        status = s.get_biometric_renewal_chain_status()
-        # Endpoint overlays renewal_enabled from cfg (default False)
-        status["renewal_enabled"] = False
-        expected_keys = {
-            "renewal_enabled", "total_renewals", "latest_renewal_ts",
-            "prev_commit_hash", "new_commit_hash", "ttl_days", "timestamp",
-        }
-        assert expected_keys == set(status.keys())
-        assert status["renewal_enabled"] is False
+    tmp = tempfile.mkdtemp()
+    s = _make_store(tmp)
+    # Simulate what the endpoint returns: store.get_biometric_renewal_chain_status()
+    # with renewal_enabled overlaid from cfg
+    status = s.get_biometric_renewal_chain_status()
+    # Endpoint overlays renewal_enabled from cfg (default False)
+    status["renewal_enabled"] = False
+    expected_keys = {
+        "renewal_enabled", "total_renewals", "latest_renewal_ts",
+        "prev_commit_hash", "new_commit_hash", "ttl_days", "timestamp",
+    }
+    assert expected_keys == set(status.keys())
+    assert status["renewal_enabled"] is False

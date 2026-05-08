@@ -36,16 +36,16 @@ def _fake_cfg(ttl_days=90.0):
 # ---------------------------------------------------------------------------
 
 def test_t178_1_insert_stores_record():
-    with tempfile.TemporaryDirectory() as tmp:
-        s = _make_store(tmp)
-        row_id = s.insert_biometric_renewal_log(
-            commit_hash="sha256:abc123",
-            age_days=6.3,
-            ttl_days=90.0,
-            ttl_expired=False,
-            recalibration_required=False,
-        )
-        assert row_id >= 1
+    tmp = tempfile.mkdtemp()
+    s = _make_store(tmp)
+    row_id = s.insert_biometric_renewal_log(
+        commit_hash="sha256:abc123",
+        age_days=6.3,
+        ttl_days=90.0,
+        ttl_expired=False,
+        recalibration_required=False,
+    )
+    assert row_id >= 1
 
 
 # ---------------------------------------------------------------------------
@@ -53,18 +53,18 @@ def test_t178_1_insert_stores_record():
 # ---------------------------------------------------------------------------
 
 def test_t178_2_get_status_returns_8_keys():
-    with tempfile.TemporaryDirectory() as tmp:
-        s = _make_store(tmp)
-        status = s.get_biometric_credential_age_status()
-        assert "ttl_enabled" in status
-        assert "commit_hash" in status
-        assert "commit_ts" in status
-        assert "age_days" in status
-        assert "ttl_days" in status
-        assert "ttl_expired" in status
-        assert "recalibration_required" in status
-        assert "timestamp" in status
-        assert len(status) == 8
+    tmp = tempfile.mkdtemp()
+    s = _make_store(tmp)
+    status = s.get_biometric_credential_age_status()
+    assert "ttl_enabled" in status
+    assert "commit_hash" in status
+    assert "commit_ts" in status
+    assert "age_days" in status
+    assert "ttl_days" in status
+    assert "ttl_expired" in status
+    assert "recalibration_required" in status
+    assert "timestamp" in status
+    assert len(status) == 8
 
 
 # ---------------------------------------------------------------------------
@@ -72,12 +72,12 @@ def test_t178_2_get_status_returns_8_keys():
 # ---------------------------------------------------------------------------
 
 def test_t178_3_no_commits_not_expired():
-    with tempfile.TemporaryDirectory() as tmp:
-        s = _make_store(tmp)
-        status = s.get_biometric_credential_age_status()
-        # No commit → commit_hash is empty → ttl_expired must be False (fail-open)
-        assert status["ttl_expired"] is False
-        assert status["commit_hash"] == ""
+    tmp = tempfile.mkdtemp()
+    s = _make_store(tmp)
+    status = s.get_biometric_credential_age_status()
+    # No commit → commit_hash is empty → ttl_expired must be False (fail-open)
+    assert status["ttl_expired"] is False
+    assert status["commit_hash"] == ""
 
 
 # ---------------------------------------------------------------------------
@@ -85,28 +85,28 @@ def test_t178_3_no_commits_not_expired():
 # ---------------------------------------------------------------------------
 
 def test_t178_4_fresh_credential_not_expired():
-    with tempfile.TemporaryDirectory() as tmp:
-        s = _make_store(tmp)
-        # Insert a renewal log with ttl_expired=False
-        s.insert_biometric_renewal_log(
-            commit_hash="sha256:fresh",
-            age_days=6.3,
-            ttl_days=90.0,
-            ttl_expired=False,
-            recalibration_required=False,
+    tmp = tempfile.mkdtemp()
+    s = _make_store(tmp)
+    # Insert a renewal log with ttl_expired=False
+    s.insert_biometric_renewal_log(
+        commit_hash="sha256:fresh",
+        age_days=6.3,
+        ttl_days=90.0,
+        ttl_expired=False,
+        recalibration_required=False,
+    )
+    # Simulate a recent commit in separation_ratio_registry_log (age ~0 days)
+    with s._conn() as conn:
+        conn.execute(
+            "INSERT INTO separation_ratio_registry_log "
+            "(commit_hash, ratio_millis, n_sessions, n_players, "
+            "committed, on_chain_tx, created_at) "
+            "VALUES (?,?,?,?,?,?,?)",
+            ("sha256:fresh", 569, 20, 3, 1, "", time.time()),
         )
-        # Simulate a recent commit in separation_ratio_registry_log (age ~0 days)
-        with s._conn() as conn:
-            conn.execute(
-                "INSERT INTO separation_ratio_registry_log "
-                "(commit_hash, ratio_millis, n_sessions, n_players, "
-                "committed, on_chain_tx, created_at) "
-                "VALUES (?,?,?,?,?,?,?)",
-                ("sha256:fresh", 569, 20, 3, 1, "", time.time()),
-            )
-        status = s.get_biometric_credential_age_status()
-        assert status["age_days"] < 1.0  # committed moments ago
-        assert status["ttl_expired"] is False
+    status = s.get_biometric_credential_age_status()
+    assert status["age_days"] < 1.0  # committed moments ago
+    assert status["ttl_expired"] is False
 
 
 # ---------------------------------------------------------------------------
@@ -114,22 +114,22 @@ def test_t178_4_fresh_credential_not_expired():
 # ---------------------------------------------------------------------------
 
 def test_t178_5_stale_credential_expired():
-    with tempfile.TemporaryDirectory() as tmp:
-        s = _make_store(tmp)
-        # Insert a commit 91 days ago (91 * 86400 seconds)
-        old_ts = time.time() - 91 * 86400
-        with s._conn() as conn:
-            conn.execute(
-                "INSERT INTO separation_ratio_registry_log "
-                "(commit_hash, ratio_millis, n_sessions, n_players, "
-                "committed, on_chain_tx, created_at) "
-                "VALUES (?,?,?,?,?,?,?)",
-                ("sha256:stale", 569, 20, 3, 1, "", old_ts),
-            )
-        status = s.get_biometric_credential_age_status()
-        assert status["age_days"] > 90.0
-        assert status["ttl_expired"] is True
-        assert status["commit_hash"] == "sha256:stale"
+    tmp = tempfile.mkdtemp()
+    s = _make_store(tmp)
+    # Insert a commit 91 days ago (91 * 86400 seconds)
+    old_ts = time.time() - 91 * 86400
+    with s._conn() as conn:
+        conn.execute(
+            "INSERT INTO separation_ratio_registry_log "
+            "(commit_hash, ratio_millis, n_sessions, n_players, "
+            "committed, on_chain_tx, created_at) "
+            "VALUES (?,?,?,?,?,?,?)",
+            ("sha256:stale", 569, 20, 3, 1, "", old_ts),
+        )
+    status = s.get_biometric_credential_age_status()
+    assert status["age_days"] > 90.0
+    assert status["ttl_expired"] is True
+    assert status["commit_hash"] == "sha256:stale"
 
 
 # ---------------------------------------------------------------------------
@@ -137,20 +137,20 @@ def test_t178_5_stale_credential_expired():
 # ---------------------------------------------------------------------------
 
 def test_t178_6_check_ttl_logs_to_renewal_log():
-    with tempfile.TemporaryDirectory() as tmp:
-        s = _make_store(tmp)
-        cfg = _fake_cfg(ttl_days=90.0)
-        from vapi_bridge.tournament_activation_chain_agent import TournamentActivationChainAgent
-        agent = TournamentActivationChainAgent(cfg=cfg, store=s, bus=None)
-        result = agent.check_biometric_credential_ttl()
-        # Should have logged to biometric_renewal_log
-        with s._conn() as conn:
-            count = conn.execute(
-                "SELECT COUNT(*) FROM biometric_renewal_log"
-            ).fetchone()[0]
-        assert count >= 1
-        assert "ttl_enabled" in result
-        assert result["ttl_days"] == 90.0
+    tmp = tempfile.mkdtemp()
+    s = _make_store(tmp)
+    cfg = _fake_cfg(ttl_days=90.0)
+    from vapi_bridge.tournament_activation_chain_agent import TournamentActivationChainAgent
+    agent = TournamentActivationChainAgent(cfg=cfg, store=s, bus=None)
+    result = agent.check_biometric_credential_ttl()
+    # Should have logged to biometric_renewal_log
+    with s._conn() as conn:
+        count = conn.execute(
+            "SELECT COUNT(*) FROM biometric_renewal_log"
+        ).fetchone()[0]
+    assert count >= 1
+    assert "ttl_enabled" in result
+    assert result["ttl_days"] == 90.0
 
 
 # ---------------------------------------------------------------------------
@@ -158,15 +158,15 @@ def test_t178_6_check_ttl_logs_to_renewal_log():
 # ---------------------------------------------------------------------------
 
 def test_t178_7_check_ttl_returns_8_keys():
-    with tempfile.TemporaryDirectory() as tmp:
-        s = _make_store(tmp)
-        cfg = _fake_cfg(ttl_days=90.0)
-        from vapi_bridge.tournament_activation_chain_agent import TournamentActivationChainAgent
-        agent = TournamentActivationChainAgent(cfg=cfg, store=s, bus=None)
-        result = agent.check_biometric_credential_ttl()
-        for key in ("ttl_enabled", "commit_hash", "commit_ts", "age_days",
-                    "ttl_days", "ttl_expired", "recalibration_required", "timestamp"):
-            assert key in result, f"Missing key: {key}"
+    tmp = tempfile.mkdtemp()
+    s = _make_store(tmp)
+    cfg = _fake_cfg(ttl_days=90.0)
+    from vapi_bridge.tournament_activation_chain_agent import TournamentActivationChainAgent
+    agent = TournamentActivationChainAgent(cfg=cfg, store=s, bus=None)
+    result = agent.check_biometric_credential_ttl()
+    for key in ("ttl_enabled", "commit_hash", "commit_ts", "age_days",
+                "ttl_days", "ttl_expired", "recalibration_required", "timestamp"):
+        assert key in result, f"Missing key: {key}"
 
 
 # ---------------------------------------------------------------------------
