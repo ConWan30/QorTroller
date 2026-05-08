@@ -127,6 +127,34 @@ class Config:
     on the event loop thread is the WIF-064 zombie pattern signature. Lower
     to 0.5s when actively diagnosing; raise above 1.0s for noisy environments."""
 
+    # --- Phase 235.x-STABILITY-3 (2026-05-08): loop health monitor (WIF-065 closure) ---
+    loop_health_monitor_enabled: bool = field(
+        default_factory=lambda: _env_bool("LOOP_HEALTH_MONITOR_ENABLED", True)
+    )
+    """Phase 235.x-STABILITY-3 — Enable independent heartbeat task that
+    detects asyncio event loop starvation regardless of asyncio's debug mode.
+    asyncio's built-in slow_callback_duration warning is gated by
+    loop.set_debug(True) which we keep OFF in production due to ~5% perf
+    overhead. The heartbeat task measures its own scheduling latency and
+    logs WARNING when expected sleep time is exceeded by more than the
+    threshold. Default ON; opt-out via LOOP_HEALTH_MONITOR_ENABLED=false."""
+
+    loop_health_check_interval_s: float = field(
+        default_factory=lambda: float(_env("LOOP_HEALTH_CHECK_INTERVAL_S", "2.0"))
+    )
+    """Phase 235.x-STABILITY-3 — Heartbeat cadence (seconds). Task sleeps
+    this long between checks. Lower = finer detection but more wakeups.
+    2.0s default = good balance for catching ~12-30s zombie windows."""
+
+    loop_health_starvation_threshold_s: float = field(
+        default_factory=lambda: float(_env("LOOP_HEALTH_STARVATION_THRESHOLD_S", "1.0"))
+    )
+    """Phase 235.x-STABILITY-3 — Excess time (seconds) above the heartbeat
+    interval that triggers a STARVATION warning. If sleep(2.0) actually
+    took 4.0s, excess is 2.0s — fires warning if > threshold. 1.0s default
+    matches WIF-064 zombie pattern signature (12-30s blocks, much higher
+    than 1s)."""
+
     # --- Batching ---
     batch_size: int = field(default_factory=lambda: _env_int("BATCH_SIZE", 10))
     batch_timeout_s: int = field(
