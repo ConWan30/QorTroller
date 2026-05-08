@@ -79,7 +79,10 @@ async def run_drift_sweep_loop(*, cfg, store, chain) -> None:
 
             if (now - last_bundle) >= bundle_interval:
                 last_bundle = now
-                _run_bundle_sweep(cfg=cfg, store=store)
+                # Phase 235.x-STABILITY-2 2026-05-08: bundle sweep does file
+                # SHA-256 + DB read; was running on event loop thread, contributing
+                # to bridge zombie windows (WIF-064). Push to worker thread.
+                await asyncio.to_thread(_run_bundle_sweep, cfg=cfg, store=store)
 
             if (now - last_scope) >= scope_interval:
                 last_scope = now

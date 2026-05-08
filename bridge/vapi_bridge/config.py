@@ -109,6 +109,24 @@ class Config:
     signal_disconnect + retries). 10x tolerates real hiccup windows
     without triggering the watchdog zombie cascade."""
 
+    # --- Phase 235.x-STABILITY-2 (2026-05-08): asyncio loop-block instrumentation (WIF-064) ---
+    asyncio_debug_enabled: bool = field(
+        default_factory=lambda: _env_bool("ASYNCIO_DEBUG_ENABLED", False)
+    )
+    """Phase 235.x-STABILITY-2 — Enable asyncio debug mode. When True, sets
+    loop.set_debug(True) which logs slow callbacks via the configured slow
+    callback duration. Default OFF; opt-in for diagnostic sessions only.
+    Has minor performance overhead (~5%) when enabled."""
+
+    asyncio_slow_callback_threshold_s: float = field(
+        default_factory=lambda: float(_env("ASYNCIO_SLOW_CALLBACK_THRESHOLD_S", "1.0"))
+    )
+    """Phase 235.x-STABILITY-2 — Threshold (seconds) above which asyncio logs
+    a "slow callback" warning identifying the function that blocked the loop.
+    Default raised from asyncio's 0.1s default to 1.0s — anything above 1s
+    on the event loop thread is the WIF-064 zombie pattern signature. Lower
+    to 0.5s when actively diagnosing; raise above 1.0s for noisy environments."""
+
     # --- Batching ---
     batch_size: int = field(default_factory=lambda: _env_int("BATCH_SIZE", 10))
     batch_timeout_s: int = field(
