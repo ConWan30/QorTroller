@@ -1,0 +1,148 @@
+{
+  "$schema": "vapi-cedar-bundle-v1",
+  "agent_id": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1",
+  "phase": "O2_SUGGEST",
+  "version": 1,
+  "issued_at_iso": "2026-05-07T19:00:00Z",
+  "lane_prefixes": [
+    "audits/",
+    "invariants/",
+    "ops/",
+    "sweeps/"
+  ],
+  "policies": [
+    {
+      "id": "P-001",
+      "effect": "permit",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "skill:read",
+      "resource": "lane://audits/**"
+    },
+    {
+      "id": "P-002",
+      "effect": "permit",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "skill:read",
+      "resource": "lane://sweeps/**"
+    },
+    {
+      "id": "P-003",
+      "effect": "permit",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "skill:read",
+      "resource": "lane://ops/**"
+    },
+    {
+      "id": "P-004",
+      "effect": "permit",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "skill:read",
+      "resource": "lane://invariants/**"
+    },
+    {
+      "id": "P-005",
+      "effect": "permit",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "tool:audit-log-query",
+      "resource": "chain://iotex-testnet"
+    },
+    {
+      "id": "P-006",
+      "effect": "permit",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "tool:agent-registry-query",
+      "resource": "chain://iotex-testnet"
+    },
+    {
+      "id": "P-007",
+      "effect": "permit",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "tool:kms-sign",
+      "resource": "draft://commit_hashes/*"
+    },
+    {
+      "id": "P-008",
+      "effect": "permit",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "skill:audit-drafting",
+      "resource": "draft://audit_entries/*"
+    },
+    {
+      "id": "P-009",
+      "effect": "permit",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "skill:operational-diagnostic",
+      "resource": "draft://audit_entries/*"
+    },
+    {
+      "id": "P-010",
+      "effect": "permit",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "tool:audit-entry-draft",
+      "resource": "draft://audit_entries/*"
+    },
+    {
+      "id": "P-011",
+      "effect": "permit",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "tool:git-add",
+      "resource": "draft://audit_entries/*"
+    },
+    {
+      "id": "P-012",
+      "effect": "permit",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "tool:git-commit",
+      "resource": "draft://audit_entries/*"
+    },
+    {
+      "id": "P-013",
+      "effect": "permit",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "tool:git-pr",
+      "resource": "draft://audit_entries/*"
+    },
+    {
+      "id": "P-014",
+      "effect": "permit",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "tool:ipfs-pin",
+      "resource": "draft://audit_entries/*"
+    },
+    {
+      "id": "F-001",
+      "effect": "forbid",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "tool:git-push",
+      "resource": "*"
+    },
+    {
+      "id": "F-002",
+      "effect": "forbid",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "tool:pda-attestation-anchor",
+      "resource": "*"
+    },
+    {
+      "id": "F-003",
+      "effect": "forbid",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "endpoint:write",
+      "resource": "*"
+    },
+    {
+      "id": "F-004",
+      "effect": "forbid",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "skill:event-correlation",
+      "resource": "*"
+    },
+    {
+      "id": "F-005",
+      "effect": "forbid",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "skill:provenance-recording",
+      "resource": "*"
+    }
+  ]
+}
