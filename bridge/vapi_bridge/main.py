@@ -1124,6 +1124,33 @@ class Bridge:
                     "Phase O1 C4: cedar_drift_sweeper unavailable: %s", _drift_exc
                 )
 
+        # Phase 235.x-STABILITY-3 2026-05-08: loop health monitor (WIF-065 closure).
+        # Independent heartbeat task that detects asyncio event loop starvation
+        # regardless of asyncio's debug mode. Closes the instrumentation gap
+        # discovered in WIF-065 (asyncio's slow_callback warning is gated by
+        # set_debug(True) which defaults OFF; STABILITY-2's threshold setting
+        # had no effect, producing 0 warnings during 16 zombie events).
+        # Default ENABLED. Lightweight (~one wakeup every 2s).
+        if getattr(self.cfg, "loop_health_monitor_enabled", True):
+            try:
+                from .loop_health_monitor import run_loop_health_monitor
+                _loop_health_task = asyncio.ensure_future(
+                    run_loop_health_monitor(cfg=self.cfg)
+                )
+                _loop_health_task.set_name("LoopHealthMonitor")
+                self._tasks.append(_loop_health_task)
+                log.info(
+                    "Phase 235.x-STABILITY-3: loop_health_monitor task started "
+                    "(check=%.1fs, threshold=%.1fs)",
+                    getattr(self.cfg, "loop_health_check_interval_s", 2.0),
+                    getattr(self.cfg, "loop_health_starvation_threshold_s", 1.0),
+                )
+            except Exception as _lh_exc:
+                log.warning(
+                    "Phase 235.x-STABILITY-3: loop_health_monitor unavailable: %s",
+                    _lh_exc,
+                )
+
         # Phase 235-AUTO-TRIGGER: SessionBoundaryDetectorAgent (agent #38).
         # Heuristic detector that publishes ruling_request events on detected
         # session-end (sustained gameplay activity followed by extended trigger
