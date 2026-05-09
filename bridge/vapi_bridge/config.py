@@ -180,6 +180,23 @@ class Config:
     the steady-state branch handling every record after the first).
     Default ON; opt-out via LOOP_RESOLVE_PUBKEY_TO_THREAD_ENABLED=false."""
 
+    # --- Phase 235.x-STABILITY-7 (2026-05-09): explicit ThreadPoolExecutor sizing ---
+    thread_pool_max_workers: int = field(
+        default_factory=lambda: int(_env("THREAD_POOL_MAX_WORKERS", "64"))
+    )
+    """Phase 235.x-STABILITY-7 — Explicit max_workers for the asyncio default
+    ThreadPoolExecutor (used by all asyncio.to_thread + run_in_executor(None,
+    ...) call sites including STABILITY-2 FSCA + STABILITY-4 on_record persist
+    + STABILITY-5 pubkey resolve + capture-health endpoint). Default 64,
+    chosen as 2x asyncio's auto-default (~32 on 8-core machines) for
+    headroom under concurrent persist + capture-health + pubkey-resolve +
+    session_adjudicator load. STABILITY-5 smoke testing observed 1 watchdog
+    restart in 90s under default sizing — empirical pool saturation.
+    Set to 0 to skip explicit configuration and use asyncio's built-in
+    default sizing (rollback path). Thread name prefix is "vapi-persist"
+    when explicit executor is configured (helps py-spy + procmon
+    identify the bridge worker pool)."""
+
 
     # --- Batching ---
     batch_size: int = field(default_factory=lambda: _env_int("BATCH_SIZE", 10))

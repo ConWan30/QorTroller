@@ -97,6 +97,9 @@ class Bridge:
         self.batcher = Batcher(cfg, self.store, self.chain)
         self._tasks: list[asyncio.Task] = []
         self._ds_transport = None  # DualShockTransport, set in run() if dualshock_enabled
+        # Phase 235.x-STABILITY-7: explicit ThreadPoolExecutor wired in run()
+        # when cfg.thread_pool_max_workers > 0. Init to None for attribute safety.
+        self._thread_pool_executor = None
         # In-memory cache: prev_poac_hash_hex -> pubkey_bytes  (avoids 392ms list_devices() call per record)
         self._pubkey_cache: dict[str, bytes] = {}
 
@@ -339,6 +342,36 @@ class Bridge:
             for err in errors:
                 log.error("Config error: %s", err)
             sys.exit(1)
+
+        # Phase 235.x-STABILITY-7: explicit ThreadPoolExecutor sizing.
+        # All asyncio.to_thread + run_in_executor(None, ...) call sites share
+        # this pool (STABILITY-2 FSCA + STABILITY-4 on_record persist +
+        # STABILITY-5 pubkey resolve + capture-health endpoint + 14 other
+        # sites). asyncio's auto-default is min(32, cpu_count()+4) ≈ 32-36
+        # workers; STABILITY-5 smoke saw 1 watchdog restart in 90s from
+        # pool saturation. Default 64 = 2x headroom. Setting
+        # THREAD_POOL_MAX_WORKERS=0 keeps asyncio's default (rollback path).
+        _tpool_workers = int(getattr(self.cfg, "thread_pool_max_workers", 64))
+        if _tpool_workers > 0:
+            import concurrent.futures as _cf
+            self._thread_pool_executor = _cf.ThreadPoolExecutor(
+                max_workers=_tpool_workers,
+                thread_name_prefix="vapi-persist",
+            )
+            asyncio.get_running_loop().set_default_executor(
+                self._thread_pool_executor
+            )
+            log.info(
+                "Phase 235.x-STABILITY-7: ThreadPoolExecutor configured "
+                "(max_workers=%d, thread_name_prefix='vapi-persist')",
+                _tpool_workers,
+            )
+        else:
+            self._thread_pool_executor = None
+            log.info(
+                "Phase 235.x-STABILITY-7: ThreadPoolExecutor explicit "
+                "sizing skipped (THREAD_POOL_MAX_WORKERS=0; using asyncio default)"
+            )
 
         log.info("=" * 60)
         log.info("VAPI Bridge v0.2.0-rc1 starting")
