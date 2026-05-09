@@ -3386,6 +3386,59 @@ class Store:
         except Exception:
             pass  # idempotent
 
+        # Phase 238-MARKETPLACE: LISTING-v1 anchor history.
+        # Seventh FROZEN-v1 primitive in PATTERN-016 family.  Per-listing
+        # cryptographic provenance: each row binds up to 5 prior FROZEN-v1
+        # anchors (SEPPROOF + BIOMETRIC + CORPUS + GIC + CONSENT bitmask) +
+        # data_class + price + IPFS CID hash into one 32-byte commitment.
+        # The on-chain extension contract VAPIDataMarketplaceListings.sol
+        # reads referenced AdjudicationRegistry anchors to compute the
+        # listing's multiplier tier (1.0x / 1.5x / 2.0x / 3.0x).  Multiplier
+        # is enforced cryptographically — sellers cannot self-attest tier.
+        try:
+            with self._conn() as conn:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS marketplace_listing_log (
+                        id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+                        listing_commitment       TEXT NOT NULL,
+                        seller_address           TEXT NOT NULL DEFAULT '',
+                        sepproof_commitment      TEXT NOT NULL DEFAULT '',
+                        biometric_snapshot_hash  TEXT NOT NULL DEFAULT '',
+                        corpus_snapshot_hash     TEXT NOT NULL DEFAULT '',
+                        gic_hash                 TEXT NOT NULL DEFAULT '',
+                        consent_bitmask          INTEGER NOT NULL,
+                        data_class               INTEGER NOT NULL,
+                        price_iotx               REAL    NOT NULL DEFAULT 0.0,
+                        ipfs_cid                 TEXT    NOT NULL DEFAULT '',
+                        ipfs_cid_hash            TEXT    NOT NULL DEFAULT '',
+                        ts_ns                    INTEGER NOT NULL,
+                        on_chain_confirmed       INTEGER NOT NULL DEFAULT 0,
+                        tx_hash                  TEXT    NOT NULL DEFAULT '',
+                        anchors_present_count    INTEGER NOT NULL DEFAULT 0,
+                        trigger_reason           TEXT    NOT NULL DEFAULT '',
+                        created_at               REAL    NOT NULL
+                    )
+                """)
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_marketplace_listing_log_ts "
+                    "ON marketplace_listing_log(ts_ns DESC)"
+                )
+                conn.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_marketplace_listing_log_commit "
+                    "ON marketplace_listing_log(listing_commitment)"
+                )
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_marketplace_listing_log_seller "
+                    "ON marketplace_listing_log(seller_address)"
+                )
+                conn.execute(
+                    "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                    " VALUES (?, ?, ?)",
+                    (238, "marketplace_listing_log", time.time()),
+                )
+        except Exception:
+            pass  # idempotent
+
         # Phase O1 C1 — operator_agent_activation_log table.
         # Mirrors the on-chain AgentScopeRootSet + AgentScopeUpdated events
         # for each Cedar bundle anchor cycle (D4 dual-anchor).  UNIQUE
@@ -15194,6 +15247,154 @@ class Store:
             "trigger_reason":      latest.get("trigger_reason", ""),
             "timestamp":           _t237gs.time(),
         }
+
+    # --- Phase 238-MARKETPLACE: LISTING-v1 anchor history ---
+
+    def insert_marketplace_listing(
+        self,
+        listing_commitment: str,
+        seller_address: str,
+        sepproof_commitment: str,
+        biometric_snapshot_hash: str,
+        corpus_snapshot_hash: str,
+        gic_hash: str,
+        consent_bitmask: int,
+        data_class: int,
+        price_iotx: float,
+        ipfs_cid: str,
+        ipfs_cid_hash: str,
+        ts_ns: int,
+        anchors_present_count: int = 0,
+        trigger_reason: str = "",
+        on_chain_confirmed: bool = False,
+        tx_hash: str = "",
+    ) -> int:
+        """Insert one LISTING-v1 row.  Returns row id.
+
+        UNIQUE(listing_commitment) enforces idempotency: re-inserting the
+        same commitment returns the existing row id (matches
+        biometric_snapshot_log precedent).
+        """
+        try:
+            with self._conn() as conn:
+                cur = conn.execute(
+                    "INSERT INTO marketplace_listing_log "
+                    "(listing_commitment, seller_address, sepproof_commitment, "
+                    " biometric_snapshot_hash, corpus_snapshot_hash, gic_hash, "
+                    " consent_bitmask, data_class, price_iotx, ipfs_cid, ipfs_cid_hash, "
+                    " ts_ns, on_chain_confirmed, tx_hash, anchors_present_count, "
+                    " trigger_reason, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        str(listing_commitment),
+                        str(seller_address),
+                        str(sepproof_commitment),
+                        str(biometric_snapshot_hash),
+                        str(corpus_snapshot_hash),
+                        str(gic_hash),
+                        int(consent_bitmask),
+                        int(data_class),
+                        float(price_iotx),
+                        str(ipfs_cid),
+                        str(ipfs_cid_hash),
+                        int(ts_ns),
+                        1 if on_chain_confirmed else 0,
+                        str(tx_hash),
+                        int(anchors_present_count),
+                        str(trigger_reason)[:128],
+                        time.time(),
+                    ),
+                )
+                return int(cur.lastrowid)
+        except Exception:
+            with self._conn() as conn:
+                row = conn.execute(
+                    "SELECT id FROM marketplace_listing_log WHERE listing_commitment = ?",
+                    (str(listing_commitment),),
+                ).fetchone()
+            return int(row["id"]) if row else 0
+
+    def get_latest_marketplace_listing(self) -> dict:
+        """Return the most recent listing or empty dict.
+
+        Returned keys mirror insert columns (parsed JSON-friendly).
+        """
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT listing_commitment, seller_address, sepproof_commitment, "
+                "       biometric_snapshot_hash, corpus_snapshot_hash, gic_hash, "
+                "       consent_bitmask, data_class, price_iotx, ipfs_cid, "
+                "       ipfs_cid_hash, ts_ns, on_chain_confirmed, tx_hash, "
+                "       anchors_present_count, trigger_reason "
+                "FROM marketplace_listing_log ORDER BY ts_ns DESC LIMIT 1"
+            ).fetchone()
+        if row is None:
+            return {}
+        return {
+            "listing_commitment":      str(row["listing_commitment"]),
+            "seller_address":          str(row["seller_address"]),
+            "sepproof_commitment":     str(row["sepproof_commitment"]),
+            "biometric_snapshot_hash": str(row["biometric_snapshot_hash"]),
+            "corpus_snapshot_hash":    str(row["corpus_snapshot_hash"]),
+            "gic_hash":                str(row["gic_hash"]),
+            "consent_bitmask":         int(row["consent_bitmask"]),
+            "data_class":              int(row["data_class"]),
+            "price_iotx":              float(row["price_iotx"]),
+            "ipfs_cid":                str(row["ipfs_cid"]),
+            "ipfs_cid_hash":           str(row["ipfs_cid_hash"]),
+            "ts_ns":                   int(row["ts_ns"]),
+            "on_chain_confirmed":      bool(row["on_chain_confirmed"]),
+            "tx_hash":                 str(row["tx_hash"]),
+            "anchors_present_count":   int(row["anchors_present_count"]),
+            "trigger_reason":          str(row["trigger_reason"]),
+        }
+
+    def get_marketplace_listing_status(self) -> dict:
+        """Return summary of marketplace_listing_log: total + latest.
+
+        Mirrors get_biometric_snapshot_status shape so the operator
+        endpoint can return both with consistent keys.
+        """
+        import time as _t238ls
+        with self._conn() as conn:
+            total = (conn.execute(
+                "SELECT COUNT(*) FROM marketplace_listing_log"
+            ).fetchone() or (0,))[0]
+            anchored = (conn.execute(
+                "SELECT COUNT(*) FROM marketplace_listing_log "
+                "WHERE on_chain_confirmed = 1"
+            ).fetchone() or (0,))[0]
+        latest = self.get_latest_marketplace_listing()
+        return {
+            "total_listings":         int(total),
+            "anchored_listings":      int(anchored),
+            "latest_commitment":      latest.get("listing_commitment", ""),
+            "latest_seller":          latest.get("seller_address", ""),
+            "latest_data_class":      latest.get("data_class", 0),
+            "latest_price_iotx":      latest.get("price_iotx", 0.0),
+            "latest_anchors_present": latest.get("anchors_present_count", 0),
+            "latest_ts_ns":           latest.get("ts_ns", 0),
+            "latest_on_chain":        latest.get("on_chain_confirmed", False),
+            "latest_tx_hash":         latest.get("tx_hash", ""),
+            "timestamp":              _t238ls.time(),
+        }
+
+    def get_marketplace_listings_by_seller(
+        self, seller_address: str, limit: int = 20
+    ) -> list[dict]:
+        """Return last N listings by seller_address (DESC ts_ns)."""
+        if not seller_address:
+            return []
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT listing_commitment, data_class, price_iotx, ipfs_cid, "
+                "       ts_ns, on_chain_confirmed, tx_hash, anchors_present_count "
+                "FROM marketplace_listing_log "
+                "WHERE seller_address = ? "
+                "ORDER BY ts_ns DESC LIMIT ?",
+                (str(seller_address), int(limit)),
+            ).fetchall()
+        return [dict(r) for r in rows]
 
     # --- Phase O0 Stream 3-prep Session 1 — AGENT_COMMIT v1 ---
 
