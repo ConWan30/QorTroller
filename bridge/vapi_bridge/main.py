@@ -267,6 +267,11 @@ class Bridge:
            so that the NEXT record (whose prev_poac_hash == current record_hash) is a cache hit.
         2. Local store (device whose chain_head matches record.prev_poac_hash)
         3. On-chain DeviceRegistry
+
+        Phase 235.x-STABILITY-5 (2026-05-09): cache-miss path moved to a worker
+        thread so the SQLite list_devices() scan doesn't block the event loop.
+        Cache HIT remains synchronous (no thread-hop overhead for the steady-
+        state path that handles every record after the first).
         """
         prev_hex = record.prev_poac_hash.hex()
 
@@ -277,7 +282,28 @@ class Bridge:
             self._pubkey_cache[record.record_hash_hex] = pk
             return pk
 
-        # Slow path: scan DB — only on cache miss (first record or restart)
+        # Slow path: cache miss → worker thread (boot-only or post-restart)
+        if getattr(self.cfg, "loop_resolve_pubkey_to_thread_enabled", True):
+            return await asyncio.to_thread(self._resolve_pubkey_miss_sync, record, prev_hex)
+        return self._resolve_pubkey_miss_sync(record, prev_hex)
+
+    def _resolve_pubkey_miss_sync(
+        self, record: PoACRecord, prev_hex: str
+    ) -> bytes | None:
+        """Phase 235.x-STABILITY-5 — sync body of cache-miss pubkey resolution.
+
+        Runs in worker thread via asyncio.to_thread. Performs:
+          - store.list_devices() SQLite scan (the heavy step)
+          - chain_head matching across registered devices
+          - genesis-record fallback for prev_hash all zeros
+          - cache pre-population
+
+        Cache writes happen on this thread; that's safe because Python dict
+        ops are atomic for individual __setitem__ / __getitem__ under the
+        GIL, and there's no compound read-modify-write that another thread
+        could observe in an inconsistent state. The bounded-eviction step
+        (pop oldest when len > 4096) is also atomic dict-op level.
+        """
         devices = self.store.list_devices()
         for dev in devices:
             if dev["pubkey_hex"] == "unknown":
