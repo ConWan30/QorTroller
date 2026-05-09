@@ -169,6 +169,17 @@ class Config:
     sequential await in the caller's loop (DualShockTransport._session_loop
     awaits _dispatch which awaits on_record one at a time per source)."""
 
+    # --- Phase 235.x-STABILITY-5 (2026-05-09): _resolve_pubkey miss path offload ---
+    loop_resolve_pubkey_to_thread_enabled: bool = field(
+        default_factory=lambda: _env_bool("LOOP_RESOLVE_PUBKEY_TO_THREAD_ENABLED", True)
+    )
+    """Phase 235.x-STABILITY-5 — Move _resolve_pubkey cache-miss path to a
+    worker thread via asyncio.to_thread. The miss path runs
+    store.list_devices() (SQLite scan) which empirically can take 100+ms on
+    a populated devices table. Hit path stays synchronous (no overhead for
+    the steady-state branch handling every record after the first).
+    Default ON; opt-out via LOOP_RESOLVE_PUBKEY_TO_THREAD_ENABLED=false."""
+
     # --- Batching ---
     batch_size: int = field(default_factory=lambda: _env_int("BATCH_SIZE", 10))
     batch_timeout_s: int = field(
