@@ -78,13 +78,18 @@ Three options, in order of preference:
    effects on calibration_intelligence_agent + InsightSynthesizer
    feedback loops. Risky.
 
-**Critical confounder**: This run was sim_mode. WIF-064/065 baseline was
-real-controller. **The offender identified here may not be the same
-offender that produced WIF-064/065 BRIDGE_UNRESPONSIVE events.** Real
-USB polling at ~1000Hz provides natural backpressure that sim_mode lacks.
-However, even with natural backpressure, sync biometric extraction on
-the loop thread is a known anti-pattern and likely contributes to
-real-controller starvation as well (just at different cadence).
+**Critical confounder (REFUTED 2026-05-08T19:08-19:22 UTC)**: First-run was
+sim_mode. **Second run with controller plugged in (`sim_mode=False`,
+real DualShock Edge) shows MORE STARVATION not less**: 60 events in 13 min
+vs 40 events in 7 min for sim_mode. Mean spacing 11.2s, max excess
+similar magnitude. The session_loop sync work IS the production offender;
+sim_mode behaviour generalizes. (Earlier conjecture that "real USB polling
+provides natural backpressure" was wrong — `_make_record` and
+`Bridge.on_record` synchronous work dominates regardless of frame source.)
+
+Real-controller run also REFUTES B1 (drift sweeper, 60s cadence) and B2
+(FSCA, 900s cadence) hypotheses: 46 of 59 STARVATION gaps fall in 5-30s
+range. Neither periodic offender candidate fits.
 
 **W3 — Verification gap**:
 
@@ -110,7 +115,16 @@ checks. No asyncio internals monkey-patching, works regardless of
 debug mode, catches ANY cause. Future bisection runs use this same
 mechanism.
 
-**Status**: OPEN. STABILITY-3 instrumentation merged + pushed
-(commit `706af098`). First bisection run completed 2026-05-08 produced
-this finding. Next step: real-controller comparison run before deciding
-whether to ship STABILITY-4 fix.
+**Status**: OPEN, sim_mode-confounder hypothesis REFUTED via 2026-05-08
+real-controller bisection run (run dir `logs/stability3_realctrl_20260508_190820/`).
+Next step is **Phase 235.x-STABILITY-4** wrapping per-record `_make_record` +
+`Bridge.on_record` sync work in `asyncio.to_thread`, mirroring STABILITY-2's
+pattern for FSCA + drift sweeper. Concrete call sites identified:
+  - `dualshock_integration.py:1677` `await self._dispatch(raw)`
+  - `dualshock_integration.py:2262` `_dispatch` → `Bridge.on_record`
+  - Synchronous biometric extraction in `_make_record` (PoAC body assembly +
+    signing path)
+
+STABILITY-4 risk: PoAC chain integrity is downstream of this path; any
+to_thread wrap MUST preserve record ordering + chain link hash invariants.
+Tests need to verify per-record sequencing is unchanged.
