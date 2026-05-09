@@ -2604,6 +2604,11 @@ class ChainClient:
     # call path is UNAFFECTED (it's been code-complete-deferred since Phase 112
     # per deployed-addresses.json:80; Phase 237.5 doesn't touch it).
     _CORPUS_SNAPSHOT_DEVICE_ID = hashlib.sha256(b"VAPI_CORPUS_SNAPSHOT_v1").digest()
+    # Phase 237-ZK-SEPPROOF — BIOMETRIC-SNAPSHOT attribution constant.
+    # Underscores here intentional (chain attribution sourceType-like tag);
+    # the FROZEN commitment domain tag uses hyphens (VAPI-BIOMETRIC-SNAPSHOT-v1).
+    # Mirrors the corpus_snapshot pattern at Phase 237.5 Path X.
+    _BIOMETRIC_SNAPSHOT_DEVICE_ID = hashlib.sha256(b"VAPI_BIOMETRIC_SNAPSHOT_v1").digest()
 
     async def anchor_corpus_snapshot(
         self,
@@ -2701,6 +2706,109 @@ class ChainClient:
                 return (None, False)
             log.warning(
                 "anchor_corpus_snapshot: anchor failed commitment=%s err=%s",
+                snapshot_commitment_hex[:16], _msg[:120],
+            )
+            return (None, False)
+
+    # --- Phase 237-ZK-SEPPROOF — BIOMETRIC-SNAPSHOT-v1 anchor (mirrors corpus_snapshot Path X) ---
+
+    async def anchor_biometric_snapshot(
+        self,
+        snapshot_commitment_hex: str,
+    ) -> "tuple[str | None, bool]":
+        """Anchor a BIOMETRIC-SNAPSHOT-v1 commitment via legacy recordAdjudication ABI.
+
+        Calls recordAdjudication(deviceIdHash, poadHash, dualVeto) on the deployed
+        AdjudicationRegistry contract with:
+          - deviceIdHash = self._BIOMETRIC_SNAPSHOT_DEVICE_ID  (constant; carries
+            BIOMETRIC_SNAPSHOT attribution as the design-intent sourceType would have)
+          - poadHash     = the 32-byte snapshot_commitment from biometric_snapshot.py
+          - dualVeto     = False (biometric snapshots are not adjudication verdicts)
+
+        Returns (tx_hash_hex, True) on success; (None, False) on missing config /
+        wallet error / tx revert / duplicate ("PoAd: already recorded"). Never
+        raises — graceful degradation matching corpus_snapshot at Phase 237.5 D1.
+
+        The tx_hash is permanent on-chain proof that the bridge committed to a
+        specific (centroids, cov_inv, ts_ns) state. Future ZK-SEPPROOF circuits
+        consume this commitment as a public input; verification asserts the
+        anchor is recorded before accepting the proof.
+        """
+        # Phase 237.5 Path C+ kill-switch — short-circuit before any RPC call.
+        if getattr(self._cfg, "chain_submission_paused", False):
+            log.info(
+                "anchor_biometric_snapshot: chain_submission_paused=true — "
+                "snapshot will record on_chain_confirmed=False (kill-switch active)"
+            )
+            return (None, False)
+        addr = getattr(self._cfg, "adjudication_registry_address", "")
+        if not addr:
+            log.warning(
+                "anchor_biometric_snapshot: adjudication_registry_address not "
+                "configured — snapshot will record on_chain_confirmed=False"
+            )
+            return (None, False)
+        if self._account is None:
+            log.warning(
+                "anchor_biometric_snapshot: self._account is None (no bridge "
+                "private key loaded) — snapshot will record on_chain_confirmed=False"
+            )
+            return (None, False)
+        try:
+            commitment_bytes32 = bytes.fromhex(snapshot_commitment_hex.lstrip("0x"))[:32]
+            commitment_bytes32 = commitment_bytes32.ljust(32, b"\x00")
+        except Exception as exc:
+            log.warning("anchor_biometric_snapshot: bad commitment hex: %s", exc)
+            return (None, False)
+        _ABI = [{
+            "name": "recordAdjudication", "type": "function",
+            "stateMutability": "nonpayable",
+            "inputs": [
+                {"name": "deviceIdHash", "type": "bytes32"},
+                {"name": "poadHash",     "type": "bytes32"},
+                {"name": "dualVeto",     "type": "bool"},
+            ],
+            "outputs": [],
+        }]
+        try:
+            contract = self._w3.eth.contract(
+                address=self._w3.to_checksum_address(addr), abi=_ABI
+            )
+            nonce = await self._w3.eth.get_transaction_count(self._account.address)
+            tx = await contract.functions.recordAdjudication(
+                self._BIOMETRIC_SNAPSHOT_DEVICE_ID, commitment_bytes32, False,
+            ).build_transaction({
+                "from": self._account.address, "nonce": nonce,
+            })
+            # Same dynamic gas estimate pattern as anchor_corpus_snapshot —
+            # IoTeX storage-heavy ops need 25% safety buffer above estimate.
+            gas_estimate = await self._w3.eth.estimate_gas(tx)
+            tx["gas"] = int(gas_estimate * 1.25)
+            signed = self._account.sign_transaction(tx)
+            tx_hash = await self._w3.eth.send_raw_transaction(signed.raw_transaction)
+            receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+            if receipt["status"] != 1:
+                log.warning(
+                    "anchor_biometric_snapshot: tx reverted commitment=%s tx=%s",
+                    snapshot_commitment_hex[:16], tx_hash.hex()[:16],
+                )
+                return (None, False)
+            log.info(
+                "anchor_biometric_snapshot: tx=%s commitment=%s",
+                tx_hash.hex()[:16], snapshot_commitment_hex[:16],
+            )
+            return (tx_hash.hex(), True)
+        except Exception as exc:
+            _msg = str(exc)
+            if "PoAd: already recorded" in _msg:
+                log.info(
+                    "anchor_biometric_snapshot: idempotent no-op — commitment=%s "
+                    "already anchored",
+                    snapshot_commitment_hex[:16],
+                )
+                return (None, False)
+            log.warning(
+                "anchor_biometric_snapshot: anchor failed commitment=%s err=%s",
                 snapshot_commitment_hex[:16], _msg[:120],
             )
             return (None, False)

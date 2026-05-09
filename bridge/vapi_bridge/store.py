@@ -3331,6 +3331,61 @@ class Store:
         except Exception:
             pass  # idempotent
 
+        # Phase 237-ZK-SEPPROOF: extend ait_session_log with centroids + cov_inv
+        # so the bridge prover can reconstruct ZK witness inputs without re-running
+        # analyze_interperson_separation.py.  Both columns are JSON-encoded for
+        # forward-compatibility with feature_dim changes; canonical canonicalisation
+        # happens at compute_biometric_commitment() time.
+        for _col_sql in [
+            "ALTER TABLE ait_session_log ADD COLUMN centroids_json TEXT NOT NULL DEFAULT '{}'",
+            "ALTER TABLE ait_session_log ADD COLUMN cov_inv_json   TEXT NOT NULL DEFAULT '[]'",
+        ]:
+            try:
+                with self._conn() as conn:
+                    conn.execute(_col_sql)
+            except Exception:
+                pass  # idempotent — column already exists
+
+        # Phase 237-ZK-SEPPROOF: BIOMETRIC-SNAPSHOT-v1 anchor history.
+        # Sixth FROZEN-v1 primitive in PATTERN-016 family.  Mirrors corpus_snapshot_log
+        # shape but binds centroids + cov_inv bytes (not just ratio + N).  ZK-SEPPROOF
+        # circuit consumes snapshot_commitment as public input #0/#1 to prove the
+        # witness centroids match an on-chain anchored corpus state.
+        try:
+            with self._conn() as conn:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS biometric_snapshot_log (
+                        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                        snapshot_commitment TEXT NOT NULL,
+                        feature_dim         INTEGER NOT NULL,
+                        n_players           INTEGER NOT NULL,
+                        sorted_player_ids   TEXT    NOT NULL DEFAULT '[]',
+                        centroids_json      TEXT    NOT NULL DEFAULT '{}',
+                        cov_inv_json        TEXT    NOT NULL DEFAULT '[]',
+                        ts_ns               INTEGER NOT NULL,
+                        on_chain_confirmed  INTEGER NOT NULL DEFAULT 0,
+                        tx_hash             TEXT    NOT NULL DEFAULT '',
+                        trigger_reason      TEXT    NOT NULL DEFAULT '',
+                        ait_session_log_id  INTEGER NOT NULL DEFAULT 0,
+                        created_at          REAL    NOT NULL
+                    )
+                """)
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_biometric_snapshot_log_ts "
+                    "ON biometric_snapshot_log(ts_ns DESC)"
+                )
+                conn.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_biometric_snapshot_log_commit "
+                    "ON biometric_snapshot_log(snapshot_commitment)"
+                )
+                conn.execute(
+                    "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                    " VALUES (?, ?, ?)",
+                    (237, "biometric_snapshot_log", time.time()),
+                )
+        except Exception:
+            pass  # idempotent
+
         # Phase O1 C1 — operator_agent_activation_log table.
         # Mirrors the on-chain AgentScopeRootSet + AgentScopeUpdated events
         # for each Cedar bundle anchor cycle (D4 dual-anchor).  UNIQUE
@@ -14117,12 +14172,19 @@ class Store:
         pair_distances:      dict = None,
         analysis_date:       str  = "",
         per_player_features: dict = None,
+        centroids:           dict = None,
+        cov_inv:             list = None,
     ) -> int:
         """Insert AIT separation analysis result (Phase 229).
 
         Phase 230: also mirrors into separation_defensibility_log with session_type='ait'
         so tournament_preflight all_pairs_p0_ok reads AIT data instead of being locked to
         touchpad_corners history.  guard_enabled=False (regression guard off by default).
+
+        Phase 237-ZK-SEPPROOF: optional `centroids` (player_id -> [feat0, feat1, ...]) +
+        `cov_inv` (FxF inverse covariance matrix) persist the geometric inputs needed
+        for ZK witness reconstruction.  Both default to empty for backward compat with
+        callers that don't yet supply them.
 
         Called by analyze_interperson_separation.py --session-type ait --write-snapshot
         and by POST /agent/run-ait-analysis bridge endpoint.
@@ -14131,14 +14193,16 @@ class Store:
         import time  as _t229
         _pair_dist_229  = pair_distances or {}
         _ppf_229        = per_player_features or {}
+        _centroids_229  = centroids or {}
+        _cov_inv_229    = cov_inv or []
         with self._conn() as conn:
             cur = conn.execute(
                 "INSERT INTO ait_session_log "
                 "(probe_type, n_sessions, n_per_player_json, separation_ratio, "
                 " all_pairs_above_1, inter_player_mean, intra_player_mean, "
                 " loo_accuracy, cov_mode, pair_distances_json, analysis_date, "
-                " per_player_features_json, created_at)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " per_player_features_json, centroids_json, cov_inv_json, created_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     "ait",
                     int(n_sessions),
@@ -14152,6 +14216,8 @@ class Store:
                     _j229.dumps(_pair_dist_229),
                     str(analysis_date),
                     _j229.dumps(_ppf_229),
+                    _j229.dumps(_centroids_229),
+                    _j229.dumps(_cov_inv_229),
                     _t229.time(),
                 ),
             )
@@ -15004,6 +15070,130 @@ class Store:
                 (int(limit),),
             ).fetchall()
         return [dict(r) for r in rows]
+
+    # --- Phase 237-ZK-SEPPROOF: BIOMETRIC-SNAPSHOT-v1 anchor history ---
+
+    def insert_biometric_snapshot(
+        self,
+        snapshot_commitment: str,
+        feature_dim: int,
+        sorted_player_ids: list,
+        centroids_by_player: dict,
+        cov_inv: list,
+        ts_ns: int,
+        ait_session_log_id: int = 0,
+        trigger_reason: str = "",
+        on_chain_confirmed: bool = False,
+        tx_hash: str = "",
+    ) -> int:
+        """Insert one BIOMETRIC-SNAPSHOT-v1 row.  Returns row id.
+
+        UNIQUE(snapshot_commitment) enforces idempotency: re-inserting the
+        same commitment returns the existing row id (matching corpus_snapshot_log
+        precedent at Phase 237.5).
+        """
+        import json as _j237s
+        try:
+            with self._conn() as conn:
+                cur = conn.execute(
+                    "INSERT INTO biometric_snapshot_log "
+                    "(snapshot_commitment, feature_dim, n_players, sorted_player_ids, "
+                    " centroids_json, cov_inv_json, ts_ns, on_chain_confirmed, tx_hash, "
+                    " trigger_reason, ait_session_log_id, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        str(snapshot_commitment),
+                        int(feature_dim),
+                        int(len(sorted_player_ids)),
+                        _j237s.dumps([int(x) for x in sorted_player_ids]),
+                        _j237s.dumps(centroids_by_player),
+                        _j237s.dumps(cov_inv),
+                        int(ts_ns),
+                        1 if on_chain_confirmed else 0,
+                        str(tx_hash),
+                        str(trigger_reason)[:128],
+                        int(ait_session_log_id),
+                        time.time(),
+                    ),
+                )
+                return int(cur.lastrowid)
+        except Exception:
+            with self._conn() as conn:
+                row = conn.execute(
+                    "SELECT id FROM biometric_snapshot_log WHERE snapshot_commitment = ?",
+                    (str(snapshot_commitment),),
+                ).fetchone()
+            return int(row["id"]) if row else 0
+
+    def get_latest_biometric_snapshot(self) -> dict:
+        """Return the most recent biometric snapshot or empty dict.
+
+        Returned keys (when present): snapshot_commitment, feature_dim,
+        n_players, sorted_player_ids, centroids_by_player, cov_inv, ts_ns,
+        on_chain_confirmed, tx_hash, trigger_reason, ait_session_log_id.
+        """
+        import json as _j237g
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT snapshot_commitment, feature_dim, n_players, sorted_player_ids, "
+                "       centroids_json, cov_inv_json, ts_ns, on_chain_confirmed, tx_hash, "
+                "       trigger_reason, ait_session_log_id "
+                "FROM biometric_snapshot_log ORDER BY ts_ns DESC LIMIT 1"
+            ).fetchone()
+        if row is None:
+            return {}
+        # Defensive JSON parsing
+        try:
+            sids = _j237g.loads(row["sorted_player_ids"]) or []
+        except Exception:
+            sids = []
+        try:
+            cents = _j237g.loads(row["centroids_json"]) or {}
+            # JSON keys are always strings — coerce back to int
+            cents = {int(k): list(v) for k, v in cents.items()}
+        except Exception:
+            cents = {}
+        try:
+            cov = _j237g.loads(row["cov_inv_json"]) or []
+        except Exception:
+            cov = []
+        return {
+            "snapshot_commitment":  str(row["snapshot_commitment"]),
+            "feature_dim":          int(row["feature_dim"]),
+            "n_players":            int(row["n_players"]),
+            "sorted_player_ids":    sids,
+            "centroids_by_player":  cents,
+            "cov_inv":              cov,
+            "ts_ns":                int(row["ts_ns"]),
+            "on_chain_confirmed":   bool(row["on_chain_confirmed"]),
+            "tx_hash":              str(row["tx_hash"]),
+            "trigger_reason":       str(row["trigger_reason"]),
+            "ait_session_log_id":   int(row["ait_session_log_id"]),
+        }
+
+    def get_biometric_snapshot_status(self) -> dict:
+        """Return summary of biometric_snapshot_log: total + latest.
+
+        Mirrors get_corpus_snapshot_status shape so the operator endpoint
+        can return both with consistent keys.
+        """
+        import time as _t237gs
+        with self._conn() as conn:
+            total = (conn.execute(
+                "SELECT COUNT(*) FROM biometric_snapshot_log"
+            ).fetchone() or (0,))[0]
+        latest = self.get_latest_biometric_snapshot()
+        return {
+            "total_snapshots":     int(total),
+            "latest_commitment":   latest.get("snapshot_commitment", ""),
+            "feature_dim":         latest.get("feature_dim", 0),
+            "n_players":           latest.get("n_players", 0),
+            "ts_ns":               latest.get("ts_ns", 0),
+            "on_chain_confirmed":  latest.get("on_chain_confirmed", False),
+            "tx_hash":             latest.get("tx_hash", ""),
+            "trigger_reason":      latest.get("trigger_reason", ""),
+            "timestamp":           _t237gs.time(),
+        }
 
     # --- Phase O0 Stream 3-prep Session 1 — AGENT_COMMIT v1 ---
 
