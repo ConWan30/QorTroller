@@ -1524,6 +1524,41 @@ class Config:
     fail-open default values (False / empty dict).  Set after deploy-phase237.js
     runs successfully."""
 
+    # --- Phase 238 Step I — Curator Shadow Infrastructure ---
+    curator_review_enabled: bool = field(
+        default_factory=lambda: _env_bool("CURATOR_REVIEW_ENABLED", False)
+    )
+    """Phase 238 Step I — Opt-in flag for the Curator Operator Initiative
+    agent's shadow-mode review pipeline. Default False because:
+      - Step I-FINAL on-chain registration (VAPIOperatorAgentNFT mint +
+        Cedar bundle dual-anchor) is wallet-gated (~0.07 IOTX).
+      - Until on-chain registration completes, the Cedar bundle agentId
+        remains placeholder (0xc0c0...c0c0) and reviews are operator-
+        triggered only.  Setting True before that activation step is
+        valid (manual operator triggers work) but operator MUST remember
+        that the placeholder agentId means policy enforcement runs against
+        an unregistered agent identity.  Real autonomous review loop is
+        Step I-FINAL.
+    Set CURATOR_REVIEW_ENABLED=true in bridge/.env to opt in."""
+
+    curator_anchor_freshness_blocks: int = field(
+        default_factory=lambda: _env_int("CURATOR_ANCHOR_FRESHNESS_BLOCKS", 1_000_000)
+    )
+    """Phase 238 Step I — Anchor freshness threshold in IoTeX block count.
+    A listing's referenced anchor is FLAGGED_ANCHOR_STALE if its block.number
+    is older than (current_block - N).  Default 1_000_000 ≈ 30 days on
+    IoTeX testnet (5s block time → 17,280 blocks/day → 30d = 518k blocks;
+    1M is conservative buffer for long-grind sessions)."""
+
+    curator_ipfs_timeout_s: float = field(
+        default_factory=lambda: _env_float("CURATOR_IPFS_TIMEOUT_S", 5.0)
+    )
+    """Phase 238 Step I — IPFS gateway resolvability check timeout in seconds.
+    Curator HEAD-fetches the listing's ipfs_cid against the configured Pinata
+    gateway; non-200 within timeout → FLAGGED_IPFS_UNAVAILABLE.
+    Default 5.0s — matches Pinata gateway p95 latency baseline.  Operator
+    can extend for slower gateways or tighten for tighter SLA enforcement."""
+
     # --- Phase O0 Stream 3-prep — AgentAdjudicationRegistry (sixth FROZEN-v1 host) ---
     agent_adjudication_registry_address: str = field(
         default_factory=lambda: _env("AGENT_ADJUDICATION_REGISTRY_ADDRESS", "")
