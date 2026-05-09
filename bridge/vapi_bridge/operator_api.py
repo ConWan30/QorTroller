@@ -7859,6 +7859,178 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         _check_read_key(x_api_key)
         return await asyncio.to_thread(store.get_biometric_snapshot_status)
 
+    # Phase 238-MARKETPLACE Step F — Provenance-Anchored Listing Layer (PALL) endpoints
+    # ------------------------------------------------------------------
+    # Bridge-side orchestration for the per-listing cryptographic provenance
+    # layer.  Sellers register listings via POST /operator/list-data-session;
+    # buyers + auditors browse via GET /agent/marketplace-listings/* endpoints.
+    # The actual on-chain extension contract VAPIDataMarketplaceListings.sol
+    # (Step D) is deployed separately (Step H, wallet-gated); these endpoints
+    # surface the bridge's local listing log and trigger AdjudicationRegistry
+    # anchoring of LISTING-v1 commitments.
+    @app.post("/operator/list-data-session")
+    async def list_data_session_endpoint(
+        api_key: str = Query(default=""),
+        seller_address: str = Query(..., description="Seller wallet address (must be Phase 69 GAMER)"),
+        sepproof_commitment_hex: str = Query(default=""),
+        biometric_snapshot_hex: str = Query(default=""),
+        corpus_snapshot_hex: str = Query(default=""),
+        gic_hash_hex: str = Query(default=""),
+        consent_bitmask: int = Query(..., description="uint32 — bit 3 (MARKETPLACE) required"),
+        data_class: int = Query(..., description="uint8 in [0, 6] — Phase 69 DATA_TAXONOMY"),
+        price_iotx: float = Query(..., description="Listing price in IOTX units"),
+        listing_metadata_json: str = Query(default="{}", description="JSON dict, pinned to IPFS"),
+        reason: str = Query(default=""),
+    ):
+        """Create a new PALL listing (operator-triggered).
+
+        Args:
+            api_key: cfg.operator_api_key (full operator auth)
+            seller_address: must be registered as Phase 69 GAMER
+            sepproof_commitment_hex / biometric_snapshot_hex / corpus_snapshot_hex /
+                gic_hash_hex: 64-char hex strings of the 4 anchor commitments
+                (or empty string if anchor absent — listing tier degrades)
+            consent_bitmask: uint32; bit 3 (MARKETPLACE) MUST be set
+            data_class: 0..6 per Phase 69 DATA_TAXONOMY
+            price_iotx: listing price in full IOTX units
+            listing_metadata_json: JSON-encoded dict, pinned to IPFS for buyer retrieval
+            reason: operator audit string >= 10 chars
+
+        Returns:
+            Result dict with listing_commitment, ipfs_cid, tier preview,
+            on_chain_confirmed, tx_hash, ts_ns.
+
+        422: short reason, malformed JSON, missing MARKETPLACE consent,
+        invalid data_class, anchor hex parse errors.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        _reason = (reason or "").strip()
+        if len(_reason) < 10:
+            raise HTTPException(
+                422, "reason must be at least 10 characters (operator audit field)"
+            )
+
+        import json as _j238fl
+        from .data_marketplace import DataMarketplace
+
+        # Parse listing_metadata_json
+        try:
+            metadata_dict = _j238fl.loads(listing_metadata_json) if listing_metadata_json else {}
+            if not isinstance(metadata_dict, dict):
+                raise ValueError("listing_metadata_json must decode to a JSON object")
+        except Exception as exc:
+            raise HTTPException(422, f"listing_metadata_json parse failed: {exc}")
+
+        # Parse anchor hexes (empty -> None)
+        def _hex_to_bytes_or_none(h: str):
+            h = (h or "").strip().lower()
+            if not h:
+                return None
+            if h.startswith("0x"):
+                h = h[2:]
+            try:
+                b = bytes.fromhex(h)
+                if len(b) != 32:
+                    raise ValueError(f"expected 32 bytes, got {len(b)}")
+                return b
+            except Exception as exc:
+                raise HTTPException(422, f"anchor hex parse failed: {exc}")
+
+        sepproof_b   = _hex_to_bytes_or_none(sepproof_commitment_hex)
+        biometric_b  = _hex_to_bytes_or_none(biometric_snapshot_hex)
+        corpus_b     = _hex_to_bytes_or_none(corpus_snapshot_hex)
+        gic_b        = _hex_to_bytes_or_none(gic_hash_hex)
+
+        # Pinata client lookup — may be None if not configured (mock mode allowed)
+        pinata_client = getattr(app, "_pinata_client", None)
+
+        marketplace = DataMarketplace(
+            store=store, chain=chain, cfg=cfg, pinata_client=pinata_client
+        )
+        result = await marketplace.create_listing(
+            seller_address          = seller_address,
+            sepproof_commitment     = sepproof_b,
+            biometric_snapshot_hash = biometric_b,
+            corpus_snapshot_hash    = corpus_b,
+            gic_hash                = gic_b,
+            consent_bitmask         = int(consent_bitmask),
+            data_class              = int(data_class),
+            price_iotx              = float(price_iotx),
+            listing_metadata        = metadata_dict,
+            trigger_reason          = _reason,
+        )
+        if result.get("error"):
+            # Defensive: validation errors -> 422; other -> 500
+            error_msg = result["error"]
+            status = 422 if (
+                "MARKETPLACE bit" in error_msg
+                or "data_class" in error_msg
+                or "consent_bitmask" in error_msg
+                or "ts_ns out of" in error_msg
+                or "32 bytes" in error_msg
+            ) else 500
+            raise HTTPException(status, detail=result)
+        return result
+
+    @app.get("/agent/marketplace-status")
+    async def marketplace_status_endpoint(
+        x_api_key: str = Header(default=""),
+    ):
+        """Read-only summary: total + anchored listing counts + latest summary.
+
+        Returns 11 keys: total_listings, anchored_listings, latest_commitment,
+        latest_seller, latest_data_class, latest_price_iotx,
+        latest_anchors_present, latest_ts_ns, latest_on_chain,
+        latest_tx_hash, timestamp.
+        """
+        _check_read_key(x_api_key)
+        return await asyncio.to_thread(store.get_marketplace_listing_status)
+
+    @app.get("/agent/marketplace-listing/{commitment_hex}")
+    async def marketplace_listing_by_commitment_endpoint(
+        commitment_hex: str,
+        x_api_key: str = Header(default=""),
+    ):
+        """Read-only: full listing record by commitment hex.
+
+        Returns 16+ keys covering all stored fields + tier preview
+        (tier, tier_name, multiplier_bps).  Returns 404 if not found.
+        """
+        _check_read_key(x_api_key)
+        from .data_marketplace import DataMarketplace
+        marketplace = DataMarketplace(store=store, chain=chain, cfg=cfg)
+
+        # Sanitise commitment hex (strip 0x, lowercase)
+        h = (commitment_hex or "").strip().lower()
+        if h.startswith("0x"):
+            h = h[2:]
+        if len(h) != 64:
+            raise HTTPException(422, "commitment_hex must be 64 hex characters")
+
+        listing = await asyncio.to_thread(marketplace.get_listing, h)
+        if not listing:
+            raise HTTPException(404, f"listing not found for commitment={h[:16]}...")
+        return listing
+
+    @app.get("/agent/marketplace-listings-by-seller")
+    async def marketplace_listings_by_seller_endpoint(
+        seller_address: str = Query(...),
+        limit: int = Query(default=20, le=100),
+        x_api_key: str = Header(default=""),
+    ):
+        """Read-only: per-seller listings (DESC ts_ns).
+
+        Returns list of listing dicts with tier preview.
+        """
+        _check_read_key(x_api_key)
+        from .data_marketplace import DataMarketplace
+        marketplace = DataMarketplace(store=store, chain=chain, cfg=cfg)
+        rows = await asyncio.to_thread(
+            marketplace.get_listings_by_seller, seller_address, int(limit)
+        )
+        return {"seller": seller_address, "count": len(rows), "listings": rows}
+
     # Phase 235-DASH-UPGRADE — GET /agent/auto-trigger-status
     # ------------------------------------------------------------------
     # Read-only telemetry for the SessionBoundaryDetectorAgent (Phase

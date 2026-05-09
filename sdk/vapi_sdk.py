@@ -8427,3 +8427,182 @@ class VAPIZKSepProof:
         return isinstance(proof_bytes, (bytes, bytearray)) and len(proof_bytes) == VAPIZKSepProof.PROOF_SIZE
 
 
+# ---------------------------------------------------------------------------
+# Phase 238-MARKETPLACE — Provenance-Anchored Listing Layer (PALL) SDK
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class ListingCreationResult:
+    """Result from VAPIMarketplaceListings.list_data_session().
+
+    Mirrors POST /operator/list-data-session response.
+    """
+    row_id:               int   = 0
+    listing_commitment:   str   = ""
+    ipfs_cid:             str   = ""
+    ipfs_cid_hash:        str   = ""
+    tier:                 int   = 0      # 0=Basic, 1=Verified, 2=Attested, 3=Premium
+    tier_name:            str   = "Basic"
+    multiplier_bps:       int   = 10000  # 1.0x default
+    anchors_present:      int   = 0
+    on_chain_confirmed:   bool  = False
+    tx_hash:              str   = ""
+    ts_ns:                int   = 0
+    error:                str   = ""
+
+
+@dataclass(slots=True)
+class MarketplaceStatusResult:
+    """Result from VAPIMarketplaceListings.status() — Phase 238 PALL aggregate."""
+    total_listings:         int   = 0
+    anchored_listings:      int   = 0
+    latest_commitment:      str   = ""
+    latest_seller:          str   = ""
+    latest_data_class:      int   = 0
+    latest_price_iotx:      float = 0.0
+    latest_anchors_present: int   = 0
+    latest_ts_ns:           int   = 0
+    latest_on_chain:        bool  = False
+    latest_tx_hash:         str   = ""
+    error:                  str   = ""
+
+
+class VAPIMarketplaceListings:
+    """Client for Phase 238-MARKETPLACE Provenance-Anchored Listing Layer (PALL).
+
+    PALL adds per-listing cryptographic provenance on top of Phase 69
+    VAPIDataMarketplace.  Each listing carries a LISTING-v1 commitment that
+    binds up to 5 prior FROZEN-v1 anchors (SEPPROOF + BIOMETRIC-SNAPSHOT +
+    CORPUS-SNAPSHOT + GIC + CONSENT bitmask).  Tier multipliers (1.0x / 1.5x /
+    2.0x / 3.0x) are computed cryptographically from anchor presence — sellers
+    cannot self-attest tier.
+
+    Example::
+
+        marketplace = VAPIMarketplaceListings("http://localhost:8080", api_key)
+        result = marketplace.list_data_session(
+            seller_address="0xseller",
+            sepproof_commitment_hex="aa..." (64-char or "" if absent),
+            biometric_snapshot_hex="bb...",
+            corpus_snapshot_hex="cc...",
+            gic_hash_hex="dd...",
+            consent_bitmask=8,           # MARKETPLACE bit only
+            data_class=4,                # BIOMETRIC
+            price_iotx=5.0,
+            listing_metadata_json='{"key":"val"}',
+            reason="post_session_pall_2026_05_09",
+        )
+        print(result.listing_commitment, result.tier_name, result.tx_hash)
+
+        status = marketplace.status()
+        print(status.total_listings, status.anchored_listings)
+
+        listing = marketplace.get_listing(result.listing_commitment)
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def list_data_session(
+        self,
+        seller_address: str,
+        consent_bitmask: int,
+        data_class: int,
+        price_iotx: float,
+        reason: str,
+        sepproof_commitment_hex: str = "",
+        biometric_snapshot_hex: str = "",
+        corpus_snapshot_hex: str = "",
+        gic_hash_hex: str = "",
+        listing_metadata_json: str = "{}",
+    ) -> ListingCreationResult:
+        """POST /operator/list-data-session — operator-only (full api_key auth).
+
+        Locally pre-validates reason length (mirrors bridge 422 message).
+        On error: returns ListingCreationResult with error set.
+        """
+        if len(reason.strip()) < 10:
+            return ListingCreationResult(
+                error="reason must be at least 10 characters (operator audit field)",
+            )
+        import json as _j238ml, urllib.request as _r238ml, urllib.parse as _u238ml
+        try:
+            params = {
+                "api_key":                self._key,
+                "seller_address":         seller_address,
+                "sepproof_commitment_hex": sepproof_commitment_hex,
+                "biometric_snapshot_hex":  biometric_snapshot_hex,
+                "corpus_snapshot_hex":     corpus_snapshot_hex,
+                "gic_hash_hex":            gic_hash_hex,
+                "consent_bitmask":         str(int(consent_bitmask)),
+                "data_class":              str(int(data_class)),
+                "price_iotx":              str(float(price_iotx)),
+                "listing_metadata_json":   listing_metadata_json,
+                "reason":                  reason,
+            }
+            qs = "&".join(
+                f"{k}={_u238ml.quote(str(v))}" for k, v in params.items()
+            )
+            url = f"{self._base}/operator/list-data-session?{qs}"
+            req = _r238ml.Request(url, method="POST")
+            with _r238ml.urlopen(req, timeout=60) as resp:
+                d = _j238ml.loads(resp.read().decode())
+            return ListingCreationResult(
+                row_id              = int(d.get("row_id", 0)),
+                listing_commitment  = str(d.get("listing_commitment", "")),
+                ipfs_cid            = str(d.get("ipfs_cid", "")),
+                ipfs_cid_hash       = str(d.get("ipfs_cid_hash", "")),
+                tier                = int(d.get("tier", 0)),
+                tier_name           = str(d.get("tier_name", "Basic")),
+                multiplier_bps      = int(d.get("multiplier_bps", 10000)),
+                anchors_present     = int(d.get("anchors_present", 0)),
+                on_chain_confirmed  = bool(d.get("on_chain_confirmed", False)),
+                tx_hash             = str(d.get("tx_hash", "")),
+                ts_ns               = int(d.get("ts_ns", 0)),
+            )
+        except Exception as exc:
+            return ListingCreationResult(error=str(exc))
+
+    def status(self) -> MarketplaceStatusResult:
+        """GET /agent/marketplace-status — read-only (uses x-api-key)."""
+        import json as _j238ms, urllib.request as _r238ms
+        try:
+            url = f"{self._base}/agent/marketplace-status"
+            req = _r238ms.Request(url, headers={"x-api-key": self._key})
+            with _r238ms.urlopen(req, timeout=10) as resp:
+                d = _j238ms.loads(resp.read().decode())
+            return MarketplaceStatusResult(
+                total_listings         = int(d.get("total_listings", 0)),
+                anchored_listings      = int(d.get("anchored_listings", 0)),
+                latest_commitment      = str(d.get("latest_commitment", "")),
+                latest_seller          = str(d.get("latest_seller", "")),
+                latest_data_class      = int(d.get("latest_data_class", 0)),
+                latest_price_iotx      = float(d.get("latest_price_iotx", 0.0)),
+                latest_anchors_present = int(d.get("latest_anchors_present", 0)),
+                latest_ts_ns           = int(d.get("latest_ts_ns", 0)),
+                latest_on_chain        = bool(d.get("latest_on_chain", False)),
+                latest_tx_hash         = str(d.get("latest_tx_hash", "")),
+            )
+        except Exception as exc:
+            return MarketplaceStatusResult(error=str(exc))
+
+    def get_listing(self, listing_commitment_hex: str) -> dict:
+        """GET /agent/marketplace-listing/{commitment} — full listing record.
+
+        Returns dict with all stored fields + tier preview, or empty dict
+        on 404 / error.
+        """
+        import json as _j238gl, urllib.request as _r238gl
+        try:
+            h = listing_commitment_hex.strip().lower()
+            if h.startswith("0x"):
+                h = h[2:]
+            url = f"{self._base}/agent/marketplace-listing/{h}"
+            req = _r238gl.Request(url, headers={"x-api-key": self._key})
+            with _r238gl.urlopen(req, timeout=10) as resp:
+                return _j238gl.loads(resp.read().decode())
+        except Exception:
+            return {}
+
+
