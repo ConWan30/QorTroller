@@ -543,6 +543,23 @@ class Bridge:
             )
             _op_app._gic_chain_broken = getattr(self, "_gic_chain_broken", False)
             _op_app._pcc_monitor = self._pcc_monitor  # Phase 234.7 wiring
+
+            # Phase 238 Step I-AUTOLOOP-3: ProtocolStateCache attached to
+            # both apps so the SSE Twin stream endpoint can find it via
+            # getattr(app, "_protocol_state_cache", None).  Cache creation
+            # must happen here (inside http_enabled block) because _op_app
+            # is a local var that only exists in this scope.  Heartbeat
+            # task wired separately at the task-list section.
+            try:
+                from .protocol_state_cache import ProtocolStateCache
+                _proto_state_cache = ProtocolStateCache()
+                self.protocol_state_cache = _proto_state_cache
+                _op_app._protocol_state_cache = _proto_state_cache
+                app._protocol_state_cache = _proto_state_cache
+                log.info("Phase 238 Step I-AUTOLOOP-3: ProtocolStateCache attached to operator + main apps")
+            except Exception as _psc_exc:
+                log.warning("Phase 238 Step I-AUTOLOOP-3: ProtocolStateCache attach failed: %s", _psc_exc)
+
             app.mount("/operator", _op_app)
             config = uvicorn.Config(
                 app,
@@ -1223,6 +1240,28 @@ class Bridge:
             except Exception as _drift_exc:
                 log.warning(
                     "Phase O1 C4: cedar_drift_sweeper unavailable: %s", _drift_exc
+                )
+
+        # Phase 238 Step I-AUTOLOOP-3: SSE Twin stream heartbeat task.
+        # Cache itself was attached above inside the http_enabled block.
+        # Heartbeat fires every 15s to keep idle SSE connections alive
+        # (frontend Twin controller EventSource clients).
+        if getattr(self, "protocol_state_cache", None) is not None:
+            try:
+                from .protocol_state_cache import run_heartbeat_loop
+                _heartbeat_task = asyncio.ensure_future(
+                    run_heartbeat_loop(self.protocol_state_cache)
+                )
+                _heartbeat_task.set_name("ProtocolStateCacheHeartbeat")
+                self._tasks.append(_heartbeat_task)
+                log.info(
+                    "Phase 238 Step I-AUTOLOOP-3: heartbeat loop started "
+                    "(15s interval)"
+                )
+            except Exception as _hb_exc:
+                log.warning(
+                    "Phase 238 Step I-AUTOLOOP-3: heartbeat loop unavailable: %s",
+                    _hb_exc,
                 )
 
         # Phase 238 Step I-AUTOLOOP-1: Curator autonomous review loop.

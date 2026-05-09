@@ -8237,6 +8237,106 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "ts_ns":               int(_t238bulk.time_ns()),
         }
 
+    # ─────────────────────────────────────────────────────────────────────
+    # Phase 238 Step I-AUTOLOOP-3 — SSE Twin Stream
+    # ─────────────────────────────────────────────────────────────────────
+    # Real-time event hub for the frontend Twin controller scene + dashboard
+    # pulse animations.  ProtocolStateCache holds bounded ring buffers for
+    # 5 event categories; this SSE endpoint fans them out to EventSource
+    # clients.  Heartbeat fires every 15s to keep idle connections alive.
+    #
+    # Wire contract LOCKED for the upcoming frontend revamp.  Adding a
+    # new event type requires v2 of protocol_state_cache.py + frontend.
+
+    @app.get("/agent/twin-stream")
+    async def twin_stream_endpoint(
+        x_api_key: str = Header(default=""),
+        backfill: int = Query(
+            default=0, ge=0, le=20,
+            description="Optional: emit up to N most-recent events per category before live stream",
+        ),
+    ):
+        """Phase 238 Step I-AUTOLOOP-3 — SSE event stream for Twin scene.
+
+        Subscribes the client to ProtocolStateCache + emits typed events
+        as they fire from bridge event sources.  Frontend EventSource
+        consumes these to drive Twin controller animations + tier badge
+        pulses + Operator-bar status updates.
+
+        Event types (FROZEN):
+            poac_chain_link    { hash16, ts_ns }
+            gic_verdict        { verdict, severity, ts_ns }
+            pcc_state_change   { capture_state, host_state, ts_ns }
+            curator_verdict    { commitment16, verdict, severity, ts_ns }
+            anchor_confirmed   { tx_hash, primitive_type, ts_ns }
+            heartbeat          { ts_ns }   # every 15s, keepalive
+        """
+        _check_read_key(x_api_key)
+        cache = getattr(app, "_protocol_state_cache", None)
+        if cache is None:
+            # Bridge booted without cache wired (shouldn't happen post-Step I-AUTOLOOP-3)
+            from .protocol_state_cache import ProtocolStateCache
+            cache = ProtocolStateCache()
+            app._protocol_state_cache = cache
+
+        async def _generate():
+            queue = cache.subscribe()
+            try:
+                # Optional backfill of most-recent events before live stream
+                if backfill > 0:
+                    from .protocol_state_cache import (
+                        EVENT_POAC_CHAIN_LINK, EVENT_GIC_VERDICT,
+                        EVENT_PCC_STATE_CHANGE, EVENT_CURATOR_VERDICT,
+                        EVENT_ANCHOR_CONFIRMED,
+                    )
+                    for et in (
+                        EVENT_POAC_CHAIN_LINK, EVENT_GIC_VERDICT,
+                        EVENT_PCC_STATE_CHANGE, EVENT_CURATOR_VERDICT,
+                        EVENT_ANCHOR_CONFIRMED,
+                    ):
+                        for evt in cache.recent(et, n=backfill):
+                            yield f"event: {et}\ndata: {_json.dumps(evt)}\n\n"
+
+                # Live stream
+                while True:
+                    event_type, payload = await queue.get()
+                    yield f"event: {event_type}\ndata: {_json.dumps(payload)}\n\n"
+            except asyncio.CancelledError:
+                # Client disconnected — clean unsubscribe
+                pass
+            finally:
+                cache.unsubscribe(queue)
+
+        return StreamingResponse(
+            _generate(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    @app.get("/agent/twin-stream-stats")
+    async def twin_stream_stats_endpoint(
+        x_api_key: str = Header(default=""),
+    ):
+        """Telemetry summary for ProtocolStateCache.  Read-only.
+
+        Returns: { events_emitted, events_dropped, subscribers_active,
+                   subscribers_registered, buffer_sizes }
+        """
+        _check_read_key(x_api_key)
+        cache = getattr(app, "_protocol_state_cache", None)
+        if cache is None:
+            return {
+                "events_emitted":         0,
+                "events_dropped":         0,
+                "subscribers_active":     0,
+                "subscribers_registered": 0,
+                "buffer_sizes":           {},
+                "cache_attached":         False,
+            }
+        stats = cache.stats()
+        stats["cache_attached"] = True
+        return stats
+
     # Phase 235-DASH-UPGRADE — GET /agent/auto-trigger-status
     # ------------------------------------------------------------------
     # Read-only telemetry for the SessionBoundaryDetectorAgent (Phase
