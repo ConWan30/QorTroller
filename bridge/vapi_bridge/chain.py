@@ -3949,6 +3949,64 @@ class ChainClient:
             return {}
 
     # ------------------------------------------------------------------
+    # Phase 238 Step I — Curator anchor verification view (zero gas)
+    # ------------------------------------------------------------------
+    #
+    # The Curator Operator Initiative agent reads AdjudicationRegistry.isRecorded
+    # to verify that each anchor referenced by a marketplace listing actually
+    # exists on-chain — sellers cannot claim a Premium tier without all four
+    # anchors recorded.  This is a pure view call (eth_call, no transaction,
+    # no gas) and bypasses the chain_submission_paused kill-switch since it
+    # is read-only.  Fail-open per Curator design: returns False when registry
+    # address is unset or any RPC error occurs (Curator surfaces this as
+    # "anchor not present" rather than blocking the review pipeline).
+    #
+    async def is_adjudication_recorded(self, commitment_hex: str) -> bool:
+        """Query AdjudicationRegistry.isRecorded(bytes32) — view, no gas.
+
+        Phase 238 Step I — Curator's read-only primitive for verifying that
+        any of the seven prior FROZEN-v1 anchor types (GIC, WEC, VAME,
+        CORPUS-SNAPSHOT, CONSENT, BIOMETRIC-SNAPSHOT, SEPPROOF, LISTING-v1)
+        is recorded on the AdjudicationRegistry contract.
+
+        Args:
+            commitment_hex: 32-byte commitment hex string (with or without
+                0x prefix).  Bad input → False (fail-open).
+
+        Returns:
+            bool — True iff isRecorded(bytes32) returned true.  False on:
+              - adjudication_registry_address unset
+              - bad hex input
+              - RPC error
+              - contract reverted
+        """
+        addr = getattr(self._cfg, "adjudication_registry_address", "")
+        if not addr:
+            return False
+        try:
+            commit_clean = commitment_hex[2:] if commitment_hex.startswith("0x") else commitment_hex
+            commit_bytes = bytes.fromhex(commit_clean)
+            if len(commit_bytes) != 32:
+                return False
+        except Exception:
+            return False
+        try:
+            abi = [{
+                "inputs": [{"name": "podHash", "type": "bytes32"}],
+                "name": "isRecorded", "type": "function",
+                "stateMutability": "view",
+                "outputs": [{"name": "", "type": "bool"}],
+            }]
+            contract = self._w3.eth.contract(
+                address=self._w3.to_checksum_address(addr),
+                abi=abi,
+            )
+            return bool(await contract.functions.isRecorded(commit_bytes).call())
+        except Exception as e:
+            log.debug("is_adjudication_recorded call failed: %s", e)
+            return False
+
+    # ------------------------------------------------------------------
     # Phase O1 C1 — AgentScope (operational) + AgentRegistry (governance) anchors
     # ------------------------------------------------------------------
     #

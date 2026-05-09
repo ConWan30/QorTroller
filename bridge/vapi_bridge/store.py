@@ -3439,6 +3439,51 @@ class Store:
         except Exception:
             pass  # idempotent
 
+        # Phase 238 Step I — curator_listing_review_log table.
+        # Append-only Curator review verdict ledger.  One row per Curator
+        # review fired against a marketplace_listing_log entry.  No UNIQUE
+        # constraint on listing_commitment because the same listing can be
+        # re-reviewed any number of times (e.g. anchor went stale → flagged
+        # retroactively in bulk re-review).  Index on listing_commitment +
+        # ts_ns DESC supports per-listing timeline drawer query pattern.
+        try:
+            with self._conn() as conn:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS curator_listing_review_log (
+                        id                          INTEGER PRIMARY KEY AUTOINCREMENT,
+                        listing_commitment          TEXT NOT NULL,
+                        verdict                     TEXT NOT NULL,
+                        severity                    TEXT NOT NULL,
+                        anchors_recorded_count      INTEGER NOT NULL DEFAULT 0,
+                        anchors_breakdown_json      TEXT NOT NULL DEFAULT '{}',
+                        consent_marketplace_bit_set INTEGER NOT NULL DEFAULT 0,
+                        ipfs_resolvable             INTEGER,
+                        declared_tier               INTEGER NOT NULL DEFAULT 0,
+                        tier_at_review_time         INTEGER NOT NULL DEFAULT 0,
+                        tier_changed                INTEGER NOT NULL DEFAULT 0,
+                        shadow_mode                 INTEGER NOT NULL DEFAULT 1,
+                        reason_detail               TEXT NOT NULL DEFAULT '',
+                        trigger_reason              TEXT NOT NULL DEFAULT '',
+                        ts_ns                       INTEGER NOT NULL,
+                        created_at                  REAL    NOT NULL
+                    )
+                """)
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_curator_review_listing "
+                    "ON curator_listing_review_log(listing_commitment, ts_ns DESC)"
+                )
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_curator_review_verdict "
+                    "ON curator_listing_review_log(verdict, ts_ns DESC)"
+                )
+                conn.execute(
+                    "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                    " VALUES (?, ?, ?)",
+                    (238, "curator_listing_review_log", time.time()),
+                )
+        except Exception:
+            pass  # idempotent
+
         # Phase O1 C1 — operator_agent_activation_log table.
         # Mirrors the on-chain AgentScopeRootSet + AgentScopeUpdated events
         # for each Cedar bundle anchor cycle (D4 dual-anchor).  UNIQUE
@@ -15393,6 +15438,144 @@ class Store:
                 "WHERE seller_address = ? "
                 "ORDER BY ts_ns DESC LIMIT ?",
                 (str(seller_address), int(limit)),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    # --- Phase 238 Step I — Curator Shadow Infrastructure ---
+
+    def insert_curator_review(
+        self,
+        listing_commitment: str,
+        verdict: str,
+        severity: str,
+        anchors_recorded_count: int,
+        anchors_breakdown_json: str,
+        consent_marketplace_bit_set: bool,
+        ipfs_resolvable,  # bool | None
+        declared_tier: int,
+        tier_at_review_time: int,
+        tier_changed: bool,
+        shadow_mode: bool,
+        reason_detail: str,
+        trigger_reason: str,
+        ts_ns: int,
+    ) -> int:
+        """Insert one Curator review row.  Returns row id.
+
+        No UNIQUE constraint on listing_commitment — Curator may re-review the
+        same listing any number of times (timeline-style ledger).
+        """
+        ipfs_int = None if ipfs_resolvable is None else (1 if ipfs_resolvable else 0)
+        try:
+            with self._conn() as conn:
+                cur = conn.execute(
+                    "INSERT INTO curator_listing_review_log "
+                    "(listing_commitment, verdict, severity, anchors_recorded_count, "
+                    " anchors_breakdown_json, consent_marketplace_bit_set, ipfs_resolvable, "
+                    " declared_tier, tier_at_review_time, tier_changed, shadow_mode, "
+                    " reason_detail, trigger_reason, ts_ns, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        str(listing_commitment),
+                        str(verdict),
+                        str(severity),
+                        int(anchors_recorded_count),
+                        str(anchors_breakdown_json)[:512],
+                        1 if consent_marketplace_bit_set else 0,
+                        ipfs_int,
+                        int(declared_tier),
+                        int(tier_at_review_time),
+                        1 if tier_changed else 0,
+                        1 if shadow_mode else 0,
+                        str(reason_detail)[:256],
+                        str(trigger_reason)[:128],
+                        int(ts_ns),
+                        time.time(),
+                    ),
+                )
+                return int(cur.lastrowid)
+        except Exception:
+            return 0
+
+    def get_curator_review_status(self) -> dict:
+        """Return aggregated Curator review summary.
+
+        Shape matches CuratorStatusResult SDK dataclass + GET
+        /agent/curator-status endpoint wire contract (10 keys).
+        """
+        import time as _t238cur
+        with self._conn() as conn:
+            total = (conn.execute(
+                "SELECT COUNT(*) FROM curator_listing_review_log"
+            ).fetchone() or (0,))[0]
+            approved = (conn.execute(
+                "SELECT COUNT(*) FROM curator_listing_review_log WHERE verdict = 'APPROVED'"
+            ).fetchone() or (0,))[0]
+            flagged = (conn.execute(
+                "SELECT COUNT(*) FROM curator_listing_review_log WHERE verdict LIKE 'FLAGGED_%'"
+            ).fetchone() or (0,))[0]
+            rejected = (conn.execute(
+                "SELECT COUNT(*) FROM curator_listing_review_log WHERE verdict LIKE 'REJECTED_%'"
+            ).fetchone() or (0,))[0]
+            latest = conn.execute(
+                "SELECT verdict, listing_commitment, ts_ns "
+                "FROM curator_listing_review_log "
+                "ORDER BY ts_ns DESC LIMIT 1"
+            ).fetchone()
+        latest_d = dict(latest) if latest else {}
+        return {
+            "total_reviews":             int(total),
+            "approved_reviews":          int(approved),
+            "flagged_reviews":           int(flagged),
+            "rejected_reviews":          int(rejected),
+            "latest_verdict":            str(latest_d.get("verdict", "")),
+            "latest_listing_commitment": str(latest_d.get("listing_commitment", "")),
+            "latest_review_ts_ns":       int(latest_d.get("ts_ns", 0)),
+            "shadow_mode":               True,  # FROZEN True in O1
+            "timestamp":                 _t238cur.time(),
+        }
+
+    def get_curator_reviews_for_listing(
+        self, listing_commitment: str, limit: int = 50
+    ) -> list[dict]:
+        """Return all Curator reviews for one listing, DESC ts_ns."""
+        if not listing_commitment:
+            return []
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT id, verdict, severity, anchors_recorded_count, "
+                "       anchors_breakdown_json, consent_marketplace_bit_set, "
+                "       ipfs_resolvable, declared_tier, tier_at_review_time, "
+                "       tier_changed, shadow_mode, reason_detail, "
+                "       trigger_reason, ts_ns "
+                "FROM curator_listing_review_log "
+                "WHERE listing_commitment = ? "
+                "ORDER BY ts_ns DESC LIMIT ?",
+                (str(listing_commitment), int(limit)),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_curator_flagged_listings(
+        self, since_minutes: int = 1440, limit: int = 50
+    ) -> list[dict]:
+        """Return distinct listings with at least one FLAGGED_* / REJECTED_*
+        verdict within the lookback window.  DESC by latest review ts_ns.
+
+        Caps: limit <= 100; since_minutes <= 30d (43200).
+        """
+        limit = max(1, min(int(limit), 100))
+        since_minutes = max(1, min(int(since_minutes), 43200))
+        cutoff_ns = int((time.time() - since_minutes * 60) * 1e9)
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT listing_commitment, verdict, severity, "
+                "       anchors_recorded_count, declared_tier, tier_at_review_time, "
+                "       tier_changed, reason_detail, ts_ns "
+                "FROM curator_listing_review_log "
+                "WHERE ts_ns >= ? "
+                "  AND (verdict LIKE 'FLAGGED_%' OR verdict LIKE 'REJECTED_%') "
+                "ORDER BY ts_ns DESC LIMIT ?",
+                (cutoff_ns, limit),
             ).fetchall()
         return [dict(r) for r in rows]
 
