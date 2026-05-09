@@ -68,6 +68,19 @@ class LiveModeActivationAgent:
                     )
                 else:
                     log.warning("LiveModeActivationAgent: cycle error: %s", exc)
+                # Phase 235.x-STABILITY-6: defensive backoff. See chain_reconciler
+                # for the empirical signature ('no running event loop' tight loop
+                # at ~100k errors/sec when DUALSHOCK_ENABLED=false).
+                try:
+                    await asyncio.sleep(min(_POLL_INTERVAL_S, 5.0))
+                except asyncio.CancelledError:
+                    raise
+                except Exception as backoff_exc:
+                    log.error(
+                        "LiveModeActivationAgent: backoff sleep failed (%s) — "
+                        "exiting loop cleanly", backoff_exc,
+                    )
+                    return
 
     async def _poll_loop(self) -> None:
         """Fallback polling loop when bus is not available."""
@@ -88,6 +101,17 @@ class LiveModeActivationAgent:
                     )
                 else:
                     log.warning("LiveModeActivationAgent (poll): cycle error: %s", exc)
+                # Phase 235.x-STABILITY-6: defensive backoff (see above).
+                try:
+                    await asyncio.sleep(min(_POLL_INTERVAL_S, 5.0))
+                except asyncio.CancelledError:
+                    raise
+                except Exception as backoff_exc:
+                    log.error(
+                        "LiveModeActivationAgent (poll): backoff sleep failed "
+                        "(%s) — exiting loop cleanly", backoff_exc,
+                    )
+                    return
 
     async def _on_gate_passed(self, event: dict) -> None:
         """Handle dry_run_gate_passed bus event."""

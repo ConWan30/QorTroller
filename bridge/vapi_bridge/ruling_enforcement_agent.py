@@ -110,6 +110,17 @@ class RulingEnforcementAgent:
                     )
                 else:
                     log.warning("RulingEnforcementAgent: cycle error: %s", exc)
+                # Phase 235.x-STABILITY-6: defensive backoff (see chain_reconciler).
+                try:
+                    await asyncio.sleep(min(_POLL_INTERVAL_S, 5.0))
+                except asyncio.CancelledError:
+                    raise
+                except Exception as backoff_exc:
+                    log.error(
+                        "RulingEnforcementAgent: backoff sleep failed (%s) — "
+                        "exiting loop cleanly", backoff_exc,
+                    )
+                    return
 
     async def _consume_pending_events(self) -> None:
         events = self._store.read_unconsumed_events("ruling_enforcement_agent", limit=20)

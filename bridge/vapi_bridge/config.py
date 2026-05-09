@@ -180,6 +180,7 @@ class Config:
     the steady-state branch handling every record after the first).
     Default ON; opt-out via LOOP_RESOLVE_PUBKEY_TO_THREAD_ENABLED=false."""
 
+
     # --- Batching ---
     batch_size: int = field(default_factory=lambda: _env_int("BATCH_SIZE", 10))
     batch_timeout_s: int = field(
