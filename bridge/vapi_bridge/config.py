@@ -155,6 +155,20 @@ class Config:
     matches WIF-064 zombie pattern signature (12-30s blocks, much higher
     than 1s)."""
 
+    # --- Phase 235.x-STABILITY-4 (2026-05-09): on_record sync chain offload (WIF-066 closure) ---
+    loop_persist_to_thread_enabled: bool = field(
+        default_factory=lambda: _env_bool("LOOP_PERSIST_TO_THREAD_ENABLED", True)
+    )
+    """Phase 235.x-STABILITY-4 — Move on_record's heavy sync work
+    (ECDSA-P256 signature verify + 3 SQLite writes + PITL meta apply)
+    to a worker thread via asyncio.to_thread. Empirically validated
+    2026-05-08 to address 60+ STARVATION events/13 min attributed to the
+    per-record sync chain (WIF-066 real-controller bisection run).
+    Default ON; opt-out via LOOP_PERSIST_TO_THREAD_ENABLED=false for A/B
+    comparison or rollback. Per-source record ordering is preserved by
+    sequential await in the caller's loop (DualShockTransport._session_loop
+    awaits _dispatch which awaits on_record one at a time per source)."""
+
     # --- Batching ---
     batch_size: int = field(default_factory=lambda: _env_int("BATCH_SIZE", 10))
     batch_timeout_s: int = field(
