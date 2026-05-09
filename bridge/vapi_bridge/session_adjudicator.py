@@ -166,6 +166,19 @@ class SessionAdjudicator:
                     )
                 else:
                     log.warning("SessionAdjudicator: cycle error: %s", exc)
+                # Phase 235.x-STABILITY-6: defensive backoff. If the next
+                # iteration's `await asyncio.sleep` also raises (the 'no
+                # running event loop' tight-loop signature), exit cleanly.
+                try:
+                    await asyncio.sleep(min(_POLL_INTERVAL_S, 5.0))
+                except asyncio.CancelledError:
+                    raise
+                except Exception as backoff_exc:
+                    log.error(
+                        "SessionAdjudicator: backoff sleep failed (%s) — "
+                        "exiting loop cleanly", backoff_exc,
+                    )
+                    return
 
     async def _consume_pending_events(self) -> None:
         events = self._store.read_unconsumed_events("session_adjudicator", limit=20)

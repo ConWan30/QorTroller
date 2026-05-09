@@ -57,6 +57,26 @@ class ChainReconciler:
                 return
             except Exception as exc:
                 log.warning("ChainReconciler cycle error: %s", exc)
+                # Phase 235.x-STABILITY-6: defensive backoff. If the next
+                # iteration's `await asyncio.sleep` also raises (e.g.,
+                # 'no running event loop' on a task that lost its loop
+                # affinity — empirically observed 2026-05-09 when the bridge
+                # event loop is otherwise idle), this inner sleep also
+                # raises and we exit cleanly instead of tight-looping at
+                # ~9000 errors/second.
+                try:
+                    await asyncio.sleep(min(self._poll_interval, 5.0))
+                except asyncio.CancelledError:
+                    self._running = False
+                    return
+                except Exception as backoff_exc:
+                    log.error(
+                        "ChainReconciler: backoff sleep failed (%s) — "
+                        "exiting loop cleanly to prevent tight-loop spam",
+                        backoff_exc,
+                    )
+                    self._running = False
+                    return
 
     async def _reconcile_cycle(self):
         """Single reconciliation pass: fetch events and mark confirmed."""
