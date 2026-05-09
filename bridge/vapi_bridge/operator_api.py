@@ -8047,81 +8047,15 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         listing: dict,
         trigger_reason: str,
     ) -> dict:
-        """Shared review-execution helper.
-
-        Computes verdict via curator_review.review_listing using a snapshot
-        of on-chain anchor state + IPFS resolvability, then persists the
-        verdict to curator_listing_review_log.
-
-        Returns the 13-key endpoint response dict.
+        """Phase 238 Step I-AUTOLOOP-1 — delegates to the module-level
+        compute_verdict_for_listing in curator_agent.py so the operator
+        endpoint + autonomous loop share one verdict-execution path.
         """
-        from .curator_review import (
-            AnchorStates, IpfsState, review_listing as _review_listing,
+        from .curator_agent import compute_verdict_for_listing
+        return await compute_verdict_for_listing(
+            store, chain, cfg,
+            commitment_hex_clean, listing, trigger_reason,
         )
-        import time as _t238cur
-        import json as _j238cur
-
-        # Snapshot anchor isRecorded() state for each non-empty anchor
-        async def _is_rec(commit_hex: str) -> bool:
-            if not commit_hex or commit_hex == "0" * 64:
-                return False
-            try:
-                return bool(await chain.is_adjudication_recorded(commit_hex))
-            except Exception:
-                return False
-
-        states = AnchorStates(
-            sepproof_recorded  = await _is_rec(listing.get("sepproof_commitment", "")),
-            biometric_recorded = await _is_rec(listing.get("biometric_snapshot_hash", "")),
-            corpus_recorded    = await _is_rec(listing.get("corpus_snapshot_hash", "")),
-            gic_recorded       = await _is_rec(listing.get("gic_hash", "")),
-        )
-
-        # IPFS resolvability — None means not checked (fail-open).
-        # Curator agent process (Step I-FINAL) will add real Pinata HEAD.
-        # Manual-trigger endpoint skips IPFS check by default to keep the
-        # round-trip latency low; bulk re-review may opt in.
-        ipfs = IpfsState(resolvable=None)
-
-        verdict = _review_listing(
-            listing, states, ipfs,
-            current_block_number=None,  # freshness check disabled in shadow infra
-            anchor_freshness_blocks=int(getattr(cfg, "curator_anchor_freshness_blocks", 1_000_000)),
-        )
-        ts_ns = int(_t238cur.time_ns())
-        breakdown_json = _j238cur.dumps(verdict.anchors_recorded_breakdown)
-        row_id = await asyncio.to_thread(
-            store.insert_curator_review,
-            commitment_hex_clean,
-            verdict.verdict,
-            verdict.severity,
-            verdict.anchors_recorded_count,
-            breakdown_json,
-            verdict.consent_marketplace_bit_set,
-            verdict.ipfs_resolvable,
-            verdict.declared_tier,
-            verdict.tier_at_review_time,
-            verdict.tier_changed,
-            verdict.shadow_mode,
-            verdict.reason_detail,
-            trigger_reason,
-            ts_ns,
-        )
-        return {
-            "row_id":                       int(row_id),
-            "commitment_hex":               commitment_hex_clean,
-            "verdict":                      verdict.verdict,
-            "severity":                     verdict.severity,
-            "anchors_recorded_count":       verdict.anchors_recorded_count,
-            "anchors_recorded_breakdown":   verdict.anchors_recorded_breakdown,
-            "consent_marketplace_bit_set":  verdict.consent_marketplace_bit_set,
-            "ipfs_resolvable":              verdict.ipfs_resolvable,
-            "declared_tier":                verdict.declared_tier,
-            "tier_at_review_time":          verdict.tier_at_review_time,
-            "tier_changed":                 verdict.tier_changed,
-            "shadow_mode":                  verdict.shadow_mode,
-            "ts_ns":                        ts_ns,
-        }
 
     @app.post("/operator/curator-review-listing")
     async def curator_review_listing_endpoint(

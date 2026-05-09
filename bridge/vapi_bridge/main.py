@@ -1225,6 +1225,36 @@ class Bridge:
                     "Phase O1 C4: cedar_drift_sweeper unavailable: %s", _drift_exc
                 )
 
+        # Phase 238 Step I-AUTOLOOP-1: Curator autonomous review loop.
+        # Polls every 5 min (default), reviews any marketplace listing not
+        # reviewed in past 1 h.  Default DISABLED via CURATOR_REVIEW_ENABLED;
+        # operator opts in only after Step I-FINAL on-chain registration
+        # (mint VAPIOperatorAgentNFT + dual-anchor Cedar bundle).  Until
+        # then, the placeholder agentId 0xc0c0...c0c0 means policy enforcement
+        # runs against an unregistered identity — operator-trigger only.
+        # Fail-open: per-iteration errors caught + logged; loop continues.
+        if getattr(self.cfg, "curator_review_enabled", False):
+            try:
+                from .curator_agent import run_curator_review_loop
+                _curator_loop_task = asyncio.ensure_future(
+                    run_curator_review_loop(
+                        store=self.store, chain=self.chain, cfg=self.cfg,
+                    )
+                )
+                _curator_loop_task.set_name("CuratorReviewLoop")
+                self._tasks.append(_curator_loop_task)
+                log.info(
+                    "Phase 238 Step I-AUTOLOOP-1: Curator review loop started "
+                    "(interval=%.0fs, batch_limit=%d)",
+                    getattr(self.cfg, "curator_review_interval_s", 300.0),
+                    getattr(self.cfg, "curator_review_batch_limit", 25),
+                )
+            except Exception as _curator_exc:
+                log.warning(
+                    "Phase 238 Step I-AUTOLOOP-1: curator_agent unavailable: %s",
+                    _curator_exc,
+                )
+
         # Phase 235.x-STABILITY-3 2026-05-08: loop health monitor (WIF-065 closure).
         # Independent heartbeat task that detects asyncio event loop starvation
         # regardless of asyncio's debug mode. Closes the instrumentation gap

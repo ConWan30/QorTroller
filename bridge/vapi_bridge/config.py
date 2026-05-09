@@ -1559,6 +1559,29 @@ class Config:
     Default 5.0s — matches Pinata gateway p95 latency baseline.  Operator
     can extend for slower gateways or tighten for tighter SLA enforcement."""
 
+    # --- Phase 238 Step I-AUTOLOOP-1 — autonomous review loop tuning ---
+    curator_review_interval_s: float = field(
+        default_factory=lambda: _env_float("CURATOR_REVIEW_INTERVAL_S", 300.0)
+    )
+    """Phase 238 Step I-AUTOLOOP-1 — Autonomous Curator review loop poll
+    cadence in seconds.  Default 300s (5 min) matches FSCA + cedar_drift_sweeper
+    cadences; aligns with the Phase O1 D shadow data accumulation window."""
+
+    curator_review_batch_limit: int = field(
+        default_factory=lambda: _env_int("CURATOR_REVIEW_BATCH_LIMIT", 25)
+    )
+    """Phase 238 Step I-AUTOLOOP-1 — Maximum listings reviewed per autonomous
+    loop iteration.  Default 25; bounded so a single iteration cannot stall
+    the loop beyond ~30s even under worst-case anchor verification latency."""
+
+    curator_review_idempotency_window_minutes: int = field(
+        default_factory=lambda: _env_int("CURATOR_REVIEW_IDEMPOTENCY_WINDOW_MINUTES", 60)
+    )
+    """Phase 238 Step I-AUTOLOOP-1 — Listings already reviewed within this
+    window are skipped by the autonomous loop (prevents 12-rows/listing/hour
+    spam).  Default 60 min; operator audits via bulk-review can override the
+    skip by manual trigger."""
+
     # --- Phase O0 Stream 3-prep — AgentAdjudicationRegistry (sixth FROZEN-v1 host) ---
     agent_adjudication_registry_address: str = field(
         default_factory=lambda: _env("AGENT_ADJUDICATION_REGISTRY_ADDRESS", "")
