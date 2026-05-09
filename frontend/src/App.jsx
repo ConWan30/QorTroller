@@ -4,6 +4,9 @@ import { ViewSelector } from './ViewSelector'
 import { HeartbeatProvider } from './heartbeat/HeartbeatProvider'
 import { FONTS } from './shared/design/tokens'
 import { DriftAlertBadge } from './components/DriftAlertBadge'
+import { OperatorBar } from './components/OperatorBar'
+// Phase 238 Frontend Foundation Revamp — VAPI theme tokens (CSS variable lock)
+import './styles/vapi-theme.css'
 
 const GamerView        = lazy(() => import('./views/GamerView').then((m) => ({ default: m.GamerView })))
 const DeveloperView    = lazy(() => import('./views/DeveloperView').then((m) => ({ default: m.DeveloperView })))
@@ -11,12 +14,17 @@ const ManufacturerView = lazy(() => import('./views/ManufacturerView').then((m) 
 // 4th view: BRP renderer post-milestone incorporation (OQ-7).
 // Pre-ceremony, live: false posture. See frontend/src/brp/VENDORED_FROM.md.
 const BrpView          = lazy(() => import('./views/BrpView').then((m) => ({ default: m.BrpView })))
+// 5th view: Phase 238 PALL Marketplace — top-level tab.
+// Sellers + buyers + auditors share this surface; operator listing form
+// hidden in O1.
+const MarketplaceView  = lazy(() => import('./views/MarketplaceView').then((m) => ({ default: m.MarketplaceView })))
 
 const VIEW_MAP = {
   gamer:        GamerView,
   developer:    DeveloperView,
   manufacturer: ManufacturerView,
   brp:          BrpView,
+  marketplace:  MarketplaceView,
 }
 
 function ViewLoader() {
@@ -50,6 +58,17 @@ export function App() {
         background:    '#020408',
       }}>
         <ViewSelector activeView={activeView} onViewChange={setActiveView} />
+
+        {/* Phase 238 — three-pill Operator bar (Sentry/Guardian/Curator).
+            Always visible; click navigates to DeveloperView for drill-down. */}
+        <div style={{
+          padding:        '4px 16px',
+          borderBottom:   '1px solid rgba(255,255,255,0.04)',
+          background:     'rgba(2,4,8,0.85)',
+          backdropFilter: 'blur(8px)',
+        }}>
+          <OperatorBar onClick={() => setActiveView('developer')} />
+        </div>
 
         {/* Phase O1 C8 — cross-view drift alert. Hidden by default; renders
             only when O1 SHADOW agents are anchored AND drift findings exist

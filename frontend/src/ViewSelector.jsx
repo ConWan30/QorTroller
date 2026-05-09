@@ -11,6 +11,9 @@ const VIEWS = [
   // Pre-ceremony, live: false. Distinct accent + small live:false dot
   // surfaced in the tab so the operator can identify the audit-state at a glance.
   { id: 'brp',         label: 'BRP',          accent: '#9bc4e8',           icon: '◉', liveFalse: true },
+  // 5th tab: Phase 238 PALL Marketplace — sellers + buyers + auditors.
+  // Cyan accent (verified-data theme) per VAPI tier palette LOCKED.
+  { id: 'marketplace', label: 'MARKETPLACE',  accent: '#22d3ee',           icon: '⬢' },
 ]
 
 export function ViewSelector({ activeView, onViewChange }) {
