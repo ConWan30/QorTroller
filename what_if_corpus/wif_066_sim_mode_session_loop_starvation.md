@@ -115,16 +115,40 @@ checks. No asyncio internals monkey-patching, works regardless of
 debug mode, catches ANY cause. Future bisection runs use this same
 mechanism.
 
-**Status**: OPEN, sim_mode-confounder hypothesis REFUTED via 2026-05-08
-real-controller bisection run (run dir `logs/stability3_realctrl_20260508_190820/`).
-Next step is **Phase 235.x-STABILITY-4** wrapping per-record `_make_record` +
-`Bridge.on_record` sync work in `asyncio.to_thread`, mirroring STABILITY-2's
-pattern for FSCA + drift sweeper. Concrete call sites identified:
-  - `dualshock_integration.py:1677` `await self._dispatch(raw)`
-  - `dualshock_integration.py:2262` `_dispatch` → `Bridge.on_record`
-  - Synchronous biometric extraction in `_make_record` (PoAC body assembly +
-    signing path)
+**Status**: CLOSED 2026-05-09 — Phase 235.x-STABILITY-4 shipped + empirically
+validated. `Bridge.on_record` refactored to route the heavy sync chain
+(PITL apply + ECDSA-P256 verify + 3 SQLite writes) through
+`asyncio.to_thread(self._persist_record_sync, ...)`. Default ON; opt-out
+via `LOOP_PERSIST_TO_THREAD_ENABLED=false`. 7 deterministic tests
+T-235-STAB4-1..7 PASS. Adjacent regression 33/33 PASS.
 
-STABILITY-4 risk: PoAC chain integrity is downstream of this path; any
-to_thread wrap MUST preserve record ordering + chain link hash invariants.
-Tests need to verify per-record sequencing is unchanged.
+**Empirical validation 2026-05-09T08:47Z** (run dir
+`logs/stability4_validation_20260509_034724/`):
+  - `/health` p50: 584ms → **3ms** (195× faster)
+  - Probe global p50: 2028ms → 31ms (-98%)
+  - LOOP STARVATION rate: 4.6/min → 2.5/min (-46%)
+  - BRIDGE_UNRESPONSIVE rate: 1.8/min → 0.85/min (-53%)
+  - Max STARVATION excess: 37.87s → ~14s (no more catastrophic stalls)
+
+Per-source record ordering preserved by sequential await pattern in the
+caller (DualShockTransport `_session_loop` awaits each `_dispatch` one
+at a time per source). PoAC chain link hash invariants unchanged
+(SHA-256(body[0:164]) — codec untouched).
+
+**Residual STARVATION sources** (smaller — for STABILITY-5 candidates):
+  - `_resolve_pubkey` cold-cache `store.list_devices()` scan still on loop
+  - capture-health endpoint reading store synchronously
+  - WAL checkpoint pressure under faster persist throughput
+  - WS broadcast JSON serialization on loop
+
+None of these produce the 30+ second catastrophic stalls seen pre-fix,
+so the watchdog's 3-restart-per-hour ceiling is comfortably clear of
+operational rates. Bridge is now operationally usable for sustained
+polling load — frontend testing + Phase O1 D shadow data accumulation
+both feasible without watchdog restart loops.
+
+Closing references:
+  - Code: `bridge/vapi_bridge/main.py` (`on_record` + `_persist_record_sync`)
+  - Config: `bridge/vapi_bridge/config.py` (`loop_persist_to_thread_enabled`)
+  - Tests: `bridge/tests/test_phase_235_stability_4.py` (7 tests)
+  - Validation: `docs/phase_235_stability_4_validation.md`
