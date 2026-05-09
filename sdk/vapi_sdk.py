@@ -8606,3 +8606,222 @@ class VAPIMarketplaceListings:
             return {}
 
 
+# ─── Phase 238 Step I — Curator Shadow Infrastructure ─────────────────────────
+
+
+@dataclass(slots=True)
+class CuratorReviewResult:
+    """Phase 238 Step I — Curator listing-review verdict (shadow mode).
+
+    13 fields — wire contract LOCKED for the upcoming frontend dashboard
+    revamp.  Any new field requires a v2 of the SDK class + endpoint.
+
+    Six FROZEN verdict codes plus the safety-floor seventh:
+      APPROVED, FLAGGED_TIER_MISMATCH, FLAGGED_ANCHOR_STALE,
+      FLAGGED_CONSENT_AMBIGUOUS, FLAGGED_IPFS_UNAVAILABLE,
+      REJECTED_NO_ANCHORS, REJECTED_INVALID_COMMITMENT.
+
+    Severity mapping: APPROVED=INFO, FLAGGED_*=WARN/LOW, REJECTED_*=HIGH.
+    """
+    row_id: int = 0
+    commitment_hex: str = ""
+    verdict: str = ""
+    severity: str = ""
+    anchors_recorded_count: int = 0
+    anchors_recorded_breakdown: dict = field(default_factory=dict)
+    consent_marketplace_bit_set: bool = False
+    ipfs_resolvable: object = None  # bool | None
+    declared_tier: int = 0
+    tier_at_review_time: int = 0
+    tier_changed: bool = False
+    shadow_mode: bool = True
+    ts_ns: int = 0
+    error: str = ""
+
+
+@dataclass(slots=True)
+class CuratorStatusResult:
+    """Phase 238 Step I — Curator review aggregation summary (top-of-tab widget)."""
+    curator_review_enabled: bool = False
+    total_reviews: int = 0
+    approved_reviews: int = 0
+    flagged_reviews: int = 0
+    rejected_reviews: int = 0
+    latest_verdict: str = ""
+    latest_listing_commitment: str = ""
+    latest_review_ts_ns: int = 0
+    shadow_mode: bool = True
+    error: str = ""
+
+
+class VAPICurator:
+    """Client for Phase 238 Step I — Curator Operator Initiative agent.
+
+    The Curator is the third Operator Initiative agent (post Sentry + Guardian)
+    and is exclusive to VAPI: no other DePIN protocol fields a third dedicated
+    agent whose job is cryptographic-tier verification of marketplace listings.
+
+    All methods follow the Phase 184+ "never raises" SDK contract — exceptions
+    surface as result.error.
+
+    Example::
+
+        curator = VAPICurator("http://localhost:8080", api_key)
+        result = curator.review_listing(
+            commitment_hex="ab" * 32,
+            reason="manual_audit_2026_05_09",
+        )
+        print(result.verdict, result.severity, result.anchors_recorded_count)
+
+        status = curator.status()
+        print(f"{status.flagged_reviews}/{status.total_reviews} flagged")
+
+        flagged = curator.flagged_listings(since_minutes=1440, limit=20)
+        for r in flagged.get("listings", []):
+            print(r["listing_commitment"], r["verdict"])
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def review_listing(
+        self,
+        commitment_hex: str,
+        reason: str,
+    ) -> CuratorReviewResult:
+        """POST /operator/curator-review-listing — operator-only (full api_key auth).
+
+        Locally pre-validates reason length (mirrors bridge 422 message).
+        Returns CuratorReviewResult; on error result.error is set.
+        """
+        if len(reason.strip()) < 10:
+            return CuratorReviewResult(
+                error="reason must be at least 10 characters (operator audit field)",
+            )
+        import json as _j238crv, urllib.request as _r238crv, urllib.parse as _u238crv
+        try:
+            params = {
+                "api_key":        self._key,
+                "commitment_hex": commitment_hex,
+                "reason":         reason,
+            }
+            qs = "&".join(
+                f"{k}={_u238crv.quote(str(v))}" for k, v in params.items()
+            )
+            url = f"{self._base}/operator/curator-review-listing?{qs}"
+            req = _r238crv.Request(url, method="POST")
+            with _r238crv.urlopen(req, timeout=30) as resp:
+                d = _j238crv.loads(resp.read().decode())
+            return CuratorReviewResult(
+                row_id                      = int(d.get("row_id", 0)),
+                commitment_hex              = str(d.get("commitment_hex", "")),
+                verdict                     = str(d.get("verdict", "")),
+                severity                    = str(d.get("severity", "")),
+                anchors_recorded_count      = int(d.get("anchors_recorded_count", 0)),
+                anchors_recorded_breakdown  = dict(d.get("anchors_recorded_breakdown", {})),
+                consent_marketplace_bit_set = bool(d.get("consent_marketplace_bit_set", False)),
+                ipfs_resolvable             = d.get("ipfs_resolvable", None),
+                declared_tier               = int(d.get("declared_tier", 0)),
+                tier_at_review_time         = int(d.get("tier_at_review_time", 0)),
+                tier_changed                = bool(d.get("tier_changed", False)),
+                shadow_mode                 = bool(d.get("shadow_mode", True)),
+                ts_ns                       = int(d.get("ts_ns", 0)),
+            )
+        except Exception as exc:
+            return CuratorReviewResult(error=str(exc))
+
+    def status(self) -> CuratorStatusResult:
+        """GET /agent/curator-status — read-only (uses x-api-key)."""
+        import json as _j238cst, urllib.request as _r238cst
+        try:
+            url = f"{self._base}/agent/curator-status"
+            req = _r238cst.Request(url, headers={"x-api-key": self._key})
+            with _r238cst.urlopen(req, timeout=10) as resp:
+                d = _j238cst.loads(resp.read().decode())
+            return CuratorStatusResult(
+                curator_review_enabled    = bool(d.get("curator_review_enabled", False)),
+                total_reviews             = int(d.get("total_reviews", 0)),
+                approved_reviews          = int(d.get("approved_reviews", 0)),
+                flagged_reviews           = int(d.get("flagged_reviews", 0)),
+                rejected_reviews          = int(d.get("rejected_reviews", 0)),
+                latest_verdict            = str(d.get("latest_verdict", "")),
+                latest_listing_commitment = str(d.get("latest_listing_commitment", "")),
+                latest_review_ts_ns       = int(d.get("latest_review_ts_ns", 0)),
+                shadow_mode               = bool(d.get("shadow_mode", True)),
+            )
+        except Exception as exc:
+            return CuratorStatusResult(error=str(exc))
+
+    def get_review(self, commitment_hex: str) -> dict:
+        """GET /agent/curator-review/{commitment_hex} — per-listing review timeline.
+
+        Returns { listing_commitment, reviews: [...], total } or empty dict on error.
+        """
+        import json as _j238cgr, urllib.request as _r238cgr
+        try:
+            h = commitment_hex.strip().lower()
+            if h.startswith("0x"):
+                h = h[2:]
+            url = f"{self._base}/agent/curator-review/{h}"
+            req = _r238cgr.Request(url, headers={"x-api-key": self._key})
+            with _r238cgr.urlopen(req, timeout=10) as resp:
+                return _j238cgr.loads(resp.read().decode())
+        except Exception:
+            return {}
+
+    def flagged_listings(
+        self, since_minutes: int = 1440, limit: int = 50
+    ) -> dict:
+        """GET /agent/curator-flagged-listings — flagged listings hot-bar.
+
+        Returns { listings, total, since_minutes, capped } or empty dict on error.
+        """
+        import json as _j238cfl, urllib.request as _r238cfl, urllib.parse as _u238cfl
+        try:
+            qs = _u238cfl.urlencode({
+                "since_minutes": int(since_minutes),
+                "limit":         int(limit),
+            })
+            url = f"{self._base}/agent/curator-flagged-listings?{qs}"
+            req = _r238cfl.Request(url, headers={"x-api-key": self._key})
+            with _r238cfl.urlopen(req, timeout=10) as resp:
+                return _j238cfl.loads(resp.read().decode())
+        except Exception:
+            return {}
+
+    def bulk_review(
+        self,
+        reason: str,
+        seller_address: str = "",
+        since_minutes: int = 1440,
+        limit: int = 20,
+    ) -> dict:
+        """POST /operator/curator-bulk-review — re-runs review pipeline against
+        recent listings (operator-only).
+
+        Returns { reviewed_count, verdicts_breakdown, reviews, since_minutes, ts_ns }
+        or { 'error': '...' } on local pre-validation failure / network error.
+        """
+        if len(reason.strip()) < 10:
+            return {"error": "reason must be at least 10 characters"}
+        import json as _j238cbr, urllib.request as _r238cbr, urllib.parse as _u238cbr
+        try:
+            params = {
+                "api_key":        self._key,
+                "seller_address": seller_address,
+                "since_minutes":  str(int(since_minutes)),
+                "limit":          str(int(limit)),
+                "reason":         reason,
+            }
+            qs = "&".join(
+                f"{k}={_u238cbr.quote(str(v))}" for k, v in params.items()
+            )
+            url = f"{self._base}/operator/curator-bulk-review?{qs}"
+            req = _r238cbr.Request(url, method="POST")
+            with _r238cbr.urlopen(req, timeout=120) as resp:
+                return _j238cbr.loads(resp.read().decode())
+        except Exception as exc:
+            return {"error": str(exc)}
+
+

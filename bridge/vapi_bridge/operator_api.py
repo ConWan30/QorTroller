@@ -8031,6 +8031,278 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         )
         return {"seller": seller_address, "count": len(rows), "listings": rows}
 
+    # ─────────────────────────────────────────────────────────────────────
+    # Phase 238 Step I — Curator Shadow Infrastructure (5 endpoints)
+    # ─────────────────────────────────────────────────────────────────────
+    # The Curator is the third Operator Initiative agent (post Sentry +
+    # Guardian).  Cedar bundle authored at
+    # bridge/vapi_bridge/cedar_bundles/curator_o1_shadow_v1.json
+    # (Merkle 0xa104138a... — agentId placeholder until Step I-FINAL).
+    #
+    # Wire-contract LOCKED for the upcoming frontend dashboard revamp phase.
+    # Do NOT iterate on JSON shapes after frontend integration begins.
+
+    async def _curator_compute_verdict(
+        commitment_hex_clean: str,
+        listing: dict,
+        trigger_reason: str,
+    ) -> dict:
+        """Shared review-execution helper.
+
+        Computes verdict via curator_review.review_listing using a snapshot
+        of on-chain anchor state + IPFS resolvability, then persists the
+        verdict to curator_listing_review_log.
+
+        Returns the 13-key endpoint response dict.
+        """
+        from .curator_review import (
+            AnchorStates, IpfsState, review_listing as _review_listing,
+        )
+        import time as _t238cur
+        import json as _j238cur
+
+        # Snapshot anchor isRecorded() state for each non-empty anchor
+        async def _is_rec(commit_hex: str) -> bool:
+            if not commit_hex or commit_hex == "0" * 64:
+                return False
+            try:
+                return bool(await chain.is_adjudication_recorded(commit_hex))
+            except Exception:
+                return False
+
+        states = AnchorStates(
+            sepproof_recorded  = await _is_rec(listing.get("sepproof_commitment", "")),
+            biometric_recorded = await _is_rec(listing.get("biometric_snapshot_hash", "")),
+            corpus_recorded    = await _is_rec(listing.get("corpus_snapshot_hash", "")),
+            gic_recorded       = await _is_rec(listing.get("gic_hash", "")),
+        )
+
+        # IPFS resolvability — None means not checked (fail-open).
+        # Curator agent process (Step I-FINAL) will add real Pinata HEAD.
+        # Manual-trigger endpoint skips IPFS check by default to keep the
+        # round-trip latency low; bulk re-review may opt in.
+        ipfs = IpfsState(resolvable=None)
+
+        verdict = _review_listing(
+            listing, states, ipfs,
+            current_block_number=None,  # freshness check disabled in shadow infra
+            anchor_freshness_blocks=int(getattr(cfg, "curator_anchor_freshness_blocks", 1_000_000)),
+        )
+        ts_ns = int(_t238cur.time_ns())
+        breakdown_json = _j238cur.dumps(verdict.anchors_recorded_breakdown)
+        row_id = await asyncio.to_thread(
+            store.insert_curator_review,
+            commitment_hex_clean,
+            verdict.verdict,
+            verdict.severity,
+            verdict.anchors_recorded_count,
+            breakdown_json,
+            verdict.consent_marketplace_bit_set,
+            verdict.ipfs_resolvable,
+            verdict.declared_tier,
+            verdict.tier_at_review_time,
+            verdict.tier_changed,
+            verdict.shadow_mode,
+            verdict.reason_detail,
+            trigger_reason,
+            ts_ns,
+        )
+        return {
+            "row_id":                       int(row_id),
+            "commitment_hex":               commitment_hex_clean,
+            "verdict":                      verdict.verdict,
+            "severity":                     verdict.severity,
+            "anchors_recorded_count":       verdict.anchors_recorded_count,
+            "anchors_recorded_breakdown":   verdict.anchors_recorded_breakdown,
+            "consent_marketplace_bit_set":  verdict.consent_marketplace_bit_set,
+            "ipfs_resolvable":              verdict.ipfs_resolvable,
+            "declared_tier":                verdict.declared_tier,
+            "tier_at_review_time":          verdict.tier_at_review_time,
+            "tier_changed":                 verdict.tier_changed,
+            "shadow_mode":                  verdict.shadow_mode,
+            "ts_ns":                        ts_ns,
+        }
+
+    @app.post("/operator/curator-review-listing")
+    async def curator_review_listing_endpoint(
+        api_key: str = Query(default=""),
+        commitment_hex: str = Query(..., description="LISTING-v1 commitment hex (64 chars)"),
+        reason: str = Query(default="", description="Operator audit string >=10 chars"),
+    ):
+        """Phase 238 Step I — Manual Curator review trigger (operator action).
+
+        Runs the deterministic review pipeline against the listing pointed
+        to by commitment_hex.  Persists a verdict row in
+        curator_listing_review_log.  Shadow-mode in O1 — verdict is advisory
+        only and does NOT auto-suspend the listing.
+
+        Returns 13-key dict (see curator_review.ReviewVerdict for shape).
+        Frontend wire contract is FROZEN.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        _r = (reason or "").strip()
+        if len(_r) < 10:
+            raise HTTPException(422, "reason must be at least 10 characters")
+        h = (commitment_hex or "").strip().lower()
+        if h.startswith("0x"):
+            h = h[2:]
+        if len(h) != 64:
+            raise HTTPException(422, "commitment_hex must be 64 hex characters")
+
+        from .data_marketplace import DataMarketplace
+        marketplace = DataMarketplace(store=store, chain=chain, cfg=cfg)
+        listing = await asyncio.to_thread(marketplace.get_listing, h)
+        if not listing:
+            raise HTTPException(404, f"listing not found for commitment={h[:16]}...")
+
+        return await _curator_compute_verdict(h, listing, _r)
+
+    @app.get("/agent/curator-status")
+    async def curator_status_endpoint(
+        x_api_key: str = Header(default=""),
+    ):
+        """Phase 238 Step I — Curator review summary (top-of-tab widget).
+
+        Returns 10 keys: curator_review_enabled, total_reviews,
+        approved_reviews, flagged_reviews, rejected_reviews, latest_verdict,
+        latest_listing_commitment, latest_review_ts_ns, shadow_mode, timestamp.
+        """
+        _check_read_key(x_api_key)
+        agg = await asyncio.to_thread(store.get_curator_review_status)
+        agg["curator_review_enabled"] = bool(getattr(cfg, "curator_review_enabled", False))
+        return agg
+
+    @app.get("/agent/curator-review/{commitment_hex}")
+    async def curator_review_for_listing_endpoint(
+        commitment_hex: str,
+        limit: int = Query(default=50, le=200),
+        x_api_key: str = Header(default=""),
+    ):
+        """Phase 238 Step I — Per-listing review timeline (drawer).
+
+        Returns { listing_commitment, reviews: [...], total }.  Reviews
+        sorted DESC by ts_ns so most recent appears first.
+        """
+        _check_read_key(x_api_key)
+        h = (commitment_hex or "").strip().lower()
+        if h.startswith("0x"):
+            h = h[2:]
+        if len(h) != 64:
+            raise HTTPException(422, "commitment_hex must be 64 hex characters")
+        rows = await asyncio.to_thread(
+            store.get_curator_reviews_for_listing, h, int(limit)
+        )
+        return {
+            "listing_commitment": h,
+            "reviews":            rows,
+            "total":              len(rows),
+        }
+
+    @app.get("/agent/curator-flagged-listings")
+    async def curator_flagged_listings_endpoint(
+        since_minutes: int = Query(default=1440),
+        limit: int = Query(default=50),
+        x_api_key: str = Header(default=""),
+    ):
+        """Phase 238 Step I — Flagged listings hot-bar (operator audit).
+
+        Returns { listings: [...], total, since_minutes, capped }.
+        Caps: limit <= 100 (silently clamped); since_minutes <= 30d.
+        """
+        _check_read_key(x_api_key)
+        # Caps applied inside store helper too — defensive double-clamp here
+        original_limit = int(limit)
+        original_since = int(since_minutes)
+        clamped_limit = max(1, min(original_limit, 100))
+        clamped_since = max(1, min(original_since, 43200))
+        rows = await asyncio.to_thread(
+            store.get_curator_flagged_listings,
+            clamped_since, clamped_limit
+        )
+        return {
+            "listings":      rows,
+            "total":         len(rows),
+            "since_minutes": clamped_since,
+            "capped":        (clamped_limit != original_limit) or (clamped_since != original_since),
+        }
+
+    @app.post("/operator/curator-bulk-review")
+    async def curator_bulk_review_endpoint(
+        api_key: str = Query(default=""),
+        seller_address: str = Query(default=""),
+        since_minutes: int = Query(default=1440),
+        limit: int = Query(default=20, le=100),
+        reason: str = Query(default=""),
+    ):
+        """Phase 238 Step I — Bulk re-review of recent listings (operator action).
+
+        Re-runs the Curator review pipeline against currently-stored listings
+        matching the filter.  Use case: anchor went stale → flag retroactively
+        without waiting for autonomous Curator loop (Step I-FINAL).
+
+        Returns { reviewed_count, verdicts_breakdown: {...}, reviews: [...], ts_ns }.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        _r = (reason or "").strip()
+        if len(_r) < 10:
+            raise HTTPException(422, "reason must be at least 10 characters")
+        clamped_limit = max(1, min(int(limit), 100))
+
+        # Gather candidate listings — by-seller filter narrows scope
+        if seller_address:
+            listings = await asyncio.to_thread(
+                store.get_marketplace_listings_by_seller, seller_address, clamped_limit
+            )
+            # Re-fetch full listing fields for each (helper above only returns subset)
+            from .data_marketplace import DataMarketplace
+            marketplace = DataMarketplace(store=store, chain=chain, cfg=cfg)
+            full_listings = []
+            for short_listing in listings:
+                full = await asyncio.to_thread(
+                    marketplace.get_listing, short_listing.get("listing_commitment", "")
+                )
+                if full:
+                    full_listings.append(full)
+            listings = full_listings
+        else:
+            # No seller filter — pull most recent listings up to limit
+            with store._conn() as conn:
+                rows = conn.execute(
+                    "SELECT listing_commitment, seller_address, sepproof_commitment, "
+                    "       biometric_snapshot_hash, corpus_snapshot_hash, gic_hash, "
+                    "       consent_bitmask, data_class, price_iotx, ipfs_cid, "
+                    "       ipfs_cid_hash, ts_ns, on_chain_confirmed, tx_hash, "
+                    "       anchors_present_count "
+                    "FROM marketplace_listing_log ORDER BY ts_ns DESC LIMIT ?",
+                    (clamped_limit,)
+                ).fetchall()
+            listings = [dict(r) for r in rows]
+
+        breakdown: dict = {}
+        reviews_out: list = []
+        for listing in listings:
+            commit = str(listing.get("listing_commitment", ""))
+            if not commit:
+                continue
+            try:
+                review = await _curator_compute_verdict(commit, listing, _r)
+                v = review["verdict"]
+                breakdown[v] = breakdown.get(v, 0) + 1
+                reviews_out.append(review)
+            except Exception as e:
+                log.warning("curator-bulk-review per-listing failure: %s", e)
+
+        import time as _t238bulk
+        return {
+            "reviewed_count":      len(reviews_out),
+            "verdicts_breakdown":  breakdown,
+            "reviews":             reviews_out,
+            "since_minutes":       int(since_minutes),
+            "ts_ns":               int(_t238bulk.time_ns()),
+        }
+
     # Phase 235-DASH-UPGRADE — GET /agent/auto-trigger-status
     # ------------------------------------------------------------------
     # Read-only telemetry for the SessionBoundaryDetectorAgent (Phase
