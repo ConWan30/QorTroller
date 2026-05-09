@@ -8050,11 +8050,18 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         """Phase 238 Step I-AUTOLOOP-1 — delegates to the module-level
         compute_verdict_for_listing in curator_agent.py so the operator
         endpoint + autonomous loop share one verdict-execution path.
+
+        Passes the ProtocolStateCache (Phase 238 Step I-AUTOLOOP-3) so
+        operator-triggered manual reviews ALSO emit curator_verdict
+        events to SSE subscribers — frontend animates regardless of
+        whether the verdict came from the autonomous loop or operator.
         """
         from .curator_agent import compute_verdict_for_listing
+        cache = getattr(app, "_protocol_state_cache", None)
         return await compute_verdict_for_listing(
             store, chain, cfg,
             commitment_hex_clean, listing, trigger_reason,
+            protocol_state_cache=cache,
         )
 
     @app.post("/operator/curator-review-listing")

@@ -48,6 +48,7 @@ async def compute_verdict_for_listing(
     commitment_hex_clean: str,
     listing: dict,
     trigger_reason: str,
+    protocol_state_cache=None,
 ) -> dict:
     """Compute a Curator review verdict for one listing + persist it.
 
@@ -122,6 +123,24 @@ async def compute_verdict_for_listing(
         trigger_reason,
         ts_ns,
     )
+
+    # Phase 238 Step I-AUTOLOOP-3 producer wiring: emit curator_verdict
+    # event to the ProtocolStateCache so SSE Twin stream subscribers
+    # (frontend Twin controller scene) animate the verdict in real time.
+    # Cache argument is optional + fail-open per producer-must-never-break
+    # invariant.
+    if protocol_state_cache is not None:
+        try:
+            protocol_state_cache.update_curator_verdict(
+                commitment16=commitment_hex_clean[:16],
+                verdict=verdict.verdict,
+                severity=verdict.severity,
+                ts_ns=ts_ns,
+            )
+        except Exception:
+            # Producer wiring must NEVER break the verdict pipeline
+            pass
+
     return {
         "row_id":                       int(row_id),
         "commitment_hex":               commitment_hex_clean,
@@ -186,7 +205,7 @@ def select_listings_due_for_review(
 
 # ── Autonomous review loop ──────────────────────────────────────────────────
 
-async def run_curator_review_loop(store, chain, cfg) -> None:
+async def run_curator_review_loop(store, chain, cfg, protocol_state_cache=None) -> None:
     """Phase 238 Step I-AUTOLOOP-1 — autonomous Curator review loop.
 
     Polls every cfg.curator_review_interval_s (default 300s = 5 min).
@@ -240,6 +259,7 @@ async def run_curator_review_loop(store, chain, cfg) -> None:
                         store, chain, cfg,
                         commit, listing,
                         trigger_reason=f"autoloop_iter{iteration}",
+                        protocol_state_cache=protocol_state_cache,
                     )
                     verdict_count += 1
                     v = res.get("verdict", "UNKNOWN")
