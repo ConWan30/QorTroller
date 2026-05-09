@@ -1278,6 +1278,9 @@ class Bridge:
                 _curator_loop_task = asyncio.ensure_future(
                     run_curator_review_loop(
                         store=self.store, chain=self.chain, cfg=self.cfg,
+                        protocol_state_cache=getattr(
+                            self, "protocol_state_cache", None
+                        ),
                     )
                 )
                 _curator_loop_task.set_name("CuratorReviewLoop")
