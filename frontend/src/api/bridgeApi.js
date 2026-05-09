@@ -780,3 +780,73 @@ export function useDriftLog({ agentId = '', driftType = '', sinceMinutes = 1440,
     retry: 1,
   })
 }
+
+/**
+ * Phase 238 Step I-AUTOLOOP — Curator + marketplace hooks.
+ * All hooks set noMock:true: review/listing data is grind-critical.
+ * Operator suspension decisions depend on these; fabricated data
+ * would mislead.  On transient failure, react-query holds the last
+ * successful response — UI surfaces "stream offline" rather than
+ * fake values.
+ */
+export function useCuratorStatus() {
+  return useQuery({
+    queryKey: ['curatorStatus'],
+    queryFn: () => get('/agent/curator-status', 'curatorStatus', { noMock: true }),
+    refetchInterval: 10000,
+    staleTime: 5000,
+    retry: 1,
+  })
+}
+
+export function useMarketplaceStatus() {
+  return useQuery({
+    queryKey: ['marketplaceStatus'],
+    queryFn: () => get('/agent/marketplace-status', 'marketplaceStatus', { noMock: true }),
+    refetchInterval: 5000,
+    staleTime: 3000,
+    retry: 1,
+  })
+}
+
+export function useCuratorFlaggedListings({ sinceMinutes = 1440, limit = 50 } = {}) {
+  const params = new URLSearchParams()
+  // Backend caps: limit<=100, since_minutes<=43200 (30d) — mirror here
+  params.set('since_minutes', String(Math.max(1, Math.min(43200, sinceMinutes))))
+  params.set('limit', String(Math.max(1, Math.min(100, limit))))
+  return useQuery({
+    queryKey: ['curatorFlaggedListings', sinceMinutes, limit],
+    queryFn: () => get(`/agent/curator-flagged-listings?${params.toString()}`, 'curatorFlaggedListings', { noMock: true }),
+    refetchInterval: 30000,
+    staleTime: 15000,
+    retry: 1,
+  })
+}
+
+/**
+ * Per-listing review timeline (drawer subsection).  Fetched on-demand
+ * when operator opens a listing detail.
+ */
+export function useCuratorReviewTimeline(commitmentHex, { enabled = true } = {}) {
+  return useQuery({
+    queryKey: ['curatorReviewTimeline', commitmentHex],
+    queryFn: () => get(`/agent/curator-review/${commitmentHex}`, 'curatorReviewTimeline', { noMock: true }),
+    enabled: enabled && Boolean(commitmentHex) && commitmentHex.length === 64,
+    staleTime: 30000,
+    retry: 1,
+  })
+}
+
+/**
+ * Sentry status pill — reads operator-agent-shadow-log most-recent
+ * activity count.  Cyan if active anchored, gray otherwise.  noMock:true.
+ */
+export function useSentryStatus() {
+  return useQuery({
+    queryKey: ['sentryStatus'],
+    queryFn: () => get('/operator/operator-agent-shadow-log?limit=1', 'sentryStatus', { noMock: true }),
+    refetchInterval: 15000,
+    staleTime: 10000,
+    retry: 1,
+  })
+}

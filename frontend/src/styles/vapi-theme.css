@@ -1,0 +1,114 @@
+/**
+ * Phase 238 Frontend Foundation Revamp — VAPI design tokens (FROZEN)
+ *
+ * Locked CSS variable palette so tier badges + Twin animations + Operator
+ * Bar pills + ConsentMatrix render with byte-for-byte consistent colors
+ * across every component.  No magic hex strings in JSX — always read from
+ * these vars or the JS-side equivalents in shared/design/tokens.js.
+ *
+ * Aesthetic principle: void-black background + electric orange (operator
+ * action) + cyan (verified/attested data) + amber (warn/attested tier) +
+ * gold (premium tier) + slate (basic/inactive) + flag (curator warn) +
+ * block (curator reject / tournament block).
+ */
+
+:root {
+  /* Core void-black backdrop */
+  --vapi-void:        #0a0a0f;
+  --vapi-void-soft:   #050a0f;
+
+  /* Operator-action accent */
+  --vapi-orange:      #ff6b00;
+  --vapi-orange-glow: 0 0 12px rgba(255, 107, 0, 0.55);
+
+  /* Verified-data accent */
+  --vapi-cyan:        #22d3ee;
+  --vapi-cyan-glow:   0 0 12px rgba(34, 211, 238, 0.55);
+
+  /* Curator tier palette — derived from cryptographic anchor count.
+   * Multiplier 1.0× / 1.5× / 2.0× / 3.0× — sellers cannot self-attest
+   * tier; on-chain isRecorded() reads compute these on the contract. */
+  --vapi-tier-basic:    #7d8590;   /* slate gray   — 1.0x — no anchors */
+  --vapi-tier-verified: #22d3ee;   /* cyan         — 1.5x — 1 anchor   */
+  --vapi-tier-attested: #f59e0b;   /* amber        — 2.0x — 2-3 anchors*/
+  --vapi-tier-premium:  #facc15;   /* gold         — 3.0x — 4 anchors  */
+
+  /* Curator verdict severity palette */
+  --vapi-info:        #22d3ee;     /* APPROVED                         */
+  --vapi-warn:        #fb923c;     /* FLAGGED_*                        */
+  --vapi-low:         #f59e0b;     /* FLAGGED_IPFS_UNAVAILABLE         */
+  --vapi-block:       #ef4444;     /* REJECTED_*                       */
+
+  /* Operator agent status palette (Sentry / Guardian / Curator pills) */
+  --vapi-agent-inactive: #4a5060;
+  --vapi-agent-shadow:   #22d3ee;  /* O1_SHADOW                        */
+  --vapi-agent-suggest:  #facc15;  /* O2_SUGGEST                       */
+  --vapi-agent-enforce:  #ff6b00;  /* O3_ENFORCE                       */
+
+  /* PCC capture-health colors */
+  --vapi-pcc-nominal:   #22d3ee;
+  --vapi-pcc-degraded:  #f59e0b;
+  --vapi-pcc-contested: #ef4444;
+  --vapi-pcc-disconnect:#7d8590;
+
+  /* Aurora gradient — used for Twin VHP-mint celebration animation */
+  --vapi-aurora:        linear-gradient(120deg, var(--vapi-orange), var(--vapi-cyan));
+
+  /* Glow halos — applied to Twin scene + tier badges on event triggers */
+  --vapi-glow-info:     0 0 16px rgba(34, 211, 238, 0.65);
+  --vapi-glow-warn:     0 0 16px rgba(251, 146, 60, 0.65);
+  --vapi-glow-block:    0 0 18px rgba(239, 68, 68, 0.7);
+  --vapi-glow-premium:  0 0 22px rgba(250, 204, 21, 0.8);
+}
+
+/* Tier badge utility class — drop into <span class="vapi-tier-badge--premium"/> */
+.vapi-tier-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid;
+}
+
+.vapi-tier-badge--basic    { color: var(--vapi-tier-basic);    border-color: var(--vapi-tier-basic);    background: rgba(125,133,144,0.08); }
+.vapi-tier-badge--verified { color: var(--vapi-tier-verified); border-color: var(--vapi-tier-verified); background: rgba(34,211,238,0.10); box-shadow: var(--vapi-glow-info); }
+.vapi-tier-badge--attested { color: var(--vapi-tier-attested); border-color: var(--vapi-tier-attested); background: rgba(245,158,11,0.10); box-shadow: var(--vapi-glow-warn); }
+.vapi-tier-badge--premium  { color: var(--vapi-tier-premium);  border-color: var(--vapi-tier-premium);  background: rgba(250,204,21,0.10); box-shadow: var(--vapi-glow-premium); }
+
+/* Twin pulse keyframes — driven by SSE event types via inline style */
+@keyframes vapi-pulse-cyan {
+  0%   { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.6); }
+  70%  { box-shadow: 0 0 0 16px rgba(34, 211, 238, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0); }
+}
+
+@keyframes vapi-pulse-orange {
+  0%   { box-shadow: 0 0 0 0 rgba(255, 107, 0, 0.7); }
+  70%  { box-shadow: 0 0 0 18px rgba(255, 107, 0, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 107, 0, 0); }
+}
+
+@keyframes vapi-pulse-amber {
+  0%   { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.6); }
+  70%  { box-shadow: 0 0 0 14px rgba(245, 158, 11, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+}
+
+@keyframes vapi-pulse-block {
+  0%   { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.75); }
+  70%  { box-shadow: 0 0 0 20px rgba(239, 68, 68, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+/* VHP minted aurora shimmer — one-time event */
+@keyframes vapi-aurora-shimmer {
+  0%   { background-position: 0% 50%; opacity: 0.0; }
+  10%  { opacity: 0.9; }
+  100% { background-position: 100% 50%; opacity: 0.0; }
+}
