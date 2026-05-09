@@ -197,6 +197,20 @@ class Config:
     when explicit executor is configured (helps py-spy + procmon
     identify the bridge worker pool)."""
 
+    # --- Phase 237-ZK-SEPPROOF Step G (2026-05-09): VHP gating ---
+    vhp_sepproof_required: bool = field(
+        default_factory=lambda: _env_bool("VHP_SEPPROOF_REQUIRED", False)
+    )
+    """Phase 237-ZK-SEPPROOF Step G — Two-tier VHP gating.
+
+    When False (default): mint-vhp accepts an optional sepproof_commitment
+    query param; if supplied, the snapshot must be anchored. Mint proceeds
+    regardless. Backward-compatible with all existing VHP issuance flows.
+
+    When True (operator opt-in): sepproof_commitment is REQUIRED. Mint
+    rejects with 422 if missing or unanchored. Tournament-grade VHP gate.
+    Set to True only after AIT corpus + biometric_snapshot anchoring +
+    ZK ceremony are operationally complete."""
 
     # --- Batching ---
     batch_size: int = field(default_factory=lambda: _env_int("BATCH_SIZE", 10))

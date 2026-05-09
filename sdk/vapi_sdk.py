@@ -8269,3 +8269,161 @@ class VAPIGrindAnalytics:
             )
         except Exception as exc:
             return GrindAnalyticsResult(error=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Phase 237-ZK-SEPPROOF — BIOMETRIC-SNAPSHOT-v1 + ZK separation proof status
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class BiometricSnapshotResult:
+    """Result from VAPIZKSepProof.snapshot_status() — Phase 237-ZK-SEPPROOF.
+
+    Mirrors the GET /agent/biometric-snapshot-status response shape.
+    """
+    total_snapshots:    int   = 0
+    latest_commitment:  str   = ""
+    feature_dim:        int   = 0
+    n_players:          int   = 0
+    ts_ns:              int   = 0
+    on_chain_confirmed: bool  = False
+    tx_hash:            str   = ""
+    trigger_reason:     str   = ""
+    error:              str   = ""
+
+
+@dataclass(slots=True)
+class BiometricSnapshotAnchorResult:
+    """Result from VAPIZKSepProof.anchor_snapshot() — Phase 237-ZK-SEPPROOF.
+
+    Returned by the POST /operator/anchor-biometric-snapshot endpoint
+    after the operator commits to the latest AIT corpus state on-chain.
+    """
+    row_id:              int   = 0
+    snapshot_commitment: str   = ""
+    feature_dim:         int   = 0
+    n_players:           int   = 0
+    sorted_player_ids:   list  = None  # type: ignore[assignment]
+    ts_ns:               int   = 0
+    trigger_reason:      str   = ""
+    on_chain_confirmed:  bool  = False
+    tx_hash:             str   = ""
+    ait_session_log_id:  int   = 0
+    error:               str   = ""
+
+    def __post_init__(self):
+        if self.sorted_player_ids is None:
+            object.__setattr__(self, "sorted_player_ids", [])
+
+
+class VAPIZKSepProof:
+    """Client for Phase 237-ZK-SEPPROOF anchor + status endpoints (SDK Step D).
+
+    Phase 237-ZK-SEPPROOF introduces the sixth FROZEN-v1 cryptographic
+    primitive in the PATTERN-016 family: BIOMETRIC-SNAPSHOT-v1.  This SDK
+    surface lets external clients:
+
+      * read the latest anchored biometric snapshot status
+      * trigger a new anchor (operator-only — full api_key auth required)
+
+    Local proof verification (`verify_local`) is provided as a structural
+    no-op until Phase 237-ZK-SEPPROOF Step F (verifier deploy + ceremony).
+    Until then, callers should rely on the on-chain verifier
+    (ZKSepProofVerifier.verifyAndCheckSnapshotView) once it ships.
+
+    Example::
+
+        zksep = VAPIZKSepProof("http://localhost:8080", api_key)
+        status = zksep.snapshot_status()
+        print(status.latest_commitment, status.on_chain_confirmed)
+
+        # Operator-only:
+        result = zksep.anchor_snapshot(reason="post-AIT-rerun-2026-05-09")
+        print(result.snapshot_commitment, result.tx_hash)
+    """
+
+    PROOF_SIZE = 256  # mirrors zk_sepproof_prover.PROOF_SIZE
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def snapshot_status(self) -> BiometricSnapshotResult:
+        """GET /agent/biometric-snapshot-status — read-only (uses x-api-key).
+
+        On error: returns BiometricSnapshotResult with error set.
+        """
+        import json as _j237s, urllib.request as _r237s
+        try:
+            url = f"{self._base}/agent/biometric-snapshot-status"
+            req = _r237s.Request(url, headers={"x-api-key": self._key})
+            with _r237s.urlopen(req, timeout=10) as resp:
+                d = _j237s.loads(resp.read().decode())
+            return BiometricSnapshotResult(
+                total_snapshots    = int(d.get("total_snapshots", 0)),
+                latest_commitment  = str(d.get("latest_commitment", "")),
+                feature_dim        = int(d.get("feature_dim", 0)),
+                n_players          = int(d.get("n_players", 0)),
+                ts_ns              = int(d.get("ts_ns", 0)),
+                on_chain_confirmed = bool(d.get("on_chain_confirmed", False)),
+                tx_hash            = str(d.get("tx_hash", "")),
+                trigger_reason     = str(d.get("trigger_reason", "")),
+            )
+        except Exception as exc:
+            return BiometricSnapshotResult(error=str(exc))
+
+    def anchor_snapshot(self, reason: str) -> BiometricSnapshotAnchorResult:
+        """POST /operator/anchor-biometric-snapshot — operator-only (full api_key).
+
+        Args:
+            reason: Operator audit string (>=10 chars; 422 otherwise).
+
+        Returns:
+            BiometricSnapshotAnchorResult with snapshot_commitment, tx_hash,
+            and on_chain_confirmed populated.
+
+        Locally validates reason length before sending so callers get a
+        consistent error message regardless of server reachability.
+        """
+        if len(reason.strip()) < 10:
+            return BiometricSnapshotAnchorResult(
+                error="reason must be at least 10 characters (operator audit field)",
+            )
+        import json as _j237a, urllib.request as _r237a, urllib.parse as _u237a
+        try:
+            url = (
+                f"{self._base}/operator/anchor-biometric-snapshot?"
+                f"api_key={_u237a.quote(self._key)}&reason={_u237a.quote(reason)}"
+            )
+            req = _r237a.Request(url, method="POST")
+            with _r237a.urlopen(req, timeout=30) as resp:
+                d = _j237a.loads(resp.read().decode())
+            return BiometricSnapshotAnchorResult(
+                row_id              = int(d.get("row_id", 0)),
+                snapshot_commitment = str(d.get("snapshot_commitment", "")),
+                feature_dim         = int(d.get("feature_dim", 0)),
+                n_players           = int(d.get("n_players", 0)),
+                sorted_player_ids   = list(d.get("sorted_player_ids") or []),
+                ts_ns               = int(d.get("ts_ns", 0)),
+                trigger_reason      = str(d.get("trigger_reason", "")),
+                on_chain_confirmed  = bool(d.get("on_chain_confirmed", False)),
+                tx_hash             = str(d.get("tx_hash", "")),
+                ait_session_log_id  = int(d.get("ait_session_log_id", 0)),
+            )
+        except Exception as exc:
+            return BiometricSnapshotAnchorResult(error=str(exc))
+
+    @staticmethod
+    def verify_local(proof_bytes: bytes) -> bool:
+        """Structural pre-flight check on a 256-byte proof.
+
+        Phase 237-ZK-SEPPROOF Step D scope: returns True iff `proof_bytes`
+        is exactly 256 bytes (matches Groth16 BN254 wire format).  No
+        cryptographic verification — that requires the trusted setup
+        ceremony's verification_key.json (deferred until wallet refill).
+        Cryptographic verification is performed on-chain via
+        ZKSepProofVerifier.verifyAndCheckSnapshotView once deployed.
+        """
+        return isinstance(proof_bytes, (bytes, bytearray)) and len(proof_bytes) == VAPIZKSepProof.PROOF_SIZE
+
+

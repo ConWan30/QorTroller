@@ -1782,6 +1782,16 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         api_key: str = Query(..., description="Shared operator API key"),
         device_id: str = Query(..., description="Device identifier"),
         to_address: str = Query(..., description="Recipient Ethereum address for VHP token"),
+        sepproof_commitment: str = Query(
+            default="",
+            description=(
+                "Phase 237-ZK-SEPPROOF (Step G): optional 64-char hex BIOMETRIC-SNAPSHOT-v1 "
+                "commitment to bind the VHP to a ZK-attested separation proof. "
+                "Required when vhp_sepproof_required=true; optional otherwise. "
+                "Validation: snapshot must exist in biometric_snapshot_log AND "
+                "on_chain_confirmed=true."
+            ),
+        ),
     ):
         """Mint a VHP soulbound token for a device that has passed all three gate conditions.
 
@@ -1949,6 +1959,72 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                     },
                 )
 
+        # Phase 237-ZK-SEPPROOF Gate 6: ZK separation proof commitment binding
+        # ────────────────────────────────────────────────────────────────────
+        # Two-tier behaviour controlled by cfg.vhp_sepproof_required:
+        #   False (default): if sepproof_commitment is supplied, validate; mint
+        #                     proceeds either way. Allows general-enrollment VHPs
+        #                     without requiring an attested SEPPROOF anchor —
+        #                     preserves backward compatibility.
+        #   True (operator opt-in): sepproof_commitment is REQUIRED. Mint rejects
+        #                            with 422 if missing or unanchored. This is
+        #                            the tournament-grade VHP path.
+        # Validation in either tier: when commitment is supplied, the snapshot
+        # must exist in biometric_snapshot_log AND have on_chain_confirmed=true.
+        _sep_required = bool(getattr(cfg, "vhp_sepproof_required", False))
+        _sep_supplied = bool(sepproof_commitment.strip())
+        _sep_anchored = False
+        _sep_row_id   = 0
+        if _sep_supplied:
+            try:
+                with store._conn() as _conn237vhp:
+                    _row237vhp = _conn237vhp.execute(
+                        "SELECT id, on_chain_confirmed FROM biometric_snapshot_log "
+                        "WHERE snapshot_commitment = ? LIMIT 1",
+                        (sepproof_commitment.strip().lower(),),
+                    ).fetchone()
+                if _row237vhp is None:
+                    from fastapi import HTTPException as _HTTPException
+                    raise _HTTPException(
+                        status_code=422,
+                        detail={
+                            "error": "sepproof_commitment not found in biometric_snapshot_log",
+                            "commitment": sepproof_commitment.strip()[:16] + "...",
+                        },
+                    )
+                _sep_row_id = int(_row237vhp["id"])
+                _sep_anchored = bool(_row237vhp["on_chain_confirmed"])
+                if not _sep_anchored:
+                    from fastapi import HTTPException as _HTTPException
+                    raise _HTTPException(
+                        status_code=422,
+                        detail={
+                            "error": "sepproof_commitment not anchored on-chain "
+                                     "(on_chain_confirmed=false)",
+                            "commitment": sepproof_commitment.strip()[:16] + "...",
+                            "row_id":     _sep_row_id,
+                        },
+                    )
+            except Exception as _sep_exc_row:
+                # Re-raise HTTPException; wrap others as 500
+                from fastapi import HTTPException as _HTTPException
+                if isinstance(_sep_exc_row, _HTTPException):
+                    raise
+                raise _HTTPException(
+                    status_code=500,
+                    detail={"error": f"sepproof lookup failed: {_sep_exc_row}"},
+                ) from _sep_exc_row
+        elif _sep_required:
+            # Required tier and no commitment supplied — reject mint
+            from fastapi import HTTPException as _HTTPException
+            raise _HTTPException(
+                status_code=422,
+                detail={
+                    "error": "vhp_sepproof_required=true: sepproof_commitment query "
+                             "param required (tournament-grade VHP gate)",
+                },
+            )
+
         # Phase 122: confidence_score multiplier from battery-stratified separation ratio
         _multiplier_enabled = getattr(cfg, "confidence_multiplier_enabled", False)
         _original_score = confidence_score
@@ -2009,6 +2085,11 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "confidence_score": confidence_score,
             "pre_multiplier_score": _original_score,
             "confidence_multiplier": round(_multiplier, 4),
+            # Phase 237-ZK-SEPPROOF Step G — sepproof binding metadata
+            "sepproof_commitment":      sepproof_commitment.strip() if _sep_supplied else "",
+            "sepproof_anchored":        bool(_sep_anchored),
+            "sepproof_row_id":          int(_sep_row_id),
+            "sepproof_required":        bool(_sep_required),
             "timestamp": time.time(),
         }
 
