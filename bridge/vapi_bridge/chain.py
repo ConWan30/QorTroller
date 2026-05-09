@@ -2609,6 +2609,10 @@ class ChainClient:
     # the FROZEN commitment domain tag uses hyphens (VAPI-BIOMETRIC-SNAPSHOT-v1).
     # Mirrors the corpus_snapshot pattern at Phase 237.5 Path X.
     _BIOMETRIC_SNAPSHOT_DEVICE_ID = hashlib.sha256(b"VAPI_BIOMETRIC_SNAPSHOT_v1").digest()
+    # Phase 238-MARKETPLACE — LISTING-v1 attribution constant.
+    # Same underscore-vs-hyphen asymmetry as the corpus + biometric snapshots.
+    # The FROZEN commitment domain tag uses hyphens (VAPI-LISTING-v1).
+    _LISTING_DEVICE_ID = hashlib.sha256(b"VAPI_LISTING_v1").digest()
 
     async def anchor_corpus_snapshot(
         self,
@@ -2810,6 +2814,109 @@ class ChainClient:
             log.warning(
                 "anchor_biometric_snapshot: anchor failed commitment=%s err=%s",
                 snapshot_commitment_hex[:16], _msg[:120],
+            )
+            return (None, False)
+
+    # --- Phase 238-MARKETPLACE — LISTING-v1 anchor (mirrors biometric_snapshot Path X) ---
+
+    async def anchor_listing_commitment(
+        self,
+        listing_commitment_hex: str,
+    ) -> "tuple[str | None, bool]":
+        """Anchor a LISTING-v1 commitment via legacy recordAdjudication ABI.
+
+        Calls recordAdjudication(deviceIdHash, poadHash, dualVeto) on the deployed
+        AdjudicationRegistry contract with:
+          - deviceIdHash = self._LISTING_DEVICE_ID  (constant; carries
+            LISTING attribution as the design-intent sourceType would have)
+          - poadHash     = the 32-byte listing_commitment from listing_primitive.py
+          - dualVeto     = False (listings are not adjudication verdicts)
+
+        Returns (tx_hash_hex, True) on success; (None, False) on missing config /
+        wallet error / tx revert / duplicate ("PoAd: already recorded"). Never
+        raises — graceful degradation matching biometric_snapshot at Phase 237 Step A.
+
+        The on-chain VAPIDataMarketplaceListings.sol extension contract reads
+        AdjudicationRegistry.isRecorded(listing_commitment) to verify the
+        listing's primitive composition before computing its multiplier tier.
+        """
+        # Phase 237.5 Path C+ kill-switch — short-circuit before any RPC call.
+        if getattr(self._cfg, "chain_submission_paused", False):
+            log.info(
+                "anchor_listing_commitment: chain_submission_paused=true — "
+                "listing will record on_chain_confirmed=False (kill-switch active)"
+            )
+            return (None, False)
+        addr = getattr(self._cfg, "adjudication_registry_address", "")
+        if not addr:
+            log.warning(
+                "anchor_listing_commitment: adjudication_registry_address not "
+                "configured — listing will record on_chain_confirmed=False"
+            )
+            return (None, False)
+        if self._account is None:
+            log.warning(
+                "anchor_listing_commitment: self._account is None (no bridge "
+                "private key loaded) — listing will record on_chain_confirmed=False"
+            )
+            return (None, False)
+        try:
+            commitment_bytes32 = bytes.fromhex(listing_commitment_hex.lstrip("0x"))[:32]
+            commitment_bytes32 = commitment_bytes32.ljust(32, b"\x00")
+        except Exception as exc:
+            log.warning("anchor_listing_commitment: bad commitment hex: %s", exc)
+            return (None, False)
+        _ABI = [{
+            "name": "recordAdjudication", "type": "function",
+            "stateMutability": "nonpayable",
+            "inputs": [
+                {"name": "deviceIdHash", "type": "bytes32"},
+                {"name": "poadHash",     "type": "bytes32"},
+                {"name": "dualVeto",     "type": "bool"},
+            ],
+            "outputs": [],
+        }]
+        try:
+            contract = self._w3.eth.contract(
+                address=self._w3.to_checksum_address(addr), abi=_ABI
+            )
+            nonce = await self._w3.eth.get_transaction_count(self._account.address)
+            tx = await contract.functions.recordAdjudication(
+                self._LISTING_DEVICE_ID, commitment_bytes32, False,
+            ).build_transaction({
+                "from": self._account.address, "nonce": nonce,
+            })
+            # Same dynamic gas estimate pattern as anchor_corpus_snapshot /
+            # anchor_biometric_snapshot — IoTeX storage-heavy ops need 25%
+            # safety buffer above estimate.
+            gas_estimate = await self._w3.eth.estimate_gas(tx)
+            tx["gas"] = int(gas_estimate * 1.25)
+            signed = self._account.sign_transaction(tx)
+            tx_hash = await self._w3.eth.send_raw_transaction(signed.raw_transaction)
+            receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+            if receipt["status"] != 1:
+                log.warning(
+                    "anchor_listing_commitment: tx reverted commitment=%s tx=%s",
+                    listing_commitment_hex[:16], tx_hash.hex()[:16],
+                )
+                return (None, False)
+            log.info(
+                "anchor_listing_commitment: tx=%s commitment=%s",
+                tx_hash.hex()[:16], listing_commitment_hex[:16],
+            )
+            return (tx_hash.hex(), True)
+        except Exception as exc:
+            _msg = str(exc)
+            if "PoAd: already recorded" in _msg:
+                log.info(
+                    "anchor_listing_commitment: idempotent no-op — commitment=%s "
+                    "already anchored",
+                    listing_commitment_hex[:16],
+                )
+                return (None, False)
+            log.warning(
+                "anchor_listing_commitment: anchor failed commitment=%s err=%s",
+                listing_commitment_hex[:16], _msg[:120],
             )
             return (None, False)
 
