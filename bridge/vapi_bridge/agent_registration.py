@@ -171,6 +171,12 @@ VAPI_OPERATOR_AGENTS_PROJECT_NAME = "VAPI Operator Agents"
 AGENT_TO_DEVICE_TOKEN_ID = {
     "anchor-sentry": 1,
     "guardian": 2,
+    # Phase 238 Step I-FINAL — Curator (third Operator Initiative agent).
+    # tokenId 3 reserved at first registration; the per-agent mint order is
+    # anchor-sentry → 1, guardian → 2, curator → 3. Operator runs
+    # step_6_mint_device_nft("curator") AFTER Sentry+Guardian sessions
+    # completed; the wrapper consumes tokenId 3 from VAPIOperatorAgentNFT.
+    "curator": 3,
 }
 
 # ---------------------------------------------------------------------------

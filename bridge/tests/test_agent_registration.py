@@ -655,8 +655,9 @@ def test_section_14_constants_match_pass_2c_specs():
         b"EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
     )
     assert PERMIT_TYPE_HASH == keccak(b"Permit(address owner,uint256 nonce)")
-    # N2 β agent → device tokenId mapping (FROZEN at first registration)
-    assert AGENT_TO_DEVICE_TOKEN_ID == {"anchor-sentry": 1, "guardian": 2}
+    # N2 β agent → device tokenId mapping (FROZEN at first registration).
+    # Phase 238 Step I-FINAL added curator → 3 (third Operator Initiative agent).
+    assert AGENT_TO_DEVICE_TOKEN_ID == {"anchor-sentry": 1, "guardian": 2, "curator": 3}
     # N2 β canonical project name
     assert VAPI_OPERATOR_AGENTS_PROJECT_NAME == "VAPI Operator Agents"
 

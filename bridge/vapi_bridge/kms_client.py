@@ -91,6 +91,10 @@ log = logging.getLogger(__name__)
 _AGENT_ALIAS_ENV_VARS = {
     "anchor-sentry": "VAPI_KMS_ANCHOR_SENTRY_ALIAS",
     "guardian": "VAPI_KMS_GUARDIAN_ALIAS",
+    # Phase 238 Step I-FINAL — Curator KMS alias for cryptographic verdict signing
+    # at O2_SUGGEST graduation (shadow_mode constraint lifted on tool:kms-sign).
+    # Until O2 anchored, the alias is unused (O1_SHADOW signs to draft://only).
+    "curator": "VAPI_KMS_CURATOR_ALIAS",
 }
 
 # Pass 2C Section 12 D1 spec

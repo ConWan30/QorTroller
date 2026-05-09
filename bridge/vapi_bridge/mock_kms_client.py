@@ -59,7 +59,8 @@ class MockKMSClient:
     """
 
     # Default agent identifiers (mirrors KMSClient._AGENT_ALIAS_ENV_VARS keys)
-    _DEFAULT_AGENTS = ("anchor-sentry", "guardian")
+    # Phase 238 Step I-FINAL: curator added as third Operator Initiative agent.
+    _DEFAULT_AGENTS = ("anchor-sentry", "guardian", "curator")
 
     def __init__(self, agents: Optional[tuple[str, ...]] = None):
         """Construct mock with secp256k1 keypair per agent.
