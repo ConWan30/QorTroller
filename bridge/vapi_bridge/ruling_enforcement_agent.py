@@ -77,6 +77,18 @@ class RulingEnforcementAgent:
                     raise
                 except Exception as exc:
                     log.warning("RulingEnforcementAgent: _listen_live_mode_bus error: %s", exc)
+                    # Phase 235.x-STABILITY-7: defensive backoff
+                    try:
+                        await _aio.sleep(min(300.0, 5.0))
+                    except _aio.CancelledError:
+                        raise
+                    except Exception as backoff_exc:
+                        log.error(
+                            "RulingEnforcementAgent: _listen_live_mode_bus "
+                            "backoff sleep failed (%s) — exiting cleanly",
+                            backoff_exc,
+                        )
+                        return
         except asyncio.CancelledError:
             raise
         except Exception as exc:

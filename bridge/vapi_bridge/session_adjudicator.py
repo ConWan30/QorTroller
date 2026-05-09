@@ -345,6 +345,21 @@ class SessionAdjudicator:
                     raise
                 except Exception as exc:
                     log.warning("SessionAdjudicator: _listen_ceremony_bus error: %s", exc)
+                    # Phase 235.x-STABILITY-7: defensive backoff (extends
+                    # STABILITY-6 to bus listeners). If asyncio.wait_for
+                    # itself raises (loop affinity loss), inner sleep also
+                    # raises and we exit cleanly instead of tight-looping.
+                    try:
+                        await asyncio.sleep(min(300.0, 5.0))
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as backoff_exc:
+                        log.error(
+                            "SessionAdjudicator: _listen_ceremony_bus "
+                            "backoff sleep failed (%s) — exiting cleanly",
+                            backoff_exc,
+                        )
+                        return
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -736,6 +751,18 @@ class SessionAdjudicator:
                     raise
                 except Exception as exc:
                     log.warning("SessionAdjudicator: _listen_class_j_bus error: %s", exc)
+                    # Phase 235.x-STABILITY-7: defensive backoff
+                    try:
+                        await asyncio.sleep(min(300.0, 5.0))
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as backoff_exc:
+                        log.error(
+                            "SessionAdjudicator: _listen_class_j_bus "
+                            "backoff sleep failed (%s) — exiting cleanly",
+                            backoff_exc,
+                        )
+                        return
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -942,6 +969,18 @@ class SessionAdjudicator:
                     log.warning(
                         "SessionAdjudicator: _listen_triage_bus error: %s", exc
                     )
+                    # Phase 235.x-STABILITY-7: defensive backoff
+                    try:
+                        await asyncio.sleep(min(300.0, 5.0))
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as backoff_exc:
+                        log.error(
+                            "SessionAdjudicator: _listen_triage_bus "
+                            "backoff sleep failed (%s) — exiting cleanly",
+                            backoff_exc,
+                        )
+                        return
         except asyncio.CancelledError:
             raise
         except Exception as exc:
@@ -980,6 +1019,18 @@ class SessionAdjudicator:
                     raise
                 except Exception as exc:
                     log.warning("SessionAdjudicator: _listen_live_mode_bus error: %s", exc)
+                    # Phase 235.x-STABILITY-7: defensive backoff
+                    try:
+                        await asyncio.sleep(min(300.0, 5.0))
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as backoff_exc:
+                        log.error(
+                            "SessionAdjudicator: _listen_live_mode_bus "
+                            "backoff sleep failed (%s) — exiting cleanly",
+                            backoff_exc,
+                        )
+                        return
         except asyncio.CancelledError:
             raise
         except Exception as exc:
