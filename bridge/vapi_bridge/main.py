@@ -105,94 +105,50 @@ class Bridge:
         Unified callback for all transports.
 
         Parses the record, validates it, persists it, and enqueues for batching.
+
+        Phase 235.x-STABILITY-4 (2026-05-09): heavy sync work (signature verify
+        + 3 SQLite writes + PITL meta apply) runs on a worker thread via
+        asyncio.to_thread when cfg.loop_persist_to_thread_enabled is True
+        (default). Per-source record ordering is preserved by the caller's
+        sequential await pattern (DualShockTransport awaits _dispatch one at
+        a time per session_loop iter).
         """
-        # 1. Parse
+        # 1. Parse — fast (< 1ms), keep on loop so malformed records raise early
         try:
             record = parse_record(raw_data)
         except ValueError as e:
             log.warning("Invalid record from %s: %s", source, e)
             raise
 
-        # 2. Look up device public key
-        # Try local store first, then on-chain registry
-        device_id_hex = record.record_hash_hex  # placeholder until we have pubkey
-        pubkey_hex = None
-
-        # If we know this device, use cached pubkey
-        # For now, try to fetch from on-chain registry
-        # The device_id is keccak256(pubkey) but we need the pubkey to verify the sig
-        # Chicken-and-egg: we need a device registration step or the pubkey in the payload
-
-        # Strategy: devices must be pre-registered via the dashboard or auto-discovered
-        # from on-chain DeviceRegistry. For first contact, we accept unverified records
-        # and flag them for manual review.
-
-        # Check if we can find the pubkey from any known device
-        # whose chain state matches this record's prev_hash
+        # 2. Resolve pubkey (already async; cache hit dominates steady state)
         pubkey_bytes = await self._resolve_pubkey(record, source)
 
-        # Tag schema version for known transports (Gate Fix A, Phase 19: from profile)
-        pitl_meta = None  # Phase 52: initialise before dualshock block so it's always defined
+        # 3. Snapshot mutable transport state on loop thread BEFORE crossing
+        #    to worker. _pending_pitl_meta and _device_profile are mutated by
+        #    _session_loop on the loop thread; the snapshot must happen here
+        #    so the worker thread sees a consistent view.
+        pitl_meta = None
+        schema_version_override = None
         if source == "dualshock":
             if (self._ds_transport is not None
                     and getattr(self._ds_transport, "_device_profile", None) is not None):
-                record.schema_version = self._ds_transport._device_profile.schema_version
-            else:
-                record.schema_version = 2  # backward-compat fallback
-
-            # Phase 21: apply PITL sidecar metadata from DualShockTransport
+                schema_version_override = self._ds_transport._device_profile.schema_version
             pitl_meta = getattr(self._ds_transport, "_pending_pitl_meta", None) \
                 if self._ds_transport is not None else None
-            if pitl_meta:
-                record.pitl_l4_distance        = pitl_meta.get("l4_distance")
-                record.pitl_l4_warmed_up       = pitl_meta.get("l4_warmed_up")
-                record.pitl_l4_features_json   = pitl_meta.get("l4_features_json")
-                record.pitl_l5_cv              = pitl_meta.get("l5_cv")
-                record.pitl_l5_entropy_bits    = pitl_meta.get("l5_entropy_bits")
-                record.pitl_l5_quant_score     = pitl_meta.get("l5_quant_score")
-                record.pitl_l5_anomaly_signals = pitl_meta.get("l5_anomaly_signals")
-                # Phase 25: agent intelligence sidecar fields
-                record.pitl_l5_rhythm_humanity = pitl_meta.get("l5_rhythm_humanity")
-                record.pitl_l4_drift_velocity  = pitl_meta.get("l4_drift_velocity")
-                record.pitl_e4_cognitive_drift = pitl_meta.get("e4_cognitive_drift")
-                record.pitl_humanity_prob      = pitl_meta.get("humanity_prob")
-                # Phase 235-GAD: trigger activity flag (1 = any L2/R2 press detected)
-                record.pitl_trigger_active     = pitl_meta.get("trigger_active", 0)
 
-        if pubkey_bytes:
-            device_id = compute_device_id(pubkey_bytes)
-            record.device_id = device_id
-
-            # 3. Verify signature
-            if not verify_signature(record, pubkey_bytes):
-                log.warning(
-                    "Signature verification FAILED: device=%s counter=%d source=%s",
-                    device_id.hex()[:16], record.monotonic_ctr, source,
-                )
-                raise ValueError("Invalid signature")
-
-            log.info(
-                "Record verified: device=%s counter=%d action=%s conf=%d src=%s",
-                device_id.hex()[:16], record.monotonic_ctr,
-                record.action_name, record.confidence, source,
+        # 4. Heavy sync work (verify + 3 DB writes) → worker thread when enabled
+        if getattr(self.cfg, "loop_persist_to_thread_enabled", True):
+            is_new = await asyncio.to_thread(
+                self._persist_record_sync,
+                record, raw_data, pubkey_bytes, pitl_meta, source,
+                schema_version_override,
             )
-
-            # Update device state
-            self.store.upsert_device(device_id.hex(), pubkey_bytes.hex())
-            self.store.update_device_state(device_id.hex(), record)
         else:
-            # No pubkey available — accept but log warning
-            # Use record_hash as a temporary device_id for tracking
-            record.device_id = record.record_hash
-            log.warning(
-                "No pubkey for record counter=%d — accepted unverified from %s",
-                record.monotonic_ctr, source,
+            is_new = self._persist_record_sync(
+                record, raw_data, pubkey_bytes, pitl_meta, source,
+                schema_version_override,
             )
-            self.store.upsert_device(record.record_hash_hex, "unknown")
-            self.store.update_device_state(record.record_hash_hex, record)
 
-        # 4. Persist
-        is_new = self.store.insert_record(record, raw_data)
         if not is_new:
             return  # Duplicate, skip
 
@@ -213,6 +169,92 @@ class Bridge:
 
         # 6. Enqueue for batching
         await self.batcher.enqueue(record, raw_data)
+
+    def _persist_record_sync(
+        self,
+        record: PoACRecord,
+        raw_data: bytes,
+        pubkey_bytes: bytes | None,
+        pitl_meta: dict | None,
+        source: str,
+        schema_version_override: int | None,
+    ) -> bool:
+        """Phase 235.x-STABILITY-4 — sync body of on_record's persist phase.
+
+        Runs in worker thread via asyncio.to_thread (or in-line when the
+        loop_persist_to_thread_enabled flag is False). Performs:
+          - PITL metadata application (sidecar fields onto the record)
+          - schema_version assignment for known transports
+          - ECDSA-P256 signature verification (~5-15ms typical)
+          - Device upsert + state update + record insert (3 SQLite writes)
+
+        Returns is_new (bool) — True when the record is freshly inserted,
+        False when it's a duplicate (caller short-circuits on False).
+
+        Raises ValueError on signature verification failure (preserves the
+        pre-STABILITY-4 contract — caller must propagate to transport).
+
+        Per-source record ordering is the caller's responsibility: a single
+        source (e.g. DualShockTransport._session_loop) awaits each on_record
+        call sequentially, so the to_thread submissions never overlap for
+        that source. Cross-source races are intentional (each transport has
+        its own chain).
+        """
+        # Phase 21: apply PITL sidecar metadata + schema version (was inline
+        # in on_record pre-STABILITY-4; moved here so the mutation happens
+        # on the worker thread alongside the persist writes).
+        if source == "dualshock":
+            if schema_version_override is not None:
+                record.schema_version = schema_version_override
+            else:
+                record.schema_version = 2  # backward-compat fallback
+            if pitl_meta:
+                record.pitl_l4_distance        = pitl_meta.get("l4_distance")
+                record.pitl_l4_warmed_up       = pitl_meta.get("l4_warmed_up")
+                record.pitl_l4_features_json   = pitl_meta.get("l4_features_json")
+                record.pitl_l5_cv              = pitl_meta.get("l5_cv")
+                record.pitl_l5_entropy_bits    = pitl_meta.get("l5_entropy_bits")
+                record.pitl_l5_quant_score     = pitl_meta.get("l5_quant_score")
+                record.pitl_l5_anomaly_signals = pitl_meta.get("l5_anomaly_signals")
+                # Phase 25: agent intelligence sidecar fields
+                record.pitl_l5_rhythm_humanity = pitl_meta.get("l5_rhythm_humanity")
+                record.pitl_l4_drift_velocity  = pitl_meta.get("l4_drift_velocity")
+                record.pitl_e4_cognitive_drift = pitl_meta.get("e4_cognitive_drift")
+                record.pitl_humanity_prob      = pitl_meta.get("humanity_prob")
+                # Phase 235-GAD: trigger activity flag (1 = any L2/R2 press)
+                record.pitl_trigger_active     = pitl_meta.get("trigger_active", 0)
+
+        if pubkey_bytes:
+            device_id = compute_device_id(pubkey_bytes)
+            record.device_id = device_id
+
+            # ECDSA-P256 verify — empirically the heaviest single sync call
+            if not verify_signature(record, pubkey_bytes):
+                log.warning(
+                    "Signature verification FAILED: device=%s counter=%d source=%s",
+                    device_id.hex()[:16], record.monotonic_ctr, source,
+                )
+                raise ValueError("Invalid signature")
+
+            log.info(
+                "Record verified: device=%s counter=%d action=%s conf=%d src=%s",
+                device_id.hex()[:16], record.monotonic_ctr,
+                record.action_name, record.confidence, source,
+            )
+
+            self.store.upsert_device(device_id.hex(), pubkey_bytes.hex())
+            self.store.update_device_state(device_id.hex(), record)
+        else:
+            # No pubkey — accept unverified (will be flagged for review)
+            record.device_id = record.record_hash
+            log.warning(
+                "No pubkey for record counter=%d — accepted unverified from %s",
+                record.monotonic_ctr, source,
+            )
+            self.store.upsert_device(record.record_hash_hex, "unknown")
+            self.store.update_device_state(record.record_hash_hex, record)
+
+        return self.store.insert_record(record, raw_data)
 
     async def _resolve_pubkey(
         self, record: PoACRecord, source: str
