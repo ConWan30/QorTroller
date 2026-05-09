@@ -44,7 +44,7 @@ if TYPE_CHECKING:
     from vapi_bridge.config import Config
 
 # ---------------------------------------------------------------------------
-# CONTRADICTION_RULES — 14 rules (Phase O1 C6 added BUNDLE_HASH_DRIFT_DETECTED + SCOPE_HASH_GOVERNANCE_DRIFT_DETECTED)
+# CONTRADICTION_RULES — 17 rules (Phase 238 Step I-AUTOLOOP-2 added LISTING_TIER_DRIFT + CONSENT_REVOKED_LISTING_ACTIVE; Phase O1 C6 added BUNDLE_HASH_DRIFT_DETECTED + SCOPE_HASH_GOVERNANCE_DRIFT_DETECTED)
 # ---------------------------------------------------------------------------
 
 CONTRADICTION_RULES: dict = {
@@ -611,6 +611,101 @@ CONTRADICTION_RULES: dict = {
             "operational is newer, governance must catch up via separate "
             "AgentRegistry.updateAgentScope call. Phase O1 C1 D4 dual-anchor "
             "must be re-asserted before any further policy decisions are made."
+        ),
+    },
+
+    # Phase 238 Step I-AUTOLOOP-2: Curator drift contradiction rules.
+    # The Curator (third Operator Initiative agent) writes review verdicts
+    # to curator_listing_review_log.  These rules query that log within a
+    # 1-hour window and surface specific verdicts as FSCA contradictions.
+    # Rule 1 — LISTING_TIER_DRIFT (HIGH): a seller's declared tier
+    # disagrees with the cryptographically-derived tier (anchor count on
+    # AdjudicationRegistry).  This is detected by Curator's
+    # FLAGGED_TIER_MISMATCH verdict + tier_changed=1.
+    # Rule 2 — CONSENT_REVOKED_LISTING_ACTIVE (CRITICAL — GDPR Art.17
+    # candidate): Curator detected a listing whose MARKETPLACE consent
+    # bit (Phase 237 CONSENT bit 3) is cleared, while the listing is still
+    # active in marketplace_listing_log.  This is the primary regulatory
+    # surveillance primitive — GDPR Art.17 right-to-erasure obligation
+    # surfaces here within ≤5 min of consent revocation (Curator
+    # autonomous loop cadence) + ≤15 min of FSCA poll cadence.
+    "LISTING_TIER_DRIFT": {
+        "query": """
+            SELECT id, listing_commitment, declared_tier, tier_at_review_time,
+                   reason_detail, ts_ns
+            FROM curator_listing_review_log
+            WHERE verdict = 'FLAGGED_TIER_MISMATCH'
+              AND tier_changed = 1
+              AND ts_ns >= ?
+            ORDER BY ts_ns DESC LIMIT 5
+        """,
+        "params": lambda cfg: (int((time.time() - 3600) * 1e9),),
+        "agents_involved": [
+            "Curator",
+            "DataMarketplace",
+        ],
+        "severity": "HIGH",
+        "explanation": (
+            "Curator detected one or more marketplace listings whose declared "
+            "tier (derived from data_class) disagrees with the on-chain anchor "
+            "count.  Either the seller over-claimed (declared Premium but "
+            "fewer anchors recorded on AdjudicationRegistry) or the seller "
+            "under-claimed (declared Basic but all four anchors actually "
+            "present).  Tier multiplier (1.0×/1.5×/2.0×/3.0×) is "
+            "cryptographically computed from on-chain isRecorded() reads, "
+            "not seller-attested.  Operator audit needed to confirm whether "
+            "the listing should be re-anchored (anchors missing) or "
+            "re-classified (data_class wrong)."
+        ),
+        "resolution": (
+            "Inspect curator_listing_review_log row + "
+            "marketplace_listing_log row via "
+            "GET /agent/curator-review/{commitment_hex} and "
+            "GET /agent/marketplace-listing/{commitment_hex}.  If anchors "
+            "missing, advise seller to re-anchor before re-listing.  If "
+            "data_class incorrect, listing should be suspended (Phase O3 "
+            "ENFORCE — operator-only in O1) and re-created with correct "
+            "tier intent."
+        ),
+    },
+
+    "CONSENT_REVOKED_LISTING_ACTIVE": {
+        "query": """
+            SELECT id, listing_commitment, reason_detail, ts_ns
+            FROM curator_listing_review_log
+            WHERE verdict = 'FLAGGED_CONSENT_AMBIGUOUS'
+              AND ts_ns >= ?
+            ORDER BY ts_ns DESC LIMIT 5
+        """,
+        "params": lambda cfg: (int((time.time() - 3600) * 1e9),),
+        "agents_involved": [
+            "Curator",
+            "BiometricPrivacyComplianceAgent",
+            "ConsentLedger",
+        ],
+        "severity": "CRITICAL",
+        "explanation": (
+            "Curator detected listing(s) where the MARKETPLACE consent bit "
+            "(Phase 237 CONSENT bit 3) is cleared in consent_bitmask, yet "
+            "the listing remains active in marketplace_listing_log.  This "
+            "is a candidate GDPR Art.17 (right-to-erasure) violation — the "
+            "gamer revoked consent for marketplace data sharing but their "
+            "listing has not been suspended.  CRITICAL severity because "
+            "regulatory exposure compounds with each subsequent buyer "
+            "purchase against the listing.  Phase 160 erasure pipeline + "
+            "BiometricPrivacyComplianceAgent (BP-001 + BP-007) provide the "
+            "remediation primitives."
+        ),
+        "resolution": (
+            "Operator: (1) verify the consent revocation via "
+            "GET /agent/gamer-consent-status?device_id=<seller>&category=3; "
+            "(2) if consent IS revoked, suspend the listing on-chain via "
+            "VAPIDataMarketplaceListings.suspendListing(commitment) — "
+            "Step H deploy required first; (3) trigger Phase 160 "
+            "erasure pipeline if any buyer access is recorded; (4) update "
+            "operator_audit_log with the resolution.  Curator graduated to "
+            "O2_SUGGEST will surface this remediation path automatically; "
+            "O3_ENFORCE will execute steps 1-2 autonomously."
         ),
     },
 }
