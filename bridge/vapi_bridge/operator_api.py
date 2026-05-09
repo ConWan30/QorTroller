@@ -7638,6 +7638,146 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
+    # Phase 237-ZK-SEPPROOF — POST /operator/anchor-biometric-snapshot
+    # ------------------------------------------------------------------
+    # Reads the most recent AIT row's centroids_json + cov_inv_json, computes
+    # the BIOMETRIC-SNAPSHOT-v1 commitment via biometric_snapshot.compute_biometric_commitment,
+    # anchors it on AdjudicationRegistry (best-effort, fail-open per kill-switch),
+    # and persists to biometric_snapshot_log. The commitment is the public input
+    # binding for ZK-SEPPROOF circuits.
+    #
+    # 422 conditions: missing/empty centroids in latest ait_session_log row
+    # (operator must run analyze_interperson_separation.py with the Phase 237
+    # extension that persists centroids + cov_inv before this endpoint succeeds).
+    @app.post("/operator/anchor-biometric-snapshot")
+    async def anchor_biometric_snapshot_endpoint(
+        api_key: str = Query(default=""),
+        reason: str = Query(default=""),
+    ):
+        """Operator-triggered biometric snapshot anchor (Phase 237-ZK-SEPPROOF).
+
+        Args:
+            api_key: Must match cfg.operator_api_key (full operator auth).
+            reason:  Operator-provided audit string; minimum 10 characters.
+
+        Returns:
+            Dict with row_id, snapshot_commitment, feature_dim, n_players,
+            sorted_player_ids, ts_ns, trigger_reason, on_chain_confirmed,
+            tx_hash, timestamp.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        _reason = (reason or "").strip()
+        if len(_reason) < 10:
+            raise HTTPException(
+                422, "reason must be at least 10 characters (operator audit field)"
+            )
+
+        import json as _j237ep
+        import time as _t237ep
+        from .biometric_snapshot import compute_biometric_commitment
+
+        try:
+            # Pull the latest AIT row directly so we can read the new
+            # centroids_json + cov_inv_json columns. get_ait_separation_status
+            # exists for higher-level summary; here we need the raw row.
+            with store._conn() as _conn237:
+                row = _conn237.execute(
+                    "SELECT id, centroids_json, cov_inv_json, n_per_player_json "
+                    "FROM ait_session_log ORDER BY id DESC LIMIT 1"
+                ).fetchone()
+            if row is None:
+                raise HTTPException(
+                    422,
+                    "no AIT session row available — run analyze_interperson_separation.py "
+                    "--session-type ait --write-snapshot first",
+                )
+            try:
+                cents_raw = _j237ep.loads(row["centroids_json"] or "{}")
+                # JSON keys are strings — coerce to int player_ids
+                centroids = {int(k): list(v) for k, v in cents_raw.items()}
+            except Exception as exc:
+                raise HTTPException(
+                    422, f"centroids_json parse failed: {exc}",
+                )
+            try:
+                cov_inv = _j237ep.loads(row["cov_inv_json"] or "[]")
+            except Exception as exc:
+                raise HTTPException(
+                    422, f"cov_inv_json parse failed: {exc}",
+                )
+            if not centroids or not cov_inv:
+                raise HTTPException(
+                    422,
+                    "latest AIT row has empty centroids/cov_inv — run "
+                    "analyze_interperson_separation.py with Phase 237 "
+                    "extension that persists geometric inputs",
+                )
+
+            sorted_ids = sorted(centroids.keys())
+            feature_dim = len(centroids[sorted_ids[0]])
+            ts_ns = _t237ep.time_ns()
+
+            commitment = compute_biometric_commitment(
+                feature_dim=feature_dim,
+                sorted_player_ids=sorted_ids,
+                centroids_by_player=centroids,
+                cov_inv=cov_inv,
+                ts_ns=ts_ns,
+            )
+
+            # Anchor first so the insert can record the live result in one
+            # call. anchor_biometric_snapshot never raises; returns
+            # (None, False) on any failure (kill-switch, missing config,
+            # tx revert, duplicate) so the local insert always proceeds.
+            tx_hash_hex, anchored = await chain.anchor_biometric_snapshot(
+                commitment.hex(),
+            )
+
+            row_id = await asyncio.to_thread(
+                store.insert_biometric_snapshot,
+                commitment.hex(),
+                feature_dim,
+                sorted_ids,
+                centroids,
+                cov_inv,
+                ts_ns,
+                int(row["id"]),                     # ait_session_log_id
+                _reason,
+                bool(anchored),                     # on_chain_confirmed
+                tx_hash_hex or "",                  # tx_hash
+            )
+
+            return {
+                "row_id":              int(row_id),
+                "snapshot_commitment": commitment.hex(),
+                "feature_dim":         feature_dim,
+                "n_players":           len(sorted_ids),
+                "sorted_player_ids":   sorted_ids,
+                "ts_ns":               ts_ns,
+                "trigger_reason":      _reason,
+                "on_chain_confirmed":  bool(anchored),
+                "tx_hash":             tx_hash_hex or "",
+                "ait_session_log_id":  int(row["id"]),
+                "timestamp":           _t237ep.time(),
+            }
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    @app.get("/agent/biometric-snapshot-status")
+    async def get_biometric_snapshot_status_endpoint(
+        x_api_key: str = Header(default=""),
+    ):
+        """Read-only summary of biometric_snapshot_log: total snapshots + latest.
+
+        Returns 9 keys: total_snapshots, latest_commitment, feature_dim,
+        n_players, ts_ns, on_chain_confirmed, tx_hash, trigger_reason, timestamp.
+        """
+        _check_read_key(x_api_key)
+        return await asyncio.to_thread(store.get_biometric_snapshot_status)
+
     # Phase 235-DASH-UPGRADE — GET /agent/auto-trigger-status
     # ------------------------------------------------------------------
     # Read-only telemetry for the SessionBoundaryDetectorAgent (Phase
