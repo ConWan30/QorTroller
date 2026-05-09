@@ -71,7 +71,15 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 
-COST_BUDGET_IOTX = 0.01  # If single canary anchor charges more, abort + investigate.
+COST_BUDGET_IOTX = 0.50
+# Original 0.01 IOTX budget assumed ~1000 Gwei network gas + ~10k gas usage
+# (a "naive Ethereum" estimate).  Phase 239 G3 GIC_100 reference (2026-05-06)
+# used 160k gas at ~1000 Gwei = 0.160 IOTX.  At 2000 Gwei (May 9 measurement)
+# the same anchor costs ~0.286 IOTX.  Budget set to 0.50 IOTX to allow
+# headroom for gas spikes while still catching an order-of-magnitude
+# anomaly (e.g. wrong contract / accidental loop / fee-market override).
+# Adjust upward only if IoTeX testnet gas price climbs persistently above
+# 4000 Gwei.
 
 
 def _check_gates() -> tuple[bool, str]:
@@ -136,6 +144,17 @@ async def _run() -> int:
     bal_before_wei = await chain._w3.eth.get_balance(wallet_addr)
     bal_before_iotx = bal_before_wei / 1e18
     print(f"  Balance before: {bal_before_iotx:.6f} IOTX")
+
+    # Report current network gas price so operator sees economics upfront
+    try:
+        gas_price_wei = await chain._w3.eth.gas_price
+        gas_price_gwei = gas_price_wei / 1e9
+        print(f"  Network gas price: {gas_price_gwei:.0f} Gwei")
+        # Estimated cost ceiling: 200k gas × current gas price
+        est_cost = 200_000 * gas_price_wei / 1e18
+        print(f"  Estimated anchor cost (200k gas): ~{est_cost:.3f} IOTX")
+    except Exception as exc:
+        print(f"  WARN: gas price probe failed (non-fatal): {exc}")
 
     if bal_before_iotx < 0.05:
         print(f"  ABORT: balance {bal_before_iotx:.6f} < 0.05 IOTX safety floor")

@@ -47,7 +47,7 @@ def test_t_canary_1_script_exists_with_required_constants():
     """Canary script exists + has the expected gate function + cost budget."""
     assert CANARY_PATH.exists()
     src = CANARY_PATH.read_text(encoding="utf-8")
-    assert "COST_BUDGET_IOTX = 0.01" in src
+    assert "COST_BUDGET_IOTX = 0.50" in src
     assert "def _check_gates()" in src
     assert "CHAIN_SUBMISSION_PAUSED" in src
     assert "CORPUS_SNAPSHOT_CANARY_AUTHORIZED" in src
