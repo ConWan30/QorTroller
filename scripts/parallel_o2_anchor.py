@@ -286,10 +286,15 @@ async def _run(args: argparse.Namespace) -> int:
     anchor_results: list = []
     for agent_id in AGENT_ANCHOR_ORDER:
         bundle_path = bundle_paths[agent_id]
-        print(f"  [{agent_id}] anchor_bundle({bundle_path.name})...")
+        # Pass FILENAME only (not full path) — CedarBundleAnchor was
+        # constructed with bundle_dir, and _load_and_parse prepends it
+        # for non-absolute paths.  Passing the relative-looking full
+        # path would cause double-prepending.
+        bundle_filename = bundle_path.name
+        print(f"  [{agent_id}] anchor_bundle({bundle_filename})...")
         try:
             result = await anchor.anchor_bundle(
-                bundle_path=str(bundle_path),
+                bundle_path=bundle_filename,
                 operator_api_key=getattr(cfg, "operator_api_key", "") or "",
                 reason_text=operator_authority_reason,
             )
