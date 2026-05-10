@@ -513,6 +513,41 @@ INVARIANTS: list[Invariant] = [
         pattern=r"c0bcdee8576e83f6b80e8c5ac89093cf08f153033037176cd03fc34fcedfd878|6f0fc77cc1dacaf3f79aeb0f27dd8c7b3d88e95b236f0806ad3588a06bb82225|d9d760c8b7b1088f2edd165fbfa6441abcb3bc3f921e8ba75a3339c0825fec24",
         min_matches=3,
     ),
+    Invariant(
+        id="INV-O1-FRR-SDK-001",
+        description="Phase O1-FRR-SDK VAPIFleetReadinessRoot client class exists in sdk/vapi_sdk.py — wraps GET /operator/fleet-readiness-root + GET /operator/operator-initiative-advancement-log; renaming or removing this class breaks the wire-contract parity discipline (endpoint -> SDK -> frontend -> NOTE) for the FRR primitive (Phase O1-FRR-SDK-LOCK)",
+        file="sdk/vapi_sdk.py",
+        pattern=r"class VAPIFleetReadinessRoot:",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-O1-FRR-SDK-002",
+        description="Phase O1-FRR-SDK three frozen dataclass names (AgentReadinessRow + FleetReadinessRootResult + AdvancementLogResult) — the slot-pinned shapes returned by VAPIFleetReadinessRoot methods; renaming would silently break downstream Python tooling that imports them (Phase O1-FRR-SDK-LOCK)",
+        file="sdk/vapi_sdk.py",
+        pattern=r"class AgentReadinessRow:|class FleetReadinessRootResult:|class AdvancementLogResult:",
+        min_matches=3,
+    ),
+    Invariant(
+        id="INV-O3-UI-DRAWER-001",
+        description="Phase O1 C5 OperatorAgentsDrawer zIndex 20 (bottom-right) preserved — bottom of the three-drawer ordering; raising it above 21 collides with DraftReviewDrawer overlap (Phase O3-UI-LAYOUT-LOCK)",
+        file="frontend/src/components/OperatorAgentsDrawer.jsx",
+        pattern=r"zIndex:\s*20",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-O3-UI-DRAWER-002",
+        description="Phase O2-DRAFT-REVIEW-FRONTEND DraftReviewDrawer zIndex 21 (bottom-left) preserved — middle of the three-drawer ordering; below O3 Readiness (22) above Operator Agents (20) (Phase O3-UI-LAYOUT-LOCK)",
+        file="frontend/src/components/DraftReviewDrawer.jsx",
+        pattern=r"zIndex:\s*21",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-O3-UI-DRAWER-003",
+        description="Phase O3-READINESS-DASHBOARD O3ReadinessDrawer zIndex 22 (top-center) preserved — TOP of the three-drawer ordering above DraftReviewDrawer (21) and OperatorAgentsDrawer (20); ensures the strategic readiness view always layers correctly when multiple drawers are open (Phase O3-UI-LAYOUT-LOCK)",
+        file="frontend/src/components/O3ReadinessDrawer.jsx",
+        pattern=r"zIndex:\s*22",
+        min_matches=1,
+    ),
 ]
 
 
