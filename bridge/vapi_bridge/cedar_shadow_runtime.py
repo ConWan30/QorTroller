@@ -98,17 +98,28 @@ def _bundle_path_for_agent(agent_id_hex: str, cfg) -> Optional[Path]:
     """Resolve the agent's Cedar bundle file by Q9-frozen agentId.
 
     Reads cfg.operator_agent_anchor_sentry_id + cfg.operator_agent_guardian_id
-    + cfg.cedar_bundle_dir to map agent_id → bundle filename.  Returns None
-    when no mapping found (caller fail-opens).
+    + cfg.operator_agent_curator_id + cfg.cedar_bundle_dir to map agent_id →
+    bundle filename.  Returns None when no mapping found (caller fail-opens).
+
+    Phase O1-CURATOR C2 (2026-05-09): Curator added as third agent.  Its
+    bundle (curator_o1_shadow_v1.json) lives in the same cedar_bundles/
+    directory and is resolved by the same pattern.  Curator's architectural
+    divergence (MockKMSClient testnet path vs Sentry/Guardian's GitHub App
+    + AWS KMS) does NOT affect bundle resolution — that divergence is at
+    the attestation-signing layer (kms-sign action), not at policy
+    evaluation.
     """
     sentry_id = str(getattr(cfg, "operator_agent_anchor_sentry_id", "") or "").lower()
     guardian_id = str(getattr(cfg, "operator_agent_guardian_id", "") or "").lower()
+    curator_id = str(getattr(cfg, "operator_agent_curator_id", "") or "").lower()
     bundle_dir = str(getattr(cfg, "cedar_bundle_dir", "bridge/vapi_bridge/cedar_bundles") or "")
     aid_lower = agent_id_hex.lower()
     if aid_lower == sentry_id:
         return Path(bundle_dir) / "anchor_sentry_o1_shadow_v1.json"
     if aid_lower == guardian_id:
         return Path(bundle_dir) / "guardian_o1_shadow_v1.json"
+    if aid_lower == curator_id:
+        return Path(bundle_dir) / "curator_o1_shadow_v1.json"
     return None
 
 
