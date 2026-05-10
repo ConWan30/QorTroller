@@ -1,0 +1,185 @@
+{
+  "$schema": "vapi-cedar-bundle-v1",
+  "agent_id": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1",
+  "phase": "O3_ACTING",
+  "version": 1,
+  "issued_at_iso": "2026-05-10T22:00:00Z",
+  "_phase_o3_act_draft_note": "Phase O3-ACT-DRAFT pre-authoring (mirrors Phase O2-SUGGEST-DRAFT 2026-05-07). Bundle Merkle root locked at draft authoring time; operator_initiative_advancement.py enforces O3_ACT advancement criteria externally before this bundle is anchored. Anchored once Guardian shadow_age >= 504h AND draft_audit_count >= 50 AND operator_disagreement_rate_30d < 5% AND kms_hsm_production_ready AND github_app_oauth_tokens_valid.",
+  "_o3_gates": {
+    "shadow_age_min_hours": 504,
+    "draft_payload_count_min": 50,
+    "operator_disagreement_rate_30d_max": 0.05,
+    "kms_hsm_production_ready": true,
+    "github_app_oauth_tokens_valid": true,
+    "dual_key_present": true
+  },
+  "lane_prefixes": [
+    "audits/",
+    "invariants/",
+    "ops/",
+    "sweeps/"
+  ],
+  "policies": [
+    {
+      "id": "P-001",
+      "effect": "permit",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "skill:read",
+      "resource": "lane://audits/**"
+    },
+    {
+      "id": "P-002",
+      "effect": "permit",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "skill:read",
+      "resource": "lane://sweeps/**"
+    },
+    {
+      "id": "P-003",
+      "effect": "permit",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "skill:read",
+      "resource": "lane://ops/**"
+    },
+    {
+      "id": "P-004",
+      "effect": "permit",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "skill:read",
+      "resource": "lane://invariants/**"
+    },
+    {
+      "id": "P-005",
+      "_note": "On-chain audit-log queries — view only (preserved from O2_SUGGEST)",
+      "effect": "permit",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "tool:audit-log-query",
+      "resource": "chain://iotex-testnet"
+    },
+    {
+      "id": "P-006",
+      "effect": "permit",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "tool:agent-registry-query",
+      "resource": "chain://iotex-testnet"
+    },
+    {
+      "id": "P-007",
+      "_note": "kms-sign on commit hashes — signatures continue as inputs to downstream audit/PR workflows. Resource unchanged from O2; production lift is at consumer (audit-entry anchor via lane://audits/** + git-pr).",
+      "effect": "permit",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "tool:kms-sign",
+      "resource": "draft://commit_hashes/*"
+    },
+    {
+      "id": "P-008",
+      "_note": "O3 ACTING LIFT: audit-drafting graduates from draft://audit_entries/* (O2 SUGGEST) to lane://audits/** (live audit lane writes). Audit entries become operator-grade artifacts for tournament-launch defensibility.",
+      "effect": "permit",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "skill:audit-drafting",
+      "resource": "lane://audits/**"
+    },
+    {
+      "id": "P-009",
+      "_note": "O3 ACTING LIFT: operational-diagnostic graduates to lane://ops/** (live ops lane). Diagnostic findings become operator-acknowledged artifacts.",
+      "effect": "permit",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "skill:operational-diagnostic",
+      "resource": "lane://ops/**"
+    },
+    {
+      "id": "P-010",
+      "_note": "audit-entry-draft permits writing audit drafts at the structured tooling layer (e.g. via internal endpoint). Resource lifted from draft://audit_entries/* to lane://audits/**.",
+      "effect": "permit",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "tool:audit-entry-draft",
+      "resource": "lane://audits/**"
+    },
+    {
+      "id": "P-011",
+      "_note": "git-add stays in draft scope — PRs remain operator-merge-required",
+      "effect": "permit",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "tool:git-add",
+      "resource": "draft://audit_entries/*"
+    },
+    {
+      "id": "P-012",
+      "effect": "permit",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "tool:git-commit",
+      "resource": "draft://audit_entries/*"
+    },
+    {
+      "id": "P-013",
+      "effect": "permit",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "tool:git-pr",
+      "resource": "draft://audit_entries/*"
+    },
+    {
+      "id": "P-014",
+      "_note": "O3 ACTING LIFT: ipfs-pin graduates to lane://audits/** (real IPFS pinning of canonical audit content)",
+      "effect": "permit",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "tool:ipfs-pin",
+      "resource": "lane://audits/**"
+    },
+    {
+      "id": "F-001",
+      "_note": "git-push FOREVER forbidden across all Operator agents (PR-merge-only path)",
+      "effect": "forbid",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "tool:git-push",
+      "resource": "*"
+    },
+    {
+      "id": "F-002",
+      "_note": "CROSS-AGENT SEPARATION (preserved at O3) — pda-attestation-anchor reserved for Sentry",
+      "effect": "forbid",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "tool:pda-attestation-anchor",
+      "resource": "*"
+    },
+    {
+      "id": "F-003",
+      "_note": "endpoint:write FOREVER forbidden — Guardian's only write path is audit-entry-draft + git-pr + ipfs-pin via specific tool actions",
+      "effect": "forbid",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "endpoint:write",
+      "resource": "*"
+    },
+    {
+      "id": "F-004",
+      "_note": "CROSS-AGENT SEPARATION (preserved at O3) — event-correlation reserved for Sentry",
+      "effect": "forbid",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "skill:event-correlation",
+      "resource": "*"
+    },
+    {
+      "id": "F-005",
+      "_note": "CROSS-AGENT SEPARATION (preserved at O3) — provenance-recording reserved for Sentry",
+      "effect": "forbid",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "skill:provenance-recording",
+      "resource": "*"
+    },
+    {
+      "id": "F-006",
+      "_note": "CROSS-AGENT SEPARATION (preserved at O3) — marketplace-listing-review reserved for Curator",
+      "effect": "forbid",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "skill:marketplace-listing-review",
+      "resource": "*"
+    },
+    {
+      "id": "F-007",
+      "_note": "CROSS-AGENT SEPARATION (preserved at O3) — marketplace-listing-suspend reserved for Curator",
+      "effect": "forbid",
+      "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"},
+      "action": "tool:marketplace-listing-suspend",
+      "resource": "*"
+    }
+  ]
+}
