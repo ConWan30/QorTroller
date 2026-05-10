@@ -1,0 +1,15 @@
+{
+  "circuitName": "ZKSepProof",
+  "circuitId": "0x1cbf0c68c0dbb08a590c5867df914312cb76b8671833ce6e3867ce017dce3494",
+  "verifyingKeyHash": "0x32fda2857bdfb0612dd5cb305aa6798fabd64bb3f9362f362c6d73cdc49c4c1f",
+  "beaconBlockHash": "0x5ae472f1c99bc5f040ab16b9adff185abaef5322dae8237fda4aaccf9917b9b8",
+  "beaconBlockNumber": 43451392,
+  "contributorHashes": [
+    "117c09aa90b79e3e1a7e1ca28b8f6e8793e247a5caa775256520de0584ec8913",
+    "62febae6b6cc8b6614a715c809fd0eb400b6c618280e391144db35a4df2b0c12",
+    "3f8b04782647e9ff83450777626e043c4ccda804ba022092743bc88cc0c292e0"
+  ],
+  "contributorCount": 3,
+  "ptauSource": "hermez-hez_final_15-2021",
+  "timestamp": 1778371876
+}

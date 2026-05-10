@@ -109,5 +109,10 @@
   "_phase_o0_section_6_4_block_b_status": "code-complete; deployment pending operator-driven session",
   "_phase_o0_section_6_4_block_b_note": "Phase O0 Section 6.4 Block B: VAPIOperatorAgentNFT — custom DeviceNFT contract per Pass 2C Section 14.4 N2 β canonical resolution. Verbatim copy of canonical contracts/examples/DeviceNFT.sol from github.com/iotexproject/ioID-contracts at commit b94ad092. Used as the deviceContract parameter in ioIDRegistry.register; per-agent device tokenIds (anchor-sentry → 1, guardian → 2 by mint order) are consumed during agent registration. Address is placeholder zero until contracts/scripts/deploy-vapi-operator-agent-nft.js executes on iotex_testnet (gas estimate ~0.30 IOTX deploy + 0.05 IOTX initialize+configureMinter; total Section 14.6 budget ~1.73 IOTX with 9.8x headroom against 16.97 IOTX bridge wallet). Per V8.3: post-deployment commit updates VAPI_OPERATOR_AGENT_NFT_ADDR constant in bridge/vapi_bridge/agent_registration.py from placeholder to deployed address; commit message documents deployment transaction hash.",
   "VAPIDataMarketplaceListings": "0x78Df84Cc512EdCaC0e58a03e4852627E2F62E3bC",
-  "_phase238_step_h_status": "LIVE (testnet)"
+  "_phase238_step_h_status": "LIVE (testnet)",
+  "Groth16VerifierZKSepProof": "0xD63EEf1372Cb496071bf963bEE395F7e0A3f2Ab6",
+  "ZKSepProofVerifier": "0xd51a21E234a800a6621f4c23a8fcA44e3bF01002",
+  "_phase237_zk_sepproof_status": "LIVE (testnet)",
+  "_phase237_zk_sepproof_ceremony_beacon_block": 43451392,
+  "_phase237_zk_sepproof_vk_hash": "0x32fda2857bdfb0612dd5cb305aa6798fabd64bb3f9362f362c6d73cdc49c4c1f"
 }
