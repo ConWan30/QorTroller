@@ -710,6 +710,113 @@ CONTRADICTION_RULES: dict = {
             "O3_ENFORCE will execute steps 1-2 autonomously."
         ),
     },
+
+    # Phase O2-FSCA-RULES (2026-05-10) — three new rules surfacing operator-
+    # initiative drafting layer health.  Drafts persist in operator_agent_drafts
+    # (Phase 1005 schema); these rules query that table + the activation log
+    # to detect stalled polling loops, review backlogs, and disagreement-rate
+    # trending toward the PHASE_O3_DISAGREEMENT_RATE_MAX=0.05 breach.
+    "O2_SUGGEST_NO_DRAFTS_24H": {
+        "query": """
+            SELECT al.agent_id, al.bundle_path,
+                   (SELECT COUNT(*) FROM operator_agent_drafts d
+                    WHERE d.agent_id = al.agent_id AND d.created_at >= ?) AS recent_drafts
+            FROM operator_agent_activation_log al
+            INNER JOIN (
+                SELECT agent_id, MAX(id) AS latest_id
+                FROM operator_agent_activation_log
+                GROUP BY agent_id
+            ) latest ON al.id = latest.latest_id
+            WHERE al.bundle_path LIKE '%_o2_suggest_%'
+              AND (SELECT COUNT(*) FROM operator_agent_drafts d
+                   WHERE d.agent_id = al.agent_id AND d.created_at >= ?) = 0
+        """,
+        "params": lambda cfg: (time.time() - 86400, time.time() - 86400),
+        "agents_involved": [
+            "anchor_sentry", "guardian", "curator",
+            "SentryPollingLoop", "GuardianPollingLoop", "CuratorPollingLoop",
+        ],
+        "severity": "HIGH",
+        "explanation": (
+            "An Operator Initiative agent currently anchored at O2_SUGGEST has "
+            "produced ZERO drafts in the last 24 hours.  Indicates the polling "
+            "loop has stalled OR the agent never received a valid trigger.  "
+            "Without drafts, the watcher's PHASE_O3_DRAFT_PAYLOAD_MIN=50 gate "
+            "will never clear and O3_ACTING anchor remains blocked indefinitely."
+        ),
+        "resolution": (
+            "Verify the agent's polling loop config flag is True (e.g. "
+            "OPERATOR_AGENT_<AGENT>_POLLING_ENABLED=true in bridge/.env).  "
+            "Verify the trigger source is wired (Phase O2-AUTONOMOUS-PRELUDE "
+            "scaffold-only — live event wiring is a follow-up phase).  "
+            "Inspect logs for `<Agent>PollingLoop: get_pending_triggers error` "
+            "or `unknown trigger kind` warnings."
+        ),
+    },
+
+    "DRAFT_UNREVIEWED_72H": {
+        "query": """
+            SELECT COUNT(*) AS unreviewed_count, MIN(created_at) AS oldest_unreviewed
+            FROM operator_agent_drafts
+            WHERE operator_decision IS NULL AND created_at < ?
+            HAVING COUNT(*) >= 10
+        """,
+        "params": lambda cfg: (time.time() - 72 * 3600,),
+        "agents_involved": [
+            "anchor_sentry", "guardian", "curator",
+            "OperatorReviewSurface",
+        ],
+        "severity": "MEDIUM",
+        "explanation": (
+            "10 or more drafts have been awaiting operator review for over 72 "
+            "hours.  Indicates an operator-review backlog.  Drafts left "
+            "unreviewed contribute to NEITHER the disagreement_rate numerator "
+            "NOR denominator (the helper excludes operator_decision IS NULL "
+            "from the reviewed set), so the watcher cannot derive a real signal "
+            "until the backlog drains.  Single finding per cycle (not per draft)."
+        ),
+        "resolution": (
+            "Operator: review pending drafts via "
+            "GET /operator/operator-agent-drafts?decision=unreviewed and "
+            "POST /operator/operator-agent-draft-review per draft.  "
+            "Frontend dashboard (deferred phase) will surface these inline."
+        ),
+    },
+
+    "DISAGREEMENT_RATE_TRENDING": {
+        "query": """
+            SELECT agent_id,
+                   COUNT(*) AS n_reviewed,
+                   SUM(CASE WHEN operator_decision = 'reject' THEN 1 ELSE 0 END) AS n_reject
+            FROM operator_agent_drafts
+            WHERE created_at >= ?
+              AND operator_decision IN ('accept', 'reject')
+            GROUP BY agent_id
+            HAVING n_reviewed > 0
+               AND (CAST(n_reject AS FLOAT) / n_reviewed) > 0.04
+        """,
+        "params": lambda cfg: (time.time() - 30 * 86400,),
+        "agents_involved": [
+            "anchor_sentry", "guardian", "curator",
+            "OperatorReviewSurface",
+        ],
+        "severity": "CRITICAL",
+        "explanation": (
+            "Operator-vs-agent disagreement rate over the last 30 days exceeds "
+            "0.04 (4%) for at least one Operator Initiative agent.  Trending "
+            "toward the 5% PHASE_O3_DISAGREEMENT_RATE_MAX=0.05 breach.  CRITICAL "
+            "severity because crossing 5% blocks O3_ACTING anchor (the watcher's "
+            "Gate 4 fails on any agent at >= 5% rate).  The agent's draft "
+            "generation logic is producing payloads that operators are "
+            "rejecting at a rate trending toward the gate threshold."
+        ),
+        "resolution": (
+            "Audit recent reject decisions via "
+            "GET /operator/operator-agent-drafts?decision=reject; identify the "
+            "shared failure mode in operator_disagreement_reason; either fix "
+            "the agent's draft generator OR adjust the trigger source quality."
+        ),
+    },
 }
 
 # ---------------------------------------------------------------------------
