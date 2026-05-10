@@ -18,7 +18,10 @@ import {
   useCuratorFlaggedListings,
 } from '../api/bridgeApi'
 import { TierBadge, TierLegend } from '../components/TierBadge'
-import { TwinControllerStream } from '../components/TwinControllerStream'
+// Phase 238-FRONTEND-V3 — single-Twin invariant: Marketplace renders the
+// same R3F GLB controller used by GamerView, embedded via the existing
+// MINIMAL iframe entry point.  The simplified SVG TwinControllerStream is
+// deprecated (see frontend/src/components/TwinControllerStream.jsx.deprecated.jsx).
 import { ConsentMatrix, CONSENT_CATEGORIES } from '../components/ConsentMatrix'
 
 const PRIMITIVE_BADGES = [
@@ -152,7 +155,11 @@ export function MarketplaceView() {
         </div>
       </section>
 
-      {/* Twin controller real-time stream */}
+      {/* Twin controller real-time stream — Phase 238-FRONTEND-V3 unified
+          3D model.  Same iframe entry point GamerView mounts; ?minimal=1
+          drops overlays so the Canvas owns the embed.  Cryptographic-event
+          pulses (poac/gic/pcc/curator/anchor) are wired inside the iframe
+          via the SSE consumer in legacy/ControllerTwin.jsx. */}
       <section>
         <SectionHeader>
           TWIN CONTROLLER · LIVE PROVENANCE THEATER
@@ -165,9 +172,17 @@ export function MarketplaceView() {
             every pulse maps to a verifiable backend signal
           </span>
         </SectionHeader>
-        <TwinControllerStream
-          consentBitmask={demoConsentBitmask}
-          height={280}
+        <iframe
+          src="/controller-twin.html?minimal=1"
+          title="VAPI 3D Controller Twin"
+          style={{
+            width:        '100%',
+            height:       280,
+            border:       '1px solid var(--vapi-cyan)',
+            borderRadius: 3,
+            background:   'var(--vapi-void)',
+            display:      'block',
+          }}
         />
       </section>
 
