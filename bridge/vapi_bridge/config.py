@@ -2061,6 +2061,19 @@ class Config:
     30s default; Curator additionally runs a 6h periodic_compliance batch
     independent of this base interval."""
 
+    # --- Phase O2-GIT-TRIGGER-SOURCE: live commit trigger source ---
+    operator_agent_git_trigger_enabled: bool = field(
+        default_factory=lambda: _env_bool("OPERATOR_AGENT_GIT_TRIGGER_ENABLED", False)
+    )
+    """Phase O2-GIT-TRIGGER-SOURCE — Enable GitTriggerSource as the live
+    commit trigger source feeding Sentry's (and optionally Guardian's)
+    polling loop. When False (default), Sentry/Guardian receive no commit
+    triggers and produce no kms-sign/provenance/audit drafts on commits.
+    When True, GitTriggerSource polls `git rev-parse HEAD` each polling
+    cycle and emits {kind:'commit', payload:{commit_hash, repo, branch}}
+    triggers on HEAD advancement. Pure stdlib subprocess; no bus dependency.
+    Default False = opt-in (live event source)."""
+
     # --- Phase 235-GAD: Gameplay Activity Discrimination ---
     gameplay_discrimination_enabled: bool = field(
         default_factory=lambda: _env_bool("GAMEPLAY_DISCRIMINATION_ENABLED", True)
