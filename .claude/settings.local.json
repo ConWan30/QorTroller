@@ -80,7 +80,8 @@
       "Bash(Enable-PnpDevice:*)",
       "Bash(Set-ItemProperty:*)",
       "Read(//c/Users/Contr/vapi-pebble-prototype/scripts/_usb_remediate_bridge.log)",
-      "Write(//c/Users/Contr/vapi-pebble-prototype/scripts/_usb_remediate_bridge.log)"
+      "Write(//c/Users/Contr/vapi-pebble-prototype/scripts/_usb_remediate_bridge.log)",
+      "Bash(mkdir -p /root/.claude/plans)"
     ]
   },
   "hooks": {
