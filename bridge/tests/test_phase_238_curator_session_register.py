@@ -87,14 +87,47 @@ def test_t_238_cur_sr_4_substitute_agent_id_validates_input():
 
 # ── T-238-CUR-SR-5 ──────────────────────────────────────────────────────────
 def test_t_238_cur_sr_5_substitute_replaces_all_occurrences(tmp_path, monkeypatch):
-    """Substitution rewrites all 41 occurrences across O1+O2 bundles."""
-    # Copy the real bundles into a tmp dir + monkeypatch the module paths
+    """Substitution rewrites all 41 occurrences across O1+O2 bundles.
+
+    Phase 238 Step I-FINAL note: the canonical bundles in
+    bridge/vapi_bridge/cedar_bundles/ have been substituted with the real
+    Curator agentId (0xed6a2df5...) post-mint 2026-05-09.  This test
+    therefore generates fresh placeholder fixtures in tmp_path rather
+    than copying from canonical, decoupling the test from production
+    bundle state.
+    """
+    import bridge.scripts.curator_session_register as csr
+
+    # Build minimal placeholder fixtures with known occurrence counts.
+    # O1 bundle: 1 header agent_id + 20 policies = 21 placeholder occurrences.
+    # O2 bundle: 1 header agent_id + 21 policies = 22 placeholder occurrences.
+    placeholder = csr.PLACEHOLDER_AGENT_ID
+
+    def _fixture(num_policies):
+        return {
+            "$schema": "vapi-cedar-bundle-v1",
+            "agent_id": placeholder,
+            "phase": "O1_SHADOW",
+            "version": 1,
+            "issued_at_iso": "2026-05-09T00:00:00Z",
+            "lane_prefixes": ["marketplace/"],
+            "policies": [
+                {
+                    "id": f"P-{i:03d}",
+                    "effect": "permit",
+                    "principal": {"agentId": placeholder},
+                    "action": "skill:read",
+                    "resource": "lane://marketplace/**",
+                }
+                for i in range(num_policies)
+            ],
+        }
+
     tmp_o1 = tmp_path / "curator_o1_shadow_v1.json"
     tmp_o2 = tmp_path / "curator_o2_suggest_v1.json"
-    shutil.copy(O1_BUNDLE, tmp_o1)
-    shutil.copy(O2_BUNDLE, tmp_o2)
+    tmp_o1.write_text(json.dumps(_fixture(20)), encoding="utf-8")
+    tmp_o2.write_text(json.dumps(_fixture(21)), encoding="utf-8")
 
-    import bridge.scripts.curator_session_register as csr
     monkeypatch.setattr(csr, "O1_BUNDLE", tmp_o1)
     monkeypatch.setattr(csr, "O2_BUNDLE", tmp_o2)
 

@@ -50,7 +50,9 @@ log = logging.getLogger(__name__)
 _GATE_SCRIPT = Path(__file__).parent.parent.parent / "scripts" / "vapi_invariant_gate.py"
 
 # ---------------------------------------------------------------------------
-# Canonical 37-agent fleet IDs (Phase 224 — biometric_governance_agent added)
+# Canonical 38-agent fleet IDs (Phase 238 Step I-FINAL — curator_agent added
+# as the third Operator Initiative agent post on-chain mint + dual-anchor
+# 2026-05-09; Merkle leaves 38 -> 39 incl. virtual allowlist leaf)
 # ---------------------------------------------------------------------------
 
 _AGENT_IDS: tuple[str, ...] = (
@@ -91,6 +93,7 @@ _AGENT_IDS: tuple[str, ...] = (
     "corpus_curator_agent",
     "fleet_signal_coherence_agent",
     "biometric_governance_agent",   # Phase 222
+    "curator_agent",                # Phase 238 Step I-FINAL — third Operator Initiative agent
 )
 
 

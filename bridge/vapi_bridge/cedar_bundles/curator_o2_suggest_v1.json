@@ -1,6 +1,6 @@
 {
   "$schema": "vapi-cedar-bundle-v1",
-  "agent_id": "0xc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0",
+  "agent_id": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8",
   "_agent_id_note": "PLACEHOLDER — replaced with real Q9-encoded agentId at on-chain VAPIOperatorAgentNFT mint (Phase 238 Step I-FINAL).  This O2_SUGGEST bundle CANNOT be anchored before the O1_SHADOW bundle is anchored (O2 graduation requires N>=50 reviews + 0 false-positive rate validation under O1 shadow data). Operator anchors O1 first, accumulates shadow data, then anchors O2 to graduate.",
   "phase": "O2_SUGGEST",
   "version": 1,
@@ -16,7 +16,7 @@
       "id": "P-001",
       "_note": "Curator reads marketplace listings + reviews",
       "effect": "permit",
-      "principal": {"agentId": "0xc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"},
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
       "action": "skill:read",
       "resource": "lane://marketplace/**"
     },
@@ -24,7 +24,7 @@
       "id": "P-002",
       "_note": "Curator reads provenance DAG to verify anchor freshness",
       "effect": "permit",
-      "principal": {"agentId": "0xc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"},
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
       "action": "skill:read",
       "resource": "lane://provenance/**"
     },
@@ -32,7 +32,7 @@
       "id": "P-003",
       "_note": "Curator reads event stream for listing creation triggers",
       "effect": "permit",
-      "principal": {"agentId": "0xc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"},
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
       "action": "skill:read",
       "resource": "lane://events/**"
     },
@@ -40,7 +40,7 @@
       "id": "P-004",
       "_note": "Curator reads wiki briefs for tier rule reference",
       "effect": "permit",
-      "principal": {"agentId": "0xc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"},
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
       "action": "skill:read",
       "resource": "lane://wiki/**"
     },
@@ -48,7 +48,7 @@
       "id": "P-005",
       "_note": "Curator queries IoTeX for AdjudicationRegistry.isRecorded() per anchor — view only, zero gas",
       "effect": "permit",
-      "principal": {"agentId": "0xc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"},
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
       "action": "tool:iotex-rpc-query",
       "resource": "chain://iotex-testnet"
     },
@@ -56,7 +56,7 @@
       "id": "P-006",
       "_note": "O2 SUGGEST graduation: kms-sign on listing reviews now lifts shadow_mode constraint — Curator can produce real authority-graded review verdicts (still no auto-suspension; that requires O3 ENFORCE)",
       "effect": "permit",
-      "principal": {"agentId": "0xc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"},
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
       "action": "tool:kms-sign",
       "resource": "draft://listing_reviews/*"
     },
@@ -64,7 +64,7 @@
       "id": "P-007",
       "_note": "CURATOR-EXCLUSIVE skill — marketplace listing review at O2 SUGGEST authority (shadow_mode constraint lifted)",
       "effect": "permit",
-      "principal": {"agentId": "0xc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"},
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
       "action": "skill:marketplace-listing-review",
       "resource": "draft://listing_reviews/*"
     },
@@ -72,7 +72,7 @@
       "id": "P-008",
       "_note": "CURATOR-EXCLUSIVE skill — tier compliance check via on-chain isRecorded reads",
       "effect": "permit",
-      "principal": {"agentId": "0xc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"},
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
       "action": "skill:tier-compliance-check",
       "resource": "lane://marketplace/**"
     },
@@ -80,7 +80,7 @@
       "id": "P-009",
       "_note": "CURATOR-EXCLUSIVE skill — anchor freshness audit",
       "effect": "permit",
-      "principal": {"agentId": "0xc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"},
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
       "action": "skill:anchor-freshness-audit",
       "resource": "lane://provenance/**"
     },
@@ -88,7 +88,7 @@
       "id": "P-010",
       "_note": "CURATOR-EXCLUSIVE skill — IPFS metadata sanity check (read-only HTTP GET against gateway)",
       "effect": "permit",
-      "principal": {"agentId": "0xc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"},
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
       "action": "tool:ipfs-metadata-fetch",
       "resource": "lane://marketplace/**"
     },
@@ -96,7 +96,7 @@
       "id": "P-011",
       "_note": "O2 GRADUATION NEW PERMIT — Curator may notify operator with a suspension RECOMMENDATION (does not execute suspension; operator approves manually).  draft://operator_notifications/* is the new lane added at O2 SUGGEST.",
       "effect": "permit",
-      "principal": {"agentId": "0xc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"},
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
       "action": "tool:operator-notify",
       "resource": "draft://operator_notifications/*"
     },
@@ -104,7 +104,7 @@
       "id": "F-001",
       "_note": "Curator does NOT pin to IPFS (write-side; reserved for Sentry post-O2)",
       "effect": "forbid",
-      "principal": {"agentId": "0xc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"},
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
       "action": "tool:ipfs-pin",
       "resource": "*"
     },
@@ -112,7 +112,7 @@
       "id": "F-002",
       "_note": "Curator does NOT anchor to PDA (Sentry's exclusive write skill post-O2)",
       "effect": "forbid",
-      "principal": {"agentId": "0xc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"},
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
       "action": "tool:pda-attestation-anchor",
       "resource": "*"
     },
@@ -120,7 +120,7 @@
       "id": "F-003",
       "_note": "git-push FOREVER forbidden across all Operator agents (PR-merge-only)",
       "effect": "forbid",
-      "principal": {"agentId": "0xc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"},
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
       "action": "tool:git-push",
       "resource": "*"
     },
@@ -128,7 +128,7 @@
       "id": "F-004",
       "_note": "Curator does NOT commit code — review verdicts written to draft:// only",
       "effect": "forbid",
-      "principal": {"agentId": "0xc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"},
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
       "action": "tool:git-commit",
       "resource": "*"
     },
@@ -136,7 +136,7 @@
       "id": "F-005",
       "_note": "Curator does NOT call write endpoints (suspension authority is O3 ENFORCE only).  At O2 SUGGEST, Curator can recommend via tool:operator-notify but cannot execute.",
       "effect": "forbid",
-      "principal": {"agentId": "0xc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"},
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
       "action": "endpoint:write",
       "resource": "*"
     },
@@ -144,7 +144,7 @@
       "id": "F-006",
       "_note": "CROSS-AGENT SEPARATION (preserved at O2) — event-correlation reserved for Sentry",
       "effect": "forbid",
-      "principal": {"agentId": "0xc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"},
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
       "action": "skill:event-correlation",
       "resource": "*"
     },
@@ -152,7 +152,7 @@
       "id": "F-007",
       "_note": "CROSS-AGENT SEPARATION (preserved at O2) — provenance-recording reserved for Sentry",
       "effect": "forbid",
-      "principal": {"agentId": "0xc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"},
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
       "action": "skill:provenance-recording",
       "resource": "*"
     },
@@ -160,7 +160,7 @@
       "id": "F-008",
       "_note": "CROSS-AGENT SEPARATION (preserved at O2) — audit-drafting reserved for Guardian",
       "effect": "forbid",
-      "principal": {"agentId": "0xc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"},
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
       "action": "skill:audit-drafting",
       "resource": "*"
     },
@@ -168,7 +168,7 @@
       "id": "F-009",
       "_note": "CROSS-AGENT SEPARATION (preserved at O2) — operational-diagnostic reserved for Guardian",
       "effect": "forbid",
-      "principal": {"agentId": "0xc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"},
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
       "action": "skill:operational-diagnostic",
       "resource": "*"
     },
@@ -176,7 +176,7 @@
       "id": "F-010",
       "_note": "Curator FOREVER forbidden from kms-sign on validation_record paths — tournament gate is Sentry+Guardian co-sign in O2/O3",
       "effect": "forbid",
-      "principal": {"agentId": "0xc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0"},
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
       "action": "tool:kms-sign",
       "resource": "draft://validation_record/*"
     }

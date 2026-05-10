@@ -1,0 +1,39 @@
+{
+  "_template_metadata": {
+    "_comment": "Phase 238 Step I-FINAL — DID document template for vapi-curator (third Operator Initiative agent). Mirrors vapi-anchor-sentry + vapi-guardian template shape per Pass 2C Section 6.1 specification; populated during Phase 238 Step I-FINAL agent registration when the bridge wallet authorizes the on-chain mint+register sequence. Placeholders use the form <name>; the IPFS pinning step substitutes real values at registration time.",
+    "_pass_2c_section": "6.1",
+    "_phase": "238 Step I-FINAL",
+    "_status": "TEMPLATE — placeholders populated during Phase 238 Step I-FINAL agent registration"
+  },
+  "@context": ["https://www.w3.org/ns/did/v1"],
+  "id": "did:io:0x<address>",
+  "controller": "did:io:0x<address>",
+  "verificationMethod": [
+    {
+      "id": "did:io:0x<address>#kms-key-1",
+      "type": "EcdsaSecp256k1VerificationKey2019",
+      "controller": "did:io:0x<address>",
+      "publicKeyHex": "0x<pubkey>"
+    }
+  ],
+  "authentication": ["did:io:0x<address>#kms-key-1"],
+  "assertionMethod": ["did:io:0x<address>#kms-key-1"],
+  "service": [
+    {
+      "id": "did:io:0x<address>#vapi-agent",
+      "type": "VAPIOperatorAgent",
+      "serviceEndpoint": "https://github.com/apps/vapi-curator"
+    }
+  ],
+  "alsoKnownAs": [
+    "https://github.com/apps/vapi-curator",
+    "vapi-agent-id:0x<agent_id_bytes32_hex>",
+    "erc6551-tba:0x<tba_address>"
+  ],
+  "metadata": {
+    "agentRole": "Curator",
+    "vapiPhase": "238 Step I-FINAL",
+    "modelClass": "claude-sonnet-4-6",
+    "createdAt": "<iso8601>"
+  }
+}

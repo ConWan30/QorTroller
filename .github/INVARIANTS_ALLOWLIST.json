@@ -60,7 +60,7 @@
     "description": "Phase 67 circuitId = sha3_256(circuitName.encode())"
   },
   "INV-016": {
-    "digest": "1a0e162b220bb71a752abc9081e4014752039dcb521723567c71a5ede34843ad",
+    "digest": "7b0cc679545a22aa94afe301d7e34a3ff264c97fa70f8f0a59c34b443609968e",
     "description": "Allowlist hash included as virtual leaf in ProtocolCoherenceAgent Merkle root"
   },
   "INV-017": {

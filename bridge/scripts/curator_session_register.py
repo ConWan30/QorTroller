@@ -79,16 +79,50 @@ async def step_6_mint_curator_device_nft() -> dict:
     return await step_6_mint_device_nft(CURATOR_AGENT_NAME)
 
 
-async def step_7_register_curator_full_flow() -> dict:
+async def step_7_register_curator_full_flow(use_mock_kms: bool = False) -> dict:
     """ioIDRegistry.register full 13-step flow for Curator.
 
     Pins DID document to IPFS, computes content hash, queries nonce,
     builds EIP-712 permit, signs via KMS (curator alias), parses DER,
     submits register tx, reads back ioID tokenId from NewDevice event,
     queries TBA address.
+
+    Args:
+        use_mock_kms: TESTNET ONLY.  When True, injects MockKMSClient with
+            deterministic per-agent keys (seed-based) instead of real AWS
+            KMS.  Acceptable for testnet activation but the private key
+            lives in-process, not HSM-backed.  MAINNET activation MUST
+            provision real AWS KMS for Curator before this flag is unset.
     """
     from bridge.scripts.operator_session_register_agents import step_7_register_full_flow
-    return await step_7_register_full_flow(CURATOR_AGENT_NAME)
+    kms_client = None
+    if use_mock_kms:
+        from bridge.vapi_bridge.mock_kms_client import MockKMSClient
+        kms_client = MockKMSClient()
+        print("  [WARN] TESTNET-ONLY: MockKMSClient injected for Curator step_7.")
+        print("    Curator's private key lives in-process; HSM-backed real")
+        print("    AWS KMS provisioning required before mainnet activation.")
+    return await step_7_register_full_flow(
+        CURATOR_AGENT_NAME, kms_client=kms_client,
+    )
+
+
+async def step_8_register_curator_agent_with_mock(use_mock_kms: bool = False) -> dict:
+    """Internal helper — step_8 with optional mock KMS injection.
+
+    Mirror step_7 mock injection so the SAME deterministic keypair is used
+    for both register flow AND AgentRegistry.registerAgent — otherwise the
+    derived device address would differ between steps and AgentRegistry
+    would record a different publicKey than ioID DID resolves to.
+    """
+    from bridge.scripts.operator_session_register_agents import step_8_register_agent
+    kms_client = None
+    if use_mock_kms:
+        from bridge.vapi_bridge.mock_kms_client import MockKMSClient
+        kms_client = MockKMSClient()
+    return await step_8_register_agent(
+        CURATOR_AGENT_NAME, kms_client=kms_client,
+    )
 
 
 async def step_8_register_curator_agent() -> dict:
@@ -192,22 +226,26 @@ def re_derive_bundle_merkle_roots() -> dict:
 
 # ── Entry point ─────────────────────────────────────────────────────────────
 
-async def run_step(step: int) -> dict:
+async def run_step(step: int, use_mock_kms: bool = False) -> dict:
     if step == 6:
         return await step_6_mint_curator_device_nft()
     if step == 7:
-        return await step_7_register_curator_full_flow()
+        return await step_7_register_curator_full_flow(use_mock_kms=use_mock_kms)
     if step == 8:
-        return await step_8_register_curator_agent()
+        return await step_8_register_curator_agent_with_mock(use_mock_kms=use_mock_kms)
     if step == 9:
-        # Step 9 needs the real agentId from step 8 session state
+        # Step 9 needs the real agentId from step 8 session state.
+        # Phase O0 wrapper saves under agent_registry_data[agent].agent_id
+        # (NOT agent_ids[agent] — that was an earlier draft path).
         from bridge.scripts.operator_session_register_agents import _load_session_state
         state = _load_session_state()
-        agent_ids = state.get("agent_ids", {})
-        real_id = agent_ids.get(CURATOR_AGENT_NAME)
+        agent_registry_data = state.get("agent_registry_data", {})
+        curator_record = agent_registry_data.get(CURATOR_AGENT_NAME, {})
+        real_id = curator_record.get("agent_id")
         if not real_id:
             raise RuntimeError(
-                "step_8 has not completed; agent_ids[curator] missing from "
+                "step_8 has not completed; "
+                "agent_registry_data[curator].agent_id missing from "
                 "session state. Run step 8 first."
             )
         return {"step": 9, "substitutions": substitute_curator_agent_id_in_bundles(real_id)}
@@ -247,13 +285,17 @@ def _main_cli() -> int:
                         help="Run a single step (6-10)")
     parser.add_argument("--execute", action="store_true",
                         help="Run all steps 6-10 in sequence")
+    parser.add_argument("--use-mock-kms", action="store_true",
+                        help="TESTNET ONLY: inject MockKMSClient instead of real "
+                             "AWS KMS.  Curator's private key lives in-process; "
+                             "HSM-backed real KMS required before mainnet.")
     args = parser.parse_args()
     if not args.step and not args.execute:
         parser.print_help()
         return 1
 
     if args.step:
-        result = asyncio.run(run_step(args.step))
+        result = asyncio.run(run_step(args.step, use_mock_kms=args.use_mock_kms))
         print(json.dumps(result, indent=2, default=str))
     else:
         result = asyncio.run(run_all_steps())
