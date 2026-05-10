@@ -1253,14 +1253,42 @@ class Bridge:
         if getattr(self.cfg, "operator_agent_sentry_polling_enabled", False):
             try:
                 from .operator_agent_sentry_polling import run_sentry_polling_loop
+                # Phase O2-GIT-TRIGGER-AUTOWIRE (2026-05-10): when
+                # operator_agent_git_trigger_enabled=True, auto-construct
+                # GitTriggerSource and pass as get_pending_triggers so Sentry
+                # receives real commit triggers without operator hand-wiring.
+                # Factory returns None when the flag is False -- in that case,
+                # run_sentry_polling_loop falls back to its no-op trigger stub
+                # (scaffold-only behavior preserved).
+                _sentry_trigger_source = None
+                try:
+                    from .operator_agent_git_trigger_source import make_git_trigger_source
+                    _sentry_trigger_source = make_git_trigger_source(cfg=self.cfg)
+                except ImportError:
+                    pass  # module ships separately; absence is non-fatal
+                except Exception as _gt_exc:
+                    log.warning(
+                        "Phase O2-GIT-TRIGGER-AUTOWIRE: GitTriggerSource "
+                        "construction failed: %s", _gt_exc
+                    )
                 _sentry_poll_task = asyncio.ensure_future(
-                    run_sentry_polling_loop(cfg=self.cfg, store=self.store)
+                    run_sentry_polling_loop(
+                        cfg=self.cfg,
+                        store=self.store,
+                        get_pending_triggers=_sentry_trigger_source,
+                    )
                 )
                 _sentry_poll_task.set_name("SentryPollingLoop")
                 self._tasks.append(_sentry_poll_task)
+                _trigger_label = (
+                    "GitTriggerSource(LIVE)" if _sentry_trigger_source is not None
+                    else "no-op stub (scaffold-only)"
+                )
                 log.info(
-                    "Phase O2-DRAFT-AUTOLOOP (Sentry): polling loop started (interval=%ds)",
+                    "Phase O2-DRAFT-AUTOLOOP (Sentry): polling loop started "
+                    "(interval=%ds, trigger_source=%s)",
                     getattr(self.cfg, "operator_agent_sentry_polling_interval_s", 30),
+                    _trigger_label,
                 )
             except ImportError as _sp_exc:
                 log.warning(
