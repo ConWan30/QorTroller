@@ -9,6 +9,8 @@ import {
   useProtocolCoherence,
   useOperatorActivation,
   useDriftLog,
+  useCuratorStatus,
+  useCuratorFlaggedListings,
 } from '../api/bridgeApi'
 import { FONTS, DEVELOPER } from '../shared/design/tokens'
 import { PIPELINE_NODE_CONTAINER, PIPELINE_NODE, DRAWER_SLIDE_LEFT } from '../shared/design/animations'
@@ -339,6 +341,18 @@ export function DeveloperView() {
   })
   const driftCount24h = driftSummary?.row_count ?? 0
 
+  // Phase 238-FRONTEND-V3 — Curator review log surface.
+  // Curator is the third Operator Initiative agent (Sentry/Guardian/Curator)
+  // and its review verdicts are the audit trail operators consult before
+  // marketplace listings clear into the buyer-facing tab.  Surfaced in
+  // DeveloperView since this is the operator drill-down view.
+  const { data: curator }       = useCuratorStatus()
+  const curatorEnabled          = Boolean(curator?.curator_review_enabled)
+  const { data: curatorFlagged } = useCuratorFlaggedListings({
+    sinceMinutes: 1440, limit: 8,
+  })
+  const [curatorOpen, setCuratorOpen] = useState(false)
+
   useEffect(() => {
     const onResize = () => setDims({ w: window.innerWidth, h: window.innerHeight })
     window.addEventListener('resize', onResize)
@@ -591,6 +605,150 @@ export function DeveloperView() {
           />
         </>
       )}
+
+      {/* Phase 238-FRONTEND-V3 — Curator review log surface. */}
+      {curatorEnabled && (
+        <CuratorReviewLog
+          curator={curator}
+          flagged={curatorFlagged}
+          open={curatorOpen}
+          onToggle={() => setCuratorOpen(v => !v)}
+        />
+      )}
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// CuratorReviewLog — Phase 238-FRONTEND-V3
+// Bottom-left collapsible panel showing recent curator reviews. Mirrors the
+// OperatorAgentsDrawer interaction pattern (handle + slide-up panel).
+// ---------------------------------------------------------------------------
+function CuratorReviewLog({ curator, flagged, open, onToggle }) {
+  const total      = Number(curator?.total_reviews || 0)
+  const flagN      = Number(curator?.flagged_reviews || 0)
+  const accent     = flagN > 0 ? 'var(--vapi-warn)' : 'var(--vapi-cyan)'
+  const rows       = flagged?.listings ?? []
+
+  return (
+    <>
+      {/* Handle */}
+      <button
+        onClick={onToggle}
+        title={`Curator agent — ${total} reviews · ${flagN} flagged in last 24h`}
+        style={{
+          position:      'absolute',
+          left:          16,
+          bottom:        16,
+          padding:       '6px 12px',
+          background:    'rgba(2,4,8,0.85)',
+          border:        `1px solid ${accent}`,
+          borderRadius:  3,
+          color:         accent,
+          fontFamily:    FONTS.mono,
+          fontSize:      10,
+          letterSpacing: '0.08em',
+          cursor:        'pointer',
+          zIndex:        15,
+          display:       'flex',
+          alignItems:    'center',
+          gap:           8,
+        }}
+      >
+        <span style={{
+          width:        6,
+          height:       6,
+          borderRadius: 3,
+          background:   accent,
+          boxShadow:    flagN > 0 ? `0 0 8px ${accent}` : 'none',
+        }} />
+        CURATOR · {total}/{flagN}
+        <span style={{ opacity: 0.6, fontSize: 8 }}>{open ? '▼' : '▲'}</span>
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            transition={{ duration: 0.18 }}
+            style={{
+              position:      'absolute',
+              left:          16,
+              bottom:        56,
+              width:         360,
+              maxHeight:     320,
+              overflowY:     'auto',
+              background:    'rgba(2,4,8,0.94)',
+              border:        `1px solid ${accent}`,
+              borderRadius:  3,
+              padding:       12,
+              backdropFilter: 'blur(8px)',
+              zIndex:        14,
+            }}
+          >
+            <div style={{
+              fontFamily:    FONTS.mono,
+              fontSize:      9,
+              color:         'var(--vapi-tier-basic)',
+              letterSpacing: '0.08em',
+              marginBottom:  8,
+            }}>
+              CURATOR REVIEWS · LAST 24H · {rows.length} FLAGGED
+            </div>
+            {rows.length === 0 ? (
+              <div style={{
+                padding:    12,
+                fontSize:   10,
+                color:      'var(--vapi-cyan)',
+                textAlign:  'center',
+                opacity:    0.7,
+              }}>
+                ◌ no flagged reviews — curator pipeline quiet
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {rows.map((r, i) => (
+                  <div
+                    key={`${r.listing_commitment}-${i}`}
+                    style={{
+                      padding:    '6px 8px',
+                      background: 'rgba(255,255,255,0.02)',
+                      borderLeft: `3px solid ${
+                        r.severity === 'CRITICAL' || r.severity === 'HIGH'
+                          ? 'var(--vapi-block)'
+                          : 'var(--vapi-warn)'
+                      }`,
+                      fontSize:   10,
+                      fontFamily: FONTS.mono,
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ color: 'var(--vapi-warn)', fontWeight: 600 }}>
+                        {r.verdict}
+                      </span>
+                      <span style={{ fontSize: 8, color: 'var(--vapi-tier-basic)' }}>
+                        {String(r.listing_commitment ?? '').slice(0, 12)}…
+                      </span>
+                    </div>
+                    {r.reason_detail && (
+                      <div style={{
+                        fontSize:     9,
+                        color:        'var(--vapi-tier-basic)',
+                        marginTop:    3,
+                        whiteSpace:   'nowrap',
+                        overflow:     'hidden',
+                        textOverflow: 'ellipsis',
+                      }}>{r.reason_detail}</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   )
 }
