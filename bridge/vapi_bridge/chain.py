@@ -3342,7 +3342,16 @@ class ChainClient:
         nonce = await self._w3.eth.get_transaction_count(self._account.address)
         tx = await contract.functions.mint(
             self._w3.to_checksum_address(to), vhp_data
-        ).build_transaction({"from": self._account.address, "nonce": nonce, "gas": 150_000})
+        ).build_transaction({"from": self._account.address, "nonce": nonce})
+        # Phase 237.5 Path X correction pattern + Session 3 VHP-mint live
+        # validation 2026-05-09 (tx 0x7ebc7673... OOG'd at 150k static gas):
+        # mint() writes 3 storage slots (vhpData struct + ownerOf + tokenOfAddress)
+        # plus an indexed Transfer event + indexed VHPMinted event.  Real gas
+        # usage measured ~155-180k including VHPData struct ABI encoding overhead.
+        # Dynamic estimate × 1.25 matches the recordAdjudication / corpus_snapshot
+        # pattern used elsewhere in this module.
+        gas_estimate = await self._w3.eth.estimate_gas(tx)
+        tx["gas"] = int(gas_estimate * 1.25)
         signed = self._account.sign_transaction(tx)
         tx_hash = await self._w3.eth.send_raw_transaction(signed.raw_transaction)
         receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
