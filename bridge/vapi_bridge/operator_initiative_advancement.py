@@ -87,6 +87,12 @@ PHASE_O2_DRIFT_MAX_30D = 0
 PHASE_O3_SUGGEST_MIN_HOURS = 504  # 3 weeks
 PHASE_O3_DRAFT_PAYLOAD_MIN = 50
 PHASE_O3_DISAGREEMENT_RATE_MAX = 0.05  # 5%
+# Phase O3-ACT-WATCHER additions (2026-05-10) -- gates encoded in
+# *_o3_acting_v1.json bundles' _o3_gates field. These are external
+# advancement criteria (FROZEN-v1 Cedar constraint vocabulary is
+# shadow_mode only -- production-readiness gates live here).
+PHASE_O3_FALSE_POSITIVE_RATE_MAX = 0.0  # Curator-specific
+PHASE_O3_DRAFT_AGE_WINDOW_SECONDS = 30 * 86400  # 30-day rolling window
 
 # All three Operator Initiative agents — parallel-advancement invariant
 INITIATIVE_AGENTS = ("anchor_sentry", "guardian", "curator")
@@ -197,6 +203,48 @@ class FleetReadinessRootResult:
     error: Optional[str] = None
 
 
+# ----------------------------------------------------------------------
+# Phase O3-ACT-WATCHER store-helper safe wrappers (forward-compat).
+#
+# These helpers return placeholder values (0 / 0.0) when the underlying
+# store method is missing -- preserves backward-compat with test stubs
+# and pre-O3-WATCHER bridge code that didn't expose draft/disagreement
+# helpers.  Production store ships these methods returning real counts
+# once O2_SUGGEST drafting begins (deferred phase; current draft_count=0
+# across all 3 agents).
+# ----------------------------------------------------------------------
+
+
+def _count_drafts_safe(store, agent_id_or_key: str) -> int:
+    fn = getattr(store, "count_operator_agent_drafts", None)
+    if fn is None:
+        return 0
+    try:
+        return int(fn(agent_id=agent_id_or_key, since_seconds=PHASE_O3_DRAFT_AGE_WINDOW_SECONDS))
+    except Exception:
+        return 0
+
+
+def _disagreement_rate_safe(store, agent_id_or_key: str) -> float:
+    fn = getattr(store, "compute_operator_agent_disagreement_rate", None)
+    if fn is None:
+        return 0.0
+    try:
+        return float(fn(agent_id=agent_id_or_key, since_seconds=PHASE_O3_DRAFT_AGE_WINDOW_SECONDS))
+    except Exception:
+        return 0.0
+
+
+def _false_positive_rate_safe(store, agent_id_or_key: str) -> float:
+    fn = getattr(store, "compute_operator_agent_false_positive_rate", None)
+    if fn is None:
+        return 0.0
+    try:
+        return float(fn(agent_id=agent_id_or_key, since_seconds=PHASE_O3_DRAFT_AGE_WINDOW_SECONDS))
+    except Exception:
+        return 0.0
+
+
 def _evaluate_agent_readiness(
     agent_id: str,
     *,
@@ -236,7 +284,11 @@ def _evaluate_agent_readiness(
             phase = "O1_SHADOW"
         elif "_o2_suggest_" in bundle_filename:
             phase = "O2_SUGGEST"
-        elif "_o3_act_" in bundle_filename:
+        elif "_o3_acting_" in bundle_filename or "_o3_act_" in bundle_filename:
+            # Phase O3-ACT-DRAFT (2026-05-10) ships bundles as *_o3_acting_v1.json
+            # to match Cedar VALID_PHASES (O3_ACTING). Legacy substring _o3_act_
+            # retained for backward-compat with any pre-2026-05-10 placeholder
+            # bundles that may exist in test fixtures.
             phase = "O3_ACT"
         else:
             phase = "UNKNOWN"
@@ -288,7 +340,11 @@ def _evaluate_agent_readiness(
             )
         o2_ready = len(o2_blockers) == 0
 
-        # O3 ACT readiness gates (only meaningful if currently at O2)
+        # O3 ACT readiness gates (only meaningful if currently at O2_SUGGEST).
+        # Phase O3-ACT-WATCHER (2026-05-10): replaced 2 placeholder blockers
+        # with real store-helper-driven blockers; added agent-specific gates
+        # for dual_key_present + github_app_oauth_tokens_valid + false_positive_rate
+        # per the *_o3_acting_v1.json bundles' _o3_gates field.
         o3_blockers = []
         if phase != "O2_SUGGEST":
             o3_blockers.append(f"agent_phase_is_{phase}_not_O2_SUGGEST")
@@ -299,19 +355,44 @@ def _evaluate_agent_readiness(
                 o3_blockers.append(
                     f"o2_age_{o2_age_hours:.1f}h_under_min_{PHASE_O3_SUGGEST_MIN_HOURS}h"
                 )
-            # draft_payload_count + disagreement_rate are evaluated from
-            # store query helpers added at C2-FOLLOWUP (deferred — placeholder
-            # blockers fire until those helpers ship)
-            o3_blockers.append("draft_payload_count_helper_not_yet_implemented")
-            o3_blockers.append("disagreement_rate_helper_not_yet_implemented")
-            # Agent-specific gates — Sentry/Guardian require AWS KMS HSM
-            # provisioning; Curator requires marketplace setCurator() role.
-            if agent_id in ("anchor_sentry", "guardian"):
+
+            # Real store-helper-driven gates. Helpers return 0/0.0 placeholders
+            # until O2_SUGGEST agents actually start drafting (no agent has
+            # written a draft yet at 2026-05-10; helpers ship as forward-compat
+            # interface locks).
+            draft_count = _count_drafts_safe(store, store_agent_key)
+            if draft_count < PHASE_O3_DRAFT_PAYLOAD_MIN:
+                o3_blockers.append(
+                    f"draft_payload_count_{draft_count}_under_min_{PHASE_O3_DRAFT_PAYLOAD_MIN}"
+                )
+            disagreement_rate = _disagreement_rate_safe(store, store_agent_key)
+            if disagreement_rate > PHASE_O3_DISAGREEMENT_RATE_MAX:
+                o3_blockers.append(
+                    f"disagreement_rate_{disagreement_rate:.4f}_over_max_{PHASE_O3_DISAGREEMENT_RATE_MAX}"
+                )
+
+            # Operator dual-key authorization (all three agents)
+            if not getattr(cfg, "operator_dual_key_present", False):
+                o3_blockers.append("operator_dual_key_not_present")
+
+            # Agent-specific gates per *_o3_acting_v1.json _o3_gates field
+            if agent_id == "anchor_sentry":
                 if not getattr(cfg, "kms_hsm_production_ready", False):
                     o3_blockers.append("kms_hsm_production_not_provisioned")
+            elif agent_id == "guardian":
+                if not getattr(cfg, "kms_hsm_production_ready", False):
+                    o3_blockers.append("kms_hsm_production_not_provisioned")
+                if not getattr(cfg, "github_app_oauth_tokens_valid", False):
+                    o3_blockers.append("github_app_oauth_tokens_not_valid")
             elif agent_id == "curator":
                 if not getattr(cfg, "marketplace_curator_role_assigned", False):
                     o3_blockers.append("marketplace_setCurator_role_not_assigned")
+                false_positive_rate = _false_positive_rate_safe(store, store_agent_key)
+                if false_positive_rate > PHASE_O3_FALSE_POSITIVE_RATE_MAX:
+                    o3_blockers.append(
+                        f"false_positive_rate_{false_positive_rate:.4f}"
+                        f"_over_max_{PHASE_O3_FALSE_POSITIVE_RATE_MAX}"
+                    )
         o3_ready = len(o3_blockers) == 0
 
         return AgentAdvancementReadiness(
