@@ -1,0 +1,201 @@
+{
+  "$schema": "vapi-cedar-bundle-v1",
+  "agent_id": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8",
+  "phase": "O3_ACTING",
+  "version": 1,
+  "issued_at_iso": "2026-05-10T22:00:00Z",
+  "_phase_o3_act_draft_note": "Phase O3-ACT-DRAFT pre-authoring (mirrors Phase O2-SUGGEST-DRAFT 2026-05-07 + Curator Sessions 1+2+3 ON-CHAIN ACTIVATION 2026-05-09). Bundle Merkle root locked at draft authoring time; operator_initiative_advancement.py enforces O3_ACT advancement criteria externally before this bundle is anchored. Curator-exclusive O3 gate is marketplace_curator_role_assigned: setCurator() role on VAPIDataMarketplaceListings.sol (0x78Df84Cc512EdCaC0e58a03e4852627E2F62E3bC, Phase 238 Step F reservation, Phase 238 Step H deploy 2026-05-09) MUST be assigned to this agent's address before O3 anchor. SECURITY NOTE: Curator was activated using MockKMSClient on testnet — mainnet O3_ACTING anchor requires AWS KMS HSM provisioning per wiki/runbooks/curator_mainnet_migration.md before this bundle is anchored on mainnet.",
+  "_o3_gates": {
+    "shadow_age_min_hours": 504,
+    "draft_review_count_min": 50,
+    "operator_disagreement_rate_30d_max": 0.05,
+    "marketplace_curator_role_assigned": true,
+    "false_positive_rate_30d_max": 0.0,
+    "dual_key_present": true,
+    "_mainnet_only_gate": "kms_hsm_production_ready (AWS KMS HSM, NOT MockKMSClient — testnet anchor allowed with MockKMSClient per Sessions 1+2+3 precedent)"
+  },
+  "lane_prefixes": [
+    "marketplace/",
+    "provenance/",
+    "events/",
+    "wiki/"
+  ],
+  "policies": [
+    {
+      "id": "P-001",
+      "_note": "Curator reads marketplace listings + reviews",
+      "effect": "permit",
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
+      "action": "skill:read",
+      "resource": "lane://marketplace/**"
+    },
+    {
+      "id": "P-002",
+      "_note": "Curator reads provenance DAG to verify anchor freshness",
+      "effect": "permit",
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
+      "action": "skill:read",
+      "resource": "lane://provenance/**"
+    },
+    {
+      "id": "P-003",
+      "_note": "Curator reads event stream for listing creation triggers",
+      "effect": "permit",
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
+      "action": "skill:read",
+      "resource": "lane://events/**"
+    },
+    {
+      "id": "P-004",
+      "_note": "Curator reads wiki briefs for tier rule reference",
+      "effect": "permit",
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
+      "action": "skill:read",
+      "resource": "lane://wiki/**"
+    },
+    {
+      "id": "P-005",
+      "_note": "On-chain reads — AdjudicationRegistry.isRecorded() / VAPIDataMarketplaceListings reads — view only, zero gas",
+      "effect": "permit",
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
+      "action": "tool:iotex-rpc-query",
+      "resource": "chain://iotex-testnet"
+    },
+    {
+      "id": "P-006",
+      "_note": "kms-sign on listing reviews — signatures attach to live verdicts. Resource unchanged from O2 (draft://listing_reviews/*); production lift is at the verdict consumer (skill:marketplace-listing-review now writes to lane://marketplace/** instead of draft://listing_reviews/*).",
+      "effect": "permit",
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
+      "action": "tool:kms-sign",
+      "resource": "draft://listing_reviews/*"
+    },
+    {
+      "id": "P-007",
+      "_note": "O3 ACTING LIFT: marketplace-listing-review graduates from draft://listing_reviews/* (O2) to lane://marketplace/** (live verdicts written to canonical marketplace lane). Authority-graded review verdicts become permanent.",
+      "effect": "permit",
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
+      "action": "skill:marketplace-listing-review",
+      "resource": "lane://marketplace/**"
+    },
+    {
+      "id": "P-008",
+      "_note": "Tier compliance check — preserved across O2/O3",
+      "effect": "permit",
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
+      "action": "skill:tier-compliance-check",
+      "resource": "lane://marketplace/**"
+    },
+    {
+      "id": "P-009",
+      "_note": "Anchor freshness audit — preserved across O2/O3",
+      "effect": "permit",
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
+      "action": "skill:anchor-freshness-audit",
+      "resource": "lane://provenance/**"
+    },
+    {
+      "id": "P-010",
+      "_note": "IPFS metadata fetch — read-only HTTP GET, preserved across O2/O3",
+      "effect": "permit",
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
+      "action": "tool:ipfs-metadata-fetch",
+      "resource": "lane://marketplace/**"
+    },
+    {
+      "id": "P-011",
+      "_note": "operator-notify (suspension recommendation) — channel preserved at O3 for cases where Curator sees a violation but operator-final review is preferred over autonomous suspension. Resource unchanged from O2 (draft://operator_notifications/*).",
+      "effect": "permit",
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
+      "action": "tool:operator-notify",
+      "resource": "draft://operator_notifications/*"
+    },
+    {
+      "id": "P-012",
+      "_note": "O3 ACTING NEW PERMIT: marketplace-listing-suspend — direct suspension authority via VAPIDataMarketplaceListings.suspendListing() (Phase 238 Step F setCurator() reservation; Phase 238 Step H deploy 0x78Df84Cc...). This is the headline O3 ACT authority for Curator. Wallet impact per suspension ~0.001 IOTX. Suspension is reversible via reinstateListing() (operator-only).",
+      "effect": "permit",
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
+      "action": "tool:marketplace-listing-suspend",
+      "resource": "chain://iotex-testnet"
+    },
+    {
+      "id": "F-001",
+      "_note": "Curator does NOT pin to IPFS (write-side) — preserved across O2/O3; reserved for Sentry's provenance lane",
+      "effect": "forbid",
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
+      "action": "tool:ipfs-pin",
+      "resource": "*"
+    },
+    {
+      "id": "F-002",
+      "_note": "CROSS-AGENT SEPARATION (preserved at O3) — pda-attestation-anchor reserved for Sentry",
+      "effect": "forbid",
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
+      "action": "tool:pda-attestation-anchor",
+      "resource": "*"
+    },
+    {
+      "id": "F-003",
+      "_note": "git-push FOREVER forbidden across all Operator agents (PR-merge-only path)",
+      "effect": "forbid",
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
+      "action": "tool:git-push",
+      "resource": "*"
+    },
+    {
+      "id": "F-004",
+      "_note": "Curator does NOT commit code — review verdicts written to lane://marketplace/** at O3 ACTING; PRs remain Sentry/Guardian scope",
+      "effect": "forbid",
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
+      "action": "tool:git-commit",
+      "resource": "*"
+    },
+    {
+      "id": "F-005",
+      "_note": "endpoint:write FOREVER forbidden — Curator's write authority is constrained to specific tool: actions (kms-sign, marketplace-listing-suspend, operator-notify), NEVER raw HTTP endpoints",
+      "effect": "forbid",
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
+      "action": "endpoint:write",
+      "resource": "*"
+    },
+    {
+      "id": "F-006",
+      "_note": "CROSS-AGENT SEPARATION (preserved at O3) — event-correlation reserved for Sentry",
+      "effect": "forbid",
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
+      "action": "skill:event-correlation",
+      "resource": "*"
+    },
+    {
+      "id": "F-007",
+      "_note": "CROSS-AGENT SEPARATION (preserved at O3) — provenance-recording reserved for Sentry",
+      "effect": "forbid",
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
+      "action": "skill:provenance-recording",
+      "resource": "*"
+    },
+    {
+      "id": "F-008",
+      "_note": "CROSS-AGENT SEPARATION (preserved at O3) — audit-drafting reserved for Guardian",
+      "effect": "forbid",
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
+      "action": "skill:audit-drafting",
+      "resource": "*"
+    },
+    {
+      "id": "F-009",
+      "_note": "CROSS-AGENT SEPARATION (preserved at O3) — operational-diagnostic reserved for Guardian",
+      "effect": "forbid",
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
+      "action": "skill:operational-diagnostic",
+      "resource": "*"
+    },
+    {
+      "id": "F-010",
+      "_note": "Curator FOREVER forbidden from kms-sign on validation_record paths — tournament gate validation_records require Sentry+Guardian co-sign authority, NEVER Curator. This invariant is preserved across all phases including O3.",
+      "effect": "forbid",
+      "principal": {"agentId": "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"},
+      "action": "tool:kms-sign",
+      "resource": "draft://validation_record/*"
+    }
+  ]
+}

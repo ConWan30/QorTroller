@@ -1,0 +1,161 @@
+{
+  "$schema": "vapi-cedar-bundle-v1",
+  "agent_id": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c",
+  "phase": "O3_ACTING",
+  "version": 1,
+  "issued_at_iso": "2026-05-10T22:00:00Z",
+  "_phase_o3_act_draft_note": "Phase O3-ACT-DRAFT pre-authoring (mirrors Phase O2-SUGGEST-DRAFT 2026-05-07). Bundle Merkle root locked at draft authoring time; watcher (operator_initiative_advancement.py) enforces O3_ACT advancement criteria externally before this bundle is anchored on chain. Anchoring is a single-action operator gesture via parallel_o3_act_anchor.py (or anchor-cedar-bundle endpoint) once Sentry shadow_age >= 504h AND draft_payload_count >= 50 AND operator_disagreement_rate_30d < 5% AND kms_hsm_production_ready.",
+  "_o3_gates": {
+    "shadow_age_min_hours": 504,
+    "draft_payload_count_min": 50,
+    "operator_disagreement_rate_30d_max": 0.05,
+    "kms_hsm_production_ready": true,
+    "dual_key_present": true
+  },
+  "lane_prefixes": [
+    "events/",
+    "provenance/",
+    "wiki/"
+  ],
+  "policies": [
+    {
+      "id": "P-001",
+      "_note": "Read access preserved across all phases",
+      "effect": "permit",
+      "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"},
+      "action": "skill:read",
+      "resource": "lane://wiki/**"
+    },
+    {
+      "id": "P-002",
+      "effect": "permit",
+      "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"},
+      "action": "skill:read",
+      "resource": "lane://provenance/**"
+    },
+    {
+      "id": "P-003",
+      "effect": "permit",
+      "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"},
+      "action": "skill:read",
+      "resource": "lane://events/**"
+    },
+    {
+      "id": "P-004",
+      "_note": "On-chain reads — view-only, zero gas (preserved from O2_SUGGEST)",
+      "effect": "permit",
+      "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"},
+      "action": "tool:iotex-rpc-query",
+      "resource": "chain://iotex-testnet"
+    },
+    {
+      "id": "P-005",
+      "_note": "kms-sign on commit hashes — signatures continue as inputs to downstream attestation/PR workflows. Resource scope unchanged from O2 (draft://commit_hashes/*); the production lift is at the consumer (pda-attestation-anchor + git-pr).",
+      "effect": "permit",
+      "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"},
+      "action": "tool:kms-sign",
+      "resource": "draft://commit_hashes/*"
+    },
+    {
+      "id": "P-006",
+      "effect": "permit",
+      "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"},
+      "action": "skill:event-correlation",
+      "resource": "lane://events/**"
+    },
+    {
+      "id": "P-007",
+      "_note": "O3 ACTING LIFT: provenance-recording graduates from draft://shadow_log/* (O1) and draft://attestations/* (O2) to lane://provenance/** (live writes into the canonical provenance lane). kms-sign signatures attached to provenance records become permanent.",
+      "effect": "permit",
+      "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"},
+      "action": "skill:provenance-recording",
+      "resource": "lane://provenance/**"
+    },
+    {
+      "id": "P-008",
+      "_note": "O3 ACTING LIFT: pda-attestation-anchor graduates from draft://attestations/* (O2 SUGGEST) to lane://provenance/** (REAL ON-CHAIN ANCHORING via AdjudicationRegistry/PoAdAnchorAgent). This is the headline O3 ACT authority for Sentry — anchored attestations become permanent on IoTeX testnet/mainnet. Wallet impact per anchor ~0.0008 IOTX.",
+      "effect": "permit",
+      "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"},
+      "action": "tool:pda-attestation-anchor",
+      "resource": "lane://provenance/**"
+    },
+    {
+      "id": "P-009",
+      "_note": "git-add stays in draft scope — PRs remain operator-merge-required",
+      "effect": "permit",
+      "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"},
+      "action": "tool:git-add",
+      "resource": "draft://attestations/*"
+    },
+    {
+      "id": "P-010",
+      "effect": "permit",
+      "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"},
+      "action": "tool:git-commit",
+      "resource": "draft://attestations/*"
+    },
+    {
+      "id": "P-011",
+      "effect": "permit",
+      "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"},
+      "action": "tool:git-pr",
+      "resource": "draft://attestations/*"
+    },
+    {
+      "id": "P-012",
+      "_note": "O3 ACTING LIFT: ipfs-pin graduates to lane://provenance/** (real IPFS pinning of canonical provenance content)",
+      "effect": "permit",
+      "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"},
+      "action": "tool:ipfs-pin",
+      "resource": "lane://provenance/**"
+    },
+    {
+      "id": "F-001",
+      "_note": "git-push FOREVER forbidden — this NEVER lifts across O0/O1/O2/O3. PR-merge is the only path; lifting this would dissolve the operator-as-merge-gate invariant.",
+      "effect": "forbid",
+      "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"},
+      "action": "tool:git-push",
+      "resource": "*"
+    },
+    {
+      "id": "F-002",
+      "_note": "endpoint:write FOREVER forbidden — Sentry's only write path is pda-attestation-anchor + ipfs-pin via specific tool actions, NEVER raw HTTP endpoint writes.",
+      "effect": "forbid",
+      "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"},
+      "action": "endpoint:write",
+      "resource": "*"
+    },
+    {
+      "id": "F-003",
+      "_note": "CROSS-AGENT SEPARATION (preserved at O3 ACTING) — audit-drafting reserved for Guardian. Lifting this would dissolve the cross-fleet skill-separation invariant that justifies a >=3-agent fleet.",
+      "effect": "forbid",
+      "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"},
+      "action": "skill:audit-drafting",
+      "resource": "*"
+    },
+    {
+      "id": "F-004",
+      "_note": "CROSS-AGENT SEPARATION (preserved at O3) — operational-diagnostic reserved for Guardian",
+      "effect": "forbid",
+      "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"},
+      "action": "skill:operational-diagnostic",
+      "resource": "*"
+    },
+    {
+      "id": "F-005",
+      "_note": "CROSS-AGENT SEPARATION (preserved at O3) — marketplace-listing-review reserved for Curator",
+      "effect": "forbid",
+      "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"},
+      "action": "skill:marketplace-listing-review",
+      "resource": "*"
+    },
+    {
+      "id": "F-006",
+      "_note": "CROSS-AGENT SEPARATION (preserved at O3) — marketplace-listing-suspend reserved for Curator (setCurator() role on VAPIDataMarketplaceListings.sol)",
+      "effect": "forbid",
+      "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"},
+      "action": "tool:marketplace-listing-suspend",
+      "resource": "*"
+    }
+  ]
+}
