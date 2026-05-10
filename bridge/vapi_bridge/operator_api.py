@@ -8836,6 +8836,180 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "timestamp":        time.time(),
         }
 
+    # Phase O2-DRAFT-REVIEW (2026-05-10) — operator review surface for drafts
+    # produced by Sentry/Guardian/Curator at O2 SUGGEST. Closes the loop that
+    # ends at the watcher's PHASE_O3_DISAGREEMENT_RATE_MAX +
+    # PHASE_O3_FALSE_POSITIVE_RATE_MAX gates: without operator review,
+    # operator_decision stays NULL and disagreement_rate / false_positive_rate
+    # stay at 0.0 (no signal) forever, blocking O3 ACTING readiness.
+    # ------------------------------------------------------------------
+    @app.get("/operator/operator-agent-drafts")
+    async def get_operator_agent_drafts(
+        x_api_key: str = Header(default=""),
+        agent_id: str = Query(default=""),
+        decision: str = Query(default=""),
+        since_minutes: int = Query(default=0, ge=0, le=43200),
+        limit: int = Query(default=50, ge=1, le=500),
+    ):
+        """Phase O2-DRAFT-REVIEW — paginated draft browse + filter.
+
+        Returns the most recent N drafts produced by Operator Initiative agents
+        at O2 SUGGEST, optionally filtered by agent / operator_decision / time
+        window. Used by the operator review surface (frontend dashboards) and
+        by audit query tooling.
+
+        Args:
+            x_api_key:      Read-key auth (match cfg.operator_api_key).
+            agent_id:       Optional Q9-frozen agentId filter; empty = trio.
+            decision:       Optional filter — '', 'unreviewed' (NULL),
+                            'accept', 'reject', 'overturn_curator'. Empty
+                            string returns all decisions including NULL.
+                            'unreviewed' translates to NULL filter at store.
+            since_minutes:  0-43200 (0 = no time filter; 43200 = 30 days);
+                            filters created_at >= (now - since_minutes*60).
+            limit:          1-500; default 50; most recent first.
+        """
+        _check_read_key(x_api_key)
+        _aid = agent_id.strip() if agent_id else None
+        _dec_raw = decision.strip() if decision else ""
+        _since = int(since_minutes) * 60 if since_minutes > 0 else None
+
+        # Phase O2-DRAFT-REVIEW: store.get_operator_agent_drafts uses
+        # keyword-only args (per Phase O2-DRAFT-GENERATION Sentry signature
+        # discipline) -- wrap in lambda for asyncio.to_thread positional arg.
+        if _dec_raw == "unreviewed":
+            # Special-case: 'unreviewed' means operator_decision IS NULL.
+            # The store helper filters on a non-NULL value, so we fetch
+            # ALL and filter in-memory (small volume; capped at 500).
+            rows_all = await asyncio.to_thread(
+                lambda: store.get_operator_agent_drafts(
+                    agent_id=_aid,
+                    decision=None,
+                    since_seconds=_since,
+                    limit=int(limit) * 4,
+                )
+            )
+            rows = [r for r in rows_all if r.get("operator_decision") is None][: int(limit)]
+            _dec_filter = "unreviewed"
+        elif _dec_raw in ("accept", "reject", "overturn_curator"):
+            rows = await asyncio.to_thread(
+                lambda: store.get_operator_agent_drafts(
+                    agent_id=_aid,
+                    decision=_dec_raw,
+                    since_seconds=_since,
+                    limit=int(limit),
+                )
+            )
+            _dec_filter = _dec_raw
+        else:
+            rows = await asyncio.to_thread(
+                lambda: store.get_operator_agent_drafts(
+                    agent_id=_aid,
+                    decision=None,
+                    since_seconds=_since,
+                    limit=int(limit),
+                )
+            )
+            _dec_filter = None
+
+        return {
+            "agent_id_filter":  _aid,
+            "decision_filter":  _dec_filter,
+            "since_minutes":    int(since_minutes),
+            "limit":            int(limit),
+            "row_count":        len(rows),
+            "drafts":           rows,
+            "timestamp":        time.time(),
+        }
+
+    @app.post("/operator/operator-agent-draft-review")
+    async def post_operator_agent_draft_review(
+        draft_id: int = Query(...),
+        decision: str = Query(...),
+        reason: str = Query(default=""),
+        api_key: str = Query(default=""),
+    ):
+        """Phase O2-DRAFT-REVIEW — record operator decision on a draft.
+
+        Full operator authorization (api_key as query param matches
+        cfg.operator_api_key). reason MUST be ≥10 characters (audit gate).
+
+        decision MUST be one of:
+          - 'accept'           — operator confirms agent's draft
+          - 'reject'           — operator rejects agent's draft
+                                 (feeds disagreement_rate numerator)
+          - 'overturn_curator' — Curator-specific; operator reverses
+                                 a marketplace verdict
+                                 (feeds false_positive_rate numerator;
+                                  ZERO TOLERANCE per Curator's
+                                  PHASE_O3_FALSE_POSITIVE_RATE_MAX=0.0)
+
+        Idempotent on same decision; allows revision (operator may
+        revise their own review). Returns updated draft state.
+
+        Returns:
+            200 + JSON on success
+            401 if api_key missing/wrong (full-auth)
+            422 if reason <10 chars or decision invalid
+            404 if draft_id not found
+        """
+        _check_key(api_key)
+        import time as _trv
+
+        if decision not in ("accept", "reject", "overturn_curator"):
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "decision must be one of 'accept' | 'reject' | "
+                    "'overturn_curator'"
+                ),
+            )
+        if len(reason.strip()) < 10:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "reason must be at least 10 characters "
+                    "(e.g., 'verdict reversed after re-checking anchor freshness')"
+                ),
+            )
+
+        # Phase O2-DRAFT-REVIEW: kwargs-only store helper -- lambda wrap.
+        ok = await asyncio.to_thread(
+            lambda: store.record_operator_decision(
+                draft_id=int(draft_id),
+                decision=str(decision),
+                reason=str(reason),
+            )
+        )
+        if not ok:
+            raise HTTPException(
+                status_code=404,
+                detail=f"draft_id {draft_id} not found",
+            )
+
+        # Surface updated row to the caller for confirmation
+        rows = await asyncio.to_thread(
+            lambda: store.get_operator_agent_drafts(
+                agent_id=None,
+                decision=None,
+                since_seconds=None,
+                limit=500,
+            )
+        )
+        updated = next(
+            (r for r in rows if int(r.get("id", 0)) == int(draft_id)),
+            None,
+        )
+
+        return {
+            "accepted":   True,
+            "draft_id":   int(draft_id),
+            "decision":   decision,
+            "reason":     reason,
+            "row":        updated,
+            "timestamp":  _trv.time(),
+        }
+
     @app.get("/operator/fleet-readiness-root")
     async def get_fleet_readiness_root(
         x_api_key: str = Header(default=""),
