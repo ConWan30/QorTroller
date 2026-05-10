@@ -2010,6 +2010,57 @@ class Config:
     path (2 chain RPC reads per agent). 600s default to bound testnet RPC
     quota. INV-OPERATOR-AGENT-008 freezes the dual-cadence shape."""
 
+    # --- Phase O2-DRAFT-AUTOLOOP: Operator-agent O2 drafting polling loops ---
+    operator_agent_sentry_polling_enabled: bool = field(
+        default_factory=lambda: _env_bool("OPERATOR_AGENT_SENTRY_POLLING_ENABLED", False)
+    )
+    """Phase O2-DRAFT-AUTOLOOP (Sentry) — Enable Sentry's autonomous draft
+    polling loop. When False (default), Sentry produces drafts only via
+    operator-triggered calls. When True, run_sentry_polling_loop() runs in
+    background dispatching trigger-driven kms-sign / provenance-recording /
+    pda-anchor drafts to operator_agent_drafts (Phase 1005). Default False =
+    opt-in observability."""
+
+    operator_agent_sentry_polling_interval_s: int = field(
+        default_factory=lambda: int(_env("OPERATOR_AGENT_SENTRY_POLLING_INTERVAL_S", "30"))
+    )
+    """Phase O2-DRAFT-AUTOLOOP (Sentry) — Sentry polling cycle interval.
+    30s default keeps draft generation responsive to fresh commits / PoAC
+    chain updates while bounding store write rate to <= 1 per cycle."""
+
+    operator_agent_guardian_polling_enabled: bool = field(
+        default_factory=lambda: _env_bool("OPERATOR_AGENT_GUARDIAN_POLLING_ENABLED", False)
+    )
+    """Phase O2-DRAFT-AUTOLOOP (Guardian) — Enable Guardian's autonomous draft
+    polling loop. When False (default), Guardian produces drafts only via
+    operator-triggered calls. When True, run_guardian_polling_loop() dispatches
+    audit-drafting / operational-diagnostic / kms-sign drafts on sweep_completed
+    + fsca_finding + commit triggers. Default False = opt-in."""
+
+    operator_agent_guardian_polling_interval_s: int = field(
+        default_factory=lambda: int(_env("OPERATOR_AGENT_GUARDIAN_POLLING_INTERVAL_S", "30"))
+    )
+    """Phase O2-DRAFT-AUTOLOOP (Guardian) — Guardian polling cycle interval.
+    30s default mirrors Sentry; Guardian's audit cadence is event-driven rather
+    than time-driven so this primarily bounds queue drain rate."""
+
+    operator_agent_curator_polling_enabled: bool = field(
+        default_factory=lambda: _env_bool("OPERATOR_AGENT_CURATOR_POLLING_ENABLED", False)
+    )
+    """Phase O2-DRAFT-AUTOLOOP (Curator) — Enable Curator's autonomous draft
+    polling loop. When False (default), Curator produces drafts only via
+    operator-triggered calls. When True, run_curator_polling_loop() dispatches
+    marketplace-listing-review + operator-notify drafts on listing_event +
+    anchor_freshness_alert + periodic_compliance triggers. Default False =
+    opt-in."""
+
+    operator_agent_curator_polling_interval_s: int = field(
+        default_factory=lambda: int(_env("OPERATOR_AGENT_CURATOR_POLLING_INTERVAL_S", "30"))
+    )
+    """Phase O2-DRAFT-AUTOLOOP (Curator) — Curator polling cycle interval.
+    30s default; Curator additionally runs a 6h periodic_compliance batch
+    independent of this base interval."""
+
     # --- Phase 235-GAD: Gameplay Activity Discrimination ---
     gameplay_discrimination_enabled: bool = field(
         default_factory=lambda: _env_bool("GAMEPLAY_DISCRIMINATION_ENABLED", True)
