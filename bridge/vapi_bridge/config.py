@@ -2066,13 +2066,73 @@ class Config:
         default_factory=lambda: _env_bool("OPERATOR_AGENT_GIT_TRIGGER_ENABLED", False)
     )
     """Phase O2-GIT-TRIGGER-SOURCE — Enable GitTriggerSource as the live
-    commit trigger source feeding Sentry's (and optionally Guardian's)
-    polling loop. When False (default), Sentry/Guardian receive no commit
-    triggers and produce no kms-sign/provenance/audit drafts on commits.
-    When True, GitTriggerSource polls `git rev-parse HEAD` each polling
-    cycle and emits {kind:'commit', payload:{commit_hash, repo, branch}}
-    triggers on HEAD advancement. Pure stdlib subprocess; no bus dependency.
+    commit trigger source feeding Sentry's polling loop. When False
+    (default), Sentry receives no commit triggers and produces no
+    kms-sign/provenance drafts on commits. When True, GitTriggerSource
+    polls `git rev-parse HEAD` each polling cycle and emits
+    {kind:'commit', payload:{commit_hash, repo, branch}} triggers on
+    HEAD advancement. Pure stdlib subprocess; no bus dependency.
     Default False = opt-in (live event source)."""
+
+    # --- Phase O2-GUARDIAN-TRIGGERS: Guardian live trigger sources ---
+    operator_agent_guardian_git_trigger_enabled: bool = field(
+        default_factory=lambda: _env_bool("OPERATOR_AGENT_GUARDIAN_GIT_TRIGGER_ENABLED", False)
+    )
+    """Phase O2-GUARDIAN-TRIGGERS — Enable GitTriggerSource feeding Guardian's
+    polling loop with commit triggers (kms-sign + audit-drafting drafts per
+    commit). Distinct from operator_agent_git_trigger_enabled (Sentry's path)
+    so operators can enable Sentry+Guardian commit-driven drafting independently.
+    Default False = opt-in."""
+
+    operator_agent_guardian_fsca_trigger_enabled: bool = field(
+        default_factory=lambda: _env_bool("OPERATOR_AGENT_GUARDIAN_FSCA_TRIGGER_ENABLED", False)
+    )
+    """Phase O2-GUARDIAN-TRIGGERS — Enable GuardianFscaTriggerSource: subscribes
+    to fleet_coherence_log new rows (by id high-water mark) and emits
+    {kind:'fsca_finding', payload:{finding_id, severity, agents_involved, subject}}
+    triggers feeding Guardian's draft_operational_diagnostic skill. Default
+    False = opt-in (live event source)."""
+
+    # --- Phase O2-CURATOR-TRIGGERS: Curator live trigger sources ---
+    operator_agent_curator_marketplace_trigger_enabled: bool = field(
+        default_factory=lambda: _env_bool("OPERATOR_AGENT_CURATOR_MARKETPLACE_TRIGGER_ENABLED", False)
+    )
+    """Phase O2-CURATOR-TRIGGERS — Enable CuratorMarketplaceListingTriggerSource:
+    subscribes to marketplace_listing_log new rows (by id) and emits
+    {kind:'listing_event', payload:{listing_id, verdict, review_payload}}
+    triggers feeding Curator's draft_marketplace_listing_review +
+    draft_kms_sign_review chained drafts. Default False = opt-in."""
+
+    operator_agent_curator_anchor_freshness_trigger_enabled: bool = field(
+        default_factory=lambda: _env_bool("OPERATOR_AGENT_CURATOR_ANCHOR_FRESHNESS_TRIGGER_ENABLED", False)
+    )
+    """Phase O2-CURATOR-TRIGGERS — Enable CuratorAnchorFreshnessTriggerSource:
+    cron-style periodic check via chain.is_adjudication_recorded() of recent
+    listing anchors; emits {kind:'anchor_freshness_alert', ...} triggers
+    when a listing's anchor age exceeds the freshness window. Default
+    False = opt-in (live chain RPC poll)."""
+
+    operator_agent_curator_anchor_freshness_interval_s: int = field(
+        default_factory=lambda: int(_env("OPERATOR_AGENT_CURATOR_ANCHOR_FRESHNESS_INTERVAL_S", "3600"))
+    )
+    """Phase O2-CURATOR-TRIGGERS — Cron interval for anchor-freshness checks.
+    1h default keeps testnet chain RPC quota bounded while still catching
+    stale anchors within the operator's review window."""
+
+    operator_agent_curator_periodic_compliance_trigger_enabled: bool = field(
+        default_factory=lambda: _env_bool("OPERATOR_AGENT_CURATOR_PERIODIC_COMPLIANCE_TRIGGER_ENABLED", False)
+    )
+    """Phase O2-CURATOR-TRIGGERS — Enable CuratorPeriodicComplianceTriggerSource:
+    6h cron emitting {kind:'periodic_compliance', payload:{listings:[...]}}
+    BATCH triggers (one trigger per cron fire; the batch produces N draft
+    rows where N = listings count). Default False = opt-in."""
+
+    operator_agent_curator_periodic_compliance_interval_s: int = field(
+        default_factory=lambda: int(_env("OPERATOR_AGENT_CURATOR_PERIODIC_COMPLIANCE_INTERVAL_S", "21600"))
+    )
+    """Phase O2-CURATOR-TRIGGERS — Cron interval for periodic-compliance batches.
+    6h default = 4×/day; balances batch throughput against operator review
+    burden."""
 
     # --- Phase 235-GAD: Gameplay Activity Discrimination ---
     gameplay_discrimination_enabled: bool = field(
