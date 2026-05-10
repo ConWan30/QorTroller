@@ -218,5 +218,17 @@
   "INV-CURATOR-O2-002": {
     "digest": "5dd460a662671f0bf6800664986e605854c4a877308ee47604ae7f0be3799a69",
     "description": "curator_o2_suggest_v1.json lane_prefix array preserves marketplace/, provenance/, events/, wiki/ \u2014 Curator's marketplace-curator-review skill scope is bounded to these prefixes; any expansion breaks the cross-agent skill-separation invariant (Phase O1-CURATOR C2)"
+  },
+  "INV-O3-WATCHER-001": {
+    "digest": "4d541ee612fd11bb85010c2529624c66ccc7ce3411cb30168940cd880d868ffe",
+    "description": "Phase O3-ACT-WATCHER bundle filename phase resolver matches both _o3_acting_ (canonical) and _o3_act_ (legacy) substrings \u2014 preserves backward compatibility with legacy bundle naming while pinning canonical O3_ACTING phase recognition (Phase O3-WATCHER-LOCK)"
+  },
+  "INV-O3-WATCHER-002": {
+    "digest": "54cc4d199b8a4506e24b39ae3bb0b810fd070e13d30baec2fc7a9b9e0f39cc88",
+    "description": "Phase O3-ACT-WATCHER strengthened gate constants (draft_payload_min + disagreement_rate_max + false_positive_rate_max) \u2014 frozen O3 readiness thresholds enforce minimum draft payload, max LLM/fallback disagreement, and Curator-specific false-positive bound (Phase O3-WATCHER-LOCK)"
+  },
+  "INV-O3-WATCHER-003": {
+    "digest": "6a34ae7256d18276a2b1da000c9b5a2950f719e94918b07503f327a802074032",
+    "description": "Phase O3-ACT-DRAFT bundle Merkle roots locked (Sentry + Guardian + Curator O3_ACTING) \u2014 three frozen Merkle roots pinned in test_phase_o3_act_draft_bundles.py; any policy edit re-anchors to NEW Merkle roots and breaks this invariant by design (governance event required) (Phase O3-WATCHER-LOCK)"
   }
 }
