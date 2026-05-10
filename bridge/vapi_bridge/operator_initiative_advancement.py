@@ -64,6 +64,7 @@ INVARIANTS (PV-CI candidates — frozen at first ship):
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import time
@@ -89,6 +90,44 @@ PHASE_O3_DISAGREEMENT_RATE_MAX = 0.05  # 5%
 
 # All three Operator Initiative agents — parallel-advancement invariant
 INITIATIVE_AGENTS = ("anchor_sentry", "guardian", "curator")
+
+# Phase O1-FRR — Fleet Readiness Root primitive (FROZEN-v1).
+# Eighth FROZEN-v1 cryptographic primitive in PATTERN-017 family
+# (after GIC + WEC + VAME + CORPUS-SNAPSHOT + CONSENT + BIOMETRIC-SNAPSHOT
+# + LISTING-v1).  Captures fleet phase as one 32-byte commitment.
+#
+# Pre-image: FRR_DOMAIN_TAG (11 bytes)
+#         || sorted_by_agent_id_bytes(agent_id_be(32) || phase_code(1)) for each agent
+#         || ts_ns_be(8)
+# Digest:  SHA-256 → 32 bytes
+#
+# Phase code byte values are FROZEN — any future ladder addition
+# requires a v2 primitive + new domain tag.
+FRR_DOMAIN_TAG = b"VAPI-FRR-v1"  # 11 bytes
+PHASE_CODE_O0 = 0x00
+PHASE_CODE_O1_SHADOW = 0x01
+PHASE_CODE_O2_SUGGEST = 0x02
+PHASE_CODE_O3_ACT = 0x03
+PHASE_CODE_UNKNOWN = 0xFF
+
+# Map canonical agent name → cfg attribute holding its 32-byte agentId.
+# Used by FRR pre-image construction.  Order does NOT matter (FRR sorts
+# by agent_id bytes); this dict is a name→cfg-attr lookup only.
+_AGENT_NAME_TO_ID_ATTR = {
+    "anchor_sentry": "operator_agent_anchor_sentry_id",
+    "guardian": "operator_agent_guardian_id",
+    "curator": "operator_agent_curator_id",
+}
+
+
+def _phase_code_from_phase_string(phase: str) -> int:
+    """Map advancement-readiness phase string to FROZEN byte code."""
+    return {
+        "O0": PHASE_CODE_O0,
+        "O1_SHADOW": PHASE_CODE_O1_SHADOW,
+        "O2_SUGGEST": PHASE_CODE_O2_SUGGEST,
+        "O3_ACT": PHASE_CODE_O3_ACT,
+    }.get(phase, PHASE_CODE_UNKNOWN)
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,6 +160,17 @@ class FleetAdvancementSummary:
     fleet_phase_aligned: bool = False  # True iff all three at SAME phase
     next_alignment_target: str = "O1_SHADOW"  # phase the fleet is converging on
     per_agent: tuple = field(default_factory=tuple)
+    error: Optional[str] = None
+
+
+@dataclass(frozen=True, slots=True)
+class FleetReadinessRootResult:
+    """Phase O1-FRR result — Fleet Readiness Root commitment."""
+
+    frr_hex: str  # SHA-256 digest, lowercase hex (no 0x prefix)
+    agents: tuple  # tuple of (canonical_name, agent_id_hex, phase_code) tuples,
+                   # SORTED by agent_id bytes ascending (canonical order)
+    ts_ns: int
     error: Optional[str] = None
 
 
@@ -332,6 +382,124 @@ def evaluate_fleet_advancement_sync(
         )
 
 
+def compute_fleet_readiness_root(
+    summary: "FleetAdvancementSummary",
+    *,
+    cfg: "Config",
+    ts_ns: Optional[int] = None,
+) -> FleetReadinessRootResult:
+    """Phase O1-FRR — compute Fleet Readiness Root.
+
+    Eighth FROZEN-v1 cryptographic primitive.  Captures the fleet's
+    phase state as one 32-byte SHA-256 commitment.  Pre-image is
+    deterministic across processes (sort by agent_id bytes ascending).
+
+    Pre-image construction (FROZEN — any change requires v2 + new tag):
+        FRR_DOMAIN_TAG (b"VAPI-FRR-v1", 11 bytes)
+        || for each agent in sorted_by_agent_id_bytes(per_agent):
+               agent_id_bytes (32) || phase_code (1)
+        || ts_ns_be (8)
+
+    Fail-open: any exception returns FleetReadinessRootResult(error=...,
+    frr_hex="", agents=()) and never raises.  Caller can detect failure
+    via .error field.
+    """
+    if ts_ns is None:
+        ts_ns = time.time_ns()
+
+    try:
+        tuples = []
+        for a in summary.per_agent:
+            attr = _AGENT_NAME_TO_ID_ATTR.get(a.agent_id)
+            if attr is None:
+                # Unknown canonical name — skip (preserves FRR stability
+                # if INITIATIVE_AGENTS expands without this map updated)
+                continue
+            id_hex_raw = str(getattr(cfg, attr, "") or "").lower()
+            id_hex = id_hex_raw[2:] if id_hex_raw.startswith("0x") else id_hex_raw
+            try:
+                id_bytes = bytes.fromhex(id_hex)
+            except ValueError:
+                continue
+            if len(id_bytes) != 32:
+                continue
+            phase_code = _phase_code_from_phase_string(a.current_phase)
+            tuples.append((a.agent_id, id_hex, id_bytes, phase_code))
+
+        # FROZEN: sort by agent_id bytes ascending — deterministic across
+        # processes and Python versions.  agent_id || phase_code byte
+        # order is FROZEN per INV-FRR-003.
+        tuples.sort(key=lambda t: t[2])
+
+        pre = bytearray(FRR_DOMAIN_TAG)
+        for _, _, id_bytes, phase_code in tuples:
+            pre.extend(id_bytes)
+            pre.append(phase_code)
+        pre.extend(int(ts_ns).to_bytes(8, "big"))
+
+        digest = hashlib.sha256(bytes(pre)).hexdigest()
+
+        return FleetReadinessRootResult(
+            frr_hex=digest,
+            agents=tuple(
+                (name, id_hex, phase_code)
+                for name, id_hex, _, phase_code in tuples
+            ),
+            ts_ns=ts_ns,
+        )
+    except Exception as exc:
+        log.warning(
+            "operator_initiative_advancement: FRR compute failed: %s",
+            exc,
+            exc_info=True,
+        )
+        return FleetReadinessRootResult(
+            frr_hex="",
+            agents=(),
+            ts_ns=ts_ns,
+            error=f"{type(exc).__name__}: {exc}",
+        )
+
+
+def evaluate_frr_sync(
+    *,
+    cfg: "Config",
+    store: "Store",
+    ts_ns: Optional[int] = None,
+) -> tuple[FleetAdvancementSummary, FleetReadinessRootResult]:
+    """One-shot evaluator: fleet advancement summary + FRR commitment.
+
+    Pure synchronous; safe to wrap with asyncio.to_thread() per Phase
+    235.x-STABILITY-2 invariant.  Never raises — always returns a
+    (summary, frr) pair, with error fields populated on any failure.
+
+    Used by:
+      - run_advancement_watcher_loop (background 1h cadence)
+      - GET /agent/fleet-readiness-root (operator-facing endpoint)
+      - scripts/parallel_o2_anchor.py pre/post-anchor verification
+    """
+    try:
+        summary = evaluate_fleet_advancement_sync(cfg=cfg, store=store)
+        frr = compute_fleet_readiness_root(summary, cfg=cfg, ts_ns=ts_ns)
+        return summary, frr
+    except Exception as exc:
+        log.error(
+            "operator_initiative_advancement: evaluate_frr_sync failed: %s",
+            exc,
+            exc_info=True,
+        )
+        err = f"{type(exc).__name__}: {exc}"
+        return (
+            FleetAdvancementSummary(timestamp=time.time(), error=err),
+            FleetReadinessRootResult(
+                frr_hex="",
+                agents=(),
+                ts_ns=ts_ns if ts_ns is not None else time.time_ns(),
+                error=err,
+            ),
+        )
+
+
 async def run_advancement_watcher_loop(
     *,
     cfg: "Config",
@@ -368,13 +536,13 @@ async def run_advancement_watcher_loop(
     try:
         while True:
             try:
-                summary = await asyncio.to_thread(
-                    evaluate_fleet_advancement_sync,
+                summary, frr = await asyncio.to_thread(
+                    evaluate_frr_sync,
                     cfg=cfg,
                     store=store,
                 )
 
-                # Persist (best-effort; insert helper added at first ship)
+                # Persist (best-effort; insert helper added at Stream C)
                 try:
                     if hasattr(store, "insert_operator_initiative_advancement_log"):
                         per_agent_json = json.dumps([
@@ -402,6 +570,8 @@ async def run_advancement_watcher_loop(
                             fleet_at_o3_ready_count=summary.fleet_at_o3_ready_count,
                             next_alignment_target=summary.next_alignment_target,
                             per_agent_json=per_agent_json,
+                            frr_hex=frr.frr_hex,
+                            frr_ts_ns=frr.ts_ns,
                             error=summary.error,
                         )
                 except Exception as persist_exc:
@@ -413,12 +583,13 @@ async def run_advancement_watcher_loop(
                 # Operational summary log line — visible in bridge stdout
                 log.info(
                     "operator_initiative_advancement: aligned=%s o1=%d o2_ready=%d "
-                    "o3_ready=%d next=%s",
+                    "o3_ready=%d next=%s frr=%s",
                     summary.fleet_phase_aligned,
                     summary.fleet_at_o1_count,
                     summary.fleet_at_o2_ready_count,
                     summary.fleet_at_o3_ready_count,
                     summary.next_alignment_target,
+                    (frr.frr_hex[:12] + "…") if frr.frr_hex else "<error>",
                 )
 
             except asyncio.CancelledError:
