@@ -9,12 +9,14 @@ import {
   useProtocolCoherence,
   useOperatorActivation,
   useDriftLog,
+  useOperatorDrafts,
   useCuratorStatus,
   useCuratorFlaggedListings,
 } from '../api/bridgeApi'
 import { FONTS, DEVELOPER } from '../shared/design/tokens'
 import { PIPELINE_NODE_CONTAINER, PIPELINE_NODE, DRAWER_SLIDE_LEFT } from '../shared/design/animations'
 import { OperatorAgentsDrawer, OperatorAgentsDrawerHandle } from '../components/OperatorAgentsDrawer'
+import { DraftReviewDrawer, DraftReviewDrawerHandle } from '../components/DraftReviewDrawer'
 
 // ─── Design primitives ───────────────────────────────────────────────────────
 
@@ -320,6 +322,7 @@ export function DeveloperView() {
   const [gateOpen,  setGateOpen]  = useState(false)
   const [pitlOpen,  setPitlOpen]  = useState(false)
   const [opAgentsOpen, setOpAgentsOpen] = useState(false)
+  const [draftReviewOpen, setDraftReviewOpen] = useState(false)
   const [dims,      setDims]      = useState({ w: window.innerWidth, h: window.innerHeight })
 
   const { data: ch } = useCaptureHealth()
@@ -340,6 +343,15 @@ export function DeveloperView() {
     sinceMinutes: 1440, limit: 1, enabled: o1Active,
   })
   const driftCount24h = driftSummary?.row_count ?? 0
+
+  // Phase O2-DRAFT-REVIEW-FRONTEND — Unreviewed-draft badge counter.
+  // Polls only when O1 active. Single-row limit fetch; row_count carries
+  // the unreviewed-draft total in the last 7 days. Used to drive the
+  // handle's pending-count chip; full review surface lives in the drawer.
+  const { data: draftSummary } = useOperatorDrafts({
+    decision: 'unreviewed', sinceMinutes: 10080, limit: 1, enabled: o1Active,
+  })
+  const unreviewedDraftCount = draftSummary?.row_count ?? 0
 
   // Phase 238-FRONTEND-V3 — Curator review log surface.
   // Curator is the third Operator Initiative agent (Sentry/Guardian/Curator)
@@ -602,6 +614,24 @@ export function DeveloperView() {
             open={opAgentsOpen}
             onClose={() => setOpAgentsOpen(false)}
             driftCount={driftCount24h}
+          />
+        </>
+      )}
+
+      {/* Phase O2-DRAFT-REVIEW-FRONTEND — Draft review drawer (only when O1 active).
+         Handle at bottom-LEFT to avoid the OperatorAgentsDrawerHandle at bottom-right.
+         Unreviewed-count badge surfaces pending-decision backlog: clearing it
+         is what drives operator_disagreement_rate gate measurement. */}
+      {o1Active && (
+        <>
+          <DraftReviewDrawerHandle
+            onClick={() => setDraftReviewOpen(v => !v)}
+            unreviewedCount={unreviewedDraftCount}
+          />
+          <DraftReviewDrawer
+            open={draftReviewOpen}
+            onClose={() => setDraftReviewOpen(false)}
+            unreviewedCount={unreviewedDraftCount}
           />
         </>
       )}
