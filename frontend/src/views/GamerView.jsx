@@ -15,9 +15,11 @@ import {
   useCaptureHealth, useGrindChain, useFleetCoherenceStatus,
   useAutoTriggerStatus, useGrindAnalytics, useAITSeparation, usePCCIntelligence,
   useActivePlayOccupancy,
+  useCuratorStatus,
   isMockActive,
 } from '../api/bridgeApi'
 import { ConsentPanel } from '../components/ConsentPanel'
+import { ConsentMatrix } from '../components/ConsentMatrix'
 import { FONTS, GAMER } from '../shared/design/tokens'
 
 // ---------------------------------------------------------------------------
@@ -312,7 +314,7 @@ function StatusChip({ label, value, color }) {
   )
 }
 
-function StatusBar({ host, state, gctx, ready, coherence, autoTrigger, ait, apop }) {
+function StatusBar({ host, state, gctx, ready, coherence, autoTrigger, ait, apop, curator }) {
   // GAMEPLAY chip
   const gctxValue = gctx ?? 'WAITING'
   const gctxColor = gctx ? tone(GCTX_TONE, gctx) : GAMER.t2
@@ -384,6 +386,22 @@ function StatusBar({ host, state, gctx, ready, coherence, autoTrigger, ait, apop
       <span title={aitTitle}>
         <StatusChip label="AIT"        value={aitValue}          color={aitColor} />
       </span>
+      {/* Phase 238-FRONTEND-V3 — Curator review surface in HUD.
+          Hidden when the bridge has not exposed curator status (e.g. read-key
+          missing or curator agent not deployed) so the chip strip stays
+          quiet for non-Operator-tier deployments. */}
+      {curator?.curator_review_enabled && (() => {
+        const flagged = Number(curator.flagged_reviews || 0)
+        const total   = Number(curator.total_reviews || 0)
+        const value   = flagged > 0 ? `${flagged}/${total}` : (total > 0 ? `${total}` : 'IDLE')
+        const color   = flagged > 0 ? GAMER.orange : total > 0 ? GAMER.cyan : GAMER.t2
+        const title   = `Curator agent (Operator Initiative #3) — ${total} reviews · ${flagged} flagged · click DeveloperView for review log`
+        return (
+          <span title={title}>
+            <StatusChip label="CURATOR" value={value} color={color} />
+          </span>
+        )
+      })()}
       {(() => {
         // Phase 241-APOP — Active Play Occupancy chip.
         // Compact: state value (or WAITING) + gate_mode pill.
@@ -750,6 +768,10 @@ export function GamerView() {
   const { data: ait }             = useAITSeparation()
   const { data: pccIntelligence } = usePCCIntelligence()
   const { data: apop }            = useActivePlayOccupancy()
+  // Phase 238-FRONTEND-V3 — Curator status for HUD chip + ConsentMatrix
+  // mini-pill render gating.  noMock surfaced via the hook; if the bridge is
+  // unreachable the value is undefined and the chip is hidden.
+  const { data: curator }         = useCuratorStatus()
 
   // Two complementary grind metrics, both surfaced in the progress card:
   //   chain_length            — cumulative GIC stamps (Phase 235-A); monotonically grows.
@@ -851,7 +873,41 @@ export function GamerView() {
         autoTrigger={autoTrigger}
         ait={ait}
         apop={apop}
+        curator={curator}
       />
+
+      {/* Phase 238-FRONTEND-V3 — ConsentMatrix HUD mini.
+          Compact 4-bit consent indicator in the top-right area, anchored
+          below LiveStatusBadge. Displays cleared/granted bits for the four
+          frozen categories (TOURNAMENT_GATE / ANONYMIZED_RESEARCH /
+          MANUFACTURER_CERT / MARKETPLACE).  Read-only here — gamer changes
+          their bitmask via the existing right-edge ConsentPanel. */}
+      <div style={{
+        position:      'absolute',
+        top:           80,
+        right:         16,
+        zIndex:        9,
+        padding:       '6px 10px',
+        background:    'rgba(2,4,8,0.72)',
+        border:        '1px solid var(--vapi-cyan)',
+        borderRadius:  3,
+        backdropFilter: 'blur(6px)',
+        display:       'flex',
+        alignItems:    'center',
+        gap:           8,
+        cursor:        'pointer',
+      }}
+        onClick={() => setConsentOpen(true)}
+        title="Click to open per-category consent panel"
+      >
+        <span style={{
+          fontFamily:    FONTS.mono,
+          fontSize:      8,
+          color:         'var(--vapi-tier-basic)',
+          letterSpacing: '0.08em',
+        }}>CONSENT</span>
+        <ConsentMatrix bitmask={curator?.consent_bitmask ?? 0b1111} mode="compact" />
+      </div>
 
       {/* Phase 241-APOP — Evidence Prism (novel weighted-evidence visualization). */}
       <ApopEvidencePrism apop={apop} />
