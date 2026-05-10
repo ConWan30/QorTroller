@@ -130,6 +130,29 @@ def _phase_code_from_phase_string(phase: str) -> int:
     }.get(phase, PHASE_CODE_UNKNOWN)
 
 
+def _resolve_agent_id_for_store(agent_canonical: str, cfg) -> str:
+    """Translate canonical agent name -> Q9-frozen agentId hex used by
+    the store layer.  cedar_bundle_anchor.anchor_bundle stores the Q9
+    hex in operator_agent_activation_log.agent_id; cedar_shadow_runtime
+    stores the same in operator_agent_shadow_log.agent_id; the drift
+    sweeper stores the same in operator_agent_drift_log.agent_id.
+
+    The watcher uses canonical names ('anchor_sentry', 'guardian',
+    'curator') as INITIATIVE_AGENTS — translate before each store call.
+
+    Returns canonical name unchanged if no mapping or cfg attribute
+    missing (preserves backward compat with test stubs that key by
+    canonical name and never set the cfg fields).
+    """
+    attr = _AGENT_NAME_TO_ID_ATTR.get(agent_canonical)
+    if attr is None:
+        return agent_canonical
+    raw = str(getattr(cfg, attr, "") or "")
+    if not raw:
+        return agent_canonical
+    return raw  # Q9 hex (with or without 0x prefix; store accepts both)
+
+
 @dataclass(frozen=True, slots=True)
 class AgentAdvancementReadiness:
     """Phase advancement readiness status for one agent."""
@@ -184,12 +207,16 @@ def _evaluate_agent_readiness(
     work suitable for asyncio.to_thread().  Never raises — populates
     `error` field on any failure path (INV-INITIATIVE-ADVANCEMENT-002)."""
     try:
+        # Translate canonical agent name -> Q9 hex used by store layer.
+        # Falls back to canonical name if cfg attr missing (test stubs).
+        store_agent_key = _resolve_agent_id_for_store(agent_id, cfg)
+
         # Resolve agent's current phase from operator_agent_activation_log.
         # Most-recent activation_log row's bundle_filename indicates phase:
         #   *_o1_shadow_v1.json  → O1_SHADOW
         #   *_o2_suggest_v1.json → O2_SUGGEST
         #   *_o3_act_v1.json     → O3_ACT (future)
-        latest = store.get_latest_operator_agent_activation(agent_id)
+        latest = store.get_latest_operator_agent_activation(store_agent_key)
         if latest is None:
             return AgentAdvancementReadiness(
                 agent_id=agent_id,
@@ -217,7 +244,7 @@ def _evaluate_agent_readiness(
         # Shadow age — earliest activation_log entry age (this is when shadow
         # observation began).  For O2 evaluation, we need ≥3 weeks since
         # FIRST anchor (not since latest re-anchor).
-        first_activation = store.get_first_operator_agent_activation(agent_id)
+        first_activation = store.get_first_operator_agent_activation(store_agent_key)
         if first_activation is None:
             shadow_age_hours = 0.0
         else:
@@ -225,16 +252,16 @@ def _evaluate_agent_readiness(
             shadow_age_hours = max(0.0, (time.time() - anchored_at) / 3600.0)
 
         # Cedar evaluation count over agent's lifetime
-        eval_count = store.count_cedar_shadow_evaluations(agent_id)
+        eval_count = store.count_cedar_shadow_evaluations(store_agent_key)
 
         # Drift counts in last 30 days
         bundle_drift_30d = store.count_operator_agent_drift_findings(
-            agent_id=agent_id,
+            agent_id=store_agent_key,
             drift_type="BUNDLE_HASH_DRIFT",
             since_seconds=30 * 86400,
         )
         scope_drift_30d = store.count_operator_agent_drift_findings(
-            agent_id=agent_id,
+            agent_id=store_agent_key,
             drift_type="SCOPE_HASH_GOVERNANCE_DRIFT",
             since_seconds=30 * 86400,
         )
@@ -346,18 +373,23 @@ def evaluate_fleet_advancement_sync(
         phases_seen = {a.current_phase for a in per_agent}
         fleet_phase_aligned = len(phases_seen) == 1 and "UNKNOWN" not in phases_seen
         fleet_at_o1_count = sum(1 for a in per_agent if a.current_phase == "O1_SHADOW")
+        fleet_at_o2_count = sum(1 for a in per_agent if a.current_phase == "O2_SUGGEST")
+        fleet_at_o3_count = sum(1 for a in per_agent if a.current_phase == "O3_ACT")
         fleet_at_o2_ready_count = sum(1 for a in per_agent if a.o2_ready)
         fleet_at_o3_ready_count = sum(1 for a in per_agent if a.o3_ready)
 
-        # Next alignment target — the next phase the fleet is converging toward
-        if fleet_at_o3_ready_count == 3:
-            next_target = "O3_ACT"
-        elif fleet_at_o2_ready_count == 3:
-            next_target = "O2_SUGGEST"
+        # Next alignment target — the next phase the fleet is converging toward.
+        # Resolution priority: current-phase populace (where the fleet IS) takes
+        # precedence over o2_ready/o3_ready counts (which gate ENTRY into the
+        # next phase and naturally drop to 0 once an agent is already there).
+        if fleet_at_o3_count == 3:
+            next_target = "O3_ACT"  # fleet already at O3_ACT
+        elif fleet_at_o2_count == 3:
+            next_target = "O3_ACT"  # fleet at O2_SUGGEST converging on O3
         elif fleet_at_o1_count == 3:
-            next_target = "O2_SUGGEST"  # converging on O2 readiness
+            next_target = "O2_SUGGEST"  # fleet at O1_SHADOW converging on O2
         else:
-            next_target = "O1_SHADOW"  # still converging on O1 alignment
+            next_target = "O1_SHADOW"  # split phase or all O0 — converge on O1 first
 
         return FleetAdvancementSummary(
             timestamp=time.time(),
