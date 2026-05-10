@@ -1923,6 +1923,70 @@ class Config:
     FROZEN per Pass 2C Q9 — registered on AgentRegistry Phase O0 (2026-05-03,
     commit 44c26ce0). Any change here breaks bundle anchoring."""
 
+    operator_agent_curator_id: str = field(
+        default_factory=lambda: _env(
+            "OPERATOR_AGENT_CURATOR_ID",
+            "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8",
+        )
+    )
+    """Phase O1-CURATOR C2 — Q9-frozen agentId for the Curator operator agent
+    (third Operator Initiative agent). Registered on AgentRegistry Phase 238
+    Step I-FINAL (2026-05-09, Sessions 1+2+3 commit eeeeb366). Any change
+    here breaks Curator bundle anchoring + cedar_shadow_runtime resolution.
+
+    Architectural divergence from Sentry/Guardian: Curator was registered
+    via the MockKMSClient TESTNET path (no GitHub App, no AWS KMS HSM).
+    Production mainnet activation requires AWS KMS HSM provisioning + steps
+    7+8 re-run + Cedar bundle re-anchor with new agentId. This is Curator's
+    dedicated development avenue — separate from Sentry/Guardian's ceremony
+    and KMS infrastructure but advances through the same Phase O ladder."""
+
+    # --- Phase O1 D: Operator Initiative Advancement Watcher (parallel-fleet) ---
+    operator_initiative_advancement_enabled: bool = field(
+        default_factory=lambda: _env_bool(
+            "OPERATOR_INITIATIVE_ADVANCEMENT_ENABLED", False
+        )
+    )
+    """Phase O1 D — Enable the parallel-fleet advancement watcher that
+    evaluates Phase O2 SUGGEST + O3 ACT readiness criteria for all three
+    Operator Initiative agents (Sentry, Guardian, Curator) on a single
+    1-hour cadence. Default False = opt-in observability (matches Phase
+    O1 C4 cedar_drift_sweep_enabled pattern). Activates the watcher in
+    main.py's task list when True. Never advances any agent — only
+    publishes readiness state."""
+
+    operator_initiative_advancement_interval_s: float = field(
+        default_factory=lambda: _env_float(
+            "OPERATOR_INITIATIVE_ADVANCEMENT_INTERVAL_S", 3600.0
+        )
+    )
+    """Phase O1 D — Watcher poll cadence in seconds. Default 3600 (1 hour)
+    matches the slow-moving criteria (3-week shadow age threshold). Lowered
+    only for testing; in production the criteria don't change fast enough
+    to warrant tighter polling."""
+
+    kms_hsm_production_ready: bool = field(
+        default_factory=lambda: _env_bool("KMS_HSM_PRODUCTION_READY", False)
+    )
+    """Phase O1 D / O3 ACT gate — Sentry + Guardian require AWS KMS HSM
+    provisioning before Phase O3 ACT advancement. Set True when KMS HSM
+    is provisioned + tested + Cedar bundle re-anchored against production
+    keys. Curator does NOT consult this flag (it uses MockKMS testnet
+    path on its dedicated avenue)."""
+
+    marketplace_curator_role_assigned: bool = field(
+        default_factory=lambda: _env_bool(
+            "MARKETPLACE_CURATOR_ROLE_ASSIGNED", False
+        )
+    )
+    """Phase O1 D / O3 ACT gate — Curator agent requires VAPIDataMarketplace
+    Listings.setCurator(curator_agent_address) called by deploy-wallet
+    before Phase O3 ACT advancement. The setCurator(address) hook was
+    reserved on the contract per Phase 238 Step F. Set True after the
+    on-chain role assignment completes (~0.05 IOTX). Sentry + Guardian
+    do NOT consult this flag — they use the kms_hsm_production_ready
+    gate instead."""
+
     # --- Phase O1 C4: Drift Auto-Sweep Scheduler ---
     cedar_drift_sweep_enabled: bool = field(
         default_factory=lambda: _env_bool("CEDAR_DRIFT_SWEEP_ENABLED", False)

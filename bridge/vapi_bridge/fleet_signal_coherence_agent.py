@@ -546,6 +546,7 @@ CONTRADICTION_RULES: dict = {
         "agents_involved": [
             "AnchorSentry",
             "Guardian",
+            "Curator",
             "CedarDriftSweeper",
         ],
         "severity": "HIGH",
@@ -585,6 +586,7 @@ CONTRADICTION_RULES: dict = {
         "agents_involved": [
             "AnchorSentry",
             "Guardian",
+            "Curator",
             "CedarDriftSweeper",
         ],
         "severity": "CRITICAL",
