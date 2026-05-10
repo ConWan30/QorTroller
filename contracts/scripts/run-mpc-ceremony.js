@@ -79,6 +79,18 @@ const CIRCUITS = [
         outZkey: path.join(ZK_DIR, "TournamentPassport_final.zkey"),
         outVkey: path.join(ZK_DIR, "TournamentPassport_verification_key.json"),
     },
+    // Phase 237-ZK-SEPPROOF — Session 2 addition (2026-05-09).
+    // 6 public inputs (snapshot lo/hi + claimedPlayerId + featureCommitment +
+    // separationThresholdMilli + inferenceCode), 804 non-linear constraints,
+    // BIOMETRIC-SNAPSHOT-v1 anchor pre-condition enforced at wrapper layer
+    // (ZKSepProofVerifier.sol).
+    {
+        name:    "ZKSepProof",
+        r1cs:    path.join(CIRC_DIR, "ZKSepProof.r1cs"),
+        wasm:    path.join(CIRC_DIR, "ZKSepProof_js", "ZKSepProof.wasm"),
+        outZkey: path.join(ZK_DIR, "ZKSepProof_final.zkey"),
+        outVkey: path.join(ZK_DIR, "ZKSepProof_verification_key.json"),
+    },
 ];
 
 // ---------------------------------------------------------------------------
@@ -226,6 +238,22 @@ function hexTo32Bytes(hex) {
 // ---------------------------------------------------------------------------
 
 async function main() {
+    // Phase 237-ZK-SEPPROOF Session 2 addition: --circuit <name> CLI flag
+    // restricts the ceremony to a single circuit so Phase 67's already-
+    // deployed beacons for PitlSessionProof + TeamProof + TournamentPassport
+    // are NOT overwritten when running the ceremony for a new circuit.
+    const argv = process.argv.slice(2);
+    let onlyCircuit = null;
+    for (let i = 0; i < argv.length; i++) {
+        if (argv[i] === "--circuit" && argv[i + 1]) {
+            onlyCircuit = argv[i + 1];
+            i++;
+        }
+    }
+    if (onlyCircuit) {
+        console.log(`[mode] single-circuit ceremony: ${onlyCircuit}`);
+    }
+
     fs.mkdirSync(OUT_DIR, { recursive: true });
     fs.mkdirSync(path.dirname(PTAU_PATH), { recursive: true });
 
@@ -241,6 +269,9 @@ async function main() {
 
     // 3. Run MPC Phase 2 for each circuit
     for (const circuit of CIRCUITS) {
+        if (onlyCircuit && circuit.name !== onlyCircuit) {
+            continue;  // skip — single-circuit mode
+        }
         if (!fs.existsSync(circuit.r1cs)) {
             console.warn(`  [skip] ${circuit.name} r1cs not found — recompile circuit first`);
             console.warn(`         cd contracts && npx hardhat compile`);
