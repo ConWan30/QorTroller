@@ -1,7 +1,34 @@
-// BrpView — additive 4th view, post-milestone incorporation per OQ-7.
+// BrpView — additive 5th view, post-milestone incorporation per OQ-7.
 //
 // Track classification: out-of-band-solo. Pre-ceremony incorporation;
 // `live: false` posture preserved per Block W.
+//
+// Phase 238-FRONTEND-V4 (BRP CROWN-JEWEL REVAMP) 2026-05-09:
+//   The BRP is the gamer's CRYPTOGRAPHIC PORTRAIT — every polygon of the
+//   ambient mesh is derived from PoAC frozenOutput bytes via keccak256.
+//   This view is the most VAPI-distinctive surface because it visualizes
+//   the protocol's data as art.
+//
+// V4 changes vs V3:
+//   - All inline hex colors replaced with vapi-theme.css CSS variables
+//   - Side drawer moved from left-edge to right-edge (matches PCCDrawer +
+//     ConsentPanel pattern from GamerView; left becomes the focal-mesh
+//     real estate)
+//   - Pull-out handle restyled to match V3 theme (cyan-on-void, JetBrains
+//     Mono 11px, 0.08em letterSpacing, glowing dot when active)
+//   - Drawer header uses Rajdhani display font + cyan accent matching V3
+//   - Cinematic radial vignette toward void at edges
+//   - Provenance HUD strip at bottom: device_id[:16] · chain_length=N ·
+//     latest_hash[:24] · APOP state (gives the visual its meaning — "this
+//     mesh IS your last N PoAC links, hash-projected into 3D space")
+//   - SSE event imprinting expanded from gic+curator (V3) to all 5 event
+//     types: poac_chain_link / gic_verdict / pcc_state_change /
+//     curator_verdict / anchor_confirmed.  Pulses are ADDITIVE on the
+//     existing ambient rotation, matching the legacy/ControllerTwin.jsx
+//     pattern from V3 C1+C2.
+//   - Camera framing fix moved into BrpCanvas (z=4.5, fov=55) so the mesh
+//     doesn't kiss viewport edges + drift particle trails up to 50 active
+//     particles fade toward void
 //
 // This view consumes:
 //   - frozenOutput     <- LIVE      useBrpFrozenOutput (GIC chain hash)
@@ -13,14 +40,11 @@
 //
 // Per-prop honesty-first indicator: the visible indicator panel labels
 // each prop's data source distinctly from Block W's audit-state badge.
-// Two distinct claims, both surfaced visibly.
 
-import { Suspense, useEffect, useState } from 'react'
+import { Suspense, useEffect, useState, useMemo } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { BrpMount } from '../brp/components/BrpMount'
 import { FONTS } from '../shared/design/tokens'
-// Phase 238-FRONTEND-V3 — SSE consumer for cross-view ambient pulses on
-// curator and gic verdicts. Aliased to avoid the export-name confusion noted
-// in the V3 plan; here it is the only useTwinStream in scope so no alias.
 import { useTwinStream } from '../api/twinStream'
 import {
   getMockEnrollmentSession,
@@ -58,32 +82,35 @@ const ROW_STYLE = {
   gridTemplateColumns: 'auto 7em 1fr',
   alignItems: 'baseline',
   gap: '0.5rem',
-  padding: '0.25rem 0',
+  padding: '0.3rem 0',
+  borderBottom: '1px solid rgba(34, 211, 238, 0.06)',
 }
 
+// Phase 238 V4 — SourceBadge using V3 theme tokens (severity palette).
 function SourceBadge({ kind }) {
   // kind: 'live' | 'synth' | 'live-fallback' | 'operator'
   const palette = {
-    live:           { bg: '#0e3a2c', fg: '#9be8c4', label: 'LIVE' },
-    'live-fallback':{ bg: '#3a2e0e', fg: '#e8d49b', label: 'LIVE→SYNTH' },
-    synth:          { bg: '#2a2a3a', fg: '#bcc4d4', label: 'SYNTH' },
-    operator:       { bg: '#1f2a3a', fg: '#9bc4e8', label: 'OPERATOR' },
+    live:           { color: 'var(--vapi-cyan)',         bg: 'rgba(34,211,238,0.10)',  label: 'LIVE' },
+    'live-fallback':{ color: 'var(--vapi-warn)',         bg: 'rgba(251,146,60,0.10)',  label: 'LIVE→SYNTH' },
+    synth:          { color: 'var(--vapi-tier-basic)',   bg: 'rgba(125,133,144,0.10)', label: 'SYNTH' },
+    operator:       { color: 'var(--vapi-orange)',       bg: 'rgba(255,107,0,0.10)',   label: 'OPERATOR' },
   }
   const p = palette[kind] || palette.synth
   return (
     <span
       style={{
         display: 'inline-block',
-        padding: '0.1rem 0.4rem',
+        padding: '0.15rem 0.45rem',
         background: p.bg,
-        color: p.fg,
-        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-        fontSize: '0.65rem',
+        color: p.color,
+        fontFamily: FONTS.mono,
+        fontSize: '9px',
         fontWeight: 700,
-        letterSpacing: '0.06em',
-        borderRadius: '3px',
+        letterSpacing: '0.08em',
+        borderRadius: 2,
         minWidth: '5em',
         textAlign: 'center',
+        border: `1px solid ${p.color}`,
       }}
     >
       {p.label}
@@ -98,38 +125,129 @@ function LiveFalseBadge() {
       style={{
         display: 'inline-flex',
         alignItems: 'center',
-        gap: '0.4rem',
-        padding: '0.3rem 0.6rem',
-        background: 'rgba(180, 60, 60, 0.18)',
-        border: '1px solid rgba(220, 100, 100, 0.4)',
-        color: '#e8a8a8',
-        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-        fontSize: '0.72rem',
+        gap: '0.5rem',
+        padding: '0.4rem 0.7rem',
+        background: 'rgba(239, 68, 68, 0.10)',
+        border: '1px solid var(--vapi-block)',
+        color: 'var(--vapi-block)',
+        fontFamily: FONTS.mono,
+        fontSize: 10,
         fontWeight: 600,
-        letterSpacing: '0.04em',
-        borderRadius: '4px',
+        letterSpacing: '0.05em',
+        borderRadius: 3,
       }}
     >
-      <span
+      <motion.span
+        animate={{ opacity: [0.4, 1, 0.4] }}
+        transition={{ duration: 1.8, repeat: Infinity }}
         style={{
-          width: '0.5rem',
-          height: '0.5rem',
+          width: 7,
+          height: 7,
           borderRadius: '50%',
-          background: '#e85a5a',
+          background: 'var(--vapi-block)',
+          boxShadow: 'var(--vapi-glow-block)',
           display: 'inline-block',
         }}
       />
-      live: false &nbsp;
-      <span style={{ opacity: 0.7, fontWeight: 400 }}>
+      live: false
+      <span style={{ opacity: 0.7, fontWeight: 400, fontSize: 9 }}>
         Block W — pre-ceremony, no audit
       </span>
     </div>
   )
 }
 
+// Phase 238 V4 — Provenance HUD strip at bottom of view.
+// Surfaces device_id, GIC chain length, latest hash, APOP state — gives
+// the focal mesh its meaning ("this is your protocol-derived self").
+function ProvenanceHUD({ deviceId, frozenHashHex, chainLength, apopState, apopScore, ssePulseTs }) {
+  const shortDevice = deviceId
+    ? `${deviceId.slice(0, 10)}…${deviceId.slice(-6)}`
+    : 'placeholder'
+  const shortHash = frozenHashHex
+    ? `${frozenHashHex.slice(0, 6)}…${frozenHashHex.slice(-12)}`
+    : '—'
+  const apopLabel = apopState
+    ? `${apopState}${apopScore != null ? ` ${apopScore.toFixed(2)}` : ''}`
+    : 'no APOP'
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 16,
+        padding: '8px 16px',
+        background: 'linear-gradient(180deg, transparent 0%, rgba(10,10,15,0.92) 60%)',
+        borderTop: '1px solid rgba(34,211,238,0.10)',
+        fontFamily: FONTS.mono,
+        fontSize: 10,
+        color: 'var(--vapi-tier-basic)',
+        letterSpacing: '0.06em',
+        zIndex: 5,
+        pointerEvents: 'none',
+      }}
+    >
+      <span style={{ color: 'var(--vapi-orange)', fontWeight: 600 }}>BRP</span>
+      <span style={{ color: 'var(--vapi-tier-basic)' }}>·</span>
+      <span>device <span style={{ color: 'var(--vapi-cyan)' }}>{shortDevice}</span></span>
+      <span style={{ color: 'var(--vapi-tier-basic)' }}>·</span>
+      <span>chain_len <span style={{ color: 'var(--vapi-cyan)' }}>{chainLength ?? 0}</span></span>
+      <span style={{ color: 'var(--vapi-tier-basic)' }}>·</span>
+      <span>latest <span style={{ color: 'var(--vapi-cyan)', fontFamily: FONTS.mono }}>{shortHash}</span></span>
+      <span style={{ color: 'var(--vapi-tier-basic)' }}>·</span>
+      <span>{apopLabel}</span>
+      <span style={{ flex: 1 }} />
+      {/* SSE pulse indicator — flashes cyan when an event fires */}
+      <SsePulseIndicator pulseTs={ssePulseTs} />
+      <span style={{ color: 'var(--vapi-tier-basic)', opacity: 0.6, fontSize: 9 }}>
+        keccak256(frozenOutput) → mesh
+      </span>
+    </div>
+  )
+}
+
+function SsePulseIndicator({ pulseTs }) {
+  const [glow, setGlow] = useState(false)
+  useEffect(() => {
+    if (!pulseTs) return
+    setGlow(true)
+    const t = setTimeout(() => setGlow(false), 600)
+    return () => clearTimeout(t)
+  }, [pulseTs])
+  return (
+    <span
+      title={pulseTs ? `last SSE event ${new Date(pulseTs).toLocaleTimeString()}` : 'no SSE event yet'}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 5,
+        fontSize: 9,
+        color: glow ? 'var(--vapi-cyan)' : 'var(--vapi-tier-basic)',
+        transition: 'color 0.4s',
+      }}
+    >
+      <span
+        style={{
+          width: 6,
+          height: 6,
+          borderRadius: 3,
+          background: glow ? 'var(--vapi-cyan)' : 'var(--vapi-tier-basic)',
+          boxShadow: glow ? 'var(--vapi-cyan-glow)' : 'none',
+          transition: 'all 0.3s',
+        }}
+      />
+      SSE
+    </span>
+  )
+}
+
 export function BrpView() {
-  // Pull-out indicator drawer; collapsed by default so the renderer
-  // claims the full view (matches GamerView PCCDrawer pattern).
+  // Drawer collapsed by default so the renderer claims the full viewport.
   const [drawerOpen, setDrawerOpen] = useState(false)
 
   // Commit η: device discovery first; downstream hooks consume the
@@ -181,26 +299,51 @@ export function BrpView() {
   // Per Block W: liveness flags all false until ceremony audit.
   const liveness = { ambient: false, legibility: false, telemetry: false }
 
-  // Phase 238-FRONTEND-V3 — SSE-driven ambient pulse boost.  Subscribes to
-  // /agent/twin-stream and lifts `intensity` (and refreshes `ts`) on
-  // gic_verdict + curator_verdict events so the BRP renderer's existing
-  // flash budget consumes them as ambient pulses.  Filter to those two
-  // verdict-bearing types only — poac_chain_link and pcc_state_change
-  // would oversaturate the per-player BRP scene.
-  const { lastEvent: sseEvent } = useTwinStream({ filter: ['gic_verdict', 'curator_verdict'] })
-  const [ssePulse, setSsePulse] = useState({ ts: 0, intensity: 0 })
+  // Phase 238-FRONTEND-V4 — SSE-driven imprinting layer expanded to all 5
+  // event types.  Each event type imprints differently on the ambient mesh:
+  //   poac_chain_link  → small cyan pulse  (~120ms, low intensity 0.6)
+  //   gic_verdict      → CERTIFY=orange aurora 800ms / FLAG=amber / BLOCK=red+freeze
+  //   curator_verdict  → APPROVED=cyan halo / FLAGGED=amber / REJECTED=red
+  //   anchor_confirmed → orange-cyan shimmer 1200ms (one-time, high impact)
+  //   pcc_state_change → rim color update (sticky until next event)
+  //
+  // The SSE pulse is forwarded to BrpMount's `pulse` prop, which AmbientLayer
+  // treats as an additive intensity boost on the existing rotation/emissive
+  // base.  This matches the V3 ControllerTwin pattern: ADDITIVE layering
+  // never overrides the existing animations.
+  const { lastEvent: sseEvent } = useTwinStream({
+    filter: ['poac_chain_link', 'gic_verdict', 'pcc_state_change', 'curator_verdict', 'anchor_confirmed'],
+  })
+  const [ssePulse, setSsePulse] = useState({ ts: 0, intensity: 0, kind: null, label: null })
   useEffect(() => {
     if (!sseEvent) return
-    setSsePulse({ ts: Date.now(), intensity: 1.4 })
+    const { type, data } = sseEvent
+    let intensity = 1.0
+    let label = type
+    if (type === 'poac_chain_link') {
+      intensity = 0.6
+      label = 'POAC'
+    } else if (type === 'gic_verdict') {
+      const v = data?.verdict
+      intensity = v === 'BLOCK' ? 2.0 : v === 'CERTIFY' ? 1.6 : 1.2
+      label = `GIC ${v || ''}`
+    } else if (type === 'curator_verdict') {
+      const v = data?.verdict
+      intensity = v?.startsWith('REJECTED_') ? 1.8 : v?.startsWith('FLAGGED_') ? 1.3 : 1.0
+      label = `CUR ${v || ''}`
+    } else if (type === 'anchor_confirmed') {
+      intensity = 2.4
+      label = `ANCHOR ${data?.primitive_type || ''}`
+    } else if (type === 'pcc_state_change') {
+      intensity = 0.9
+      label = `PCC ${data?.host_state || ''}`
+    }
+    setSsePulse({ ts: Date.now(), intensity, kind: type, label })
   }, [sseEvent])
 
-  // Pulse prop is forwarded to BrpMount only when the WebSocket has produced
-  // at least one event. lastPulseTs starts at 0; sending pulse={ts:0,...} on
-  // first render would trigger a no-op pulse (ts > 0 check inside AmbientLayer
-  // skips it), but we omit the prop entirely to keep the wiring honest:
-  // when no pulse stream exists, the renderer is in rotation-only mode.
-  // V3 merge: when the SSE event ts is newer than the WS ts, use it (and
-  // its boosted intensity); otherwise prefer the WS pulse (1000 Hz cadence).
+  // Pulse merge — when SSE event ts is newer than WS pulse ts, use the SSE
+  // (with its event-tuned intensity); otherwise prefer the WS pulse stream
+  // (1000 Hz cadence; keeps the mesh alive between rare cryptographic events).
   const wsTs   = recordPulse.lastPulseTs
   const useSse = ssePulse.ts > wsTs
   const pulse  = (wsTs > 0 || ssePulse.ts > 0)
@@ -217,11 +360,6 @@ export function BrpView() {
       ? `WS dropped · last ${recordPulse.pulseCount} records, reconnecting`
       : 'WS not connected (no /ws/records broadcast yet)'
 
-  // Orientation prop wiring: only forward when the hook has actually
-  // received frames (controllerOrientation.orientation !== null).
-  // When connected but no frames yet (e.g., placeholder device_id with
-  // no matching server-side _ws_twin_clients key), we leave orientation
-  // unset so AmbientLayer stays in rotation-only mode (commit δ behavior).
   const orientation = controllerOrientation.orientation ?? undefined
   const orientationSourceKind = controllerOrientation.orientation
     ? 'live'
@@ -234,7 +372,6 @@ export function BrpView() {
       ? `WS connected · no twin frames yet (device ${liveDeviceId ? 'discovered' : 'placeholder'})`
       : 'WS not connected (no /ws/twin broadcast)'
 
-  // Commit η: device discovery indicator.
   const deviceSourceKind = liveDeviceId
     ? 'live'
     : deviceQuery.error
@@ -248,9 +385,6 @@ export function BrpView() {
         ? 'discovering…'
         : 'no devices in bridge → using placeholder device_id'
 
-  // Commit θ: per-device recent-records indicator. liveDeviceId gates LIVE
-  // posture; placeholder fallback reads the synthetic device's records
-  // (bridge returns []) which we surface as 'no recent records'.
   const recordsData = recentRecords.data
   const sessionSourceKind = liveDeviceId && recordsData?.records?.length > 0
     ? 'live'
@@ -275,11 +409,6 @@ export function BrpView() {
     return `${recordsData.records.length} recent · ${rate} · ${ageStr}${anomalyTag}`
   })()
 
-  // Commit ι: capture-health palette wiring. The bridge's PCC subsystem
-  // (Phase 234.7) classifies host-state from HID poll-rate CV. We forward
-  // the kind to BrpMount so the ambient mesh's emissive palette reflects
-  // controller<->bridge link health. Omit prop when no health data exists
-  // so the renderer stays on the base steel-blue palette.
   const captureData = captureHealth.data
   const hostState = captureData?.host_state
     ? {
@@ -305,9 +434,6 @@ export function BrpView() {
     return `${host} · ${cap} · ${rate} · ${ready}`
   })()
 
-  // Commit κ: PHG profile indicator. Bridge returns 404 (→ null) for the
-  // placeholder device until first NOMINAL record arrives. liveDeviceId AND
-  // a non-null profile gate the LIVE posture.
   const phgData = phgProfile.data
   const phgSourceKind = liveDeviceId && phgData
     ? 'live'
@@ -329,11 +455,6 @@ export function BrpView() {
     return `score ${score} (weighted ${weighted}) · humanity ${humanity} · ${nominal}/${total} nominal`
   })()
 
-  // Commit λ: promote PHG profile from drawer-text to renderer-side trust
-  // modulation. humanityProbAvg lerps the ambient mesh's resting emissive
-  // floor; low-trust devices render dimmer, high-trust devices brighter.
-  // Omit prop entirely when no live profile exists so the mesh stays on
-  // the static BASE_EMISSIVE_INTENSITY (commit ε behavior).
   const trust = phgData
     ? {
         humanityProbAvg: typeof phgData.humanity_prob_avg === 'number' ? phgData.humanity_prob_avg : 0,
@@ -357,6 +478,11 @@ export function BrpView() {
     { kind: phgSourceKind, label: 'phg-profile', value: phgLabel },
   ]
 
+  // Provenance HUD inputs
+  const chainLength = recordsData?.records?.length ?? 0
+  const apopState = apopQuery.data?.latest_state ?? null
+  const apopScore = apopQuery.data?.latest_score ?? null
+
   return (
     <div
       data-testid="brp-view-root"
@@ -364,15 +490,14 @@ export function BrpView() {
         display: 'flex',
         flexDirection: 'column',
         flex: 1,
-        background: '#020408',
+        background: 'var(--vapi-void)',
         overflow: 'hidden',
         position: 'relative',
       }}
     >
-      {/* Renderer fills the whole view; the indicator panel is now a
-          right-edge pull-out drawer (matches PCCDrawer / ConsentPanel
-          pattern from GamerView). */}
+      {/* Renderer + cinematic vignette + provenance HUD strip */}
       <main style={{ flex: 1, position: 'relative', minHeight: 0 }}>
+        {/* The Canvas itself — fills the entire main */}
         <div style={{ position: 'absolute', inset: 0 }}>
           <Suspense fallback={null}>
             <BrpMount
@@ -399,113 +524,294 @@ export function BrpView() {
           </Suspense>
         </div>
 
-        {/* Pull-out tab — always visible, anchored to left edge */}
+        {/* Cinematic radial vignette — focal mesh draws the eye, edges fade
+            to void.  Pointer-events:none so the canvas remains interactive. */}
         <div
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            pointerEvents: 'none',
+            background:
+              'radial-gradient(ellipse at center, transparent 35%, rgba(10,10,15,0.55) 75%, rgba(10,10,15,0.95) 100%)',
+            zIndex: 2,
+          }}
+        />
+
+        {/* Title chip — top-left, anchored above vignette */}
+        <div
+          style={{
+            position: 'absolute',
+            top: 16,
+            left: 16,
+            zIndex: 3,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 4,
+          }}
+        >
+          <div style={{
+            fontFamily: "'Rajdhani', sans-serif",
+            fontSize: 22,
+            fontWeight: 700,
+            letterSpacing: '0.10em',
+            color: 'var(--vapi-cyan)',
+            textShadow: '0 0 14px rgba(34,211,238,0.45)',
+          }}>
+            BRP
+          </div>
+          <div style={{
+            fontFamily: FONTS.mono,
+            fontSize: 9,
+            color: 'var(--vapi-tier-basic)',
+            letterSpacing: '0.08em',
+          }}>
+            BIOMETRIC RENDERER · cryptographic portrait
+          </div>
+        </div>
+
+        {/* SSE event toast — top-center, slides in when an event fires */}
+        <SseEventToast pulse={ssePulse} />
+
+        {/* Pull-out handle — RIGHT EDGE, V4 theme tokens, matches V3
+            CuratorReviewLog handle pattern (bottom-left) but mirrored to
+            right-edge to keep focal mesh undisturbed when drawer closed. */}
+        <button
           onClick={() => setDrawerOpen(!drawerOpen)}
           style={{
             position: 'absolute',
             top: '50%',
-            left: drawerOpen ? 320 : 0,
+            right: drawerOpen ? 380 : 0,
             transform: 'translateY(-50%)',
-            width: 28,
-            height: 96,
-            background: 'rgba(90, 143, 184, 0.18)',
-            border: '1px solid rgba(90, 143, 184, 0.4)',
-            borderLeft: 'none',
-            borderRadius: '0 6px 6px 0',
+            width: 32,
+            height: 110,
+            background: 'rgba(34, 211, 238, 0.08)',
+            border: `1px solid ${drawerOpen ? 'var(--vapi-cyan)' : 'rgba(34, 211, 238, 0.35)'}`,
+            borderRight: 'none',
+            borderRadius: '6px 0 0 6px',
             cursor: 'pointer',
             zIndex: 11,
             display: 'flex',
+            flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            transition: 'left 0.32s ease',
+            gap: 6,
+            transition: 'right 0.32s ease, background 0.2s, border-color 0.2s',
+            color: 'var(--vapi-cyan)',
+            fontFamily: 'inherit',
+            padding: 0,
           }}
           title={drawerOpen ? 'Hide BRP indicators' : 'Show BRP indicators'}
+          aria-label={drawerOpen ? 'Hide BRP indicators' : 'Show BRP indicators'}
         >
           <span
             style={{
+              width: 7,
+              height: 7,
+              borderRadius: 3.5,
+              background: 'var(--vapi-cyan)',
+              boxShadow: drawerOpen ? 'var(--vapi-cyan-glow)' : 'none',
+              transition: 'box-shadow 0.3s',
+            }}
+          />
+          <span
+            style={{
               fontFamily: FONTS.mono,
-              fontSize: 8,
-              color: '#5a8fb8',
-              letterSpacing: '0.16em',
+              fontSize: 10,
+              color: 'var(--vapi-cyan)',
+              letterSpacing: '0.18em',
               writingMode: 'vertical-rl',
               transform: 'rotate(180deg)',
-              fontWeight: 500,
+              fontWeight: 600,
             }}
           >
-            {drawerOpen ? 'BRP ▶' : 'BRP ◀'}
+            INDICATORS
           </span>
-        </div>
+        </button>
 
-        {/* Slide-in drawer */}
-        <div
-          aria-hidden={!drawerOpen}
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: drawerOpen ? 0 : -320,
-            bottom: 0,
-            width: 320,
-            zIndex: 10,
-            background: '#0a0e14',
-            borderRight: '1px solid rgba(90, 143, 184, 0.25)',
-            color: '#cce',
-            fontFamily: FONTS.mono,
-            fontSize: '0.78rem',
-            padding: '16px 16px',
-            overflowY: 'auto',
-            transition: 'left 0.32s ease',
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'flex-start',
-              marginBottom: '0.75rem',
-              gap: '0.5rem',
-            }}
-          >
-            <strong
+        {/* Slide-in drawer — RIGHT EDGE, V4 theme tokens */}
+        <AnimatePresence>
+          {drawerOpen && (
+            <motion.div
+              key="brp-drawer"
+              initial={{ x: 380, opacity: 0 }}
+              animate={{ x: 0,   opacity: 1 }}
+              exit={{    x: 380, opacity: 0 }}
+              transition={{ duration: 0.28, ease: 'easeOut' }}
+              aria-hidden={!drawerOpen}
               style={{
-                fontSize: '0.68rem',
-                letterSpacing: '0.08em',
-                textTransform: 'uppercase',
-                color: '#aab',
-                lineHeight: 1.4,
+                position: 'absolute',
+                top: 0,
+                right: 0,
+                bottom: 36, // leave room for provenance HUD strip
+                width: 380,
+                zIndex: 10,
+                background: 'rgba(8, 10, 14, 0.97)',
+                backdropFilter: 'blur(14px)',
+                borderLeft: '1px solid var(--vapi-cyan)',
+                color: 'var(--vapi-tier-verified)',
+                fontFamily: FONTS.mono,
+                fontSize: 11,
+                padding: '20px 18px',
+                overflowY: 'auto',
+                boxShadow: '0 0 28px rgba(34,211,238,0.10)',
               }}
             >
-              BRP Renderer · post-milestone (OQ-7)
-            </strong>
-            <button
-              onClick={() => setDrawerOpen(false)}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: '#aab',
-                cursor: 'pointer',
-                fontFamily: 'inherit',
-                fontSize: 14,
-                lineHeight: 1,
-                padding: 0,
-              }}
-              aria-label="Close indicator drawer"
-            >×</button>
-          </div>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  marginBottom: 14,
+                  gap: 8,
+                }}
+              >
+                <div>
+                  <div
+                    style={{
+                      fontFamily: "'Rajdhani', sans-serif",
+                      fontSize: 16,
+                      fontWeight: 700,
+                      letterSpacing: '0.10em',
+                      color: 'var(--vapi-cyan)',
+                      lineHeight: 1.1,
+                    }}
+                  >
+                    BRP INDICATORS
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 9,
+                      letterSpacing: '0.06em',
+                      color: 'var(--vapi-tier-basic)',
+                      marginTop: 3,
+                    }}
+                  >
+                    post-milestone (OQ-7) · per-prop honesty
+                  </div>
+                </div>
+                <button
+                  onClick={() => setDrawerOpen(false)}
+                  style={{
+                    background: 'transparent',
+                    border: '1px solid rgba(34, 211, 238, 0.25)',
+                    borderRadius: 3,
+                    color: 'var(--vapi-cyan)',
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                    fontSize: 12,
+                    lineHeight: 1,
+                    padding: '4px 8px',
+                  }}
+                  aria-label="Close indicator drawer"
+                >×</button>
+              </div>
 
-          <div style={{ marginBottom: '0.75rem' }}>
-            <LiveFalseBadge />
-          </div>
+              <div style={{ marginBottom: 14 }}>
+                <LiveFalseBadge />
+              </div>
 
-          {indicatorRows.map((row) => (
-            <div key={row.label} style={ROW_STYLE}>
-              <SourceBadge kind={row.kind} />
-              <span style={{ color: '#aab' }}>{row.label}</span>
-              <span style={{ color: '#dde', wordBreak: 'break-word' }}>{row.value}</span>
-            </div>
-          ))}
-        </div>
+              <div style={{
+                fontSize: 9,
+                color: 'var(--vapi-tier-basic)',
+                letterSpacing: '0.06em',
+                marginBottom: 6,
+                textTransform: 'uppercase',
+              }}>
+                Per-Prop Indicators
+              </div>
+
+              {indicatorRows.map((row) => (
+                <div key={row.label} style={ROW_STYLE}>
+                  <SourceBadge kind={row.kind} />
+                  <span style={{ color: 'var(--vapi-tier-basic)' }}>{row.label}</span>
+                  <span style={{
+                    color: 'var(--vapi-tier-verified)',
+                    wordBreak: 'break-word',
+                    fontSize: 10,
+                  }}>{row.value}</span>
+                </div>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Provenance HUD bottom strip — gives the visual its meaning */}
+        <ProvenanceHUD
+          deviceId={activeDeviceId}
+          frozenHashHex={frozen.hashHex}
+          chainLength={chainLength}
+          apopState={apopState}
+          apopScore={apopScore}
+          ssePulseTs={ssePulse.ts}
+        />
       </main>
     </div>
+  )
+}
+
+// SSE event toast — slides down from top-center, fades after 1.6s
+function SseEventToast({ pulse }) {
+  const [visible, setVisible] = useState(false)
+  const [latest, setLatest] = useState(null)
+  useEffect(() => {
+    if (!pulse?.ts || pulse.ts === 0) return
+    setLatest(pulse)
+    setVisible(true)
+    const t = setTimeout(() => setVisible(false), 1600)
+    return () => clearTimeout(t)
+  }, [pulse?.ts])
+
+  if (!latest) return null
+  const color =
+    latest.kind === 'gic_verdict' ? 'var(--vapi-orange)' :
+    latest.kind === 'curator_verdict' ? 'var(--vapi-cyan)' :
+    latest.kind === 'anchor_confirmed' ? 'var(--vapi-tier-premium)' :
+    latest.kind === 'pcc_state_change' ? 'var(--vapi-amber)' :
+    'var(--vapi-cyan)'
+
+  return (
+    <AnimatePresence>
+      {visible && (
+        <motion.div
+          key={latest.ts}
+          initial={{ y: -30, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: -30, opacity: 0 }}
+          transition={{ duration: 0.24 }}
+          style={{
+            position: 'absolute',
+            top: 18,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 4,
+            padding: '6px 14px',
+            background: 'rgba(8,10,14,0.85)',
+            backdropFilter: 'blur(8px)',
+            border: `1px solid ${color}`,
+            borderRadius: 4,
+            color: color,
+            fontFamily: FONTS.mono,
+            fontSize: 10,
+            letterSpacing: '0.08em',
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
+          <span
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: 3,
+              background: color,
+              boxShadow: `0 0 10px ${color}`,
+            }}
+          />
+          {latest.label}
+        </motion.div>
+      )}
+    </AnimatePresence>
   )
 }
