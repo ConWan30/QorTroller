@@ -2,7 +2,7 @@ openapi: "3.0.3"
 
 info:
   title: VAPI — Self-Verifying Integration SDK REST API
-  version: "3.0.0-phase237"
+  version: "3.0.0-phase-o1-frr-sdk"
   description: |
     The VAPI REST API exposes Proof of Authentic Controller (PoAC) submission,
     on-chain verification, device PHCI certification, SDK self-attestation,
@@ -5037,6 +5037,76 @@ paths:
         "403": { description: Invalid api_key }
         "422": { description: Missing device_id, bad category, or reason < 10 chars }
 
+  /operator/fleet-readiness-root:
+    get:
+      tags: [Operator]
+      summary: Compute the Fleet Readiness Root + per-agent O2/O3 readiness rollup (Phase O1-FRR)
+      description: |
+        FROZEN-v1 cryptographic primitive (eighth in PATTERN-017 family):
+
+          frr_hex = SHA-256(
+            b"VAPI-FRR-v1" || sorted(agent_id_be(32) || phase_code(1))
+            for each agent || ts_ns_be(8)
+          ) -> 32B
+
+        Returns the FRR commitment + per-agent phase resolution + the
+        FleetAdvancementSummary state (fleet_phase_aligned,
+        next_alignment_target, etc.). Fail-open: errors surface in the
+        frr_error / summary_error / per-agent error fields without raising.
+
+        Read-key auth (x-api-key Header). Used by:
+          - Frontend dashboards (Phase O3-READINESS-DASHBOARD)
+          - Downstream Python tooling via VAPIFleetReadinessRoot SDK
+          - Operator audit trails verifying FRR drift across watcher cycles
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: x-api-key
+          in: header
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Fleet readiness rollup
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FleetReadinessRoot"
+        "403": { description: Invalid api_key }
+
+  /operator/operator-initiative-advancement-log:
+    get:
+      tags: [Operator]
+      summary: Paginated FRR baseline history (Phase O1-FRR)
+      description: |
+        Returns the most recent N rows from operator_initiative_advancement_log,
+        capturing each watcher cycle's evaluation + FRR commitment. Used by
+        operator to inspect FRR drift over time, verify watcher cadence,
+        and audit fleet phase alignment history.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: x-api-key
+          in: header
+          required: true
+          schema: { type: string }
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 50
+      responses:
+        "200":
+          description: Paginated advancement_log rows
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdvancementLogPage"
+        "403": { description: Invalid api_key }
+
 # =============================================================================
 # Components
 # =============================================================================
@@ -9934,3 +10004,113 @@ webhooks:
         timestamp:
           type: number
           description: "Unix timestamp of status query"
+
+    # ---- Phase O1-FRR ----
+
+    AgentReadinessRow:
+      type: object
+      description: "Per-agent O2/O3 readiness rollup (Phase O1-FRR)"
+      properties:
+        agent_id:
+          type: string
+          description: "Canonical name (anchor_sentry / guardian / curator)"
+        current_phase:
+          type: string
+          enum: [O0_BIRTH, O1_SHADOW, O2_SUGGEST, O3_ACT, UNKNOWN]
+        shadow_age_hours:
+          type: number
+          description: "Hours since the agent's O1_SHADOW activation"
+        cedar_eval_count:
+          type: integer
+          description: "Total Cedar shadow-mode evaluations"
+        bundle_hash_drift_count_30d:
+          type: integer
+          description: "Bundle-hash drift events in last 30 days (gate max: 0)"
+        scope_hash_governance_drift_count_30d:
+          type: integer
+          description: "Scope-hash governance drift events in last 30 days (gate max: 0)"
+        o2_ready:
+          type: boolean
+          description: "True if all O2_SUGGEST gates clear"
+        o2_blockers:
+          type: array
+          items: { type: string }
+          description: "Human-readable blocker strings (e.g. shadow_age_152.1h_under_min_504h)"
+        o3_ready:
+          type: boolean
+          description: "True if all O3_ACT gates clear"
+        o3_blockers:
+          type: array
+          items: { type: string }
+          description: "Human-readable O3 blocker strings"
+        error:
+          type: string
+          nullable: true
+          description: "Per-agent evaluation error (fail-open; null on success)"
+
+    FleetReadinessRoot:
+      type: object
+      description: "Fleet Readiness Root commitment + summary (Phase O1-FRR)"
+      properties:
+        frr_hex:
+          type: string
+          description: "FRR commitment (SHA-256 of FROZEN-v1 pre-image; 64 hex chars)"
+        frr_ts_ns:
+          type: integer
+          description: "ts_ns_be component baked into the commitment"
+        frr_error:
+          type: string
+          nullable: true
+          description: "FRR computation error (fail-open; null on success)"
+        fleet_phase_aligned:
+          type: boolean
+          description: "True if all agents share the same current_phase"
+        fleet_size:
+          type: integer
+          description: "Number of agents in the fleet (3: sentry/guardian/curator)"
+        fleet_at_o1_count:
+          type: integer
+        fleet_at_o2_ready_count:
+          type: integer
+        fleet_at_o3_ready_count:
+          type: integer
+        next_alignment_target:
+          type: string
+          description: "Phase the fleet is converging on (O2_SUGGEST / O3_ACT / NONE)"
+        summary_error:
+          type: string
+          nullable: true
+        per_agent:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentReadinessRow"
+        agents_in_frr:
+          type: array
+          description: "Sorted name+id_hex+phase_code triples baked into the FRR pre-image"
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              agent_id_hex: { type: string }
+              phase_code: { type: integer }
+        domain_tag:
+          type: string
+          description: "Domain tag echo (always 'VAPI-FRR-v1')"
+        timestamp:
+          type: number
+
+    AdvancementLogPage:
+      type: object
+      description: "Paginated operator_initiative_advancement_log rows (Phase O1-FRR)"
+      properties:
+        limit:
+          type: integer
+        row_count:
+          type: integer
+        rows:
+          type: array
+          items:
+            type: object
+            description: "advancement_log row (FRR baseline snapshot)"
+        timestamp:
+          type: number

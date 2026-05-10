@@ -78,7 +78,7 @@ for _d in [str(_CONTROLLER_DIR), str(_BRIDGE_DIR)]:
 # Protocol constants (PoAC spec — immutable)
 # ---------------------------------------------------------------------------
 
-SDK_VERSION       = "3.0.0-phase-o2-draft-review"
+SDK_VERSION       = "3.0.0-phase-o1-frr-sdk"
 POAC_RECORD_SIZE  = 228
 POAC_BODY_SIZE    = 164
 POAC_SIG_SIZE     = 64
@@ -8988,4 +8988,181 @@ class VAPIDraftReview:
                 decision = str(decision),
                 error    = str(exc),
             )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Phase O1-FRR-SDK — Fleet Readiness Root client
+# ─────────────────────────────────────────────────────────────────────────────
+# Wraps the FRR + advancement-log endpoints shipped Phase O1-FRR-ENDPOINT
+# (commit 6c9a8acf). FROZEN-v1 primitive (eighth in PATTERN-017 family):
+#
+#   frr_hex = SHA-256(
+#       b"VAPI-FRR-v1" || sorted(agent_id_be(32) || phase_code(1))
+#       for each agent || ts_ns_be(8)
+#   ) -> 32B
+#
+# Used by frontend dashboards (Phase O3-READINESS-DASHBOARD commit 8fecfcd7
+# binds to this via the corresponding REST endpoint) + external Python
+# tooling that wants programmatic access to fleet phase alignment + per-
+# agent O2/O3 blockers without parsing CLAUDE.md NOTE entries.
+#
+# Read-key auth (x-api-key Header) on both endpoints; fail-open shape
+# matches existing clients (VAPIDraftReview / VAPIMarketplaceListings).
+
+@dataclass(slots=True)
+class AgentReadinessRow:
+    """One agent's readiness row from VAPIFleetReadinessRoot.status (Phase O1-FRR)."""
+    agent_id:                                str        = ""
+    current_phase:                           str        = ""
+    shadow_age_hours:                        float      = 0.0
+    cedar_eval_count:                        int        = 0
+    bundle_hash_drift_count_30d:             int        = 0
+    scope_hash_governance_drift_count_30d:   int        = 0
+    o2_ready:                                bool       = False
+    o2_blockers:                             list       = field(default_factory=list)
+    o3_ready:                                bool       = False
+    o3_blockers:                             list       = field(default_factory=list)
+    error:                                   "str|None" = None
+
+
+@dataclass(slots=True)
+class FleetReadinessRootResult:
+    """Result from VAPIFleetReadinessRoot.status (Phase O1-FRR-SDK)."""
+    frr_hex:                  str        = ""
+    frr_ts_ns:                int        = 0
+    fleet_phase_aligned:      bool       = False
+    fleet_size:               int        = 0
+    fleet_at_o1_count:        int        = 0
+    fleet_at_o2_ready_count:  int        = 0
+    fleet_at_o3_ready_count:  int        = 0
+    next_alignment_target:    str        = ""
+    per_agent:                list       = field(default_factory=list)
+    domain_tag:               str        = ""
+    error:                    "str|None" = None
+
+
+@dataclass(slots=True)
+class AdvancementLogResult:
+    """Result from VAPIFleetReadinessRoot.advancement_log (Phase O1-FRR-SDK)."""
+    limit:     int        = 50
+    row_count: int        = 0
+    rows:      list       = field(default_factory=list)
+    error:     "str|None" = None
+
+
+class VAPIFleetReadinessRoot:
+    """Client for the Fleet Readiness Root endpoints (Phase O1-FRR-SDK).
+
+    Wraps the GET endpoints shipped Phase O1-FRR-ENDPOINT that surface the
+    FRR primitive + per-agent O2/O3 blocker rollups + paginated history
+    from the operator_initiative_advancement_log table.
+
+    Read-key auth (x-api-key Header) on both endpoints. Fail-open: every
+    error path returns the dataclass with .error populated and never raises.
+
+    Usage::
+
+        client = VAPIFleetReadinessRoot("http://localhost:8081", api_key)
+
+        # Live snapshot
+        s = client.status()
+        if s.fleet_phase_aligned and all(a["o3_ready"] for a in s.per_agent):
+            print("anchor unblocked:", s.frr_hex)
+
+        # History inspection
+        hist = client.advancement_log(limit=100)
+        for row in hist.rows:
+            print(row["frr_hex"], row["ts_ns"])
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def status(self) -> FleetReadinessRootResult:
+        """Read GET /operator/fleet-readiness-root.
+
+        Returns FleetReadinessRootResult with per_agent rollup. On error,
+        returns with error set and other fields zero/empty.
+        """
+        try:
+            import urllib.request, json
+            url = f"{self._base}/operator/fleet-readiness-root"
+            req = urllib.request.Request(
+                url,
+                headers={"x-api-key": self._key} if self._key else {},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                body = json.loads(resp.read().decode())
+            return FleetReadinessRootResult(
+                frr_hex                  = str(body.get("frr_hex", "")),
+                frr_ts_ns                = int(body.get("frr_ts_ns", 0)),
+                fleet_phase_aligned      = bool(body.get("fleet_phase_aligned", False)),
+                fleet_size               = int(body.get("fleet_size", 0)),
+                fleet_at_o1_count        = int(body.get("fleet_at_o1_count", 0)),
+                fleet_at_o2_ready_count  = int(body.get("fleet_at_o2_ready_count", 0)),
+                fleet_at_o3_ready_count  = int(body.get("fleet_at_o3_ready_count", 0)),
+                next_alignment_target    = str(body.get("next_alignment_target", "")),
+                per_agent                = list(body.get("per_agent", [])),
+                domain_tag               = str(body.get("domain_tag", "")),
+            )
+        except Exception as exc:
+            return FleetReadinessRootResult(error=str(exc))
+
+    def advancement_log(self, *, limit: int = 50) -> AdvancementLogResult:
+        """Read GET /operator/operator-initiative-advancement-log.
+
+        Args:
+            limit: 1-500. Default 50. Most recent first by timestamp.
+
+        Returns AdvancementLogResult. On error: error populated + rows=[].
+        """
+        try:
+            import urllib.request, json
+            url = (
+                f"{self._base}/operator/operator-initiative-advancement-log"
+                f"?limit={int(limit)}"
+            )
+            req = urllib.request.Request(
+                url,
+                headers={"x-api-key": self._key} if self._key else {},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                body = json.loads(resp.read().decode())
+            return AdvancementLogResult(
+                limit     = int(body.get("limit", limit)),
+                row_count = int(body.get("row_count", 0)),
+                rows      = list(body.get("rows", [])),
+            )
+        except Exception as exc:
+            return AdvancementLogResult(error=str(exc))
+
+    def per_agent_row(self, agent_id: str) -> "AgentReadinessRow|None":
+        """Convenience: fetch live status + return the row for one agent.
+
+        Args:
+            agent_id: Canonical name ('anchor_sentry' / 'guardian' / 'curator').
+
+        Returns AgentReadinessRow on hit, None if the agent isn't in the
+        fleet snapshot (or if status() returned an error).
+        """
+        s = self.status()
+        if s.error:
+            return None
+        for raw in s.per_agent:
+            if raw.get("agent_id") == agent_id:
+                return AgentReadinessRow(
+                    agent_id                              = str(raw.get("agent_id", "")),
+                    current_phase                         = str(raw.get("current_phase", "")),
+                    shadow_age_hours                      = float(raw.get("shadow_age_hours", 0.0)),
+                    cedar_eval_count                      = int(raw.get("cedar_eval_count", 0)),
+                    bundle_hash_drift_count_30d           = int(raw.get("bundle_hash_drift_count_30d", 0)),
+                    scope_hash_governance_drift_count_30d = int(raw.get("scope_hash_governance_drift_count_30d", 0)),
+                    o2_ready                              = bool(raw.get("o2_ready", False)),
+                    o2_blockers                           = list(raw.get("o2_blockers", [])),
+                    o3_ready                              = bool(raw.get("o3_ready", False)),
+                    o3_blockers                           = list(raw.get("o3_blockers", [])),
+                    error                                 = raw.get("error"),
+                )
+        return None
 
