@@ -1300,17 +1300,94 @@ class Bridge:
                     "Phase O2-DRAFT-AUTOLOOP (Sentry): task creation failed: %s", _sp_exc
                 )
 
+        # Phase O2-GUARDIAN-TRIGGERS / O2-CURATOR-TRIGGERS shared helpers
+        # (defined locally to keep the patch self-contained):
+        #   _compose_sources -> single callable concatenating N source lists
+        #   _git_cfg_view    -> lightweight cfg view that exposes
+        #                       operator_agent_git_trigger_enabled=True via
+        #                       a different Guardian-specific underlying flag,
+        #                       so GitTriggerSource (which checks
+        #                       operator_agent_git_trigger_enabled) can be
+        #                       reused for Guardian without coupling its
+        #                       enablement to Sentry's cfg flag.
+        def _compose_sources(srcs):
+            def _composed():
+                out = []
+                for src in srcs:
+                    try:
+                        res = src() or []
+                        if isinstance(res, list):
+                            out.extend(res)
+                    except Exception:  # noqa: BLE001 -- fail-open per phase contract
+                        pass
+                return out
+            return _composed if srcs else None
+
+        def _git_cfg_view(real_cfg, source_flag_name):
+            # Read the Guardian-specific flag at instantiation time; expose
+            # operator_agent_git_trigger_enabled=True if that flag is set.
+            class _GitCfgView:
+                def __getattr__(self, name):
+                    if name == "operator_agent_git_trigger_enabled":
+                        return bool(getattr(real_cfg, source_flag_name, False))
+                    return getattr(real_cfg, name)
+            return _GitCfgView()
+
         if getattr(self.cfg, "operator_agent_guardian_polling_enabled", False):
             try:
                 from .operator_agent_guardian_polling import run_guardian_polling_loop
+                # Phase O2-GUARDIAN-TRIGGERS: compose live trigger sources.
+                # Each source is opt-in via its own cfg flag; the composed
+                # callable concatenates whatever sources are enabled. When
+                # all flags False, _composed returns None and run_guardian_polling_loop
+                # falls back to its no-op stub (scaffold-only behavior preserved).
+                _guardian_sources: list = []
+                _guardian_labels: list = []
+                # Source 1: GitTriggerSource (commit kind) — reuses the
+                # Sentry source class but with Guardian-specific cfg flag.
+                if getattr(self.cfg, "operator_agent_guardian_git_trigger_enabled", False):
+                    try:
+                        from .operator_agent_git_trigger_source import GitTriggerSource
+                        _guardian_sources.append(GitTriggerSource(
+                            cfg=_git_cfg_view(self.cfg, "operator_agent_guardian_git_trigger_enabled"),
+                        ))
+                        _guardian_labels.append("GitTriggerSource")
+                    except ImportError:
+                        pass
+                # Source 2: GuardianFscaTriggerSource (fsca_finding kind).
+                try:
+                    from .operator_agent_guardian_trigger_sources import (
+                        make_guardian_fsca_trigger_source,
+                    )
+                    _g_fsca = make_guardian_fsca_trigger_source(
+                        cfg=self.cfg, store=self.store,
+                    )
+                    if _g_fsca is not None:
+                        _guardian_sources.append(_g_fsca)
+                        _guardian_labels.append("GuardianFscaTriggerSource")
+                except ImportError:
+                    pass
+                except Exception as _gt_exc:
+                    log.warning(
+                        "Phase O2-GUARDIAN-TRIGGERS: GuardianFscaTriggerSource "
+                        "construction failed: %s", _gt_exc
+                    )
+
+                _composed_g = _compose_sources(_guardian_sources)
                 _guardian_poll_task = asyncio.ensure_future(
-                    run_guardian_polling_loop(cfg=self.cfg, store=self.store)
+                    run_guardian_polling_loop(
+                        cfg=self.cfg, store=self.store,
+                        get_pending_triggers=_composed_g,
+                    )
                 )
                 _guardian_poll_task.set_name("GuardianPollingLoop")
                 self._tasks.append(_guardian_poll_task)
+                _g_label = ", ".join(_guardian_labels) if _guardian_labels else "no-op stub"
                 log.info(
-                    "Phase O2-DRAFT-AUTOLOOP (Guardian): polling loop started (interval=%ds)",
+                    "Phase O2-DRAFT-AUTOLOOP (Guardian): polling loop started "
+                    "(interval=%ds, trigger_sources=[%s])",
                     getattr(self.cfg, "operator_agent_guardian_polling_interval_s", 30),
+                    _g_label,
                 )
             except ImportError as _gp_exc:
                 log.warning(
@@ -1325,14 +1402,56 @@ class Bridge:
         if getattr(self.cfg, "operator_agent_curator_polling_enabled", False):
             try:
                 from .operator_agent_curator_polling import run_curator_polling_loop
+                # Phase O2-CURATOR-TRIGGERS: compose live trigger sources.
+                _curator_sources: list = []
+                _curator_labels: list = []
+                try:
+                    from .operator_agent_curator_trigger_sources import (
+                        make_curator_marketplace_listing_trigger_source,
+                        make_curator_anchor_freshness_trigger_source,
+                        make_curator_periodic_compliance_trigger_source,
+                    )
+                    _c_listing = make_curator_marketplace_listing_trigger_source(
+                        cfg=self.cfg, store=self.store,
+                    )
+                    if _c_listing is not None:
+                        _curator_sources.append(_c_listing)
+                        _curator_labels.append("MarketplaceListingTriggerSource")
+                    _c_freshness = make_curator_anchor_freshness_trigger_source(
+                        cfg=self.cfg, store=self.store, chain=getattr(self, "chain", None),
+                    )
+                    if _c_freshness is not None:
+                        _curator_sources.append(_c_freshness)
+                        _curator_labels.append("AnchorFreshnessTriggerSource")
+                    _c_periodic = make_curator_periodic_compliance_trigger_source(
+                        cfg=self.cfg, store=self.store,
+                    )
+                    if _c_periodic is not None:
+                        _curator_sources.append(_c_periodic)
+                        _curator_labels.append("PeriodicComplianceTriggerSource")
+                except ImportError:
+                    pass
+                except Exception as _ct_exc:
+                    log.warning(
+                        "Phase O2-CURATOR-TRIGGERS: trigger source construction "
+                        "failed: %s", _ct_exc
+                    )
+
+                _composed_c = _compose_sources(_curator_sources)
                 _curator_poll_task = asyncio.ensure_future(
-                    run_curator_polling_loop(cfg=self.cfg, store=self.store)
+                    run_curator_polling_loop(
+                        cfg=self.cfg, store=self.store,
+                        get_pending_triggers=_composed_c,
+                    )
                 )
                 _curator_poll_task.set_name("CuratorPollingLoop")
                 self._tasks.append(_curator_poll_task)
+                _c_label = ", ".join(_curator_labels) if _curator_labels else "no-op stub"
                 log.info(
-                    "Phase O2-DRAFT-AUTOLOOP (Curator): polling loop started (interval=%ds)",
+                    "Phase O2-DRAFT-AUTOLOOP (Curator): polling loop started "
+                    "(interval=%ds, trigger_sources=[%s])",
                     getattr(self.cfg, "operator_agent_curator_polling_interval_s", 30),
+                    _c_label,
                 )
             except ImportError as _cp_exc:
                 log.warning(
