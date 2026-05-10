@@ -3675,6 +3675,54 @@ class Store:
         except Exception:
             pass  # idempotent
 
+        # Phase O2-DRAFT-GENERATION (2026-05-10) — operator_agent_drafts table.
+        # Persists each draft payload produced by an Operator Initiative agent
+        # under O2 SUGGEST authority. Drafts are payloads under draft://...
+        # URIs that the agent has authored but not yet anchored on chain (per
+        # O2 SUGGEST bundle's permit set with no shadow_mode constraint).
+        # Operator review (accept/reject) populates the operator_decision +
+        # operator_decision_at columns; the disagreement_rate watcher gate
+        # (PHASE_O3_DISAGREEMENT_RATE_MAX=0.05) reads reject/total ratio.
+        # Schema phase 1005. agent_id stored as Q9 hex when cfg fields
+        # populated (production); canonical name when test stubs key by name.
+        try:
+            with self._conn() as conn:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS operator_agent_drafts (
+                        id                              INTEGER PRIMARY KEY AUTOINCREMENT,
+                        agent_id                        TEXT    NOT NULL,
+                        action_category                 TEXT    NOT NULL,
+                        action_name                     TEXT    NOT NULL,
+                        draft_uri                       TEXT    NOT NULL,
+                        payload_hash                    TEXT    NOT NULL,
+                        payload_bytes                   INTEGER NOT NULL,
+                        kms_sig_present                 INTEGER NOT NULL DEFAULT 0,
+                        operator_decision               TEXT,
+                        operator_decision_at            REAL,
+                        operator_disagreement_reason    TEXT,
+                        created_at                      REAL    NOT NULL
+                    )
+                """)
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_oad_agent_created "
+                    "ON operator_agent_drafts(agent_id, created_at DESC)"
+                )
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_oad_agent_decision "
+                    "ON operator_agent_drafts(agent_id, operator_decision)"
+                )
+                conn.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_oad_payload_hash "
+                    "ON operator_agent_drafts(agent_id, payload_hash)"
+                )
+                conn.execute(
+                    "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                    " VALUES (?, ?, ?)",
+                    (1005, "operator_agent_drafts", time.time()),
+                )
+        except Exception:
+            pass  # idempotent
+
         # Phase O0 Stream 3-prep Session 1 — AGENT_COMMIT v1 store table.
         # Sixth FROZEN-v1 primitive in the family. Each row records a git
         # commit attestation produced by an Operator Agent, with the computed
@@ -14899,6 +14947,227 @@ class Store:
             return int(row["n"]) if row else 0
         except Exception:
             return 0
+
+    # ------------------------------------------------------------------
+    # Phase O2-DRAFT-GENERATION (2026-05-10) — operator_agent_drafts helpers
+    # ------------------------------------------------------------------
+    def insert_operator_agent_draft(
+        self,
+        *,
+        agent_id: str,
+        action_category: str,   # 'skill' | 'tool'
+        action_name: str,        # e.g. 'kms-sign' or 'provenance-recording'
+        draft_uri: str,          # full draft://... URI
+        payload_hash: str,       # SHA-256 of payload body, lowercase hex
+        payload_bytes: int,
+        kms_sig_present: bool = False,
+    ) -> int:
+        """Persist one draft payload produced by an Operator agent under
+        O2 SUGGEST authority. Returns new row id; 0 on UNIQUE collision
+        (same agent_id+payload_hash already persisted -- idempotent)."""
+        try:
+            with self._conn() as conn:
+                cur = conn.execute(
+                    "INSERT OR IGNORE INTO operator_agent_drafts "
+                    "(agent_id, action_category, action_name, draft_uri, "
+                    " payload_hash, payload_bytes, kms_sig_present, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        str(agent_id),
+                        str(action_category),
+                        str(action_name),
+                        str(draft_uri),
+                        str(payload_hash),
+                        int(payload_bytes),
+                        1 if kms_sig_present else 0,
+                        time.time(),
+                    ),
+                )
+                if cur.lastrowid:
+                    return int(cur.lastrowid)
+                # UNIQUE collision -- return existing row id
+                row = conn.execute(
+                    "SELECT id FROM operator_agent_drafts "
+                    "WHERE agent_id = ? AND payload_hash = ?",
+                    (str(agent_id), str(payload_hash)),
+                ).fetchone()
+                return int(row["id"]) if row else 0
+        except Exception:
+            return 0
+
+    def count_operator_agent_drafts(
+        self,
+        *,
+        agent_id: str,
+        since_seconds: int,
+    ) -> int:
+        """Count drafts produced by an agent within the last N seconds.
+        Used by Phase O3-ACT-WATCHER PHASE_O3_DRAFT_PAYLOAD_MIN gate
+        (default 50 drafts in a 30-day window). Returns 0 on any failure
+        (fail-open per INV-INITIATIVE-ADVANCEMENT-002)."""
+        try:
+            cutoff = time.time() - max(0, int(since_seconds))
+            with self._conn() as conn:
+                row = conn.execute(
+                    "SELECT COUNT(*) AS n FROM operator_agent_drafts "
+                    "WHERE agent_id = ? AND created_at >= ?",
+                    (str(agent_id), cutoff),
+                ).fetchone()
+            return int(row["n"]) if row else 0
+        except Exception:
+            return 0
+
+    def record_operator_decision(
+        self,
+        *,
+        draft_id: int,
+        decision: str,           # 'accept' | 'reject' | 'overturn_curator'
+        reason: str | None = None,
+    ) -> bool:
+        """Operator review of a draft -- updates operator_decision +
+        operator_decision_at + (optional) operator_disagreement_reason.
+        Idempotent: re-recording the same decision is a no-op; recording
+        a different decision overwrites (operator may revise their own
+        review). Returns True on success, False on missing draft."""
+        if decision not in ("accept", "reject", "overturn_curator"):
+            return False
+        try:
+            with self._conn() as conn:
+                cur = conn.execute(
+                    "UPDATE operator_agent_drafts "
+                    "SET operator_decision = ?, "
+                    "    operator_decision_at = ?, "
+                    "    operator_disagreement_reason = ? "
+                    "WHERE id = ?",
+                    (
+                        str(decision),
+                        time.time(),
+                        str(reason) if reason else None,
+                        int(draft_id),
+                    ),
+                )
+                return int(cur.rowcount) > 0
+        except Exception:
+            return False
+
+    def compute_operator_agent_disagreement_rate(
+        self,
+        *,
+        agent_id: str,
+        since_seconds: int,
+    ) -> float:
+        """Fraction of REVIEWED drafts where operator rejected.
+        denominator = drafts with operator_decision IN ('accept', 'reject')
+                      created within window
+        numerator   = drafts with operator_decision = 'reject'
+                      created within window
+
+        Excludes 'overturn_curator' (Curator-specific; tracked separately
+        by compute_operator_agent_false_positive_rate). Excludes drafts
+        with NULL operator_decision (unreviewed -- not part of disagreement
+        signal).
+
+        Returns 0.0 on:
+          - any DB failure
+          - zero reviewed drafts in window (no signal yet)
+
+        Used by Phase O3-ACT-WATCHER PHASE_O3_DISAGREEMENT_RATE_MAX gate
+        (default 0.05 = 5%). Fail-open."""
+        try:
+            cutoff = time.time() - max(0, int(since_seconds))
+            with self._conn() as conn:
+                row = conn.execute(
+                    "SELECT "
+                    "  SUM(CASE WHEN operator_decision = 'reject' THEN 1 ELSE 0 END) AS n_reject, "
+                    "  SUM(CASE WHEN operator_decision IN ('accept','reject') THEN 1 ELSE 0 END) AS n_reviewed "
+                    "FROM operator_agent_drafts "
+                    "WHERE agent_id = ? AND created_at >= ?",
+                    (str(agent_id), cutoff),
+                ).fetchone()
+            if not row:
+                return 0.0
+            n_reject = int(row["n_reject"] or 0)
+            n_reviewed = int(row["n_reviewed"] or 0)
+            if n_reviewed <= 0:
+                return 0.0
+            return float(n_reject) / float(n_reviewed)
+        except Exception:
+            return 0.0
+
+    def compute_operator_agent_false_positive_rate(
+        self,
+        *,
+        agent_id: str,
+        since_seconds: int,
+    ) -> float:
+        """Fraction of REVIEWED drafts where operator overturned the agent's
+        verdict. Curator-specific: marketplace-listing-review verdicts that
+        the operator reverses post-review count as false positives.
+
+        denominator = drafts with operator_decision IN ('accept','reject',
+                      'overturn_curator') created within window
+        numerator   = drafts with operator_decision = 'overturn_curator'
+                      created within window
+
+        Returns 0.0 on:
+          - any DB failure
+          - zero reviewed drafts in window (no signal yet)
+
+        Used by Phase O3-ACT-WATCHER PHASE_O3_FALSE_POSITIVE_RATE_MAX gate
+        (Curator-only; default 0.0 = zero tolerance). Fail-open."""
+        try:
+            cutoff = time.time() - max(0, int(since_seconds))
+            with self._conn() as conn:
+                row = conn.execute(
+                    "SELECT "
+                    "  SUM(CASE WHEN operator_decision = 'overturn_curator' THEN 1 ELSE 0 END) AS n_overturn, "
+                    "  SUM(CASE WHEN operator_decision IN ('accept','reject','overturn_curator') THEN 1 ELSE 0 END) AS n_reviewed "
+                    "FROM operator_agent_drafts "
+                    "WHERE agent_id = ? AND created_at >= ?",
+                    (str(agent_id), cutoff),
+                ).fetchone()
+            if not row:
+                return 0.0
+            n_overturn = int(row["n_overturn"] or 0)
+            n_reviewed = int(row["n_reviewed"] or 0)
+            if n_reviewed <= 0:
+                return 0.0
+            return float(n_overturn) / float(n_reviewed)
+        except Exception:
+            return 0.0
+
+    def get_operator_agent_drafts(
+        self,
+        *,
+        agent_id: str | None = None,
+        decision: str | None = None,
+        since_seconds: int | None = None,
+        limit: int = 50,
+    ) -> list[dict]:
+        """Return drafts (most recent first), filtered by agent / decision /
+        time window. Capped at 500 rows. Used by operator review surface
+        (frontend dashboards) and by audit query tooling."""
+        limit = max(1, min(500, int(limit)))
+        try:
+            sql = "SELECT * FROM operator_agent_drafts WHERE 1=1"
+            args: list = []
+            if agent_id is not None:
+                sql += " AND agent_id = ?"
+                args.append(str(agent_id))
+            if decision is not None:
+                sql += " AND operator_decision = ?"
+                args.append(str(decision))
+            if since_seconds is not None:
+                cutoff = time.time() - max(0, int(since_seconds))
+                sql += " AND created_at >= ?"
+                args.append(cutoff)
+            sql += " ORDER BY created_at DESC LIMIT ?"
+            args.append(limit)
+            with self._conn() as conn:
+                rows = conn.execute(sql, tuple(args)).fetchall()
+            return [dict(r) for r in rows]
+        except Exception:
+            return []
 
     def insert_operator_initiative_advancement_log(
         self,
