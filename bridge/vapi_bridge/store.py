@@ -3630,6 +3630,51 @@ class Store:
         except Exception:
             pass  # idempotent
 
+        # Phase O1-FRR — operator_initiative_advancement_log table.
+        # Persists each fleet-readiness evaluation cycle from
+        # operator_initiative_advancement.run_advancement_watcher_loop
+        # AND every parallel anchor event from
+        # scripts/parallel_o2_anchor.py.  frr_hex carries the Phase O1-FRR
+        # commitment (eighth FROZEN-v1 primitive) over (agent_id, phase_code)
+        # tuples — see operator_initiative_advancement.compute_fleet_readiness_root.
+        #
+        # Phase 1004 distinguishes from 1001 (activation) + 1002 (shadow) +
+        # 1003 (drift). frr_hex nullable because watcher cycles before the
+        # FRR primitive shipped will not have it; new rows always populate.
+        try:
+            with self._conn() as conn:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS operator_initiative_advancement_log (
+                        id                              INTEGER PRIMARY KEY AUTOINCREMENT,
+                        timestamp                       REAL    NOT NULL,
+                        fleet_phase_aligned             INTEGER NOT NULL,
+                        fleet_at_o1_count               INTEGER NOT NULL,
+                        fleet_at_o2_ready_count         INTEGER NOT NULL,
+                        fleet_at_o3_ready_count         INTEGER NOT NULL,
+                        next_alignment_target           TEXT    NOT NULL,
+                        per_agent_json                  TEXT    NOT NULL,
+                        frr_hex                         TEXT,
+                        frr_ts_ns                       INTEGER,
+                        error                           TEXT,
+                        created_at                      REAL    NOT NULL
+                    )
+                """)
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_oial_timestamp "
+                    "ON operator_initiative_advancement_log(timestamp DESC)"
+                )
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_oial_frr_hex "
+                    "ON operator_initiative_advancement_log(frr_hex)"
+                )
+                conn.execute(
+                    "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                    " VALUES (?, ?, ?)",
+                    (1004, "operator_initiative_advancement_log", time.time()),
+                )
+        except Exception:
+            pass  # idempotent
+
         # Phase O0 Stream 3-prep Session 1 — AGENT_COMMIT v1 store table.
         # Sixth FROZEN-v1 primitive in the family. Each row records a git
         # commit attestation produced by an Operator Agent, with the computed
@@ -14760,6 +14805,167 @@ class Store:
             sql += " ORDER BY detected_at DESC LIMIT ?"
             args.append(limit)
             return [dict(r) for r in conn.execute(sql, tuple(args)).fetchall()]
+
+    # --- Phase O1-FRR: Operator Initiative Advancement helpers ---
+    #
+    # The advancement watcher (operator_initiative_advancement.py) calls
+    # four legacy-named helpers that were prototyped against test stubs
+    # only — production store had no real implementations.  The four
+    # helpers below close that gap with adapter shapes (bundle_filename
+    # derived from bundle_path, anchored_at_unix aliased from activated_at)
+    # so the watcher module + its tests are unchanged.
+    #
+    # The fifth/sixth/seventh helpers persist + read the FRR commitment.
+
+    def get_latest_operator_agent_activation(self, agent_id: str) -> dict | None:
+        """Return the most-recent activation_log row for one agent, with
+        watcher-compatible field shape (bundle_filename + anchored_at_unix).
+
+        Returns None when no activation exists.  Never raises."""
+        try:
+            with self._conn() as conn:
+                row = conn.execute(
+                    "SELECT * FROM operator_agent_activation_log "
+                    "WHERE agent_id = ? "
+                    "ORDER BY activated_at DESC LIMIT 1",
+                    (agent_id,),
+                ).fetchone()
+            if row is None:
+                return None
+            d = dict(row)
+            bundle_path = str(d.get("bundle_path", "") or "")
+            d["bundle_filename"] = bundle_path.replace("\\", "/").rsplit("/", 1)[-1] if bundle_path else ""
+            d["anchored_at_unix"] = float(d.get("activated_at", 0.0) or 0.0)
+            return d
+        except Exception:
+            return None
+
+    def get_first_operator_agent_activation(self, agent_id: str) -> dict | None:
+        """Return the EARLIEST activation_log row for one agent (= when
+        shadow observation began).  Same field shape as
+        get_latest_operator_agent_activation.  Never raises."""
+        try:
+            with self._conn() as conn:
+                row = conn.execute(
+                    "SELECT * FROM operator_agent_activation_log "
+                    "WHERE agent_id = ? "
+                    "ORDER BY activated_at ASC LIMIT 1",
+                    (agent_id,),
+                ).fetchone()
+            if row is None:
+                return None
+            d = dict(row)
+            bundle_path = str(d.get("bundle_path", "") or "")
+            d["bundle_filename"] = bundle_path.replace("\\", "/").rsplit("/", 1)[-1] if bundle_path else ""
+            d["anchored_at_unix"] = float(d.get("activated_at", 0.0) or 0.0)
+            return d
+        except Exception:
+            return None
+
+    def count_cedar_shadow_evaluations(self, agent_id: str) -> int:
+        """Count rows in operator_agent_shadow_log for an agent.  Used by
+        Phase O2 SUGGEST gate (PHASE_O2_EVAL_MIN_COUNT=100).  Returns 0
+        on any failure (fail-open per INV-INITIATIVE-ADVANCEMENT-002)."""
+        try:
+            with self._conn() as conn:
+                row = conn.execute(
+                    "SELECT COUNT(*) AS n FROM operator_agent_shadow_log "
+                    "WHERE agent_id = ?",
+                    (agent_id,),
+                ).fetchone()
+            return int(row["n"]) if row else 0
+        except Exception:
+            return 0
+
+    def count_operator_agent_drift_findings(
+        self,
+        *,
+        agent_id: str,
+        drift_type: str,
+        since_seconds: int,
+    ) -> int:
+        """Count drift findings of a given type for an agent within the
+        last N seconds.  Used by Phase O2 SUGGEST gate to enforce
+        bundle/scope drift = 0 over the trailing 30-day window.  Returns 0
+        on any failure (fail-open)."""
+        try:
+            cutoff = time.time() - max(0, int(since_seconds))
+            with self._conn() as conn:
+                row = conn.execute(
+                    "SELECT COUNT(*) AS n FROM operator_agent_drift_log "
+                    "WHERE agent_id = ? AND drift_type = ? AND detected_at >= ?",
+                    (agent_id, drift_type, cutoff),
+                ).fetchone()
+            return int(row["n"]) if row else 0
+        except Exception:
+            return 0
+
+    def insert_operator_initiative_advancement_log(
+        self,
+        *,
+        timestamp: float,
+        fleet_phase_aligned: bool,
+        fleet_at_o1_count: int,
+        fleet_at_o2_ready_count: int,
+        fleet_at_o3_ready_count: int,
+        next_alignment_target: str,
+        per_agent_json: str,
+        frr_hex: str = "",
+        frr_ts_ns: int = 0,
+        error: str | None = None,
+    ) -> int:
+        """Persist one fleet-advancement evaluation cycle, including the
+        FRR commitment.  Returns new row id; raises sqlite3.Error only
+        on hard DB failures (caller handles)."""
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO operator_initiative_advancement_log "
+                "(timestamp, fleet_phase_aligned, fleet_at_o1_count, "
+                "fleet_at_o2_ready_count, fleet_at_o3_ready_count, "
+                "next_alignment_target, per_agent_json, frr_hex, frr_ts_ns, "
+                "error, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    float(timestamp),
+                    1 if fleet_phase_aligned else 0,
+                    int(fleet_at_o1_count),
+                    int(fleet_at_o2_ready_count),
+                    int(fleet_at_o3_ready_count),
+                    str(next_alignment_target),
+                    str(per_agent_json),
+                    str(frr_hex or ""),
+                    int(frr_ts_ns or 0),
+                    str(error) if error else None,
+                    time.time(),
+                ),
+            )
+            return int(cur.lastrowid)
+
+    def get_latest_operator_initiative_advancement(self) -> dict | None:
+        """Return the most-recent advancement-log row, or None."""
+        try:
+            with self._conn() as conn:
+                row = conn.execute(
+                    "SELECT * FROM operator_initiative_advancement_log "
+                    "ORDER BY timestamp DESC LIMIT 1",
+                ).fetchone()
+            return dict(row) if row else None
+        except Exception:
+            return None
+
+    def get_operator_initiative_advancement_history(self, limit: int = 50) -> list[dict]:
+        """Return advancement-log history (most recent first), capped at 500."""
+        limit = max(1, min(500, int(limit)))
+        try:
+            with self._conn() as conn:
+                rows = conn.execute(
+                    "SELECT * FROM operator_initiative_advancement_log "
+                    "ORDER BY timestamp DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+            return [dict(r) for r in rows]
+        except Exception:
+            return []
 
     # --- Phase 235-A: Grind Integrity Chain (GIC) ---
 

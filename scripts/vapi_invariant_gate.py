@@ -450,6 +450,48 @@ INVARIANTS: list[Invariant] = [
         pattern=r"_BUNDLE_DRIFT_INTERVAL_DEFAULT_S = 60|_SCOPE_DRIFT_INTERVAL_DEFAULT_S = 600",
         min_matches=2,
     ),
+    Invariant(
+        id="INV-FRR-001",
+        description="compute_fleet_readiness_root function exists in operator_initiative_advancement.py — eighth FROZEN-v1 cryptographic primitive (Phase O1-FRR Stream B)",
+        file="bridge/vapi_bridge/operator_initiative_advancement.py",
+        pattern=r"def compute_fleet_readiness_root\(",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-FRR-002",
+        description="FRR_DOMAIN_TAG = b\"VAPI-FRR-v1\" (11 bytes) — FROZEN-v1 domain tag for Fleet Readiness Root pre-image (Phase O1-FRR)",
+        file="bridge/vapi_bridge/operator_initiative_advancement.py",
+        pattern=r'FRR_DOMAIN_TAG = b"VAPI-FRR-v1"',
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-FRR-003",
+        description="FRR pre-image byte-order frozen — agent_id (32B) || phase_code (1B) per agent, then ts_ns_be(8) at end. Encoded via to_bytes(8, \"big\") for ts_ns; pre.append(phase_code) for byte; pre.extend(id_bytes) for agent_id. Any rearrangement breaks downstream verifiers and requires FRR v2 + new domain tag (Phase O1-FRR)",
+        file="bridge/vapi_bridge/operator_initiative_advancement.py",
+        pattern=r'pre\.extend\(int\(ts_ns\)\.to_bytes\(8, "big"\)\)|pre\.append\(phase_code\)',
+        min_matches=2,
+    ),
+    Invariant(
+        id="INV-PARALLEL-ANCHOR-001",
+        description="scripts/parallel_o2_anchor.py triple-gate pattern frozen — env CHAIN_SUBMISSION_PAUSED=false + env OPERATOR_INITIATIVE_O2_AUTHORIZED=true + --confirm CLI. All three required to fire txs; mirrors canary_corpus_snapshot_anchor.py defensive layer (Phase O1-FRR Stream E)",
+        file="scripts/parallel_o2_anchor.py",
+        pattern=r"OPERATOR_INITIATIVE_O2_AUTHORIZED|CHAIN_SUBMISSION_PAUSED|args\.confirm",
+        min_matches=3,
+    ),
+    Invariant(
+        id="INV-CURATOR-O2-001",
+        description="curator_o2_suggest_v1.json bundle Merkle root frozen at 0xeb400a5c9b410c6f3035a595e2c36dee915f6b2447f822c72c46b164ccd5daa9 — validated 2026-05-09 prior to parallel O2 anchor; any policy edit re-anchors to a NEW Merkle root and breaks this invariant by design (governance event required) (Phase O1-FRR Stream A)",
+        file="bridge/vapi_bridge/cedar_bundles/curator_o2_suggest_v1.json",
+        pattern=r'"agent_id":\s*"0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8"|"phase":\s*"O2_SUGGEST"',
+        min_matches=2,
+    ),
+    Invariant(
+        id="INV-CURATOR-O2-002",
+        description="curator_o2_suggest_v1.json lane_prefix array preserves marketplace/, provenance/, events/, wiki/ — Curator's marketplace-curator-review skill scope is bounded to these prefixes; any expansion breaks the cross-agent skill-separation invariant (Phase O1-CURATOR C2)",
+        file="bridge/vapi_bridge/cedar_bundles/curator_o2_suggest_v1.json",
+        pattern=r'"marketplace/"|"provenance/"|"events/"|"wiki/"',
+        min_matches=4,
+    ),
 ]
 
 

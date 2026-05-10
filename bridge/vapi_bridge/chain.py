@@ -1087,8 +1087,21 @@ class ChainClient:
         async with self._nonce_lock:
             self._nonce = None
 
-    async def _send_tx(self, tx_func, *args, value: int = 0) -> str:
-        """Build, sign, and send a transaction. Returns tx hash hex."""
+    async def _send_tx(
+        self,
+        tx_func,
+        *args,
+        value: int = 0,
+        gas_buffer_multiplier: float = 1.2,
+    ) -> str:
+        """Build, sign, and send a transaction. Returns tx hash hex.
+
+        gas_buffer_multiplier: scales the gas estimate.  Default 1.20 matches
+        Phase 0 baseline used by all PoAC + adjudication paths.  Phase 237.5
+        Path X established 1.25 for IoTeX-storage-heavy operations under
+        elevated gas conditions; cedar_bundle_anchor passes 1.25 explicitly
+        for the dual-anchor calls (Phase O1-FRR Stream D).
+        """
         # Phase 237.5 Path C+ — global chain submission kill-switch.
         # When CHAIN_SUBMISSION_PAUSED=true in bridge/.env, every transaction
         # path that goes through this chokepoint short-circuits. Gates the
@@ -1123,10 +1136,11 @@ class ChainClient:
 
         tx = await tx_func(*args).build_transaction(tx_overrides)
 
-        # Estimate gas with 20% buffer
+        # Estimate gas with caller-supplied buffer (default 1.20)
         try:
             gas_estimate = await self._w3.eth.estimate_gas(tx)
-            tx["gas"] = int(gas_estimate * 1.2)
+            buf = float(gas_buffer_multiplier) if gas_buffer_multiplier else 1.2
+            tx["gas"] = int(gas_estimate * buf)
         except ContractLogicError as e:
             await self._reset_nonce()
             raise RuntimeError(f"Contract revert: {e}") from e
@@ -4151,10 +4165,14 @@ class ChainClient:
         )
         # _send_tx expects the function reference + args (not pre-constructed call).
         # Pattern matches verify_single (line 1127-1132).
+        # 1.25 buffer per Phase 237.5 Path X — IoTeX testnet storage-heavy
+        # patterns (mappings + structs) can exceed the 1.20 default under
+        # elevated gas conditions (1000 → 2000 Gwei observed 2026-05-09).
         tx_hash_hex = await self._send_tx(
             contract.functions.setAgentScopeRoot,
             agent_id_bytes,
             root_bytes,
+            gas_buffer_multiplier=1.25,
         )
         # _send_tx returns hex str; wait_for_transaction_receipt accepts hex str via to_bytes.
         receipt = await self._w3.eth.wait_for_transaction_receipt(
@@ -4190,10 +4208,12 @@ class ChainClient:
             address=self._w3.to_checksum_address(addr),
             abi=self._AGENT_REGISTRY_SCOPE_ABI,
         )
+        # 1.25 buffer per Phase 237.5 Path X — see set_agent_scope_root above.
         tx_hash_hex = await self._send_tx(
             contract.functions.updateAgentScope,
             agent_id_bytes,
             root_bytes,
+            gas_buffer_multiplier=1.25,
         )
         receipt = await self._w3.eth.wait_for_transaction_receipt(
             bytes.fromhex(tx_hash_hex.removeprefix("0x"))

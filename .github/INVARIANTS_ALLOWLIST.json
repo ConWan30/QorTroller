@@ -76,7 +76,7 @@
     "description": "Provenance hash computation function exists in gate script (Phase 226)"
   },
   "INV-020": {
-    "digest": "eedfd15a070556e160429f49ed9491748e4ca79d819f87fd7bdd095f8176b65e",
+    "digest": "fa10ec72e39f637e2c4cfb2b47bdeed03e60f98a144a13ff48b3d3e449ca61aa",
     "description": "ts_ns included as 8-byte big-endian in provenance hash \u2014 replay prevention (Phase 226)"
   },
   "INV-021": {
@@ -194,5 +194,29 @@
   "INV-OPERATOR-AGENT-008": {
     "digest": "516aaed34aae8e80e3bbdb27373b583cbe4277c3a22766a78e744bfc02305ff9",
     "description": "cedar_drift_sweeper dual-cadence default constants frozen \u2014 bundle 60s (cheap+frequent: local file SHA-256 + DB read) / scope 600s (expensive+rare: 2 chain RPC reads/agent). The split is invariant; the specific seconds are configurable (Phase O1 C4)"
+  },
+  "INV-FRR-001": {
+    "digest": "efa82bd33bed6ac0e45c0b1e832b51f3a4f2cf38420162904f620d3606139565",
+    "description": "compute_fleet_readiness_root function exists in operator_initiative_advancement.py \u2014 eighth FROZEN-v1 cryptographic primitive (Phase O1-FRR Stream B)"
+  },
+  "INV-FRR-002": {
+    "digest": "450ce29eac95c7420425af64e2527841bb36573d70f87261457ffcac0bc29f29",
+    "description": "FRR_DOMAIN_TAG = b\"VAPI-FRR-v1\" (11 bytes) \u2014 FROZEN-v1 domain tag for Fleet Readiness Root pre-image (Phase O1-FRR)"
+  },
+  "INV-FRR-003": {
+    "digest": "4abd78186aa7bd076bb3250c5512506aa541e0efc0c1649dadced1122cd10c97",
+    "description": "FRR pre-image byte-order frozen \u2014 agent_id (32B) || phase_code (1B) per agent, then ts_ns_be(8) at end. Encoded via to_bytes(8, \"big\") for ts_ns; pre.append(phase_code) for byte; pre.extend(id_bytes) for agent_id. Any rearrangement breaks downstream verifiers and requires FRR v2 + new domain tag (Phase O1-FRR)"
+  },
+  "INV-PARALLEL-ANCHOR-001": {
+    "digest": "361c3ac968ffc462441cd6c11e2a4e6e94dd3463a3c5850d2500b13637fdfac8",
+    "description": "scripts/parallel_o2_anchor.py triple-gate pattern frozen \u2014 env CHAIN_SUBMISSION_PAUSED=false + env OPERATOR_INITIATIVE_O2_AUTHORIZED=true + --confirm CLI. All three required to fire txs; mirrors canary_corpus_snapshot_anchor.py defensive layer (Phase O1-FRR Stream E)"
+  },
+  "INV-CURATOR-O2-001": {
+    "digest": "8e590661da2bcc9cfb023a14106519c4e4cf76f427b04dc6fe1692df65c60f38",
+    "description": "curator_o2_suggest_v1.json bundle Merkle root frozen at 0xeb400a5c9b410c6f3035a595e2c36dee915f6b2447f822c72c46b164ccd5daa9 \u2014 validated 2026-05-09 prior to parallel O2 anchor; any policy edit re-anchors to a NEW Merkle root and breaks this invariant by design (governance event required) (Phase O1-FRR Stream A)"
+  },
+  "INV-CURATOR-O2-002": {
+    "digest": "5dd460a662671f0bf6800664986e605854c4a877308ee47604ae7f0be3799a69",
+    "description": "curator_o2_suggest_v1.json lane_prefix array preserves marketplace/, provenance/, events/, wiki/ \u2014 Curator's marketplace-curator-review skill scope is bounded to these prefixes; any expansion breaks the cross-agent skill-separation invariant (Phase O1-CURATOR C2)"
   }
 }
