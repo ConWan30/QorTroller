@@ -266,6 +266,72 @@ def test_T_O1_FRR_5_evaluate_frr_sync_fail_open():
 # ───────────────────────────────────────────────────────────────────────
 
 
+def test_T_O1_FRR_7_canonical_to_q9_translation_and_o3_target():
+    """Stream J — canonical agent name -> Q9 hex translation works end-to-end
+    when cfg has frozen agentIds set, AND fleet at O2_SUGGEST converges on
+    O3_ACT (not O1_SHADOW) per next_alignment_target fix.
+
+    Pre-fix bug: watcher passed canonical names ('anchor_sentry'/etc) to
+    store helpers but cedar_bundle_anchor stored Q9 hex in
+    operator_agent_activation_log.agent_id — every store query returned
+    None in production.
+
+    Pre-fix bug 2: when fleet_at_o2_count==3 (all three at O2_SUGGEST), the
+    next_alignment_target fell through to 'O1_SHADOW' instead of 'O3_ACT'
+    because fleet_at_o2_ready_count counts agents READY to ENTER O2 (drops
+    to 0 once they're already there).
+    """
+    from vapi_bridge.operator_initiative_advancement import (
+        _resolve_agent_id_for_store,
+        evaluate_fleet_advancement_sync,
+    )
+
+    cfg = _make_cfg()
+
+    # Translator returns Q9 hex when cfg attr present
+    assert _resolve_agent_id_for_store("anchor_sentry", cfg) == SENTRY_ID
+    assert _resolve_agent_id_for_store("guardian", cfg) == GUARDIAN_ID
+    assert _resolve_agent_id_for_store("curator", cfg) == CURATOR_ID
+    # Falls back to canonical name when cfg attr missing (backward-compat
+    # with test stubs)
+    empty_cfg = types.SimpleNamespace()
+    assert _resolve_agent_id_for_store("anchor_sentry", empty_cfg) == "anchor_sentry"
+    assert _resolve_agent_id_for_store("unknown_agent", cfg) == "unknown_agent"
+
+    # End-to-end: stub store keyed by Q9 hex (matching production); watcher
+    # MUST translate canonical names before querying.  All three at O2_SUGGEST
+    # → next_alignment_target should be O3_ACT (not O1_SHADOW or O2_SUGGEST).
+    now = time.time()
+    activations = {
+        SENTRY_ID:   {"bundle_filename": "anchor_sentry_o2_suggest_v1.json",
+                      "anchored_at_unix": now - 3600 * 200},
+        GUARDIAN_ID: {"bundle_filename": "guardian_o2_suggest_v1.json",
+                      "anchored_at_unix": now - 3600 * 200},
+        CURATOR_ID:  {"bundle_filename": "curator_o2_suggest_v1.json",
+                      "anchored_at_unix": now - 3600 * 50},
+    }
+    s = types.SimpleNamespace()
+    s.get_latest_operator_agent_activation = lambda aid: activations.get(aid.lower())
+    s.get_first_operator_agent_activation = lambda aid: activations.get(aid.lower())
+    s.count_cedar_shadow_evaluations = lambda aid: 100 if aid.lower() in activations else 0
+    s.count_operator_agent_drift_findings = lambda **kw: 0
+
+    summary = evaluate_fleet_advancement_sync(cfg=cfg, store=s)
+    # All three resolve to O2_SUGGEST via the translator
+    for a in summary.per_agent:
+        assert a.current_phase == "O2_SUGGEST", (
+            f"watcher canonical->Q9 translation broken for {a.agent_id}: "
+            f"phase={a.current_phase}, expected O2_SUGGEST"
+        )
+    # Fleet aligned at O2_SUGGEST
+    assert summary.fleet_phase_aligned is True
+    # Next target is O3_ACT (NOT O1_SHADOW — Stream J fix to next_target logic)
+    assert summary.next_alignment_target == "O3_ACT", (
+        f"next_alignment_target={summary.next_alignment_target}, expected O3_ACT "
+        f"(fleet at O2_SUGGEST converging on O3_ACT per Stream J fix)"
+    )
+
+
 def test_T_O1_FRR_6_advancement_log_roundtrip():
     """insert_operator_initiative_advancement_log →
     get_latest_operator_initiative_advancement preserves frr_hex.
