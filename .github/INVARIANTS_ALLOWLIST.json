@@ -230,5 +230,25 @@
   "INV-O3-WATCHER-003": {
     "digest": "6a34ae7256d18276a2b1da000c9b5a2950f719e94918b07503f327a802074032",
     "description": "Phase O3-ACT-DRAFT bundle Merkle roots locked (Sentry + Guardian + Curator O3_ACTING) \u2014 three frozen Merkle roots pinned in test_phase_o3_act_draft_bundles.py; any policy edit re-anchors to NEW Merkle roots and breaks this invariant by design (governance event required) (Phase O3-WATCHER-LOCK)"
+  },
+  "INV-O1-FRR-SDK-001": {
+    "digest": "61e09d0446955ea230a062e3f309cefe964d89888042eef7e0c8cc516bf28e48",
+    "description": "Phase O1-FRR-SDK VAPIFleetReadinessRoot client class exists in sdk/vapi_sdk.py \u2014 wraps GET /operator/fleet-readiness-root + GET /operator/operator-initiative-advancement-log; renaming or removing this class breaks the wire-contract parity discipline (endpoint -> SDK -> frontend -> NOTE) for the FRR primitive (Phase O1-FRR-SDK-LOCK)"
+  },
+  "INV-O1-FRR-SDK-002": {
+    "digest": "51c4f1a0efd74af8842c009666ace5843baa2cbc4ff60ad74c7d5e89f3feb4da",
+    "description": "Phase O1-FRR-SDK three frozen dataclass names (AgentReadinessRow + FleetReadinessRootResult + AdvancementLogResult) \u2014 the slot-pinned shapes returned by VAPIFleetReadinessRoot methods; renaming would silently break downstream Python tooling that imports them (Phase O1-FRR-SDK-LOCK)"
+  },
+  "INV-O3-UI-DRAWER-001": {
+    "digest": "2e21fc1066c8d2be4cd7e1ef764abc131092d492070b748a511879e392728a2b",
+    "description": "Phase O1 C5 OperatorAgentsDrawer zIndex 20 (bottom-right) preserved \u2014 bottom of the three-drawer ordering; raising it above 21 collides with DraftReviewDrawer overlap (Phase O3-UI-LAYOUT-LOCK)"
+  },
+  "INV-O3-UI-DRAWER-002": {
+    "digest": "644b1304b1bfdb88038b0c731fc55dfb0d3ad73b72c8738df2477fc52f66d24e",
+    "description": "Phase O2-DRAFT-REVIEW-FRONTEND DraftReviewDrawer zIndex 21 (bottom-left) preserved \u2014 middle of the three-drawer ordering; below O3 Readiness (22) above Operator Agents (20) (Phase O3-UI-LAYOUT-LOCK)"
+  },
+  "INV-O3-UI-DRAWER-003": {
+    "digest": "66e9174897d838e70a00b1490b769874cfdf752fb5cedb80b27e35f0722d7d6d",
+    "description": "Phase O3-READINESS-DASHBOARD O3ReadinessDrawer zIndex 22 (top-center) preserved \u2014 TOP of the three-drawer ordering above DraftReviewDrawer (21) and OperatorAgentsDrawer (20); ensures the strategic readiness view always layers correctly when multiple drawers are open (Phase O3-UI-LAYOUT-LOCK)"
   }
 }
