@@ -816,6 +816,23 @@ export function useOperatorDrafts({
   })
 }
 
+// Phase O3-READINESS-DASHBOARD ----------------------------------------------
+// Live Fleet Readiness Root + per-agent O2/O3 gate state. Drives the top-edge
+// O3 Readiness drawer in DeveloperView. noMock:true — operator strategic
+// planning depends on accurate countdown; fabricated values would mislead.
+// 30s refetch: gate state changes on watcher cadence (1h) plus operator-
+// flag flips; 30s is plenty to feel live without burning bridge cycles.
+export function useFleetReadinessRoot({ enabled = true } = {}) {
+  return useQuery({
+    queryKey: ['fleetReadinessRoot'],
+    queryFn: () => get('/operator/fleet-readiness-root', 'fleetReadinessRoot', { noMock: true }),
+    enabled,
+    refetchInterval: 30000,
+    staleTime: 15000,
+    retry: 1,
+  })
+}
+
 export function useReviewDraft() {
   // Mutation hook. POST /operator/operator-agent-draft-review takes draft_id +
   // decision + reason as QUERY PARAMS (not body); api_key auto-appended by

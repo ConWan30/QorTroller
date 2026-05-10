@@ -10,6 +10,7 @@ import {
   useOperatorActivation,
   useDriftLog,
   useOperatorDrafts,
+  useFleetReadinessRoot,
   useCuratorStatus,
   useCuratorFlaggedListings,
 } from '../api/bridgeApi'
@@ -17,6 +18,7 @@ import { FONTS, DEVELOPER } from '../shared/design/tokens'
 import { PIPELINE_NODE_CONTAINER, PIPELINE_NODE, DRAWER_SLIDE_LEFT } from '../shared/design/animations'
 import { OperatorAgentsDrawer, OperatorAgentsDrawerHandle } from '../components/OperatorAgentsDrawer'
 import { DraftReviewDrawer, DraftReviewDrawerHandle } from '../components/DraftReviewDrawer'
+import { O3ReadinessDrawer, O3ReadinessDrawerHandle } from '../components/O3ReadinessDrawer'
 
 // ─── Design primitives ───────────────────────────────────────────────────────
 
@@ -323,6 +325,7 @@ export function DeveloperView() {
   const [pitlOpen,  setPitlOpen]  = useState(false)
   const [opAgentsOpen, setOpAgentsOpen] = useState(false)
   const [draftReviewOpen, setDraftReviewOpen] = useState(false)
+  const [o3ReadinessOpen, setO3ReadinessOpen] = useState(false)
   const [dims,      setDims]      = useState({ w: window.innerWidth, h: window.innerHeight })
 
   const { data: ch } = useCaptureHealth()
@@ -352,6 +355,12 @@ export function DeveloperView() {
     decision: 'unreviewed', sinceMinutes: 10080, limit: 1, enabled: o1Active,
   })
   const unreviewedDraftCount = draftSummary?.row_count ?? 0
+
+  // Phase O3-READINESS-DASHBOARD — fleet alignment for handle badge.
+  // Polls only when O1 active. fleet_phase_aligned=True is the strategic
+  // signal that all three agents are at the same phase + ready to advance.
+  const { data: frrSummary } = useFleetReadinessRoot({ enabled: o1Active })
+  const fleetAligned = Boolean(frrSummary?.fleet_phase_aligned)
 
   // Phase 238-FRONTEND-V3 — Curator review log surface.
   // Curator is the third Operator Initiative agent (Sentry/Guardian/Curator)
@@ -632,6 +641,24 @@ export function DeveloperView() {
             open={draftReviewOpen}
             onClose={() => setDraftReviewOpen(false)}
             unreviewedCount={unreviewedDraftCount}
+          />
+        </>
+      )}
+
+      {/* Phase O3-READINESS-DASHBOARD — top-edge slide-down drawer (only O1 active).
+         Handle at top-CENTER; drawer slides down from top. Three drawers total
+         (top-center / bottom-left / bottom-right) — no collisions. ★ badge fires
+         when fleet_phase_aligned=True signaling all three agents at same phase. */}
+      {o1Active && (
+        <>
+          <O3ReadinessDrawerHandle
+            onClick={() => setO3ReadinessOpen(v => !v)}
+            fleetAligned={fleetAligned}
+          />
+          <O3ReadinessDrawer
+            open={o3ReadinessOpen}
+            onClose={() => setO3ReadinessOpen(false)}
+            fleetAligned={fleetAligned}
           />
         </>
       )}
