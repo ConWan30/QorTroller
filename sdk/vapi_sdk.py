@@ -78,7 +78,7 @@ for _d in [str(_CONTROLLER_DIR), str(_BRIDGE_DIR)]:
 # Protocol constants (PoAC spec — immutable)
 # ---------------------------------------------------------------------------
 
-SDK_VERSION       = "3.0.0-phase193"
+SDK_VERSION       = "3.0.0-phase-o2-draft-review"
 POAC_RECORD_SIZE  = 228
 POAC_BODY_SIZE    = 164
 POAC_SIG_SIZE     = 64
@@ -8824,4 +8824,168 @@ class VAPICurator:
         except Exception as exc:
             return {"error": str(exc)}
 
+
+# === Phase O2-DRAFT-REVIEW SDK (2026-05-10) ====================================
+# Wraps the operator review HTTP surface shipped in commit a44fa359
+# (GET /operator/operator-agent-drafts + POST /operator/operator-agent-draft-review).
+# Closes the disagreement_rate / false_positive_rate measurement loop from the
+# client side -- pairs with the Phase 1005 store schema and the polling-loop
+# triggers shipped in O2-DRAFT-AUTOLOOP (Sentry/Guardian/Curator).
+
+@dataclass(slots=True)
+class DraftReviewListResult:
+    """Result from VAPIDraftReview.list_drafts (Phase O2-DRAFT-REVIEW)."""
+    agent_id_filter:   "str|None" = None
+    decision_filter:   "str|None" = None
+    since_minutes:     int        = 0
+    limit:             int        = 50
+    row_count:         int        = 0
+    drafts:            list       = field(default_factory=list)
+    error:             "str|None" = None
+
+
+@dataclass(slots=True)
+class DraftReviewSubmitResult:
+    """Result from VAPIDraftReview.review_draft (Phase O2-DRAFT-REVIEW)."""
+    accepted:   bool       = False
+    draft_id:   int        = 0
+    decision:   str        = ""
+    reason:     str        = ""
+    row:        "dict|None" = None
+    error:      "str|None" = None
+
+
+class VAPIDraftReview:
+    """Client for the operator review HTTP surface (Phase O2-DRAFT-REVIEW).
+
+    Wraps the GET + POST endpoints that surface Operator Initiative draft
+    payloads + accept the operator's decision (accept/reject/overturn_curator).
+    Closes the disagreement_rate / false_positive_rate measurement loop that
+    drives the watcher's PHASE_O3_DISAGREEMENT_RATE_MAX + PHASE_O3_FALSE_
+    POSITIVE_RATE_MAX gates blocking O3_ACTING anchor.
+
+    Read-key auth (x-api-key Header) for list_drafts; full operator auth
+    (api_key query param) for review_draft.
+
+    Usage::
+        client = VAPIDraftReview("http://localhost:8081", api_key)
+        result = client.list_drafts(decision="unreviewed", limit=20)
+        for draft in result.drafts:
+            client.review_draft(
+                draft_id=draft["id"],
+                decision="accept",
+                reason="operator approved this commit signature",
+            )
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def list_drafts(
+        self,
+        *,
+        agent_id: str = "",
+        decision: str = "",
+        since_minutes: int = 0,
+        limit: int = 50,
+    ) -> DraftReviewListResult:
+        """List drafts from GET /operator/operator-agent-drafts.
+
+        Args:
+            agent_id:      Optional Q9-frozen agentId filter; empty = trio.
+            decision:      Filter on operator_decision: '' (all incl. NULL),
+                           'unreviewed' (NULL), 'accept', 'reject',
+                           'overturn_curator'.
+            since_minutes: 0-43200 (30 days max). 0 = no time filter.
+            limit:         1-500. Default 50. Most recent first.
+
+        Returns DraftReviewListResult; on error, returns with error set
+        and row_count=0 / drafts=[].
+        """
+        try:
+            import urllib.request, urllib.parse, json
+            qs_parts: list[str] = []
+            if agent_id:
+                qs_parts.append(f"agent_id={urllib.parse.quote(agent_id)}")
+            if decision:
+                qs_parts.append(f"decision={urllib.parse.quote(decision)}")
+            if int(since_minutes) > 0:
+                qs_parts.append(f"since_minutes={int(since_minutes)}")
+            qs_parts.append(f"limit={int(limit)}")
+            url = f"{self._base}/operator/operator-agent-drafts?{'&'.join(qs_parts)}"
+            req = urllib.request.Request(
+                url,
+                headers={"x-api-key": self._key} if self._key else {},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                body = json.loads(resp.read().decode())
+            return DraftReviewListResult(
+                agent_id_filter = body.get("agent_id_filter"),
+                decision_filter = body.get("decision_filter"),
+                since_minutes   = int(body.get("since_minutes", 0)),
+                limit           = int(body.get("limit", limit)),
+                row_count       = int(body.get("row_count", 0)),
+                drafts          = list(body.get("drafts", [])),
+            )
+        except Exception as exc:
+            return DraftReviewListResult(error=str(exc))
+
+    def review_draft(
+        self,
+        *,
+        draft_id: int,
+        decision: str,
+        reason: str,
+    ) -> DraftReviewSubmitResult:
+        """Submit operator decision via POST /operator/operator-agent-draft-review.
+
+        Args:
+            draft_id: Required. Targets the row's id in operator_agent_drafts.
+            decision: One of 'accept' | 'reject' | 'overturn_curator'.
+                      'overturn_curator' is Curator-specific (feeds
+                      false_positive_rate; ZERO TOLERANCE per Curator's
+                      PHASE_O3_FALSE_POSITIVE_RATE_MAX=0.0).
+            reason:   >= 10 chars (audit gate). Stored as
+                      operator_disagreement_reason in operator_agent_drafts.
+
+        Returns DraftReviewSubmitResult. On error: error populated with
+        the HTTP status / detail (e.g. '422' for short reason or invalid
+        decision; '404' for missing draft_id; '403' for missing/wrong api_key).
+        """
+        try:
+            import urllib.request, urllib.parse, urllib.error, json
+            qs = urllib.parse.urlencode({
+                "draft_id": int(draft_id),
+                "decision": str(decision),
+                "reason":   str(reason),
+                "api_key":  self._key,
+            })
+            url = f"{self._base}/operator/operator-agent-draft-review?{qs}"
+            req = urllib.request.Request(url, method="POST")
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                body = json.loads(resp.read().decode())
+            return DraftReviewSubmitResult(
+                accepted = bool(body.get("accepted", False)),
+                draft_id = int(body.get("draft_id", draft_id)),
+                decision = str(body.get("decision", decision)),
+                reason   = str(body.get("reason", reason)),
+                row      = body.get("row"),
+            )
+        except urllib.error.HTTPError as exc:
+            try:
+                detail = exc.read().decode()
+            except Exception:
+                detail = ""
+            return DraftReviewSubmitResult(
+                draft_id = int(draft_id),
+                decision = str(decision),
+                error    = f"HTTP {exc.code}: {detail}",
+            )
+        except Exception as exc:
+            return DraftReviewSubmitResult(
+                draft_id = int(draft_id),
+                decision = str(decision),
+                error    = str(exc),
+            )
 
