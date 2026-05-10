@@ -90,7 +90,7 @@ export function BrpCanvas({
         frameloop={frameloop}
         role="presentation"
         aria-hidden="true"
-        camera={{ position: [0, 0, 3], fov: 45 }}
+        camera={{ position: [0, 0, 4.5], fov: 55 }}
         gl={{ antialias: true, alpha: true }}
       >
         <ambientLight intensity={0.5} />
