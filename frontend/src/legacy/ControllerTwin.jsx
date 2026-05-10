@@ -5,6 +5,10 @@ import { Physics } from '@react-three/rapier'
 import { OrbitControls, Sparkles, useGLTF, Environment, ContactShadows } from '@react-three/drei'
 import * as THREE from 'three'
 import QRCode from 'qrcode'
+// Phase 238-FRONTEND-V3 — SSE consumer for /agent/twin-stream cryptographic events.
+// Aliased on import so the legacy WebSocket-based useTwinStream local function
+// (line ~81) is not shadowed.
+import { useTwinStream as useTwinSSEStream } from '../api/twinStream'
 
 const VOID_BG = '#030507'
 const ORANGE  = '#ff6b00'
@@ -521,7 +525,7 @@ function ButtonGlow({ position, active, color, radius = 0.10 }) {
 //   • Inference code: floating holographic badge above controller
 //   • Accel magnitude: equatorial arc (green, bottom orbital plane)
 // ---------------------------------------------------------------------------
-function DualShockEdgeTwin({ frame, record, snap }) {
+function DualShockEdgeTwin({ frame, record, snap, pulseRef, pccRimRef }) {
   const groupRef  = useRef()
   const lightRef  = useRef()
   const haloRef   = useRef()
@@ -599,13 +603,39 @@ function DualShockEdgeTwin({ frame, record, snap }) {
     // Smooth RED→GREEN based on humanity
     _hc.lerpColors(_redC, _greenC, humanity)
 
+    // ── Phase 238-FRONTEND-V3 — SSE pulse layer (additive) ──────────────────
+    // Every Twin pulse maps to a verifiable backend event. pulseRef is mutated
+    // by the page-level useEffect on lastEvent; we read it once per frame and
+    // compute a 0→1 decay factor.  Effects ADD to the existing animation
+    // values rather than overriding them, except for BLOCK verdicts which
+    // briefly freeze rotation drift.
+    const pulse = pulseRef?.current
+    let pulseFactor = 0
+    let pulseColorObj = null
+    let pulseIsBlock = false
+    if (pulse?.kind && pulse.durationMs > 0) {
+      const elapsed = (performance.now() / 1000) - pulse.startTime
+      const dur = pulse.durationMs / 1000
+      if (elapsed < dur) {
+        pulseFactor = 1 - (elapsed / dur)
+        pulseColorObj = new THREE.Color(pulse.color || CYAN)
+        pulseIsBlock = pulse.kind === 'gic' && pulse.label === 'BLOCK'
+      } else {
+        // expire one-shot pulse so subsequent frames are no-ops
+        pulse.kind = null
+      }
+    }
+
     // ── Natural gyro-driven tilt (NOT full rotation — it's a controller) ────
     if (groupRef.current) {
       const targetRX = gyroY * 0.18 + Math.sin(t * 0.25) * 0.012
       const targetRY = gyroX * 0.18 + t * 0.06        // very slow drift-spin
       const targetRZ = (l2Raw - r2Raw) * 0.04          // trigger asymmetry tilt
       groupRef.current.rotation.x += (targetRX - groupRef.current.rotation.x) * 0.06
-      groupRef.current.rotation.y += delta * 0.06 + (targetRY - groupRef.current.rotation.y) * 0.02
+      // BLOCK verdict: clamp drift-spin during the pulse window (visual freeze)
+      if (!pulseIsBlock) {
+        groupRef.current.rotation.y += delta * 0.06 + (targetRY - groupRef.current.rotation.y) * 0.02
+      }
       groupRef.current.rotation.z += (targetRZ - groupRef.current.rotation.z) * 0.04
     }
 
@@ -615,6 +645,7 @@ function DualShockEdgeTwin({ frame, record, snap }) {
       lightRef.current.intensity = 2.8
         + (l2Raw + r2Raw) * 6.0        // trigger press = light burst
         + Math.sin(t * 2.1 + jitter * 20) * 0.7   // IBI jitter = breathing
+        + pulseFactor * 4.0             // SSE pulse — additive
     }
 
     // ── Per-mesh emissive — body glows humanity color on trigger/motion ─────
@@ -622,22 +653,37 @@ function DualShockEdgeTwin({ frame, record, snap }) {
     clonedScene.traverse(node => {
       if (!node.isMesh || !node.material?.emissive) return
       node.material.emissive.copy(_hc)
-      node.material.emissiveIntensity = emissiveBase + (isAnomaly ? 0.15 : 0)
+      node.material.emissiveIntensity = emissiveBase + (isAnomaly ? 0.15 : 0) + pulseFactor * 0.3
     })
 
     // ── Anomaly halo — orange corona when L4 distance > threshold ───────────
+    // Phase 238-FRONTEND-V3: SSE pulse can OVERRIDE the halo color while
+    // active (pulseFactor lerps from pulse color back to humanity/anomaly base
+    // as the pulse decays).  Steady-state PCC rim color from pccRimRef takes
+    // precedence over the humanity base when not anomalous and no pulse.
     if (haloRef.current?.material) {
-      const haloColor = isAnomaly ? _orangeC : _hc
+      const baseHaloColor = isAnomaly ? _orangeC : _hc
+      let haloColor = baseHaloColor
+      const pccRim = pccRimRef?.current
+      if (pccRim && pccRim !== 'default' && !isAnomaly && pulseFactor === 0) {
+        haloColor = new THREE.Color(pccRim)
+      }
+      if (pulseColorObj) {
+        // Lerp halo toward pulse color in proportion to pulseFactor
+        haloColor = baseHaloColor.clone().lerp(pulseColorObj, pulseFactor)
+      }
       haloRef.current.material.color.copy(haloColor)
       haloRef.current.material.emissive.copy(haloColor)
       if (isAnomaly) {
-        // Fast orange pulse on anomaly
         haloRef.current.material.emissiveIntensity = 0.7 + Math.sin(t * 5.5) * 0.5
         haloRef.current.material.opacity           = 0.14 + Math.sin(t * 5.5) * 0.07
+      } else if (pccRim === RED) {
+        // CONTESTED — fast red rim flicker
+        haloRef.current.material.emissiveIntensity = 0.4 + Math.sin(t * 7.0) * 0.4
+        haloRef.current.material.opacity           = 0.08 + Math.sin(t * 7.0) * 0.05
       } else {
-        // Gentle humanity-colored breathing
-        haloRef.current.material.emissiveIntensity = 0.12 + Math.sin(t * 1.5) * 0.06
-        haloRef.current.material.opacity           = 0.035 + Math.sin(t * 1.5) * 0.012
+        haloRef.current.material.emissiveIntensity = 0.12 + Math.sin(t * 1.5) * 0.06 + pulseFactor * 0.6
+        haloRef.current.material.opacity           = 0.035 + Math.sin(t * 1.5) * 0.012 + pulseFactor * 0.15
       }
     }
 
@@ -2154,6 +2200,44 @@ function ControllerTwinPage() {
   const latestRuling = useLatestRuling(deviceId, mode === 'LIVE')
   const classJRisk = latestRuling?.evidence_summary?.class_j_ml_bot_risk ?? null
 
+  // Phase 238-FRONTEND-V3 — SSE event subscription for layered cryptographic
+  // animations.  pulseRef carries one-shot transient effects (poac/gic/curator/
+  // anchor); pccRimRef carries a sticky rim-light color (host_state).  Both are
+  // refs so useFrame() can read latest state without re-rendering the scene.
+  const { lastEvent: sseEvent, connected: sseConnected } = useTwinSSEStream({ backfill: 0 })
+  const pulseRef  = useRef({ kind: null, color: null, startTime: 0, durationMs: 0, label: null })
+  const pccRimRef = useRef('default')
+
+  useEffect(() => {
+    if (!sseEvent) return
+    const { type, data } = sseEvent
+    const tNow = performance.now() / 1000
+    if (type === 'poac_chain_link') {
+      pulseRef.current = { kind: 'poac', color: CYAN, startTime: tNow, durationMs: 200, label: 'POAC' }
+    } else if (type === 'gic_verdict') {
+      const v = data?.verdict
+      const color = v === 'CERTIFY' ? ORANGE : v === 'FLAG' ? '#f59e0b' : v === 'BLOCK' ? RED : CYAN
+      pulseRef.current = { kind: 'gic', color, startTime: tNow, durationMs: 800, label: v || 'GIC' }
+    } else if (type === 'pcc_state_change') {
+      const host = data?.host_state
+      pccRimRef.current =
+        host === 'EXCLUSIVE_USB' ? CYAN :
+        host === 'CONTESTED'     ? RED  :
+        host === 'DEGRADED'      ? '#f59e0b' :
+        host === 'DISCONNECTED'  ? DIM  :
+        'default'
+    } else if (type === 'curator_verdict') {
+      const v = data?.verdict
+      const color = v === 'APPROVED' ? CYAN
+                  : (typeof v === 'string' && v.startsWith('FLAGGED_')) ? '#f59e0b'
+                  : (typeof v === 'string' && v.startsWith('REJECTED_')) ? RED
+                  : CYAN
+      pulseRef.current = { kind: 'curator', color, startTime: tNow, durationMs: 800, label: v || 'CURATOR' }
+    } else if (type === 'anchor_confirmed') {
+      pulseRef.current = { kind: 'anchor', color: ORANGE, startTime: tNow, durationMs: 1200, label: data?.primitive_type || 'ANCHOR' }
+    }
+  }, [sseEvent])
+
   const lockedRecord = chain[chainIdx] || record
   const activeFrame  = currentReplayFrame || frame   // replay overrides live
 
@@ -2247,6 +2331,26 @@ function ControllerTwinPage() {
               {mode === 'LIVE' ? 'LIVE · TWIN ACTIVE' : 'DEMO · BRIDGE OFFLINE'}
             </span>
           </div>
+          {/* Phase 238-FRONTEND-V3 — SSE cryptographic-event stream status */}
+          <div
+            title={sseConnected ? 'SSE: LIVE — cryptographic events streaming' : 'SSE: OFFLINE'}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5, padding: '4px 8px',
+              border: `1px solid ${sseConnected ? CYAN + '44' : DIM + '44'}`,
+              borderRadius: 2,
+              background: sseConnected ? `${CYAN}06` : 'transparent',
+            }}
+          >
+            <span style={{
+              width: 5, height: 5, borderRadius: '50%', flexShrink: 0,
+              background: sseConnected ? CYAN : DIM,
+              boxShadow: sseConnected ? `0 0 6px ${CYAN}` : 'none',
+            }} />
+            <span style={{
+              fontFamily: 'JetBrains Mono, monospace', fontSize: 7,
+              color: sseConnected ? CYAN : DIM, letterSpacing: '0.08em',
+            }}>SSE</span>
+          </div>
           <span style={{
             fontFamily: 'JetBrains Mono, monospace', fontSize: 7, color: DIM,
             padding: '4px 8px', borderRadius: 2, border: '1px solid rgba(61,80,96,0.25)',
@@ -2333,7 +2437,13 @@ function ControllerTwinPage() {
         <Environment preset="city" background={false} />
         <Suspense fallback={null}>
           {/* Phase 69: DualShock Edge GLB twin with VAPI biometric animations */}
-          <DualShockEdgeTwin frame={activeFrame} record={lockedRecord} snap={snap} />
+          <DualShockEdgeTwin
+            frame={activeFrame}
+            record={lockedRecord}
+            snap={snap}
+            pulseRef={pulseRef}
+            pccRimRef={pccRimRef}
+          />
           <PoACHelix chain={chain} />
         </Suspense>
       </Canvas>
