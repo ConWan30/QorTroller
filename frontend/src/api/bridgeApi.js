@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { activateMock, deactivateMock, isMockActive, MOCK } from './mockBridge'
-import { apiGet, ApiKeyError, BridgeOfflineError } from './client'
+import { apiGet, apiPost, ApiKeyError, BridgeOfflineError } from './client'
 
 // All status endpoints hit by the dashboard live inside the operator sub-app,
 // which the bridge mounts at /operator (see bridge/vapi_bridge/main.py). The
@@ -778,6 +778,64 @@ export function useDriftLog({ agentId = '', driftType = '', sinceMinutes = 1440,
     refetchInterval: 30000,
     staleTime: 15000,
     retry: 1,
+  })
+}
+
+// Phase O2-DRAFT-REVIEW-FRONTEND ------------------------------------------------
+// Operator review surface for accumulated agent drafts. Pairs with the bridge
+// endpoints shipped Phase O2-DRAFT-REVIEW-ENDPOINT (commit a44fa359) and the
+// SDK shipped Phase O2-DRAFT-REVIEW-SDK. Drives the disagreement_rate +
+// false_positive_rate gates that block O3 ACTING anchor readiness.
+//
+// noMock:true on the GET hook — drafts are operator-decision-critical; we
+// MUST NOT swap in fabricated rows even on transient bridge stalls. Mutation
+// hook returns the server response directly so the UI can branch on the
+// 422 reason-too-short / decision-invalid cases.
+//
+// Path convention: doubled /operator/ prefix per codebase pattern (the get()
+// helper prepends _OP_PREFIX="/operator" and route declarations include
+// "/operator/" — final URL is "/operator/operator/operator-agent-drafts").
+
+export function useOperatorDrafts({
+  agentId = '', decision = 'unreviewed', sinceMinutes = 10080, limit = 50, enabled = true,
+} = {}) {
+  // Default since_minutes=10080 (7 days); decision='unreviewed' matches the
+  // operator's most common workflow (work the backlog of NULL-decision drafts).
+  const params = new URLSearchParams()
+  if (agentId)  params.set('agent_id', agentId)
+  if (decision) params.set('decision', decision)
+  params.set('since_minutes', String(Math.max(0, Math.min(43200, sinceMinutes))))
+  params.set('limit', String(Math.max(1, Math.min(500, limit))))
+  return useQuery({
+    queryKey: ['operatorAgentDrafts', agentId, decision, sinceMinutes, limit],
+    queryFn: () => get(`/operator/operator-agent-drafts?${params.toString()}`, 'operatorAgentDrafts', { noMock: true }),
+    enabled,
+    refetchInterval: 20000, // 20s; drafts accumulate slowly, no need for fast polling
+    staleTime: 10000,
+    retry: 1,
+  })
+}
+
+export function useReviewDraft() {
+  // Mutation hook. POST /operator/operator-agent-draft-review takes draft_id +
+  // decision + reason as QUERY PARAMS (not body); api_key auto-appended by
+  // apiPost wrapper. Body is unused server-side but apiPost requires a value.
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ draftId, decision, reason }) => {
+      const params = new URLSearchParams()
+      params.set('draft_id', String(draftId))
+      params.set('decision', decision)
+      params.set('reason', reason)
+      return apiPost(
+        `${_OP_PREFIX}/operator/operator-agent-draft-review?${params.toString()}`,
+        {},
+      )
+    },
+    onSuccess: () => {
+      // Invalidate ALL operator-draft queries so list views refresh.
+      qc.invalidateQueries({ queryKey: ['operatorAgentDrafts'] })
+    },
   })
 }
 
