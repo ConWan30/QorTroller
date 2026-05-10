@@ -8836,6 +8836,108 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "timestamp":        time.time(),
         }
 
+    @app.get("/operator/fleet-readiness-root")
+    async def get_fleet_readiness_root(
+        x_api_key: str = Header(default=""),
+    ):
+        """Phase O1-FRR — Fleet Readiness Root primitive (eighth FROZEN-v1).
+
+        Computes current FRR over all three Operator Initiative agents
+        (Sentry+Guardian+Curator) using the FROZEN-v1 pre-image:
+
+            b"VAPI-FRR-v1" (11B) || sorted_by_agent_id_bytes(
+                agent_id_be(32) || phase_code(1)
+            ) for each agent || ts_ns_be(8)
+            -> SHA-256 -> 32B
+
+        Returns the FRR commitment + per-agent phase resolution + the
+        FleetAdvancementSummary state (fleet_phase_aligned,
+        next_alignment_target, etc.).  Computation is fail-open:
+        any underlying error returns the result with error fields
+        populated (caller inspects .error).
+
+        Used by:
+          - Frontend dashboards (operator-facing fleet state)
+          - Downstream contracts that wish to reference FRR (once
+            on-chain getFleetReadinessRoot() ships in follow-up phase)
+          - Operator audit (verify FRR baseline accumulating correctly
+            across watcher cycles via operator_initiative_advancement_log)
+
+        Args:
+            x_api_key: Read-key auth (match cfg.operator_api_key).
+        """
+        _check_read_key(x_api_key)
+        from .operator_initiative_advancement import evaluate_frr_sync
+        summary, frr = await asyncio.to_thread(
+            evaluate_frr_sync, cfg=cfg, store=store,
+        )
+        per_agent_dump = [
+            {
+                "agent_id":                          a.agent_id,
+                "current_phase":                     a.current_phase,
+                "shadow_age_hours":                  round(a.shadow_age_hours, 2),
+                "cedar_eval_count":                  a.cedar_eval_count,
+                "bundle_hash_drift_count_30d":       a.bundle_hash_drift_count_30d,
+                "scope_hash_governance_drift_count_30d": a.scope_hash_governance_drift_count_30d,
+                "o2_ready":                          a.o2_ready,
+                "o2_blockers":                       list(a.o2_blockers),
+                "o3_ready":                          a.o3_ready,
+                "o3_blockers":                       list(a.o3_blockers),
+                "error":                             a.error,
+            }
+            for a in summary.per_agent
+        ]
+        return {
+            "frr_hex":                  frr.frr_hex,
+            "frr_ts_ns":                frr.ts_ns,
+            "frr_error":                frr.error,
+            "fleet_phase_aligned":      bool(summary.fleet_phase_aligned),
+            "fleet_size":               int(summary.fleet_size),
+            "fleet_at_o1_count":        int(summary.fleet_at_o1_count),
+            "fleet_at_o2_ready_count":  int(summary.fleet_at_o2_ready_count),
+            "fleet_at_o3_ready_count":  int(summary.fleet_at_o3_ready_count),
+            "next_alignment_target":    summary.next_alignment_target,
+            "summary_error":            summary.error,
+            "per_agent":                per_agent_dump,
+            "agents_in_frr":            [
+                {"name": name, "agent_id_hex": id_hex, "phase_code": phase_code}
+                for name, id_hex, phase_code in frr.agents
+            ],
+            "domain_tag":               "VAPI-FRR-v1",
+            "timestamp":                time.time(),
+        }
+
+    @app.get("/operator/operator-initiative-advancement-log")
+    async def get_operator_initiative_advancement_log(
+        x_api_key: str = Header(default=""),
+        limit: int = Query(default=50, ge=1, le=500),
+    ):
+        """Phase O1-FRR — paginated advancement_log (FRR baseline history).
+
+        Returns the most recent N rows from
+        operator_initiative_advancement_log, capturing each watcher
+        cycle's evaluation + FRR commitment.  Used by operator to:
+          - Inspect FRR drift over time (each row is a 32B commitment)
+          - Verify watcher cadence is operating (1h cadence by default
+            when OPERATOR_INITIATIVE_ADVANCEMENT_ENABLED=true)
+          - Audit fleet phase alignment history
+
+        Args:
+            x_api_key: Read-key auth.
+            limit:     1-500; default 50; most recent first by timestamp.
+        """
+        _check_read_key(x_api_key)
+        rows = await asyncio.to_thread(
+            store.get_operator_initiative_advancement_history,
+            int(limit),
+        )
+        return {
+            "limit":     int(limit),
+            "row_count": len(rows),
+            "rows":      rows,
+            "timestamp": time.time(),
+        }
+
     @app.post("/operator/evaluate-agent-action")
     async def evaluate_agent_action_endpoint(
         api_key: str = Query(...),
