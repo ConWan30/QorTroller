@@ -492,6 +492,27 @@ INVARIANTS: list[Invariant] = [
         pattern=r'"marketplace/"|"provenance/"|"events/"|"wiki/"',
         min_matches=4,
     ),
+    Invariant(
+        id="INV-O3-WATCHER-001",
+        description="Phase O3-ACT-WATCHER bundle filename phase resolver matches both _o3_acting_ (canonical) and _o3_act_ (legacy) substrings — preserves backward compatibility with legacy bundle naming while pinning canonical O3_ACTING phase recognition (Phase O3-WATCHER-LOCK)",
+        file="bridge/vapi_bridge/operator_initiative_advancement.py",
+        pattern=r"_o3_acting_|_o3_act_",
+        min_matches=2,
+    ),
+    Invariant(
+        id="INV-O3-WATCHER-002",
+        description="Phase O3-ACT-WATCHER strengthened gate constants (draft_payload_min + disagreement_rate_max + false_positive_rate_max) — frozen O3 readiness thresholds enforce minimum draft payload, max LLM/fallback disagreement, and Curator-specific false-positive bound (Phase O3-WATCHER-LOCK)",
+        file="bridge/vapi_bridge/operator_initiative_advancement.py",
+        pattern=r"PHASE_O3_DRAFT_PAYLOAD_MIN|PHASE_O3_DISAGREEMENT_RATE_MAX|PHASE_O3_FALSE_POSITIVE_RATE_MAX",
+        min_matches=3,
+    ),
+    Invariant(
+        id="INV-O3-WATCHER-003",
+        description="Phase O3-ACT-DRAFT bundle Merkle roots locked (Sentry + Guardian + Curator O3_ACTING) — three frozen Merkle roots pinned in test_phase_o3_act_draft_bundles.py; any policy edit re-anchors to NEW Merkle roots and breaks this invariant by design (governance event required) (Phase O3-WATCHER-LOCK)",
+        file="bridge/tests/test_phase_o3_act_draft_bundles.py",
+        pattern=r"c0bcdee8576e83f6b80e8c5ac89093cf08f153033037176cd03fc34fcedfd878|6f0fc77cc1dacaf3f79aeb0f27dd8c7b3d88e95b236f0806ad3588a06bb82225|d9d760c8b7b1088f2edd165fbfa6441abcb3bc3f921e8ba75a3339c0825fec24",
+        min_matches=3,
+    ),
 ]
 
 
