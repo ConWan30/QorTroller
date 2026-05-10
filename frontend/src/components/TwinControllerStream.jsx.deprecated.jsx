@@ -1,26 +1,15 @@
 /**
- * Phase 238 Frontend — TwinControllerStream component.
+ * DEPRECATED Phase 238-FRONTEND-V3 — superseded by the unified 3D Twin at
+ * frontend/src/legacy/ControllerTwin.jsx, which now consumes the same SSE
+ * cryptographic-event stream and infuses the 5 frozen event types
+ * (poac_chain_link / gic_verdict / pcc_state_change / curator_verdict /
+ * anchor_confirmed) as additive layered effects on top of the existing R3F
+ * humanity / breathing / trigger-orbit / anomaly-halo animations.
  *
- * SSE consumer that subscribes to /agent/twin-stream and renders
- * Twin controller pulses driven by REAL backend events:
- *
- *   poac_chain_link    → cyan D-pad pulse, 200 ms
- *   gic_verdict CERTIFY → orange whole-twin aurora, 800 ms
- *   gic_verdict FLAG    → amber pulse
- *   gic_verdict BLOCK   → red shift + freeze
- *   pcc_state EXCLUSIVE_USB → steady cyan rim light
- *   pcc_state CONTESTED → red rim flicker
- *   curator_verdict APPROVED → tier badge cyan halo
- *   curator_verdict FLAGGED_* → amber halo
- *   curator_verdict REJECTED_* → red halo + freeze
- *   anchor_confirmed VHP/SEPPROOF → orange-cyan aurora shimmer (one-time)
- *
- * NEVER falls back to fabricated events.  When stream offline, the
- * static fallback Twin renders gray + a "STREAM OFFLINE" indicator.
- *
- * This component is the THEATER OF CRYPTOGRAPHIC PROVENANCE — every
- * pulse maps to a verifiable backend signal source.  No animation
- * theater allowed.
+ * Single-Twin invariant: the dashboard MUST render exactly ONE controller
+ * visualization.  This simplified SVG silhouette is kept for git history
+ * only; do NOT import.  See /root/.claude/plans/here-is-a-draft-shimmying-quasar.md
+ * for the full V3 design.
  */
 import { useEffect, useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
