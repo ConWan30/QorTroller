@@ -5,10 +5,13 @@ import {
   useCaptureHealth,
   useInvariantGateStatus,
   useTournamentPreflight,
+  useCuratorStatus,
+  useCuratorFlaggedListings,
 } from '../api/bridgeApi'
 import { useHeartbeatStore } from '../heartbeat/useHeartbeat'
 import { FONTS, MANUFACTURER } from '../shared/design/tokens'
 import { DRAWER_SLIDE_LEFT } from '../shared/design/animations'
+import { TierLegend } from '../components/TierBadge'
 
 // ─── Design primitives ───────────────────────────────────────────────────────
 
@@ -430,6 +433,11 @@ export function ManufacturerView() {
   const { data: inv } = useInvariantGateStatus()
   const { data: pf  } = useTournamentPreflight()
   const magnitude     = useHeartbeatStore((s) => s.magnitude)
+  // Phase 238-FRONTEND-V3 — Curator surfacing for manufacturers (hardware
+  // attestation tier maps to cryptographic anchor count; flagged listings
+  // are operational signal that hardware-cert claims may be in dispute).
+  const { data: curator }        = useCuratorStatus()
+  const { data: curatorFlagged } = useCuratorFlaggedListings({ sinceMinutes: 1440, limit: 5 })
 
   useEffect(() => {
     const onResize = () => setDims({ w: window.innerWidth, h: window.innerHeight })
@@ -484,12 +492,27 @@ export function ManufacturerView() {
       {/* Biometric fingerprint radar — full-bleed center canvas */}
       <RadarCanvas ait={ait} captureHealth={ch} magnitude={magnitude} />
 
-      {/* ── TOP-LEFT: certification tier badge ── */}
-      <div style={{ position: 'absolute', top: 16, left: 16 }}>
+      {/* ── TOP-LEFT: certification tier badge + cryptographic-tier legend ── */}
+      <div style={{ position: 'absolute', top: 16, left: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
         <Glass accent={tierColor} style={{ padding: '8px 14px' }}>
           <div style={{ fontFamily: FONTS.display, fontSize: 20, fontWeight: 700, color: tierColor, letterSpacing: '0.12em', lineHeight: 1 }}>{tier}</div>
           <div style={{ fontFamily: FONTS.mono, fontSize: 8, color: MANUFACTURER.t2, marginTop: 4 }}>CFI-ZCP1 DualShock Edge</div>
         </Glass>
+        {/* Phase 238-FRONTEND-V3 — Marketplace tier legend (hardware-cert
+            tier maps to cryptographic anchor count via VAPIDataMarketplaceListings) */}
+        <div style={{
+          padding:       '6px 10px',
+          background:    'rgba(2,4,8,0.70)',
+          border:        `1px solid ${MANUFACTURER.bd}`,
+          borderRadius:  3,
+          fontFamily:    FONTS.mono,
+          fontSize:      8,
+          letterSpacing: '0.06em',
+          color:         MANUFACTURER.t2,
+        }}>
+          <div style={{ marginBottom: 4 }}>CRYPTO TIER MULT (on-chain)</div>
+          <TierLegend />
+        </div>
       </div>
 
       {/* ── TOP-RIGHT: poll rate + host state badge ── */}
@@ -563,6 +586,47 @@ export function ManufacturerView() {
         <StatusChip label="L4"          value={l4Label}     accent={MANUFACTURER.t2} />
         <StatusChip label="INVARIANTS"  value={invLabel}    accent={invPass ? MANUFACTURER.green : MANUFACTURER.red} />
       </div>
+
+      {/* Phase 238-FRONTEND-V3 — Curator-flagged listings hot-bar.
+          Manufacturers care about flagged listings because they signal
+          hardware-cert disputes propagating through the marketplace.
+          Hidden when curator agent not deployed or no flagged reviews. */}
+      {curator?.curator_review_enabled && (curatorFlagged?.listings?.length || 0) > 0 && (
+        <div style={{
+          position:      'absolute',
+          bottom:         60,
+          left:          '50%',
+          transform:     'translateX(-50%)',
+          maxWidth:       560,
+          width:         'calc(100% - 64px)',
+          padding:       '8px 12px',
+          background:    'rgba(2,4,8,0.85)',
+          border:        '1px solid var(--vapi-warn)',
+          borderRadius:  3,
+          fontFamily:    FONTS.mono,
+          fontSize:      9,
+          color:         'var(--vapi-warn)',
+          letterSpacing: '0.06em',
+          backdropFilter: 'blur(6px)',
+          display:       'flex',
+          alignItems:    'center',
+          gap:           10,
+          overflow:      'hidden',
+        }}>
+          <span style={{ fontWeight: 700 }}>
+            ⚠ CURATOR FLAGGED ×{curatorFlagged.listings.length}
+          </span>
+          <span style={{
+            flex:         1,
+            color:        MANUFACTURER.t2,
+            whiteSpace:   'nowrap',
+            overflow:     'hidden',
+            textOverflow: 'ellipsis',
+          }}>
+            {curatorFlagged.listings.slice(0, 3).map((r) => `${r.verdict}@${String(r.listing_commitment ?? '').slice(0, 8)}`).join(' · ')}
+          </span>
+        </div>
+      )}
 
       {/* Drawers */}
       <PairDrawer       open={pairOpen} onClose={() => setPairOpen(false)} ait={ait} />

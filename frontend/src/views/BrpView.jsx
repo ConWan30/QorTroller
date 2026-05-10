@@ -15,9 +15,13 @@
 // each prop's data source distinctly from Block W's audit-state badge.
 // Two distinct claims, both surfaced visibly.
 
-import { Suspense, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { BrpMount } from '../brp/components/BrpMount'
 import { FONTS } from '../shared/design/tokens'
+// Phase 238-FRONTEND-V3 — SSE consumer for cross-view ambient pulses on
+// curator and gic verdicts. Aliased to avoid the export-name confusion noted
+// in the V3 plan; here it is the only useTwinStream in scope so no alias.
+import { useTwinStream } from '../api/twinStream'
 import {
   getMockEnrollmentSession,
   getMockPitlSnapshot,
@@ -177,13 +181,30 @@ export function BrpView() {
   // Per Block W: liveness flags all false until ceremony audit.
   const liveness = { ambient: false, legibility: false, telemetry: false }
 
+  // Phase 238-FRONTEND-V3 — SSE-driven ambient pulse boost.  Subscribes to
+  // /agent/twin-stream and lifts `intensity` (and refreshes `ts`) on
+  // gic_verdict + curator_verdict events so the BRP renderer's existing
+  // flash budget consumes them as ambient pulses.  Filter to those two
+  // verdict-bearing types only — poac_chain_link and pcc_state_change
+  // would oversaturate the per-player BRP scene.
+  const { lastEvent: sseEvent } = useTwinStream({ filter: ['gic_verdict', 'curator_verdict'] })
+  const [ssePulse, setSsePulse] = useState({ ts: 0, intensity: 0 })
+  useEffect(() => {
+    if (!sseEvent) return
+    setSsePulse({ ts: Date.now(), intensity: 1.4 })
+  }, [sseEvent])
+
   // Pulse prop is forwarded to BrpMount only when the WebSocket has produced
   // at least one event. lastPulseTs starts at 0; sending pulse={ts:0,...} on
   // first render would trigger a no-op pulse (ts > 0 check inside AmbientLayer
   // skips it), but we omit the prop entirely to keep the wiring honest:
   // when no pulse stream exists, the renderer is in rotation-only mode.
-  const pulse = recordPulse.lastPulseTs > 0
-    ? { ts: recordPulse.lastPulseTs, intensity: 1 }
+  // V3 merge: when the SSE event ts is newer than the WS ts, use it (and
+  // its boosted intensity); otherwise prefer the WS pulse (1000 Hz cadence).
+  const wsTs   = recordPulse.lastPulseTs
+  const useSse = ssePulse.ts > wsTs
+  const pulse  = (wsTs > 0 || ssePulse.ts > 0)
+    ? { ts: useSse ? ssePulse.ts : wsTs, intensity: useSse ? ssePulse.intensity : 1 }
     : undefined
   const pulseSourceKind = recordPulse.connected
     ? 'live'
