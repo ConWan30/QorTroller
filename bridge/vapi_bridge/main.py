@@ -1242,6 +1242,80 @@ class Bridge:
                     "Phase O1 C4: cedar_drift_sweeper unavailable: %s", _drift_exc
                 )
 
+        # Phase O2-DRAFT-AUTOLOOP (Sentry/Guardian/Curator) — operator-agent
+        # autonomous draft polling loops. Each loop wires the agent's already-
+        # shipped draft-generator primitive surface (operator_agent_*_drafting.py)
+        # to a trigger source. Default disabled per opt-in observability pattern;
+        # operator activates per-agent via OPERATOR_AGENT_<X>_POLLING_ENABLED env
+        # var. try/except ImportError is the de-conflict mechanism: until the
+        # polling-loop module ships in Wave 1, the import fails silently and the
+        # task slot is vacant. Once Wave 1 lands, importable + flag=True activates.
+        if getattr(self.cfg, "operator_agent_sentry_polling_enabled", False):
+            try:
+                from .operator_agent_sentry_polling import run_sentry_polling_loop
+                _sentry_poll_task = asyncio.ensure_future(
+                    run_sentry_polling_loop(cfg=self.cfg, store=self.store)
+                )
+                _sentry_poll_task.set_name("SentryPollingLoop")
+                self._tasks.append(_sentry_poll_task)
+                log.info(
+                    "Phase O2-DRAFT-AUTOLOOP (Sentry): polling loop started (interval=%ds)",
+                    getattr(self.cfg, "operator_agent_sentry_polling_interval_s", 30),
+                )
+            except ImportError as _sp_exc:
+                log.warning(
+                    "Phase O2-DRAFT-AUTOLOOP (Sentry): module not available "
+                    "(skipping; ships in Wave 1): %s", _sp_exc
+                )
+            except Exception as _sp_exc:
+                log.warning(
+                    "Phase O2-DRAFT-AUTOLOOP (Sentry): task creation failed: %s", _sp_exc
+                )
+
+        if getattr(self.cfg, "operator_agent_guardian_polling_enabled", False):
+            try:
+                from .operator_agent_guardian_polling import run_guardian_polling_loop
+                _guardian_poll_task = asyncio.ensure_future(
+                    run_guardian_polling_loop(cfg=self.cfg, store=self.store)
+                )
+                _guardian_poll_task.set_name("GuardianPollingLoop")
+                self._tasks.append(_guardian_poll_task)
+                log.info(
+                    "Phase O2-DRAFT-AUTOLOOP (Guardian): polling loop started (interval=%ds)",
+                    getattr(self.cfg, "operator_agent_guardian_polling_interval_s", 30),
+                )
+            except ImportError as _gp_exc:
+                log.warning(
+                    "Phase O2-DRAFT-AUTOLOOP (Guardian): module not available "
+                    "(skipping; ships in Wave 1): %s", _gp_exc
+                )
+            except Exception as _gp_exc:
+                log.warning(
+                    "Phase O2-DRAFT-AUTOLOOP (Guardian): task creation failed: %s", _gp_exc
+                )
+
+        if getattr(self.cfg, "operator_agent_curator_polling_enabled", False):
+            try:
+                from .operator_agent_curator_polling import run_curator_polling_loop
+                _curator_poll_task = asyncio.ensure_future(
+                    run_curator_polling_loop(cfg=self.cfg, store=self.store)
+                )
+                _curator_poll_task.set_name("CuratorPollingLoop")
+                self._tasks.append(_curator_poll_task)
+                log.info(
+                    "Phase O2-DRAFT-AUTOLOOP (Curator): polling loop started (interval=%ds)",
+                    getattr(self.cfg, "operator_agent_curator_polling_interval_s", 30),
+                )
+            except ImportError as _cp_exc:
+                log.warning(
+                    "Phase O2-DRAFT-AUTOLOOP (Curator): module not available "
+                    "(skipping; ships in Wave 1): %s", _cp_exc
+                )
+            except Exception as _cp_exc:
+                log.warning(
+                    "Phase O2-DRAFT-AUTOLOOP (Curator): task creation failed: %s", _cp_exc
+                )
+
         # Phase 238 Step I-AUTOLOOP-3: SSE Twin stream heartbeat task.
         # Cache itself was attached above inside the http_enabled block.
         # Heartbeat fires every 15s to keep idle SSE connections alive
