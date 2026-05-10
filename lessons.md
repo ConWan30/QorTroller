@@ -32,3 +32,40 @@
 - frame_checkpoints FK constraint (Phase 61): FOREIGN KEY (record_hash) REFERENCES records(record_hash) with foreign_keys=ON. In production, checkpoint is stored after `_dispatch()` → `_on_record()` stores the record first. In tests, pre-seed the parent record before calling `store_frame_checkpoint` — the `INSERT OR IGNORE` does NOT suppress FK violations (only uniqueness conflicts).
 - /features endpoint (Phase 61): reads `pitl_l4_features` (JSON TEXT) from records table; only returns rows where `pitl_l4_features IS NOT NULL`. Feature vectors are list[float] len=12. Limit capped at 200. Use indices 3 and 11 for BiometricScatter (tremor × jitter cross-section). Returns empty list [] if no warmed L4 records exist.
 - Track C testnet deployment (Phase 61): wallet 0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692 depleted to 0.43 IOTX after prior deployments. VAPIioIDRegistry and PITLTournamentPassport deployments blocked. Need testnet IOTX top-up via IoTeX faucet before proceeding.
+- **BT-CALIB-LESSON-001** (Active, load-bearing): Transport-layer ground truth must be verified against authoritative sources (upstream OS driver + reverse-engineering project + field confirmation, three independent classes minimum) before deriving protocol-layer features for any wireless or wired controller transport. Marketing-tier "wireless Bluetooth" descriptions are insufficient — BR/EDR and BLE are structurally different stacks with non-overlapping primitive sets. Established 2026-05-10 after methodology-research falsified three of four proposed L4 features in the v1.0 BT calibration architectural proposal (BLE primitives named for a controller that runs BR/EDR with HIDP). Full lesson detail in section "BT-CALIB-LESSON-001" below.
+
+---
+
+## BT-CALIB-LESSON-001: Transport-Layer Ground Truth Must Precede Feature Derivation
+
+**Status:** Active. Load-bearing for all future VAPI connectivity-option work.
+**Established:** 2026-05-10, after a methodology-research verification pass falsified three of four proposed L4 features in the v1.0 BT calibration architectural proposal.
+**Cross-reference:** Canonical anchor — `wiki/assessments/VAPI Bluetooth Calibration_ Architectural Prerequisites and Threat Model Analysis.pdf`. Architectural revision — `wiki/methodology/bt_calibration_v1_1_architectural_revision.md`. Superseded artifact — v1.0 BT calibration architectural proposal (chat-session, marked [SUPERSEDED-BT-CALIB-LESSON-001]).
+
+### Lesson statement
+
+Before deriving protocol-layer features from any wireless or wired controller transport, verify the actual transport profile against authoritative sources. Marketing-tier descriptions of "wireless Bluetooth" are insufficient because Bluetooth Classic (BR/EDR) and Bluetooth Low Energy (BLE) are structurally different stacks with non-overlapping primitive sets. Features named in one transport (advertising interval, connection events, GATT, advDelay) do not exist in the other (where the analogs are page-scan repetition with R0/R1/R2 modes, Tpoll variance, sniff-mode Tsniff drift, and L2CAP HID PSMs 0x11 and 0x13). Feature derivation against the wrong transport produces an architectural proposal that is structurally invalid rather than merely suboptimal — the primitives the features assume do not exist on the wire.
+
+### What happened
+
+The v1.0 BT calibration architectural proposal named four L4 features: `connection_interval_jitter`, `advertisement_period_drift`, `retransmission_rate` in its BLE-specific reading, and `rssi_variance_normalized`. The DualSense and DualSense Edge use Bluetooth Classic BR/EDR with HID-over-L2CAP (HIDP), not BLE with HID-over-GATT (HOGP). Three of four features were structurally invalid; their underlying BLE primitives do not exist on the actual transport the controller runs. The published BT-fingerprinting and BT-attack literature most relevant to the proposal (Givehchian et al. S&P 2022, BlueShield RAID 2020, BLESA WOOT 2020, SweynTooth USENIX Sec 2020, KNOB USENIX Sec 2019) overwhelmingly targets BLE; their empirical anchors do not transfer cleanly to BR/EDR. The error was caught only on a literature-verification pass two architectural turns later. This is precisely the failure mode VSD-INV-19 was written to prevent.
+
+### Verification sources of record (DualSense / DualSense Edge transport)
+
+The transport profile for the DualSense and DualSense Edge is Bluetooth Classic BR/EDR with HIDP, confirmed by:
+
+1. **Upstream OS driver:** Linux mainline kernel `drivers/hid/hid-playstation.c` by Roderick Colenbrander (Sony Interactive Entertainment), mainlined in Linux 5.12 (April 2021). Devices register via the `HID_BLUETOOTH_DEVICE(...)` macro, which is used for BR/EDR HIDP transport, not BLE/HOGP.
+2. **Reverse-engineering project (general controller stack):** Bluepad32 FAQ at bluepad32.readthedocs.io — "Controllers like Switch, Wii, DualSense, DualShock, etc. only talk 'BR/EDR' (as opposed to BLE)."
+3. **Reverse-engineering project (PS5-specific):** BlueRetro project, Hackaday.io project 170365 (darthcloud) — "PS5 Dual Sense is still BR/EDR (aka. BT classic)."
+4. **Vendor/wiki documentation:** PCGamingWiki Controller:DualSense Edge — "Bluetooth 2.1 + EDR or higher required for wireless connection."
+5. **Field confirmation:** FreeBSD Forums thread 80786 — pairing fails on a BLE-only BCM920702MD board and succeeds on a BT 2.1+EDR BCM92046MD board.
+
+A verification block is considered complete only when at least three independent classes of source agree: the upstream OS driver, at least one reverse-engineering project, and at least one field-confirmation source. Vendor marketing pages do not count toward the verification block.
+
+### Application rule
+
+Any future VAPI architectural proposal that names protocol-layer features for a controller transport must include a transport-verification block citing sources from at least three independent classes (upstream OS driver, reverse-engineering project, field confirmation) before the proposal exits draft state. The verification block is part of the proposal, not a downstream check. If the verification block cannot be assembled — because the controller is too new, the driver is closed-source, or no reverse-engineering project exists — the proposal must explicitly mark the transport claim as "unverified" and the proposal cannot proceed to feature derivation until verification is obtained. This rule applies to USB-C-with-Power-Delivery, 2.4 GHz proprietary RF, future console controllers (PS6, next-gen Xbox), and any wired or wireless transport VAPI extends to.
+
+### Anti-pattern to recognize
+
+The error pattern that produced this lesson: deriving features from the *intended use case* (low-latency wireless input over Bluetooth) rather than from the *actual wire format* (BR/EDR with HIDP versus BLE with HOGP). Use cases describe what the system does; wire formats describe what the system emits. Features must be derived from wire formats, not from use cases. When a future architectural proposal starts to feel like it's progressing without a verification block in hand, that is the signal to halt and assemble the block before continuing.
