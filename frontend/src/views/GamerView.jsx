@@ -20,6 +20,7 @@ import {
 } from '../api/bridgeApi'
 import { ConsentPanel } from '../components/ConsentPanel'
 import { ConsentMatrix } from '../components/ConsentMatrix'
+import { PoacChainRibbon } from '../components/PoacChainRibbon'
 import { FONTS, GAMER } from '../shared/design/tokens'
 
 // ---------------------------------------------------------------------------
@@ -107,7 +108,7 @@ function Glass({ children, style, accent = GAMER.cyan, intensity = 1 }) {
 
 function SessionBadge({ sessionId, magnitude }) {
   return (
-    <Glass style={{ position: 'absolute', top: 16, left: 16, padding: '6px 12px', zIndex: 10 }}>
+    <Glass style={{ position: 'absolute', top: 62, left: 16, padding: '6px 12px', zIndex: 10 }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <span style={{ fontFamily: FONTS.mono, fontSize: 7, letterSpacing: '0.18em', color: GAMER.t3 }}>
           GRIND SESSION
@@ -135,7 +136,7 @@ function SessionBadge({ sessionId, magnitude }) {
 function LiveStatusBadge({ intact, onChain, agentCount, merkleRoot }) {
   return (
     <Glass
-      style={{ position: 'absolute', top: 16, right: 16, padding: '6px 12px', zIndex: 10 }}
+      style={{ position: 'absolute', top: 62, right: 16, padding: '6px 12px', zIndex: 10 }}
       accent={intact ? GAMER.green : GAMER.red}
     >
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
@@ -187,7 +188,7 @@ function GrindProgressBar({
   return (
     <div style={{
       position:  'absolute',
-      top:       60,
+      top:       106,
       left:      '50%',
       transform: 'translateX(-50%)',
       width:     500,
@@ -840,6 +841,19 @@ export function GamerView() {
         zIndex:        2,
       }} />
 
+      {/* Phase 238-FRONTEND-V4 — PoAC Chain accretion ribbon at top edge.
+          Visualizes the GIC chain primitive (Phase 235-A) growing in real
+          time. Subscribes to twin-stream SSE for poac_chain_link + gic_verdict
+          to pulse the rightmost dot. Pointer-events:none → does not block
+          the badges that overlay below. */}
+      <PoacChainRibbon
+        chainLen={chainLen}
+        target={target}
+        intact={intact}
+        latestHash={grindChain?.latest_gic_hash}
+        sessionId={sessionId}
+      />
+
       {/* HUD overlays — all confined to screen edges */}
       <SessionBadge sessionId={sessionId} magnitude={magnitude} />
 
@@ -884,7 +898,7 @@ export function GamerView() {
           their bitmask via the existing right-edge ConsentPanel. */}
       <div style={{
         position:      'absolute',
-        top:           80,
+        top:           126,
         right:         16,
         zIndex:        9,
         padding:       '6px 10px',
