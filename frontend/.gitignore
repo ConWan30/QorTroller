@@ -12,3 +12,10 @@ node_modules/
 # Editor artifacts
 .DS_Store
 *.local
+
+# ZKBA compiled artifact output (Phase O3-ZKBA-TRACK1).  Output is
+# deterministic from inputs; regenerable via scripts/vsd_ui_compiler.py
+# + scripts/zkba_compile_gic_ledger.py (or future per-artifact builders).
+# Only the .gitkeep directory marker is tracked.
+src/artifacts/*/
+!src/artifacts/.gitkeep

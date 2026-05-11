@@ -1,0 +1,10 @@
+# ZKBA artifact output directory marker (Phase O3-ZKBA-TRACK1 Stream Z3)
+#
+# Compiled artifacts (HTML + manifest.json) live in subdirectories:
+#   gic_continuity_ledger/<input_commitment_hex>.html
+#   gic_continuity_ledger/<input_commitment_hex>.manifest.json
+#
+# Compiled output is deterministic from inputs (vsd_ui_compiler.compile_artifact)
+# and excluded from git via frontend/.gitignore (src/artifacts/*/).  This
+# .gitkeep file ensures the parent directory is tracked even when no
+# artifacts are present.
