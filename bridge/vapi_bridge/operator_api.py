@@ -9167,4 +9167,135 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "timestamp":              time.time(),
         }
 
+    # ------------------------------------------------------------------
+    # Phase O3-ZKBA-TRACK1 (post-C5) — VAPIZKBA bridge HTTP endpoints.
+    #
+    # Three read-only GETs that close the wire-contract loop with the
+    # VAPIZKBA SDK class shipped at C4 (sdk/vapi_sdk.py:9170+). At C4
+    # commit time the SDK was wire-locked against future endpoints; this
+    # block ships those endpoints.
+    #
+    # Track 1 invariant: anchor_tx_hash IS NULL across all rows (Stream A3
+    # will populate it post-§8 gate). The /operator/zkba-status response
+    # surfaces track1_invariant_holds = (anchored_count == 0) so external
+    # tooling can verify the invariant without re-scanning the table.
+    #
+    # No Cedar evaluation, no operator-agent draft emission, no chain
+    # call — pure read-only wrappers over store.get_zkba_artifact_*
+    # helpers. Wallet impact 0 IOTX.
+    # ------------------------------------------------------------------
+    @app.get("/operator/zkba-status")
+    async def get_zkba_status(
+        x_api_key: str = Header(default=""),
+    ):
+        """Phase O3-ZKBA-TRACK1 — aggregate status over zkba_artifact_log.
+
+        Returns the shape consumed by VAPIZKBA.status() at
+        sdk/vapi_sdk.py:9260-9285:
+
+            {
+                "total_artifacts":        int,
+                "anchored_count":         int,
+                "track1_invariant_holds": bool,
+                "class_breakdown":        {zkba_class_int: count, ...},
+                "latest": {
+                    "commitment_hex": str,
+                    "zkba_class":     int,
+                    "proof_weight":   int,
+                    "ts_ns":          int,
+                },
+                "frozen_v1_position": 10,
+                "domain_tag":         "VAPI-ZKBA-ARTIFACT-v1",
+                "timestamp":          float,
+            }
+
+        Read-key auth. Fail-open at the store layer.
+        """
+        _check_read_key(x_api_key)
+        summary = await asyncio.to_thread(store.get_zkba_artifact_summary)
+        latest_raw = summary.get("latest")
+        if latest_raw is None:
+            latest_out: dict = {}
+        else:
+            latest_out = {
+                "commitment_hex": str(latest_raw.get("commitment_hex", "")),
+                "zkba_class":     int(latest_raw.get("zkba_class", 0)),
+                "proof_weight":   int(latest_raw.get("proof_weight", 0)),
+                "ts_ns":          int(latest_raw.get("ts_ns", 0)),
+            }
+        return {
+            "total_artifacts":        int(summary.get("total_artifacts", 0)),
+            "anchored_count":         int(summary.get("anchored_count", 0)),
+            "track1_invariant_holds": bool(summary.get("track1_invariant_holds", True)),
+            "class_breakdown":        dict(summary.get("class_breakdown", {})),
+            "latest":                 latest_out,
+            "frozen_v1_position":     10,
+            "domain_tag":             "VAPI-ZKBA-ARTIFACT-v1",
+            "timestamp":              time.time(),
+        }
+
+    @app.get("/operator/zkba-artifact/{commitment_hex}")
+    async def get_zkba_artifact_endpoint(
+        commitment_hex: str,
+        x_api_key: str = Header(default=""),
+    ):
+        """Phase O3-ZKBA-TRACK1 — fetch one ZKBA artifact row by commitment_hex.
+
+        Returns the shape consumed by VAPIZKBA.get_artifact() at
+        sdk/vapi_sdk.py:9287-9315:
+
+            {"found": false, "commitment_hex": str}                          # miss
+            {"found": true,  "db_row": {... full row ...}}                   # hit
+
+        Read-key auth. Returns 200 + found=False on miss (NOT 404) — the
+        SDK consumes the boolean rather than parsing HTTP status, and
+        404s would force callers into exception-handling code paths.
+        """
+        _check_read_key(x_api_key)
+        row = await asyncio.to_thread(
+            store.get_zkba_artifact_status, commitment_hex
+        )
+        if row is None:
+            return {
+                "found":          False,
+                "commitment_hex": commitment_hex,
+                "timestamp":      time.time(),
+            }
+        return {
+            "found":          True,
+            "commitment_hex": commitment_hex,
+            "db_row":         row,
+            "timestamp":      time.time(),
+        }
+
+    @app.get("/operator/zkba-history")
+    async def get_zkba_history_endpoint(
+        x_api_key: str = Header(default=""),
+        limit: int = Query(default=20, ge=1, le=500),
+    ):
+        """Phase O3-ZKBA-TRACK1 — paginated DESC-by-ts_ns ZKBA artifact history.
+
+        Returns the shape consumed by VAPIZKBA.history() at
+        sdk/vapi_sdk.py:9317-9338:
+
+            {
+                "limit":     int,
+                "row_count": int,
+                "rows":      [dict, ...],   # newest first
+                "timestamp": float,
+            }
+
+        Read-key auth. limit clamped 1..500 by Query bounds.
+        """
+        _check_read_key(x_api_key)
+        rows = await asyncio.to_thread(
+            store.get_zkba_artifact_history, int(limit)
+        )
+        return {
+            "limit":     int(limit),
+            "row_count": len(rows),
+            "rows":      rows,
+            "timestamp": time.time(),
+        }
+
     return app
