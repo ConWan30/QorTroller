@@ -357,18 +357,44 @@ completion.
 Hashes match §2 table. This commit lands the manifest as the deferral-
 boundary witness; no other artifacts move.
 
-### 7.2 Step 2 — Inventory Normalization (pending)
+### 7.2 Step 2 — Inventory Normalization (landed)
 
-Reserved. To be appended after Step 2 atomic commit.
+Step 2 atomic commit applied 2026-05-10. The byte-preservation invariant
+(pre-operation hashes equal post-operation hashes) is satisfied for all
+five methodology .md files brought under version control. The PDF
+artifact (`DualSense Edge Sensor-Stack Characterization for VAPI Track-1
+Anti-Cheat Feature Architecture.pdf`) remains untracked at Step 2 close;
+binary inclusion is deferred to a separate operator decision.
 
-Required entries:
-- Post-import hash of `wiki/methodology/vsd_methodology_v1_FINAL.md`
-  (must equal `c5a38a2bb1fb...263ca`)
-- Post-import hash of `wiki/methodology/claude_code_master_resumption_prompt.md`
-  (must equal `e3c97e350003...e83d97d`)
-- Post-rename hash of `wiki/methodology/VBDIP-0001-vad-framework-introduction.md`
-  (must equal `50754b93bdf9...a74315`)
-- Disposition of MISSING-ARTIFACT-001 (per operator decision M1/M2/M3)
+Post-operation hashes:
+
+| File | Hash | Operation |
+|------|------|-----------|
+| `wiki/methodology/VBDIP-0001-vad-framework-introduction.md` | `50754b93bdf95ad5b92d51cbab8e5064e9286576ba175f725253a75a7a3e4315` | rename (drop `" (1)"` suffix); byte-identical to source |
+| `wiki/methodology/vsd_methodology_v1_FINAL.md` | `c5a38a2bb1fb3bd8e4eb3e188724b46fea79579b3d81083b61cd38f534d263ca` | import from Downloads; byte-identical to source |
+| `wiki/methodology/claude_code_master_resumption_prompt.md` | `e3c97e350003efa7332f706d6c5d139d59a4671ee74f6111d7ecc930de83d97d` | import from Downloads; byte-identical to source |
+| `wiki/methodology/vsd_volume_2_final.md` | `c746bcb7be7fbba94a6a5f338f8c8fbe8ee7bad3fb58650b491229f214278e13` | scope expansion: pre-existing on filesystem but untracked; added in Step 2 as inventory normalization |
+| `wiki/methodology/phase_o1_vsd_bootstrap_canonical.md` | `a685b8f0b6a149f57eff9f7a8b6b09ab1db894cdc234dc43955084ec07842be3` | scope expansion: pre-existing on filesystem but untracked; added in Step 2 as inventory normalization |
+
+Scope expansion rationale: Step 2's literal name "Inventory Normalization"
+implies all methodology .md artifacts referenced by the deferral-boundary
+manifest §2 inventory should be reconciled to canonical git-tracked state.
+The §2 inventory marked `vsd_volume_2_final.md` and
+`phase_o1_vsd_bootstrap_canonical.md` as "In tree; no move" — meaning
+filesystem-present, but git-tracking was not verified at manifest authoring.
+Step 2 closes that gap by `git add`-ing both alongside the 3 originally
+scoped operations. The PDF artifact is deferred pending binary-inclusion
+operator decision.
+
+MISSING-ARTIFACT-001 disposition: **M3** (defer as named open item per
+operator decision recorded in VBDIP-0001 Step 1 commit body
+`2aea877a`). `notebooklm_session_prompt.md` remains absent from all
+on-disk locations; Step 3 amendments may resolve via N2-class rename
+or cross-reference removal in the resumption prompt + VBDIP-0001 §10.
+
+Step 2 commit references this manifest hash block; future readers may
+verify byte preservation by recomputing SHA-256 of each file at the Step
+2 commit SHA and comparing against this table.
 
 ### 7.3 Step 3 — Phase B State Reconciliation Amendments (pending)
 
