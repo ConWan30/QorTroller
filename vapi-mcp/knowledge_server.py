@@ -1490,6 +1490,202 @@ async def vapi_provenance_chain(node_id: str = "", max_depth: int = 20, **_):
 
 
 # ============================================================
+# Phase O3-ZKBA-TRACK1 C4 — ZKBA artifact MCP tools (Stream Z5)
+#
+# Direct DB queries against bridge/vapi_store.db zkba_artifact_log
+# (shipped C2; tenth FROZEN-v1 primitive in PATTERN-017). All read-only
+# or "describe-only" tools per Track 1 invariant (no chain.py import,
+# no on-chain submission, no operator-agent draft emission).
+# ============================================================
+
+# ZKBA class enum values (FROZEN-v1; mirrors bridge/vapi_bridge/zkba_artifact.py)
+_ZKBA_CLASS_NAMES = {
+    1: "AIT", 2: "GIC", 3: "VHP", 4: "HARDWARE",
+    5: "CONSENT", 6: "TOURNAMENT", 7: "MARKET",
+}
+_PROOF_WEIGHT_NAMES = {
+    1: "DIRECT_HID", 2: "CALIBRATION_PLUS_CONTEXT", 3: "CHAIN_ONLY",
+    4: "MARKETPLACE_DERIVED", 5: "DEMO", 6: "FROZEN_DISABLED",
+}
+
+
+@tool(
+    name="vapi_zkba_status",
+    description=(
+        "Returns ZKBA artifact log status: total count, latest commitment, "
+        "per-class breakdown, anchor status (anchor_tx_hash NULL during Track 1 "
+        "until Phase O1-VAD-MIGRATE / VBDIP-0002 Track 2 ships parallel_zkba_anchor.py). "
+        "Read-only direct DB query against bridge/vapi_store.db zkba_artifact_log "
+        "(Phase O3-ZKBA-TRACK1 C2 ship). VBDIP-0002 §5 ZKBA classes; §6 proof-weight taxonomy."
+    ),
+    schema={"type": "object", "properties": {}, "required": []}
+)
+async def vapi_zkba_status(**_):
+    total_row = db_query("SELECT COUNT(*) as n FROM zkba_artifact_log")
+    total = int(total_row[0]["n"]) if total_row else 0
+
+    latest = db_query(
+        "SELECT commitment_hex, zkba_class, proof_weight, ts_ns, "
+        "       manifest_uri, compiler_output_hash_hex, anchor_tx_hash, created_at "
+        "FROM zkba_artifact_log ORDER BY ts_ns DESC LIMIT 1"
+    )
+    latest_row = dict(latest[0]) if latest else None
+    if latest_row:
+        latest_row["zkba_class_name"] = _ZKBA_CLASS_NAMES.get(
+            int(latest_row.get("zkba_class", 0)), "UNKNOWN"
+        )
+        latest_row["proof_weight_name"] = _PROOF_WEIGHT_NAMES.get(
+            int(latest_row.get("proof_weight", 0)), "UNKNOWN"
+        )
+
+    by_class = db_query(
+        "SELECT zkba_class, COUNT(*) as n FROM zkba_artifact_log GROUP BY zkba_class"
+    )
+    class_breakdown = {
+        _ZKBA_CLASS_NAMES.get(int(r["zkba_class"]), f"class_{r['zkba_class']}"): int(r["n"])
+        for r in by_class
+    }
+
+    anchored = db_query(
+        "SELECT COUNT(*) as n FROM zkba_artifact_log WHERE anchor_tx_hash IS NOT NULL"
+    )
+    anchored_count = int(anchored[0]["n"]) if anchored else 0
+
+    return {
+        "total_artifacts":          total,
+        "anchored_count":           anchored_count,
+        "track1_invariant_holds":   (anchored_count == 0),  # Track 1: none anchored
+        "class_breakdown":          class_breakdown,
+        "latest":                   latest_row,
+        "frozen_v1_position":       10,
+        "domain_tag":               "VAPI-ZKBA-ARTIFACT-v1",
+        "primitive_module":         "bridge/vapi_bridge/zkba_artifact.py",
+        "store_table":              "zkba_artifact_log",
+    }
+
+
+@tool(
+    name="vapi_compile_zkba_artifact",
+    description=(
+        "Returns the CLI command to compile a ZKBA artifact + cached findings. "
+        "Does NOT execute (mirrors vapi_separation_analysis pattern — operator "
+        "runs the command). Track 1 invariant: no chain submission; output "
+        "lands under frontend/src/artifacts/<class_dir>/. Only ZKBAClass.GIC has "
+        "a builder script shipped (scripts/zkba_compile_gic_ledger.py); other "
+        "classes pending future commits."
+    ),
+    schema={
+        "type": "object",
+        "properties": {
+            "zkba_class":        {"type": "string",
+                                  "enum": ["AIT", "GIC", "VHP", "HARDWARE",
+                                           "CONSENT", "TOURNAMENT", "MARKET"]},
+            "grind_session_id":  {"type": "string"},
+            "ts_ns":             {"type": "integer"},
+        },
+        "required": ["zkba_class"]
+    }
+)
+async def vapi_compile_zkba_artifact(zkba_class: str = "GIC",
+                                      grind_session_id: str = "grind_phase235_v1",
+                                      ts_ns: int = None,
+                                      **_):
+    if zkba_class == "GIC":
+        cmd_parts = [
+            "python scripts/zkba_compile_gic_ledger.py",
+            f"--session {grind_session_id}",
+        ]
+        if ts_ns is not None:
+            cmd_parts.append(f"--ts-ns {ts_ns}")
+        return {
+            "zkba_class":          "GIC",
+            "command_to_run":      " ".join(cmd_parts),
+            "output_dir":          "frontend/src/artifacts/gic_continuity_ledger/",
+            "builder_script":      "scripts/zkba_compile_gic_ledger.py",
+            "compiler":            "scripts/vsd_ui_compiler.py",
+            "compiler_version":    "0.1.0",
+            "manifest_schema":     "vapi-zkba-manifest-v1",
+            "proof_weight":        "CHAIN_ONLY",
+            "track1_invariant":    "no chain submission; no Cedar evaluation; no operator-agent draft",
+            "note":                "Run the command above; manifest emitted alongside HTML at "
+                                   "<commitment_hex>.html / <commitment_hex>.manifest.json",
+        }
+    return {
+        "zkba_class":   zkba_class,
+        "status":       "NO BUILDER SHIPPED",
+        "note":         f"ZKBA-{zkba_class} builder not yet implemented. Only GIC has "
+                        f"a builder at this commit (scripts/zkba_compile_gic_ledger.py); "
+                        f"other classes per VBDIP-0002 §5 ship in future commits.",
+    }
+
+
+@tool(
+    name="vapi_zkba_projection_manifest",
+    description=(
+        "Returns the projection manifest for a ZKBA artifact identified by "
+        "commitment_hex (64 lowercase hex chars). Reads zkba_artifact_log row "
+        "from bridge DB; resolves manifest_uri to absolute path. Returns the "
+        "manifest JSON body (parsed) plus the DB row metadata."
+    ),
+    schema={
+        "type": "object",
+        "properties": {
+            "commitment_hex": {"type": "string"},
+        },
+        "required": ["commitment_hex"]
+    }
+)
+async def vapi_zkba_projection_manifest(commitment_hex: str, **_):
+    row = db_query(
+        "SELECT commitment_hex, zkba_class, proof_weight, preimage_json, ts_ns, "
+        "       manifest_uri, compiler_output_hash_hex, anchor_tx_hash, created_at "
+        "FROM zkba_artifact_log WHERE commitment_hex = ?",
+        (commitment_hex,),
+    )
+    if not row:
+        return {
+            "commitment_hex":   commitment_hex,
+            "found":            False,
+            "note":             "No artifact registered with that commitment_hex",
+        }
+    db_row = dict(row[0])
+    db_row["zkba_class_name"] = _ZKBA_CLASS_NAMES.get(
+        int(db_row.get("zkba_class", 0)), "UNKNOWN"
+    )
+    db_row["proof_weight_name"] = _PROOF_WEIGHT_NAMES.get(
+        int(db_row.get("proof_weight", 0)), "UNKNOWN"
+    )
+
+    manifest_uri = db_row.get("manifest_uri") or ""
+    manifest_body = None
+    manifest_path_resolved = None
+    if manifest_uri:
+        # manifest_uri stored as POSIX path; resolve relative to PROJECT_ROOT
+        candidate = manifest_uri
+        if not os.path.isabs(candidate):
+            candidate = str(PROJECT_ROOT / candidate)
+        # The compiler writes <commit>.html; the manifest sits beside it at
+        # <commit>.manifest.json. Resolve.
+        if candidate.endswith(".html"):
+            candidate = candidate[:-5] + ".manifest.json"
+        try:
+            if os.path.exists(candidate):
+                with open(candidate, "r", encoding="utf-8") as f:
+                    manifest_body = json.loads(f.read())
+                manifest_path_resolved = candidate
+        except Exception:
+            manifest_body = None
+
+    return {
+        "commitment_hex":          commitment_hex,
+        "found":                   True,
+        "db_row":                  db_row,
+        "manifest_path_resolved":  manifest_path_resolved,
+        "manifest_body":           manifest_body,
+    }
+
+
+# ============================================================
 # MCP Server Loop
 # ============================================================
 
