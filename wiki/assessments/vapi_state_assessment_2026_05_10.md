@@ -151,7 +151,8 @@ bridge module computing it.
 | 6 | **CONSENT** Per-category gamer consent | `b"VAPI-CONSENT-v1"` | 237-CONSENT | INV-CONSENT-001..004 |
 | 7 | **BIOMETRIC-SNAPSHOT** ZK-attested separation ratio | `b"VAPI-BIOMETRIC-SNAPSHOT-v1"` | 237-ZK-SEPPROOF | (Groth16 VK hash anchored) |
 | 8 | **LISTING-v1** Provenance-anchored marketplace listing | `b"VAPI-LISTING-v1"` | 238-MARKETPLACE | (15-byte tag + 196-byte body, scale 1e6) |
-| 9 | **FRR** Fleet Readiness Root *(THIS SHIP — Phase O1-FRR)* | `b"VAPI-FRR-v1"` | O1-FRR | INV-FRR-001/002/003 |
+| 9 | **FRR** Fleet Readiness Root | `b"VAPI-FRR-v1"` | O1-FRR | INV-FRR-001/002/003 |
+| 10 | **ZKBA-ARTIFACT** Zero-Knowledge Biometric Artifact *(THIS SHIP — Phase O3-ZKBA-TRACK1 C2)* | `b"VAPI-ZKBA-ARTIFACT-v1"` | O3-ZKBA-TRACK1 | INV-ZKBA-001/002/003 (pending Stream Z8) |
 
 **The pattern**: each primitive defines a SHA-256 commitment over a
 precisely-byte-ordered pre-image, and embeds a domain tag that rules out

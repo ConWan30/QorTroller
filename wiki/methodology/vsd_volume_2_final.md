@@ -18,7 +18,7 @@ This document is the canonical methodology evolution for VSD as ingested into th
 
 ## 17. TL;DR (Volume 2)
 
-Volume 2 absorbs the **MCP layer** into VSD as the methodology's runtime, ships **VRR (Vault Readiness Root)** as the ninth FROZEN-v1 cryptographic primitive in the PATTERN-017 family, and elevates VSD's three operating roles (Synthesizer, HarnessSentinel, EigenspaceWarden) into a **Synthesis Operator Fleet** structurally identical to the protocol's Operator Initiative fleet (Sentry+Guardian+Curator). The two fleets share Cedar bundle architecture, dual-anchor pattern, FSCA drift rules, and parallel-fleet advancement primitives — but live in disjoint skill spaces enforced by the same cross-agent skill-separation invariant Phase O1-FRR-PARALLEL established for the protocol fleet.
+Volume 2 absorbs the **MCP layer** into VSD as the methodology's runtime, ships **VRR (Vault Readiness Root)** as the eleventh FROZEN-v1 cryptographic primitive in the PATTERN-017 family (count revised by VBDIP-0001 Step 3 Amendment #1 — VRR was authored as #9 in Volume 2 first-cut framing, but the canonical convention places PoAC as #1 and inserts ZKBA-ARTIFACT at #10 between FRR and VRR; see VBDIP-0001 §7 for the canonical convention), and elevates VSD's three operating roles (Synthesizer, HarnessSentinel, EigenspaceWarden) into a **Synthesis Operator Fleet** structurally identical to the protocol's Operator Initiative fleet (Sentry+Guardian+Curator). The two fleets share Cedar bundle architecture, dual-anchor pattern, FSCA drift rules, and parallel-fleet advancement primitives — but live in disjoint skill spaces enforced by the same cross-agent skill-separation invariant Phase O1-FRR-PARALLEL established for the protocol fleet.
 
 The methodology's seven new invariants (VSD-INV-17 through VSD-INV-23) close the five gaps surfaced in v1.0 FINAL author review: temporal decay inheritance from BP-001; eigenspace probe coverage declaration (closing the AIT-only fragility); verification gap vs implementation gap distinction in PBSA; VRR computational determinism; mechanical adversarial closure verification; cross-tier consistency between MCP/NotebookLM/filesystem; and unified eval harness as single source of truth.
 
@@ -96,7 +96,7 @@ There MUST exist exactly ONE eval harness binary (`scripts/vapi_invariant_gate.p
 
 ## 19. VRR — Vault Readiness Root (Ninth FROZEN-v1 Primitive)
 
-VRR is the synthesis-domain analog of FRR (Phase O1-FRR-PARALLEL, ninth-actually-tenth in PATTERN-017). Single 32-byte SHA-256 commitment over vault state. Mirrors FRR's pre-image construction discipline byte-for-byte. Composable on-chain via a sibling contract surface or stored-only in `operator_initiative_advancement_log` with a `domain` discriminator column.
+VRR is the synthesis-domain analog of FRR (Phase O1-FRR-PARALLEL, ninth in PATTERN-017 under the canonical convention defined by VBDIP-0001 §7 Amendment #1). Single 32-byte SHA-256 commitment over vault state. Mirrors FRR's pre-image construction discipline byte-for-byte. Composable on-chain via a sibling contract surface or stored-only in `operator_initiative_advancement_log` with a `domain` discriminator column. Under canonical convention VRR is the eleventh shipped primitive (after PoAC=1, GIC=2, WEC=3, VAME=4, CORPUS-SNAPSHOT=5, CONSENT=6, BIOMETRIC-SNAPSHOT=7, LISTING-v1=8, FRR=9, ZKBA-ARTIFACT=10).
 
 ### 19.1 FROZEN-v1 pre-image (locked at v2.0)
 
