@@ -487,21 +487,63 @@ The attestation script (`scripts/vsd_attest_architect_key.py`) is committed alon
 
 This signature is the root of the deployer-anchored signing chain. All future architect-Ed25519-signed methodology artifacts inherit trust from this attestation. Any change to the architect key (rotation) requires Procedure-VSD-K1 (defined in `vsd-vault/eval/PROCEDURES.md` once Stream A.5 of Phase O1-VSD-BOOTSTRAP ships VSDIP-0003) and a new attestation with a forward-reference to this one in the rotation chain.
 
-### 7.5 Step 5 — VBDIP-0001 Freeze (pending)
+### 7.5 Step 5 — VBDIP-0001 Freeze (landed)
 
-Reserved. To be appended after Step 5 atomic commit.
+Step 5 atomic commit applied 2026-05-10. VBDIP-0001 transitions from
+FROZEN-candidate to **FROZEN** with architect Ed25519 signature applied
+to the proposal's canonical content hash; manifest committed; harness
+extended; allowlist regenerated; vault README authored.
 
-Required entries:
-- SHA-256 of `wiki/methodology/VBDIP-0001-vad-framework-introduction.md`
-  with architect signature applied (final FROZEN content hash)
-- SHA-256 of `vsd-vault/manifests/proposals-VBDIP-0001/001.manifest.json`
-- New SHA-256 of `scripts/vapi_invariant_gate.py` (extended for bridge
-  proposal-type)
-- New SHA-256 of `.github/INVARIANTS_ALLOWLIST.json` (v3 with `vbd`
-  section)
-- PV-CI invariant count post-Step-5 (current 63 + new VBD invariants;
-  exact count per Phase B Amendment #1 reconciliation)
-- SHA-256 of `vsd-vault/README.md` with deferred-migration documentation
+| Artifact | Hash / Value | Notes |
+|----------|--------------|-------|
+| `wiki/methodology/VBDIP-0001-vad-framework-introduction.md` | `56da19e2e593396dff10b72cbc5c2a1d1c8a4658eb52de548d0b57829a18ea27` | FROZEN content; byte length 44,518; §11 status transition log records the freeze |
+| `vsd-vault/manifests/proposals-VBDIP-0001/001.manifest.json` | `46d786952c9979177afe221180e340577c10b0dbec67b9d6fccb7fc41a7c69e4` | Canonical-JSON; byte length 1,393; embeds architect Ed25519 signature over `proposal_canonical_hash` |
+| Architect Ed25519 signature (64B hex) | `ea59071b0640f6fab03507f403bdd618e320ab6bfe3d27951150bcc30a029aca8101f644d882b1e0f152419279434470a03557e0fbff842e49de8a9b5fd6e103` | Signs the 32-byte canonical hash of VBDIP-0001; verified PASS at signing time |
+| Architect pubkey (32B hex) | `056e695f2995070198a0db1a6c264d8234fb88bf5cf6332c354f58a096a78ca8` | Matches Step 4 attestation (`architect_key_attestation.json`); deployer-anchored signing chain holds |
+| `frozen_at_ts_ns` | `1778469491278228500` | Uint64; recorded in manifest |
+| `scripts/vapi_invariant_gate.py` | extended | +VBD_INVARIANTS list (3 entries) + `_select_invariants_for_proposal_type()` + `_parse_proposal_type_arg()` + `--proposal-type` flag (4 choices: protocol / bridge / synthesis / all; `both` preserved as deprecated alias); default `protocol` preserves backward compat |
+| `.github/INVARIANTS_ALLOWLIST.json` | 63 → 66 entries | Regenerated via `--generate --proposal-type=all --reason "invariant_change: ..." --confirm-governance`. Governance phrase piped (`I understand this changes a frozen protocol invariant`). Bridge POST failed gracefully (bridge not running; expected per kill-switch posture). |
+| `vsd-vault/README.md` | new | Per VBDIP-0001 §6.2 deferred-migration documentation; describes VAD framework, sub-discipline mapping, numbered-proposal lineage, deferred `vsd-vault/` → `vad-vault/` rename via Phase O1-VAD-MIGRATE (gated on VBDIP-0002 numbering resolution N1/N2'/N3). |
+| New PV-CI invariants registered | VBD-INV-001, VBD-INV-002, VBD-INV-003 | Markdown-normative; Python check bodies remain stubs at v1.0 per VBDIP-0001 §9 (programmatic enforcement deferred to VBDIP-0003). Each invariant pattern-matches the `check_vbd_inv_N` function signature documented in VBDIP-0001 §4.1/§4.2/§4.3. |
+| VBD-INV-4 (retroactive CFSS rename) | reserved | Not registered in this commit. INV-CFSS-001 ships at Phase O1-VSD-BOOTSTRAP Stream B (per VBDIP-0001 §4.4 + Volume 2 §20.1). Retroactive rename applies when CFSS lands; tracked as deferred Step 5 follow-up. |
+
+Bridge gate verification post-Step-5:
+
+| Command | Result |
+|---------|--------|
+| `python scripts/vapi_invariant_gate.py --proposal-type=protocol --report` | 63 invariants — All pass |
+| `python scripts/vapi_invariant_gate.py --proposal-type=bridge --report` | 3 VBD invariants — All pass |
+| `python scripts/vapi_invariant_gate.py --proposal-type=all --report` | 66 invariants — All pass |
+| `python scripts/vapi_invariant_gate.py --report` (default = protocol; backward compat) | 63 invariants — All pass |
+
+Verification procedure for future readers (replayable from canonical inputs):
+
+```python
+import hashlib, json
+from pathlib import Path
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
+# 1. Read VBDIP-0001 at this commit
+vbdip = Path('wiki/methodology/VBDIP-0001-vad-framework-introduction.md').read_bytes()
+canonical_hash = hashlib.sha256(vbdip).hexdigest()
+assert canonical_hash == '56da19e2e593396dff10b72cbc5c2a1d1c8a4658eb52de548d0b57829a18ea27'
+
+# 2. Read manifest, extract pubkey + signature
+manifest = json.loads(Path('vsd-vault/manifests/proposals-VBDIP-0001/001.manifest.json').read_bytes())
+assert manifest['proposal_canonical_hash'] == canonical_hash
+pk_bytes = bytes.fromhex(manifest['architect_pubkey_ed25519'])
+sig_bytes = bytes.fromhex(manifest['signature'])
+
+# 3. Verify Ed25519 signature over canonical hash bytes
+Ed25519PublicKey.from_public_bytes(pk_bytes).verify(sig_bytes, bytes.fromhex(canonical_hash))
+
+# 4. Verify architect pubkey chains to bridge wallet via attestation
+attestation = json.loads(Path('vsd-vault/eval/architect_key_attestation.json').read_bytes())
+assert attestation['envelope']['architect_pubkey_ed25519'] == manifest['architect_pubkey_ed25519']
+assert attestation['recovered_address'] == '0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692'
+```
+
+VBDIP-0001 is now **FROZEN**. The VAD methodology framework — VSD synthesis + VED engineering + VBD bridge sub-disciplines — is established as the canonical methodology surface. The 5-step secure resumption procedure is complete. VBDIP-0002 Track 2 activation gate #1 (per VBDIP-0002 §16) is now satisfied; the remaining Track 2 gates are operator-decision + wallet-impact gates (numbering resolution; compiler harness implementation; AgentScope/Cedar permissions; Curator review readiness; internal projection first).
 
 ---
 

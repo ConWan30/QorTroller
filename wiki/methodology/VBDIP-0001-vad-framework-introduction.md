@@ -327,18 +327,22 @@ CVAS document origin: Gemini extrapolation in response to a theoretical perpetua
 
 ## 11. Document Metadata
 
-**Document version:** VBDIP-0001 v1.0 (FROZEN-candidate)
+**Document version:** VBDIP-0001 v1.0 **FROZEN**
 **Generated:** 2026-05-10
+**Frozen:** 2026-05-10 (Phase O1-VBDIP-0001-INTEGRATION Step 5)
 **Author authority:** VAPI Architect, sole deployer (`0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692`)
-**Architect signature:** (to be applied at freeze by architect Ed25519 key signed once by bridge wallet at bootstrap)
-**Manifest path:** `vsd-vault/manifests/proposals-VBDIP-0001/001.manifest.json` (to be authored at freeze)
-**Tags:** `#vbdip #vad #methodology #vapi #frozen-v1-candidate #notebook-llm-corpus #verification-first #honesty-first #sub-discipline-pivot #vsd #ved #vbd #deferred-migration`
+**Architect signature:** Ed25519 signature applied; see `vsd-vault/manifests/proposals-VBDIP-0001/001.manifest.json` (deployer-anchored signing chain established at Step 4 via `vsd-vault/eval/architect_key_attestation.json` — bridge wallet EIP-191 attestation of architect pubkey)
+**Manifest path:** `vsd-vault/manifests/proposals-VBDIP-0001/001.manifest.json`
+**Architect pubkey (Ed25519, 32B hex):** `056e695f2995070198a0db1a6c264d8234fb88bf5cf6332c354f58a096a78ca8`
+**Tags:** `#vbdip #vad #methodology #vapi #frozen-v1 #notebook-llm-corpus #verification-first #honesty-first #sub-discipline-pivot #vsd #ved #vbd #deferred-migration`
 
 **Status transition log:**
 - 2026-05-10: Draft v1.0 authored in architectural collaboration thread
-- (pending): Architect review
-- (pending): Architect signature applied; status moves to FROZEN
-- (pending): Atomic commit lands VBDIP-0001 plus harness extension plus allowlist regeneration plus vsd-vault/README.md update
+- 2026-05-10 (Phase O1-VBDIP-0001-INTEGRATION Step 1, commit `2aea877a`): Provenance pin manifest landed; deferral-boundary witness established
+- 2026-05-10 (Step 2, commit `69ac74d2`): Inventory normalization — imported absent artifacts, renamed VBDIP-0001 (1).md → VBDIP-0001.md
+- 2026-05-10 (Step 3, commit `be13de49`): State reconciliation amendments — PATTERN-017 count canonicalized; VED-INV-N clarified as count-abstraction; master resumption Phase D revised to Option D2; bootstrap canonical state references refreshed (bridge 2836→2922; PV-CI 55→63)
+- 2026-05-10 (Step 4, commit `8b95d5bc`): Architect Ed25519 key generated; bridge wallet EIP-191 attestation produced (`vsd-vault/eval/architect_key_attestation.json`); deployer-anchored signing chain established per VBD-INV-1
+- 2026-05-10 (Step 5, this commit): Architect Ed25519 signature applied to VBDIP-0001 canonical hash; manifest authored at `vsd-vault/manifests/proposals-VBDIP-0001/001.manifest.json`; harness extended with `--proposal-type` flag (4 choices); allowlist regenerated 63→66 entries with VBD-INV-001/002/003; `vsd-vault/README.md` authored per §6.2 deferred-migration documentation; **status: FROZEN**
 
 **Supersession discipline:** VBDIP-0001 is a foundational proposal that establishes the VBD lineage and the VAD framework. It is not superseded by future VBDIPs; future VBDIPs build on it. Future VBDIPs (VBDIP-0002 for Phase O1-VAD-MIGRATE, VBDIP-0003 for full Python harness, etc.) reference VBDIP-0001 as their architectural foundation.
 
