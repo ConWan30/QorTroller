@@ -2,12 +2,12 @@
 
 **Proposal type:** VBDIP (Verified Bridge Discipline Improvement Proposal)
 **Proposal number:** 0002 (sidecar; numbering decision pending operator resolution)
-**Status:** FROZEN-SPEC v1.0, pending VBDIP-0001 dependency satisfaction
+**Status:** FROZEN-SPEC v1.0, pending operational activation gates
 **Author authority:** VAPI Architect, sole deployer (`0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692`)
 **Generated:** 2026-05-10
 **Scope:** VAPI-internal sidecar specification. Not operationally active.
-**Dependency:** VBDIP-0001 must reach FROZEN state before this proposal can activate.
-**Activation status:** Blocked until compiler harness, ZKBA manifest schema, and AgentScope/Cedar permissions are implemented and authorized.
+**Dependency:** VBDIP-0001 FROZEN dependency satisfied; operational activation still gated.
+**Activation status:** Partially satisfied: VBDIP-0001 is FROZEN and the Track 1 deterministic compiler exists; blocked until numbering resolution, full schema validation, AgentScope/Cedar permissions, and VPM Integrity Label / visual grammar tests are implemented and authorized.
 **Staging path:** `wiki/methodology/VBDIP-0002-zkba-visual-projections.md`
 **Eventual vault path:** `vsd-vault/proposals/VBDIP-0002-zkba-visual-projections.md` (or successor path per VAD-MIGRATE)
 **Revision note:** This v1.0 enhancement consolidates an earlier draft with a forward-looking extensions appendix (Section A). Section ordering follows the operator-canonical 17-section spec.
@@ -32,34 +32,42 @@ canonical. HTML is a deterministic, proof-bearing visual projection.
 
 HTML is not a source of truth. HTML is the human-legible rendering layer for
 already verified state. ZK proofs, on-chain anchors, FROZEN-v1 commitments,
-and signed manifests are the proof root. ZKBAs *will* project that root
-into a deterministic visual surface that any stakeholder *will be able to*
-locally verify (post-compiler-activation per §16) against the proof root.
-The compiler does not exist at the time of this writing; the verification
-runtime does not exist at the time of this writing. The discipline is
-specified by this proposal; activation produces the capability.
+and signed manifests are the proof root. ZKBAs project that root into a
+deterministic visual surface that stakeholders can locally verify against the
+proof root once the relevant verification runtime exists. The Track 1
+deterministic compiler (`scripts/vsd_ui_compiler.py`) now exists and has a
+passing deterministic-output test suite for the GIC Continuity Ledger target;
+the broader VBDIP-0002 operational activation remains gated by §16.
 
 ### 1.2 Dependency Status
 
-VBDIP-0002 is **not operationally active**. Activation requires all of the
+VBDIP-0002 is **not operationally active**. Some original dependencies have
+now been satisfied by Track 1 work, but activation still requires all of the
 following independent gates:
 
-1. **VBDIP-0001 FROZEN** - the VAD framework rename, `--proposal-type=bridge`
-   harness mode, allowlist v2->v3 expansion, and VBD-INV-1..VBD-INV-3
-   invariants must be applied as a deployer-signed atomic commit (Phase D
-   Option D2 sequencing per the secure resumption procedure).
-2. **Compiler harness implemented** - `vsd_ui_compiler.py` or successor must
-   exist and pass its deterministic-output test suite. The compiler does not
-   exist at the time of this writing.
-3. **ZKBA manifest schema validated** - the JSON schema in Section 9.2 must
+1. **VBDIP-0001 FROZEN** - satisfied by the VBDIP-0001 freeze commit and
+   deployer-anchored architect signing chain.
+2. **Compiler harness implemented** - partially satisfied by Track 1:
+   `scripts/vsd_ui_compiler.py` exists and the GIC Continuity Ledger
+   deterministic-output tests pass. Full activation still requires the
+   complete Section 9.3 visual honesty test surface.
+3. **ZKBA manifest schema validated** - still required. The JSON schema in Section 9.2 must
    validate against representative artifacts of each ZKBA class in Section 5.
-4. **AgentScope/Cedar permissions authorized** - each Operator agent
+4. **VBDIP-0002A / VPM reconciliation** - still required before VPM language
+   becomes active. VBDIP-0002A generalizes HTML/ZKBA projection outputs into
+   Verified Projection Media while preserving this document as the ZKBA
+   artifact specification.
+5. **AgentScope/Cedar permissions authorized** - still required. Each Operator agent
    (Sentry / Guardian / Curator) must have a Cedar bundle phase-anchored on
    chain that authorizes the actions named in Section 8 for the artifact
    lifecycle. These authorizations are NOT in scope for VBDIP-0002 freeze;
-   they are scope for follow-up ceremonies after VBDIP-0001 freezes.
+   they are scope for follow-up ceremonies.
+6. **VPM Integrity Label and visual grammar tests** - still required for any
+   VPM-labeled projection. The existing GIC Continuity Ledger is a ZKBA
+   compiler target, not an active VPM artifact, until VPM wrapper manifests
+   and Integrity Label tests exist.
 
-Until all four gates close, VBDIP-0002 is a sidecar specification. The
+Until all remaining gates close, VBDIP-0002 is a sidecar specification. The
 methodology surface assumes the specification is `read-only context`, not
 `active discipline`.
 
@@ -89,6 +97,22 @@ the operator must resolve numbering by one of:
 Until that decision is made, this file is a sidecar FROZEN-SPEC candidate,
 not an active lineage mutation. See Section 17 Decision Block K1 and
 Section A.13.
+
+### 1.4 VBDIP-0002A Relationship
+
+VBDIP-0002A (`vsd-vault/proposals/drafts/VBDIP-0002A-verified-projection-media.DRAFT.md`)
+is a documentation-only draft sidecar that generalizes HTML and ZKBA
+projection outputs into the broader **Verified Projection Media (VPM)** media
+category.
+
+This relationship is hierarchical, not substitutive:
+
+- VBDIP-0002 remains the ZKBA artifact specification.
+- VBDIP-0002A defines a future VPM wrapper layer over existing ZKBA and proof
+  manifests.
+- `vapi-zkba-manifest-v1` remains frozen and unchanged.
+- VPM wrapper manifests are not operational authority until VBDIP-0002A is
+  reconciled, Integrity Label tests exist, and governance authorizes use.
 
 ---
 
@@ -1014,43 +1038,50 @@ tier-downgrade transparency cards.
 
 VBDIP-0002 is not operationally active until all gates below clear:
 
-1. **VBDIP-0001 FROZEN** - VAD / VSD / VED / VBD framework foundation
-   accepted; allowlist v3 published; `--proposal-type=bridge` harness
-   mode live.
+1. **VBDIP-0001 FROZEN** - SATISFIED. VAD / VSD / VED / VBD framework
+   foundation accepted; deployer-anchored architect signing chain live;
+   `--proposal-type=bridge` / `--proposal-type=all` harness modes live.
 
 2. **Numbering Decision Resolved** - Operator resolves N1 / N2 / N3 per
    Section 1.3 (this proposal owns VBDIP-0002, OR is renumbered to
    VBDIP-0003+, OR remains indefinite sidecar).
 
-3. **Compiler Harness Implemented** - Deterministic compiler
-   (`vsd_ui_compiler.py` or successor) exists; projection-manifest tests
-   pass; Section 9.3 visual honesty tests pass.
+3. **Compiler Harness Implemented** - PARTIALLY SATISFIED for Track 1.
+   Deterministic compiler (`scripts/vsd_ui_compiler.py`) exists and
+   GIC Continuity Ledger deterministic-output tests pass. Full gate closure
+   still requires the complete projection-manifest and Section 9.3 visual
+   honesty tests for the active artifact set.
 
 4. **ZKBA Manifest Schema Validated** - Schema `zkba.projection_manifest.v1`
    validates all required artifact layers and proof-weight fields against
    representative artifacts of all seven Section 5 classes.
 
-5. **AgentScope / Cedar Permissions Authorized** - Sentry, Guardian, and
+5. **VPM Wrapper / Integrity Label Reconciled** - If VBDIP-0002A is adopted,
+   VPM wrapper schema `vapi-vpm-manifest-v1`, Integrity Nutrition Label
+   fields, lifecycle states, and VPM visual grammar tests must exist before
+   any artifact is called an active VPM.
+
+6. **AgentScope / Cedar Permissions Authorized** - Sentry, Guardian, and
    Curator each have phase-appropriate Cedar policies on chain authorizing
    their Section 8 lane actions.
 
-6. **Curator Review Readiness** - Curator can classify proof weight,
+7. **Curator Review Readiness** - Curator can classify proof weight,
    detect visual dishonesty, and recommend quarantine without mutating
    anchors or consent state. Phase 238-DRAFT-REVIEW-FRONTEND surface
    confirmed compatible.
 
-7. **Internal Projection First** - GIC Continuity Ledger (Section 10.1)
+8. **Internal Projection First** - GIC Continuity Ledger (Section 10.1)
    and CDRR DAG (Section 10.3) ship before consumer ZKBA Market Card
    (Section 10.4).
 
-8. **Numbering Decision Applied** - Per Section 1.3, operator has resolved
+9. **Numbering Decision Applied** - Per Section 1.3, operator has resolved
    N1 / N2' / N3 and this proposal's canonical number is pinned at
    activation. Sidecar status terminates at this gate; the proposal
    transitions to a numbered lineage member with stable cross-references
    that downstream documents can cite.
 
 Any single unmet gate keeps VBDIP-0002 in sidecar / FROZEN-SPEC state.
-All eight gates clearing transitions the proposal to `OPERATIONALLY ACTIVE`
+All nine gates clearing transitions the proposal to `OPERATIONALLY ACTIVE`
 under its lineage successor (VBDIP-0002 or VBDIP-0004+ per the N decision).
 
 ---
@@ -1436,18 +1467,21 @@ applied per operator review)
 **Tags:** `#vbdip #zkba #html-projection #visual-honesty #proof-weight #curator #depin #iotex #vad #vsd #ved #vbd #appendix-extensions #revised-r1`
 **Operational status:** Sidecar specification only; not operationally active.
 **Numbering status:** Pending operator resolution (N1 / N2' / N3 per Section 1.3; N2 retired because VBDIP-0001 §3.3 reserves VBDIP-0003).
-**Dependency:** VBDIP-0001 must reach FROZEN state before activation.
-**Next action:** Operator may authorize implementation per PLAN-VBDIP-0002-ZKBA-PARALLEL-v1 (Track 1 wallet-free scaffold) after VBDIP-0001 freeze, OR keep this file as a sidecar pending numbering resolution.
+**Dependency:** VBDIP-0001 FROZEN dependency satisfied; activation remains blocked by the remaining Section 16 gates.
+**VBDIP-0002A relationship:** Verified Projection Media draft sidecar exists at `vsd-vault/proposals/drafts/VBDIP-0002A-verified-projection-media.DRAFT.md`; documentation-only, not operational authority.
+**Next action:** Operator may resolve numbering and authorize remaining activation work, OR keep this file as a sidecar pending numbering resolution and VPM reconciliation.
 
 **Status transition log:**
 
 - 2026-05-10: Initial draft authored (700 lines, hash `1ffdd22a1f793215...8de5a8`)
 - 2026-05-10: Enhanced to v1.0 with 17-section ordering + Appendix A forward-looking extensions (1,433 lines, hash `6531e1a9...3d36c`)
 - 2026-05-10: r1 docs-only revision applied (E1–E12 batch per operator review — numbering 0003 reservation surfaced; ZKBA-LISTING → ZKBA-MARKET consolidation; freshness_window + capture_ts_ns schema fields added; `lane` field removed from v1.0 schema (deferred to v1.1 per A.12); DEMO 15% pin mirrored in §6.5; APOP hybrid-mode qualifier added; trust-model reframe in §12.3; activation gate #8 numbering resolution added; ZKBA-DUAL-ANCHOR post-O3 phase qualifier added; W3bstream applet status clarified to code-complete-stubs)
+- 2026-05-11: r2 docs-only cross-reference applied for VBDIP-0002A Verified Projection Media (VPM) sidecar; VBDIP-0001 and Track 1 compiler status updated; VPM wrapper remains draft-only and not operational authority
 - (pending): Operator review of Section 17 K1-K7 decision blocks
 - (pending): Operator resolution of Section 1.3 N1 / N2' / N3 numbering decision
-- (pending): VBDIP-0001 FROZEN (gate 16.1)
-- (pending): Compiler harness implementation (gate 16.3)
+- (satisfied): VBDIP-0001 FROZEN (gate 16.1)
+- (partially satisfied): Compiler harness implementation for Track 1 (`scripts/vsd_ui_compiler.py`; gate 16.3 remains open for full visual honesty coverage)
+- (pending): VBDIP-0002A VPM wrapper / Integrity Label reconciliation (gate 16.5)
 - (pending): VBDIP-0002 activation under resolved numbering successor
 
 **Supersession discipline:** VBDIP-0002 v1.0 is a foundational sidecar.
