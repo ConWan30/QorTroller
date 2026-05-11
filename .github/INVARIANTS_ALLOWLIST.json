@@ -251,6 +251,18 @@
     "digest": "66e9174897d838e70a00b1490b769874cfdf752fb5cedb80b27e35f0722d7d6d",
     "description": "Phase O3-READINESS-DASHBOARD O3ReadinessDrawer zIndex 22 (top-center) preserved \u2014 TOP of the three-drawer ordering above DraftReviewDrawer (21) and OperatorAgentsDrawer (20); ensures the strategic readiness view always layers correctly when multiple drawers are open (Phase O3-UI-LAYOUT-LOCK)"
   },
+  "INV-ZKBA-001": {
+    "digest": "d86d3109a2264bc916f40398827f06209af9abb2cb6df86b42be5eb56a7744e0",
+    "description": "compute_zkba_commitment function exists in bridge/vapi_bridge/zkba_artifact.py \u2014 the tenth FROZEN-v1 primitive compute function (Phase O3-ZKBA-TRACK1 C2; PATTERN-017 #10 per VBDIP-0001 \u00a77 canonical convention)"
+  },
+  "INV-ZKBA-002": {
+    "digest": "00e14db6128d3f8420b82ce4a3be88473f209f2b1071966c2d587011368aa158",
+    "description": "VAPI-ZKBA-ARTIFACT-v1 domain tag literal pinned in bridge/vapi_bridge/zkba_artifact.py \u2014 FROZEN-v1 21-byte domain separator for the ZKBA primitive pre-image; uniqueness verified against 11 pre-existing VAPI-*-v1 tags at C2 ship time (Phase O3-ZKBA-TRACK1)"
+  },
+  "INV-ZKBA-003": {
+    "digest": "ff0059e5ab16cf884f8c90c50d69b011acc33a1cc047b08d181ee434d5dd3f92",
+    "description": "vapi-zkba-manifest-v1 manifest schema string pinned in scripts/vsd_ui_compiler.py \u2014 FROZEN at v1.0 per VBDIP-0002 \u00a79.2; identifies the projection manifest schema version that the deterministic UI compiler emits (Phase O3-ZKBA-TRACK1 C3)"
+  },
   "VBD-INV-001": {
     "digest": "d4c6a0911f2b4fab490a9bdb2600435236e386444518c7d9f92799f9ac656ae6",
     "description": "Continuous deployer-verified provenance under fleet expansion \u2014 bridge wallet 0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692 is the load-bearing identity anchor for all VAPI work across all sub-disciplines; check_vbd_inv_1 signature documented in VBDIP-0001 \u00a74.1 (markdown-normative; programmatic check deferred to VBDIP-0003)"
