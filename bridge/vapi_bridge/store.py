@@ -3484,6 +3484,54 @@ class Store:
         except Exception:
             pass  # idempotent
 
+        # Phase O3-ZKBA-TRACK1 — Zero-Knowledge Biometric Artifact (ZKBA) log.
+        # Tenth FROZEN-v1 primitive in PATTERN-017 family (pending VBDIP-0001
+        # Step 3 Amendment #1 count reconciliation).  Each row binds:
+        #   - zkba_class (1 of 7 from VBDIP-0002 §5)
+        #   - proof_weight (1 of 6 from VBDIP-0002 §6)
+        #   - sorted component hashes (composed FROZEN-v1 primitives)
+        #   - ts_ns
+        # into one 32-byte commitment via compute_zkba_commitment().
+        # UNIQUE(commitment_hex) enforces idempotent insert.  anchor_tx_hash
+        # NULL throughout Track 1 (no chain submission in pre-activation scope
+        # per PLAN-VBDIP-0002-ZKBA-PARALLEL-v1 §4; populated by future Stream A3
+        # parallel_zkba_anchor.py after VBDIP-0001 FROZEN).
+        try:
+            with self._conn() as conn:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS zkba_artifact_log (
+                        id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+                        commitment_hex           TEXT NOT NULL,
+                        zkba_class               INTEGER NOT NULL,
+                        proof_weight             INTEGER NOT NULL,
+                        preimage_json            TEXT NOT NULL DEFAULT '[]',
+                        ts_ns                    INTEGER NOT NULL,
+                        manifest_uri             TEXT,
+                        compiler_output_hash_hex TEXT,
+                        anchor_tx_hash           TEXT,
+                        created_at               REAL NOT NULL
+                    )
+                """)
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_zkba_artifact_log_ts "
+                    "ON zkba_artifact_log(ts_ns DESC)"
+                )
+                conn.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_zkba_artifact_log_commit "
+                    "ON zkba_artifact_log(commitment_hex)"
+                )
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_zkba_artifact_log_class "
+                    "ON zkba_artifact_log(zkba_class, ts_ns DESC)"
+                )
+                conn.execute(
+                    "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                    " VALUES (?, ?, ?)",
+                    (1100, "zkba_artifact_log", time.time()),
+                )
+        except Exception:
+            pass  # idempotent
+
         # Phase O1 C1 — operator_agent_activation_log table.
         # Mirrors the on-chain AgentScopeRootSet + AgentScopeUpdated events
         # for each Cedar bundle anchor cycle (D4 dual-anchor).  UNIQUE
@@ -15640,6 +15688,76 @@ class Store:
                 "       separation_ratio, corpus_n, ts_ns, on_chain_confirmed, "
                 "       trigger_reason, created_at "
                 "FROM corpus_snapshot_log ORDER BY ts_ns DESC LIMIT ?",
+                (int(limit),),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    # --- Phase O3-ZKBA-TRACK1: ZKBA artifact log (PATTERN-017 family) ---
+
+    def insert_zkba_artifact(
+        self,
+        *,
+        zkba_class: int,
+        proof_weight: int,
+        commitment_hex: str,
+        preimage_json: str,
+        ts_ns: int,
+        manifest_uri: str | None = None,
+        compiler_output_hash_hex: str | None = None,
+    ) -> int:
+        """Insert one ZKBA artifact row. Returns row id.
+
+        UNIQUE(commitment_hex) enforced — re-inserting the same commitment
+        returns the existing row id (matches corpus_snapshot_log idempotency
+        precedent).  anchor_tx_hash is intentionally NOT writable in Track 1
+        (populated by Stream A3 parallel_zkba_anchor.py post-activation).
+        """
+        try:
+            with self._conn() as conn:
+                cur = conn.execute(
+                    "INSERT INTO zkba_artifact_log "
+                    "(commitment_hex, zkba_class, proof_weight, preimage_json, "
+                    " ts_ns, manifest_uri, compiler_output_hash_hex, "
+                    " anchor_tx_hash, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)",
+                    (
+                        str(commitment_hex), int(zkba_class), int(proof_weight),
+                        str(preimage_json), int(ts_ns),
+                        str(manifest_uri) if manifest_uri is not None else None,
+                        str(compiler_output_hash_hex) if compiler_output_hash_hex is not None else None,
+                        time.time(),
+                    ),
+                )
+                return int(cur.lastrowid)
+        except Exception:
+            # Likely UNIQUE collision — return the existing row id
+            with self._conn() as conn:
+                row = conn.execute(
+                    "SELECT id FROM zkba_artifact_log WHERE commitment_hex = ?",
+                    (str(commitment_hex),),
+                ).fetchone()
+            return int(row["id"]) if row else 0
+
+    def get_zkba_artifact_status(self, commitment_hex: str) -> dict | None:
+        """Return one ZKBA artifact row by commitment_hex, or None."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT id, commitment_hex, zkba_class, proof_weight, "
+                "       preimage_json, ts_ns, manifest_uri, "
+                "       compiler_output_hash_hex, anchor_tx_hash, created_at "
+                "FROM zkba_artifact_log WHERE commitment_hex = ?",
+                (str(commitment_hex),),
+            ).fetchone()
+        return dict(row) if row is not None else None
+
+    def get_zkba_artifact_history(self, limit: int = 20) -> list[dict]:
+        """Return last N ZKBA artifacts in DESC ts_ns order (newest first)."""
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT id, commitment_hex, zkba_class, proof_weight, ts_ns, "
+                "       manifest_uri, compiler_output_hash_hex, anchor_tx_hash, "
+                "       created_at "
+                "FROM zkba_artifact_log ORDER BY ts_ns DESC LIMIT ?",
                 (int(limit),),
             ).fetchall()
         return [dict(r) for r in rows]
