@@ -1,0 +1,17 @@
+# SECURITY-CRITICAL: never commit private key material
+#
+# The architect Ed25519 private key (architect_key.pem) lives locally
+# only.  The public key portion is extracted to architect_pubkey.pem
+# (safe to commit) and anchored cryptographically via the bridge-wallet
+# attestation at eval/architect_key_attestation.json.
+#
+# Loss of architect_key.pem requires a key-rotation procedure
+# (Procedure-VSD-K1 per VBDIP-0001 §5.1 strengthening A.5.5; defined in
+# eval/PROCEDURES.md once Stream A.5 ships VSDIP-0003).
+
+architect_key.pem
+*.pem.key
+*-key.pem
+
+# Any private-key-shaped artifact must never enter git history
+**/.*private*.pem

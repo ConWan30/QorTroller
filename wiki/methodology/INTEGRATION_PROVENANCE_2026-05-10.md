@@ -448,18 +448,44 @@ in Step 3 (the "no in-place amendments to historical records" discipline
 preserves the phase-boundary witness pattern). Current state assertions
 for CLAUDE.md happen in Z9 sync of PLAN-VBDIP-0002-ZKBA-PARALLEL-v1.
 
-### 7.4 Step 4 — Architect Key + Bridge Wallet Attestation (pending)
+### 7.4 Step 4 — Architect Key + Bridge Wallet Attestation (landed)
 
-Reserved. To be appended after Step 4 atomic commit.
+Step 4 atomic commit applied 2026-05-10. Deployer-anchored signing chain
+established per VBD-INV-1 (continuous deployer-verified provenance).
+Architect Ed25519 private key remains LOCAL ONLY (gitignored via
+`vsd-vault/.gitignore`); architect public key + signature attestation
+committed to canonical tree.
 
-Required entries:
-- SHA-256 of `vsd-vault/architect_key.pem` public key portion (private
-  key never hashed in manifest — file remains gitignored or stored
-  out-of-tree per operator preference)
-- SHA-256 of `vsd-vault/eval/architect_key_attestation.json`
-- Bridge wallet address that signed the attestation (must equal
-  `0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692`)
-- Recovered address from signature verification (must match)
+| Field | Value |
+|-------|-------|
+| Architect Ed25519 public key (32B raw hex) | `056e695f2995070198a0db1a6c264d8234fb88bf5cf6332c354f58a096a78ca8` |
+| SHA-256 of architect public key bytes | `5f37e4322db987ce5b97f11e622eef88f5611caa0d58cbe492c83df1ea860e96` |
+| Bridge wallet address (signer) | `0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692` |
+| Recovered address (signature verification) | `0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692` (MATCHES expected) |
+| Signing method | EIP-191 (`eth_account.Account.sign_message` over canonical JSON envelope) |
+| Attestation timestamp (ts_ns, uint64) | `1778468776325676600` |
+| Attestation purpose tag (FROZEN at v1.0) | `vsd-architect-key-anchor-v1` |
+| Envelope canonical SHA-256 | `ce3f74be4715a2e0f109090d67c2cd99e3776a13148cf70016c5ff5b9dfcdf2d` |
+| Attestation file path | `vsd-vault/eval/architect_key_attestation.json` |
+| Attestation canonical SHA-256 | `14ad3970d592bd00a8cdc13bc7ff45e4ece209c692b8f7cd7389740992a1307a` |
+| Signature (EIP-191; 65 bytes hex with `0x` prefix) | `0xb21a94de29f642f4282366e937d66ab6c92054597a225754ee2b469ecf2b64f867067c75bee2528693816a6bde0033b93346c128f5f21195e5720fc574c673731b` |
+| Architect private key file path | `vsd-vault/architect_key.pem` — **GITIGNORED**; NEVER committed |
+| Architect public key file path | `vsd-vault/architect_pubkey.pem` — gitignored by root `.gitignore:82 (*.pem)` rule; convenience artifact; pubkey hex is the canonical reference and IS recorded in the attestation JSON committed at the path above |
+
+Security properties (verified post-execution):
+
+- `vsd-vault/architect_key.pem` is gitignored via `vsd-vault/.gitignore` line 12. `git check-ignore` confirms.
+- Bridge wallet private key (`BRIDGE_PRIVATE_KEY` in `bridge/.env`) was read once for signing, never echoed, never persisted by the attestation script.
+- The attestation envelope is canonical-JSON sorted-key encoded; signature is reproducible by any future verifier who:
+  1. Reads the architect pubkey hex from the attestation JSON
+  2. Reconstructs the envelope: `{architect_pubkey_ed25519, attested_at_ts_ns, purpose, bridge_wallet_address}` with sorted keys + tight JSON separators
+  3. Encodes via EIP-191 (`encode_defunct`)
+  4. Calls `Account.recover_message(message, signature)` with the recorded signature
+  5. Confirms recovered address equals `0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692`
+
+The attestation script (`scripts/vsd_attest_architect_key.py`) is committed alongside the attestation JSON to enable reproducibility from raw inputs.
+
+This signature is the root of the deployer-anchored signing chain. All future architect-Ed25519-signed methodology artifacts inherit trust from this attestation. Any change to the architect key (rotation) requires Procedure-VSD-K1 (defined in `vsd-vault/eval/PROCEDURES.md` once Stream A.5 of Phase O1-VSD-BOOTSTRAP ships VSDIP-0003) and a new attestation with a forward-reference to this one in the rotation chain.
 
 ### 7.5 Step 5 — VBDIP-0001 Freeze (pending)
 
