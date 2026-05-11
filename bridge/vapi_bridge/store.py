@@ -15762,6 +15762,63 @@ class Store:
             ).fetchall()
         return [dict(r) for r in rows]
 
+    def get_zkba_artifact_summary(self) -> dict:
+        """Phase O3-ZKBA-TRACK1 (post-C5) — aggregate stats over zkba_artifact_log.
+
+        Returned dict shape (matches VAPIZKBA.status() SDK wire contract at
+        sdk/vapi_sdk.py:9272-9283):
+
+            {
+                "total_artifacts":        int,
+                "anchored_count":         int,        # rows with anchor_tx_hash IS NOT NULL
+                "track1_invariant_holds": bool,        # anchored_count == 0 holds across Track 1
+                "class_breakdown":        {zkba_class_int: count_int, ...},
+                "latest":                 dict | None,  # newest row (DESC ts_ns) or None
+            }
+
+        Reads only — no mutation.  Fail-open on DB errors via outer try/except
+        returning the zero-state shape (total=0, anchored=0, holds=True,
+        breakdown={}, latest=None).
+        """
+        try:
+            with self._conn() as conn:
+                total_row = conn.execute(
+                    "SELECT COUNT(*) AS n FROM zkba_artifact_log"
+                ).fetchone()
+                anchored_row = conn.execute(
+                    "SELECT COUNT(*) AS n FROM zkba_artifact_log "
+                    "WHERE anchor_tx_hash IS NOT NULL"
+                ).fetchone()
+                breakdown_rows = conn.execute(
+                    "SELECT zkba_class, COUNT(*) AS n FROM zkba_artifact_log "
+                    "GROUP BY zkba_class"
+                ).fetchall()
+                latest_row = conn.execute(
+                    "SELECT id, commitment_hex, zkba_class, proof_weight, ts_ns, "
+                    "       manifest_uri, compiler_output_hash_hex, anchor_tx_hash, "
+                    "       created_at "
+                    "FROM zkba_artifact_log ORDER BY ts_ns DESC LIMIT 1"
+                ).fetchone()
+            total = int(total_row["n"]) if total_row else 0
+            anchored = int(anchored_row["n"]) if anchored_row else 0
+            breakdown = {int(r["zkba_class"]): int(r["n"]) for r in breakdown_rows}
+            latest = dict(latest_row) if latest_row is not None else None
+            return {
+                "total_artifacts":        total,
+                "anchored_count":         anchored,
+                "track1_invariant_holds": anchored == 0,
+                "class_breakdown":        breakdown,
+                "latest":                 latest,
+            }
+        except Exception:
+            return {
+                "total_artifacts":        0,
+                "anchored_count":         0,
+                "track1_invariant_holds": True,
+                "class_breakdown":        {},
+                "latest":                 None,
+            }
+
     # --- Phase 237-ZK-SEPPROOF: BIOMETRIC-SNAPSHOT-v1 anchor history ---
 
     def insert_biometric_snapshot(
