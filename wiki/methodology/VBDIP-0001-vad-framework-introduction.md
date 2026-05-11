@@ -205,13 +205,13 @@ The following past work is retroactively documented as VED-governed:
 
 The eighteen Phase O0 commits across five streams (Phase O0 closure 2026-05-03, 44 total commits at close, final commit `44c26ce0`) executed under VED discipline — V-checks, P-checks, atomic commits, Decision blocks, hold-for-approval gates. VEDIP-0001 will retroactively document this work.
 
-The Phase O1-FRR-PARALLEL ship (commit `4ddeb43c`) executed under VED discipline, with the FRR primitive shipping as the ninth FROZEN-v1 primitive in PATTERN-017. VEDIP-0001 will document the FRR primitive and the ship.
+The Phase O1-FRR-PARALLEL ship (commit `4ddeb43c`) executed under VED discipline, with the FRR primitive shipping as the ninth FROZEN-v1 primitive in PATTERN-017 (under the canonical convention defined in §7 — PoAC is #1, FRR is #9, ZKBA-ARTIFACT is #10 post-Phase-O3-ZKBA-TRACK1 C2). VEDIP-0001 will document the FRR primitive and the ship.
 
 The Stream J commit (`79dacc88`) closing the canonical-name versus Q9-hex schema mismatch and the `next_alignment_target` misresolution executed under VED discipline, with regression test T-O1-FRR-7 locking both fixes. VEDIP-0001 will document the Stream J empirical findings as a verification-gap finding per VSD-INV-19, with the synthesis-side artifact authored as a VSD `adversarial/` note that references VEDIP-0001 as the engineering-side closure.
 
 The parallel O2 SUGGEST anchor (commit `2cde36a3`) executed under VED discipline, advancing the three Operator Initiative agents to O2_SUGGEST on chain. VEDIP-0001 will document the parallel O2 anchor as the most recent VED ship boundary at VBDIP-0001 freeze.
 
-The existing 55 PV-CI invariants are retroactively prefixed as VED-INV-1 through VED-INV-55 in documentation, mapping one-to-one onto the existing IDs in `.github/INVARIANTS_ALLOWLIST.json` `protocol:` section. The allowlist file structure does not change; the prefix mapping lives in VEDIP-0001's documentation.
+The existing PV-CI invariants (55 at VBDIP-0001 authoring; 63 at the methodology integration resumption per `.github/INVARIANTS_ALLOWLIST.json` count) are retroactively counted as VED-INV-N in documentation, where N is the methodology-doc count abstraction. **VED-INV-N is a documentation-only count abstraction, not a rename of the underlying allowlist IDs.** The allowlist file retains its existing per-invariant naming (e.g., `INV-FRR-001`, `INV-OPERATOR-AGENT-001`, `INV-ZKBA-002`); no code or allowlist-file rename is performed under VED prefix. Future allowlist invariants continue to use their phase-anchored IDs; "VED-INV-N" appears only in methodology cross-references where a count abstraction is useful. The allowlist file structure does not change.
 
 ### 5.2 VBD Retrospective Scope
 
@@ -221,7 +221,7 @@ The cross-fleet skill-separation discipline authored in Volume 2 §20.1 as INV-C
 
 The unified harness extension authored in Volume 2 §22 (the `--proposal-type` flag introduction extending `vapi_invariant_gate.py` to serve both protocol and synthesis invariants from a single binary) has been a VBD mechanism since Volume 2 freeze. VBDIP-0001 §3.4 retroactively names this as VBD-governed and extends it to four choices.
 
-The CDRR primitive authored in Volume 2 §19.2 as the eleventh FROZEN-v1 primitive in PATTERN-017 has been a VBD primitive since Volume 2 freeze. VBDIP-0001 §4.3 (VBD-INV-3 primitive composition discipline) retroactively documents CDRR's role as the load-bearing example of the composition discipline.
+The CDRR primitive authored in Volume 2 §19.2 as the twelfth FROZEN-v1 primitive in PATTERN-017 (under the canonical convention defined in §7 — twelfth because ZKBA-ARTIFACT was inserted between FRR and VRR at #10) has been a VBD primitive since Volume 2 freeze. VBDIP-0001 §4.3 (VBD-INV-3 primitive composition discipline) retroactively documents CDRR's role as the load-bearing example of the composition discipline.
 
 The fleet-domain replication discipline named informally in Volume 2 §25 (the observation that adding a new operator domain is structurally equivalent to adding a new agent within an existing domain) has been a VBD architectural property since Volume 2 freeze. VBD-INV-2 retroactively encodes it as a harness-checkable invariant.
 
@@ -273,7 +273,7 @@ Three VBD invariants (VBD-INV-1, VBD-INV-2, VBD-INV-3) are encoded into the harn
 
 Note types remain at twelve under VSD. No new note types are introduced under VBD at VBDIP-0001 freeze. Future VBDIPs may introduce a `notes/bridge/` type if composition findings between sub-disciplines warrant their own artifact type; this is deferred.
 
-PATTERN-017 cryptographic primitive family count remains at eleven (the eight pre-Volume-2 primitives plus FRR, VRR, CDRR). VBDIP-0001 does not introduce new primitives; it documents the composition discipline that governs the existing family.
+PATTERN-017 cryptographic primitive family count is canonically tracked as twelve post-bootstrap. Canonical convention: PATTERN-017 includes SHA-256 commitment primitives with explicit or implicit domain separation used as VAPI's chain-anchored proof commitments. The family consists of PoAC (Phase 1, implicit slice [0:164]), GIC (Phase 235-A), WEC (Phase 236-WATCHDOG), VAME (Phase 236-VAME), CORPUS-SNAPSHOT (Phase 236-CORPUS-SNAPSHOT), CONSENT (Phase 237-CONSENT), BIOMETRIC-SNAPSHOT (Phase 237-ZK-SEPPROOF), LISTING-v1 (Phase 238-MARKETPLACE), FRR (Phase O1-FRR-PARALLEL, commit `4ddeb43c`), and ZKBA-ARTIFACT (Phase O3-ZKBA-TRACK1 C2, commit `625007ab`). Ten pre-bootstrap shipped FROZEN-v1 modules; twelve post-bootstrap with VRR + CDRR (Volume 2 §19.1 + §19.2). The family EXCLUDES parser-schema tags (CEDAR-BUNDLE-v1 in `cedar_parser.py`) and Pass 2C operator-track primitives (AGENT-COMMIT-v1, PHYSICAL-DATA-ATTESTATION-v1) which form a distinct primitive lineage. VBDIP-0001 does not introduce new primitives; it documents the composition discipline that governs the existing family. VBDIP-0002 ships ZKBA-ARTIFACT as the tenth member.
 
 Wallet impact at VBDIP-0001 freeze: zero. The architect Ed25519 signature over this proposal is gas-free per V2 verification in the bootstrap prompt. No on-chain transactions execute as part of VBDIP-0001 freeze.
 

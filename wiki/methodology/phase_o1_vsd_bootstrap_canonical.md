@@ -14,17 +14,19 @@
 
 This prompt is the canonical execution target for Phase O1-VSD-BOOTSTRAP. Future-Claude reading this document executes the bootstrap as specified. State references are authoritative-as-of 2026-05-10 and ground-truth from `CLAUDE.md` + on-chain reads, not from any earlier prompt's stale snapshot.
 
-**Current protocol state (verify via `mcp__vapi__vapi_protocol_state` at execution time):**
+**Current protocol state (verify via `mcp__vapi__vapi_protocol_state` at execution time; values below refreshed by VBDIP-0001 Step 3 Amendment #4 on 2026-05-10):**
 
 - Phase O1-FRR-PARALLEL ship complete; commits `4ddeb43c`, `79dacc88`, `2cde36a3` on `origin/main`
-- All three Operator Initiative agents (Sentry + Guardian + Curator) at `O2_SUGGEST` on chain (verified via `chain.get_agent_scope_root()` direct reads 2026-05-10)
+- Phase O3-ZKBA-TRACK1 C1 + C2 shipped 2026-05-10 in parallel with VBDIP-0001 integration (commits `3df5e59f`, `625007ab` local; not pushed)
+- VBDIP-0001 integration Step 1 + Step 2 committed locally (commits `2aea877a`, `69ac74d2`); Step 3 (this amendment), Step 4, Step 5 pending
+- All three Operator Initiative agents (Sentry + Guardian + Curator) at `O2_SUGGEST` on chain (verified via `chain.get_agent_scope_root()` direct reads 2026-05-10; O3-readiness shadow_age clock advancing toward 504h)
 - Phase O0 ON-CHAIN REGISTRATION COMPLETE 2026-05-03 (commit `44c26ce0`); pause-point `f8c577ab` is historical, not active
-- 49 contracts LIVE on IoTeX testnet
-- 55 PV-CI invariants (will become 78 if v2.0 SOF fleet ships at Stream H)
-- Bridge tests 2836 passing
-- Wallet `0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692` balance ~15.262626 IOTX (38× margin against 0.39 IOTX bootstrap impact)
-- Nine FROZEN-v1 cryptographic primitives in PATTERN-017 family; v2.0 ships VRR + CDRR as #10 + #11
-- Three live MCP servers (`vapi`, `vapi-knowledge`, `vapi-unified`); v2.0 §21 adds 10 new VSD tools
+- 49 contracts LIVE on IoTeX testnet (deployed-addresses.json contains 51 entries; 2-entry discrepancy deferred per Step 1 Decision B(c))
+- **63 PV-CI invariants** at integration resumption (was 55 at VBDIP-0001 authoring; +8 shipped between authoring and integration); will become 78 if v2.0 SOF fleet ships at Stream H, plus +3 INV-ZKBA-* at Stream Z8 (66 post-Track-1-C5)
+- **Bridge tests 2922 passing** at integration resumption (was 2836 at VBDIP-0001 authoring; +86 shipped between authoring and integration); +7 unique ZKBA primitive tests at Phase O3-ZKBA-TRACK1 C2 (2929 post-C2)
+- Wallet `0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692` balance ~15.44 IOTX (38× margin against 0.39 IOTX bootstrap impact)
+- **Ten FROZEN-v1 cryptographic primitives shipped** in PATTERN-017 family (PoAC + GIC + WEC + VAME + CORPUS-SNAPSHOT + CONSENT + BIOMETRIC-SNAPSHOT + LISTING-v1 + FRR + ZKBA-ARTIFACT; canonical convention per VBDIP-0001 §7); v2.0 ships VRR + CDRR as #11 + #12 (post-bootstrap total 12)
+- Three live MCP servers (`vapi`, `vapi-knowledge`, `vapi-unified`); v2.0 §21 adds 10 new VSD tools; VBDIP-0002 C4 adds 3 new ZKBA tools
 
 **Authorization commit boundary:** Phase O1-VSD-BOOTSTRAP is a parallel architectural workstream. It does not modify any FROZEN-v1 primitive (v2.0's VRR + CDRR are NEW primitives, not modifications of existing). It does not modify the existing 55 PV-CI invariants (v2.0 ADDS 23 VSD invariants). It does not redeploy any of the 49 LIVE contracts. It mints THREE new operator agent NFTs on existing `VAPIOperatorAgentNFT` (no new contract deploy required). It extends `bridge/vapi_bridge/operator_initiative_advancement.py`, `bridge/vapi_bridge/store.py`, `bridge/vapi_bridge/chain.py` (already extended Phase O1-FRR Stream J), `scripts/vapi_invariant_gate.py`, and the three MCP server files.
 
