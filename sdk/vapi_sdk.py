@@ -78,7 +78,7 @@ for _d in [str(_CONTROLLER_DIR), str(_BRIDGE_DIR)]:
 # Protocol constants (PoAC spec — immutable)
 # ---------------------------------------------------------------------------
 
-SDK_VERSION       = "3.0.0-phase-o1-frr-sdk"
+SDK_VERSION       = "3.1.0-phase-o3-zkba-track1-c4-sdk"
 POAC_RECORD_SIZE  = 228
 POAC_BODY_SIZE    = 164
 POAC_SIG_SIZE     = 64
@@ -9165,4 +9165,175 @@ class VAPIFleetReadinessRoot:
                     error                                 = raw.get("error"),
                 )
         return None
+
+
+# === Phase O3-ZKBA-TRACK1 C4 SDK (2026-05-10) ==================================
+# VAPIZKBA — Zero-Knowledge Biometric Artifact client (tenth FROZEN-v1
+# primitive in PATTERN-017 per VBDIP-0001 §7 canonical convention).
+#
+# Wraps the GET endpoints that surface zkba_artifact_log state. The bridge
+# HTTP endpoints (/operator/zkba-status, /operator/zkba-artifact/<hex>,
+# /operator/zkba-history) ship in a future commit; this SDK class provides
+# the wire-contract surface NOW so external tooling can build against it,
+# with fail-open behavior (matches VAPIDraftReview / VAPIFleetReadinessRoot
+# pattern: methods return Result dataclass with .error populated; never raise).
+
+@dataclass(slots=True)
+class ZKBAStatusResult:
+    """Result from VAPIZKBA.status (Phase O3-ZKBA-TRACK1 C4)."""
+    total_artifacts:        int        = 0
+    anchored_count:         int        = 0
+    track1_invariant_holds: bool       = True
+    class_breakdown:        dict       = field(default_factory=dict)
+    latest_commitment_hex:  str        = ""
+    latest_zkba_class:      int        = 0
+    latest_proof_weight:    int        = 0
+    latest_ts_ns:           int        = 0
+    frozen_v1_position:     int        = 10
+    domain_tag:             str        = "VAPI-ZKBA-ARTIFACT-v1"
+    error:                  "str|None" = None
+
+
+@dataclass(slots=True)
+class ZKBAArtifactResult:
+    """Result from VAPIZKBA.get_artifact (Phase O3-ZKBA-TRACK1 C4)."""
+    commitment_hex:           str        = ""
+    found:                    bool       = False
+    zkba_class:               int        = 0
+    proof_weight:             int        = 0
+    preimage_json:            str        = ""
+    ts_ns:                    int        = 0
+    manifest_uri:             str        = ""
+    compiler_output_hash_hex: str        = ""
+    anchor_tx_hash:           "str|None" = None
+    created_at:               float      = 0.0
+    error:                    "str|None" = None
+
+
+@dataclass(slots=True)
+class ZKBAHistoryResult:
+    """Result from VAPIZKBA.history (Phase O3-ZKBA-TRACK1 C4)."""
+    limit:     int        = 20
+    row_count: int        = 0
+    rows:      list       = field(default_factory=list)
+    error:     "str|None" = None
+
+
+class VAPIZKBA:
+    """Client for the ZKBA artifact endpoints (Phase O3-ZKBA-TRACK1 C4).
+
+    ZKBA = Zero-Knowledge Biometric Artifact, the tenth FROZEN-v1 primitive
+    in the PATTERN-017 family per VBDIP-0001 §7 canonical convention.
+
+    Three methods wrap the future ZKBA bridge endpoints:
+      - status()          GET /operator/zkba-status
+      - get_artifact(hex) GET /operator/zkba-artifact/<commitment_hex>
+      - history(limit=20) GET /operator/zkba-history?limit=N
+
+    Read-key auth (x-api-key Header). Fail-open: every error path returns
+    the dataclass with .error populated and never raises (matches
+    VAPIDraftReview / VAPIFleetReadinessRoot pattern).
+
+    At C4 commit time, the bridge HTTP endpoints are NOT yet shipped — all
+    calls return Result with .error set (typical: connection refused or
+    404). The SDK exists to lock the wire-contract surface so external
+    tooling can build against it; the bridge endpoints will ship in a
+    follow-up commit (or as part of VBDIP-0002 Track 2 anchor flow).
+
+    Usage::
+
+        client = VAPIZKBA("http://localhost:8081", api_key)
+
+        s = client.status()
+        if s.total_artifacts > 0:
+            print(f"latest: {s.latest_commitment_hex[:16]} class={s.latest_zkba_class}")
+
+        a = client.get_artifact("056e...")
+        if a.found:
+            print(f"anchored: {a.anchor_tx_hash}")
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def status(self) -> ZKBAStatusResult:
+        """Read GET /operator/zkba-status. Returns ZKBAStatusResult; never raises."""
+        try:
+            import urllib.request, json
+            url = f"{self._base}/operator/zkba-status"
+            req = urllib.request.Request(
+                url,
+                headers={"x-api-key": self._key} if self._key else {},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                body = json.loads(resp.read().decode())
+            latest = body.get("latest") or {}
+            return ZKBAStatusResult(
+                total_artifacts        = int(body.get("total_artifacts", 0)),
+                anchored_count         = int(body.get("anchored_count", 0)),
+                track1_invariant_holds = bool(body.get("track1_invariant_holds", True)),
+                class_breakdown        = dict(body.get("class_breakdown", {})),
+                latest_commitment_hex  = str(latest.get("commitment_hex", "")),
+                latest_zkba_class      = int(latest.get("zkba_class", 0)),
+                latest_proof_weight    = int(latest.get("proof_weight", 0)),
+                latest_ts_ns           = int(latest.get("ts_ns", 0)),
+                frozen_v1_position     = int(body.get("frozen_v1_position", 10)),
+                domain_tag             = str(body.get("domain_tag", "VAPI-ZKBA-ARTIFACT-v1")),
+            )
+        except Exception as exc:
+            return ZKBAStatusResult(error=str(exc))
+
+    def get_artifact(self, commitment_hex: str) -> ZKBAArtifactResult:
+        """Read GET /operator/zkba-artifact/<commitment_hex>. Returns
+        ZKBAArtifactResult; never raises. `found=False` if 404 or absent."""
+        try:
+            import urllib.request, json
+            url = f"{self._base}/operator/zkba-artifact/{commitment_hex}"
+            req = urllib.request.Request(
+                url,
+                headers={"x-api-key": self._key} if self._key else {},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                body = json.loads(resp.read().decode())
+            if not body.get("found", False):
+                return ZKBAArtifactResult(commitment_hex=commitment_hex, found=False)
+            row = body.get("db_row") or {}
+            return ZKBAArtifactResult(
+                commitment_hex           = str(row.get("commitment_hex", commitment_hex)),
+                found                    = True,
+                zkba_class               = int(row.get("zkba_class", 0)),
+                proof_weight             = int(row.get("proof_weight", 0)),
+                preimage_json            = str(row.get("preimage_json", "")),
+                ts_ns                    = int(row.get("ts_ns", 0)),
+                manifest_uri             = str(row.get("manifest_uri") or ""),
+                compiler_output_hash_hex = str(row.get("compiler_output_hash_hex") or ""),
+                anchor_tx_hash           = row.get("anchor_tx_hash"),  # may be None
+                created_at               = float(row.get("created_at", 0.0)),
+            )
+        except Exception as exc:
+            return ZKBAArtifactResult(commitment_hex=commitment_hex, error=str(exc))
+
+    def history(self, *, limit: int = 20) -> ZKBAHistoryResult:
+        """Read GET /operator/zkba-history?limit=N. Most recent first by ts_ns.
+
+        Args:
+            limit: 1-500. Default 20.
+        """
+        try:
+            import urllib.request, json, urllib.parse
+            url = f"{self._base}/operator/zkba-history?limit={int(limit)}"
+            req = urllib.request.Request(
+                url,
+                headers={"x-api-key": self._key} if self._key else {},
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                body = json.loads(resp.read().decode())
+            return ZKBAHistoryResult(
+                limit     = int(body.get("limit", limit)),
+                row_count = int(body.get("row_count", 0)),
+                rows      = list(body.get("rows", [])),
+            )
+        except Exception as exc:
+            return ZKBAHistoryResult(limit=int(limit), error=str(exc))
 
