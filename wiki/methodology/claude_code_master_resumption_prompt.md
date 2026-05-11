@@ -67,7 +67,7 @@
 >
 > Option D3: VBDIP-0001 freezes after the bootstrap completes, as a follow-up atomic commit. The bootstrap executes under v2.0 terminology with VBDIP-0001 deferred. The methodology surface remains under the VSD-only label until VBDIP-0001 freeze.
 >
-> My recommendation as the executing assistant is Option D1 because it minimizes the number of atomic commits, ships the methodology surface coherently as a single architectural evolution, and produces the cleanest audit trail. But the architectural call is the operator's. Hold for operator approval. Do not proceed to Phase E until sequencing is confirmed.
+> My recommendation as the executing assistant is **Option D2** (VBDIP-0001 freezes as its own atomic commit before bootstrap). Rationale (revised by VBDIP-0001 Step 3 Amendment #3): D1 would either require in-place amendment of the saved bootstrap prompt (forbidden under the "no in-place amendments to FROZEN documents" discipline) or allow Stream A.5 to ship work the bootstrap prompt does not document, creating audit-trail drift. D2 freezes VBDIP-0001 against the stable v2.0 methodology surface, then the bootstrap executes against a methodology where VAD is already established and the harness already extended — two clean atomic commits with no recursive dependency. D3 (freeze VBDIP-0001 after bootstrap) is worst because it retrofits VAD naming through documentation patches later, creating temporal layers of nomenclature future readers must navigate. But the architectural call is the operator's. Hold for operator approval. Do not proceed to Phase E until sequencing is confirmed.
 >
 > ## Phase E — Authorization for Bootstrap Execution
 >

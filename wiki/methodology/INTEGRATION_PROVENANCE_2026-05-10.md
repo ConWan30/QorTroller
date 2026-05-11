@@ -396,19 +396,57 @@ Step 2 commit references this manifest hash block; future readers may
 verify byte preservation by recomputing SHA-256 of each file at the Step
 2 commit SHA and comparing against this table.
 
-### 7.3 Step 3 — Phase B State Reconciliation Amendments (pending)
+### 7.3 Step 3 — Phase B State Reconciliation Amendments (landed)
 
-Reserved. To be appended after Step 3 atomic commit.
+Step 3 atomic commit applied 2026-05-10. Four amendments applied across
+five files (Amendment #1 cascades to 4 documents per Finding 2 in §4 of
+this manifest).
 
-Required entries:
-- New SHA-256 of amended `VBDIP-0001-vad-framework-introduction.md`
-  (different from `50754b93...a74315` — content has been amended)
-- New SHA-256 of amended `claude_code_master_resumption_prompt.md`
-  (different from `e3c97e35...e83d97d`)
-- New SHA-256 of amended `phase_o1_vsd_bootstrap_canonical.md`
-  (different from `a685b8f0...842be3`)
-- Diff summary per amendment (line ranges affected, before/after value
-  pairs for the state references)
+Amendment summary:
+
+| # | Target | Section | Change |
+|---|--------|---------|--------|
+| **#1** | `wiki/methodology/VBDIP-0001-vad-framework-introduction.md` | §7 | PATTERN-017 count canonicalized: 12 post-bootstrap (10 pre-bootstrap including ZKBA + VRR + CDRR). Canonical convention defined explicitly (PoAC=1 ... ZKBA=10, VRR=11, CDRR=12); EXCLUDES parser-schema tags + Pass 2C op-track primitives. |
+| **#1** | `wiki/methodology/VBDIP-0001-vad-framework-introduction.md` | §5.1 | FRR position annotated as #9; ZKBA as #10 |
+| **#1** | `wiki/methodology/VBDIP-0001-vad-framework-introduction.md` | §5.2 | CDRR position annotated as #12 (was "eleventh"); ZKBA insertion explained |
+| **#1** | `wiki/methodology/vsd_volume_2_final.md` | §17 | VRR position revised from "ninth" to "eleventh" with cross-reference to VBDIP-0001 §7 canonical convention |
+| **#1** | `wiki/methodology/vsd_volume_2_final.md` | §19.1 | "ninth-actually-tenth" hedge dropped; FRR explicitly positioned at #9; full sequence enumerated |
+| **#1** | `wiki/assessments/vapi_state_assessment_2026_05_10.md` | §2.3 | Table row #10 added for ZKBA-ARTIFACT (Phase O3-ZKBA-TRACK1 C2 ship); FRR row "THIS SHIP" marker removed (now historical) |
+| **#2** | `wiki/methodology/VBDIP-0001-vad-framework-introduction.md` | §5.1 | VED-INV-N clarified as methodology-doc count-abstraction NOT allowlist rename; existing INV-* IDs in allowlist preserved |
+| **#3** | `wiki/methodology/claude_code_master_resumption_prompt.md` | Phase D | Recommendation revised from Option D1 to **Option D2** with full rationale (D2 = freeze VBDIP-0001 before bootstrap; avoids in-place amendment of saved bootstrap prompt; cleanest audit trail) |
+| **#4** | `wiki/methodology/phase_o1_vsd_bootstrap_canonical.md` | §1 | State references refreshed: bridge tests 2836 → 2922 (+86); PV-CI invariants 55 → 63 (+8); 9 → 10 FROZEN-v1 primitives shipped post-Phase-O3-ZKBA-TRACK1 C2; commits 3df5e59f + 625007ab + 2aea877a + 69ac74d2 cross-referenced |
+
+Post-amendment hashes:
+
+| File | Pre-Step-3 Hash | Post-Step-3 Hash |
+|------|-----------------|------------------|
+| `wiki/methodology/VBDIP-0001-vad-framework-introduction.md` | `50754b93bdf95ad5b92d51cbab8e5064e9286576ba175f725253a75a7a3e4315` | `83d9266350c3d38c83647fbeffcb0f297f3f03b809fde7c55973d245d3cac6f9` |
+| `wiki/methodology/vsd_volume_2_final.md` | `c746bcb7be7fbba94a6a5f338f8c8fbe8ee7bad3fb58650b491229f214278e13` | `44406f7838ec3ba967cde74585aa6ebad2c140551692618654ffcf10c64bbda9` |
+| `wiki/assessments/vapi_state_assessment_2026_05_10.md` | (Step 1 baseline, not Step 2 inventory; was already in tree pre-Step-1 — see Phase A §2 inventory) | `fb6d894720852502f57eec68cc713aa5ac673b6662151116f2f680d1e045613f` |
+| `wiki/methodology/claude_code_master_resumption_prompt.md` | `e3c97e350003efa7332f706d6c5d139d59a4671ee74f6111d7ecc930de83d97d` | `8df38969a42399a89ea402e59d18625227f38ef666c4b5d83c9810e8cec7553c` |
+| `wiki/methodology/phase_o1_vsd_bootstrap_canonical.md` | `a685b8f0b6a149f57eff9f7a8b6b09ab1db894cdc234dc43955084ec07842be3` | `cddc9784d61358ed791946de901da051fb209d3f89129dcec3bfb7a375fa2dd1` |
+
+Canonical PATTERN-017 family count convention (Amendment #1 codification):
+
+> PATTERN-017 family = SHA-256 commitment primitives with explicit or
+> implicit domain separation used as VAPI's chain-anchored proof
+> commitment family. Convention INCLUDES: PoAC (#1, implicit slice
+> [0:164]), GIC (#2, b"VAPI-GIC-GENESIS-v1"), WEC (#3,
+> b"VAPI-WEC-GENESIS-v1"), VAME (#4, b"VAPI-VAME-v1"), CORPUS-SNAPSHOT
+> (#5, b"VAPI-CORPUS-SNAPSHOT-v1"), CONSENT (#6, b"VAPI-CONSENT-v1"),
+> BIOMETRIC-SNAPSHOT (#7, b"VAPI-BIOMETRIC-SNAPSHOT-v1"), LISTING-v1 (#8,
+> b"VAPI-LISTING-v1"), FRR (#9, b"VAPI-FRR-v1"), ZKBA-ARTIFACT (#10,
+> b"VAPI-ZKBA-ARTIFACT-v1"). Post-bootstrap additions: VRR (#11), CDRR
+> (#12). EXCLUDES: CEDAR-BUNDLE-v1 (parser schema, not chain commitment),
+> AGENT-COMMIT-v1 + PHYSICAL-DATA-ATTESTATION-v1 (Pass 2C operator-track
+> primitives forming a distinct lineage).
+
+Pre-bootstrap count: 10 shipped. Post-bootstrap count: 12 shipped.
+
+CLAUDE.md NOTE entries are historical-phase records and are NOT amended
+in Step 3 (the "no in-place amendments to historical records" discipline
+preserves the phase-boundary witness pattern). Current state assertions
+for CLAUDE.md happen in Z9 sync of PLAN-VBDIP-0002-ZKBA-PARALLEL-v1.
 
 ### 7.4 Step 4 — Architect Key + Bridge Wallet Attestation (pending)
 
