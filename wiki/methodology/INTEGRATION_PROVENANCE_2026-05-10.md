@@ -1,0 +1,473 @@
+---
+title: "VBDIP-0001 Integration Provenance Manifest — 2026-05-10"
+date: 2026-05-10
+type: integration_witness
+status: pending_operator_review
+purpose: deferral_boundary_witness
+authority: VAPI Architect (bridge wallet 0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692)
+relates_to: VBDIP-0001-vad-framework-introduction.md
+relates_to_phase: Phase O1-VSD-BOOTSTRAP (pre-execution integration)
+---
+
+# VBDIP-0001 Integration Provenance Manifest
+
+> **What this document is.** The forensic witness for the resumption of
+> VBDIP-0001 integration from its 2026-05-10 deferral boundary. It captures
+> SHA-256 hashes of every methodology artifact at its source location at the
+> moment integration resumed, plus the Phase A V-check drift findings, the
+> state delta since artifact authoring, and the explicit known gaps.
+>
+> **Why it exists.** VBD-INV-1 (continuous deployer-verified provenance
+> under fleet expansion) is recursively self-applied to VBDIP-0001's own
+> integration. This manifest converts the integration from a narrative claim
+> ("we resumed from the architectural-collaboration thread artifacts") into
+> a mechanically verifiable claim ("compute SHA-256 of file X; compare to
+> the entry below").
+>
+> **Authority.** The hashes recorded here are the authoritative starting
+> state for all subsequent integration work (Steps 2-5 per the secure
+> resumption procedure). Any artifact whose tree-state hash diverges from
+> the post-Step-2 hash recorded below has either been edited (intended,
+> via Step 3 amendments — recorded in a follow-up hash block) or corrupted
+> (unintended, requires investigation before further integration).
+
+---
+
+## 1. Deferral Context
+
+The architectural collaboration thread of 2026-05-10 produced six
+methodology artifacts intended as the canonical methodology surface for
+VAPI's evolution from the Verified Synthesis Discipline (VSD) to the VAPI
+Architectural Discipline (VAD). Authoring concluded the same day and the
+artifacts were saved out to local disk. **Integration into the repository
+tree was deferred** — the artifacts existed in mixed locations (some at
+`wiki/methodology/`, some only in `C:\Users\Contr\Downloads\`, some with
+duplicate-download filename suffixes, one absent entirely) but had not
+been frozen, hash-anchored, or provenance-attested as a coherent set.
+
+While the integration was deferred, the protocol itself continued to
+ship. Six atomic commits landed on `origin/main` between 2026-05-10
+methodology authoring and 2026-05-10 integration resumption (same date;
+sub-day commit cadence):
+
+| Commit | Phase |
+|--------|-------|
+| `f7d21bcf` | Phase O1-FRR-SDK-LOCK NOTE (CLAUDE.md update) |
+| `4afcac8d` | Phase O1-FRR-SDK-LOCK ship (PV-CI invariants pin SDK + UI drawer layout) |
+| `db195b2d` | Phase O1-FRR-SDK NOTE |
+| `0076082b` | Phase O1-FRR-SDK ship (VAPIFleetReadinessRoot SDK client) |
+| `f137ded6` | Phase O3-READINESS-DASHBOARD NOTE |
+| `8fecfcd7` | Phase O3-READINESS-DASHBOARD ship |
+| `c46e04cb` | Phase O2-DRAFT-REVIEW-FRONTEND NOTE |
+| `3d5923e7` | Phase O2-DRAFT-REVIEW-FRONTEND ship |
+| `af42c91d` | Phase O2-GUARDIAN-CURATOR-TRIGGERS-ARC NOTE (consolidated) |
+| `32997d18` | Phase O2-CURATOR-TRIGGERS ship |
+| `3238c68f` | Phase O2-GUARDIAN-TRIGGERS ship |
+| `73e70838` | Phase O2-GUARDIAN-CURATOR-TRIGGERS-PRELUDE |
+| `3eede644` | Phase O2-GIT-TRIGGER-AUTOWIRE |
+
+State delta (authoring → integration boundary):
+
+- Bridge tests: **2836 → 2922** (+86)
+- PV-CI invariants: **55 → 63** (+8)
+- HEAD commit at integration resumption: **`f7d21bcf`**
+
+This delta is the empirical justification for Phase B amendment work to
+the bootstrap canonical and master resumption prompt.
+
+**Integration resumption authorized:** 2026-05-10, by operator
+acknowledgment of the recommended five-step secure procedure (Provenance
+Pin → Inventory Normalization → State Reconciliation Amendments →
+Architect Key + Attestation → VBDIP-0001 Freeze).
+
+---
+
+## 2. Artifact Inventory and Hashes
+
+Six methodology artifacts comprise the canonical VAD methodology surface
+per VBDIP-0001 §10 + claude_code_master_resumption_prompt.md Phase A. The
+table below captures each artifact's source location, intended tree
+location, SHA-256 content hash, line count, and integration disposition.
+
+| # | Artifact | Source Path | Intended Tree Path | SHA-256 (32B) | Lines | Disposition |
+|---|----------|-------------|-------------------|---------------|-------|-------------|
+| 1 | VSD v1.0 FINAL | `C:\Users\Contr\Downloads\vsd_methodology_v1_FINAL.md` | `wiki/methodology/vsd_methodology_v1_FINAL.md` | `c5a38a2bb1fb3bd8e4eb3e188724b46fea79579b3d81083b61cd38f534d263ca` | 619 | Step 2: import |
+| 2 | VSD Volume 2 FINAL | `wiki/methodology/vsd_volume_2_final.md` (already in tree) | `wiki/methodology/vsd_volume_2_final.md` | `c746bcb7be7fbba94a6a5f338f8c8fbe8ee7bad3fb58650b491229f214278e13` | 1102 | In tree; no move |
+| 3 | Phase O1-VSD-BOOTSTRAP canonical execution prompt | `wiki/methodology/phase_o1_vsd_bootstrap_canonical.md` (already in tree) | `wiki/methodology/phase_o1_vsd_bootstrap_canonical.md` | `a685b8f0b6a149f57eff9f7a8b6b09ab1db894cdc234dc43955084ec07842be3` | 418 | In tree; no move |
+| 4 | NotebookLM session prompt | **NOT LOCATED** | `wiki/methodology/notebooklm_session_prompt.md` | `(absent)` | `(absent)` | **MISSING-ARTIFACT-001** — see §5 |
+| 5 | VBDIP-0001 VAD framework introduction draft | `wiki/methodology/VBDIP-0001-vad-framework-introduction (1).md` (in tree, suffixed) | `wiki/methodology/VBDIP-0001-vad-framework-introduction.md` (no suffix) | `50754b93bdf95ad5b92d51cbab8e5064e9286576ba175f725253a75a7a3e4315` | 351 | Step 2: `git mv` to drop suffix |
+| 6 | Master resumption prompt | `C:\Users\Contr\Downloads\claude_code_master_resumption_prompt.md` | `wiki/methodology/claude_code_master_resumption_prompt.md` | `e3c97e350003efa7332f706d6c5d139d59a4671ee74f6111d7ecc930de83d97d` | 152 | Step 2: import |
+
+**Hash verification commands** (any future operator can reproduce):
+
+```bash
+# Pre-Step-2 source hashes (current state of this manifest):
+sha256sum "C:/Users/Contr/Downloads/vsd_methodology_v1_FINAL.md"                                  # → c5a38a2bb1fb...263ca
+sha256sum "wiki/methodology/vsd_volume_2_final.md"                                                 # → c746bcb7be7f...278e13
+sha256sum "wiki/methodology/phase_o1_vsd_bootstrap_canonical.md"                                   # → a685b8f0b6a1...842be3
+sha256sum "wiki/methodology/VBDIP-0001-vad-framework-introduction (1).md"                          # → 50754b93bdf9...a74315
+sha256sum "C:/Users/Contr/Downloads/claude_code_master_resumption_prompt.md"                       # → e3c97e350003...e83d97d
+
+# Post-Step-2 tree hashes (will be recorded as a Step-2 hash-block append below):
+sha256sum "wiki/methodology/vsd_methodology_v1_FINAL.md"                                           # MUST equal c5a38a2bb1fb...263ca
+sha256sum "wiki/methodology/VBDIP-0001-vad-framework-introduction.md"                              # MUST equal 50754b93bdf9...a74315
+sha256sum "wiki/methodology/claude_code_master_resumption_prompt.md"                               # MUST equal e3c97e350003...e83d97d
+```
+
+The pre/post-Step-2 hash equality is the byte-preservation invariant: a
+`git mv` and a copy from outside the tree must not alter content. Any
+divergence is a Step 2 STOP condition.
+
+### 2.1 Note on the VBDIP-0001 duplicate-download artifact
+
+Three byte-identical copies of VBDIP-0001 exist on disk:
+
+```
+50754b93bdf95ad5b92d51cbab8e5064e9286576ba175f725253a75a7a3e4315  wiki/methodology/VBDIP-0001-vad-framework-introduction (1).md
+50754b93bdf95ad5b92d51cbab8e5064e9286576ba175f725253a75a7a3e4315  C:/Users/Contr/Downloads/VBDIP-0001-vad-framework-introduction.md
+50754b93bdf95ad5b92d51cbab8e5064e9286576ba175f725253a75a7a3e4315  C:/Users/Contr/Downloads/VBDIP-0001-vad-framework-introduction (1).md
+```
+
+The `" (1)"` suffix is a Windows browser duplicate-download artifact —
+zero semantic content difference. The in-tree filename inherits the
+suffix from the original copy operation. Step 2 normalizes via `git mv`
+to the canonical no-suffix form.
+
+VBDIP-0001's own metadata at line 10 declares its eventual canonical
+save path as `vsd-vault/proposals/VBDIP-0001-vad-framework-introduction.md`,
+NOT `wiki/methodology/`. The current `wiki/methodology/` placement is a
+**pre-bootstrap staging location**. The final move to `vsd-vault/proposals/`
+happens during Phase O1-VSD-BOOTSTRAP Stream A when the vault skeleton is
+created. Step 2 of this integration leaves it in `wiki/methodology/` with
+the corrected filename; the eventual move is bootstrap-Stream-A scope.
+
+---
+
+## 3. Phase A V-Check Drift Findings (Verbatim)
+
+The Phase A read-only state reconciliation produced 9 V-check DRIFT
+findings and 1 PASS against the master resumption prompt's V-A1..V-A10
+specifications. They are recorded here verbatim for forensic continuity.
+
+| V-check | Required outcome | Actual | Status |
+|---------|------------------|--------|--------|
+| V-A1 | bootstrap-prompt protocol state matches CLAUDE.md | Bootstrap doc references state at Phase O1-FRR-PARALLEL ship; CLAUDE.md head is Phase O1-FRR-SDK-LOCK (6 ships later same day) | **DRIFT** |
+| V-A2 | wallet ≥ 15.0 IOTX | ~15.44 IOTX per CLAUDE.md (not live-queried; chain RPC not exercised this session per kill-switch posture) | **PASS-by-memory** (not chain-verified) |
+| V-A3 | 49 contracts matches deployed-addresses.json | 51 contract address entries in file; CLAUDE.md asserts 49 LIVE | **DRIFT — 2 entry discrepancy** |
+| V-A4 | bootstrap-prompt PV-CI 55 matches current | Current: 63 entries | **DRIFT — +8 invariants** |
+| V-A5 | PATTERN-017 count 9 pre-bootstrap | CLAUDE.md memory: 7 LIVE (excludes PoAC + FRR); State Assessment §2.3: 9 (PoAC as #1; FRR as #9); Volume 2 §17 + §19.1 hedges "ninth-actually-tenth" for VRR; VBDIP-0001 §7 asserts 11 total post-bootstrap | **DRIFT — three sources count three different ways; this IS the Phase B Amendment #1 target** |
+| V-A6 | bridge tests 2836 ± 20 | Current: 2922 (delta +86, well outside ±20) | **DRIFT — +86** |
+| V-A7 | methodology doc supersession check | `phase_o1_vsd_bootstrap_canonical.md` exists in tree (not `…_prompt.md` as resumption prompt names); v1.0 FINAL + NotebookLM session prompt + resumption prompt itself NOT in tree | **DRIFT — three of six canonical artifacts missing from tree; one filename mismatch** |
+| V-A8 | `CHAIN_SUBMISSION_PAUSED=true` | bridge/.env:208 = CHAIN_SUBMISSION_PAUSED=true | **PASS** |
+| V-A9 | new phases shipped since thread closure | Six ships since 2026-05-10 same day: O1-FRR-SDK + O1-FRR-SDK-LOCK + O3-READINESS-DASHBOARD + O2-DRAFT-REVIEW-FRONTEND + O2-GUARDIAN-CURATOR-TRIGGERS-ARC + O2-AUTONOMOUS-COMPLETION arc | **DRIFT — six new ships affect bootstrap scope** |
+| V-A10 | shadow_age progression | CLAUDE.md cites Sentry/Guardian 152.13h and Curator 6.79h at 2026-05-10. Per state-assessment §2.4 + parallel O2 anchor 2026-05-10 the agents are now at O2_SUGGEST not O1_SHADOW; the 152.13h figure was the O2-readiness shadow_age at moment of O2 anchor, not a current advancing clock toward O3 | **DRIFT — bootstrap doc refers to O1_SHADOW shadow_age but agents elevated to O2_SUGGEST same day** |
+
+**V-check pass rate: 1 of 10 PASS (V-A8). Nine DRIFT findings.**
+
+The high drift count is expected and not blocking — it reflects the
+6-commit protocol-side delta that landed between methodology authoring
+and integration resumption. The drift findings drive the Phase B
+amendment scope (Step 3 of secure resumption); they do not invalidate
+the methodology artifacts themselves.
+
+---
+
+## 4. Critical Structural Findings
+
+Three findings surfaced during Phase A read-only reconciliation require
+explicit resolution before progressing past Step 1.
+
+### Finding 1 — Methodology artifact inventory mismatch
+
+The resumption prompt names six methodology files at `wiki/methodology/`.
+Three are absent from the tree (one is absent entirely from on-disk
+sources). One has a duplicate-download suffix. The on-tree bootstrap is
+named `_canonical.md`, not `_prompt.md` as the resumption prompt asserts.
+
+**Disposition:** Step 2 imports the located absent files and renames
+VBDIP-0001 to drop the suffix. Step 3 amendments correct the filename
+reference in claude_code_master_resumption_prompt.md (Phase D) and any
+cross-references in VBDIP-0001 §10 that name `_prompt.md`.
+
+### Finding 2 — PATTERN-017 family count is unreconciled
+
+Four load-bearing documents count the FROZEN-v1 cryptographic primitive
+family differently:
+
+- **CLAUDE.md memory header:** "Seven FROZEN-v1 cryptographic primitives
+  LIVE (PATTERN-017): GIC + WEC + VAME + CORPUS-SNAPSHOT + CONSENT +
+  BIOMETRIC-SNAPSHOT + LISTING-v1." — excludes PoAC; treats FRR as not
+  yet LIVE (despite Phase O1-FRR-PARALLEL having shipped commit
+  `4ddeb43c`).
+- **State Assessment §2.3 table:** 9 entries (PoAC as #1, GIC as #2, ...,
+  FRR as #9 "this ship").
+- **Volume 2 §17:** "VRR (Vault Readiness Root) as the ninth FROZEN-v1
+  cryptographic primitive in the PATTERN-017 family." §19.1 internally
+  hedges: "ninth-actually-tenth in PATTERN-017."
+- **VBDIP-0001 §7:** "PATTERN-017 cryptographic primitive family count
+  remains at eleven (the eight pre-Volume-2 primitives plus FRR, VRR,
+  CDRR)." — implies pre-V2 count is 8.
+
+**Recommended canonical convention** (Step 3 Amendment #1 target):
+adopt the State Assessment §2.3 convention. PoAC is #1 (the founding
+member of the family). Post-FRR LIVE count = 9. Post-bootstrap (when
+VRR + CDRR ship) = 11. Reconcile by updating four documents in the same
+Step 3 commit:
+
+1. CLAUDE.md memory header: revise from "Seven FROZEN-v1 ... LIVE
+   (PATTERN-017)" to "Nine FROZEN-v1 cryptographic primitives LIVE
+   (PATTERN-017): PoAC + GIC + WEC + VAME + CORPUS-SNAPSHOT + CONSENT
+   + BIOMETRIC-SNAPSHOT + LISTING-v1 + FRR. Eleven total at Phase
+   O1-VSD-BOOTSTRAP completion (+ VRR + CDRR)."
+2. State Assessment §2.3 — already correct; preserve as canonical reference.
+3. Volume 2 §17 + §19.1 — drop the "ninth-actually-tenth" hedge; assert
+   "VRR is the tenth FROZEN-v1 primitive" cleanly.
+4. VBDIP-0001 §7 — revise from "eleven (eight pre-Volume-2 + FRR + VRR
+   + CDRR)" to "eleven (nine pre-bootstrap PoAC..FRR + VRR + CDRR);
+   nine pre-VBDIP-0001-freeze".
+
+This is itself a VBD-INV-3 (primitive composition discipline) self-
+application — the methodology discipline applied to the methodology's
+own count drift. The four-document reconciliation in one Step 3 atomic
+commit prevents future drift recurrence.
+
+### Finding 3 — Contract address count mismatch
+
+`contracts/deployed-addresses.json` contains 51 contract address entries.
+CLAUDE.md asserts "49 contracts ALL LIVE." The 2-entry gap is likely
+legacy contracts (TournamentGate v1, possibly one other early version)
+that are deployed but no longer counted as "live infrastructure".
+
+**Disposition:** Not bootstrap-blocking. Recommend addressed during
+Step 3 either by (a) explicit reconciliation of CLAUDE.md to "51 LIVE",
+(b) annotation of `_legacy_superseded` keys in deployed-addresses.json
+naming the two superseded contracts, or (c) deferral to a follow-up
+maintenance commit. Operator judgment on which option.
+
+### MISSING-ARTIFACT-001 — NotebookLM session prompt absent
+
+`notebooklm_session_prompt.md` is referenced in:
+
+- VBDIP-0001 §10 cross-references (as "the NotebookLM session contract")
+- claude_code_master_resumption_prompt.md Phase A (as the fourth of the
+  five canonical methodology artifacts to read alongside VBDIP-0001)
+- claude_code_master_resumption_prompt.md "Pre-Paste Operational
+  Checklist" (as a precondition file that must be saved at the named
+  path before pasting the resumption prompt)
+
+The file exists at no on-disk location reachable from this session:
+- ❌ `wiki/methodology/notebooklm_session_prompt.md` — absent
+- ❌ `C:/Users/Contr/Downloads/notebooklm_session_prompt.md` — absent
+- ❌ Broader `C:/Users/Contr/` recursive search (max-depth 3) — absent
+
+Three resolution options for operator decision before Step 2 begins:
+
+- **Option M1** — Author/locate the NotebookLM session prompt from
+  architectural-collaboration-thread artifacts; manifest amended with
+  hash + line count post-location; integration proceeds with all six
+  artifacts present.
+- **Option M2** — Acknowledge as never-shipped; amend resumption prompt
+  Phase A and VBDIP-0001 §10 cross-references to remove the artifact
+  reference; integration proceeds with five canonical artifacts.
+- **Option M3** — Defer to a follow-up phase; manifest captures absence
+  as MISSING-ARTIFACT-001; integration proceeds with five of six
+  artifacts; resumption prompt and VBDIP-0001 cross-references annotated
+  with a "(authoring deferred)" status pending future authoring.
+
+**No automated determination possible** — requires operator authority on
+whether the artifact exists, was lost, or was never authored.
+
+---
+
+## 5. State Snapshot at Integration Boundary
+
+For forensic completeness, the protocol-state values asserted as
+authoritative at integration resumption.
+
+| Dimension | Value | Source |
+|-----------|-------|--------|
+| HEAD commit | `f7d21bcf` | `git rev-parse HEAD` |
+| Branch | `main` | `git rev-parse --abbrev-ref HEAD` |
+| Phase | Phase O1-FRR-SDK-LOCK COMPLETE 2026-05-10 | CLAUDE.md header |
+| Bridge tests | 2922 (delta) | CLAUDE.md |
+| SDK tests | 548 | CLAUDE.md |
+| Hardhat tests | 528 | CLAUDE.md |
+| Contracts (LIVE per CLAUDE.md / entries in deployed-addresses.json) | 49 / 51 | CLAUDE.md vs file |
+| PV-CI invariants | 63 | INVARIANTS_ALLOWLIST.json (counted) |
+| Operator agent fleet (Sentry/Guardian/Curator) | All at O2_SUGGEST | CLAUDE.md + state assessment §2.4 |
+| Wallet balance | ~15.44 IOTX (per CLAUDE.md; not chain-verified this session) | CLAUDE.md |
+| Wallet address | `0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692` | CLAUDE.md |
+| `CHAIN_SUBMISSION_PAUSED` | `true` | bridge/.env:208 |
+| FROZEN-v1 primitive count (pending reconciliation) | 7 LIVE per memory / 9 LIVE per state assessment | Finding 2 |
+
+This snapshot is the authoritative pre-integration state. Subsequent
+integration steps may amend memory headers and state assertions in the
+methodology documents (Step 3 Amendments) but do not modify the
+protocol-side artifacts (CLAUDE.md, deployed-addresses.json,
+INVARIANTS_ALLOWLIST.json, bridge code, contracts) at any of Steps 1-5.
+
+The Phase B amendments target methodology *draft documents only* —
+filling them with current authoritative state values rather than the
+authoring-time values they were authored against. This is the
+"no in-place amendments to FROZEN documents" discipline applied
+correctly: the FROZEN documents (v1.0 FINAL, Volume 2 FINAL) are not
+amended; the still-draft documents (VBDIP-0001 FROZEN-candidate,
+master resumption prompt, bootstrap canonical pre-execution) are.
+
+---
+
+## 6. Hash Reproduction Procedure
+
+Any future operator (architect themselves, post-rotation successor, or
+external auditor with read access to this repository) can verify the
+provenance recorded in this manifest:
+
+1. Check out the commit that lands this manifest (Step 1 atomic commit).
+   This commit's parent is `f7d21bcf` per §1.
+2. Run `sha256sum` against each artifact at the source path listed in §2
+   table column 3. The output must equal the SHA-256 in column 5.
+3. After Step 2 atomic commit lands, run `sha256sum` against each
+   artifact at the *intended tree path* (column 4). Output must equal
+   the SHA-256 in column 5 (byte-preservation invariant).
+4. Step 3 amendments will produce new hashes for the amended documents.
+   Those post-amendment hashes will be recorded in a Step-3 hash-block
+   appended to this manifest (§7 placeholder below).
+
+If any verification step fails:
+- **Pre-Step-2 hash mismatch:** the source artifact has been edited or
+  corrupted between manifest authoring and verification. STOP and
+  investigate.
+- **Step-2 byte-preservation violation:** `git mv` or copy operation
+  altered content. STOP and revert Step 2 commit.
+- **Step-3 post-amendment hash divergence from Step-3 manifest entry:**
+  amendment landed but produced different bytes than recorded. STOP and
+  investigate the amendment commit.
+
+---
+
+## 7. Hash Block Appendix (Append-Only)
+
+Subsequent integration steps append hash blocks here. Each block records
+the artifact hashes at that step's atomic commit boundary, providing a
+chain of byte-state snapshots from deferral boundary through integration
+completion.
+
+### 7.1 Step 1 — Provenance Pin (this commit)
+
+Hashes match §2 table. This commit lands the manifest as the deferral-
+boundary witness; no other artifacts move.
+
+### 7.2 Step 2 — Inventory Normalization (pending)
+
+Reserved. To be appended after Step 2 atomic commit.
+
+Required entries:
+- Post-import hash of `wiki/methodology/vsd_methodology_v1_FINAL.md`
+  (must equal `c5a38a2bb1fb...263ca`)
+- Post-import hash of `wiki/methodology/claude_code_master_resumption_prompt.md`
+  (must equal `e3c97e350003...e83d97d`)
+- Post-rename hash of `wiki/methodology/VBDIP-0001-vad-framework-introduction.md`
+  (must equal `50754b93bdf9...a74315`)
+- Disposition of MISSING-ARTIFACT-001 (per operator decision M1/M2/M3)
+
+### 7.3 Step 3 — Phase B State Reconciliation Amendments (pending)
+
+Reserved. To be appended after Step 3 atomic commit.
+
+Required entries:
+- New SHA-256 of amended `VBDIP-0001-vad-framework-introduction.md`
+  (different from `50754b93...a74315` — content has been amended)
+- New SHA-256 of amended `claude_code_master_resumption_prompt.md`
+  (different from `e3c97e35...e83d97d`)
+- New SHA-256 of amended `phase_o1_vsd_bootstrap_canonical.md`
+  (different from `a685b8f0...842be3`)
+- Diff summary per amendment (line ranges affected, before/after value
+  pairs for the state references)
+
+### 7.4 Step 4 — Architect Key + Bridge Wallet Attestation (pending)
+
+Reserved. To be appended after Step 4 atomic commit.
+
+Required entries:
+- SHA-256 of `vsd-vault/architect_key.pem` public key portion (private
+  key never hashed in manifest — file remains gitignored or stored
+  out-of-tree per operator preference)
+- SHA-256 of `vsd-vault/eval/architect_key_attestation.json`
+- Bridge wallet address that signed the attestation (must equal
+  `0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692`)
+- Recovered address from signature verification (must match)
+
+### 7.5 Step 5 — VBDIP-0001 Freeze (pending)
+
+Reserved. To be appended after Step 5 atomic commit.
+
+Required entries:
+- SHA-256 of `wiki/methodology/VBDIP-0001-vad-framework-introduction.md`
+  with architect signature applied (final FROZEN content hash)
+- SHA-256 of `vsd-vault/manifests/proposals-VBDIP-0001/001.manifest.json`
+- New SHA-256 of `scripts/vapi_invariant_gate.py` (extended for bridge
+  proposal-type)
+- New SHA-256 of `.github/INVARIANTS_ALLOWLIST.json` (v3 with `vbd`
+  section)
+- PV-CI invariant count post-Step-5 (current 63 + new VBD invariants;
+  exact count per Phase B Amendment #1 reconciliation)
+- SHA-256 of `vsd-vault/README.md` with deferred-migration documentation
+
+---
+
+## 8. Cross-References
+
+- VBDIP-0001 draft: `wiki/methodology/VBDIP-0001-vad-framework-introduction (1).md` (Step 2 → drop suffix)
+- VSD Volume 2 FINAL: `wiki/methodology/vsd_volume_2_final.md`
+- Phase O1-VSD-BOOTSTRAP canonical: `wiki/methodology/phase_o1_vsd_bootstrap_canonical.md`
+- VSD v1.0 FINAL: `C:\Users\Contr\Downloads\vsd_methodology_v1_FINAL.md` (Step 2 → import to `wiki/methodology/`)
+- Master resumption prompt: `C:\Users\Contr\Downloads\claude_code_master_resumption_prompt.md` (Step 2 → import to `wiki/methodology/`)
+- NotebookLM session prompt: `(absent — MISSING-ARTIFACT-001)`
+- Authoritative state source: `CLAUDE.md` (project root)
+- Memory index: `C:\Users\Contr\.claude\projects\C--Users-Contr-vapi-pebble-prototype\memory\MEMORY.md`
+- State assessment: `wiki/assessments/vapi_state_assessment_2026_05_10.md`
+- Allowlist: `.github/INVARIANTS_ALLOWLIST.json`
+- Deployed addresses: `contracts/deployed-addresses.json`
+- Kill-switch: `bridge/.env:208`
+
+---
+
+## 9. Document Metadata
+
+**Document version:** 1.0 (initial integration provenance witness)
+**Generated:** 2026-05-10
+**Author authority:** VAPI Architect, sole deployer (`0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692`)
+**Architect signature:** none yet (manifest pre-dates architect key generation in Step 4 — intentional; the manifest is the deferral-boundary witness, not a methodology artifact requiring signature)
+**Manifest path:** this file — `wiki/methodology/INTEGRATION_PROVENANCE_2026-05-10.md`
+**Status:** pending operator review; no commit yet
+**Tags:** `#integration-provenance #vbdip-0001 #vad #methodology-resumption #deferral-boundary-witness #verification-first #honesty-first #append-only`
+
+**Status transition log:**
+- 2026-05-10: Step 1 manifest authored; pending operator review
+- (pending): Operator confirms Finding 1/2/3 dispositions + MISSING-ARTIFACT-001 resolution option
+- (pending): Atomic commit 1 lands manifest into tree
+- (pending): Step 2 atomic commit 2 lands; §7.2 hash block appended
+- (pending): Step 3 atomic commit 3 lands; §7.3 hash block appended
+- (pending): Step 4 atomic commit 4 lands; §7.4 hash block appended
+- (pending): Step 5 atomic commit 5 lands; §7.5 hash block appended; integration complete
+
+**Append-only discipline:** §7 hash blocks are append-only. Once a step's
+hash block is recorded, it is not modified. If an integration step has
+to be re-attempted after revert, the new attempt's hash block is appended
+*alongside* the original (with revert reason noted), not instead of it.
+This preserves the forensic record of any failed integration attempt.
+
+---
+
+**End of integration provenance manifest.**
+
+This document is the deferral-boundary witness for VBDIP-0001 integration
+resumption on 2026-05-10. The hashes recorded above are the authoritative
+starting state. All subsequent integration steps verify against this
+baseline; deviations surface as findings rather than be absorbed silently.
+
+The methodology framework is VAPI Architectural Discipline (VAD), pending
+VBDIP-0001 freeze in Step 5 per Option D2 sequencing. Integration proceeds
+under Verification-First Discipline with hold-for-operator-approval at
+every step boundary. The kill-switch (`CHAIN_SUBMISSION_PAUSED=true`)
+remains held throughout Steps 1-5; no on-chain activity occurs.
