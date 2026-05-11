@@ -551,6 +551,77 @@ INVARIANTS: list[Invariant] = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# VBD invariants (Phase O1-VBDIP-0001 Step 5; VAD bridge sub-discipline)
+#
+# Per VBDIP-0001 §4 + §9: at v1.0 freeze the Python check function bodies
+# remain `pass` stubs; programmatic enforcement is deferred to VBDIP-0003.
+# Each entry pattern-matches the function signature documented in
+# VBDIP-0001's §4.1/§4.2/§4.3 markdown code blocks — that's how we
+# "register" the invariant's existence in canonical methodology while
+# the harness check is markdown-normative.
+#
+# VBD-INV-4 (retroactive CFSS rename) is reserved but NOT registered here
+# because INV-CFSS-001 does not yet exist in the allowlist (Volume 2
+# §20.1 ships it at Phase O1-VSD-BOOTSTRAP). Registration follows when
+# CFSS lands.
+# ---------------------------------------------------------------------------
+
+VBD_INVARIANTS: list[Invariant] = [
+    Invariant(
+        id="VBD-INV-001",
+        description="Continuous deployer-verified provenance under fleet expansion — bridge wallet 0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692 is the load-bearing identity anchor for all VAPI work across all sub-disciplines; check_vbd_inv_1 signature documented in VBDIP-0001 §4.1 (markdown-normative; programmatic check deferred to VBDIP-0003)",
+        file="wiki/methodology/VBDIP-0001-vad-framework-introduction.md",
+        pattern=r"def check_vbd_inv_1\(repo_root",
+        min_matches=1,
+    ),
+    Invariant(
+        id="VBD-INV-002",
+        description="Fleet-domain replication discipline — new operator domains must follow the structural pattern established by the synthesis fleet's relationship to the protocol fleet; check_vbd_inv_2 signature documented in VBDIP-0001 §4.2 (markdown-normative; programmatic check deferred to VBDIP-0003)",
+        file="wiki/methodology/VBDIP-0001-vad-framework-introduction.md",
+        pattern=r"def check_vbd_inv_2\(repo_root",
+        min_matches=1,
+    ),
+    Invariant(
+        id="VBD-INV-003",
+        description="Primitive composition discipline — every FROZEN-v1 primitive in PATTERN-017 must declare its composition path with other primitives or explicitly state composition-terminal; check_vbd_inv_3 signature documented in VBDIP-0001 §4.3 (markdown-normative; programmatic check deferred to VBDIP-0003)",
+        file="wiki/methodology/VBDIP-0001-vad-framework-introduction.md",
+        pattern=r"def check_vbd_inv_3\(repo_root",
+        min_matches=1,
+    ),
+]
+
+# Synthesis invariants — stub list. VSD-INV-1..VSD-INV-23 ship at Phase
+# O1-VSD-BOOTSTRAP Stream B per Volume 2 §22. Empty here so the --proposal-type
+# flag has a registry to filter against; bootstrap populates.
+SYNTHESIS_INVARIANTS: list[Invariant] = []
+
+
+def _select_invariants_for_proposal_type(proposal_type: str) -> list[Invariant]:
+    """Select the invariant registry to check based on --proposal-type flag.
+
+    Choices (VBDIP-0001 §7):
+      protocol  : INVARIANTS (existing protocol-side; default; backward-compat)
+      bridge    : VBD_INVARIANTS (VBD sub-discipline; VBD-INV-* entries)
+      synthesis : SYNTHESIS_INVARIANTS (empty stub; ships at Phase O1-VSD-BOOTSTRAP)
+      all       : union of all three
+      both      : DEPRECATED alias for 'all' (Volume 2 §22 legacy; preserved)
+    """
+    if proposal_type == "protocol":
+        return INVARIANTS
+    elif proposal_type == "bridge":
+        return VBD_INVARIANTS
+    elif proposal_type == "synthesis":
+        return SYNTHESIS_INVARIANTS
+    elif proposal_type in ("all", "both"):
+        return INVARIANTS + VBD_INVARIANTS + SYNTHESIS_INVARIANTS
+    else:
+        raise ValueError(
+            f"unknown --proposal-type: {proposal_type!r}; "
+            "choices are protocol, bridge, synthesis, all (or deprecated 'both')"
+        )
+
+
 def compute_allowlist_hash() -> str:
     """Return SHA-256 of canonicalized INVARIANTS_ALLOWLIST.json. Returns 64 zeros if missing."""
     if not ALLOWLIST_PATH.exists():
@@ -570,10 +641,16 @@ def _hash_file_region(path: Path, pattern: str) -> tuple[str, int]:
     return (digest, len(matches))
 
 
-def check_invariants() -> list[dict]:
-    """Run all invariant checks. Returns list of result dicts."""
+def check_invariants(proposal_type: str = "protocol") -> list[dict]:
+    """Run invariant checks for the given proposal-type. Returns list of result dicts.
+
+    Phase O1-VBDIP-0001 Step 5: extended to accept proposal_type per VBDIP-0001
+    §3.4 / §7. Default 'protocol' preserves backward compatibility (the original
+    63 INVARIANTS run by default).
+    """
+    invariants = _select_invariants_for_proposal_type(proposal_type)
     results = []
-    for inv in INVARIANTS:
+    for inv in invariants:
         path = REPO_ROOT / inv.file
         digest, count = _hash_file_region(path, inv.pattern)
         result = {
@@ -676,9 +753,13 @@ def generate_allowlist(results: list[dict], reason_category: str = "", reason_te
         _post_governance_event(previous_hash, new_hash, reason_category, reason_text)
 
 
-def run_gate(report_only: bool = False) -> int:
-    """Run invariant gate. Returns 0=pass, 1=fail."""
-    results = check_invariants()
+def run_gate(report_only: bool = False, proposal_type: str = "protocol") -> int:
+    """Run invariant gate. Returns 0=pass, 1=fail.
+
+    Phase O1-VBDIP-0001 Step 5: proposal_type filters which invariant
+    registry to check (protocol / bridge / synthesis / all).
+    """
+    results = check_invariants(proposal_type=proposal_type)
     allowlist = load_allowlist()
     failures = []
 
@@ -722,7 +803,47 @@ def run_gate(report_only: bool = False) -> int:
     return 0
 
 
+def _parse_proposal_type_arg() -> str:
+    """Parse --proposal-type from sys.argv. Default 'protocol' (backward-compat).
+
+    Handles both forms:
+      --proposal-type bridge   (space-separated)
+      --proposal-type=bridge   (equals-form)
+
+    Phase O1-VBDIP-0001 Step 5: VBDIP-0001 §7 introduces --proposal-type
+    with choices [protocol, bridge, synthesis, all]; 'both' is preserved
+    as a deprecated alias for 'all'.
+    """
+    val: str | None = None
+    for i, arg in enumerate(sys.argv):
+        if arg == "--proposal-type":
+            if i + 1 >= len(sys.argv):
+                print("[invariant_gate] ERROR: --proposal-type requires a value.")
+                sys.exit(2)
+            val = sys.argv[i + 1]
+            break
+        if arg.startswith("--proposal-type="):
+            val = arg.split("=", 1)[1]
+            break
+    if val is None:
+        return "protocol"
+    if val not in ("protocol", "bridge", "synthesis", "all", "both"):
+        print(
+            f"[invariant_gate] ERROR: invalid --proposal-type: {val!r}\n"
+            "Choices: protocol | bridge | synthesis | all  (or deprecated 'both')"
+        )
+        sys.exit(2)
+    if val == "both":
+        print(
+            "[invariant_gate] WARNING: --proposal-type=both is a deprecated alias for 'all'. "
+            "Use --proposal-type=all directly."
+        )
+    return val
+
+
 if __name__ == "__main__":
+    proposal_type = _parse_proposal_type_arg()
+
     if "--generate" in sys.argv:
         # Phase 224: --reason is required for all --generate calls
         if "--reason" not in sys.argv:
@@ -780,10 +901,10 @@ if __name__ == "__main__":
                 )
                 sys.exit(3)
 
-        results = check_invariants()
+        results = check_invariants(proposal_type=proposal_type)
         generate_allowlist(results, reason_category=reason_category, reason_text=reason_text)
 
     elif "--report" in sys.argv:
-        sys.exit(run_gate(report_only=True))
+        sys.exit(run_gate(report_only=True, proposal_type=proposal_type))
     else:
-        sys.exit(run_gate())
+        sys.exit(run_gate(proposal_type=proposal_type))
