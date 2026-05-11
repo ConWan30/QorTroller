@@ -548,6 +548,31 @@ INVARIANTS: list[Invariant] = [
         pattern=r"zIndex:\s*22",
         min_matches=1,
     ),
+
+    # --- Phase O3-ZKBA-TRACK1 C5 — INV-ZKBA-001/002/003 (tenth FROZEN-v1 primitive) ---
+    # ZKBA-ARTIFACT primitive (Phase O3-ZKBA-TRACK1 C2 commit 625007ab) pinned
+    # at PV-CI level per VBDIP-0001 §7 canonical PATTERN-017 convention.
+    Invariant(
+        id="INV-ZKBA-001",
+        description="compute_zkba_commitment function exists in bridge/vapi_bridge/zkba_artifact.py — the tenth FROZEN-v1 primitive compute function (Phase O3-ZKBA-TRACK1 C2; PATTERN-017 #10 per VBDIP-0001 §7 canonical convention)",
+        file="bridge/vapi_bridge/zkba_artifact.py",
+        pattern=r"def compute_zkba_commitment",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-ZKBA-002",
+        description="VAPI-ZKBA-ARTIFACT-v1 domain tag literal pinned in bridge/vapi_bridge/zkba_artifact.py — FROZEN-v1 21-byte domain separator for the ZKBA primitive pre-image; uniqueness verified against 11 pre-existing VAPI-*-v1 tags at C2 ship time (Phase O3-ZKBA-TRACK1)",
+        file="bridge/vapi_bridge/zkba_artifact.py",
+        pattern=r'b"VAPI-ZKBA-ARTIFACT-v1"',
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-ZKBA-003",
+        description="vapi-zkba-manifest-v1 manifest schema string pinned in scripts/vsd_ui_compiler.py — FROZEN at v1.0 per VBDIP-0002 §9.2; identifies the projection manifest schema version that the deterministic UI compiler emits (Phase O3-ZKBA-TRACK1 C3)",
+        file="scripts/vsd_ui_compiler.py",
+        pattern=r'"vapi-zkba-manifest-v1"',
+        min_matches=1,
+    ),
 ]
 
 
