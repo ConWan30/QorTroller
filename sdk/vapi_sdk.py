@@ -78,7 +78,7 @@ for _d in [str(_CONTROLLER_DIR), str(_BRIDGE_DIR)]:
 # Protocol constants (PoAC spec — immutable)
 # ---------------------------------------------------------------------------
 
-SDK_VERSION       = "3.1.0-phase-o3-zkba-track1-c4-sdk"
+SDK_VERSION       = "3.1.1-phase-o3-zkba-track1-g4-validator-sdk"
 POAC_RECORD_SIZE  = 228
 POAC_BODY_SIZE    = 164
 POAC_SIG_SIZE     = 64
@@ -9336,4 +9336,124 @@ class VAPIZKBA:
             )
         except Exception as exc:
             return ZKBAHistoryResult(limit=int(limit), error=str(exc))
+
+
+# === Phase O3-ZKBA-TRACK1 Lane B G4 follow-up SDK (2026-05-12) =================
+# VAPIZKBAValidator — wraps POST /operator/zkba-validate-manifest (commit 4f63c5d5).
+#
+# Closes the C4-style architectural reach trio for the G4 validator:
+#   Python lib (scripts/zkba_manifest_validator)
+#     -> MCP tool (vapi_validate_zkba_manifest at commit 53553047)
+#     -> bridge HTTP (commit 4f63c5d5)
+#     -> SDK (this class)
+#
+# Fail-open: every error path returns ZKBAValidateResult with .error
+# populated; never raises. Matches VAPIZKBA / VAPIDraftReview /
+# VAPIFleetReadinessRoot pattern.
+
+@dataclass(slots=True)
+class ZKBAValidateResult:
+    """Result from VAPIZKBAValidator.validate (Phase O3-ZKBA-TRACK1 Lane B G4
+    follow-up). Mirrors the bridge endpoint response shape at
+    bridge/vapi_bridge/operator_api.py POST /operator/zkba-validate-manifest.
+
+    The `schema_name_form` field surfaces the §9.2-vs-implementation
+    schema-name drift V-check finding documented at G4: the validator
+    accepts both `vapi-zkba-manifest-v1` (implementation FROZEN; pinned
+    by PV-CI INV-ZKBA-003) and `zkba.projection_manifest.v1` (§9.2 spec
+    design-time). External tooling can use this field to detect which
+    schema name a manifest was emitted under.
+    """
+    valid:             bool       = False
+    errors:            list       = field(default_factory=list)
+    zkba_class_name:   str        = ""
+    proof_weight_name: str        = ""
+    schema_name_form:  str        = "absent"  # "implementation" / "spec_design_time" / "unknown" / "absent"
+    error:             "str|None" = None
+
+
+class VAPIZKBAValidator:
+    """Client for POST /operator/zkba-validate-manifest (Phase O3-ZKBA-TRACK1
+    Lane B G4 follow-up).
+
+    Validates a ZKBA projection manifest dict against B.8 G4 rules. The
+    validator is fail-open at the bridge layer (malformed manifest
+    content returns HTTP 200 + valid=False + errors populated); HTTP
+    422 is reserved for body-parsing errors (non-JSON body / non-object
+    body) at the wire boundary.
+
+    Read-key auth (x-api-key Header).
+
+    Usage::
+
+        client = VAPIZKBAValidator("http://localhost:8081", api_key)
+
+        # Validate a manifest dict you already have in memory
+        result = client.validate({"schema": "vapi-zkba-manifest-v1", ...})
+        if result.valid:
+            print(f"OK: {result.zkba_class_name} / {result.proof_weight_name}")
+        else:
+            for err in result.errors:
+                print(f"INVALID: {err}")
+
+        # Validate a manifest file loaded from disk
+        with open("artifact.manifest.json") as f:
+            result = client.validate(json.loads(f.read()))
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key  = api_key
+
+    def validate(self, manifest: dict) -> ZKBAValidateResult:
+        """POST a manifest dict to /operator/zkba-validate-manifest and
+        return the ManifestValidationResult shape. Never raises.
+
+        Args:
+            manifest: dict conforming to vapi-zkba-manifest-v1 (or the
+                §9.2 design-time `zkba.projection_manifest.v1` schema).
+                MUST be a JSON-serializable dict.
+
+        Returns:
+            ZKBAValidateResult. On transport / parse / connection error,
+            returns result with .error populated. On bridge wire error
+            (HTTP 422 from body-parsing, HTTP 403 from auth failure),
+            returns result with .error set to the HTTP error text.
+            On successful HTTP exchange (200), returns result with
+            .valid + .errors + class/weight names + schema_name_form
+            populated from the bridge response body.
+        """
+        try:
+            import urllib.request, urllib.error, json
+            url = f"{self._base}/operator/zkba-validate-manifest"
+            body_bytes = json.dumps(manifest).encode("utf-8")
+            req = urllib.request.Request(
+                url,
+                data=body_bytes,
+                method="POST",
+                headers={
+                    "x-api-key":    self._key,
+                    "Content-Type": "application/json",
+                },
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    body = json.loads(resp.read().decode())
+            except urllib.error.HTTPError as http_exc:
+                # 403 wrong key, 422 body-parse, 500 import failure
+                try:
+                    err_body = json.loads(http_exc.read().decode())
+                    err_msg = err_body.get("detail", str(http_exc))
+                except Exception:
+                    err_msg = f"HTTP {http_exc.code}: {http_exc.reason}"
+                return ZKBAValidateResult(error=str(err_msg))
+            return ZKBAValidateResult(
+                valid             = bool(body.get("valid", False)),
+                errors            = list(body.get("errors", [])),
+                zkba_class_name   = str(body.get("zkba_class_name", "")),
+                proof_weight_name = str(body.get("proof_weight_name", "")),
+                schema_name_form  = str(body.get("schema_name_form", "absent")),
+            )
+        except Exception as exc:
+            return ZKBAValidateResult(error=str(exc))
 
