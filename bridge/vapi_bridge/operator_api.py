@@ -9298,4 +9298,101 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "timestamp": time.time(),
         }
 
+    # ------------------------------------------------------------------
+    # Phase O3-ZKBA-TRACK1 Lane B G4 follow-up (2026-05-12) —
+    # POST /operator/zkba-validate-manifest endpoint.
+    #
+    # Extends the G4 manifest validator's reach to the bridge HTTP
+    # surface. Mirrors the C4 → c2510883 architectural pattern for the
+    # ZKBA primitive itself (C4 shipped MCP + SDK wire-locked; c2510883
+    # shipped the bridge endpoints closing the wire-contract loop).
+    #
+    # Read-only validation; no Cedar evaluation, no chain action, no
+    # operator-agent draft emission, no store mutation. Wallet 0 IOTX.
+    #
+    # The validator module lives at scripts/zkba_manifest_validator.py
+    # (alongside vsd_ui_compiler.py per G4 architectural decision). The
+    # bridge does not normally import from scripts/; we do a localized
+    # sys.path.insert + lazy import inside the endpoint to localize the
+    # cross-directory dependency. This is a one-time inversion of the
+    # usual scripts/-depends-on-bridge/ direction; it's deliberate at
+    # this endpoint and not generalized.
+    # ------------------------------------------------------------------
+    @app.post("/operator/zkba-validate-manifest")
+    async def validate_zkba_manifest_endpoint(
+        request: Request,
+        x_api_key: str = Header(default=""),
+    ):
+        """Phase O3-ZKBA-TRACK1 Lane B G4 follow-up — validate a ZKBA
+        projection manifest dict against B.8 G4 rules.
+
+        Accepts JSON body containing a manifest dict (the 8-field FROZEN
+        simple-form manifest emitted by scripts/vsd_ui_compiler.compile_artifact,
+        or a richer dict that includes the 8 required fields).
+
+        Returns the same shape consumed by the MCP tool
+        vapi_validate_zkba_manifest at vapi-mcp/knowledge_server.py:
+
+            {
+                "valid":             bool,
+                "errors":            list[str],
+                "zkba_class_name":   str,
+                "proof_weight_name": str,
+                "schema_name_form":  str,   # "implementation" /
+                                            # "spec_design_time" /
+                                            # "unknown" / "absent"
+                "timestamp":         float,
+            }
+
+        Read-key auth (x-api-key Header). 422 on non-JSON or non-object
+        body; 500 if validator import fails (should never happen in
+        well-formed repo); validator itself is fail-open (never raises;
+        malformed manifests produce valid=False + populated errors).
+
+        Track 1 contract: the endpoint is purely a deterministic validator
+        wrapper. No filesystem writes, no DB inserts, no chain reads.
+        """
+        _check_read_key(x_api_key)
+
+        # Parse JSON body
+        try:
+            manifest = await request.json()
+        except Exception as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=f"invalid JSON body: {exc}",
+            )
+        if not isinstance(manifest, dict):
+            raise HTTPException(
+                status_code=422,
+                detail=f"body must be a JSON object; got {type(manifest).__name__}",
+            )
+
+        # Lazy import of validator. scripts/ is not on bridge's default
+        # sys.path; localize the path addition here so it doesn't
+        # generalize across the codebase.
+        import sys as _sys
+        from pathlib import Path as _Path
+        _scripts_dir = str(_Path(__file__).resolve().parent.parent.parent / "scripts")
+        if _scripts_dir not in _sys.path:
+            _sys.path.insert(0, _scripts_dir)
+        try:
+            from zkba_manifest_validator import validate_zkba_manifest  # type: ignore
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"validator import failed: {exc}",
+            )
+
+        # Run the validator (fail-open; never raises)
+        result = validate_zkba_manifest(manifest)
+        return {
+            "valid":             bool(result.valid),
+            "errors":            list(result.errors),
+            "zkba_class_name":   result.zkba_class_name,
+            "proof_weight_name": result.proof_weight_name,
+            "schema_name_form":  result.schema_name_form,
+            "timestamp":         time.time(),
+        }
+
     return app

@@ -1835,6 +1835,8 @@ content = v1.0r2 + v1.1 amendment.**
 - (satisfied): Anti-Hype Visual Grammar tests passing (B.8 G5c)
 - (partially satisfied): §9.3 visual honesty tests for active artifact set (B.8 G3) — 6 of 10 rules covered for GIC; 3 N/A for GIC's CHAIN_ONLY profile (will close when DEMO / FROZEN_DISABLED / marketplace classes ship); 1 deferred to Track 2 per §A.12
 - (satisfied): ZKBA manifest schema validated against representative artifacts of all 7 §5 classes (B.8 G4)
+- 2026-05-12: G4 reach extended to MCP — `vapi_validate_zkba_manifest` tool added at `vapi-mcp/knowledge_server.py` (4 new tests T-ZKBA-17..20 PASS); accepts inline manifest dict or manifest_path; mirrors C4 ZKBA primitive MCP pattern; surfaces schema_name_form drift to LLM agents.
+- 2026-05-12: G4 reach extended to bridge HTTP — `POST /operator/zkba-validate-manifest` endpoint added at `bridge/vapi_bridge/operator_api.py` (13 new tests T-ZKBA-VEP-1..7 PASS including 7-class parametrized coverage); read-key auth; 422 on body-parse errors; 200+fail-open on content-validation errors; surfaces schema_name_form drift via response field. Localized sys.path.insert + lazy import (`scripts/` → bridge endpoint) is a one-time inversion of the usual `scripts/`-depends-on-`bridge/` direction, deliberate at this endpoint. This completes the C4 → c2510883 architectural progression for the G4 validator: Python lib → MCP tool → bridge HTTP. Wallet-free; no PV-CI change.
 - (pending): VBDIP-0002 activation under resolved numbering successor
 
 **Supersession discipline:** VBDIP-0002 v1.0 is a foundational sidecar.
