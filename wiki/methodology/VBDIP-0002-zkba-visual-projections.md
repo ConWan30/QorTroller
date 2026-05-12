@@ -1801,13 +1801,170 @@ remaining three sections continue as VBDIP-0002A sidecar content.
 
 ---
 
+## Appendix C — Schema Name Reconciliation (v1.2 amendment)
+
+This appendix is a **v1.2 amendment** codifying bilateral acceptance
+of two ZKBA projection manifest schema names per the resolution
+proposal at
+`vsd-vault/proposals/drafts/VBDIP-0002-schema-name-reconciliation.DRAFT.md`
+recommended **Option C — Codify bilateral acceptance** (§8).
+
+The v1.0 spec sections §§1-17 + Appendix A + Appendix B remain
+byte-identical; the supersession discipline (§18 "do not modify v1.0
+in place") is honored — Appendix C is purely additive, matching the
+Appendix A + Appendix B precedent that the v1.0 freeze accepts for
+"build on this freeze."
+
+### C.1 The Drift
+
+During G4 implementation (commit `210f841b`), the manifest validator
+discovered a divergence between the spec text at §9.2 and the
+implementation at `scripts/vsd_ui_compiler.py:58`:
+
+| Layer | Schema name literal |
+|---|---|
+| **§9.2 spec design-time text** | `zkba.projection_manifest.v1` |
+| **`scripts/vsd_ui_compiler.py:58` implementation** | `vapi-zkba-manifest-v1` |
+| **PV-CI INV-ZKBA-003 pin** | `vapi-zkba-manifest-v1` |
+
+The drift trace:
+
+- **C3 (commit `3b3081d3`)** — implementation chose
+  `vapi-zkba-manifest-v1` without consulting §9.2
+- **C5 (commit `0791c935`)** — INV-ZKBA-003 FROZE the implementation
+  name at the PV-CI layer
+- **G4 (commit `210f841b`)** — validator authored; drift discovered
+- **2026-05-12** — proposal authored at commit `f17622c0`
+  recommending Option C
+
+### C.2 Bilateral Acceptance
+
+The validator at `scripts/zkba_manifest_validator.py` accepts BOTH
+schema names via `ACCEPTED_SCHEMA_NAMES` frozenset:
+
+```python
+IMPLEMENTATION_SCHEMA_NAME = "vapi-zkba-manifest-v1"
+SPEC_DESIGN_TIME_SCHEMA_NAME = "zkba.projection_manifest.v1"
+ACCEPTED_SCHEMA_NAMES = frozenset({
+    IMPLEMENTATION_SCHEMA_NAME,
+    SPEC_DESIGN_TIME_SCHEMA_NAME,
+})
+```
+
+The `schema_name_form` field of `ManifestValidationResult` surfaces
+which name a given manifest was emitted under. The same field is
+returned through all four reach surfaces (Python lib + MCP tool +
+bridge HTTP endpoint + SDK client) so external tooling can detect
+schema-name drift per request.
+
+### C.3 Canonical Name (New Emissions)
+
+**`vapi-zkba-manifest-v1` is the canonical name for new emissions.**
+
+PV-CI invariant INV-ZKBA-003 pins this literal in the implementation
+allowlist at `.github/INVARIANTS_ALLOWLIST.json`. Any future ZKBA
+manifest emission MUST use this name to satisfy the invariant gate.
+
+Rationale:
+
+- The implementation has been in production through 14 commits since
+  C3 (2026-05-10)
+- INV-ZKBA-003 is an operator-frozen protocol invariant; changing the
+  pin literal would require `--confirm-governance` ceremony
+- The implementation name was the working name at the time PV-CI
+  governance was applied
+
+### C.4 Recognized Legacy Name (Read-Only)
+
+**`zkba.projection_manifest.v1` is the recognized legacy name for
+validation only.**
+
+The validator accepts manifests under this name so legacy / third-
+party / hypothetical emissions referencing §9.2 spec text remain
+interpretable. No new emissions under this name are permitted by the
+PV-CI invariant gate.
+
+This bilateral discipline preserves forward compatibility: external
+integrators who read §9.2 design-time text and constructed manifests
+under the spec name during the drift window (2026-05-10 to
+2026-05-12) are not invalidated; their manifests still validate
+successfully.
+
+### C.5 Validator Behavior Pin
+
+The four `schema_name_form` values are FROZEN at v1.2:
+
+| Value | Meaning |
+|---|---|
+| `"implementation"` | Manifest uses `vapi-zkba-manifest-v1` |
+| `"spec_design_time"` | Manifest uses `zkba.projection_manifest.v1` |
+| `"unknown"` | Schema string present but not in `ACCEPTED_SCHEMA_NAMES` |
+| `"absent"` | Schema field missing or not a string |
+
+The validator emits exactly one of these four values per request.
+External tooling can branch on this field to implement migration
+flows, drift detection, audit logging, etc.
+
+### C.6 Migration Path Reservation
+
+If a future VBDIP-0002 v2.0 freeze chooses to migrate to a different
+schema name (e.g., `vapi-zkba-projection-manifest-v2`), the v2
+manifest spec will carry forward BOTH v1 names as
+ACCEPTED-FOR-VERIFICATION-ONLY:
+
+- v2 emissions use the v2 name
+- v1.x emissions (under either C.3 canonical or C.4 legacy name)
+  remain validatable indefinitely
+- No backwards-incompatible breakage
+
+This reservation prevents future migration from invalidating the
+artifact history that accumulates under v1.
+
+### C.7 Cross-References
+
+- `vsd-vault/proposals/drafts/VBDIP-0002-schema-name-reconciliation.DRAFT.md`
+  (commit `f17622c0`) — full options analysis for A/B/C/D
+- `scripts/zkba_manifest_validator.py` (commit `210f841b`) —
+  bilateral-acceptance implementation
+- `scripts/vapi_invariant_gate.py` INV-ZKBA-003 entry — implementation
+  name FROZEN pin
+- `wiki/methodology/VEDIP-0001-engineering-discipline-retrospective.md`
+  Appendix A entry for VED-INV-066 — implementation name reflected
+  in documentation alias map (no change required under this
+  amendment)
+
+### C.8 Status
+
+**v1.2 amendment status: SHIPPED 2026-05-12.**
+
+Codifies the working state. Validator implementation already matches
+(no code change). PV-CI INV-ZKBA-003 unchanged. v1.0 spec §§1-17 +
+Appendix A + Appendix B byte-identical per supersession discipline.
+
+### C.9 What This Amendment Does NOT Do
+
+- Does not edit §9.2 text in place (would violate supersession).
+- Does not regenerate `.github/INVARIANTS_ALLOWLIST.json`.
+- Does not change INV-ZKBA-003 pin literal.
+- Does not change implementation schema name in
+  `scripts/vsd_ui_compiler.py`.
+- Does not re-emit any compiled ZKBA artifact.
+- Does not author a VBDIP-0002 v2.0 migration proposal (Option B
+  from the resolution proposal). If a future operator decides v2.0
+  migration is appropriate, that proposal is authored as a separate
+  document.
+- Does not run a signing ceremony.
+
+---
+
 ## 18. Document Metadata
 
 **Document version:** VBDIP-0002 v1.0r2 FROZEN-SPEC candidate
 + v1.1 amendment (Appendix B — VBDIP-0002A Absorption) applied
-2026-05-12. v1.0 spec §§1-17 + Appendix A byte-identical; v1.1
-amendment is additive per supersession discipline. **Active spec
-content = v1.0r2 + v1.1 amendment.**
+2026-05-12 + v1.2 amendment (Appendix C — Schema Name Reconciliation)
+applied 2026-05-12. v1.0 spec §§1-17 + Appendix A + Appendix B
+byte-identical; v1.2 amendment is additive per supersession discipline.
+**Active spec content = v1.0r2 + v1.1 amendment + v1.2 amendment.**
 **Generated:** 2026-05-10
 **Tags:** `#vbdip #zkba #html-projection #visual-honesty #proof-weight #curator #depin #iotex #vad #vsd #ved #vbd #appendix-extensions #revised-r1`
 **Operational status:** Sidecar specification only; not operationally active.
@@ -1838,6 +1995,7 @@ content = v1.0r2 + v1.1 amendment.**
 - 2026-05-12: G4 reach extended to MCP — `vapi_validate_zkba_manifest` tool added at `vapi-mcp/knowledge_server.py` (4 new tests T-ZKBA-17..20 PASS); accepts inline manifest dict or manifest_path; mirrors C4 ZKBA primitive MCP pattern; surfaces schema_name_form drift to LLM agents.
 - 2026-05-12: G4 reach extended to bridge HTTP — `POST /operator/zkba-validate-manifest` endpoint added at `bridge/vapi_bridge/operator_api.py` (13 new tests T-ZKBA-VEP-1..7 PASS including 7-class parametrized coverage); read-key auth; 422 on body-parse errors; 200+fail-open on content-validation errors; surfaces schema_name_form drift via response field. Localized sys.path.insert + lazy import (`scripts/` → bridge endpoint) is a one-time inversion of the usual `scripts/`-depends-on-`bridge/` direction, deliberate at this endpoint. This completes the C4 → c2510883 architectural progression for the G4 validator: Python lib → MCP tool → bridge HTTP. Wallet-free; no PV-CI change.
 - 2026-05-12: G4 reach trio CLOSED — SDK `VAPIZKBAValidator` client added at `sdk/vapi_sdk.py:9340+` wrapping `POST /operator/zkba-validate-manifest`. SDK_VERSION bumped `3.1.0-phase-o3-zkba-track1-c4-sdk` → `3.1.1-phase-o3-zkba-track1-g4-validator-sdk`. `ZKBAValidateResult` slotted dataclass (6 fields: valid / errors / zkba_class_name / proof_weight_name / schema_name_form / error) with same fail-open contract as VAPIZKBA / VAPIDraftReview / VAPIFleetReadinessRoot. 12 new SDK tests T-ZKBA-VSDK-1..6 PASS including 7-class parametrized live round-trip via uvicorn fixture. Existing T-ZKBA-13 sanity check relaxed `startswith("3.1.0")` → `startswith("3.1.")` to permit patch bumps within the 3.1.x family. Final reach surface for the G4 validator: Python lib (G4 commit 210f841b) → MCP tool (commit 53553047) → bridge HTTP (commit 4f63c5d5) → SDK (this commit). Wallet-free; no PV-CI change.
+- 2026-05-12: **v1.2 amendment applied** — Appendix C authored landing Option C from the §9.2 schema-name reconciliation proposal at commit `f17622c0`. **Codifies bilateral acceptance**: `vapi-zkba-manifest-v1` (implementation; INV-ZKBA-003 pin) is CANONICAL for new emissions; `zkba.projection_manifest.v1` (§9.2 spec design-time text) is RECOGNIZED for read-only validation of legacy / third-party manifests. v1.0 spec §§1-17 + Appendix A + Appendix B NOT modified per §18 supersession discipline. Validator implementation at `scripts/zkba_manifest_validator.py` (commit 210f841b) already implements the bilateral acceptance; this amendment codifies the working state. No code change; no PV-CI ceremony; no allowlist regeneration. Migration path reservation §C.6 preserves forward compatibility for a future v2.0 schema migration. Wallet 0 IOTX; chain impact none; `CHAIN_SUBMISSION_PAUSED=true` held.
 - (pending): VBDIP-0002 activation under resolved numbering successor
 
 **Supersession discipline:** VBDIP-0002 v1.0 is a foundational sidecar.
