@@ -104,3 +104,83 @@ def test_t_zkba_13_mcp_vapi_compile_zkba_artifact_returns_command():
     # VHP class -> stub
     result_vhp = asyncio.run(fn(zkba_class="VHP"))
     assert result_vhp["status"] == "NO BUILDER SHIPPED"
+
+
+# ---------------------------------------------------------------------------
+# T-ZKBA-17: vapi_validate_zkba_manifest MCP tool registration + behavior
+# (Phase O3-ZKBA-TRACK1 Lane B G4 follow-up, 2026-05-12)
+# ---------------------------------------------------------------------------
+
+def test_t_zkba_17_mcp_vapi_validate_zkba_manifest_registered():
+    """Verify vapi_validate_zkba_manifest is registered with the expected
+    schema shape (no required params; both 'manifest' and 'manifest_path'
+    optional inputs)."""
+    ks = _import_knowledge_server()
+    assert "vapi_validate_zkba_manifest" in ks.TOOLS, \
+        f"vapi_validate_zkba_manifest missing from TOOLS; have: {sorted(ks.TOOLS.keys())[:30]}"
+    tool = ks.TOOLS["vapi_validate_zkba_manifest"]
+    assert "description" in tool and "schema" in tool and "fn" in tool
+    schema = tool["schema"]
+    assert schema.get("type") == "object"
+    # No REQUIRED params — caller supplies one of {manifest, manifest_path}
+    assert schema.get("required", []) == []
+    props = schema.get("properties", {})
+    assert "manifest" in props
+    assert "manifest_path" in props
+    # Description mentions key concepts
+    desc = tool["description"]
+    assert "validate" in desc.lower() or "manifest" in desc.lower()
+    assert "G4" in desc or "validator" in desc.lower()
+
+
+def test_t_zkba_18_mcp_vapi_validate_zkba_manifest_happy_path():
+    """Tool accepts an inline manifest dict + returns the validator
+    ManifestValidationResult fields. Round-trip test: build a
+    representative GIC manifest via scripts/zkba_manifest_validator
+    helper and pass it through the MCP tool."""
+    ks = _import_knowledge_server()
+    fn = ks.TOOLS["vapi_validate_zkba_manifest"]["fn"]
+
+    # Build a valid GIC manifest via the same helper used at G4
+    import sys as _sys, os as _os
+    _scripts = _os.path.normpath(_os.path.join(
+        _os.path.dirname(__file__), "..", "..", "scripts"
+    ))
+    _sys.path.insert(0, _scripts)
+    from zkba_manifest_validator import build_representative_manifest  # type: ignore
+    from vapi_bridge.zkba_artifact import ZKBAClass  # type: ignore
+
+    manifest = build_representative_manifest(zkba_class=ZKBAClass.GIC)
+    result = asyncio.run(fn(manifest=manifest))
+    assert result["valid"] is True, f"unexpected errors: {result['errors']}"
+    assert result["errors"] == []
+    assert result["zkba_class_name"] == "GIC"
+    assert result["proof_weight_name"] == "CHAIN_ONLY"
+    assert result["schema_name_form"] == "implementation"
+    assert result["manifest_source"] == "inline"
+
+
+def test_t_zkba_19_mcp_vapi_validate_zkba_manifest_rejects_malformed():
+    """Tool returns valid=False + errors[] populated when input is
+    malformed. Fail-open contract preserved end-to-end through the
+    MCP boundary."""
+    ks = _import_knowledge_server()
+    fn = ks.TOOLS["vapi_validate_zkba_manifest"]["fn"]
+
+    # Malformed: missing required fields
+    bad = {"schema": "vapi-zkba-manifest-v1"}
+    result = asyncio.run(fn(manifest=bad))
+    assert result["valid"] is False
+    assert len(result["errors"]) > 0
+    assert any("missing required fields" in e for e in result["errors"])
+
+
+def test_t_zkba_20_mcp_vapi_validate_zkba_manifest_no_input():
+    """Tool returns clear error when neither 'manifest' nor
+    'manifest_path' is provided."""
+    ks = _import_knowledge_server()
+    fn = ks.TOOLS["vapi_validate_zkba_manifest"]["fn"]
+    result = asyncio.run(fn())
+    assert result["valid"] is False
+    assert any("must provide either" in e for e in result["errors"])
+    assert result["manifest_source"] == "none"

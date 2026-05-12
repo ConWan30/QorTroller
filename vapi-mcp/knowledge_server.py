@@ -1686,6 +1686,110 @@ async def vapi_zkba_projection_manifest(commitment_hex: str, **_):
 
 
 # ============================================================
+# Phase O3-ZKBA-TRACK1 Lane B G4 follow-up (2026-05-12) —
+# MCP tool exposing the ZKBA manifest validator
+# ============================================================
+
+@tool(
+    name="vapi_validate_zkba_manifest",
+    description=(
+        "Validates a ZKBA projection manifest dict against B.8 G4 rules per "
+        "scripts/zkba_manifest_validator.validate_zkba_manifest. Returns "
+        "{valid, errors, zkba_class_name, proof_weight_name, schema_name_form}. "
+        "Fail-open: never raises. Validates 8-field FROZEN simple-form manifest "
+        "emitted by scripts/vsd_ui_compiler.compile_artifact. Accepts both schema "
+        "names (implementation 'vapi-zkba-manifest-v1' + spec-design-time "
+        "'zkba.projection_manifest.v1'); the schema_name_form field surfaces "
+        "the §9.2-vs-implementation drift documented as V-check finding at G4 ship."
+    ),
+    schema={
+        "type": "object",
+        "properties": {
+            "manifest": {
+                "type": "object",
+                "description": "ZKBA manifest dict to validate. Either inline dict or parsed JSON from .manifest.json file."
+            },
+            "manifest_path": {
+                "type": "string",
+                "description": "Optional alternative: filesystem path to a .manifest.json file. Resolved relative to PROJECT_ROOT if not absolute. If both manifest and manifest_path are provided, manifest takes precedence."
+            },
+        },
+        "required": [],
+    }
+)
+async def vapi_validate_zkba_manifest(
+    manifest: dict | None = None,
+    manifest_path: str | None = None,
+    **_,
+):
+    """Phase O3-ZKBA-TRACK1 Lane B G4 follow-up — MCP-side validator."""
+    # Resolve the manifest dict — either from inline arg or from path
+    resolved_manifest = None
+    source = "none"
+    if manifest is not None:
+        resolved_manifest = manifest
+        source = "inline"
+    elif manifest_path:
+        path = manifest_path
+        if not os.path.isabs(path):
+            path = str(PROJECT_ROOT / path)
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                resolved_manifest = json.loads(f.read())
+            source = "file"
+        except Exception as exc:
+            return {
+                "valid":             False,
+                "errors":            [f"failed to read manifest_path {manifest_path!r}: {exc}"],
+                "zkba_class_name":   "",
+                "proof_weight_name": "",
+                "schema_name_form":  "absent",
+                "manifest_source":   "file_read_error",
+            }
+    else:
+        return {
+            "valid":             False,
+            "errors":            ["must provide either 'manifest' (dict) or 'manifest_path' (str)"],
+            "zkba_class_name":   "",
+            "proof_weight_name": "",
+            "schema_name_form":  "absent",
+            "manifest_source":   "none",
+        }
+
+    # Import the validator on-demand. Module sits in scripts/ (not bridge/);
+    # add scripts/ to sys.path the same way the GIC compiler does at
+    # bridge/tests/test_phase_o3_zkba_compiler.py.
+    _scripts_dir = str(PROJECT_ROOT / "scripts")
+    if _scripts_dir not in sys.path:
+        sys.path.insert(0, _scripts_dir)
+    _bridge_dir = str(PROJECT_ROOT / "bridge")
+    if _bridge_dir not in sys.path:
+        sys.path.insert(0, _bridge_dir)
+
+    try:
+        from zkba_manifest_validator import validate_zkba_manifest  # type: ignore
+    except Exception as exc:
+        return {
+            "valid":             False,
+            "errors":            [f"validator import failed: {exc}"],
+            "zkba_class_name":   "",
+            "proof_weight_name": "",
+            "schema_name_form":  "absent",
+            "manifest_source":   source,
+        }
+
+    result = validate_zkba_manifest(resolved_manifest)
+    return {
+        "valid":             bool(result.valid),
+        "errors":            list(result.errors),
+        "zkba_class_name":   result.zkba_class_name,
+        "proof_weight_name": result.proof_weight_name,
+        "schema_name_form":  result.schema_name_form,
+        "manifest_source":   source,
+    }
+
+
+# ============================================================
 # MCP Server Loop
 # ============================================================
 
