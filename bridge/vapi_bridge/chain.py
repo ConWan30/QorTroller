@@ -2629,9 +2629,10 @@ class ChainClient:
     _LISTING_DEVICE_ID = hashlib.sha256(b"VAPI_LISTING_v1").digest()
     # Phase O3-ZKBA-TRACK1 Track 2 C7 — ZKBA artifact attribution constant.
     # Same underscore-vs-hyphen asymmetry as corpus + biometric + listing
-    # snapshots. The FROZEN commitment domain tag uses hyphens
-    # (b"VAPI-ZKBA-ARTIFACT-v1" — PV-CI pinned by INV-ZKBA-002);
-    # the device-id-hash attribution uses underscores (b"VAPI_ZKBA_v1").
+    # snapshots. The FROZEN commitment domain tag uses HYPHENS (canonical
+    # name: VAPI-ZKBA-ARTIFACT v1; PV-CI pinned by INV-ZKBA-002 in
+    # bridge/vapi_bridge/zkba_artifact.py); the device-id-hash attribution
+    # uses underscores per the byte literal below.
     _ZKBA_DEVICE_ID = hashlib.sha256(b"VAPI_ZKBA_v1").digest()
 
     async def anchor_corpus_snapshot(
