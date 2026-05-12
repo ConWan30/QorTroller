@@ -263,16 +263,8 @@
     "digest": "ff0059e5ab16cf884f8c90c50d69b011acc33a1cc047b08d181ee434d5dd3f92",
     "description": "vapi-zkba-manifest-v1 manifest schema string pinned in scripts/vsd_ui_compiler.py \u2014 FROZEN at v1.0 per VBDIP-0002 \u00a79.2; identifies the projection manifest schema version that the deterministic UI compiler emits (Phase O3-ZKBA-TRACK1 C3)"
   },
-  "VBD-INV-001": {
-    "digest": "d4c6a0911f2b4fab490a9bdb2600435236e386444518c7d9f92799f9ac656ae6",
-    "description": "Continuous deployer-verified provenance under fleet expansion \u2014 bridge wallet 0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692 is the load-bearing identity anchor for all VAPI work across all sub-disciplines; check_vbd_inv_1 signature documented in VBDIP-0001 \u00a74.1 (markdown-normative; programmatic check deferred to VBDIP-0003)"
-  },
-  "VBD-INV-002": {
-    "digest": "51660ad354431dfab5648169d3acf77de0db5acc8ee22dcd5db1437936602550",
-    "description": "Fleet-domain replication discipline \u2014 new operator domains must follow the structural pattern established by the synthesis fleet's relationship to the protocol fleet; check_vbd_inv_2 signature documented in VBDIP-0001 \u00a74.2 (markdown-normative; programmatic check deferred to VBDIP-0003)"
-  },
-  "VBD-INV-003": {
-    "digest": "a9bdd6bf532aa5f9304a1386b8310953f2889c55ec16185cbc4fe760cb4e8e6c",
-    "description": "Primitive composition discipline \u2014 every FROZEN-v1 primitive in PATTERN-017 must declare its composition path with other primitives or explicitly state composition-terminal; check_vbd_inv_3 signature documented in VBDIP-0001 \u00a74.3 (markdown-normative; programmatic check deferred to VBDIP-0003)"
+  "INV-VPM-WRAPPER-001": {
+    "digest": "7998c5b3b2e521f8da48d7752b671d7818d3411290a543906983b64c3a76ef3f",
+    "description": "vapi-vpm-manifest-v1 wrapper schema string pinned in scripts/vsd_vpm_wrapper.py \u2014 FROZEN at v1.0 per VBDIP-0002 Appendix B B.4 (v1.1 amendment); identifies the VPM wrapper manifest schema that wraps (does not replace) the FROZEN vapi-zkba-manifest-v1 ZKBA schema. Resolved via Operator Decision Matrix D-PV-VPM Option P3 (single-pin minimal form mirroring INV-ZKBA-003); ships 2026-05-12. Supplements G5b static guard tests (test_t_vpm_static_wrapper_schema_string_pinned_in_source) by elevating the FROZEN literal to PV-CI gate enforcement. VPM-HONESTY-001 (Appendix B B.5) remains a methodology-doc identifier; INV-VPM-WRAPPER-001 is the implementation-layer pin (distinct surfaces per reconciliation plan \u00a74)."
   }
 }
