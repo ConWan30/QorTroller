@@ -1,0 +1,40 @@
+{
+  "$schema": "vapi-cedar-bundle-v1",
+  "agent_id": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1",
+  "_v2_note": "Track 2 C6 (commit ships 2026-05-12 per Operator Decision Matrix D-TRACK2-C6 + plan §6 A1) — adds zk_verifications/ lane + ZKBA audit trail permit. References (does not replace) v1; v1 remains live until C8 ceremony anchors v2.",
+  "phase": "O2_SUGGEST",
+  "version": 2,
+  "issued_at_iso": "2026-05-12T00:00:00Z",
+  "lane_prefixes": [
+    "audits/",
+    "invariants/",
+    "ops/",
+    "sweeps/",
+    "zk_verifications/"
+  ],
+  "policies": [
+    {"id": "P-001", "effect": "permit", "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"}, "action": "skill:read", "resource": "lane://audits/**"},
+    {"id": "P-002", "effect": "permit", "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"}, "action": "skill:read", "resource": "lane://sweeps/**"},
+    {"id": "P-003", "effect": "permit", "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"}, "action": "skill:read", "resource": "lane://ops/**"},
+    {"id": "P-004", "effect": "permit", "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"}, "action": "skill:read", "resource": "lane://invariants/**"},
+    {"id": "P-005", "effect": "permit", "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"}, "action": "tool:audit-log-query", "resource": "chain://iotex-testnet"},
+    {"id": "P-006", "effect": "permit", "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"}, "action": "tool:agent-registry-query", "resource": "chain://iotex-testnet"},
+    {"id": "P-007", "effect": "permit", "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"}, "action": "tool:kms-sign", "resource": "draft://commit_hashes/*"},
+    {"id": "P-008", "effect": "permit", "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"}, "action": "skill:audit-drafting", "resource": "draft://audit_entries/*"},
+    {"id": "P-009", "effect": "permit", "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"}, "action": "skill:operational-diagnostic", "resource": "draft://audit_entries/*"},
+    {"id": "P-010", "effect": "permit", "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"}, "action": "tool:audit-entry-draft", "resource": "draft://audit_entries/*"},
+    {"id": "P-011", "effect": "permit", "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"}, "action": "tool:git-add", "resource": "draft://audit_entries/*"},
+    {"id": "P-012", "effect": "permit", "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"}, "action": "tool:git-commit", "resource": "draft://audit_entries/*"},
+    {"id": "P-013", "effect": "permit", "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"}, "action": "tool:git-pr", "resource": "draft://audit_entries/*"},
+    {"id": "P-014", "effect": "permit", "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"}, "action": "tool:ipfs-pin", "resource": "draft://audit_entries/*"},
+    {"id": "P-015", "_v2_note": "TRACK 2 NEW PERMIT — Guardian may read zk_verifications/ lane (ZKBA verification audit trails)", "effect": "permit", "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"}, "action": "skill:read", "resource": "lane://zk_verifications/**"},
+    {"id": "P-016", "_v2_note": "TRACK 2 NEW PERMIT — Guardian may write ZKBA audit-trail drafts (verification records linking ZKBA artifact commitments to Cedar lane provenance); pairs with C7 zk_audit_trail draft generator", "effect": "permit", "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"}, "action": "tool:zk-audit-trail", "resource": "draft://zk_verifications/*"},
+    {"id": "F-001", "effect": "forbid", "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"}, "action": "tool:git-push", "resource": "*"},
+    {"id": "F-002", "effect": "forbid", "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"}, "action": "tool:pda-attestation-anchor", "resource": "*"},
+    {"id": "F-003", "effect": "forbid", "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"}, "action": "endpoint:write", "resource": "*"},
+    {"id": "F-004", "effect": "forbid", "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"}, "action": "skill:event-correlation", "resource": "*"},
+    {"id": "F-005", "effect": "forbid", "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"}, "action": "skill:provenance-recording", "resource": "*"},
+    {"id": "F-006", "_v2_note": "CROSS-AGENT SEPARATION (preserved) — zk_artifacts lane is Sentry's; Guardian does not anchor there", "effect": "forbid", "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"}, "action": "tool:zk-artifact-anchor", "resource": "*"},
+    {"id": "F-007", "_v2_note": "CROSS-AGENT SEPARATION (preserved) — zk_listings lane is Curator's; Guardian does not write there", "effect": "forbid", "principal": {"agentId": "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1"}, "action": "tool:zk-marketplace-listing", "resource": "*"}
+  ]
+}
