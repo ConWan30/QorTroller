@@ -1828,8 +1828,9 @@ content = v1.0r2 + v1.1 amendment.**
 - (satisfied): VBDIP-0001 FROZEN (gate 16.1 / B.8 G1)
 - (partially satisfied): Compiler harness implementation for Track 1 (`scripts/vsd_ui_compiler.py`; gate 16.3 / B.8 G3 remains open for full visual honesty coverage)
 - (satisfied): VBDIP-0002 / VBDIP-0002A reconciliation (B.8 G5a)
-- (pending): VPM wrapper manifest schema + Integrity Label implementation (B.8 G5b — Lane B work; wallet-free + authority-neutral)
-- (pending): Anti-Hype Visual Grammar tests passing (B.8 G5c — Lane B work; wallet-free + authority-neutral)
+- 2026-05-12: Lane B G5b + G5c shipped — `scripts/vsd_vpm_wrapper.py` authors `vapi-vpm-manifest-v1` wrapper schema (referencing FROZEN `vapi-zkba-manifest-v1`, not replacing), 9-field VPMIntegrityLabel, 6-element VPMVisualState enum, 5-element VPMCaptureMode enum, derive_visual_state() rule engine encoding B.6 failure-state precedence, validate_vpm_manifest() mechanical enforcement. `bridge/tests/test_phase_o3_zkba_vpm_wrapper.py` 24/24 PASS (T-VPM-1..10 wrapper + T-VPM-VG-1..12 visual grammar + 2 static guards). Wallet-free; no PV-CI change; VPM-HONESTY-001 remains methodology-doc identifier per reconciliation plan §4.
+- (satisfied): VPM wrapper manifest schema + Integrity Label implementation (B.8 G5b)
+- (satisfied): Anti-Hype Visual Grammar tests passing (B.8 G5c)
 - (pending): VBDIP-0002 activation under resolved numbering successor
 
 **Supersession discipline:** VBDIP-0002 v1.0 is a foundational sidecar.
