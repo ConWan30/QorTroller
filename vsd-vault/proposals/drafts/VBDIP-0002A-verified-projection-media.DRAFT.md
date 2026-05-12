@@ -1,11 +1,50 @@
 # VBDIP-0002A - Verified Projection Media (VPM) and Stakeholder Utility Layer
 
-**Proposal type:** VBDIP Sidecar / Amendment Candidate
+**Proposal type:** VBDIP Sidecar (PARTIALLY ABSORBED)
 **Parent proposal:** VBDIP-0002 - Zero-Knowledge Biometric Artifacts and Visual Proof Projections
 **Dependency:** VBDIP-0001 is FROZEN; operational activation remains gated by VBDIP-0002 and governance
-**Status:** DRAFT / PARALLEL DEVELOPMENT
-**Scope:** Documentation-only expansion. No new runtime authority granted.
-**Activation:** Not active until reconciled into VBDIP-0002 and approved through governance.
+**Status:** PARTIALLY ABSORBED (2026-05-12); §§6, 8, 10 active sidecar content
+**Scope:** Documentation-only sidecar. No new runtime authority granted.
+**Activation:** Not active until governance-authorized for the sidecar-retained sections.
+
+---
+
+## 0. Reading Note — PARTIALLY ABSORBED Status
+
+**Authoritative status (post 2026-05-12 v1.1 amendment):**
+
+This sidecar's sections **§1, §2, §3, §4, §5, §7, §9, §11, §12** have been
+absorbed into VBDIP-0002 v1.1 amendment as **Appendix B (B.1-B.9)** at
+`wiki/methodology/VBDIP-0002-zkba-visual-projections.md`, per the
+D-MERGE-SELECTIVE disposition recommended in the reconciliation plan at
+`vsd-vault/proposals/drafts/VBDIP-0002-vs-0002A-reconciliation.DRAFT.md` §8.
+
+The absorbed-section text below remains in this file for **historical
+authoring reference**. It is **NOT authoritative** for those sections; the
+authoritative content lives in VBDIP-0002 Appendix B under VBDIP-0002
+governance.
+
+**Sidecar-retained sections (still authoritative under VBDIP-0002A):**
+
+- **§6 Stakeholder Utility Layer** — audience-specific framing
+- **§8 Curator Marketplace Lane** — Curator agent-specific behavior
+- **§10 VPM Projection Registry** — 10 Reserved VPM IDs + lifecycle ladder
+
+These three sections continue as VBDIP-0002A sidecar content; their growth
+and revision discipline remains under VBDIP-0002A authoring.
+
+**What changed at v1.1 amendment ship time:**
+
+- Status: DRAFT / PARALLEL DEVELOPMENT → PARTIALLY ABSORBED
+- Authoritative span: §1-§12 → §6, §8, §10 only
+- VPM-HONESTY-001 namespace locked as methodology-doc identifier (NOT a
+  PV-CI invariant) per VBDIP-0002 Appendix B B.5 + reconciliation plan §4
+- Activation gates G1-G6 of this sidecar superseded by VBDIP-0002 §16 +
+  Appendix B B.8 (11-gate set: G1, G2, G3, G4, G5a, G5b, G5c, G6, G7, G8, G9)
+
+**No file content below this reading note has been deleted.** The absorbed
+sections remain readable as the original VBDIP-0002A authoring; readers
+seeking the authoritative version should consult VBDIP-0002 Appendix B.
 
 ---
 
