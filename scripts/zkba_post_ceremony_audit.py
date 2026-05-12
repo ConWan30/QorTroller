@@ -352,7 +352,7 @@ Run on the operator's PowerShell with the bridge running:
   #    Verification: review 10+ marketplace_listing_review drafts produced
   #    by Curator over a 7-day observation window; verify
   #    operator_disagreement_reason is empty or operator_decision='accept'
-  #    on ≥9/10 (rejection rate < 5% per Phase O2 SUGGEST advancement gate).
+  #    on >=9/10 (rejection rate < 5% per Phase O2 SUGGEST advancement gate).
 
 Observation gates the next operator-track ladder rung (Curator O2 → O3 ACT
 transition; tracked by Operator Initiative O3 watcher per Phase O1 D unified
@@ -540,6 +540,16 @@ async def _run(args: argparse.Namespace) -> int:
 
 
 def _main_cli() -> int:
+    # Windows defaults stdout to cp1252 which can't encode the report's
+    # em-dashes / section symbols / arrows. Reconfigure to UTF-8 with
+    # 'replace' errors so the audit always emits cleanly. No-op on
+    # platforms that already use UTF-8 stdout.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        # Older Python or non-reconfigurable stream — best effort.
+        pass
+
     parser = argparse.ArgumentParser(
         description=(
             "Phase O3-ZKBA-TRACK1 Track 2 post-ceremony audit (D-TRACK2-G6). "
