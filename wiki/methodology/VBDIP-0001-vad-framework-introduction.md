@@ -325,9 +325,113 @@ CVAS document origin: Gemini extrapolation in response to a theoretical perpetua
 
 ---
 
+## Appendix A — Numbering Reservation Amendment (v1.1 amendment)
+
+This appendix is a **v1.1 amendment** released 2026-05-12 per the
+Operator Decision Matrix D-NUM resolution at
+`vsd-vault/proposals/drafts/OPERATOR-DECISION-MATRIX.DRAFT.md`. The
+v1.0 spec sections §§1-10 + §11 metadata remain byte-identical; the
+supersession discipline (§11 "future VBDIPs build on this freeze") is
+honored — Appendix A is purely additive, ratifying the working
+operational state across 17+ commits since 2026-05-10.
+
+### A.1 D-NUM Resolution: Option N1
+
+**Resolved: Option N1 — VBDIP-0002 owns the 0002 slot for ZKBA
+permanently.**
+
+VBDIP-0001 §3.4 (line 79) and §6.1 (line 240) originally reserved
+VBDIP-0002 for Phase O1-VAD-MIGRATE work. This reservation was
+released by operational practice across Phase O3-ZKBA-TRACK1 (2026-
+05-10 onward), during which VBDIP-0002 was authored as the ZKBA
+visual projections proposal. This Appendix A ratifies the working
+state.
+
+### A.2 Updated Reservation Table (Amends v1.0 §3.4 + §6.1)
+
+The amended numbering reservation table takes effect at this v1.1
+amendment ship:
+
+| Proposal number | Reserved for | Source |
+|---|---|---|
+| VBDIP-0001 | This proposal (VAD framework introduction) | v1.0 §11 FROZEN |
+| **VBDIP-0002** | **ZKBA visual projections (Phase O3-ZKBA-TRACK1)** | **v1.1 amendment A.1** |
+| VBDIP-0003 | Post-bootstrap discovery requiring VBD invariant adjustment | v1.0 §3.4 (unchanged) |
+| VBDIP-0004 | Phase O1-VAD-MIGRATE (vsd-vault/ → vad-vault/) | **v1.1 amendment A.1** |
+
+VBDIP-0003 reservation is unchanged from v1.0. The relocated
+Phase O1-VAD-MIGRATE work now reserves VBDIP-0004; v1.0's "VBDIP-0002
+reserved for this purpose" text (§6.1 line 240) is superseded by this
+amendment.
+
+### A.3 Why N1 was Chosen
+
+Three options were on the table per the Operator Decision Matrix
+D-NUM row:
+
+| Option | Action | Cost |
+|---|---|---|
+| **N1** | VBDIP-0002 owns 0002 permanently; Phase O1-VAD-MIGRATE relocates to VBDIP-0004 | Methodology-only; one Appendix A (this) |
+| **N2'** | Renumber VBDIP-0002 → VBDIP-0004; Phase O1-VAD-MIGRATE keeps 0002 reservation | Massive rename churn across 17+ commits' references |
+| **N3** | Keep VBDIP-0002 as indefinite sidecar | Permanent citation-drift risk; ZKBA proposal lineage never numbered |
+
+Operator chose N1 per the broad "do whatever is necessary" + "based on
+your recommendations" authorization at 2026-05-12. N1 mirrors the
+working operational state across all 17 commits in the
+Phase O3-ZKBA-TRACK1 + Lane B + Methodology Layer integration arc.
+
+### A.4 Downstream Effects
+
+This amendment closes VBDIP-0002 §16 G2 (Numbering Decision Resolved)
+and §16 G9 (Numbering Decision Applied; depends on G2):
+
+- **G2 SATISFIED at this commit** — VBDIP-0002 canonical number is
+  pinned at 0002.
+- **G9 SATISFIED at this commit** — All cross-references that
+  previously read "pending numbering decision" now resolve to
+  VBDIP-0002 canonical lineage.
+
+Future references to Phase O1-VAD-MIGRATE work that previously
+pointed to VBDIP-0002 now point to VBDIP-0004 (pending proposal).
+This Appendix authors no new proposal under that number; the
+relocation is a reservation only.
+
+### A.5 What This Appendix Does NOT Do
+
+- Does not edit v1.0 §3.4 line 79 or §6.1 line 240 in place
+  (supersession discipline).
+- Does not author VBDIP-0004 (only reserves the number).
+- Does not regenerate `.github/INVARIANTS_ALLOWLIST.json`.
+- Does not run a signing ceremony. The architect signing chain
+  (`vsd-vault/eval/architect_key_attestation.json`) remains available
+  for future operator-authorized formal manifests.
+- Does not affect VBDIP-0002 v1.0 + v1.1 + v1.2 amendment chain (those
+  remain FROZEN-SPEC + amended per their own §18 supersession
+  discipline).
+
+### A.6 Cross-References
+
+- `wiki/methodology/VBDIP-0002-zkba-visual-projections.md` (canonical
+  ZKBA proposal under VBDIP-0002 lineage per this amendment)
+- `vsd-vault/proposals/drafts/OPERATOR-DECISION-MATRIX.DRAFT.md`
+  (commit `56fe99a2`; D-NUM row source)
+- `wiki/methodology/METHODOLOGY_LAYER_INTEGRATION_MAP.md` (commit
+  `aa436f9b`; references VBDIP-0002 canonically throughout)
+
+### A.7 Status
+
+**v1.1 amendment status: SHIPPED 2026-05-12.**
+
+Closes VBDIP-0002 §16 G2 + G9 gates by ratifying VBDIP-0002 as the
+canonical lineage member for ZKBA work. Phase O1-VAD-MIGRATE
+relocated to VBDIP-0004 (pending proposal; reserved by this
+amendment).
+
+---
+
 ## 11. Document Metadata
 
-**Document version:** VBDIP-0001 v1.0 **FROZEN**
+**Document version:** VBDIP-0001 v1.0 **FROZEN** + v1.1 amendment (Appendix A — Numbering Reservation) applied 2026-05-12. v1.0 spec §§1-10 + §11 byte-identical; v1.1 amendment is additive per supersession discipline. **Active spec content = v1.0 + v1.1 amendment.**
 **Generated:** 2026-05-10
 **Frozen:** 2026-05-10 (Phase O1-VBDIP-0001-INTEGRATION Step 5)
 **Author authority:** VAPI Architect, sole deployer (`0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692`)
@@ -343,6 +447,7 @@ CVAS document origin: Gemini extrapolation in response to a theoretical perpetua
 - 2026-05-10 (Step 3, commit `be13de49`): State reconciliation amendments — PATTERN-017 count canonicalized; VED-INV-N clarified as count-abstraction; master resumption Phase D revised to Option D2; bootstrap canonical state references refreshed (bridge 2836→2922; PV-CI 55→63)
 - 2026-05-10 (Step 4, commit `8b95d5bc`): Architect Ed25519 key generated; bridge wallet EIP-191 attestation produced (`vsd-vault/eval/architect_key_attestation.json`); deployer-anchored signing chain established per VBD-INV-1
 - 2026-05-10 (Step 5, this commit): Architect Ed25519 signature applied to VBDIP-0001 canonical hash; manifest authored at `vsd-vault/manifests/proposals-VBDIP-0001/001.manifest.json`; harness extended with `--proposal-type` flag (4 choices); allowlist regenerated 63→66 entries with VBD-INV-001/002/003; `vsd-vault/README.md` authored per §6.2 deferred-migration documentation; **status: FROZEN**
+- 2026-05-12: **v1.1 amendment applied** — Appendix A authored ratifying Operator Decision Matrix D-NUM Option N1. VBDIP-0002 canonical number pinned at 0002 for ZKBA proposal lineage; Phase O1-VAD-MIGRATE relocated to VBDIP-0004 (pending proposal). v1.0 spec §§1-10 + §11 byte-identical per supersession discipline. Closes VBDIP-0002 §16 G2 + G9 gates. No code change; no PV-CI ceremony; no allowlist regeneration. Wallet 0 IOTX; chain impact none; `CHAIN_SUBMISSION_PAUSED=true` held.
 
 **Supersession discipline:** VBDIP-0001 is a foundational proposal that establishes the VBD lineage and the VAD framework. It is not superseded by future VBDIPs; future VBDIPs build on it. Future VBDIPs (VBDIP-0002 for Phase O1-VAD-MIGRATE, VBDIP-0003 for full Python harness, etc.) reference VBDIP-0001 as their architectural foundation.
 
