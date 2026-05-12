@@ -178,16 +178,25 @@ async def _run(args: argparse.Namespace) -> int:
         return 1
     print(f"  Gates 1 + 2: {reason}")
 
-    if not args.confirm:
+    # Gate 3 is required for FIRING; dry-run bypasses Gate 3 by design (the
+    # purpose of dry-run is to exercise the pre-flight chain WITHOUT
+    # requiring the third authorization factor). Mirrors parallel_o2_anchor.py
+    # precedent where dry-run = "--confirm absent → exit cleanly".
+    if not args.confirm and not args.dry_run:
         print(
             "  ABORT: Gate 3 FAILED — --confirm CLI flag not passed.\n"
             "         The three-factor authorization requires all three:\n"
             "           env CHAIN_SUBMISSION_PAUSED=false\n"
             "           env OPERATOR_ZKBA_ANCHOR_AUTHORIZED=true\n"
-            "           --confirm CLI flag"
+            "           --confirm CLI flag\n"
+            "         (Or pass --dry-run to verify gates + Merkle + wallet\n"
+            "          without firing any chain tx.)"
         )
         return 1
-    print(f"  Gate 3: --confirm CLI flag present")
+    if args.confirm:
+        print(f"  Gate 3: --confirm CLI flag present")
+    else:
+        print(f"  Gate 3: --dry-run mode (Gate 3 bypassed by design)")
 
     # ── Pre-flight: verify Merkle roots --------------------------------─
     bundle_dir = PROJECT_ROOT / "bridge" / "vapi_bridge" / "cedar_bundles"
@@ -216,12 +225,22 @@ async def _run(args: argparse.Namespace) -> int:
     print(f"  cfg.chain_submission_paused = False (kill-switch lifted)")
 
     # ── Wallet balance check ------------------------------------------─
+    # ChainClient takes a single cfg arg (NOT cfg + store). Mirrors
+    # parallel_o2_anchor.py line 237 precedent.
     store = Store(cfg.db_path)
     try:
-        chain = ChainClient(cfg, store)
-        balance_wei = await chain._w3.eth.get_balance(chain._account.address)
+        chain = ChainClient(cfg)
+        if chain._account is None:
+            print(
+                "  ABORT: bridge wallet not loaded (chain._account is None). "
+                "Verify bridge/.env has BRIDGE_PRIVATE_KEY set."
+            )
+            return 3
+        wallet_addr = chain._account.address
+        balance_wei = await chain._w3.eth.get_balance(wallet_addr)
         balance_iotx = balance_wei / 10**18
-        print(f"  Wallet balance: {balance_iotx:.4f} IOTX")
+        print(f"  Wallet:           {wallet_addr}")
+        print(f"  Wallet balance:   {balance_iotx:.4f} IOTX")
         if balance_iotx < SAFETY_FLOOR_IOTX:
             print(
                 f"  ABORT: Wallet balance {balance_iotx:.4f} below SAFETY "
@@ -247,28 +266,41 @@ async def _run(args: argparse.Namespace) -> int:
         return 0
 
     # ── Ceremony fires here -----------------------------------------------
-    anchor = CedarBundleAnchor(cfg, store, chain)
+    # CedarBundleAnchor takes keyword args (chain=, store=, bundle_dir=).
+    # Mirrors parallel_o2_anchor.py:274 precedent.
+    anchor = CedarBundleAnchor(chain=chain, store=store, bundle_dir=bundle_dir)
     print()
     print("  → Firing parallel ZKBA Cedar v2 ceremony (6 dual-anchor txs)")
     print()
 
+    operator_authority_reason = (
+        "Phase O3-ZKBA-TRACK1 Track 2 C8 — parallel ZKBA Cedar v2 bundle "
+        "advancement (operator-authorized gate-by-gate 2026-05-12; "
+        "scripts/parallel_zkba_anchor.py --confirm)"
+    )
+
     successes: list[str] = []
     failures: list[tuple[str, str]] = []
     for agent_id in AGENT_ANCHOR_ORDER:
-        bundle_path = bundle_dir / AGENT_BUNDLE_FILES[agent_id]
-        print(f"  [{agent_id}] anchoring v2 bundle {AGENT_BUNDLE_FILES[agent_id]}")
+        bundle_filename = AGENT_BUNDLE_FILES[agent_id]
+        print(f"  [{agent_id}] anchor_bundle({bundle_filename})...")
         try:
             # CedarBundleAnchor.anchor_bundle() handles dual-anchor
             # (operational FIRST + governance SECOND) per
-            # INV-OPERATOR-AGENT-001
+            # INV-OPERATOR-AGENT-001. Uses keyword-only args:
+            # bundle_path (filename; bundle_dir prepended internally),
+            # reason_text, operator_api_key.
             result = await anchor.anchor_bundle(
-                str(bundle_path),
-                reason=f"Track 2 C8 ZKBA Cedar v2 bundle ceremony for {agent_id}",
+                bundle_path=bundle_filename,
+                reason_text=operator_authority_reason,
+                operator_api_key=getattr(cfg, "operator_api_key", "") or "",
             )
             if result and getattr(result, "operational_tx_hash", None):
+                op_tx = result.operational_tx_hash
+                gov_tx = getattr(result, "governance_tx_hash", "?") or "?"
                 print(
-                    f"    op_tx:  {result.operational_tx_hash[:18]}...\n"
-                    f"    gov_tx: {getattr(result, 'governance_tx_hash', '?')[:18]}..."
+                    f"    op_tx:  {op_tx[:18]}...\n"
+                    f"    gov_tx: {gov_tx[:18]}..."
                 )
                 successes.append(agent_id)
             else:
