@@ -94,9 +94,14 @@ def test_t_zkba_16_sdk_vapi_zkba_history_fail_open():
 # ---------------------------------------------------------------------------
 
 def test_sdk_version_bumped_for_zkba_c4():
-    """SDK_VERSION reflects ZKBA C4 ship (Phase O3-ZKBA-TRACK1 C4)."""
+    """SDK_VERSION reflects ZKBA C4 ship (Phase O3-ZKBA-TRACK1 C4).
+
+    The C4 marker introduced `zkba` to SDK_VERSION at v3.1.0; subsequent
+    patch bumps within 3.1.x (e.g., 3.1.1 for G4 validator SDK follow-up)
+    are acceptable. The 3.1. prefix locks the minor-version family that
+    the ZKBA SDK surface belongs to."""
     assert "zkba" in SDK_VERSION.lower(), f"SDK_VERSION={SDK_VERSION!r} does not mention zkba"
-    assert SDK_VERSION.startswith("3.1.0"), f"SDK_VERSION={SDK_VERSION!r} should start with 3.1.0"
+    assert SDK_VERSION.startswith("3.1."), f"SDK_VERSION={SDK_VERSION!r} should start with 3.1."
 
 
 # ===========================================================================
