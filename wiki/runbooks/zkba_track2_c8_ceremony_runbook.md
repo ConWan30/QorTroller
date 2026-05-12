@@ -2,7 +2,7 @@
 title: "ZKBA Track 2 C8 Ceremony — Operator Runbook"
 date: 2026-05-12
 proposal_type: OPERATOR-RUNBOOK
-status: "OPERATIONAL / READY-TO-FIRE"
+status: "🚀 FIRED 2026-05-12 — Cedar v2 bundles LIVE on IoTeX testnet (3/3 successes; 6 dual-anchor txs)"
 scope: "Operator-runtime ceremony procedure. Wallet-spending (~0.23 IOTX projected)."
 authority: "VAPI Architect; bridge wallet 0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692"
 ships_under: "Track 2 gate-by-gate authorization 2026-05-12"
@@ -15,7 +15,25 @@ related_commits:
 
 ## 0. Reading note
 
-This runbook is **OPERATIONAL** and **READY-TO-FIRE**. It documents
+**🚀 STATUS UPDATE 2026-05-12: CEREMONY FIRED. 3/3 successes.**
+
+Cedar v2 bundles are LIVE on IoTeX testnet via 6 dual-anchor txs:
+
+| Agent | Operational tx | Governance tx |
+|---|---|---|
+| anchor_sentry v2 | `3f79b4b428e0931671...` | `04029ac59b4e08084f...` |
+| guardian v2 | `1e3a65f4445d73cc37...` | `16ce625cdc9c8fc2cb...` |
+| curator v2 | `470cbd17c865eef82b...` | `5aac0d92866ac29cc5...` |
+
+Operator wallet pre-ceremony: 15.2626 IOTX. Post-ceremony delta ~0.23 IOTX
+across 6 dual-anchor txs. Kill-switch restored to safe posture immediately
+after ceremony.
+
+The original procedure below is retained for historical reference + as
+the template for future re-anchoring (e.g., Cedar v3 bundles if a future
+operator-authorized methodology amendment requires it).
+
+This runbook was originally **OPERATIONAL** and **READY-TO-FIRE**. It documents
 the operator three-factor authorization procedure for executing the
 Cedar v2 bundle re-anchoring ceremony (plan §6 A4) shipped under
 Track 2 gate-by-gate authorization.
