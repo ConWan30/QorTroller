@@ -2627,6 +2627,12 @@ class ChainClient:
     # Same underscore-vs-hyphen asymmetry as the corpus + biometric snapshots.
     # The FROZEN commitment domain tag uses hyphens (VAPI-LISTING-v1).
     _LISTING_DEVICE_ID = hashlib.sha256(b"VAPI_LISTING_v1").digest()
+    # Phase O3-ZKBA-TRACK1 Track 2 C7 — ZKBA artifact attribution constant.
+    # Same underscore-vs-hyphen asymmetry as corpus + biometric + listing
+    # snapshots. The FROZEN commitment domain tag uses hyphens
+    # (b"VAPI-ZKBA-ARTIFACT-v1" — PV-CI pinned by INV-ZKBA-002);
+    # the device-id-hash attribution uses underscores (b"VAPI_ZKBA_v1").
+    _ZKBA_DEVICE_ID = hashlib.sha256(b"VAPI_ZKBA_v1").digest()
 
     async def anchor_corpus_snapshot(
         self,
@@ -2725,6 +2731,117 @@ class ChainClient:
             log.warning(
                 "anchor_corpus_snapshot: anchor failed commitment=%s err=%s",
                 snapshot_commitment_hex[:16], _msg[:120],
+            )
+            return (None, False)
+
+    # --- Phase O3-ZKBA-TRACK1 Track 2 C7 — ZKBA artifact anchor (mirrors corpus + biometric + listing Path X) ---
+
+    async def anchor_zkba_artifact(
+        self,
+        commitment_hex: str,
+    ) -> "tuple[str | None, bool]":
+        """Anchor a ZKBA artifact commitment via legacy recordAdjudication ABI.
+
+        Calls recordAdjudication(deviceIdHash, poadHash, dualVeto) on the deployed
+        AdjudicationRegistry contract with:
+          - deviceIdHash = self._ZKBA_DEVICE_ID (constant; carries
+            ZKBA attribution as the design-intent sourceType would have)
+          - poadHash     = the 32-byte commitment from
+                           bridge/vapi_bridge/zkba_artifact.compute_zkba_commitment()
+          - dualVeto     = False (ZKBA artifacts are not adjudication verdicts)
+
+        Returns (tx_hash_hex, True) on success; (None, False) on missing config /
+        wallet error / tx revert / duplicate ("PoAd: already recorded"). Never
+        raises — graceful degradation matching corpus_snapshot at Phase 237.5 D1.
+
+        The tx_hash is permanent on-chain proof that the bridge committed to a
+        specific ZKBA artifact (class + proof_weight + component hashes + ts_ns).
+        Track 1 invariant of anchor_tx_hash IS NULL on zkba_artifact_log is
+        LIFTED by this method's success path: caller updates the row with the
+        returned tx_hash via store.update_zkba_artifact_anchor (Phase O3
+        follow-up) once the anchor lands.
+
+        Phase O3-ZKBA-TRACK1 Track 2 C7 (commit ships 2026-05-12 per Operator
+        Decision Matrix D-TRACK2-C7 + plan §6 A3). Invoked by
+        scripts/parallel_zkba_anchor.py when the operator's three-factor
+        authorization fires the C8 ceremony.
+        """
+        # Phase 237.5 Path C+ kill-switch — short-circuit before any RPC call.
+        if getattr(self._cfg, "chain_submission_paused", False):
+            log.info(
+                "anchor_zkba_artifact: chain_submission_paused=true — "
+                "artifact will record on_chain_confirmed=False (kill-switch active)"
+            )
+            return (None, False)
+        addr = getattr(self._cfg, "adjudication_registry_address", "")
+        if not addr:
+            log.warning(
+                "anchor_zkba_artifact: adjudication_registry_address not "
+                "configured — artifact will record on_chain_confirmed=False"
+            )
+            return (None, False)
+        if self._account is None:
+            log.warning(
+                "anchor_zkba_artifact: self._account is None (no bridge "
+                "private key loaded) — artifact will record on_chain_confirmed=False"
+            )
+            return (None, False)
+        try:
+            commitment_bytes32 = bytes.fromhex(commitment_hex.lstrip("0x"))[:32]
+            commitment_bytes32 = commitment_bytes32.ljust(32, b"\x00")
+        except Exception as exc:
+            log.warning("anchor_zkba_artifact: bad commitment hex: %s", exc)
+            return (None, False)
+        _ABI = [{
+            "name": "recordAdjudication", "type": "function",
+            "stateMutability": "nonpayable",
+            "inputs": [
+                {"name": "deviceIdHash", "type": "bytes32"},
+                {"name": "poadHash",     "type": "bytes32"},
+                {"name": "dualVeto",     "type": "bool"},
+            ],
+            "outputs": [],
+        }]
+        try:
+            contract = self._w3.eth.contract(
+                address=self._w3.to_checksum_address(addr), abi=_ABI
+            )
+            nonce = await self._w3.eth.get_transaction_count(self._account.address)
+            tx = await contract.functions.recordAdjudication(
+                self._ZKBA_DEVICE_ID, commitment_bytes32, False,
+            ).build_transaction({
+                "from": self._account.address, "nonce": nonce,
+            })
+            # Dynamic gas estimate with 25% safety buffer; same pattern as
+            # corpus_snapshot + biometric_snapshot for IoTeX storage-heavy ops.
+            gas_estimate = await self._w3.eth.estimate_gas(tx)
+            tx["gas"] = int(gas_estimate * 1.25)
+            signed = self._account.sign_transaction(tx)
+            tx_hash = await self._w3.eth.send_raw_transaction(signed.raw_transaction)
+            receipt = await self._w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
+            if receipt["status"] != 1:
+                log.warning(
+                    "anchor_zkba_artifact: tx reverted commitment=%s tx=%s",
+                    commitment_hex[:16], tx_hash.hex()[:16],
+                )
+                return (None, False)
+            log.info(
+                "anchor_zkba_artifact: tx=%s commitment=%s",
+                tx_hash.hex()[:16], commitment_hex[:16],
+            )
+            return (tx_hash.hex(), True)
+        except Exception as exc:
+            _msg = str(exc)
+            if "PoAd: already recorded" in _msg:
+                log.info(
+                    "anchor_zkba_artifact: idempotent no-op — commitment=%s "
+                    "already anchored",
+                    commitment_hex[:16],
+                )
+                return (None, False)
+            log.warning(
+                "anchor_zkba_artifact: anchor failed commitment=%s err=%s",
+                commitment_hex[:16], _msg[:120],
             )
             return (None, False)
 
