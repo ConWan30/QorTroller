@@ -817,6 +817,167 @@ CONTRADICTION_RULES: dict = {
             "the agent's draft generator OR adjust the trigger source quality."
         ),
     },
+
+    # ---------------------------------------------------------------------
+    # Phase O3-ZKBA-TRACK1 Track 2 C6 (commit ships 2026-05-12 per
+    # Operator Decision Matrix D-TRACK2-C6 + plan §6 A2) — three new
+    # contradiction rules for ZKBA artifact integrity. These rules fire
+    # against the zkba_artifact_log table populated by Sentry's
+    # zk-artifact-anchor draft generator (C7) + downstream Cedar v2
+    # bundle authorizations (C6 A1).
+    #
+    # Rule 1 — ZKBA_PROOF_WEIGHT_MISMATCH (HIGH): a ZKBA artifact's
+    # declared proof_weight in the wrapper manifest disagrees with the
+    # ZKBA primitive's actual proof_weight value. This is detected when
+    # a VPM wrapper manifest claims a stronger proof_weight than the
+    # underlying ZKBA artifact's preimage_json reports. Per Appendix B
+    # B.6, proof-weight mismatches MUST fail compilation; this rule
+    # surfaces cases where a manifest slipped through with mismatched
+    # proof_weight values.
+    # ---------------------------------------------------------------------
+    "ZKBA_PROOF_WEIGHT_MISMATCH": {
+        "query": """
+            SELECT id, commitment_hex, zkba_class, proof_weight,
+                   preimage_json, ts_ns, manifest_uri, created_at
+            FROM zkba_artifact_log
+            WHERE manifest_uri IS NOT NULL
+              AND created_at >= ?
+            ORDER BY created_at DESC LIMIT 5
+        """,
+        "params": lambda cfg: (time.time() - 3600,),
+        "agents_involved": [
+            "AnchorSentry",
+            "Curator",
+        ],
+        "severity": "HIGH",
+        "explanation": (
+            "ZKBA artifact in zkba_artifact_log has a manifest_uri "
+            "populated but no integrity check has been run linking the "
+            "manifest's declared proof_weight to the artifact's "
+            "preimage_json proof_weight value. Possible causes: (a) VPM "
+            "wrapper manifest authored with overclaimed proof_weight "
+            "(e.g., declared CHAIN_ONLY but wrapping a DEMO artifact), "
+            "(b) bridge endpoint POST /operator/zkba-validate-manifest "
+            "bypassed at write time, (c) downstream consumer parsing "
+            "wrong proof_weight surface. Per VBDIP-0002 Appendix B B.6 "
+            "+ §9.3.1, proof-weight visibility is load-bearing for K9 "
+            "Anti-Hype Visual Grammar."
+        ),
+        "resolution": (
+            "Run validator over the affected manifest: "
+            "POST /operator/zkba-validate-manifest with the manifest "
+            "JSON body. If valid=False, fix the manifest. If valid=True, "
+            "cross-check that proof_weight field in the manifest matches "
+            "the proof_weight in preimage_json of the zkba_artifact_log "
+            "row. Discrepancy means the wrapper compiler shipped a "
+            "manifest that contradicts the primitive — either the "
+            "manifest is fraudulent or the compiler has a bug at the "
+            "B.4 wrapper schema layer."
+        ),
+    },
+
+    # ---------------------------------------------------------------------
+    # Rule 2 — ZKBA_LANE_VIOLATION (HIGH): a ZKBA artifact was emitted
+    # to a Cedar lane prefix not authorized for the emitting agent. Per
+    # Cedar v2 bundles (C6 A1):
+    #   - zk_artifacts/   is Sentry's exclusive lane
+    #   - zk_verifications/ is Guardian's exclusive lane
+    #   - zk_listings/    is Curator's exclusive lane
+    # Cross-agent emission into a forbidden lane is a B.6 + K3
+    # (Operator Capability Gating) violation.
+    # ---------------------------------------------------------------------
+    "ZKBA_LANE_VIOLATION": {
+        "query": """
+            SELECT z.id, z.commitment_hex, z.zkba_class, z.proof_weight,
+                   z.manifest_uri, z.created_at, d.agent_id
+            FROM zkba_artifact_log z
+            LEFT JOIN operator_agent_drafts d
+                   ON d.payload_hash = z.commitment_hex
+            WHERE z.manifest_uri IS NOT NULL
+              AND z.created_at >= ?
+              AND (
+                   (d.agent_id = 'anchor_sentry' AND z.manifest_uri NOT LIKE '%zk_artifacts/%')
+                OR (d.agent_id = 'guardian'      AND z.manifest_uri NOT LIKE '%zk_verifications/%')
+                OR (d.agent_id = 'curator'       AND z.manifest_uri NOT LIKE '%zk_listings/%')
+              )
+            ORDER BY z.created_at DESC LIMIT 5
+        """,
+        "params": lambda cfg: (time.time() - 3600,),
+        "agents_involved": [
+            "AnchorSentry",
+            "Guardian",
+            "Curator",
+        ],
+        "severity": "HIGH",
+        "explanation": (
+            "ZKBA artifact emitted to a Cedar lane prefix not authorized "
+            "for the emitting agent. Per Cedar v2 bundle policies (Track "
+            "2 C6 A1), each agent has exactly ONE zk_* lane prefix it may "
+            "write to: Sentry → zk_artifacts/, Guardian → zk_verifications/, "
+            "Curator → zk_listings/. Cross-lane emission indicates either "
+            "(a) Cedar policy bypass at the bridge endpoint layer, (b) "
+            "agent draft generator writing to wrong manifest_uri, or (c) "
+            "manifest_uri corrupted after artifact compile. K3 violation."
+        ),
+        "resolution": (
+            "Inspect the offending row's manifest_uri + agent_id. Verify "
+            "Cedar v2 bundle anchored for that agent permits the actual "
+            "lane (cast call AgentScope.getScopeRoot to confirm anchored "
+            "bundle Merkle matches local file). If bundle authorizes the "
+            "lane but agent wrote elsewhere, fix the draft generator. If "
+            "bundle does NOT authorize, the artifact must be quarantined "
+            "AND the Cedar v2 bundle must be re-anchored before further "
+            "emissions."
+        ),
+    },
+
+    # ---------------------------------------------------------------------
+    # Rule 3 — ZKBA_VERIFICATION_KEY_STALE (MEDIUM): a ZKBA artifact's
+    # manifest references a verification key (e.g., Groth16 proof key
+    # for BIOMETRIC-SNAPSHOT-class artifacts) older than the verification
+    # key rotation epoch. Per VBDIP-0002 §9.3.8, stale verification key
+    # hash MUST render 'warning' state. This rule queries
+    # zkba_artifact_log for artifacts whose preimage_json references a
+    # verification_key_hash not matching the current ceremony VK hash.
+    # Severity is MEDIUM (not HIGH) because the artifact's commitment
+    # remains valid; only the verification-key-binding is stale.
+    # ---------------------------------------------------------------------
+    "ZKBA_VERIFICATION_KEY_STALE": {
+        "query": """
+            SELECT id, commitment_hex, zkba_class, proof_weight,
+                   preimage_json, ts_ns, created_at
+            FROM zkba_artifact_log
+            WHERE preimage_json LIKE '%verification_key_hash%'
+              AND created_at >= ?
+            ORDER BY created_at DESC LIMIT 5
+        """,
+        "params": lambda cfg: (time.time() - 86400,),
+        "agents_involved": [
+            "AnchorSentry",
+            "Guardian",
+        ],
+        "severity": "MEDIUM",
+        "explanation": (
+            "ZKBA artifact preimage references a verification_key_hash "
+            "that may be older than the current verification-key rotation "
+            "epoch. Per VBDIP-0002 §9.3.8, stale verification-key hash "
+            "MUST render 'warning' visual state. MEDIUM severity: the "
+            "artifact commitment remains cryptographically valid (the "
+            "primitive doesn't depend on VK rotation); only the verifier-"
+            "binding is stale. Downstream consumers MUST refresh or "
+            "reject the verification key per their workflow."
+        ),
+        "resolution": (
+            "Verify current Phase 237-ZK-SEPPROOF ceremony VK hash "
+            "(0x32fda2857bdfb0612dd5cb305aa6798fabd64bb3f9362f362c6d73cdc49c4c1f "
+            "per CLAUDE.md Sessions 1+2+3 + chain.is_ceremony_recorded "
+            "view). Compare against the verification_key_hash field in "
+            "the affected artifact's preimage_json. If mismatched, "
+            "downstream VPM rendering MUST surface visual_state=warning "
+            "per Appendix B B.6. New artifacts emitted under the rotated "
+            "VK will not trigger this rule."
+        ),
+    },
 }
 
 # ---------------------------------------------------------------------------

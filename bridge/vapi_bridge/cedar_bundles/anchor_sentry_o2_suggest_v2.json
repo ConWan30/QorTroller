@@ -1,0 +1,36 @@
+{
+  "$schema": "vapi-cedar-bundle-v1",
+  "agent_id": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c",
+  "_v2_note": "Track 2 C6 (commit ships 2026-05-12 per Operator Decision Matrix D-TRACK2-C6 + plan §6 A1) — adds zk_artifacts/ lane + ZKBA artifact anchor permit. References (does not replace) v1; v1 remains live until C8 ceremony anchors v2.",
+  "phase": "O2_SUGGEST",
+  "version": 2,
+  "issued_at_iso": "2026-05-12T00:00:00Z",
+  "lane_prefixes": [
+    "events/",
+    "provenance/",
+    "wiki/",
+    "zk_artifacts/"
+  ],
+  "policies": [
+    {"id": "P-001", "effect": "permit", "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"}, "action": "skill:read", "resource": "lane://wiki/**"},
+    {"id": "P-002", "effect": "permit", "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"}, "action": "skill:read", "resource": "lane://provenance/**"},
+    {"id": "P-003", "effect": "permit", "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"}, "action": "skill:read", "resource": "lane://events/**"},
+    {"id": "P-004", "effect": "permit", "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"}, "action": "tool:iotex-rpc-query", "resource": "chain://iotex-testnet"},
+    {"id": "P-005", "effect": "permit", "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"}, "action": "tool:kms-sign", "resource": "draft://commit_hashes/*"},
+    {"id": "P-006", "effect": "permit", "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"}, "action": "skill:event-correlation", "resource": "lane://events/**"},
+    {"id": "P-007", "effect": "permit", "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"}, "action": "skill:provenance-recording", "resource": "draft://attestations/*"},
+    {"id": "P-008", "effect": "permit", "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"}, "action": "tool:pda-attestation-anchor", "resource": "draft://attestations/*"},
+    {"id": "P-009", "effect": "permit", "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"}, "action": "tool:git-add", "resource": "draft://attestations/*"},
+    {"id": "P-010", "effect": "permit", "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"}, "action": "tool:git-commit", "resource": "draft://attestations/*"},
+    {"id": "P-011", "effect": "permit", "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"}, "action": "tool:git-pr", "resource": "draft://attestations/*"},
+    {"id": "P-012", "effect": "permit", "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"}, "action": "tool:ipfs-pin", "resource": "draft://attestations/*"},
+    {"id": "P-013", "_v2_note": "TRACK 2 NEW PERMIT — Sentry may read zk_artifacts/ lane (ZKBA compiled outputs); pairs with C7 zk-artifact-anchor draft generator", "effect": "permit", "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"}, "action": "skill:read", "resource": "lane://zk_artifacts/**"},
+    {"id": "P-014", "_v2_note": "TRACK 2 NEW PERMIT — Sentry may anchor ZKBA artifact commitments via PDA at O2 SUGGEST (still shadow_mode at content-validation layer until O3); enables zk_artifact_anchor draft → on-chain AdjudicationRegistry path per plan §6 A3", "effect": "permit", "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"}, "action": "tool:zk-artifact-anchor", "resource": "draft://zk_artifacts/*"},
+    {"id": "F-001", "effect": "forbid", "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"}, "action": "tool:git-push", "resource": "*"},
+    {"id": "F-002", "effect": "forbid", "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"}, "action": "endpoint:write", "resource": "*"},
+    {"id": "F-003", "effect": "forbid", "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"}, "action": "skill:audit-drafting", "resource": "*"},
+    {"id": "F-004", "effect": "forbid", "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"}, "action": "skill:operational-diagnostic", "resource": "*"},
+    {"id": "F-005", "_v2_note": "CROSS-AGENT SEPARATION (preserved) — zk_verifications lane is Guardian's; Sentry does not write there", "effect": "forbid", "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"}, "action": "tool:zk-audit-trail", "resource": "*"},
+    {"id": "F-006", "_v2_note": "CROSS-AGENT SEPARATION (preserved) — zk_listings lane is Curator's; Sentry does not write there", "effect": "forbid", "principal": {"agentId": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c"}, "action": "tool:zk-marketplace-listing", "resource": "*"}
+  ]
+}
