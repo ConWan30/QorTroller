@@ -573,6 +573,13 @@ INVARIANTS: list[Invariant] = [
         pattern=r'"vapi-zkba-manifest-v1"',
         min_matches=1,
     ),
+    Invariant(
+        id="INV-VPM-WRAPPER-001",
+        description="vapi-vpm-manifest-v1 wrapper schema string pinned in scripts/vsd_vpm_wrapper.py — FROZEN at v1.0 per VBDIP-0002 Appendix B B.4 (v1.1 amendment); identifies the VPM wrapper manifest schema that wraps (does not replace) the FROZEN vapi-zkba-manifest-v1 ZKBA schema. Resolved via Operator Decision Matrix D-PV-VPM Option P3 (single-pin minimal form mirroring INV-ZKBA-003); ships 2026-05-12. Supplements G5b static guard tests (test_t_vpm_static_wrapper_schema_string_pinned_in_source) by elevating the FROZEN literal to PV-CI gate enforcement. VPM-HONESTY-001 (Appendix B B.5) remains a methodology-doc identifier; INV-VPM-WRAPPER-001 is the implementation-layer pin (distinct surfaces per reconciliation plan §4).",
+        file="scripts/vsd_vpm_wrapper.py",
+        pattern=r'"vapi-vpm-manifest-v1"',
+        min_matches=1,
+    ),
 ]
 
 

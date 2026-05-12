@@ -444,6 +444,7 @@ aliases. Native IDs remain unchanged in source control.
 | VED-INV-064 | INV-ZKBA-001 | `compute_zkba_commitment` function exists |
 | VED-INV-065 | INV-ZKBA-002 | `VAPI-ZKBA-ARTIFACT-v1` domain tag literal is pinned |
 | VED-INV-066 | INV-ZKBA-003 | `vapi-zkba-manifest-v1` manifest schema string is pinned |
+| VED-INV-067 | INV-VPM-WRAPPER-001 | `vapi-vpm-manifest-v1` wrapper schema string is pinned (added 2026-05-12 per Operator Decision Matrix D-PV-VPM Option P3) |
 
 ## Appendix B: VBD-Native Entries Present in the Same Allowlist
 
