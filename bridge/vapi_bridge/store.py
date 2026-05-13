@@ -3532,6 +3532,62 @@ class Store:
         except Exception:
             pass  # idempotent
 
+        # Phase O4-VPM-INT B.0 — vpm_artifact_log table.
+        # Records VPM artifacts (HTML + manifest sidecar pair) emitted by
+        # the Phase O4 compile_vpm_artifact() entry-point in
+        # scripts/vsd_ui_compiler.py. Mirrors the zkba_artifact_log shape
+        # above but adds VPM-specific columns (vpm_id, visual_state,
+        # capture_mode, integrity_label_hash_hex, wrapper_schema,
+        # zkba_manifest_hash_hex) so a VPM artifact can be traced back to
+        # its underlying ZKBA projection + Integrity Label + visual state.
+        # UNIQUE(commitment_hex) enforces idempotent insert. The VPM
+        # artifact is filesystem-only at landing; no on-chain anchor
+        # column (additive surface, not replacement for ZKBA primitive).
+        try:
+            with self._conn() as conn:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS vpm_artifact_log (
+                        id                         INTEGER PRIMARY KEY AUTOINCREMENT,
+                        commitment_hex             TEXT NOT NULL,
+                        vpm_id                     TEXT NOT NULL,
+                        zkba_class                 INTEGER NOT NULL,
+                        proof_weight               INTEGER NOT NULL,
+                        visual_state               TEXT NOT NULL,
+                        capture_mode               TEXT NOT NULL,
+                        integrity_label_hash_hex   TEXT NOT NULL,
+                        wrapper_schema             TEXT NOT NULL,
+                        zkba_manifest_hash_hex     TEXT NOT NULL,
+                        manifest_uri               TEXT,
+                        compiler_output_hash_hex   TEXT,
+                        preimage_json              TEXT NOT NULL DEFAULT '{}',
+                        ts_ns                      INTEGER NOT NULL,
+                        created_at                 REAL NOT NULL
+                    )
+                """)
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_vpm_artifact_log_ts "
+                    "ON vpm_artifact_log(ts_ns DESC)"
+                )
+                conn.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_vpm_artifact_log_commit "
+                    "ON vpm_artifact_log(commitment_hex)"
+                )
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_vpm_artifact_log_vpm_id "
+                    "ON vpm_artifact_log(vpm_id, ts_ns DESC)"
+                )
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_vpm_artifact_log_state "
+                    "ON vpm_artifact_log(visual_state, ts_ns DESC)"
+                )
+                conn.execute(
+                    "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                    " VALUES (?, ?, ?)",
+                    (1200, "vpm_artifact_log", time.time()),
+                )
+        except Exception:
+            pass  # idempotent
+
         # Phase O1 C1 — operator_agent_activation_log table.
         # Mirrors the on-chain AgentScopeRootSet + AgentScopeUpdated events
         # for each Cedar bundle anchor cycle (D4 dual-anchor).  UNIQUE
@@ -15816,6 +15872,170 @@ class Store:
                 "anchored_count":         0,
                 "track1_invariant_holds": True,
                 "class_breakdown":        {},
+                "latest":                 None,
+            }
+
+    # --- Phase O4-VPM-INT B.0: vpm_artifact_log helpers ---
+
+    def insert_vpm_artifact(
+        self,
+        *,
+        commitment_hex: str,
+        vpm_id: str,
+        zkba_class: int,
+        proof_weight: int,
+        visual_state: str,
+        capture_mode: str,
+        integrity_label_hash_hex: str,
+        wrapper_schema: str,
+        zkba_manifest_hash_hex: str,
+        manifest_uri: str | None,
+        compiler_output_hash_hex: str | None,
+        preimage_json: str,
+        ts_ns: int,
+    ) -> int:
+        """Insert one VPM artifact row. Returns row id.
+
+        UNIQUE(commitment_hex) enforced — re-inserting the same commitment
+        returns the existing row id (matches zkba_artifact_log idempotency
+        precedent from commit 625007ab).
+
+        All fields keyword-only to keep the insert call site self-describing
+        at compile-vpm-artifact orchestrators + at the bridge POST /operator/
+        vpm-compile endpoint.
+        """
+        try:
+            with self._conn() as conn:
+                cur = conn.execute(
+                    "INSERT INTO vpm_artifact_log "
+                    "(commitment_hex, vpm_id, zkba_class, proof_weight, "
+                    " visual_state, capture_mode, integrity_label_hash_hex, "
+                    " wrapper_schema, zkba_manifest_hash_hex, manifest_uri, "
+                    " compiler_output_hash_hex, preimage_json, ts_ns, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        str(commitment_hex), str(vpm_id),
+                        int(zkba_class), int(proof_weight),
+                        str(visual_state), str(capture_mode),
+                        str(integrity_label_hash_hex),
+                        str(wrapper_schema), str(zkba_manifest_hash_hex),
+                        str(manifest_uri) if manifest_uri is not None else None,
+                        str(compiler_output_hash_hex) if compiler_output_hash_hex is not None else None,
+                        str(preimage_json), int(ts_ns),
+                        time.time(),
+                    ),
+                )
+                return int(cur.lastrowid)
+        except Exception:
+            # Likely UNIQUE collision — return the existing row id
+            with self._conn() as conn:
+                row = conn.execute(
+                    "SELECT id FROM vpm_artifact_log WHERE commitment_hex = ?",
+                    (str(commitment_hex),),
+                ).fetchone()
+            return int(row["id"]) if row else 0
+
+    def get_vpm_artifact_status(self, commitment_hex: str) -> dict | None:
+        """Return one VPM artifact row by commitment_hex, or None."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT id, commitment_hex, vpm_id, zkba_class, proof_weight, "
+                "       visual_state, capture_mode, integrity_label_hash_hex, "
+                "       wrapper_schema, zkba_manifest_hash_hex, manifest_uri, "
+                "       compiler_output_hash_hex, preimage_json, ts_ns, created_at "
+                "FROM vpm_artifact_log WHERE commitment_hex = ?",
+                (str(commitment_hex),),
+            ).fetchone()
+        return dict(row) if row is not None else None
+
+    def get_vpm_artifact_history(
+        self,
+        vpm_id: str | None = None,
+        visual_state: str | None = None,
+        since_minutes: int = 0,
+        limit: int = 20,
+    ) -> list[dict]:
+        """Return VPM artifacts filtered by optional vpm_id / visual_state /
+        since_minutes window, DESC ts_ns (newest first), capped at `limit`.
+
+        `since_minutes`=0 means no time filter. Filter parameters are
+        composable; passing none = unbounded query (clamped by `limit`).
+        """
+        clauses: list[str] = []
+        args: list = []
+        if vpm_id is not None and vpm_id != "":
+            clauses.append("vpm_id = ?")
+            args.append(str(vpm_id))
+        if visual_state is not None and visual_state != "":
+            clauses.append("visual_state = ?")
+            args.append(str(visual_state))
+        if since_minutes > 0:
+            cutoff = time.time() - (int(since_minutes) * 60.0)
+            clauses.append("created_at >= ?")
+            args.append(cutoff)
+        where_sql = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+        args.append(int(limit))
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT id, commitment_hex, vpm_id, zkba_class, proof_weight, "
+                "       visual_state, capture_mode, integrity_label_hash_hex, "
+                "       wrapper_schema, zkba_manifest_hash_hex, manifest_uri, "
+                "       compiler_output_hash_hex, ts_ns, created_at "
+                f"FROM vpm_artifact_log{where_sql} ORDER BY ts_ns DESC LIMIT ?",
+                tuple(args),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_vpm_artifact_summary(self) -> dict:
+        """Phase O4-VPM-INT B.0 — aggregate stats over vpm_artifact_log.
+
+        Mirrors the zkba_artifact_log summary shape but with VPM-specific
+        breakdowns. Returned dict shape:
+
+            {
+                "total_artifacts":    int,
+                "vpm_id_breakdown":   {vpm_id_str: count_int, ...},
+                "visual_state_breakdown": {state_str: count_int, ...},
+                "latest":             dict | None,
+            }
+
+        Reads only — no mutation. Fail-open on DB errors via outer
+        try/except returning the zero-state shape.
+        """
+        try:
+            with self._conn() as conn:
+                total_row = conn.execute(
+                    "SELECT COUNT(*) AS n FROM vpm_artifact_log"
+                ).fetchone()
+                vpm_id_rows = conn.execute(
+                    "SELECT vpm_id, COUNT(*) AS n FROM vpm_artifact_log "
+                    "GROUP BY vpm_id"
+                ).fetchall()
+                state_rows = conn.execute(
+                    "SELECT visual_state, COUNT(*) AS n FROM vpm_artifact_log "
+                    "GROUP BY visual_state"
+                ).fetchall()
+                latest_row = conn.execute(
+                    "SELECT id, commitment_hex, vpm_id, zkba_class, proof_weight, "
+                    "       visual_state, capture_mode, ts_ns, manifest_uri, "
+                    "       created_at "
+                    "FROM vpm_artifact_log ORDER BY ts_ns DESC LIMIT 1"
+                ).fetchone()
+            total = int(total_row["n"]) if total_row else 0
+            vpm_id_breakdown = {str(r["vpm_id"]): int(r["n"]) for r in vpm_id_rows}
+            state_breakdown = {str(r["visual_state"]): int(r["n"]) for r in state_rows}
+            latest = dict(latest_row) if latest_row is not None else None
+            return {
+                "total_artifacts":        total,
+                "vpm_id_breakdown":       vpm_id_breakdown,
+                "visual_state_breakdown": state_breakdown,
+                "latest":                 latest,
+            }
+        except Exception:
+            return {
+                "total_artifacts":        0,
+                "vpm_id_breakdown":       {},
+                "visual_state_breakdown": {},
                 "latest":                 None,
             }
 
