@@ -4,24 +4,25 @@
 
 **Author:** Contravious Battle (Independent Researcher)
 **Network:** IoTeX testnet (chain ID 4690)
-**Repository anchor commit:** `e81e04aa` (Phase O4-VPM-INTEGRATION close, 2026-05-13)
+**Architecture anchor commit:** `e81e04aa` (Phase O4-VPM-INTEGRATION close, 2026-05-13)
+**Documentation revamp commit:** `9f8581cd` (README + Whitepaper v4 successor landing, 2026-05-13)
 **Supersedes:** v3 (Zenodo DOI 10.5281/zenodo.18966169, Phase 68–70 baseline)
-**Citation:** DOI assignment pending Zenodo release. Until v4 minting: cite v3 + reference this file at commit `e81e04aa`.
+**Citation:** DOI assignment pending Zenodo release. Until v4 minting: cite v3 + reference this file at architecture anchor `e81e04aa` (documentation revamp commit `9f8581cd`).
 **License:** Copyright © 2026 Contravious Battle. All Rights Reserved.
 
 ---
 
 ## Abstract
 
-VAPI (Verified Autonomous Physical Intelligence) is the first Decentralized Physical Infrastructure (DePIN) protocol on IoTeX with cryptographic proof of human presence in competitive gaming. Each controller input event produces a 228-byte Proof of Autonomous Cognition (PoAC) record binding raw sensor commitments (Inertial Measurement Unit dynamics, adaptive trigger force curves, biometric fingerprint vectors) to a hardware-rooted ECDSA-P256 signature and a SHA-256 hash-chained sequence anchored on the IoTeX EVM. A nine-level Physical Input Trust (PITL) stack interprets each record through layered detectors — from hardware presence (L0) to active haptic challenge-response (L6) — and exposes the resulting per-session eligibility through a single composable on-chain view call, `VAPIProtocolLens.isFullyEligible(deviceIdHash)`. External tournament organizers can gate eligibility on that one call with zero off-chain trust.
+VAPI (Verified Autonomous Physical Intelligence) introduces a Decentralized Physical Infrastructure (DePIN) architecture on IoTeX for cryptographic human-gameplay verification in competitive gaming. Each controller input event produces a 228-byte Proof of Autonomous Cognition (PoAC) record binding raw sensor commitments (Inertial Measurement Unit dynamics, analog trigger dynamics, stick/button timing, biometric feature commitments) to a hardware-rooted ECDSA-P256 signature and a SHA-256 hash-chained sequence anchored on the IoTeX EVM. A nine-level Physical Input Trust (PITL) stack interprets each record through layered detectors — from hardware presence (L0) to active haptic challenge-response (L6) — and exposes the resulting per-session eligibility through a single composable on-chain view call, `VAPIProtocolLens.isFullyEligible(deviceIdHash)`. The on-chain gate minimizes integrator trust by reducing eligibility to a public view call over previously anchored protocol state; integrators do not need to operate a private publisher API or inspect raw biometric data themselves.
 
-As of Phase O4-VPM-INTEGRATION close (2026-05-13), the protocol comprises 49+ live smart contracts on IoTeX testnet, a 38-agent autonomous fleet running asyncio-orchestrated detection + governance, 77 PV-CI invariants pinning load-bearing source-code regions at PR time, 26 FSCA (Fleet Signal Coherence Agent) contradiction rules, a 10-element family of FROZEN-v1 cryptographic primitives (PATTERN-017), seven shipped Zero-Knowledge Biometric Artifact (ZKBA) classes (AIT, GIC, VHP, HARDWARE, CONSENT, TOURNAMENT, MARKET) composing through one deterministic compiler pipeline, six active Verified Projection Media (VPM) compilers under a three-layer Anti-Hype Visual Grammar discipline, and a three-agent Operator Initiative fleet (Sentry, Guardian, Curator) at lifecycle O1_SHADOW with Cedar v2 lane authority bundles dual-anchored on AgentScope + AgentRegistry. Test coverage stands at 3344 bridge tests, 562 SDK tests, 528 Hardhat contract tests, and 26 Vitest frontend tests.
+As of Phase O4-VPM-INTEGRATION close (2026-05-13), the protocol comprises 49 substantive live smart contracts on IoTeX testnet (51 contract registry slots), a 38-agent bridge runtime fleet including three on-chain registered Operator Initiative agents, 77 PV-CI invariants pinning load-bearing source-code regions at PR time, 26 FSCA (Fleet Signal Coherence Agent) contradiction rules, a 10-element family of FROZEN-v1 cryptographic primitives (PATTERN-017), seven shipped Zero-Knowledge Biometric Artifact (ZKBA) classes (AIT, GIC, VHP, HARDWARE, CONSENT, TOURNAMENT, MARKET) composing through one deterministic compiler pipeline, six active Verified Projection Media (VPM) compilers under a three-layer Anti-Hype Visual Grammar discipline, and a three-agent Operator Initiative fleet (Sentry, Guardian, Curator) at lifecycle O1_SHADOW with Cedar v2 lane authority bundles dual-anchored on AgentScope + AgentRegistry. Test coverage stands at 3344 bridge tests, 562 SDK tests, 528 Hardhat contract tests, and 26 Vitest frontend tests.
 
-The protocol's headline tournament gate — inter-person separation ratio > 1.0 with all-pairs separability — is empirically CLEARED for the Active Isometric Trigger (AIT) calibration battery at ratio 1.199 with N=37 sessions (Phase 229–231 breakthrough). The touchpad_corners battery remains an open blocker at ratio 0.728 for full tournament BLOCK enforcement; corpus expansion work continues. The token launch invariant ("no Token Generation Event before separation_ratio > 1.0 confirmed and all_pairs_above_1=True") remains in force for legal/economic defensibility.
+The protocol's headline tournament gate — inter-person separation ratio > 1.0 with all-pairs separability — is empirically cleared for the Active Isometric Trigger (AIT) calibration battery at ratio 1.199 with N=37 sessions (Phase 229–231 breakthrough), sufficient as AIT-based testnet/demo eligibility evidence in the current corpus. The touchpad_corners battery remains an open blocker at ratio 0.728 for actual tournament BLOCK enforcement; corpus expansion work continues. The token launch invariant ("no Token Generation Event before separation_ratio > 1.0 confirmed and all_pairs_above_1=True") remains in force for legal/economic defensibility.
 
 This whitepaper supersedes v3 in scope and currency. v3 captures Phase 68–70 (Ruling Registry + MPC ceremony) baseline; v4 captures the full architectural state through Phase O4 (Verified Projection Media output layer). v3's Zenodo DOI is preserved for historical continuity; v4 receives a new DOI at Zenodo release.
 
-The novelty contribution claimed: VAPI is the only DePIN gaming protocol with a four-layer cryptographic discipline that simultaneously pins (1) the FROZEN-v1 primitive family, (2) the deterministic content-addressed compiler, (3) the FROZEN six-state visual grammar enforced at three independent runtime layers, and (4) the FROZEN browser-iframe sandbox attribute. Every cryptographic claim emitted by the protocol is independently verifiable by anyone with the canonical-JSON algorithm + SHA-256 + the public source of the four enforcement layers.
+The architectural contribution claimed: VAPI's reference implementation simultaneously pins (1) the FROZEN-v1 primitive family, (2) the deterministic content-addressed compiler, (3) the FROZEN six-state visual grammar enforced at three independent runtime layers, and (4) the FROZEN browser-iframe sandbox attribute. Together these four enforcement surfaces form a quadruple-bind around the protocol's emitted cryptographic claims. Each emitted claim is independently verifiable by anyone with the canonical-JSON algorithm + SHA-256 + the public source of the four enforcement layers.
 
 ---
 
@@ -241,9 +242,9 @@ The protocol deploys to IoTeX testnet (chain ID 4690) because IoTeX provides thr
 2. **ioID device identity stack.** Every certified controller can register a `did:io:` identifier with a deterministically-deployed ERC-6551 Token Bound Account, giving the controller itself an addressable identity separate from the player's wallet.
 3. **W3bstream DePIN data layer.** Off-chain biometric data processing happens in W3bstream applets (AssemblyScript compiled to WASM) before any on-chain commitment, keeping raw biometrics out of public-chain storage while preserving cryptographic verifiability.
 
-### 6.1 Contract registry (49+ LIVE)
+### 6.1 Contract registry (49 substantive live testnet contracts)
 
-The authoritative on-chain address registry is `contracts/deployed-addresses.json`. As of Phase O4 close, the registry contains **49+ contracts** organized by function. Selected highlights:
+The authoritative on-chain address registry is `contracts/deployed-addresses.json`. As of Phase O4 close, the registry contains **49 substantive live testnet contracts across 51 registry slots** organized by function. Selected highlights:
 
 **PITL stack + core protocol (5):**
 - `PoACVerifier` — ECDSA-P256 verification + chain integrity
@@ -311,7 +312,7 @@ IVAPIProtocolLens lens = IVAPIProtocolLens(VAPI_LENS_ADDR);
 require(lens.isFullyEligible(deviceIdHash), "VAPI: ineligible");
 ```
 
-No off-chain trust. No publisher integration. No proprietary API. The single view call is the entire gate.
+The on-chain gate minimizes the integrator's trust surface: a tournament organizer reduces the eligibility decision to a public view call over previously anchored protocol state, without needing to operate a private publisher API or manually inspect raw biometric data. The protocol's broader physical-to-chain pipeline (off-chain capture, calibration, bridge integrity, operator controls, proof-generation discipline) still depends on the verifiability surfaces described elsewhere in this whitepaper — the single view call is the composability point for downstream integrators, not a claim that the entire pipeline is trustless.
 
 ---
 
@@ -331,7 +332,7 @@ All three agents are at lifecycle **O1_SHADOW** (Cedar v2 bundles anchored 2026-
 
 ### 7.2 Cross-Fleet Skill Separation (CFSS)
 
-The CFSS invariant is the protocol's first ≥3-agent governance separation in any DePIN gaming protocol. Each agent has exclusive write authority over its lane prefix; every other agent's Cedar policy explicitly FORBIDS the cross-lane action. The full 12-row lane authority matrix is pinned in `scripts/zkba_post_ceremony_audit.py:EXPECTED_LANE_MATRIX`:
+The CFSS invariant encodes a three-way agent governance separation: each agent has exclusive write authority over its lane prefix, and every other agent's Cedar policy explicitly FORBIDS the cross-lane action. The full 12-row lane authority matrix is pinned in `scripts/zkba_post_ceremony_audit.py:EXPECTED_LANE_MATRIX`:
 
 | Agent | Action | Resource | Effect |
 |---|---|---|---|
@@ -564,7 +565,7 @@ The phrase is checked verbatim; mismatch exits with code 3 and no allowlist rege
 
 Reason categories are a FROZEN closed enum: `refactor` / `bugfix` / `invariant_change` / `ceremony_update`. The `invariant_change` category specifically requires the `--confirm-governance` ceremony; other categories regenerate the allowlist without the phrase requirement.
 
-This discipline encodes the protocol's structural posture: **the source code is the source of authority**, and modifications to load-bearing source regions are tamper-evident at PR time before they reach the chain.
+This discipline encodes the protocol's structural posture: **load-bearing source regions are part of the protocol authority surface alongside FROZEN methodology documents, on-chain governance events, manifests, and governance ceremonies — and PV-CI makes changes to those regions tamper-evident before merge.** PV-CI does not override governance; it complements it.
 
 ### 10.3 The VBDIP architectural framework
 
@@ -728,7 +729,7 @@ The 10 tiers are not mutually exclusive; some (e.g., #2 + #6 + #9) can proceed i
 
 ## 16. What is architecturally exclusive to VAPI
 
-After Phase O4 close, VAPI holds the following architectural positions that no competing DePIN, anti-cheat, or proof-of-humanity protocol replicates. This list is not aspirational; each item is enforced in source code today:
+After Phase O4 close, VAPI's reference implementation introduces the following architectural positions. Each item is enforced in source code today and is independently verifiable against the repository at architecture anchor `e81e04aa`; the "exclusivity" claim is bounded to the protocol-architectural specifics enumerated in each row, not to broader market comparisons.
 
 | Exclusivity | What it is | Why no competitor has it |
 |---|---|---|
@@ -738,10 +739,10 @@ After Phase O4 close, VAPI holds the following architectural positions that no c
 | **CDRR DAG composition-lattice projection** | The 7-class ZKBA composition lattice rendered as inline SVG with per-node CFSS lane attribution | No other DePIN has a frozen-primitive composition lattice at this depth to project |
 | **Nine-layer PITL stack + Layer 7 Methodology** | The Methodology Layer is a peer architectural layer (not docs) with PV-CI gating + architect Ed25519 signing chain + operational reach across all 3 agent lanes | Most protocols treat methodology as a wiki; VAPI treats it as code-frozen + chain-anchored |
 | **Three-agent CFSS triangle at Cedar policy level** | Sentry / Guardian / Curator with cross-fleet skill separation invariant enforced via three distinct dual-anchored Cedar bundles | Most agent fleets are 1–2 agents with shared authority; VAPI's three-agent triangle is structural |
-| **First MANUFACTURER-bound audience artifact** (HARDWARE Participation Card) | Cryptographic commitment binds the certifying manufacturer's on-chain address as publicly-attributable surface | Requires `VAPIHardwareCertRegistry` + PATTERN-017 + per-audience Cedar lane composition |
+| **Manufacturer-bound audience artifact** (HARDWARE Participation Card; protocol's first manufacturer-audience class) | Cryptographic commitment binds the certifying manufacturer's on-chain address as a publicly-attributable surface, alongside CONSENT (gamer-audience), AIT/GIC/VHP/TOURNAMENT (operator-audience), and MARKET (buyer-audience) | Requires `VAPIHardwareCertRegistry` + PATTERN-017 + per-audience Cedar lane composition |
 | **PV-CI invariant gate at PR time** | 77 byte-digest pins of load-bearing source-code regions; modification fails CI | Most protocols enforce conventions in review; VAPI enforces them in CI |
-| **GIC_100 permanently-anchored cognitive chain** | 100-link cryptographic chain of grind sessions, head hash `0x0e9d453d...` anchored on IoTeX | First chain-of-cognition primitive in any gaming protocol |
-| **First DePIN gaming protocol with full operator console for cryptographic media inspection** | VPM Registry tab + sandboxed iframe + Layer 3 grammar verifier | The protocol's outputs are inspectable by the operator without leaving the dashboard |
+| **GIC_100 permanently-anchored cognitive chain** | 100-link cryptographic chain of grind sessions, head hash `0x0e9d453d...` anchored on IoTeX testnet | The chain head plus the WEC operational-continuity chain together produce tamper-evident provenance for a 100-session grind run |
+| **Operator console with cryptographic media inspection surface** | VPM Registry tab + sandboxed iframe + Layer 3 grammar verifier | The protocol's outputs are inspectable by the operator without leaving the dashboard; each VPM iframe runs Web Crypto SHA-256 + the FROZEN 6-state DOM grammar verifier client-side |
 | **Wallet-free + chain-write-paused operating posture** | `CHAIN_SUBMISSION_PAUSED=true` held; 22 audited submission paths gated; operator three-factor authorization required to lift | Most protocols default to chain-write-enabled and rely on signing key separation; VAPI defaults to denied |
 | **Architect Ed25519 signing chain anchored to bridge wallet via EIP-191** | Every methodology document inherits trust from one attestation | No competing protocol has formal methodology-layer cryptographic signing |
 
@@ -751,7 +752,7 @@ After Phase O4 close, VAPI holds the following architectural positions that no c
 
 ### Citation
 
-Until a Zenodo DOI is minted for v4, cite the historical v3 plus reference this file at the anchor commit:
+Until a Zenodo DOI is minted for v4, cite the historical v3 plus reference this file at the architecture anchor commit `e81e04aa` (documentation revamp commit `9f8581cd`):
 
 ```bibtex
 @software{battle_2026_vapi_v3,
@@ -763,8 +764,9 @@ Until a Zenodo DOI is minted for v4, cite the historical v3 plus reference this 
   doi       = {10.5281/zenodo.18966169},
   url       = {https://doi.org/10.5281/zenodo.18966169},
   version   = {v3 (historical; superseded by v4 in-repo)},
-  note      = {v4 in-repo: docs/vapi-whitepaper-v4.md at commit e81e04aa
-               (Phase O4-VPM-INTEGRATION close, 2026-05-13). v4 DOI
+  note      = {v4 in-repo: docs/vapi-whitepaper-v4.md at architecture
+               anchor commit e81e04aa (Phase O4-VPM-INTEGRATION close,
+               2026-05-13; documentation revamp commit 9f8581cd). v4 DOI
                assignment pending Zenodo release.}
 }
 ```
@@ -777,7 +779,7 @@ The protocol's calibration corpus was contributed by three anonymous players (P1
 
 **Copyright © 2026 Contravious Battle. All Rights Reserved.**
 
-This whitepaper, the repository at `vapi-pebble-prototype` (anchor commit `e81e04aa`), and all derivative work is the proprietary intellectual property of the author. Source is available for inspection, research review, and security audit. No open-source license is declared. Commercial integration, derivative work, or redistribution requires an explicit license agreement with the author.
+This whitepaper, the repository at `vapi-pebble-prototype` (architecture anchor commit `e81e04aa`, documentation revamp commit `9f8581cd`), and all derivative work is the proprietary intellectual property of the author. Source is available for inspection, research review, and security audit. No open-source license is declared. Commercial integration, derivative work, or redistribution requires an explicit license agreement with the author.
 
 Patent claims and academic citation: reference the Zenodo DOI above (v3) plus the in-repo `docs/vapi-whitepaper-v4.md` for current-state citations. The v4 successor DOI will be assigned at Zenodo release.
 
@@ -795,7 +797,7 @@ Patent claims and academic citation: reference the Zenodo DOI above (v3) plus th
 | Phase 235 GRIND LIVE | ~2447 | 521 | 502 | 36 | 45 |
 | Phase 238 Step I-FINAL (Curator LIVE) | 2779 | 539 | 528 | 49 | 49 |
 | Phase O3-ZKBA-TRACK1 close (Layer 7 7-of-7) | 3160 | 562 | 528 | 67 | 49 |
-| **Phase O4-VPM-INT close (this whitepaper anchor)** | **3344** | **562** | **528** | **77** | **49+** |
+| **Phase O4-VPM-INT close (this whitepaper anchor)** | **3344** | **562** | **528** | **77** | **49** substantive live (51 registry slots) |
 
 ### Phase O4 commit roster (10 commits)
 
@@ -824,7 +826,7 @@ ece17f4f  phase O3-ZKBA-TRACK1 Track 2 follow-up: 7th (final) ZKBA artifact — 
 
 **AdjudicationRegistry** — On-chain registry of adjudication records (PoAd hashes); Phase 111; address `0x44CF981f46a52ADE56476Ce894255954a7776fb4`.
 
-**AGaaS (Agentic-as-a-Service)** — VAPI's protocol-category positioning. The protocol delivers agent-fleet-as-a-service for competitive gaming verification.
+**AGaaS (Anti-cheat as a Service)** — VAPI's delivery model for tournament operators and esports platforms: cryptographic human-gameplay verification consumed via the single `isFullyEligible()` on-chain gate. The Operator Initiative fleet (Sentry / Guardian / Curator) provides agentic protocol stewardship as a separate concern; AGaaS specifically refers to the anti-cheat / verified-human-gameplay service layer integrators consume.
 
 **AIT (Active Isometric Trigger)** — Phase 229 calibration battery. Player holds L2 trigger at 50% for 30 seconds; tremor + gravity fingerprint extracted. Achieved ratio 1.199 N=37 with all_pairs_above_1=True — the protocol's tournament-gate breakthrough.
 

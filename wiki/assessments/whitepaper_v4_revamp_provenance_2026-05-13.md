@@ -1,7 +1,8 @@
 # Whitepaper v4 + README revamp — provenance pin (2026-05-13)
 
-**Anchor commit (pre-revamp):** `e81e04aa` (Phase O4-VPM-INT close)
-**Revamp commit:** to-be-assigned at landing as the next commit after `e81e04aa`
+**Architecture anchor commit:** `e81e04aa` (Phase O4-VPM-INTEGRATION close, 2026-05-13) — the source-of-truth for all current-state architectural claims in v4
+**Documentation revamp commit:** `9f8581cd` (README + Whitepaper v4 successor landing, 2026-05-13) — the commit at which the four landed files entered the tree
+**Documentation micro-patch commit:** to-be-assigned at landing (this commit; precision-tuning per operator review 2026-05-13)
 **Author:** VAPI Principal Architect
 **Operator authorization:** "Make this a priority /goal... Utilize the necessary aligning /agent as well to create this as the masterpiece for understanding VAPI and final release white paper succeeding prior white paper drafts." + Plan-mode approval (`C:\Users\Contr\.claude\plans\rustling-soaring-rossum.md`) with four explicit decisions:
 - Option A — Direct draft in main session (no background agent)
@@ -135,6 +136,52 @@ Counts at landing:
 - CHAIN_SUBMISSION_PAUSED: true held
 - Wallet: 0 IOTX impact
 - Anchor commit hint: `e81e04aa` (Phase O4 close ship)
+
+---
+
+## Addendum — precision tuning after operator review (2026-05-13)
+
+After the documentation revamp landed at `9f8581cd`, the operator returned a 10-item precision review identifying public-claim framing items to tighten. A single follow-up micro-patch commit applied the following deltas:
+
+### Commit identity deltas
+
+- Distinguished **architecture anchor commit** (`e81e04aa`, Phase O4 close — source-of-truth for architectural claims) from **documentation revamp commit** (`9f8581cd`, where the v4 file entered the tree). Both commits now cited together throughout `README.md` / `docs/vapi-whitepaper-v4.md` / `docs/WHITEPAPER_VERSIONING.md` / this provenance pin. External reviewers will find the whitepaper file at `9f8581cd` while finding the architectural state at `e81e04aa`.
+
+### Public-claim framing deltas
+
+- **AIT separation gate framing.** README + whitepaper §14: "CLEARED for tournament gate use" → "CLEARED for the AIT separation gate in the current corpus (testnet/demo eligibility evidence)". Maintains accuracy that touchpad_corners 0.728 remains the actual tournament BLOCK enforcement blocker.
+
+- **Composability claim — `isFullyEligible()`.** README + whitepaper §12: "zero off-chain trust" / "No off-chain trust. No publisher integration. No proprietary API." → "minimizes integrator trust" / "without trusting a private publisher API or manually inspecting raw biometric data." The protocol's broader physical-to-chain pipeline is not trustless; the on-chain gate is the integrator-facing composability point.
+
+- **Top-level positioning.** README banner + tagline + whitepaper abstract: "first DePIN gaming protocol with cryptographic proof of human presence" / "VAPI is the first and only Verified Autonomous Physical Intelligence protocol on IoTeX" → "A Verified Autonomous Physical Intelligence architecture on IoTeX for cryptographic human-gameplay verification" / "VAPI is a reference implementation of Verified Autonomous Physical Intelligence for competitive gaming on IoTeX." The §16 exclusivity table is preserved (concrete architectural claims defensible against direct comparison); broader market-comparison "first" claims softened to "introduces."
+
+- **Sensor commitment phrasing.** Whitepaper abstract: "adaptive trigger force curves" → "IMU dynamics, analog trigger dynamics, stick/button timing, biometric feature commitments." Reflects what is directly captured (analog trigger depth/velocity) rather than what is contextual (adaptive-trigger resistance state).
+
+- **AGaaS terminology.** Whitepaper Appendix B glossary: "AGaaS (Agentic-as-a-Service)" → "AGaaS (Anti-cheat as a Service)" with explicit clarification that the Operator Initiative fleet provides agentic protocol stewardship as a separate concern. Resolves a terminology collision with VAPI's earlier framing.
+
+- **Fleet count phrasing.** Whitepaper abstract: "38-agent autonomous fleet" → "38-agent bridge runtime fleet including three on-chain registered Operator Initiative agents." Public readers no longer infer that all 38 agents are on-chain.
+
+- **Contract count phrasing.** README + whitepaper §6.1 + Appendix A + repository navigation: "49+ LIVE contracts" → "49 substantive live testnet contracts (51 registry slots; see `contracts/deployed-addresses.json`)." Standardized across all surfaces.
+
+- **PV-CI authority phrasing.** Whitepaper §10.2: "the source code is the source of authority" → "load-bearing source regions are part of the protocol authority surface alongside FROZEN methodology documents, on-chain governance events, manifests, and governance ceremonies — and PV-CI makes changes to those regions tamper-evident before merge. PV-CI does not override governance; it complements it." Closer to the actual layered authority model.
+
+- **GIC_100 framing.** README + whitepaper §16 exclusivity table: "First 100-link cognitive-session integrity chain anchored on any DePIN gaming protocol" / "First chain-of-cognition primitive in any gaming protocol" → "A 100-link cognitive-session integrity chain anchored on IoTeX testnet" + "The chain head plus the WEC operational-continuity chain together produce tamper-evident provenance for a 100-session grind run." Removes market-comparison "first" claims while preserving the architectural specifics.
+
+- **CFSS framing.** Whitepaper §7.2: "the protocol's first ≥3-agent governance separation in any DePIN gaming protocol" → "encodes a three-way agent governance separation." Removes the unverifiable market-comparison claim.
+
+- **§16 exclusivity table preface.** "VAPI holds the following architectural positions that no competing DePIN, anti-cheat, or proof-of-humanity protocol replicates. This list is not aspirational; each item is enforced in source code today" → "VAPI's reference implementation introduces the following architectural positions. Each item is enforced in source code today and is independently verifiable against the repository at architecture anchor `e81e04aa`; the 'exclusivity' claim is bounded to the protocol-architectural specifics enumerated in each row, not to broader market comparisons." Preserves the concrete claims while bounding the exclusivity scope to defensible architectural specifics.
+
+### What was deliberately left intact
+
+- All 12 rows of the §16 exclusivity table (concrete architectural claims, each bounded to verifiable source-code constructs).
+- All quantitative test counts and contract counts (verifiable against repository state).
+- The token launch invariant ("no TGE before separation_ratio > 1.0 AND all_pairs_above_1=True") and all calibration-state honesty (touchpad_corners 0.728 BLOCKER; P1vP3=0.032 verification pending; L6 / L6b / GSR / BT all N=0 gated disabled).
+- The architectural-novelty framing of HARDWARE Participation Card as the protocol's first manufacturer-attributable artifact (protocol-internal "first" claim, bounded to the 7-class ZKBA taxonomy).
+- The four-layer quadruple-bind claim (FROZEN-v1 primitive + FROZEN compiler + FROZEN visual grammar + FROZEN iframe sandbox) — each layer is a specific source-code construct with PV-CI digest pin, defensible by direct repository inspection.
+
+### Why precision-tuning matters here
+
+VAPI's strongest public posture is not maximal claims; it is **verifiable claims with visible limits**. The architectural contribution is real — the quadruple-bind is real, the Layer 7 7-of-7 closure is real, the GIC_100 anchored chain is real, the three-agent Cedar v2 CFSS triangle is real — but each of those claims is bounded to specific source-code constructs that an external reviewer can independently verify. Where the prior draft made broader "first in any" market-comparison claims, those rest on enumerating every competing protocol globally, which the project has not done. The precision tuning preserves every concrete architectural assertion while removing the unverifiable comparative framings.
 
 ---
 
