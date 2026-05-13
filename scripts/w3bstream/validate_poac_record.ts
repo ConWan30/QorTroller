@@ -172,11 +172,23 @@ export function handle_poac_message(): i32 {
  * keccak256("isConsentValid(address,uint8)")[:4] when the applet pipeline
  * phase ships. The contract is deployed; only this stub's ABI encoding is
  * placeholder.
+ *
+ * REAL SELECTOR (computed 2026-05-13 via keccak256, audited by
+ * scripts/w3bstream_applet_audit.py):
+ *
+ *     0xbabcf9f5 = keccak256("isConsentValid(address,uint8)")[:4]
+ *
+ * Replacement in applet-pipeline phase is mechanical (swap the literal),
+ * but full production readiness requires additionally:
+ *   - real ABI return-data parsing (chain_call returns RPC code, not bool)
+ *   - device_id → gamer address resolution via VAPIioIDRegistry
+ *   - keccak256 of `signature` parameter (not the SHA-256 stubbed here)
+ * See scripts/w3bstream_applet_audit.py for the full delta inventory.
  */
 function _check_consent_view(rawPtr: i32, category: u8, callPtr: i32): bool {
     // ABI encode: isConsentValid(address gamer, uint8 category)
     //   selector(4) || gamer_padded(32) || category_padded(32) = 68 bytes
-    store<u32>(callPtr, 0xCAFE0237);  // PLACEHOLDER selector — replace at applet-pipeline phase
+    store<u32>(callPtr, 0xCAFE0237);  // PLACEHOLDER (real: 0xbabcf9f5) — replace at applet-pipeline phase
     // (real ABI encoder would copy device_id → gamer slot and category → uint8 slot)
 
     // Consent registry address — configured via W3bstream project env
@@ -200,10 +212,33 @@ function _verify_p256_stub(bodyPtr: i32, bodyLen: i32): bool {
 }
 
 function _encode_submit_proof(rawPtr: i32, inferenceCode: i32, outPtr: i32): i32 {
-    // ABI encode: submitProof(bytes32 chainLinkHash, bytes32 deviceId, uint8 inferenceCode)
-    // Function selector = keccak256("submitProof(bytes32,bytes32,uint8)")[0:4]
-    // Full ABI encoding stub — replace with proper ABI encoder in production
-    store<u32>(outPtr, 0xDEADBEEF);  // function selector placeholder
+    // PLACEHOLDER stub. This function is UNDER-SPEC'd against the real
+    // PITLSessionRegistry production contract.
+    //
+    // STUB SIGNATURE (this code):
+    //   submitProof(bytes32 chainLinkHash, bytes32 deviceId, uint8 inferenceCode)
+    //
+    // REAL CONTRACT SIGNATURE (PITLSessionRegistry.sol:138):
+    //   submitPITLProof(
+    //     bytes32 deviceId, bytes proof, uint256 featureCommitment,
+    //     uint256 humanityProbInt, uint256 inferenceCode,
+    //     uint256 nullifierHash, uint256 epoch
+    //   )
+    //
+    // REAL SELECTOR (computed 2026-05-13):
+    //   0x7c4847ed = keccak256("submitPITLProof(bytes32,bytes,uint256,uint256,uint256,uint256,uint256)")[:4]
+    //
+    // Applet-pipeline phase must:
+    //   (a) replace 0xDEADBEEF with 0x7c4847ed
+    //   (b) implement variable-length `bytes proof` ABI v2 encoding (offset+length prefix)
+    //   (c) derive featureCommitment via Poseidon(8-input) from the AS-side
+    //       feature vector — currently no AS Poseidon implementation
+    //   (d) compute humanityProbInt scaled per Phase 46 (0..1000)
+    //   (e) compute nullifierHash = Poseidon(deviceIdHash, epoch) — anti-replay
+    //   (f) read epoch = block.number / EPOCH_BLOCKS at proof time
+    //
+    // See scripts/w3bstream_applet_audit.py for the full readiness audit.
+    store<u32>(outPtr, 0xDEADBEEF);  // PLACEHOLDER (real: 0x7c4847ed) — replace at applet-pipeline phase
     return 4 + 32 + 32 + 32;  // selector + chainLinkHash + deviceId + padded uint8
 }
 
