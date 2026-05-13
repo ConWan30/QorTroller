@@ -1524,6 +1524,17 @@ class Config:
     fail-open default values (False / empty dict).  Set after deploy-phase237.js
     runs successfully."""
 
+    vpm_anchor_registry_address: str = field(
+        default_factory=lambda: _env("VPM_ANCHOR_REGISTRY_ADDRESS", "")
+    )
+    """Phase O4-VPM-ANCHOR — Deployed VPMAnchorRegistry address on IoTeX testnet.
+    Empty string = on-chain VPM anchoring disabled; chain.anchor_vpm() short-
+    circuits and returns (None, False) fail-open. Set in bridge/.env after the
+    operator three-factor deploy ceremony per
+    wiki/runbooks/vpm_anchor_registry_deploy_runbook.md fires successfully.
+    Contract source: contracts/contracts/VPMAnchorRegistry.sol.
+    Deploy script: contracts/scripts/deploy-vpm-anchor-registry.js."""
+
     # --- Phase 238 Step I — Curator Shadow Infrastructure ---
     curator_review_enabled: bool = field(
         default_factory=lambda: _env_bool("CURATOR_REVIEW_ENABLED", False)
