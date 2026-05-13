@@ -9395,4 +9395,249 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "timestamp":         time.time(),
         }
 
+    # ------------------------------------------------------------------
+    # Phase O4-VPM-INT Stream B (Bridge Endpoints) — VPM artifact registry
+    # HTTP surface. Five new endpoints serve the read + future write +
+    # validate + audit paths over scripts/vpm_compile_*.py emitted output.
+    #
+    #   B.1  GET  /operator/vpm-list                        (read-key)
+    #   B.2  GET  /operator/vpm-artifact/{commit}           (read-key)
+    #   B.3  GET  /operator/vpm-manifest/{commit}           (read-key)
+    #   B.4  POST /operator/vpm-compile                     (full operator key)
+    #   B.5  POST /operator/vpm-validate-manifest           (read-key)
+    #   B.6  GET  /operator/vpm-audit-status                (read-key)
+    #
+    # This block ships B.1-B.3 (read endpoints + store-backed list). B.4-B.7
+    # ship in the next plan-row commit.
+    # ------------------------------------------------------------------
+
+    # FROZEN CSP header set for VPM HTML responses per Phase O4 plan §3
+    # Stream B.2 security headers. default-src 'none' + no connect-src
+    # makes runtime network impossible regardless of inline JS behavior.
+    # 'unsafe-inline' for style + script is INTENTIONAL — VPMs are
+    # self-contained single-file artifacts compiled deterministically
+    # from frozen inputs (per scripts/vsd_ui_compiler.py
+    # compile_vpm_artifact static guards INV-VPM-COMPILER-001).
+    _VPM_HTML_RESPONSE_HEADERS = {
+        "Content-Security-Policy": (
+            "default-src 'none'; "
+            "style-src 'unsafe-inline'; "
+            "script-src 'unsafe-inline'; "
+            "img-src data:; "
+            "base-uri 'none'; "
+            "frame-ancestors 'self'; "
+            "form-action 'none'"
+        ),
+        "Referrer-Policy":         "no-referrer",
+        "X-Content-Type-Options":  "nosniff",
+        "X-Frame-Options":         "SAMEORIGIN",
+        "Cache-Control":           "public, max-age=31536000, immutable",
+    }
+
+    @app.get("/operator/vpm-list")
+    async def get_vpm_list_endpoint(
+        x_api_key: str = Header(default=""),
+        vpm_id: str = Query(default=""),
+        visual_state: str = Query(default=""),
+        since_minutes: int = Query(default=0, ge=0, le=43200),
+        limit: int = Query(default=50, ge=1, le=500),
+    ):
+        """Phase O4-VPM-INT B.1 — list VPM artifacts from vpm_artifact_log.
+
+        Filterable by vpm_id (e.g. HONESTY-BOARD-v1), visual_state (1-of-6
+        FROZEN VPMVisualState), since_minutes (rolling time window;
+        0=unbounded, max 30 days = 43200 minutes), limit (1..500).
+
+        Returns:
+            {
+                "filter_summary": {"vpm_id": str, "visual_state": str,
+                                   "since_minutes": int, "limit": int},
+                "row_count": int,
+                "rows": [{full row dict}, ...],   # newest first
+                "timestamp": float,
+            }
+
+        Read-key auth (x-api-key Header). Fail-open at store layer.
+        """
+        _check_read_key(x_api_key)
+        rows = await asyncio.to_thread(
+            store.get_vpm_artifact_history,
+            vpm_id if vpm_id else None,
+            visual_state if visual_state else None,
+            int(since_minutes),
+            int(limit),
+        )
+        return {
+            "filter_summary": {
+                "vpm_id":        vpm_id,
+                "visual_state":  visual_state,
+                "since_minutes": int(since_minutes),
+                "limit":         int(limit),
+            },
+            "row_count": len(rows),
+            "rows":      rows,
+            "timestamp": time.time(),
+        }
+
+    @app.get("/operator/vpm-artifact/{commitment_hex}")
+    async def get_vpm_artifact_endpoint(
+        commitment_hex: str,
+        x_api_key: str = Header(default=""),
+    ):
+        """Phase O4-VPM-INT B.2 — serve a VPM artifact's compiled HTML.
+
+        Looks up the row in vpm_artifact_log; reads manifest_uri-pointed
+        HTML file from disk; returns it with the FROZEN CSP + security
+        header set per Phase O4 plan §3 Stream B.2.
+
+        Returns:
+          - 200 + HTML body + CSP headers when artifact found + file exists
+          - 200 + JSON {"found": false, ...} when row missing (NOT 404)
+          - 200 + JSON {"found": true, "file_missing": true, ...} when row
+            present but manifest_uri file is gone from disk (operator can
+            see the inconsistency without 5xx)
+
+        Read-key auth (x-api-key Header).
+        """
+        _check_read_key(x_api_key)
+        row = await asyncio.to_thread(
+            store.get_vpm_artifact_status, commitment_hex
+        )
+        if row is None:
+            return {
+                "found":          False,
+                "commitment_hex": commitment_hex,
+                "timestamp":      time.time(),
+            }
+        manifest_uri = row.get("manifest_uri")
+        if not manifest_uri:
+            return {
+                "found":          True,
+                "file_missing":   True,
+                "commitment_hex": commitment_hex,
+                "reason":         "no manifest_uri recorded in store row",
+                "timestamp":      time.time(),
+            }
+        from pathlib import Path as _Path
+        artifact_path = _Path(manifest_uri)
+        if not artifact_path.exists():
+            return {
+                "found":          True,
+                "file_missing":   True,
+                "commitment_hex": commitment_hex,
+                "manifest_uri":   manifest_uri,
+                "reason":         "manifest_uri file missing from disk",
+                "timestamp":      time.time(),
+            }
+        try:
+            html_bytes = await asyncio.to_thread(artifact_path.read_bytes)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"failed to read artifact file: {exc}",
+            )
+        from starlette.responses import Response as _Resp
+        return _Resp(
+            content=html_bytes,
+            media_type="text/html; charset=utf-8",
+            headers=_VPM_HTML_RESPONSE_HEADERS,
+        )
+
+    @app.get("/operator/vpm-manifest/{commitment_hex}")
+    async def get_vpm_manifest_endpoint(
+        commitment_hex: str,
+        x_api_key: str = Header(default=""),
+    ):
+        """Phase O4-VPM-INT B.3 — return the .vpm.manifest.json sidecar
+        contents for a recorded VPM artifact.
+
+        Derives the sidecar path from manifest_uri by replacing the
+        `.html` suffix with `.vpm.manifest.json` (matches the
+        compile_vpm_artifact convention at
+        scripts/vsd_ui_compiler.py:compile_vpm_artifact, where both
+        files are written to the same output_dir with the same
+        <input_commit> stem).
+
+        Returns:
+            {
+                "found":          bool,
+                "commitment_hex": str,
+                "manifest":       dict | None,   # parsed JSON sidecar
+                "db_row":         dict | None,   # store row metadata
+                "file_missing":   bool,           # true when row present
+                                                  # but sidecar absent
+                "timestamp":      float,
+            }
+
+        Read-key auth.
+        """
+        _check_read_key(x_api_key)
+        row = await asyncio.to_thread(
+            store.get_vpm_artifact_status, commitment_hex
+        )
+        if row is None:
+            return {
+                "found":          False,
+                "commitment_hex": commitment_hex,
+                "manifest":       None,
+                "db_row":         None,
+                "file_missing":   False,
+                "timestamp":      time.time(),
+            }
+        manifest_uri = row.get("manifest_uri")
+        if not manifest_uri:
+            return {
+                "found":          True,
+                "commitment_hex": commitment_hex,
+                "manifest":       None,
+                "db_row":         row,
+                "file_missing":   True,
+                "reason":         "no manifest_uri recorded in store row",
+                "timestamp":      time.time(),
+            }
+        from pathlib import Path as _Path
+        artifact_path = _Path(manifest_uri)
+        # Derive sidecar: replace .html with .vpm.manifest.json
+        if artifact_path.suffix.lower() == ".html":
+            sidecar_path = artifact_path.with_name(
+                artifact_path.stem + ".vpm.manifest.json"
+            )
+        else:
+            return {
+                "found":          True,
+                "commitment_hex": commitment_hex,
+                "manifest":       None,
+                "db_row":         row,
+                "file_missing":   True,
+                "reason":         f"manifest_uri unexpected suffix: {artifact_path.suffix!r}",
+                "timestamp":      time.time(),
+            }
+        if not sidecar_path.exists():
+            return {
+                "found":          True,
+                "commitment_hex": commitment_hex,
+                "manifest":       None,
+                "db_row":         row,
+                "file_missing":   True,
+                "reason":         f"sidecar missing at {sidecar_path}",
+                "timestamp":      time.time(),
+            }
+        try:
+            sidecar_bytes = await asyncio.to_thread(sidecar_path.read_bytes)
+            import json as _json
+            sidecar = _json.loads(sidecar_bytes.decode("utf-8"))
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"failed to read/parse sidecar: {exc}",
+            )
+        return {
+            "found":          True,
+            "commitment_hex": commitment_hex,
+            "manifest":       sidecar,
+            "db_row":         row,
+            "file_missing":   False,
+            "timestamp":      time.time(),
+        }
+
     return app
