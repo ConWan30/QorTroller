@@ -10007,4 +10007,132 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         report["timestamp"] = time.time()
         return report
 
+    # Phase O4-VPM-INT follow-up — HTTP endpoint surface for the
+    # 6 wallet-free audit scripts shipped in the session arc closing
+    # at HEAD 1bbf163f. Three highest-frontend-value audits exposed
+    # here for Operator Console dashboard consumption (G7 graduation
+    # readiness chip + CFSS lane authority continuous monitor +
+    # Curator graduation consolidated readiness).
+    #
+    # Each endpoint: read-key auth via x-api-key Header; offloads the
+    # underlying audit's sweep_once / run_audit function to a worker
+    # thread via asyncio.to_thread (keeps the event loop responsive
+    # under live frontend polling load per the Phase 235-STAB pattern).
+
+    @app.get("/operator/g7-curator-readiness")
+    async def get_g7_curator_readiness(
+        x_api_key: str = Header(default=""),
+    ):
+        """G7 Curator Review Readiness audit — wallet-free read-only.
+
+        Exposes the same payload as scripts/g7_curator_review_readiness
+        _audit.py via HTTP. Reports the gate's verdict across 5
+        sections (curator presence / 7-day window counts / last-N
+        breakdown / gate evaluation / ZERO TOLERANCE invariant).
+        """
+        _check_read_key(x_api_key)
+        try:
+            import importlib.util
+            import sys as _sys
+            from pathlib import Path as _Path
+            _proj = _Path(__file__).resolve().parent.parent.parent
+            if str(_proj / "scripts") not in _sys.path:
+                _sys.path.insert(0, str(_proj / "scripts"))
+            _spec = importlib.util.spec_from_file_location(
+                "g7_audit_ep",
+                _proj / "scripts" / "g7_curator_review_readiness_audit.py",
+            )
+            _mod = importlib.util.module_from_spec(_spec)
+            _sys.modules["g7_audit_ep"] = _mod
+            _spec.loader.exec_module(_mod)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"g7_audit import failed: {exc}",
+            )
+        db_path = _Path(getattr(cfg, "db_path", "bridge/vapi_store.db"))
+        report, exit_code = await asyncio.to_thread(_mod.run_audit, db_path)
+        report["http_exit_code"] = exit_code
+        report["timestamp"] = time.time()
+        return report
+
+    @app.get("/operator/cfss-lane-drift-status")
+    async def get_cfss_lane_drift_status(
+        x_api_key: str = Header(default=""),
+    ):
+        """CFSS Cedar v2 lane authority drift status — wallet-free.
+
+        Exposes the same payload as scripts/cfss_lane_drift_sweep.py.
+        Reports per-row matrix evaluation + verdict (PASS / CFSS_
+        VIOLATION / BUNDLE_LOAD_ERROR). Companion to the runtime
+        sweeper shipped at be53cd3c — frontend can poll this for the
+        operator console's CFSS chip without polling the FSCA log.
+        """
+        _check_read_key(x_api_key)
+        try:
+            import importlib.util
+            import sys as _sys
+            from pathlib import Path as _Path
+            _proj = _Path(__file__).resolve().parent.parent.parent
+            if str(_proj / "scripts") not in _sys.path:
+                _sys.path.insert(0, str(_proj / "scripts"))
+            _spec = importlib.util.spec_from_file_location(
+                "cfss_audit_ep",
+                _proj / "scripts" / "cfss_lane_drift_sweep.py",
+            )
+            _mod = importlib.util.module_from_spec(_spec)
+            _sys.modules["cfss_audit_ep"] = _mod
+            _spec.loader.exec_module(_mod)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"cfss_audit import failed: {exc}",
+            )
+        bundle_dir = _Path(__file__).resolve().parent / "cedar_bundles"
+        report = await asyncio.to_thread(_mod.sweep_once, bundle_dir)
+        report["timestamp"] = time.time()
+        return report
+
+    @app.get("/operator/curator-graduation-readiness")
+    async def get_curator_graduation_readiness(
+        x_api_key: str = Header(default=""),
+    ):
+        """Curator O2_SUGGEST -> O3_ACT consolidated graduation
+        readiness — wallet-free.
+
+        Exposes the same payload as scripts/curator_graduation_
+        readiness_audit.py. Reduces 4 sub-audits (G7 + watcher + CFSS
+        + on-chain) to a single READY/BLOCKED/FAIL/ERROR verdict.
+        Frontend Operator Console reads this for the "Curator
+        graduation cleared" dashboard tile.
+        """
+        _check_read_key(x_api_key)
+        try:
+            import importlib.util
+            import sys as _sys
+            from pathlib import Path as _Path
+            _proj = _Path(__file__).resolve().parent.parent.parent
+            if str(_proj / "scripts") not in _sys.path:
+                _sys.path.insert(0, str(_proj / "scripts"))
+            _spec = importlib.util.spec_from_file_location(
+                "curator_grad_ep",
+                _proj / "scripts" / "curator_graduation_readiness_audit.py",
+            )
+            _mod = importlib.util.module_from_spec(_spec)
+            _sys.modules["curator_grad_ep"] = _mod
+            _spec.loader.exec_module(_mod)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"curator_grad_audit import failed: {exc}",
+            )
+        db_path = _Path(getattr(cfg, "db_path", "bridge/vapi_store.db"))
+        bundle_dir = _Path(__file__).resolve().parent / "cedar_bundles"
+        report, exit_code = await asyncio.to_thread(
+            _mod.run_audit, db_path, bundle_dir,
+        )
+        report["http_exit_code"] = exit_code
+        report["timestamp"] = time.time()
+        return report
+
     return app
