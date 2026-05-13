@@ -925,3 +925,71 @@ export function useSentryStatus() {
     retry: 1,
   })
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase O4-VPM-INT Stream C.2 — VPM Registry hooks
+//
+// Bridge endpoints surfaced here are shipped by Phase O4 Stream B
+// (commits 1b13618d + d5803d47):
+//   GET /operator/vpm-list       — filterable VPM artifact registry
+//   GET /operator/vpm-manifest/{commit} — manifest sidecar JSON + db_row
+//
+// noMock:true on both: VPM artifact inspection is audit-critical;
+// fabricated mock entries would corrupt the operator's view of what
+// has actually been compiled + recorded. On bridge offline / transient
+// failure, react-query holds the last successful response in `data`.
+// Matches the useShadowLog + useDriftLog precedent.
+// ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * useVpmList — filterable list of compiled VPM artifacts.
+ *
+ * Params (object; all optional):
+ *   vpmId         — filter by registered VPM ID ('HONESTY-BOARD-v1', etc.)
+ *   visualState   — filter by 1-of-6 FROZEN VPMVisualState
+ *   sinceMinutes  — rolling window (0=unbounded, max 43200=30d)
+ *   limit         — 1..500 (default 50)
+ *   enabled       — gate polling (default true)
+ */
+export function useVpmList({
+  vpmId        = '',
+  visualState  = '',
+  sinceMinutes = 0,
+  limit        = 50,
+  enabled      = true,
+} = {}) {
+  const params = new URLSearchParams()
+  if (vpmId)       params.set('vpm_id', vpmId)
+  if (visualState) params.set('visual_state', visualState)
+  if (sinceMinutes > 0) params.set('since_minutes', String(sinceMinutes))
+  params.set('limit', String(limit))
+  return useQuery({
+    queryKey: ['vpmList', vpmId, visualState, sinceMinutes, limit],
+    queryFn:  () => get(`/operator/vpm-list?${params.toString()}`, 'vpmList', { noMock: true }),
+    enabled,
+    refetchInterval: 20000,
+    staleTime: 15000,
+    retry: 1,
+  })
+}
+
+/**
+ * useVpmManifest — fetch the parsed .vpm.manifest.json sidecar for a
+ * compiled VPM artifact + its store row metadata.
+ *
+ * Returns react-query result with body shape:
+ *   { found, commitment_hex, manifest, db_row, file_missing, timestamp }
+ */
+export function useVpmManifest(commitmentHex, { enabled = true } = {}) {
+  return useQuery({
+    queryKey: ['vpmManifest', commitmentHex],
+    queryFn:  () => get(
+      `/operator/vpm-manifest/${commitmentHex}`,
+      'vpmManifest',
+      { noMock: true },
+    ),
+    enabled: Boolean(commitmentHex) && enabled,
+    staleTime: 60000,
+    retry: 1,
+  })
+}

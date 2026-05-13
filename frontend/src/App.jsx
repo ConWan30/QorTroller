@@ -18,6 +18,11 @@ const BrpView          = lazy(() => import('./views/BrpView').then((m) => ({ def
 // Sellers + buyers + auditors share this surface; operator listing form
 // hidden in O1.
 const MarketplaceView  = lazy(() => import('./views/MarketplaceView').then((m) => ({ default: m.MarketplaceView })))
+// 6th view: Phase O4-VPM-INT Stream C — VPM Registry tab. Read-only
+// inspection surface for the Phase O4 VPM artifacts emitted by the
+// Stream A.1+A.2 compilers. Sandboxed iframe rendering + Layer 3
+// Anti-Hype Visual Grammar verification.
+const VpmRegistryView  = lazy(() => import('./views/VpmRegistryView').then((m) => ({ default: m.VpmRegistryView })))
 
 const VIEW_MAP = {
   gamer:        GamerView,
@@ -25,6 +30,7 @@ const VIEW_MAP = {
   manufacturer: ManufacturerView,
   brp:          BrpView,
   marketplace:  MarketplaceView,
+  vpm:          VpmRegistryView,
 }
 
 function ViewLoader() {
