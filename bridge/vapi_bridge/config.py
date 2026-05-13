@@ -2021,6 +2021,25 @@ class Config:
     path (2 chain RPC reads per agent). 600s default to bound testnet RPC
     quota. INV-OPERATOR-AGENT-008 freezes the dual-cadence shape."""
 
+    # --- Phase O4-VPM-INT follow-up: Continuous CFSS lane drift sweep ---
+    cfss_drift_sweep_enabled: bool = field(
+        default_factory=lambda: _env_bool("CFSS_DRIFT_SWEEP_ENABLED", False)
+    )
+    """Phase O4-VPM-INT follow-up — Enable cfss_drift_sweeper background task
+    that runs the EXPECTED_LANE_MATRIX evaluation continuously at 60s cadence.
+    When False (default), CFSS lane authority is verified only by the
+    operator-runtime post-ceremony audit. When True, silent Cedar bundle
+    mutations surface within one sweep window. Default False = opt-in
+    observability. Findings land in cfss_lane_drift_log → consumed by
+    FSCA rule CFSS_LANE_AUTHORITY_DRIFT (CRITICAL)."""
+
+    cfss_drift_sweep_interval_s: int = field(
+        default_factory=lambda: int(_env("CFSS_DRIFT_SWEEP_INTERVAL_S", "60"))
+    )
+    """Phase O4-VPM-INT follow-up — CFSS drift sweep interval. Aligns with
+    cedar_drift_sweep_interval_bundle_s (60s) per INV-OPERATOR-AGENT-008
+    cheap+frequent cadence tier (file-only evaluation; no chain RPC)."""
+
     # --- Phase O2-DRAFT-AUTOLOOP: Operator-agent O2 drafting polling loops ---
     operator_agent_sentry_polling_enabled: bool = field(
         default_factory=lambda: _env_bool("OPERATOR_AGENT_SENTRY_POLLING_ENABLED", False)

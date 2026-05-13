@@ -3588,6 +3588,49 @@ class Store:
         except Exception:
             pass  # idempotent
 
+        # Phase O4-VPM-INT follow-up — cfss_lane_drift_log table.
+        # Sink for findings from cfss_drift_sweeper.py (continuous Cedar
+        # policy CFSS lane authority drift detection at the policy layer,
+        # complementing FSCA's existing data-layer drift detection).
+        #
+        # Each row = one (agent_id, action, resource) row where the live
+        # bundle file's Cedar policy evaluation drifted from
+        # EXPECTED_LANE_MATRIX. INV-OPERATOR-AGENT-008 dual-cadence
+        # contract: written by the sweeper at the 60s bundle cadence.
+        # Consumed by the 27th FSCA contradiction rule
+        # CFSS_LANE_AUTHORITY_DRIFT (CRITICAL severity).
+        try:
+            with self._conn() as conn:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS cfss_lane_drift_log (
+                        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                        sweep_id        TEXT    NOT NULL,
+                        agent_id        TEXT    NOT NULL,
+                        action          TEXT    NOT NULL,
+                        resource        TEXT,
+                        expected_effect TEXT    NOT NULL,
+                        actual_effect   TEXT    NOT NULL,
+                        bundle_path     TEXT,
+                        evidence_json   TEXT,
+                        created_at      REAL    NOT NULL
+                    )
+                """)
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_cfss_drift_created "
+                    "ON cfss_lane_drift_log(created_at DESC)"
+                )
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_cfss_drift_agent "
+                    "ON cfss_lane_drift_log(agent_id, created_at DESC)"
+                )
+                conn.execute(
+                    "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                    " VALUES (?, ?, ?)",
+                    (1210, "cfss_lane_drift_log", time.time()),
+                )
+        except Exception:
+            pass  # idempotent
+
         # Phase O1 C1 — operator_agent_activation_log table.
         # Mirrors the on-chain AgentScopeRootSet + AgentScopeUpdated events
         # for each Cedar bundle anchor cycle (D4 dual-anchor).  UNIQUE
@@ -14957,6 +15000,66 @@ class Store:
             sql += " ORDER BY detected_at DESC LIMIT ?"
             args.append(limit)
             return [dict(r) for r in conn.execute(sql, tuple(args)).fetchall()]
+
+    # --- Phase O4-VPM-INT follow-up: CFSS lane drift helpers ---
+    #
+    # Findings from cfss_drift_sweeper.py (continuous Cedar policy
+    # CFSS lane authority detection). Each row = one matrix-row
+    # CFSS_VIOLATION. Consumed by the 27th FSCA contradiction rule
+    # CFSS_LANE_AUTHORITY_DRIFT (CRITICAL severity).
+
+    def insert_cfss_lane_drift(
+        self,
+        *,
+        sweep_id: str,
+        agent_id: str,
+        action: str,
+        resource: str | None,
+        expected_effect: str,
+        actual_effect: str,
+        bundle_path: str = "",
+        evidence_json: str = "",
+    ) -> int:
+        """Persist one CFSS lane-authority drift finding. Never raises."""
+        try:
+            now = time.time()
+            with self._conn() as conn:
+                cur = conn.execute(
+                    "INSERT INTO cfss_lane_drift_log "
+                    "(sweep_id, agent_id, action, resource, "
+                    "expected_effect, actual_effect, bundle_path, "
+                    "evidence_json, created_at) "
+                    "VALUES (?,?,?,?,?,?,?,?,?)",
+                    (
+                        sweep_id, agent_id, action, resource,
+                        expected_effect, actual_effect,
+                        bundle_path, evidence_json, now,
+                    ),
+                )
+                return int(cur.lastrowid) if cur.lastrowid else 0
+        except Exception:
+            return 0
+
+    def get_cfss_lane_drift_recent(
+        self,
+        since_seconds: int = 3600,
+        limit: int = 50,
+    ) -> list[dict]:
+        """Return CFSS drift findings within the trailing window."""
+        try:
+            since = time.time() - max(1, int(since_seconds))
+            limit = max(1, min(500, int(limit)))
+            with self._conn() as conn:
+                return [
+                    dict(r) for r in conn.execute(
+                        "SELECT * FROM cfss_lane_drift_log "
+                        "WHERE created_at >= ? "
+                        "ORDER BY created_at DESC LIMIT ?",
+                        (since, limit),
+                    ).fetchall()
+                ]
+        except Exception:
+            return []
 
     # --- Phase O1-FRR: Operator Initiative Advancement helpers ---
     #
