@@ -978,6 +978,193 @@ CONTRADICTION_RULES: dict = {
             "VK will not trigger this rule."
         ),
     },
+
+    # ---------------------------------------------------------------------
+    # Phase O4-VPM-INT close — 3 new VPM contradiction rules.
+    # All three target vpm_artifact_log (Phase 1200 migration; shipped in
+    # commit 1b13618d). The rules surface VPM-layer integrity violations
+    # within the same FSCA poll cadence (15 min) as the existing ZKBA
+    # rules above. agents_involved sets mirror the lane authority for
+    # each rule's relevant VPM compiler family.
+    # ---------------------------------------------------------------------
+
+    # Rule O4-1 — VPM_VISUAL_STATE_DOM_MISMATCH (HIGH)
+    # Detects VPM artifacts in vpm_artifact_log whose stored
+    # compiler_output_hash_hex is non-empty (file was emitted on disk)
+    # but whose visual_state has no matching audit-time grammar
+    # verification record. Used as a structural integrity signal —
+    # when the audit harness has flagged Section 6 issues, those rows
+    # surface here for operator review. Today the rule fires on rows
+    # with NULL compiler_output_hash_hex (which should never happen if
+    # the compile path completed); future Phase O5 expansion can join
+    # against a vpm_grammar_check_log table.
+    "VPM_VISUAL_STATE_DOM_MISMATCH": {
+        "query": """
+            SELECT id, commitment_hex, vpm_id, visual_state, capture_mode,
+                   manifest_uri, ts_ns, created_at
+            FROM vpm_artifact_log
+            WHERE manifest_uri IS NOT NULL
+              AND compiler_output_hash_hex IS NULL
+              AND created_at >= ?
+            ORDER BY created_at DESC LIMIT 5
+        """,
+        "params": lambda cfg: (time.time() - 3600,),
+        "agents_involved": [
+            "AnchorSentry",
+            "Guardian",
+            "Curator",
+        ],
+        "severity": "HIGH",
+        "explanation": (
+            "VPM artifact in vpm_artifact_log has manifest_uri populated "
+            "but compiler_output_hash_hex is NULL — implies a partial "
+            "compile path or a row inserted without the post-compile "
+            "hash. Per Phase O4 plan section 5.2 Layer 1 enforcement, "
+            "every emitted VPM HTML must pass the static guard set "
+            "(no external URLs / no runtime network / no randomness / "
+            "no wall-clock / 9-field Integrity Label DOM) before disk "
+            "write. A row with NULL compiler_output_hash_hex is "
+            "structurally incomplete. The Layer 3 frontend grammar "
+            "verifier (frontend/src/components/VpmGrammarVerifier.jsx) "
+            "would surface GRAMMAR FAIL on such a row's served HTML, "
+            "but the operator should not wait for browser-side render "
+            "to detect the inconsistency."
+        ),
+        "resolution": (
+            "Inspect the affected row's manifest_uri file. If the file "
+            "exists, recompute SHA-256 of the HTML bytes and update the "
+            "row's compiler_output_hash_hex. If the file is missing, "
+            "the row is orphaned and should be deleted by an operator "
+            "action (no automatic deletion in O1 SHADOW). For each row "
+            "returned, run: python scripts/vpm_audit.py --report and "
+            "review Sections 1 + 6. If Section 6 (visual grammar "
+            "coverage) FAILs, the corresponding compiler has drifted "
+            "from the canonical scripts/vpm_visual_grammar.py imports."
+        ),
+    },
+
+    # Rule O4-2 — VPM_MANIFEST_HASH_DRIFT (HIGH)
+    # Detects VPM artifacts whose declared zkba_manifest_hash_hex
+    # doesn't reference a known commitment_hex in zkba_artifact_log.
+    # The VPM artifact is a wrapper over an underlying ZKBA projection
+    # per Phase O4 plan section 3 Stream A.0 design: the wrapper
+    # carries zkba_manifest_hash_hex as a cryptographic composition
+    # link. If the wrapper claims a zkba_manifest_hash_hex that doesn't
+    # appear anywhere in zkba_artifact_log, either the wrapper is
+    # forged or the ZKBA layer drifted.
+    "VPM_MANIFEST_HASH_DRIFT": {
+        "query": """
+            SELECT v.id, v.commitment_hex, v.vpm_id, v.visual_state,
+                   v.zkba_manifest_hash_hex, v.ts_ns, v.created_at
+            FROM vpm_artifact_log v
+            LEFT JOIN zkba_artifact_log z
+                   ON z.commitment_hex = v.zkba_manifest_hash_hex
+            WHERE v.created_at >= ?
+              AND v.zkba_manifest_hash_hex IS NOT NULL
+              AND v.zkba_manifest_hash_hex != ''
+              AND z.commitment_hex IS NULL
+            ORDER BY v.created_at DESC LIMIT 5
+        """,
+        "params": lambda cfg: (time.time() - 3600,),
+        "agents_involved": [
+            "AnchorSentry",
+            "Guardian",
+            "Curator",
+        ],
+        "severity": "HIGH",
+        "explanation": (
+            "VPM artifact in vpm_artifact_log declares a "
+            "zkba_manifest_hash_hex that does not match any "
+            "commitment_hex in zkba_artifact_log. The VPM wrapper "
+            "schema vapi-vpm-manifest-v1 (Phase O4 INV-VPM-WRAPPER-001 "
+            "+ INV-VPM-WRAPPER-SCHEMA-REF-001) requires every VPM "
+            "artifact to reference a real underlying ZKBA projection. "
+            "Possible causes: (a) VPM compiler invoked with a "
+            "fabricated zkba_manifest_hash_hex (overclaim), (b) the "
+            "wrapped ZKBA artifact was deleted post-VPM-compile "
+            "(structural drift), (c) the VPM was compiled against a "
+            "ZKBA artifact from a different bridge instance. The "
+            "Layer 2 audit endpoint /operator/vpm-audit-status "
+            "Section 1 + Section 2 will not detect this — it's a "
+            "cross-table referential integrity check that requires "
+            "live FSCA polling."
+        ),
+        "resolution": (
+            "For each affected row: query "
+            "/operator/zkba-artifact/<zkba_manifest_hash_hex> to "
+            "confirm the underlying ZKBA artifact really is missing. "
+            "If missing: investigate whether the VPM compile was "
+            "operator-authorized + whether the zkba_manifest_hash_hex "
+            "was reproducible from the ZKBA primitive at compile time. "
+            "If the ZKBA artifact was deleted (no Phase O3 deletion "
+            "primitive exists; manual SQL deletion is the only path), "
+            "this rule documents the resulting orphan. Restoration "
+            "requires re-compiling the ZKBA artifact via the original "
+            "scripts/zkba_compile_*.py path."
+        ),
+    },
+
+    # Rule O4-3 — VPM_LIFECYCLE_REGRESSION (MEDIUM)
+    # Detects VPM IDs at Compiler Target lifecycle (DISPUTE-PACKET-v1
+    # + MARKET-LISTING-v1 per Phase O4 Stream A.2) that have zero
+    # rows in vpm_artifact_log within the trailing 30 days. Today this
+    # is a soft signal — Compiler Target VPMs may sit unused while
+    # the operator prioritizes Test Fixture surfaces. A non-zero
+    # count is the expected state once the Operator Console VPM tab
+    # has compiled the canonical fixtures. MEDIUM severity reflects
+    # this is not a security event; it's stagnation observation.
+    "VPM_LIFECYCLE_REGRESSION": {
+        "query": """
+            SELECT 'DISPUTE-PACKET-v1' AS vpm_id_check,
+                   COUNT(*) AS recent_rows
+            FROM vpm_artifact_log
+            WHERE vpm_id = 'DISPUTE-PACKET-v1'
+              AND created_at >= ?
+            HAVING recent_rows = 0
+            UNION ALL
+            SELECT 'MARKET-LISTING-v1' AS vpm_id_check,
+                   COUNT(*) AS recent_rows
+            FROM vpm_artifact_log
+            WHERE vpm_id = 'MARKET-LISTING-v1'
+              AND created_at >= ?
+            HAVING recent_rows = 0
+        """,
+        "params": lambda cfg: (
+            time.time() - (30 * 86400.0),
+            time.time() - (30 * 86400.0),
+        ),
+        "agents_involved": [
+            "Guardian",
+            "Curator",
+        ],
+        "severity": "MEDIUM",
+        "explanation": (
+            "VPM IDs at the VBDIP-0002A section 10 'Compiler Target' "
+            "lifecycle (DISPUTE-PACKET-v1 Guardian-lane + "
+            "MARKET-LISTING-v1 Curator-lane per Phase O4 Stream A.2) "
+            "have not produced any rows in vpm_artifact_log within the "
+            "last 30 days. Per VBDIP-0002A section 10 the Compiler "
+            "Target lifecycle is meant to be exercised continuously by "
+            "the bridge POST /operator/vpm-compile endpoint or by the "
+            "operator's CLI. Prolonged silence can indicate (a) the "
+            "Operator Console VPM Registry tab is unused, (b) the "
+            "bridge POST endpoint has a regression preventing dispatch, "
+            "or (c) the operator workflow has paused VPM compilation "
+            "entirely. Not a security event; surface for stagnation "
+            "review."
+        ),
+        "resolution": (
+            "Smoke-test each affected VPM ID by running its CLI "
+            "compile: e.g. python scripts/vpm_compile_dispute_packet.py "
+            "--help to verify the compiler module imports cleanly. "
+            "Then exercise the bridge POST /operator/vpm-compile path "
+            "for a representative input. If the compile succeeds + "
+            "records a row, the rule resolves on the next FSCA poll. "
+            "If the rule persists for a full 30-day window with no "
+            "operator response, escalate to a Phase O5 candidate "
+            "(deferred or removed lifecycle)."
+        ),
+    },
 }
 
 # ---------------------------------------------------------------------------

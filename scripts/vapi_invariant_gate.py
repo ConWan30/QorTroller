@@ -580,6 +580,80 @@ INVARIANTS: list[Invariant] = [
         pattern=r'"vapi-vpm-manifest-v1"',
         min_matches=1,
     ),
+    # Phase O4-VPM-INTEGRATION close — 10 INV-VPM-* invariants per plan §4.1.
+    # Pin load-bearing source-code regions across the entire VPM stack:
+    # compiler engine, manifest schema literals, visual grammar enum,
+    # bridge CSP headers, frontend sandbox literal, audit harness shape.
+    Invariant(
+        id="INV-VPM-COMPILER-001",
+        description="compile_vpm_artifact function exists in scripts/vsd_ui_compiler.py — the Phase O4 Stream A.0 public entry-point that emits VPM artifacts under strict compiler discipline (no external resources / no runtime network / no randomness / no wall-clock / 9-field Integrity Label DOM). Sibling of compile_artifact() for the unwrapped ZKBA projection path. Pinned at v1.0 alongside the VPM artifact schema; signature change requires Phase O5+ governance event.",
+        file="scripts/vsd_ui_compiler.py",
+        pattern=r"def compile_vpm_artifact\(",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-VPM-COMPILER-002",
+        description="vapi-vpm-artifact-v1 VPM artifact schema literal pinned in scripts/vsd_ui_compiler.py — FROZEN at v1.0 per Phase O4 plan section 4.1. Distinct from vapi-zkba-manifest-v1 (ZKBA projection schema, INV-ZKBA-003) and vapi-vpm-manifest-v1 (wrapper schema, INV-VPM-WRAPPER-001). The three schemas form the Layer 7 stack: ZKBA -> VPM wrapper -> VPM artifact. Compiler version 0.1.0 bump or schema rename requires v2 governance ceremony.",
+        file="scripts/vsd_ui_compiler.py",
+        pattern=r'"vapi-vpm-artifact-v1"',
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-VPM-INTEGRITY-LABEL-001",
+        description="9-field Integrity Nutrition Label tuple pinned in scripts/vsd_ui_compiler.py — _VPM_INTEGRITY_LABEL_FIELDS captures the FROZEN field set per VBDIP-0002 Appendix B section B.5: proof_type / capture_mode / raw_biometrics_exposed / consent_active / zk_verified / on_chain_anchor / proof_weight / revocation_status / limitations. The compiler's _verify_integrity_label_in_dom static guard refuses to write any emitted HTML missing any of these 9 data-vpm-field markers. Mirrored on frontend at scripts/vpm_visual_grammar.py:INTEGRITY_LABEL_FIELDS + frontend/src/components/VpmManifestPanel.jsx.",
+        file="scripts/vsd_ui_compiler.py",
+        pattern=r"_VPM_INTEGRITY_LABEL_FIELDS = \(",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-VPM-VISUAL-STATES-001",
+        description="6-element FROZEN Anti-Hype Visual Grammar state tuple pinned in scripts/vpm_visual_grammar.py — VISUAL_STATES = (live, dry-run, emulated, frozen-disabled, revoked, unverified) per VBDIP-0002 Appendix B section B.5 + Phase O4 plan section 5.1. The 6 states are protocol law; renaming or reordering requires VBDIP-0002 v1.2 amendment + corresponding update of the frontend VpmGrammarVerifier FROZEN signature matrix.",
+        file="scripts/vpm_visual_grammar.py",
+        pattern=r"^VISUAL_STATES = \(",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-VPM-CAPTURE-MODES-001",
+        description="5-element FROZEN VPM capture mode tuple pinned in scripts/vsd_ui_compiler.py — _VPM_CAPTURE_MODES = (live, dry-run, emulated, demo, frozen-disabled) per VBDIP-0002A section 4 wrapper schema. Mirrors the VPMCaptureMode enum in scripts/vsd_vpm_wrapper.py. Bridge validator endpoint validates manifest.capture_mode against this set.",
+        file="scripts/vsd_ui_compiler.py",
+        pattern=r"_VPM_CAPTURE_MODES = \(",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-VPM-WRAPPER-SCHEMA-REF-001",
+        description="VPM artifact manifest references the wrapper schema literally in scripts/vsd_ui_compiler.py — _VPM_WRAPPER_SCHEMA_REF = \"vapi-vpm-manifest-v1\" is the FROZEN reference (not replacement) link between the VPM artifact's manifest sidecar and the wrapper schema. Every compile_vpm_artifact-emitted manifest carries this string as its wrapper_schema field. Mirrors INV-VPM-WRAPPER-001 from the wrapper-module side; this invariant pins the consumer-module side of the same string.",
+        file="scripts/vsd_ui_compiler.py",
+        pattern=r'_VPM_WRAPPER_SCHEMA_REF = "vapi-vpm-manifest-v1"',
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-VPM-CSP-001",
+        description="VPM HTML response FROZEN security headers pinned in bridge/vapi_bridge/operator_api.py — _VPM_HTML_RESPONSE_HEADERS dict carries the Phase O4 plan section 3 Stream B.2 CSP set: default-src 'none' / style-src 'unsafe-inline' / script-src 'unsafe-inline' / img-src data: / base-uri 'none' / frame-ancestors 'self' / form-action 'none'. The 'unsafe-inline' flags are INTENTIONAL — VPMs are self-contained single-file artifacts pre-validated by compile_vpm_artifact static guards; default-src 'none' + no connect-src makes runtime network impossible regardless of inline JS behavior.",
+        file="bridge/vapi_bridge/operator_api.py",
+        pattern=r"_VPM_HTML_RESPONSE_HEADERS = \{",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-VPM-SANDBOX-001",
+        description="VPM iframe FROZEN sandbox attribute pinned in frontend/src/components/VpmIframe.jsx — VPM_IFRAME_SANDBOX literal must equal 'allow-scripts allow-same-origin' exactly per Phase O4 plan section 3 Stream C.3. NO expansion permitted: allow-forms / allow-popups / allow-top-navigation / allow-modals / allow-pointer-lock / allow-presentation / allow-downloads / allow-storage-access-by-user-activation are ALL forbidden. allow-scripts is required (VPMs render inline JS); allow-same-origin is required for Layer 3 grammar verifier to read iframe contentDocument.",
+        file="frontend/src/components/VpmIframe.jsx",
+        pattern=r'"allow-scripts allow-same-origin"',
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-VPM-COMPILE-ENDPOINT-001",
+        description="POST /operator/vpm-compile bridge endpoint route pinned in bridge/vapi_bridge/operator_api.py — Phase O4 Stream B.4 write endpoint that dispatches compile requests to one of 6 active VPM compilers per _VPM_COMPILER_REGISTRY and records the result row in vpm_artifact_log. Full operator key required (api_key query param matches cfg.operator_api_key). Worker-thread compile dispatch via asyncio.to_thread keeps the event loop responsive.",
+        file="bridge/vapi_bridge/operator_api.py",
+        pattern=r'@app\.post\("/operator/vpm-compile"\)',
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-VPM-AUDIT-SECTION-1-001",
+        description="VPM audit harness Section 1 active compiler registry function pinned in scripts/vpm_audit.py — section_1_active_compiler_registry verifies all 6 active VPM compiler scripts exist on disk and export their declared build_*_artifact function. Companion sections 2..6 cover Draft Manifest registry / VBDIP-0002A section 10 lifecycle ladder / CFSS lane assignment / source discipline source-grep / visual grammar coverage. Pinning section 1's signature pins the audit harness shape; renaming Section 1 forces governance ceremony.",
+        file="scripts/vpm_audit.py",
+        pattern=r"def section_1_active_compiler_registry\b",
+        min_matches=1,
+    ),
 ]
 
 
