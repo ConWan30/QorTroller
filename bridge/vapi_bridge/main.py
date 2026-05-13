@@ -1242,6 +1242,33 @@ class Bridge:
                     "Phase O1 C4: cedar_drift_sweeper unavailable: %s", _drift_exc
                 )
 
+        # Phase O4-VPM-INT follow-up — Continuous CFSS lane authority drift
+        # sweeper. Default disabled (opt-in via CFSS_DRIFT_SWEEP_ENABLED=true).
+        # Runs at 60s cadence aligned with cedar_drift_sweeper's bundle path
+        # per INV-OPERATOR-AGENT-008 cheap+frequent tier. Findings land in
+        # cfss_lane_drift_log → consumed by FSCA rule
+        # CFSS_LANE_AUTHORITY_DRIFT (CRITICAL).
+        if getattr(self.cfg, "cfss_drift_sweep_enabled", False):
+            try:
+                from .cfss_drift_sweeper import run_cfss_drift_sweep_loop
+                _cfss_sweep_task = asyncio.ensure_future(
+                    run_cfss_drift_sweep_loop(
+                        cfg=self.cfg, store=self.store,
+                    )
+                )
+                _cfss_sweep_task.set_name("CFSSDriftSweeper")
+                self._tasks.append(_cfss_sweep_task)
+                log.info(
+                    "Phase O4-VPM-INT follow-up: cfss_drift_sweeper started "
+                    "(interval=%ds)",
+                    getattr(self.cfg, "cfss_drift_sweep_interval_s", 60),
+                )
+            except Exception as _cfss_exc:
+                log.warning(
+                    "Phase O4-VPM-INT follow-up: cfss_drift_sweeper "
+                    "unavailable: %s", _cfss_exc
+                )
+
         # Phase O2-DRAFT-AUTOLOOP (Sentry/Guardian/Curator) — operator-agent
         # autonomous draft polling loops. Each loop wires the agent's already-
         # shipped draft-generator primitive surface (operator_agent_*_drafting.py)

@@ -1165,6 +1165,70 @@ CONTRADICTION_RULES: dict = {
             "(deferred or removed lifecycle)."
         ),
     },
+
+    # Rule O4-4 — CFSS_LANE_AUTHORITY_DRIFT (CRITICAL)
+    # The 27th FSCA contradiction rule. Closes the data-layer / policy-
+    # layer enforcement asymmetry: FSCA's prior 26 rules detect data-
+    # layer CFSS violations (e.g. LISTING_TIER_DRIFT / BUNDLE_HASH_DRIFT
+    # _DETECTED). CFSS_LANE_AUTHORITY_DRIFT detects Cedar POLICY-layer
+    # violations — bundle JSON files mutating to grant one agent
+    # authority over another's lane, which would survive bundle-hash
+    # invariants if Merkle root was recomputed alongside the mutation.
+    #
+    # Source: cfss_lane_drift_log table, populated by
+    # bridge/vapi_bridge/cfss_drift_sweeper.py on 60s cadence (opt-in
+    # via cfg.cfss_drift_sweep_enabled). Each row is one (agent_id,
+    # action, resource) tuple where the LIVE bundle evaluates to an
+    # effect different from EXPECTED_LANE_MATRIX.
+    #
+    # CRITICAL severity matches BUNDLE_HASH_DRIFT_DETECTED + ALLOWLIST_
+    # CHANGE_WITHOUT_GOVERNANCE — this is protocol-architectural
+    # integrity at the Cedar policy layer, not data drift.
+    "CFSS_LANE_AUTHORITY_DRIFT": {
+        "query": """
+            SELECT id, sweep_id, agent_id, action, resource,
+                   expected_effect, actual_effect, bundle_path,
+                   created_at
+            FROM cfss_lane_drift_log
+            WHERE created_at >= ?
+            ORDER BY created_at DESC LIMIT 5
+        """,
+        "params": lambda cfg: (time.time() - 3600,),
+        "agents_involved": [
+            "AnchorSentry",
+            "Guardian",
+            "Curator",
+            "CFSSDriftSweeper",
+        ],
+        "severity": "CRITICAL",
+        "explanation": (
+            "Cedar v2 lane authority drift detected at the POLICY layer. "
+            "One or more rows of the 12-row EXPECTED_LANE_MATRIX (pinned "
+            "in scripts/zkba_post_ceremony_audit.py) evaluate to a "
+            "different effect from the FROZEN expected value when the "
+            "live bundle JSON is parsed. This is the most security-"
+            "relevant CFSS attack pattern: an agent gaining write "
+            "authority over another agent's lane (e.g. Curator gaining "
+            "tool:zk-artifact-anchor, which belongs exclusively to "
+            "Sentry). Bundle hash drift (BUNDLE_HASH_DRIFT_DETECTED) "
+            "catches file-content-changed-but-anchored-Merkle-unchanged "
+            "drift; this rule catches Merkle-recomputed-alongside-"
+            "mutation drift that survives the BUNDLE_HASH check."
+        ),
+        "resolution": (
+            "1) Run scripts/cfss_lane_drift_sweep.py to see the full "
+            "12-row matrix evaluation. 2) Run scripts/"
+            "zkba_post_ceremony_audit.py to cross-check against the "
+            "on-chain AgentScope state — if Cedar policy on-chain "
+            "diverges from local bundle, the local file was tampered "
+            "post-anchor. 3) If local bundle was tampered, restore "
+            "from the architect Ed25519-attested manifest at "
+            "vsd-vault/manifests/. 4) If on-chain state diverged "
+            "(extremely rare), governance ceremony required to re-"
+            "anchor the canonical bundle. DO NOT advance any agent's "
+            "lifecycle phase while CFSS_VIOLATION findings are open."
+        ),
+    },
 }
 
 # ---------------------------------------------------------------------------
