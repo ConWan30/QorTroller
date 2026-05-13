@@ -1,0 +1,111 @@
+{
+  "$schema_doc": "Phase O4-VPM-INTEGRATION Stream A.3 draft manifest. Lifecycle: Draft Manifest per VBDIP-0002A section 10. NO compiler body ships in this phase; this JSON declares the wrapper shape a future Phase O5 compiler will consume.",
+  "vpm_id": "CONSENT-CAPSULE-v1",
+  "name": "Data Contribution Receipt",
+  "audience": "Gamers / Data Buyers",
+  "lifecycle_status": "Draft Manifest",
+  "registry_section": "VBDIP-0002A section 10",
+  "wrapper_schema_ref": "vapi-vpm-manifest-v1",
+  "proposed_zkba_class": 5,
+  "proposed_zkba_class_name": "CONSENT",
+  "proposed_proof_weight": 1,
+  "proposed_proof_weight_name": "CHAIN_ONLY",
+  "proposed_cfss_lane": "guardian",
+  "proposed_cfss_resource_prefix": "draft://zk_verifications/*",
+  "proposed_cfss_tool": "tool:zk-audit-trail",
+  "proposed_visual_states": [
+    "live",
+    "dry-run",
+    "emulated",
+    "frozen-disabled",
+    "revoked",
+    "unverified"
+  ],
+  "proposed_inputs_schema": {
+    "consent_hash": {
+      "type": "string",
+      "format": "64-char-lowercase-hex",
+      "required": true,
+      "description": "Phase 237 CONSENT v1 compute_consent_hash output; binds capsule to specific consent state"
+    },
+    "gamer_address_hash": {
+      "type": "string",
+      "format": "64-char-lowercase-hex",
+      "required": true,
+      "privacy": "already-hashed-input",
+      "description": "SHA-256 of gamer wallet address; pseudonymous identifier per GDPR Art. 17 audit posture"
+    },
+    "category_bitmask": {
+      "type": "integer",
+      "format": "uint32",
+      "range": [0, 15],
+      "required": true,
+      "description": "4-bit consent category mask per Phase 237: TOURNAMENT_GATE bit 0 / ANONYMIZED_RESEARCH bit 1 / MANUFACTURER_CERT bit 2 / MARKETPLACE bit 3"
+    },
+    "data_contribution_count_30d": {
+      "type": "integer",
+      "format": "uint64",
+      "required": true,
+      "description": "Number of data buyer transactions in trailing 30 days under this consent; capsule activity signal"
+    },
+    "first_contribution_ts_ns": {
+      "type": "integer",
+      "format": "uint64-nanos",
+      "required": true,
+      "description": "Earliest data contribution timestamp under current consent epoch"
+    },
+    "last_contribution_ts_ns": {
+      "type": "integer",
+      "format": "uint64-nanos",
+      "required": true,
+      "description": "Most recent data contribution timestamp"
+    },
+    "revoked_at": {
+      "type": "integer",
+      "format": "uint64-nanos",
+      "required": false,
+      "description": "If non-zero: timestamp of consent revocation. Triggers visual_state=revoked. GDPR Art. 17 audit primitive."
+    },
+    "buyer_attestation_chain_hash": {
+      "type": "string",
+      "format": "64-char-lowercase-hex",
+      "required": true,
+      "description": "SHA-256 chain over the data buyer transactions; reproducible audit trail per consent epoch"
+    },
+    "earnings_iotx_milli": {
+      "type": "integer",
+      "format": "uint64",
+      "required": true,
+      "description": "Total earnings under this consent (milli IOTX); gamer-facing accountability signal"
+    }
+  },
+  "proposed_integrity_label_template": {
+    "proof_type": "VPM-CONSENT-CAPSULE",
+    "capture_mode": "<live | dry-run | emulated | demo | frozen-disabled>",
+    "raw_biometrics_exposed": false,
+    "consent_active": true,
+    "zk_verified": false,
+    "on_chain_anchor": true,
+    "proof_weight": "CHAIN_ONLY",
+    "revocation_status": "<active | revoked | expired>",
+    "limitations": [
+      "Per-consent-epoch receipt; covers data contributions within one consent state",
+      "Surfaces aggregate earnings + counters; does not expose individual data buyer identities",
+      "On consent revocation: capsule renders visual_state=revoked + GDPR Art. 17 banner"
+    ]
+  },
+  "references": {
+    "registry": "VBDIP-0002A section 10 row 5 (CONSENT-CAPSULE-v1 / Data Contribution Receipt / Gamers + Data Buyers / Reserved)",
+    "phase_O4_plan_row": "wiki/proposals/Phase_O4_VPM_Integration_Plan.md section 2.3 row 8",
+    "related_compilers_active": [
+      "scripts/zkba_compile_consent_receipt.py"
+    ],
+    "future_compiler_path": "scripts/vpm_compile_consent_capsule.py"
+  },
+  "promotion_rules": {
+    "to_compiler_target": "Author scripts/vpm_compile_consent_capsule.py with build_consent_capsule_artifact(...). Must implement GDPR Article 17 revocation semantic: revoked_at != 0 forces visual_state=revoked and surfaces the redacted banner per scripts/vpm_visual_grammar.py.",
+    "to_test_fixture": "Add bridge/tests/test_phase_o5_vpm_consent_capsule.py with T-VPM-CC-1..10 + T-VPM-GRAMMAR x6 + GDPR Art. 17 semantic invariant test mirroring T-ZKBA-CONSENT-10 (commit 9bfa981e).",
+    "to_active": "Operator governance ceremony. Requires gamer-self-sovereignty audit flow (gamer can view their own capsule without operator intervention) + data-buyer audit interface before Active status."
+  },
+  "non_authoritative_notes": "This draft manifest is documentation-only. It does not grant runtime authority. The capsule wraps the Phase 237 CONSENT v1 primitive output + Phase O3 CONSENT Receipt Card (commit 9bfa981e); promotion requires those upstream primitives remain unchanged."
+}
