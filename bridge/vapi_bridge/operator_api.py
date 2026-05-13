@@ -9640,4 +9640,371 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "timestamp":      time.time(),
         }
 
+    # ------------------------------------------------------------------
+    # Phase O4-VPM-INT Stream B Commit 2 — write + validate + audit + B.7
+    # ------------------------------------------------------------------
+
+    # Dispatch table: vpm_id -> (module_name, build_function_name)
+    # Maps the operator-supplied vpm_id to the right Phase O4 Stream A
+    # compiler. Internal-only IDs (CDRR-DAG-v1, GIC-LEDGER-BETA-v1) are
+    # accepted for clarity; both also dispatch to their compilers.
+    _VPM_COMPILER_REGISTRY = {
+        "HONESTY-BOARD-v1":   ("vpm_compile_honesty_board",   "build_honesty_board_artifact"),
+        "AGENT-REVIEW-v1":    ("vpm_compile_agent_review",    "build_agent_review_artifact"),
+        "CDRR-DAG-v1":        ("vpm_compile_cdrr_dag",        "build_cdrr_dag_artifact"),
+        "GIC-LEDGER-BETA-v1": ("vpm_compile_gic_ledger_beta", "build_gic_ledger_beta_artifact"),
+        "DISPUTE-PACKET-v1":  ("vpm_compile_dispute_packet",  "build_dispute_packet_artifact"),
+        "MARKET-LISTING-v1":  ("vpm_compile_market_listing",  "build_market_listing_artifact"),
+    }
+
+    # FROZEN visual state + capture mode enums (mirror scripts/vsd_ui_compiler.py).
+    # Duplicated here for the validator endpoint to run without importing
+    # the compiler module at endpoint-invocation time (the lazy-import is
+    # deferred to the compile endpoint which actually needs it).
+    _VPM_VALID_VISUAL_STATES = frozenset((
+        "live", "dry-run", "emulated", "frozen-disabled", "revoked", "unverified",
+    ))
+    _VPM_VALID_CAPTURE_MODES = frozenset((
+        "live", "dry-run", "emulated", "demo", "frozen-disabled",
+    ))
+
+    @app.post("/operator/vpm-compile")
+    async def post_vpm_compile_endpoint(
+        request: Request,
+        api_key: str = Query(default=""),
+    ):
+        """Phase O4-VPM-INT B.4 — compile a VPM artifact + record in store.
+
+        Full operator authority required (api_key query param matches
+        cfg.operator_api_key — Phase O3 ZKBA write-endpoint convention
+        at /operator/anchor-cedar-bundle and /operator/gic-reset).
+
+        Body shape (JSON):
+            {
+                "vpm_id":     str (1-of-6 from _VPM_COMPILER_REGISTRY),
+                "inputs":     dict (compiler-specific kwargs),
+                "output_dir": str (optional; defaults to caller-supplied
+                               path or frontend/src/artifacts/<id>/).
+            }
+
+        The dispatch chooses the compiler from _VPM_COMPILER_REGISTRY,
+        invokes its build_*_artifact function with **inputs unpacking
+        + output_dir, records the resulting row in vpm_artifact_log, and
+        returns the commitment + manifest hash + row id.
+
+        Returns:
+            {
+                "success":              bool,
+                "vpm_id":               str,
+                "input_commitment_hex": str,
+                "output_hash_hex":      str,
+                "output_path":          str,
+                "row_id":               int (>0 on insert success;
+                                             0 on UNIQUE collision
+                                             returning existing id),
+                "timestamp":            float,
+            }
+
+        Errors:
+          403 wrong/missing api_key
+          422 missing/invalid body / unknown vpm_id / invalid inputs
+              (raised from compiler-side ValueError or TypeError)
+          500 compiler import / runtime failure
+        """
+        # Full operator authority (not read-key) — mirrors anchor-cedar-bundle
+        if not cfg.operator_api_key:
+            raise HTTPException(503, "operator_api_key not configured")
+        if not hmac.compare_digest(api_key, cfg.operator_api_key):
+            raise HTTPException(403, "Invalid api_key query param")
+
+        try:
+            body = await request.json()
+        except Exception as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=f"invalid JSON body: {exc}",
+            )
+        if not isinstance(body, dict):
+            raise HTTPException(
+                status_code=422,
+                detail=f"body must be JSON object; got {type(body).__name__}",
+            )
+
+        vpm_id = body.get("vpm_id")
+        if not isinstance(vpm_id, str) or vpm_id not in _VPM_COMPILER_REGISTRY:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"vpm_id must be one of "
+                    f"{sorted(_VPM_COMPILER_REGISTRY.keys())}; got {vpm_id!r}"
+                ),
+            )
+
+        inputs = body.get("inputs")
+        if not isinstance(inputs, dict):
+            raise HTTPException(
+                status_code=422,
+                detail=f"body['inputs'] must be dict; got {type(inputs).__name__}",
+            )
+
+        # Lazy import: scripts/ is not on bridge sys.path; localize the path
+        # addition here (mirrors the validator endpoint pattern at
+        # /operator/zkba-validate-manifest). _Path is needed before
+        # output_dir resolution since that defaults to repo-root-relative.
+        import sys as _sys
+        from pathlib import Path as _Path
+
+        output_dir_str = body.get("output_dir")
+        if output_dir_str is None:
+            output_dir_str = str(
+                _Path(__file__).resolve().parent.parent.parent
+                / "frontend" / "src" / "artifacts"
+                / vpm_id.lower().replace("-v1", "").replace("-", "_")
+            )
+
+        _scripts_dir = str(_Path(__file__).resolve().parent.parent.parent / "scripts")
+        if _scripts_dir not in _sys.path:
+            _sys.path.insert(0, _scripts_dir)
+        # bridge/ must also be on path for compiler imports of vapi_bridge.*
+        _bridge_dir = str(_Path(__file__).resolve().parent.parent)
+        if _bridge_dir not in _sys.path:
+            _sys.path.insert(0, _bridge_dir)
+
+        module_name, fn_name = _VPM_COMPILER_REGISTRY[vpm_id]
+        try:
+            import importlib
+            mod = importlib.import_module(module_name)
+            build_fn = getattr(mod, fn_name)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"compiler import failed: {exc}",
+            )
+
+        # Build the artifact + record the store row in a worker thread.
+        # compile_vpm_artifact + build_*_artifact + store insert all do
+        # synchronous filesystem + DB work; asyncio.to_thread keeps the
+        # event loop responsive for concurrent /vpm-list reads.
+        def _build_and_record():
+            manifest = build_fn(
+                output_dir=_Path(output_dir_str),
+                **inputs,
+            )
+            row_id = store.insert_vpm_artifact(
+                commitment_hex=manifest.input_commitment_hex,
+                vpm_id=manifest.vpm_id,
+                zkba_class=manifest.zkba_class,
+                proof_weight=manifest.proof_weight,
+                visual_state=manifest.visual_state,
+                capture_mode=manifest.capture_mode,
+                integrity_label_hash_hex=manifest.integrity_label_hash_hex,
+                wrapper_schema=manifest.wrapper_schema,
+                zkba_manifest_hash_hex=manifest.zkba_manifest_hash_hex,
+                manifest_uri=manifest.output_path,
+                compiler_output_hash_hex=manifest.output_hash_hex,
+                preimage_json="{}",
+                ts_ns=manifest.ts_ns,
+            )
+            return manifest, row_id
+
+        try:
+            manifest, row_id = await asyncio.to_thread(_build_and_record)
+        except (ValueError, TypeError) as exc:
+            # Compiler input validation failure
+            raise HTTPException(
+                status_code=422,
+                detail=f"compiler rejected inputs: {exc}",
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"compiler runtime failure: {exc}",
+            )
+
+        return {
+            "success":              True,
+            "vpm_id":               manifest.vpm_id,
+            "input_commitment_hex": manifest.input_commitment_hex,
+            "output_hash_hex":      manifest.output_hash_hex,
+            "output_path":          manifest.output_path,
+            "row_id":               int(row_id),
+            "timestamp":            time.time(),
+        }
+
+    @app.post("/operator/vpm-validate-manifest")
+    async def post_vpm_validate_manifest_endpoint(
+        request: Request,
+        x_api_key: str = Header(default=""),
+    ):
+        """Phase O4-VPM-INT B.5 — validate a VPM artifact manifest dict.
+
+        Validates the .vpm.manifest.json sidecar shape emitted by
+        scripts/vsd_ui_compiler.compile_vpm_artifact() — schema string,
+        zkba_class enum range (1..7), proof_weight enum range (1..6),
+        visual_state FROZEN 6-element set, capture_mode FROZEN 5-element
+        set, integrity_label_hash_hex shape (64 lowercase hex),
+        wrapper_schema reference shape, zkba_manifest_hash_hex shape.
+
+        Read-key auth. Fail-open: malformed manifests produce
+        valid=False with populated errors list; the validator never
+        raises HTTPException for content issues.
+
+        Returns:
+            {
+                "valid":                  bool,
+                "errors":                 list[str],
+                "schema_recognized":      bool,    # schema == vapi-vpm-artifact-v1
+                "visual_state_recognized": bool,
+                "capture_mode_recognized": bool,
+                "vpm_id_in_body":         str,     # for cross-ref
+                "timestamp":              float,
+            }
+        """
+        _check_read_key(x_api_key)
+
+        try:
+            manifest = await request.json()
+        except Exception as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=f"invalid JSON body: {exc}",
+            )
+        if not isinstance(manifest, dict):
+            raise HTTPException(
+                status_code=422,
+                detail=f"body must be JSON object; got {type(manifest).__name__}",
+            )
+
+        errors: list[str] = []
+        # Schema
+        schema = manifest.get("schema")
+        schema_recognized = schema == "vapi-vpm-artifact-v1"
+        if not schema_recognized:
+            errors.append(
+                f"schema must be 'vapi-vpm-artifact-v1'; got {schema!r}"
+            )
+
+        # zkba_class
+        zkba_class = manifest.get("zkba_class")
+        if not isinstance(zkba_class, int) or zkba_class < 1 or zkba_class > 7:
+            errors.append(
+                f"zkba_class must be int in 1..7; got {zkba_class!r}"
+            )
+
+        # proof_weight
+        proof_weight = manifest.get("proof_weight")
+        if not isinstance(proof_weight, int) or proof_weight < 1 or proof_weight > 6:
+            errors.append(
+                f"proof_weight must be int in 1..6; got {proof_weight!r}"
+            )
+
+        # visual_state
+        visual_state = manifest.get("visual_state")
+        visual_state_recognized = visual_state in _VPM_VALID_VISUAL_STATES
+        if not visual_state_recognized:
+            errors.append(
+                f"visual_state must be one of {sorted(_VPM_VALID_VISUAL_STATES)}; "
+                f"got {visual_state!r}"
+            )
+
+        # capture_mode
+        capture_mode = manifest.get("capture_mode")
+        capture_mode_recognized = capture_mode in _VPM_VALID_CAPTURE_MODES
+        if not capture_mode_recognized:
+            errors.append(
+                f"capture_mode must be one of {sorted(_VPM_VALID_CAPTURE_MODES)}; "
+                f"got {capture_mode!r}"
+            )
+
+        # integrity_label_hash_hex
+        ilh = manifest.get("integrity_label_hash_hex")
+        if not isinstance(ilh, str) or len(ilh) != 64:
+            errors.append(
+                f"integrity_label_hash_hex must be 64-char hex; got "
+                f"{len(ilh) if isinstance(ilh, str) else type(ilh).__name__}"
+            )
+        else:
+            try:
+                int(ilh, 16)
+            except ValueError:
+                errors.append("integrity_label_hash_hex not valid hex")
+
+        # wrapper_schema
+        wrapper_schema = manifest.get("wrapper_schema")
+        if wrapper_schema != "vapi-vpm-manifest-v1":
+            errors.append(
+                f"wrapper_schema must be 'vapi-vpm-manifest-v1'; got {wrapper_schema!r}"
+            )
+
+        # zkba_manifest_hash_hex
+        zmh = manifest.get("zkba_manifest_hash_hex")
+        if not isinstance(zmh, str) or len(zmh) != 64:
+            errors.append(
+                f"zkba_manifest_hash_hex must be 64-char hex; got "
+                f"{len(zmh) if isinstance(zmh, str) else type(zmh).__name__}"
+            )
+        else:
+            try:
+                int(zmh, 16)
+            except ValueError:
+                errors.append("zkba_manifest_hash_hex not valid hex")
+
+        # vpm_id required + non-empty (no enum check at endpoint —
+        # internal IDs like CDRR-DAG-v1 are accepted)
+        vpm_id_in = manifest.get("vpm_id")
+        if not isinstance(vpm_id_in, str) or not vpm_id_in:
+            errors.append(
+                f"vpm_id must be non-empty str; got {vpm_id_in!r}"
+            )
+
+        return {
+            "valid":                   len(errors) == 0,
+            "errors":                  errors,
+            "schema_recognized":       schema_recognized,
+            "visual_state_recognized": visual_state_recognized,
+            "capture_mode_recognized": capture_mode_recognized,
+            "vpm_id_in_body":          str(vpm_id_in) if isinstance(vpm_id_in, str) else "",
+            "timestamp":               time.time(),
+        }
+
+    @app.get("/operator/vpm-audit-status")
+    async def get_vpm_audit_status_endpoint(
+        x_api_key: str = Header(default=""),
+    ):
+        """Phase O4-VPM-INT B.6 — run the scripts/vpm_audit.py harness
+        programmatically + return the audit report JSON.
+
+        Reuses the same audit script that ships at scripts/vpm_audit.py
+        per Phase O4 plan section 3 Stream A.4 — surfaces the 6-section
+        audit (active compiler registry / draft manifests / section 10
+        ladder / CFSS lane assignment / source discipline / visual
+        grammar coverage) at HTTP for the Operator Console.
+
+        Read-key auth. The audit is wallet-free + read-only.
+
+        Returns the run_audit() output dict shape directly: see
+        scripts/vpm_audit.py:run_audit() docstring.
+        """
+        _check_read_key(x_api_key)
+
+        # Lazy import of audit script
+        import sys as _sys
+        from pathlib import Path as _Path
+        _scripts_dir = str(_Path(__file__).resolve().parent.parent.parent / "scripts")
+        if _scripts_dir not in _sys.path:
+            _sys.path.insert(0, _scripts_dir)
+        try:
+            from vpm_audit import run_audit  # type: ignore
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"vpm_audit import failed: {exc}",
+            )
+
+        repo_root = _Path(__file__).resolve().parent.parent.parent
+        # Audit walks filesystem; offload to worker thread to keep loop responsive
+        report = await asyncio.to_thread(run_audit, repo_root)
+        report["timestamp"] = time.time()
+        return report
+
     return app
