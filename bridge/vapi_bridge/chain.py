@@ -2735,6 +2735,179 @@ class ChainClient:
             )
             return (None, False)
 
+    # --- Phase O4-VPM-ANCHOR — VPM artifact anchor (dedicated VPMAnchorRegistry contract) ---
+
+    # Frozen ABI literal for VPMAnchorRegistry.anchorVPM. Distinct from the
+    # legacy recordAdjudication ABI used by anchor_corpus_snapshot /
+    # anchor_zkba_artifact / etc. — this targets the dedicated Phase O4
+    # contract at cfg.vpm_anchor_registry_address (immutable post-deploy;
+    # constructor pins AdjudicationRegistry 0x44CF981f... for cross-
+    # contract composition integrity check).
+    _VPM_ANCHOR_ABI = [{
+        "name": "anchorVPM", "type": "function",
+        "stateMutability": "nonpayable",
+        "inputs": [
+            {"name": "zkbaManifestHash", "type": "bytes32"},
+            {"name": "vpmManifestHash",  "type": "bytes32"},
+            {"name": "tsNs",             "type": "uint64"},
+        ],
+        "outputs": [],
+    }]
+
+    async def anchor_vpm(
+        self,
+        zkba_manifest_hash_hex: str,
+        vpm_manifest_hash_hex: str,
+        ts_ns: int,
+    ) -> "tuple[str | None, bool]":
+        """Anchor a VPM artifact's manifest hash on-chain via VPMAnchorRegistry.
+
+        Calls VPMAnchorRegistry.anchorVPM(zkbaManifestHash, vpmManifestHash, tsNs)
+        on the deployed contract at cfg.vpm_anchor_registry_address.
+
+        The contract enforces cross-contract integrity at write time:
+        zkbaManifestHash MUST already be anchored in AdjudicationRegistry
+        (Phase 111 LIVE at 0x44CF981f...). The bridge does NOT pre-check this
+        — the chain reverts with 'VPM: zkba not anchored' if the upstream
+        ZKBA artifact wasn't anchored first.
+
+        Returns:
+          (tx_hash_hex, True)  on successful tx receipt with status=1
+          (None,         False) on missing config / kill-switch / wallet error /
+                                 tx revert / 'VPM: already anchored' duplicate
+
+        Never raises — graceful degradation per the kill-switch + missing-
+        config + fail-open pattern shared with anchor_corpus_snapshot.
+
+        FROZEN scopes:
+          - cfg.vpm_anchor_registry_address (env: VPM_ANCHOR_REGISTRY_ADDRESS)
+          - VPMAnchorRegistry.anchorVPM ABI literal at _VPM_ANCHOR_ABI
+          - gas estimate × 1.25 buffer (matches Phase 237.5 IoTeX
+            storage-heavy operation pattern)
+
+        Kill-switch:
+          When cfg.chain_submission_paused=True, short-circuits BEFORE any
+          RPC contact and returns (None, False). The bridge wallet is never
+          debited under the held kill-switch.
+        """
+        # Kill-switch — same pattern as anchor_corpus_snapshot.
+        if getattr(self._cfg, "chain_submission_paused", False):
+            log.info(
+                "anchor_vpm: chain_submission_paused=true — "
+                "tx suppressed; VPM will not anchor (kill-switch active)"
+            )
+            return (None, False)
+
+        addr = getattr(self._cfg, "vpm_anchor_registry_address", "")
+        if not addr:
+            log.warning(
+                "anchor_vpm: vpm_anchor_registry_address not configured — "
+                "VPM will not anchor (fail-open; deploy ceremony pending)"
+            )
+            return (None, False)
+
+        if self._account is None:
+            log.warning(
+                "anchor_vpm: self._account is None (no bridge private key "
+                "loaded) — VPM will not anchor"
+            )
+            return (None, False)
+
+        try:
+            zkba_bytes32 = bytes.fromhex(
+                zkba_manifest_hash_hex.lstrip("0x")
+            )[:32].ljust(32, b"\x00")
+            vpm_bytes32 = bytes.fromhex(
+                vpm_manifest_hash_hex.lstrip("0x")
+            )[:32].ljust(32, b"\x00")
+        except Exception as exc:
+            log.warning("anchor_vpm: bad hash hex: %s", exc)
+            return (None, False)
+
+        # Validate ts_ns is uint64.
+        if not isinstance(ts_ns, int) or ts_ns < 0 or ts_ns > (2**64 - 1):
+            log.warning("anchor_vpm: ts_ns must be uint64; got %r", ts_ns)
+            return (None, False)
+
+        # Reject zero hashes upfront (contract reverts on these — saves the
+        # round-trip + gas estimate failure path).
+        if zkba_bytes32 == b"\x00" * 32:
+            log.warning(
+                "anchor_vpm: zkbaManifestHash is zero — contract would "
+                "revert with 'VPM: zero zkba hash'"
+            )
+            return (None, False)
+        if vpm_bytes32 == b"\x00" * 32:
+            log.warning(
+                "anchor_vpm: vpmManifestHash is zero — contract would "
+                "revert with 'VPM: zero vpm hash'"
+            )
+            return (None, False)
+
+        try:
+            contract = self._w3.eth.contract(
+                address=self._w3.to_checksum_address(addr),
+                abi=self._VPM_ANCHOR_ABI,
+            )
+            nonce = await self._w3.eth.get_transaction_count(
+                self._account.address
+            )
+            tx = await contract.functions.anchorVPM(
+                zkba_bytes32, vpm_bytes32, int(ts_ns),
+            ).build_transaction({
+                "from": self._account.address, "nonce": nonce,
+            })
+            # Gas estimate × 1.25 buffer (matches recordAdjudication +
+            # IoTeX storage-heavy operation pattern).
+            gas_estimate = await self._w3.eth.estimate_gas(tx)
+            tx["gas"] = int(gas_estimate * 1.25)
+            signed = self._account.sign_transaction(tx)
+            tx_hash = await self._w3.eth.send_raw_transaction(
+                signed.raw_transaction,
+            )
+            receipt = await self._w3.eth.wait_for_transaction_receipt(
+                tx_hash, timeout=120,
+            )
+            if receipt["status"] != 1:
+                log.warning(
+                    "anchor_vpm: tx reverted vpm=%s zkba=%s tx=%s",
+                    vpm_manifest_hash_hex[:16],
+                    zkba_manifest_hash_hex[:16],
+                    tx_hash.hex()[:16],
+                )
+                return (None, False)
+            log.info(
+                "anchor_vpm: tx=%s vpm=%s zkba=%s ts_ns=%d",
+                tx_hash.hex()[:16],
+                vpm_manifest_hash_hex[:16],
+                zkba_manifest_hash_hex[:16],
+                int(ts_ns),
+            )
+            return (tx_hash.hex(), True)
+        except Exception as exc:
+            # Match anchor_corpus_snapshot's "VPM: already anchored" /
+            # "VPM: zkba not anchored" / generic-failure handling.
+            err_text = str(exc)
+            if "VPM: already anchored" in err_text:
+                log.info(
+                    "anchor_vpm: idempotent — vpm=%s already anchored",
+                    vpm_manifest_hash_hex[:16],
+                )
+                return (None, False)
+            if "VPM: zkba not anchored" in err_text:
+                log.warning(
+                    "anchor_vpm: cross-contract integrity check failed — "
+                    "zkba=%s not anchored in AdjudicationRegistry yet; "
+                    "anchor the underlying ZKBA artifact first",
+                    zkba_manifest_hash_hex[:16],
+                )
+                return (None, False)
+            log.error(
+                "anchor_vpm: unexpected error vpm=%s: %s",
+                vpm_manifest_hash_hex[:16], exc,
+            )
+            return (None, False)
+
     # --- Phase O3-ZKBA-TRACK1 Track 2 C7 — ZKBA artifact anchor (mirrors corpus + biometric + listing Path X) ---
 
     async def anchor_zkba_artifact(
