@@ -654,6 +654,48 @@ INVARIANTS: list[Invariant] = [
         pattern=r"def section_1_active_compiler_registry\b",
         min_matches=1,
     ),
+    Invariant(
+        id="INV-VPM-ANCHOR-CONTRACT-001",
+        description="VPMAnchorRegistry.sol anchorVPM function declaration pinned. The function takes 3 args (bytes32 zkbaManifestHash, bytes32 vpmManifestHash, uint64 tsNs) — verified together with the immediately-following arg lines via INV-VPM-ANCHOR-ABI-001. Extends the FROZEN quadruple-bind into a quintuple-bind by wiring on-chain anchoring.",
+        file="contracts/contracts/VPMAnchorRegistry.sol",
+        pattern=r"function anchorVPM\(",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-VPM-ANCHOR-CHAIN-CLIENT-001",
+        description="chain.anchor_vpm bridge-side helper pinned. Async method consuming VPMAnchorRegistry.anchorVPM via the FROZEN ABI literal _VPM_ANCHOR_ABI. Kill-switch checked FIRST (CHAIN_SUBMISSION_PAUSED), then config + account presence, then hex normalization, then zero-hash upfront rejection, then build+sign+send with gas-estimate × 1.25 buffer. Never raises — fail-open (None, False) per the anchor_corpus_snapshot pattern.",
+        file="bridge/vapi_bridge/chain.py",
+        pattern=r"async def anchor_vpm\(",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-VPM-ANCHOR-ABI-001",
+        description="_VPM_ANCHOR_ABI literal name in chain.py pinned. The FROZEN 3-arg ABI descriptor for VPMAnchorRegistry.anchorVPM lives directly below this assignment. Selector + arg order MUST match the contract's anchorVPM signature byte-for-byte; drift breaks the wire format. Catches accidental selector / arg rename at PR time alongside T-VPM-ANCHOR-11.",
+        file="bridge/vapi_bridge/chain.py",
+        pattern=r"_VPM_ANCHOR_ABI\s*=\s*\[\{",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-CFSS-SWEEPER-LOOP-001",
+        description="run_cfss_drift_sweep_loop async entry-point pinned in cfss_drift_sweeper.py — the 27th-FSCA-rule data source. Opt-in via cfg.cfss_drift_sweep_enabled; cadence pinned at 60s per INV-OPERATOR-AGENT-008 cheap+frequent tier. Wraps audit_module.sweep_once() + persists CFSS_VIOLATION findings to cfss_lane_drift_log. Fail-open: any sweep error caught + logged; loop continues.",
+        file="bridge/vapi_bridge/cfss_drift_sweeper.py",
+        pattern=r"async def run_cfss_drift_sweep_loop\s*\(\s*\*,\s*cfg,\s*store\)",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-CFSS-SWEEPER-CADENCE-001",
+        description="_CFSS_DRIFT_INTERVAL_DEFAULT_S = 60 default cadence pinned in cfss_drift_sweeper.py — matches cedar_drift_sweeper bundle cadence per INV-OPERATOR-AGENT-008 cheap+frequent tier (file-only evaluation; no chain RPC). Operator can override via env CFSS_DRIFT_SWEEP_INTERVAL_S but the default is FROZEN at 60s.",
+        file="bridge/vapi_bridge/cfss_drift_sweeper.py",
+        pattern=r"_CFSS_DRIFT_INTERVAL_DEFAULT_S\s*=\s*60",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-FSCA-CFSS-RULE-001",
+        description="CFSS_LANE_AUTHORITY_DRIFT 27th contradiction rule pinned in fleet_signal_coherence_agent.py CONTRADICTION_RULES dict — CRITICAL severity; 4 agents involved (AnchorSentry + Guardian + Curator + CFSSDriftSweeper). Source: cfss_lane_drift_log populated by cfss_drift_sweeper. Closes the data-layer / policy-layer enforcement asymmetry for Cedar v2 CFSS.",
+        file="bridge/vapi_bridge/fleet_signal_coherence_agent.py",
+        pattern=r'"CFSS_LANE_AUTHORITY_DRIFT":\s*\{',
+        min_matches=1,
+    ),
 ]
 
 
