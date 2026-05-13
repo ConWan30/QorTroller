@@ -184,3 +184,79 @@ def test_t_zkba_20_mcp_vapi_validate_zkba_manifest_no_input():
     assert result["valid"] is False
     assert any("must provide either" in e for e in result["errors"])
     assert result["manifest_source"] == "none"
+
+
+# ---------------------------------------------------------------------------
+# T-ZKBA-21: vapi_zkba_post_ceremony_audit MCP tool registration + behavior
+# (Phase O3-ZKBA-TRACK1 Track 2 D-TRACK2-G6, 2026-05-12)
+# ---------------------------------------------------------------------------
+
+def test_t_zkba_21_mcp_vapi_post_ceremony_audit_registered():
+    """Verify vapi_zkba_post_ceremony_audit is registered with the expected
+    schema shape (no required params; include_chain_reads optional boolean)."""
+    ks = _import_knowledge_server()
+    assert "vapi_zkba_post_ceremony_audit" in ks.TOOLS, \
+        f"vapi_zkba_post_ceremony_audit missing from TOOLS; have: {sorted(ks.TOOLS.keys())[:30]}"
+    tool = ks.TOOLS["vapi_zkba_post_ceremony_audit"]
+    assert "description" in tool and "schema" in tool and "fn" in tool
+    schema = tool["schema"]
+    assert schema.get("type") == "object"
+    assert schema.get("required", []) == []
+    props = schema.get("properties", {})
+    assert "include_chain_reads" in props
+    assert props["include_chain_reads"]["type"] == "boolean"
+    desc = tool["description"]
+    assert "D-TRACK2-G6" in desc
+    assert "wallet-free" in desc.lower()
+
+
+def test_t_zkba_22_mcp_vapi_post_ceremony_audit_local_only_pass():
+    """Tool runs local-only audit (Section 1 + 3 only) + returns PASS verdict
+    on current bundles. No chain reads invoked."""
+    ks = _import_knowledge_server()
+    fn = ks.TOOLS["vapi_zkba_post_ceremony_audit"]["fn"]
+    result = asyncio.run(fn())
+    assert result["audit_id"] == "D-TRACK2-G6"
+    assert result["wallet_free"] is True
+    assert result["overall_pass"] is True
+    assert result["g7_operator_commands_required"] is True
+    # Section 1 + 3 present; Section 2 absent (chain reads not requested)
+    sections = result["sections"]
+    assert "section_1_local_merkles" in sections
+    assert "section_3_lane_matrix" in sections
+    assert "section_2_chain_reads" not in sections
+    # Section 1 ok=True (Merkle matches)
+    assert sections["section_1_local_merkles"]["ok"] is True
+    # Section 3 ok=True (CFSS holds)
+    assert sections["section_3_lane_matrix"]["ok"] is True
+
+
+def test_t_zkba_23_mcp_vapi_post_ceremony_audit_section1_findings():
+    """Tool's Section 1 findings include one MATCH per agent."""
+    ks = _import_knowledge_server()
+    fn = ks.TOOLS["vapi_zkba_post_ceremony_audit"]["fn"]
+    result = asyncio.run(fn())
+    s1 = result["sections"]["section_1_local_merkles"]
+    findings = s1["findings"]
+    # Should have 3 findings (anchor_sentry, guardian, curator)
+    agent_ids = [f.get("agent") for f in findings]
+    assert "anchor_sentry" in agent_ids
+    assert "guardian" in agent_ids
+    assert "curator" in agent_ids
+    # All status MATCH
+    for f in findings:
+        assert f.get("status") == "MATCH", f"Section 1 finding not MATCH: {f}"
+
+
+def test_t_zkba_24_mcp_vapi_post_ceremony_audit_section3_full_matrix():
+    """Tool's Section 3 findings cover all 12 expected (agent, action,
+    resource, effect) tuples and all have status=OK."""
+    ks = _import_knowledge_server()
+    fn = ks.TOOLS["vapi_zkba_post_ceremony_audit"]["fn"]
+    result = asyncio.run(fn())
+    s3 = result["sections"]["section_3_lane_matrix"]
+    findings = s3["findings"]
+    # 12 rows in EXPECTED_LANE_MATRIX
+    assert len(findings) == 12, f"expected 12 CFSS rows; got {len(findings)}"
+    for f in findings:
+        assert f.get("status") == "OK", f"CFSS row failed: {f}"

@@ -1790,6 +1790,125 @@ async def vapi_validate_zkba_manifest(
 
 
 # ============================================================
+# Phase O3-ZKBA-TRACK1 Track 2 post-ceremony audit MCP tool
+# (commit 98a9af37; ships 2026-05-12 per Operator Decision Matrix
+# D-TRACK2-G6 wallet-free observability work)
+# ============================================================
+
+@tool(
+    name="vapi_zkba_post_ceremony_audit",
+    description=(
+        "Runs the wallet-free post-ceremony audit at "
+        "scripts/zkba_post_ceremony_audit.py. Three sections: "
+        "(1) Local v2 bundle Merkle vs EXPECTED_MERKLES lock from C6 ship; "
+        "(2) optional on-chain AgentScope.getScopeRoot() reads (eth_call "
+        "only; no tx; no gas; bypasses CHAIN_SUBMISSION_PAUSED); "
+        "(3) Cedar v2 lane authority matrix (CFSS invariant across "
+        "zk_artifacts/, zk_verifications/, zk_listings/ for "
+        "Sentry/Guardian/Curator). Returns structured dict with "
+        "{audit_id, wallet_free, sections, overall_pass, "
+        "g7_operator_commands_required}. Resolves D-TRACK2-G6; D-TRACK2-G7 "
+        "remains operator-runtime observation."
+    ),
+    schema={
+        "type": "object",
+        "properties": {
+            "include_chain_reads": {
+                "type": "boolean",
+                "description": (
+                    "If true, ALSO run Section 2 (on-chain AgentScope reads "
+                    "via eth_call). Requires bridge/.env configured + RPC "
+                    "reachable. Read-only; no tx; no gas; no wallet impact. "
+                    "Default false."
+                ),
+            },
+        },
+        "required": [],
+    }
+)
+async def vapi_zkba_post_ceremony_audit(
+    include_chain_reads: bool = False,
+    **_,
+):
+    """Phase O3-ZKBA-TRACK1 Track 2 D-TRACK2-G6 — MCP-side audit invocation."""
+    # Lazy import: scripts/ not on bridge's default sys.path
+    _scripts_dir = str(PROJECT_ROOT / "scripts")
+    if _scripts_dir not in sys.path:
+        sys.path.insert(0, _scripts_dir)
+    _bridge_dir = str(PROJECT_ROOT / "bridge")
+    if _bridge_dir not in sys.path:
+        sys.path.insert(0, _bridge_dir)
+
+    try:
+        import zkba_post_ceremony_audit as audit  # type: ignore
+    except Exception as exc:
+        return {
+            "audit_id":         "D-TRACK2-G6",
+            "wallet_free":      True,
+            "overall_pass":     False,
+            "import_error":     str(exc),
+        }
+
+    bundle_dir = PROJECT_ROOT / "bridge" / "vapi_bridge" / "cedar_bundles"
+
+    # Section 1 — local Merkle (always runs)
+    try:
+        s1_ok, s1_findings, computed = audit.section_1_local_merkles(bundle_dir)
+    except Exception as exc:
+        return {
+            "audit_id":         "D-TRACK2-G6",
+            "wallet_free":      True,
+            "overall_pass":     False,
+            "section_1_error":  str(exc),
+        }
+
+    # Section 2 — optional chain reads
+    s2_result = None
+    if include_chain_reads:
+        try:
+            s2_ok, s2_findings = await audit.section_2_chain_reads(computed)
+            s2_result = {"ok": s2_ok, "findings": s2_findings}
+        except Exception as exc:
+            s2_result = {"ok": False, "error": str(exc), "findings": []}
+
+    # Section 3 — lane matrix (always runs)
+    try:
+        s3_ok, s3_findings = audit.section_3_lane_matrix(bundle_dir)
+    except Exception as exc:
+        return {
+            "audit_id":         "D-TRACK2-G6",
+            "wallet_free":      True,
+            "overall_pass":     False,
+            "section_3_error":  str(exc),
+        }
+
+    # Overall
+    overall = s1_ok and s3_ok
+    if include_chain_reads and s2_result is not None:
+        overall = overall and bool(s2_result.get("ok", False))
+
+    result = {
+        "audit_id":         "D-TRACK2-G6",
+        "wallet_free":      True,
+        "sections": {
+            "section_1_local_merkles": {
+                "ok": s1_ok,
+                "findings": s1_findings,
+            },
+            "section_3_lane_matrix": {
+                "ok": s3_ok,
+                "findings": s3_findings,
+            },
+        },
+        "overall_pass":     overall,
+        "g7_operator_commands_required": True,
+    }
+    if include_chain_reads and s2_result is not None:
+        result["sections"]["section_2_chain_reads"] = s2_result
+    return result
+
+
+# ============================================================
 # MCP Server Loop
 # ============================================================
 
