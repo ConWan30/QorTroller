@@ -14,6 +14,11 @@ const VIEWS = [
   // 5th tab: Phase 238 PALL Marketplace — sellers + buyers + auditors.
   // Cyan accent (verified-data theme) per VAPI tier palette LOCKED.
   { id: 'marketplace', label: 'MARKETPLACE',  accent: '#22d3ee',           icon: '⬢' },
+  // 6th tab: Phase O4-VPM-INT Stream C — VPM Registry. Read-only
+  // inspection surface for Verified Projection Media artifacts. Amber
+  // accent (operator-audit theme; distinct from DEVELOPER orange so the
+  // two operator-facing tabs remain visually distinguishable).
+  { id: 'vpm',         label: 'VPM',          accent: '#f0a868',           icon: '◫' },
 ]
 
 export function ViewSelector({ activeView, onViewChange }) {
