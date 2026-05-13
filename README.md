@@ -1,143 +1,261 @@
-# VAPI: Verifiable Controller Input Provenance with Physics-Backed Liveness for Competitive Gaming
+# VAPI — Verified Autonomous Physical Intelligence
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18966169.svg)](https://doi.org/10.5281/zenodo.18966169)
+**The first DePIN gaming protocol with cryptographic proof of human presence in competitive gaming.**
 
-**Authors:** Contravious Battle — Independent Researcher
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18966169.svg)](https://doi.org/10.5281/zenodo.18966169) (v3 — historical; v4 DOI pending release)
 
----
+**Author:** Contravious Battle (Independent Researcher) · **Network:** IoTeX testnet (chain ID 4690) · **Phase:** O4-VPM-INTEGRATION CLOSED 2026-05-13 (HEAD `e81e04aa`)
 
-## What Is VAPI
-
-VAPI (Verified Autonomous Physical Intelligence) is a cryptographic anti-cheat and identity protocol for competitive gaming. It attaches a tamper-evident, on-chain-verifiable record — a **Proof of Autonomous Cognition (PoAC)** — to every input event produced by a gaming controller. Each 228-byte PoAC record binds raw sensor commitments (IMU, adaptive trigger dynamics, biometric fingerprint) to a hardware-rooted ECDSA-P256 signature and a hash-chained sequence enforced on the IoTeX blockchain. The result is unforgeable evidence that a human physically operated a certified controller during a session, anchored to a nine-level Physical Input Trust Layer (PITL, L0–L6) that detects software injection, bot behavior, and identity transplants at rates impossible for pure software to forge.
-
----
-
-## Architecture
-
-| Component | Stack | Role |
-|-----------|-------|------|
-| **Firmware / C / Zephyr** | C · nRF Connect SDK · Zephyr RTOS | IoTeX Pebble Tracker reference implementation — PoAC chain, PSA crypto, MQTT uplink |
-| **Python asyncio Bridge** | Python 3.11 · asyncio · FastAPI · SQLite | DualShock Edge HID capture → PITL oracle pipeline → on-chain relay · BridgeAgent (Claude tool_use) |
-| **Solidity Contracts / IoTeX** | Solidity 0.8 · Hardhat · IoTeX L1 (P256 precompile 0x0100) | 13 contracts: PoACVerifier, PITLSessionRegistry, PHGCredential, TournamentGateV3, FederatedThreatRegistry, and more |
-| **DualShock Edge Controller Subsystem** | Python · hidapi · pydualsense · NumPy | HID report parser · 11-feature biometric extractor · L4 Mahalanobis · L5 rhythm oracle · L6 active challenge-response |
-
----
-
-## Current Status — Phase 41 Complete
-
-| Suite | Count | Status |
-|-------|-------|--------|
-| Bridge tests (pytest) | **874** | All pass |
-| Hardhat contract tests | **354** | All pass |
-| Hardware integration tests | **28** | Pass (requires DualShock Edge) |
-| E2E simulation tests | **14** | Pass |
-| Contracts on IoTeX testnet | **13** | Live |
-
-Key Phase 41 deliverables:
-- FFT tremor analysis ring buffer (512-frame persistent window)
-- Full covariance Mahalanobis L4 (`USE_FULL_COVARIANCE` flag, Tikhonov regularization λ=0.01)
-- Synthetic inter-player separation validation (5 players, 20 sessions each — ratio 9.85, LOO 98%)
-- ZK inference code binding: `pub[2] = inferenceCode` in `PITLSessionRegistry.sol`
-- Game genre certification framework (§7.5.2.1 in whitepaper)
-- Whitepaper published to Zenodo: [10.5281/zenodo.18966169](https://doi.org/10.5281/zenodo.18966169)
+| Surface | Status |
+|---|---|
+| **Bridge tests** | 3344 passing |
+| **SDK tests** | 562 passing |
+| **Hardhat contract tests** | 528 passing |
+| **Frontend Vitest** | 26 passing (first frontend test infra) |
+| **PV-CI invariant gate** | 77 / 77 pinned (governance-ceremony-locked) |
+| **FSCA contradiction rules** | 26 active |
+| **Contracts LIVE on IoTeX** | 49+ (see `contracts/deployed-addresses.json`) |
+| **Operator Initiative agents** | 3 LIVE at O1_SHADOW (Sentry / Guardian / Curator) |
+| **ZKBA artifact classes** | 7 of 7 shipped (Layer 7 closed) |
+| **VPM compilers active** | 6 (4 internal + 2 consumer-facing) |
+| **Cryptographic chain primitives** | 10 FROZEN-v1 (PATTERN-017) |
+| **Wallet posture** | `CHAIN_SUBMISSION_PAUSED=true` held; 0 IOTX impact across Phase O4 |
 
 ---
 
-## Hardware Requirements
+## What VAPI is
 
-- **Controller:** Sony DualShock Edge CFI-ZCP1 (primary certified device)
-- **OS:** Windows 11 (USB HID polling at 1000 Hz)
-- **Cable:** USB-C data cable (not charge-only)
-- **Python:** 3.11+ with `hidapi` (`pip install hidapi`, NOT `hid`)
-- **Node.js:** 18+ (for Hardhat contract tests)
+**The problem.** Cheat detection in competitive gaming has no cryptographic anchor. Existing solutions (BattlEye, Riot Vanguard, Easy Anti-Cheat) are kernel-level anti-cheat with no public verifiability surface; tournament organizers and viewers must trust the publisher's claim that a match was clean. Bot software keeps improving; controllers get repurposed; signed binaries get repurposed; injection vectors keep multiplying.
+
+**The protocol.** VAPI binds every controller input event to a tamper-evident, on-chain-verifiable cryptographic record — a **Proof of Autonomous Cognition (PoAC)**. Each 228-byte PoAC binds raw sensor commitments (IMU, adaptive trigger dynamics, biometric fingerprint) to a hardware-rooted ECDSA-P256 signature, hash-chains them into a per-session sequence, and exposes the resulting state through a single composable on-chain call: `VAPIProtocolLens.isFullyEligible(deviceIdHash)`. External tournament organizers can gate eligibility on that one view call with zero off-chain trust.
+
+**The architecture.** Nine layers of Physical Input Trust (PITL L0–L6 deployed, L7 GSR advisory, L8 BT gated) verify each input event at increasing levels of biometric specificity. A 10-element family of FROZEN-v1 cryptographic primitives (PATTERN-017) anchors session continuity, cognition integrity, watchdog events, application-layer messaging, biometric snapshots, consent state, and Layer 7 ZKBA artifacts. Three Operator Initiative agents (Sentry, Guardian, Curator) hold Cross-Fleet Skill Separation (CFSS) lane authority on Cedar v2 bundles dual-anchored on chain.
+
+**The output.** Seven Zero-Knowledge Biometric Artifact (ZKBA) classes (AIT, GIC, VHP, HARDWARE, CONSENT, TOURNAMENT, MARKET) compile through a deterministic Verified Projection Media (VPM) compiler with three-layer Anti-Hype Visual Grammar enforcement (compile-time + bridge-time + browser-time). Every cryptographic claim is independently verifiable by anyone with the canonical-JSON algorithm + SHA-256 + the public source of the four enforcement layers.
 
 ---
 
-## Running Tests
+## Architecture at a glance
 
-### Bridge (874 tests)
+| Layer | Code | Type | Signal / Function | Key Invariants |
+|---|---|---|---|---|
+| **L0** | — | Structural | HID presence (1000 Hz USB polling) | INV-001..016 protocol pins |
+| **L1** | — | Structural | PoAC chain integrity (SHA-256(raw[:164])) | INV-002 chain hash discipline |
+| **L2** | `0x28` | Hard cheat | IMU gravity + HID/XInput discrepancy | Tournament-BLOCKING |
+| **L3** | `0x29` / `0x2A` | Hard cheat | TinyML behavioral classifier | Tournament-BLOCKING |
+| **L2B** | `0x31` | Advisory | IMU-button causal latency | — |
+| **L2C** | `0x32` | Advisory | Stick-IMU cross-correlation | Inactive in dead-zone stick games |
+| **L4** | `0x30` | Advisory | 13-feature Mahalanobis biometric fingerprint | INV-PCC-002..005; thresholds 7.009 / 5.367 |
+| **L5** | `0x2B` | Advisory | Temporal rhythm (CV, entropy, quantization) | INV-APOP-001..002 |
+| **L6** | — | Advisory | Active haptic challenge-response | `L6_CHALLENGES_ENABLED=false` until N≥50 |
+| **L7** (PITL) | `0x33` | Advisory | GSR sympathetic-arousal correlation | `GSR_ENABLED=false` until N≥30/player |
+| **L7-Methodology** | — | Output | PATTERN-017 primitives + VPM compiler + 3-layer Anti-Hype Visual Grammar | INV-VPM-* family (11 invariants) |
+| **L8** | — | Transport | BT 250 Hz BLE (gated workstream) | `bt_transport_enabled=false` until N≥30/player MVCP |
+| **L9** | — | Governance | Operator Initiative fleet (Sentry/Guardian/Curator) at O1_SHADOW; Cedar v2 dual-anchored | INV-OPERATOR-AGENT-001..008; CFSS triangle |
+
+See `wiki/methodology/METHODOLOGY_LAYER_INTEGRATION_MAP.md` for the complete cross-layer dependency graph.
+
+---
+
+## Current state — honest
+
+**Tournament gate status.** The protocol's headline invariant is `inter-person separation ratio > 1.0 AND all_pairs_above_1=True`. Current state across three calibration batteries:
+
+| Battery | Ratio | N | `all_pairs_above_1` | Status |
+|---|---|---|---|---|
+| **AIT** (Active Isometric Trigger — Phase 229–231) | **1.199** | 37 | **True** | **CLEARED** for tournament gate use |
+| **touchpad_corners** | 0.728 | 35 | False | **BLOCKER** for tournament BLOCK enforcement (per-pair P3 separation inadequate) |
+| **tremor_resting** | 1.177 | 27 | False | `all_pairs_p0_ok=False`; P1vP3=0.032 — Phase 213 AccelTremorFFT fix shipped, verification pending |
+
+The token launch invariant ("no TGE before separation_ratio > 1.0 + all_pairs_above_1") **REMAINS IN FORCE** for legal/economic defensibility of token issuance. AIT clears the technical gate for testnet/non-tournament demonstrations; touchpad_corners is the actual tournament BLOCK enforcement blocker.
+
+**On-chain anchored milestones (IoTeX testnet, chain 4690):**
+- **GIC_100 cognitive chain head** permanently anchored 2026-05-06 — tx `0xe807347eb837...` block 43348052. First 100-link cognitive-session integrity chain anchored on any DePIN gaming protocol.
+- **Cedar v2 lane authority bundles** for all three Operator Initiative agents dual-anchored 2026-05-12 on AgentScope (operational FIRST) + AgentRegistry (governance SECOND). Merkle roots: Sentry `0x39e8b65f...db1f23` / Guardian `0x6818a9ad...0a9a0` / Curator `0x0ade0c92...60a80b3d`.
+- **Inaugural CORPUS-SNAPSHOT** anchored 2026-05-09 — tx `0x24e4ddb6...` (closes Phase 237.5 Path C+ wallet-drain audit trail).
+- **VHP demo mint** tokenId=2 — first DePIN humanity credential bound to all three layers (canonical Sony DualShock Edge CFI-ZCP1 device + GIC_100 milestone + ZK ceremony VK hash).
+
+**What's still open** (not security blockers; operator-runtime work):
+- VBDIP-0002 Appendix B B.8 gate **G7** (Curator Review Readiness — 7-day observation window with ≥9/10 acceptance gate)
+- Touchpad_corners corpus expansion for P3 (per-pair separation work)
+- 4 VPM Draft Manifest IDs at Reserved/Draft → Active lifecycle promotion (stakeholder governance gated)
+
+See `wiki/phases/phase_o4_vpm_integration.md` §9 for the full forward roadmap.
+
+---
+
+## Quick start
+
+### Read the whitepaper
+
+- **Canonical v4 successor** (in this repo): [`docs/vapi-whitepaper-v4.md`](docs/vapi-whitepaper-v4.md) — current state through Phase O4 close
+- **Historical v3** (Zenodo-published): [`docs/vapi-whitepaper-v3.md`](docs/vapi-whitepaper-v3.md) — Phase 68–70 baseline; preserved for DOI continuity
+- See [`docs/WHITEPAPER_VERSIONING.md`](docs/WHITEPAPER_VERSIONING.md) for the full v1→v4 lineage
+
+### Inspect the deployed contracts
+
 ```bash
+# Open the deployed-addresses.json to see all 49+ LIVE contracts on IoTeX testnet
+cat contracts/deployed-addresses.json | python -m json.tool | head -60
+```
+
+Headline contracts to inspect on IoTeX testnet explorer (chain ID 4690):
+
+- **PoACVerifier** — wire-format + ECDSA-P256 + chain integrity
+- **VAPIProtocolLens** — the singular `isFullyEligible(deviceIdHash)` view-call gate
+- **AdjudicationRegistry** `0x44CF981f46a52ADE56476Ce894255954a7776fb4` — PoAd anchors (Phase 111 LIVE)
+- **AgentRegistry / AgentScope** — Operator Initiative fleet on-chain governance
+- **ProtocolCoherenceRegistry** `0xfAfe4E8BEE45be22836b90D542045510dDd927Dd` — fleet Merkle anchor
+- **VAPIConsentRegistry** `0xA82dB0eF0bF7D15b6400EDd4A09C0D4338C948dA` — per-category gamer consent
+
+### Run the bridge locally
+
+```bash
+# Bridge (Python asyncio)
 cd bridge
 pip install -r requirements.txt
-python -m pytest tests/ --ignore=tests/test_e2e_simulation.py -q
-```
+python -m pytest tests/ --ignore=tests/test_e2e_simulation.py -q   # 3344 tests
 
-### Contracts (354 tests)
-```bash
+# Frontend (Vite + React)
+cd frontend
+npm install
+npm run dev          # http://localhost:5173
+npm test             # 26 Vitest tests across VPM Registry components
+
+# Contracts (Hardhat)
 cd contracts
 npm install
-npx hardhat test
+npx hardhat test     # 528 tests
 ```
 
-### Hardware integration (28 tests — requires DualShock Edge connected via USB)
-```bash
-python -m pytest bridge/tests/hardware/ -v -m hardware -s
-```
+### Inspect a VPM artifact end-to-end
 
-### E2E simulation (14 tests — requires local Hardhat node)
 ```bash
-cd contracts && npx hardhat node &
-HARDHAT_RPC_URL=http://127.0.0.1:8545 python -m pytest bridge/tests/test_e2e_simulation.py -v
-```
+# 1. Compile one of the 7 ZKBA artifact classes (canonical fixture)
+python scripts/zkba_compile_hardware_card.py --profile-hash 0xa1b2c3...0000 \
+  --device-id-hash 0x10e0169446ba33200000000000000000000000000000000000000000000000 \
+  --cert-level 1 \
+  --manufacturer-address 0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692 \
+  --is-certified --ts-ns 1778900000000000000
 
-### ZK proofs (5 tests — requires ceremony artifacts)
-```bash
-# Run ceremony first (one-time, ~10 minutes):
-cd contracts && PATH="$(pwd):$PATH" npx hardhat run scripts/run-ceremony.js
-# Then:
-python -m pytest bridge/tests/test_zk_prover_real.py -v
+# 2. Run the wallet-free Layer 7 coverage audit
+python scripts/layer7_coverage_audit.py --report
+
+# 3. Run the wallet-free VPM audit (6-section harness)
+python scripts/vpm_audit.py
 ```
 
 ---
 
-## Key Files
+## Repository navigation
 
 ```
 vapi-pebble-prototype/
-├── bridge/
-│   ├── vapi_bridge/
-│   │   ├── dualshock_integration.py     # Main DualShock HID bridge (PITL L0–L6)
-│   │   ├── tinyml_biometric_fusion.py   # L4: 11-feature Mahalanobis biometric
-│   │   ├── temporal_rhythm_oracle.py    # L5: IBI CV/entropy/quantization
-│   │   ├── pitl_prover.py               # ZK PITL session proof generator
-│   │   └── chain.py                     # IoTeX on-chain relay
-│   └── tests/                           # 874 test files
-├── contracts/
-│   ├── contracts/
-│   │   ├── PoACVerifier.sol             # ECDSA-P256 + chain integrity
-│   │   ├── PITLSessionRegistry.sol      # ZK PITL proof registry + anti-replay
-│   │   ├── PHGCredential.sol            # Soulbound humanity credential (ERC-5192)
-│   │   └── TournamentGateV3.sol         # PHG-gated + credential-active entry
-│   └── circuits/
-│       └── PitlSessionProof.circom      # Groth16 ZK circuit (~1,820 constraints)
-├── controller/
-│   ├── tinyml_biometric_fusion.py       # L4 biometric feature extractor + classifier
-│   ├── temporal_rhythm_oracle.py        # L5 temporal rhythm oracle
-│   ├── l2b_imu_press_correlation.py     # L2B: IMU-button causal latency
-│   └── l2c_stick_imu_correlation.py     # L2C: stick-IMU cross-correlation
-├── scripts/
-│   ├── capture_session.py               # Live DualShock session capture
-│   ├── threshold_calibrator.py          # Recalibrate L4/L5 thresholds from sessions
-│   └── generate_synthetic_players.py   # Synthetic inter-player separation validator
-├── docs/
-│   ├── vapi-whitepaper-v3.md            # Canonical whitepaper (source)
-│   └── vapi-whitepaper-v3.pdf           # Compiled PDF
-└── calibration_profile.json             # Production L4/L5 thresholds (N=74 sessions)
+├── bridge/                  Python asyncio bridge (3344 tests; PITL L0–L6 oracle pipeline + 38-agent fleet)
+│   ├── vapi_bridge/         Source — store / chain / agents / endpoint surface
+│   └── tests/               Bridge test bands (Phase O3 ZKBA + Phase O4 VPM + earlier)
+├── contracts/               Solidity 0.8 + Hardhat — 49+ LIVE on IoTeX testnet
+│   ├── contracts/           Source — PoACVerifier, AdjudicationRegistry, VAPIProtocolLens, AgentRegistry, etc.
+│   ├── test/                528 Hardhat tests
+│   └── deployed-addresses.json   Authoritative on-chain address registry
+├── scripts/                 Compilers + audits + ceremonies
+│   ├── zkba_compile_*.py    7 ZKBA artifact compilers (Phase O3-ZKBA-TRACK1)
+│   ├── vpm_compile_*.py     6 VPM compilers (Phase O4 Streams A.1+A.2)
+│   ├── vpm_drafts/          4 draft manifests (JSON; Reserved → Draft Manifest lifecycle)
+│   ├── vpm_visual_grammar.py    Shared FROZEN 6-state Anti-Hype Visual Grammar
+│   ├── vsd_ui_compiler.py   Deterministic compile_artifact + compile_vpm_artifact
+│   ├── vsd_vpm_wrapper.py   VPM wrapper schema (vapi-vpm-manifest-v1)
+│   ├── vpm_audit.py         6-section VPM compiler/registry audit harness
+│   ├── layer7_coverage_audit.py    Wallet-free Layer 7 7-of-7 audit
+│   ├── zkba_post_ceremony_audit.py Cedar v2 lane authority audit
+│   ├── vapi_invariant_gate.py      PV-CI 77-invariant gate
+│   └── parallel_*_anchor.py        Triple-gate ceremony scripts (operator-runtime)
+├── sdk/                     Python SDK (562 tests) — VAPIZKBA, VAPIFleetReadinessRoot, etc.
+├── frontend/                Vite + React Operator Console
+│   ├── src/views/           6 top-level views (GAMER / DEVELOPER / MANUFACTURER / BRP / MARKETPLACE / VPM)
+│   ├── src/components/      VpmFilterChips / VpmIframe / VpmManifestPanel / VpmGrammarVerifier + others
+│   └── src/__tests__/       26 Vitest tests (first frontend test infra)
+├── wiki/                    Methodology + phase + assessment archive
+│   ├── methodology/         VBDIP-0001 (FROZEN) + VBDIP-0002 v1.2 with Appendix B
+│   ├── phases/              Phase provenance pins (latest: phase_o4_vpm_integration.md)
+│   ├── proposals/           Phase O4 plan + Operator Decision Matrix + reconciliation plans
+│   ├── assessments/         V-check reports + position assessments + canonical PDFs
+│   ├── concepts/ entities/ what_if/  Cross-cutting reference material
+│   └── runbooks/            Operator-runtime procedures
+├── docs/                    Public-facing documentation
+│   ├── vapi-whitepaper-v4.md       Canonical successor (current; this commit)
+│   ├── vapi-whitepaper-v3.md       Zenodo-published baseline (preserved)
+│   ├── WHITEPAPER_VERSIONING.md    v1→v4 lineage
+│   └── (other technical docs)
+├── CLAUDE.md                Operator-authoritative state file (single source of truth)
+├── contracts/deployed-addresses.json   Authoritative on-chain registry
+└── .github/INVARIANTS_ALLOWLIST.json   77-entry PV-CI digest pin file
 ```
+
+---
+
+## Hard rules (non-negotiable protocol invariants)
+
+The following rules are **FROZEN**. Changing any of them requires a `--confirm-governance` ceremony plus operator authority:
+
+- **PoAC wire format: 228 bytes** (164-byte signed body + 64-byte ECDSA-P256 signature). Pinned by INV-001.
+- **Chain link hash: `SHA-256(raw[:164])`** — body only, NOT the full 228 bytes. Pinned by INV-002.
+- **`deviceId = keccak256(pubkey)`** — never swapped with `record_hash`.
+- **Hard cheat codes**: `0x28` DRIVER_INJECT, `0x29` WALLHACK, `0x2A` AIMBOT — block tournament eligibility.
+- **`L6_CHALLENGES_ENABLED = false`** until N≥50 RIGID_MAX calibration (current N=0).
+- **`GSR_ENABLED = false`** until N≥30 GSR sessions per player (current N=0).
+- **`bt_transport_enabled = false`** until N≥30 BT MVCP per player (current N=0).
+- **No token launch before separation_ratio > 1.0 AND all_pairs_above_1=True** — empirically confirmed AND all-pairs above. Currently CLEARED for AIT (1.199, N=37); touchpad_corners (0.728) remains the actual tournament BLOCK enforcement blocker.
+- **Stable EMA track updates on NOMINAL sessions only** — security invariant; never override.
+- **Per-player L4 thresholds tighten, never loosen** — enforced via `min()` operator.
+- **PV-CI invariant gate** runs on every PR — currently 77 invariants. Modifying a frozen region without a `--confirm-governance` ceremony fails CI.
+- **CHAIN_SUBMISSION_PAUSED kill-switch** held in `bridge/.env` — every chain-write path is gated; operator three-factor authorization (env var + env var + `--confirm` CLI flag) required to lift.
+
+Complete invariant list: `scripts/vapi_invariant_gate.py` + `.github/INVARIANTS_ALLOWLIST.json`.
+
+---
+
+## Phase O4-VPM-INTEGRATION (just closed)
+
+Phase O4 elevated the **Methodology Layer (Layer 7) output surface** from a collection of frozen primitives + a deterministic compiler to a complete delivery stack with multi-layer overclaim defense. Shipped across 10 atomic commits, 0 IOTX wallet impact, 0 new Cedar lanes, 0 contract deploys:
+
+| Stream | Commit | What shipped |
+|---|---|---|
+| Layer 7 audit | `168256a0` | `scripts/layer7_coverage_audit.py` (917 LOC) + 7-of-7 closure provenance |
+| V-check pin | `603c98cb` | `wiki/assessments/phase_o4_vchecks_2026-05-13.md` (V1..V10 pass) |
+| A.0 | `524ae1cc` | `compile_vpm_artifact()` engine + T-VPM-COMPILER-1..10 (10 tests) |
+| A.1 | `fd0d6699` | 4 internal compilers + Anti-Hype Visual Grammar (73 tests) |
+| A.2 | `7052144f` | 2 consumer-facing compilers + procedural geometric art (46 tests) |
+| A.3 + A.4 | `169471bb` | 4 draft manifests + `vpm_audit.py` (15 tests) |
+| B.0–B.3 | `1b13618d` | `vpm_artifact_log` store + 3 read endpoints (14 tests) |
+| B.4–B.7 | `d5803d47` | Write + validate + audit endpoints + stability harness (20 tests) |
+| C | `0061e6d9` | VPM Registry tab + sandboxed iframe + Layer 3 grammar verifier (26 Vitest) |
+| Close | `e81e04aa` | PV-CI 77 + FSCA 26 + B.8 gate sweep + CLAUDE.md NOTE + provenance pin |
+
+The **three-layer Anti-Hype Visual Grammar** is the protocol's first structural UX defense — preventing demo-as-production / revoked-as-active / unverified-as-verified overclaim attacks via a FROZEN DOM signature matrix enforced at three independent layers (Python compile-time + Python bridge-time + JavaScript browser-time).
+
+**VAPI now holds the frozen-primitive ↔ frozen-compiler ↔ frozen-visual-grammar ↔ frozen-iframe-sandbox quadruple-bind** — every cryptographic claim is independently verifiable by anyone with the canonical-JSON algorithm + SHA-256 + the public source of the four enforcement layers.
+
+See [`wiki/phases/phase_o4_vpm_integration.md`](wiki/phases/phase_o4_vpm_integration.md) for the complete close provenance.
 
 ---
 
 ## Citation
 
+Until v4 receives its own Zenodo DOI at release, cite the historical v3 whitepaper and reference v4 by commit:
+
 ```bibtex
-@software{battle_2026_vapi,
+@software{battle_2026_vapi_v3,
   author    = {Battle, Contravious},
   title     = {VAPI: Verifiable Controller Input Provenance with
                Physics-Backed Liveness for Competitive Gaming},
   year      = {2026},
   publisher = {Zenodo},
   doi       = {10.5281/zenodo.18966169},
-  url       = {https://doi.org/10.5281/zenodo.18966169}
+  url       = {https://doi.org/10.5281/zenodo.18966169},
+  version   = {v3 (historical; superseded by v4 in-repo)},
+  note      = {v4 in-repo: docs/vapi-whitepaper-v4.md at commit e81e04aa;
+               v4 DOI assignment pending Zenodo release}
 }
 ```
 
@@ -145,4 +263,18 @@ vapi-pebble-prototype/
 
 ## License
 
-Copyright (C) 2026 Contravious Battle. All Rights Reserved.
+**Copyright © 2026 Contravious Battle. All Rights Reserved.**
+
+Source is available in this repository for inspection, research review, and security audit. **No open-source license is declared.** Commercial integration, derivative work, or redistribution requires an explicit license agreement with the author.
+
+Patent claims and academic citation: reference the Zenodo DOI above (v3) plus the in-repo `docs/vapi-whitepaper-v4.md` for current-state citations.
+
+---
+
+## Contact
+
+Issues, security disclosures, and partnership inquiries should be filed via GitHub Issues on this repository or directed to the author through Zenodo's contact path on the v3 DOI page.
+
+---
+
+*VAPI is the first and only Verified Autonomous Physical Intelligence protocol on IoTeX. This repository contains the canonical reference implementation as of Phase O4-VPM-INTEGRATION close (2026-05-13, HEAD `e81e04aa`).*
