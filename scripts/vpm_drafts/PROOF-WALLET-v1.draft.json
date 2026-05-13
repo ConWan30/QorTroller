@@ -1,0 +1,105 @@
+{
+  "$schema_doc": "Phase O4-VPM-INTEGRATION Stream A.3 draft manifest. Lifecycle: Draft Manifest per VBDIP-0002A section 10. NO compiler body ships in this phase; this JSON declares the wrapper shape a future Phase O5 compiler will consume.",
+  "vpm_id": "PROOF-WALLET-v1",
+  "name": "Player-Side Competitive Record",
+  "audience": "Gamers",
+  "lifecycle_status": "Draft Manifest",
+  "registry_section": "VBDIP-0002A section 10",
+  "wrapper_schema_ref": "vapi-vpm-manifest-v1",
+  "proposed_zkba_class": 3,
+  "proposed_zkba_class_name": "VHP",
+  "proposed_proof_weight": 1,
+  "proposed_proof_weight_name": "CHAIN_ONLY",
+  "proposed_cfss_lane": "sentry",
+  "proposed_cfss_resource_prefix": "draft://zk_artifacts/*",
+  "proposed_cfss_tool": "tool:zk-artifact-anchor",
+  "proposed_visual_states": [
+    "live",
+    "dry-run",
+    "emulated",
+    "frozen-disabled",
+    "revoked",
+    "unverified"
+  ],
+  "proposed_inputs_schema": {
+    "gamer_address": {
+      "type": "string",
+      "format": "ethereum-address-20-byte-hex",
+      "required": true,
+      "privacy": "hashed-via-sha256-in-preimage",
+      "description": "Player wallet address; hashed for privacy in the artifact preimage like CONSENT v1 gamer_address_hash"
+    },
+    "vhp_token_id": {
+      "type": "integer",
+      "format": "uint256",
+      "required": true,
+      "description": "Soulbound VAPIVerifiedHumanProof token id bound to the gamer"
+    },
+    "vhp_cert_level": {
+      "type": "integer",
+      "format": "uint8",
+      "range": [1, 2],
+      "required": true,
+      "description": "1=controller-only, 2=controller+GSR (Phase 99A schema)"
+    },
+    "vhp_expires_at": {
+      "type": "integer",
+      "format": "uint64-unix-timestamp",
+      "required": true,
+      "description": "VHP TTL expiration; renders as ACTIVE / EXPIRED status"
+    },
+    "consecutive_clean_streak": {
+      "type": "integer",
+      "format": "uint64",
+      "required": true,
+      "description": "Current GIC chain consecutive_clean streak; surfaces as the gamer's grind continuity"
+    },
+    "gic_chain_length": {
+      "type": "integer",
+      "format": "uint64",
+      "required": true,
+      "description": "Current GIC chain length; renders GIC_100 milestone badge if >= 100"
+    },
+    "session_count_30d": {
+      "type": "integer",
+      "format": "uint64",
+      "required": true,
+      "description": "Live PoAC session count in trailing 30 days; gamer-side activity signal"
+    },
+    "last_session_ts_ns": {
+      "type": "integer",
+      "format": "uint64-nanos",
+      "required": true,
+      "description": "Most recent session timestamp; gamer can see how fresh their record is"
+    }
+  },
+  "proposed_integrity_label_template": {
+    "proof_type": "VPM-PROOF-WALLET",
+    "capture_mode": "<live | dry-run | emulated | demo | frozen-disabled>",
+    "raw_biometrics_exposed": false,
+    "consent_active": true,
+    "zk_verified": false,
+    "on_chain_anchor": true,
+    "proof_weight": "CHAIN_ONLY",
+    "revocation_status": "<active | revoked | expired>",
+    "limitations": [
+      "Gamer-facing competitive record only; not a per-tournament eligibility proof",
+      "Surfaces aggregate streak counters; does not expose per-session biometric data"
+    ]
+  },
+  "references": {
+    "registry": "VBDIP-0002A section 10 row 2 (PROOF-WALLET-v1 / Player-Side Competitive Record / Gamers / Reserved)",
+    "phase_O4_plan_row": "wiki/proposals/Phase_O4_VPM_Integration_Plan.md section 2.3 row 5",
+    "related_compilers_active": [
+      "scripts/vpm_compile_honesty_board.py",
+      "scripts/zkba_compile_vhp_card.py"
+    ],
+    "future_compiler_path": "scripts/vpm_compile_proof_wallet.py"
+  },
+  "promotion_rules": {
+    "to_compiler_target": "Author scripts/vpm_compile_proof_wallet.py with build_proof_wallet_artifact(...) consuming this exact input schema + a html_renderer that inherits scripts/vpm_visual_grammar.py.",
+    "to_test_fixture": "Add bridge/tests/test_phase_o5_vpm_proof_wallet.py with T-VPM-PW-1..8 + T-VPM-GRAMMAR x6 mirroring Phase O4 Stream A.1 test bands.",
+    "to_active": "Operator governance ceremony per VBDIP-0002A section 10 lifecycle ladder discipline. Stakeholder-facing artifact; requires player-consent capture flow + GDPR Article 17 verification before Active status."
+  },
+  "non_authoritative_notes": "This draft manifest is documentation-only. It does not grant runtime authority. It does not modify FROZEN schemas. It does not add Cedar lane permissions. Promotion to Compiler Target requires explicit Phase O5 implementation work; promotion to Active requires governance approval per VBDIP-0002A section 11 G6."
+}

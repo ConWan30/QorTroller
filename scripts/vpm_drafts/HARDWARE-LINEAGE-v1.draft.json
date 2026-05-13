@@ -1,0 +1,115 @@
+{
+  "$schema_doc": "Phase O4-VPM-INTEGRATION Stream A.3 draft manifest. Lifecycle: Draft Manifest per VBDIP-0002A section 10. NO compiler body ships in this phase; this JSON declares the wrapper shape a future Phase O5 compiler will consume.",
+  "vpm_id": "HARDWARE-LINEAGE-v1",
+  "name": "Hardware Lifecycle Certificate",
+  "audience": "Manufacturers",
+  "lifecycle_status": "Draft Manifest",
+  "registry_section": "VBDIP-0002A section 10",
+  "wrapper_schema_ref": "vapi-vpm-manifest-v1",
+  "proposed_zkba_class": 4,
+  "proposed_zkba_class_name": "HARDWARE",
+  "proposed_proof_weight": 1,
+  "proposed_proof_weight_name": "CHAIN_ONLY",
+  "proposed_cfss_lane": "sentry",
+  "proposed_cfss_resource_prefix": "draft://zk_artifacts/*",
+  "proposed_cfss_tool": "tool:zk-artifact-anchor",
+  "proposed_visual_states": [
+    "live",
+    "dry-run",
+    "emulated",
+    "frozen-disabled",
+    "revoked",
+    "unverified"
+  ],
+  "proposed_inputs_schema": {
+    "profile_hash": {
+      "type": "string",
+      "format": "64-char-lowercase-hex",
+      "required": true,
+      "description": "keccak256(manufacturer || model || firmware_version) per Phase 99A VAPIHardwareCertRegistry"
+    },
+    "manufacturer_name": {
+      "type": "string",
+      "max_length": 80,
+      "required": true,
+      "description": "Display string; HTML-escaped at render time. Public attribution."
+    },
+    "model_name": {
+      "type": "string",
+      "max_length": 80,
+      "required": true,
+      "description": "e.g. Sony DualShock Edge CFI-ZCP1; HTML-escaped"
+    },
+    "firmware_version": {
+      "type": "string",
+      "max_length": 40,
+      "required": true,
+      "description": "Manufacturer firmware version string"
+    },
+    "manufacturer_address": {
+      "type": "string",
+      "format": "ethereum-address-20-byte-hex",
+      "required": true,
+      "privacy": "publicly-attributable-not-hashed",
+      "description": "Inverse of CONSENT v1 privacy posture: manufacturer address is publicly attributable by design (mirrors Phase O3 HARDWARE Participation Card commit ece17f4f)"
+    },
+    "cert_level": {
+      "type": "integer",
+      "format": "uint8",
+      "range": [1, 2],
+      "required": true,
+      "description": "1=controller-only, 2=controller+GSR per Phase 99A schema"
+    },
+    "first_certified_block": {
+      "type": "integer",
+      "format": "uint64",
+      "required": true,
+      "description": "IoTeX block when this profile was first certified on VAPIHardwareCertRegistry"
+    },
+    "is_currently_certified": {
+      "type": "boolean",
+      "required": true,
+      "description": "chain.isCertified(profile_hash) view result"
+    },
+    "total_units_attested_count": {
+      "type": "integer",
+      "format": "uint64",
+      "required": true,
+      "description": "Cumulative count of distinct device_id_hash values seen attesting under this profile; lineage statistic"
+    },
+    "current_active_units_count": {
+      "type": "integer",
+      "format": "uint64",
+      "required": true,
+      "description": "Distinct devices active in trailing 30 days; informs lineage health"
+    }
+  },
+  "proposed_integrity_label_template": {
+    "proof_type": "VPM-HARDWARE-LINEAGE",
+    "capture_mode": "<live | dry-run | emulated | demo | frozen-disabled>",
+    "raw_biometrics_exposed": false,
+    "consent_active": true,
+    "zk_verified": false,
+    "on_chain_anchor": true,
+    "proof_weight": "CHAIN_ONLY",
+    "revocation_status": "<active | revoked | expired>",
+    "limitations": [
+      "Manufacturer-attestation lineage projection; does not assert per-device humanity proof",
+      "Statistical fields (total units / active units) are point-in-time snapshots; verifier should re-query if accuracy is load-bearing"
+    ]
+  },
+  "references": {
+    "registry": "VBDIP-0002A section 10 row 4 (HARDWARE-LINEAGE-v1 / Hardware Lifecycle Cert / Manufacturers / Reserved)",
+    "phase_O4_plan_row": "wiki/proposals/Phase_O4_VPM_Integration_Plan.md section 2.3 row 7",
+    "related_compilers_active": [
+      "scripts/zkba_compile_hardware_card.py"
+    ],
+    "future_compiler_path": "scripts/vpm_compile_hardware_lineage.py"
+  },
+  "promotion_rules": {
+    "to_compiler_target": "Author scripts/vpm_compile_hardware_lineage.py with build_hardware_lineage_artifact(...). Renderer must inherit scripts/vpm_visual_grammar.py and surface manufacturer_address publicly (mirrors Phase O3 HARDWARE Participation Card privacy posture — inverse of CONSENT v1 gamer-address hashing).",
+    "to_test_fixture": "Add bridge/tests/test_phase_o5_vpm_hardware_lineage.py with T-VPM-HL-1..8 + T-VPM-GRAMMAR x6 + manufacturer-address-load-bearing tamper test mirroring T-ZKBA-HW-10 (commit ece17f4f).",
+    "to_active": "Operator governance ceremony. Requires manufacturer-partner-program flow (Sony Partner / GuliKit aftermarket / etc.) before Active status; first MANUFACTURER-bound consumer audience artifact."
+  },
+  "non_authoritative_notes": "This draft manifest is documentation-only. It does not grant runtime authority. It does not modify FROZEN schemas. It does not add Cedar lane permissions. The HARDWARE Participation Card (Phase O3 commit ece17f4f) is the upstream ZKBA primitive this VPM will wrap."
+}

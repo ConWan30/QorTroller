@@ -1,0 +1,109 @@
+{
+  "$schema_doc": "Phase O4-VPM-INTEGRATION Stream A.3 draft manifest. Lifecycle: Draft Manifest per VBDIP-0002A section 10. NO compiler body ships in this phase; this JSON declares the wrapper shape a future Phase O5 compiler will consume.",
+  "vpm_id": "QR-ELIGIBILITY-v1",
+  "name": "Tournament Check-in Pass",
+  "audience": "Tournament Organizers",
+  "lifecycle_status": "Draft Manifest",
+  "registry_section": "VBDIP-0002A section 10",
+  "wrapper_schema_ref": "vapi-vpm-manifest-v1",
+  "proposed_zkba_class": 6,
+  "proposed_zkba_class_name": "TOURNAMENT",
+  "proposed_proof_weight": 1,
+  "proposed_proof_weight_name": "CHAIN_ONLY",
+  "proposed_cfss_lane": "sentry",
+  "proposed_cfss_resource_prefix": "draft://zk_artifacts/*",
+  "proposed_cfss_tool": "tool:zk-artifact-anchor",
+  "proposed_visual_states": [
+    "live",
+    "dry-run",
+    "emulated",
+    "frozen-disabled",
+    "revoked",
+    "unverified"
+  ],
+  "proposed_inputs_schema": {
+    "tournament_id": {
+      "type": "integer",
+      "format": "uint64",
+      "required": true,
+      "description": "Tournament identifier per VAPI tournament canonical id"
+    },
+    "tournament_name": {
+      "type": "string",
+      "max_length": 120,
+      "required": true,
+      "description": "Display title; HTML-escaped at render time"
+    },
+    "gamer_address_hash": {
+      "type": "string",
+      "format": "64-char-lowercase-hex",
+      "required": true,
+      "privacy": "already-hashed-input",
+      "description": "SHA-256 of gamer wallet address (caller-supplied; bridge does not learn the address)"
+    },
+    "vhp_token_id": {
+      "type": "integer",
+      "format": "uint256",
+      "required": true,
+      "description": "VHP token bound to the gamer; chain.is_vhp_valid(token_id) consulted offline at compile time"
+    },
+    "is_fully_eligible": {
+      "type": "boolean",
+      "required": true,
+      "description": "VAPIProtocolLens.isFullyEligible(device_id) view result; the singular composability gate"
+    },
+    "device_id_hash": {
+      "type": "string",
+      "format": "64-char-lowercase-hex",
+      "required": true,
+      "description": "Canonical device identifier hash per Phase O3 TOURNAMENT artifact"
+    },
+    "check_in_window_start_ts_ns": {
+      "type": "integer",
+      "format": "uint64-nanos",
+      "required": true,
+      "description": "Tournament check-in window opens at this timestamp"
+    },
+    "check_in_window_end_ts_ns": {
+      "type": "integer",
+      "format": "uint64-nanos",
+      "required": true,
+      "description": "Tournament check-in window closes at this timestamp"
+    },
+    "qr_payload_hash_hex": {
+      "type": "string",
+      "format": "64-char-lowercase-hex",
+      "required": true,
+      "description": "SHA-256 of the QR scan payload bytes; verifier reproduces the QR contents and compares"
+    }
+  },
+  "proposed_integrity_label_template": {
+    "proof_type": "VPM-QR-ELIGIBILITY",
+    "capture_mode": "<live | dry-run | emulated | demo | frozen-disabled>",
+    "raw_biometrics_exposed": false,
+    "consent_active": true,
+    "zk_verified": false,
+    "on_chain_anchor": true,
+    "proof_weight": "CHAIN_ONLY",
+    "revocation_status": "<active | revoked | expired>",
+    "limitations": [
+      "Per-tournament check-in artifact; eligibility is asserted relative to the tournament_id at check-in window time",
+      "QR contents must be reproduced from the wrapped ZKBA manifest by the verifier; this VPM does not embed the QR image"
+    ]
+  },
+  "references": {
+    "registry": "VBDIP-0002A section 10 row 3 (QR-ELIGIBILITY-v1 / Tournament Check-in Pass / Organizers / Reserved)",
+    "phase_O4_plan_row": "wiki/proposals/Phase_O4_VPM_Integration_Plan.md section 2.3 row 6",
+    "related_compilers_active": [
+      "scripts/zkba_compile_tournament_card.py",
+      "scripts/vpm_compile_dispute_packet.py"
+    ],
+    "future_compiler_path": "scripts/vpm_compile_qr_eligibility.py"
+  },
+  "promotion_rules": {
+    "to_compiler_target": "Author scripts/vpm_compile_qr_eligibility.py with build_qr_eligibility_artifact(...) consuming this input schema. Inline QR rendering via deterministic SVG (NO external resources; ASCII-art fallback for non-SVG-capable consumers).",
+    "to_test_fixture": "Add bridge/tests/test_phase_o5_vpm_qr_eligibility.py with T-VPM-QRE-1..8 + T-VPM-GRAMMAR x6 + a QR-payload-reproduction test verifying SHA-256(QR-bytes) == qr_payload_hash_hex.",
+    "to_active": "Operator governance ceremony. Requires tournament-organizer partnership flow + check-in-station SDK integration before Active status."
+  },
+  "non_authoritative_notes": "This draft manifest is documentation-only. It does not grant runtime authority. The QR check-in flow itself remains gated by VAPIProtocolLens.isFullyEligible() per the existing Phase O3 TOURNAMENT primitive; this VPM is a presentation surface, not an authority gate."
+}
