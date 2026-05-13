@@ -1,10 +1,10 @@
 # VAPI — Verified Autonomous Physical Intelligence
 
-**The first DePIN gaming protocol with cryptographic proof of human presence in competitive gaming.**
+**A Verified Autonomous Physical Intelligence architecture on IoTeX for cryptographic human-gameplay verification in competitive gaming.**
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18966169.svg)](https://doi.org/10.5281/zenodo.18966169) (v3 — historical; v4 DOI pending release)
 
-**Author:** Contravious Battle (Independent Researcher) · **Network:** IoTeX testnet (chain ID 4690) · **Phase:** O4-VPM-INTEGRATION CLOSED 2026-05-13 (HEAD `e81e04aa`)
+**Author:** Contravious Battle (Independent Researcher) · **Network:** IoTeX testnet (chain ID 4690) · **Phase:** O4-VPM-INTEGRATION CLOSED 2026-05-13 · **Architecture anchor:** `e81e04aa` · **Documentation commit:** `9f8581cd`
 
 | Surface | Status |
 |---|---|
@@ -14,7 +14,7 @@
 | **Frontend Vitest** | 26 passing (first frontend test infra) |
 | **PV-CI invariant gate** | 77 / 77 pinned (governance-ceremony-locked) |
 | **FSCA contradiction rules** | 26 active |
-| **Contracts LIVE on IoTeX** | 49+ (see `contracts/deployed-addresses.json`) |
+| **Contracts LIVE on IoTeX** | 49 substantive live testnet contracts (51 registry slots; see `contracts/deployed-addresses.json`) |
 | **Operator Initiative agents** | 3 LIVE at O1_SHADOW (Sentry / Guardian / Curator) |
 | **ZKBA artifact classes** | 7 of 7 shipped (Layer 7 closed) |
 | **VPM compilers active** | 6 (4 internal + 2 consumer-facing) |
@@ -27,7 +27,7 @@
 
 **The problem.** Cheat detection in competitive gaming has no cryptographic anchor. Existing solutions (BattlEye, Riot Vanguard, Easy Anti-Cheat) are kernel-level anti-cheat with no public verifiability surface; tournament organizers and viewers must trust the publisher's claim that a match was clean. Bot software keeps improving; controllers get repurposed; signed binaries get repurposed; injection vectors keep multiplying.
 
-**The protocol.** VAPI binds every controller input event to a tamper-evident, on-chain-verifiable cryptographic record — a **Proof of Autonomous Cognition (PoAC)**. Each 228-byte PoAC binds raw sensor commitments (IMU, adaptive trigger dynamics, biometric fingerprint) to a hardware-rooted ECDSA-P256 signature, hash-chains them into a per-session sequence, and exposes the resulting state through a single composable on-chain call: `VAPIProtocolLens.isFullyEligible(deviceIdHash)`. External tournament organizers can gate eligibility on that one view call with zero off-chain trust.
+**The protocol.** VAPI binds every controller input event to a tamper-evident, on-chain-verifiable cryptographic record — a **Proof of Autonomous Cognition (PoAC)**. Each 228-byte PoAC binds raw sensor commitments (IMU dynamics, analog trigger dynamics, stick/button timing, biometric feature commitments) to a hardware-rooted ECDSA-P256 signature, hash-chains them into a per-session sequence, and exposes the resulting state through a single composable on-chain call: `VAPIProtocolLens.isFullyEligible(deviceIdHash)`. External tournament organizers can gate eligibility on that one view call without trusting a private publisher API or manually inspecting raw biometric data — the on-chain gate minimizes integrator trust by reducing eligibility to a public view-call over previously anchored protocol state.
 
 **The architecture.** Nine layers of Physical Input Trust (PITL L0–L6 deployed, L7 GSR advisory, L8 BT gated) verify each input event at increasing levels of biometric specificity. A 10-element family of FROZEN-v1 cryptographic primitives (PATTERN-017) anchors session continuity, cognition integrity, watchdog events, application-layer messaging, biometric snapshots, consent state, and Layer 7 ZKBA artifacts. Three Operator Initiative agents (Sentry, Guardian, Curator) hold Cross-Fleet Skill Separation (CFSS) lane authority on Cedar v2 bundles dual-anchored on chain.
 
@@ -63,17 +63,17 @@ See `wiki/methodology/METHODOLOGY_LAYER_INTEGRATION_MAP.md` for the complete cro
 
 | Battery | Ratio | N | `all_pairs_above_1` | Status |
 |---|---|---|---|---|
-| **AIT** (Active Isometric Trigger — Phase 229–231) | **1.199** | 37 | **True** | **CLEARED** for tournament gate use |
+| **AIT** (Active Isometric Trigger — Phase 229–231) | **1.199** | 37 | **True** | **CLEARED** for the AIT separation gate in the current corpus (testnet/demo eligibility evidence) |
 | **touchpad_corners** | 0.728 | 35 | False | **BLOCKER** for tournament BLOCK enforcement (per-pair P3 separation inadequate) |
 | **tremor_resting** | 1.177 | 27 | False | `all_pairs_p0_ok=False`; P1vP3=0.032 — Phase 213 AccelTremorFFT fix shipped, verification pending |
 
 The token launch invariant ("no TGE before separation_ratio > 1.0 + all_pairs_above_1") **REMAINS IN FORCE** for legal/economic defensibility of token issuance. AIT clears the technical gate for testnet/non-tournament demonstrations; touchpad_corners is the actual tournament BLOCK enforcement blocker.
 
 **On-chain anchored milestones (IoTeX testnet, chain 4690):**
-- **GIC_100 cognitive chain head** permanently anchored 2026-05-06 — tx `0xe807347eb837...` block 43348052. First 100-link cognitive-session integrity chain anchored on any DePIN gaming protocol.
+- **GIC_100 cognitive chain head** permanently anchored 2026-05-06 — tx `0xe807347eb837...` block 43348052. A 100-link cognitive-session integrity chain anchored on IoTeX testnet.
 - **Cedar v2 lane authority bundles** for all three Operator Initiative agents dual-anchored 2026-05-12 on AgentScope (operational FIRST) + AgentRegistry (governance SECOND). Merkle roots: Sentry `0x39e8b65f...db1f23` / Guardian `0x6818a9ad...0a9a0` / Curator `0x0ade0c92...60a80b3d`.
 - **Inaugural CORPUS-SNAPSHOT** anchored 2026-05-09 — tx `0x24e4ddb6...` (closes Phase 237.5 Path C+ wallet-drain audit trail).
-- **VHP demo mint** tokenId=2 — first DePIN humanity credential bound to all three layers (canonical Sony DualShock Edge CFI-ZCP1 device + GIC_100 milestone + ZK ceremony VK hash).
+- **VHP demo mint** tokenId=2 — humanity credential bound to all three protocol layers (canonical Sony DualShock Edge CFI-ZCP1 device + GIC_100 milestone + ZK ceremony VK hash).
 
 **What's still open** (not security blockers; operator-runtime work):
 - VBDIP-0002 Appendix B B.8 gate **G7** (Curator Review Readiness — 7-day observation window with ≥9/10 acceptance gate)
@@ -95,7 +95,7 @@ See `wiki/phases/phase_o4_vpm_integration.md` §9 for the full forward roadmap.
 ### Inspect the deployed contracts
 
 ```bash
-# Open the deployed-addresses.json to see all 49+ LIVE contracts on IoTeX testnet
+# Open the deployed-addresses.json to see all 49 substantive live testnet contracts (51 registry slots)
 cat contracts/deployed-addresses.json | python -m json.tool | head -60
 ```
 
@@ -154,7 +154,7 @@ vapi-pebble-prototype/
 ├── bridge/                  Python asyncio bridge (3344 tests; PITL L0–L6 oracle pipeline + 38-agent fleet)
 │   ├── vapi_bridge/         Source — store / chain / agents / endpoint surface
 │   └── tests/               Bridge test bands (Phase O3 ZKBA + Phase O4 VPM + earlier)
-├── contracts/               Solidity 0.8 + Hardhat — 49+ LIVE on IoTeX testnet
+├── contracts/               Solidity 0.8 + Hardhat — 49 substantive live testnet contracts
 │   ├── contracts/           Source — PoACVerifier, AdjudicationRegistry, VAPIProtocolLens, AgentRegistry, etc.
 │   ├── test/                528 Hardhat tests
 │   └── deployed-addresses.json   Authoritative on-chain address registry
@@ -205,7 +205,7 @@ The following rules are **FROZEN**. Changing any of them requires a `--confirm-g
 - **`L6_CHALLENGES_ENABLED = false`** until N≥50 RIGID_MAX calibration (current N=0).
 - **`GSR_ENABLED = false`** until N≥30 GSR sessions per player (current N=0).
 - **`bt_transport_enabled = false`** until N≥30 BT MVCP per player (current N=0).
-- **No token launch before separation_ratio > 1.0 AND all_pairs_above_1=True** — empirically confirmed AND all-pairs above. Currently CLEARED for AIT (1.199, N=37); touchpad_corners (0.728) remains the actual tournament BLOCK enforcement blocker.
+- **No token launch before separation_ratio > 1.0 AND all_pairs_above_1=True** — empirically confirmed AND all-pairs above. Currently cleared for the AIT separation gate in the current corpus (1.199, N=37); touchpad_corners (0.728) remains the actual tournament BLOCK enforcement blocker.
 - **Stable EMA track updates on NOMINAL sessions only** — security invariant; never override.
 - **Per-player L4 thresholds tighten, never loosen** — enforced via `min()` operator.
 - **PV-CI invariant gate** runs on every PR — currently 77 invariants. Modifying a frozen region without a `--confirm-governance` ceremony fails CI.
@@ -254,7 +254,8 @@ Until v4 receives its own Zenodo DOI at release, cite the historical v3 whitepap
   doi       = {10.5281/zenodo.18966169},
   url       = {https://doi.org/10.5281/zenodo.18966169},
   version   = {v3 (historical; superseded by v4 in-repo)},
-  note      = {v4 in-repo: docs/vapi-whitepaper-v4.md at commit e81e04aa;
+  note      = {v4 in-repo: docs/vapi-whitepaper-v4.md at architecture anchor
+               commit e81e04aa (documentation revamp commit 9f8581cd);
                v4 DOI assignment pending Zenodo release}
 }
 ```
@@ -277,4 +278,4 @@ Issues, security disclosures, and partnership inquiries should be filed via GitH
 
 ---
 
-*VAPI is the first and only Verified Autonomous Physical Intelligence protocol on IoTeX. This repository contains the canonical reference implementation as of Phase O4-VPM-INTEGRATION close (2026-05-13, HEAD `e81e04aa`).*
+*VAPI is a reference implementation of Verified Autonomous Physical Intelligence for competitive gaming on IoTeX. This repository contains the canonical implementation as of Phase O4-VPM-INTEGRATION close — architecture anchor `e81e04aa` (2026-05-13), documentation commit `9f8581cd`.*
