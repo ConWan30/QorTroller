@@ -418,3 +418,174 @@ export function smoke_fieldSub_wrap(): u64 {
   const r = fieldSub(feFromU64(0), feFromU64(1));
   return r[0];
 }
+
+// ===========================================================================
+// Stream I.1b -- Poseidon(BN254) permutation + arity entry points
+// ===========================================================================
+//
+// Algorithm (the naive reference from circomlibjs/src/poseidon_reference.js):
+//
+//   t = inputs.length + 1                  // internal state width
+//   N_ROUNDS_F = 8                         // full rounds (constant)
+//   N_ROUNDS_P = R_P per arity             // partial rounds
+//   state = [0, ...inputs]                 // initState 0 prepended
+//   for r in 0 .. (R_F + R_P):
+//     state[i] = (state[i] + C[r*t + i]) mod p   for all i   // AddRoundConstants
+//     if r < R_F/2 OR r >= R_F/2 + R_P:                      // FULL round
+//       state[i] = pow5(state[i]) for all i
+//     else:                                                  // PARTIAL round
+//       state[0] = pow5(state[0])  // ONLY state[0]
+//     state[i] = sum_j( M[i][j] * state[j] ) mod p  for all i // MDS mix
+//   return state[0]
+//
+// The C/M constants are REPLICATED in poseidon_constants.generated.ts (emitted
+// by poseidon_constants_gen.js from circomlibjs/src/poseidon_constants.json).
+
+import {
+  C_T2, M_T2,
+  C_T3, M_T3,
+  C_T9, M_T9,
+} from "./poseidon_constants.generated";
+
+// Full-round count is constant across all arities.
+const N_ROUNDS_F: i32 = 8;
+
+// ---------------------------------------------------------------------------
+// Constants accessors -- read a field element from a flat StaticArray<u64>
+// ---------------------------------------------------------------------------
+//
+// The generated C/M arrays store 4 little-endian limbs per field element.
+// feFromFlat copies element `elemIdx` out of the flat array into a fresh
+// 4-limb field element.
+function feFromFlat(flat: StaticArray<u64>, elemIdx: i32): StaticArray<u64> {
+  const base = elemIdx * 4;
+  const r = new StaticArray<u64>(4);
+  r[0] = flat[base];
+  r[1] = flat[base + 1];
+  r[2] = flat[base + 2];
+  r[3] = flat[base + 3];
+  return r;
+}
+
+// ---------------------------------------------------------------------------
+// Poseidon permutation (generic over arity)
+// ---------------------------------------------------------------------------
+//
+// `inputs` is an array of `t-1` field elements. `C` is the flat round-constant
+// array (length t*(R_F+R_P)*4 limbs). `M` is the flat MDS matrix (length
+// t*t*4 limbs). `t` is the internal state width; `rP` the partial-round count.
+// Returns state[0] after the full permutation.
+function poseidonPermute(
+  inputs: StaticArray<StaticArray<u64>>,
+  t: i32,
+  rP: i32,
+  C: StaticArray<u64>,
+  M: StaticArray<u64>
+): StaticArray<u64> {
+  // state = [0, ...inputs]
+  const state = new StaticArray<StaticArray<u64>>(t);
+  state[0] = feZero();
+  for (let i = 1; i < t; i++) {
+    state[i] = feCopy(inputs[i - 1]);
+  }
+
+  const totalRounds: i32 = N_ROUNDS_F + rP;
+  const halfF: i32 = N_ROUNDS_F / 2; // 4
+
+  for (let r = 0; r < totalRounds; r++) {
+    // 1. AddRoundConstants: state[i] += C[r*t + i]
+    for (let i = 0; i < t; i++) {
+      const c = feFromFlat(C, r * t + i);
+      state[i] = fieldAdd(state[i], c);
+    }
+
+    // 2. S-box (x^5)
+    const isFullRound: bool = (r < halfF) || (r >= halfF + rP);
+    if (isFullRound) {
+      for (let i = 0; i < t; i++) {
+        state[i] = pow5(state[i]);
+      }
+    } else {
+      // partial round -- S-box on state[0] only
+      state[0] = pow5(state[0]);
+    }
+
+    // 3. MDS mix: newState[i] = sum_j( M[i][j] * state[j] )
+    const newState = new StaticArray<StaticArray<u64>>(t);
+    for (let i = 0; i < t; i++) {
+      let acc = feZero();
+      for (let j = 0; j < t; j++) {
+        const m = feFromFlat(M, i * t + j);
+        const term = fieldMul(m, state[j]);
+        acc = fieldAdd(acc, term);
+      }
+      newState[i] = acc;
+    }
+    for (let i = 0; i < t; i++) {
+      state[i] = newState[i];
+    }
+  }
+
+  return state[0];
+}
+
+// ---------------------------------------------------------------------------
+// Arity entry points
+// ---------------------------------------------------------------------------
+//
+// All inputs are 32-byte big-endian field elements; all outputs are a freshly
+// allocated 32-byte big-endian ArrayBuffer holding the canonical reduced
+// field element (matching circomlibjs F.toObject() byte order).
+//
+// Round-constant counts per arity (from circomlibjs/src/poseidon_reference.js
+// N_ROUNDS_P, indexed [t-2]):
+//   t=2  R_P=56     t=3  R_P=57     t=9  R_P=63
+
+const R_P_T2: i32 = 56;
+const R_P_T3: i32 = 57;
+const R_P_T9: i32 = 63;
+
+// Helper: read a 32-byte big-endian field element out of an ArrayBuffer.
+function feFromArrayBuffer(buf: ArrayBuffer): StaticArray<u64> {
+  // changetype<usize> gives the data pointer of the ArrayBuffer payload.
+  const ptr = changetype<usize>(buf);
+  return feFromBytesBE(<i32>ptr);
+}
+
+// Helper: allocate a 32-byte ArrayBuffer and write a field element into it
+// big-endian.
+function feToArrayBuffer(a: StaticArray<u64>): ArrayBuffer {
+  const buf = new ArrayBuffer(32);
+  const ptr = changetype<usize>(buf);
+  feToBytesBE(a, <i32>ptr);
+  return buf;
+}
+
+// poseidon_t2 -- circomlib Poseidon(1); 1x32B input. For deviceIdHash.
+export function poseidon_t2(in0: ArrayBuffer): ArrayBuffer {
+  const inputs = new StaticArray<StaticArray<u64>>(1);
+  inputs[0] = feFromArrayBuffer(in0);
+  const out = poseidonPermute(inputs, 2, R_P_T2, C_T2, M_T2);
+  return feToArrayBuffer(out);
+}
+
+// poseidon_t3 -- circomlib Poseidon(2); 2x32B inputs. For nullifierHash.
+export function poseidon_t3(in0: ArrayBuffer, in1: ArrayBuffer): ArrayBuffer {
+  const inputs = new StaticArray<StaticArray<u64>>(2);
+  inputs[0] = feFromArrayBuffer(in0);
+  inputs[1] = feFromArrayBuffer(in1);
+  const out = poseidonPermute(inputs, 3, R_P_T3, C_T3, M_T3);
+  return feToArrayBuffer(out);
+}
+
+// poseidon_t9 -- circomlib Poseidon(8); 8x32B inputs packed into one 256-byte
+// ArrayBuffer (input k at byte offset k*32). For featureCommitment.
+export function poseidon_t9(inputs: ArrayBuffer): ArrayBuffer {
+  const ptr = changetype<usize>(inputs);
+  const fes = new StaticArray<StaticArray<u64>>(8);
+  for (let k = 0; k < 8; k++) {
+    fes[k] = feFromBytesBE(<i32>ptr + k * 32);
+  }
+  const out = poseidonPermute(fes, 9, R_P_T9, C_T9, M_T9);
+  return feToArrayBuffer(out);
+}
