@@ -118,10 +118,25 @@ AUTHORITATIVE_SIGNATURES = [
         "(future read pattern)",
         "Phase 99A hardware cert composition check — not yet bound",
     ),
+    (
+        "getDeviceWallet(bytes32)",
+        "VAPIioIDRegistry",
+        "validate_poac_record.ts",
+        "Phase O4-VPM-INT-A.PARTIAL device_id_hash → gamer address "
+        "resolution. Selector 0x0ff0779b used by _resolve_device_to_gamer "
+        "before consent-routing checks.",
+    ),
 ]
 
 # Placeholders currently present in the applet sources at this commit.
 # Each tuple: (hex_placeholder, file_glob, real_signature_to_replace_with)
+#
+# Phase O4-VPM-INT-A.PARTIAL (2026-05-14): 0xCAFE0237 and 0xDEADBEEF were
+# removed from validate_poac_record.ts when the ABI_ENCODER + CONSENT_RETURN_DATA
+# + DEVICE_ID_TO_GAMER deltas closed. The real selectors (0x7c4847ed,
+# 0xbabcf9f5, 0x0ff0779b) are now used directly as FROZEN constants. The
+# audit detects placeholders by literal substring; with the placeholders
+# removed from source, the audit no longer flags them.
 KNOWN_PLACEHOLDERS = [
     ("0xCAFE0237", "validate_poac_record.ts", "isConsentValid(address,uint8)"),
     ("0xDEADBEEF", "validate_poac_record.ts",
@@ -129,46 +144,73 @@ KNOWN_PLACEHOLDERS = [
 ]
 
 # Crypto-integration deltas the applet-pipeline phase must address.
+# Phase O4-VPM-INT-A.PARTIAL (2026-05-14): ABI_ENCODER + CONSENT_RETURN_DATA +
+# DEVICE_ID_TO_GAMER moved to CLOSED_DELTAS below. P256_VERIFY remains open
+# (dep-blocked by @assemblyscript/wasm-crypto 404). POSEIDON_HASH remains
+# open (atomic-stopped per safety rule: no Python reference available to
+# verify a hand-written AS Poseidon implementation; deferred until a Python
+# Poseidon reference is provisioned OR an AS Poseidon package becomes
+# available).
 # Each tuple: (delta_id, applet, current_state, production_requirement)
 CRYPTO_INTEGRATION_DELTAS = [
     (
         "P256_VERIFY",
         "validate_poac_record.ts",
-        "_verify_p256_stub() returns true unconditionally",
+        "_verify_p256_stub() returns true unconditionally (explicit deferral; "
+        "Hard Rule prohibits shipping unverified crypto)",
         "Integrate @assemblyscript/wasm-crypto + ecdsa.verify(body, sig, pubkey) "
-        "where pubkey resolves via VAPIioIDRegistry device-to-wallet mapping",
-    ),
-    (
-        "ABI_ENCODER",
-        "validate_poac_record.ts",
-        "_encode_submit_proof() emits 4-byte selector + 3 padded fields = stub shape",
-        "Replace with full ABI encoder emitting 7-arg submitPITLProof: "
-        "bytes32 deviceId + dynamic-length bytes proof + 5 uint256 fields. "
-        "Variable-length 'bytes proof' requires offset+length prefix per "
-        "Solidity ABI v2 spec.",
+        "where pubkey resolves via VAPIioIDRegistry device-to-wallet mapping. "
+        "Currently blocked by @assemblyscript/wasm-crypto 404 on npm registry.",
     ),
     (
         "POSEIDON_HASH",
         "validate_poac_record.ts",
-        "nullifierHash uint256 derivation not implemented",
+        "featureCommitment + nullifierHash emitted as zero placeholders in "
+        "_encode_submit_proof; ABI shape is final, payload is zero",
         "Implement Poseidon(deviceIdHash, epoch) in AssemblyScript or "
         "find an AS-compiled circom-Poseidon implementation. nullifierHash "
-        "is the anti-replay guard at PITLSessionRegistry.submitPITLProof.",
+        "is the anti-replay guard at PITLSessionRegistry.submitPITLProof. "
+        "Atomic-stopped 2026-05-14: no Python Poseidon reference available "
+        "to verify hand-written AS implementation against circomlib vectors; "
+        "safety rule prohibits shipping unverified crypto.",
+    ),
+]
+
+# Crypto-integration deltas CLOSED in prior commits. Retained for historical
+# record so re-audits can confirm the deltas didn't silently re-open.
+# Each tuple: (delta_id, applet, closed_in_phase, closure_summary)
+CLOSED_DELTAS = [
+    (
+        "ABI_ENCODER",
+        "validate_poac_record.ts",
+        "Phase O4-VPM-INT-A.PARTIAL (2026-05-14)",
+        "Full ABI v2 encoder for 7-arg submitPITLProof with real selector "
+        "0x7c4847ed. Head: deviceId + offset(224) + featureCommitment[ZERO] + "
+        "humanityProbInt[ZERO] + inferenceCode + nullifierHash[ZERO] + "
+        "epoch[ZERO]. Tail: length(0) + empty data. Total calldata = 260B. "
+        "ABI shape is FINAL; zero-placeholder fills change when Poseidon "
+        "and P256 deps land.",
     ),
     (
         "CONSENT_RETURN_DATA",
         "validate_poac_record.ts",
-        "_check_consent_view assumes chain_call return==0 means consent-valid",
-        "Read the actual return-data buffer (32 bytes; bool is rightmost byte) "
-        "and treat non-zero rightmost byte as consent-valid. The chain_call "
-        "return code is RPC-level (was the call reachable), not consent state.",
+        "Phase O4-VPM-INT-A.PARTIAL (2026-05-14)",
+        "_check_consent_view now reads 32-byte chain_call return-data buffer "
+        "via chain_call_returndata host import, then extracts bool from "
+        "rightmost byte via _read_bool_from_returndata(retPtr). RPC-level "
+        "errors (chain_call != 0) are correctly distinguished from "
+        "consent-state false (rightmost byte == 0).",
     ),
     (
         "DEVICE_ID_TO_GAMER",
         "validate_poac_record.ts",
-        "device_id bytes treated as gamer address in stub",
-        "Real flow: device_id_hash -> VAPIioIDRegistry.getDeviceWallet(hash) "
-        "-> gamer address. Requires extra chain_call before consent check.",
+        "Phase O4-VPM-INT-A.PARTIAL (2026-05-14)",
+        "_resolve_device_to_gamer calls VAPIioIDRegistry.getDeviceWallet"
+        "(bytes32 deviceIdHash) with real selector 0x0ff0779b. Reads 32-byte "
+        "return-data, extracts left-padded address from rightmost 20 bytes, "
+        "guards against zero-address (device not registered). Resolved "
+        "gamer address (32B-padded) flows into _check_consent_view. "
+        "Return code 6 surfaces resolution failures distinctly.",
     ),
 ]
 
@@ -181,21 +223,28 @@ CRYPTO_INTEGRATION_DELTAS = [
 DEPENDENCY_BLOCKERS = [
     (
         "@assemblyscript/wasm-crypto",
-        "404 Not Found on npm registry (2026-05-14)",
-        ["P256_VERIFY", "POSEIDON_HASH (partial)"],
+        "404 Not Found on npm registry (re-probed 2026-05-14)",
+        ["P256_VERIFY"],
         "Vendor a hand-written ECDSA-P256 AS implementation (~200 LOC) "
         "OR wait for an upstream AS crypto package; do NOT ship pseudo-"
         "production crypto without runtime verification per VAPI's "
-        "'verifiable claims with visible limits' posture.",
+        "'verifiable claims with visible limits' posture. Phase O4-VPM-INT-"
+        "A.PARTIAL Hard Rule explicitly blocks hand-rolled ECDSA-P256.",
     ),
     (
         "AssemblyScript Poseidon implementation",
         "No canonical npm package found (poseidon-as / circom-poseidon-as / "
-        "@iden3/poseidon-as all 404 as of 2026-05-14)",
+        "@iden3/poseidon-as all 404 as of 2026-05-14). Local atomic-stop on "
+        "2026-05-14 Stream A.PARTIAL: no Python Poseidon reference available "
+        "in the agent runtime to verify a hand-written AS implementation "
+        "against circomlib vectors.",
         ["POSEIDON_HASH"],
-        "Manually transpile circomlib's poseidon-bn254 to AssemblyScript "
-        "(~400 LOC arithmetic; non-trivial but bounded); defer until AS "
-        "crypto dep landscape stabilizes.",
+        "Path 1 (preferred): provision Python Poseidon reference (e.g. "
+        "py_ecc poseidon-bn254 or vendored circomlib reference) and re-run "
+        "Stream A.PARTIAL to vendor an AS Poseidon implementation verified "
+        "vector-by-vector. Path 2: manually transpile circomlib's poseidon-"
+        "bn254 to AssemblyScript (~400 LOC arithmetic; non-trivial but "
+        "bounded) ONLY after Path 1's verification harness is in place.",
     ),
 ]
 
@@ -298,6 +347,11 @@ def audit_one_applet(applet_path: Path) -> dict:
                                   # at minimum selectors are fixed; further
                                   # production readiness is operator's call.
 
+    closed_for_applet = [
+        d for d in CLOSED_DELTAS
+        if d[1] == applet_path.name
+    ]
+
     return {
         "applet": applet_path.name,
         "exists": True,
@@ -311,6 +365,14 @@ def audit_one_applet(applet_path: Path) -> dict:
                 "production_requirement": d[3],
             }
             for d in deltas_for_applet
+        ],
+        "crypto_deltas_closed": [
+            {
+                "delta_id": d[0],
+                "closed_in_phase": d[2],
+                "closure_summary": d[3],
+            }
+            for d in closed_for_applet
         ],
         "verdict": verdict,
     }
@@ -393,11 +455,16 @@ def render_human(report: dict) -> str:
                     f"({ph['real_signature']})"
                 )
         if a.get("crypto_deltas_open"):
-            lines.append("  Crypto integration deltas:")
+            lines.append("  Crypto integration deltas (OPEN):")
             for d in a["crypto_deltas_open"]:
                 lines.append(f"    [{d['delta_id']}]")
                 lines.append(f"      now: {d['current_state']}")
                 lines.append(f"      req: {d['production_requirement'][:120]}")
+        if a.get("crypto_deltas_closed"):
+            lines.append("  Crypto integration deltas (CLOSED):")
+            for d in a["crypto_deltas_closed"]:
+                lines.append(f"    [{d['delta_id']}] closed in {d['closed_in_phase']}")
+                lines.append(f"      summary: {d['closure_summary'][:120]}")
         lines.append("")
 
     lines.append("=" * 70)
