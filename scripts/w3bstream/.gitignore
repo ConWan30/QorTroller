@@ -1,0 +1,6 @@
+# Phase O4-W3B-POSEIDON-AS build pipeline (P.1) — generated artifacts, not tracked.
+node_modules/
+dist/
+*.wasm
+*.wat
+*.wasm.map
