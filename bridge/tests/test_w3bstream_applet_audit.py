@@ -51,11 +51,20 @@ def test_t_w3b_3_submitpitlproof_selector():
 
 def test_t_w3b_4_live_audit_reports_stub_state():
     """Against the real scripts/w3bstream/ directory, the audit MUST
-    report validate_poac_record.ts as STUB or STUB_DEPS_BLOCKED
-    (placeholders + crypto deltas). Phase O4-VPM-INT-A.5 added the
-    STUB_DEPS_BLOCKED verdict tier when the deltas overlap with
-    DEPENDENCY_BLOCKERS (P256_VERIFY / POSEIDON_HASH currently dep-
-    blocked per the upstream @assemblyscript/wasm-crypto 404)."""
+    report validate_poac_record.ts as STUB or STUB_DEPS_BLOCKED.
+
+    Phase O4-VPM-INT-A.5 added the STUB_DEPS_BLOCKED verdict tier when
+    the deltas overlap with DEPENDENCY_BLOCKERS.
+
+    Phase O4-VPM-INT-A.PARTIAL (2026-05-14): the ABI_ENCODER +
+    CONSENT_RETURN_DATA + DEVICE_ID_TO_GAMER deltas closed, so the
+    placeholder hex literals 0xCAFE0237 and 0xDEADBEEF are no longer
+    present in the applet source — they're now FROZEN-constant real
+    selectors (0xbabcf9f5 + 0x7c4847ed). placeholders_found is
+    expected to be empty; the STUB_DEPS_BLOCKED verdict comes
+    exclusively from the remaining P256_VERIFY + POSEIDON_HASH open
+    deltas (both dep-blocked).
+    """
     report, exit_code = w3b_audit.run_audit(
         PROJECT_ROOT / "scripts" / "w3bstream"
     )
@@ -64,9 +73,17 @@ def test_t_w3b_4_live_audit_reports_stub_state():
         a for a in report["applets"] if a["applet"] == "validate_poac_record.ts"
     )
     assert poac["verdict"] in ("STUB", "STUB_DEPS_BLOCKED")
-    placeholders = {p["placeholder"] for p in poac["placeholders_found"]}
-    assert "0xCAFE0237" in placeholders
-    assert "0xDEADBEEF" in placeholders
+    # Placeholders removed in Phase O4-VPM-INT-A.PARTIAL.
+    assert len(poac["placeholders_found"]) == 0
+    # The closed deltas must appear under crypto_deltas_closed.
+    closed_ids = {d["delta_id"] for d in poac.get("crypto_deltas_closed", [])}
+    assert "ABI_ENCODER" in closed_ids
+    assert "CONSENT_RETURN_DATA" in closed_ids
+    assert "DEVICE_ID_TO_GAMER" in closed_ids
+    # The open deltas must still surface P256_VERIFY + POSEIDON_HASH.
+    open_ids = {d["delta_id"] for d in poac["crypto_deltas_open"]}
+    assert "P256_VERIFY" in open_ids
+    assert "POSEIDON_HASH" in open_ids
 
 
 # ---- T-W3B-5: missing applet dir returns exit 2 -----------------------
@@ -208,17 +225,76 @@ def test_t_w3b_14_dependency_blockers_in_report():
 
 
 def test_t_w3b_11_real_selector_in_applet_source():
-    """The applet source MUST mention the real selector value somewhere
-    in the placeholder comments. This catches the case where the audit
-    script declares a real selector but the applet author forgot to
-    document it inline."""
+    """The applet source MUST mention the real selector values somewhere.
+    This catches the case where the audit script declares a real selector
+    but the applet author forgot to document it inline.
+
+    Phase O4-VPM-INT-A.PARTIAL: selectors now appear as FROZEN constants
+    (SEL_SUBMIT_PITL_PROOF, SEL_IS_CONSENT_VALID, SEL_GET_DEVICE_WALLET),
+    not just placeholder-replacement comments. The substring check still
+    matches both forms.
+    """
     applet_path = PROJECT_ROOT / "scripts" / "w3bstream" / "validate_poac_record.ts"
     source = applet_path.read_text(encoding="utf-8")
 
-    # Both real selectors must appear somewhere in the file.
+    # All three real selectors must appear somewhere in the file.
     assert "0xbabcf9f5" in source, (
         "Real isConsentValid selector 0xbabcf9f5 not documented inline"
     )
     assert "0x7c4847ed" in source, (
         "Real submitPITLProof selector 0x7c4847ed not documented inline"
     )
+    assert "0x0ff0779b" in source, (
+        "Real getDeviceWallet selector 0x0ff0779b (Phase O4-VPM-INT-A.PARTIAL) "
+        "not documented inline"
+    )
+
+
+# ---- T-W3B-15: A.PARTIAL — CLOSED_DELTAS surfaces in report ----------
+
+def test_t_w3b_15_closed_deltas_in_report():
+    """Phase O4-VPM-INT-A.PARTIAL (2026-05-14): the audit report MUST
+    include CLOSED_DELTAS so re-audits can confirm the deltas didn't
+    silently re-open. The 3 closed deltas are ABI_ENCODER +
+    CONSENT_RETURN_DATA + DEVICE_ID_TO_GAMER.
+    """
+    # The CLOSED_DELTAS constant exists.
+    assert hasattr(w3b_audit, "CLOSED_DELTAS")
+    closed = {d[0] for d in w3b_audit.CLOSED_DELTAS}
+    assert "ABI_ENCODER" in closed
+    assert "CONSENT_RETURN_DATA" in closed
+    assert "DEVICE_ID_TO_GAMER" in closed
+    # No overlap between open and closed deltas (drift guard).
+    open_ids = {d[0] for d in w3b_audit.CRYPTO_INTEGRATION_DELTAS}
+    assert not (closed & open_ids), (
+        f"Delta IDs cannot be both open and closed: {closed & open_ids}"
+    )
+
+
+# ---- T-W3B-16: A.PARTIAL — getDeviceWallet selector --------------------
+
+def test_t_w3b_16_getdevicewallet_selector():
+    """Phase O4-VPM-INT-A.PARTIAL DEVICE_ID_TO_GAMER closure: applet calls
+    VAPIioIDRegistry.getDeviceWallet(bytes32) with selector 0x0ff0779b.
+    """
+    sel = w3b_audit.selector_for("getDeviceWallet(bytes32)")
+    assert sel == "0x0ff0779b"
+
+
+# ---- T-W3B-17: A.PARTIAL — DEPENDENCY_BLOCKERS only block remaining open
+
+def test_t_w3b_17_blockers_align_with_open_deltas():
+    """After A.PARTIAL, DEPENDENCY_BLOCKERS may only block deltas that are
+    still in CRYPTO_INTEGRATION_DELTAS (open). The 3 closed deltas
+    (ABI_ENCODER + CONSENT_RETURN_DATA + DEVICE_ID_TO_GAMER) must NOT
+    appear in any blocker's blocks_deltas list."""
+    open_ids = {d[0] for d in w3b_audit.CRYPTO_INTEGRATION_DELTAS}
+    closed_ids = {d[0] for d in w3b_audit.CLOSED_DELTAS}
+    for pkg, status, blocks, alt in w3b_audit.DEPENDENCY_BLOCKERS:
+        for blocked_id in blocks:
+            # Tolerate the legacy "(partial)" suffix if any survives.
+            normalized = blocked_id.replace(" (partial)", "")
+            assert normalized not in closed_ids, (
+                f"Blocker {pkg} still claims to block CLOSED delta "
+                f"{blocked_id}; this is stale and must be removed"
+            )
