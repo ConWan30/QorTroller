@@ -696,6 +696,45 @@ INVARIANTS: list[Invariant] = [
         pattern=r'"CFSS_LANE_AUTHORITY_DRIFT":\s*\{',
         min_matches=1,
     ),
+    # Phase O4-W3B-POSEIDON-AS — pin the protocol-internal AssemblyScript
+    # Poseidon(BN254) cryptographic capability. POSEIDON-BN254-AS is NOT an
+    # 11th PATTERN-017 commitment family (the commitment-family count stays
+    # 10): it is the hash-function capability that SUPPORTS PATTERN-017 #8
+    # ZK-SEPPROOF and the Phase 62 PitlSessionProof circuit by making their
+    # commitment computation verifiable inside the W3bstream applet. The AS
+    # implementation is verified byte-identical to circomlibjs 0.1.7 across
+    # 525 final-output vectors + 150 per-round vectors + 48100 intermediate
+    # round-state elements (V.1 commit 0b6adc13 + V.2 commit a80f3fb4). AMBER
+    # path: circomlibjs 0.1.7 is the single reference; V.3 cross-reference
+    # triangulation is deferred pending ecosystem availability of a second
+    # BN254-compatible Poseidon reference (P.0-confirmed 2026-05-14).
+    # NOTE: the plan's PV.1 named INV-POSEIDON-AS-003 as a
+    # POSEIDON_VECTORS_SHA256 *constant in poseidon_bn254.ts*; the I.1 agent
+    # (correctly) did not pollute the production crypto module with test
+    # metadata, so this invariant pins the vector-corpus hash where it
+    # actually lives — the committed poseidon_test_vectors.sha256 — which is
+    # the genuine tamper-evidence surface P.3's validator already checks.
+    Invariant(
+        id="INV-POSEIDON-AS-001",
+        description="AS Poseidon(BN254) arity entry points poseidon_t2/t3/t9 exported from poseidon_bn254.ts (Phase O4-W3B-POSEIDON-AS) — the public surface validate_poac_record.ts wires to: t2=deviceIdHash (circomlib Poseidon(1)), t3=nullifierHash (Poseidon(2)), t9=featureCommitment (Poseidon(8)). min_matches=3 catches any single-arity rename.",
+        file="scripts/w3bstream/poseidon_bn254.ts",
+        pattern=r"export function poseidon_t[239]\(",
+        min_matches=3,
+    ),
+    Invariant(
+        id="INV-POSEIDON-AS-002",
+        description="BN254 scalar field prime byte-literal pinned in poseidon_bn254.ts (Phase O4-W3B-POSEIDON-AS) — the top 8 big-endian bytes of p = 0x30644e72e131a029.... Any drift in the prime is a modular-reduction correctness break that silently invalidates every Poseidon output the applet produces.",
+        file="scripts/w3bstream/poseidon_bn254.ts",
+        pattern=r"0x30,\s*0x64,\s*0x4e,\s*0x72,\s*0xe1,\s*0x31,\s*0xa0,\s*0x29",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-POSEIDON-AS-003",
+        description="Poseidon test-vector corpus SHA-256 pinned in poseidon_test_vectors.sha256 (Phase O4-W3B-POSEIDON-AS) — the circomlibjs 0.1.7 ground-truth corpus that V.1/V.2 verify the AS implementation against (1000 random + 25 boundary + 50 per-round vectors per arity {t2,t3,t9}). Protects against silent vector-file tampering eroding the single-reference verification basis.",
+        file="scripts/w3bstream/poseidon_test_vectors.sha256",
+        pattern=r"9bfe035c83919af6047a196523c2396e85dd76fe5c4412102031131aeec99980",
+        min_matches=1,
+    ),
 ]
 
 
