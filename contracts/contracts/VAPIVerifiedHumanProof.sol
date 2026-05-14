@@ -36,6 +36,40 @@ contract VAPIVerifiedHumanProof is Ownable {
     mapping(address => uint256) public tokenOfAddress;  // latest token per address
     uint256 public defaultTTLDays = 90;
 
+    /// @notice Phase O4-VPM-INT-B-PREP - Address of the cross-chain bridge
+    ///         contract authorized to call bridgeMint(). Zero address until
+    ///         setBridgeAddress is called by owner; bridgeMint reverts when
+    ///         bridgeAddress is zero. Defensive prep for the eventual
+    ///         VAPIVerifiedHumanProofBridge OApp refactor; full LayerZero
+    ///         V2 inheritance is BLOCKED upstream by a peer-dep conflict
+    ///         (lz-evm-oapp-v2 transitively requires ethers v5 via
+    ///         eth-optimism contracts; Hardhat Toolbox 4 requires ethers
+    ///         v6). Until the conflict resolves, bridgeMint provides the
+    ///         receiver-side mint authority that the bridge _lzReceive
+    ///         would call - exercisable today via MockLayerZeroEndpoint
+    ///         simulateInbound at test time.
+    address public bridgeAddress;
+
+    event BridgeAddressSet(address indexed oldBridge, address indexed newBridge);
+    event VHPBridgeMinted(
+        uint256 indexed tokenId,
+        address indexed to,
+        bytes32 deviceIdHash,
+        uint64  remoteNonce
+    );
+
+    modifier onlyBridge() {
+        require(
+            bridgeAddress != address(0),
+            "VAPIVerifiedHumanProof: bridge not configured"
+        );
+        require(
+            msg.sender == bridgeAddress,
+            "VAPIVerifiedHumanProof: caller not bridge"
+        );
+        _;
+    }
+
     event VHPMinted(
         uint256 indexed tokenId,
         address indexed to,
@@ -111,5 +145,64 @@ contract VAPIVerifiedHumanProof is Ownable {
 
     function setApprovalForAll(address, bool) external pure {
         revert("VAPIVerifiedHumanProof: soulbound");
+    }
+
+    // --- Phase O4-VPM-INT-B-PREP — Cross-chain bridge prep additions ---
+
+    /**
+     * @notice Set the authorized cross-chain bridge contract address.
+     * @dev Zero address forbidden once set (no un-set path); subsequent
+     *      changes emit BridgeAddressSet so the operator audit trail
+     *      surfaces every authority rotation. ONLY this address may call
+     *      bridgeMint() once configured.
+     */
+    function setBridgeAddress(address newBridge) external onlyOwner {
+        require(newBridge != address(0), "VAPIVerifiedHumanProof: zero bridge");
+        address old = bridgeAddress;
+        bridgeAddress = newBridge;
+        emit BridgeAddressSet(old, newBridge);
+    }
+
+    /**
+     * @notice Bridge-initiated mint for cross-chain VHP arrivals.
+     * @dev Called by the (future) VAPIVerifiedHumanProofBridge contract's
+     *      `_lzReceive` when an inbound LayerZero message decodes to a
+     *      mint request from another chain. Restrictions:
+     *        - onlyBridge modifier (msg.sender == bridgeAddress; bridgeAddress != 0)
+     *        - to != zero address
+     *        - data.expiresAt must be in the future (bridge cannot
+     *          mint already-expired tokens; receiver-side TTL check)
+     *      Emits VHPMinted (compatible with existing minting analytics) +
+     *      VHPBridgeMinted (Phase O4 receiver-side attribution).
+     * @param to            Recipient address on this chain
+     * @param data          Full VHPData payload bridged from source chain
+     * @param remoteNonce   LayerZero message nonce — caller-supplied for
+     *                      receiver-side replay guard inspection
+     * @return tokenId      Newly-minted token's id
+     */
+    function bridgeMint(
+        address to,
+        VHPData calldata data,
+        uint64  remoteNonce
+    ) external onlyBridge returns (uint256) {
+        require(to != address(0), "VAPIVerifiedHumanProof: zero address");
+        require(
+            data.expiresAt > block.timestamp,
+            "VAPIVerifiedHumanProof: already expired"
+        );
+
+        _tokenIdCounter++;
+        uint256 tokenId = _tokenIdCounter;
+
+        vhpData[tokenId] = data;
+        ownerOf[tokenId] = to;
+        tokenOfAddress[to] = tokenId;
+
+        emit VHPMinted(
+            tokenId, to, data.deviceIdHash,
+            data.certificationLevel, data.expiresAt
+        );
+        emit VHPBridgeMinted(tokenId, to, data.deviceIdHash, remoteNonce);
+        return tokenId;
     }
 }
