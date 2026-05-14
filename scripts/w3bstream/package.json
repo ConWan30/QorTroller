@@ -11,7 +11,8 @@
     "vector-gen": "node poseidon_vector_generator.js"
   },
   "devDependencies": {
-    "assemblyscript": "0.28.17"
+    "assemblyscript": "0.28.17",
+    "circomlibjs": "0.1.7"
   },
   "engines": {
     "node": ">=18.0.0"
