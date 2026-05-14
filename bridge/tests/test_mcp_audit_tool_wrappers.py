@@ -37,6 +37,16 @@ def ks():
     return knowledge_server
 
 
+@pytest.fixture(scope="module")
+def us():
+    """Import unified_server + pin PROJECT_ROOT (mirror of ks fixture).
+    The 6 audit wrappers in unified_server.py are functionally equivalent
+    to knowledge_server.py — same source, mirrored for re-export."""
+    import unified_server  # type: ignore
+    unified_server.PROJECT_ROOT = PROJECT_ROOT
+    return unified_server
+
+
 # ---- T-MCP-AUDIT-1: G7 readiness wrapper -----------------------------
 
 def test_t_mcp_audit_1_g7_readiness_wrapper(ks):
@@ -186,3 +196,56 @@ def test_t_mcp_audit_9_wrappers_never_raise(ks):
         except Exception as exc:
             pytest.fail(f"{fn.__name__} raised: {exc}")
         assert isinstance(result, dict)
+
+
+# ---- T-MCP-AUDIT-10: unified_server has the same 6 audit tools --------
+
+def test_t_mcp_audit_10_unified_server_has_six_audit_tools(us):
+    """unified_server.py mirrors the 6 audit wrappers from
+    knowledge_server.py — re-exported so vapi-unified MCP consumers
+    can invoke audits without round-tripping through vapi-knowledge."""
+    expected_names = {
+        "vapi_audit_g7_curator_readiness",
+        "vapi_audit_replay_artifact",
+        "vapi_audit_cfss_lane_drift",
+        "vapi_audit_curator_graduation",
+        "vapi_audit_w3bstream_applet",
+        "vapi_audit_layerzero_vhp",
+    }
+    actual = {n for n in dir(us) if n.startswith("vapi_audit_")}
+    assert actual >= expected_names, (
+        f"unified_server missing audit tools: {expected_names - actual}"
+    )
+
+
+# ---- T-MCP-AUDIT-11: unified_server CFSS wrapper PASSes live ---------
+
+def test_t_mcp_audit_11_unified_cfss_lane_drift_live(us):
+    """Sanity: the same wrappers in unified_server produce the same
+    verdicts as the knowledge_server versions. CFSS against live
+    anchored v2 bundles MUST PASS."""
+    result = asyncio.run(us.vapi_audit_cfss_lane_drift())
+    assert result["audit_id"] == "CFSS"
+    assert result["wallet_free"] is True
+    assert result.get("verdict") == "PASS"
+    assert result.get("expected_rows") == 12
+
+
+# ---- T-MCP-AUDIT-12: both servers' wrappers return equivalent shape --
+
+def test_t_mcp_audit_12_both_servers_equivalent_shape(ks, us):
+    """For each audit, the knowledge_server + unified_server wrappers
+    must return the same audit_id + wallet_free + verdict-shape. Catches
+    silent drift between the two re-exported tool implementations."""
+    pairs = [
+        (ks.vapi_audit_cfss_lane_drift, us.vapi_audit_cfss_lane_drift),
+        (ks.vapi_audit_layerzero_vhp, us.vapi_audit_layerzero_vhp),
+        (ks.vapi_audit_w3bstream_applet, us.vapi_audit_w3bstream_applet),
+    ]
+    for ks_fn, us_fn in pairs:
+        ks_r = asyncio.run(ks_fn())
+        us_r = asyncio.run(us_fn())
+        assert ks_r["audit_id"] == us_r["audit_id"], (
+            f"audit_id mismatch: ks={ks_r['audit_id']} us={us_r['audit_id']}"
+        )
+        assert ks_r["wallet_free"] == us_r["wallet_free"]
