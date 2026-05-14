@@ -1909,6 +1909,329 @@ async def vapi_zkba_post_ceremony_audit(
 
 
 # ============================================================
+# Phase O4 post-backlog-closure — 6 wallet-free audit harness wrappers
+# ============================================================
+#
+# Each tool below wraps one of the 6 audit scripts shipped during the
+# post-O4 v4 §15 backlog closure session arc. Lazy-imports the script
+# module (scripts/ not on the MCP server's default sys.path) + invokes
+# its public entry-point (run_audit / sweep_once / scan / verify_manifest).
+#
+# All 6 tools share the same contract:
+#   - Wallet-free + read-only (no chain RPC unless flagged; no DB writes)
+#   - Never raise — errors land in the return dict's `error` field
+#   - Mirror the script's CLI exit_code as `exit_code` field in the return
+#
+# Sibling audit reference: vapi_zkba_post_ceremony_audit (above) follows
+# the same shape; these 6 round out the audit-MCP surface for the
+# post-O4 backlog closure.
+
+
+def _ensure_scripts_on_path() -> None:
+    """Ensure scripts/ + bridge/ on sys.path for lazy audit-module loads."""
+    _scripts_dir = str(PROJECT_ROOT / "scripts")
+    if _scripts_dir not in sys.path:
+        sys.path.insert(0, _scripts_dir)
+    _bridge_dir = str(PROJECT_ROOT / "bridge")
+    if _bridge_dir not in sys.path:
+        sys.path.insert(0, _bridge_dir)
+
+
+@tool(
+    name="vapi_audit_g7_curator_readiness",
+    description=(
+        "Runs the G7 Curator Review Readiness audit at "
+        "scripts/g7_curator_review_readiness_audit.py. Closes the agent-"
+        "actionable surface of VBDIP-0002 Appendix B §B.8 G7 (7-day window, "
+        "≥9/10 acceptance gate). Wallet-free + read-only sqlite query against "
+        "bridge/vapi_store.db operator_agent_drafts table. Returns 5-section "
+        "report: (1) curator agent_id resolution, (2) 7-day window counts, "
+        "(3) last-N decision breakdown, (4) gate evaluation, (5) ZERO TOLERANCE "
+        "false-positive invariant. Verdicts: PASS / BLOCKED / FAIL / FAIL_"
+        "ZERO_TOLERANCE_VIOLATION / NO_CURATOR_DRAFTS. PASS means Curator is "
+        "ready for O2_SUGGEST → O3_ACT graduation per the operator-runtime "
+        "ceremony at parallel_o3_act_anchor.py."
+    ),
+    schema={"type": "object", "properties": {}, "required": []}
+)
+async def vapi_audit_g7_curator_readiness(**_):
+    _ensure_scripts_on_path()
+    try:
+        import importlib.util
+        _spec = importlib.util.spec_from_file_location(
+            "g7_audit_mcp",
+            PROJECT_ROOT / "scripts" / "g7_curator_review_readiness_audit.py",
+        )
+        _mod = importlib.util.module_from_spec(_spec)
+        sys.modules["g7_audit_mcp"] = _mod
+        _spec.loader.exec_module(_mod)
+    except Exception as exc:
+        return {"audit_id": "G7", "wallet_free": True, "error": f"import: {exc}"}
+    db_path = PROJECT_ROOT / "bridge" / "vapi_store.db"
+    try:
+        report, exit_code = _mod.run_audit(db_path)
+        report["audit_id"] = "G7"
+        report["wallet_free"] = True
+        report["mcp_exit_code"] = exit_code
+        return report
+    except Exception as exc:
+        return {"audit_id": "G7", "wallet_free": True, "error": f"run: {exc}"}
+
+
+@tool(
+    name="vapi_audit_replay_artifact",
+    description=(
+        "Runs the Reproducibility Receipt audit at scripts/replay_artifact.py. "
+        "Extends the FROZEN deterministic compiler invariant (INV-VPM-COMPILER-001, "
+        "INV-ZKBA-003) into a publicly-executable verification surface. Verifies "
+        "any third party with the manifest + on-disk HTML can re-check the "
+        "output_hash claim + structural manifest fields. For VPM artifacts, "
+        "additionally re-runs Layer 2 visual grammar checks. Wallet-free + "
+        "read-only file inspection. Verdicts: PASS / FAIL_OUTPUT_HASH_MISMATCH "
+        "/ FAIL_STRUCTURAL / FAIL_VISUAL_GRAMMAR."
+    ),
+    schema={
+        "type": "object",
+        "properties": {
+            "manifest_path": {
+                "type": "string",
+                "description": (
+                    "Path to a single .manifest.json (absolute or relative "
+                    "to PROJECT_ROOT). Either this OR target_dir required."
+                ),
+            },
+            "target_dir": {
+                "type": "string",
+                "description": (
+                    "Directory under which to recursively verify every "
+                    "*.manifest.json. Either this OR manifest_path required. "
+                    "Default if neither provided: frontend/src/artifacts."
+                ),
+            },
+        },
+        "required": [],
+    }
+)
+async def vapi_audit_replay_artifact(
+    manifest_path: str = "",
+    target_dir: str = "",
+    **_,
+):
+    _ensure_scripts_on_path()
+    try:
+        import importlib.util
+        _spec = importlib.util.spec_from_file_location(
+            "replay_artifact_mcp",
+            PROJECT_ROOT / "scripts" / "replay_artifact.py",
+        )
+        _mod = importlib.util.module_from_spec(_spec)
+        sys.modules["replay_artifact_mcp"] = _mod
+        _spec.loader.exec_module(_mod)
+    except Exception as exc:
+        return {"audit_id": "REPLAY", "wallet_free": True, "error": f"import: {exc}"}
+    try:
+        if manifest_path:
+            p = Path(manifest_path)
+            if not p.is_absolute():
+                p = PROJECT_ROOT / p
+            result = _mod.verify_manifest(p)
+            return {
+                "audit_id":           "REPLAY",
+                "wallet_free":        True,
+                "mode":               "single",
+                "manifest_path":      result.manifest_path,
+                "schema_form":        result.schema_form,
+                "structural_ok":      result.structural_ok,
+                "structural_errors":  list(result.structural_errors),
+                "html_present":       result.html_present,
+                "output_hash_claimed":  result.output_hash_claimed,
+                "output_hash_computed": result.output_hash_computed,
+                "output_hash_match":  result.output_hash_match,
+                "visual_grammar_ok":  result.visual_grammar_ok,
+                "verdict":            result.overall_verdict,
+            }
+        target = Path(target_dir) if target_dir else (
+            PROJECT_ROOT / "frontend" / "src" / "artifacts"
+        )
+        if not target.is_absolute():
+            target = PROJECT_ROOT / target
+        manifests = _mod._find_manifests(target)
+        results = [_mod.verify_manifest(p) for p in manifests]
+        exit_code = _mod._aggregate_exit_code(results)
+        return {
+            "audit_id":         "REPLAY",
+            "wallet_free":      True,
+            "mode":             "directory",
+            "target_dir":       str(target),
+            "manifest_count":   len(results),
+            "pass_count":       sum(1 for r in results if r.overall_verdict == "PASS"),
+            "fail_count":       sum(1 for r in results if r.overall_verdict != "PASS"),
+            "mcp_exit_code":    exit_code,
+            "verdicts":         [
+                {"path": r.manifest_path, "verdict": r.overall_verdict}
+                for r in results
+            ],
+        }
+    except Exception as exc:
+        return {"audit_id": "REPLAY", "wallet_free": True, "error": f"run: {exc}"}
+
+
+@tool(
+    name="vapi_audit_cfss_lane_drift",
+    description=(
+        "Runs the CFSS Cedar-policy lane authority drift sweep at "
+        "scripts/cfss_lane_drift_sweep.py. Closes the data-layer / policy-"
+        "layer enforcement asymmetry for Cedar v2 Cross-Fleet Skill "
+        "Separation (CFSS). Evaluates the 12-row EXPECTED_LANE_MATRIX "
+        "(pinned in scripts/zkba_post_ceremony_audit.py) against the live "
+        "Cedar bundle JSON files. Wallet-free + read-only file inspection. "
+        "Verdicts: PASS / CFSS_VIOLATION / BUNDLE_LOAD_ERROR / CONFIG_ERROR. "
+        "Companion to the bridge runtime cfss_drift_sweeper async task "
+        "(default disabled; opt-in via CFSS_DRIFT_SWEEP_ENABLED env)."
+    ),
+    schema={"type": "object", "properties": {}, "required": []}
+)
+async def vapi_audit_cfss_lane_drift(**_):
+    _ensure_scripts_on_path()
+    try:
+        import importlib.util
+        _spec = importlib.util.spec_from_file_location(
+            "cfss_drift_mcp",
+            PROJECT_ROOT / "scripts" / "cfss_lane_drift_sweep.py",
+        )
+        _mod = importlib.util.module_from_spec(_spec)
+        sys.modules["cfss_drift_mcp"] = _mod
+        _spec.loader.exec_module(_mod)
+    except Exception as exc:
+        return {"audit_id": "CFSS", "wallet_free": True, "error": f"import: {exc}"}
+    bundle_dir = PROJECT_ROOT / "bridge" / "vapi_bridge" / "cedar_bundles"
+    try:
+        report = _mod.sweep_once(bundle_dir)
+        report["audit_id"] = "CFSS"
+        report["wallet_free"] = True
+        return report
+    except Exception as exc:
+        return {"audit_id": "CFSS", "wallet_free": True, "error": f"run: {exc}"}
+
+
+@tool(
+    name="vapi_audit_curator_graduation",
+    description=(
+        "Runs the consolidated Curator O2_SUGGEST → O3_ACT graduation "
+        "readiness audit at scripts/curator_graduation_readiness_audit.py. "
+        "Consolidates 4 sub-audits (G7 acceptance + Operator Initiative "
+        "watcher + CFSS lane authority + on-chain anchor state) into a "
+        "single verdict. Wallet-free + read-only. Verdicts: READY / "
+        "BLOCKED / FAIL / ERROR (priority: ERROR > FAIL > BLOCKED > READY). "
+        "READY means operator may fire parallel_o3_act_anchor.py --confirm."
+    ),
+    schema={"type": "object", "properties": {}, "required": []}
+)
+async def vapi_audit_curator_graduation(**_):
+    _ensure_scripts_on_path()
+    try:
+        import importlib.util
+        _spec = importlib.util.spec_from_file_location(
+            "curator_grad_mcp",
+            PROJECT_ROOT / "scripts" / "curator_graduation_readiness_audit.py",
+        )
+        _mod = importlib.util.module_from_spec(_spec)
+        sys.modules["curator_grad_mcp"] = _mod
+        _spec.loader.exec_module(_mod)
+    except Exception as exc:
+        return {"audit_id": "CURATOR-GRAD", "wallet_free": True, "error": f"import: {exc}"}
+    db_path = PROJECT_ROOT / "bridge" / "vapi_store.db"
+    bundle_dir = PROJECT_ROOT / "bridge" / "vapi_bridge" / "cedar_bundles"
+    try:
+        report, exit_code = _mod.run_audit(db_path, bundle_dir)
+        report["audit_id"] = "CURATOR-GRAD"
+        report["wallet_free"] = True
+        report["mcp_exit_code"] = exit_code
+        return report
+    except Exception as exc:
+        return {"audit_id": "CURATOR-GRAD", "wallet_free": True, "error": f"run: {exc}"}
+
+
+@tool(
+    name="vapi_audit_w3bstream_applet",
+    description=(
+        "Runs the W3bstream applet integration audit at "
+        "scripts/w3bstream_applet_audit.py. Scans applet *.ts files for "
+        "FROZEN ABI selectors + crypto-integration deltas + DEPENDENCY_"
+        "BLOCKERS roster. Wallet-free + read-only. Per-applet verdicts: "
+        "STUB / STUB_DEPS_BLOCKED / SELECTORS_OK / PRODUCTION. Reports "
+        "the full upstream blocker inventory (e.g. @assemblyscript/wasm-"
+        "crypto 404 on npm). validate_poac_record.ts currently STUB_DEPS_"
+        "BLOCKED post Stream A push (3 of 5 deltas closed; P256_VERIFY + "
+        "POSEIDON_HASH dep-blocked per Hard Rule)."
+    ),
+    schema={"type": "object", "properties": {}, "required": []}
+)
+async def vapi_audit_w3bstream_applet(**_):
+    _ensure_scripts_on_path()
+    try:
+        import importlib.util
+        _spec = importlib.util.spec_from_file_location(
+            "w3b_audit_mcp",
+            PROJECT_ROOT / "scripts" / "w3bstream_applet_audit.py",
+        )
+        _mod = importlib.util.module_from_spec(_spec)
+        sys.modules["w3b_audit_mcp"] = _mod
+        _spec.loader.exec_module(_mod)
+    except Exception as exc:
+        return {"audit_id": "W3B", "wallet_free": True, "error": f"import: {exc}"}
+    applet_dir = PROJECT_ROOT / "scripts" / "w3bstream"
+    try:
+        report, exit_code = _mod.run_audit(applet_dir)
+        report["audit_id"] = "W3B"
+        report["wallet_free"] = True
+        report["mcp_exit_code"] = exit_code
+        return report
+    except Exception as exc:
+        return {"audit_id": "W3B", "wallet_free": True, "error": f"run: {exc}"}
+
+
+@tool(
+    name="vapi_audit_layerzero_vhp",
+    description=(
+        "Runs the LayerZero VHP bridge readiness audit at "
+        "scripts/layerzero_vhp_bridge_audit.py. Scans "
+        "VAPIVerifiedHumanProofBridge.sol for 4 stub-pattern indicators "
+        "+ 5 production-pattern indicators. Wallet-free + read-only "
+        "source inspection. Verdicts: STUB / OAPP_WIRED / SRC_NOT_FOUND. "
+        "Currently STUB (4/4 stub + 0/5 production) — full OApp refactor "
+        "deferred on upstream peer-dep conflict (lz-evm-oapp-v2 transitively "
+        "requires ethers v5; hardhat-toolbox requires ethers v6.14). "
+        "Defensive prep (MockLayerZeroEndpoint + bridgeMint gated function "
+        "on VHP.sol) shipped at commit dfdeaf2b."
+    ),
+    schema={"type": "object", "properties": {}, "required": []}
+)
+async def vapi_audit_layerzero_vhp(**_):
+    _ensure_scripts_on_path()
+    try:
+        import importlib.util
+        _spec = importlib.util.spec_from_file_location(
+            "lz_audit_mcp",
+            PROJECT_ROOT / "scripts" / "layerzero_vhp_bridge_audit.py",
+        )
+        _mod = importlib.util.module_from_spec(_spec)
+        sys.modules["lz_audit_mcp"] = _mod
+        _spec.loader.exec_module(_mod)
+    except Exception as exc:
+        return {"audit_id": "LZ-VHP", "wallet_free": True, "error": f"import: {exc}"}
+    src = PROJECT_ROOT / "contracts" / "contracts" / "VAPIVerifiedHumanProofBridge.sol"
+    try:
+        report = _mod.scan(src)
+        report["audit_id"] = "LZ-VHP"
+        report["wallet_free"] = True
+        report["mcp_exit_code"] = report.get("exit_code", 0)
+        return report
+    except Exception as exc:
+        return {"audit_id": "LZ-VHP", "wallet_free": True, "error": f"run: {exc}"}
+
+
+# ============================================================
 # MCP Server Loop
 # ============================================================
 
