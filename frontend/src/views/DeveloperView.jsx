@@ -19,6 +19,8 @@ import { PIPELINE_NODE_CONTAINER, PIPELINE_NODE, DRAWER_SLIDE_LEFT } from '../sh
 import { OperatorAgentsDrawer, OperatorAgentsDrawerHandle } from '../components/OperatorAgentsDrawer'
 import { DraftReviewDrawer, DraftReviewDrawerHandle } from '../components/DraftReviewDrawer'
 import { O3ReadinessDrawer, O3ReadinessDrawerHandle } from '../components/O3ReadinessDrawer'
+import { AuditHarnessesDrawer, AuditHarnessesDrawerHandle } from '../components/AuditHarnessesDrawer'
+import { useCuratorGraduationReadiness } from '../api/bridgeApi'
 
 // ─── Design primitives ───────────────────────────────────────────────────────
 
@@ -326,6 +328,7 @@ export function DeveloperView() {
   const [opAgentsOpen, setOpAgentsOpen] = useState(false)
   const [draftReviewOpen, setDraftReviewOpen] = useState(false)
   const [o3ReadinessOpen, setO3ReadinessOpen] = useState(false)
+  const [auditDrawerOpen, setAuditDrawerOpen] = useState(false)
   const [dims,      setDims]      = useState({ w: window.innerWidth, h: window.innerHeight })
 
   const { data: ch } = useCaptureHealth()
@@ -346,6 +349,13 @@ export function DeveloperView() {
     sinceMinutes: 1440, limit: 1, enabled: o1Active,
   })
   const driftCount24h = driftSummary?.row_count ?? 0
+
+  // Phase O4 post-backlog-closure — Curator graduation readiness drives
+  // the AuditHarnesses drawer handle ★ badge tint. Gated on o1Active so
+  // operators not on the Operator Initiative track incur zero polling
+  // cost. Polls every 60s while o1Active=true.
+  const { data: curatorGradData } = useCuratorGraduationReadiness({ enabled: o1Active })
+  const curatorGradVerdict = curatorGradData?.section_5_consolidated_verdict?.verdict || ''
 
   // Phase O2-DRAFT-REVIEW-FRONTEND — Unreviewed-draft badge counter.
   // Polls only when O1 active. Single-row limit fetch; row_count carries
@@ -659,6 +669,30 @@ export function DeveloperView() {
             open={o3ReadinessOpen}
             onClose={() => setO3ReadinessOpen(false)}
             fleetAligned={fleetAligned}
+          />
+        </>
+      )}
+
+      {/* Phase O4 post-backlog-closure — Audit harnesses drawer (top-right).
+         Surfaces G7 readiness + CFSS lane authority + Curator graduation
+         readiness from the 3 bridge HTTP endpoints shipped at commit
+         0f2d10fa. Drawer position TOP-RIGHT (only remaining uncluttered
+         drawer slot; existing drawers occupy top-CENTER, bottom-LEFT,
+         bottom-RIGHT). Activation-gated like the other drawers — only
+         renders when o1Active=true. Conditional polling: panels poll
+         only while drawer is open + the handle's badge query is gated
+         on o1Active (zero polling cost when no O1 agent is active).
+         curatorGradVerdict drives the ★ badge tint so operator sees
+         from-a-glance whether graduation cleared. */}
+      {o1Active && (
+        <>
+          <AuditHarnessesDrawerHandle
+            onClick={() => setAuditDrawerOpen(v => !v)}
+            readinessVerdict={curatorGradVerdict}
+          />
+          <AuditHarnessesDrawer
+            open={auditDrawerOpen}
+            onClose={() => setAuditDrawerOpen(false)}
           />
         </>
       )}

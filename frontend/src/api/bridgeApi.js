@@ -781,6 +781,51 @@ export function useDriftLog({ agentId = '', driftType = '', sinceMinutes = 1440,
   })
 }
 
+// Phase O4 post-backlog-closure — 3 wallet-free audit harness hooks ----------
+// Bind GET /operator/g7-curator-readiness + /cfss-lane-drift-status +
+// /curator-graduation-readiness from the bridge HTTP endpoints shipped at
+// commit 0f2d10fa. All read-key auth via x-api-key Header (apiGet wraps).
+//
+// noMock:true on all three — audit data is operator-decision-critical;
+// fabricated rows would corrupt operator review of pre-ceremony state.
+// Polling intervals chosen per state-change frequency:
+//   G7        — 60s (operator review activity is operator-paced)
+//   CFSS      — 60s (matches the cfss_drift_sweeper runtime cadence)
+//   Curator-graduation — 60s (consolidates the other two + watcher state)
+
+export function useG7CuratorReadiness({ enabled = true } = {}) {
+  return useQuery({
+    queryKey: ['g7CuratorReadiness'],
+    queryFn: () => get('/operator/g7-curator-readiness', 'g7CuratorReadiness', { noMock: true }),
+    enabled,
+    refetchInterval: 60000,
+    staleTime: 30000,
+    retry: 1,
+  })
+}
+
+export function useCFSSLaneDriftStatus({ enabled = true } = {}) {
+  return useQuery({
+    queryKey: ['cfssLaneDriftStatus'],
+    queryFn: () => get('/operator/cfss-lane-drift-status', 'cfssLaneDriftStatus', { noMock: true }),
+    enabled,
+    refetchInterval: 60000,
+    staleTime: 30000,
+    retry: 1,
+  })
+}
+
+export function useCuratorGraduationReadiness({ enabled = true } = {}) {
+  return useQuery({
+    queryKey: ['curatorGraduationReadiness'],
+    queryFn: () => get('/operator/curator-graduation-readiness', 'curatorGraduationReadiness', { noMock: true }),
+    enabled,
+    refetchInterval: 60000,
+    staleTime: 30000,
+    retry: 1,
+  })
+}
+
 // Phase O2-DRAFT-REVIEW-FRONTEND ------------------------------------------------
 // Operator review surface for accumulated agent drafts. Pairs with the bridge
 // endpoints shipped Phase O2-DRAFT-REVIEW-ENDPOINT (commit a44fa359) and the
