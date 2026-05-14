@@ -8,7 +8,8 @@
     "asbuild:validate-zksep": "asc validate_zk_sepproof.ts --config asconfig.json --target release --outFile dist/validate_zk_sepproof.wasm --textFile dist/validate_zk_sepproof.wat",
     "asbuild:gsr": "asc process_gsr_packet.ts --config asconfig.json --target release --outFile dist/process_gsr_packet.wasm --textFile dist/process_gsr_packet.wat",
     "asbuild": "npm run asbuild:validate-poac && npm run asbuild:validate-zksep && npm run asbuild:gsr",
-    "vector-gen": "node poseidon_vector_generator.js"
+    "vector-gen": "node poseidon_vector_generator.js",
+    "constants-gen": "node poseidon_constants_gen.js"
   },
   "devDependencies": {
     "assemblyscript": "0.28.17",
