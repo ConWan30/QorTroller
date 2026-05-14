@@ -416,7 +416,37 @@ in the PATTERN-017 family alongside GIC + WEC + VAME + CORPUS-SNAPSHOT). Documen
 Five FROZEN-v1 primitives now LIVE: GIC + WEC + VAME + CORPUS-SNAPSHOT + CONSENT.
 
 **Invariant count history**: 15 (Phase 223) → 16 (Phase 224) → 18 (Phase 225 audit) →
-22 (Phase 226) → 26 (Phase 235-ULTRAREVIEW) → **30 (Phase 237-EXTEND with INV-CONSENT-001..004)**.
+22 (Phase 226) → 26 (Phase 235-ULTRAREVIEW) → 30 (Phase 237-EXTEND with INV-CONSENT-001..004) →
+55 (Phase O1 C2/C3/C6/C8 + INV-CEDAR-* + INV-OPERATOR-AGENT-*) → 67 (Phase O3-ZKBA-TRACK1 +
+INV-ZKBA-001..003 + early INV-VPM-WRAPPER-001) → 77 (Phase O4-VPM-INTEGRATION close 2026-05-13;
++10 INV-VPM-* compiler/grammar/sandbox/audit pins) → **83 (Post-O4 streams continuation 2026-05-13/14; +6
+INV-VPM-ANCHOR-* + INV-CFSS-SWEEPER-* + INV-FSCA-CFSS-RULE-001 pinning the VPMAnchorRegistry
+contract + chain.anchor_vpm bridge-side helper + _VPM_ANCHOR_ABI literal + cfss_drift_sweeper
+async entry-point + 60s cadence default + 27th FSCA contradiction rule CFSS_LANE_AUTHORITY_DRIFT)**.
+
+**Phase O4 streams continuation entries (2026-05-13/14):**
+- `INV-VPM-ANCHOR-CONTRACT-001` — `contracts/contracts/VPMAnchorRegistry.sol::function anchorVPM(` —
+  pins the on-chain anchorVPM entry-point. Drift = wire-format break against the bridge's
+  `_VPM_ANCHOR_ABI` literal at `chain.py`.
+- `INV-VPM-ANCHOR-CHAIN-CLIENT-001` — `bridge/vapi_bridge/chain.py::async def anchor_vpm(` —
+  pins the bridge-side async helper shipped at commit `19e6ba0f`.
+- `INV-VPM-ANCHOR-ABI-001` — `bridge/vapi_bridge/chain.py::_VPM_ANCHOR_ABI = [{` — pins the
+  FROZEN 3-arg ABI literal name.
+- `INV-CFSS-SWEEPER-LOOP-001` — `bridge/vapi_bridge/cfss_drift_sweeper.py::async def run_cfss_drift_sweep_loop(` —
+  pins the async entry-point shipped at commit `be53cd3c`.
+- `INV-CFSS-SWEEPER-CADENCE-001` — `bridge/vapi_bridge/cfss_drift_sweeper.py::_CFSS_DRIFT_INTERVAL_DEFAULT_S = 60` —
+  pins the 60s cadence default per `INV-OPERATOR-AGENT-008` cheap+frequent tier.
+- `INV-FSCA-CFSS-RULE-001` — `bridge/vapi_bridge/fleet_signal_coherence_agent.py::"CFSS_LANE_AUTHORITY_DRIFT":` —
+  pins the 27th FSCA contradiction rule existence.
+
+Authoritative source for the full 83-entry roster: `scripts/vapi_invariant_gate.py` (Python
+list `INVARIANTS`) + `.github/INVARIANTS_ALLOWLIST.json` (SHA-256 digest pins per ID). PV-CI
+gate runs on every PR and fails fast on digest drift. Modifying any pinned region requires a
+typed `--confirm-governance` ceremony with phrase "I understand this changes a frozen protocol
+invariant" piped to the gate's `--generate` mode.
+
+This Markdown doc's per-INV detail is intentionally NOT exhaustive — it documents the protocol's
+discipline + history. The Python source is the canonical roster.
 
 ---
 
