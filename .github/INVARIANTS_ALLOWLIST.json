@@ -330,5 +330,17 @@
   "INV-FSCA-CFSS-RULE-001": {
     "digest": "2ebe910429f8193563ac2e99008f4bd03888f1bd51730b4199c12af6136067ed",
     "description": "CFSS_LANE_AUTHORITY_DRIFT 27th contradiction rule pinned in fleet_signal_coherence_agent.py CONTRADICTION_RULES dict \u2014 CRITICAL severity; 4 agents involved (AnchorSentry + Guardian + Curator + CFSSDriftSweeper). Source: cfss_lane_drift_log populated by cfss_drift_sweeper. Closes the data-layer / policy-layer enforcement asymmetry for Cedar v2 CFSS."
+  },
+  "INV-POSEIDON-AS-001": {
+    "digest": "eadbbcb38c6e02a7a9c3120d4cdd88f3909933ce9705244a5ab157483ca433b9",
+    "description": "AS Poseidon(BN254) arity entry points poseidon_t2/t3/t9 exported from poseidon_bn254.ts (Phase O4-W3B-POSEIDON-AS) \u2014 the public surface validate_poac_record.ts wires to: t2=deviceIdHash (circomlib Poseidon(1)), t3=nullifierHash (Poseidon(2)), t9=featureCommitment (Poseidon(8)). min_matches=3 catches any single-arity rename."
+  },
+  "INV-POSEIDON-AS-002": {
+    "digest": "161e330cb02825b6d290271b956ec8ff614e3c86ee1724467300e8b9749ab397",
+    "description": "BN254 scalar field prime byte-literal pinned in poseidon_bn254.ts (Phase O4-W3B-POSEIDON-AS) \u2014 the top 8 big-endian bytes of p = 0x30644e72e131a029.... Any drift in the prime is a modular-reduction correctness break that silently invalidates every Poseidon output the applet produces."
+  },
+  "INV-POSEIDON-AS-003": {
+    "digest": "de0b256e6078b256bd6050091be41496836c2e3df00841133fcb44746b5d5c3c",
+    "description": "Poseidon test-vector corpus SHA-256 pinned in poseidon_test_vectors.sha256 (Phase O4-W3B-POSEIDON-AS) \u2014 the circomlibjs 0.1.7 ground-truth corpus that V.1/V.2 verify the AS implementation against (1000 random + 25 boundary + 50 per-round vectors per arity {t2,t3,t9}). Protects against silent vector-file tampering eroding the single-reference verification basis."
   }
 }
