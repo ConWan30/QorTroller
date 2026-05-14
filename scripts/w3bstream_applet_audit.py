@@ -172,6 +172,68 @@ CRYPTO_INTEGRATION_DELTAS = [
     ),
 ]
 
+# Phase O4-VPM-INT-A.5 (Stream A RED path) — Upstream package availability
+# blockers for the applet-pipeline rewrite. Each tuple:
+#   (package_name, npm_check_status, blocking_for, alternative_path)
+# These are FACT: probed via `npm view <package>` on 2026-05-14.
+# When a future operator probe finds these packages available, the audit's
+# DEPENDENCY_BLOCKERS check upgrades the verdict reasoning automatically.
+DEPENDENCY_BLOCKERS = [
+    (
+        "@assemblyscript/wasm-crypto",
+        "404 Not Found on npm registry (2026-05-14)",
+        ["P256_VERIFY", "POSEIDON_HASH (partial)"],
+        "Vendor a hand-written ECDSA-P256 AS implementation (~200 LOC) "
+        "OR wait for an upstream AS crypto package; do NOT ship pseudo-"
+        "production crypto without runtime verification per VAPI's "
+        "'verifiable claims with visible limits' posture.",
+    ),
+    (
+        "AssemblyScript Poseidon implementation",
+        "No canonical npm package found (poseidon-as / circom-poseidon-as / "
+        "@iden3/poseidon-as all 404 as of 2026-05-14)",
+        ["POSEIDON_HASH"],
+        "Manually transpile circomlib's poseidon-bn254 to AssemblyScript "
+        "(~400 LOC arithmetic; non-trivial but bounded); defer until AS "
+        "crypto dep landscape stabilizes.",
+    ),
+]
+
+
+def check_dependency_blockers() -> dict:
+    """Return the static DEPENDENCY_BLOCKERS roster as a structured dict.
+
+    This is intentionally STATIC — the audit script doesn't probe npm at
+    runtime (would couple audit success to network availability + add a
+    latency tier). The roster is updated by operator at re-audit time
+    when upstream packages become available.
+
+    Updating this roster is wallet-free; ship the change as a follow-up
+    commit with documented re-probe outcome.
+    """
+    return {
+        "as_of_date": "2026-05-14",
+        "blockers": [
+            {
+                "package": pkg,
+                "npm_status": status,
+                "blocks_deltas": list(blocks),
+                "alternative_path": alternative,
+            }
+            for pkg, status, blocks, alternative in DEPENDENCY_BLOCKERS
+        ],
+        "any_blocked": len(DEPENDENCY_BLOCKERS) > 0,
+        "rationale": (
+            "Per VAPI's 'verifiable claims with visible limits' posture: "
+            "the applet-pipeline phase MUST NOT ship pseudo-production "
+            "crypto without runtime verification. While AS crypto deps "
+            "remain unavailable, the applets stay STUB + the deferral is "
+            "explicitly documented. Operator re-probes at each future "
+            "audit cycle; verdict transitions automatically when blockers "
+            "clear."
+        ),
+    }
+
 
 def audit_one_applet(applet_path: Path) -> dict:
     """Scan one applet file. Reports its current state + deltas."""
@@ -209,7 +271,28 @@ def audit_one_applet(applet_path: Path) -> dict:
     ]
 
     if placeholders_found or deltas_for_applet:
-        verdict = "STUB"
+        # Distinguish dep-blocked STUB from generic STUB: if any of this
+        # applet's open deltas matches a DEPENDENCY_BLOCKERS entry, the
+        # verdict surfaces STUB_DEPS_BLOCKED so the operator audit knows
+        # the gap is upstream-blocked, not just untouched.
+        delta_ids = {d[0] for d in deltas_for_applet}
+        all_blocked_delta_ids = {
+            blocked_id
+            for _, _, blocks_list, _ in DEPENDENCY_BLOCKERS
+            for blocked_id in blocks_list
+            if not blocked_id.endswith("(partial)")
+        }
+        if delta_ids and delta_ids.issubset(
+            all_blocked_delta_ids | {"ABI_ENCODER", "CONSENT_RETURN_DATA",
+                                     "DEVICE_ID_TO_GAMER"}
+        ):
+            # Some deltas remain; check if ANY is dep-blocked
+            has_dep_blocked = any(
+                d_id in all_blocked_delta_ids for d_id in delta_ids
+            )
+            verdict = "STUB_DEPS_BLOCKED" if has_dep_blocked else "STUB"
+        else:
+            verdict = "STUB"
     else:
         verdict = "SELECTORS_OK"  # No placeholders + no crypto deltas means
                                   # at minimum selectors are fixed; further
@@ -249,7 +332,14 @@ def run_audit(applet_dir: Path) -> tuple[dict, int]:
 
     per_applet = [audit_one_applet(p) for p in applets]
 
-    any_stub = any(a.get("verdict") == "STUB" for a in per_applet)
+    # Either STUB or STUB_DEPS_BLOCKED count toward non-zero exit. The
+    # distinction is informational — both indicate the applet pipeline
+    # is not production-ready — but STUB_DEPS_BLOCKED tells the operator
+    # the gap is upstream-blocked.
+    any_stub = any(
+        a.get("verdict") in ("STUB", "STUB_DEPS_BLOCKED")
+        for a in per_applet
+    )
     exit_code = 1 if any_stub else 0
 
     return ({
@@ -266,6 +356,7 @@ def run_audit(applet_dir: Path) -> tuple[dict, int]:
             }
             for sig, tgt, consumer, purpose in AUTHORITATIVE_SIGNATURES
         ],
+        "dependency_blockers": check_dependency_blockers(),
         "exit_code": exit_code,
     }, exit_code)
 
