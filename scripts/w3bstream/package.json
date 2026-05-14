@@ -1,0 +1,19 @@
+{
+  "name": "vapi-w3bstream-applets",
+  "version": "1.0.0",
+  "description": "VAPI W3bstream AssemblyScript applets — compiled to WASM via asc. Phase O4-W3B-POSEIDON-AS build pipeline (P.1).",
+  "private": true,
+  "scripts": {
+    "asbuild:validate-poac": "asc validate_poac_record.ts --config asconfig.json --target release --outFile dist/validate_poac_record.wasm --textFile dist/validate_poac_record.wat",
+    "asbuild:validate-zksep": "asc validate_zk_sepproof.ts --config asconfig.json --target release --outFile dist/validate_zk_sepproof.wasm --textFile dist/validate_zk_sepproof.wat",
+    "asbuild:gsr": "asc process_gsr_packet.ts --config asconfig.json --target release --outFile dist/process_gsr_packet.wasm --textFile dist/process_gsr_packet.wat",
+    "asbuild": "npm run asbuild:validate-poac && npm run asbuild:validate-zksep && npm run asbuild:gsr",
+    "vector-gen": "node poseidon_vector_generator.js"
+  },
+  "devDependencies": {
+    "assemblyscript": "0.28.17"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
