@@ -7419,6 +7419,29 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "Gameplay context overridden for ruling_validation_log_id=%d reason='%s'",
             ruling_validation_log_id, reason,
         )
+
+        # Phase O5-MLGA Stage 9: DISPUTE-PACKET-v1 autonomous emission.
+        # An operator-initiated gameplay-context override is effectively
+        # a dispute against the automatic adjudication. Fail-open: any
+        # emission failure logs internally + does NOT affect the
+        # override response. Worker-thread to keep the event loop free.
+        try:
+            from .dispute_packet_emitter import emit_dispute_packet
+            await asyncio.to_thread(
+                emit_dispute_packet,
+                store=store, cfg=cfg,
+                dispute_id=f"dispute-rvl-{ruling_validation_log_id}",
+                ruling_validation_log_id=int(ruling_validation_log_id),
+                adjudicator_agent_id="guardian",
+                evidence_count=1,
+                dispute_status="open",
+                reason=str(reason),
+            )
+        except Exception as _disp_exc:  # noqa: BLE001
+            log.warning(
+                "DISPUTE-PACKET emit hook failed (non-fatal): %s", _disp_exc,
+            )
+
         return {
             "accepted":                True,
             "ruling_validation_log_id": ruling_validation_log_id,
