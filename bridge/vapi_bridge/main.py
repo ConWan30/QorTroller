@@ -1318,6 +1318,37 @@ class Bridge:
                     _gic_beta_exc,
                 )
 
+        # Phase O5-MLGA Stage 6 — HONESTY-BOARD-v1 weekly autonomous
+        # self-report. Third autonomous VPM artifact class. Polls every
+        # hour; emits once per 7 days. Idempotent across bridge restart.
+        self._honesty_board_tracker = None
+        if getattr(self.cfg, "honesty_board_tracker_enabled", False):
+            try:
+                from .honesty_board_tracker import (
+                    HonestyBoardTracker, run_honesty_board_tracker_loop,
+                )
+                self._honesty_board_tracker = HonestyBoardTracker(
+                    store=self.store, cfg=self.cfg,
+                )
+                _hb_task = asyncio.ensure_future(
+                    run_honesty_board_tracker_loop(
+                        tracker=self._honesty_board_tracker,
+                    )
+                )
+                _hb_task.set_name("HonestyBoardTracker")
+                self._tasks.append(_hb_task)
+                log.info(
+                    "Phase O5-MLGA Stage 6: HONESTY-BOARD tracker started "
+                    "(poll=%ds, emit_interval=%ds)",
+                    getattr(self.cfg, "honesty_board_poll_interval_s", 3600),
+                    getattr(self.cfg, "honesty_board_emission_interval_s", 604800),
+                )
+            except Exception as _hb_exc:
+                log.warning(
+                    "Phase O5-MLGA Stage 6: HONESTY-BOARD tracker unavailable: %s",
+                    _hb_exc,
+                )
+
         # Phase O4-VPM-INT follow-up — Continuous CFSS lane authority drift
         # sweeper. Default disabled (opt-in via CFSS_DRIFT_SWEEP_ENABLED=true).
         # Runs at 60s cadence aligned with cedar_drift_sweeper's bundle path
