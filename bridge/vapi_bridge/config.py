@@ -2106,6 +2106,29 @@ class Config:
     MLGA tracker observation: 105 advances in 95s session), so 30s
     catches every 10-link milestone within ~3 minutes of crossing."""
 
+    # --- Phase O5-MLGA Stage 6: HONESTY-BOARD-v1 autonomous weekly emission ---
+    honesty_board_tracker_enabled: bool = field(
+        default_factory=lambda: _env_bool("HONESTY_BOARD_TRACKER_ENABLED", True)
+    )
+    """Phase O5-MLGA Stage 6 — third autonomous VPM artifact class.
+    When True, honesty_board_tracker snapshots protocol-state honesty
+    fields weekly and emits one HONESTY-BOARD-v1 VPM artifact per
+    week. Wallet-free; local-only; idempotent on restart via
+    vpm_artifact_log last-emit seed."""
+
+    honesty_board_poll_interval_s: int = field(
+        default_factory=lambda: int(_env("HONESTY_BOARD_POLL_INTERVAL_S", "3600"))
+    )
+    """Phase O5-MLGA Stage 6 — HONESTY-BOARD tracker poll cadence.
+    1h default. Emission gated by 7-day interval, so most polls are
+    no-ops."""
+
+    honesty_board_emission_interval_s: int = field(
+        default_factory=lambda: int(_env("HONESTY_BOARD_EMISSION_INTERVAL_S", "604800"))
+    )
+    """Phase O5-MLGA Stage 6 — HONESTY-BOARD emission cadence. 7 days
+    default (Sentry weekly self-report cycle per VBDIP-0002A §10)."""
+
     # --- Phase 242-BT Stream 1 — BT-WITNESS v1 capability ---
     bt_witness_enabled: bool = field(
         default_factory=lambda: _env_bool("BT_WITNESS_ENABLED", False)
