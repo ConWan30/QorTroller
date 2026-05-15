@@ -3239,6 +3239,144 @@ async def vapi_audit_layerzero_vhp(**_):
         return {"audit_id": "LZ-VHP", "wallet_free": True, "error": f"run: {exc}"}
 
 
+# ============================================================
+# Phase O5-MYTHOS-MINIMAL M.2 — Mythos variants exposed as MCP tools
+# ============================================================
+# Tools 18 + 19: wrap the deterministic variant functions in
+# bridge/vapi_bridge/mythos_variants.py. Each returns its findings as a
+# dict (variant / count / severity_breakdown / findings list). The MCP
+# layer is pure-call — persistence to mythos_finding_log happens at the
+# cadence-engine layer (M.1), not here. This lets manual MCP invocations
+# return findings without touching the DB.
+
+
+def _ensure_bridge_on_path():
+    """Add <repo_root>/bridge to sys.path so vapi_bridge.* imports resolve."""
+    bridge_path = str(PROJECT_ROOT / "bridge")
+    if bridge_path not in sys.path:
+        sys.path.insert(0, bridge_path)
+
+
+def _findings_to_dict(variant_name: str, findings: list) -> dict:
+    """Serialize MythosFindingResult dataclass instances to a JSON-safe dict
+    + severity-breakdown summary. Each finding is converted via dataclasses
+    so the slotted fields show up as keys."""
+    import dataclasses as _dc
+    severity_counts: dict[str, int] = {}
+    items: list[dict] = []
+    for f in findings:
+        try:
+            d = _dc.asdict(f)
+        except Exception:
+            d = {
+                "variant": getattr(f, "variant", variant_name),
+                "severity": getattr(f, "severity", "MEDIUM"),
+                "description": getattr(f, "description", ""),
+                "coherence_id": getattr(f, "coherence_id", ""),
+                "file_path": getattr(f, "file_path", None),
+                "line_number": getattr(f, "line_number", None),
+                "frozen_region": getattr(f, "frozen_region", False),
+                "fix_authority_tier": getattr(f, "fix_authority_tier", 2),
+            }
+        sev = d.get("severity", "MEDIUM")
+        severity_counts[sev] = severity_counts.get(sev, 0) + 1
+        items.append(d)
+    return {
+        "variant": variant_name,
+        "total_findings": len(items),
+        "severity_breakdown": severity_counts,
+        "findings": items,
+        "timestamp": time.time(),
+    }
+
+
+# ── Tool 18 ── vapi_mythos_frozen_drift ──────────────────────────────────────
+
+@tool(
+    name="vapi_mythos_frozen_drift",
+    description=(
+        "Mythos-Frozen variant (Phase O5-MYTHOS-MINIMAL M.2). Wraps the PV-CI "
+        "invariant gate (scripts/vapi_invariant_gate.check_invariants) and "
+        "surfaces ANY pinned invariant that would FAIL if --report were run "
+        "now — pattern unmatched, source file missing, or digest drift vs "
+        "the committed allowlist. Each finding is severity=HIGH + "
+        "frozen_region=True (forces fix_authority_tier=3 read-only per "
+        "INV-MYTHOS-FROZEN-PROTECTION-001). Healthy state returns "
+        "total_findings=0. Read-only: never writes to mythos_finding_log "
+        "from manual MCP invocation (persistence is the cadence engine's "
+        "responsibility)."
+    ),
+    schema={"type": "object", "properties": {}, "required": []}
+)
+async def vapi_mythos_frozen_drift(**_):
+    _ensure_bridge_on_path()
+    try:
+        from vapi_bridge.mythos_variants import mythos_frozen_drift as _runner
+    except Exception as exc:
+        return {
+            "variant": "frozen",
+            "error": f"import vapi_bridge.mythos_variants failed: {exc}",
+            "total_findings": 0,
+            "findings": [],
+            "timestamp": time.time(),
+        }
+    try:
+        findings = await _runner(repo_root=PROJECT_ROOT)
+    except Exception as exc:
+        return {
+            "variant": "frozen",
+            "error": f"variant raised: {exc}",
+            "total_findings": 0,
+            "findings": [],
+            "timestamp": time.time(),
+        }
+    return _findings_to_dict("frozen", findings)
+
+
+# ── Tool 19 ── vapi_mythos_stability_sweep ──────────────────────────────────
+
+@tool(
+    name="vapi_mythos_stability_sweep",
+    description=(
+        "Mythos-Stability variant (Phase O5-MYTHOS-MINIMAL M.2). Scans "
+        "production .py files in bridge/vapi_bridge/ + scripts/ for two "
+        "async-hazard patterns the prior Mythos audit empirically found "
+        "(commit 48236084): (1) urllib.request.urlopen() called without "
+        "timeout= argument [HIGH — executor-pool starvation risk; "
+        "asyncio.wait_for cannot interrupt the blocking socket]; "
+        "(2) silent `except Exception: pass` WITHOUT a deliberate-fail-open "
+        "comment within 5 surrounding lines [MEDIUM — patterns marked "
+        "# idempotent / # fail-open / # noqa: BLE001 / # intentional are "
+        "skipped per VAPI convention]. Read-only; persistence is the "
+        "cadence engine's responsibility."
+    ),
+    schema={"type": "object", "properties": {}, "required": []}
+)
+async def vapi_mythos_stability_sweep(**_):
+    _ensure_bridge_on_path()
+    try:
+        from vapi_bridge.mythos_variants import mythos_stability_sweep as _runner
+    except Exception as exc:
+        return {
+            "variant": "stability",
+            "error": f"import vapi_bridge.mythos_variants failed: {exc}",
+            "total_findings": 0,
+            "findings": [],
+            "timestamp": time.time(),
+        }
+    try:
+        findings = await _runner(repo_root=PROJECT_ROOT)
+    except Exception as exc:
+        return {
+            "variant": "stability",
+            "error": f"variant raised: {exc}",
+            "total_findings": 0,
+            "findings": [],
+            "timestamp": time.time(),
+        }
+    return _findings_to_dict("stability", findings)
+
+
 async def main():
     # Preload workflow corpus files into mtime cache
     for key in WORKFLOW_FILES:
