@@ -466,5 +466,25 @@
   "INV-VBDIP-0006-004": {
     "digest": "aa46fccaecdd5779327e1e4d9b2260321f877a649a6c73d6676c5de433f621c6",
     "description": "VBDIP-0006 v1.0 Section 8 conformance test suite specification \u2014 100 deterministic test vectors covering random (20) + edge case (20) + hard-cheat (20) + GIC continuity (20) + counter rollover (20). Ensures the certification harness scope cannot silently shrink. Cited by VAPIHardwareCertRegistry cert_level=1 requirement."
+  },
+  "INV-PUBLIC-FORENSIC-001": {
+    "digest": "c4c8c9f52f60e934cfc4b33c9667a2949bea6b821fb39b6050e50daa62bfe76c",
+    "description": "public_forensic_api.py MUST NOT contain any _check_key( or _check_read_key( substring. The public sub-app is by-design unauthenticated; an accidental auth gate on a route declared public would silently change the integrity contract. Static grep CI guard."
+  },
+  "INV-PUBLIC-FORENSIC-002": {
+    "digest": "ff7b78c361c88c42ed75815e387de044e977c7df8adbb5ac0aab57f9bcb7e30a",
+    "description": "public sub-app MUST be mounted at exactly /public in main.py (not /pub, /v1/public, etc.). Pinned literal so router-path drift surfaces immediately."
+  },
+  "INV-CRYPTO-VERIFIER-CATALOG-001": {
+    "digest": "4c1b88c27facc5f8d8e13509dbd79a187ff5d7a3f7040acc9fa1a280a729a20a",
+    "description": "frontend/src/crypto/vapi_verifier.js MUST export exactly 15 verifier functions (14 FROZEN-v1 primitives + Cedar Merkle). Pinned function names ensure the browser-side catalog cannot shrink below the Python algorithm count without an invariant change."
+  },
+  "INV-CRYPTO-VERIFIER-FROZEN-TAGS-001": {
+    "digest": "c49efd696103fe7371e584afebd07499457cfb6b641c20b11443eb746a4b8dd7",
+    "description": "frontend/src/crypto/vapi_verifier.js MUST reference all 13 FROZEN-v1 domain tags (the catalog in public_forensic_api._FROZEN_V1_ALGORITHMS). Cross-file consistency: every domain tag the bridge publishes is replayable in browser."
+  },
+  "INV-PUBLIC-ROUTE-001": {
+    "digest": "813e03832ef657804a0074a99445c0a803c5a6e4c6314699b298a5a32dde7441",
+    "description": "frontend/src/main.jsx MUST wire BrowserRouter with both the public session route (/session/:commitmentHex) and the default operator route (/). Pinned together so neither route can silently disappear in a refactor."
   }
 }

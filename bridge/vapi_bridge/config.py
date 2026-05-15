@@ -2145,6 +2145,16 @@ class Config:
     """Phase O5-MLGA Stage 8 — CDRR-DAG tracker poll cadence. 60s
     matches FSCA poll cycle."""
 
+    # --- Phase O5-PUBLIC-VIEWER: rate-limit for the public sub-app ---
+    public_forensic_rate_limit_per_min: int = field(
+        default_factory=lambda: int(_env("PUBLIC_FORENSIC_RATE_LIMIT_PER_MIN", "60"))
+    )
+    """Phase O5-PUBLIC-VIEWER — sliding-window per-IP rate limit on
+    /public/* endpoints. 60 req/min/IP default. The public sub-app
+    has NO auth; the rate limit is the only abuse defense at the
+    bridge layer. Operators may lower behind a CDN/edge that also
+    rate-limits."""
+
     # --- Phase 242-BT Stream 1 — BT-WITNESS v1 capability ---
     bt_witness_enabled: bool = field(
         default_factory=lambda: _env_bool("BT_WITNESS_ENABLED", False)

@@ -562,6 +562,29 @@ class Bridge:
                 log.warning("Phase 238 Step I-AUTOLOOP-3: ProtocolStateCache attach failed: %s", _psc_exc)
 
             app.mount("/operator", _op_app)
+
+            # Phase O5-PUBLIC-VIEWER — Public Forensic Replay-and-Verify
+            # sub-app mounted at /public. NO auth; rate-limited per IP;
+            # VAME-stamped; CORS open (read-only, no creds). The substrate
+            # the public 'VAPI Etherscan for gameplay' viewer consumes.
+            # Architectural sibling to /operator: separate FastAPI instance,
+            # zero shared route surface, no operator-state mutation paths.
+            try:
+                from .public_forensic_api import create_public_forensic_app
+                _pub_app = create_public_forensic_app(
+                    cfg=self.cfg, store=self.store,
+                )
+                app.mount("/public", _pub_app)
+                log.info(
+                    "Phase O5-PUBLIC-VIEWER: /public sub-app mounted "
+                    "(no auth, %s req/min/IP)",
+                    getattr(self.cfg, "public_forensic_rate_limit_per_min", 60),
+                )
+            except Exception as _pub_exc:  # noqa: BLE001
+                log.warning(
+                    "Phase O5-PUBLIC-VIEWER: /public sub-app unavailable: %s",
+                    _pub_exc,
+                )
             config = uvicorn.Config(
                 app,
                 host=self.cfg.http_host,
