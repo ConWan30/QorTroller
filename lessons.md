@@ -231,3 +231,57 @@ MLGA-LESSON-001 establishes that ambient-capture is a viable supplementation pat
 - Phase 229 AIT corpus: ambient supplementation viable for raw N (still-hold during gameplay pauses + menu screens produces AIT-quality windows); dedicated capture remains the canonical baseline.
 
 The application rule: classify each capture target as "controlled-environment-binding" or "raw-volume-binding" before proposing the campaign structure. Mixed-binding targets (e.g., L4 v2 trigger force-curve where both controlled context AND raw N matter) need both modalities in the campaign.
+
+---
+
+# FIRMWARE-REFERENCE-LESSON-001: Cryptographic Signing At-Source Is the Only Layer 0 Trust Closure Path
+
+**Status:** Active. Authored 2026-05-15. Load-bearing for all future VAPI controller / sensor / input-device design + manufacturer partnership conversations.
+**Cross-reference:** Canonical anchor — `wiki/methodology/VBDIP-0006-vapi-firmware-reference-implementation.md`. Companion lessons — `BT-CALIB-LESSON-001` (transport verification rule), `CROSS-LESSON-001` (same-model separability), `MLGA-LESSON-001` (dual-connection topology).
+
+## Lesson statement
+
+When a protocol depends on the integrity of physical input data (gameplay inputs, biometric readouts, sensor telemetry), the only architectural path that provides cryptographic Layer 0 trust closure is **at-source signing inside the input device's secure element**. Bridge-side reconstruction of attestation records from external data streams (USB-HID, BT-HID, network) is structurally vulnerable to stream-replay + frame-injection + cloud-streamed-input attack classes that physical-presence-of-a-controller does not preclude.
+
+This is not the same as "we sign the records on the bridge" — that's a different trust boundary that places the keypair on a general-purpose host. Layer 0 trust closure requires the private key to live inside tamper-resistant hardware that the input data passes through cryptographically before any external system observes it.
+
+## What happened
+
+The VAPI protocol shipped its first 5 years of layers (L0-L8) operating against bridge-side PoAC reconstruction. The bridge reads HID frames at 1000 Hz via hidapi, constructs 228-byte PoAC records, signs them with the bridge wallet, and persists them. The implicit trust assumption was that the HID stream the laptop sees is faithful to the controller's actual emissions.
+
+That assumption was empirically falsified during the v1.1 BT calibration architecture pass when the threat-anchor for cloud-gaming-bot stealth attacks was concretely documented: WormVision Lite MAX userscript (Greasy Fork 2024-12-26), NVIDIA's own GeForce NOW anti-cheat documentation, Activision RICOCHET Season 02 update pivot, and the 2024 ARES paper confirming that kernel anti-cheats (BattlEye, Easy Anti-Cheat, FACEIT AC, Vanguard, Tencent ACE) collectively cannot reach the radio-layer attestation surface that these attacks live in.
+
+The bridge-side reconstruction model could not close the cloud-gaming-bot stealth attack class. The attack-pattern is: real DualSense Edge sits on the player's desk emitting plausible BT-Classic BR/EDR traffic to a local host while a remote operator drives input upstream via Parsec / WebRTC / cloud-gaming injection. Bridge sees plausible HID + plausible BT — but the inputs the game receives don't match.
+
+The only architectural path that closes this is: the controller's secure element signs each input record before it leaves the controller. Cloud-streamed-replay attackers cannot forge new signed records without controller-internal private key access. Even if they record + replay old signed records, the per-record counter + chain hash + timestamp_ms differentials make replay detectable.
+
+## Why "bridge-side signing" doesn't substitute
+
+A common (but wrong) intuition is: "we can sign records on the bridge, that's also cryptographic." It is cryptographic but it locks a different trust property. Bridge-side signing proves "the bridge produced this record." It does not prove "this record reflects an actual physical input that physically happened on the controller." The bridge is a general-purpose host — if compromised (malware, supply-chain attack, sophisticated rootkit), an attacker can produce arbitrary signed records that don't correspond to any physical input. Bridge-side signing is necessary for some properties (chain integrity, off-device audit trail) but it is NOT sufficient for Layer 0 trust.
+
+The hardware secure element trust boundary is qualitatively different. Compromising a tamper-resistant SE requires physical possession of the SE + state-of-the-art tamper analysis + bench programming. A network-based attacker cannot reach this surface.
+
+## Application rule
+
+Future VAPI architectural proposals that name "Layer 0" or "physical input attestation" or "tamper-evident gameplay capture" MUST distinguish:
+
+1. **Bridge-side reconstruction** (today's VAPI) — adequate for L1-L8 layered evidence aggregation; INADEQUATE alone for Layer 0 closure.
+2. **At-source signing in controller firmware via secure element** — the only architectural path that closes Layer 0 trust.
+
+Any proposal that claims Layer 0 closure WITHOUT specifying secure-element-anchored at-source signing has misunderstood the threat model. The proposal must explicitly cite VBDIP-0006 (or successor) for the at-source signing contract, OR articulate why Layer 0 closure is intentionally out of scope.
+
+## Constraint envelope
+
+FIRMWARE-REFERENCE-LESSON-001 establishes that at-source signing is **the only path** to Layer 0 closure. It does NOT establish:
+
+- That at-source signing closes every attack class (it does not; physical-custody + tamper-attack + firmware-replacement is a distinct attacker tier addressed in v2 hardware)
+- That at-source signing makes bridge-side L1-L8 logic obsolete (it does not; bridge-side aggregation is the ONLY way to combine signals from L0 + L1 + L2 + L3 + L4 + L5 + L6 + L7 + L8 layers)
+- That every input device needs at-source signing for VAPI to be useful (it does not; bridge-side reconstruction is sufficient for advisory L1-L8 features; L0 hard tournament gates require at-source signing only when the gate decision must be tamper-evident across organizational boundaries)
+
+The lesson establishes a structural truth about the trust-boundary topology. It does not mandate that every VAPI deployment adopt VBDIP-0006-conformant hardware. Manufacturer partnerships + tournament adoption + market readiness determine when VBDIP-0006 hardware enters the trust chain.
+
+## Anti-pattern to recognize
+
+The error pattern: assuming that a cryptographic record + a private key signature is sufficient for Layer 0 trust regardless of where the signing happens. This is the most common architectural shortcut — and it is the shortcut that VBDIP-0006 exists to prevent.
+
+When a future architectural proposal says "we sign the records, therefore Layer 0 is closed" — the correct response is: "where is the private key stored, who can access it, and does the data being signed reach the private-key-holder via a path that cannot be tampered with?" If the path passes through a general-purpose host without secure-element pass-through, Layer 0 is not closed. The proposal needs revision.
