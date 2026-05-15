@@ -25,6 +25,7 @@ const VPM_ID_CHIPS = [
   { value: 'GIC-LEDGER-BETA-v1',  label: 'GIC-BETA' },
   { value: 'DISPUTE-PACKET-v1',   label: 'DISPUTE' },
   { value: 'MARKET-LISTING-v1',   label: 'MARKET' },
+  { value: 'MLGA-SESSION-v1',     label: 'MLGA' },
 ]
 
 const VISUAL_STATE_CHIPS = [
