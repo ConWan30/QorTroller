@@ -35,7 +35,21 @@ python scripts/operator_initiative_o3_preflight.py
 ```
 This is the **daily-check surface**. Re-run anytime to see the latest state.
 
-**Step 2.** Clear the cfg-flag gates that you can clear today (gates 5-7). These flips don't fire any tx — they're operator declarations that the underlying infrastructure work has completed:
+**Step 2.** Clear the cfg-flag gates that you can clear today (gates 5-7). These flips don't fire any tx — they're operator declarations that the underlying infrastructure work has completed.
+
+The canonical template file `bridge/.env.o3_expedite.example` (committed alongside this runbook) contains the 4 flag declarations + audit context for each. Recommended workflow:
+```
+# Inspect what's being declared:
+cat bridge/.env.o3_expedite.example
+
+# Append to bridge/.env (gitignored — never committed; safe for secrets):
+cat bridge/.env.o3_expedite.example >> bridge/.env
+
+# Re-run preflight to verify the cfg_flag_gate transitioned to CLEARED:
+python scripts/operator_initiative_o3_preflight.py
+```
+
+Equivalent one-liner if you prefer not to read the example first:
 ```
 # In bridge/.env (or as shell exports for one-shot operator runs):
 OPERATOR_DUAL_KEY_PRESENT=true             # gate 5; all 3 agents
@@ -43,6 +57,14 @@ KMS_HSM_PRODUCTION_READY=true              # gate 6; Sentry + Guardian
 GITHUB_APP_OAUTH_TOKENS_VALID=true         # gate 7; Guardian
 ```
 The actual KMS-HSM + GitHub-App OAuth infrastructure work must complete BEFORE flipping the flags. The flags are declarations, not triggers.
+
+**SECRETS DISCIPLINE NOTE:** `bridge/.env` is gitignored because it contains
+the bridge wallet private key + AWS secret access key + agent client secrets.
+NEVER `git add --force bridge/.env`. The flag declarations live in `bridge/.env`
+on each operator's local workstation; the canonical record in git is the
+`bridge/.env.o3_expedite.example` template. This pattern preserves the
+"wallet 0 IOTX impact" + "no mainnet operations" hard rules even under
+operator-runtime expedite activity.
 
 **Step 3.** Pre-populate the draft-count gate (gate 2). The triple-gate authorized seeding harness writes synthetic-but-FROZEN-format drafts via the Phase O2-DRAFT-GENERATION primitives. This does NOT touch chain state:
 ```
