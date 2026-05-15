@@ -1,0 +1,115 @@
+name: VAPI Mythos PR Gate
+
+# Runs Mythos-Frozen + Mythos-Crypto variants on every PR opened against
+# main, surfacing findings as inline GitHub Actions annotations and
+# blocking merge on CRITICAL / HIGH frozen_region=True findings.
+#
+# Why these 2 of the 7 Mythos variants:
+#   - Mythos-Frozen: PV-CI invariant gate (CRITICAL on drift)
+#   - Mythos-Crypto: PATTERN-017 commitment-family integrity
+#
+# Other variants (stability/opinit/methodology/ceremony/corpus) run on
+# cadence (daily/weekly/pre_ceremony) — they would noise PRs OR are
+# state-dependent in ways that don't apply at PR time. See
+# scripts/run_mythos_pr_gate.py docstring for the full rationale.
+#
+# Wallet-free; no chain RPC; ephemeral GH Actions VM.
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+    paths:
+      # Trigger on changes to anything Mythos-Frozen or Mythos-Crypto cares
+      # about. Conservative scope; expand as Mythos surface area grows.
+      - "bridge/vapi_bridge/**.py"
+      - "scripts/**.py"
+      - "contracts/**.sol"
+      - "contracts/circuits/**.circom"
+      - ".github/INVARIANTS_ALLOWLIST.json"
+      - "scripts/vapi_invariant_gate.py"
+      - "bridge/vapi_bridge/mythos_variants.py"
+      - "scripts/run_mythos_pr_gate.py"
+      - ".github/workflows/vapi-mythos-pr-gate.yml"
+  workflow_dispatch:
+
+jobs:
+  mythos-pr-gate:
+    name: "Mythos PR Gate (Frozen + Crypto)"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write   # for the comment-on-failure step
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run Mythos PR gate
+        id: mythos
+        run: python scripts/run_mythos_pr_gate.py --output github
+
+      - name: Comment on PR (on failure)
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = `## VAPI Mythos PR Gate — Blocking Findings
+
+            Mythos-Frozen and/or Mythos-Crypto surfaced one or more
+            **CRITICAL** or **HIGH** \`frozen_region=True\` findings on
+            this PR. The drift these variants catch falls into two
+            categories:
+
+            **A. PV-CI invariant drift (Mythos-Frozen):**
+
+            One of VAPI's frozen protocol invariants has changed. Treat
+            every allowlist change as a tamper-evident governance event.
+
+            \`\`\`
+            python scripts/vapi_invariant_gate.py --report
+            \`\`\`
+
+            ...will show which invariant(s) broke. Then choose:
+
+            \`\`\`
+            # Legitimate refactor:
+            python scripts/vapi_invariant_gate.py --generate --reason "refactor: <description>"
+
+            # Bug fix:
+            python scripts/vapi_invariant_gate.py --generate --reason "bugfix: <description>"
+
+            # Intentional invariant change (GOVERNANCE):
+            python scripts/vapi_invariant_gate.py --generate --reason "invariant_change: <description>" --confirm-governance
+            \`\`\`
+
+            **B. PATTERN-017 commitment-family drift (Mythos-Crypto):**
+
+            Either a FROZEN commitment-family domain tag is MISSING from
+            production code, OR an UNKNOWN \`b"VAPI-..."\` literal has
+            appeared (potential new commitment family without governance).
+            See the inline annotations on the Files Changed view for the
+            specific tag(s) involved.
+
+            **For Mythos-Crypto findings:** restore the missing primitive
+            from git history OR (if intentionally adding a new family)
+            invoke the governance ceremony AND update
+            \`_PATTERN_017_FROZEN_TAGS\` in \`bridge/vapi_bridge/mythos_variants.py\`
+            in the same PR.
+
+            ---
+
+            Mythos runs 7 variants on cadence (daily / weekly /
+            pre_ceremony) — this PR gate runs only the 2 highest-leverage
+            ones (Frozen + Crypto) to keep PR latency low. The other 5
+            variants run in the background and surface findings via the
+            \`fleet_coherence_log\` table.`;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body
+            });
