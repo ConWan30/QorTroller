@@ -164,7 +164,11 @@ class MLGASessionTracker:
         sess = self._open
 
         try:
-            from vapi_bridge.mlga_capture import (
+            # Relative import — this module IS bridge.vapi_bridge.*; the bare
+            # \`vapi_bridge.X\` form requires bridge/ on sys.path which is not
+            # guaranteed inside the running bridge process (sys.path has the
+            # project root, so the package surfaces as bridge.vapi_bridge.*).
+            from .mlga_capture import (
                 compute_mlga_session_dataproof,
                 MLGA_BT_NOT_OBSERVED, MLGA_BT_OBSERVED,
                 MLGA_BT_HELD_PLACED_IDENTIFIED,
@@ -274,7 +278,11 @@ class MLGASessionTracker:
                 )
 
         except Exception as exc:  # noqa: BLE001 — fail-open
-            log.warning("MLGA session close persist failed: %s", exc)
+            import traceback as _tb
+            log.warning(
+                "MLGA session close persist failed: %s\n%s",
+                exc, _tb.format_exc(),
+            )
 
         self._last_close_ts_ns = now_ns
         self._last_close_reason = reason
