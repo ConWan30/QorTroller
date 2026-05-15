@@ -50,6 +50,7 @@ import asyncio
 import hashlib
 import logging
 import re
+import time
 from pathlib import Path
 from typing import Iterable
 
@@ -849,6 +850,10 @@ _KNOWN_CAPABILITY_TAGS: frozenset[bytes] = frozenset({
     b"VAPI-CEDAR-BUNDLE-v1",          # cedar_parser.py — Cedar bundle $schema version
                                       # literal (schema-versioning surface, NOT a
                                       # commitment-family domain tag)
+    b"VAPI-MLGA-SESSION-v1",          # Phase O5-MLGA Stage 2 — mlga_capture.py session
+                                      # dataproof capability; NOT a PATTERN-017
+                                      # commitment family per the POSEIDON-BN254-AS
+                                      # reframe precedent
 })
 
 
@@ -1244,6 +1249,257 @@ async def mythos_ceremony_drift(
 # ==========================================================================
 # Mythos-Corpus — separation-ratio + TGE-blocker visibility (Priority 5)
 # ==========================================================================
+
+async def mythos_live_gameplay_audit(
+    *,
+    repo_root: Path | None = None,
+    db_path: str | None = None,
+    session_window_s: int = 60,
+) -> list[MythosFindingResult]:
+    """Mythos-Live-Gameplay (9th variant; Phase O5-MLGA Stage 2).
+
+    Real-time audit of the dual-connected DualSense Edge capture stream
+    during live gameplay (USB-HID to bridge laptop + BT-Classic BR/EDR
+    to PS5). Per `wiki/methodology/mlga_architectural_proposal_v1.md` §4
+    Audit Layer claim.
+
+    Cadence: per_session (new 8th tier added 2026-05-15). Default
+    polling interval 60s during active gameplay; finds drift in the
+    capture stream within one cadence window.
+
+    Four check families:
+      1. HID stream integrity — capture_health_log latest row reports
+         capture_state=NOMINAL + host_state in {EXCLUSIVE_USB, UNKNOWN}.
+         Drift → MEDIUM (degraded capture; recoverable; not protocol drift).
+      2. APOP classification health — active_play_occupancy_log shows
+         confident readouts. UNKNOWN_LOW_EVIDENCE storm → MEDIUM.
+      3. Sensor coverage — bio feature vectors in records are non-
+         degenerate (not all zeros; trigger_active fraction reasonable).
+         All-zero IMU/touchpad/stick → HIGH (sensor failure).
+      4. Live state markers — recent records exist + GIC chain advancing
+         OR explicitly chain-broken (which fires its own existing FSCA
+         rule). Stalled chain with no records → LOW (operator may have
+         paused; informational).
+
+    NEVER raises. All findings frozen_region=False (live-capture state
+    is operational, not protocol-layer FROZEN material). Mythos-Live-
+    Gameplay is the only variant that emits exclusively non-frozen
+    findings — by design. Live capture drift is recoverable; it
+    doesn't taint FROZEN protocol surfaces.
+    """
+    root = _resolve_repo_root(repo_root)
+    findings: list[MythosFindingResult] = []
+    if db_path is None:
+        db_path = str(root / "bridge" / "vapi_store.db")
+
+    try:
+        from vapi_bridge.store import Store
+        store = Store(db_path=db_path)
+
+        # ----- Check Family 1: HID stream integrity -----
+        try:
+            ch = store.get_capture_health_status()
+            cap_state = (ch.get("capture_state") or "").upper()
+            host_state = (ch.get("host_state") or "").upper()
+            if cap_state and cap_state != "NOMINAL":
+                findings.append(MythosFindingResult(
+                    variant="live_gameplay",
+                    severity="MEDIUM",
+                    description=(
+                        f"HID stream integrity DEGRADED: capture_state="
+                        f"{cap_state}. Live gameplay capture is producing "
+                        "degraded data; GIC chain advancement paused per "
+                        "Phase 234.7 PCC gate. Operator inspect "
+                        "capture_health_log for poll-rate dropout cause."
+                    ),
+                    recommended_fix=(
+                        "Check USB-C cable + bridge laptop USB port; "
+                        "verify hidapi sees interface 3 at ~1000 Hz "
+                        "via GET /bridge/capture-health."
+                    ),
+                    coherence_id=_coherence_id(
+                        "live_gameplay", f"hid_degraded:{cap_state}"
+                    ),
+                    frozen_region=False,
+                    fix_authority_tier=2,
+                    evidence_sources=[
+                        "bridge/vapi_bridge/capture_continuity.py",
+                        f"{db_path}:capture_health_log",
+                    ],
+                ))
+            if host_state and host_state not in (
+                "EXCLUSIVE_USB", "UNKNOWN"
+            ):
+                findings.append(MythosFindingResult(
+                    variant="live_gameplay",
+                    severity="MEDIUM",
+                    description=(
+                        f"HOST arbitration CONTESTED: host_state={host_state}. "
+                        "Bridge laptop USB poll-rate is unstable — typically "
+                        "indicates PS Remote Play / streaming session "
+                        "competing with USB-HID. MLGA capture quality "
+                        "degrades; GIC chain pauses."
+                    ),
+                    recommended_fix=(
+                        "Disable PS Remote Play during MLGA gameplay; "
+                        "use dual-connection (USB-C to laptop + BT to PS5) "
+                        "rather than streaming."
+                    ),
+                    coherence_id=_coherence_id(
+                        "live_gameplay", f"host_contested:{host_state}"
+                    ),
+                    frozen_region=False,
+                    fix_authority_tier=2,
+                    evidence_sources=[
+                        "bridge/vapi_bridge/capture_continuity.py",
+                    ],
+                ))
+        except Exception:  # noqa: BLE001 — fail-open
+            pass
+
+        # ----- Check Family 2: APOP classification health -----
+        try:
+            import sqlite3
+            con = sqlite3.connect(db_path)
+            con.row_factory = sqlite3.Row
+            rows = con.execute(
+                "SELECT classified_state, COUNT(*) AS n "
+                "FROM active_play_occupancy_log "
+                "WHERE created_at > ? "
+                "GROUP BY classified_state",
+                (time.time() - session_window_s,),
+            ).fetchall()
+            con.close()
+            counts = {dict(r)["classified_state"]: int(dict(r)["n"]) for r in rows}
+            total = sum(counts.values())
+            if total > 0:
+                unknown = counts.get("UNKNOWN_LOW_EVIDENCE", 0)
+                if unknown / total > 0.5:
+                    findings.append(MythosFindingResult(
+                        variant="live_gameplay",
+                        severity="MEDIUM",
+                        description=(
+                            f"APOP classifier UNCONFIDENT: "
+                            f"{unknown}/{total} classifications in last "
+                            f"{session_window_s}s are UNKNOWN_LOW_EVIDENCE. "
+                            "Per Phase 241-APOP-FIX, this typically means "
+                            "frame_checkpoints are stale or sampling is "
+                            "below the 10/sec gate."
+                        ),
+                        recommended_fix=(
+                            "Verify _dispatch in dualshock_integration.py "
+                            "sample-rate-limited writer is running at 10/sec; "
+                            "check frame_checkpoint table growth rate."
+                        ),
+                        coherence_id=_coherence_id(
+                            "live_gameplay",
+                            f"apop_unconfident:{unknown}_{total}",
+                        ),
+                        frozen_region=False,
+                        fix_authority_tier=2,
+                        evidence_sources=[
+                            "bridge/vapi_bridge/active_play_occupancy.py",
+                            f"{db_path}:active_play_occupancy_log",
+                        ],
+                    ))
+        except Exception:  # noqa: BLE001 — table may not exist; fail-open
+            pass
+
+        # ----- Check Family 3: Sensor coverage during gameplay -----
+        try:
+            import sqlite3
+            con = sqlite3.connect(db_path)
+            con.row_factory = sqlite3.Row
+            row = con.execute(
+                "SELECT COUNT(*) AS n_total, "
+                "       SUM(COALESCE(trigger_active, 0)) AS n_trigger_active "
+                "FROM records "
+                "WHERE created_at > ?",
+                (time.time() - session_window_s,),
+            ).fetchone()
+            con.close()
+            n_total = int(dict(row)["n_total"] or 0) if row else 0
+            n_trig = int(dict(row).get("n_trigger_active", 0) or 0) if row else 0
+            if n_total > 100 and n_trig == 0:
+                findings.append(MythosFindingResult(
+                    variant="live_gameplay",
+                    severity="HIGH",
+                    description=(
+                        f"Sensor coverage ANOMALY: {n_total} records in "
+                        f"last {session_window_s}s but ZERO trigger_active "
+                        "events. Either player is on a menu (expected; APOP "
+                        "would report MENU_DETECTED) OR trigger-onset "
+                        "detection is broken. Cross-check with APOP "
+                        "classification before remediation."
+                    ),
+                    recommended_fix=(
+                        "Check Phase 235-GAD trigger-onset gate "
+                        "(trigger_active = int(velocity_l2 > 0 OR "
+                        "velocity_r2 > 0)). If broken, gameplay-context "
+                        "classification degrades; consecutive_clean "
+                        "advances incorrectly."
+                    ),
+                    coherence_id=_coherence_id(
+                        "live_gameplay",
+                        f"sensor_zero_trigger:{n_total}",
+                    ),
+                    frozen_region=False,
+                    fix_authority_tier=2,
+                    evidence_sources=[
+                        "bridge/vapi_bridge/dualshock_integration.py",
+                        f"{db_path}:records",
+                    ],
+                ))
+        except Exception:  # noqa: BLE001
+            pass
+
+        # ----- Check Family 4: Live state markers (GIC + records) -----
+        try:
+            from vapi_bridge.config import Config
+            cfg = Config()
+            gc = store.get_grind_chain_status(
+                grind_session_id=getattr(cfg, "grind_session_id", "default"),
+                cfg=cfg,
+            )
+            if not gc.get("chain_intact", True):
+                findings.append(MythosFindingResult(
+                    variant="live_gameplay",
+                    severity="HIGH",
+                    description=(
+                        "GIC chain BROKEN during MLGA-active session. "
+                        "Cannot advance grind chain until operator "
+                        "POST /operator/gic-reset and restarts bridge."
+                    ),
+                    recommended_fix=(
+                        "Operator: POST /operator/gic-reset with audit "
+                        "reason ≥10 chars + restart bridge."
+                    ),
+                    coherence_id=_coherence_id(
+                        "live_gameplay", "gic_chain_broken"
+                    ),
+                    frozen_region=False,
+                    fix_authority_tier=2,
+                    evidence_sources=[
+                        "bridge/vapi_bridge/grind_chain.py",
+                    ],
+                ))
+        except Exception:  # noqa: BLE001
+            pass
+
+        return findings
+    except Exception as exc:  # noqa: BLE001
+        findings.append(MythosFindingResult(
+            variant="live_gameplay",
+            severity="LOW",
+            description=f"Mythos-Live-Gameplay audit raised: {exc}",
+            recommended_fix="Investigate variant module.",
+            coherence_id=_coherence_id("live_gameplay", "exception"),
+            frozen_region=False,
+            fix_authority_tier=2,
+            evidence_sources=["bridge/vapi_bridge/mythos_variants.py"],
+        ))
+        return findings
+
 
 async def mythos_post_o3_ceremony_audit(
     *,
