@@ -3428,6 +3428,136 @@ async def vapi_mythos_operator_initiative_audit(**_):
     return _findings_to_dict("operator_initiative", findings)
 
 
+# ── Tool 21 ── vapi_mythos_crypto_drift ──────────────────────────────────────
+
+@tool(
+    name="vapi_mythos_crypto_drift",
+    description=(
+        "Mythos-Crypto variant (Priority 5). Audits PATTERN-017 commitment-"
+        "family integrity (the 10 FROZEN family domain tags VAPI-GIC / VAPI-WEC "
+        "/ VAPI-VAME / VAPI-CORPUS-SNAPSHOT / VAPI-CONSENT / VAPI-BIOMETRIC-"
+        "SNAPSHOT / VAPI-LISTING / VAPI-FRR / VAPI-ZKBA-ARTIFACT / VAPI-AGENT-"
+        "COMMIT). Surfaces CRITICAL if any FROZEN tag is missing from production "
+        "code; HIGH if an unknown VAPI- tag appears (potential new family without "
+        "governance ceremony). Also includes optional NPM registry poll for "
+        "@assemblyscript/wasm-crypto — the Phase 244-W3B-REG upstream unblocker. "
+        "Findings frozen_region=True → tier=3 read-only."
+    ),
+    schema={"type": "object", "properties": {
+        "poll_npm_registry": {"type": "boolean",
+            "description": "If true, poll npm registry for @assemblyscript/wasm-crypto"}
+    }, "required": []}
+)
+async def vapi_mythos_crypto_drift(**kwargs):
+    _ensure_bridge_on_path()
+    try:
+        from vapi_bridge.mythos_variants import mythos_crypto_drift as _runner
+    except Exception as exc:
+        return {"variant": "crypto", "error": f"import failed: {exc}",
+                "total_findings": 0, "findings": [], "timestamp": time.time()}
+    try:
+        findings = await _runner(
+            repo_root=PROJECT_ROOT,
+            poll_npm_registry=bool(kwargs.get("poll_npm_registry", False)),
+        )
+    except Exception as exc:
+        return {"variant": "crypto", "error": f"variant raised: {exc}",
+                "total_findings": 0, "findings": [], "timestamp": time.time()}
+    return _findings_to_dict("crypto", findings)
+
+
+# ── Tool 22 ── vapi_mythos_methodology_drift ─────────────────────────────────
+
+@tool(
+    name="vapi_mythos_methodology_drift",
+    description=(
+        "Mythos-Methodology variant (Priority 5). Verifies the methodology "
+        "trust chain that all protocol-layer surfaces inherit from: "
+        "VBDIP-0001 (VAD framework FROZEN), METHODOLOGY_LAYER_INTEGRATION_MAP, "
+        "BT/sensor-stack v1.1 architectural revisions, canonical-anchor PDFs, "
+        "and the Architect Ed25519 attestation. HIGH-severity findings on "
+        "VBDIP / architect-key files; MEDIUM elsewhere. All frozen_region=True."
+    ),
+    schema={"type": "object", "properties": {}, "required": []}
+)
+async def vapi_mythos_methodology_drift(**_):
+    _ensure_bridge_on_path()
+    try:
+        from vapi_bridge.mythos_variants import mythos_methodology_drift as _runner
+    except Exception as exc:
+        return {"variant": "methodology", "error": f"import failed: {exc}",
+                "total_findings": 0, "findings": [], "timestamp": time.time()}
+    try:
+        findings = await _runner(repo_root=PROJECT_ROOT)
+    except Exception as exc:
+        return {"variant": "methodology", "error": f"variant raised: {exc}",
+                "total_findings": 0, "findings": [], "timestamp": time.time()}
+    return _findings_to_dict("methodology", findings)
+
+
+# ── Tool 23 ── vapi_mythos_ceremony_drift ────────────────────────────────────
+
+@tool(
+    name="vapi_mythos_ceremony_drift",
+    description=(
+        "Mythos-Ceremony variant (Priority 5). Pre/post ceremony invariant "
+        "checks: (1) CHAIN_SUBMISSION_PAUSED=true in bridge/.env (kill-switch "
+        "armed; CRITICAL when False unexpectedly); (2) parallel anchor scripts "
+        "exist; (3) PV-CI invariant allowlist parseable. Runs before any "
+        "operator-authorized ceremony to surface ready-to-fire conditions."
+    ),
+    schema={"type": "object", "properties": {}, "required": []}
+)
+async def vapi_mythos_ceremony_drift(**_):
+    _ensure_bridge_on_path()
+    try:
+        from vapi_bridge.mythos_variants import mythos_ceremony_drift as _runner
+    except Exception as exc:
+        return {"variant": "ceremony", "error": f"import failed: {exc}",
+                "total_findings": 0, "findings": [], "timestamp": time.time()}
+    try:
+        findings = await _runner(repo_root=PROJECT_ROOT)
+    except Exception as exc:
+        return {"variant": "ceremony", "error": f"variant raised: {exc}",
+                "total_findings": 0, "findings": [], "timestamp": time.time()}
+    return _findings_to_dict("ceremony", findings)
+
+
+# ── Tool 24 ── vapi_mythos_corpus_drift ──────────────────────────────────────
+
+@tool(
+    name="vapi_mythos_corpus_drift",
+    description=(
+        "Mythos-Corpus variant (Priority 5). Queries the bridge SQLite store "
+        "for separation_ratio / GIC chain / AIT defensibility state and "
+        "surfaces TGE-blocker conditions per the Hard Rule 'no TGE before "
+        "separation_ratio > 1.0'. Most findings are LOW informational — they "
+        "surface current state without claiming drift. MEDIUM findings on "
+        "active TGE blockers per probe type."
+    ),
+    schema={"type": "object", "properties": {
+        "db_path": {"type": "string",
+            "description": "Override bridge SQLite path (default: bridge/vapi_store.db)"}
+    }, "required": []}
+)
+async def vapi_mythos_corpus_drift(**kwargs):
+    _ensure_bridge_on_path()
+    try:
+        from vapi_bridge.mythos_variants import mythos_corpus_drift as _runner
+    except Exception as exc:
+        return {"variant": "corpus", "error": f"import failed: {exc}",
+                "total_findings": 0, "findings": [], "timestamp": time.time()}
+    try:
+        findings = await _runner(
+            repo_root=PROJECT_ROOT,
+            db_path=kwargs.get("db_path"),
+        )
+    except Exception as exc:
+        return {"variant": "corpus", "error": f"variant raised: {exc}",
+                "total_findings": 0, "findings": [], "timestamp": time.time()}
+    return _findings_to_dict("corpus", findings)
+
+
 async def main():
     # Preload workflow corpus files into mtime cache
     for key in WORKFLOW_FILES:
