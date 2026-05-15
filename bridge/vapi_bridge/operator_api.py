@@ -7282,6 +7282,76 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "timestamp":                     _t2347.time(),
         }
 
+    # Phase O5-MLGA Stage 3 — GET /agent/mlga-live-session-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/mlga-live-session-status")
+    async def get_mlga_live_session_status(
+        x_api_key: str = Header(default=""),
+    ):
+        """Current MLGA session tracker state. Reports whether a session
+        is open, running totals (poac records / R2 / L2 / GIC advances /
+        APOP state distribution), session duration, total sessions
+        persisted lifetime. Operator dashboard surface.
+
+        Returns:
+          enabled: bool
+          has_open_session: bool
+          session_id: str (if open)
+          session_open_ts_ns / session_duration_s (if open)
+          n_poac_records / n_trigger_pulls_r2 / n_trigger_pulls_l2
+          gic_advances_in_session
+          apop_state_counts: dict
+          bt_observability: int (0/1/2)
+          sessions_persisted_total: int
+          last_close_ts_ns / last_close_reason
+          timestamp: float
+
+        Returns empty/disabled shape if cfg.mlga_session_tracker_enabled=False
+        or tracker not yet wired (bridge starting up).
+        """
+        _check_read_key(x_api_key)
+        import time as _t_mlga
+        _tracker = getattr(app, "_mlga_tracker", None)
+        if _tracker is None:
+            return {
+                "enabled":              bool(
+                    getattr(cfg, "mlga_session_tracker_enabled", False)
+                ),
+                "has_open_session":     False,
+                "tracker_wired":        False,
+                "sessions_persisted_total": 0,
+                "timestamp":            _t_mlga.time(),
+            }
+        try:
+            status = _tracker.live_status()
+        except Exception as exc:  # noqa: BLE001
+            return {
+                "enabled":              True,
+                "has_open_session":     False,
+                "tracker_wired":        True,
+                "error":                f"{type(exc).__name__}: {exc}",
+                "timestamp":            _t_mlga.time(),
+            }
+        # MLGASessionLiveStatus is a slotted dataclass — serialize to dict
+        return {
+            "enabled":                  status.enabled,
+            "has_open_session":         status.has_open_session,
+            "tracker_wired":            True,
+            "session_id":               status.session_id,
+            "session_open_ts_ns":       status.session_open_ts_ns,
+            "session_duration_s":       status.session_duration_s,
+            "n_poac_records":           status.n_poac_records,
+            "n_trigger_pulls_r2":       status.n_trigger_pulls_r2,
+            "n_trigger_pulls_l2":       status.n_trigger_pulls_l2,
+            "gic_advances_in_session":  status.gic_advances_in_session,
+            "apop_state_counts":        dict(status.apop_state_counts),
+            "bt_observability":         status.bt_observability,
+            "sessions_persisted_total": status.sessions_persisted_total,
+            "last_close_ts_ns":         status.last_close_ts_ns,
+            "last_close_reason":        status.last_close_reason,
+            "timestamp":                _t_mlga.time(),
+        }
+
     # Phase 241-APOP — GET /agent/active-play-occupancy-status
     # ------------------------------------------------------------------
     @app.get("/agent/active-play-occupancy-status")

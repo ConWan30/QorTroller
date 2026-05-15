@@ -2062,6 +2062,30 @@ class Config:
     """Phase O5-MYTHOS-MINIMAL M.1 — Mythos cadence engine heartbeat
     interval. 86400s (24h) default — daily cadence per the M.1 plan."""
 
+    # --- Phase O5-MLGA Stage 3: runtime session tracker ---
+    mlga_session_tracker_enabled: bool = field(
+        default_factory=lambda: _env_bool("MLGA_SESSION_TRACKER_ENABLED", False)
+    )
+    """Phase O5-MLGA Stage 3 — operationalizes the MLGA capability. When
+    True, mlga_session_tracker polls capture_health_log + records + APOP
+    + ruling_validation_log every mlga_session_tracker_interval_s seconds
+    during active gameplay; opens sessions on controller-connect; closes
+    on disconnect / max_duration; computes + persists session dataproof
+    to mlga_session_log. Default False = opt-in observability."""
+
+    mlga_session_tracker_interval_s: int = field(
+        default_factory=lambda: int(_env("MLGA_SESSION_TRACKER_INTERVAL_S", "30"))
+    )
+    """Phase O5-MLGA Stage 3 — tracker poll cadence. 30s default — fast
+    enough to catch session transitions; slow enough to be background."""
+
+    mlga_session_max_duration_s: int = field(
+        default_factory=lambda: int(_env("MLGA_SESSION_MAX_DURATION_S", "3600"))
+    )
+    """Phase O5-MLGA Stage 3 — session duration cap. 3600s (1h) default.
+    Auto-closes long sessions to prevent runaway accumulator state; a fresh
+    session opens immediately on the next poll if controller still NOMINAL."""
+
     # --- Phase 242-BT Stream 1 — BT-WITNESS v1 capability ---
     bt_witness_enabled: bool = field(
         default_factory=lambda: _env_bool("BT_WITNESS_ENABLED", False)

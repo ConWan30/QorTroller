@@ -430,5 +430,13 @@
   "INV-MLGA-UNBLOCK-MAPPING-001": {
     "digest": "b494c75ec399408fcb192ede18d0d8de74b71b38cac5014643be7ad6f75e290a",
     "description": "Phase O5-MLGA: unblock-harness export script maps to the 3 currently-blocked phases (243-SS2-Stage-A / 242-BT-Stage-2 / 229-AIT-Corpus). Pin the 3 phase keys + the consumer references so future PRs cannot silently drop a target phase. Per MLGA architectural proposal \u00a73."
+  },
+  "INV-MLGA-TRACKER-ENTRY-001": {
+    "digest": "7e7d61aa50803001259f741b1c654927441bcdad195cffbae6cfdd6d740db5a0",
+    "description": "Phase O5-MLGA Stage 3 \u2014 MLGASessionTracker class + run_mlga_session_tracker_loop async entry-point pinned in bridge/vapi_bridge/mlga_session_tracker.py. The tracker is the runtime wiring that operationalizes the MLGA capability (Stage 2 commit cee77070). Without these entry points, MLGA is paper \u2014 Stage 3 is the operational unblock. Renaming or removing requires governance ceremony."
+  },
+  "INV-MLGA-TRACKER-LIFECYCLE-001": {
+    "digest": "04cb6f44e101b6a0a7755f0bcc50598c6feff30f75aa2d1e9b6e1a73e5cf75f8",
+    "description": "Phase O5-MLGA Stage 3 \u2014 session lifecycle methods pinned: open_session + close_session + poll_once. These are the 3 public methods that compose the polling-based session lifecycle (open on capture_state=NOMINAL; close on DISCONNECTED or max_duration; poll_once accumulates from records/APOP/GIC tables between events). Changing the method shape changes how MLGA sessions are bounded \u2014 drift here invalidates the dataproof semantics."
   }
 }
