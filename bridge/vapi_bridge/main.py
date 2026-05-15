@@ -1282,6 +1282,42 @@ class Bridge:
                     _mlga_exc,
                 )
 
+        # Phase O5-MLGA Stage 5 — GIC-LEDGER-BETA-v1 autonomous emission.
+        # Second autonomous VPM artifact class after MLGA-SESSION-v1.
+        # Polls grind_chain_status every gic_ledger_beta_interval_s; emits
+        # one VPM artifact each time the chain crosses a 10-link
+        # milestone (10, 20, ..., 100, 110, ...). Idempotent on restart
+        # via vpm_artifact_log seed scan. Default enabled (wallet-free,
+        # local-only). Set GIC_LEDGER_BETA_TRACKER_ENABLED=false to
+        # disable. Fail-open: poll exceptions caught internally.
+        self._gic_beta_tracker = None
+        if getattr(self.cfg, "gic_ledger_beta_tracker_enabled", False):
+            try:
+                from .gic_ledger_beta_tracker import (
+                    GicLedgerBetaTracker, run_gic_ledger_beta_tracker_loop,
+                )
+                self._gic_beta_tracker = GicLedgerBetaTracker(
+                    store=self.store, cfg=self.cfg,
+                )
+                _gic_beta_task = asyncio.ensure_future(
+                    run_gic_ledger_beta_tracker_loop(
+                        tracker=self._gic_beta_tracker,
+                    )
+                )
+                _gic_beta_task.set_name("GicLedgerBetaTracker")
+                self._tasks.append(_gic_beta_task)
+                log.info(
+                    "Phase O5-MLGA Stage 5: GIC-BETA tracker started "
+                    "(interval=%ds, seeded_at=%d)",
+                    getattr(self.cfg, "gic_ledger_beta_interval_s", 30),
+                    self._gic_beta_tracker._state.last_emitted_length,
+                )
+            except Exception as _gic_beta_exc:
+                log.warning(
+                    "Phase O5-MLGA Stage 5: GIC-BETA tracker unavailable: %s",
+                    _gic_beta_exc,
+                )
+
         # Phase O4-VPM-INT follow-up — Continuous CFSS lane authority drift
         # sweeper. Default disabled (opt-in via CFSS_DRIFT_SWEEP_ENABLED=true).
         # Runs at 60s cadence aligned with cedar_drift_sweeper's bundle path
