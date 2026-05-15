@@ -68,10 +68,22 @@ if _BRIDGE_DIR not in sys.path:
 if _HERE not in sys.path:
     sys.path.insert(0, _HERE)
 
-from vapi_bridge.zkba_artifact import (  # noqa: E402
-    ZKBAClass,
-    ProofWeightClass,
-)
+try:
+    from vapi_bridge.zkba_artifact import (  # noqa: E402
+        ZKBAClass,
+        ProofWeightClass,
+    )
+except ImportError:
+    # When invoked from within the running bridge process
+    # (python -m bridge.vapi_bridge.main), the project root is on
+    # sys.path so the package surfaces as bridge.vapi_bridge.* instead
+    # of bare vapi_bridge.*. Both code paths reach the same module
+    # object; the dual-import is a sys.path-layout adapter, not a
+    # second source of truth.
+    from bridge.vapi_bridge.zkba_artifact import (  # noqa: E402
+        ZKBAClass,
+        ProofWeightClass,
+    )
 from vsd_ui_compiler import (  # noqa: E402
     compile_vpm_artifact,
 )
