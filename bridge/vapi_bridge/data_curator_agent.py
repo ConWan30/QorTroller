@@ -114,7 +114,24 @@ class DataCuratorAgent:
     # -----------------------------------------------------------------------
 
     async def _run_curation_cycle(self) -> None:
-        """Full curation cycle: classify → lineage → eligibility → oracle publish."""
+        """Full curation cycle: classify → lineage → eligibility → oracle publish.
+
+        Phase 235.x-STABILITY-3 (WIF-066+): when CHAIN_SUBMISSION_PAUSED is held,
+        every oracle update tx short-circuits at chain._send_tx. But the per-
+        device iteration still constructs N=devices×3 method invocations + gate
+        checks, each consuming event-loop time and starving HTTP/MLGA tasks
+        (observed: 26,862-device pass blocking /operator/* endpoints for >180s).
+        Skip the iteration entirely while the kill-switch is held — no chain
+        side-effect is even attempted when paused, so skipping is semantically
+        identical to running.
+        """
+        if getattr(self._cfg, "chain_submission_paused", False):
+            log.info(
+                "DataCuratorAgent: cycle skipped — "
+                "chain_submission_paused=true (kill-switch held); "
+                "no oracle work attempted (would all short-circuit)"
+            )
+            return
         devices = self._store.list_known_devices()
         if not devices:
             return
