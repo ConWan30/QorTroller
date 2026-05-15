@@ -271,9 +271,21 @@ export function VpmRegistryView() {
                     /operator/operator/vpm-artifact/{commit}.
                     NOTE: in operator-console-internal deployment the
                     iframe inherits the parent origin so the FROZEN
-                    sandbox flags allow-scripts+allow-same-origin work. */}
+                    sandbox flags allow-scripts+allow-same-origin work.
+                    The read-key MUST be passed in the URL because an
+                    iframe with src= cannot set custom headers
+                    (bridge's _check_read_key requires x-api-key OR
+                    query api_key). The earlier null-readKey form
+                    surfaced as 403 'Invalid x-api-key header' in the
+                    iframe body. Read-key in URL is acceptable here
+                    because (a) operator console is internal-only
+                    deployment, (b) the same key already appears in
+                    every apiGet wrapper's query string. */}
                 <VpmIframe
-                  artifactUrl={vpmArtifactUrl(selectedCommit, null)}
+                  artifactUrl={vpmArtifactUrl(
+                    selectedCommit,
+                    import.meta.env.VITE_VAPI_API_KEY,
+                  )}
                   onIframeReady={(el) => { iframeRef.current = el }}
                   title={`VPM Artifact ${selectedCommit.slice(0, 12)}`}
                 />
