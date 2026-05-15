@@ -2039,6 +2039,37 @@ class Config:
     """Phase O5-MYTHOS-MINIMAL M.1 — Mythos cadence engine heartbeat
     interval. 86400s (24h) default — daily cadence per the M.1 plan."""
 
+    # --- Phase 242-BT Stream 1 — BT-WITNESS v1 capability ---
+    bt_witness_enabled: bool = field(
+        default_factory=lambda: _env_bool("BT_WITNESS_ENABLED", False)
+    )
+    """Phase 242-BT Stream 1 — Enable the LAN-tower BlueZ BT-WITNESS
+    background task. When False (default), no witness service runs and
+    no commitments are produced. When True, Stream 2 will wire the
+    BlueZ subprocess + HCI Read_RSSI capture loop (NOT YET SHIPPED).
+    Default False = opt-in observability per the canonical anchor's
+    6-month timeline: Stage-2 measurement campaign (weeks 7-14) +
+    Stage-3 adversarial validation (weeks 15-24) must complete before
+    first calibration capture.  See wiki/methodology/
+    bt_calibration_v1_1_architectural_revision.md."""
+
+    bt_witness_dongle_path: str = field(
+        default_factory=lambda: _env("BT_WITNESS_DONGLE_PATH", "")
+    )
+    """Phase 242-BT Stream 1 — BlueZ USB BT dongle HCI device path
+    (Stream 2 reads this; Stream 1 stores it as documentation).
+    Empty default — operator sets when witness rig is provisioned.
+    Typical Linux path: '/dev/hci0' or 'hci0' (BlueZ identifier)."""
+
+    bt_witness_interval_s: int = field(
+        default_factory=lambda: int(_env("BT_WITNESS_INTERVAL_S", "60"))
+    )
+    """Phase 242-BT Stream 1 — Commitment write cadence for the
+    Stream 2 witness service. 60s default — matches cedar_drift_sweep
+    cheap+frequent cadence tier (file-only / HCI-socket evaluation;
+    no chain RPC). Operator sets via env var BT_WITNESS_INTERVAL_S
+    when Stream 2 is wired."""
+
     # --- Phase O4-VPM-INT follow-up: Continuous CFSS lane drift sweep ---
     cfss_drift_sweep_enabled: bool = field(
         default_factory=lambda: _env_bool("CFSS_DRIFT_SWEEP_ENABLED", False)
