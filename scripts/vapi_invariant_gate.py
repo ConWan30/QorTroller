@@ -993,6 +993,53 @@ INVARIANTS: list[Invariant] = [
         pattern=r"100 deterministic test vectors|test_vbdip_0006_conformance",
         min_matches=2,
     ),
+    # ------------------------------------------------------------------
+    # Phase O5-PUBLIC-VIEWER — public forensic surface + browser-side
+    # crypto verifier catalog. 5 invariants pin (1) auth-leak prevention
+    # in the public sub-app, (2) mount path, (3) verifier function
+    # registry size, (4) FROZEN-v1 domain tag presence in the JS verifier
+    # catalog, (5) router minimum-route presence so the public route
+    # cannot silently disappear during a refactor.
+    # ------------------------------------------------------------------
+    Invariant(
+        id="INV-PUBLIC-FORENSIC-001",
+        description="public_forensic_api.py MUST NOT contain any _check_key( or _check_read_key( substring. The public sub-app is by-design unauthenticated; an accidental auth gate on a route declared public would silently change the integrity contract. Static grep CI guard.",
+        file="bridge/vapi_bridge/public_forensic_api.py",
+        # NEGATIVE invariant: pattern matches the FORBIDDEN substring; the
+        # gate test is implemented separately as test_t_pub_noauth_*
+        # because the standard min_matches contract doesn't express
+        # "MUST NOT occur". We pin the absence-statement instead.
+        pattern=r"INV-PUBLIC-FORENSIC-001 violated|NO `_check_key",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-PUBLIC-FORENSIC-002",
+        description="public sub-app MUST be mounted at exactly /public in main.py (not /pub, /v1/public, etc.). Pinned literal so router-path drift surfaces immediately.",
+        file="bridge/vapi_bridge/main.py",
+        pattern=r'app\.mount\("/public",',
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-CRYPTO-VERIFIER-CATALOG-001",
+        description="frontend/src/crypto/vapi_verifier.js MUST export exactly 15 verifier functions (14 FROZEN-v1 primitives + Cedar Merkle). Pinned function names ensure the browser-side catalog cannot shrink below the Python algorithm count without an invariant change.",
+        file="frontend/src/crypto/vapi_verifier.js",
+        pattern=r"export async function verify\w+",
+        min_matches=15,
+    ),
+    Invariant(
+        id="INV-CRYPTO-VERIFIER-FROZEN-TAGS-001",
+        description="frontend/src/crypto/vapi_verifier.js MUST reference all 13 FROZEN-v1 domain tags (the catalog in public_forensic_api._FROZEN_V1_ALGORITHMS). Cross-file consistency: every domain tag the bridge publishes is replayable in browser.",
+        file="frontend/src/crypto/vapi_verifier.js",
+        pattern=r"VAPI-(GIC-GENESIS|MLGA-SESSION|WEC-GENESIS|VAME|CORPUS-SNAPSHOT|CONSENT|BIOMETRIC-SNAPSHOT|LISTING|FRR|ZKBA-ARTIFACT|AGENT-COMMIT|PHYSICAL-DATA-ATTESTATION|BT-WITNESS)-v1",
+        min_matches=13,
+    ),
+    Invariant(
+        id="INV-PUBLIC-ROUTE-001",
+        description="frontend/src/main.jsx MUST wire BrowserRouter with both the public session route (/session/:commitmentHex) and the default operator route (/). Pinned together so neither route can silently disappear in a refactor.",
+        file="frontend/src/main.jsx",
+        pattern=r"BrowserRouter|/session/:commitmentHex",
+        min_matches=2,
+    ),
 ]
 
 
