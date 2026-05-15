@@ -735,6 +735,33 @@ INVARIANTS: list[Invariant] = [
         pattern=r"9bfe035c83919af6047a196523c2396e85dd76fe5c4412102031131aeec99980",
         min_matches=1,
     ),
+    # Phase O5-MYTHOS-MINIMAL M.3 — pin the Minimal-Mythos infrastructure.
+    # Mythos variants find drift; PV-CI must protect Mythos itself from
+    # drift. Three invariants form the trust ratchet: (1) the cadence
+    # schedule dict, (2) the variant entry points, (3) the FROZEN-region
+    # protection contract that prevents Mythos from ever auto-fixing
+    # FROZEN material.
+    Invariant(
+        id="INV-MYTHOS-CADENCE-001",
+        description="MYTHOS_CADENCE_SCHEDULE dict pinned in mythos_cadence_engine.py (Phase O5-MYTHOS-MINIMAL M.3). Defines which variants run at which cadence tier — daily / per_pr / per_phase_close / pre_ceremony / post_incident. Drift here changes the audit cadence silently.",
+        file="bridge/vapi_bridge/mythos_cadence_engine.py",
+        pattern=r"MYTHOS_CADENCE_SCHEDULE:\s*dict\[str,\s*list\[str\]\]\s*=\s*\{",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-MYTHOS-VARIANTS-001",
+        description="Mythos variant entry points pinned in mythos_variants.py (Phase O5-MYTHOS-MINIMAL M.3). The 2 async variant functions mythos_frozen_drift + mythos_stability_sweep are the public surface the cadence engine and MCP tools invoke. min_matches=2 catches any single-variant rename or removal.",
+        file="bridge/vapi_bridge/mythos_variants.py",
+        pattern=r"^async def mythos_(frozen_drift|stability_sweep)\(",
+        min_matches=2,
+    ),
+    Invariant(
+        id="INV-MYTHOS-FROZEN-PROTECTION-001",
+        description="Store-layer enforcement of the FROZEN-region read-only invariant: insert_mythos_finding FORCES fix_authority_tier=3 whenever frozen_region=True, regardless of the variant's declared tier. Mythos NEVER auto-fixes FROZEN material — this invariant is the cryptographic safety property the plan named (verified by T-MYTHOS-M1-3). Drift here would let a malicious or buggy variant suggest tier-1 autofix on a FROZEN region and have it take effect.",
+        file="bridge/vapi_bridge/store.py",
+        pattern=r"INV-MYTHOS-FROZEN-PROTECTION-001",
+        min_matches=1,
+    ),
 ]
 
 

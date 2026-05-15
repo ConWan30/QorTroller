@@ -3,7 +3,7 @@ Tests for CoherenceRuleLoader — VAPI-EXT Step 4.
 
 15+ tests covering:
   - load_all() returns exactly 39 VAPI_CORE rules
-  - category counts: CONTRADICTION=27, ORPHAN=7, INVERSION=5
+  - category counts: CONTRADICTION=29, ORPHAN=7, INVERSION=5
   - guard lambdas preserved (IOSWARM_ACTIVE_NO_ADJUDICATIONS has guard != None)
   - inject_rules() adds to FSCA's runtime dicts
   - injected rules appear in load_all()
@@ -68,12 +68,12 @@ def _make_ext_rule(name: str = "EXT_TEST_RULE", category: str = "CONTRADICTION")
 class TestLoadAll:
     def test_load_all_returns_18_rules(self):
         rules = CoherenceRuleLoader.load_all()
-        assert len(rules) == 39, f"Expected 39 rules, got {len(rules)}"
+        assert len(rules) == 41, f"Expected 41 rules, got {len(rules)}"
 
     def test_contradiction_count(self):
         rules = CoherenceRuleLoader.load_all()
         contradictions = [r for r in rules if r.category == "CONTRADICTION"]
-        assert len(contradictions) == 27, f"Expected 27 CONTRADICTION rules, got {len(contradictions)}"
+        assert len(contradictions) == 29, f"Expected 29 CONTRADICTION rules, got {len(contradictions)}"
 
     def test_orphan_count(self):
         rules = CoherenceRuleLoader.load_all()
@@ -146,7 +146,7 @@ class TestGuardPreservation:
         rules = CoherenceRuleLoader.load_all()
         rules_without_guard = [r for r in rules if r.guard is None]
         # Only 1 rule (IOSWARM_ACTIVE_NO_ADJUDICATIONS) has a guard; 38 should not
-        assert len(rules_without_guard) == 38
+        assert len(rules_without_guard) == 40
 
 
 # ---------------------------------------------------------------------------
@@ -179,7 +179,7 @@ class TestInjectRules:
         rule = _make_ext_rule()
         CoherenceRuleLoader.inject_rules([rule])
         all_rules = CoherenceRuleLoader.load_all()
-        assert len(all_rules) == 40  # 39 core + 1 injected
+        assert len(all_rules) == 42  # 41 core (Phase O5 M.3: +2 Mythos) + 1 injected
 
     def test_inject_rule_with_guard_preserved_in_fsca_dict(self):
         guard_fn = lambda cfg: getattr(cfg, "test_flag", False)
