@@ -68,10 +68,25 @@
  *   - DEVICE_ID_TO_GAMER: CLOSED — VAPIioIDRegistry.getDeviceWallet resolves
  *                         device_id → gamer address before consent check
  *   - P256_VERIFY:        STUB (dep-blocked; @assemblyscript/wasm-crypto 404)
- *   - POSEIDON_HASH:      STUB (no AS Poseidon reference available; the
- *                         applet stub still does not compute featureCommitment
- *                         or nullifierHash — both passed as zero placeholders
- *                         to preserve ABI shape until Poseidon lands)
+ *   - POSEIDON_HASH:      RECLASSIFIED — architecture-N/A for this applet
+ *                         (Phase O4-W3B-POSEIDON-AS, 2026-05-14). A verified
+ *                         AS Poseidon(BN254) capability now EXISTS and is
+ *                         PV-CI-pinned (scripts/w3bstream/poseidon_bn254.ts;
+ *                         byte-identical to circomlibjs 0.1.7 across V.1+V.2:
+ *                         525 final-output vectors + 48100 per-round states).
+ *                         BUT this applet structurally CANNOT compute
+ *                         featureCommitment / nullifierHash: their preimages
+ *                         (scaledFeatures[7], deviceIdHash) are circuit-PRIVATE
+ *                         inputs — see contracts/circuits/PitlSessionProof.circom
+ *                         — that never travel in the 228-byte PoAC wire format
+ *                         (see bridge/vapi_bridge/codec.py: the 164-byte body
+ *                         is 4 hashes + 13 telemetry scalars, no feature
+ *                         vector, no raw deviceId). The applet RELAYS these
+ *                         bridge-computed ZK public inputs; it is not their
+ *                         computation site. The zero placeholders in
+ *                         _encode_submit_proof are the honest not-yet-relayed
+ *                         state until the bridge to W3bstream message format
+ *                         carries the bridge-computed values (separate phase).
  *
  *   The W3bstream applet pipeline is NOT wired to production at this commit;
  *   the bridge `_check_consent_gate` (Phase 237 core, shipped) remains the
@@ -389,21 +404,31 @@ function _verify_p256_stub(bodyPtr: i32, bodyLen: i32): bool {
  *   [228:260]  proof length (uint256, tail)
  *   [260:260+proof_len_padded]  proof data, zero-padded to 32B boundary
  *
- * STUB DEPENDENCIES (Phase O4-VPM-INT-A.PARTIAL):
- *   - featureCommitment requires Poseidon(8-input) over feature vector;
- *     no AS Poseidon reference available (POSEIDON_HASH delta still open);
- *     emitted as zero placeholder for now.
- *   - nullifierHash requires Poseidon(deviceIdHash, epoch); same blocker.
- *   - humanityProbInt requires deriving probability from feature vector;
- *     emitted as zero placeholder.
- *   - epoch requires block.number / EPOCH_BLOCKS; needs W3bstream chain
+ * RELAY-NOT-COMPUTE (Phase O4-W3B-POSEIDON-AS, 2026-05-14):
+ *   - featureCommitment = Poseidon(8)(scaledFeatures[0..6], inferenceCodeFromBody).
+ *     scaledFeatures[7] is a circuit-PRIVATE input (PitlSessionProof.circom)
+ *     — it is NOT in the 228-byte PoAC wire format. The applet cannot
+ *     compute this value; the bridge does (it holds the L4 feature vector
+ *     and runs the Groth16 prover). Emitted as a zero placeholder until the
+ *     bridge to W3bstream message relays the bridge-computed value.
+ *   - nullifierHash = Poseidon(deviceIdHash, epoch). deviceIdHash is also a
+ *     circuit-PRIVATE input (Poseidon(deviceId bytes)); the raw deviceId is
+ *     not a field of the 164-byte body. Same relay-not-compute conclusion.
+ *   - humanityProbInt requires deriving probability from the feature vector;
+ *     bridge-computed, relayed; zero placeholder here.
+ *   - epoch requires block.number / EPOCH_BLOCKS; needs a W3bstream chain
  *     introspection API not modeled in this stub.
- *   - `bytes proof` requires a real Groth16 proof; emitted as empty bytes
- *     (length=0) for now. ABI shape is correct; payload is empty.
+ *   - `bytes proof` requires a real Groth16 proof; bridge-computed, relayed;
+ *     emitted as empty bytes (length=0) for now. ABI shape is correct.
  *
- * The selector + ABI v2 layout shape ARE correct. The cryptographic
- * payload contents are placeholders. When Poseidon + P256 deps land,
- * only the zero-placeholder fills change — the encoder shape is final.
+ * The selector + ABI v2 layout shape ARE correct and FINAL. The four ZK
+ * public-input slots (featureCommitment / humanityProbInt / nullifierHash /
+ * epoch) plus `bytes proof` are bridge-computed values this applet RELAYS,
+ * not values it computes. They stay zero until the bridge to W3bstream
+ * message format carries them (separate phase). A verified AS Poseidon(BN254)
+ * capability exists (scripts/w3bstream/poseidon_bn254.ts, PV-CI-pinned by
+ * INV-POSEIDON-AS-001/002/003) for any future WASM context that must COMPUTE
+ * — rather than relay — a BN254 Poseidon; this applet is not such a context.
  */
 function _encode_submit_proof(rawPtr: i32, inferenceCode: i32, outPtr: i32): i32 {
     // Selector (4 bytes, big-endian)
@@ -427,7 +452,8 @@ function _encode_submit_proof(rawPtr: i32, inferenceCode: i32, outPtr: i32): i32
     // 224 fits in one byte; encode at offset 31 (rightmost)
     store<u8>(headStart + 32 + 31, 224);
 
-    // word 2: featureCommitment — STUB ZERO
+    // word 2: featureCommitment — RELAY SLOT (bridge-computed; see the
+    // RELAY-NOT-COMPUTE note above). Zero until the bridge relays it.
     memory.fill(headStart + 64, 0, 32);
 
     // word 3: humanityProbInt — STUB ZERO
@@ -437,7 +463,8 @@ function _encode_submit_proof(rawPtr: i32, inferenceCode: i32, outPtr: i32): i32
     memory.fill(headStart + 128, 0, 32);
     store<u8>(headStart + 128 + 31, <u8>(inferenceCode & 0xFF));
 
-    // word 5: nullifierHash — STUB ZERO
+    // word 5: nullifierHash — RELAY SLOT (bridge-computed; see the
+    // RELAY-NOT-COMPUTE note above). Zero until the bridge relays it.
     memory.fill(headStart + 160, 0, 32);
 
     // word 6: epoch — STUB ZERO
