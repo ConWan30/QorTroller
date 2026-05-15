@@ -90,6 +90,7 @@ def test_validate_env_source_with_key_passes():
     assert not any("BRIDGE_PRIVATE_KEY" in e for e in errors)
 
 
+@pytest.mark.needs_env
 def test_validate_env_source_without_key_fails():
     """validate() reports BRIDGE_PRIVATE_KEY error when source='env' and key is empty."""
     cfg = _make_config(

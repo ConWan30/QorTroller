@@ -97,7 +97,7 @@ def _make_cfg_no_key():
 class TestOperatorAuth:
     def test_passport_endpoint_rejects_wrong_key(self):
         """POST /operator/passport with wrong x-api-key -> 401."""
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             store = _make_store(tmp)
             cfg = _make_cfg_with_key()
             app = create_app(cfg, store, MagicMock())
@@ -112,7 +112,7 @@ class TestOperatorAuth:
 
     def test_passport_issue_rejects_wrong_key(self):
         """POST /operator/passport/issue with wrong x-api-key -> 401."""
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             store = _make_store(tmp)
             cfg = _make_cfg_with_key()
             app = create_app(cfg, store, MagicMock())
@@ -127,7 +127,7 @@ class TestOperatorAuth:
 
     def test_endpoint_503_when_no_key_configured(self):
         """operator_api_key='' -> 503 on passport endpoint."""
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             store = _make_store(tmp)
             cfg = _make_cfg_no_key()
             app = create_app(cfg, store, MagicMock())
@@ -183,7 +183,7 @@ class TestRateLimiter:
 class TestAuditLog:
     def test_log_operator_action_stores_entry(self):
         """log_operator_action() writes a row retrievable via get_operator_audit_log()."""
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             store = _make_store(tmp)
             store.log_operator_action(
                 endpoint="/operator/passport",
@@ -203,7 +203,7 @@ class TestAuditLog:
 
     def test_get_audit_log_filtered_by_device(self):
         """device_id filter returns only matching rows."""
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             store = _make_store(tmp)
             store.log_operator_action("/ep", "device-A", "h1", "1.1.1.1", 200, "ok")
             store.log_operator_action("/ep", "device-B", "h2", "1.1.1.2", 401, "unauth")
@@ -215,7 +215,7 @@ class TestAuditLog:
 
     def test_audit_log_table_idempotent(self):
         """Creating Store twice on same DB does not raise (idempotent schema)."""
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             db = os.path.join(tmp, "idem.db")
             Store(db)
             s2 = Store(db)
@@ -264,7 +264,7 @@ def _make_agent(db_path):
 class TestAnalyzeThresholdImpact:
     def test_threshold_impact_tighten_flips_sessions(self):
         """delta_pct=-10 tightens threshold; sessions in 6.3-7.0 range flip nominal->anomaly."""
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             db = os.path.join(tmp, "t.db")
             Store(db)  # init schema
             _seed_l4_records(db, [3.0, 4.0, 6.5, 6.5, 6.5])
@@ -276,7 +276,7 @@ class TestAnalyzeThresholdImpact:
 
     def test_threshold_impact_zero_delta_no_flips(self):
         """delta_pct=0 -> both flip counts == 0."""
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             db = os.path.join(tmp, "t.db")
             Store(db)
             _seed_l4_records(db, [3.0, 5.0, 8.0])
@@ -293,7 +293,7 @@ class TestAnalyzeThresholdImpact:
 class TestGetAnomalyTrend:
     def test_anomaly_trend_empty_device(self):
         """Device with no records -> session_count=0 without error."""
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             db = os.path.join(tmp, "t.db")
             agent = _make_agent(db)
             result = agent._execute_tool("get_anomaly_trend", {"device_id": "ab" * 32})
@@ -303,7 +303,7 @@ class TestGetAnomalyTrend:
     def test_anomaly_trend_degrading_detected(self):
         """Rising L4 distances -> trend='DEGRADING'."""
         device_id = "ff" * 32
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             db = os.path.join(tmp, "t.db")
             Store(db)  # init schema
             conn = sqlite3.connect(db)
@@ -339,7 +339,7 @@ class TestGetAnomalyTrend:
 class TestPredictEvasionCost:
     def test_evasion_cost_attack_h_100pct(self):
         """attack_class=H -> l4_detection='100%'."""
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             agent = _make_agent(os.path.join(tmp, "t.db"))
             result = agent._execute_tool("predict_evasion_cost", {"attack_class": "H"})
         assert result["attack_class"] == "H"
@@ -348,7 +348,7 @@ class TestPredictEvasionCost:
 
     def test_evasion_cost_unknown_class(self):
         """Unknown attack class returns error dict."""
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             agent = _make_agent(os.path.join(tmp, "t.db"))
             result = agent._execute_tool("predict_evasion_cost", {"attack_class": "Z"})
         assert "error" in result
@@ -361,7 +361,7 @@ class TestPredictEvasionCost:
 class TestGenerateIncidentReport:
     def test_incident_report_structure(self):
         """All expected top-level keys present; no exception for unknown device."""
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
             agent = _make_agent(os.path.join(tmp, "t.db"))
             result = agent._execute_tool(
                 "generate_incident_report", {"device_id": "ab" * 32}

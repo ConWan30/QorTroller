@@ -27,6 +27,8 @@ import sys
 import tempfile
 import types
 import unittest
+
+import pytest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -169,6 +171,7 @@ class TestTaskDoneHandlerCancelled(unittest.TestCase):
 # ===========================================================================
 
 class TestSendRawTxNonceReset(unittest.TestCase):
+    @pytest.mark.needs_env
     def test_send_raw_tx_resets_nonce_on_send_failure(self):
         """_reset_nonce must be called and _nonce=None after send_raw_transaction raises."""
         client = _make_chain_client()

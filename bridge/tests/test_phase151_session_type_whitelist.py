@@ -23,9 +23,17 @@ test_10_tool_107_returns_5_keys
 import os
 import sys
 import tempfile
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+
+# sys.path setup — matches the convention used across bridge/tests (e.g.
+# test_phase173). Without this, `from vapi_bridge.X` fails with
+# ModuleNotFoundError because pytest --import-mode=importlib does not add
+# the test file's parent dirs to sys.path.
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "bridge"))
 
 # Web3/eth_account stub
 _w3 = MagicMock()
@@ -42,7 +50,7 @@ def _make_store():
     """Create a file-based Store (Windows WAL safety)."""
     tmp_dir = tempfile.mkdtemp()
     db_path = os.path.join(tmp_dir, "test_phase151.db")
-    from bridge.vapi_bridge.store import Store
+    from vapi_bridge.store import Store
     return Store(db_path)
 
 
@@ -133,15 +141,17 @@ class TestSessionTypeWhitelist:
         assert "W1-011" in str(exc_info.value) or "gameplay" in str(exc_info.value).lower()
 
     def test_4_structured_probe_types_frozenset_contains_4(self):
-        """Store.STRUCTURED_PROBE_TYPES must be a frozenset with exactly 4 entries (Phase 166 adds mixed_biometric_probe)."""
-        from bridge.vapi_bridge.store import Store
+        """Store.STRUCTURED_PROBE_TYPES must be a frozenset with the current probe set (6 entries: Phase 166 mixed_biometric_probe + Phase 199 tremor_resting + Phase 229 ait)."""
+        from vapi_bridge.store import Store
         spt = Store.STRUCTURED_PROBE_TYPES
         assert isinstance(spt, frozenset)
-        assert len(spt) == 4
+        assert len(spt) == 6
         assert "touchpad_corners" in spt
         assert "touchpad_freeform" in spt
         assert "touchpad_swipes" in spt
         assert "mixed_biometric_probe" in spt  # Phase 166: 2-min all-feature probe
+        assert "tremor_resting" in spt          # Phase 199: 30s still-hold
+        assert "ait" in spt                     # Phase 229: Active Isometric Trigger
         # Free-form gameplay must NOT be in whitelist
         assert "gameplay" not in spt
 
@@ -153,12 +163,12 @@ class TestSessionTypeWhitelist:
 class TestEnrollmentCaptureGuidance:
 
     def test_5_guidance_empty_db_all_probes_not_found(self):
-        """On an empty DB, guidance must report found=False for all probe types (Phase 166: 4 types)."""
+        """On an empty DB, guidance must report found=False for all probe types (currently 6 types)."""
         store = _make_store()
         g = store.get_enrollment_capture_guidance(min_n=10)
         assert "guidance" in g
         assert "probe_types" in g
-        assert len(g["probe_types"]) == 4  # Phase 166: mixed_biometric_probe added
+        assert len(g["probe_types"]) == 6  # corners/freeform/swipes/mixed/tremor_resting/ait
         for probe in g["probe_types"]:
             assert g["guidance"][probe]["found"] is False
         assert g["overall_ready"] is False
@@ -228,7 +238,7 @@ class TestTool107:
         """Tool #107 get_enrollment_capture_guidance must return 5 required keys."""
         store = _make_store()
         cfg = _make_cfg()
-        from bridge.vapi_bridge.bridge_agent import BridgeAgent
+        from vapi_bridge.bridge_agent import BridgeAgent
         agent = BridgeAgent.__new__(BridgeAgent)
         agent._store = store
         agent._cfg = cfg

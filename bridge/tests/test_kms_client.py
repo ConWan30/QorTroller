@@ -46,6 +46,7 @@ from vapi_bridge.mock_kms_client import MockKMSClient
 # Test 1: Construction succeeds with all env vars
 # ---------------------------------------------------------------------------
 
+@pytest.mark.needs_env
 def test_kms_client_construction_succeeds_with_env_vars(monkeypatch):
     """KMSClient construction succeeds when all required env vars are present.
 

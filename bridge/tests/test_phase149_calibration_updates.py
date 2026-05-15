@@ -47,8 +47,8 @@ if str(_BRIDGE) not in sys.path:
 class TestCurrentPhaseConstant:
 
     def test_1_current_phase_constant_is_148(self):
-        """_CURRENT_PHASE in scripts/calibration_agent.py must be 148 after Phase 149 update."""
-        assert _ca_mod._CURRENT_PHASE == 148
+        """_CURRENT_PHASE in scripts/calibration_agent.py must be 228 at current head."""
+        assert _ca_mod._CURRENT_PHASE == 228
 
 
 # ---------------------------------------------------------------------------
@@ -59,7 +59,7 @@ class TestCountPlayersFromDirs:
 
     def test_2_count_players_from_dirs_finds_3_players(self):
         """_count_players_from_dirs must return 3 when terminal_cal_P1/P2/P3 all exist."""
-        with tempfile.TemporaryDirectory() as tmpdir:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
             root = pathlib.Path(tmpdir)
             human = root / "sessions" / "human"
             (human / "terminal_cal_P1").mkdir(parents=True)
@@ -75,7 +75,7 @@ class TestCountPlayersFromDirs:
 
     def test_2b_count_players_includes_hw_json_as_p1(self):
         """hw_*.json files count as P1 even without explicit terminal_cal_P1 dir."""
-        with tempfile.TemporaryDirectory() as tmpdir:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
             root = pathlib.Path(tmpdir)
             human = root / "sessions" / "human"
             human.mkdir(parents=True)
@@ -112,7 +112,7 @@ class TestLoadSeparationFromDb:
     def test_3_load_separation_from_db_reads_snapshot(self):
         """_load_separation_from_db returns the latest pooled_ratio from the DB."""
         import calibration_agent as ca
-        with tempfile.TemporaryDirectory() as tmpdir:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
             db = pathlib.Path(tmpdir) / "bridge.db"
             self._make_db_with_snapshot(db, 1.261)
             result = _ca_mod._load_separation_from_db(db)
@@ -121,7 +121,7 @@ class TestLoadSeparationFromDb:
     def test_4_load_separation_from_db_returns_none_on_empty(self):
         """_load_separation_from_db returns None when table is empty or missing."""
         import calibration_agent as ca
-        with tempfile.TemporaryDirectory() as tmpdir:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
             db = pathlib.Path(tmpdir) / "bridge.db"
             # Table exists but no rows
             conn = sqlite3.connect(str(db))
@@ -161,7 +161,7 @@ class TestComputeProgress:
 
     def test_5_compute_progress_uses_db_ratio(self):
         """_compute_progress reads separation ratio from DB snapshot, not just env var."""
-        with tempfile.TemporaryDirectory() as tmpdir:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
             db = pathlib.Path(tmpdir) / "bridge.db"
             self._make_db_with_snapshot(db, 1.261)
             result = _ca_mod._compute_progress([], [], db=db)
@@ -169,7 +169,7 @@ class TestComputeProgress:
 
     def test_6_compute_progress_uses_dir_based_player_count(self):
         """_compute_progress uses directory scan for player count, not DB device_id grouping."""
-        with tempfile.TemporaryDirectory() as tmpdir:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
             root = pathlib.Path(tmpdir)
             human = root / "sessions" / "human"
             (human / "terminal_cal_P1").mkdir(parents=True)
