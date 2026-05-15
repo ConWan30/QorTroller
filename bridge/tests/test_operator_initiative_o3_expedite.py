@@ -33,6 +33,24 @@ sys.modules.setdefault("web3.exceptions", MagicMock())
 sys.modules.setdefault("eth_account", MagicMock())
 
 
+# The 4 O3 cfg flag env vars + dotenv-loaded bridge/.env contaminate
+# the test ambient state when the operator has run the O3 expedite arc
+# (commit 7f470ccc). setenv() the keys to "false" so subsequent
+# load_dotenv() calls (triggered by lazy import of vapi_bridge.config
+# inside run_preflight) won't override — load_dotenv default behavior
+# does NOT override existing os.environ entries.
+@pytest.fixture(autouse=True)
+def _strip_o3_cfg_env(monkeypatch):
+    for env_var in (
+        "OPERATOR_DUAL_KEY_PRESENT",
+        "KMS_HSM_PRODUCTION_READY",
+        "GITHUB_APP_OAUTH_TOKENS_VALID",
+        "MARKETPLACE_CURATOR_ROLE_ASSIGNED",
+    ):
+        monkeypatch.setenv(env_var, "false")
+    yield
+
+
 # ---------------------------------------------------------------------------
 # T-O3-EXPEDITE-1
 # ---------------------------------------------------------------------------

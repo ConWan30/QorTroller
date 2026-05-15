@@ -762,6 +762,98 @@ INVARIANTS: list[Invariant] = [
         pattern=r"INV-MYTHOS-FROZEN-PROTECTION-001",
         min_matches=1,
     ),
+    # ---------------------------------------------------------------------------
+    # Session 2026-05-15 Stream 4 PV-CI ceremony — pin the constructs shipped
+    # across the day's 9 commits: Phase 243-SS2 Stream 1 (trigger force curve
+    # scaffolding) + Phase 242-BT Stream 1 (BT-WITNESS v1 capability) +
+    # Mythos OpInit variant + Priority 5 Full Mythos (Crypto/Methodology/Ceremony/
+    # Corpus) + Mythos PR gate + O3 expedite arc (preflight + seeding + 2 new cfg
+    # fields). 12 invariants total; 89 → 101 after this ceremony.
+    # ---------------------------------------------------------------------------
+    Invariant(
+        id="INV-SS2-PROBE-TYPE-001",
+        description="Phase 243-SS2 Stream 1: trigger_force_curve probe type registered in STRUCTURED_PROBE_TYPES frozenset (the 7th member after touchpad_corners + touchpad_freeform + touchpad_swipes + mixed_biometric_probe + tremor_resting + ait). T-PHASE243-1 verifies; Stage-A captures consume this routing key.",
+        file="bridge/vapi_bridge/store.py",
+        pattern=r'"trigger_force_curve"',
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-BT-WITNESS-DOMAIN-001",
+        description='Phase 242-BT Stream 1: BT-WITNESS v1 FROZEN capability tag b"VAPI-BT-WITNESS-v1" (18 bytes). Width is asserted at module import; widening or narrowing requires a separate capability tag, NOT modification of this literal. Capability tag (NOT a new PATTERN-017 commitment family per the POSEIDON-BN254-AS reframe precedent).',
+        file="bridge/vapi_bridge/bt_witness.py",
+        pattern=r'BT_WITNESS_DOMAIN_TAG: bytes = b"VAPI-BT-WITNESS-v1"',
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-BT-WITNESS-TRANSPORT-001",
+        description="Phase 242-BT Stream 1: BT_WITNESS_TRANSPORT_BR_EDR = 0x01 FROZEN transport-code literal. DualSense + DualSense Edge transport is Bluetooth Classic BR/EDR with HIDP per the v1.1 canonical anchor (NOT BLE/HOGP). Future BLE-HOGP variant requires a separate capability tag, not a different transport_code value.",
+        file="bridge/vapi_bridge/bt_witness.py",
+        pattern=r"BT_WITNESS_TRANSPORT_BR_EDR: int = 0x01",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-BT-WITNESS-PREIMAGE-001",
+        description="Phase 242-BT Stream 1: BT-WITNESS commitment preimage layout FROZEN at 18 + 20 + 32 + 32 + 32 + 1 + 8 = 143 bytes (domain tag + witness_pubkey + device_id + session_id + feature_root + transport_code + ts_ns). Any reordering or width change requires v2 capability tag. INV-BT-WITNESS-003 in the module's docstring describes this in detail.",
+        file="bridge/vapi_bridge/bt_witness.py",
+        pattern=r"18 \+ 20 \+ 32 \+ 32 \+ 32 \+ 1 \+ 8 == 143",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-MYTHOS-OPINIT-ENTRY-001",
+        description="Mythos-Operator-Initiative-Audit variant entry point pinned in mythos_variants.py (operator-authorized extension 2026-05-15). The async function mythos_operator_initiative_audit is the comprehensive 5-check-family audit; renaming or removing requires a governance ceremony.",
+        file="bridge/vapi_bridge/mythos_variants.py",
+        pattern=r"async def mythos_operator_initiative_audit",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-MYTHOS-FAMILIES-001",
+        description="Mythos-Crypto _PATTERN_017_FROZEN_TAGS frozenset declaration pinned (Priority 5). 11 commitment families per the empirical audit finding 2026-05-15 (CLAUDE.md previously stated 10; PHYSICAL_DATA_ATTESTATION v1 confirmed as 11th by its own module docstring). The frozenset declaration line is pinned; the contents are pinned by the per-family domain tag literals being checked by their own existing invariants.",
+        file="bridge/vapi_bridge/mythos_variants.py",
+        pattern=r"_PATTERN_017_FROZEN_TAGS: frozenset\[bytes\] = frozenset",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-MYTHOS-METHODOLOGY-FILES-001",
+        description="Mythos-Methodology _METHODOLOGY_REQUIRED_FILES tuple pinned (Priority 5). The methodology trust chain that protocol-layer surfaces inherit from depends on these 7 files (VBDIP-0001 + METHODOLOGY_LAYER_INTEGRATION_MAP + BT/sensor-stack v1.1 architectural revisions + 2 canonical-anchor PDFs + architect Ed25519 attestation). Mythos-Methodology surfaces HIGH on VBDIP/architect missing; MEDIUM elsewhere.",
+        file="bridge/vapi_bridge/mythos_variants.py",
+        pattern=r"_METHODOLOGY_REQUIRED_FILES: tuple\[str, \.\.\.\] =",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-MYTHOS-CADENCE-SCHEDULE-001",
+        description="MYTHOS_CADENCE_SCHEDULE 6-tier dict pinned in mythos_cadence_engine.py (extended to include operator_initiative + Priority 5 variants 2026-05-15). Tiers: daily/per_pr/per_phase_close/pre_ceremony/post_incident/weekly. Drift here changes which variants run at which cadence — affects FSCA finding-surface coverage windows.",
+        file="bridge/vapi_bridge/mythos_cadence_engine.py",
+        pattern=r"MYTHOS_CADENCE_SCHEDULE: dict\[str, list\[str\]\]",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-MYTHOS-PR-GATE-BLOCKING-001",
+        description="Mythos PR gate _is_blocking rule matrix pinned (Priority 5 Part 3, commit a756f95f). CRITICAL severity ALWAYS blocks PR merge; HIGH severity + frozen_region=True blocks; HIGH non-frozen + MEDIUM + LOW are informational. Drift here changes the effective PR enforcement boundary — must move through governance ceremony.",
+        file="scripts/run_mythos_pr_gate.py",
+        pattern=r'if finding\.severity == "CRITICAL":',
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-O3-EXPEDITE-CFG-001",
+        description="O3 expedite arc 2026-05-15 cfg fields pinned in config.py: operator_dual_key_present (gate 5; all 3 agents) + github_app_oauth_tokens_valid (gate 7; Guardian-only). Promoted from getattr-fallback to first-class Config fields so operators can author the declarations via env vars OPERATOR_DUAL_KEY_PRESENT + GITHUB_APP_OAUTH_TOKENS_VALID.",
+        file="bridge/vapi_bridge/config.py",
+        pattern=r"operator_dual_key_present: bool = field",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-O3-EXPEDITE-PREFLIGHT-001",
+        description="O3 expedite preflight CLI entry point run_preflight pinned (commit 0e83a8ce). Reads watcher state + cfg flags + DB state; produces verdict ceremony_ready_to_fire / ceremony_ready_when_calendar_clears / READY-TO-FIRE / CALENDAR-WAITING / EXPEDITE-WORK-AVAILABLE. The single canonical operator-facing CLI for the O3 calendar window.",
+        file="scripts/operator_initiative_o3_preflight.py",
+        pattern=r"def run_preflight\(db_path: str, \*, strict: bool\)",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-O3-EXPEDITE-SEEDING-TRIPLEGATE-001",
+        description="O3 expedite seeding harness triple-gate authorization function pinned (commit 0e83a8ce). _check_triple_gate enforces (a) CHAIN_SUBMISSION_PAUSED=true env (kill-switch ARMED), (b) OPERATOR_INITIATIVE_SEED_DRAFTS_AUTHORIZED=true env (DISTINCT from O2/O3 anchor envs to prevent carry-over), (c) --confirm CLI flag. All three required for real seeding; otherwise dry-run.",
+        file="scripts/operator_initiative_seed_drafts.py",
+        pattern=r"def _check_triple_gate\(\*, confirm: bool\)",
+        min_matches=1,
+    ),
 ]
 
 

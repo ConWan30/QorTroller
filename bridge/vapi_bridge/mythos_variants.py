@@ -1245,6 +1245,196 @@ async def mythos_ceremony_drift(
 # Mythos-Corpus — separation-ratio + TGE-blocker visibility (Priority 5)
 # ==========================================================================
 
+async def mythos_post_o3_ceremony_audit(
+    *,
+    repo_root: Path | None = None,
+    db_path: str | None = None,
+    include_chain_reads: bool = False,
+) -> list[MythosFindingResult]:
+    """Mythos-Post-O3 — wraps scripts/operator_initiative_post_o3_audit.py
+    (operator-authorized goal 2026-05-15) and emits its sections as Mythos
+    findings. Cadence: post_ceremony tier — runs automatically after the
+    Day 15 ceremony fires (operator-runtime).
+
+    Section 1 (activation_log integrity) FAIL → CRITICAL frozen_region findings
+    Section 2 (on-chain scopeRoot)        FAIL → CRITICAL frozen_region findings
+    Section 3 (Mythos OpInit cross-check) FAIL → HIGH    frozen_region findings
+    Section 4 (FSCA contradictions)       PRESENT → MEDIUM findings
+
+    NEVER raises (fail-open contract). All severity-CRITICAL/HIGH findings
+    carry frozen_region=True → INV-MYTHOS-FROZEN-PROTECTION-001 forces
+    tier=3 read-only at the store layer.
+    """
+    root = _resolve_repo_root(repo_root)
+    findings: list[MythosFindingResult] = []
+    try:
+        # Defer heavy import — the audit script is in scripts/ not on the
+        # bridge import path by default.
+        import sys
+        scripts_path = str(root / "scripts")
+        if scripts_path not in sys.path:
+            sys.path.insert(0, scripts_path)
+        try:
+            import operator_initiative_post_o3_audit as audit_mod
+        except Exception as exc:  # noqa: BLE001
+            findings.append(MythosFindingResult(
+                variant="post_o3",
+                severity="LOW",
+                description=(
+                    f"Could not import scripts/operator_initiative_post_o3_"
+                    f"audit.py: {exc}. Mythos-Post-O3 audit skipped."
+                ),
+                recommended_fix=(
+                    "Restore scripts/operator_initiative_post_o3_audit.py "
+                    "from git history."
+                ),
+                coherence_id=_coherence_id("post_o3", "import_fail"),
+                frozen_region=False,
+                fix_authority_tier=2,
+                evidence_sources=["scripts/operator_initiative_post_o3_audit.py"],
+            ))
+            return findings
+
+        if db_path is None:
+            db_path = str(root / "bridge" / "vapi_store.db")
+        audit = await audit_mod.run_audit(
+            db_path=db_path,
+            include_chain_reads=include_chain_reads,
+            repo_root=root,
+        )
+        sections = audit.get("sections", {})
+
+        # Section 1: activation_log integrity
+        s1 = sections.get("section_1", {})
+        if s1 and not s1.get("all_pass", True):
+            for agent_name, entry in (s1.get("per_agent") or {}).items():
+                if entry.get("pass", True):
+                    continue
+                checks = entry.get("checks", {})
+                key = f"{agent_name}:" + ",".join(
+                    f"{k}={v}" for k, v in checks.items()
+                    if k.endswith("_ok") and v is False
+                )
+                findings.append(MythosFindingResult(
+                    variant="post_o3",
+                    severity="CRITICAL",
+                    description=(
+                        f"POST-O3 SECTION 1 (activation_log integrity) FAIL "
+                        f"for {agent_name}: "
+                        + ", ".join(
+                            f"{k}={v}" for k, v in checks.items()
+                            if v is False
+                        )
+                        or f"agent={agent_name}; see audit checks for detail."
+                    ),
+                    recommended_fix=(
+                        "Re-fire scripts/parallel_o3_act_anchor.py for the "
+                        "missing/divergent agent OR investigate activation_"
+                        "log row mismatch."
+                    ),
+                    coherence_id=_coherence_id("post_o3", f"section_1:{key}"),
+                    frozen_region=True,
+                    fix_authority_tier=3,
+                    evidence_sources=[
+                        "bridge/vapi_store.db:operator_agent_activation_log",
+                        "scripts/parallel_o3_act_anchor.py",
+                    ],
+                ))
+
+        # Section 2: on-chain scopeRoot (only if chain reads enabled)
+        s2 = sections.get("section_2", {})
+        if s2 and not s2.get("all_pass", True):
+            for agent_name, entry in (s2.get("per_agent") or {}).items():
+                if entry.get("pass", True):
+                    continue
+                findings.append(MythosFindingResult(
+                    variant="post_o3",
+                    severity="CRITICAL",
+                    description=(
+                        f"POST-O3 SECTION 2 (on-chain scopeRoot) FAIL for "
+                        f"{agent_name}: live={(entry.get('live') or '')[:18]}"
+                        f"... expected={entry.get('expected', '')[:18]}..."
+                    ),
+                    recommended_fix=(
+                        "Critical drift between on-chain AgentScope state "
+                        "and pre-authored Cedar bundle. Investigate "
+                        "immediately + halt any subsequent ceremony activity."
+                    ),
+                    coherence_id=_coherence_id(
+                        "post_o3", f"section_2:{agent_name}"
+                    ),
+                    frozen_region=True,
+                    fix_authority_tier=3,
+                    evidence_sources=[
+                        "AgentScope contract on chain ID 4690",
+                        f"bridge/vapi_bridge/cedar_bundles/{agent_name}_o3_acting_v1.json",
+                    ],
+                ))
+
+        # Section 3: Mythos OpInit cross-reference
+        s3 = sections.get("section_3", {})
+        if s3 and not s3.get("all_pass", True):
+            n = s3.get("finding_count", 0)
+            findings.append(MythosFindingResult(
+                variant="post_o3",
+                severity="HIGH",
+                description=(
+                    f"POST-O3 SECTION 3 (Mythos OpInit cross-reference) "
+                    f"FAIL: {n} findings surfaced when audit re-ran the "
+                    "OpInit variant. See mythos_finding_log for full details."
+                ),
+                recommended_fix=(
+                    "Inspect mythos_finding_log filtered by "
+                    "variant='operator_initiative' for the specific drift."
+                ),
+                coherence_id=_coherence_id(
+                    "post_o3", f"section_3:{n}_findings"
+                ),
+                frozen_region=True,
+                fix_authority_tier=3,
+                evidence_sources=["mythos_finding_log"],
+            ))
+
+        # Section 4: FSCA contradictions (informational MEDIUM)
+        s4 = sections.get("section_4", {})
+        if s4 and s4.get("contradictions_present"):
+            n = len(s4.get("rows", []))
+            findings.append(MythosFindingResult(
+                variant="post_o3",
+                severity="MEDIUM",
+                description=(
+                    f"POST-O3 SECTION 4: {n} FSCA contradiction(s) fired in "
+                    "the hour after ceremony. May be expected (agents now "
+                    "operating in lifted scope) OR may indicate ceremony "
+                    "introduced drift. Operator inspects fleet_coherence_log."
+                ),
+                recommended_fix=(
+                    "Query fleet_coherence_log for the post-ceremony hour. "
+                    "Each contradiction has its own recommended_fix per "
+                    "FSCA CONTRADICTION_RULES."
+                ),
+                coherence_id=_coherence_id(
+                    "post_o3", f"section_4:{n}_contradictions"
+                ),
+                frozen_region=False,
+                fix_authority_tier=2,
+                evidence_sources=["bridge/vapi_store.db:fleet_coherence_log"],
+            ))
+        return findings
+    except Exception as exc:  # noqa: BLE001 — fail-open
+        findings.append(MythosFindingResult(
+            variant="post_o3",
+            severity="LOW",
+            description=f"Mythos-Post-O3 audit raised: {exc}",
+            recommended_fix="Investigate post-O3 audit module.",
+            coherence_id=_coherence_id("post_o3", "exception"),
+            frozen_region=False,
+            fix_authority_tier=2,
+            evidence_sources=["scripts/operator_initiative_post_o3_audit.py"],
+        ))
+        return findings
+
+
 async def mythos_corpus_drift(
     *,
     repo_root: Path | None = None,
