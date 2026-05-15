@@ -1349,6 +1349,34 @@ class Bridge:
                     _hb_exc,
                 )
 
+        # Phase O5-MLGA Stage 8 — CDRR-DAG-v1 fires on HIGH/CRITICAL
+        # FSCA contradictions ("coherence rule re-rejection").
+        self._cdrr_dag_tracker = None
+        if getattr(self.cfg, "cdrr_dag_tracker_enabled", False):
+            try:
+                from .cdrr_dag_tracker import (
+                    CdrrDagTracker, run_cdrr_dag_tracker_loop,
+                )
+                self._cdrr_dag_tracker = CdrrDagTracker(
+                    store=self.store, cfg=self.cfg,
+                )
+                _cdrr_task = asyncio.ensure_future(
+                    run_cdrr_dag_tracker_loop(tracker=self._cdrr_dag_tracker)
+                )
+                _cdrr_task.set_name("CdrrDagTracker")
+                self._tasks.append(_cdrr_task)
+                log.info(
+                    "Phase O5-MLGA Stage 8: CDRR-DAG tracker started "
+                    "(poll=%ds, seeded=%d)",
+                    getattr(self.cfg, "cdrr_dag_poll_interval_s", 60),
+                    self._cdrr_dag_tracker._state.last_seen_coherence_id,
+                )
+            except Exception as _cdrr_exc:
+                log.warning(
+                    "Phase O5-MLGA Stage 8: CDRR-DAG tracker unavailable: %s",
+                    _cdrr_exc,
+                )
+
         # Phase O4-VPM-INT follow-up — Continuous CFSS lane authority drift
         # sweeper. Default disabled (opt-in via CFSS_DRIFT_SWEEP_ENABLED=true).
         # Runs at 60s cadence aligned with cedar_drift_sweeper's bundle path
