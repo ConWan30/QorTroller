@@ -909,6 +909,26 @@ INVARIANTS: list[Invariant] = [
         pattern=r"phase_243_ss2_stage_a|phase_242_bt_stage_2|phase_229_ait_corpus",
         min_matches=3,
     ),
+    # ---------------------------------------------------------------------------
+    # Phase O5-MLGA Stage 3 PV-CI pins (2 new invariants; 108 → 110).
+    # These cover the runtime session tracker that operationalizes the MLGA
+    # capability — without these, MLGA was paper. After Stage 3, gameplay
+    # sessions auto-track + dataproof + persist.
+    # ---------------------------------------------------------------------------
+    Invariant(
+        id="INV-MLGA-TRACKER-ENTRY-001",
+        description="Phase O5-MLGA Stage 3 — MLGASessionTracker class + run_mlga_session_tracker_loop async entry-point pinned in bridge/vapi_bridge/mlga_session_tracker.py. The tracker is the runtime wiring that operationalizes the MLGA capability (Stage 2 commit cee77070). Without these entry points, MLGA is paper — Stage 3 is the operational unblock. Renaming or removing requires governance ceremony.",
+        file="bridge/vapi_bridge/mlga_session_tracker.py",
+        pattern=r"class MLGASessionTracker:|async def run_mlga_session_tracker_loop",
+        min_matches=2,
+    ),
+    Invariant(
+        id="INV-MLGA-TRACKER-LIFECYCLE-001",
+        description="Phase O5-MLGA Stage 3 — session lifecycle methods pinned: open_session + close_session + poll_once. These are the 3 public methods that compose the polling-based session lifecycle (open on capture_state=NOMINAL; close on DISCONNECTED or max_duration; poll_once accumulates from records/APOP/GIC tables between events). Changing the method shape changes how MLGA sessions are bounded — drift here invalidates the dataproof semantics.",
+        file="bridge/vapi_bridge/mlga_session_tracker.py",
+        pattern=r"def (open_session|close_session|poll_once)\(",
+        min_matches=3,
+    ),
 ]
 
 
