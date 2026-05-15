@@ -2129,6 +2129,22 @@ class Config:
     """Phase O5-MLGA Stage 6 — HONESTY-BOARD emission cadence. 7 days
     default (Sentry weekly self-report cycle per VBDIP-0002A §10)."""
 
+    # --- Phase O5-MLGA Stage 8: CDRR-DAG-v1 autonomous on-rejection ---
+    cdrr_dag_tracker_enabled: bool = field(
+        default_factory=lambda: _env_bool("CDRR_DAG_TRACKER_ENABLED", True)
+    )
+    """Phase O5-MLGA Stage 8 — fifth autonomous VPM artifact class.
+    Polls fleet_coherence_log; emits one CDRR-DAG-v1 artifact when a
+    HIGH or CRITICAL contradiction lands (the 'coherence rule
+    re-rejection' trigger per VBDIP-0002A §10.4). Wallet-free;
+    idempotent on restart via vpm_artifact_log seed."""
+
+    cdrr_dag_poll_interval_s: int = field(
+        default_factory=lambda: int(_env("CDRR_DAG_POLL_INTERVAL_S", "60"))
+    )
+    """Phase O5-MLGA Stage 8 — CDRR-DAG tracker poll cadence. 60s
+    matches FSCA poll cycle."""
+
     # --- Phase 242-BT Stream 1 — BT-WITNESS v1 capability ---
     bt_witness_enabled: bool = field(
         default_factory=lambda: _env_bool("BT_WITNESS_ENABLED", False)
