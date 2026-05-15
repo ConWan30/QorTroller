@@ -29,7 +29,7 @@ def _make_store(tmp):
 # ---------------------------------------------------------------------------
 
 def test_t175_1_insert_stores_record():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         row_id = s.insert_age_weight_analysis_log(
             probe_type="touchpad_corners",
@@ -46,7 +46,7 @@ def test_t175_1_insert_stores_record():
 # ---------------------------------------------------------------------------
 
 def test_t175_2_get_returns_latest():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         s.insert_age_weight_analysis_log("touchpad_corners", 0.569, 0.720, 90.0, 20)
         time.sleep(0.01)
@@ -61,7 +61,7 @@ def test_t175_2_get_returns_latest():
 # ---------------------------------------------------------------------------
 
 def test_t175_3_temporal_drift_index():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         s.insert_age_weight_analysis_log("touchpad_corners", 0.569, 0.720, 90.0, 20)
         rows = s.get_age_weight_analysis_status(limit=1)
@@ -74,7 +74,7 @@ def test_t175_3_temporal_drift_index():
 # ---------------------------------------------------------------------------
 
 def test_t175_4_drift_p1_nonstationarity():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         # raw=1.2, age_weighted=1.0 -> tdi=0.2 > 0.05
         s.insert_age_weight_analysis_log("touchpad_corners", 1.200, 1.000, 90.0, 15)
@@ -87,7 +87,7 @@ def test_t175_4_drift_p1_nonstationarity():
 # ---------------------------------------------------------------------------
 
 def test_t175_5_drift_improving():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         # raw=1.0, age_weighted=1.3 -> tdi=-0.3 < -0.05
         s.insert_age_weight_analysis_log("touchpad_corners", 1.000, 1.300, 90.0, 15)
@@ -100,7 +100,7 @@ def test_t175_5_drift_improving():
 # ---------------------------------------------------------------------------
 
 def test_t175_6_drift_stable():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         # raw=1.0, age_weighted=1.02 -> tdi=-0.02 in [-0.05, 0.05]
         s.insert_age_weight_analysis_log("touchpad_corners", 1.000, 1.020, 90.0, 15)
@@ -113,7 +113,7 @@ def test_t175_6_drift_stable():
 # ---------------------------------------------------------------------------
 
 def test_t175_7_status_returns_expected_keys():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         s.insert_age_weight_analysis_log("touchpad_corners", 0.569, 0.720, 90.0, 20)
         rows = s.get_age_weight_analysis_status(limit=1)
@@ -132,7 +132,7 @@ def test_t175_7_status_returns_expected_keys():
 # ---------------------------------------------------------------------------
 
 def test_t175_8_empty_log_returns_empty_list():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         rows = s.get_age_weight_analysis_status(limit=1)
         # No records — empty list (defaults handled at API layer)

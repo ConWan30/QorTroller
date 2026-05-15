@@ -205,7 +205,7 @@ class TestTournamentPassportsTableSchema(unittest.TestCase):
     def test_tournament_passports_table_schema(self):
         from vapi_bridge.store import Store
 
-        with tempfile.TemporaryDirectory() as tmpdir:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
             db_path = os.path.join(tmpdir, "test_tp.db")
             # First init
             s1 = Store(db_path)

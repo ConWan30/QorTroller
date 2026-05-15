@@ -31,7 +31,7 @@ import stability3_polling_probe as probe  # noqa: E402
 # ---------------------------------------------------------------------------
 
 def test_t_235_stab3_pfix_1_read_env_file_basic():
-    with tempfile.TemporaryDirectory() as td:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
         p = Path(td) / "fake.env"
         p.write_text(
             "OPERATOR_API_KEY=vapi-test-key\n"

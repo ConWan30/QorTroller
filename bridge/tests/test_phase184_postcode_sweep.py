@@ -53,7 +53,7 @@ def test_t184_2_config_fields_182_183():
 # ---------------------------------------------------------------------------
 
 def test_t184_3_store_schema_versions_182_183():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         from vapi_bridge.store import Store
         import sqlite3
         db_path = str(Path(tmp) / "t184_schema.db")
@@ -81,7 +81,7 @@ def test_t184_4_endpoints_registered():
     from vapi_bridge.config import Config
     from vapi_bridge.operator_api import create_operator_app
 
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         store = Store(str(Path(tmp) / "t184_routes.db"))
         cfg = Config()
         object.__setattr__(cfg, "operator_api_key", "test-key-184")

@@ -28,7 +28,7 @@ def _make_store(tmp):
 # ---------------------------------------------------------------------------
 
 def test_t182_1_insert_persona_break_log():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         row_id = s.insert_persona_break_log(
             player_id="P1",
@@ -46,7 +46,7 @@ def test_t182_1_insert_persona_break_log():
 # ---------------------------------------------------------------------------
 
 def test_t182_2_status_safe_defaults_when_empty():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         status = s.get_persona_break_status()
         assert status is not None
@@ -61,7 +61,7 @@ def test_t182_2_status_safe_defaults_when_empty():
 # ---------------------------------------------------------------------------
 
 def test_t182_3_player_id_filter():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         s.insert_persona_break_log("P1", 0.10, 0.05, True,  "CRITICAL", 5)
         s.insert_persona_break_log("P2", 0.80, 0.01, False, "MEDIUM",   3)
@@ -78,7 +78,7 @@ def test_t182_3_player_id_filter():
 # ---------------------------------------------------------------------------
 
 def test_t182_4_persona_break_detected_true():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         s.insert_persona_break_log("P1", 0.12, 0.18, True, "CRITICAL", 5)
         status = s.get_persona_break_status("P1")
@@ -95,7 +95,7 @@ def pytest_approx(v):
 # ---------------------------------------------------------------------------
 
 def test_t182_5_urgency_critical_when_break():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         s.insert_persona_break_log("P1", 0.05, 0.20, True, "CRITICAL", 5)
         status = s.get_persona_break_status("P1")
@@ -125,7 +125,7 @@ def test_t182_7_endpoint_returns_expected_keys():
     from vapi_bridge.config import Config
     from vapi_bridge.operator_api import create_operator_app
 
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         store = Store(str(Path(tmp) / "test182t7.db"))
         cfg = Config()
         object.__setattr__(cfg, "operator_api_key", "test-key-182")
@@ -158,7 +158,7 @@ def test_t182_7_endpoint_returns_expected_keys():
 # ---------------------------------------------------------------------------
 
 def test_t182_8_two_players_separate_snapshots():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         s.insert_persona_break_log("P1", 0.10, 0.15, True,  "CRITICAL", 5)
         s.insert_persona_break_log("P3", 0.75, 0.02, False, "MEDIUM",   4)

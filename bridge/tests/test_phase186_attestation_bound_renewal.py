@@ -25,7 +25,7 @@ sys.path.insert(0, str(ROOT / "bridge"))
 
 def test_t186_1_table_and_schema():
     import sqlite3
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         from vapi_bridge.store import Store
         db_path = str(Path(tmp) / "t186_schema.db")
         Store(db_path)
@@ -51,7 +51,7 @@ def test_t186_1_table_and_schema():
 # ---------------------------------------------------------------------------
 
 def test_t186_2_insert_and_counts():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         from vapi_bridge.store import Store
         s = Store(str(Path(tmp) / "t186_counts.db"))
 
@@ -88,7 +88,7 @@ def test_t186_2_insert_and_counts():
 # ---------------------------------------------------------------------------
 
 def test_t186_3_player_filter():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         from vapi_bridge.store import Store
         s = Store(str(Path(tmp) / "t186_filter.db"))
 
@@ -123,7 +123,7 @@ def test_t186_3_player_filter():
 # ---------------------------------------------------------------------------
 
 def test_t186_4_validate_active_valid():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         from vapi_bridge.store import Store
         from vapi_bridge.attestation_bound_renewal_agent import AttestationBoundRenewalAgent
 
@@ -155,7 +155,7 @@ def test_t186_4_validate_active_valid():
 # ---------------------------------------------------------------------------
 
 def test_t186_5_validate_expired():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         from vapi_bridge.store import Store
         from vapi_bridge.attestation_bound_renewal_agent import AttestationBoundRenewalAgent
 
@@ -197,7 +197,7 @@ def test_t186_5_validate_expired():
 # ---------------------------------------------------------------------------
 
 def test_t186_6_validate_unknown_player():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         from vapi_bridge.store import Store
         from vapi_bridge.attestation_bound_renewal_agent import AttestationBoundRenewalAgent
 
@@ -232,7 +232,7 @@ def test_t186_7_config_field():
 # ---------------------------------------------------------------------------
 
 def test_t186_8_endpoint_registered():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         from vapi_bridge.store import Store
         from vapi_bridge.config import Config
         from vapi_bridge.operator_api import create_operator_app
