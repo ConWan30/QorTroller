@@ -25,7 +25,7 @@ sys.path.insert(0, str(ROOT / "bridge"))
 
 def test_t185_1_table_and_schema():
     import sqlite3
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         from vapi_bridge.store import Store
         db_path = str(Path(tmp) / "t185_schema.db")
         Store(db_path)
@@ -53,7 +53,7 @@ def test_t185_1_table_and_schema():
 # ---------------------------------------------------------------------------
 
 def test_t185_2_insert_and_retrieve():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         from vapi_bridge.store import Store
         s = Store(str(Path(tmp) / "t185_insert.db"))
 
@@ -82,7 +82,7 @@ def test_t185_2_insert_and_retrieve():
 
 def test_t185_3_active_attestation_player_filter():
     import pytest
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         from vapi_bridge.store import Store
         s = Store(str(Path(tmp) / "t185_filter.db"))
 
@@ -115,7 +115,7 @@ def test_t185_3_active_attestation_player_filter():
 # ---------------------------------------------------------------------------
 
 def test_t185_4_expire_stale_attestations():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         from vapi_bridge.store import Store
         s = Store(str(Path(tmp) / "t185_expire.db"))
 
@@ -221,7 +221,7 @@ def test_t185_8_endpoint_registered():
     from vapi_bridge.config import Config
     from vapi_bridge.operator_api import create_operator_app
 
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         store = Store(str(Path(tmp) / "t185_routes.db"))
         cfg   = Config()
         object.__setattr__(cfg, "operator_api_key", "test-key-185")

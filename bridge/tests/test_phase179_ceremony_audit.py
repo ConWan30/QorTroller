@@ -30,7 +30,7 @@ def _make_store(tmp):
 # ---------------------------------------------------------------------------
 
 def test_t179_1_insert_stores_record():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         row_id = s.insert_ceremony_audit_entry(
             ceremony_id="vapi-ceremony-2026-04-09",
@@ -47,7 +47,7 @@ def test_t179_1_insert_stores_record():
 # ---------------------------------------------------------------------------
 
 def test_t179_2_get_status_returns_7_keys():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         status = s.get_ceremony_audit_status()
         for key in ("ceremony_audit_enabled", "total_entries", "distinct_participants",
@@ -61,7 +61,7 @@ def test_t179_2_get_status_returns_7_keys():
 # ---------------------------------------------------------------------------
 
 def test_t179_3_count_zero_for_unknown_circuit():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         count = s.count_ceremony_participants("NonExistentCircuit")
         assert count == 0
@@ -72,7 +72,7 @@ def test_t179_3_count_zero_for_unknown_circuit():
 # ---------------------------------------------------------------------------
 
 def test_t179_4_count_correct_after_inserts():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         ceremony = "vapi-ceremony-2026-04-09"
         circuit = "PitlSessionProof"
@@ -90,7 +90,7 @@ def test_t179_4_count_correct_after_inserts():
 # ---------------------------------------------------------------------------
 
 def test_t179_5_anti_replay_duplicate_raises():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         s.insert_ceremony_audit_entry("ceremony1", "CircuitA", "0xAAA1", "hash1")
         try:
@@ -133,7 +133,7 @@ def test_t179_7_min_participants_default_3():
 # ---------------------------------------------------------------------------
 
 def test_t179_8_audit_passed_true_when_disabled():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         # No participants registered — but gate is disabled by default
         # The operator_api overlays audit_passed=True when disabled

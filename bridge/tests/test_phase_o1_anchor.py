@@ -101,7 +101,7 @@ class _MockStore:
 # T-O1-AN-1 — happy path
 # ----------------------------------------------------------------------
 def test_t_o1_an_1_happy_path():
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
         bp = _write_bundle(tmpdir)
         chain = _MockChain(current_root=b"\x00" * 32)
         store = _MockStore()
@@ -128,7 +128,7 @@ def test_t_o1_an_1_happy_path():
 # T-O1-AN-2 — governance-tx-revert path
 # ----------------------------------------------------------------------
 def test_t_o1_an_2_governance_revert_records_both():
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
         bp = _write_bundle(tmpdir)
         chain = _MockChain(gov_should_revert=True)
         store = _MockStore()
@@ -151,7 +151,7 @@ def test_t_o1_an_2_governance_revert_records_both():
 # T-O1-AN-3 — missing bundle file
 # ----------------------------------------------------------------------
 def test_t_o1_an_3_missing_bundle():
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
         chain = _MockChain()
         store = _MockStore()
         anchor = CedarBundleAnchor(chain=chain, store=store, bundle_dir=tmpdir)
@@ -168,7 +168,7 @@ def test_t_o1_an_3_missing_bundle():
 # ----------------------------------------------------------------------
 def test_t_o1_an_4_noop_same_root():
     """When bundle Merkle root matches current scopeRoot, no chain calls fire."""
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
         bp = _write_bundle(tmpdir)
         # Pre-compute the bundle's expected root and prime the mock chain to return it
         from vapi_bridge.cedar_parser import bundle_merkle_root
@@ -195,7 +195,7 @@ def test_t_o1_an_4_noop_same_root():
 # ----------------------------------------------------------------------
 def test_t_o1_an_5_reason_too_short():
     """reason_text < 10 chars raises CedarBundleAnchorError before chain calls."""
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
         bp = _write_bundle(tmpdir)
         chain = _MockChain()
         store = _MockStore()

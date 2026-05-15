@@ -29,7 +29,7 @@ def _make_store(tmp):
 # ---------------------------------------------------------------------------
 
 def test_t176_1_insert_stores_record():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         row_id = s.insert_poac_chain_audit_log(
             device_id="dev_abc",
@@ -45,7 +45,7 @@ def test_t176_1_insert_stores_record():
 # ---------------------------------------------------------------------------
 
 def test_t176_2_get_returns_latest():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         s.insert_poac_chain_audit_log("dev_abc", 50, 50, 0)
         time.sleep(0.01)
@@ -60,7 +60,7 @@ def test_t176_2_get_returns_latest():
 # ---------------------------------------------------------------------------
 
 def test_t176_3_integrity_score_computed():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         s.insert_poac_chain_audit_log("dev_abc", 100, 90, 10)
         rows = s.get_poac_chain_audit_status(limit=1)
@@ -72,7 +72,7 @@ def test_t176_3_integrity_score_computed():
 # ---------------------------------------------------------------------------
 
 def test_t176_4_audit_passed_on_zero_broken():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         s.insert_poac_chain_audit_log("dev_abc", 50, 50, 0)
         rows = s.get_poac_chain_audit_status(limit=1)
@@ -84,7 +84,7 @@ def test_t176_4_audit_passed_on_zero_broken():
 # ---------------------------------------------------------------------------
 
 def test_t176_5_audit_failed_on_broken():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         s.insert_poac_chain_audit_log("dev_abc", 50, 47, 3)
         rows = s.get_poac_chain_audit_status(limit=1)
@@ -96,7 +96,7 @@ def test_t176_5_audit_failed_on_broken():
 # ---------------------------------------------------------------------------
 
 def test_t176_6_vacuous_integrity_on_zero_records():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         s.insert_poac_chain_audit_log("dev_new", 0, 0, 0)
         rows = s.get_poac_chain_audit_status(limit=1)
@@ -108,7 +108,7 @@ def test_t176_6_vacuous_integrity_on_zero_records():
 # ---------------------------------------------------------------------------
 
 def test_t176_7_device_id_filter():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         s.insert_poac_chain_audit_log("dev_a", 10, 10, 0)
         s.insert_poac_chain_audit_log("dev_b", 20, 19, 1)
@@ -124,7 +124,7 @@ def test_t176_7_device_id_filter():
 # ---------------------------------------------------------------------------
 
 def test_t176_8_no_broken_record_ids_in_response():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         s.insert_poac_chain_audit_log("dev_abc", 50, 47, 3)
         rows = s.get_poac_chain_audit_status(limit=1)

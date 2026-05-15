@@ -29,7 +29,7 @@ def _make_store(tmp):
 # ---------------------------------------------------------------------------
 
 def test_t177_1_insert_stores_record():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         row_id = s.insert_protocol_maturity_log(
             separation_component=0.5,
@@ -47,7 +47,7 @@ def test_t177_1_insert_stores_record():
 # ---------------------------------------------------------------------------
 
 def test_t177_2_get_returns_latest():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         s.insert_protocol_maturity_log(0.5, 1.0, 1.0, 0.8, 0.9, 0.0)
         time.sleep(0.01)
@@ -64,7 +64,7 @@ def test_t177_2_get_returns_latest():
 # ---------------------------------------------------------------------------
 
 def test_t177_3_score_formula():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         sep, chain, consent, fresh, cal, enroll = 0.5, 0.8, 0.6, 0.7, 0.9, 0.3
         tfa, bso, pmi = 0.8, 0.7, 1.0
@@ -89,7 +89,7 @@ def test_t177_3_score_formula():
 # ---------------------------------------------------------------------------
 
 def test_t177_4_tier_alpha():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         # All low values -> score well below 0.50
         s.insert_protocol_maturity_log(0.1, 0.1, 0.1, 0.1, 0.1, 0.1)
@@ -103,7 +103,7 @@ def test_t177_4_tier_alpha():
 # ---------------------------------------------------------------------------
 
 def test_t177_5_tier_beta():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         # Target ~0.65: sep=0.6, chain=0.7, consent=0.7, fresh=0.6, cal=0.7, enroll=0.5
         # score = 0.25*0.6 + 0.20*0.7 + 0.15*0.7 + 0.15*0.6 + 0.15*0.7 + 0.10*0.5
@@ -119,7 +119,7 @@ def test_t177_5_tier_beta():
 # ---------------------------------------------------------------------------
 
 def test_t177_6_tier_production_candidate():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         # All 1.0 gives score = 1.0
         s.insert_protocol_maturity_log(1.0, 1.0, 1.0, 1.0, 1.0, 1.0)
@@ -133,7 +133,7 @@ def test_t177_6_tier_production_candidate():
 # ---------------------------------------------------------------------------
 
 def test_t177_7_all_zeros_alpha():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         s.insert_protocol_maturity_log(
             0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
@@ -151,7 +151,7 @@ def test_t177_7_all_zeros_alpha():
 # ---------------------------------------------------------------------------
 
 def test_t177_8_all_ones_production_candidate():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         s.insert_protocol_maturity_log(
             1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
