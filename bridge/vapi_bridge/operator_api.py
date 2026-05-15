@@ -4000,7 +4000,15 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                         _sys134.executable, _script, "--db", _db,
                         stdout=_aio134.subprocess.DEVNULL, stderr=_aio134.subprocess.DEVNULL,
                     )
-                    await _aio134.wait_for(_proc.wait(), timeout=300.0)
+                    try:
+                        await _aio134.wait_for(_proc.wait(), timeout=300.0)
+                    except _aio134.TimeoutError:
+                        # Mythos audit (MEDIUM): wait_for cancels the awaiting
+                        # coroutine but leaves the child process running — kill
+                        # + reap it so recalibrate_l4_pipeline.py doesn't orphan.
+                        _proc.kill()
+                        await _proc.wait()
+                        raise
                 except Exception as _exc:
                     store.update_l4_recalibration_job(
                         job_id=_job_id, status="failed",

@@ -1105,7 +1105,14 @@ async def _async_write_separation_snapshot(cfg, store) -> None:
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
         )
-        await asyncio.wait_for(proc.wait(), timeout=120.0)
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=120.0)
+        except asyncio.TimeoutError:
+            # Mythos audit (MEDIUM): wait_for cancels the awaiting coroutine but
+            # leaves the child running — kill + reap the orphaned child on timeout.
+            proc.kill()
+            await proc.wait()
+            raise
         log.debug("Phase134: separation snapshot written (exit=%s)", proc.returncode)
     except Exception as exc:
         log.debug("Phase134: separation snapshot subprocess failed: %s", exc)
