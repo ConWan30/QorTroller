@@ -3870,6 +3870,73 @@ class Store:
         except Exception:
             pass  # idempotent
 
+        # Phase O5-MYTHOS-MINIMAL M.1 — mythos_finding_log + mythos_cadence_log.
+        # Mythos variants (Phase O5 M.2) write findings here; the FSCA loop
+        # (Phase O5 M.3) polls mythos_finding_log via 2 new contradiction
+        # rules. The cadence-engine wakeup history lives in
+        # mythos_cadence_log for operator audit. coherence_id is UNIQUE
+        # (anti-replay): mythos_<variant>_<sha256[:16]>. Severity values:
+        # CRITICAL / HIGH / MEDIUM / LOW. Fix authority tier 1 (autofix-safe)
+        # / 2 (operator-gated) / 3 (read-only — frozen_region=True always
+        # tier 3 per INV-MYTHOS-FROZEN-PROTECTION-001). evidence_sources_json
+        # is the W1 consensus-fallacy mitigation surface (declares the
+        # corpus the variant audited so cross-variant overlap can be scored).
+        try:
+            with self._conn() as conn:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS mythos_finding_log (
+                        id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+                        variant                 TEXT    NOT NULL,
+                        severity                TEXT    NOT NULL,
+                        coherence_id            TEXT    NOT NULL UNIQUE,
+                        file_path               TEXT,
+                        line_number             INTEGER,
+                        description             TEXT    NOT NULL,
+                        recommended_fix         TEXT    NOT NULL,
+                        frozen_region           INTEGER NOT NULL DEFAULT 0,
+                        fix_authority_tier      INTEGER NOT NULL,
+                        evidence_sources_json   TEXT    NOT NULL,
+                        resolved                INTEGER NOT NULL DEFAULT 0,
+                        resolution_commit       TEXT,
+                        created_at              REAL    NOT NULL
+                    )
+                """)
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_mfl_variant_created "
+                    "ON mythos_finding_log(variant, created_at DESC)"
+                )
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_mfl_severity "
+                    "ON mythos_finding_log(severity)"
+                )
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_mfl_resolved "
+                    "ON mythos_finding_log(resolved)"
+                )
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS mythos_cadence_log (
+                        id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+                        variant                 TEXT    NOT NULL,
+                        cadence                 TEXT    NOT NULL,
+                        findings_count          INTEGER NOT NULL,
+                        duration_ms             INTEGER NOT NULL,
+                        triggered_by            TEXT    NOT NULL,
+                        error                   TEXT,
+                        created_at              REAL    NOT NULL
+                    )
+                """)
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_mcl_variant_created "
+                    "ON mythos_cadence_log(variant, created_at DESC)"
+                )
+                conn.execute(
+                    "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                    " VALUES (?, ?, ?)",
+                    (1100, "mythos_finding_log+mythos_cadence_log", time.time()),
+                )
+        except Exception:
+            pass  # idempotent
+
         # Phase O0 Stream 3-prep Session 1 — AGENT_COMMIT v1 store table.
         # Sixth FROZEN-v1 primitive in the family. Each row records a git
         # commit attestation produced by an Operator Agent, with the computed
@@ -15375,6 +15442,162 @@ class Store:
             return [dict(r) for r in rows]
         except Exception:
             return []
+
+    # ------------------------------------------------------------------
+    # Phase O5-MYTHOS-MINIMAL M.1 — mythos_finding_log + mythos_cadence_log helpers
+    # ------------------------------------------------------------------
+    def insert_mythos_finding(
+        self,
+        *,
+        variant: str,
+        severity: str,
+        coherence_id: str,
+        description: str,
+        recommended_fix: str,
+        file_path: str | None = None,
+        line_number: int | None = None,
+        frozen_region: bool = False,
+        fix_authority_tier: int = 2,
+        evidence_sources: list[str] | None = None,
+    ) -> int:
+        """Persist one Mythos finding. Returns new row id; 0 on UNIQUE
+        collision (same coherence_id already persisted -- idempotent /
+        anti-replay). Fail-open: returns 0 on any DB error, never raises.
+
+        INV-MYTHOS-FROZEN-PROTECTION-001 enforced HERE: when frozen_region
+        is True, fix_authority_tier is forced to 3 (read-only) regardless
+        of the caller's value. Mythos NEVER auto-fixes FROZEN material.
+        """
+        try:
+            tier = int(fix_authority_tier)
+            if bool(frozen_region):
+                tier = 3  # INV-MYTHOS-FROZEN-PROTECTION-001
+            if tier not in (1, 2, 3):
+                tier = 2  # safe default
+            sev = str(severity).upper()
+            if sev not in ("CRITICAL", "HIGH", "MEDIUM", "LOW"):
+                sev = "MEDIUM"
+            ev_json = json.dumps(list(evidence_sources or []), sort_keys=True)
+            with self._conn() as conn:
+                cur = conn.execute(
+                    "INSERT OR IGNORE INTO mythos_finding_log "
+                    "(variant, severity, coherence_id, file_path, line_number, "
+                    " description, recommended_fix, frozen_region, "
+                    " fix_authority_tier, evidence_sources_json, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        str(variant),
+                        sev,
+                        str(coherence_id),
+                        file_path,
+                        line_number,
+                        str(description),
+                        str(recommended_fix),
+                        1 if bool(frozen_region) else 0,
+                        tier,
+                        ev_json,
+                        time.time(),
+                    ),
+                )
+                return int(cur.lastrowid or 0)
+        except Exception:
+            return 0
+
+    def insert_mythos_cadence_run(
+        self,
+        *,
+        variant: str,
+        cadence: str,
+        findings_count: int,
+        duration_ms: int,
+        triggered_by: str = "schedule",
+        error: str | None = None,
+    ) -> int:
+        """Persist one cadence-engine wakeup record for a variant. Returns
+        new row id; 0 on error. Fail-open."""
+        try:
+            with self._conn() as conn:
+                cur = conn.execute(
+                    "INSERT INTO mythos_cadence_log "
+                    "(variant, cadence, findings_count, duration_ms, "
+                    " triggered_by, error, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        str(variant),
+                        str(cadence),
+                        int(findings_count),
+                        int(duration_ms),
+                        str(triggered_by),
+                        error,
+                        time.time(),
+                    ),
+                )
+                return int(cur.lastrowid or 0)
+        except Exception:
+            return 0
+
+    def get_mythos_findings(
+        self,
+        *,
+        variant: str | None = None,
+        severity: str | None = None,
+        unresolved_only: bool = False,
+        limit: int = 50,
+    ) -> list[dict]:
+        """Read Mythos findings with optional filters. Fail-open: returns
+        [] on any DB error."""
+        try:
+            sql = "SELECT * FROM mythos_finding_log WHERE 1=1"
+            args: list = []
+            if variant:
+                sql += " AND variant = ?"
+                args.append(str(variant))
+            if severity:
+                sql += " AND severity = ?"
+                args.append(str(severity).upper())
+            if unresolved_only:
+                sql += " AND resolved = 0"
+            sql += " ORDER BY created_at DESC LIMIT ?"
+            args.append(max(1, min(int(limit), 500)))
+            with self._conn() as conn:
+                rows = conn.execute(sql, tuple(args)).fetchall()
+            return [dict(r) for r in rows]
+        except Exception:
+            return []
+
+    def get_mythos_cadence_status(self) -> dict:
+        """Summary of cadence-engine activity. Fail-open: returns
+        {variants: {}, total_runs: 0, ...} on DB error."""
+        try:
+            with self._conn() as conn:
+                rows = conn.execute(
+                    "SELECT variant, COUNT(*) AS n_runs, "
+                    "       SUM(findings_count) AS total_findings, "
+                    "       MAX(created_at) AS last_run_ts "
+                    "FROM mythos_cadence_log "
+                    "GROUP BY variant"
+                ).fetchall()
+            variants: dict = {}
+            total_runs = 0
+            total_findings = 0
+            for r in rows:
+                d = dict(r)
+                vname = d["variant"]
+                variants[vname] = {
+                    "n_runs": int(d["n_runs"] or 0),
+                    "total_findings": int(d["total_findings"] or 0),
+                    "last_run_ts": float(d["last_run_ts"] or 0.0),
+                }
+                total_runs += int(d["n_runs"] or 0)
+                total_findings += int(d["total_findings"] or 0)
+            return {
+                "variants": variants,
+                "total_runs": total_runs,
+                "total_findings": total_findings,
+                "timestamp": time.time(),
+            }
+        except Exception:
+            return {"variants": {}, "total_runs": 0, "total_findings": 0, "timestamp": time.time()}
 
     def insert_operator_initiative_advancement_log(
         self,

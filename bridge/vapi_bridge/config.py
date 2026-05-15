@@ -2021,6 +2021,24 @@ class Config:
     path (2 chain RPC reads per agent). 600s default to bound testnet RPC
     quota. INV-OPERATOR-AGENT-008 freezes the dual-cadence shape."""
 
+    # --- Phase O5-MYTHOS-MINIMAL M.1: Mythos cadence engine ---
+    mythos_cadence_enabled: bool = field(
+        default_factory=lambda: _env_bool("MYTHOS_CADENCE_ENABLED", False)
+    )
+    """Phase O5-MYTHOS-MINIMAL M.1 — Enable the Mythos cadence background
+    task. When False (default), Mythos variants only run on operator-
+    triggered MCP tool invocation. When True, variants registered with
+    get_pending_variants run at the daily cadence; findings persist to
+    mythos_finding_log and route via fleet_coherence_log (M.3 FSCA
+    rules). Default False = opt-in observability — same pattern as the
+    cedar_drift_sweep family above."""
+
+    mythos_cadence_interval_s: int = field(
+        default_factory=lambda: int(_env("MYTHOS_CADENCE_INTERVAL_S", "86400"))
+    )
+    """Phase O5-MYTHOS-MINIMAL M.1 — Mythos cadence engine heartbeat
+    interval. 86400s (24h) default — daily cadence per the M.1 plan."""
+
     # --- Phase O4-VPM-INT follow-up: Continuous CFSS lane drift sweep ---
     cfss_drift_sweep_enabled: bool = field(
         default_factory=lambda: _env_bool("CFSS_DRIFT_SWEEP_ENABLED", False)
