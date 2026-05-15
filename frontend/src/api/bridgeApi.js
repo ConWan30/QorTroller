@@ -88,9 +88,11 @@ export function useSeparationDefensibility() {
 }
 
 export function useInvariantGateStatus() {
+  // noMock:true — invariant gate state is protocol-governance, never
+  // fabricate. Per Mythos audit (post-/goal 2026-05-15).
   return useQuery({
     queryKey: ['invariantGateStatus'],
-    queryFn: () => get('/agent/invariant-gate-status', 'invariantGateStatus'),
+    queryFn: () => get('/agent/invariant-gate-status', 'invariantGateStatus', { noMock: true }),
     refetchInterval: 30000,
     staleTime: 20000,
   })
@@ -133,9 +135,11 @@ export function useCaptureVelocityOracle() {
 }
 
 export function useTournamentPreflight() {
+  // noMock:true — preflight gates are tournament-eligibility-critical;
+  // mock fakes would mislead the operator. Per Mythos audit.
   return useQuery({
     queryKey: ['tournamentPreflight'],
-    queryFn: () => get('/agent/tournament-preflight-status', 'tournamentPreflight'),
+    queryFn: () => get('/agent/tournament-preflight-status', 'tournamentPreflight', { noMock: true }),
     refetchInterval: 15000,
     staleTime: 10000,
   })
