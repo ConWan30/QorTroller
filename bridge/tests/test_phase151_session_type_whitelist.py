@@ -141,17 +141,18 @@ class TestSessionTypeWhitelist:
         assert "W1-011" in str(exc_info.value) or "gameplay" in str(exc_info.value).lower()
 
     def test_4_structured_probe_types_frozenset_contains_4(self):
-        """Store.STRUCTURED_PROBE_TYPES must be a frozenset with the current probe set (6 entries: Phase 166 mixed_biometric_probe + Phase 199 tremor_resting + Phase 229 ait)."""
+        """Store.STRUCTURED_PROBE_TYPES must be a frozenset with the current probe set (7 entries: Phase 166 mixed_biometric_probe + Phase 199 tremor_resting + Phase 229 ait + Phase 243-SS2 trigger_force_curve)."""
         from vapi_bridge.store import Store
         spt = Store.STRUCTURED_PROBE_TYPES
         assert isinstance(spt, frozenset)
-        assert len(spt) == 6
+        assert len(spt) == 7
         assert "touchpad_corners" in spt
         assert "touchpad_freeform" in spt
         assert "touchpad_swipes" in spt
         assert "mixed_biometric_probe" in spt  # Phase 166: 2-min all-feature probe
         assert "tremor_resting" in spt          # Phase 199: 30s still-hold
         assert "ait" in spt                     # Phase 229: Active Isometric Trigger
+        assert "trigger_force_curve" in spt     # Phase 243-SS2: adaptive-trigger force-curve PRIMARY DISCRIMINATOR candidate
         # Free-form gameplay must NOT be in whitelist
         assert "gameplay" not in spt
 
@@ -163,12 +164,12 @@ class TestSessionTypeWhitelist:
 class TestEnrollmentCaptureGuidance:
 
     def test_5_guidance_empty_db_all_probes_not_found(self):
-        """On an empty DB, guidance must report found=False for all probe types (currently 6 types)."""
+        """On an empty DB, guidance must report found=False for all probe types (currently 7 types per Phase 243-SS2)."""
         store = _make_store()
         g = store.get_enrollment_capture_guidance(min_n=10)
         assert "guidance" in g
         assert "probe_types" in g
-        assert len(g["probe_types"]) == 6  # corners/freeform/swipes/mixed/tremor_resting/ait
+        assert len(g["probe_types"]) == 7  # corners/freeform/swipes/mixed/tremor_resting/ait/trigger_force_curve
         for probe in g["probe_types"]:
             assert g["guidance"][probe]["found"] is False
         assert g["overall_ready"] is False
