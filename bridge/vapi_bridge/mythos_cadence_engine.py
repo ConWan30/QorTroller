@@ -53,6 +53,7 @@ MYTHOS_CADENCE_SCHEDULE: dict[str, list[str]] = {
     "per_pr":         ["frozen", "crypto"],                         # Priority-5
     "per_phase_close":["methodology"],                              # Priority-5
     "pre_ceremony":   ["ceremony", "frozen", "operator_initiative"],
+    "post_ceremony":  ["post_o3", "operator_initiative"],           # operator goal 2026-05-15
     "post_incident":  ["stability", "crypto"],
     "weekly":         ["operator_initiative", "methodology"],       # Priority-5
 }
