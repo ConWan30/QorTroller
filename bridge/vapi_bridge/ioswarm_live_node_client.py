@@ -104,8 +104,12 @@ class IoSwarmLiveNodeClient:
                     self._store.update_ioswarm_node_last_seen(
                         url, now, result.get("staker_address", "")
                     )
-                except Exception:
-                    pass
+                except Exception as exc:  # noqa: BLE001
+                    # Mythos audit (MEDIUM): was silently swallowed — node
+                    # registry staleness must not be invisible.
+                    log.warning(
+                        "ioSwarm node last_seen update failed for %s: %s", url, exc
+                    )
         return results
 
     async def _call_node(self, url: str, body: bytes) -> dict:
@@ -123,7 +127,13 @@ class IoSwarmLiveNodeClient:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(req) as resp:
+        # Mythos audit (HIGH): explicit socket timeout. asyncio.wait_for at the
+        # call site cancels the awaiting coroutine but cannot interrupt this
+        # blocking urlopen running in the executor thread — without a timeout
+        # here, a hung node leaks an executor thread + socket per call and can
+        # starve the bridge-wide ThreadPoolExecutor.
+        _t = float(getattr(self._cfg, "ioswarm_node_timeout_seconds", 5.0))
+        with urllib.request.urlopen(req, timeout=_t) as resp:
             return json.loads(resp.read())
 
     # ------------------------------------------------------------------
@@ -156,8 +166,12 @@ class IoSwarmLiveNodeClient:
                     self._store.update_ioswarm_node_last_seen(
                         url, now, result.get("staker_address", "")
                     )
-                except Exception:
-                    pass
+                except Exception as exc:  # noqa: BLE001
+                    # Mythos audit (MEDIUM): was silently swallowed — node
+                    # registry staleness must not be invisible.
+                    log.warning(
+                        "ioSwarm node last_seen update failed for %s: %s", url, exc
+                    )
             results.append(entry)
         return results
 
@@ -173,5 +187,7 @@ class IoSwarmLiveNodeClient:
 
     def _http_get_status(self, base_url: str) -> dict:
         endpoint = base_url.rstrip("/") + "/status"
-        with urllib.request.urlopen(endpoint) as resp:
+        # Mythos audit (HIGH): explicit socket timeout — see _http_post.
+        _t = float(getattr(self._cfg, "ioswarm_node_timeout_seconds", 5.0))
+        with urllib.request.urlopen(endpoint, timeout=_t) as resp:
             return json.loads(resp.read())
