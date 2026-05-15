@@ -8159,11 +8159,34 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         """
         from .curator_agent import compute_verdict_for_listing
         cache = getattr(app, "_protocol_state_cache", None)
-        return await compute_verdict_for_listing(
+        verdict_result = await compute_verdict_for_listing(
             store, chain, cfg,
             commitment_hex_clean, listing, trigger_reason,
             protocol_state_cache=cache,
         )
+
+        # Phase O5-MLGA Stage 10: MARKET-LISTING-v1 autonomous emission.
+        # Every Curator review (manual operator trigger OR autonomous
+        # loop) auto-emits one MARKET-LISTING VPM artifact summarizing
+        # the listing state at verdict time. Fail-open: any emission
+        # failure logs internally + does NOT affect the verdict
+        # response. Worker thread to keep the event loop free.
+        try:
+            from .market_listing_emitter import emit_market_listing
+            verdict_label = str(verdict_result.get("verdict") or "APPROVED")
+            await asyncio.to_thread(
+                emit_market_listing,
+                store=store, cfg=cfg,
+                commitment_hex=commitment_hex_clean,
+                listing=listing,
+                verdict=verdict_label,
+            )
+        except Exception as _ml_exc:  # noqa: BLE001
+            log.warning(
+                "MARKET-LISTING emit hook failed (non-fatal): %s", _ml_exc,
+            )
+
+        return verdict_result
 
     @app.post("/operator/curator-review-listing")
     async def curator_review_listing_endpoint(
