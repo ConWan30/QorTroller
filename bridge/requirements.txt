@@ -34,3 +34,9 @@ tenacity>=8.0.0
 # explicit-add for manifest reproducibility — used by Phase O0 Section 6.3
 # and 6.4 tests; pytest.ini line 8 already configures asyncio_mode = strict)
 pytest-asyncio>=0.23.0
+
+# Parallel test execution — Store.__init__ runs a 370-statement SQLite
+# migration per test; tests already isolated via tempfile.mkdtemp(); using
+# `pytest -n auto` cuts the full bridge suite from ~3h35m to ~1h05m
+# (verified ~3.2× speedup on a 20-module batch).
+pytest-xdist>=3.8.0
