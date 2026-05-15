@@ -145,12 +145,17 @@ KNOWN_PLACEHOLDERS = [
 
 # Crypto-integration deltas the applet-pipeline phase must address.
 # Phase O4-VPM-INT-A.PARTIAL (2026-05-14): ABI_ENCODER + CONSENT_RETURN_DATA +
-# DEVICE_ID_TO_GAMER moved to CLOSED_DELTAS below. P256_VERIFY remains open
-# (dep-blocked by @assemblyscript/wasm-crypto 404). POSEIDON_HASH remains
-# open (atomic-stopped per safety rule: no Python reference available to
-# verify a hand-written AS Poseidon implementation; deferred until a Python
-# Poseidon reference is provisioned OR an AS Poseidon package becomes
-# available).
+# DEVICE_ID_TO_GAMER moved to CLOSED_DELTAS below.
+# Phase O4-W3B-POSEIDON-AS (2026-05-14): POSEIDON_HASH moved to CLOSED_DELTAS.
+# The W.1 V-check established that POSEIDON_HASH was never an in-applet
+# computation delta: featureCommitment + nullifierHash derive from
+# circuit-PRIVATE inputs (scaledFeatures[7], deviceIdHash) that do not travel
+# in the 228-byte PoAC wire format. The applet RELAYS these bridge-computed
+# ZK public inputs; it is not their computation site. The verified +
+# PV-CI-pinned AS Poseidon(BN254) capability (poseidon_bn254.ts) resolves the
+# capability layer; in-applet wiring is architecture-N/A. See CLOSED_DELTAS.
+# P256_VERIFY remains the sole genuinely-open delta (dep-blocked by
+# @assemblyscript/wasm-crypto 404).
 # Each tuple: (delta_id, applet, current_state, production_requirement)
 CRYPTO_INTEGRATION_DELTAS = [
     (
@@ -161,18 +166,6 @@ CRYPTO_INTEGRATION_DELTAS = [
         "Integrate @assemblyscript/wasm-crypto + ecdsa.verify(body, sig, pubkey) "
         "where pubkey resolves via VAPIioIDRegistry device-to-wallet mapping. "
         "Currently blocked by @assemblyscript/wasm-crypto 404 on npm registry.",
-    ),
-    (
-        "POSEIDON_HASH",
-        "validate_poac_record.ts",
-        "featureCommitment + nullifierHash emitted as zero placeholders in "
-        "_encode_submit_proof; ABI shape is final, payload is zero",
-        "Implement Poseidon(deviceIdHash, epoch) in AssemblyScript or "
-        "find an AS-compiled circom-Poseidon implementation. nullifierHash "
-        "is the anti-replay guard at PITLSessionRegistry.submitPITLProof. "
-        "Atomic-stopped 2026-05-14: no Python Poseidon reference available "
-        "to verify hand-written AS implementation against circomlib vectors; "
-        "safety rule prohibits shipping unverified crypto.",
     ),
 ]
 
@@ -212,6 +205,35 @@ CLOSED_DELTAS = [
         "gamer address (32B-padded) flows into _check_consent_view. "
         "Return code 6 surfaces resolution failures distinctly.",
     ),
+    (
+        "POSEIDON_HASH",
+        "validate_poac_record.ts",
+        "Phase O4-W3B-POSEIDON-AS (2026-05-14)",
+        "Resolved at the CAPABILITY layer; reclassified architecture-N/A for "
+        "in-applet wiring. A protocol-internal AS Poseidon(BN254) module "
+        "(scripts/w3bstream/poseidon_bn254.ts) shipped and was verified "
+        "byte-identical to circomlibjs 0.1.7 across 525 final-output vectors "
+        "+ 150 per-round vectors + 48100 intermediate round-state elements "
+        "(V.1 commit 0b6adc13 + V.2 commit a80f3fb4), then pinned by PV-CI "
+        "invariants INV-POSEIDON-AS-001/002/003 (PV-CI 83->86, PV.1 commit "
+        "de64af4c). The W.1 V-check then established that POSEIDON_HASH was "
+        "never an in-applet computation delta: featureCommitment = "
+        "Poseidon(8)(scaledFeatures[0..6], inferenceCodeFromBody) and "
+        "nullifierHash = Poseidon(deviceIdHash, epoch) both derive from "
+        "circuit-PRIVATE inputs (scaledFeatures[7], deviceIdHash) per "
+        "contracts/circuits/PitlSessionProof.circom -- inputs that do NOT "
+        "travel in the 228-byte PoAC wire format (bridge/vapi_bridge/codec.py: "
+        "the 164-byte body is 4 hashes + 13 telemetry scalars; no feature "
+        "vector, no raw deviceId). The applet RELAYS these bridge-computed ZK "
+        "public inputs; it is structurally not their computation site. The "
+        "zero placeholders in _encode_submit_proof are the honest "
+        "not-yet-relayed state. The AS Poseidon capability stands available "
+        "for any future WASM context that must COMPUTE rather than relay a "
+        "BN254 Poseidon (e.g. independent in-applet commitment re-derivation "
+        "if the bridge->W3bstream message is later extended to carry feature "
+        "data). AMBER path: circomlibjs 0.1.7 single reference; V.3 "
+        "cross-reference triangulation deferred.",
+    ),
 ]
 
 # Phase O4-VPM-INT-A.5 (Stream A RED path) — Upstream package availability
@@ -220,6 +242,13 @@ CLOSED_DELTAS = [
 # These are FACT: probed via `npm view <package>` on 2026-05-14.
 # When a future operator probe finds these packages available, the audit's
 # DEPENDENCY_BLOCKERS check upgrades the verdict reasoning automatically.
+# Phase O4-W3B-POSEIDON-AS (2026-05-14): the "AssemblyScript Poseidon
+# implementation" blocker was RESOLVED -- a verified, PV-CI-pinned AS
+# Poseidon(BN254) module shipped (scripts/w3bstream/poseidon_bn254.ts; see
+# CLOSED_DELTAS POSEIDON_HASH for the full closure record). It is removed
+# from this roster. The W.1 V-check additionally established POSEIDON_HASH
+# was never an in-applet wiring delta (relay-not-compute). The sole live
+# blocker is @assemblyscript/wasm-crypto (P256_VERIFY).
 DEPENDENCY_BLOCKERS = [
     (
         "@assemblyscript/wasm-crypto",
@@ -230,21 +259,6 @@ DEPENDENCY_BLOCKERS = [
         "production crypto without runtime verification per VAPI's "
         "'verifiable claims with visible limits' posture. Phase O4-VPM-INT-"
         "A.PARTIAL Hard Rule explicitly blocks hand-rolled ECDSA-P256.",
-    ),
-    (
-        "AssemblyScript Poseidon implementation",
-        "No canonical npm package found (poseidon-as / circom-poseidon-as / "
-        "@iden3/poseidon-as all 404 as of 2026-05-14). Local atomic-stop on "
-        "2026-05-14 Stream A.PARTIAL: no Python Poseidon reference available "
-        "in the agent runtime to verify a hand-written AS implementation "
-        "against circomlib vectors.",
-        ["POSEIDON_HASH"],
-        "Path 1 (preferred): provision Python Poseidon reference (e.g. "
-        "py_ecc poseidon-bn254 or vendored circomlib reference) and re-run "
-        "Stream A.PARTIAL to vendor an AS Poseidon implementation verified "
-        "vector-by-vector. Path 2: manually transpile circomlib's poseidon-"
-        "bn254 to AssemblyScript (~400 LOC arithmetic; non-trivial but "
-        "bounded) ONLY after Path 1's verification harness is in place.",
     ),
 ]
 
