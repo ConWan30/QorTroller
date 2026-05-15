@@ -49,12 +49,12 @@ log = logging.getLogger(__name__)
 # explicit operator-runtime invocation; pre_ceremony from preflight
 # script; post_incident from FSCA rule trigger).
 MYTHOS_CADENCE_SCHEDULE: dict[str, list[str]] = {
-    "daily":          ["frozen", "stability"],          # M.1+M.2 minimal
-    "per_pr":         ["frozen"],                       # M.5 GitHub Actions
-    "per_phase_close":["methodology"],                  # M.5
-    "pre_ceremony":   ["ceremony", "frozen", "operator_initiative"],  # operator-authored extension 2026-05-15
-    "post_incident":  ["stability", "crypto"],          # M.5
-    "weekly":         ["operator_initiative"],          # operator-authored extension 2026-05-15
+    "daily":          ["frozen", "stability", "crypto", "corpus"],  # M.1+M.2+Priority-5
+    "per_pr":         ["frozen", "crypto"],                         # Priority-5
+    "per_phase_close":["methodology"],                              # Priority-5
+    "pre_ceremony":   ["ceremony", "frozen", "operator_initiative"],
+    "post_incident":  ["stability", "crypto"],
+    "weekly":         ["operator_initiative", "methodology"],       # Priority-5
 }
 
 

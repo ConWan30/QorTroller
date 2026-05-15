@@ -799,3 +799,610 @@ async def mythos_operator_initiative_audit(
         ))
 
     return findings
+
+
+# ==========================================================================
+# Mythos-Crypto — PATTERN-017 commitment-family integrity (Priority 5)
+# ==========================================================================
+# Pinned PATTERN-017 domain tags (10 commitment families per CLAUDE.md
+# Hard Rules). Drift here (additions OR removals) reshapes the protocol
+# surface; any change requires governance ceremony + new PV-CI invariants.
+# This list is the audit's source-of-truth — if a new commitment family
+# is added in production code, this list MUST be updated in the same PR.
+_PATTERN_017_FROZEN_TAGS: frozenset[bytes] = frozenset({
+    b"VAPI-GIC-GENESIS-v1",          # grind_chain.py
+    b"VAPI-WEC-GENESIS-v1",          # watchdog_chain.py
+    b"VAPI-VAME-v1",                 # vame.py
+    b"VAPI-CORPUS-SNAPSHOT-v1",      # corpus_snapshot.py
+    b"VAPI-CONSENT-v1",              # consent_categories.py
+    b"VAPI-BIOMETRIC-SNAPSHOT-v1",   # biometric_snapshot.py
+    b"VAPI-LISTING-v1",              # listing_primitive.py
+    b"VAPI-FRR-v1",                  # operator_initiative_advancement.py
+    b"VAPI-ZKBA-ARTIFACT-v1",        # zkba_artifact.py
+    b"VAPI-AGENT-COMMIT-v1",         # agent_commit.py
+    b"VAPI-PHYSICAL-DATA-ATTESTATION-v1",  # physical_data_attestation.py
+                                     # (Pass 2C Section 4.2 ratified; the
+                                     # docstring explicitly identifies it
+                                     # as a FROZEN-v1 commitment-family
+                                     # primitive — surfaced as a finding
+                                     # against CLAUDE.md's stated count
+                                     # of 10, see audit notes below)
+})
+
+# AUDIT NOTE 2026-05-15: When this audit was first run live, Mythos-Crypto
+# surfaced VAPI-PHYSICAL-DATA-ATTESTATION-v1 as an UNKNOWN HIGH finding.
+# Investigation confirmed PHYSICAL_DATA_ATTESTATION v1 is a genuine
+# FROZEN-v1 commitment family (Pass 2C Section 4.2 ratified). The pin
+# list now includes it explicitly, bringing the empirically-observed
+# count to 11. CLAUDE.md's stated "10 PATTERN-017 commitment families"
+# may need a sync update — surfaced here for operator review without
+# silently editing CLAUDE.md.
+
+# Capability tags — distinct from PATTERN-017 commitment families per
+# the POSEIDON-BN254-AS reframe precedent. These are NOT counted toward
+# the PATTERN-017 family invariant.
+_KNOWN_CAPABILITY_TAGS: frozenset[bytes] = frozenset({
+    b"VAPI-BT-WITNESS-v1",            # Phase 242-BT Stream 1
+    b"VAPI-BT-WITNESS-BLE-v1",        # Phase 242-BT — reserved BLE-HOGP future variant
+                                      # (documented in bt_witness.py module docstring; not
+                                      # yet allocated, distinct capability tag if needed)
+    b"VAPI-CEDAR-BUNDLE-v1",          # cedar_parser.py — Cedar bundle $schema version
+                                      # literal (schema-versioning surface, NOT a
+                                      # commitment-family domain tag)
+})
+
+
+async def mythos_crypto_drift(
+    *,
+    repo_root: Path | None = None,
+    poll_npm_registry: bool = False,
+) -> list[MythosFindingResult]:
+    """PATTERN-017 commitment-family integrity audit.
+
+    Scans bridge/vapi_bridge/*.py for `b"VAPI-..."` domain tag literals
+    and cross-checks against the FROZEN frozenset of 10 PATTERN-017
+    commitment-family tags + the known capability-tag set. Findings:
+      CRITICAL: a PATTERN-017 tag in the FROZEN set is MISSING from
+                production code (commitment family was removed without
+                governance).
+      HIGH:     an unknown `b"VAPI-..."` literal appears in production
+                code (potential new commitment family without invariant
+                pinning — needs governance ceremony to add).
+      LOW:      poll_npm_registry=True surfaces an INFORMATIONAL when
+                @assemblyscript/wasm-crypto becomes available on npm
+                (the Phase 244 unblocker; this variant is the operator's
+                periodic check for that upstream resolution).
+
+    NEVER raises (fail-open contract). All findings frozen_region=True.
+    """
+    root = _resolve_repo_root(repo_root)
+    findings: list[MythosFindingResult] = []
+    bridge_dir = root / "bridge" / "vapi_bridge"
+
+    # Discover all b"VAPI-..." literal occurrences in production code.
+    discovered_tags: set[bytes] = set()
+    discovered_by_file: dict[bytes, list[str]] = {}
+    pat = re.compile(rb'b"(VAPI-[A-Za-z0-9_\-]+-v\d+)"')
+    if bridge_dir.is_dir():
+        for f in bridge_dir.rglob("*.py"):
+            try:
+                src = f.read_bytes()
+            except Exception:  # noqa: BLE001 — fail-open
+                continue
+            for m in pat.finditer(src):
+                tag = b'"' + m.group(1) + b'"'  # for clarity, but we use raw form below
+                raw_tag = m.group(1)            # without surrounding quotes
+                discovered_tags.add(raw_tag)
+                rel = str(f.relative_to(root)).replace("\\", "/")
+                discovered_by_file.setdefault(raw_tag, []).append(rel)
+            await asyncio.sleep(0)
+
+    # Convert to canonical bytes for set ops
+    all_known = set(_PATTERN_017_FROZEN_TAGS) | set(_KNOWN_CAPABILITY_TAGS)
+    discovered_bytes = {b for b in discovered_tags}
+
+    # Check 1: every FROZEN PATTERN-017 tag must appear in production code
+    missing = _PATTERN_017_FROZEN_TAGS - discovered_bytes
+    for tag in missing:
+        findings.append(MythosFindingResult(
+            variant="crypto",
+            severity="CRITICAL",
+            description=(
+                f"PATTERN-017 FAMILY DRIFT: FROZEN commitment-family tag "
+                f"{tag!r} is missing from bridge/vapi_bridge/*.py. The 10 "
+                "PATTERN-017 commitment families are protocol-defining; "
+                "removal requires governance ceremony + invariant change."
+            ),
+            recommended_fix=(
+                f"Restore the {tag!r} primitive module from git history. "
+                "Do NOT update _PATTERN_017_FROZEN_TAGS — the count is "
+                "the FROZEN invariant."
+            ),
+            coherence_id=_coherence_id("crypto", f"missing_family:{tag.decode()}"),
+            frozen_region=True,
+            fix_authority_tier=3,
+            evidence_sources=["bridge/vapi_bridge/", "CLAUDE.md"],
+        ))
+
+    # Check 2: every discovered tag should be in the known set (FROZEN
+    # PATTERN-017 ∪ known capability tags). Unknown tags = potential new
+    # commitment family without invariant pinning.
+    unknown = discovered_bytes - all_known
+    for tag in sorted(unknown):
+        files_ref = discovered_by_file.get(tag, [])
+        findings.append(MythosFindingResult(
+            variant="crypto",
+            severity="HIGH",
+            description=(
+                f"UNKNOWN CRYPTOGRAPHIC TAG: {tag!r} appears in production "
+                f"code at {files_ref} but is NOT in _PATTERN_017_FROZEN_TAGS "
+                "or _KNOWN_CAPABILITY_TAGS. Either (a) a new commitment "
+                "family was added without governance ceremony, OR (b) a "
+                "new capability tag was added without updating this audit."
+            ),
+            recommended_fix=(
+                "If this is a new commitment family: invoke governance "
+                "ceremony (--reason 'invariant_change' + governance phrase) "
+                "to update _PATTERN_017_FROZEN_TAGS + add PV-CI invariant. "
+                "If a capability tag: update _KNOWN_CAPABILITY_TAGS."
+            ),
+            coherence_id=_coherence_id("crypto", f"unknown_tag:{tag.decode()}"),
+            file_path=files_ref[0] if files_ref else None,
+            frozen_region=True,
+            fix_authority_tier=3,
+            evidence_sources=files_ref or ["bridge/vapi_bridge/"],
+        ))
+
+    # Check 3: AS Poseidon test-vector corpus SHA-256 file presence
+    poseidon_sha = root / "scripts" / "w3bstream" / "poseidon_test_vectors.sha256"
+    if not poseidon_sha.is_file():
+        findings.append(MythosFindingResult(
+            variant="crypto",
+            severity="HIGH",
+            description=(
+                "Poseidon test-vector corpus SHA-256 pin file missing at "
+                "scripts/w3bstream/poseidon_test_vectors.sha256. This file "
+                "pins the circomlibjs 0.1.7 ground-truth corpus that V.1/"
+                "V.2 verify the AS Poseidon implementation against. Without "
+                "it, INV-POSEIDON-AS-003 cannot enforce vector-file integrity."
+            ),
+            recommended_fix=(
+                "Restore from git history (Phase O4-W3B-POSEIDON-AS, commit "
+                "afa31416..2205e2a1)."
+            ),
+            coherence_id=_coherence_id("crypto", "missing:poseidon_sha"),
+            file_path="scripts/w3bstream/poseidon_test_vectors.sha256",
+            frozen_region=True,
+            fix_authority_tier=3,
+            evidence_sources=["scripts/w3bstream/poseidon_test_vectors.sha256"],
+        ))
+
+    # Check 4 (optional): NPM registry poll for @assemblyscript/wasm-crypto.
+    # This is the Phase 244 unblocker. Default OFF (network I/O); operator
+    # enables periodically.
+    if poll_npm_registry:
+        try:
+            import urllib.request
+            req = urllib.request.Request(
+                "https://registry.npmjs.org/@assemblyscript/wasm-crypto",
+                headers={"User-Agent": "vapi-mythos-crypto-poll/1.0"},
+            )
+            with urllib.request.urlopen(req, timeout=5) as resp:  # noqa: S310
+                status = resp.status
+            if status == 200:
+                findings.append(MythosFindingResult(
+                    variant="crypto",
+                    severity="LOW",
+                    description=(
+                        "DISCOVERY: @assemblyscript/wasm-crypto is now "
+                        "available on the npm registry. This is the "
+                        "Phase 244-W3B-REG upstream unblocker — operator "
+                        "may now proceed with P256_VERIFY closure + "
+                        "applet registration ceremony."
+                    ),
+                    recommended_fix=(
+                        "Operator action: validate the package via NIST "
+                        "CAVP P-256 vectors, then schedule the applet "
+                        "registration ceremony at console.w3bstream.com "
+                        "per the Phase 244 plan."
+                    ),
+                    coherence_id=_coherence_id(
+                        "crypto", "npm_discovery:wasm_crypto_available"
+                    ),
+                    frozen_region=False,  # informational discovery, not protocol drift
+                    fix_authority_tier=2,
+                    evidence_sources=["registry.npmjs.org/@assemblyscript/wasm-crypto"],
+                ))
+            # status 404 = still unavailable (current state); no finding emitted
+        except Exception as exc:  # noqa: BLE001 — fail-open
+            log.debug("npm poll error (non-fatal): %s", exc)
+
+    return findings
+
+
+# ==========================================================================
+# Mythos-Methodology — VBDIP + canonical-anchor integrity (Priority 5)
+# ==========================================================================
+
+# Files that constitute the methodology trust chain. Drift here doesn't
+# break protocol mechanics, but it does break the auditability story.
+_METHODOLOGY_REQUIRED_FILES: tuple[str, ...] = (
+    "wiki/methodology/VBDIP-0001-vad-framework-introduction.md",
+    "wiki/methodology/METHODOLOGY_LAYER_INTEGRATION_MAP.md",
+    "wiki/methodology/bt_calibration_v1_1_architectural_revision.md",
+    "wiki/methodology/sensor_stack_v2_1_architectural_revision.md",
+    "wiki/assessments/VAPI Bluetooth Calibration_ Architectural Prerequisites and Threat Model Analysis.pdf",
+    "wiki/assessments/DualSense Edge Sensor-Stack Characterization for VAPI Track-1 Anti-Cheat Feature Architecture.pdf",
+    "vsd-vault/eval/architect_key_attestation.json",
+)
+
+
+async def mythos_methodology_drift(
+    *,
+    repo_root: Path | None = None,
+) -> list[MythosFindingResult]:
+    """Methodology layer trust-chain integrity audit.
+
+    Verifies the canonical anchors + VBDIP files + architect attestation
+    that the protocol-layer surfaces inherit trust from. Missing any one
+    of these breaks the methodology audit-trail story but does NOT break
+    protocol mechanics (frozen_region=True for VBDIP / architect; MEDIUM
+    elsewhere).
+    """
+    root = _resolve_repo_root(repo_root)
+    findings: list[MythosFindingResult] = []
+
+    for rel_path in _METHODOLOGY_REQUIRED_FILES:
+        p = root / rel_path
+        # Path objects normalize separators; check both is_file + is_dir
+        # (PDFs are files; eval/ files; etc.)
+        if not p.is_file():
+            severity = (
+                "HIGH" if "VBDIP-0001" in rel_path or "architect_key" in rel_path
+                else "MEDIUM"
+            )
+            findings.append(MythosFindingResult(
+                variant="methodology",
+                severity=severity,
+                description=(
+                    f"METHODOLOGY FILE MISSING: {rel_path}. The methodology "
+                    "trust chain that all protocol-layer surfaces inherit "
+                    "trust from depends on this canonical anchor."
+                ),
+                recommended_fix=(
+                    f"Restore {rel_path} from git history. "
+                    "Do NOT regenerate — the architect Ed25519 attestation "
+                    "+ Pass 2C verification basis are the canonical record."
+                ),
+                coherence_id=_coherence_id(
+                    "methodology", f"missing:{rel_path}"
+                ),
+                file_path=rel_path,
+                frozen_region=True,
+                fix_authority_tier=3,
+                evidence_sources=[rel_path],
+            ))
+        await asyncio.sleep(0)
+
+    return findings
+
+
+# ==========================================================================
+# Mythos-Ceremony — pre/post ceremony invariant integrity (Priority 5)
+# ==========================================================================
+
+async def mythos_ceremony_drift(
+    *,
+    repo_root: Path | None = None,
+    env_path: Path | None = None,
+) -> list[MythosFindingResult]:
+    """Pre/post ceremony invariant checks.
+
+    Verifies the operator-runtime invariants that MUST hold before any
+    chain-anchor ceremony fires:
+      • CHAIN_SUBMISSION_PAUSED=true in bridge/.env (the kill-switch
+        protecting against silent wallet drain; CRITICAL when False)
+      • parallel anchor scripts exist + reference VAPI_GOVERNANCE_PHRASE
+        wording correctly (HIGH when missing)
+      • PV-CI invariant allowlist file exists + is parseable JSON (MEDIUM)
+    """
+    root = _resolve_repo_root(repo_root)
+    if env_path is None:
+        env_path = root / "bridge" / ".env"
+    findings: list[MythosFindingResult] = []
+
+    # Check 1: kill-switch state in bridge/.env
+    if env_path.is_file():
+        try:
+            env_text = env_path.read_text(encoding="utf-8")
+            # Look for CHAIN_SUBMISSION_PAUSED. False is what we're guarding against.
+            for line in env_text.splitlines():
+                ln = line.strip()
+                if ln.startswith("#"):
+                    continue
+                if ln.startswith("CHAIN_SUBMISSION_PAUSED="):
+                    val = ln.split("=", 1)[1].strip().lower()
+                    if val == "false":
+                        findings.append(MythosFindingResult(
+                            variant="ceremony",
+                            severity="CRITICAL",
+                            description=(
+                                "KILL-SWITCH DISARMED: bridge/.env has "
+                                "CHAIN_SUBMISSION_PAUSED=false. Per Phase "
+                                "237.5 Path C+ + the operator's hard rule "
+                                "'no mainnet deploys until Operator "
+                                "Initiative complete', the kill-switch "
+                                "MUST be true except during an explicit "
+                                "operator-runtime ceremony."
+                            ),
+                            recommended_fix=(
+                                "Set CHAIN_SUBMISSION_PAUSED=true in "
+                                "bridge/.env unless a ceremony is actively "
+                                "running. Process-scoped override via "
+                                "shell env var is the documented pattern "
+                                "for one-shot ceremonies."
+                            ),
+                            coherence_id=_coherence_id(
+                                "ceremony", "kill_switch_disarmed"
+                            ),
+                            file_path="bridge/.env",
+                            frozen_region=True,
+                            fix_authority_tier=3,
+                            evidence_sources=["bridge/.env"],
+                        ))
+                    break
+        except Exception as exc:  # noqa: BLE001 — fail-open
+            log.debug("ceremony: env read error (non-fatal): %s", exc)
+
+    # Check 2: parallel anchor scripts exist
+    for script_name in ("parallel_o2_anchor.py", "parallel_o3_act_anchor.py"):
+        p = root / "scripts" / script_name
+        if not p.is_file():
+            findings.append(MythosFindingResult(
+                variant="ceremony",
+                severity="HIGH",
+                description=(
+                    f"CEREMONY SCRIPT MISSING: scripts/{script_name}. "
+                    "Operator-runtime ceremony cannot fire without this "
+                    "script — Operator Initiative graduation BLOCKED."
+                ),
+                recommended_fix=f"Restore scripts/{script_name} from git history.",
+                coherence_id=_coherence_id("ceremony", f"missing:{script_name}"),
+                file_path=f"scripts/{script_name}",
+                frozen_region=True,
+                fix_authority_tier=3,
+                evidence_sources=[f"scripts/{script_name}"],
+            ))
+
+    # Check 3: PV-CI invariant allowlist is parseable
+    allowlist = root / ".github" / "INVARIANTS_ALLOWLIST.json"
+    if allowlist.is_file():
+        try:
+            import json
+            data = json.loads(allowlist.read_text(encoding="utf-8"))
+            if not isinstance(data, dict) and not isinstance(data, list):
+                findings.append(MythosFindingResult(
+                    variant="ceremony",
+                    severity="MEDIUM",
+                    description=(
+                        "PV-CI allowlist file has unexpected top-level "
+                        f"type {type(data).__name__}. Governance ceremony "
+                        "writes expect dict-typed allowlist."
+                    ),
+                    recommended_fix=(
+                        "Re-run `python scripts/vapi_invariant_gate.py "
+                        "--generate --reason 'refactor: regenerate allowlist'`."
+                    ),
+                    coherence_id=_coherence_id("ceremony", "allowlist_shape"),
+                    file_path=".github/INVARIANTS_ALLOWLIST.json",
+                    frozen_region=False,
+                    fix_authority_tier=2,
+                    evidence_sources=[".github/INVARIANTS_ALLOWLIST.json"],
+                ))
+        except Exception as exc:  # noqa: BLE001 — fail-open
+            findings.append(MythosFindingResult(
+                variant="ceremony",
+                severity="MEDIUM",
+                description=(
+                    f"PV-CI allowlist file unparseable as JSON: {exc}. "
+                    "Governance ceremony cannot read this state."
+                ),
+                recommended_fix=(
+                    "Re-run `python scripts/vapi_invariant_gate.py "
+                    "--generate --reason 'refactor: regenerate allowlist'`."
+                ),
+                coherence_id=_coherence_id("ceremony", "allowlist_unparseable"),
+                file_path=".github/INVARIANTS_ALLOWLIST.json",
+                frozen_region=False,
+                fix_authority_tier=2,
+                evidence_sources=[".github/INVARIANTS_ALLOWLIST.json"],
+            ))
+    else:
+        findings.append(MythosFindingResult(
+            variant="ceremony",
+            severity="HIGH",
+            description=(
+                "PV-CI allowlist file MISSING at "
+                ".github/INVARIANTS_ALLOWLIST.json. Any governance "
+                "ceremony will refuse to fire (gate refuses without "
+                "allowlist)."
+            ),
+            recommended_fix=(
+                "Generate via `python scripts/vapi_invariant_gate.py "
+                "--generate --reason 'refactor: restore missing allowlist'`."
+            ),
+            coherence_id=_coherence_id("ceremony", "missing:allowlist"),
+            file_path=".github/INVARIANTS_ALLOWLIST.json",
+            frozen_region=True,
+            fix_authority_tier=3,
+            evidence_sources=[".github/INVARIANTS_ALLOWLIST.json"],
+        ))
+
+    return findings
+
+
+# ==========================================================================
+# Mythos-Corpus — separation-ratio + TGE-blocker visibility (Priority 5)
+# ==========================================================================
+
+async def mythos_corpus_drift(
+    *,
+    repo_root: Path | None = None,
+    db_path: str | None = None,
+) -> list[MythosFindingResult]:
+    """Corpus integrity + TGE-blocker visibility audit.
+
+    Queries the bridge SQLite store for separation_ratio / GIC chain /
+    AIT defensibility state and surfaces TGE-blocker conditions per the
+    CLAUDE.md Hard Rules ("no TGE before separation_ratio > 1.0
+    confirmed — non-negotiable"). Most findings are INFORMATIONAL —
+    they surface the current corpus state without claiming drift.
+
+    DB-state mismatches with the CLAUDE.md narrative (e.g., empty DB
+    showing zero corpus while CLAUDE.md narrates N=37 AIT corpus) are
+    surfaced as LOW informational findings — they reflect dev-vs-prod
+    DB divergence, not protocol drift.
+    """
+    root = _resolve_repo_root(repo_root)
+    if db_path is None:
+        db_path = str(root / "bridge" / "vapi_store.db")
+    findings: list[MythosFindingResult] = []
+
+    try:
+        import sqlite3
+        con = sqlite3.connect(db_path)
+        con.row_factory = sqlite3.Row
+
+        # Check 1: separation_defensibility_log state (informational —
+        # this is the Phase 150 probe-type-keyed corpus state per CLAUDE.md
+        # Phase 150 reference, NOT separation_ratio_snapshots which is the
+        # battery-stratified pooled-ratio surface).
+        try:
+            row = con.execute(
+                "SELECT COUNT(*) AS n FROM separation_defensibility_log"
+            ).fetchone()
+            sep_count = int(row["n"] or 0) if row else 0
+        except Exception:  # noqa: BLE001
+            sep_count = 0
+
+        if sep_count == 0:
+            findings.append(MythosFindingResult(
+                variant="corpus",
+                severity="LOW",
+                description=(
+                    f"CORPUS STATE: separation_defensibility_log table is "
+                    f"empty in {db_path}. CLAUDE.md narrates the live "
+                    "corpus state (touchpad_corners=0.728 N=35; "
+                    "ait=1.199 N=37; tremor_resting=1.177 N=27) but the "
+                    "local DB does not reflect this. This is typically a "
+                    "dev-vs-prod DB divergence — operator's production "
+                    "bridge holds the canonical state."
+                ),
+                recommended_fix=(
+                    "Operational: run audit against production DB via "
+                    "--db PATH OR populate local DB from a snapshot."
+                ),
+                coherence_id=_coherence_id(
+                    "corpus", "empty_separation_defensibility_log"
+                ),
+                frozen_region=False,
+                fix_authority_tier=2,
+                evidence_sources=[db_path, "CLAUDE.md"],
+            ))
+
+        # Check 2: TGE invariant — surface separation ratio per probe type.
+        # separation_defensibility_log columns: session_type / ratio /
+        # all_pairs_above_1 / n_sessions_total / n_per_player_json /
+        # defensible / created_at.
+        try:
+            rows = con.execute(
+                "SELECT session_type, ratio, all_pairs_above_1, "
+                "       n_per_player_json, defensible, created_at "
+                "FROM separation_defensibility_log "
+                "ORDER BY created_at DESC LIMIT 30"
+            ).fetchall()
+            seen_probes = set()
+            for r in rows:
+                d = dict(r)
+                pt = d.get("session_type", "")
+                if pt in seen_probes:
+                    continue
+                seen_probes.add(pt)
+                ratio = float(d.get("ratio") or 0.0)
+                all_pairs = int(d.get("all_pairs_above_1") or 0)
+                if ratio < 1.0 or all_pairs == 0:
+                    findings.append(MythosFindingResult(
+                        variant="corpus",
+                        severity="MEDIUM",
+                        description=(
+                            f"TGE BLOCKER (informational): session_type={pt} "
+                            f"latest ratio={ratio:.3f}, "
+                            f"all_pairs_above_1={all_pairs}. Per Hard Rule "
+                            "'no TGE before separation_ratio > 1.0', this "
+                            "probe type is a TGE blocker until clearance "
+                            "is confirmed."
+                        ),
+                        recommended_fix=(
+                            "Operational: continue corpus growth via the "
+                            "hardware-capture protocol per the canonical "
+                            "anchor documents. Mythos-Corpus surfaces "
+                            "state; growth happens off-CLI."
+                        ),
+                        coherence_id=_coherence_id(
+                            "corpus", f"tge_blocker:{pt}"
+                        ),
+                        frozen_region=False,
+                        fix_authority_tier=2,
+                        evidence_sources=[db_path],
+                    ))
+        except Exception:  # noqa: BLE001 — table may not exist
+            pass
+
+        # Check 3: GIC chain integrity
+        try:
+            row = con.execute(
+                "SELECT COUNT(*) AS n, MAX(gic_ts_ns) AS latest "
+                "FROM ruling_validation_log "
+                "WHERE grind_chain_hash IS NOT NULL AND grind_chain_hash != ''"
+            ).fetchone()
+            gic_count = int(row["n"] or 0) if row else 0
+            # Informational — populated GIC chain is healthy; empty is
+            # dev-DB state.
+            if gic_count == 0:
+                findings.append(MythosFindingResult(
+                    variant="corpus",
+                    severity="LOW",
+                    description=(
+                        "GIC chain (Phase 235-A) is empty in local DB. "
+                        "CLAUDE.md narrates GIC_100 reached 2026-05-05 + "
+                        "anchored 2026-05-06; production state is the "
+                        "canonical record."
+                    ),
+                    recommended_fix=(
+                        "Operational: audit against production DB."
+                    ),
+                    coherence_id=_coherence_id("corpus", "empty_gic_chain"),
+                    frozen_region=False,
+                    fix_authority_tier=2,
+                    evidence_sources=[db_path, "CLAUDE.md"],
+                ))
+        except Exception:  # noqa: BLE001
+            pass
+
+        con.close()
+    except Exception as exc:  # noqa: BLE001 — fail-open
+        findings.append(MythosFindingResult(
+            variant="corpus",
+            severity="LOW",
+            description=(
+                f"Corpus audit could not open DB {db_path}: {exc}. "
+                "This is informational — local DB may not exist yet."
+            ),
+            recommended_fix="Operational; investigate DB path if expected.",
+            coherence_id=_coherence_id("corpus", f"db_open_fail"),
+            frozen_region=False,
+            fix_authority_tier=2,
+            evidence_sources=[db_path],
+        ))
+
+    return findings
