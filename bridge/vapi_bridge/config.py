@@ -1998,6 +1998,29 @@ class Config:
     do NOT consult this flag — they use the kms_hsm_production_ready
     gate instead."""
 
+    # --- O3 expedite arc 2026-05-15: surface previously-getattr-only flags ---
+    operator_dual_key_present: bool = field(
+        default_factory=lambda: _env_bool("OPERATOR_DUAL_KEY_PRESENT", False)
+    )
+    """Phase O1 D / O3 ACT gate — all three Operator Initiative agents
+    require dual-key operator authorization before Phase O3 ACT
+    advancement. The watcher previously read this via getattr fallback
+    (defaulting to False if cfg attr missing); promoted to a first-class
+    Config field 2026-05-15 so operators can set it via env var
+    OPERATOR_DUAL_KEY_PRESENT=true once dual-key authorization is in
+    place. Surfaced by scripts/operator_initiative_o3_preflight.py."""
+
+    github_app_oauth_tokens_valid: bool = field(
+        default_factory=lambda: _env_bool(
+            "GITHUB_APP_OAUTH_TOKENS_VALID", False
+        )
+    )
+    """Phase O1 D / O3 ACT gate — Guardian-only. Guardian's audit-drafting
+    workflow lifts at O3_ACTING to write directly to the audits/ lane
+    via GitHub App + OAuth-scoped tokens. Set True after the operator
+    completes GitHub App OAuth setup. Sentry + Curator do NOT consult
+    this flag. Surfaced by scripts/operator_initiative_o3_preflight.py."""
+
     # --- Phase O1 C4: Drift Auto-Sweep Scheduler ---
     cedar_drift_sweep_enabled: bool = field(
         default_factory=lambda: _env_bool("CEDAR_DRIFT_SWEEP_ENABLED", False)
