@@ -61,9 +61,15 @@ def test_t_w3b_4_live_audit_reports_stub_state():
     placeholder hex literals 0xCAFE0237 and 0xDEADBEEF are no longer
     present in the applet source — they're now FROZEN-constant real
     selectors (0xbabcf9f5 + 0x7c4847ed). placeholders_found is
-    expected to be empty; the STUB_DEPS_BLOCKED verdict comes
-    exclusively from the remaining P256_VERIFY + POSEIDON_HASH open
-    deltas (both dep-blocked).
+    expected to be empty.
+
+    Phase O4-W3B-POSEIDON-AS (2026-05-14): POSEIDON_HASH moved to
+    crypto_deltas_closed — reframed architecture-N/A. The W.1 V-check
+    established the applet RELAYS bridge-computed ZK commitments, it does
+    not compute them (their preimages are circuit-PRIVATE inputs absent
+    from the 228-byte wire format). The STUB_DEPS_BLOCKED verdict now
+    comes exclusively from the remaining P256_VERIFY open delta
+    (dep-blocked by @assemblyscript/wasm-crypto).
     """
     report, exit_code = w3b_audit.run_audit(
         PROJECT_ROOT / "scripts" / "w3bstream"
@@ -80,10 +86,12 @@ def test_t_w3b_4_live_audit_reports_stub_state():
     assert "ABI_ENCODER" in closed_ids
     assert "CONSENT_RETURN_DATA" in closed_ids
     assert "DEVICE_ID_TO_GAMER" in closed_ids
-    # The open deltas must still surface P256_VERIFY + POSEIDON_HASH.
+    # Phase O4-W3B-POSEIDON-AS: POSEIDON_HASH is now CLOSED, not open.
+    assert "POSEIDON_HASH" in closed_ids
+    # The open deltas surface P256_VERIFY only (POSEIDON_HASH reframed out).
     open_ids = {d["delta_id"] for d in poac["crypto_deltas_open"]}
     assert "P256_VERIFY" in open_ids
-    assert "POSEIDON_HASH" in open_ids
+    assert "POSEIDON_HASH" not in open_ids
 
 
 # ---- T-W3B-5: missing applet dir returns exit 2 -----------------------
@@ -184,10 +192,12 @@ def test_t_w3b_12_dependency_blockers_shape():
     assert "rationale" in result
     assert isinstance(result["blockers"], list)
     assert isinstance(result["any_blocked"], bool)
-    # Per A.0 preflight 2026-05-14: @assemblyscript/wasm-crypto + AS
-    # Poseidon both unavailable → 2 blockers documented.
+    # Phase O4-W3B-POSEIDON-AS (2026-05-14): the AS Poseidon dependency
+    # blocker was resolved (verified + PV-CI-pinned AS Poseidon module
+    # shipped) and removed from the roster. @assemblyscript/wasm-crypto
+    # (blocking P256_VERIFY) is the sole remaining blocker.
     assert result["any_blocked"] is True
-    assert len(result["blockers"]) >= 2
+    assert len(result["blockers"]) >= 1
 
 
 # ---- T-W3B-13: A.5 — STUB_DEPS_BLOCKED verdict tier --------------
@@ -203,8 +213,9 @@ def test_t_w3b_13_stub_deps_blocked_verdict_for_validate_poac():
     poac = next(
         a for a in report["applets"] if a["applet"] == "validate_poac_record.ts"
     )
-    # At this commit state, the deltas P256_VERIFY + POSEIDON_HASH are
-    # both dep-blocked; verdict MUST be STUB_DEPS_BLOCKED.
+    # Phase O4-W3B-POSEIDON-AS: POSEIDON_HASH reframed to closed; the sole
+    # remaining open delta P256_VERIFY is dep-blocked by
+    # @assemblyscript/wasm-crypto, so verdict MUST stay STUB_DEPS_BLOCKED.
     assert poac["verdict"] == "STUB_DEPS_BLOCKED"
 
 
@@ -255,8 +266,9 @@ def test_t_w3b_11_real_selector_in_applet_source():
 def test_t_w3b_15_closed_deltas_in_report():
     """Phase O4-VPM-INT-A.PARTIAL (2026-05-14): the audit report MUST
     include CLOSED_DELTAS so re-audits can confirm the deltas didn't
-    silently re-open. The 3 closed deltas are ABI_ENCODER +
-    CONSENT_RETURN_DATA + DEVICE_ID_TO_GAMER.
+    silently re-open. Phase O4-W3B-POSEIDON-AS (2026-05-14) added a 4th:
+    the 4 closed deltas are ABI_ENCODER + CONSENT_RETURN_DATA +
+    DEVICE_ID_TO_GAMER + POSEIDON_HASH.
     """
     # The CLOSED_DELTAS constant exists.
     assert hasattr(w3b_audit, "CLOSED_DELTAS")
@@ -264,6 +276,7 @@ def test_t_w3b_15_closed_deltas_in_report():
     assert "ABI_ENCODER" in closed
     assert "CONSENT_RETURN_DATA" in closed
     assert "DEVICE_ID_TO_GAMER" in closed
+    assert "POSEIDON_HASH" in closed
     # No overlap between open and closed deltas (drift guard).
     open_ids = {d[0] for d in w3b_audit.CRYPTO_INTEGRATION_DELTAS}
     assert not (closed & open_ids), (
@@ -298,3 +311,50 @@ def test_t_w3b_17_blockers_align_with_open_deltas():
                 f"Blocker {pkg} still claims to block CLOSED delta "
                 f"{blocked_id}; this is stale and must be removed"
             )
+
+
+# ---- T-W3B-18: Phase O4-W3B-POSEIDON-AS — POSEIDON_HASH reframe closure ---
+
+def test_t_w3b_18_poseidon_hash_reframe_closure():
+    """Phase O4-W3B-POSEIDON-AS (2026-05-14): POSEIDON_HASH is recorded in
+    CLOSED_DELTAS with the HONEST reframe — it was never an in-applet
+    computation delta. The closure summary MUST carry the relay-not-compute
+    architecture reason so a future re-audit reads the real reason, not a
+    false 'closed by wiring' claim, AND must record that the AS Poseidon
+    capability shipped + was verified."""
+    poseidon = next(
+        (d for d in w3b_audit.CLOSED_DELTAS if d[0] == "POSEIDON_HASH"), None
+    )
+    assert poseidon is not None, "POSEIDON_HASH must be in CLOSED_DELTAS"
+    delta_id, applet, closed_phase, summary = poseidon
+    assert applet == "validate_poac_record.ts"
+    assert "Phase O4-W3B-POSEIDON-AS" in closed_phase
+    low = summary.lower()
+    # relay-not-compute architecture reason
+    assert "relay" in low
+    assert "circuit-private" in low
+    assert "architecture-n/a" in low
+    # the AS Poseidon capability shipped + was verified + pinned
+    assert "poseidon_bn254.ts" in low
+    assert "verified" in low
+    assert "inv-poseidon-as" in low
+
+
+# ---- T-W3B-19: Phase O4-W3B-POSEIDON-AS — AS-Poseidon blocker removed ----
+
+def test_t_w3b_19_as_poseidon_blocker_removed():
+    """Phase O4-W3B-POSEIDON-AS (2026-05-14): the 'AssemblyScript Poseidon
+    implementation' DEPENDENCY_BLOCKERS entry was resolved (verified +
+    PV-CI-pinned AS Poseidon module shipped) and removed. No remaining
+    blocker may reference Poseidon or claim to block POSEIDON_HASH;
+    @assemblyscript/wasm-crypto (blocking P256_VERIFY) is the sole
+    remaining blocker."""
+    pkg_names = {b[0] for b in w3b_audit.DEPENDENCY_BLOCKERS}
+    assert "@assemblyscript/wasm-crypto" in pkg_names
+    for pkg, status, blocks, alt in w3b_audit.DEPENDENCY_BLOCKERS:
+        assert "poseidon" not in pkg.lower(), (
+            f"Stale Poseidon dependency blocker still present: {pkg}"
+        )
+        assert "POSEIDON_HASH" not in blocks, (
+            f"Blocker {pkg} still claims to block POSEIDON_HASH (now closed)"
+        )
