@@ -140,23 +140,30 @@ export function VpmManifestPanel({ manifest, commitmentHex }) {
         return
       }
       setRecomputedHex(hex)
-      // Compare the FULL manifest hash recomputed client-side. Note: the
-      // server's commitment_hex is the input_commitment_hex (SHA-256 of
-      // canonical_json(inputs)), NOT the manifest dict hash. To do a
-      // STRICT match we'd need either the original inputs OR the manifest
-      // hash recorded separately. The panel surfaces the recomputed
-      // manifest hash as an audit fingerprint; matches with downstream
-      // verifier reproducing the same canonical-JSON discipline.
-      //
-      // This is a soft tamper-detect: the recomputed hex is shown to
-      // the operator + would be re-verified by an out-of-band auditor.
-      // If the panel sees `manifest.input_commitment_hex` matching the
-      // commitment_hex passed to this component, that's a stronger sanity
-      // signal: the bridge served a manifest whose own claimed commit
-      // matches the URL it was fetched under.
-      if (manifest.input_commitment_hex === commitmentHex) {
+      // Two conventions are valid in the VPM compiler family:
+      //   - ZKBA compilers (HONESTY-BOARD / AGENT-REVIEW / CDRR-DAG /
+      //     GIC-BETA / DISPUTE / MARKET) set the registry row's
+      //     commitment_hex equal to the ZKBA input_commitment_hex
+      //     (canonical-JSON SHA-256 over inputs).
+      //   - MLGA compiler (Phase O5-MLGA Stage 4) sets the registry
+      //     row's commitment_hex equal to output_hash_hex (SHA-256 of
+      //     the rendered HTML), since the artifact's cryptographic ID
+      //     IS the output. input_commitment_hex remains in the
+      //     manifest for traceability but differs from commitment_hex.
+      // Hash check passes if EITHER convention's claim matches the
+      // URL the manifest was fetched under. Both are sanity signals:
+      // the bridge served a manifest whose own self-claim agrees with
+      // the URL routing. Recomputing the actual artifact's SHA-256
+      // would require fetching the HTML bytes; that's a stronger
+      // check reserved for the VpmGrammarVerifier component.
+      const inputMatch  = manifest.input_commitment_hex === commitmentHex
+      const outputMatch = manifest.output_hash_hex      === commitmentHex
+      if (inputMatch || outputMatch) {
         setHashStatus(true)
-      } else if (typeof manifest.input_commitment_hex === 'string') {
+      } else if (
+        typeof manifest.input_commitment_hex === 'string' ||
+        typeof manifest.output_hash_hex      === 'string'
+      ) {
         setHashStatus(false)
       } else {
         setHashStatus('unavailable')
