@@ -265,22 +265,41 @@ export function VpmRegistryView() {
           )}
           {selectedRow && (
             <>
+              {/* Integrity Nutrition Label panel on TOP — the operator's
+                  primary cryptographic-honesty surface. The 9-field
+                  FROZEN integrity contract is what makes this protocol
+                  defensible, so it deserves the prime above-the-fold
+                  position. Fixed height (no scroll bar) since the 9
+                  fields + audit-fingerprint footer fit in ~340px;
+                  if a future class needs more rows, lift this and
+                  re-balance. */}
+              <div style={{
+                flex:       '0 0 auto',
+                padding:    '12px',
+                background: 'rgba(10,14,20,0.85)',
+                borderBottom: `1px solid ${VPM_ACCENT}1a`,
+              }}>
+                <VpmManifestPanel
+                  manifest={manifestQ.data?.manifest}
+                  commitmentHex={selectedCommit}
+                />
+              </div>
+              {/* Iframe takes the remaining space. Iframe loads via src=
+                  since the manifest doesn't embed the HTML; the bridge
+                  serves it under /operator/operator/vpm-artifact/{commit}.
+                  NOTE: in operator-console-internal deployment the
+                  iframe inherits the parent origin so the FROZEN
+                  sandbox flags allow-scripts+allow-same-origin work.
+                  The read-key MUST be passed in the URL because an
+                  iframe with src= cannot set custom headers
+                  (bridge's _check_read_key requires x-api-key OR
+                  query api_key). The earlier null-readKey form
+                  surfaced as 403 'Invalid x-api-key header' in the
+                  iframe body. Read-key in URL is acceptable here
+                  because (a) operator console is internal-only
+                  deployment, (b) the same key already appears in
+                  every apiGet wrapper's query string. */}
               <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
-                {/* Iframe loads via src= since the manifest doesn't
-                    embed the HTML; the bridge serves it under
-                    /operator/operator/vpm-artifact/{commit}.
-                    NOTE: in operator-console-internal deployment the
-                    iframe inherits the parent origin so the FROZEN
-                    sandbox flags allow-scripts+allow-same-origin work.
-                    The read-key MUST be passed in the URL because an
-                    iframe with src= cannot set custom headers
-                    (bridge's _check_read_key requires x-api-key OR
-                    query api_key). The earlier null-readKey form
-                    surfaced as 403 'Invalid x-api-key header' in the
-                    iframe body. Read-key in URL is acceptable here
-                    because (a) operator console is internal-only
-                    deployment, (b) the same key already appears in
-                    every apiGet wrapper's query string. */}
                 <VpmIframe
                   artifactUrl={vpmArtifactUrl(
                     selectedCommit,
@@ -288,18 +307,6 @@ export function VpmRegistryView() {
                   )}
                   onIframeReady={(el) => { iframeRef.current = el }}
                   title={`VPM Artifact ${selectedCommit.slice(0, 12)}`}
-                />
-              </div>
-              <div style={{
-                maxHeight:  '40%',
-                overflowY:  'auto',
-                padding:    '12px',
-                background: 'rgba(10,14,20,0.85)',
-                borderTop:  `1px solid ${VPM_ACCENT}1a`,
-              }}>
-                <VpmManifestPanel
-                  manifest={manifestQ.data?.manifest}
-                  commitmentHex={selectedCommit}
                 />
               </div>
             </>
