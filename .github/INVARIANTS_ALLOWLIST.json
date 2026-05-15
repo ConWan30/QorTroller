@@ -354,5 +354,53 @@
   "INV-MYTHOS-FROZEN-PROTECTION-001": {
     "digest": "2f65b2cad775883f30a11752d987e76cff0ac2f22e19e124017080326be44d81",
     "description": "Store-layer enforcement of the FROZEN-region read-only invariant: insert_mythos_finding FORCES fix_authority_tier=3 whenever frozen_region=True, regardless of the variant's declared tier. Mythos NEVER auto-fixes FROZEN material \u2014 this invariant is the cryptographic safety property the plan named (verified by T-MYTHOS-M1-3). Drift here would let a malicious or buggy variant suggest tier-1 autofix on a FROZEN region and have it take effect."
+  },
+  "INV-SS2-PROBE-TYPE-001": {
+    "digest": "ca72e685edb0c50e82776698342e35b9ccd2e49c1a6f587d3cf12a5c4239a669",
+    "description": "Phase 243-SS2 Stream 1: trigger_force_curve probe type registered in STRUCTURED_PROBE_TYPES frozenset (the 7th member after touchpad_corners + touchpad_freeform + touchpad_swipes + mixed_biometric_probe + tremor_resting + ait). T-PHASE243-1 verifies; Stage-A captures consume this routing key."
+  },
+  "INV-BT-WITNESS-DOMAIN-001": {
+    "digest": "f7bb324f3622f6103ba9a34e93ac41eb6509d0f33974c5c2bc0f92ceafcff5bc",
+    "description": "Phase 242-BT Stream 1: BT-WITNESS v1 FROZEN capability tag b\"VAPI-BT-WITNESS-v1\" (18 bytes). Width is asserted at module import; widening or narrowing requires a separate capability tag, NOT modification of this literal. Capability tag (NOT a new PATTERN-017 commitment family per the POSEIDON-BN254-AS reframe precedent)."
+  },
+  "INV-BT-WITNESS-TRANSPORT-001": {
+    "digest": "f9319067cda2d7a4c5600bd546c6b72af554e58778a08a97446d4939dfd2e814",
+    "description": "Phase 242-BT Stream 1: BT_WITNESS_TRANSPORT_BR_EDR = 0x01 FROZEN transport-code literal. DualSense + DualSense Edge transport is Bluetooth Classic BR/EDR with HIDP per the v1.1 canonical anchor (NOT BLE/HOGP). Future BLE-HOGP variant requires a separate capability tag, not a different transport_code value."
+  },
+  "INV-BT-WITNESS-PREIMAGE-001": {
+    "digest": "69b823f87b71006c7cac04fa5c6e391c05ccb0f62be89e1e09760bfcc357e3d7",
+    "description": "Phase 242-BT Stream 1: BT-WITNESS commitment preimage layout FROZEN at 18 + 20 + 32 + 32 + 32 + 1 + 8 = 143 bytes (domain tag + witness_pubkey + device_id + session_id + feature_root + transport_code + ts_ns). Any reordering or width change requires v2 capability tag. INV-BT-WITNESS-003 in the module's docstring describes this in detail."
+  },
+  "INV-MYTHOS-OPINIT-ENTRY-001": {
+    "digest": "6e3589d686ed218e70d339fffa97b3092b0c91e1c1436e28e1dbe30108dc001d",
+    "description": "Mythos-Operator-Initiative-Audit variant entry point pinned in mythos_variants.py (operator-authorized extension 2026-05-15). The async function mythos_operator_initiative_audit is the comprehensive 5-check-family audit; renaming or removing requires a governance ceremony."
+  },
+  "INV-MYTHOS-FAMILIES-001": {
+    "digest": "d6ced1dc4712c8e63c063193588fe4d0807671b24bea98f5231db91b684d1c63",
+    "description": "Mythos-Crypto _PATTERN_017_FROZEN_TAGS frozenset declaration pinned (Priority 5). 11 commitment families per the empirical audit finding 2026-05-15 (CLAUDE.md previously stated 10; PHYSICAL_DATA_ATTESTATION v1 confirmed as 11th by its own module docstring). The frozenset declaration line is pinned; the contents are pinned by the per-family domain tag literals being checked by their own existing invariants."
+  },
+  "INV-MYTHOS-METHODOLOGY-FILES-001": {
+    "digest": "b66e72022b57ac9fe041c6ee38e30d07dc6f45d61e65021beebbf6b1dc0b6bf6",
+    "description": "Mythos-Methodology _METHODOLOGY_REQUIRED_FILES tuple pinned (Priority 5). The methodology trust chain that protocol-layer surfaces inherit from depends on these 7 files (VBDIP-0001 + METHODOLOGY_LAYER_INTEGRATION_MAP + BT/sensor-stack v1.1 architectural revisions + 2 canonical-anchor PDFs + architect Ed25519 attestation). Mythos-Methodology surfaces HIGH on VBDIP/architect missing; MEDIUM elsewhere."
+  },
+  "INV-MYTHOS-CADENCE-SCHEDULE-001": {
+    "digest": "db231debda0e2b779b17d1b5119486d02a99770e272f59ae4b06762b255b25d3",
+    "description": "MYTHOS_CADENCE_SCHEDULE 6-tier dict pinned in mythos_cadence_engine.py (extended to include operator_initiative + Priority 5 variants 2026-05-15). Tiers: daily/per_pr/per_phase_close/pre_ceremony/post_incident/weekly. Drift here changes which variants run at which cadence \u2014 affects FSCA finding-surface coverage windows."
+  },
+  "INV-MYTHOS-PR-GATE-BLOCKING-001": {
+    "digest": "f43369903079d53481a850af16e8abb699575371c07f5925df1415140d461c39",
+    "description": "Mythos PR gate _is_blocking rule matrix pinned (Priority 5 Part 3, commit a756f95f). CRITICAL severity ALWAYS blocks PR merge; HIGH severity + frozen_region=True blocks; HIGH non-frozen + MEDIUM + LOW are informational. Drift here changes the effective PR enforcement boundary \u2014 must move through governance ceremony."
+  },
+  "INV-O3-EXPEDITE-CFG-001": {
+    "digest": "3b7a0691c0ea4ad7b0fef487ab5dbc922b49353c0d0657b8390eb20bcbda0702",
+    "description": "O3 expedite arc 2026-05-15 cfg fields pinned in config.py: operator_dual_key_present (gate 5; all 3 agents) + github_app_oauth_tokens_valid (gate 7; Guardian-only). Promoted from getattr-fallback to first-class Config fields so operators can author the declarations via env vars OPERATOR_DUAL_KEY_PRESENT + GITHUB_APP_OAUTH_TOKENS_VALID."
+  },
+  "INV-O3-EXPEDITE-PREFLIGHT-001": {
+    "digest": "7ee84dea819b93aa6b8decf194dda2b5a7c8179cb4f96a2985a22c4cd80336b6",
+    "description": "O3 expedite preflight CLI entry point run_preflight pinned (commit 0e83a8ce). Reads watcher state + cfg flags + DB state; produces verdict ceremony_ready_to_fire / ceremony_ready_when_calendar_clears / READY-TO-FIRE / CALENDAR-WAITING / EXPEDITE-WORK-AVAILABLE. The single canonical operator-facing CLI for the O3 calendar window."
+  },
+  "INV-O3-EXPEDITE-SEEDING-TRIPLEGATE-001": {
+    "digest": "25c3353787090e0b355179755360b20ab475818eede5efba758b526a8b9d5097",
+    "description": "O3 expedite seeding harness triple-gate authorization function pinned (commit 0e83a8ce). _check_triple_gate enforces (a) CHAIN_SUBMISSION_PAUSED=true env (kill-switch ARMED), (b) OPERATOR_INITIATIVE_SEED_DRAFTS_AUTHORIZED=true env (DISTINCT from O2/O3 anchor envs to prevent carry-over), (c) --confirm CLI flag. All three required for real seeding; otherwise dry-run."
   }
 }

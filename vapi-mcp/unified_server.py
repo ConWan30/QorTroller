@@ -3558,6 +3558,48 @@ async def vapi_mythos_corpus_drift(**kwargs):
     return _findings_to_dict("corpus", findings)
 
 
+# ── Tool 25 ── vapi_mythos_post_o3_ceremony_audit ────────────────────────────
+
+@tool(
+    name="vapi_mythos_post_o3_ceremony_audit",
+    description=(
+        "Mythos-Post-O3 ceremony verification audit (operator-authorized "
+        "goal 2026-05-15). Runs AFTER the Day 15 parallel_o3_act_anchor.py "
+        "ceremony fires. 4 sections: (1) activation_log integrity per agent; "
+        "(2) on-chain AgentScope.getScopeRoot match (--include-chain-reads); "
+        "(3) Mythos-OpInit cross-reference; (4) FSCA contradictions in the "
+        "ceremony-hour window. Wallet-free; READ-ONLY; eth_call only when "
+        "chain reads enabled. CRITICAL findings on sections 1-2; HIGH on "
+        "section 3; MEDIUM on section 4."
+    ),
+    schema={"type": "object", "properties": {
+        "include_chain_reads": {"type": "boolean",
+            "description": "Also eth_call AgentScope.getScopeRoot per agent"},
+        "db_path": {"type": "string",
+            "description": "Override bridge SQLite path"}
+    }, "required": []}
+)
+async def vapi_mythos_post_o3_ceremony_audit(**kwargs):
+    _ensure_bridge_on_path()
+    try:
+        from vapi_bridge.mythos_variants import (
+            mythos_post_o3_ceremony_audit as _runner,
+        )
+    except Exception as exc:
+        return {"variant": "post_o3", "error": f"import failed: {exc}",
+                "total_findings": 0, "findings": [], "timestamp": time.time()}
+    try:
+        findings = await _runner(
+            repo_root=PROJECT_ROOT,
+            db_path=kwargs.get("db_path"),
+            include_chain_reads=bool(kwargs.get("include_chain_reads", False)),
+        )
+    except Exception as exc:
+        return {"variant": "post_o3", "error": f"variant raised: {exc}",
+                "total_findings": 0, "findings": [], "timestamp": time.time()}
+    return _findings_to_dict("post_o3", findings)
+
+
 async def main():
     # Preload workflow corpus files into mtime cache
     for key in WORKFLOW_FILES:
