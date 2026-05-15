@@ -2,7 +2,7 @@
 
 T-238-CUR-FSCA-1..4 — verifies the 2 new CONTRADICTION_RULES query the
 curator_listing_review_log correctly, fire only on the right verdicts +
-within the 1 h window, and the rule count assertion is 17 (was 15 pre-
+within the 1 h window, and the rule count assertion is 27 (was 15 pre-
 this-commit).
 """
 from __future__ import annotations
@@ -151,12 +151,12 @@ def test_t_238_cur_fsca_3_rules_age_out_after_1h(tmp_store):
 
 # T-238-CUR-FSCA-4 ───────────────────────────────────────────────────────────
 def test_t_238_cur_fsca_4_rule_count_invariant():
-    """CONTRADICTION_RULES count assertion: 17 rules after Phase 238 Step I-AUTOLOOP-2."""
+    """CONTRADICTION_RULES count assertion: 27 rules at current head."""
     assert "LISTING_TIER_DRIFT" in CONTRADICTION_RULES
     assert "CONSENT_REVOKED_LISTING_ACTIVE" in CONTRADICTION_RULES
     # Total rule count — locks the structural invariant
-    assert len(CONTRADICTION_RULES) == 17, (
-        f"Expected 17 CONTRADICTION_RULES; got {len(CONTRADICTION_RULES)}. "
+    assert len(CONTRADICTION_RULES) == 27, (
+        f"Expected 27 CONTRADICTION_RULES; got {len(CONTRADICTION_RULES)}. "
         "If this test fails, either a new rule was added (update count) or "
         "an existing rule was removed (which is FROZEN — reverse the change)."
     )

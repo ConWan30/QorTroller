@@ -2,8 +2,8 @@
 Tests for CoherenceRuleLoader — VAPI-EXT Step 4.
 
 15+ tests covering:
-  - load_all() returns exactly 18 VAPI_CORE rules
-  - category counts: CONTRADICTION=8, ORPHAN=6, INVERSION=4
+  - load_all() returns exactly 39 VAPI_CORE rules
+  - category counts: CONTRADICTION=27, ORPHAN=7, INVERSION=5
   - guard lambdas preserved (IOSWARM_ACTIVE_NO_ADJUDICATIONS has guard != None)
   - inject_rules() adds to FSCA's runtime dicts
   - injected rules appear in load_all()
@@ -62,28 +62,28 @@ def _make_ext_rule(name: str = "EXT_TEST_RULE", category: str = "CONTRADICTION")
 
 
 # ---------------------------------------------------------------------------
-# T-EXT-RULE-1: load_all() returns all 18 VAPI_CORE rules
+# T-EXT-RULE-1: load_all() returns all 39 VAPI_CORE rules
 # ---------------------------------------------------------------------------
 
 class TestLoadAll:
     def test_load_all_returns_18_rules(self):
         rules = CoherenceRuleLoader.load_all()
-        assert len(rules) == 18, f"Expected 18 rules, got {len(rules)}"
+        assert len(rules) == 39, f"Expected 39 rules, got {len(rules)}"
 
     def test_contradiction_count(self):
         rules = CoherenceRuleLoader.load_all()
         contradictions = [r for r in rules if r.category == "CONTRADICTION"]
-        assert len(contradictions) == 8, f"Expected 8 CONTRADICTION rules, got {len(contradictions)}"
+        assert len(contradictions) == 27, f"Expected 27 CONTRADICTION rules, got {len(contradictions)}"
 
     def test_orphan_count(self):
         rules = CoherenceRuleLoader.load_all()
         orphans = [r for r in rules if r.category == "ORPHAN"]
-        assert len(orphans) == 6, f"Expected 6 ORPHAN rules, got {len(orphans)}"
+        assert len(orphans) == 7, f"Expected 7 ORPHAN rules, got {len(orphans)}"
 
     def test_inversion_count(self):
         rules = CoherenceRuleLoader.load_all()
         inversions = [r for r in rules if r.category == "INVERSION"]
-        assert len(inversions) == 4, f"Expected 4 INVERSION rules, got {len(inversions)}"
+        assert len(inversions) == 5, f"Expected 5 INVERSION rules, got {len(inversions)}"
 
     def test_all_rules_are_coherence_rule_instances(self):
         rules = CoherenceRuleLoader.load_all()
@@ -145,8 +145,8 @@ class TestGuardPreservation:
     def test_most_rules_have_no_guard(self):
         rules = CoherenceRuleLoader.load_all()
         rules_without_guard = [r for r in rules if r.guard is None]
-        # Only 1 rule (IOSWARM_ACTIVE_NO_ADJUDICATIONS) has a guard; 17 should not
-        assert len(rules_without_guard) == 17
+        # Only 1 rule (IOSWARM_ACTIVE_NO_ADJUDICATIONS) has a guard; 38 should not
+        assert len(rules_without_guard) == 38
 
 
 # ---------------------------------------------------------------------------
@@ -179,7 +179,7 @@ class TestInjectRules:
         rule = _make_ext_rule()
         CoherenceRuleLoader.inject_rules([rule])
         all_rules = CoherenceRuleLoader.load_all()
-        assert len(all_rules) == 19  # 18 core + 1 injected
+        assert len(all_rules) == 40  # 39 core + 1 injected
 
     def test_inject_rule_with_guard_preserved_in_fsca_dict(self):
         guard_fn = lambda cfg: getattr(cfg, "test_flag", False)

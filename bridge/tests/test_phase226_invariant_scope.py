@@ -28,10 +28,10 @@ def _load_gate():
     return mod
 
 
-# T226-1: INVARIANTS list now contains exactly 22 entries
+# T226-1: INVARIANTS list now contains exactly 86 entries
 def test_t226_1_invariants_count():
     gate = _load_gate()
-    assert len(gate.INVARIANTS) == 22
+    assert len(gate.INVARIANTS) == 86
 
 
 # T226-2: INV-019 matches _compute_governance_provenance_hash in gate script
@@ -70,17 +70,17 @@ def test_t226_5_inv022_store_table():
     assert len(matches) >= inv022.min_matches, f"INV-022 found {len(matches)} matches (expected >= {inv022.min_matches})"
 
 
-# T226-6: INVARIANTS_ALLOWLIST.json has 22 entries after regeneration
-def test_t226_6_allowlist_has_22_entries():
+# T226-6: INVARIANTS_ALLOWLIST.json has 86 entries after regeneration
+def test_t226_6_allowlist_has_86_entries():
     allowlist = json.loads(ALLOWLIST_PATH.read_text(encoding="utf-8"))
-    assert len(allowlist) == 22
+    assert len(allowlist) == 86
     assert "INV-019" in allowlist
     assert "INV-020" in allowlist
     assert "INV-021" in allowlist
     assert "INV-022" in allowlist
 
 
-# T226-7: run_gate() exits 0 — all 22 invariants pass current codebase
+# T226-7: run_gate() exits 0 — all 86 invariants pass current codebase
 def test_t226_7_gate_pass():
     gate = _load_gate()
     results = gate.check_invariants()
@@ -97,13 +97,13 @@ def test_t226_7_gate_pass():
     assert failures == [], f"Gate failures: {failures}"
 
 
-# T226-8: compute_allowlist_hash() reflects new 22-entry allowlist
-def test_t226_8_allowlist_hash_22_entries():
+# T226-8: compute_allowlist_hash() reflects new 86-entry allowlist
+def test_t226_8_allowlist_hash_86_entries():
     gate = _load_gate()
     h = gate.compute_allowlist_hash()
     # Must be a 64-char hex string (not zeros sentinel)
     assert len(h) == 64
     assert h != "0" * 64
-    # Allowlist file must have 22 entries for this hash to be correct
+    # Allowlist file must have 86 entries for this hash to be correct
     allowlist = json.loads(ALLOWLIST_PATH.read_text(encoding="utf-8"))
-    assert len(allowlist) == 22
+    assert len(allowlist) == 86

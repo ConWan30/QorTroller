@@ -6,9 +6,18 @@ T235-EL-3: CorpusDataCuratorAgent.run has asyncio.sleep(30) startup delay.
 """
 import inspect
 import sqlite3
+import sys
 import tempfile
 import os
+from pathlib import Path
+
 import pytest
+
+# sys.path setup — matches the convention used across bridge/tests.
+# Without this, `from vapi_bridge.X` fails because pytest
+# --import-mode=importlib does not add the test file's parent dirs.
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "bridge"))
 
 
 # ---------------------------------------------------------------------------

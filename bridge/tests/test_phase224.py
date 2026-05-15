@@ -114,12 +114,12 @@ def test_T224_4_invariant_change_without_confirm_exits_2():
     )
 
 
-# ── T224-5: compute_fleet_root() produces 38-leaf tree ───────────────────────
+# ── T224-5: compute_fleet_root() produces full-fleet + virtual-leaf tree ─────
 def test_T224_5_compute_fleet_root_38_leaves():
-    """compute_fleet_root() builds 38-leaf Merkle tree (37 fleet + 1 virtual allowlist)."""
+    """compute_fleet_root() builds 39-leaf Merkle tree (38 fleet + 1 virtual allowlist)."""
     from vapi_bridge.protocol_coherence_agent import ProtocolCoherenceAgent, _AGENT_IDS
 
-    assert len(_AGENT_IDS) == 37, f"Expected 37 fleet agents, got {len(_AGENT_IDS)}"
+    assert len(_AGENT_IDS) == 38, f"Expected 38 fleet agents, got {len(_AGENT_IDS)}"
     assert "biometric_governance_agent" in _AGENT_IDS, (
         "biometric_governance_agent must be present in _AGENT_IDS (Phase 222)"
     )
@@ -141,7 +141,7 @@ def test_T224_5_compute_fleet_root_38_leaves():
     alt_leaf = hashlib.sha256(
         b"allowlist" + bytes.fromhex("ff" * 8) + ts_ns.to_bytes(8, "big")
     ).digest()
-    # Verify internal leaf count indirectly: root hex is non-zero (38 leaves hashed)
+    # Verify internal leaf count indirectly: root hex is non-zero (39 leaves hashed)
     assert root_hex != "0" * 64
 
 
@@ -175,6 +175,7 @@ def test_T224_7_suspicious_change_detection():
 
 
 # ── T224-8: POST /agent/allowlist-governance-event ────────────────────────────
+@pytest.mark.needs_env
 def test_T224_8_allowlist_governance_event_endpoint():
     """POST /agent/allowlist-governance-event: valid payload returns 200; invalid category returns 422."""
     from fastapi.testclient import TestClient

@@ -200,6 +200,7 @@ def test_t_mcp_audit_9_wrappers_never_raise(ks):
 
 # ---- T-MCP-AUDIT-10: unified_server has the same 6 audit tools --------
 
+@pytest.mark.needs_mcp
 def test_t_mcp_audit_10_unified_server_has_six_audit_tools(us):
     """unified_server.py mirrors the 6 audit wrappers from
     knowledge_server.py — re-exported so vapi-unified MCP consumers
@@ -220,6 +221,7 @@ def test_t_mcp_audit_10_unified_server_has_six_audit_tools(us):
 
 # ---- T-MCP-AUDIT-11: unified_server CFSS wrapper PASSes live ---------
 
+@pytest.mark.needs_mcp
 def test_t_mcp_audit_11_unified_cfss_lane_drift_live(us):
     """Sanity: the same wrappers in unified_server produce the same
     verdicts as the knowledge_server versions. CFSS against live
@@ -233,6 +235,7 @@ def test_t_mcp_audit_11_unified_cfss_lane_drift_live(us):
 
 # ---- T-MCP-AUDIT-12: both servers' wrappers return equivalent shape --
 
+@pytest.mark.needs_mcp
 def test_t_mcp_audit_12_both_servers_equivalent_shape(ks, us):
     """For each audit, the knowledge_server + unified_server wrappers
     must return the same audit_id + wallet_free + verdict-shape. Catches

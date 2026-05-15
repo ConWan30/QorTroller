@@ -136,6 +136,7 @@ def test_T225_5_provenance_hash_structure():
 
 
 # ── T225-6: GET /agent/allowlist-governance-history chain_intact=True ─────────
+@pytest.mark.needs_env
 def test_T225_6_history_endpoint_chain_intact():
     """GET /agent/allowlist-governance-history returns chain_intact=True for a valid single entry."""
     from fastapi.testclient import TestClient
@@ -168,6 +169,7 @@ def test_T225_6_history_endpoint_chain_intact():
 
 
 # ── T225-7: GET /agent/allowlist-governance-history chain_intact=False ────────
+@pytest.mark.needs_env
 def test_T225_7_history_endpoint_chain_broken():
     """GET /agent/allowlist-governance-history chain_intact=False when link is broken."""
     from fastapi.testclient import TestClient
@@ -202,6 +204,7 @@ def test_T225_7_history_endpoint_chain_broken():
 
 
 # ── T225-8: POST /agent/allowlist-governance-event stores provenance chain ────
+@pytest.mark.needs_env
 def test_T225_8_post_governance_event_stores_provenance():
     """POST /agent/allowlist-governance-event with provenance_hash stores a chain entry."""
     from fastapi.testclient import TestClient

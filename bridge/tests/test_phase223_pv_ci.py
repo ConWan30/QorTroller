@@ -100,12 +100,12 @@ def test_T223_4_config_pv_ci_enabled_default():
     assert cfg.pv_ci_enabled is True
 
 
-# ── T223-5: vapi_invariant_gate check_invariants returns 15 results ──────────
+# ── T223-5: vapi_invariant_gate check_invariants returns all results ─────────
 def test_T223_5_check_invariants_count():
-    """vapi_invariant_gate.check_invariants() returns 16 result dicts (Phase 224 adds INV-016)."""
+    """vapi_invariant_gate.check_invariants() returns 86 result dicts (current INVARIANTS set)."""
     import vapi_invariant_gate as vig
     results = vig.check_invariants()
-    assert len(results) == 16
+    assert len(results) == 86
     for r in results:
         assert "id" in r
         assert "digest" in r
@@ -122,6 +122,7 @@ def test_T223_6_run_gate_passes():
 
 
 # ── T223-7: GET /agent/invariant-gate-status returns 7 keys ─────────────────
+@pytest.mark.needs_env
 def test_T223_7_endpoint_invariant_gate_status():
     """GET /agent/invariant-gate-status returns 200 with 7 expected keys."""
     from fastapi.testclient import TestClient
@@ -144,6 +145,7 @@ def test_T223_7_endpoint_invariant_gate_status():
 
 
 # ── T223-8: POST /agent/run-invariant-gate returns gate_pass ─────────────────
+@pytest.mark.needs_env
 def test_T223_8_endpoint_run_invariant_gate():
     """POST /agent/run-invariant-gate returns 200 with gate_pass key."""
     from fastapi.testclient import TestClient

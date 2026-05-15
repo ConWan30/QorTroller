@@ -210,6 +210,7 @@ def test_t_zkba_21_mcp_vapi_post_ceremony_audit_registered():
     assert "wallet-free" in desc.lower()
 
 
+@pytest.mark.needs_mcp
 def test_t_zkba_22_mcp_vapi_post_ceremony_audit_local_only_pass():
     """Tool runs local-only audit (Section 1 + 3 only) + returns PASS verdict
     on current bundles. No chain reads invoked."""
@@ -231,6 +232,7 @@ def test_t_zkba_22_mcp_vapi_post_ceremony_audit_local_only_pass():
     assert sections["section_3_lane_matrix"]["ok"] is True
 
 
+@pytest.mark.needs_mcp
 def test_t_zkba_23_mcp_vapi_post_ceremony_audit_section1_findings():
     """Tool's Section 1 findings include one MATCH per agent."""
     ks = _import_knowledge_server()
@@ -248,6 +250,7 @@ def test_t_zkba_23_mcp_vapi_post_ceremony_audit_section1_findings():
         assert f.get("status") == "MATCH", f"Section 1 finding not MATCH: {f}"
 
 
+@pytest.mark.needs_mcp
 def test_t_zkba_24_mcp_vapi_post_ceremony_audit_section3_full_matrix():
     """Tool's Section 3 findings cover all 12 expected (agent, action,
     resource, effect) tuples and all have status=OK."""
