@@ -929,6 +929,35 @@ INVARIANTS: list[Invariant] = [
         pattern=r"def (open_session|close_session|poll_once)\(",
         min_matches=3,
     ),
+    # ---------------------------------------------------------------------------
+    # Phase O5-MLGA Stage 4 PV-CI pins (3 new; 110 → 113).
+    # These wire the MLGA dataproof primitive (shipped Stage 2 commit cee77070)
+    # into the Phase O4 VPM compiler discipline so each closed gameplay session
+    # becomes a tamper-evident HTML artifact in the existing VPM Registry +
+    # the new DeveloperView MLGA drawer. Without these pins, the VPM bridge
+    # could regress silently (e.g., schema rename, missing close-hook).
+    # ---------------------------------------------------------------------------
+    Invariant(
+        id="INV-MLGA-COMPILER-ENTRY-001",
+        description="Phase O5-MLGA Stage 4: build_mlga_session_artifact entry point pinned in scripts/mlga_compile_session_artifact.py. Mirrors zkba_compile_gic_ledger.py pattern. Caller is bridge/vapi_bridge/mlga_session_tracker.py close_session() hook + the CLI entry. Renaming this function silently breaks Stage 4 wiring; PV-CI prevents that.",
+        file="scripts/mlga_compile_session_artifact.py",
+        pattern=r"def build_mlga_session_artifact\(",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-MLGA-VPM-SCHEMA-001",
+        description='Phase O5-MLGA Stage 4: MLGA_VPM_WRAPPER_SCHEMA = "vapi-mlga-session-artifact-v1" FROZEN literal in scripts/mlga_compile_session_artifact.py. Persisted to vpm_artifact_log.wrapper_schema column on every close — frontend useMlgaArtifacts filters by this schema. Renaming the schema breaks downstream queries silently; PV-CI prevents that.',
+        file="scripts/mlga_compile_session_artifact.py",
+        pattern=r'MLGA_VPM_WRAPPER_SCHEMA: str = "vapi-mlga-session-artifact-v1"',
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-MLGA-CLOSE-HOOK-001",
+        description="Phase O5-MLGA Stage 4: close_session() in mlga_session_tracker.py invokes build_mlga_session_artifact + persists via insert_vpm_artifact post dataproof persist. Pattern matches the 2 critical call sites in close_session — the compiler invocation + the vpm_artifact_log insert. Drift here means the VPM artifact stops getting produced + persisted at session close. PV-CI prevents silent regression.",
+        file="bridge/vapi_bridge/mlga_session_tracker.py",
+        pattern=r"build_mlga_session_artifact\(|self\._store\.insert_vpm_artifact\(",
+        min_matches=2,
+    ),
 ]
 
 

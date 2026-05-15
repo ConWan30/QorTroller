@@ -17,6 +17,8 @@ import {
 import { FONTS, DEVELOPER } from '../shared/design/tokens'
 import { PIPELINE_NODE_CONTAINER, PIPELINE_NODE, DRAWER_SLIDE_LEFT } from '../shared/design/animations'
 import { OperatorAgentsDrawer, OperatorAgentsDrawerHandle } from '../components/OperatorAgentsDrawer'
+import { MlgaLiveDrawer, MlgaLiveDrawerHandle } from '../components/MlgaLiveDrawer'
+import { useMlgaLiveSession } from '../api/bridgeApi'
 import { DraftReviewDrawer, DraftReviewDrawerHandle } from '../components/DraftReviewDrawer'
 import { O3ReadinessDrawer, O3ReadinessDrawerHandle } from '../components/O3ReadinessDrawer'
 import { AuditHarnessesDrawer, AuditHarnessesDrawerHandle } from '../components/AuditHarnessesDrawer'
@@ -326,6 +328,11 @@ export function DeveloperView() {
   const [gateOpen,  setGateOpen]  = useState(false)
   const [pitlOpen,  setPitlOpen]  = useState(false)
   const [opAgentsOpen, setOpAgentsOpen] = useState(false)
+  // Phase O5-MLGA Stage 4 — MLGA live drawer state
+  const [mlgaLiveOpen, setMlgaLiveOpen] = useState(false)
+  const mlgaLiveQ = useMlgaLiveSession({ enabled: true })
+  const mlgaHasOpenSession = Boolean(mlgaLiveQ.data?.has_open_session)
+  const mlgaSessionsTotal  = Number(mlgaLiveQ.data?.sessions_persisted_total || 0)
   const [draftReviewOpen, setDraftReviewOpen] = useState(false)
   const [o3ReadinessOpen, setO3ReadinessOpen] = useState(false)
   const [auditDrawerOpen, setAuditDrawerOpen] = useState(false)
@@ -636,6 +643,21 @@ export function DeveloperView() {
           />
         </>
       )}
+
+      {/* Phase O5-MLGA Stage 4 — MLGA Live drawer (always visible — not gated
+          on o1Active because MLGA operates independent of Operator Initiative
+          state; the tracker may be enabled even when O1 agents are not
+          anchored on this DB). Handle sits 36px above the OperatorAgents
+          handle at bottom-right; z-index 23 above the existing 20/21/22. */}
+      <MlgaLiveDrawerHandle
+        onClick={() => setMlgaLiveOpen(v => !v)}
+        hasOpenSession={mlgaHasOpenSession}
+        sessionsTotal={mlgaSessionsTotal}
+      />
+      <MlgaLiveDrawer
+        open={mlgaLiveOpen}
+        onClose={() => setMlgaLiveOpen(false)}
+      />
 
       {/* Phase O2-DRAFT-REVIEW-FRONTEND — Draft review drawer (only when O1 active).
          Handle at bottom-LEFT to avoid the OperatorAgentsDrawerHandle at bottom-right.
