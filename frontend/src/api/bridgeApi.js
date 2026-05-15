@@ -1038,3 +1038,55 @@ export function useVpmManifest(commitmentHex, { enabled = true } = {}) {
     retry: 1,
   })
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase O5-MLGA Stage 4 — Mythos Live Gameplay Audit live-session + artifact hooks.
+// noMock:true on both (audit-critical; fabricated MLGA data would corrupt
+// operator dashboards mid-grind).
+// ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * useMlgaLiveSession — current MLGA tracker state.
+ *
+ * Returns react-query result with body shape (per
+ * /agent/mlga-live-session-status endpoint):
+ *   { enabled, has_open_session, tracker_wired, session_id,
+ *     session_open_ts_ns, session_duration_s, n_poac_records,
+ *     n_trigger_pulls_r2, n_trigger_pulls_l2, gic_advances_in_session,
+ *     apop_state_counts, bt_observability, sessions_persisted_total,
+ *     last_close_ts_ns, last_close_reason, timestamp }
+ *
+ * Polls every 10s while enabled. Grind-critical: noMock:true.
+ */
+export function useMlgaLiveSession({ enabled = true } = {}) {
+  return useQuery({
+    queryKey: ['mlgaLiveSession'],
+    queryFn:  () => get(
+      '/agent/mlga-live-session-status',
+      'mlgaLiveSession',
+      { noMock: true },
+    ),
+    enabled,
+    refetchInterval: 10000,
+    staleTime: 8000,
+    retry: 1,
+  })
+}
+
+/**
+ * useMlgaArtifacts — list MLGA VPM artifacts (thin wrapper over useVpmList).
+ *
+ * Filters /operator/vpm-list by vpm_id=MLGA-SESSION-v1. Each row is one
+ * closed gameplay session that produced a deterministic VPM artifact
+ * via Phase O5-MLGA Stage 4 compile_mlga_session_artifact.
+ *
+ * Polling cadence inherits useVpmList (20s); audit-critical (noMock:true
+ * already set by useVpmList).
+ */
+export function useMlgaArtifacts({ enabled = true, limit = 50 } = {}) {
+  return useVpmList({
+    vpmId: 'MLGA-SESSION-v1',
+    limit,
+    enabled,
+  })
+}
