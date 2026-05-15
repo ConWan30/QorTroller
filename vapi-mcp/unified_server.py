@@ -3377,6 +3377,57 @@ async def vapi_mythos_stability_sweep(**_):
     return _findings_to_dict("stability", findings)
 
 
+# ── Tool 20 ── vapi_mythos_operator_initiative_audit ─────────────────────────
+
+@tool(
+    name="vapi_mythos_operator_initiative_audit",
+    description=(
+        "Mythos-Operator-Initiative-Audit (operator-authorized extension "
+        "2026-05-15). Comprehensively audits past + current + future "
+        "Operator Initiative synchronization across 5 check families: "
+        "(1) PAST_ARTIFACTS — 12 Cedar bundle files exist (3 agents × 4 "
+        "lifecycle bundles); (2) Q9_HEX_CONSISTENCY — each bundle's "
+        "agent_id field matches the canonical Pass 2C Q9 hex; (3) MERKLE_"
+        "SYNCHRONIZATION — each bundle's recomputed Merkle matches the "
+        "canonical pin from the historical chain-anchor record; (4) "
+        "PARALLEL_SCRIPT_SYNC — anchor scripts (parallel_o2_anchor.py + "
+        "parallel_o3_act_anchor.py) have identical AGENT_ANCHOR_ORDER + "
+        "complete AGENT_BUNDLE_FILES; (5) METHODOLOGY_OVERLAP — Architect "
+        "Ed25519 attestation + VBDIP-0001 manifest both exist (Operator "
+        "Initiative trust hierarchy inherits from these). All findings "
+        "carry frozen_region=True → tier=3 read-only per INV-MYTHOS-"
+        "FROZEN-PROTECTION-001. Mythos NEVER auto-fixes Operator "
+        "Initiative state."
+    ),
+    schema={"type": "object", "properties": {}, "required": []}
+)
+async def vapi_mythos_operator_initiative_audit(**_):
+    _ensure_bridge_on_path()
+    try:
+        from vapi_bridge.mythos_variants import (
+            mythos_operator_initiative_audit as _runner,
+        )
+    except Exception as exc:
+        return {
+            "variant": "operator_initiative",
+            "error": f"import vapi_bridge.mythos_variants failed: {exc}",
+            "total_findings": 0,
+            "findings": [],
+            "timestamp": time.time(),
+        }
+    try:
+        findings = await _runner(repo_root=PROJECT_ROOT)
+    except Exception as exc:
+        return {
+            "variant": "operator_initiative",
+            "error": f"variant raised: {exc}",
+            "total_findings": 0,
+            "findings": [],
+            "timestamp": time.time(),
+        }
+    return _findings_to_dict("operator_initiative", findings)
+
+
 async def main():
     # Preload workflow corpus files into mtime cache
     for key in WORKFLOW_FILES:
