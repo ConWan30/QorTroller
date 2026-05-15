@@ -3937,6 +3937,54 @@ class Store:
         except Exception:
             pass  # idempotent
 
+        # Phase 242-BT Stream 1 — BT-WITNESS v1 capability scaffolding.
+        # Each row records one BT-WITNESS commitment computed by the LAN-tower
+        # BlueZ witness (Stream 2 wires the actual witness service).
+        # commitment_hex UNIQUE constraint = anti-replay at the store layer.
+        # Stream 1 schema only — feature_root_hex carries the FROZEN empty-
+        # dict canonical-JSON SHA-256 until Stream 2 commits the canonical
+        # feature set post-Stage-2 measurement campaign (v1.1 anchor §5).
+        # on_chain_confirmed + tx_hash placeholders for Stream 3
+        # BTWitnessRegistry.sol anchor (wallet-gated; deferred).
+        try:
+            with self._conn() as conn:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS bt_witness_log (
+                        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                        commitment_hex      TEXT    NOT NULL,
+                        witness_pubkey_hex  TEXT    NOT NULL,
+                        device_id_hex       TEXT    NOT NULL,
+                        session_id_hex      TEXT    NOT NULL,
+                        feature_root_hex    TEXT    NOT NULL,
+                        n_features          INTEGER NOT NULL DEFAULT 0,
+                        transport_code      INTEGER NOT NULL,
+                        ts_ns               INTEGER NOT NULL,
+                        on_chain_confirmed  INTEGER NOT NULL DEFAULT 0,
+                        tx_hash             TEXT    NOT NULL DEFAULT '',
+                        trigger_reason      TEXT    NOT NULL DEFAULT '',
+                        created_at          REAL    NOT NULL
+                    )
+                """)
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_bt_witness_log_ts "
+                    "ON bt_witness_log(ts_ns DESC)"
+                )
+                conn.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_bt_witness_log_commit "
+                    "ON bt_witness_log(commitment_hex)"
+                )
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_bt_witness_log_session "
+                    "ON bt_witness_log(session_id_hex, ts_ns DESC)"
+                )
+                conn.execute(
+                    "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                    " VALUES (?, ?, ?)",
+                    (1101, "bt_witness_log", time.time()),
+                )
+        except Exception:
+            pass  # idempotent
+
         # Phase O0 Stream 3-prep Session 1 — AGENT_COMMIT v1 store table.
         # Sixth FROZEN-v1 primitive in the family. Each row records a git
         # commit attestation produced by an Operator Agent, with the computed
@@ -15599,6 +15647,96 @@ class Store:
             }
         except Exception:
             return {"variants": {}, "total_runs": 0, "total_findings": 0, "timestamp": time.time()}
+
+    # ------------------------------------------------------------------
+    # Phase 242-BT Stream 1 — bt_witness_log helpers
+    # ------------------------------------------------------------------
+    def insert_bt_witness_event(
+        self,
+        *,
+        commitment_hex: str,
+        witness_pubkey_hex: str,
+        device_id_hex: str,
+        session_id_hex: str,
+        feature_root_hex: str,
+        n_features: int,
+        transport_code: int,
+        ts_ns: int,
+        trigger_reason: str = "",
+    ) -> int:
+        """Persist one BT-WITNESS commitment. Returns new row id; 0 on
+        UNIQUE collision (anti-replay — same commitment already recorded).
+        Fail-open: returns 0 on any DB error, never raises.
+
+        Stream 1 callers MUST pass n_features=0 (feature schema deferred
+        to Stream 2 post-Stage-2 measurement per the v1.1 canonical
+        anchor §5).
+        """
+        try:
+            with self._conn() as conn:
+                cur = conn.execute(
+                    "INSERT OR IGNORE INTO bt_witness_log "
+                    "(commitment_hex, witness_pubkey_hex, device_id_hex, "
+                    " session_id_hex, feature_root_hex, n_features, "
+                    " transport_code, ts_ns, trigger_reason, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        commitment_hex,
+                        witness_pubkey_hex,
+                        device_id_hex,
+                        session_id_hex,
+                        feature_root_hex,
+                        int(n_features),
+                        int(transport_code),
+                        int(ts_ns),
+                        trigger_reason,
+                        time.time(),
+                    ),
+                )
+                if cur.lastrowid:
+                    return int(cur.lastrowid)
+                # UNIQUE collision — return existing row id (idempotent).
+                row = conn.execute(
+                    "SELECT id FROM bt_witness_log WHERE commitment_hex = ?",
+                    (commitment_hex,),
+                ).fetchone()
+                return int(row["id"]) if row else 0
+        except Exception:
+            return 0
+
+    def get_bt_witness_status(self) -> dict:
+        """Summary of BT-WITNESS activity. Fail-open: returns the empty
+        shape on DB error or empty table."""
+        try:
+            with self._conn() as conn:
+                row = conn.execute(
+                    "SELECT COUNT(*) AS total, "
+                    "       MAX(ts_ns) AS latest_ts_ns, "
+                    "       SUM(CASE WHEN on_chain_confirmed=1 THEN 1 ELSE 0 END) AS confirmed "
+                    "FROM bt_witness_log"
+                ).fetchone()
+                latest = conn.execute(
+                    "SELECT commitment_hex, witness_pubkey_hex, session_id_hex, ts_ns "
+                    "FROM bt_witness_log ORDER BY ts_ns DESC LIMIT 1"
+                ).fetchone()
+            total = int(row["total"] or 0) if row else 0
+            return {
+                "total_events":       total,
+                "on_chain_confirmed": int(row["confirmed"] or 0) if row else 0,
+                "latest_ts_ns":       int(row["latest_ts_ns"] or 0) if row else 0,
+                "latest_commitment":  (dict(latest)["commitment_hex"] if latest else ""),
+                "latest_session_id":  (dict(latest)["session_id_hex"] if latest else ""),
+                "timestamp":          time.time(),
+            }
+        except Exception:
+            return {
+                "total_events": 0,
+                "on_chain_confirmed": 0,
+                "latest_ts_ns": 0,
+                "latest_commitment": "",
+                "latest_session_id": "",
+                "timestamp": time.time(),
+            }
 
     def insert_operator_initiative_advancement_log(
         self,
