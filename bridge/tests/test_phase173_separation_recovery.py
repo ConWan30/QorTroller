@@ -42,7 +42,7 @@ def _make_agent(store, cfg=None, bus=None):
 # ---------------------------------------------------------------------------
 
 def test_t173_1_schema_creates_table():
-    with tempfile.TemporaryDirectory() as td:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
         store = _make_store(td)
         import sqlite3
         conn = sqlite3.connect(store._db_path)
@@ -59,7 +59,7 @@ def test_t173_1_schema_creates_table():
 # ---------------------------------------------------------------------------
 
 def test_t173_2_insert_get_roundtrip():
-    with tempfile.TemporaryDirectory() as td:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
         store = _make_store(td)
         store.insert_separation_ratio_recovery_log(
             current_ratio    = 0.569,
@@ -85,7 +85,7 @@ def test_t173_2_insert_get_roundtrip():
 # ---------------------------------------------------------------------------
 
 def test_t173_3_stable_when_above_gate():
-    with tempfile.TemporaryDirectory() as td:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
         store = _make_store(td)
         # Insert 3 snapshots with ratio above gate and improving
         for r in [1.1, 1.2, 1.3]:
@@ -127,7 +127,7 @@ def test_t173_5_velocity_zero_for_insufficient_data():
 # ---------------------------------------------------------------------------
 
 def test_t173_6_p1_re_enrollment_for_critical_velocity():
-    with tempfile.TemporaryDirectory() as td:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
         store = _make_store(td)
         # Strongly converging series
         for r in [1.261, 0.789, 0.569]:
@@ -150,7 +150,7 @@ def test_t173_7_age_weighting_for_mild_velocity():
     from vapi_bridge.separation_ratio_recovery_agent import SeparationRatioRecoveryAgent
     cfg = MagicMock()
     cfg.min_separation_ratio = 0.70
-    with tempfile.TemporaryDirectory() as td:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
         store = _make_store(td)
         # Mildly negative series (velocity between -0.05 and -0.01)
         for r in [0.80, 0.75, 0.70]:
@@ -171,7 +171,7 @@ def test_t173_7_age_weighting_for_mild_velocity():
 # ---------------------------------------------------------------------------
 
 def test_t173_8_bus_event_fired_on_recovery_needed():
-    with tempfile.TemporaryDirectory() as td:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
         store = _make_store(td)
         # Strongly converging — triggers P1_RE_ENROLLMENT
         for r in [1.261, 0.789, 0.569]:

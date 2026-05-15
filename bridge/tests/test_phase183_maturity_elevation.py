@@ -29,7 +29,7 @@ def _make_store(tmp):
 # ---------------------------------------------------------------------------
 
 def test_t183_1_insert_maturity_elevation_log():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         plan = {"separation_component": {"gap": 0.30, "action": "P1_RE_ENROLLMENT"}}
         row_id = s.insert_maturity_elevation_log(
@@ -49,7 +49,7 @@ def test_t183_1_insert_maturity_elevation_log():
 # ---------------------------------------------------------------------------
 
 def test_t183_2_status_safe_defaults_when_empty():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         status = s.get_maturity_elevation_status()
         assert status["current_tier"] == "ALPHA"
@@ -64,7 +64,7 @@ def test_t183_2_status_safe_defaults_when_empty():
 # ---------------------------------------------------------------------------
 
 def test_t183_3_elevation_available_when_gap_small():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         s.insert_maturity_elevation_log(
             current_tier="BETA",
@@ -85,7 +85,7 @@ def test_t183_3_elevation_available_when_gap_small():
 # ---------------------------------------------------------------------------
 
 def test_t183_4_elevation_not_available_when_gap_large():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         s.insert_maturity_elevation_log(
             current_tier="ALPHA",
@@ -105,7 +105,7 @@ def test_t183_4_elevation_not_available_when_gap_large():
 # ---------------------------------------------------------------------------
 
 def test_t183_5_critical_component_stored():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         s.insert_maturity_elevation_log(
             current_tier="ALPHA",
@@ -125,7 +125,7 @@ def test_t183_5_critical_component_stored():
 # ---------------------------------------------------------------------------
 
 def test_t183_6_estimated_sessions_total():
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         s = _make_store(tmp)
         s.insert_maturity_elevation_log(
             current_tier="ALPHA",
@@ -161,7 +161,7 @@ def test_t183_8_endpoint_returns_expected_keys():
     from vapi_bridge.config import Config
     from vapi_bridge.operator_api import create_operator_app
 
-    with tempfile.TemporaryDirectory() as tmp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
         store = Store(str(Path(tmp) / "test183t8.db"))
         cfg = Config()
         object.__setattr__(cfg, "operator_api_key", "test-key-183")

@@ -67,7 +67,7 @@ def _make_app(tmpdir):
 
 def test_t168_1_schema_migration_adds_ci_columns():
     """Store schema migration idempotently adds ci_lower/ci_upper/n_bootstrap."""
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
         store = _make_store(tmpdir)
         import sqlite3
         conn = sqlite3.connect(store._db_path)
@@ -84,7 +84,7 @@ def test_t168_1_schema_migration_adds_ci_columns():
 
 def test_t168_2_insert_stores_ci_values():
     """insert_separation_ratio_snapshot persists ci_lower/ci_upper/n_bootstrap."""
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
         store = _make_store(tmpdir)
         store.insert_separation_ratio_snapshot(
             pooled_ratio=1.261,
@@ -111,7 +111,7 @@ def test_t168_2_insert_stores_ci_values():
 
 def test_t168_3_insert_without_ci_defaults_to_zero():
     """insert_separation_ratio_snapshot without CI args defaults to 0.0/0.0/0."""
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
         store = _make_store(tmpdir)
         store.insert_separation_ratio_snapshot(
             pooled_ratio=0.569,
@@ -135,7 +135,7 @@ def test_t168_3_insert_without_ci_defaults_to_zero():
 
 def test_t168_4_get_status_returns_ci_fields():
     """get_separation_ratio_status returns ci_lower, ci_upper, n_bootstrap keys."""
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
         store = _make_store(tmpdir)
         store.insert_separation_ratio_snapshot(
             pooled_ratio=1.100,
@@ -165,7 +165,7 @@ def test_t168_4_get_status_returns_ci_fields():
 
 def test_t168_5_api_defensibility_status_includes_ci():
     """GET /agent/separation-defensibility-status includes ci_lower/ci_upper/n_bootstrap."""
-    with tempfile.TemporaryDirectory() as tmpdir:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmpdir:
         try:
             client, store = _make_app(tmpdir)
         except Exception:
