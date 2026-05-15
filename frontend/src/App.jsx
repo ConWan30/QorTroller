@@ -5,6 +5,7 @@ import { HeartbeatProvider } from './heartbeat/HeartbeatProvider'
 import { FONTS } from './shared/design/tokens'
 import { DriftAlertBadge } from './components/DriftAlertBadge'
 import { OperatorBar } from './components/OperatorBar'
+import GlobalMockBanner from './components/GlobalMockBanner'
 // Phase 238 Frontend Foundation Revamp — VAPI theme tokens (CSS variable lock)
 import './styles/vapi-theme.css'
 
@@ -56,6 +57,11 @@ export function App() {
 
   return (
     <HeartbeatProvider>
+      {/* Mythos audit fix (post-/goal 2026-05-15): App-level mock
+          indicator. Shows the 'bridge offline' banner across ALL tabs
+          (previously only GamerView surfaced it). Auto-clears on the
+          next successful fetch via client.js apiGet/apiPost hooks. */}
+      <GlobalMockBanner />
       <div style={{
         display:       'flex',
         flexDirection: 'column',

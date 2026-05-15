@@ -28,13 +28,14 @@ describe('VpmFilterChips', () => {
         onVisualStateChange={() => {}}
       />
     )
-    // 7 vpm_id chips (ALL + 6 compilers)
-    expect(VPM_ID_OPTIONS).toHaveLength(7)
+    // 8 vpm_id chips (ALL + 7 compilers — Phase O5-MLGA Stage 4
+    // added MLGA-SESSION-v1 as the 7th compiler).
+    expect(VPM_ID_OPTIONS).toHaveLength(8)
     // 7 visual_state chips (ALL + 6 FROZEN states)
     expect(VISUAL_STATE_OPTIONS).toHaveLength(7)
     // Each chip rendered as a button with data-vpm-filter-chip attr
     const chips = container.querySelectorAll('[data-vpm-filter-chip]')
-    expect(chips.length).toBe(14)
+    expect(chips.length).toBe(15)
   })
 
   it('T-VPM-C-CHIPS-2: clicking a chip invokes onSelect', () => {

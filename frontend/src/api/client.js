@@ -6,6 +6,7 @@
 // commitment is detected at the application layer.
 
 import { validateVame } from './vame'
+import { isMockActive, deactivateMock } from './mockBridge'
 
 const _key = import.meta.env.VITE_VAPI_API_KEY
 
@@ -53,6 +54,15 @@ export async function apiGet(path, options = {}) {
   const bodyView = new Uint8Array(bodyBuf)
   // VAME validation runs but never throws — failures surface via vameFailureCount()
   await validateVame(res.headers, path, bodyView)
+  // Mythos audit fix (post-/goal 2026-05-15): clear the sticky mock
+  // banner here, on EVERY successful fetch — not only on get()-helper
+  // routed calls. The prior placement (bridgeApi.js:28) missed
+  // direct-apiGet hooks (BrpView, EnrollmentStatus, etc.), so when
+  // the bridge recovered while the user was on a tab whose hooks
+  // bypass get(), the __vapiMockActive flag stayed stuck and the
+  // 'MOCK DATA — bridge offline' banner persisted. Closing this gap
+  // makes recovery automatic regardless of which view is active.
+  if (isMockActive()) deactivateMock()
   return JSON.parse(new TextDecoder('utf-8').decode(bodyView))
 }
 
@@ -74,5 +84,7 @@ export async function apiPost(path, body, options = {}) {
   if (res.status === 503 || res.status === 502 || res.status === 504) throw new BridgeOfflineError()
   if (!res.ok) throw new BridgeOfflineError()
 
+  // Mythos audit fix — mirror the apiGet success-path mock clear.
+  if (isMockActive()) deactivateMock()
   return res.json()
 }
