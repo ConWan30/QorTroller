@@ -44,7 +44,7 @@ if TYPE_CHECKING:
     from vapi_bridge.config import Config
 
 # ---------------------------------------------------------------------------
-# CONTRADICTION_RULES — 17 rules (Phase 238 Step I-AUTOLOOP-2 added LISTING_TIER_DRIFT + CONSENT_REVOKED_LISTING_ACTIVE; Phase O1 C6 added BUNDLE_HASH_DRIFT_DETECTED + SCOPE_HASH_GOVERNANCE_DRIFT_DETECTED)
+# CONTRADICTION_RULES — 29 rules (Phase O5-MYTHOS-MINIMAL M.3 added MYTHOS_FROZEN_REGION_DRIFT + MYTHOS_ASYNC_HAZARD, 27→29; prior: Phase 238 Step I-AUTOLOOP-2 added LISTING_TIER_DRIFT + CONSENT_REVOKED_LISTING_ACTIVE; Phase O1 C6 added BUNDLE_HASH_DRIFT_DETECTED + SCOPE_HASH_GOVERNANCE_DRIFT_DETECTED; Phase O4 27th CFSS_LANE_AUTHORITY_DRIFT)
 # ---------------------------------------------------------------------------
 
 CONTRADICTION_RULES: dict = {
@@ -1227,6 +1227,100 @@ CONTRADICTION_RULES: dict = {
             "(extremely rare), governance ceremony required to re-"
             "anchor the canonical bundle. DO NOT advance any agent's "
             "lifecycle phase while CFSS_VIOLATION findings are open."
+        ),
+    },
+
+    # Phase O5-MYTHOS-MINIMAL M.3 — Mythos findings route via FSCA.
+    # Mythos variants (M.2) write to mythos_finding_log; these 2 rules
+    # poll that table and surface findings as FSCA contradictions, which
+    # in turn route to the operator queue. Zero-new-pipeline integration
+    # (the plan's W2 opportunity from the Phase O5 proposal).
+    "MYTHOS_FROZEN_REGION_DRIFT": {
+        "query": """
+            SELECT id, variant, coherence_id, severity, description,
+                   file_path, line_number, fix_authority_tier,
+                   frozen_region, created_at
+            FROM mythos_finding_log
+            WHERE variant = 'frozen'
+              AND frozen_region = 1
+              AND resolved = 0
+              AND created_at >= ?
+            ORDER BY created_at DESC LIMIT 5
+        """,
+        "params": lambda cfg: (time.time() - 86400,),
+        "agents_involved": [
+            "AnchorSentry",
+            "Guardian",
+            "Mythos-Frozen",
+        ],
+        "severity": "CRITICAL",
+        "explanation": (
+            "Mythos-Frozen variant (Phase O5 M.2) detected at least one "
+            "PV-CI invariant that would FAIL if --report were run now — "
+            "pattern unmatched, source file missing, or digest drift vs "
+            "the committed allowlist. Every such finding is on a FROZEN "
+            "region (fix_authority_tier=3 read-only per INV-MYTHOS-"
+            "FROZEN-PROTECTION-001), which means a manual edit has "
+            "diverged the source from its allowlist-pinned digest. This "
+            "is the most security-relevant Mythos signal: silent "
+            "drift in protocol-critical regions."
+        ),
+        "resolution": (
+            "1) Invoke the Mythos-Frozen MCP tool to see the full "
+            "drift list: vapi_mythos_frozen_drift. 2) Run `python "
+            "scripts/vapi_invariant_gate.py --report` to confirm the "
+            "specific failing invariants. 3) Investigate each: if the "
+            "drift is INTENTIONAL (a deliberate change to a previously-"
+            "pinned region), regenerate the allowlist via the "
+            "governance ceremony "
+            "`python scripts/vapi_invariant_gate.py --generate "
+            "--reason \"<category>: ...\" --confirm-governance` and "
+            "type the exact governance phrase. If UNINTENTIONAL, "
+            "restore the pinned region from git history. DO NOT auto-"
+            "apply Mythos-Frozen recommendations — frozen_region=True "
+            "findings are tier 3 (read-only) by INV-MYTHOS-FROZEN-"
+            "PROTECTION-001."
+        ),
+    },
+    "MYTHOS_ASYNC_HAZARD": {
+        "query": """
+            SELECT id, variant, coherence_id, severity, description,
+                   file_path, line_number, fix_authority_tier,
+                   frozen_region, created_at
+            FROM mythos_finding_log
+            WHERE variant = 'stability'
+              AND resolved = 0
+              AND severity IN ('CRITICAL', 'HIGH')
+              AND created_at >= ?
+            ORDER BY created_at DESC LIMIT 5
+        """,
+        "params": lambda cfg: (time.time() - 86400,),
+        "agents_involved": [
+            "Mythos-Stability",
+            "Guardian",
+        ],
+        "severity": "MEDIUM",
+        "explanation": (
+            "Mythos-Stability variant (Phase O5 M.2) detected a HIGH-"
+            "severity async hazard in production code — most commonly "
+            "urllib.urlopen() without timeout= argument, which can "
+            "starve the bridge ThreadPoolExecutor when peers hang "
+            "(precedent: Mythos audit commit 48236084). MEDIUM-severity "
+            "findings (silent except:pass without deliberate-fail-open "
+            "marker) are deliberately NOT surfaced here — they exceed "
+            "manual-review bandwidth; the operator queries them "
+            "directly via the MCP tool when bandwidth allows."
+        ),
+        "resolution": (
+            "1) Invoke the Mythos-Stability MCP tool to see all "
+            "findings: vapi_mythos_stability_sweep. 2) For urlopen-no-"
+            "timeout: add `timeout=<float>` to the urlopen call "
+            "(mirror ipfs_pinning.py / ioswarm_live_node_client.py). "
+            "3) For subprocess hazards: kill+reap on TimeoutError "
+            "(precedent: commit 48236084 operator_api.py + "
+            "session_adjudicator.py). 4) Mark resolved in "
+            "mythos_finding_log once the fix lands — set resolved=1 "
+            "+ resolution_commit=<sha>."
         ),
     },
 }

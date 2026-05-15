@@ -11,7 +11,7 @@ WIF-038 W2 closure:
   VHP MINT_QUORUM=0.80 pathway.
 
 Tests:
-  T204-1  len(CONTRADICTION_RULES) == 27
+  T204-1  len(CONTRADICTION_RULES) == 29
   T204-2  IOSWARM_ACTIVE_NO_ADJUDICATIONS key exists + required fields present
   T204-3  guard dormant when ioswarm_enabled=False
   T204-4  guard dormant when ioswarm_adjudication_enabled=False
@@ -52,14 +52,14 @@ from vapi_bridge.fleet_signal_coherence_agent import (  # noqa: E402
 # ---------------------------------------------------------------------------
 class TestT204_1_RuleCount(unittest.TestCase):
     def test_contradiction_rules_length_is_8(self):
-        # Current count is 27 (post-Phase 238). Phase 204 introduced
+        # Current count is 29 (post-Phase O5 M.3). Phase 204 introduced
         # IOSWARM_ACTIVE_NO_ADJUDICATIONS as the 8th rule; subsequent phases
         # added more. The structural invariant exercised here is "the rule set
         # grows monotonically and IOSWARM_ACTIVE_NO_ADJUDICATIONS is present".
         self.assertEqual(
             len(CONTRADICTION_RULES),
-            27,
-            f"Expected 27 CONTRADICTION_RULES, got {len(CONTRADICTION_RULES)}: "
+            29,
+            f"Expected 29 CONTRADICTION_RULES, got {len(CONTRADICTION_RULES)}: "
             f"{list(CONTRADICTION_RULES)}",
         )
 

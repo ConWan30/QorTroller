@@ -16,7 +16,7 @@ T-CFSS-INT-6: FSCA rule CFSS_LANE_AUTHORITY_DRIFT registered with CRITICAL sever
 T-CFSS-INT-7: FSCA rule SQL query fires on populated cfss_lane_drift_log
 T-CFSS-INT-8: store helper failures fail-open (return 0 / empty list)
 T-CFSS-INT-9: sweep_id deterministic for same report
-T-CFSS-INT-10: CONTRADICTION_RULES count is 27 (26 pre-rule + 1 new)
+T-CFSS-INT-10: CONTRADICTION_RULES count is 29 (Phase O5 M.3 added MYTHOS_FROZEN_REGION_DRIFT + MYTHOS_ASYNC_HAZARD, 27→29)
 """
 from __future__ import annotations
 
@@ -285,11 +285,11 @@ def test_t_cfss_int_9_sweep_id_deterministic():
     assert s3 != s1
 
 
-# ---- T-CFSS-INT-10: CONTRADICTION_RULES count is 27 ------------------
+# ---- T-CFSS-INT-10: CONTRADICTION_RULES count is 29 ------------------
 
 def test_t_cfss_int_10_total_rule_count():
-    """Pin the FSCA contradiction rule count at 27 (26 pre-rule +
+    """Pin the FSCA contradiction rule count at 29 (Phase O5 M.3 adds 2 Mythos rules; 26 pre-rule +
     CFSS_LANE_AUTHORITY_DRIFT). Catches accidental rule
     additions/removals at PR time."""
     from vapi_bridge.fleet_signal_coherence_agent import CONTRADICTION_RULES
-    assert len(CONTRADICTION_RULES) == 27
+    assert len(CONTRADICTION_RULES) == 29

@@ -342,5 +342,17 @@
   "INV-POSEIDON-AS-003": {
     "digest": "de0b256e6078b256bd6050091be41496836c2e3df00841133fcb44746b5d5c3c",
     "description": "Poseidon test-vector corpus SHA-256 pinned in poseidon_test_vectors.sha256 (Phase O4-W3B-POSEIDON-AS) \u2014 the circomlibjs 0.1.7 ground-truth corpus that V.1/V.2 verify the AS implementation against (1000 random + 25 boundary + 50 per-round vectors per arity {t2,t3,t9}). Protects against silent vector-file tampering eroding the single-reference verification basis."
+  },
+  "INV-MYTHOS-CADENCE-001": {
+    "digest": "db231debda0e2b779b17d1b5119486d02a99770e272f59ae4b06762b255b25d3",
+    "description": "MYTHOS_CADENCE_SCHEDULE dict pinned in mythos_cadence_engine.py (Phase O5-MYTHOS-MINIMAL M.3). Defines which variants run at which cadence tier \u2014 daily / per_pr / per_phase_close / pre_ceremony / post_incident. Drift here changes the audit cadence silently."
+  },
+  "INV-MYTHOS-VARIANTS-001": {
+    "digest": "e7c52051bc72a9e817fbb4a0ed4b9b903c6e5efc2ac948b62ac00a0f433d4452",
+    "description": "Mythos variant entry points pinned in mythos_variants.py (Phase O5-MYTHOS-MINIMAL M.3). The 2 async variant functions mythos_frozen_drift + mythos_stability_sweep are the public surface the cadence engine and MCP tools invoke. min_matches=2 catches any single-variant rename or removal."
+  },
+  "INV-MYTHOS-FROZEN-PROTECTION-001": {
+    "digest": "2f65b2cad775883f30a11752d987e76cff0ac2f22e19e124017080326be44d81",
+    "description": "Store-layer enforcement of the FROZEN-region read-only invariant: insert_mythos_finding FORCES fix_authority_tier=3 whenever frozen_region=True, regardless of the variant's declared tier. Mythos NEVER auto-fixes FROZEN material \u2014 this invariant is the cryptographic safety property the plan named (verified by T-MYTHOS-M1-3). Drift here would let a malicious or buggy variant suggest tier-1 autofix on a FROZEN region and have it take effect."
   }
 }
