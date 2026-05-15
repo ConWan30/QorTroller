@@ -1,0 +1,34 @@
+{
+  "schema_version": "vsd-proposal-manifest-v1",
+  "proposal_id": "VBDIP-0006",
+  "proposal_path": "wiki/methodology/VBDIP-0006-vapi-firmware-reference-implementation.md",
+  "status": "DRAFT_AWAITING_ARCHITECT_SIGNATURE",
+  "frozen_phase": "PENDING (will become 'VBDIP-0006 v1.0 FREEZE' upon signing)",
+  "frozen_at_ts_ns": null,
+  "proposal_byte_length": null,
+  "proposal_canonical_hash": null,
+  "architect_pubkey_ed25519": "056e695f2995070198a0db1a6c264d8234fb88bf5cf6332c354f58a096a78ca8",
+  "bridge_wallet_attestation_ref": "vsd-vault/eval/architect_key_attestation.json",
+  "signature": null,
+  "signing_method": "Ed25519 (cryptography.hazmat.primitives.asymmetric.ed25519)",
+  "signed_object": "proposal_canonical_hash bytes (32B from hex)",
+  "_operator_signing_procedure_": [
+    "When VBDIP-0006 v1.0 markdown is final (operator review complete):",
+    "1. Compute canonical hash: python -c \"import hashlib; print(hashlib.sha256(open('wiki/methodology/VBDIP-0006-vapi-firmware-reference-implementation.md','rb').read()).hexdigest())\"",
+    "2. Populate proposal_canonical_hash + proposal_byte_length fields above",
+    "3. Sign the 32-byte canonical_hash with the architect Ed25519 private key (vsd-vault/architect_key.pem; gitignored per vsd-vault/.gitignore)",
+    "4. Populate signature field (64B hex) + frozen_at_ts_ns + flip status to FROZEN",
+    "5. Rename file: drop the .PENDING-ARCHITECT-SIGNATURE suffix -> 001.manifest.json",
+    "6. Commit the signed manifest in a separate operator-runtime commit (NOT this proposal-ship commit)",
+    "7. Mirror VBDIP-0001 (commit d6830525) precedent for the architect-signing ceremony"
+  ],
+  "verification_procedure": [
+    "1. Read VBDIP-0006 from proposal_path at the FROZEN commit",
+    "2. Compute SHA-256 of file bytes; must equal proposal_canonical_hash",
+    "3. Load architect_pubkey_ed25519 (hex -> 32 bytes raw Ed25519 pubkey)",
+    "4. Convert signature hex -> 64 bytes",
+    "5. Call ed25519_verify(pubkey, signature, hash_bytes_from_canonical_hash)",
+    "6. Confirm architect_pubkey_ed25519 matches the value in bridge_wallet_attestation_ref envelope",
+    "7. Re-verify the bridge wallet EIP-191 signature in the attestation references back to 0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692"
+  ]
+}
