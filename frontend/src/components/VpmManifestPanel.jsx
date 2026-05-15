@@ -195,16 +195,41 @@ export function VpmManifestPanel({ manifest, commitmentHex }) {
   //
   // Future Phase O5: the sidecar will carry the integrity_label dict
   // directly. Today the panel uses the per-field fallbacks below.
+  // Per-vpm_id default-value overrides. The VPMArtifactManifest dataclass
+  // serializes only integrity_label_hash_hex into the sidecar (not the
+  // full dict). Until the sidecar carries the integrity_label dict
+  // directly (Phase O5 follow-up), the panel must provide reasonable
+  // defaults per-class. MLGA-SESSION-v1 is the first fully-autonomous
+  // artifact class and has a distinct profile from the ZKBA family.
+  const _isMlga = manifest.vpm_id === 'MLGA-SESSION-v1'
+  const _isChainOnly = manifest.proof_weight === 3
+  const _proofWeightLabel = (
+    manifest.proof_weight === 1 ? 'DIRECT_HID' :
+    manifest.proof_weight === 2 ? 'CALIBRATION_PLUS_CONTEXT' :
+    manifest.proof_weight === 3 ? 'CHAIN_ONLY' :
+    manifest.proof_weight === 4 ? 'MARKETPLACE_DERIVED' :
+    manifest.proof_weight === 5 ? 'DEMO' :
+    manifest.proof_weight === 6 ? 'FROZEN_DISABLED' :
+    String(manifest.proof_weight ?? '—')
+  )
   const labelDict = manifest.integrity_label || {
-    proof_type:             manifest.proof_type || `VPM-${(manifest.vpm_id || '').replace('-v1', '')}`,
+    proof_type:             manifest.proof_type || (_isMlga
+                              ? 'mlga_session'
+                              : `VPM-${(manifest.vpm_id || '').replace('-v1', '')}`),
     capture_mode:           manifest.capture_mode || '—',
-    raw_biometrics_exposed: false,
-    consent_active:         true,
-    zk_verified:            false,
-    on_chain_anchor:        manifest.on_chain_anchor ?? true,
-    proof_weight:           manifest.proof_weight ?? '—',
+    raw_biometrics_exposed: false,                          // 'no' across all current classes
+    consent_active:         _isMlga ? 'n/a' : true,         // MLGA is operator-owned session
+    zk_verified:            false,                          // none of these classes are ZK-proven today
+    on_chain_anchor:        manifest.on_chain_anchor ?? (
+                              _isMlga ? false              // MLGA Stage 4 local-only; Stage 5 ships anchor
+                              : _isChainOnly ? true        // ZKBA CHAIN_ONLY rows are by-defn anchored
+                              : true
+                            ),
+    proof_weight:           _proofWeightLabel,
     revocation_status:      manifest.revocation_status || 'active',
-    limitations:            manifest.limitations || [],
+    limitations:            manifest.limitations || (_isMlga
+                              ? ['MLGA v1 ambient capture; supplements lab measurements; does not replace controlled-environment baseline']
+                              : []),
   }
 
   // Hash check badge
