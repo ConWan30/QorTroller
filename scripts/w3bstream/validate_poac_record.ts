@@ -104,10 +104,15 @@ const POAC_TOTAL_LEN: i32 = 228;
 const BODY_LEN: i32 = 164;
 const SIG_LEN: i32 = 64;
 
-// Byte offsets within 164-byte body (see PoAC wire format specification)
-const OFF_DEVICE_ID: i32 = 0;    // 32 bytes
-const OFF_INF_CODE: i32 = 104;   // 1 byte
-const OFF_CHAIN_HASH: i32 = 32;  // 32 bytes (SHA-256 of prior body segment)
+// Byte offsets within the FROZEN 164-byte PoAC body. Authoritative layout:
+// bridge/vapi_bridge/codec.py wire-format table — byte 0=prev_poac_hash,
+// 32=sensor_commitment, 64=model_manifest_hash, 96=world_model_hash,
+// 128=inference_result. (Phase O4 codebase sweep: OFF_INF_CODE was 104 —
+// wrong; the circuit C3 binding and codec.py both place inference_result at
+// byte 128. 104 read into the monotonic_ctr/timestamp region — garbage.)
+const OFF_PREV_POAC_HASH: i32 = 0;     // 32 bytes — SHA-256 chain link to prior record
+const OFF_INF_CODE: i32 = 128;         // 1 byte — inference_result (circuit C3: "PoAC body byte 128")
+const OFF_SENSOR_COMMITMENT: i32 = 32; // 32 bytes — sensor_commitment (declared for wire-format completeness; currently unread)
 
 // FROZEN ABI selectors (real, computed via keccak256; audited by
 // scripts/w3bstream_applet_audit.py).
@@ -237,8 +242,11 @@ function _resolve_device_to_gamer(rawPtr: i32, callPtr: i32, outAddrPtr: i32): b
     // Selector stored big-endian; AS store<u32> is little-endian on
     // wasm32, so write byte-by-byte to preserve big-endian ABI layout.
     _store_u32_be(callPtr, SEL_GET_DEVICE_WALLET);
-    // Copy device_id_hash (32 bytes) from PoAC body [OFF_DEVICE_ID:OFF_DEVICE_ID+32]
-    memory.copy(callPtr + 4, rawPtr + OFF_DEVICE_ID, 32);
+    // STUB: copies prev_poac_hash (body[0:32]) where a real deviceIdHash is
+    // required. The true deviceId is keccak256(pubkey) — computed post
+    // P256-signature-verification, NOT a field of the 164-byte body (see
+    // codec.py). Same relay-not-compute gap as the ZK public inputs above.
+    memory.copy(callPtr + 4, rawPtr + OFF_PREV_POAC_HASH, 32);
 
     const ioidAddrPtr: i32 = 0;  // address passed by W3bstream runtime configuration
     const result = chain_call(ioidAddrPtr, 20, callPtr, 36);
@@ -444,8 +452,9 @@ function _encode_submit_proof(rawPtr: i32, inferenceCode: i32, outPtr: i32): i32
     //   word 6: epoch              (STUB ZERO)
     const headStart: i32 = outPtr + 4;
 
-    // word 0: deviceId — copy 32B from PoAC body OFF_DEVICE_ID
-    memory.copy(headStart, rawPtr + OFF_DEVICE_ID, 32);
+    // word 0: deviceId — STUB: copies prev_poac_hash (body[0:32]). The real
+    // deviceId is keccak256(pubkey), not a body field — relay-not-compute gap.
+    memory.copy(headStart, rawPtr + OFF_PREV_POAC_HASH, 32);
 
     // word 1: offset to proof — 224 (= 7 × 32), encoded as uint256 big-endian
     memory.fill(headStart + 32, 0, 32);
