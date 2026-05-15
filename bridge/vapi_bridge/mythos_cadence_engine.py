@@ -52,8 +52,9 @@ MYTHOS_CADENCE_SCHEDULE: dict[str, list[str]] = {
     "daily":          ["frozen", "stability"],          # M.1+M.2 minimal
     "per_pr":         ["frozen"],                       # M.5 GitHub Actions
     "per_phase_close":["methodology"],                  # M.5
-    "pre_ceremony":   ["ceremony", "frozen"],           # M.5
+    "pre_ceremony":   ["ceremony", "frozen", "operator_initiative"],  # operator-authored extension 2026-05-15
     "post_incident":  ["stability", "crypto"],          # M.5
+    "weekly":         ["operator_initiative"],          # operator-authored extension 2026-05-15
 }
 
 
