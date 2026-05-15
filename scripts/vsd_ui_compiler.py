@@ -47,7 +47,14 @@ _BRIDGE_DIR = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "br
 if _BRIDGE_DIR not in sys.path:
     sys.path.insert(0, _BRIDGE_DIR)
 
-from vapi_bridge.zkba_artifact import ZKBAClass, ProofWeightClass  # noqa: E402
+try:
+    from vapi_bridge.zkba_artifact import ZKBAClass, ProofWeightClass  # noqa: E402
+except ImportError:
+    # When loaded inside the running bridge process (python -m
+    # bridge.vapi_bridge.main), the package surfaces as
+    # bridge.vapi_bridge.* — bare vapi_bridge.* does not resolve.
+    # Both code paths reach the same module object.
+    from bridge.vapi_bridge.zkba_artifact import ZKBAClass, ProofWeightClass  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
