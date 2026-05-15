@@ -438,5 +438,17 @@
   "INV-MLGA-TRACKER-LIFECYCLE-001": {
     "digest": "04cb6f44e101b6a0a7755f0bcc50598c6feff30f75aa2d1e9b6e1a73e5cf75f8",
     "description": "Phase O5-MLGA Stage 3 \u2014 session lifecycle methods pinned: open_session + close_session + poll_once. These are the 3 public methods that compose the polling-based session lifecycle (open on capture_state=NOMINAL; close on DISCONNECTED or max_duration; poll_once accumulates from records/APOP/GIC tables between events). Changing the method shape changes how MLGA sessions are bounded \u2014 drift here invalidates the dataproof semantics."
+  },
+  "INV-MLGA-COMPILER-ENTRY-001": {
+    "digest": "7db75cc505e9a8e45bfbd7b5bbbb885b94b0f1a42e7a2d4847360f1e98a0dfb5",
+    "description": "Phase O5-MLGA Stage 4: build_mlga_session_artifact entry point pinned in scripts/mlga_compile_session_artifact.py. Mirrors zkba_compile_gic_ledger.py pattern. Caller is bridge/vapi_bridge/mlga_session_tracker.py close_session() hook + the CLI entry. Renaming this function silently breaks Stage 4 wiring; PV-CI prevents that."
+  },
+  "INV-MLGA-VPM-SCHEMA-001": {
+    "digest": "e8d8f44713d17b9756d3e2275d0b3731a2fed02ba50f9024910d10851a3b7c42",
+    "description": "Phase O5-MLGA Stage 4: MLGA_VPM_WRAPPER_SCHEMA = \"vapi-mlga-session-artifact-v1\" FROZEN literal in scripts/mlga_compile_session_artifact.py. Persisted to vpm_artifact_log.wrapper_schema column on every close \u2014 frontend useMlgaArtifacts filters by this schema. Renaming the schema breaks downstream queries silently; PV-CI prevents that."
+  },
+  "INV-MLGA-CLOSE-HOOK-001": {
+    "digest": "c182a0c82493a4d82d19684b9e4473a9cd50b1531cdfe53fadcab725e3e86497",
+    "description": "Phase O5-MLGA Stage 4: close_session() in mlga_session_tracker.py invokes build_mlga_session_artifact + persists via insert_vpm_artifact post dataproof persist. Pattern matches the 2 critical call sites in close_session \u2014 the compiler invocation + the vpm_artifact_log insert. Drift here means the VPM artifact stops getting produced + persisted at session close. PV-CI prevents silent regression."
   }
 }

@@ -211,6 +211,68 @@ class MLGASessionTracker:
                 sess.n_trigger_pulls_r2, sess.n_trigger_pulls_l2,
                 sess.gic_advances_in_session, row_id,
             )
+
+            # ---- Phase O5-MLGA Stage 4: VPM artifact compile + persist ----
+            # Composes MLGA dataproof with Phase O4 VPM compiler discipline
+            # to produce a deterministic HTML artifact + persist row to
+            # vpm_artifact_log. The artifact becomes accessible to operators
+            # via the existing /operator/vpm-list endpoint + VpmRegistryView
+            # frontend tab (vpm_id filter = "MLGA-SESSION-v1") + the new
+            # MlgaLiveDrawer tile in DeveloperView. Fail-open: compiler
+            # failure must NOT prevent dataproof persist (which already
+            # succeeded above). Pinned by INV-MLGA-CLOSE-HOOK-001.
+            try:
+                import sys as _sys
+                _scripts_path = str(
+                    Path(__file__).resolve().parents[2] / "scripts"
+                )
+                if _scripts_path not in _sys.path:
+                    _sys.path.insert(0, _scripts_path)
+                from mlga_compile_session_artifact import (  # noqa: E402
+                    build_mlga_session_artifact,
+                )
+                _output_dir = (
+                    Path(__file__).resolve().parents[2]
+                    / "frontend" / "src" / "artifacts" / "mlga"
+                )
+                _vpm_manifest = build_mlga_session_artifact(
+                    session_id=sess.session_id,
+                    session_start_ts_ns=sess.open_ts_ns,
+                    session_end_ts_ns=end_ts_ns,
+                    n_poac_records=sess.n_poac_records,
+                    n_trigger_pulls_r2=sess.n_trigger_pulls_r2,
+                    n_trigger_pulls_l2=sess.n_trigger_pulls_l2,
+                    apop_state_counts=sess.apop_state_counts,
+                    bt_observability=bt_obs,
+                    gic_advances_in_session=sess.gic_advances_in_session,
+                    dataproof_hex=dataproof.hex(),
+                    output_dir=_output_dir,
+                )
+                _vpm_row = self._store.insert_vpm_artifact(
+                    commitment_hex=_vpm_manifest["commitment_hex"],
+                    vpm_id="MLGA-SESSION-v1",
+                    zkba_class=2,            # ZKBAClass.GIC
+                    proof_weight=1,          # ProofWeightClass.CHAIN_ONLY (=1 enum order)
+                    visual_state=_vpm_manifest["visual_state"],
+                    capture_mode="live",
+                    integrity_label_hash_hex=_vpm_manifest["integrity_label_hash_hex"],
+                    wrapper_schema="vapi-mlga-session-artifact-v1",
+                    zkba_manifest_hash_hex=dataproof.hex(),
+                    manifest_uri=_vpm_manifest.get("manifest_uri"),
+                    compiler_output_hash_hex=_vpm_manifest.get("output_hash_hex"),
+                    preimage_json=_vpm_manifest.get("preimage_json", "{}"),
+                    ts_ns=end_ts_ns,
+                )
+                log.info(
+                    "MLGA VPM artifact compiled: vpm_row=%d commitment=%s...",
+                    _vpm_row, _vpm_manifest["commitment_hex"][:16],
+                )
+            except Exception as vpm_exc:  # noqa: BLE001 — fail-open
+                log.warning(
+                    "MLGA VPM compile/persist failed (non-fatal): %s",
+                    vpm_exc,
+                )
+
         except Exception as exc:  # noqa: BLE001 — fail-open
             log.warning("MLGA session close persist failed: %s", exc)
 

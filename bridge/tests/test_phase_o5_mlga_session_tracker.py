@@ -242,14 +242,17 @@ def test_t_mlga_tracker_10_live_status_shape():
 # ----- T-11 -----
 
 def test_t_mlga_tracker_11_config_fields(monkeypatch):
-    """Config has 3 MLGA tracker fields with documented defaults."""
-    # Strip env that might override the defaults
-    for env_var in (
-        "MLGA_SESSION_TRACKER_ENABLED",
-        "MLGA_SESSION_TRACKER_INTERVAL_S",
-        "MLGA_SESSION_MAX_DURATION_S",
-    ):
-        monkeypatch.delenv(env_var, raising=False)
+    """Config has 3 MLGA tracker fields with documented defaults.
+
+    Uses monkeypatch.setenv to defaults so that any operator-flipped
+    values in bridge/.env (which get loaded by dotenv at config module
+    import time) cannot leak into the test. setenv survives subsequent
+    load_dotenv calls because load_dotenv default behavior does NOT
+    override existing os.environ entries. Same pattern as
+    test_operator_initiative_o3_expedite.py fixture."""
+    monkeypatch.setenv("MLGA_SESSION_TRACKER_ENABLED", "false")
+    monkeypatch.setenv("MLGA_SESSION_TRACKER_INTERVAL_S", "30")
+    monkeypatch.setenv("MLGA_SESSION_MAX_DURATION_S", "3600")
     from vapi_bridge.config import Config
     cfg = Config()
     assert hasattr(cfg, "mlga_session_tracker_enabled")
