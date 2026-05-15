@@ -854,6 +854,61 @@ INVARIANTS: list[Invariant] = [
         pattern=r"def _check_triple_gate\(\*, confirm: bool\)",
         min_matches=1,
     ),
+    # ---------------------------------------------------------------------------
+    # Phase O5-MLGA Stage 5 PV-CI ceremony — pin the MLGA constructs from
+    # session 2026-05-15 Stage 2 implementation. 7 invariants; 101 → 108.
+    # See wiki/methodology/mlga_architectural_proposal_v1.md for the
+    # architectural basis for each pin.
+    # ---------------------------------------------------------------------------
+    Invariant(
+        id="INV-MLGA-DOMAIN-TAG-001",
+        description='Phase O5-MLGA: MLGA_SESSION_DOMAIN_TAG = b"VAPI-MLGA-SESSION-v1" FROZEN literal in bridge/vapi_bridge/mlga_capture.py (20 bytes). Capability tag distinguishing MLGA session dataproofs from PATTERN-017 commitment families + every other capability tag. Width asserted at module import; widening or narrowing requires a separate capability tag, NOT modification of this literal.',
+        file="bridge/vapi_bridge/mlga_capture.py",
+        pattern=r'MLGA_SESSION_DOMAIN_TAG: bytes = b"VAPI-MLGA-SESSION-v1"',
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-MLGA-CAPABILITY-NOT-FAMILY-001",
+        description='Phase O5-MLGA: b"VAPI-MLGA-SESSION-v1" must appear in _KNOWN_CAPABILITY_TAGS in bridge/vapi_bridge/mythos_variants.py (NOT in _PATTERN_017_FROZEN_TAGS). MLGA is a capability tag per the POSEIDON-BN254-AS reframe precedent; commitment-family count stays 10 + PHYSICAL_DATA_ATTESTATION = 11 (per the Mythos-Crypto empirical correction). MLGA-LESSON-001 ratified.',
+        file="bridge/vapi_bridge/mythos_variants.py",
+        pattern=r'b"VAPI-MLGA-SESSION-v1"',
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-MLGA-DATAPROOF-PREIMAGE-001",
+        description="Phase O5-MLGA: compute_mlga_session_dataproof byte layout FROZEN at 20 + 8 + 8 + 8 + 4 + 4 + 32 + 1 + 4 = 89 bytes preimage. Any reordering or width change requires a v2 capability tag. The 89-byte assert is the load-bearing line of defense against silent layout drift.",
+        file="bridge/vapi_bridge/mlga_capture.py",
+        pattern=r"20 \+ 8 \+ 8 \+ 8 \+ 4 \+ 4 \+ 32 \+ 1 \+ 4 == 89",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-MLGA-VARIANT-ENTRY-001",
+        description="Phase O5-MLGA: mythos_live_gameplay_audit async function entry point pinned in bridge/vapi_bridge/mythos_variants.py — the 9th Mythos variant. Cadence: per_session tier (8th cadence tier, also pinned by INV-MLGA-CADENCE-001). Mythos finding routing goes through this entry; renaming or removing requires governance ceremony.",
+        file="bridge/vapi_bridge/mythos_variants.py",
+        pattern=r"async def mythos_live_gameplay_audit",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-MLGA-CADENCE-001",
+        description='Phase O5-MLGA: per_session cadence tier registered in MYTHOS_CADENCE_SCHEDULE with live_gameplay variant (8th tier; added 2026-05-15 alongside the 9th variant). Drift here changes when MLGA fires; tied to operator-runtime hardware-capture sessions.',
+        file="bridge/vapi_bridge/mythos_cadence_engine.py",
+        pattern=r'"per_session":\s+\["live_gameplay"\]',
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-MLGA-STORE-TABLE-001",
+        description="Phase O5-MLGA: mlga_session_log table migration registered in store.py (Phase 1102 migration; UNIQUE(session_id, dataproof_hex) anti-replay). Schema is the single canonical record for MLGA gameplay sessions; drift here breaks the unblock-harness export consumers (Phase 243-SS2 + 242-BT + 229).",
+        file="bridge/vapi_bridge/store.py",
+        pattern=r"CREATE TABLE IF NOT EXISTS mlga_session_log",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-MLGA-UNBLOCK-MAPPING-001",
+        description="Phase O5-MLGA: unblock-harness export script maps to the 3 currently-blocked phases (243-SS2-Stage-A / 242-BT-Stage-2 / 229-AIT-Corpus). Pin the 3 phase keys + the consumer references so future PRs cannot silently drop a target phase. Per MLGA architectural proposal §3.",
+        file="scripts/mlga_unblock_export.py",
+        pattern=r"phase_243_ss2_stage_a|phase_242_bt_stage_2|phase_229_ait_corpus",
+        min_matches=3,
+    ),
 ]
 
 

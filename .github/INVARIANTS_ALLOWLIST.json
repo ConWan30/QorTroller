@@ -402,5 +402,33 @@
   "INV-O3-EXPEDITE-SEEDING-TRIPLEGATE-001": {
     "digest": "25c3353787090e0b355179755360b20ab475818eede5efba758b526a8b9d5097",
     "description": "O3 expedite seeding harness triple-gate authorization function pinned (commit 0e83a8ce). _check_triple_gate enforces (a) CHAIN_SUBMISSION_PAUSED=true env (kill-switch ARMED), (b) OPERATOR_INITIATIVE_SEED_DRAFTS_AUTHORIZED=true env (DISTINCT from O2/O3 anchor envs to prevent carry-over), (c) --confirm CLI flag. All three required for real seeding; otherwise dry-run."
+  },
+  "INV-MLGA-DOMAIN-TAG-001": {
+    "digest": "9db52944aec64ce1c219ddfb868367048ab9c5984d0d14a8e9e78529d7116229",
+    "description": "Phase O5-MLGA: MLGA_SESSION_DOMAIN_TAG = b\"VAPI-MLGA-SESSION-v1\" FROZEN literal in bridge/vapi_bridge/mlga_capture.py (20 bytes). Capability tag distinguishing MLGA session dataproofs from PATTERN-017 commitment families + every other capability tag. Width asserted at module import; widening or narrowing requires a separate capability tag, NOT modification of this literal."
+  },
+  "INV-MLGA-CAPABILITY-NOT-FAMILY-001": {
+    "digest": "357c2a274f5fd39eb65a9d549088627689cb0b8b0c20253ee3237d357f40675d",
+    "description": "Phase O5-MLGA: b\"VAPI-MLGA-SESSION-v1\" must appear in _KNOWN_CAPABILITY_TAGS in bridge/vapi_bridge/mythos_variants.py (NOT in _PATTERN_017_FROZEN_TAGS). MLGA is a capability tag per the POSEIDON-BN254-AS reframe precedent; commitment-family count stays 10 + PHYSICAL_DATA_ATTESTATION = 11 (per the Mythos-Crypto empirical correction). MLGA-LESSON-001 ratified."
+  },
+  "INV-MLGA-DATAPROOF-PREIMAGE-001": {
+    "digest": "994ea215f6bcdd3cb91be688084e44c00209b7e6ad2e78db75465e97b47df06e",
+    "description": "Phase O5-MLGA: compute_mlga_session_dataproof byte layout FROZEN at 20 + 8 + 8 + 8 + 4 + 4 + 32 + 1 + 4 = 89 bytes preimage. Any reordering or width change requires a v2 capability tag. The 89-byte assert is the load-bearing line of defense against silent layout drift."
+  },
+  "INV-MLGA-VARIANT-ENTRY-001": {
+    "digest": "5106e23eab3ebbbdcd93737ead6a0ee46b0e1fc5ed7369cb13b65b72e5c03829",
+    "description": "Phase O5-MLGA: mythos_live_gameplay_audit async function entry point pinned in bridge/vapi_bridge/mythos_variants.py \u2014 the 9th Mythos variant. Cadence: per_session tier (8th cadence tier, also pinned by INV-MLGA-CADENCE-001). Mythos finding routing goes through this entry; renaming or removing requires governance ceremony."
+  },
+  "INV-MLGA-CADENCE-001": {
+    "digest": "f8dec26b6c562cd70d58d70d110a31af1045a48a81c84692ae0a88fcb7dc9a2f",
+    "description": "Phase O5-MLGA: per_session cadence tier registered in MYTHOS_CADENCE_SCHEDULE with live_gameplay variant (8th tier; added 2026-05-15 alongside the 9th variant). Drift here changes when MLGA fires; tied to operator-runtime hardware-capture sessions."
+  },
+  "INV-MLGA-STORE-TABLE-001": {
+    "digest": "6f75cd2b0cb5d9b309ed8a620ee24222e8a2ab64f58554968657262170805e52",
+    "description": "Phase O5-MLGA: mlga_session_log table migration registered in store.py (Phase 1102 migration; UNIQUE(session_id, dataproof_hex) anti-replay). Schema is the single canonical record for MLGA gameplay sessions; drift here breaks the unblock-harness export consumers (Phase 243-SS2 + 242-BT + 229)."
+  },
+  "INV-MLGA-UNBLOCK-MAPPING-001": {
+    "digest": "b494c75ec399408fcb192ede18d0d8de74b71b38cac5014643be7ad6f75e290a",
+    "description": "Phase O5-MLGA: unblock-harness export script maps to the 3 currently-blocked phases (243-SS2-Stage-A / 242-BT-Stage-2 / 229-AIT-Corpus). Pin the 3 phase keys + the consumer references so future PRs cannot silently drop a target phase. Per MLGA architectural proposal \u00a73."
   }
 }

@@ -56,6 +56,7 @@ MYTHOS_CADENCE_SCHEDULE: dict[str, list[str]] = {
     "post_ceremony":  ["post_o3", "operator_initiative"],           # operator goal 2026-05-15
     "post_incident":  ["stability", "crypto"],
     "weekly":         ["operator_initiative", "methodology"],       # Priority-5
+    "per_session":    ["live_gameplay"],                            # Phase O5-MLGA Stage 2
 }
 
 

@@ -3985,6 +3985,46 @@ class Store:
         except Exception:
             pass  # idempotent
 
+        # Phase O5-MLGA Stage 2 — Mythos Live Gameplay Audit session log.
+        # Each row persists one gameplay session's MLGA dataproof + the
+        # raw aggregates from which it was computed (re-derivable). UNIQUE
+        # on (session_id, dataproof_hex) = anti-replay. Wallet-free; only
+        # local SQLite writes; no chain anchor in v1 (canonical record is
+        # the dataproof commitment itself, verifiable post-session).
+        try:
+            with self._conn() as conn:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS mlga_session_log (
+                        id                        INTEGER PRIMARY KEY AUTOINCREMENT,
+                        session_id                TEXT    NOT NULL,
+                        session_start_ts_ns       INTEGER NOT NULL,
+                        session_end_ts_ns         INTEGER NOT NULL,
+                        n_poac_records            INTEGER NOT NULL,
+                        n_trigger_pulls_r2        INTEGER NOT NULL,
+                        n_trigger_pulls_l2        INTEGER NOT NULL,
+                        apop_state_counts_json    TEXT    NOT NULL DEFAULT '{}',
+                        bt_observability          INTEGER NOT NULL DEFAULT 0,
+                        gic_advances_in_session   INTEGER NOT NULL DEFAULT 0,
+                        dataproof_hex             TEXT    NOT NULL,
+                        created_at                REAL    NOT NULL
+                    )
+                """)
+                conn.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS idx_mlga_session_unique "
+                    "ON mlga_session_log(session_id, dataproof_hex)"
+                )
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_mlga_session_start "
+                    "ON mlga_session_log(session_start_ts_ns DESC)"
+                )
+                conn.execute(
+                    "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                    " VALUES (?, ?, ?)",
+                    (1102, "mlga_session_log", time.time()),
+                )
+        except Exception:
+            pass  # idempotent
+
         # Phase O0 Stream 3-prep Session 1 — AGENT_COMMIT v1 store table.
         # Sixth FROZEN-v1 primitive in the family. Each row records a git
         # commit attestation produced by an Operator Agent, with the computed
@@ -15735,6 +15775,101 @@ class Store:
                 "latest_ts_ns": 0,
                 "latest_commitment": "",
                 "latest_session_id": "",
+                "timestamp": time.time(),
+            }
+
+    # ------------------------------------------------------------------
+    # Phase O5-MLGA Stage 2 — mlga_session_log helpers
+    # ------------------------------------------------------------------
+    def insert_mlga_session(
+        self,
+        *,
+        session_id: str,
+        session_start_ts_ns: int,
+        session_end_ts_ns: int,
+        n_poac_records: int,
+        n_trigger_pulls_r2: int,
+        n_trigger_pulls_l2: int,
+        apop_state_counts_json: str,
+        bt_observability: int,
+        gic_advances_in_session: int,
+        dataproof_hex: str,
+    ) -> int:
+        """Persist one MLGA session record. Returns new row id; 0 on
+        UNIQUE collision (session_id + dataproof_hex anti-replay) OR DB
+        error. Fail-open per Mythos contract."""
+        try:
+            with self._conn() as conn:
+                cur = conn.execute(
+                    "INSERT OR IGNORE INTO mlga_session_log "
+                    "(session_id, session_start_ts_ns, session_end_ts_ns, "
+                    " n_poac_records, n_trigger_pulls_r2, n_trigger_pulls_l2, "
+                    " apop_state_counts_json, bt_observability, "
+                    " gic_advances_in_session, dataproof_hex, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        session_id,
+                        int(session_start_ts_ns),
+                        int(session_end_ts_ns),
+                        int(n_poac_records),
+                        int(n_trigger_pulls_r2),
+                        int(n_trigger_pulls_l2),
+                        apop_state_counts_json,
+                        int(bt_observability),
+                        int(gic_advances_in_session),
+                        dataproof_hex,
+                        time.time(),
+                    ),
+                )
+                if cur.lastrowid:
+                    return int(cur.lastrowid)
+                row = conn.execute(
+                    "SELECT id FROM mlga_session_log "
+                    "WHERE session_id = ? AND dataproof_hex = ?",
+                    (session_id, dataproof_hex),
+                ).fetchone()
+                return int(row["id"]) if row else 0
+        except Exception:
+            return 0
+
+    def get_mlga_session_status(self, limit: int = 10) -> dict:
+        """Summary of recent MLGA captures. Fail-open."""
+        try:
+            with self._conn() as conn:
+                rows = conn.execute(
+                    "SELECT * FROM mlga_session_log "
+                    "ORDER BY session_start_ts_ns DESC LIMIT ?",
+                    (max(1, min(100, int(limit))),),
+                ).fetchall()
+                summary = conn.execute(
+                    "SELECT COUNT(*) AS total, "
+                    "       SUM(n_poac_records) AS total_records, "
+                    "       SUM(n_trigger_pulls_r2) AS total_r2, "
+                    "       SUM(n_trigger_pulls_l2) AS total_l2, "
+                    "       SUM(gic_advances_in_session) AS total_gic, "
+                    "       MAX(session_end_ts_ns) AS latest_end "
+                    "FROM mlga_session_log"
+                ).fetchone()
+            s = dict(summary) if summary else {}
+            return {
+                "total_sessions":      int(s.get("total") or 0),
+                "total_poac_records":  int(s.get("total_records") or 0),
+                "total_r2_pulls":      int(s.get("total_r2") or 0),
+                "total_l2_pulls":      int(s.get("total_l2") or 0),
+                "total_gic_advances":  int(s.get("total_gic") or 0),
+                "latest_session_end_ts_ns": int(s.get("latest_end") or 0),
+                "recent_sessions":     [dict(r) for r in rows],
+                "timestamp":           time.time(),
+            }
+        except Exception:
+            return {
+                "total_sessions": 0,
+                "total_poac_records": 0,
+                "total_r2_pulls": 0,
+                "total_l2_pulls": 0,
+                "total_gic_advances": 0,
+                "latest_session_end_ts_ns": 0,
+                "recent_sessions": [],
                 "timestamp": time.time(),
             }
 

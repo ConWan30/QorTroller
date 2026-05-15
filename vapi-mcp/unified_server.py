@@ -3600,6 +3600,49 @@ async def vapi_mythos_post_o3_ceremony_audit(**kwargs):
     return _findings_to_dict("post_o3", findings)
 
 
+# ── Tool 26 ── vapi_mythos_live_gameplay_audit ──────────────────────────────
+
+@tool(
+    name="vapi_mythos_live_gameplay_audit",
+    description=(
+        "Mythos-Live-Gameplay variant (Phase O5-MLGA Stage 2). Real-time "
+        "audit of dual-connected DualSense Edge during live gameplay "
+        "(USB-HID to bridge laptop + BT-Classic BR/EDR to PS5). 4 check "
+        "families: (1) HID stream integrity via Phase 234.7 PCC; "
+        "(2) APOP classification health via Phase 241 classifier; "
+        "(3) sensor coverage during gameplay; (4) live state markers "
+        "(GIC chain advancement). Runs in per_session cadence tier; "
+        "default 60s window. All findings frozen_region=False — live-"
+        "capture state is operational, not protocol-layer FROZEN."
+    ),
+    schema={"type": "object", "properties": {
+        "session_window_s": {"type": "integer",
+            "description": "Polling window seconds (default 60)"},
+        "db_path": {"type": "string",
+            "description": "Override bridge SQLite path"}
+    }, "required": []}
+)
+async def vapi_mythos_live_gameplay_audit(**kwargs):
+    _ensure_bridge_on_path()
+    try:
+        from vapi_bridge.mythos_variants import (
+            mythos_live_gameplay_audit as _runner,
+        )
+    except Exception as exc:
+        return {"variant": "live_gameplay", "error": f"import failed: {exc}",
+                "total_findings": 0, "findings": [], "timestamp": time.time()}
+    try:
+        findings = await _runner(
+            repo_root=PROJECT_ROOT,
+            db_path=kwargs.get("db_path"),
+            session_window_s=int(kwargs.get("session_window_s", 60)),
+        )
+    except Exception as exc:
+        return {"variant": "live_gameplay", "error": f"variant raised: {exc}",
+                "total_findings": 0, "findings": [], "timestamp": time.time()}
+    return _findings_to_dict("live_gameplay", findings)
+
+
 async def main():
     # Preload workflow corpus files into mtime cache
     for key in WORKFLOW_FILES:
