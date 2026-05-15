@@ -9079,6 +9079,22 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             None,
         )
 
+        # Phase O5-MLGA Stage 7: AGENT-REVIEW-v1 autonomous emission.
+        # Fires after the decision persists. Fail-open: any failure logs
+        # internally + does NOT affect the operator's response. Run in
+        # a worker thread so we don't block the asyncio loop on the
+        # compile + sqlite write.
+        try:
+            from .agent_review_emitter import emit_agent_review_for_draft
+            await asyncio.to_thread(
+                emit_agent_review_for_draft,
+                store=store, cfg=cfg, draft_id=int(draft_id),
+            )
+        except Exception as _arv_exc:  # noqa: BLE001
+            log.warning(
+                "AGENT-REVIEW emit hook failed (non-fatal): %s", _arv_exc,
+            )
+
         return {
             "accepted":   True,
             "draft_id":   int(draft_id),
