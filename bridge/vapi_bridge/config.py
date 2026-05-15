@@ -2086,6 +2086,26 @@ class Config:
     Auto-closes long sessions to prevent runaway accumulator state; a fresh
     session opens immediately on the next poll if controller still NOMINAL."""
 
+    # --- Phase O5-MLGA Stage 5: GIC-LEDGER-BETA-v1 autonomous emission ---
+    gic_ledger_beta_tracker_enabled: bool = field(
+        default_factory=lambda: _env_bool("GIC_LEDGER_BETA_TRACKER_ENABLED", True)
+    )
+    """Phase O5-MLGA Stage 5 — second autonomous VPM artifact class
+    (after MLGA-SESSION-v1). When True, gic_ledger_beta_tracker polls
+    grind_chain_status every gic_ledger_beta_interval_s seconds and
+    emits one GIC-LEDGER-BETA-v1 VPM artifact each time the chain
+    crosses a 10-link milestone (10, 20, 30, …, 100, 110, …). Default
+    True — emission is wallet-free, local-only, idempotent on bridge
+    restart. Set False to disable."""
+
+    gic_ledger_beta_interval_s: int = field(
+        default_factory=lambda: int(_env("GIC_LEDGER_BETA_INTERVAL_S", "30"))
+    )
+    """Phase O5-MLGA Stage 5 — GIC-BETA tracker poll cadence. 30s
+    default. Chain advances roughly every 1s during active play (per
+    MLGA tracker observation: 105 advances in 95s session), so 30s
+    catches every 10-link milestone within ~3 minutes of crossing."""
+
     # --- Phase 242-BT Stream 1 — BT-WITNESS v1 capability ---
     bt_witness_enabled: bool = field(
         default_factory=lambda: _env_bool("BT_WITNESS_ENABLED", False)
