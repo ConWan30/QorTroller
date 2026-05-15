@@ -188,3 +188,46 @@ Any future VAPI architectural proposal that names a controller-internal physical
 ### Anti-pattern to recognize
 
 The error pattern that produced this lesson (twice independently): conflating "this signal class shows good separability in the published literature" with "this signal class will show good separability in our deployment." Published BLE physical-layer fingerprinting work uses heterogeneous device populations (162-device studies with multiple manufacturers, multiple SoCs, multiple firmware versions). Tournament deployments use same-model same-batch populations (50 identical DualSense Edges, possibly all from the same aftermarket TMR supplier). The published separability numbers are an upper bound on a heterogeneous population, not a transferable estimate for a same-model deployment. When the architectural plan involves "fingerprinting" any controller-internal physical surface in a tournament context, the same-model question is the binding constraint, not the published heterogeneous-population number.
+
+
+---
+
+# MLGA-LESSON-001: Dual-Connection Topology Routes Around Calibration-Capture Bottleneck
+
+**Status:** Active. Authored 2026-05-15. Load-bearing for Phase O5-MLGA architectural decisions + all future "calibration corpus growth via ambient capture" proposals.
+**Cross-reference:** Canonical anchor — `wiki/methodology/mlga_architectural_proposal_v1.md` v1.0. Companion lesson — `BT-CALIB-LESSON-001` (transport verification rule that MLGA's Section 1 applies). Companion lesson — `CROSS-LESSON-001` (same-model separability constraint that MLGA does NOT violate because MLGA claims session-bound passive capture only, not cross-session identity).
+
+## Lesson statement
+
+When a hardware target supports simultaneous dual-channel transport (USB to one host + Bluetooth to another), and one channel has independent calibration-grade observability (1000 Hz HID via USB to bridge laptop), the dedicated-capture-session bottleneck for calibration corpus growth can be partially routed around by capturing during ambient real-use sessions. The structural premise is: ambient real-use exercises the relevant feature surfaces at higher volume than dedicated capture sessions can practically schedule.
+
+This is NOT a substitute for lab-controlled measurements where lab control matters (e.g., σ_RSSI held-vs-placed requires controlled low-WiFi-interference environment per the v1.1 BT calibration anchor §5 Empirical Unknown #1). But it IS a substitute for raw-volume-bound capture targets where the controlled-environment constraint is weaker (e.g., N=100 trigger pulls × 3 game contexts for Phase 243-SS2 Stage-A; the game contexts are themselves "controlled" by the player's actual game).
+
+## What happened
+
+Three Phase 243-SS2 Stage-A + Phase 242-BT Stage 2 + Phase 229 AIT corpus-growth campaigns were sized for dedicated-capture-session pace: N=10 players × 100 trigger pulls × 3 contexts ≈ 15 hours of staged work. The schedule cost was treated as fixed engineering overhead. Operator directive 2026-05-15 reframed the question: if a player is playing NCAA CFB 26 on the PS5 with DualSense Edge USB-C plugged into the bridge laptop AND BT-paired to the PS5, the bridge sees 1000 Hz HID for free. The same NCAA CFB 26 sprint mechanic (R2 hold) produces dozens to hundreds of trigger force-curve readouts per session organically. The dedicated-capture overhead was real but had been treated as the only path.
+
+The miss: "calibration capture" was being scoped against "lab session" semantics by default, even though VAPI's bridge already had the full 1000 Hz HID capture pipeline (Phase 49 onward) wired against organic gameplay (Phase 235-A GIC chain runs against ambient gameplay; Phase 241-APOP classifier runs against ambient gameplay). The bottleneck was scheduling, not engineering.
+
+## Application rule
+
+Before designing a new dedicated capture-session campaign for VAPI calibration corpus growth, the proposal must answer:
+
+1. **Does the target feature surface exercise during ambient real-use of the target hardware?** If YES, ambient-capture supplementation should be in scope.
+2. **What is the controlled-environment requirement for the feature?** If lab-controlled is binding (σ_RSSI, σ_CFO, temperature-controlled benchmarks), dedicated capture is the load-bearing path and ambient is opt-in supplement. If controlled-environment is not binding (raw trigger pull count, raw R2 onset velocity samples, raw IMU windows during natural hold), ambient-capture can be the load-bearing path with dedicated capture as the verification supplement.
+3. **What is the ambient-real-use rate of the feature exercise?** Cite the empirical-unknown number explicitly. Don't assume; measure.
+4. **What is the cryptographic-dataproof discipline for ambient captures?** Lab captures have known provenance + controlled metadata. Ambient captures need explicit provenance commitment (MLGA dataproof) to be treated as protocol-grade corpus entries.
+
+## Anti-pattern to recognize
+
+The error pattern that produced this lesson: treating "calibration corpus growth = lab session" as a structural identity rather than as a default. Dedicated lab sessions are one capture modality. Ambient-capture during real-use is another. Both can produce calibration-grade data; the relevant question is whether the controlled-environment constraint binds the feature, not whether the capture session was labeled "lab" or "ambient." Whenever a calibration campaign feels expensive in operator-runtime, ask whether the controlled-environment constraint is actually binding for the target feature OR whether it's being applied by default.
+
+## Constraint envelope
+
+MLGA-LESSON-001 establishes that ambient-capture is a viable supplementation path for non-controlled-environment-binding features. It does NOT establish that ambient-capture replaces lab capture where lab control matters. Specifically:
+
+- Phase 242-BT Stage 2 σ_held-vs-placed: lab-controlled REQUIRED (low-WiFi-interference RF environment is binding); ambient supplementation valuable for breadth-of-condition coverage but NOT a substitute.
+- Phase 243-SS2 Stage-A trigger force-curve: ambient supplementation viable for raw N (player IS firing R2 during gameplay); dedicated capture remains valuable for cross-game-context controlled comparison.
+- Phase 229 AIT corpus: ambient supplementation viable for raw N (still-hold during gameplay pauses + menu screens produces AIT-quality windows); dedicated capture remains the canonical baseline.
+
+The application rule: classify each capture target as "controlled-environment-binding" or "raw-volume-binding" before proposing the campaign structure. Mixed-binding targets (e.g., L4 v2 trigger force-curve where both controlled context AND raw N matter) need both modalities in the campaign.
