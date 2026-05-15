@@ -421,6 +421,165 @@ def _extract_ait_features_from_file(fpath: "Path | str") -> "dict | None":
     }
 
 
+# ---------------------------------------------------------------------------
+# Phase 243-SS2 Stage-A: trigger force-curve probe scaffolding
+# ---------------------------------------------------------------------------
+# Per the canonical anchor at wiki/assessments/DualSense Edge Sensor-Stack
+# Characterization_*.pdf + the v2.1 architectural revision, the adaptive-
+# trigger force-curve at 8-bit/1kHz is a PRIMARY DISCRIMINATOR candidate
+# (vendor-spec-verified at gamepadtest.app + the Sony Edge spec; literature-
+# anchored 1-15% inter-subject EER per Saevanee 2009, Antal 2015, Wakita
+# 2006, Miyajima 2007, Van Vugt 2013).
+#
+# DELIBERATE RESTRAINT — feature schema is DEFERRED to Stream 2 of this
+# phase, post-Stage-A capture (N=10 players × 100 trigger pulls × 3 game
+# contexts). The canonical anchor's empirical-first discipline says the
+# v2 L4 architecture spec must NOT exit draft until measurements inform it.
+# Stream 1 (this commit) ships ONLY the scaffolding — probe-type
+# registration + analyzer entry point — that unblocks the operator's
+# capture sessions without prematurely committing to a feature set.
+
+TRIGGER_FORCE_CURVE_FEATURE_NAMES: list[str] = []
+# Empty until Stage-A captures inform the schema. Provisional candidates
+# (NOT yet committed): mean_force_amplitude, force_rise_slope,
+# force_fall_slope, force_hold_variance, force_peak_force. Stream 2 selects
+# the final set based on measured inter-player Mahalanobis separation per
+# candidate-feature subset.
+
+
+def _extract_trigger_force_features_from_file(fpath: "Path | str") -> "dict | None":
+    """Phase 243-SS2 Stage-A scaffolding stub. Returns None until the
+    trigger_force_curve session schema is finalized in Stream 2 (post-
+    Stage-A capture). Caller (run_analysis_trigger_force_curve) handles
+    None gracefully by reporting `status=no_data`.
+
+    Future Stream 2 implementation will read the session JSON's
+    `trigger_force_curve` field (8-bit/1kHz time-series captured at the
+    bridge level), apply the canonical-anchor-anchored feature extraction
+    (force amplitude / rise+fall slopes / hold-phase variance), and
+    return a dict keyed by TRIGGER_FORCE_CURVE_FEATURE_NAMES.
+
+    Fail-open: never raises; returns None for any session that lacks the
+    force-curve field (which is ALL current sessions — captures land in
+    Stage-A)."""
+    # Stream 2 will replace this body. Until then: no current session
+    # carries trigger-force-curve data, so we surface that honestly.
+    return None
+
+
+def run_analysis_trigger_force_curve() -> dict:
+    """Phase 243-SS2 Stage-A scaffolding. Scans `terminal_cal_P*/
+    trigger_force_curve_*.json` files; reports `status=no_data` when N=0
+    per player (which is the current state — Stage-A hardware capture
+    not yet begun). Once captures land + the Stream 2 feature extractor
+    ships, this analyzer runs the same Mahalanobis separation flow as
+    run_analysis_ait (Phase 229 precedent verbatim).
+
+    Returns the same top-level keys as run_analysis() so callers can
+    treat results uniformly (status / separation_ratio / all_pairs_above_1
+    / n_per_player / pair_distances / loo_accuracy / cov_mode)."""
+    player_sessions_tfc: dict[str, list[dict]] = {}
+    tcal_dirs = sorted(
+        d for d in SESSIONS_DIR.iterdir()
+        if d.is_dir() and d.name.startswith("terminal_cal_P")
+    ) if SESSIONS_DIR.exists() else []
+
+    n_per_player: dict[str, int] = {}
+    for tcal_dir in tcal_dirs:
+        suffix = tcal_dir.name[len("terminal_cal_P"):]
+        player = f"Player {suffix}"
+        player_sessions_tfc.setdefault(player, [])
+        tfc_files = sorted(tcal_dir.glob("trigger_force_curve_*.json"))
+        for jpath in tfc_files:
+            feats = _extract_trigger_force_features_from_file(jpath)
+            if feats is None:
+                # Stream 1 path: every file lacks the force-curve field
+                # until Stream 2 ships the schema. Honest no-data report.
+                continue
+            player_sessions_tfc[player].append({
+                "session_name": f"{tcal_dir.name}/{jpath.stem}",
+                "player":       player,
+                "features":     feats,
+            })
+        n_per_player[player] = len(player_sessions_tfc[player])
+
+    total_sessions = sum(n_per_player.values())
+    # Stage-A gate: N >= 10 per player + all 3 players present
+    n_players_meeting = sum(1 for n in n_per_player.values() if n >= 10)
+    stage_a_complete = (
+        n_players_meeting >= 3
+        and len(TRIGGER_FORCE_CURVE_FEATURE_NAMES) > 0
+    )
+
+    if total_sessions == 0:
+        return {
+            "status": "no_data",
+            "session_type": "trigger_force_curve",
+            "n_sessions": 0,
+            "n_per_player": n_per_player,
+            "stage_a_complete": False,
+            "feature_schema_committed": len(TRIGGER_FORCE_CURVE_FEATURE_NAMES) > 0,
+            "separation_ratio": 0.0,
+            "all_pairs_above_1": False,
+            "pair_distances": {},
+            "loo_accuracy": 0.0,
+            "cov_mode": "n/a",
+            "note": (
+                "Phase 243-SS2 Stage-A scaffolding. Hardware capture has not "
+                "yet begun (N=0 across all players). Stage-A target: 10 "
+                "players × 100 trigger pulls × 3 game contexts. Once captures "
+                "land + Stream 2 ships the feature extractor, this returns "
+                "the standard Mahalanobis result shape."
+            ),
+        }
+
+    # Sessions exist but the feature schema isn't committed yet — Stream 2
+    # gap. Surface that distinctly from no_data.
+    if not TRIGGER_FORCE_CURVE_FEATURE_NAMES:
+        return {
+            "status": "captures_present_but_schema_pending",
+            "session_type": "trigger_force_curve",
+            "n_sessions": total_sessions,
+            "n_per_player": n_per_player,
+            "stage_a_complete": False,
+            "feature_schema_committed": False,
+            "separation_ratio": 0.0,
+            "all_pairs_above_1": False,
+            "pair_distances": {},
+            "loo_accuracy": 0.0,
+            "cov_mode": "n/a",
+            "note": (
+                "Stage-A captures present but feature extractor schema "
+                "(TRIGGER_FORCE_CURVE_FEATURE_NAMES) is still empty. "
+                "Stream 2 ships the feature extractor + commits the FROZEN "
+                "feature set per the canonical-anchor-anchored design pass."
+            ),
+        }
+
+    # Stream 2+ reaches here: actual Mahalanobis. Stream 1 ships the
+    # graceful pre-data state; the full analysis follows the AIT pattern
+    # at run_analysis_ait().
+    return {
+        "status": "stage_a_in_progress" if not stage_a_complete else "stage_a_complete",
+        "session_type": "trigger_force_curve",
+        "n_sessions": total_sessions,
+        "n_per_player": n_per_player,
+        "stage_a_complete": stage_a_complete,
+        "feature_schema_committed": True,
+        # Stream 2 fills these via the AIT precedent at run_analysis_ait().
+        "separation_ratio": 0.0,
+        "all_pairs_above_1": False,
+        "pair_distances": {},
+        "loo_accuracy": 0.0,
+        "cov_mode": "pending_stream_2",
+        "note": (
+            "Stream 2 wires the Mahalanobis flow per AIT precedent "
+            "(run_analysis_ait) — pair-wise Mahalanobis + LOO classification "
+            "+ all_pairs_above_1 gate."
+        ),
+    }
+
+
 def run_analysis_ait() -> dict:
     """AIT separation analysis: 4-feature [tremor_hz, roll_cos, roll_sin, pitch_cos] pipeline.
 
@@ -761,6 +920,7 @@ _TERMINAL_CAL_ONLY_TYPES = frozenset({
     "tremor_resting",  # Phase 199: 30s still-hold; primary tremor_peak_hz discriminator
     "mixed_biometric_probe",  # Phase 166: 2-min multi-feature probe activating all 13 features
     "ait",             # Phase 229: Active Isometric Trigger; uses separate 4-feature pipeline
+    "trigger_force_curve",  # Phase 243-SS2 Stage-A: DualSense Edge adaptive-trigger force-curve at 8-bit/1kHz; PRIMARY DISCRIMINATOR candidate per canonical anchor
 })
 
 
@@ -802,6 +962,8 @@ def _detect_session_type(session_name: str) -> str:
         return "tremor_resting"
     if stem.startswith("ait_"):
         return "ait"           # Phase 229: Active Isometric Trigger sessions
+    if stem.startswith("trigger_force_curve"):
+        return "trigger_force_curve"  # Phase 243-SS2 Stage-A
     return "gameplay"
 
 

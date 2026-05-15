@@ -9670,6 +9670,7 @@ class Store:
         "mixed_biometric_probe",  # Phase 166: 2-min multi-feature probe (touchpad+trigger+button+stick)
         "tremor_resting",         # Phase 199: 30s still-hold; isolates neurological tremor signal
         "ait",                    # Phase 229: Active Isometric Trigger; 4-feature accel+postural pipeline
+        "trigger_force_curve",    # Phase 243-SS2 Stage-A: DualSense Edge adaptive-trigger force-curve at 8-bit/1kHz. PRIMARY DISCRIMINATOR candidate per the canonical anchor (wiki/assessments/DualSense Edge Sensor-Stack Characterization_*.pdf). Stage-A measurement gates: N=10 players × 100 trigger pulls × 3 game contexts; primary-discriminator-status requires separation_ratio > 1.0.
     })
 
     def insert_separation_defensibility_log(
