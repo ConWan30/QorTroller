@@ -543,6 +543,7 @@ class Bridge:
             )
             _op_app._gic_chain_broken = getattr(self, "_gic_chain_broken", False)
             _op_app._pcc_monitor = self._pcc_monitor  # Phase 234.7 wiring
+            _op_app._mlga_tracker = None              # Phase O5-MLGA Stage 3 (set below if enabled)
 
             # Phase 238 Step I-AUTOLOOP-3: ProtocolStateCache attached to
             # both apps so the SSE Twin stream endpoint can find it via
@@ -1240,6 +1241,45 @@ class Bridge:
             except Exception as _drift_exc:
                 log.warning(
                     "Phase O1 C4: cedar_drift_sweeper unavailable: %s", _drift_exc
+                )
+
+        # Phase O5-MLGA Stage 3 — runtime session tracker. Polls
+        # capture_health_log + records + APOP + ruling_validation_log
+        # every mlga_session_tracker_interval_s seconds; opens session
+        # on controller-NOMINAL; closes on disconnect / max_duration;
+        # computes + persists MLGA dataproof per session. Operationalizes
+        # the MLGA capability (Stage 2 shipped 2026-05-15 commit cee77070).
+        # Default disabled (operator opts in via MLGA_SESSION_TRACKER_
+        # ENABLED=true). Fail-open: tracker raises caught internally.
+        self._mlga_tracker = None
+        if getattr(self.cfg, "mlga_session_tracker_enabled", False):
+            try:
+                from .mlga_session_tracker import (
+                    MLGASessionTracker, run_mlga_session_tracker_loop,
+                )
+                self._mlga_tracker = MLGASessionTracker(
+                    store=self.store, cfg=self.cfg,
+                )
+                _mlga_task = asyncio.ensure_future(
+                    run_mlga_session_tracker_loop(tracker=self._mlga_tracker)
+                )
+                _mlga_task.set_name("MLGASessionTracker")
+                self._tasks.append(_mlga_task)
+                # Wire tracker to operator_app for /agent/mlga-live-session-status
+                try:
+                    _op_app._mlga_tracker = self._mlga_tracker  # type: ignore[name-defined]
+                except Exception:  # noqa: BLE001
+                    pass
+                log.info(
+                    "Phase O5-MLGA Stage 3: session tracker started "
+                    "(interval=%ds, max_duration=%ds)",
+                    getattr(self.cfg, "mlga_session_tracker_interval_s", 30),
+                    getattr(self.cfg, "mlga_session_max_duration_s", 3600),
+                )
+            except Exception as _mlga_exc:
+                log.warning(
+                    "Phase O5-MLGA Stage 3: session tracker unavailable: %s",
+                    _mlga_exc,
                 )
 
         # Phase O4-VPM-INT follow-up — Continuous CFSS lane authority drift
