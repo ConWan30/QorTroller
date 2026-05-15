@@ -450,5 +450,21 @@
   "INV-MLGA-CLOSE-HOOK-001": {
     "digest": "c182a0c82493a4d82d19684b9e4473a9cd50b1531cdfe53fadcab725e3e86497",
     "description": "Phase O5-MLGA Stage 4: close_session() in mlga_session_tracker.py invokes build_mlga_session_artifact + persists via insert_vpm_artifact post dataproof persist. Pattern matches the 2 critical call sites in close_session \u2014 the compiler invocation + the vpm_artifact_log insert. Drift here means the VPM artifact stops getting produced + persisted at session close. PV-CI prevents silent regression."
+  },
+  "INV-VBDIP-0006-001": {
+    "digest": "8b70bb49f791913e42f05cc6329be70407f17d655124e9c77bc5fc221d85391e",
+    "description": "VBDIP-0006 v1.0 Section 1 scope claim \u2014 the trust-boundary-shift the spec defines (Layer 0 cryptographic trust at the input source via at-source ECDSA-P256 signing inside the controller's secure element). Drift here would broaden what v1.0 firmware claims; governance ceremony required."
+  },
+  "INV-VBDIP-0006-002": {
+    "digest": "f0ac91763d3a089ba8a4f7c4cb5ca19a89ea7a3098b1c56b610833846ebe1212",
+    "description": "VBDIP-0006 v1.0 Section 3 FROZEN cryptographic primitives list \u2014 the 228-byte PoAC wire format reference + GIC chain genesis tag b\"VAPI-GIC-GENESIS-v1\" + hard cheat code 0x28 DRIVER_INJECT firmware emission. Adding a new FROZEN primitive that firmware must implement requires governance ceremony."
+  },
+  "INV-VBDIP-0006-003": {
+    "digest": "41a4de9511f6147c52794ecb770f9012b9499ef759b1d0a49879085b0ab8a585",
+    "description": "VBDIP-0006 v1.0 Section 6 VAPI Mode HID descriptor \u2014 Interface 3 with Usage Page 0xFF00, Report ID 0x01 carrying 228-byte PoAC records at 1000 Hz. The descriptor is consumed by both firmware (emit) + bridge (read); drift breaks both sides simultaneously."
+  },
+  "INV-VBDIP-0006-004": {
+    "digest": "aa46fccaecdd5779327e1e4d9b2260321f877a649a6c73d6676c5de433f621c6",
+    "description": "VBDIP-0006 v1.0 Section 8 conformance test suite specification \u2014 100 deterministic test vectors covering random (20) + edge case (20) + hard-cheat (20) + GIC continuity (20) + counter rollover (20). Ensures the certification harness scope cannot silently shrink. Cited by VAPIHardwareCertRegistry cert_level=1 requirement."
   }
 }

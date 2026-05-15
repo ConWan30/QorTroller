@@ -958,6 +958,41 @@ INVARIANTS: list[Invariant] = [
         pattern=r"build_mlga_session_artifact\(|self\._store\.insert_vpm_artifact\(",
         min_matches=2,
     ),
+    # ---------------------------------------------------------------------------
+    # VBDIP-0006 PV-CI pins (4 new; 113 → 117).
+    # VAPI Firmware Reference Implementation specification — the canonical
+    # document any VAPI-Native Controller manufacturer reads + builds against.
+    # Pins the load-bearing structural claims that the spec's v1.0 makes.
+    # Stream 4-style ceremony per VBDIP-0001 + VBDIP-0002 precedent.
+    # ---------------------------------------------------------------------------
+    Invariant(
+        id="INV-VBDIP-0006-001",
+        description="VBDIP-0006 v1.0 Section 1 scope claim — the trust-boundary-shift the spec defines (Layer 0 cryptographic trust at the input source via at-source ECDSA-P256 signing inside the controller's secure element). Drift here would broaden what v1.0 firmware claims; governance ceremony required.",
+        file="wiki/methodology/VBDIP-0006-vapi-firmware-reference-implementation.md",
+        pattern=r"VAPI-Native Controllers.*ECDSA-P256 signed inside the controller's secure element",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-VBDIP-0006-002",
+        description="VBDIP-0006 v1.0 Section 3 FROZEN cryptographic primitives list — the 228-byte PoAC wire format reference + GIC chain genesis tag b\"VAPI-GIC-GENESIS-v1\" + hard cheat code 0x28 DRIVER_INJECT firmware emission. Adding a new FROZEN primitive that firmware must implement requires governance ceremony.",
+        file="wiki/methodology/VBDIP-0006-vapi-firmware-reference-implementation.md",
+        pattern=r'b"VAPI-GIC-GENESIS-v1"|228 bytes total|0x28.*DRIVER_INJECT',
+        min_matches=3,
+    ),
+    Invariant(
+        id="INV-VBDIP-0006-003",
+        description="VBDIP-0006 v1.0 Section 6 VAPI Mode HID descriptor — Interface 3 with Usage Page 0xFF00, Report ID 0x01 carrying 228-byte PoAC records at 1000 Hz. The descriptor is consumed by both firmware (emit) + bridge (read); drift breaks both sides simultaneously.",
+        file="wiki/methodology/VBDIP-0006-vapi-firmware-reference-implementation.md",
+        pattern=r"Usage Page 0xFF00|Report ID.*0x01.*228",
+        min_matches=2,
+    ),
+    Invariant(
+        id="INV-VBDIP-0006-004",
+        description="VBDIP-0006 v1.0 Section 8 conformance test suite specification — 100 deterministic test vectors covering random (20) + edge case (20) + hard-cheat (20) + GIC continuity (20) + counter rollover (20). Ensures the certification harness scope cannot silently shrink. Cited by VAPIHardwareCertRegistry cert_level=1 requirement.",
+        file="wiki/methodology/VBDIP-0006-vapi-firmware-reference-implementation.md",
+        pattern=r"100 deterministic test vectors|test_vbdip_0006_conformance",
+        min_matches=2,
+    ),
 ]
 
 
