@@ -42,10 +42,28 @@ the same crypto verifier catalog, and the same FROZEN-region invariants.
 ### `/os/evidence` — Evidence Graph
 
 The signature workspace. Renders the protocol's substrate layers as
-node cards in execution order — HID frames → PoAC records → GIC chain →
-APOP → ZKBA artifacts → on-chain anchor. Each node carries a mythology
-line (one sentence the operator can quote to a stakeholder), a status
-badge, a detail line, and a source reference.
+node cards (HID frames → PoAC records → GIC chain → APOP → PCC → AIT
+→ GIC / VHP / ZKBA / VPM / Curator → on-chain anchor) **with measured
+SVG relationship edges drawn between them**. Each node carries a
+mythology line (one sentence the operator can quote to a stakeholder),
+a status badge, a detail line, and a source reference. Each edge
+encodes a real protocol binding — cryptographic / predicate-gate /
+derived-poll / kill-switch-deferred — measured against post-mount DOM
+positions so it stays pinned across viewport and flex-wrap changes.
+
+The graph holds two honesty rules tightly:
+
+- **No phantom relationships.** When either endpoint of an edge is
+  missing from the rendered DOM (e.g. a node that hasn't shipped
+  yet), the edge is silently dropped. Nothing is ever drawn for a
+  relationship the workspace can't ground in two real cards.
+- **Mobile honesty.** Below 760px viewport (the same threshold
+  where the AppShell rail collapses to a horizontal scroller), the
+  SVG layer suppresses entirely — once cards flex-wrap into a
+  vertical stack, horizontal lines between same-row neighbours
+  would mislead. The text-summary remains screen-reader accessible
+  at every viewport so the dataflow model is never lost on narrow
+  screens.
 
 Use this surface when somebody asks **"how do I get from a controller
 plugged into a USB port to a tournament-eligible signed credential?"**
@@ -143,11 +161,37 @@ the bridge is unreachable — they hold the last successful response or
 report an error.
 
 ### `/os/evidence` — Evidence Graph
+
+Data hooks:
 - `usePublicProtocolState` (public, no auth)
 - `usePublicVhp` (public, no auth)
 - `useCaptureHealth`, `useGrindChain`, `useActivePlayOccupancy`,
-  `useFleetCoherenceStatus`, `useInvariantGateStatus`,
-  `useCuratorStatus`
+  `useAITSeparation`, `useVpmList`, `useCuratorStatus`
+
+Signature primitive:
+- `EvidenceEdgeLayer` (`frontend/src/os/components/EvidenceEdgeLayer.jsx`)
+  — measures post-mount DOM positions of every `[data-os-evidence-node]`
+  child of its `containerRef` via `getBoundingClientRect`, then draws
+  SVG `<line>` elements between them in container-relative coordinates.
+  Re-measures on every `ResizeObserver` tick (watches both the
+  container and each node, since flex-wrap can change child positions
+  without the container's own width changing), with a
+  `requestAnimationFrame` debounce so paint doesn't thrash on rapid
+  resize. Edge styles map to the FROZEN `os-edge--{solid,dotted,
+  dashed,ghost}` classes in `theme.css` (cryptographic / derived /
+  predicate / kill-switch-deferred). Falls back to a `window`
+  `resize` listener when `ResizeObserver` is absent (older jsdom in
+  tests).
+
+Accessibility:
+- The `<svg>` rendered by `EvidenceEdgeLayer` carries
+  `aria-hidden="true"` because the geometry is a purely visual layer.
+- The workspace publishes a visually-hidden relationship summary
+  (`<h3>` + `<ul>` of one `<li>` per edge in natural language —
+  "X flows into Y as a Z relationship (currently deferred ...)")
+  so screen-reader and keyboard users get the same dataflow model
+  without depending on the SVG. The summary survives narrow-viewport
+  suppression of the SVG layer.
 
 ### `/os/live` — Live Match
 - `useCaptureHealth`, `useGrindChain`, `useActivePlayOccupancy`
@@ -363,16 +407,62 @@ shows a hash or hex value.
 
 ## Provenance
 
-| Stage | Commit       | Date       |
-|-------|--------------|------------|
-| 1     | `bc2a5cb8`   | 2026-05-15 |
-| 2     | `b4a9b12b`   | 2026-05-15 |
-| 3     | `2014c7a3`   | 2026-05-15 |
-| 4     | `b5826189`   | 2026-05-15 |
-| 5     | `f08d62e7`   | 2026-05-15 |
-| 5.1 (Mythos audit) | _this commit_ | 2026-05-16 |
+| Stage | Commit       | Date       | Headline                                                        |
+|-------|--------------|------------|------------------------------------------------------------------|
+| 1     | `bc2a5cb8`   | 2026-05-15 | Shell + Evidence Graph vertical slice                            |
+| 2     | `b4a9b12b`   | 2026-05-15 | Live Match session-counts verdict                                |
+| 3     | `2014c7a3`   | 2026-05-15 | Operator Queue unified decision surface                          |
+| 4     | `b5826189`   | 2026-05-15 | Forensic Replay verification surface                             |
+| 5     | `f08d62e7`   | 2026-05-15 | Protocol State posture / measurement / identity                  |
+| 5.1   | `ea72b638`   | 2026-05-16 | Mythos hardening audit + `docs/evidence-os.md`                   |
+| 5.2   | `7c307495`   | 2026-05-16 | L4 hook-contract regression guards + M5 `role="meter"` + M2 enum |
+| 6     | `d11bb07b`   | 2026-05-16 | Evidence Graph measured SVG edges via `EvidenceEdgeLayer`        |
 
-Test counts at 5.1: 118 frontend tests across 11 files. Bundle:
-`main` chunk 353.58 KB raw / 107.31 KB gzipped (unchanged across
-the Evidence OS arc — all five workspaces are within the existing
-chunk).
+**Stage 5.2 in detail** — picks off three Mythos audit deferrals in
+the operator's chosen triage order:
+- **L4** — regression guards locking the C1/C2 honesty bugs into CI.
+  Four new tests in `frontend/src/__tests__/EvidenceOSHookContracts.test.jsx`:
+  T-OS-L4-1 asserts `useBrpControllerOrientation` returns the FROZEN
+  `{orientation, connected, framesReceived}` shape (no `.data`
+  accessor); T-OS-L4-2 asserts the Live Match IMU meter never claims
+  `streaming` when `connected=false`; T-OS-L4-3 + T-OS-L4-4 lock
+  StatusStrip's Blockers tile to dormant `—` when coherence is null
+  AND reject the C2 `value={0}` source pattern via a static-grep
+  guard.
+- **M5** — `SignalMeter` upgrades from `role="group"` to
+  `role="meter"` (with `aria-valuemin/max/now/text`) when its value
+  is numeric; falls back to `role="group"` for non-numeric labels
+  (ARIA meter requires a numeric `aria-valuenow`). Matches the
+  discipline already used by `_ProbeBar` in `ProtocolStateWorkspace`.
+- **M2** — `apopStatus()` in `EvidenceGraphWorkspace` renders the
+  human label first with the raw enum appended in parens (`On menu
+  / paused — gating GIC (NON_COMPETITIVE_MENU)`); protocol term
+  preserved as inspectable secondary detail.
+
+Verification: 122/122 frontend tests pass, `npm run build` PASS,
+0 IOTX wallet impact, no bridge restart required.
+
+**Stage 6 in detail** — Evidence Graph crosses from honest placeholder
+to real operator surface. The signature workspace now renders real SVG
+edges between EvidenceNode cards using measured post-mount DOM positions:
+- New primitive: `frontend/src/os/components/EvidenceEdgeLayer.jsx`.
+- Eleven edges grounded in real protocol bindings (chain / predicate /
+  derived) plus ghost styling for kill-switch-held or dormant targets.
+- Re-measures on every `ResizeObserver` tick (watches container +
+  every node so flex-wrap changes don't desync geometry).
+- Below 760px viewport the SVG suppresses with marker
+  `data-os-edge-layer="suppressed-narrow"`; the screen-reader
+  relationship summary remains at every viewport.
+- Missing endpoints silently drop their edge — no phantom
+  relationships ever drawn for nodes not in the DOM.
+- Workspace publishes a visually-hidden text dataflow summary that
+  lists every edge as natural language, so the provenance model is
+  never lost on narrow screens.
+
+Verification: 132/132 frontend tests pass (122 prior + 10 new
+T-OS-EDGE-1..9 + T-OS-EDGE-7b), `npm run build` PASS, 0 IOTX wallet
+impact, no bridge restart required.
+
+Test counts: 132 frontend tests across 13 files. Bundle: `main`
+chunk ~358 KB raw / 107.31 → ~108.9 KB gzipped (Evidence OS arc
+remains within the existing main chunk; no new chunks created).
