@@ -13,6 +13,10 @@ import { wagmiConfig } from './shared/wagmiConfig'
 import { App } from './App'
 import PublicSessionViewer from './views/PublicSessionViewer'
 import GicChainExplorerView from './views/GicChainExplorerView'
+import PoacRecordExplorerView from './views/PoacRecordExplorerView'
+import VhpCredentialView from './views/VhpCredentialView'
+import AlgorithmCatalogView from './views/AlgorithmCatalogView'
+import PublicExplorerLandingView from './views/PublicExplorerLandingView'
 import './index.css'
 
 const queryClient = new QueryClient({
@@ -35,6 +39,10 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           <Routes>
             <Route path="/session/:commitmentHex" element={<PublicSessionViewer />} />
             <Route path="/gic/:grindSessionId" element={<GicChainExplorerView />} />
+            <Route path="/record/:deviceId/:counter" element={<PoacRecordExplorerView />} />
+            <Route path="/vhp/:tokenId" element={<VhpCredentialView />} />
+            <Route path="/algorithms" element={<AlgorithmCatalogView />} />
+            <Route path="/explorer" element={<PublicExplorerLandingView />} />
             <Route path="/" element={<App />} />
             <Route path="*" element={<App />} />
           </Routes>

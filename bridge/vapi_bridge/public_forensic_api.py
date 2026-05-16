@@ -638,6 +638,80 @@ def create_public_forensic_app(*, cfg, store) -> FastAPI:
             },
         )
 
+    # ---------- Route #8b: /vhp/{tokenId} — Stage 4 VHP credential ----------
+    @app.get("/vhp/{token_id}")
+    async def public_vhp(
+        token_id: int = FPath(..., ge=0),
+        request: Request = None,  # type: ignore
+    ):
+        """Phase O5-PUBLIC-VIEWER Stage 4 — Verified Human Proof
+        credential public view. Reads the SQLite issuance record (no
+        chain call — fail-open when chain unreachable). Strategic for
+        streamer / sponsor / tournament-organizer credential embed.
+
+        Returns: { found, token_id, device_id, cert_level, expires_at,
+                   consecutive_clean, tx_hash, to_address, is_valid_local,
+                   timestamp }. is_valid_local = expires_at > now."""
+        _check_rate(request)
+        try:
+            import sqlite3 as _sql
+            db_path = getattr(store, "_db_path", None) or getattr(
+                store, "db_path", None
+            )
+            if not db_path:
+                return {"found": False, "token_id": int(token_id),
+                        "reason": "store unavailable",
+                        "timestamp": time.time()}
+            con = _sql.connect(db_path, timeout=2.0)
+            try:
+                con.row_factory = _sql.Row
+                row = con.execute(
+                    "SELECT device_id, token_id, tx_hash, expires_at, "
+                    "       cert_level, consecutive_clean, to_address, "
+                    "       created_at FROM vhp_issuances "
+                    "WHERE token_id = ? "
+                    "ORDER BY created_at DESC LIMIT 1",
+                    (int(token_id),),
+                ).fetchone()
+            finally:
+                con.close()
+            if row is None:
+                return {"found": False, "token_id": int(token_id),
+                        "timestamp": time.time()}
+            d = dict(row)
+            now_ts = time.time()
+            d["is_valid_local"] = float(d.get("expires_at") or 0) > now_ts
+            d["seconds_until_expiry"] = max(
+                0, int(float(d.get("expires_at") or 0) - now_ts),
+            )
+            return {
+                "found":     True,
+                "schema":    "vapi-public-vhp-credential-v1",
+                "vhp":       d,
+                "chain":     {
+                    "name":     "IoTeX",
+                    "chain_id": 4690,
+                    "network":  "testnet",
+                    "contract": getattr(cfg, "vhp_contract_address", ""),
+                },
+                "discipline":(
+                    "VHP is a SOULBOUND ERC-4671 credential — non-"
+                    "transferable proof of cryptographically-verified "
+                    "human presence. The token's deviceIdHash binds to "
+                    "the certified hardware (DualShock Edge), "
+                    "consecutive_clean attests sustained grind "
+                    "continuity (via GIC chain), and expires_at enforces "
+                    "90-day TTL renewal cycle (Phase 178 biometric "
+                    "credential TTL gate)."
+                ),
+                "timestamp": now_ts,
+            }
+        except Exception as exc:  # noqa: BLE001
+            log.warning("public /vhp/%d error: %s", token_id, exc)
+            return {"found": False, "token_id": int(token_id),
+                    "reason": "internal_lookup_error",
+                    "timestamp": time.time()}
+
     # ---------------- Route #9: /agent-roots ----------------
     @app.get("/agent-roots")
     def public_agent_roots(request: Request):

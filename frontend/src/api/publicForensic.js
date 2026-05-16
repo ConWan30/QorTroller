@@ -96,6 +96,16 @@ export function usePublicProtocolState({ enabled = true } = {}) {
   })
 }
 
+export function usePublicVhp(tokenId, { enabled = true } = {}) {
+  return useQuery({
+    queryKey: ['publicVhp', tokenId],
+    queryFn:  () => publicGet(`/vhp/${tokenId}`),
+    enabled:  (tokenId !== null && tokenId !== undefined) && enabled,
+    staleTime: 60_000,
+    retry: 1,
+  })
+}
+
 /**
  * Fetch raw 228-byte PoAC record blob. Used by PoacBodyHasher for
  * in-browser SHA-256 re-execution.
