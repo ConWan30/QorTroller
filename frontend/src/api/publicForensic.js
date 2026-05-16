@@ -59,6 +59,23 @@ export function usePublicGicChain(grindSessionId, { enabled = true } = {}) {
   })
 }
 
+/**
+ * Phase O5-PUBLIC-VIEWER Stage 2 — fetch the full chain links list
+ * for browser-side recomputation. Returns links[] where each entry
+ * carries prev_gic_hex + commitment_hash + verdict_code +
+ * host_state_code + gic_ts_ns + grind_chain_hash (the protocol-side
+ * answer to verify against).
+ */
+export function usePublicGicLinks(grindSessionId, { enabled = true, limit = 200 } = {}) {
+  return useQuery({
+    queryKey: ['publicGicLinks', grindSessionId, limit],
+    queryFn:  () => publicGet(`/gic/${grindSessionId}/links?limit=${limit}`),
+    enabled:  Boolean(grindSessionId) && enabled,
+    staleTime: 60_000,
+    retry: 1,
+  })
+}
+
 export function usePublicAgentRoots({ enabled = true } = {}) {
   return useQuery({
     queryKey: ['publicAgentRoots'],
