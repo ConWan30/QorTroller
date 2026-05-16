@@ -189,25 +189,23 @@ describe('DataBadge accessibility', () => {
   })
 })
 
-describe('Placeholder workspaces', () => {
-  // Stage 2: /os/live shipped. Stage 3: /os/queue shipped. Only /os/replay
-  // remains placeholder pending Stage 4 (Forensic Replay fold-in).
-  it('T-OS-PLACE-1: Replay still shows EmptyState + source', () => {
-    const { container } = renderRoute('/os/replay')
-    const empty = container.querySelector('[role="region"]')
-    expect(empty).not.toBeNull()
-    expect(container.textContent).toMatch(/pending/i)
-    expect(container.textContent).toMatch(/source:/i)
-  })
-
-  it('T-OS-PLACE-2: /os/live now renders the live verdict (no placeholder)', () => {
+describe('All 5 OS workspaces shipped', () => {
+  // Stage 2: /os/live. Stage 3: /os/queue. Stage 4: /os/replay.
+  // None remain placeholder. Only /os/protocol still uses the original
+  // Stage 1 LIVE metrics shape (no further work pending).
+  it('T-OS-WS-1: /os/live renders the live verdict (Stage 2)', () => {
     const { container } = renderRoute('/os/live')
     expect(container.querySelector('[data-os-verdict]')).not.toBeNull()
   })
 
-  it('T-OS-PLACE-3: /os/queue now renders the queue summary (no placeholder)', () => {
+  it('T-OS-WS-2: /os/queue renders the queue summary (Stage 3)', () => {
     const { container } = renderRoute('/os/queue')
-    // QueueSummary section is a region with aria-label="Queue summary"
     expect(container.querySelector('[aria-label="Queue summary"]')).not.toBeNull()
+  })
+
+  it('T-OS-WS-3: /os/replay renders ReplaySearch + ReplayModeTabs (Stage 4)', () => {
+    const { container } = renderRoute('/os/replay')
+    expect(container.querySelector('form[role="search"]')).not.toBeNull()
+    expect(container.querySelector('[role="tablist"]')).not.toBeNull()
   })
 })
