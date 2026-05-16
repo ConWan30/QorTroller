@@ -17622,6 +17622,67 @@ class Store:
         except Exception:  # noqa: BLE001
             return None
 
+    def get_gic_chain_links(
+        self, grind_session_id: str, limit: int = 200, offset: int = 0,
+    ) -> list[dict]:
+        """Public viewer Stage 2 — return all GIC chain links for a session
+        in chronological order so the browser can recompute SHA-256 of
+        each link via verifyGicChainLink(prev_gic, commitment, verdict_code,
+        host_state_code, ts_ns).
+
+        Returns rows with fields:
+          id, commitment_hash, fallback_verdict, pcc_host_state,
+          grind_chain_hash, gic_ts_ns, created_at.
+
+        Filters: only rows with non-null grind_chain_hash (stamped links).
+        Ordered by gic_ts_ns ASC so [0] is genesis-adjacent, [N-1] is head.
+        """
+        # commitment_hash lives on agent_rulings (joined via ruling_id).
+        # We LEFT JOIN so chain rows survive even if the agent_rulings row
+        # was pruned; missing commitment falls back to "" for those.
+        try:
+            with self._conn() as conn:
+                rows = conn.execute(
+                    "SELECT v.id AS id, "
+                    "       COALESCE(a.commitment_hash, '') AS commitment_hash, "
+                    "       v.fallback_verdict AS fallback_verdict, "
+                    "       v.pcc_host_state AS pcc_host_state, "
+                    "       v.grind_chain_hash AS grind_chain_hash, "
+                    "       v.gic_ts_ns AS gic_ts_ns, "
+                    "       v.created_at AS created_at "
+                    "FROM ruling_validation_log v "
+                    "LEFT JOIN agent_rulings a ON v.ruling_id = a.id "
+                    "WHERE v.grind_session_id = ? "
+                    "  AND v.grind_chain_hash IS NOT NULL "
+                    "  AND v.grind_chain_hash != '' "
+                    "ORDER BY v.gic_ts_ns ASC LIMIT ? OFFSET ?",
+                    (str(grind_session_id),
+                     max(1, min(500, int(limit))),
+                     max(0, int(offset))),
+                ).fetchall()
+                # Fallback: legacy rows may not carry grind_session_id;
+                # surface them when no primary hit exists.
+                if not rows and grind_session_id:
+                    rows = conn.execute(
+                        "SELECT v.id AS id, "
+                        "       COALESCE(a.commitment_hash, '') AS commitment_hash, "
+                        "       v.fallback_verdict AS fallback_verdict, "
+                        "       v.pcc_host_state AS pcc_host_state, "
+                        "       v.grind_chain_hash AS grind_chain_hash, "
+                        "       v.gic_ts_ns AS gic_ts_ns, "
+                        "       v.created_at AS created_at "
+                        "FROM ruling_validation_log v "
+                        "LEFT JOIN agent_rulings a ON v.ruling_id = a.id "
+                        "WHERE v.grind_chain_hash IS NOT NULL "
+                        "  AND v.grind_chain_hash != '' "
+                        "ORDER BY v.gic_ts_ns ASC LIMIT ? OFFSET ?",
+                        (max(1, min(500, int(limit))),
+                         max(0, int(offset))),
+                    ).fetchall()
+            return [dict(r) for r in rows]
+        except Exception:  # noqa: BLE001
+            return []
+
     def get_protocol_state_snapshot(self) -> dict:
         """High-level public snapshot of protocol state — what the
         viewer renders on the / index route and on the per-session

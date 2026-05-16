@@ -467,6 +467,76 @@ def create_public_forensic_app(*, cfg, store) -> FastAPI:
             "timestamp":         time.time(),
         }
 
+    # ---------- Route #6b: /gic/{sid}/links — Phase O5-PUBLIC-VIEWER Stage 2 ----------
+    @app.get("/gic/{grind_session_id}/links")
+    async def public_gic_links(
+        grind_session_id: str = FPath(..., min_length=1),
+        limit: int = 200,
+        offset: int = 0,
+        request: Request = None,  # type: ignore
+    ):
+        """Return all GIC chain links for a grind session so the browser
+        can recompute SHA-256 of each link via verifyGicChainLink and
+        confirm the chain is intact end-to-end.
+
+        Phase O5-PUBLIC-VIEWER Stage 2 — the GIC Chain Explorer's
+        backbone. Each row carries the inputs the browser-side
+        verifyGicChainLink function needs: prev_gic (=previous row's
+        grind_chain_hash), commitment_hash, verdict_code (mapped from
+        fallback_verdict), pcc_host_code (mapped from pcc_host_state),
+        gic_ts_ns, and the protocol-side grind_chain_hash to compare
+        against.
+
+        Rate-limited; no auth; PII-safe (all fields are protocol-public).
+        """
+        _check_rate(request)
+        # Verdict + host-state code tables — frozen mirrors of grind_chain.py
+        verdict_codes = {
+            "CLEAR": 0x00, "CERTIFY": 0x01, "FLAG": 0x10,
+            "HOLD": 0x11, "BLOCK": 0x20,
+        }
+        host_codes = {
+            "EXCLUSIVE_USB": 0x01, "UNKNOWN": 0x02, "EXCLUSIVE_BT": 0x10,
+            "CONTESTED": 0x20, "DEGRADED": 0x30, "DISCONNECTED": 0xFF,
+        }
+        rows = await asyncio.to_thread(
+            store.get_gic_chain_links,
+            grind_session_id, int(limit), int(offset),
+        )
+        # Compute prev_gic per row (the previous row's grind_chain_hash;
+        # first row gets "" so the browser knows to compute genesis_gic)
+        links = []
+        prev = ""
+        for r in rows:
+            d = dict(r)
+            d["prev_gic_hex"] = prev
+            d["verdict_code"] = verdict_codes.get(
+                str(d.get("fallback_verdict") or "FLAG"),
+                verdict_codes["FLAG"],
+            )
+            d["host_state_code"] = host_codes.get(
+                str(d.get("pcc_host_state") or "DISCONNECTED"),
+                host_codes["DISCONNECTED"],
+            )
+            links.append(d)
+            prev = str(d.get("grind_chain_hash") or "")
+        return {
+            "schema":            "vapi-public-gic-chain-links-v1",
+            "grind_session_id":  grind_session_id,
+            "chain_length":      len(links),
+            "links":             links,
+            "discipline":        (
+                "For each link i, recompute via "
+                "verifyGicChainLink(prev_gic_hex, commitment_hash, "
+                "verdict_code, host_state_code, gic_ts_ns) and confirm "
+                "the result equals grind_chain_hash. For link [0], also "
+                "call verifyGicGenesis(grind_session_id, gic_ts_ns) to "
+                "anchor the chain to the FROZEN-v1 genesis tag "
+                "b'VAPI-GIC-GENESIS-v1'."
+            ),
+            "timestamp":         time.time(),
+        }
+
     # ---------------- Route #7: /mlga/{dataproof_hex} ----------------
     @app.get("/mlga/{dataproof_hex}")
     async def public_mlga(

@@ -12,6 +12,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { wagmiConfig } from './shared/wagmiConfig'
 import { App } from './App'
 import PublicSessionViewer from './views/PublicSessionViewer'
+import GicChainExplorerView from './views/GicChainExplorerView'
 import './index.css'
 
 const queryClient = new QueryClient({
@@ -33,6 +34,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <BrowserRouter>
           <Routes>
             <Route path="/session/:commitmentHex" element={<PublicSessionViewer />} />
+            <Route path="/gic/:grindSessionId" element={<GicChainExplorerView />} />
             <Route path="/" element={<App />} />
             <Route path="*" element={<App />} />
           </Routes>

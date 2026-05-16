@@ -14,6 +14,9 @@ T-PUB-FORENSIC-11  /public/protocol-state returns snapshot keys
 T-PUB-FORENSIC-12  Rate-limit kicks in after RPM threshold
 T-PUB-FORENSIC-13  All endpoints accept NO x-api-key / api_key (public)
 T-PUB-FORENSIC-14  VAME headers stamped on JSON responses
+T-PUB-FORENSIC-15  /public/gic/{sid}/links returns chain links with codes
+T-PUB-FORENSIC-16  GIC links carry prev_gic_hex chain so browser can replay
+T-PUB-FORENSIC-17  GIC links endpoint unknown session returns empty list
 """
 from __future__ import annotations
 
@@ -287,6 +290,91 @@ def test_t_pub_forensic_13_no_auth_required():
                 f"NEVER 401/403)"
             )
             assert r.status_code not in (401, 403)
+
+
+# ----- T-15 -----
+
+def test_t_pub_forensic_15_gic_links_endpoint_shape():
+    """Phase O5-PUBLIC-VIEWER Stage 2 — GIC chain links endpoint must
+    return the link-shape the browser-side verifyGicChainLink expects."""
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
+        client, store = _make_app(td)
+        # Seed a chain link
+        import sqlite3 as _sql
+        con = _sql.connect(store._db_path, timeout=2.0)
+        try:
+            con.execute(
+                "INSERT INTO ruling_validation_log (ruling_id, device_id, "
+                "  llm_verdict, fallback_verdict, llm_confidence, "
+                "  fallback_confidence, divergence, grind_chain_hash, "
+                "  gic_ts_ns, pcc_host_state, grind_session_id, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (1, "d1", "FLAG", "FLAG", 0.1, 0.05, 0,
+                 "ab" * 32, int(time.time_ns()),
+                 "EXCLUSIVE_USB", "test_grind", time.time()),
+            )
+            con.commit()
+        finally:
+            con.close()
+        r = client.get("/gic/test_grind/links")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["schema"] == "vapi-public-gic-chain-links-v1"
+        assert body["chain_length"] >= 1
+        assert isinstance(body["links"], list)
+        link = body["links"][0]
+        assert "verdict_code" in link
+        assert "host_state_code" in link
+        assert "prev_gic_hex" in link
+        assert link["verdict_code"] == 0x10  # FLAG
+        assert link["host_state_code"] == 0x01  # EXCLUSIVE_USB
+
+
+# ----- T-16 -----
+
+def test_t_pub_forensic_16_gic_links_prev_chain_consistency():
+    """prev_gic_hex of link[N+1] == grind_chain_hash of link[N]."""
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
+        client, store = _make_app(td)
+        import sqlite3 as _sql
+        con = _sql.connect(store._db_path, timeout=2.0)
+        try:
+            for i in range(3):
+                con.execute(
+                    "INSERT INTO ruling_validation_log (ruling_id, device_id, "
+                    "  llm_verdict, fallback_verdict, llm_confidence, "
+                    "  fallback_confidence, divergence, grind_chain_hash, "
+                    "  gic_ts_ns, pcc_host_state, grind_session_id, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (i + 1, "d1", "FLAG", "FLAG", 0.1, 0.05, 0,
+                     f"{i:02x}" * 32, (i + 1) * 1000,
+                     "EXCLUSIVE_USB", "test_grind_chain", time.time() + i),
+                )
+            con.commit()
+        finally:
+            con.close()
+        r = client.get("/gic/test_grind_chain/links")
+        body = r.json()
+        links = body["links"]
+        assert len(links) == 3
+        # link[0].prev_gic_hex == "" (caller will compute genesis)
+        assert links[0]["prev_gic_hex"] == ""
+        # link[1].prev_gic_hex == link[0].grind_chain_hash
+        assert links[1]["prev_gic_hex"] == links[0]["grind_chain_hash"]
+        # link[2].prev_gic_hex == link[1].grind_chain_hash
+        assert links[2]["prev_gic_hex"] == links[1]["grind_chain_hash"]
+
+
+# ----- T-17 -----
+
+def test_t_pub_forensic_17_gic_links_unknown_session_returns_empty():
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
+        client, _ = _make_app(td)
+        r = client.get("/gic/totally_nonexistent_session_xyz/links")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["chain_length"] == 0
+        assert body["links"] == []
 
 
 # ----- T-14 -----
