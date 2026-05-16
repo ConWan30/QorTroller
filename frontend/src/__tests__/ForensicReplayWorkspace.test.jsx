@@ -195,8 +195,12 @@ describe('ForensicReplayWorkspace integration', () => {
     const { container, getByPlaceholderText, getByText, getByLabelText } = renderWorkspace()
     const input = getByPlaceholderText(/grind_20260505/i)
     fireEvent.change(input, { target: { value: 'a'.repeat(64) } })
-    // Detected chip surfaces the mode label
-    expect(getByText(/session commitment/i)).not.toBeNull()
+    // Detected chip surfaces the mode label as a DataBadge
+    // (verified status; uppercase label). Stage 5.1 — the literal
+    // "session commitment" string also appears in the screen-reader
+    // hint on the disabled session tab post-H3 audit fix, so we
+    // match the badge specifically, not raw text.
+    expect(container.querySelector('[data-os-badge="verified"]')).not.toBeNull()
     // Submit
     fireEvent.click(getByLabelText('Open detected mode'))
     // Nested route mounted via the test-only outlet stub

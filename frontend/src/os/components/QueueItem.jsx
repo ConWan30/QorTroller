@@ -49,6 +49,10 @@ export default function QueueItem({ item, onOpen, isSelected = false }) {
 
   const Tag = item.openable ? 'button' : 'article'
   const interactive = item.openable && typeof onOpen === 'function'
+  // Mythos audit H4 — queue row is a disclosure widget (expand/hide
+  // detail panel), so aria-expanded + aria-controls are the correct
+  // pattern, NOT aria-pressed (toggle button).
+  const detailPanelId = `queue-detail-${item.id}`
 
   return (
     <Tag
@@ -56,7 +60,8 @@ export default function QueueItem({ item, onOpen, isSelected = false }) {
       onClick={interactive ? () => onOpen(item) : undefined}
       data-os-queue-item={item.kind}
       data-os-severity={item.severity}
-      aria-pressed={interactive ? isSelected : undefined}
+      aria-expanded={interactive ? isSelected : undefined}
+      aria-controls={interactive ? detailPanelId : undefined}
       aria-label={`${sevLabel} · ${item.title}`}
       style={{
         textAlign:      'left',

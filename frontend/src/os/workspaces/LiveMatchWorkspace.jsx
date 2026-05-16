@@ -211,7 +211,13 @@ export default function LiveMatchWorkspace() {
   const grindChain     = useGrindChain().data
   const apop           = useActivePlayOccupancy().data
   const pulse          = useBrpRecordPulse()
-  const orientation    = useBrpControllerOrientation('').data  // optional device-id; renders dormant when empty
+  // Mythos audit C1 — hook returns {orientation, connected, framesReceived}
+  // (NOT .data) and short-circuits to no-op when deviceId === ''.  Stage 2
+  // ships without device-id discovery wiring, so the IMU meter is
+  // intentionally dormant in v1 — the meter renders an honest
+  // "device-id wiring deferred" label instead of falsely claiming
+  // a stream that never connects.
+  const orientationStream = useBrpControllerOrientation('')
   const autoTrigger    = useAutoTriggerStatus().data
   const aitSeparation  = useAITSeparation().data
 
@@ -327,10 +333,10 @@ export default function LiveMatchWorkspace() {
           />
           <SignalMeter
             label="Controller IMU"
-            value={orientation
+            value={orientationStream?.connected
               ? 'streaming'
-              : '—'}
-            status={orientation ? 'live' : 'dormant'}
+              : 'device-id wiring deferred'}
+            status={orientationStream?.connected ? 'live' : 'dormant'}
             ariaLabel="Controller orientation IMU stream"
           />
           <SignalMeter

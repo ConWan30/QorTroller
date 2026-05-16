@@ -19,6 +19,7 @@ import {
   usePublicProtocolState,
   usePublicAgentRoots,
 } from '../../api/publicForensic'
+import { useFleetCoherenceStatus } from '../../api/bridgeApi'
 import DataBadge from './DataBadge'
 
 function MetricCell({ label, value, accent }) {
@@ -50,6 +51,10 @@ function MetricCell({ label, value, accent }) {
 export default function StatusStrip() {
   const { data: state, error: stateErr } = usePublicProtocolState()
   const { data: roots } = usePublicAgentRoots()
+  // Mythos audit C2 — real fleet-coherence aggregate replaces hardcoded 0.
+  // useFleetCoherenceStatus is operator-side (api_key); when unauthenticated
+  // OR mock/offline, fall through to dormant "—" instead of fake green.
+  const { data: coherence, isError: coherenceErr } = useFleetCoherenceStatus()
 
   // Bridge state — observation, not inference
   let bridgeStatus = 'live'
@@ -68,10 +73,15 @@ export default function StatusStrip() {
   const merkleShort = firstAgentMerkle
     ? `${firstAgentMerkle.slice(0, 8)}…${firstAgentMerkle.slice(-4)}`
     : '—'
-  const blockerCount = state?.total_grind_chain_links === undefined ? '—' :
-    // proxy: 'blockers' for this strip = 0 when chain advancing, otherwise unknown.
-    // Replace with real fleet-coherence aggregate in a follow-up vertical slice.
-    0
+  // Real fleet-coherence aggregate. When coherence data unavailable (auth
+  // missing / mock / offline), the strip honestly reads "—" + dormant
+  // status — NOT green 0. This is the C2 honesty fix from Mythos audit.
+  const coherenceAvailable = Boolean(coherence) && !coherenceErr && !isMockActive()
+  const blockerCount = coherenceAvailable
+    ? (coherence.active_contradictions ?? coherence.by_mode?.CONTRADICTION ?? 0)
+      + (coherence.active_orphans     ?? coherence.by_mode?.ORPHAN ?? 0)
+      + (coherence.active_inversions  ?? coherence.by_mode?.INVERSION ?? 0)
+    : '—'
 
   return (
     <nav
@@ -128,7 +138,11 @@ export default function StatusStrip() {
       <MetricCell
         label="Blockers"
         value={blockerCount}
-        accent={blockerCount > 0 ? 'var(--os-status-blocked)' : 'var(--os-status-live)'}
+        accent={!coherenceAvailable
+          ? 'var(--os-text-faint)'
+          : blockerCount > 0
+            ? 'var(--os-status-blocked)'
+            : 'var(--os-status-live)'}
       />
     </nav>
   )

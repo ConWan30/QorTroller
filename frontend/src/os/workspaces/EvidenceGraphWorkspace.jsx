@@ -22,9 +22,8 @@
  */
 import { useMemo } from 'react'
 import { useGrindChain, useCaptureHealth, useActivePlayOccupancy, useAITSeparation, useCuratorStatus, useVpmList } from '../../api/bridgeApi'
-import { usePublicVhp, usePublicAgentRoots, usePublicProtocolState } from '../../api/publicForensic'
+import { usePublicVhp, usePublicProtocolState } from '../../api/publicForensic'
 import EvidenceNode from '../components/EvidenceNode'
-import { EvidenceEdgeArrowDefs } from '../components/EvidenceEdge'
 import WorkspaceHeader from '../components/WorkspaceHeader'
 
 const _ACCENT_CHAIN     = 'var(--os-chain)'
@@ -220,24 +219,13 @@ export default function EvidenceGraphWorkspace() {
           minHeight:      600,
         }}
       >
-        {/* Edge layer — inline SVG; absolute over the grid */}
-        <svg
-          aria-hidden="true"
-          width="100%"
-          height="100%"
-          style={{
-            position:       'absolute',
-            inset:          24,
-            pointerEvents:  'none',
-            zIndex:         0,
-            color:          'var(--os-chain)',
-          }}
-        >
-          <EvidenceEdgeArrowDefs />
-          {/* Lines are simplified for first vertical slice; geometry
-              represents semantic intent, not pixel-perfect routing.
-              A follow-up stage can switch to a d3 layout. */}
-        </svg>
+        {/* Mythos audit H1 — the edge SVG previously rendered as an
+            empty <svg> with only arrow-marker defs, and the "Edge
+            semantics" legend below promised line types that never
+            drew. Both removed for v1; node order + accent color now
+            carry the cryptographic flow semantics. A follow-up stage
+            can wire real geometric edges (post-mount ref measurement
+            or d3 layout). */}
 
         {/* ROW 1 — Input substrate */}
         <div style={{ display: 'flex', gap: 16, marginBottom: 18, position: 'relative', zIndex: 1, flexWrap: 'wrap' }}>
@@ -343,7 +331,9 @@ export default function EvidenceGraphWorkspace() {
           />
         </div>
 
-        {/* Edge legend — explicit semantics, not buried in CSS */}
+        {/* Node-accent semantics key — replaces the prior edge legend
+            that promised line types that never drew. Aligned with
+            Mythos audit H1: documentation must match what's rendered. */}
         <div style={{
           marginTop:      32,
           padding:        '12px 14px',
@@ -362,30 +352,22 @@ export default function EvidenceGraphWorkspace() {
             color:          'var(--os-text-faint)',
             letterSpacing:  '0.08em',
             textTransform:  'uppercase',
-          }}>Edge semantics</strong>
+          }}>Accent key</strong>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <svg width="32" height="6" aria-hidden="true">
-              <line x1="0" y1="3" x2="32" y2="3" className="os-edge--solid" stroke="var(--os-chain)" strokeWidth="1.5" />
-            </svg>
-            cryptographic binding
+            <span aria-hidden="true" style={{ width: 12, height: 12, background: 'var(--os-chain)', borderRadius: 2 }}/>
+            cryptographic substrate (HID → PoAC → GIC chain)
           </span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <svg width="32" height="6" aria-hidden="true">
-              <line x1="0" y1="3" x2="32" y2="3" stroke="var(--os-derived)" strokeWidth="1.2" strokeDasharray="2 3" />
-            </svg>
-            derived / polled
+            <span aria-hidden="true" style={{ width: 12, height: 12, background: 'var(--os-derived)', borderRadius: 2 }}/>
+            derived / polled (FSCA · invariant gate)
           </span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <svg width="32" height="6" aria-hidden="true">
-              <line x1="0" y1="3" x2="32" y2="3" stroke="var(--os-predicate)" strokeWidth="1.2" strokeDasharray="6 4" />
-            </svg>
-            predicate gate
+            <span aria-hidden="true" style={{ width: 12, height: 12, background: 'var(--os-predicate)', borderRadius: 2 }}/>
+            predicate gate (APOP · isFullyEligible)
           </span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <svg width="32" height="6" aria-hidden="true">
-              <line x1="0" y1="3" x2="32" y2="3" stroke="var(--os-ghost)" strokeWidth="1.2" strokeDasharray="1 4" />
-            </svg>
-            kill-switch paused
+            <span aria-hidden="true" style={{ width: 12, height: 12, background: 'var(--os-accent)', borderRadius: 2 }}/>
+            on-chain terminus (anchor · VHP mint)
           </span>
         </div>
       </section>

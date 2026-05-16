@@ -18,10 +18,15 @@
  *     hint so screen readers announce "10 chars required"
  *   - "raw payload" rendered as <pre> with role='code' for forensic copy
  */
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import PropTypes from 'prop-types'
 import DataBadge from './DataBadge'
 import ActionGuardBadge from './ActionGuardBadge'
+
+// Mythos audit M4 — armed destructive decisions auto-cancel after
+// 8s of inactivity so an operator who walks away mid-decision
+// doesn't return to a primed "Confirm reject" they don't remember.
+const _ARM_TIMEOUT_MS = 8000
 
 const _MONO = 'JetBrains Mono, ui-monospace, monospace'
 const _REASON_MIN = 10
@@ -77,7 +82,16 @@ export default function QueueDetailPanel({
 }) {
   const [reason, setReason]   = useState('')
   const [pending, setPending] = useState(null)   // 'accept'|'reject'|'overturn'|null
-  const titleId = `queue-detail-${item.id}`
+  const titleId = `queue-detail-title-${item.id}`
+
+  // Mythos audit M4 — auto-clear pending arm after 8s. Decisions
+  // are destructive (operator_decision is non-revisable in v1 wire);
+  // a primed button with no recent click cannot be trusted.
+  useEffect(() => {
+    if (!pending) return undefined
+    const id = setTimeout(() => setPending(null), _ARM_TIMEOUT_MS)
+    return () => clearTimeout(id)
+  }, [pending])
 
   const isDraft = item.kind === 'draft'
   const isCuratorDraft = isDraft && (
@@ -111,6 +125,9 @@ export default function QueueDetailPanel({
 
   return (
     <section
+      // Mythos audit H4 — id matches QueueItem's aria-controls so
+      // the disclosure pattern is programmatically wired end-to-end.
+      id={`queue-detail-${item.id}`}
       role="region"
       aria-labelledby={titleId}
       data-os-queue-detail={item.kind}
@@ -196,7 +213,8 @@ export default function QueueDetailPanel({
             textTransform: 'uppercase',
           }}>Raw row</summary>
           <pre
-            role="code"
+            // Mythos audit L3 — role="code" isn't a valid ARIA role;
+            // native <pre> is sufficient for screen readers.
             aria-label="Raw protocol row"
             style={{
               marginTop: 8,
