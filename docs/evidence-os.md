@@ -232,7 +232,7 @@ Accessibility:
 ## 5. Mock / offline honesty rules
 
 The shell and workspaces must **never paint mock or offline data as
-live**. Five rules apply:
+live**. Six rules apply:
 
 1. **`noMock: true` on every grind-critical hook.** A transient bridge
    stall during a live grind must surface as an error or held-last
@@ -254,6 +254,20 @@ live**. Five rules apply:
    explicitly does not say "all clear"; it says "honest quiet" and
    names every source hook it checked. The Verification Receipt empty
    state literally reads "does not imply OK".
+6. **Operator-deferred is its own status, not pending or blocked.**
+   The `deferred` DataBadge token (added 2026-05-16) marks probes /
+   measurements that the operator has formally cast out of the active
+   gate set via authorization — distinct from `pending` (work in
+   progress) AND from `blocked` (currently failing). Deferred items
+   render with reduced opacity + strikethrough on the numeric value +
+   the literal word `DEFERRED` + a tooltip pointing at the operator-
+   authorization rationale. The corpus stays queryable for
+   transparency; the probe is no longer evaluated as a blocker. This
+   mirrors the protocol-level "tremor_resting P1vP3 cast-out
+   2026-05-09" + "touchpad_corners cast-out 2026-05-16" precedents
+   tracked in `CLAUDE.md`. Adding to the deferred set is a
+   documentation-only operator decision; no protocol code path
+   treats deferred probes specially.
 
 ---
 

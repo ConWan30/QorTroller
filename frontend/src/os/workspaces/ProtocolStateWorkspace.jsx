@@ -129,14 +129,31 @@ function _Row({ label, value, status, hint }) {
   )
 }
 
+// Operator-deferred probe set — cast out of the active gate evaluation
+// per explicit operator authorization. Mirrors the protocol-level
+// tremor_resting P1vP3 cast-out (CLAUDE.md 2026-05-09). The corpus stays
+// queryable for transparency; the probe is no longer evaluated as a
+// blocker. Adding to this set is a documentation-only operator decision
+// — no protocol code path treats deferred probes specially.
+const _DEFERRED_PROBES = new Set([
+  'touchpad_corners',  // 2026-05-16: AIT (1.199) cleared and touchpad signal
+                       // is structurally absent in NCAA CFB 26 gameplay
+                       // (zero touchpad-active fraction). No path to >1.0
+                       // through this probe; cast out as development
+                       // progress blocker per operator authorization.
+                       // Mainnet TGE invariant remains in force via AIT.
+])
+
 function _ProbeBar({ probe, ratio, target = 1.0 }) {
   const pct = Math.max(0, Math.min(100, (ratio / Math.max(1.0, target)) * 100))
   const cleared = ratio >= target
+  const deferred = _DEFERRED_PROBES.has(probe)
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', gap: 4,
       padding: '10px 0',
       borderTop: '1px solid var(--os-border-soft)',
+      opacity: deferred ? 0.75 : 1,
     }}>
       <div style={{
         display: 'flex', justifyContent: 'space-between',
@@ -145,14 +162,23 @@ function _ProbeBar({ probe, ratio, target = 1.0 }) {
         <span style={{ color: 'var(--os-text-dim)' }}>{probe}</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{
-            color: 'var(--os-text)',
+            color: deferred ? 'var(--os-text-dim)' : 'var(--os-text)',
             fontWeight: 600,
             fontFamily: _MONO,
+            textDecoration: deferred ? 'line-through' : 'none',
           }}>{ratio?.toFixed(3) ?? '—'}</span>
-          <DataBadge
-            status={cleared ? 'verified' : 'pending'}
-            label={cleared ? 'CLEARED' : 'BELOW 1.0'}
-          />
+          {deferred ? (
+            <DataBadge
+              status="deferred"
+              label="DEFERRED"
+              title="Operator-deferred per CLAUDE.md NOTE 2026-05-16. Not a live gate input; corpus retained for historical reference. AIT (cleared) is the active discriminator."
+            />
+          ) : (
+            <DataBadge
+              status={cleared ? 'verified' : 'pending'}
+              label={cleared ? 'CLEARED' : 'BELOW 1.0'}
+            />
+          )}
         </div>
       </div>
       <div
