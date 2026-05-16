@@ -23,7 +23,10 @@ function _Tile({ label, count, status, hint }) {
       role="group"
       aria-label={`${label}: ${count ?? '—'} (${status || 'unknown'})`}
       style={{
-        flex:           '1 1 0',
+        // Stage 5.3 (iPhone 15 walk-through Finding A) — tile no longer
+        // self-flexes inside the parent; parent is now a CSS grid that
+        // gives each tile a 140px minimum. Tile only constrains its
+        // own minWidth:0 to allow inner text to wrap when needed.
         minWidth:       0,
         padding:        '12px 14px',
         background:     'var(--os-panel)',
@@ -81,9 +84,17 @@ export default function QueueSummary({ tiles }) {
       role="region"
       aria-label="Queue summary"
       style={{
-        display:        'flex',
-        gap:            10,
-        flexWrap:       'wrap',
+        // Stage 5.3 (iPhone 15 Finding A): swap from flex+wrap to CSS
+        // grid with auto-fit minmax. Each tile gets a hard 140px
+        // minimum width; below that, the row wraps to fewer columns.
+        // At 393px iPhone 15 width: ~2 columns × 3 rows (clean).
+        // At 768px tablet: ~5 columns. At 1280px+ desktop: all 6 in
+        // one row. The prior flex:1 1 0 caused tiles to compress to
+        // ~50px before flex-wrap kicked in, making content overflow
+        // the rectangle bounds.
+        display:               'grid',
+        gridTemplateColumns:   'repeat(auto-fit, minmax(140px, 1fr))',
+        gap:                   10,
       }}
     >
       {tiles.map(t => <_Tile key={t.label} {...t} />)}
