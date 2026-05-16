@@ -59,13 +59,15 @@ export default function AppShell() {
   return (
     <div className="os-shell">
       <StatusStrip />
-      <div style={{
+      <div className="os-shell__body" style={{
         display:    'grid',
-        gridTemplateColumns: 'var(--os-rail-width) 1fr',
+        gridTemplateColumns: 'minmax(0, var(--os-rail-width)) minmax(0, 1fr)',
         minHeight:  'calc(100dvh - var(--os-strip-h))',
       }}>
-        {/* Left rail nav */}
+        {/* Left rail nav — collapses to a top horizontal scroller
+            below 760px viewport per Mythos audit H2. */}
         <nav
+          className="os-shell__rail"
           aria-label="Evidence OS workspaces"
           style={{
             borderRight:    '1px solid var(--os-border)',
