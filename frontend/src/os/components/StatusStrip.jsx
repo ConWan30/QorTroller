@@ -22,15 +22,21 @@ import {
 import { useFleetCoherenceStatus } from '../../api/bridgeApi'
 import DataBadge from './DataBadge'
 
-function MetricCell({ label, value, accent }) {
+function MetricCell({ label, value, accent, isLast }) {
   return (
     <div style={{
       display:        'flex',
       flexDirection:  'column',
       gap:            2,
-      paddingRight:   18,
-      borderRight:    '1px solid var(--os-border)',
+      // Stage 5.3 (iPhone 15 Finding B): last cell drops paddingRight
+      // + borderRight so there's no dead space after Blockers at the
+      // end of horizontal scroll on phone. The right padding +
+      // separator border were designed for cell-to-cell separation;
+      // the trailing cell has no neighbour to separate from.
+      paddingRight:   isLast ? 0 : 18,
+      borderRight:    isLast ? 'none' : '1px solid var(--os-border)',
       minWidth:       100,
+      flexShrink:     0,
     }}>
       <span style={{
         fontSize:       'var(--os-text-min)',
@@ -96,6 +102,13 @@ export default function StatusStrip() {
         background:     'var(--os-panel)',
         borderBottom:   '1px solid var(--os-border)',
         fontFamily:     'JetBrains Mono, ui-monospace, monospace',
+        // Stage 5.3 (iPhone 15 Finding B): explicit overflow-x:auto so
+        // iOS Safari gives momentum-scroll on touch instead of the
+        // default panning behavior. flex-shrink:0 on MetricCell + Link
+        // children keeps them from squeezing into illegibility on
+        // narrow viewports.
+        overflowX:      'auto',
+        WebkitOverflowScrolling: 'touch',
       }}
     >
       <Link
@@ -109,6 +122,8 @@ export default function StatusStrip() {
           textDecoration: 'none',
           paddingRight:   18,
           borderRight:    '1px solid var(--os-border)',
+          flexShrink:     0,
+          whiteSpace:     'nowrap',
         }}
       >VAPI · Evidence OS</Link>
 
@@ -125,7 +140,11 @@ export default function StatusStrip() {
           : 'Chain submissions live'}
       />
 
-      <div style={{ flex: 1 }} />
+      {/* Stage 5.3 (iPhone 15 Finding B): spacer is flex-shrink:1 so
+          it collapses to zero when content overflows the viewport on
+          phone, instead of holding non-zero width and creating dead
+          space between the badges and the metric cells. */}
+      <div style={{ flex: '1 1 0', minWidth: 0 }} />
 
       <MetricCell label="Agents"  value={agentCount} />
       <MetricCell label="PV-CI"   value={state?.pv_ci_invariants_count ?? '—'} />
@@ -137,6 +156,7 @@ export default function StatusStrip() {
       />
       <MetricCell
         label="Blockers"
+        isLast
         value={blockerCount}
         accent={!coherenceAvailable
           ? 'var(--os-text-faint)'
