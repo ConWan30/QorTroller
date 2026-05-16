@@ -27,15 +27,32 @@ export default function SignalMeter({
   max, ariaLabel,
 }) {
   const colorVar = _COLOR_VAR[status] || _COLOR_VAR.dormant
-  const v = (value === null || value === undefined) ? null : Number(value)
+  // Mythos audit M5 — numeric values get role="meter" with
+  // aria-valuemin/max/now (matching ProtocolStateWorkspace._ProbeBar
+  // consistency). Non-numeric / null values stay as role="group" since
+  // ARIA meter requires a numeric aria-valuenow.
+  const numericRaw = typeof value === 'number' ? value
+    : (typeof value === 'string' && value !== '' && !Number.isNaN(Number(value))) ? Number(value)
+    : null
+  const v = numericRaw
   const m = max ? Number(max) : null
   const pct = (v !== null && m) ? Math.max(0, Math.min(100, (v / m) * 100)) : null
-  const display = v === null ? '—' : (
+  const display = (value === null || value === undefined) ? '—' : (
     typeof value === 'number' && !Number.isInteger(value) ? value.toFixed(1) : String(value)
   )
+  const isMeter = v !== null
+  const ariaProps = isMeter
+    ? {
+        role:           'meter',
+        'aria-valuemin': 0,
+        'aria-valuemax': m ?? Math.max(v, 1),
+        'aria-valuenow': v,
+        'aria-valuetext': unit ? `${display} ${unit}` : String(display),
+      }
+    : { role: 'group' }
   return (
     <div
-      role="group"
+      {...ariaProps}
       aria-label={ariaLabel || label}
       style={{
         display:        'flex',
