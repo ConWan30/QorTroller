@@ -55,7 +55,16 @@ Discipline points:
 
 ## 3. Recommended app shape
 
-**Capacitor 6.x over the existing React + Vite frontend.**
+**Capacitor over the existing React + Vite frontend, on the current supported major version verified at M1 commission time.**
+
+**Version-pin discipline (M0.1 amendment 2026-05-16):** This document does NOT hard-pin a Capacitor major. The exact version is resolved at M1 commission via:
+
+```bash
+npm view @capacitor/core version       # current latest published
+npm view @capacitor/core dist-tags     # current LTS / next channel mapping
+```
+
+The version selected at M1 must match the version Capacitor's own docs site currently anchors as the supported release (the docs site at `capacitorjs.com` currently points to **v8** as of authoring; that may have advanced by the time M1 commissions). Hard-pinning a major in this planning artifact would create instant doc drift; the convention is "resolve at install time, record the selected version in the M1 closure note + commit the resulting `package.json` lockfile."
 
 Why Capacitor over alternatives:
 - **No code fork.** The same JSX/JS that renders in the desktop browser renders in the WebView. Stage 5.3 + Stage 6 fixes propagate automatically. Mythos's audit dispatched earlier confirmed "underlying responsive layer is mostly correct at iPhone 15 size" — a wrapper is sufficient.
@@ -85,25 +94,58 @@ Deliverables (done):
 
 ### M1 — Capacitor shell scaffold
 
-Goal: render the existing Evidence OS surface inside a Capacitor WebView, build an `.apk` and `.ipa` (or at minimum a Capacitor-served Android debug build for first walk-through), no API access yet — just the shell + cached frontend.
+Goal: render the existing Evidence OS surface inside a Capacitor WebView, no API access yet — just the shell + cached frontend.
+
+**M0.1 amendment (2026-05-16) — split into Android-first / iOS-deferred tracks** because the operator's host is Windows. iOS scaffolding requires a Mac with Xcode (the Cocoapods + signing chain is Mac-only); attempting iOS work on Windows would either silently fail or produce uncommittable native project artifacts. Android scaffolding works fully on Windows via Android Studio.
+
+#### M1-Android (commission first; Windows-compatible)
 
 Tasks:
-- `npm install --save @capacitor/core @capacitor/cli @capacitor/ios @capacitor/android @capacitor/preferences`
-- `npx cap init` with appId `xyz.vapi.companion` (or similar), webDir `frontend/dist`, server config initially pointing at the dev Vite for hot-reload (will change for production builds)
-- `npx cap add ios && npx cap add android`
-- `frontend/capacitor.config.ts` (or `.json`) committed; `ios/` and `android/` native project skeletons committed
-- Verify `npm run build && npx cap sync && npx cap open ios` produces a launchable simulator build that shows the Evidence OS shell
-- Plumb `Info.plist` with `NSLocalNetworkUsageDescription` + `AndroidManifest.xml` with `INTERNET` + `ACCESS_NETWORK_STATE`
+- `npm install --save @capacitor/core @capacitor/cli @capacitor/android @capacitor/preferences` (version resolved per §3 at install time; record the resolved version in the M1 closure note)
+- `npx cap init` with appId per §9 default, webDir `frontend/dist`, server config initially pointing at the dev Vite for hot-reload (will change for production builds)
+- `npx cap add android` (NOT `add ios` — see M1-iOS below)
+- `frontend/capacitor.config.ts` (or `.json`) committed; `android/` native project skeleton committed
+- Verify `npm run build && npx cap sync android && npx cap open android` produces a launchable Android emulator build (Android Studio on Windows) showing the Evidence OS shell
+- Plumb `AndroidManifest.xml` with `INTERNET` + `ACCESS_NETWORK_STATE` permissions
+- Sideload to a physical Android device via USB ADB to confirm the WebView renders the responsive Stage 5.3 layout correctly at real-device resolution
 
-Files added (estimate):
+Pass criteria (Android-only at this milestone):
+- Android emulator launches the Capacitor app; Evidence OS shell renders
+- Left rail collapses to top horizontal scroller below 760px
+- Sideloaded APK on physical Android phone confirms render
+- Operator can hand a tester an .apk file and have it install + launch
+
+Files added (Android only):
 - `frontend/capacitor.config.ts` (~30 LOC)
-- `frontend/ios/` native project (Cap-generated, ~50 files)
-- `frontend/android/` native project (Cap-generated, ~40 files)
-- `frontend/package.json` updated (~5 LOC dep additions)
+- `frontend/android/` native project (Cap-generated, ~40 files; one bundle)
+- `frontend/package.json` updated (~3 LOC dep additions; iOS plugin NOT in deps yet)
 
 Files modified:
-- `.gitignore` to exclude `frontend/ios/App/Pods/`, `frontend/android/.gradle/`, build artifacts
+- `.gitignore` to exclude `frontend/android/.gradle/`, build artifacts
 - `frontend/vite.config.js` — no changes (proxy stays dev-only)
+
+#### M1-iOS (deferred; commission separately when prerequisite available)
+
+**Blocker:** iOS Capacitor scaffolding requires a macOS host with Xcode 15+ and Cocoapods installed. The operator's current development host is Windows.
+
+Options for unblocking M1-iOS:
+- **Mac access** — operator borrows / acquires a Mac (mini, MacBook Air, used iMac). One-time enabler for the iOS bundle. Capacitor sync can happen on Windows after; the initial `cap add ios` must run on Mac.
+- **CI macOS runner** — GitHub Actions provides `macos-14` and `macos-15` runners free for public repos. A CI job can run `cap add ios` + `cap sync ios` + produce an `.ipa` artifact downloadable to the Windows host. Requires GitHub Actions setup + Apple Developer account ($99/yr) for signing.
+- **Cloud Mac service** — MacStadium, MacInCloud (~$1-5/hr). Operator boots an hourly Mac, runs the iOS scaffold once, downloads the resulting native project, commits it from Windows.
+
+iOS-specific tasks (when prerequisite available):
+- `npm install --save @capacitor/ios` (no-op on Windows beyond package.json entry; native commands fail until on Mac)
+- On Mac: `npx cap add ios && npx cap sync ios && npx cap open ios`
+- Plumb `Info.plist` with `NSLocalNetworkUsageDescription`
+- Verify iOS simulator launches the Capacitor app; same shell renders
+- Distribution path per §9 default (TestFlight is deferred; sideload via Xcode to operator's personal iPhone is the v1 path)
+
+Files added when M1-iOS commissions (NOT in initial Android-only commit):
+- `frontend/ios/` native project (Cap-generated on Mac, ~50 files)
+- `frontend/package.json` extended with `@capacitor/ios`
+- `.gitignore` extended for `frontend/ios/App/Pods/` + iOS build artifacts
+
+**Verification framing:** the M1 closure note captures Android-only verification. iOS verification appears in a future M1-iOS closure addendum when the prerequisite lands. Stage 5.3 phone-viewport validation is iOS-only today (operator walked iPhone 15); R9 in the risk register names the Android responsive audit as a Stage 5.4 prerequisite to M1-Android (per §9 recommendation).
 
 Pass criteria:
 - iOS simulator launches the Capacitor app; Evidence OS shell renders; left rail collapses to top horizontal scroller below 760px (iPhone size)
@@ -114,29 +156,50 @@ Pass criteria:
 
 Goal: make API calls actually reach the bridge from the bundled Capacitor app via a configurable LAN base URL.
 
+**M0.1 amendment — runtime bridge URL precedence (FROZEN at M2 spec):**
+
+The base URL the API client uses for every fetch is resolved at request time per the following precedence (highest wins):
+
+| Tier | Source | When it applies |
+|------|--------|-----------------|
+| 1 | Persisted Capacitor Preferences key `bridgeBaseUrl` | Capacitor bundle — set by operator at first launch via Settings workspace; survives app restarts; explicit operator-changeable |
+| 2 | `VITE_BRIDGE_BASE_URL` build-time env var | Capacitor bundle when Preferences key is unset; build-time fallback the operator can bake into a TestFlight / sideload distribution for a known-LAN deployment |
+| 3 | Empty string → relative URL → Vite dev proxy | Dev browser at `http://localhost:5173` AND `http://172.20.10.5:5173` (the laptop's LAN-served Vite); behavior byte-identical to current Stage 5.3 |
+
+Implementation contract:
+- `runtimeConfig.js` exports `getBridgeBaseUrl()` which evaluates the precedence chain on every call (cheap; Preferences read is sync in v8+ via `@capacitor/preferences` get).
+- `client.js`'s `apiGet`/`apiPost` prepend `getBridgeBaseUrl() + path` when the result is non-empty; otherwise pass `path` unchanged.
+- `publicForensic.js`'s `publicGet` does the same.
+- Settings workspace writes Tier 1 (`Preferences.set({key: 'bridgeBaseUrl', value: ...})`) when operator types/confirms a LAN IP.
+- Settings workspace surfaces ALL THREE tiers in the UI so the operator can see which one is active + override.
+
 Tasks:
-- Add `VITE_BRIDGE_BASE_URL` to `.env.example` documenting the contract: empty string in dev (use relative paths + Vite proxy), `http://192.168.x.x:8080` in production Capacitor builds
-- Modify `frontend/src/api/client.js`: when `VITE_BRIDGE_BASE_URL` is set, prepend it to every fetch URL; when empty, behavior is byte-identical to today
+- Add `VITE_BRIDGE_BASE_URL` to `.env.example` documenting the contract above (empty string in dev → Tier 3 / Vite proxy; populated for Capacitor → Tier 2 build default; overridden by Tier 1 Preferences when operator runs the Settings flow)
+- Modify `frontend/src/api/client.js`: prepend the resolved base URL when non-empty; when empty, behavior is byte-identical to today
 - Modify `frontend/src/api/publicForensic.js`: same pattern (it has its own `publicGet`)
-- Add a small in-app settings surface: `/os/settings` (or a Capacitor-only modal) where the operator enters the laptop's LAN IP at first launch. Persist via `@capacitor/preferences`. App reads the preference on boot and stamps it as `VITE_BRIDGE_BASE_URL`-equivalent into a runtime config.
-- Status surface: add a "Connection" pill to the AppShell's StatusStrip that shows the currently-configured bridge URL + the last-seen latency. When unreachable, the existing `BRIDGE UNREACHABLE` pill already handles the case.
+- Add `runtimeConfig.js` implementing the 3-tier precedence with explicit unit tests proving precedence order
+- Add `/os/settings` workspace (or Capacitor-only modal) where operator enters laptop's LAN IP at first launch + sees the active tier. Persist via `@capacitor/preferences`.
+- Status surface: add a "Connection" pill to AppShell's StatusStrip showing the currently-configured bridge URL + active precedence tier + last-seen latency. Existing `BRIDGE UNREACHABLE` pill handles the unreachable case.
 - Bridge-side: verify `bridge/vapi_bridge/operator_api.py` CORS config permits `capacitor://localhost` + `https://localhost` origins. If not, add them (one-line config tweak; not a protocol change).
 
 Files modified:
 - `frontend/src/api/client.js` (~20 LOC; base-URL prepend logic)
 - `frontend/src/api/publicForensic.js` (~10 LOC; same)
 - `frontend/src/os/AppShell.jsx` (~20 LOC; settings link)
-- `frontend/.env.example` (~5 LOC; documentation)
+- `frontend/.env.example` (~10 LOC; documentation of 3-tier precedence)
 - `bridge/vapi_bridge/operator_api.py` (CORS — verify-only; modify only if missing)
 
 Files added:
-- `frontend/src/os/workspaces/SettingsWorkspace.jsx` (~150 LOC; configurable bridge URL + preference persistence)
-- `frontend/src/api/runtimeConfig.js` (~50 LOC; abstracts dev/Capacitor base-URL resolution)
+- `frontend/src/os/workspaces/SettingsWorkspace.jsx` (~180 LOC; configurable bridge URL + 3-tier precedence display + preference persistence)
+- `frontend/src/api/runtimeConfig.js` (~80 LOC; abstracts dev/Capacitor base-URL resolution per 3-tier precedence)
+- `frontend/src/__tests__/RuntimeConfig.test.jsx` (~100 LOC; precedence ordering tests)
 
 Pass criteria:
-- In dev browser: behavior unchanged (test pass at 133/133)
-- In iOS simulator pointing at a laptop bridge on the LAN: all read endpoints work; QueueSummary populates; Evidence Graph + Protocol State render real data
-- iOS Local Network prompt fires on first API call; user accepts; subsequent launches use stored permission
+- In dev browser at `localhost:5173`: Tier 3 active; behavior byte-identical to today (test pass at 133/133)
+- In dev browser at `172.20.10.5:5173` (LAN-served Vite): Tier 3 active; Vite proxy still routes; behavior identical
+- In Capacitor Android bundle with Tier 2 baked: hits the baked URL; QueueSummary populates from real bridge
+- In Capacitor Android bundle with Tier 1 set via Settings: Tier 1 wins; URL changes propagate without rebuild
+- Android Local Network behaviour: first API call to LAN succeeds (no prompt; Android `INTERNET` is auto-granted; mDNS-class prompts only fire when M6 mDNS work commissions)
 
 ### M3 — Evidence OS route embedding / launch target
 
@@ -225,15 +288,35 @@ The following are explicitly named as future work, NOT v1:
 | R9 | **Stage 5.3 phone-viewport layout assumed by mythos to be "mostly correct" — but only iPhone 15 + iOS Safari was tested.** | MEDIUM | MEDIUM | Pre-M1: ship one additional small responsive audit pass on Android (Pixel 7-class viewport, Chrome) before committing to the Capacitor shell. If breaks emerge, close them as Stage 5.4 before M1 starts. |
 | R10 | **Companion app accidentally becomes "second product surface".** Marketing pressure or feature creep could push UI choices that diverge from Evidence OS (e.g. phone-only widgets, custom mobile flows). | HIGH | MEDIUM | The architectural principle in §1 is the load-bearing defense. This document codifies the "one source of layout truth" discipline. Any deviation requires a successor amendment to this doc + explicit operator authorization. |
 
-## 6. Signing-path constraint (R5 elaboration)
+## 6. v1 credential rule
 
-**The mobile companion app NEVER holds a private key.** Three subordinate rules:
+**The mobile companion app NEVER holds a private key or a full-write operator API key in v1.** Four subordinate rules (FROZEN at v1 spec; M0.1 amendment 2026-05-16 elevates rule 3 + adds rule 4 to the prior 3-rule signing-path block):
 
-1. **No bridge wallet key on the phone.** The bridge wallet (`0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692` currently) lives in `bridge/.env` on the laptop, gitignored. The phone has no copy.
-2. **No SE-equivalent on the phone.** When VBDIP-0006 v2 controllers exist with at-source signing, the key lives in the controller's secure element — not on the phone. The phone observes signed PoAC records via the bridge; it does not validate signatures locally (the bridge does that; the public `/algorithms` + `/public/session` browser-side verifier already exists for third-party audit).
-3. **WalletConnect-style remote sign is acceptable if needed.** If a future v3 enhancement wants operator co-sign for governance ceremonies from the phone (e.g. PV-CI invariant ratification away from the laptop), the WalletConnect 2.x flow OR a Capacitor wallet-plugin that delegates to the iOS/Android system keychain (Secure Enclave / TEE) is the path — but the signing material remains hardware-protected, not in JS memory.
+1. **No bridge wallet key on the phone.** The bridge wallet (currently `0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692`) lives in `bridge/.env` on the laptop, gitignored. The phone has no copy. Not in build env, not in Preferences, not in WebView localStorage.
+2. **No phone-resident private key of any kind.** When VBDIP-0006 v2 controllers exist with at-source signing, the key lives in the controller's secure element — not on the phone. The phone observes signed PoAC records via the bridge; it does not validate signatures locally (the bridge does that; the public `/algorithms` + `/public/session` browser-side verifier already exists for third-party audit). No ECDSA key, no Ed25519 key, no symmetric session key persisted in any phone storage layer.
+3. **No persisted full-write API key in v1.** The current desktop frontend uses `VITE_VAPI_API_KEY` (matching the bridge's `OPERATOR_API_KEY`) which is a full-write credential granting access to ALL operator endpoints including state-changing ones (anchor-cedar-bundle, gic-reset, override-gameplay-context, force-corpus-snapshot, etc.). v1 companion app MUST NOT persist this key on the phone. Three derived requirements:
+   - The Capacitor build MUST NOT bake `VITE_VAPI_API_KEY` into the bundle at build time (would ship the secret to every device that installs the .apk).
+   - Settings workspace MUST NOT expose a text field for entering the full-write API key.
+   - First-launch flow MUST treat all bridge endpoints as unauthenticated; this means most operator endpoints will return 401/403, which is exactly the intended v1 read-mostly posture.
+4. **Read-only token only if needed.** If v1 read endpoints (e.g. `/agent/curator-status`, `/operator/operator-agent-shadow-log`) require auth that the current bridge config provides via `OPERATOR_API_KEY`, the v1 companion app MAY support a **read-only token** distinct from the full-write key, with these properties:
+   - Introduced via a NEW bridge config field `OPERATOR_READ_ONLY_API_KEY` (separate from `OPERATOR_API_KEY`)
+   - Bridge enforces: the read-only token grants ONLY GET endpoints; any POST/PUT/DELETE returns 403 regardless of token presence
+   - Companion app's Settings flow allows pasting THIS token only (UX surfaces explicit "Read-only key — cannot perform write actions")
+   - Even with the read-only token, the M4 `companion-safe-mode` cascade still applies — the token is a belt; the safe-mode block is the suspenders
+   - This is a v1 OPTIONAL feature; if not implemented in M1-M5, the v1 companion runs purely against unauthenticated public endpoints (`/public/*` family) which already work without any token
 
-These three rules are non-negotiable. They're the boundary that prevents the companion app from accidentally becoming a credential-bearing artifact a thief / cloner could compromise.
+These four rules are non-negotiable in v1. They're the boundary that prevents the companion app from accidentally becoming a credential-bearing artifact a thief / cloner could compromise.
+
+### Future-version signing escape hatch (NOT v1)
+
+If a future v2 or v3 enhancement DOES want the phone to participate in any signing (e.g. operator co-sign for governance ceremonies from the phone), acceptable paths:
+- **WalletConnect 2.x** remote-sign flow — signing happens in a separate wallet app that already protects its keys; companion app is a request/display surface only
+- **Capacitor wallet plugin delegating to OS keychain** — Secure Enclave on iOS, TEE on Android; signing material stays hardware-protected, never appears in JS memory
+
+Forbidden paths in all versions:
+- Phone-resident raw private keys (any algorithm, any storage tier)
+- Full-write API key persisted on phone
+- Browser localStorage / sessionStorage / IndexedDB persistence of credentials beyond a session-lifetime ephemeral read-only token (and even that requires explicit M-tier authorization beyond this v1 spec)
 
 ## 7. Recommended test/build commands
 
@@ -293,17 +376,40 @@ MODIFIED (estimate 7 files):
 
 Total estimate: ~500-1000 LOC of frontend + bridge changes (excluding the Cap-generated native project skeletons which are ~3000-5000 LOC of platform boilerplate but operator-untouched).
 
-## 9. Unresolved decisions
+## 9. Recommended decisions (operator-authorizable defaults)
 
-These need operator input before M1 can commission:
+**M0.1 amendment 2026-05-16** — each item now ships with a recommended default the operator can authorize as-is. Marked **R** for recommended; if operator accepts without comment, the recommendation is the binding choice. Items still requiring explicit operator input are marked **O**.
 
-1. **App ID convention.** Suggest `xyz.vapi.companion` or `io.vapi.companion`. Locked at M1 + permanently embedded in the iOS bundle ID + Android package name; changing later means rebuilding from scratch. Operator: pick one.
-2. **App icon + splash assets.** Capacitor needs 1024x1024 master icon + adaptive Android icons + iOS app icons in multiple sizes. v1 can ship with a placeholder (e.g. the VAPI logo's color block) and iterate. Operator: confirm placeholder is acceptable, or wait for a design pass.
-3. **iOS distribution path.** TestFlight (operator pays $99/yr Apple Dev fee) vs simulator-only-for-now vs sideload via Xcode for the operator's personal device. v1 doesn't need App Store; this affects M1 sequencing.
-4. **Android distribution path.** Direct APK download / sideload (free, immediate) vs Google Play Console ($25 one-time) vs internal-test track on Play. Recommend direct APK for v1.
-5. **`companionMode='safe'` default behavior on desktop browsers.** Should the safe-mode write-block ALSO engage on desktop browsers if `runtimeConfig.detectCapacitor() === false`? Default no (desktop is the canonical write surface). Confirm.
-6. **Mythos co-architect review cadence.** Codex named the co-architect role explicitly. Expectation: Mythos dispatched read-only at M0 (done), M2-end (pre-implementation review of bridge-URL handling), M5-end (post-build review of the final commit arc). Confirm cadence.
-7. **Stage 5.4 (Android responsive audit per R9) — ship before M1, or accept iPhone-only walk-through validation?** Recommend ship before M1 (~30 min operator walk on a Pixel-class device if available; ~1 day to close any breaks).
+1. **App ID convention.** **R: `io.github.conwan30.vapi.companion`**.
+   The reverse-DNS convention for app IDs requires a domain the operator controls. The operator's current verifiable namespace is the GitHub account `ConWan30`; `io.github.conwan30.vapi.companion` is the canonical reverse-DNS form for GitHub-account-rooted projects. If a controlled VAPI domain (`vapi.io`, `vapi.xyz`, etc.) is acquired later, a v2 rebrand requires an app uninstall + reinstall cycle (app IDs are immutable on Android Play; iOS allows app ID migration with effort). For v1 sideload distribution this is fine — installs go away when the operator opts. Locked at M1.
+
+2. **App icon + splash assets.** **R: placeholder for v1.**
+   Capacitor needs 1024×1024 master icon + adaptive Android icons + iOS sizes. v1 ships with a placeholder derived from the existing VAPI logo / accent palette (the `--os-accent` amber on `--os-bg` deep-void from `frontend/src/os/theme.css` is sufficient as a placeholder masthead). A design pass for production assets is a v1.x deliverable, not a v1 blocker.
+
+3. **iOS distribution path.** **R: deferred until Mac/Xcode access available.**
+   Per the M1-Android / M1-iOS split (§4), iOS scaffolding is structurally blocked on Windows. v1 ships Android-only. iOS distribution decision (TestFlight $99/yr vs sideload via Xcode) defers until the Mac prerequisite lands. When it does, sideload via Xcode to operator's personal iPhone is the v1 path; TestFlight is v1.x.
+
+4. **Android distribution path.** **R: direct APK first.**
+   Operator builds the .apk via `npx cap build android --release` or Android Studio's `Build > Generate Signed Bundle / APK`, then distributes by direct download / file share / ADB sideload. No Play Console fee, no review cycle, immediate testing. Internal-test track on Play is a v1.x deliverable once the operator has 3+ testers actively using the app. Public Play release is v2.
+
+5. **`companionMode='safe'` default behavior on desktop browsers.** **R: safe-mode OFF on desktop by default.**
+   The cascade in M4 only auto-engages safe-mode when `runtimeConfig.detectCapacitor() === true`. Desktop browsers remain the canonical write surface; operators reviewing drafts / managing the queue from their laptop are not gated. If a future v1.x operator decides they ALSO want safe-mode on a specific desktop, they can opt-in via the Settings workspace — but desktop default is OFF.
+
+6. **Mythos co-architect review cadence.** **R: M1 sanity, M2-end, M5-end.**
+   Three Mythos dispatches over the v1 arc:
+   - **M1 sanity** — read-only review of the Android shell scaffold + native project commits. Catches Capacitor version drift, AndroidManifest permission over-grant, capacitor.config.ts misconfig.
+   - **M2-end** — review of the 3-tier bridge URL precedence implementation + the v1 credential rule enforcement (no full-write key baked, no phone-resident private key, read-only token path if implemented). Load-bearing — this is the safety boundary.
+   - **M5-end** — review of the final commit arc + test + build verification. Catches any drift introduced over the M1-M5 span before declaring v1 shipped.
+
+7. **Android responsive audit before scaffold.** **R: ship before M1.**
+   Stage 5.4 — a focused 30-60 min responsive pass on an Android device (Pixel 7-class viewport at 412×915 logical, or Pixel 8 at 412×914, or whatever the operator has access to). Validates that the Stage 5.3 layout fixes (QueueSummary grid + StatusStrip overflow + Logo flex-shrink) work in Chrome/Edge mobile on Android, not just iOS Safari on iPhone 15. Any breaks land as inline fixes BEFORE the Capacitor shell scaffolding starts — preserves the discipline of "fix the responsive layer before wrapping it." Estimated ~1 day total including walk-through + potential fix commit.
+
+### Acceptance protocol
+
+Operator's authorization options for these defaults:
+- **Accept all defaults as-is** — explicit single message ("authorize §9 defaults; commission M1-Android per spec"). The 7 items become binding; Stage 5.4 commissions first, then M1-Android.
+- **Accept some, modify others** — operator names which items to override and the replacement choice. Doc gets a follow-up amendment with the modifications before M1 commissions.
+- **Defer entirely** — wait until other forward-vectors close before commissioning M1. The plan stays live as the canonical reference but no Capacitor work starts.
 
 ## 10. Authoring discipline
 
