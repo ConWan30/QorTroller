@@ -64,7 +64,17 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               <Route path="live"     element={<LiveMatchWorkspace />} />
               <Route path="evidence" element={<EvidenceGraphWorkspace />} />
               <Route path="queue"    element={<OperatorQueueWorkspace />} />
-              <Route path="replay"   element={<ForensicReplayWorkspace />} />
+              {/* Stage 4 — Forensic Replay folds the 6 public viewers
+                  inside the OS shell via nested routes. The viewers
+                  themselves are reused unchanged; they read params
+                  via useParams() which works for nested routes too. */}
+              <Route path="replay" element={<ForensicReplayWorkspace />}>
+                <Route path="session/:commitmentHex" element={<PublicSessionViewer />} />
+                <Route path="gic/:grindSessionId"    element={<GicChainExplorerView />} />
+                <Route path="record/:deviceId/:counter" element={<PoacRecordExplorerView />} />
+                <Route path="vhp/:tokenId"           element={<VhpCredentialView />} />
+                <Route path="algorithms"             element={<AlgorithmCatalogView />} />
+              </Route>
               <Route path="protocol" element={<ProtocolStateWorkspace />} />
             </Route>
 
