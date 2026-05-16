@@ -57,6 +57,14 @@ vi.mock('../api/bridgeApi', () => ({
   useBrpRecordPulse:           () => ({ pulseCount: 0, lastPulseTs: 0, connected: false }),
   useBrpControllerOrientation: () => ({ data: null }),
   useAutoTriggerStatus:        () => ({ data: null }),
+  // Stage 3 — Operator Queue dependencies
+  useOperatorDrafts:           () => ({ data: { drafts: [], row_count: 0 }, isError: false }),
+  useReviewDraft:              () => ({ mutate: () => {}, isPending: false, error: null }),
+  useCuratorFlaggedListings:   () => ({ data: { listings: [], total: 0 }, isError: false }),
+  useDriftLog:                 () => ({ data: { findings: [] }, isError: false }),
+  useFleetReadinessRoot:       () => ({ data: { per_agent: [] }, isError: false }),
+  useInvariantGateStatus:      () => ({ data: { gate_pass: true, total_checked: 122, last_failures: [] }, isError: false }),
+  useFleetCoherenceStatus:     () => ({ data: { by_mode: { CONTRADICTION: 0, ORPHAN: 0, INVERSION: 0 } }, isError: false }),
 }))
 
 vi.mock('../api/mockBridge', () => ({
@@ -182,25 +190,24 @@ describe('DataBadge accessibility', () => {
 })
 
 describe('Placeholder workspaces', () => {
-  // Stage 2 (2026-05-15): /os/live is no longer a placeholder — it's the live
-  // match workspace shipped by Phase O5-EVIDENCE-OS Stage 2. The Queue and
-  // Replay workspaces remain placeholders pending Stage 3+ delivery.
-  it('T-OS-PLACE-1: Queue / Replay still show EmptyState + source', () => {
-    for (const path of ['/os/queue', '/os/replay']) {
-      const { container, unmount } = renderRoute(path)
-      // EmptyState has role=region with aria-label containing "pending"
-      const empty = container.querySelector('[role="region"]')
-      expect(empty, `EmptyState missing on ${path}`).not.toBeNull()
-      expect(container.textContent).toMatch(/pending/i)
-      // Source line is present
-      expect(container.textContent).toMatch(/source:/i)
-      unmount()
-    }
+  // Stage 2: /os/live shipped. Stage 3: /os/queue shipped. Only /os/replay
+  // remains placeholder pending Stage 4 (Forensic Replay fold-in).
+  it('T-OS-PLACE-1: Replay still shows EmptyState + source', () => {
+    const { container } = renderRoute('/os/replay')
+    const empty = container.querySelector('[role="region"]')
+    expect(empty).not.toBeNull()
+    expect(container.textContent).toMatch(/pending/i)
+    expect(container.textContent).toMatch(/source:/i)
   })
 
   it('T-OS-PLACE-2: /os/live now renders the live verdict (no placeholder)', () => {
     const { container } = renderRoute('/os/live')
-    // VerdictPanel is the dominant surface — must be present
     expect(container.querySelector('[data-os-verdict]')).not.toBeNull()
+  })
+
+  it('T-OS-PLACE-3: /os/queue now renders the queue summary (no placeholder)', () => {
+    const { container } = renderRoute('/os/queue')
+    // QueueSummary section is a region with aria-label="Queue summary"
+    expect(container.querySelector('[aria-label="Queue summary"]')).not.toBeNull()
   })
 })
