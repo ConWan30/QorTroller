@@ -72,19 +72,36 @@ function gicStatus(grindChain) {
   }
 }
 
+// Mythos audit M2 — APOP enum → human label translation. Detail copy
+// renders the human label first; raw enum is appended in parens so
+// the protocol term is still inspectable but the reader gets the
+// English meaning first.
+const _APOP_HUMAN = {
+  ACTIVE_MATCH_PLAY:    'Actively playing',
+  COMPETITIVE_CONTROL:  'Competitive control',
+  MATCH_TRANSITION:     'Between plays',
+  NON_COMPETITIVE_MENU: 'On menu / paused',
+  UNKNOWN_LOW_EVIDENCE: 'Insufficient evidence',
+}
+
+function _humanApop(s) {
+  return _APOP_HUMAN[s] || s || 'Unclassified'
+}
+
 function apopStatus(apop) {
   if (!apop) return { status: 'dormant', detail: 'APOP tracker not yet emitting' }
   const s = apop.classification?.state || apop.state
   if (!s) return { status: 'pending', detail: 'no classification yet' }
+  const human = _humanApop(s)
   if (s === 'ACTIVE_MATCH_PLAY' || s === 'COMPETITIVE_CONTROL') return {
     status: 'live',
-    detail: `state=${s}`,
+    detail: `${human} (${s})`,
   }
   if (s === 'NON_COMPETITIVE_MENU') return {
     status: 'pending',
-    detail: 'state=NON_COMPETITIVE_MENU · gating GIC',
+    detail: `${human} — gating GIC (${s})`,
   }
-  return { status: 'pending', detail: `state=${s}` }
+  return { status: 'pending', detail: `${human} (${s})` }
 }
 
 function pccStatus(captureHealth) {
