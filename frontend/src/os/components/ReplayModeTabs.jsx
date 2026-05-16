@@ -93,20 +93,41 @@ export default function ReplayModeTabs({ available = {}, paths = {} }) {
           </span>
         )
 
-        // Use Link only when enabled — disabled tabs render as a span
-        // with role=tab + aria-disabled + title explaining what's needed
+        // Mythos audit H3 — disabled tabs are focusable so keyboard
+        // users can discover requirements. Rendered as <button
+        // type="button" disabled> with aria-describedby so screen
+        // readers read out the "Paste a … first" hint.
         if (!enabled) {
+          const hintId = `replay-tab-hint-${m.key}`
           return (
-            <span
+            <button
               key={m.key}
+              type="button"
+              disabled
               role="tab"
               aria-selected={isActive}
               aria-disabled="true"
+              aria-describedby={m.requires ? hintId : undefined}
               data-os-replay-tab={m.key}
               data-os-tab-enabled="false"
               title={m.requires ? `Paste a ${m.requires} first` : ''}
-              style={{ textDecoration: 'none' }}
-            >{inner}</span>
+              style={{
+                background: 'transparent',
+                border: 'none',
+                padding: 0,
+                cursor: 'not-allowed',
+              }}
+            >
+              {inner}
+              {m.requires && (
+                <span id={hintId} style={{
+                  position: 'absolute',
+                  width: 1, height: 1, overflow: 'hidden',
+                  clip: 'rect(0 0 0 0)',
+                  whiteSpace: 'nowrap',
+                }}>Paste a {m.requires} first to enable this tab.</span>
+              )}
+            </button>
           )
         }
 

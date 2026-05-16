@@ -68,6 +68,31 @@ function _ageLabel(tsLike) {
 
 const _SEVERITY_RANK = { critical: 0, warn: 1, info: 2 }
 
+// Mythos audit M1 — human-action translator. Operator brief required
+// human-first labels with protocol terms as secondary detail. Falls
+// through to the raw action_name when no translation is known.
+const _HUMAN_ACTION = {
+  'kms-sign':                    'KMS signature draft',
+  'audit-drafting':              'Audit-entry draft',
+  'provenance-recording':        'Provenance attestation draft',
+  'pda-attestation-anchor':      'Physical-data attestation anchor',
+  'ipfs-pin':                    'IPFS artifact pin',
+  'git-add':                     'Git stage draft',
+  'git-commit':                  'Git commit draft',
+  'git-pr':                      'PR open draft',
+  'event-correlation':           'Event correlation draft',
+  'operational-diagnostic':      'Operational diagnostic',
+  'marketplace-listing-review':  'Marketplace listing review',
+  'marketplace-listing-suspend': 'Marketplace listing suspension',
+  'operator-notify':             'Operator notification',
+  'tier-compliance-check':       'Tier-compliance check',
+  'anchor-freshness-audit':      'Anchor-freshness audit',
+}
+
+function _humanAction(name) {
+  return _HUMAN_ACTION[name] || name || 'Unknown action'
+}
+
 function _bySeverityThenAge(a, b) {
   const sa = _SEVERITY_RANK[a.severity] ?? 9
   const sb = _SEVERITY_RANK[b.severity] ?? 9
@@ -95,7 +120,7 @@ function _draftToItem(draft, { writeGuard } = {}) {
   return {
     id:             `draft-${draft.id}`,
     kind:           'draft',
-    title:          `Draft awaiting review — ${actionName}`,
+    title:          `Draft awaiting review — ${_humanAction(actionName)}`,
     protocolTerm:   `agent=${agentId}… action=${actionName}`,
     source:         '/operator/operator-agent-drafts',
     severity:       'warn',
@@ -109,10 +134,16 @@ function _draftToItem(draft, { writeGuard } = {}) {
   }
 }
 
-function _curatorFlaggedToItem(row) {
+function _curatorFlaggedToItem(row, idx = 0) {
   const sev = (row.severity === 'CRITICAL' || row.severity === 'HIGH') ? 'critical' : 'warn'
+  // Mythos audit M6 — stable React key derived from row fields, NOT
+  // Math.random(). A random key on every render triggers full remount
+  // + focus loss when the row is expanded.
+  const stableKey = row.listing_commitment
+    || row.review_id
+    || `${row.created_at || row.reviewed_at || 'unknown'}-${idx}`
   return {
-    id:             `curator-${row.listing_commitment || row.review_id || Math.random().toString(36).slice(2)}`,
+    id:             `curator-${stableKey}`,
     kind:           'curator',
     title:          `Curator flagged listing — ${row.verdict || 'verdict pending'}`,
     protocolTerm:   `commitment=${String(row.listing_commitment || '').slice(0, 12)}… severity=${row.severity || '?'}`,
@@ -156,16 +187,23 @@ function _o3BlockerToItems(per_agent = []) {
   per_agent.forEach(agent => {
     const blockers = agent.o3_blockers || []
     blockers.forEach((b, i) => {
+      // Mythos audit L5 — severity-map by blocker substring. Hard
+      // P0 gates (disagreement / KMS / dual-key / setCurator) escalate
+      // to warn; structural shadow-time progress remains info.
+      const blockerStr = String(b)
+      const isHardGate = /disagreement_rate|kms_hsm|dual_key|setCurator|github_app_oauth|false_positive_rate/i.test(blockerStr)
       items.push({
         id:             `o3-${agent.agent_id}-${i}`,
         kind:           'o3-blocker',
         title:          `O3 readiness blocker (${agent.agent_id || 'agent'})`,
-        protocolTerm:   `blocker=${String(b).slice(0, 60)}`,
+        protocolTerm:   `blocker=${blockerStr.slice(0, 60)}`,
         source:         '/operator/fleet-readiness-root',
-        severity:       'info',
+        severity:       isHardGate ? 'warn' : 'info',
         ageLabel:       '—',
         ageMs:          0,
-        recommendation: 'Watcher-derived blocker; resolve via shadow time / draft accumulation / operator flag',
+        recommendation: isHardGate
+          ? 'Hard P0 gate. Resolve via operator config or KMS/HSM/wallet provisioning before O3 ACT can land.'
+          : 'Watcher-derived blocker; resolve via shadow time / draft accumulation / operator flag',
         openable:       true,
         raw:            { agent_id: agent.agent_id, blocker: b, agent },
       })
@@ -239,7 +277,7 @@ export default function OperatorQueueWorkspace() {
     })
 
     const flaggedRows = flagged?.data?.listings || []
-    flaggedRows.forEach(r => acc.push(_curatorFlaggedToItem(r)))
+    flaggedRows.forEach((r, i) => acc.push(_curatorFlaggedToItem(r, i)))
 
     const driftRows = drift?.data?.findings || drift?.data?.entries || drift?.data?.rows || []
     driftRows.forEach(r => acc.push(_driftToItem(r)))

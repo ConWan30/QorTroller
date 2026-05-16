@@ -151,12 +151,15 @@ describe('EvidenceGraphWorkspace', () => {
     }
   })
 
-  it('T-OS-EVID-3: edge legend includes all 4 semantic kinds', () => {
+  it('T-OS-EVID-3: accent key includes all 4 semantic kinds', () => {
+    // Stage 5.1 (Mythos audit H1): the prior "edge legend" promised
+    // line types that never rendered; replaced with node-accent
+    // semantics key. Documentation must match what's rendered.
     const { getByText } = renderRoute('/os/evidence')
-    expect(getByText('cryptographic binding')).not.toBeNull()
-    expect(getByText('derived / polled')).not.toBeNull()
-    expect(getByText('predicate gate')).not.toBeNull()
-    expect(getByText('kill-switch paused')).not.toBeNull()
+    expect(getByText(/cryptographic substrate/i)).not.toBeNull()
+    expect(getByText(/derived \/ polled/i)).not.toBeNull()
+    expect(getByText(/predicate gate/i)).not.toBeNull()
+    expect(getByText(/on-chain terminus/i)).not.toBeNull()
   })
 })
 
