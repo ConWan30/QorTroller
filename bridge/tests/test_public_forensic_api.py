@@ -17,6 +17,8 @@ T-PUB-FORENSIC-14  VAME headers stamped on JSON responses
 T-PUB-FORENSIC-15  /public/gic/{sid}/links returns chain links with codes
 T-PUB-FORENSIC-16  GIC links carry prev_gic_hex chain so browser can replay
 T-PUB-FORENSIC-17  GIC links endpoint unknown session returns empty list
+T-PUB-FORENSIC-18  /public/vhp/{tokenId} returns credential row when found
+T-PUB-FORENSIC-19  /public/vhp/{tokenId} returns found:False for missing tokenId
 """
 from __future__ import annotations
 
@@ -375,6 +377,45 @@ def test_t_pub_forensic_17_gic_links_unknown_session_returns_empty():
         body = r.json()
         assert body["chain_length"] == 0
         assert body["links"] == []
+
+
+# ----- T-18 -----
+
+def test_t_pub_forensic_18_vhp_credential_found():
+    """Phase O5-PUBLIC-VIEWER Stage 4 — VHP credential endpoint."""
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
+        client, store = _make_app(td)
+        store.insert_vhp_issuance(
+            device_id="test_dev_001",
+            token_id=2,
+            tx_hash="0xdeadbeef",
+            expires_at=time.time() + 86400 * 30,  # 30 days out
+            cert_level=1,
+            consecutive_clean=100,
+        )
+        r = client.get("/vhp/2")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["found"] is True
+        assert body["schema"] == "vapi-public-vhp-credential-v1"
+        assert body["vhp"]["token_id"] == 2
+        assert body["vhp"]["cert_level"] == 1
+        assert body["vhp"]["consecutive_clean"] == 100
+        assert body["vhp"]["is_valid_local"] is True
+        assert body["vhp"]["seconds_until_expiry"] > 0
+        assert body["chain"]["chain_id"] == 4690
+
+
+# ----- T-19 -----
+
+def test_t_pub_forensic_19_vhp_credential_missing():
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
+        client, _ = _make_app(td)
+        r = client.get("/vhp/9999999")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["found"] is False
+        assert body["token_id"] == 9999999
 
 
 # ----- T-14 -----
