@@ -139,17 +139,34 @@ describe('ProtocolStateWorkspace', () => {
     expect(container.textContent.includes('OFFLINE')).toBe(true)
   })
 
-  it('T-OS-PROT-5: separation-ratio probes render CLEARED ≥1.0 and BELOW 1.0 otherwise', () => {
+  it('T-OS-PROT-5: separation-ratio probes render CLEARED ≥1.0 and DEFERRED for cast-out probes', () => {
     const { container, getAllByText } = renderWorkspace()
     // tremor_resting (1.177) AND ait (1.199) both ≥ 1.0 → CLEARED
     const cleared = getAllByText('CLEARED')
     expect(cleared.length).toBeGreaterThanOrEqual(2)
-    // touchpad_corners (0.728) < 1.0 → BELOW 1.0
-    const below = getAllByText('BELOW 1.0')
-    expect(below.length).toBeGreaterThanOrEqual(1)
-    // Each probe has a role=meter for screen readers
+    // touchpad_corners (0.728) is operator-deferred per CLAUDE.md
+    // 2026-05-16 cast-out — must render DEFERRED, NOT BELOW 1.0.
+    // This is the active-gate honesty guard: never show a deferred
+    // probe as a live blocker.
+    const deferred = getAllByText('DEFERRED')
+    expect(deferred.length).toBeGreaterThanOrEqual(1)
+    // Inverse guard — BELOW 1.0 must NOT appear for any current probe
+    // set, because the only sub-1.0 probe (touchpad_corners) is now
+    // deferred.
+    expect(container.textContent).not.toMatch(/BELOW 1\.0/)
+    // Each probe still has a role=meter for screen readers
     const meters = container.querySelectorAll('[role="meter"]')
     expect(meters.length).toBe(3)
+  })
+
+  it('T-OS-PROT-5b: deferred probe carries the deferred DataBadge token + tooltip', () => {
+    const { container } = renderWorkspace()
+    // Deferred badge present with the deferred semantic data attribute
+    const deferredBadge = container.querySelector('[data-os-badge="deferred"]')
+    expect(deferredBadge).not.toBeNull()
+    // Tooltip surfaces the operator-authorization rationale
+    expect(deferredBadge.getAttribute('title')).toMatch(/operator-deferred/i)
+    expect(deferredBadge.getAttribute('title')).toMatch(/AIT/)
   })
 
   it('T-OS-PROT-6: operator detail surfaces invariant gate failures', () => {

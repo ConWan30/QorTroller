@@ -10,6 +10,13 @@
  *   mock      — fabricated data visibly flagged
  *   killswitch — paused-anchor honest state (CHAIN_SUBMISSION_PAUSED)
  *   dormant   — has not yet been emitted (no row exists)
+ *   deferred  — operator-authorized cast-out from active gate set;
+ *               distinct from pending (no work in progress) AND from
+ *               blocked (not blocking anything). Mirrors the
+ *               protocol-level "tremor_resting P1vP3 cast-out
+ *               2026-05-09" precedent. Used for historical baselines
+ *               kept visible for transparency but explicitly not
+ *               part of the live-gate evaluation.
  *
  * Renders as inline span (not interactive). For interactive states
  * wrap in <button>.
@@ -24,6 +31,7 @@ const _LABELS = {
   mock:       'MOCK',
   killswitch: 'PAUSED',
   dormant:    'DORMANT',
+  deferred:   'DEFERRED',
 }
 
 const _COLOR_VAR = {
@@ -34,6 +42,11 @@ const _COLOR_VAR = {
   mock:       '--os-status-mock',
   killswitch: '--os-status-killswitch',
   dormant:    '--os-status-dormant',
+  // deferred reuses the dormant colour token deliberately — visually
+  // calm grey, NOT amber pending nor red blocked. Operator-authorized
+  // cast-out should read as "not part of the active gate set" not as
+  // "something to fix".
+  deferred:   '--os-status-dormant',
 }
 
 export default function DataBadge({ status = 'dormant', label, ariaLabel, title }) {
@@ -74,7 +87,7 @@ export default function DataBadge({ status = 'dormant', label, ariaLabel, title 
 DataBadge.propTypes = {
   status: PropTypes.oneOf([
     'live', 'verified', 'pending', 'blocked',
-    'mock', 'killswitch', 'dormant',
+    'mock', 'killswitch', 'dormant', 'deferred',
   ]),
   label:     PropTypes.string,
   ariaLabel: PropTypes.string,
