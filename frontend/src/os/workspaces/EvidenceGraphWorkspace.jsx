@@ -20,10 +20,11 @@
  * Edges drawn as inline SVG overlay; SVG sits above the grid with
  * pointer-events:none so it doesn't intercept node clicks.
  */
-import { useMemo } from 'react'
+import { useMemo, useRef } from 'react'
 import { useGrindChain, useCaptureHealth, useActivePlayOccupancy, useAITSeparation, useCuratorStatus, useVpmList } from '../../api/bridgeApi'
 import { usePublicVhp, usePublicProtocolState } from '../../api/publicForensic'
 import EvidenceNode from '../components/EvidenceNode'
+import EvidenceEdgeLayer from '../components/EvidenceEdgeLayer'
 import WorkspaceHeader from '../components/WorkspaceHeader'
 
 const _ACCENT_CHAIN     = 'var(--os-chain)'
@@ -212,11 +213,61 @@ export default function EvidenceGraphWorkspace() {
     chain:   chainStatus(protoState),
   }), [capture, grind, apop, ait, vpmList, curator, vhp, protoState])
 
+  // Stage 6 (Option B) — honest edge model. Each entry names a
+  // protocol-level dataflow relationship that is currently
+  // represented by the workspace's node set. Edges fall back to
+  // 'ghost' (translucent dashed) when the TARGET node is dormant,
+  // so the geometry never implies a live binding that hasn't
+  // actually flowed. The kill-switch on the on-chain terminus
+  // also forces all → chain edges to ghost.
+  const killSwitchPaused = Boolean(protoState?.kill_switch_paused)
+  const onChainDormant   = killSwitchPaused || nodes.chain.status === 'killswitch' || nodes.chain.status === 'dormant'
+
+  const edges = useMemo(() => [
+    // Substrate spine — every PoAC is signed over HID frame data
+    // (INV-POAC); every GIC link hashes the prior PoAC commitment
+    // (INV-GIC-001). Solid chain edges.
+    { from: 'HID FRAMES', to: 'POAC',  kind: 'chain', dormant: nodes.poac.status === 'dormant' },
+    { from: 'POAC',       to: 'GIC',   kind: 'chain', dormant: nodes.gic.status  === 'dormant' },
+
+    // Predicate gates — APOP gameplay_context AND PCC capture_state
+    // are inputs to GIC eligibility (Phase 235-GAD / 235-PCC).
+    // Dashed predicate edges.
+    { from: 'APOP', to: 'GIC', kind: 'predicate', dormant: nodes.gic.status === 'dormant' || nodes.apop.status === 'dormant' },
+    { from: 'PCC',  to: 'GIC', kind: 'predicate', dormant: nodes.gic.status === 'dormant' || nodes.pcc.status  === 'dormant' },
+
+    // AIT separation is the biometric input to VHP cert-tier.
+    // Predicate gate (must clear separation ratio to mint).
+    { from: 'AIT', to: 'VHP', kind: 'predicate', dormant: nodes.vhp.status === 'dormant' },
+
+    // GIC head is a cryptographic input to BOTH VHP mints AND
+    // ZKBA artifacts (PATTERN-017 composition).
+    { from: 'GIC', to: 'VHP',  kind: 'chain', dormant: nodes.vhp.status  === 'dormant' },
+    { from: 'GIC', to: 'ZKBA', kind: 'chain', dormant: nodes.zkba.status === 'dormant' },
+
+    // ZKBA manifests are wrapped by VPM artifacts. Chain.
+    { from: 'ZKBA', to: 'VPM', kind: 'chain', dormant: nodes.vpm.status === 'dormant' },
+
+    // Curator polls VPM listings via the marketplace surface.
+    // Derived (read-side polling, not cryptographic binding).
+    { from: 'VPM', to: 'CURATOR', kind: 'derived', dormant: nodes.curator.status === 'dormant' },
+
+    // On-chain terminus — VHP mints + ZKBA anchors + VPM persistence
+    // all flow into IoTeX testnet writes. When CHAIN_SUBMISSION_PAUSED
+    // is held, ALL these edges render as ghost (honest deferred state).
+    { from: 'VHP',  to: 'ON-CHAIN ANCHOR', kind: 'chain', dormant: onChainDormant },
+    { from: 'ZKBA', to: 'ON-CHAIN ANCHOR', kind: 'chain', dormant: onChainDormant },
+    { from: 'VPM',  to: 'ON-CHAIN ANCHOR', kind: 'chain', dormant: onChainDormant },
+  ], [nodes, onChainDormant])
+
+  // Container ref for the edge layer's position measurement.
+  const dagContainerRef = useRef(null)
+
   return (
     <>
       <WorkspaceHeader
         title="Evidence Graph"
-        description="The protocol's causal DAG, end to end. Each node is a real bridge hook (or honestly labelled dormant if no data has flowed yet). Edges encode cryptographic vs derived vs predicate-gate vs kill-switch-paused bindings. The on-chain anchor terminus respects CHAIN_SUBMISSION_PAUSED honestly — never painting pending as anchored."
+        description="The protocol's causal DAG, end to end. Each node is a real bridge hook (or honestly labelled dormant if no data has flowed yet). Edges encode cryptographic vs predicate-gate vs derived vs kill-switch-paused bindings, measured against the rendered node positions. The on-chain anchor terminus respects CHAIN_SUBMISSION_PAUSED honestly — when the kill-switch is held, every edge into the anchor renders as a ghost (deferred) line."
         right={
           <span style={{
             fontSize:       'var(--os-text-min)',
@@ -236,15 +287,43 @@ export default function EvidenceGraphWorkspace() {
           minHeight:      600,
         }}
       >
-        {/* Mythos audit H1 — the edge SVG previously rendered as an
-            empty <svg> with only arrow-marker defs, and the "Edge
-            semantics" legend below promised line types that never
-            drew. Both removed for v1; node order + accent color now
-            carry the cryptographic flow semantics. A follow-up stage
-            can wire real geometric edges (post-mount ref measurement
-            or d3 layout). */}
+        {/* Screen-reader summary of the rendered dataflow.
+            EvidenceEdgeLayer's SVG geometry is aria-hidden because
+            it's purely visual; the same relationships are exposed
+            here as text so keyboard / SR users get the dataflow
+            without depending on the graph. */}
+        <div data-os-edge-summary style={{
+          position: 'absolute',
+          width: 1, height: 1, overflow: 'hidden',
+          clip: 'rect(0 0 0 0)',
+          whiteSpace: 'nowrap',
+        }}>
+          <h3>Protocol dataflow summary</h3>
+          <ul>
+            {edges.map((e) => (
+              <li key={`${e.from}->${e.to}`}>
+                {e.from} flows into {e.to} as a {e.kind} relationship
+                {e.dormant ? ' (currently deferred / no data has flowed yet)' : ''}.
+              </li>
+            ))}
+          </ul>
+        </div>
 
-        {/* ROW 1 — Input substrate */}
+        {/* Live dataflow edge layer — Stage 6 Option B. Measures real
+            DOM positions of EvidenceNode cards and draws SVG lines
+            between them. Suppresses itself below 760px viewport
+            (matches AppShell rail collapse) where flex-wrap would
+            make horizontal edges misleading. */}
+        <div
+          ref={dagContainerRef}
+          data-os-evidence-dag
+          style={{
+            position: 'relative',
+          }}
+        >
+          <EvidenceEdgeLayer containerRef={dagContainerRef} edges={edges}/>
+
+          {/* ROW 1 — Input substrate */}
         <div style={{ display: 'flex', gap: 16, marginBottom: 18, position: 'relative', zIndex: 1, flexWrap: 'wrap' }}>
           <EvidenceNode
             layer="HID FRAMES"
@@ -347,10 +426,11 @@ export default function EvidenceGraphWorkspace() {
             accent={_ACCENT_TERMINUS}
           />
         </div>
+        </div>{/* /os-evidence-dag — closes Stage 6 measured-edge container */}
 
-        {/* Node-accent semantics key — replaces the prior edge legend
-            that promised line types that never drew. Aligned with
-            Mythos audit H1: documentation must match what's rendered. */}
+        {/* Stage 6 — accent + edge semantics key (updated from Stage
+            5.1's accent-only key to also describe edge styles now
+            that real edges render). */}
         <div style={{
           marginTop:      32,
           padding:        '12px 14px',
@@ -369,19 +449,34 @@ export default function EvidenceGraphWorkspace() {
             color:          'var(--os-text-faint)',
             letterSpacing:  '0.08em',
             textTransform:  'uppercase',
-          }}>Accent key</strong>
+          }}>Edge + accent key</strong>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <span aria-hidden="true" style={{ width: 12, height: 12, background: 'var(--os-chain)', borderRadius: 2 }}/>
-            cryptographic substrate (HID → PoAC → GIC chain)
+            <svg width="36" height="6" aria-hidden="true">
+              <line x1="0" y1="3" x2="36" y2="3" className="os-edge--solid"/>
+            </svg>
+            cryptographic binding (signed/hashed)
           </span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <span aria-hidden="true" style={{ width: 12, height: 12, background: 'var(--os-derived)', borderRadius: 2 }}/>
-            derived / polled (FSCA · invariant gate)
+            <svg width="36" height="6" aria-hidden="true">
+              <line x1="0" y1="3" x2="36" y2="3" className="os-edge--dashed"/>
+            </svg>
+            predicate gate (APOP / PCC / AIT clears GIC / VHP)
           </span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <span aria-hidden="true" style={{ width: 12, height: 12, background: 'var(--os-predicate)', borderRadius: 2 }}/>
-            predicate gate (APOP · isFullyEligible)
+            <svg width="36" height="6" aria-hidden="true">
+              <line x1="0" y1="3" x2="36" y2="3" className="os-edge--dotted"/>
+            </svg>
+            derived / polled (Curator reads VPM)
           </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <svg width="36" height="6" aria-hidden="true">
+              <line x1="0" y1="3" x2="36" y2="3" className="os-edge--ghost"/>
+            </svg>
+            deferred / kill-switch held (no live binding yet)
+          </span>
+          <span aria-hidden="true" style={{
+            width: 1, height: 18, background: 'var(--os-border)', margin: '0 4px',
+          }}/>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <span aria-hidden="true" style={{ width: 12, height: 12, background: 'var(--os-accent)', borderRadius: 2 }}/>
             on-chain terminus (anchor · VHP mint)

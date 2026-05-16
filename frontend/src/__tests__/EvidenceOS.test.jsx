@@ -151,14 +151,16 @@ describe('EvidenceGraphWorkspace', () => {
     }
   })
 
-  it('T-OS-EVID-3: accent key includes all 4 semantic kinds', () => {
-    // Stage 5.1 (Mythos audit H1): the prior "edge legend" promised
-    // line types that never rendered; replaced with node-accent
-    // semantics key. Documentation must match what's rendered.
+  it('T-OS-EVID-3: edge+accent key includes all 5 semantic kinds', () => {
+    // Stage 6 (Option B): real edges now render, so the legend was
+    // promoted from "accent-only" to "edge + accent" — describing
+    // the four edge styles (chain / predicate / derived / ghost) AND
+    // the on-chain terminus accent token.
     const { getByText } = renderRoute('/os/evidence')
-    expect(getByText(/cryptographic substrate/i)).not.toBeNull()
-    expect(getByText(/derived \/ polled/i)).not.toBeNull()
+    expect(getByText(/cryptographic binding/i)).not.toBeNull()
     expect(getByText(/predicate gate/i)).not.toBeNull()
+    expect(getByText(/derived \/ polled/i)).not.toBeNull()
+    expect(getByText(/deferred \/ kill-switch held/i)).not.toBeNull()
     expect(getByText(/on-chain terminus/i)).not.toBeNull()
   })
 })
