@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { Link } from 'react-router-dom'
 import { useHeartbeatStore } from './heartbeat/useHeartbeat'
 import { FONTS, GAMER, DEVELOPER, MANUFACTURER } from './shared/design/tokens'
 
@@ -66,6 +67,26 @@ export function ViewSelector({ activeView, onViewChange }) {
             letterSpacing: '0.05em',
           }}>MOCK DATA — bridge offline</span>
         )}
+        {/* Phase O5-EVIDENCE-OS Stage 1 — entry point to the new IA.
+            Preserves existing 6 tabs; this is an additive cross-link. */}
+        <Link
+          to="/os/evidence"
+          aria-label="Evidence OS — new proof-native IA"
+          style={{
+            fontFamily:    FONTS.mono,
+            fontSize:      9,
+            fontWeight:    700,
+            color:         '#f0a868',
+            background:    'rgba(240,168,104,0.10)',
+            border:        '1px solid rgba(240,168,104,0.45)',
+            borderRadius:  3,
+            padding:       '2px 7px',
+            letterSpacing: '0.08em',
+            textDecoration: 'none',
+            marginLeft:    4,
+            textTransform: 'uppercase',
+          }}
+        >Evidence OS →</Link>
       </div>
 
       {/* Center: view tabs */}

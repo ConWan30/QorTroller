@@ -17,6 +17,19 @@ import PoacRecordExplorerView from './views/PoacRecordExplorerView'
 import VhpCredentialView from './views/VhpCredentialView'
 import AlgorithmCatalogView from './views/AlgorithmCatalogView'
 import PublicExplorerLandingView from './views/PublicExplorerLandingView'
+
+// Evidence OS — Phase O5-EVIDENCE-OS Stage 1
+// Forensic instrument panel; new IA replacing the audience-tab SPA
+// gradually. Existing legacy views preserved at /, /session, /gic,
+// /record, /vhp, /algorithms, /explorer.
+import AppShell from './os/AppShell'
+import LiveMatchWorkspace from './os/workspaces/LiveMatchWorkspace'
+import EvidenceGraphWorkspace from './os/workspaces/EvidenceGraphWorkspace'
+import OperatorQueueWorkspace from './os/workspaces/OperatorQueueWorkspace'
+import ForensicReplayWorkspace from './os/workspaces/ForensicReplayWorkspace'
+import ProtocolStateWorkspace from './os/workspaces/ProtocolStateWorkspace'
+import { Navigate } from 'react-router-dom'
+
 import './index.css'
 
 const queryClient = new QueryClient({
@@ -43,6 +56,18 @@ ReactDOM.createRoot(document.getElementById('root')).render(
             <Route path="/vhp/:tokenId" element={<VhpCredentialView />} />
             <Route path="/algorithms" element={<AlgorithmCatalogView />} />
             <Route path="/explorer" element={<PublicExplorerLandingView />} />
+
+            {/* Evidence OS — nested under /os with AppShell layout.
+                /os redirects to /os/evidence (signature workspace). */}
+            <Route path="/os" element={<AppShell />}>
+              <Route index element={<Navigate to="evidence" replace />} />
+              <Route path="live"     element={<LiveMatchWorkspace />} />
+              <Route path="evidence" element={<EvidenceGraphWorkspace />} />
+              <Route path="queue"    element={<OperatorQueueWorkspace />} />
+              <Route path="replay"   element={<ForensicReplayWorkspace />} />
+              <Route path="protocol" element={<ProtocolStateWorkspace />} />
+            </Route>
+
             <Route path="/" element={<App />} />
             <Route path="*" element={<App />} />
           </Routes>

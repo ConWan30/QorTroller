@@ -1,0 +1,83 @@
+/* VAPI Evidence OS — design tokens
+ *
+ * Forensic instrument panel meets living cryptographic specimen.
+ * Targeted aesthetic: laboratory measurement device, oscilloscope
+ * graticule, evidence-room labelling discipline. NOT generic cyber
+ * neon. Restrained palette; type does the work.
+ *
+ * Layers above existing vapi-theme.css FROZEN tokens; only ADDS
+ * new CSS variables under the --os- prefix to avoid stomping the
+ * frozen palette.
+ */
+
+:root {
+  /* Base surfaces — flatter, less glow than the cyber-neon SPA */
+  --os-bg:          #04060a;   /* deeper than gamer/dev/mfr bg */
+  --os-panel:       #0a0e14;   /* card surface */
+  --os-panel-soft:  #0d1218;   /* secondary card */
+  --os-border:      #1a2230;   /* mostly-invisible separator */
+  --os-border-soft: #131a24;
+
+  /* Text — readable, no 6-8px nano-text */
+  --os-text:        #d4dde8;   /* primary body */
+  --os-text-dim:    #8a96a5;   /* secondary */
+  --os-text-faint:  #5a6675;   /* tertiary; minimum 11px usage */
+
+  /* Status palette — semantic, NOT color-only (text label required) */
+  --os-status-live:     #5bd6a3;  /* verified live data */
+  --os-status-verified: #5bd6a3;  /* verified cryptographically */
+  --os-status-pending:  #f0a868;  /* in-flight / awaiting confirmation */
+  --os-status-blocked:  #d65b78;  /* failed / blocked / mismatch */
+  --os-status-mock:     #d65b78;  /* fabricated data — visible alert */
+  --os-status-killswitch: #f0a868; /* paused; not anchored; honest */
+  --os-status-dormant:  #5a6675;  /* not yet emitted */
+
+  /* Accents — used for edges + active selection only */
+  --os-accent:      #f0a868;   /* amber; consistent with VPM Registry */
+  --os-accent-soft: #f0a86833;
+  --os-chain:       #5bd6a3;   /* mythology line: cryptographic flow */
+  --os-derived:     #8a96a5;   /* dotted derivation; less salient */
+  --os-predicate:   #f0a868;   /* dashed predicate gate */
+  --os-ghost:       #5a667555; /* kill-switch-paused (translucent) */
+
+  /* Sizing — operator-readable minimums */
+  --os-text-min:    11px;
+  --os-text-base:   12px;
+  --os-text-label:  13px;
+  --os-text-h3:     14px;
+  --os-text-h2:     16px;
+  --os-text-h1:     20px;
+
+  /* Layout */
+  --os-rail-width:  220px;
+  --os-strip-h:     56px;
+  --os-radius:      4px;
+}
+
+/* Reset only for OS routes — body itself stays unchanged */
+.os-shell {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size:   var(--os-text-base);
+  background:  var(--os-bg);
+  color:       var(--os-text);
+  min-height:  100dvh;
+}
+
+/* Buttons + links — semantic, focus-visible */
+.os-shell button,
+.os-shell a {
+  font-family: inherit;
+  font-size:   inherit;
+}
+.os-shell button:focus-visible,
+.os-shell a:focus-visible {
+  outline: 2px solid var(--os-accent);
+  outline-offset: 2px;
+  border-radius: var(--os-radius);
+}
+
+/* DAG-edge SVG line classes — referenced by EvidenceEdge component */
+.os-edge--solid   { stroke: var(--os-chain);     stroke-width: 1.5; }
+.os-edge--dotted  { stroke: var(--os-derived);   stroke-width: 1.2; stroke-dasharray: 2 3; }
+.os-edge--dashed  { stroke: var(--os-predicate); stroke-width: 1.2; stroke-dasharray: 6 4; }
+.os-edge--ghost   { stroke: var(--os-ghost);     stroke-width: 1.2; stroke-dasharray: 1 4; }
