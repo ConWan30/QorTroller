@@ -15,7 +15,11 @@
 }
 
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-html, body { background: var(--vapi-bg); color: #c8d8e8; overflow: hidden; }
+/* Body allows scrolling for public viewer routes (Phase O5-PUBLIC-VIEWER
+   Stages 1–6). Operator SPA at / has its own internal overflow:hidden
+   wrapper in App.jsx that creates the fixed-viewport tab layout, so this
+   change is transparent there. */
+html, body { background: var(--vapi-bg); color: #c8d8e8; overflow: auto; }
 body { font-family: 'Syne', system-ui, sans-serif; }
 
 ::-webkit-scrollbar { width: 4px; height: 4px; }
