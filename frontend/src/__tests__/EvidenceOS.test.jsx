@@ -48,12 +48,15 @@ vi.mock('../api/publicForensic', () => ({
 }))
 
 vi.mock('../api/bridgeApi', () => ({
-  useCaptureHealth: () => ({ data: { capture_state: 'NOMINAL', host_state: 'EXCLUSIVE_USB' } }),
+  useCaptureHealth: () => ({ data: { capture_state: 'NOMINAL', host_state: 'EXCLUSIVE_USB', poll_rate_hz: 998 } }),
   useGrindChain:    () => ({ data: { chain_length: 100, chain_intact: true, latest_gic_hash: '0e9d453d904220148d632e75802b71bdff74c7197aa8afcbfec5d36a61ab48da' } }),
-  useActivePlayOccupancy: () => ({ data: { state: 'ACTIVE_MATCH_PLAY' } }),
+  useActivePlayOccupancy: () => ({ data: { state: 'ACTIVE_MATCH_PLAY', classification: { state: 'ACTIVE_MATCH_PLAY' } } }),
   useAITSeparation:       () => ({ data: { separation_ratio: 1.199, n_sessions: 37 } }),
   useVpmList:             () => ({ data: { row_count: 14, rows: [{ zkba_class: 2 }, { zkba_class: 7 }] } }),
   useCuratorStatus:       () => ({ data: { total_reviews: 0 } }),
+  useBrpRecordPulse:           () => ({ pulseCount: 0, lastPulseTs: 0, connected: false }),
+  useBrpControllerOrientation: () => ({ data: null }),
+  useAutoTriggerStatus:        () => ({ data: null }),
 }))
 
 vi.mock('../api/mockBridge', () => ({
@@ -179,8 +182,11 @@ describe('DataBadge accessibility', () => {
 })
 
 describe('Placeholder workspaces', () => {
-  it('T-OS-PLACE-1: Live Match / Queue / Replay show EmptyState + source', () => {
-    for (const path of ['/os/live', '/os/queue', '/os/replay']) {
+  // Stage 2 (2026-05-15): /os/live is no longer a placeholder — it's the live
+  // match workspace shipped by Phase O5-EVIDENCE-OS Stage 2. The Queue and
+  // Replay workspaces remain placeholders pending Stage 3+ delivery.
+  it('T-OS-PLACE-1: Queue / Replay still show EmptyState + source', () => {
+    for (const path of ['/os/queue', '/os/replay']) {
       const { container, unmount } = renderRoute(path)
       // EmptyState has role=region with aria-label containing "pending"
       const empty = container.querySelector('[role="region"]')
@@ -190,5 +196,11 @@ describe('Placeholder workspaces', () => {
       expect(container.textContent).toMatch(/source:/i)
       unmount()
     }
+  })
+
+  it('T-OS-PLACE-2: /os/live now renders the live verdict (no placeholder)', () => {
+    const { container } = renderRoute('/os/live')
+    // VerdictPanel is the dominant surface — must be present
+    expect(container.querySelector('[data-os-verdict]')).not.toBeNull()
   })
 })
