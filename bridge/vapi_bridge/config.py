@@ -2329,6 +2329,21 @@ class Config:
     6h default = 4×/day; balances batch throughput against operator review
     burden."""
 
+    # --- Phase O1-D-AUTO-SUPERSEDE 2026-05-17 ---
+    phase_o3_auto_supersede_enabled: bool = field(
+        default_factory=lambda: _env_bool("PHASE_O3_AUTO_SUPERSEDE_ENABLED", False)
+    )
+    """Phase O1-D-AUTO-SUPERSEDE — Enable the Empirical-Evidence Supersession
+    primitive (VAPI-O3-SUPERSEDE-v1).  When True, the
+    operator_initiative_advancement watcher records a cryptographically-
+    attested supersession event when all non-calendar O3 gates are
+    empirically clear AND treats the 504h shadow_age calendar floor as
+    satisfied.  Audit trail in operator_initiative_auto_supersede_log.
+    Default False = opt-in (conservative; FROZEN safety behavior preserved
+    unless operator explicitly enables for THIS cohort).  See
+    bridge/vapi_bridge/operator_initiative_auto_supersede.py for the
+    primitive + the docstring there for the architectural intent."""
+
     # --- Phase 235-GAD: Gameplay Activity Discrimination ---
     gameplay_discrimination_enabled: bool = field(
         default_factory=lambda: _env_bool("GAMEPLAY_DISCRIMINATION_ENABLED", True)

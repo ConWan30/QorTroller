@@ -97,6 +97,20 @@ PHASE_O3_DRAFT_AGE_WINDOW_SECONDS = 30 * 86400  # 30-day rolling window
 # All three Operator Initiative agents — parallel-advancement invariant
 INITIATIVE_AGENTS = ("anchor_sentry", "guardian", "curator")
 
+# Phase O1-D-AUTO-SUPERSEDE 2026-05-17 — Empirical-Evidence Supersession
+# primitive integration.  When ALL non-calendar gates are empirically
+# cleared for an agent AND cfg.phase_o3_auto_supersede_enabled is True,
+# the watcher treats the 504h shadow_age calendar as satisfied and
+# writes a VAPI-O3-SUPERSEDE-v1 attestation row to
+# operator_initiative_auto_supersede_log capturing the gate-state
+# evidence at the moment of supersession.  See
+# bridge/vapi_bridge/operator_initiative_auto_supersede.py for the
+# FROZEN-v1 primitive.
+from .operator_initiative_auto_supersede import (
+    evaluate_supersede_eligibility_for_agent,
+)
+import json as _json_o3supersede
+
 # Phase O1-FRR — Fleet Readiness Root primitive (FROZEN-v1).
 # Eighth FROZEN-v1 cryptographic primitive in PATTERN-017 family
 # (after GIC + WEC + VAME + CORPUS-SNAPSHOT + CONSENT + BIOMETRIC-SNAPSHOT
@@ -393,6 +407,99 @@ def _evaluate_agent_readiness(
                         f"false_positive_rate_{false_positive_rate:.4f}"
                         f"_over_max_{PHASE_O3_FALSE_POSITIVE_RATE_MAX}"
                     )
+
+            # Phase O1-D-AUTO-SUPERSEDE 2026-05-17 — Empirical-Evidence Supersession
+            # primitive integration.  When all NON-CALENDAR gates clear AND the
+            # operator-opt-in flag is enabled, the watcher records an attestation
+            # to operator_initiative_auto_supersede_log + removes the o2_age
+            # blocker from the readiness assessment.  Honors the architectural
+            # principle: 504h was a pre-deployment placeholder when no empirical
+            # evidence existed; once empirical evidence demonstrably exists, the
+            # placeholder has no remaining safety role.
+            auto_supersede_enabled = bool(getattr(
+                cfg, "phase_o3_auto_supersede_enabled", False
+            ))
+            if auto_supersede_enabled and o3_blockers:
+                # Only consider supersession when the ONLY remaining blocker
+                # is the o2_age calendar floor.  If other blockers exist, the
+                # empirical case is not made.
+                non_calendar_blockers = [
+                    b for b in o3_blockers if not b.startswith("o2_age_")
+                ]
+                if not non_calendar_blockers:
+                    # All non-calendar gates clear; evaluate + attest.
+                    try:
+                        elig = evaluate_supersede_eligibility_for_agent(
+                            agent_id=agent_id,
+                            draft_count=draft_count,
+                            disagreement_rate=disagreement_rate,
+                            bundle_drift_count_30d=bundle_drift_30d,
+                            scope_drift_count_30d=scope_drift_30d,
+                            operator_dual_key_present=getattr(
+                                cfg, "operator_dual_key_present", False),
+                            kms_hsm_production_ready=getattr(
+                                cfg, "kms_hsm_production_ready", False),
+                            github_app_oauth_tokens_valid=getattr(
+                                cfg, "github_app_oauth_tokens_valid", False),
+                            marketplace_curator_role_assigned=getattr(
+                                cfg, "marketplace_curator_role_assigned", False),
+                            false_positive_rate=(
+                                _false_positive_rate_safe(store, store_agent_key)
+                                if agent_id == "curator" else 0.0
+                            ),
+                            shadow_age_at_supersede_hours=shadow_age_hours,
+                            ts_ns=time.time_ns(),
+                        )
+                        # Attest unconditionally (eligible or not) for audit-trail
+                        # integrity.  Watcher rate-limit is implicit via the 1h
+                        # poll cadence; at most 24 rows/agent/day.
+                        try:
+                            store.insert_operator_initiative_auto_supersede(
+                                agent_id=elig.agent_id,
+                                eligible=elig.eligible,
+                                attestation_hash_hex=elig.attestation_hash_hex,
+                                draft_count=elig.evidence.draft_count,
+                                disagreement_rate=elig.evidence.disagreement_rate,
+                                bundle_drift_count_30d=elig.evidence.bundle_drift_count_30d,
+                                scope_drift_count_30d=elig.evidence.scope_drift_count_30d,
+                                operator_dual_key_present=elig.evidence.operator_dual_key_present,
+                                kms_hsm_production_ready=elig.evidence.kms_hsm_production_ready,
+                                github_app_oauth_tokens_valid=elig.evidence.github_app_oauth_tokens_valid,
+                                marketplace_curator_role_assigned=elig.evidence.marketplace_curator_role_assigned,
+                                false_positive_rate=elig.evidence.false_positive_rate,
+                                shadow_age_at_supersede_hours=elig.evidence.shadow_age_at_supersede_hours,
+                                blockers_json=_json_o3supersede.dumps(list(elig.blockers)),
+                                ts_ns=elig.evidence.ts_ns,
+                            )
+                        except Exception as sup_exc:  # fail-open
+                            log.warning(
+                                "Phase O1-D-AUTO-SUPERSEDE: attestation persist "
+                                "failed for %s: %s", agent_id, sup_exc,
+                            )
+                        if elig.eligible:
+                            # Remove the o2_age calendar blocker; supersession
+                            # is operative.  The attestation row in
+                            # operator_initiative_auto_supersede_log captures
+                            # the cryptographic evidence + supersession event;
+                            # log.info surfaces it for human-readable trace.
+                            o3_blockers = [
+                                b for b in o3_blockers if not b.startswith("o2_age_")
+                            ]
+                            log.info(
+                                "Phase O1-D-AUTO-SUPERSEDE: o2_age calendar "
+                                "superseded for agent=%s attestation_hash=%s "
+                                "(draft_count=%d disagreement=%.6f drift_30d=%d/%d)",
+                                agent_id, elig.attestation_hash_hex[:16],
+                                elig.evidence.draft_count,
+                                elig.evidence.disagreement_rate,
+                                elig.evidence.bundle_drift_count_30d,
+                                elig.evidence.scope_drift_count_30d,
+                            )
+                    except Exception as sup_eval_exc:  # fail-open
+                        log.warning(
+                            "Phase O1-D-AUTO-SUPERSEDE: eligibility eval failed "
+                            "for %s: %s", agent_id, sup_eval_exc,
+                        )
         o3_ready = len(o3_blockers) == 0
 
         return AgentAdvancementReadiness(

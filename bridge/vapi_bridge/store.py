@@ -15940,6 +15940,149 @@ class Store:
         except Exception:
             return []
 
+    # --- Phase O1-D-AUTO-SUPERSEDE 2026-05-17 ---
+    # Empirical-Evidence Supersession primitive attestation log.  Each row
+    # commits the gate-state evidence at the moment of supersession via the
+    # VAPI-O3-SUPERSEDE-v1 FROZEN attestation hash.  Watcher consults this
+    # table when shadow_age is unmet; if a recent (within 5 min) eligible
+    # attestation exists AND phase_o3_auto_supersede_enabled cfg flag is True,
+    # the calendar gate is treated as satisfied.
+
+    def _ensure_operator_initiative_auto_supersede_table(self, conn) -> None:
+        """Lazy-create the auto_supersede_log table.  Idempotent CREATE TABLE
+        IF NOT EXISTS pattern matches other late-shipped tables (Phase 240)."""
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS operator_initiative_auto_supersede_log (
+                id                                 INTEGER PRIMARY KEY AUTOINCREMENT,
+                agent_id                           TEXT NOT NULL,
+                eligible                           INTEGER NOT NULL,
+                attestation_hash_hex               TEXT NOT NULL,
+                draft_count                        INTEGER NOT NULL,
+                disagreement_rate                  REAL NOT NULL,
+                bundle_drift_count_30d             INTEGER NOT NULL,
+                scope_drift_count_30d              INTEGER NOT NULL,
+                operator_dual_key_present          INTEGER NOT NULL,
+                kms_hsm_production_ready           INTEGER NOT NULL,
+                github_app_oauth_tokens_valid      INTEGER NOT NULL,
+                marketplace_curator_role_assigned  INTEGER NOT NULL,
+                false_positive_rate                REAL NOT NULL,
+                shadow_age_at_supersede_hours      REAL NOT NULL,
+                blockers_json                      TEXT NOT NULL DEFAULT '[]',
+                ts_ns                              INTEGER NOT NULL,
+                created_at                         REAL NOT NULL DEFAULT (unixepoch('now'))
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_o3_supersede_agent_created "
+            "ON operator_initiative_auto_supersede_log(agent_id, created_at DESC)"
+        )
+        conn.execute(
+            "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at) "
+            "VALUES (?, ?, ?)",
+            (240, "operator_initiative_auto_supersede_log", time.time()),
+        )
+
+    def insert_operator_initiative_auto_supersede(
+        self,
+        *,
+        agent_id: str,
+        eligible: bool,
+        attestation_hash_hex: str,
+        draft_count: int,
+        disagreement_rate: float,
+        bundle_drift_count_30d: int,
+        scope_drift_count_30d: int,
+        operator_dual_key_present: bool,
+        kms_hsm_production_ready: bool,
+        github_app_oauth_tokens_valid: bool,
+        marketplace_curator_role_assigned: bool,
+        false_positive_rate: float,
+        shadow_age_at_supersede_hours: float,
+        blockers_json: str,
+        ts_ns: int,
+    ) -> int:
+        """Persist one supersede attestation row (eligible OR ineligible).
+        Returns new row id; returns 0 on DB failure (fail-open per
+        INV-OPERATOR-AGENT-004 spirit)."""
+        try:
+            with self._conn() as conn:
+                self._ensure_operator_initiative_auto_supersede_table(conn)
+                cur = conn.execute(
+                    "INSERT INTO operator_initiative_auto_supersede_log "
+                    "(agent_id, eligible, attestation_hash_hex, draft_count, "
+                    " disagreement_rate, bundle_drift_count_30d, "
+                    " scope_drift_count_30d, operator_dual_key_present, "
+                    " kms_hsm_production_ready, github_app_oauth_tokens_valid, "
+                    " marketplace_curator_role_assigned, false_positive_rate, "
+                    " shadow_age_at_supersede_hours, blockers_json, ts_ns) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        str(agent_id),
+                        1 if eligible else 0,
+                        str(attestation_hash_hex or ""),
+                        int(draft_count),
+                        float(disagreement_rate),
+                        int(bundle_drift_count_30d),
+                        int(scope_drift_count_30d),
+                        1 if operator_dual_key_present else 0,
+                        1 if kms_hsm_production_ready else 0,
+                        1 if github_app_oauth_tokens_valid else 0,
+                        1 if marketplace_curator_role_assigned else 0,
+                        float(false_positive_rate),
+                        float(shadow_age_at_supersede_hours),
+                        str(blockers_json or "[]"),
+                        int(ts_ns),
+                    ),
+                )
+                return int(cur.lastrowid or 0)
+        except Exception:
+            return 0  # fail-open
+
+    def get_latest_operator_initiative_auto_supersede(
+        self, agent_id: str, since_seconds: float = 300.0,
+    ) -> dict | None:
+        """Return most-recent eligible supersede attestation for agent_id
+        within last since_seconds (default 5 min).  Returns None if no
+        eligible row found in window."""
+        try:
+            cutoff = time.time() - max(0.0, float(since_seconds))
+            with self._conn() as conn:
+                self._ensure_operator_initiative_auto_supersede_table(conn)
+                row = conn.execute(
+                    "SELECT * FROM operator_initiative_auto_supersede_log "
+                    "WHERE agent_id = ? AND eligible = 1 "
+                    "AND created_at >= ? "
+                    "ORDER BY id DESC LIMIT 1",
+                    (str(agent_id), cutoff),
+                ).fetchone()
+            return dict(row) if row else None
+        except Exception:
+            return None
+
+    def get_operator_initiative_auto_supersede_status(self) -> dict:
+        """Aggregate status across all 3 agents for the operator API surface."""
+        try:
+            with self._conn() as conn:
+                self._ensure_operator_initiative_auto_supersede_table(conn)
+                rows = conn.execute(
+                    "SELECT agent_id, eligible, attestation_hash_hex, "
+                    "draft_count, disagreement_rate, ts_ns, created_at "
+                    "FROM operator_initiative_auto_supersede_log "
+                    "ORDER BY id DESC LIMIT 30"
+                ).fetchall()
+            return {
+                "total_attestations": len(rows),
+                "rows": [dict(r) for r in rows],
+                "timestamp": time.time(),
+            }
+        except Exception as exc:
+            return {
+                "total_attestations": 0,
+                "rows": [],
+                "timestamp": time.time(),
+                "error": str(exc),
+            }
+
     # --- Phase 235-A: Grind Integrity Chain (GIC) ---
 
     def get_prev_grind_chain_hash(self, grind_session_id: str) -> bytes | None:
