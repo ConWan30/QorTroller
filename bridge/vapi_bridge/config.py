@@ -155,6 +155,25 @@ class Config:
     matches WIF-064 zombie pattern signature (12-30s blocks, much higher
     than 1s)."""
 
+    # --- Phase 235.x-STABILITY-9 stage 10 (2026-05-17): boot-cohort scheduler ---
+    boot_cohort_scheduler_enabled: bool = field(
+        default_factory=lambda: _env_bool("BOOT_COHORT_SCHEDULER_ENABLED", True)
+    )
+    """Phase 235.x-STABILITY-9 stage 10 — Enable deterministic slot
+    scheduling for the ~17-agent boot cohort. Replaces stage-5 random
+    jitter [0, 30s] with stable slot-index * spacing_s assignment.
+    Default True. Set BOOT_COHORT_SCHEDULER_ENABLED=false to revert
+    every caller to its stage-5 random-jitter fallback in one flip."""
+
+    boot_cohort_spacing_s: float = field(
+        default_factory=lambda: float(_env("BOOT_COHORT_SPACING_S", "5.0"))
+    )
+    """Phase 235.x-STABILITY-9 stage 10 — Seconds between deterministic
+    boot-cohort first-fire slots. Default 5.0s: 17 agents → 85s spread
+    window. Smaller values reduce stagger effectiveness; larger values
+    extend boot warmup duration. 5.0s sized to ensure one chain RPC
+    can complete (default chain_read_timeout_s=10.0) per slot."""
+
     # --- Phase 235.x-STABILITY-9 stage 9 (2026-05-17): shared chain-read governor ---
     chain_read_block_cache_ttl_s: float = field(
         default_factory=lambda: float(_env("CHAIN_READ_BLOCK_CACHE_TTL_S", "5.0"))

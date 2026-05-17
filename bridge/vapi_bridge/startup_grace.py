@@ -87,23 +87,50 @@ async def startup_grace(
     agent_name: str,
     max_jitter_s: Optional[float] = None,
 ) -> None:
-    """Inject random startup delay [0, max_jitter_s] before agent's
-    first work iteration.
+    """Inject startup delay before agent's first work iteration.
 
     Args:
-      cfg: vapi_bridge.config.Config (or test stub) — reads
-           cfg.startup_jitter_enabled + cfg.startup_jitter_max_s
-      agent_name: label for debug logging + observability
+      cfg: vapi_bridge.config.Config (or test stub).
+      agent_name: label for debug logging + scheduler slot assignment.
       max_jitter_s: per-agent override; defaults to
            cfg.startup_jitter_max_s (default 30.0s)
 
-    Behavior:
-      - cfg.startup_jitter_enabled=False → no-op (no sleep, no log)
-      - cfg.startup_jitter_enabled=True  → await asyncio.sleep(jitter)
-      - jitter = uniform(0, effective_max)
-      - never raises (fail-open per stability discipline)
+    Phase 235.x-STABILITY-9 stage 10 2026-05-17: PREFER deterministic
+    slot scheduling from BootCohortScheduler over random jitter.
+    Standalone agents share the same scheduler with absorbed-ticker
+    agents; cohort spread is now guaranteed-non-overlapping.
+
+    Fallback chain:
+      1. scheduler enabled (cfg.boot_cohort_scheduler_enabled=True default)
+         → sleep for scheduler.first_fire_offset_for(agent_name)
+      2. else stage-5 jitter (cfg.startup_jitter_enabled=True default)
+         → sleep for uniform(0, max)
+      3. else no-op
+
+    All paths fail-open: never raises.
     """
     try:
+        # Stage 10: deterministic slot
+        if getattr(cfg, "boot_cohort_scheduler_enabled", True):
+            try:
+                from .boot_cohort_scheduler import get_scheduler
+                scheduler = get_scheduler(cfg)
+                if scheduler.enabled:
+                    offset_s = scheduler.first_fire_offset_for(agent_name)
+                    log.debug(
+                        "startup_grace: %s STAGE-10 slot offset %.2fs",
+                        agent_name, offset_s,
+                    )
+                    if offset_s > 0.0:
+                        await asyncio.sleep(offset_s)
+                    return
+            except Exception as _sched_exc:  # noqa: BLE001 — fail-open
+                log.debug(
+                    "startup_grace: %s scheduler unavailable (%s); "
+                    "falling back to stage-5 jitter",
+                    agent_name, _sched_exc,
+                )
+        # Stage 5: random jitter fallback
         if not getattr(cfg, "startup_jitter_enabled", True):
             return
         effective_max = (
@@ -115,13 +142,13 @@ async def startup_grace(
         rng = _get_rng(cfg)
         jitter_s = rng.uniform(0.0, effective_max)
         log.debug(
-            "startup_grace: %s sleeping %.2fs (max=%.1fs)",
+            "startup_grace: %s STAGE-5 jitter %.2fs (max=%.1fs)",
             agent_name, jitter_s, effective_max,
         )
         await asyncio.sleep(jitter_s)
     except Exception as exc:  # noqa: BLE001 — fail-open
         log.warning(
-            "startup_grace: %s jitter sleep error (%s); proceeding without jitter",
+            "startup_grace: %s delay error (%s); proceeding without delay",
             agent_name, exc,
         )
 
