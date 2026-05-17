@@ -155,6 +155,45 @@ class Config:
     matches WIF-064 zombie pattern signature (12-30s blocks, much higher
     than 1s)."""
 
+    # --- Phase 235.x-STABILITY-9 stage 7 (2026-05-17): first-fire cohort instrumentation ---
+    acim_run_warn_duration_s: float = field(
+        default_factory=lambda: float(_env("ACIM_RUN_WARN_DURATION_S", "5.0"))
+    )
+    """Phase 235.x-STABILITY-9 stage 7 — WARNING threshold (seconds) for
+    AgentCalibrationMonitor._run_all_tests outer wall duration. Logs
+    WARNING when 16-self-test cycle exceeds this; localizes whether ACIM
+    is the 83s blocker. Default 5.0s."""
+
+    acim_subtest_warn_duration_s: float = field(
+        default_factory=lambda: float(_env("ACIM_SUBTEST_WARN_DURATION_S", "1.0"))
+    )
+    """Phase 235.x-STABILITY-9 stage 7 — WARNING threshold (seconds) for
+    individual ACIM self-tests inside _run_all_tests. Silent under
+    threshold (16 INFO lines per cycle would be log spam). Default 1.0s."""
+
+    protocol_intel_compute_warn_duration_s: float = field(
+        default_factory=lambda: float(_env("PROTOCOL_INTEL_COMPUTE_WARN_DURATION_S", "2.0"))
+    )
+    """Phase 235.x-STABILITY-9 stage 7 — WARNING threshold (seconds) for
+    ProtocolIntelligenceAgent._compute_and_store. Wraps compute_report
+    (10+ sync SQL queries already to_thread'd in stage 3) plus the
+    insert_protocol_intelligence_report write. Default 2.0s."""
+
+    absorbed_ticker_outer_warn_duration_s: float = field(
+        default_factory=lambda: float(_env("ABSORBED_TICKER_OUTER_WARN_DURATION_S", "2.0"))
+    )
+    """Phase 235.x-STABILITY-9 stage 7 — WARNING threshold (seconds) for
+    AbsorbedAgentTicker.tick_all outer duration (per steward, per cycle).
+    With 4 absorbed agents in Sentry + 4 in Guardian + 1 in Curator,
+    outer >2s indicates one or more specs is slow. Default 2.0s."""
+
+    absorbed_ticker_per_spec_warn_duration_s: float = field(
+        default_factory=lambda: float(_env("ABSORBED_TICKER_PER_SPEC_WARN_DURATION_S", "1.0"))
+    )
+    """Phase 235.x-STABILITY-9 stage 7 — WARNING threshold (seconds) for
+    AbsorbedAgentTicker per-spec invocation. Names which absorbed agent
+    is slow inside the ticker's tick_all. Default 1.0s."""
+
     # --- Phase 235.x-STABILITY-9 stage 6 (2026-05-17): curator instrumentation ---
     curator_task_warn_duration_s: float = field(
         default_factory=lambda: float(_env("CURATOR_TASK_WARN_DURATION_S", "5.0"))

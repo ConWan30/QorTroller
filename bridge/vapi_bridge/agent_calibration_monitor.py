@@ -64,46 +64,77 @@ class AgentCalibrationMonitor:
             await asyncio.sleep(_POLL_INTERVAL_S)
 
     async def _run_all_tests(self) -> None:
-        """Run all 16 self-tests and persist results. Publishes bus event on completion."""
-        healthy = 0
-        degraded = 0
-        failed_agents: list[str] = []
+        """Run all 16 self-tests and persist results. Publishes bus event on completion.
 
-        for agent_id in range(1, 17):
-            try:
-                result = await self._run_test(agent_id)
-                passed = result.get("passed", False)
-                self.store.insert_agent_calibration_health(
-                    agent_id=agent_id,
-                    agent_name=_AGENT_NAMES[agent_id],
-                    test_name=result.get("test_name", f"agent_{agent_id}_invariant"),
-                    result="PASS" if passed else "FAIL",
-                    details=result.get("details", ""),
-                )
-                if passed:
-                    healthy += 1
-                else:
-                    degraded += 1
-                    failed_agents.append(_AGENT_NAMES[agent_id])
-            except Exception as exc:
-                log.warning("Phase 148: ACIM test agent #%d failed: %s", agent_id, exc)
-                degraded += 1
-                failed_agents.append(_AGENT_NAMES[agent_id])
+        Phase 235.x-STABILITY-9 stage 7 (2026-05-17): instrumented — outer
+        cycle + per-test timing surface whether ACIM is the 83s cohort
+        blocker. Wraps via shared `loop_timing.timed_block` helper.
+        """
+        from .loop_timing import timed_block
+        _outer_warn_s = float(getattr(
+            self._cfg, "acim_run_warn_duration_s", 5.0
+        ))
+        _subtest_warn_s = float(getattr(
+            self._cfg, "acim_subtest_warn_duration_s", 1.0
+        ))
+        with timed_block(
+            "ACIM_run_all_tests",
+            warn_s=_outer_warn_s,
+            logger=log,
+            prefix="[AgentCalibrationMonitor] STAGE-7",
+            always_info=True,
+            slow_word="SLOW CYCLE",
+            hint="16 self-tests cycle — likely contributor to LOOP STARVATION "
+                 "if sub-tests show no individual outlier",
+        ):
+            healthy = 0
+            degraded = 0
+            failed_agents: list[str] = []
+
+            for agent_id in range(1, 17):
                 try:
+                    with timed_block(
+                        f"ACIM_test_agent_{agent_id}_{_AGENT_NAMES[agent_id]}",
+                        warn_s=_subtest_warn_s,
+                        logger=log,
+                        prefix="[AgentCalibrationMonitor] STAGE-7",
+                        always_info=False,
+                        slow_word="SLOW SUBTEST",
+                        hint="individual agent self-test exceeded threshold",
+                    ):
+                        result = await self._run_test(agent_id)
+                    passed = result.get("passed", False)
                     self.store.insert_agent_calibration_health(
                         agent_id=agent_id,
                         agent_name=_AGENT_NAMES[agent_id],
-                        test_name=f"agent_{agent_id}_invariant",
-                        result="ERROR",
-                        details=str(exc),
+                        test_name=result.get("test_name", f"agent_{agent_id}_invariant"),
+                        result="PASS" if passed else "FAIL",
+                        details=result.get("details", ""),
                     )
-                except Exception:
-                    pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
+                    if passed:
+                        healthy += 1
+                    else:
+                        degraded += 1
+                        failed_agents.append(_AGENT_NAMES[agent_id])
+                except Exception as exc:
+                    log.warning("Phase 148: ACIM test agent #%d failed: %s", agent_id, exc)
+                    degraded += 1
+                    failed_agents.append(_AGENT_NAMES[agent_id])
+                    try:
+                        self.store.insert_agent_calibration_health(
+                            agent_id=agent_id,
+                            agent_name=_AGENT_NAMES[agent_id],
+                            test_name=f"agent_{agent_id}_invariant",
+                            result="ERROR",
+                            details=str(exc),
+                        )
+                    except Exception:
+                        pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
-        log.info(
-            "Phase 148: ACIM cycle complete — healthy=%d, degraded=%d, failed=%s",
-            healthy, degraded, failed_agents,
-        )
+            log.info(
+                "Phase 148: ACIM cycle complete — healthy=%d, degraded=%d, failed=%s",
+                healthy, degraded, failed_agents,
+            )
         if self._bus is not None:
             try:
                 self._bus.publish_sync("calibration_health_report", {
