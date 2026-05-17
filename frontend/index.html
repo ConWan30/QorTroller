@@ -2,7 +2,16 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      Stage 5.4 (Android responsive audit Finding A3): viewport-fit=cover
+      extends the rendering area into the safe-inset region on devices
+      with display cutouts / gesture navigation bars (Pixel 6+, iPhone X+).
+      Without it, system UI overlays can clip Evidence OS content at the
+      bottom edge on Pixel gesture-nav devices. user-scalable preserved
+      as default (yes) for accessibility — operators with low vision
+      retain pinch-zoom.
+    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>VAPI Protocol Dashboard</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -11,7 +20,18 @@
       rel="stylesheet"
     />
     <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; }
+      * {
+        margin: 0; padding: 0; box-sizing: border-box;
+        /*
+          Stage 5.4 (Android responsive audit Finding A4): suppress
+          Chrome Android's default translucent tap-highlight box, which
+          on the void-black Evidence OS aesthetic appears as a jarring
+          light overlay on every tap. transparent honors the existing
+          focus-visible outline (theme.css) for keyboard navigation
+          without injecting a separate tap visual.
+        */
+        -webkit-tap-highlight-color: transparent;
+      }
       body { background: #030507; color: #c4cdd6; }
       ::-webkit-scrollbar { width: 4px; }
       ::-webkit-scrollbar-track { background: #030507; }

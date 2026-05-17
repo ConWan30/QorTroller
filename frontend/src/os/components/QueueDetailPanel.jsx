@@ -266,7 +266,13 @@ export default function QueueDetailPanel({
               placeholder="e.g. verdict matches on-chain anchor freshness check"
               style={{
                 fontFamily: _MONO,
-                fontSize: 'var(--os-text-base)',
+                // Stage 5.4 (Android responsive audit Finding A2): same
+                // Chrome Android auto-zoom-on-focus bug as Finding A1.
+                // Operator typing a ≥10-char audit reason on mobile
+                // would otherwise get stuck at zoomed level for the
+                // whole entry. 16px is the WebKit/Blink floor below
+                // which both iOS Safari and Chrome Android auto-zoom.
+                fontSize: '16px',
                 color: 'var(--os-text)',
                 background: 'var(--os-bg)',
                 border: '1px solid var(--os-border)',
