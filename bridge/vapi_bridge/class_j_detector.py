@@ -24,7 +24,13 @@ from collections import defaultdict, deque
 
 log = logging.getLogger(__name__)
 
-_POLL_INTERVAL_S = 300        # 5 minutes
+# Phase 235.x-STABILITY-9 stage 4b 2026-05-17: poll interval lengthened
+# 300s → 1800s. ML-bot pattern accumulation is N-window analysis bound;
+# trigger threshold (Phase 81 default n_windows=10) cannot accumulate faster
+# than the session arrival rate. Event-driven conversion (subscribe to a
+# `ruling_completed` bus event with class_j_ml_bot_risk=HIGH) deferred —
+# see agent_rationalization_v1.md §3.5.
+_POLL_INTERVAL_S = 1800       # 30 minutes (was 300s = 5 min)
 _HIGH_RISK_THRESHOLD = 0.05   # entropy_variance <= this → HIGH
 _MEDIUM_RISK_THRESHOLD = 0.15  # entropy_variance <= this → MEDIUM (else LOW)
 

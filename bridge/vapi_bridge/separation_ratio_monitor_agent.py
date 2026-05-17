@@ -25,7 +25,14 @@ import time
 
 _log = logging.getLogger(__name__)
 
-POLL_INTERVAL_S = 300  # 5 minutes
+# Phase 235.x-STABILITY-9 stage 4b 2026-05-17: poll interval lengthened
+# 300s → 1800s. Separation ratio is corpus-bound and changes glacially
+# (current N=37 update cadence is days/weeks), so 5-min polling is
+# overkill. 30-min cadence preserves breakthrough detection latency.
+# Full event-driven conversion (subscribe to a `separation_ratio_recomputed`
+# bus event from analyze_interperson_separation.py) is deferred until that
+# producer is wired — see agent_rationalization_v1.md §3.5.
+POLL_INTERVAL_S = 1800  # 5 minutes
 
 
 class SeparationRatioMonitorAgent:
