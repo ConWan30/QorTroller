@@ -97,6 +97,10 @@ class CorpusDataCuratorAgent:
         self._last_entropy_ok: bool = True
         self._last_cert_status: str = "UNKNOWN"
         self._last_dag_nodes_registered: int = 0
+        # Phase 235.x-STABILITY-9 stage 2 (2026-05-17): federation bus event
+        # buffered by the worker-thread _run_federation_quality body, then
+        # dispatched on the main loop after the 7-task chain completes.
+        self._pending_federation_bus_event = None
 
     # ------------------------------------------------------------------
     # Main poll loop
@@ -122,14 +126,37 @@ class CorpusDataCuratorAgent:
         """Execute all 7 tasks in sequence. Each task is independently fail-open."""
         self._last_dag_nodes_registered = 0
 
+        # Phase 235.x-STABILITY-9 stage 2 2026-05-17: dispatch the 7
+        # sync-bodied tasks via asyncio.to_thread so the SQLite query
+        # chain runs on a worker thread instead of monopolizing the
+        # event loop for the full 7-task cycle every 30 min. All 7
+        # task functions are now sync def (converted from async def
+        # with no internal awaits except _run_federation_quality's
+        # bus.publish, which is buffered + dispatched below).
         for task_name in self.TASK_SEQUENCE:
             try:
-                await getattr(self, task_name)()
+                await asyncio.to_thread(getattr(self, task_name))
             except Exception as exc:
                 self._logger.warning(
                     f"[CorpusDataCuratorAgent] Task {task_name} failed (fail-open): {exc}"
                 )
             await asyncio.sleep(0)  # yield after each task so HTTP handlers get turns
+
+        # Phase 235.x-STABILITY-9 stage 2: drain the federation bus event
+        # buffered by _run_federation_quality (bus.publish is async-only;
+        # can't run from a worker thread).
+        if self._bus is not None and self._pending_federation_bus_event is not None:
+            try:
+                await self._bus.publish(
+                    "corpus_quality",
+                    self._pending_federation_bus_event,
+                    source="corpus_data_curator_agent",
+                )
+            except Exception as exc:
+                self._logger.warning(
+                    f"[CorpusDataCuratorAgent] Federation bus publish failed: {exc}"
+                )
+            self._pending_federation_bus_event = None
 
         # Publish unified status to "curator" bus channel after all tasks
         if self._bus is not None:
@@ -151,7 +178,7 @@ class CorpusDataCuratorAgent:
     # Task 1: Provenance DAG Engine
     # ------------------------------------------------------------------
 
-    async def _run_provenance_dag(self) -> None:
+    def _run_provenance_dag(self) -> None:
         """Task 1 — Register recent store rows as provenance DAG nodes (Phase 192).
 
         Queries separation_ratio_snapshots, separation_defensibility_log,
@@ -282,7 +309,7 @@ class CorpusDataCuratorAgent:
     # Task 2: Corpus Entropy Monitor
     # ------------------------------------------------------------------
 
-    async def _run_corpus_entropy(self) -> None:
+    def _run_corpus_entropy(self) -> None:
         """Task 2 — Compute Shannon entropy of 13-dim feature space (Phase 192).
 
         Score < 1.5 = CLUSTERING_WARNING (brittle centroid).
@@ -364,7 +391,7 @@ class CorpusDataCuratorAgent:
     # Task 3: Proof-of-Erasure Certificate Engine
     # ------------------------------------------------------------------
 
-    async def _run_erasure_certificates(self) -> None:
+    def _run_erasure_certificates(self) -> None:
         """Task 3 — Issue erasure certificates for pending anonymizations (Phase 192).
 
         Only runs when pending erasures exist in post_erasure_ratio_log.
@@ -427,11 +454,18 @@ class CorpusDataCuratorAgent:
     # Task 4: Federated Corpus Quality Aggregator
     # ------------------------------------------------------------------
 
-    async def _run_federation_quality(self) -> None:
+    def _run_federation_quality(self) -> None:
         """Task 4 — Publish anonymized corpus quality to federation bus (Phase 192).
 
         Only runs when federated_corpus_quality_enabled=True.
         BP-007: never sends raw biometric data — only derived statistics.
+
+        Phase 235.x-STABILITY-9 stage 2 (2026-05-17): body restructured
+        from async to sync — the SQLite query chain is the heavy part
+        and runs on a worker thread via _run_once's asyncio.to_thread
+        dispatch. The original `await self._bus.publish(...)` is now
+        buffered in `self._pending_federation_bus_event` and dispatched
+        on the main loop by _run_once after the task chain completes.
         """
         if not getattr(self._cfg, "federated_corpus_quality_enabled", False):
             return
@@ -489,14 +523,16 @@ class CorpusDataCuratorAgent:
                 received_at_ts=int(time.time()),
             )
 
+            # Phase 235.x-STABILITY-9 stage 2: buffer event for main-loop
+            # dispatch (bus.publish is async and can't run from worker thread).
             if self._bus is not None:
-                await self._bus.publish("corpus_quality", {
+                self._pending_federation_bus_event = {
                     "event":          "corpus_quality_published",
                     "bridge_id_hash": bridge_id_hash,
                     "entropy_score":  entropy_score,
                     "n_sessions":     n_sessions,
                     "timestamp":      time.time(),
-                }, source="corpus_data_curator_agent")
+                }
         except Exception as exc:
             self._logger.warning(
                 f"[CorpusDataCuratorAgent] Task 4 (federation): {exc}"
@@ -506,7 +542,7 @@ class CorpusDataCuratorAgent:
     # Task 5: Cross-Feature Temporal Correlation Engine
     # ------------------------------------------------------------------
 
-    async def _run_correlation_engine(self) -> None:
+    def _run_correlation_engine(self) -> None:
         """Task 5 — Compute 13x13 per-player feature correlation matrices (Phase 192).
 
         Upper triangle JSON (91 values). Frobenius distance is correlation-structure
@@ -601,7 +637,7 @@ class CorpusDataCuratorAgent:
     # Task 6: Data Readiness Certificate Engine
     # ------------------------------------------------------------------
 
-    async def _run_readiness_certificate(self) -> None:
+    def _run_readiness_certificate(self) -> None:
         """Task 6 — Generate 8-dimension pre-tournament certification (Phase 192).
 
         FROZEN: separation_gate=0.70, vhp_expiry_days=90.
@@ -775,7 +811,7 @@ class CorpusDataCuratorAgent:
     # Task 7: Session Contribution Weight Table
     # ------------------------------------------------------------------
 
-    async def _run_contribution_weights(self) -> None:
+    def _run_contribution_weights(self) -> None:
         """Task 7 — Compute TBD-decay contribution weights per session (Phase 192).
 
         FROZEN: lambda = ln(2)/90 (BP-001 TBD half-life = vhp_expiry_days = 90).
