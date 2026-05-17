@@ -155,6 +155,20 @@ class Config:
     matches WIF-064 zombie pattern signature (12-30s blocks, much higher
     than 1s)."""
 
+    # --- Phase 235.x-STABILITY-9 (2026-05-17): bisection instrument ---
+    minimal_task_mode: bool = field(
+        default_factory=lambda: _env_bool("MINIMAL_TASK_MODE", False)
+    )
+    """Phase 235.x-STABILITY-9 — Bisection instrument. When True, bridge
+    boots with ONLY uvicorn HTTP server + loop_health_monitor; all 50+
+    background agent tasks (batcher, transports, FSCA, drift sweepers,
+    polling loops, trackers, executors) are skipped. Used to establish
+    a stability baseline + identify which task group reintroduces the
+    50-70s loop_starvation events. Default OFF for production. Activate
+    via MINIMAL_TASK_MODE=true in bridge/.env, restart bridge, observe
+    loop_health_monitor output for ~10 min — should be 0 STARVATION
+    events. Then re-enable groups incrementally to localize the offender."""
+
     # --- Phase 235.x-STABILITY-4 (2026-05-09): on_record sync chain offload (WIF-066 closure) ---
     loop_persist_to_thread_enabled: bool = field(
         default_factory=lambda: _env_bool("LOOP_PERSIST_TO_THREAD_ENABLED", True)
