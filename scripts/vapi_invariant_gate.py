@@ -1179,7 +1179,7 @@ def _fetch_latest_provenance_hash() -> str:
             if entries:
                 return str(entries[0].get("governance_provenance_hash", "0" * 64))
     except Exception:
-        pass
+        pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
     return "0" * 64
 
 

@@ -189,7 +189,7 @@ class CorpusDataCuratorAgent:
                 })
                 nodes_created += 1
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         # Register recent separation_defensibility_log rows
         try:
@@ -216,7 +216,7 @@ class CorpusDataCuratorAgent:
                 })
                 nodes_created += 1
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         # Register recent re_enrollment_attestation_log rows
         try:
@@ -243,7 +243,7 @@ class CorpusDataCuratorAgent:
                 })
                 nodes_created += 1
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         # Register separation_ratio_registry_log (commitment) rows
         try:
@@ -270,7 +270,7 @@ class CorpusDataCuratorAgent:
                 })
                 nodes_created += 1
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         self._last_dag_nodes_registered += nodes_created
         self._logger.debug(
@@ -303,7 +303,7 @@ class CorpusDataCuratorAgent:
                 ).fetchone()
                 n_sessions = int(row[0]) if row else 0
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         current_ratio = 0.569
         try:
@@ -315,7 +315,7 @@ class CorpusDataCuratorAgent:
                 if row and row[0] is not None:
                     current_ratio = float(row[0])
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         if n_sessions == 0:
             per_player = {"P1": 0.0, "P2": 0.0, "P3": 0.0}
@@ -395,7 +395,7 @@ class CorpusDataCuratorAgent:
                         if row and row[0] is not None:
                             post_ratio = float(row[0])
                 except Exception:
-                    pass
+                    pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
                 erased_tables = {"post_erasure_ratio_log": [0]}
                 cert_hash = self._store.compute_erasure_certificate(
@@ -454,7 +454,7 @@ class CorpusDataCuratorAgent:
                     if row and row[0] is not None:
                         stationarity = float(row[0])
             except Exception:
-                pass
+                pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
             velocity = 0.0
             try:
@@ -466,7 +466,7 @@ class CorpusDataCuratorAgent:
                     if row and row[0] is not None:
                         velocity = float(row[0])
             except Exception:
-                pass
+                pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
             n_sessions = 0
             try:
@@ -477,7 +477,7 @@ class CorpusDataCuratorAgent:
                     ).fetchone()
                     n_sessions = int(row[0]) if row else 0
             except Exception:
-                pass
+                pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
             self._store.insert_federation_corpus_quality(
                 bridge_id_hash=bridge_id_hash,
@@ -531,7 +531,7 @@ class CorpusDataCuratorAgent:
                 ).fetchone()
                 session_count = int(row[0]) if row else 0
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         for player_id in ("P1", "P2", "P3"):
             try:
@@ -620,7 +620,7 @@ class CorpusDataCuratorAgent:
                 if row and row[0] is not None:
                     current_ratio = float(row[0])
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         # Persona break (centroid stability)
         any_persona_break = False
@@ -628,7 +628,7 @@ class CorpusDataCuratorAgent:
             pb = self._store.get_persona_break_status()
             any_persona_break = bool(pb.get("persona_break_detected", False))
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         # Consent coverage
         n_consented, n_enrolled = 0, 0
@@ -643,7 +643,7 @@ class CorpusDataCuratorAgent:
                 ).fetchone()
                 n_consented = int(r2[0]) if r2 else 0
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         # Biometric TTL (commitment age)
         commitment_age_days = 0.0
@@ -655,7 +655,7 @@ class CorpusDataCuratorAgent:
                 if row and row[0] is not None:
                     commitment_age_days = (time.time() - float(row[0])) / 86400
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         # Corpus entropy adequacy
         entropy_adequate = True
@@ -664,7 +664,7 @@ class CorpusDataCuratorAgent:
             if entropy_row:
                 entropy_adequate = float(entropy_row["corpus_entropy_score"]) >= 1.5
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         # Active attestations
         active_attestations = 0
@@ -676,7 +676,7 @@ class CorpusDataCuratorAgent:
                 ).fetchone()
                 active_attestations = int(row[0]) if row else 0
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         # Evaluate 8 dimensions (FROZEN gate=0.70, expiry=90 days)
         dims = {
@@ -804,7 +804,7 @@ class CorpusDataCuratorAgent:
             pb = self._store.get_persona_break_status()
             tdi = float(pb.get("tdi_current", 0.0))
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
         stationarity_multiplier = max(0.1, 1.0 - tdi)
 
         weights_list = []
@@ -844,7 +844,7 @@ class CorpusDataCuratorAgent:
                     computed_at_ts=current_ts,
                 )
             except Exception:
-                pass
+                pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         self._logger.debug(
             f"[CorpusDataCuratorAgent] Task 7 (weights): "

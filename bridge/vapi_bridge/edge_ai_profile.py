@@ -65,7 +65,7 @@ def get_edge_ai_profile(cfg=None, store=None) -> dict:
                     ).fetchone()
                     poac_rate_per_hour = float(row["cnt"]) if row else 0.0
             except Exception:
-                pass
+                pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         # LLM availability
         llm_available = False

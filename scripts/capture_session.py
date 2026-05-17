@@ -350,7 +350,7 @@ def run(duration_s: int, output_path: str, notes: str, transport_arg: str = "aut
         try:
             h.close()
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
     t_actual    = time.perf_counter() - t_start
     rate_actual = len(captured) / t_actual if t_actual > 0 else 0.0
