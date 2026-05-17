@@ -703,7 +703,14 @@ class Bridge:
                     log.info("WorldModelAttestation: %s", _reason)
 
         # Phase 25: Start chain reconciler for PHG checkpoint confirmation
-        if getattr(self.cfg, "phg_registry_address", ""):
+        # Phase 235.x-STABILITY-9 stage 4d 2026-05-17: ChainReconciler ABSORBED
+        # into Sentry steward via AbsorbedAgentTicker. Standalone spawn skipped
+        # when stewards_absorb_enabled=True (default). Per Q1: module preserved
+        # + reactivation = STEWARDS_ABSORB_ENABLED=false + restart.
+        if (
+            getattr(self.cfg, "phg_registry_address", "")
+            and not getattr(self.cfg, "stewards_absorb_enabled", True)
+        ):
             from .chain_reconciler import ChainReconciler
             reconciler = ChainReconciler(
                 self.store,
@@ -714,8 +721,7 @@ class Bridge:
             _t.add_done_callback(_task_done_handler)
             self._tasks.append(_t)
             log.info(
-                "Phase 25: ChainReconciler started (interval=%.0fs)",
-                getattr(self.cfg, "reconciler_poll_interval", 30.0),
+                "Phase 25: ChainReconciler started (REACTIVATED — bypasses Sentry steward)",
             )
 
         # Phase 32: Start ProactiveMonitor — autonomous protocol surveillance
@@ -836,8 +842,12 @@ class Bridge:
         else:
             log.info("Phase 70: SessionAdjudicator skipped (OPERATOR_API_KEY not set)")
 
-        # RulingEnforcementAgent — guarded by ruling_enforcement_enabled
-        if getattr(self.cfg, "ruling_enforcement_enabled", False):
+        # Phase 235.x-STABILITY-9 stage 4c 2026-05-17: RulingEnforcementAgent
+        # ABSORBED into Guardian steward via AbsorbedAgentTicker.
+        if (
+            getattr(self.cfg, "ruling_enforcement_enabled", False)
+            and not getattr(self.cfg, "stewards_absorb_enabled", True)
+        ):
             try:
                 from .ruling_enforcement_agent import RulingEnforcementAgent
                 _enforcer = RulingEnforcementAgent(self.cfg, self.store, self.chain, bus=_bus)
@@ -845,7 +855,7 @@ class Bridge:
                 _t.set_name("RulingEnforcementAgent")
                 _t.add_done_callback(_task_done_handler)
                 self._tasks.append(_t)
-                log.info("Phase 70: RulingEnforcementAgent started (streak escalation live)")
+                log.info("Phase 70: RulingEnforcementAgent started (REACTIVATED — bypasses Guardian steward)")
             except Exception as _rea_exc:
                 log.warning("Phase 70: RulingEnforcementAgent unavailable: %s", _rea_exc)
         else:
@@ -873,9 +883,12 @@ class Bridge:
         else:
             log.info("Phase 75: SessionAdjudicatorValidationAgent skipped (OPERATOR_API_KEY not set)")
 
-        # Phase 75: CeremonyWatchdogAgent — guarded by ceremony_watchdog_enabled
-        # Polls CeremonyRegistry every 5 min; invalidates SA cache on key rotation (W1 mitigation)
-        if getattr(self.cfg, "ceremony_watchdog_enabled", True):
+        # Phase 235.x-STABILITY-9 stage 4d 2026-05-17: CeremonyWatchdogAgent
+        # ABSORBED into Sentry steward via AbsorbedAgentTicker.
+        if (
+            getattr(self.cfg, "ceremony_watchdog_enabled", True)
+            and not getattr(self.cfg, "stewards_absorb_enabled", True)
+        ):
             try:
                 from .ceremony_watchdog import CeremonyWatchdogAgent
                 _watchdog = CeremonyWatchdogAgent(self.cfg, self.store, bus=_bus)
@@ -893,9 +906,12 @@ class Bridge:
         else:
             log.info("Phase 75: CeremonyWatchdogAgent skipped (CEREMONY_WATCHDOG_ENABLED=false)")
 
-        # Phase 76: RulingProvenanceAnchorAgent — guarded by ruling_provenance_enabled
-        # Computes SHA-256 provenance anchors binding ruling + ceremony + evidence
-        if getattr(self.cfg, "ruling_provenance_enabled", True):
+        # Phase 235.x-STABILITY-9 stage 4d 2026-05-17: RulingProvenanceAnchorAgent
+        # ABSORBED into Sentry steward via AbsorbedAgentTicker.
+        if (
+            getattr(self.cfg, "ruling_provenance_enabled", True)
+            and not getattr(self.cfg, "stewards_absorb_enabled", True)
+        ):
             try:
                 from .ruling_provenance_anchor_agent import RulingProvenanceAnchorAgent
                 _provenance = RulingProvenanceAnchorAgent(
@@ -969,8 +985,12 @@ class Bridge:
         else:
             log.info("Phase 81: ClassJDetector skipped (CLASS_J_DETECTION_ENABLED=false)")
 
-        # Phase 83: AgentSupervisor — fleet health monitor
-        if getattr(self.cfg, "supervisor_enabled", True):
+        # Phase 235.x-STABILITY-9 stage 4c 2026-05-17: AgentSupervisor
+        # ABSORBED into Guardian steward via AbsorbedAgentTicker.
+        if (
+            getattr(self.cfg, "supervisor_enabled", True)
+            and not getattr(self.cfg, "stewards_absorb_enabled", True)
+        ):
             try:
                 from .agent_supervisor import AgentSupervisor
                 _supervisor = AgentSupervisor(self.cfg, self.store, bus=_bus)
@@ -987,8 +1007,12 @@ class Bridge:
         else:
             log.info("Phase 83: AgentSupervisor skipped (SUPERVISOR_ENABLED=false)")
 
-        # Phase 89: ProtocolIntelligenceAgent — unified protocol_health_score synthesizer
-        if getattr(self.cfg, "protocol_intelligence_enabled", True):
+        # Phase 235.x-STABILITY-9 stage 4c 2026-05-17: ProtocolIntelligenceAgent
+        # ABSORBED into Guardian steward via AbsorbedAgentTicker.
+        if (
+            getattr(self.cfg, "protocol_intelligence_enabled", True)
+            and not getattr(self.cfg, "stewards_absorb_enabled", True)
+        ):
             try:
                 from .protocol_intelligence_agent import ProtocolIntelligenceAgent
                 _pia = ProtocolIntelligenceAgent(self.cfg, self.store, bus=_bus)
@@ -1052,8 +1076,12 @@ class Bridge:
                 log.warning("Phase 99B: GSRRegistryAgent unavailable: %s", _gsr_exc)
         # else: silent skip — see agent_rationalization_v1.md §3.1
 
-        # Phase 102: VHPRenewalAgent — soulbound token TTL lifecycle manager (14th agent)
-        if getattr(self.cfg, "vhp_renewal_enabled", True):
+        # Phase 235.x-STABILITY-9 stage 4d 2026-05-17: VHPRenewalAgent
+        # ABSORBED into Sentry steward via AbsorbedAgentTicker.
+        if (
+            getattr(self.cfg, "vhp_renewal_enabled", True)
+            and not getattr(self.cfg, "stewards_absorb_enabled", True)
+        ):
             try:
                 from .vhp_renewal_agent import VHPRenewalAgent
                 _chain_ref   = getattr(self, "chain", None)
@@ -1120,9 +1148,12 @@ class Bridge:
         except Exception as _taca_exc:
             log.warning("Phase 135: TournamentActivationChainAgent unavailable: %s", _taca_exc)
 
-        # Phase 148: AgentCalibrationMonitor — agent #18 (ACIM)
-        # W1: cross-validates 16 agent invariants independently (no single-validator anti-pattern)
-        if getattr(self.cfg, "agent_calibration_monitor_enabled", True):
+        # Phase 235.x-STABILITY-9 stage 4c 2026-05-17: AgentCalibrationMonitor
+        # ABSORBED into Guardian steward via AbsorbedAgentTicker.
+        if (
+            getattr(self.cfg, "agent_calibration_monitor_enabled", True)
+            and not getattr(self.cfg, "stewards_absorb_enabled", True)
+        ):
             try:
                 from .agent_calibration_monitor import AgentCalibrationMonitor
                 _acim = AgentCalibrationMonitor(self.cfg, self.store, bus=_bus)
@@ -1235,29 +1266,27 @@ class Bridge:
         else:
             log.info("Phase 173: SeparationRatioRecoveryAgent skipped (SEPARATION_RECOVERY_ENABLED=false)")
 
-        # Phase 192: CorpusDataCuratorAgent (agent #35) — 7-task data coherence layer.
-        # Runs 30-minute unified poll cycle. Each task is independently fail-open.
-        # Tasks: provenance_dag | corpus_entropy | erasure_cert | federation_quality
-        #        | correlation_engine | readiness_cert | contribution_weights
-        # Depends on: SeparationRatioMonitorAgent (#15), AgeWeightedRatioPersistenceAgent (#24),
-        #             PersonaBreakDetectorAgent (#27), BiometricCredentialTTLAgent (#29).
-        try:
-            from .corpus_curator_agent import CorpusDataCuratorAgent
-            _curator192 = CorpusDataCuratorAgent(
-                self.store, self.cfg, bus=_bus, logger=log
-            )
-            _curator192_task = asyncio.ensure_future(_curator192.run())
-            _curator192_task.set_name("CorpusDataCuratorAgent")
-            self._tasks.append(_curator192_task)
-            log.info(
-                "Phase 192: CorpusDataCuratorAgent started (agent #35; "
-                "7-task data coherence layer; poll=%ss)",
-                1800,
-            )
-        except Exception as _curator192_exc:
-            log.warning(
-                "Phase 192: CorpusDataCuratorAgent unavailable: %s", _curator192_exc
-            )
+        # Phase 235.x-STABILITY-9 stage 4e 2026-05-17: CorpusDataCuratorAgent
+        # ABSORBED into Curator steward via AbsorbedAgentTicker.
+        # Standalone spawn skipped when stewards_absorb_enabled=True (default).
+        # Per Q4: corpus integrity IS curation — natural steward lane.
+        if not getattr(self.cfg, "stewards_absorb_enabled", True):
+            try:
+                from .corpus_curator_agent import CorpusDataCuratorAgent
+                _curator192 = CorpusDataCuratorAgent(
+                    self.store, self.cfg, bus=_bus, logger=log
+                )
+                _curator192_task = asyncio.ensure_future(_curator192.run())
+                _curator192_task.set_name("CorpusDataCuratorAgent")
+                self._tasks.append(_curator192_task)
+                log.info(
+                    "Phase 192: CorpusDataCuratorAgent started (REACTIVATED — "
+                    "bypasses Curator steward; 7-task data coherence layer; poll=1800s)"
+                )
+            except Exception as _curator192_exc:
+                log.warning(
+                    "Phase 192: CorpusDataCuratorAgent unavailable: %s", _curator192_exc
+                )
 
         # Phase 193: FleetSignalCoherenceAgent (agent #36) — fleet-level coherence observer.
         # Polls every 900s (15 min). Detects contradictions / orphans / inversions across all
@@ -1505,6 +1534,11 @@ class Bridge:
                         cfg=self.cfg,
                         store=self.store,
                         get_pending_triggers=_sentry_trigger_source,
+                        # Phase 235.x-STABILITY-9 stage 4d: chain+bus refs so
+                        # the SentryPollingLoop can construct its absorbed
+                        # ticker (4 provenance agents) per agent_rationalization_v1.
+                        chain=getattr(self, "chain", None),
+                        bus=_bus,
                     )
                 )
                 _sentry_poll_task.set_name("SentryPollingLoop")
@@ -1607,6 +1641,9 @@ class Bridge:
                     run_guardian_polling_loop(
                         cfg=self.cfg, store=self.store,
                         get_pending_triggers=_composed_g,
+                        # Phase 235.x-STABILITY-9 stage 4c: chain+bus refs.
+                        chain=getattr(self, "chain", None),
+                        bus=_bus,
                     )
                 )
                 _guardian_poll_task.set_name("GuardianPollingLoop")
@@ -1671,6 +1708,9 @@ class Bridge:
                     run_curator_polling_loop(
                         cfg=self.cfg, store=self.store,
                         get_pending_triggers=_composed_c,
+                        # Phase 235.x-STABILITY-9 stage 4e: chain+bus refs.
+                        chain=getattr(self, "chain", None),
+                        bus=_bus,
                     )
                 )
                 _curator_poll_task.set_name("CuratorPollingLoop")

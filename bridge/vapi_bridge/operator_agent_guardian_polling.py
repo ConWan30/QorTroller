@@ -84,6 +84,8 @@ class GuardianPollingLoop:
         store: Any,
         draft_generator: GuardianDraftGenerator,
         get_pending_triggers: GetPendingTriggersFn,
+        chain: Any = None,
+        bus: Any = None,
     ) -> None:
         self._cfg = cfg
         self._store = store
@@ -96,6 +98,27 @@ class GuardianPollingLoop:
             getattr(cfg, "operator_agent_guardian_polling_interval_s",
                     _POLL_INTERVAL_DEFAULT_S)
         )
+        # Phase 235.x-STABILITY-9 stage 4c 2026-05-17: absorbed-agent ticker
+        # invokes 6 diagnostic/audit agents (ProtocolIntelligence /
+        # ProtocolMaturityScoring / MaturityElevationGate / AgentSupervisor /
+        # AgentCalibrationMonitor / RulingEnforcement) at their original
+        # cadences. Per agent_rationalization_v1.md §3.2.
+        self._absorbed_ticker = None
+        if getattr(cfg, "stewards_absorb_enabled", True):
+            try:
+                from .operator_steward_absorbed_agents import (
+                    AbsorbedAgentTicker, GUARDIAN_ABSORBED,
+                )
+                self._absorbed_ticker = AbsorbedAgentTicker(
+                    steward_name="Guardian",
+                    specs=GUARDIAN_ABSORBED,
+                    cfg=cfg, store=store, chain=chain, bus=bus,
+                )
+            except Exception as _exc:  # noqa: BLE001
+                log.warning(
+                    "GuardianPollingLoop: absorbed ticker setup failed (%s); "
+                    "absorbed agents will not run", _exc,
+                )
 
     def _drafts_this_session(self) -> int:
         """Number of drafts produced since this loop instance started."""
@@ -150,6 +173,16 @@ class GuardianPollingLoop:
                 if triggers:
                     head = triggers[0]
                     self._dispatch_one(head)
+                # Phase 235.x-STABILITY-9 stage 4c 2026-05-17: tick absorbed
+                # diagnostic/audit agents at their per-spec cadences.
+                if self._absorbed_ticker is not None:
+                    try:
+                        await self._absorbed_ticker.tick_all()
+                    except Exception as _abs_exc:  # noqa: BLE001
+                        log.warning(
+                            "GuardianPollingLoop: absorbed tick failed (%s); "
+                            "continuing main loop", _abs_exc,
+                        )
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # noqa: BLE001 -- loop must not die
@@ -325,6 +358,8 @@ async def run_guardian_polling_loop(
     store: Any,
     draft_generator: Optional[GuardianDraftGenerator] = None,
     get_pending_triggers: Optional[GetPendingTriggersFn] = None,
+    chain: Any = None,
+    bus: Any = None,
 ) -> None:
     """Module-level entrypoint for main.py task wiring.
 
@@ -354,6 +389,8 @@ async def run_guardian_polling_loop(
         store=store,
         draft_generator=gen,
         get_pending_triggers=triggers_fn,
+        chain=chain,
+        bus=bus,
     )
     await loop.start()
     # Block until cancelled (matches cedar_drift_sweeper.run_drift_sweep_loop
