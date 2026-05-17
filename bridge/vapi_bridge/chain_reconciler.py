@@ -26,13 +26,43 @@ class ChainReconciler:
         asyncio.create_task(reconciler.run())
     """
 
-    def __init__(self, store, chain, poll_interval: float = 30.0, retry_age_s: float = 300.0):
+    def __init__(self, store, chain, poll_interval: float = 30.0, retry_age_s: float = 300.0,
+                 cfg=None, governor=None):
         self._store = store
         self._chain = chain
+        self._cfg = cfg
         self._poll_interval = poll_interval
         self._retry_age_s = retry_age_s
         self._running = False
         self._last_block: int = 0
+        # Phase 235.x-STABILITY-9 stage 9 (2026-05-17): shared chain-read
+        # governor. Optional injection so existing callers / tests work
+        # unchanged. When None, lazily create one on first need (lazy
+        # creation lets us defer asyncio.Semaphore init until the loop
+        # exists). Cfg defaults: 5.0s block-cache TTL + max_concurrent=4
+        # + 10.0s per-call timeout.
+        self._governor = governor
+
+    def _get_governor(self):
+        """Lazy-init the chain-read governor. Returns None if cfg/chain
+        is missing or governor construction fails (fail-open: caller falls
+        back to direct chain calls)."""
+        if self._governor is not None:
+            return self._governor
+        try:
+            from .chain_read_governor import ChainReadGovernor
+            self._governor = ChainReadGovernor(
+                w3=self._chain._w3,
+                cfg=self._cfg if self._cfg is not None else type("_", (), {})(),
+            )
+            return self._governor
+        except Exception as exc:  # noqa: BLE001 — fail-open
+            log.warning(
+                "ChainReconciler: governor lazy-init failed (%s); falling "
+                "back to direct chain reads", exc,
+            )
+            self._governor = False  # sentinel: don't retry init
+            return None
 
     async def run(self):
         """Run the reconciler loop until cancelled."""
@@ -42,8 +72,13 @@ class ChainReconciler:
             self._poll_interval, self._retry_age_s,
         )
         # Initialize last_block
+        # Phase 235.x-STABILITY-9 stage 9: route through governor when available
         try:
-            self._last_block = await self._chain._w3.eth.block_number
+            gov = self._get_governor()
+            if gov:
+                self._last_block = await gov.get_block_number()
+            else:
+                self._last_block = await self._chain._w3.eth.block_number
         except Exception:
             self._last_block = 0
 
@@ -104,7 +139,11 @@ class ChainReconciler:
         _sqlite_warn_s = 0.5
         _outer_prefix = "[ChainReconciler] STAGE-8"
 
-        # SECTION A — chain block_number (async; network)
+        # SECTION A — chain block_number (async; network; STAGE-9 governed)
+        # Stage 9: route through governor for TTL cache + semaphore + timeout.
+        # Reconciler polls every 30s; TTL is 5s — first call after each poll
+        # interval misses cache + fetches; subsequent same-interval calls
+        # from OTHER agents (when wired in future) hit cache.
         try:
             with timed_block(
                 "chain_block_number",
@@ -113,9 +152,14 @@ class ChainReconciler:
                 prefix=_outer_prefix,
                 always_info=False,
                 slow_word="SLOW CHAIN",
-                hint="IoTeX RPC block_number read — network latency or rate-limit",
+                hint="IoTeX RPC block_number read — network latency or rate-limit "
+                     "(STAGE-9 governed: TTL cache + semaphore + timeout)",
             ):
-                current_block = await self._chain._w3.eth.block_number
+                gov = self._get_governor()
+                if gov:
+                    current_block = await gov.get_block_number()
+                else:
+                    current_block = await self._chain._w3.eth.block_number
         except Exception as exc:
             log.warning("ChainReconciler: could not fetch block number: %s", exc)
             return
@@ -124,6 +168,8 @@ class ChainReconciler:
             return
 
         # SECTION B — chain get_logs (async; network; range-sensitive)
+        # Stage 9: route through governor for semaphore + timeout (NOT cached
+        # — get_logs is range-specific and not safely cacheable).
         try:
             with timed_block(
                 f"chain_get_logs_range_{current_block - self._last_block}",
@@ -132,12 +178,23 @@ class ChainReconciler:
                 prefix=_outer_prefix,
                 always_info=False,
                 slow_word="SLOW CHAIN",
-                hint="IoTeX get_logs over block range — narrow range or "
-                     "switch to event filter cursor if persistent",
+                hint="IoTeX get_logs over block range — STAGE-9 governed "
+                     "(semaphore + timeout); narrow range or event-filter "
+                     "cursor if persistent",
             ):
-                events = await self._chain.get_phg_checkpoint_events(
-                    self._last_block + 1, current_block
-                )
+                gov = self._get_governor()
+                if gov:
+                    _from = self._last_block + 1
+                    _to = current_block
+                    events = await gov.run_read(
+                        lambda: self._chain.get_phg_checkpoint_events(_from, _to),
+                        label=f"get_phg_checkpoint_events_range_{_to - _from + 1}",
+                        fallback=[],
+                    )
+                else:
+                    events = await self._chain.get_phg_checkpoint_events(
+                        self._last_block + 1, current_block
+                    )
         except Exception as exc:
             log.warning("ChainReconciler: getLogs error (non-fatal): %s", exc)
             events = []
