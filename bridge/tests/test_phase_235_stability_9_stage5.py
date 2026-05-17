@@ -24,6 +24,10 @@ def _stub_cfg(**overrides):
         "startup_jitter_enabled": True,
         "startup_jitter_max_s": 1.0,    # tight bound for fast tests
         "startup_jitter_seed": "",
+        # Stage 10 2026-05-17: scheduler disabled in stage-5 tests to
+        # preserve their original semantics (tests stage-5 jitter in isolation).
+        "boot_cohort_scheduler_enabled": False,
+        "boot_cohort_spacing_s": 5.0,
     }
     base.update(overrides)
     return SimpleNamespace(**base)

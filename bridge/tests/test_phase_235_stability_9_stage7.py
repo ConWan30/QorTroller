@@ -32,6 +32,10 @@ def _stub_cfg(**overrides):
         "startup_jitter_enabled": False,
         "startup_jitter_max_s": 0.0,
         "startup_jitter_seed": "",
+        # Stage 10 2026-05-17: scheduler disabled in stage-7 tests to
+        # preserve the original isolated tick_all return-contract semantics.
+        "boot_cohort_scheduler_enabled": False,
+        "boot_cohort_spacing_s": 5.0,
     }
     base.update(overrides)
     return SimpleNamespace(**base)
