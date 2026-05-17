@@ -490,9 +490,14 @@ class ControllerHardwareIntelligenceAgent:
         
         try:
             import hid
-            
-            # Enumerate all HID devices
-            devices = hid.enumerate()
+            import asyncio as _asyncio
+
+            # Phase 235.x-STABILITY-9 stage 3 2026-05-17: hid.enumerate() is
+            # a synchronous Windows HID enumeration that typically blocks
+            # 1-3s. Offload to worker thread so the controller-hardware
+            # detection cycle (default 300s poll) doesn't freeze the event
+            # loop while iterating every device on every machine bus.
+            devices = await _asyncio.to_thread(hid.enumerate)
             
             for device in devices:
                 vid = device.get("vendor_id")
