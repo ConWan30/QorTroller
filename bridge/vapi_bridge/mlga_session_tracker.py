@@ -532,7 +532,12 @@ async def run_mlga_session_tracker_loop(
     )
     try:
         while True:
-            tracker.poll_once()
+            # Phase 235.x-STABILITY-8 2026-05-17: wrap sync poll_once in
+            # asyncio.to_thread to prevent SQL queries from blocking the
+            # event loop (loop_health_monitor was flagging 6-25s starvation
+            # events traced to this + 3 sibling MLGA trackers all doing
+            # sync DB work in async context).
+            await asyncio.to_thread(tracker.poll_once)
             await asyncio.sleep(interval_s)
     except asyncio.CancelledError:
         if tracker._open is not None:
