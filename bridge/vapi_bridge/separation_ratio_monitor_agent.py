@@ -122,6 +122,10 @@ class SeparationRatioMonitorAgent:
         # 3. Fire bus event
         if self._bus is not None:
             try:
+                # Phase 235.x-STABILITY-9 stage 3 2026-05-17: missing 'source'
+                # kwarg caused "publish_sync() missing 1 required positional
+                # argument" warnings since Phase 129 ship — non-fatal but
+                # documented in archaeological sweep.
                 self._bus.publish_sync(
                     "separation_ratio_breakthrough",
                     {
@@ -131,6 +135,7 @@ class SeparationRatioMonitorAgent:
                         "feature_count": feature_count,
                         "ts":            time.time(),
                     },
+                    source="separation_ratio_monitor_agent",
                 )
             except Exception as exc:
                 _log.warning("Phase 129: bus publish error: %s", exc)
@@ -205,6 +210,7 @@ class SeparationRatioMonitorAgent:
                         "ratio":      ratio,
                         "ts":         time.time(),
                     },
+                    source="separation_ratio_monitor_agent",
                 )
             except Exception as exc:
                 _log.warning("Phase 214: bus publish error on graduation_readiness_check: %s", exc)
