@@ -155,6 +155,38 @@ class Config:
     matches WIF-064 zombie pattern signature (12-30s blocks, much higher
     than 1s)."""
 
+    # --- Phase 235.x-STABILITY-9 stage 5 (2026-05-17): startup-jitter ---
+    startup_jitter_enabled: bool = field(
+        default_factory=lambda: _env_bool("STARTUP_JITTER_ENABLED", True)
+    )
+    """Phase 235.x-STABILITY-9 stage 5 — Enable startup-jitter primitive
+    that spreads the thundering-herd of background agent first-polls
+    across a configurable window at bridge boot. When True (default),
+    each thundering-herd contributor sleeps `uniform(0, startup_jitter_max_s)`
+    before its first iteration; eliminates the 7.5-min STARVATION wave
+    empirically observed at boot. Set STARTUP_JITTER_ENABLED=false to
+    revert to pre-stage-5 thundering-herd behavior."""
+
+    startup_jitter_max_s: float = field(
+        default_factory=lambda: float(_env("STARTUP_JITTER_MAX_S", "30.0"))
+    )
+    """Phase 235.x-STABILITY-9 stage 5 — Maximum jitter window in
+    seconds. Default 30.0 — spreads ~17 thundering-herd contributors
+    across a 30s window (mean ~15s offset). Smaller values (e.g. 5s)
+    reduce stagger effectiveness; larger values (e.g. 60s) delay all
+    first-fires equivalently. Conservative default chosen so absorbed
+    agents with shortest interval (ChainReconciler 30s) still get
+    meaningful spread without dropping invocations entirely."""
+
+    startup_jitter_seed: str = field(
+        default_factory=lambda: _env("STARTUP_JITTER_SEED", "")
+    )
+    """Phase 235.x-STABILITY-9 stage 5 — Optional reproducibility seed.
+    Default empty = process-fresh non-deterministic seed (os.urandom).
+    Set to any non-empty string to make jitter values reproducible
+    across restarts — useful for ceremony audit trails where exact
+    boot timing must be reconstructable."""
+
     # --- Phase 235.x-STABILITY-9 stages 4c/4d/4e (2026-05-17): absorbed agents ---
     stewards_absorb_enabled: bool = field(
         default_factory=lambda: _env_bool("STEWARDS_ABSORB_ENABLED", True)

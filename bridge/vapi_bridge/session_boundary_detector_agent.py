@@ -290,6 +290,9 @@ class SessionBoundaryDetectorAgent:
     # ------------------------------------------------------------------
 
     async def run_poll_loop(self) -> None:
+        # Phase 235.x-STABILITY-9 stage 5 2026-05-17: startup-jitter.
+        from .startup_grace import startup_grace
+        await startup_grace(self._cfg, agent_name="SessionBoundaryDetectorAgent")
         log.info(
             "Phase 235-AUTO-TRIGGER: SessionBoundaryDetectorAgent started "
             "(agent #38; poll=%ds; min_interval=%ds; quiescence_window=%d; "

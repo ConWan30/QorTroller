@@ -185,6 +185,9 @@ class EnrollmentAutoGuidanceAgent:
     async def run_poll_loop(self) -> None:
         """1-hour poll loop — synthesizes guidance and persists report."""
         poll_s = int(getattr(self._cfg, "enrollment_guidance_poll_interval_s", 3600))
+        # Phase 235.x-STABILITY-9 stage 5 2026-05-17: startup-jitter.
+        from .startup_grace import startup_grace
+        await startup_grace(self._cfg, agent_name="EnrollmentAutoGuidanceAgent")
         while True:
             try:
                 report = self._synthesize_guidance()
