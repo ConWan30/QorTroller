@@ -1043,66 +1043,38 @@ CONTRADICTION_RULES: dict = {
         ),
     },
 
-    # Rule O4-2 — VPM_MANIFEST_HASH_DRIFT (HIGH)
-    # Detects VPM artifacts whose declared zkba_manifest_hash_hex
-    # doesn't reference a known commitment_hex in zkba_artifact_log.
-    # The VPM artifact is a wrapper over an underlying ZKBA projection
-    # per Phase O4 plan section 3 Stream A.0 design: the wrapper
-    # carries zkba_manifest_hash_hex as a cryptographic composition
-    # link. If the wrapper claims a zkba_manifest_hash_hex that doesn't
-    # appear anywhere in zkba_artifact_log, either the wrapper is
-    # forged or the ZKBA layer drifted.
-    "VPM_MANIFEST_HASH_DRIFT": {
-        "query": """
-            SELECT v.id, v.commitment_hex, v.vpm_id, v.visual_state,
-                   v.zkba_manifest_hash_hex, v.ts_ns, v.created_at
-            FROM vpm_artifact_log v
-            LEFT JOIN zkba_artifact_log z
-                   ON z.commitment_hex = v.zkba_manifest_hash_hex
-            WHERE v.created_at >= ?
-              AND v.zkba_manifest_hash_hex IS NOT NULL
-              AND v.zkba_manifest_hash_hex != ''
-              AND z.commitment_hex IS NULL
-            ORDER BY v.created_at DESC LIMIT 5
-        """,
-        "params": lambda cfg: (time.time() - 3600,),
-        "agents_involved": [
-            "AnchorSentry",
-            "Guardian",
-            "Curator",
-        ],
-        "severity": "HIGH",
-        "explanation": (
-            "VPM artifact in vpm_artifact_log declares a "
-            "zkba_manifest_hash_hex that does not match any "
-            "commitment_hex in zkba_artifact_log. The VPM wrapper "
-            "schema vapi-vpm-manifest-v1 (Phase O4 INV-VPM-WRAPPER-001 "
-            "+ INV-VPM-WRAPPER-SCHEMA-REF-001) requires every VPM "
-            "artifact to reference a real underlying ZKBA projection. "
-            "Possible causes: (a) VPM compiler invoked with a "
-            "fabricated zkba_manifest_hash_hex (overclaim), (b) the "
-            "wrapped ZKBA artifact was deleted post-VPM-compile "
-            "(structural drift), (c) the VPM was compiled against a "
-            "ZKBA artifact from a different bridge instance. The "
-            "Layer 2 audit endpoint /operator/vpm-audit-status "
-            "Section 1 + Section 2 will not detect this — it's a "
-            "cross-table referential integrity check that requires "
-            "live FSCA polling."
-        ),
-        "resolution": (
-            "For each affected row: query "
-            "/operator/zkba-artifact/<zkba_manifest_hash_hex> to "
-            "confirm the underlying ZKBA artifact really is missing. "
-            "If missing: investigate whether the VPM compile was "
-            "operator-authorized + whether the zkba_manifest_hash_hex "
-            "was reproducible from the ZKBA primitive at compile time. "
-            "If the ZKBA artifact was deleted (no Phase O3 deletion "
-            "primitive exists; manual SQL deletion is the only path), "
-            "this rule documents the resulting orphan. Restoration "
-            "requires re-compiling the ZKBA artifact via the original "
-            "scripts/zkba_compile_*.py path."
-        ),
-    },
+    # ──────────────────────────────────────────────────────────────
+    # SUPERSEDED 2026-05-16 — VPM_MANIFEST_HASH_DRIFT REMOVED (Option B
+    # per H-1 investigation; commit see git log around this date).
+    # ──────────────────────────────────────────────────────────────
+    # Rule O4-2 was DROPPED after Mythos audit 2026-05-16 surfaced 84
+    # unresolved findings + investigation found the rule was checking
+    # a relationship the production design never honored. The field
+    # `zkba_manifest_hash_hex` on vpm_artifact_log is populated by the
+    # six MLGA Stage 4-10 emitters with the underlying PRIMITIVE's
+    # commitment (dataproof SHA-256 for MLGA, GIC chain head for
+    # GIC-LEDGER-BETA, etc.) — these are legitimate cryptographic
+    # commitments that simply aren't stored in zkba_artifact_log. The
+    # original Phase O3-ZKBA-TRACK1 G5b schema intent (VPM wraps a
+    # ZKBA projection) was not honored by the Phase O5-MLGA autonomous-
+    # emission arc, which legitimately bypasses the ZKBA wrapping for
+    # primitives that already have their own commitment shape.
+    #
+    # Option B chosen over schema rename + emitter enrichment because:
+    #   - the primitive commitments already cryptographically commit
+    #     to the data (wrapping them in ZKBA adds a layer without
+    #     adding integrity);
+    #   - 127/127 vpm_artifact_log rows were orphans (not isolated);
+    #   - field rename would touch a PV-CI-pinned schema literal
+    #     (governance ceremony) for no semantic gain.
+    #
+    # If a future architectural decision restores the ZKBA-wrapping
+    # invariant (e.g. a new ZKBA-wrapped VPM artifact class is added
+    # alongside the existing primitive-direct classes), re-add a
+    # narrower variant of this rule scoped to ONLY that class — do
+    # not restore the broad cross-table check that was failing on
+    # legitimate primitive-direct emissions.
+    # ──────────────────────────────────────────────────────────────
 
     # Rule O4-3 — VPM_LIFECYCLE_REGRESSION (MEDIUM)
     # Detects VPM IDs at Compiler Target lifecycle (DISPUTE-PACKET-v1
