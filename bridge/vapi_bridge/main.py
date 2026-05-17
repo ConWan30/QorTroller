@@ -604,6 +604,44 @@ class Bridge:
             _t.add_done_callback(_task_done_handler)
             self._tasks.append(_t)
 
+        # Phase 235.x-STABILITY-9 (2026-05-17): bisection instrument.
+        # Hoist loop_health_monitor to run BEFORE any agent tasks so it
+        # observes the event loop from the earliest possible point. Then
+        # short-circuit if minimal_task_mode=True — leaves uvicorn +
+        # loop_health_monitor as the only running tasks for baseline.
+        if getattr(self.cfg, "loop_health_monitor_enabled", True):
+            try:
+                from .loop_health_monitor import run_loop_health_monitor
+                _loop_health_task = asyncio.ensure_future(
+                    run_loop_health_monitor(cfg=self.cfg)
+                )
+                _loop_health_task.set_name("LoopHealthMonitor")
+                self._tasks.append(_loop_health_task)
+                log.info(
+                    "Phase 235.x-STABILITY-3: loop_health_monitor task started "
+                    "(check=%.1fs, threshold=%.1fs)",
+                    getattr(self.cfg, "loop_health_check_interval_s", 2.0),
+                    getattr(self.cfg, "loop_health_starvation_threshold_s", 1.0),
+                )
+            except Exception as _lh_exc:  # noqa: BLE001
+                log.warning(
+                    "Phase 235.x-STABILITY-3: loop_health_monitor unavailable: %s",
+                    _lh_exc,
+                )
+
+        if getattr(self.cfg, "minimal_task_mode", False):
+            log.warning(
+                "Phase 235.x-STABILITY-9 MINIMAL_TASK_MODE=true — skipping ALL "
+                "background agent tasks (batcher, transports, polling loops, "
+                "trackers, FSCA, drift sweepers, executors). Bridge will only "
+                "run uvicorn HTTP server + loop_health_monitor for baseline "
+                "stability measurement. To restore full operation: set "
+                "MINIMAL_TASK_MODE=false in bridge/.env + restart."
+            )
+            # Park forever so the bridge keeps running.
+            await asyncio.Event().wait()
+            return
+
         if self.cfg.dualshock_enabled:
             from .dualshock_integration import DualShockTransport
             from .continuity_prover import ContinuityProver
@@ -1736,32 +1774,11 @@ class Bridge:
                     _curator_exc,
                 )
 
-        # Phase 235.x-STABILITY-3 2026-05-08: loop health monitor (WIF-065 closure).
-        # Independent heartbeat task that detects asyncio event loop starvation
-        # regardless of asyncio's debug mode. Closes the instrumentation gap
-        # discovered in WIF-065 (asyncio's slow_callback warning is gated by
-        # set_debug(True) which defaults OFF; STABILITY-2's threshold setting
-        # had no effect, producing 0 warnings during 16 zombie events).
-        # Default ENABLED. Lightweight (~one wakeup every 2s).
-        if getattr(self.cfg, "loop_health_monitor_enabled", True):
-            try:
-                from .loop_health_monitor import run_loop_health_monitor
-                _loop_health_task = asyncio.ensure_future(
-                    run_loop_health_monitor(cfg=self.cfg)
-                )
-                _loop_health_task.set_name("LoopHealthMonitor")
-                self._tasks.append(_loop_health_task)
-                log.info(
-                    "Phase 235.x-STABILITY-3: loop_health_monitor task started "
-                    "(check=%.1fs, threshold=%.1fs)",
-                    getattr(self.cfg, "loop_health_check_interval_s", 2.0),
-                    getattr(self.cfg, "loop_health_starvation_threshold_s", 1.0),
-                )
-            except Exception as _lh_exc:
-                log.warning(
-                    "Phase 235.x-STABILITY-3: loop_health_monitor unavailable: %s",
-                    _lh_exc,
-                )
+        # Phase 235.x-STABILITY-9 2026-05-17: loop_health_monitor task was
+        # hoisted to run right after uvicorn (~line 605) so it observes the
+        # loop from earliest possible point + cooperates with minimal_task_mode
+        # short-circuit. Original spawn block removed from this position to
+        # avoid double-spawn.
 
         # Phase 235-AUTO-TRIGGER: SessionBoundaryDetectorAgent (agent #38).
         # Heuristic detector that publishes ruling_request events on detected
