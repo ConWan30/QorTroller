@@ -70,54 +70,47 @@ log = logging.getLogger(__name__)
 
 @contextlib.contextmanager
 def _timed_curator_task(task_name: str, cfg, logger):
-    """Time wrapper for a curator task body.
+    """Stage 6 backward-compat wrapper. Stage 7 (2026-05-17) delegates
+    to shared `loop_timing.timed_block` while preserving the stage 6
+    log-message shape that operators have learned to grep for.
 
-    Always logs INFO with duration; logs WARNING when duration exceeds
-    cfg.curator_task_warn_duration_s (default 5.0s) — surfaces the
-    Task 6/7 70s blocker by name.
+    Produces INFO: "[CorpusDataCuratorAgent] STAGE-6: <task_name> duration=Xs (tid=N)"
+    Produces WARN: "[CorpusDataCuratorAgent] STAGE-6 SLOW TASK: <task_name> took Xs ..."
     """
-    t_start = time.monotonic()
-    wall_start_ns = time.time_ns()
-    tid = threading.get_ident()
+    from .loop_timing import timed_block
     warn_s = float(getattr(cfg, "curator_task_warn_duration_s", 5.0))
-    try:
+    with timed_block(
+        task_name,
+        warn_s=warn_s,
+        logger=logger,
+        prefix="[CorpusDataCuratorAgent] STAGE-6",
+        always_info=True,
+        slow_word="SLOW TASK",
+        hint="likely contributor to LOOP STARVATION",
+    ):
         yield
-    finally:
-        dur_s = time.monotonic() - t_start
-        if dur_s > warn_s:
-            logger.warning(
-                "[CorpusDataCuratorAgent] STAGE-6 SLOW TASK: %s took %.2fs "
-                "(tid=%d, wall_start_ns=%d, warn_threshold=%.1fs) — "
-                "likely contributor to LOOP STARVATION",
-                task_name, dur_s, tid, wall_start_ns, warn_s,
-            )
-        else:
-            logger.info(
-                "[CorpusDataCuratorAgent] STAGE-6: %s duration=%.3fs (tid=%d)",
-                task_name, dur_s, tid,
-            )
 
 
 @contextlib.contextmanager
 def _timed_db_block(site_name: str, cfg, logger):
-    """Time wrapper for individual SQLite connection block inside a curator
-    task. Logs WARNING when block exceeds cfg.curator_db_warn_duration_s
-    (default 1.0s) — identifies WAL contention / cache-miss / cold-start
-    patterns vs CPU work."""
-    t_start = time.monotonic()
-    tid = threading.get_ident()
+    """Stage 6 backward-compat wrapper. Stage 7 delegates to shared
+    `loop_timing.timed_block`. Silent under threshold; WARNING when
+    block exceeds cfg.curator_db_warn_duration_s (default 1.0s).
+
+    Produces WARN: "[CorpusDataCuratorAgent] STAGE-6 SLOW DB: <site_name> took Xs ..."
+    """
+    from .loop_timing import timed_block
     warn_s = float(getattr(cfg, "curator_db_warn_duration_s", 1.0))
-    try:
+    with timed_block(
+        site_name,
+        warn_s=warn_s,
+        logger=logger,
+        prefix="[CorpusDataCuratorAgent] STAGE-6",
+        always_info=False,
+        slow_word="SLOW DB",
+        hint="investigate WAL contention or query plan",
+    ):
         yield
-    finally:
-        dur_s = time.monotonic() - t_start
-        if dur_s > warn_s:
-            logger.warning(
-                "[CorpusDataCuratorAgent] STAGE-6 SLOW DB: %s took %.3fs "
-                "(tid=%d, warn_threshold=%.1fs) — investigate WAL contention "
-                "or query plan",
-                site_name, dur_s, tid, warn_s,
-            )
 
 _POLL_INTERVAL_S = 1800          # 30-minute unified cycle
 _TBD_LAMBDA = math.log(2) / 90  # FROZEN: BP-001 TBD decay constant

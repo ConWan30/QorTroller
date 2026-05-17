@@ -331,26 +331,59 @@ class AbsorbedAgentTicker:
         agent doesn't block others — but they run sequentially, not in
         parallel, to preserve the steward's "one thing at a time"
         polling discipline.
+
+        Phase 235.x-STABILITY-9 stage 7 (2026-05-17): instrumented —
+        outer wall + per-spec invocation timing surface which absorbed
+        agent in this steward is the slow contributor when the first-fire
+        cohort blocks the loop.
         """
-        now = time.time()
-        fired: Dict[str, int] = {}
-        for spec in self._specs:
-            state = self._state[spec.name]
-            elapsed = now - state.last_invoked_at
-            if state.last_invoked_at == 0.0 or elapsed >= spec.interval_s:
-                # Eligible — fire it.
-                try:
-                    await self._invoke_one(spec)
-                    fired[spec.name] = 1
-                except Exception as exc:  # noqa: BLE001 — defense in depth
-                    log.warning(
-                        "%sStewardAbsorbedTicker: tick_all caught %s for %s",
-                        self._steward_name, exc, spec.name,
-                    )
+        from .loop_timing import timed_block
+        _outer_warn_s = float(getattr(
+            self._cfg, "absorbed_ticker_outer_warn_duration_s", 2.0
+        ))
+        _per_spec_warn_s = float(getattr(
+            self._cfg, "absorbed_ticker_per_spec_warn_duration_s", 1.0
+        ))
+        _prefix = f"[{self._steward_name}StewardAbsorbedTicker] STAGE-7"
+        with timed_block(
+            "tick_all",
+            warn_s=_outer_warn_s,
+            logger=log,
+            prefix=_prefix,
+            always_info=False,
+            slow_word="SLOW TICK",
+            hint="one or more absorbed specs slow — see per-spec WARNINGs",
+        ):
+            now = time.time()
+            fired: Dict[str, int] = {}
+            for spec in self._specs:
+                state = self._state[spec.name]
+                elapsed = now - state.last_invoked_at
+                if state.last_invoked_at == 0.0 or elapsed >= spec.interval_s:
+                    # Eligible — fire it (per-spec timed for naming).
+                    try:
+                        with timed_block(
+                            f"spec_{spec.name}",
+                            warn_s=_per_spec_warn_s,
+                            logger=log,
+                            prefix=_prefix,
+                            always_info=False,
+                            slow_word="SLOW SPEC",
+                            hint=f"absorbed agent {spec.name} interval_s="
+                                 f"{spec.interval_s} — investigate compute "
+                                 f"method {spec.method_name}",
+                        ):
+                            await self._invoke_one(spec)
+                        fired[spec.name] = 1
+                    except Exception as exc:  # noqa: BLE001 — defense in depth
+                        log.warning(
+                            "%sStewardAbsorbedTicker: tick_all caught %s for %s",
+                            self._steward_name, exc, spec.name,
+                        )
+                        fired[spec.name] = 0
+                else:
                     fired[spec.name] = 0
-            else:
-                fired[spec.name] = 0
-        return fired
+            return fired
 
     def get_state_summary(self) -> Dict[str, Dict[str, Any]]:
         """Read-only snapshot of per-agent state — for /operator/* endpoints."""
