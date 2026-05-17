@@ -166,7 +166,13 @@ export default function ReplaySearch({
           aria-describedby="replay-search-detected"
           style={{
             fontFamily:   _MONO,
-            fontSize:     'var(--os-text-label)',
+            // Stage 5.4 (Android responsive audit Finding A1): input
+            // font-size must be ≥16px to suppress Chrome Android auto-
+            // zoom-on-focus (which doesn't auto-zoom back and leaves
+            // operator stuck at zoomed level). 13px label token is
+            // correct for non-interactive text; interactive controls
+            // need 16px floor on mobile.
+            fontSize:     '16px',
             color:        'var(--os-text)',
             background:   'var(--os-bg)',
             border:       '1px solid var(--os-border)',
