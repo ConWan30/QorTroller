@@ -155,6 +155,20 @@ class Config:
     matches WIF-064 zombie pattern signature (12-30s blocks, much higher
     than 1s)."""
 
+    # --- Phase 235.x-STABILITY-9 stages 4c/4d/4e (2026-05-17): absorbed agents ---
+    stewards_absorb_enabled: bool = field(
+        default_factory=lambda: _env_bool("STEWARDS_ABSORB_ENABLED", True)
+    )
+    """Phase 235.x-STABILITY-9 stages 4c/4d/4e — Enable the Operator
+    Initiative stewards (Sentry/Guardian/Curator) to absorb the 11
+    diagnostic + provenance + corpus agents enumerated in
+    agent_rationalization_v1.md. When True, the 11 standalone background
+    asyncio tasks are NOT spawned in main.py; instead each steward's
+    poll loop invokes the absorbed agents at their original cadences
+    via operator_steward_absorbed_agents.AbsorbedAgentTicker.
+    Default ON. Set STEWARDS_ABSORB_ENABLED=false to revert to the
+    pre-stage-4 behavior (all 11 agents spawn as standalone tasks)."""
+
     # --- Phase 235.x-STABILITY-9 (2026-05-17): bisection instrument ---
     minimal_task_mode: bool = field(
         default_factory=lambda: _env_bool("MINIMAL_TASK_MODE", False)

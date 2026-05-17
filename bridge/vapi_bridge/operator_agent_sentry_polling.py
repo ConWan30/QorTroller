@@ -77,6 +77,8 @@ class SentryPollingLoop:
         store: Any,
         draft_generator: Any,
         get_pending_triggers: Callable[[], list[dict]],
+        chain: Any = None,
+        bus: Any = None,
     ) -> None:
         self._cfg = cfg
         self._store = store
@@ -89,6 +91,27 @@ class SentryPollingLoop:
             getattr(cfg, "operator_agent_sentry_polling_interval_s",
                     _POLL_INTERVAL_DEFAULT_S)
         )
+        # Phase 235.x-STABILITY-9 stage 4d 2026-05-17: absorbed-agent ticker
+        # invokes 4 provenance/chain-anchor agents at their original cadences
+        # instead of running 4 standalone background asyncio tasks. Per
+        # agent_rationalization_v1.md §3.3 + Q2 (steward cadence: agents fire
+        # when their original interval has elapsed relative to last tick).
+        self._absorbed_ticker = None
+        if getattr(cfg, "stewards_absorb_enabled", True):
+            try:
+                from .operator_steward_absorbed_agents import (
+                    AbsorbedAgentTicker, SENTRY_ABSORBED,
+                )
+                self._absorbed_ticker = AbsorbedAgentTicker(
+                    steward_name="Sentry",
+                    specs=SENTRY_ABSORBED,
+                    cfg=cfg, store=store, chain=chain, bus=bus,
+                )
+            except Exception as _exc:  # noqa: BLE001
+                log.warning(
+                    "SentryPollingLoop: absorbed ticker setup failed (%s); "
+                    "absorbed agents will not run", _exc,
+                )
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -137,6 +160,17 @@ class SentryPollingLoop:
         while not self._stop_event.is_set():
             try:
                 await self._dispatch_one_cycle()
+                # Phase 235.x-STABILITY-9 stage 4d 2026-05-17: tick absorbed
+                # provenance/chain-anchor agents. Each fires at its own cadence
+                # via per-agent elapsed-since-last-invoked tracking.
+                if self._absorbed_ticker is not None:
+                    try:
+                        await self._absorbed_ticker.tick_all()
+                    except Exception as _abs_exc:  # noqa: BLE001
+                        log.warning(
+                            "SentryPollingLoop: absorbed tick failed (%s); "
+                            "continuing main loop", _abs_exc,
+                        )
             except asyncio.CancelledError:
                 log.info("SentryPollingLoop: cancelled, exiting cleanly")
                 raise
@@ -252,6 +286,8 @@ async def run_sentry_polling_loop(
     store: Any,
     draft_generator: Any = None,
     get_pending_triggers: Optional[Callable[[], list[dict]]] = None,
+    chain: Any = None,
+    bus: Any = None,
 ) -> None:
     """Module-level entrypoint invoked from main.py.
 
@@ -283,6 +319,8 @@ async def run_sentry_polling_loop(
         store=store,
         draft_generator=draft_generator,
         get_pending_triggers=get_pending_triggers,
+        chain=chain,
+        bus=bus,
     )
     await loop.start()
     # Block until the inner task completes (graceful cancellation by main.py
