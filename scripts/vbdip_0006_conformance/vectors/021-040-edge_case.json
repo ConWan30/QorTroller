@@ -1,0 +1,702 @@
+[
+  {
+    "category": "edge_case",
+    "expected": {
+      "body_hex": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "body_sha256_hex": "4b22ee6807a2e4ddfd1bf16851609a7a009f4c6bd5aeb78162f121cb89492f02",
+      "signature_hex": "9295a2c06c4ea7da5e6ac584d89a3797b13970465078f789d0bb4e04f112b8d1c355c96d3f1fad46f878b5171dc739c75c661fdd30ab0206d659f14b3e059eaf",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 0,
+      "battery_pct": 0,
+      "bounty_id": 0,
+      "confidence": 0,
+      "inference_result": 0,
+      "latitude": 0.0,
+      "longitude": 0.0,
+      "model_manifest_hash_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+      "monotonic_ctr": 0,
+      "prev_poac_hash_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+      "sensor_commitment_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+      "timestamp_ms": 0,
+      "world_model_hash_hex": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "notes": "C2 edge case boundary sample 1/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-021"
+  },
+  {
+    "category": "edge_case",
+    "expected": {
+      "body_hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff64ffffffff400000000000000040568000000000004066800000000000ffffffff",
+      "body_sha256_hex": "d29e7919e81aad4d6a4f1ae0d9a22f89daaa0a19812bfbb67202920ca6cad3f1",
+      "signature_hex": "8ac84c1ba0281793b16c33f5ec4bf8823bc6ace6af40190d06fad1f218f9fb323db1b9353dc9ef895d4aa42da16de40e685c09fc79c937da886f78a4da313909",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 255,
+      "battery_pct": 100,
+      "bounty_id": 4294967295,
+      "confidence": 255,
+      "inference_result": 255,
+      "latitude": 90.0,
+      "longitude": 180.0,
+      "model_manifest_hash_hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "monotonic_ctr": 4294967295,
+      "prev_poac_hash_hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "sensor_commitment_hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "timestamp_ms": 4611686018427387904,
+      "world_model_hash_hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "notes": "C2 edge case boundary sample 2/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-022"
+  },
+  {
+    "category": "edge_case",
+    "expected": {
+      "body_hex": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000ffffff64ffffffff000001000000000000000000000000000000000000000000ffffffff",
+      "body_sha256_hex": "72a08a3c8d0674fd60f78a50946f3601290c211520324a5fc2a793ae495e4bab",
+      "signature_hex": "b3131abe37eb9d5aa143f79e5b04aee95db1965ce73ef47c23e51a2098854eab44ce20a108ad28e76c80b1b1393b4c0f84c69830fa547c378bd2af4fab2de765",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 255,
+      "battery_pct": 100,
+      "bounty_id": 4294967295,
+      "confidence": 255,
+      "inference_result": 255,
+      "latitude": 0.0,
+      "longitude": 0.0,
+      "model_manifest_hash_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+      "monotonic_ctr": 4294967295,
+      "prev_poac_hash_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+      "sensor_commitment_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+      "timestamp_ms": 1099511627776,
+      "world_model_hash_hex": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "notes": "C2 edge case boundary sample 3/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-023"
+  },
+  {
+    "category": "edge_case",
+    "expected": {
+      "body_hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff000000000000000000000000000000000000000000000000000000000000000000000000",
+      "body_sha256_hex": "9e4f411e5165f1ebeaca96bd034726ad43c7db9f11337322266022c4c0cffcf6",
+      "signature_hex": "1d28774a1305ae50231bbcfb1b233aea4c023290383751e1f0f587cb50ce4dbf9ba1c02b1ece9e26371a57438a72ce1c016d39d859d2a5f01e9401055cab368d",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 0,
+      "battery_pct": 0,
+      "bounty_id": 0,
+      "confidence": 0,
+      "inference_result": 0,
+      "latitude": 0.0,
+      "longitude": 0.0,
+      "model_manifest_hash_hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "monotonic_ctr": 0,
+      "prev_poac_hash_hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "sensor_commitment_hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "timestamp_ms": 0,
+      "world_model_hash_hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "notes": "C2 edge case boundary sample 4/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-024"
+  },
+  {
+    "category": "edge_case",
+    "expected": {
+      "body_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa100580320000000100000000000000010000000000000000000000000000000000000001",
+      "body_sha256_hex": "c57adf3042dee6d1b752324a423a257c30586e24c9ede9a176f8597c3effba47",
+      "signature_hex": "09cd19d31f0e18bf21aa3e7d2f1115643ee319ba88e52ac888dca053f878ed1884e86b2036e7bbbffee51840d98a7071c96e4182762aa815024f41dc5154c77c",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 5,
+      "battery_pct": 50,
+      "bounty_id": 1,
+      "confidence": 128,
+      "inference_result": 16,
+      "latitude": 0.0,
+      "longitude": 0.0,
+      "model_manifest_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "monotonic_ctr": 1,
+      "prev_poac_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sensor_commitment_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "timestamp_ms": 1,
+      "world_model_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "notes": "C2 edge case boundary sample 5/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-025"
+  },
+  {
+    "category": "edge_case",
+    "expected": {
+      "body_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa110100320000006400000000000003e83ff00000000000003ff000000000000000000000",
+      "body_sha256_hex": "705516068a70ba232460a4a525592d3361ec40deef4cf26aa53c9471a937415f",
+      "signature_hex": "a9eaee5050fea900081adf6bd77178b7632f2b4cc2cead40aa392737bf75be6a74816fb8bfedec2ad7095b6abab3ee0abb3714c8937f4c56b704d15460938f1a",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 1,
+      "battery_pct": 50,
+      "bounty_id": 0,
+      "confidence": 0,
+      "inference_result": 17,
+      "latitude": 1.0,
+      "longitude": 1.0,
+      "model_manifest_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "monotonic_ctr": 100,
+      "prev_poac_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sensor_commitment_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "timestamp_ms": 1000,
+      "world_model_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "notes": "C2 edge case boundary sample 6/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-026"
+  },
+  {
+    "category": "edge_case",
+    "expected": {
+      "body_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa12027f320000006400000000000003e83ff00000000000003ff000000000000000000000",
+      "body_sha256_hex": "48a03e806f6b267caa557794e8b95aaca92244e4988261f5b1744a73db384228",
+      "signature_hex": "47d11dac54b45a3f99cafb091079111c7daa393c378bddea0792f1479455ab37a6ee8f9c253b65d18b841e58bdad58ed000061b88c66028815cff8fb8b9374c0",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 2,
+      "battery_pct": 50,
+      "bounty_id": 0,
+      "confidence": 127,
+      "inference_result": 18,
+      "latitude": 1.0,
+      "longitude": 1.0,
+      "model_manifest_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "monotonic_ctr": 100,
+      "prev_poac_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sensor_commitment_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "timestamp_ms": 1000,
+      "world_model_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "notes": "C2 edge case boundary sample 7/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-027"
+  },
+  {
+    "category": "edge_case",
+    "expected": {
+      "body_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0009c8000000006400000000000003e8000000000000000000000000000000000000002a",
+      "body_sha256_hex": "0e2f393b3883784371e1b31af9455d80f7d5d998910dcdd1cf4c6e4879be7b12",
+      "signature_hex": "d798ec2cad967093f56f95554d3c300bc069b06c6c952a5a5af9c66fc601e6dd3d25d4f005af431acf179517f2868588b26fe67d7bafb87ebf9d33b554c96ad0",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 9,
+      "battery_pct": 0,
+      "bounty_id": 42,
+      "confidence": 200,
+      "inference_result": 0,
+      "latitude": 0.0,
+      "longitude": 0.0,
+      "model_manifest_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "monotonic_ctr": 100,
+      "prev_poac_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sensor_commitment_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "timestamp_ms": 1000,
+      "world_model_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "notes": "C2 edge case boundary sample 8/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-028"
+  },
+  {
+    "category": "edge_case",
+    "expected": {
+      "body_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0009c8640000006400000000000003e8000000000000000000000000000000000000002a",
+      "body_sha256_hex": "45da7b3e840221a33869cc5e9200332522b6424f16b41e8c9dad4037e3ef6b91",
+      "signature_hex": "0dd0c596d6d6995dcb1210a3c49872827369e93edd7907910121b305cc96e04d8af937de5b0ed2640650a71740548428c69a53269496c6eeeb251048d12e14cb",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 9,
+      "battery_pct": 100,
+      "bounty_id": 42,
+      "confidence": 200,
+      "inference_result": 0,
+      "latitude": 0.0,
+      "longitude": 0.0,
+      "model_manifest_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "monotonic_ctr": 100,
+      "prev_poac_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sensor_commitment_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "timestamp_ms": 1000,
+      "world_model_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "notes": "C2 edge case boundary sample 9/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-029"
+  },
+  {
+    "category": "edge_case",
+    "expected": {
+      "body_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa000064320000000100000000000000010000000000000000000000000000000000000000",
+      "body_sha256_hex": "2bbff02e8a1d022868cce57e1f74b8163895389a10516340cb8f3611b35a1a05",
+      "signature_hex": "6e261a70f719e9e15b6143bc137d8ffc6561ec6897b0f5d3cb80c4d2abe9bc2a1a81510f55001f020a6c3c526fb26e4ffb002511bc985e5b0bdcd1200c298459",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 0,
+      "battery_pct": 50,
+      "bounty_id": 0,
+      "confidence": 100,
+      "inference_result": 0,
+      "latitude": 0.0,
+      "longitude": 0.0,
+      "model_manifest_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "monotonic_ctr": 1,
+      "prev_poac_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sensor_commitment_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "timestamp_ms": 1,
+      "world_model_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "notes": "C2 edge case boundary sample 10/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-030"
+  },
+  {
+    "category": "edge_case",
+    "expected": {
+      "body_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa090900640000000100000000000000000000000000000000000000000000000000000000",
+      "body_sha256_hex": "8d22d74c595883d70a32c478e431b86a126eb01d1120e1baba29131cfb3edd66",
+      "signature_hex": "c0faf76311803a9eead0985616eb8154cd8aa72a794e8e1de43773498a4fc130477aaafec05ef2a7aa5848e8505fa65fdc24e775c68122f742651c1f677fa597",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 9,
+      "battery_pct": 100,
+      "bounty_id": 0,
+      "confidence": 0,
+      "inference_result": 9,
+      "latitude": 0.0,
+      "longitude": 0.0,
+      "model_manifest_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "monotonic_ctr": 1,
+      "prev_poac_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sensor_commitment_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "timestamp_ms": 0,
+      "world_model_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "notes": "C2 edge case boundary sample 11/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-031"
+  },
+  {
+    "category": "edge_case",
+    "expected": {
+      "body_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa00003232000003e800000000800000000000000000000000000000000000000000000000",
+      "body_sha256_hex": "35c8e6b636613a5d33d90b5eef9f0cd5a1791182f478f0b486ee2ca4ca5df46a",
+      "signature_hex": "ad8da9a82eeed52a37fd74f6321261913c5ee371997d7216ff6ac488c1931f760f94fbd2bca1c3d25f987dd3d44b002be2ad07ca75196b51ab141b1597114fe4",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 0,
+      "battery_pct": 50,
+      "bounty_id": 0,
+      "confidence": 50,
+      "inference_result": 0,
+      "latitude": 0.0,
+      "longitude": 0.0,
+      "model_manifest_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "monotonic_ctr": 1000,
+      "prev_poac_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sensor_commitment_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "timestamp_ms": 2147483648,
+      "world_model_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "notes": "C2 edge case boundary sample 12/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-032"
+  },
+  {
+    "category": "edge_case",
+    "expected": {
+      "body_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa00003232000003e800000001000000000000000000000000000000000000000000000000",
+      "body_sha256_hex": "4b0edea6c0b31b14f832ac3dac5098f9c3d44865fde24a31f7f7c64b22a57361",
+      "signature_hex": "f3fd007ca5db9b26b0d85abefe4ac6f8721ab34b578bb297e208701fb85281798e2acee0039abda68c91900cb60e2f54e378cfe4675a0f6ec76ef4eca164dac7",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 0,
+      "battery_pct": 50,
+      "bounty_id": 0,
+      "confidence": 50,
+      "inference_result": 0,
+      "latitude": 0.0,
+      "longitude": 0.0,
+      "model_manifest_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "monotonic_ctr": 1000,
+      "prev_poac_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sensor_commitment_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "timestamp_ms": 4294967296,
+      "world_model_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "notes": "C2 edge case boundary sample 13/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-033"
+  },
+  {
+    "category": "edge_case",
+    "expected": {
+      "body_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa000032320000006400000000000003e80000000000000000000000000000000000000000",
+      "body_sha256_hex": "cff7dd07fb4735a925fd34368569732ddd4c24c7c7e98aa0a8c244031cca940b",
+      "signature_hex": "1aeefe93193c60db598b0eac9b230e16ab185cef09189299d8c72e4ef7cace7f84e66e6330b54159437ec91192f2f61ff75a67cc1fa01c3083f1520d9fc9e4e5",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 0,
+      "battery_pct": 50,
+      "bounty_id": 0,
+      "confidence": 50,
+      "inference_result": 0,
+      "latitude": 0.0,
+      "longitude": 0.0,
+      "model_manifest_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "monotonic_ctr": 100,
+      "prev_poac_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sensor_commitment_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "timestamp_ms": 1000,
+      "world_model_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "notes": "C2 edge case boundary sample 14/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-034"
+  },
+  {
+    "category": "edge_case",
+    "expected": {
+      "body_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa000032320000006400000000000003e8c056800000000000000000000000000000000000",
+      "body_sha256_hex": "576bbc89d26e8ebdf36e2b0d4981f8bad47247cd278f863a9f1593c990c52814",
+      "signature_hex": "8b0f993502c38e4bc7929cf3c1fff52a0126bccb8763878a7b0baeff7e22935df5be652df72448e1df276874fe5a582dc641c1b4f44f057ea11ed73918f77b6b",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 0,
+      "battery_pct": 50,
+      "bounty_id": 0,
+      "confidence": 50,
+      "inference_result": 0,
+      "latitude": -90.0,
+      "longitude": 0.0,
+      "model_manifest_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "monotonic_ctr": 100,
+      "prev_poac_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sensor_commitment_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "timestamp_ms": 1000,
+      "world_model_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "notes": "C2 edge case boundary sample 15/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-035"
+  },
+  {
+    "category": "edge_case",
+    "expected": {
+      "body_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa000032320000006400000000000003e84056800000000000000000000000000000000000",
+      "body_sha256_hex": "cbd992d1582262715448df94e2642bd6be287706826ef0296e43cdbe5baea4b6",
+      "signature_hex": "8f4a04fd303e63757f023c540bdeea06b9e8cbd6e0641d1327527068766552f58c1713b0d4333de5a7ea24338e21c9381af3fb30b446081f5aba3c7191e65cf5",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 0,
+      "battery_pct": 50,
+      "bounty_id": 0,
+      "confidence": 50,
+      "inference_result": 0,
+      "latitude": 90.0,
+      "longitude": 0.0,
+      "model_manifest_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "monotonic_ctr": 100,
+      "prev_poac_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sensor_commitment_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "timestamp_ms": 1000,
+      "world_model_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "notes": "C2 edge case boundary sample 16/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-036"
+  },
+  {
+    "category": "edge_case",
+    "expected": {
+      "body_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa000032320000006400000000000003e80000000000000000c06680000000000000000000",
+      "body_sha256_hex": "7f8ed9489b279ee2d4d7dcbf8b527c8a015414c280e40bc790315c93ef89ab7e",
+      "signature_hex": "1cd657490ee806250d806121346e16782aa58536383ac9ceddbd4d6ec80c377397a905b589a2c4b1094c5925ce95be9f5740eff6e851ff812d52bd12dcbb78f8",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 0,
+      "battery_pct": 50,
+      "bounty_id": 0,
+      "confidence": 50,
+      "inference_result": 0,
+      "latitude": 0.0,
+      "longitude": -180.0,
+      "model_manifest_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "monotonic_ctr": 100,
+      "prev_poac_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sensor_commitment_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "timestamp_ms": 1000,
+      "world_model_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "notes": "C2 edge case boundary sample 17/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-037"
+  },
+  {
+    "category": "edge_case",
+    "expected": {
+      "body_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa000032320000006400000000000003e80000000000000000406680000000000000000000",
+      "body_sha256_hex": "9ceb0cd3b094cc473e2668baa97d4421335db138dd6060421d59a638b4da785b",
+      "signature_hex": "d092bbe8af0fe34e9b7da04a732865aff3231ccf88f30ab23dd939da8fb56eab735fd7be4ee31af9b1ca6bb20f61f98d9d2038be4f8c223e1ea337e6c121c57d",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 0,
+      "battery_pct": 50,
+      "bounty_id": 0,
+      "confidence": 50,
+      "inference_result": 0,
+      "latitude": 0.0,
+      "longitude": 180.0,
+      "model_manifest_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "monotonic_ctr": 100,
+      "prev_poac_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sensor_commitment_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "timestamp_ms": 1000,
+      "world_model_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "notes": "C2 edge case boundary sample 18/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-038"
+  },
+  {
+    "category": "edge_case",
+    "expected": {
+      "body_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa130ac84b0000303900000000000109324046800000000000c052c0000000000000000063",
+      "body_sha256_hex": "5dadb1d99d9b6b7110789b8ea488a519e650e12ee0c4cd4a360c67d3fce32ed0",
+      "signature_hex": "510bc7cfca811eba29e0766eb0eadcd6ce9a85e31af4c6e1aa8da47f3fe9e69e6e3556abdaf801b4e087bb9c4e0250f63e8a91ec51e20e86450f8de05ead0492",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 10,
+      "battery_pct": 75,
+      "bounty_id": 99,
+      "confidence": 200,
+      "inference_result": 19,
+      "latitude": 45.0,
+      "longitude": -75.0,
+      "model_manifest_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "monotonic_ctr": 12345,
+      "prev_poac_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sensor_commitment_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "timestamp_ms": 67890,
+      "world_model_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "notes": "C2 edge case boundary sample 19/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-039"
+  },
+  {
+    "category": "edge_case",
+    "expected": {
+      "body_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa33026432000003e7000000000001869fc0468000000000004052c0000000000000000001",
+      "body_sha256_hex": "183581bcc27f9d19a645448778df569ee67f721b21d2bbd7abc1050631a1bcdd",
+      "signature_hex": "a51f9100ef00fc210247f37362d40279e13dc653a0dd27690c5372e09cc5d851aaf97763099c1877b2ac1a115fd38d5054031c54889d7003ad8703c507a80ed8",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 2,
+      "battery_pct": 50,
+      "bounty_id": 1,
+      "confidence": 100,
+      "inference_result": 51,
+      "latitude": -45.0,
+      "longitude": 75.0,
+      "model_manifest_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "monotonic_ctr": 999,
+      "prev_poac_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "sensor_commitment_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "timestamp_ms": 99999,
+      "world_model_hash_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "notes": "C2 edge case boundary sample 20/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-040"
+  }
+]

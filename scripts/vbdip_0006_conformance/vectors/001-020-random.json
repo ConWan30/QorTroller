@@ -1,0 +1,702 @@
+[
+  {
+    "category": "random",
+    "expected": {
+      "body_hex": "c5d71484f8cf9bf4b76f47904730804b9e3225a9f133b5dea168f4e2851f072fcc00fcaa7ca62061717a48e52e29a3fa379a953faa6893e32ec5a27b945e605f1085f3232d424c1329c88d786ed68ce6fcb62aa63bf9ab617c088a3b70be57aada1f334a7017250d3f603dc82ebd3b120b635e3ff56b1f0bd933852371249ab31b021f403bcaf4c4000000c8fcfcfa81c04b0ed7b3d2d0f5c04975c58f26a9f878601602",
+      "body_sha256_hex": "3a2bac6f4b049ff788c23d09616740eb42e0332d9a46c19b2a9231429655830e",
+      "signature_hex": "45970bcff2bd4cc8b7756b0830d337ebb2d5ae890b38a8b069493b2d303695293290119c453634ca114ed1af053ce3410dfae7f2fd197ae680f788fefe2ea672",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 2,
+      "battery_pct": 64,
+      "bounty_id": 2019563010,
+      "confidence": 31,
+      "inference_result": 27,
+      "latitude": -54.115957715928666,
+      "longitude": -50.92009152782333,
+      "model_manifest_hash_hex": "1085f3232d424c1329c88d786ed68ce6fcb62aa63bf9ab617c088a3b70be57aa",
+      "monotonic_ctr": 1003156676,
+      "prev_poac_hash_hex": "c5d71484f8cf9bf4b76f47904730804b9e3225a9f133b5dea168f4e2851f072f",
+      "sensor_commitment_hex": "cc00fcaa7ca62061717a48e52e29a3fa379a953faa6893e32ec5a27b945e605f",
+      "timestamp_ms": 863237896833,
+      "world_model_hash_hex": "da1f334a7017250d3f603dc82ebd3b120b635e3ff56b1f0bd933852371249ab3"
+    },
+    "notes": "C1 random Mersenne Twister seed=0 sample 1",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-001"
+  },
+  {
+    "category": "random",
+    "expected": {
+      "body_hex": "56681d5152af803ce25906f1d19fb6c6804e06ea28ab178f457af6b493b7439ec6d4290062ab517a72e5c1d410cdd61754e4208450e4f90013fda69fef19d4602a4207cdd5a1016d070132613c659a8f5d33f3cb290b8ce73b8344b13a4f8e0915146984a1bb15fdeadebe5b6ac09504464d8aaaacbc2fad12158a534c94b8ca08043a3d5d81bc760000009d0c5a876fc04cd651a9dbbc134020989e639457f0122411e6",
+      "body_sha256_hex": "55d6eb8ce7965166b8d3fc4b09ec1c31d8c9793f9e48a0e6eb181cb774f674c5",
+      "signature_hex": "522a4e7102466b3da9ebc8ba42d112768e04836678e7f566813c5cd0459a5be3338982a2fda7cf407ab96bfe20d6f447c10f10a4792750ac093a4f3ec649a69e",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 4,
+      "battery_pct": 61,
+      "bounty_id": 304353766,
+      "confidence": 58,
+      "inference_result": 8,
+      "latitude": -57.674367172519986,
+      "longitude": 8.29808341203531,
+      "model_manifest_hash_hex": "2a4207cdd5a1016d070132613c659a8f5d33f3cb290b8ce73b8344b13a4f8e09",
+      "monotonic_ctr": 1568783478,
+      "prev_poac_hash_hex": "56681d5152af803ce25906f1d19fb6c6804e06ea28ab178f457af6b493b7439e",
+      "sensor_commitment_hex": "c6d4290062ab517a72e5c1d410cdd61754e4208450e4f90013fda69fef19d460",
+      "timestamp_ms": 674517124975,
+      "world_model_hash_hex": "15146984a1bb15fdeadebe5b6ac09504464d8aaaacbc2fad12158a534c94b8ca"
+    },
+    "notes": "C1 random Mersenne Twister seed=0 sample 2",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-002"
+  },
+  {
+    "category": "random",
+    "expected": {
+      "body_hex": "9acea899d43732f6f2acaf3ff53bfeda139aab4f55c02c212b65711fc50432c994e5fa6fd82abc708555dc62b73a200ee7673cfecb836a156e4a3565eac1b94d35f94bcfd8fda5ffff677004aea2a4124b834fc296f0212b14217342149907e5a9524cebbec3112e27da6994d5f6c6770a005d9a82aa21fc869bd0c4c41f53410f04ab07788eeffc000000f60932f5b6c02d91771ea8c6a0c00786ded79d268014e5064c",
+      "body_sha256_hex": "41b8bb486b658816bdce8feae58a9fa9b16941f4804e7a83fea7d4b7a117cf28",
+      "signature_hex": "1a532faf70798f9a4efd0c72a168923d80d4980990dd06b7c2d0475d2ed0589bf38bfb4bdd8ceaf97dcb62d4331aa1e945b24f6b13dbe49cf8721a614a8ccaee",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 4,
+      "battery_pct": 7,
+      "bounty_id": 350553676,
+      "confidence": 171,
+      "inference_result": 15,
+      "latitude": -14.784111936666989,
+      "longitude": -2.940854725344991,
+      "model_manifest_hash_hex": "35f94bcfd8fda5ffff677004aea2a4124b834fc296f0212b14217342149907e5",
+      "monotonic_ctr": 2022633468,
+      "prev_poac_hash_hex": "9acea899d43732f6f2acaf3ff53bfeda139aab4f55c02c212b65711fc50432c9",
+      "sensor_commitment_hex": "94e5fa6fd82abc708555dc62b73a200ee7673cfecb836a156e4a3565eac1b94d",
+      "timestamp_ms": 1056716289462,
+      "world_model_hash_hex": "a9524cebbec3112e27da6994d5f6c6770a005d9a82aa21fc869bd0c4c41f5341"
+    },
+    "notes": "C1 random Mersenne Twister seed=0 sample 3",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-003"
+  },
+  {
+    "category": "random",
+    "expected": {
+      "body_hex": "4db4d212eec5ea1833f14d0a1043a535b163c4fb381eefac3f9741c6963e6013c8e3be61e9b6261614f8820d6e752fd79c3a4adad82b35d42032d44f0fe4dcd50ffea68128b4243eb70fb0b25b0576bb24496a01683f0396bc0c77485fe839f4b084420e6ab9abf29597a75e29349d50c04b4072a17c795e95bed617430ac9270402d726467fddd900000048ed28508d403064ce54ffcea4c0522d6eb01589af5ac4b6c7",
+      "body_sha256_hex": "69391de315df4a7da6a0c73e12655afbb300a93dd64b8502e02a2ac33da75ccc",
+      "signature_hex": "b6c4d169e9d510c4ab9c9209e6af9e9973343852ad7dfd8bf77dd545d50d1aaeb2d103ce0960a97f6bb391a1697500bb36d4e103a02901a04996aa807d435ea9",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 2,
+      "battery_pct": 38,
+      "bounty_id": 1522841287,
+      "confidence": 215,
+      "inference_result": 4,
+      "latitude": 16.39377337689679,
+      "longitude": -72.70988084891609,
+      "model_manifest_hash_hex": "0ffea68128b4243eb70fb0b25b0576bb24496a01683f0396bc0c77485fe839f4",
+      "monotonic_ctr": 1182784985,
+      "prev_poac_hash_hex": "4db4d212eec5ea1833f14d0a1043a535b163c4fb381eefac3f9741c6963e6013",
+      "sensor_commitment_hex": "c8e3be61e9b6261614f8820d6e752fd79c3a4adad82b35d42032d44f0fe4dcd5",
+      "timestamp_ms": 313216487565,
+      "world_model_hash_hex": "b084420e6ab9abf29597a75e29349d50c04b4072a17c795e95bed617430ac927"
+    },
+    "notes": "C1 random Mersenne Twister seed=0 sample 4",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-004"
+  },
+  {
+    "category": "random",
+    "expected": {
+      "body_hex": "2b7fe3bd1dc0d104d5a4e168be96f12e5e378d394ee4cc5ed7dd597ee8ae48b5ec2cf7689600e5ec036f983a9a4fd9f12ffe76cf8f0b3d8a140083cbcae33481b591642b1224869cae3c7f5322d49490446b35d2ce8e95e2be46503f3dc3cdef4799b5f2d46ff4faa2fc1ee39949fd1a6e0db5f1c8052229ca03b8153b018a950e0293180d7fb8d8000000eb6f1bdd074043789b2036f6bcc044db485a36d95454a8762b",
+      "body_sha256_hex": "d7b4abc434084982cf7fc1d170b349276858308c0e83be0bd6158f0dd721b152",
+      "signature_hex": "f915cefe600f7534b35fe7af2e0e2e745cdcb8685321002b6d4f15e5367d3293ff0b7a8a0a8659498fe8202a86f19719c28271f8ea8d63438f4ecb13fd304e55",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 2,
+      "battery_pct": 24,
+      "bounty_id": 1420326443,
+      "confidence": 147,
+      "inference_result": 14,
+      "latitude": 38.94223406490116,
+      "longitude": -41.71314552000209,
+      "model_manifest_hash_hex": "b591642b1224869cae3c7f5322d49490446b35d2ce8e95e2be46503f3dc3cdef",
+      "monotonic_ctr": 226474200,
+      "prev_poac_hash_hex": "2b7fe3bd1dc0d104d5a4e168be96f12e5e378d394ee4cc5ed7dd597ee8ae48b5",
+      "sensor_commitment_hex": "ec2cf7689600e5ec036f983a9a4fd9f12ffe76cf8f0b3d8a140083cbcae33481",
+      "timestamp_ms": 1011181411591,
+      "world_model_hash_hex": "4799b5f2d46ff4faa2fc1ee39949fd1a6e0db5f1c8052229ca03b8153b018a95"
+    },
+    "notes": "C1 random Mersenne Twister seed=0 sample 5",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-005"
+  },
+  {
+    "category": "random",
+    "expected": {
+      "body_hex": "d7de4be54ba1426a5fe3b2c7dafbc77064e06819c611772b5fba1d5877982c91b4d2ea1bdce8fa82f36eac8815161a53b30194034720db71cb71e862ad342ba3a5e9a6820e1661bc296bb16067809a9fc482f6b07a169c2504ebfde018d3fcebe13c2b297b324ed36de127dac9145c7ffa70418eb4a3de36926797e2ec858b76010132165dcf2d020000007f6a27241fc0495fca088c79d640611729cc63f5ca01a6009e",
+      "body_sha256_hex": "afd9816bcc253a49ee9ee491ebdcb0dd2a91d0845003fb94240390c314ddc9c1",
+      "signature_hex": "b03ad662d6939a85e8d67a6b05bbfd03e527dbd9f6bc3823326ac9ea642af345a31d2fc268aed2173d7b4ae3a472fb7a015b8b28dff2c6c0f26cefff23bb1419",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 1,
+      "battery_pct": 22,
+      "bounty_id": 27656350,
+      "confidence": 50,
+      "inference_result": 1,
+      "latitude": -50.748353069869765,
+      "longitude": 136.723852343783,
+      "model_manifest_hash_hex": "a5e9a6820e1661bc296bb16067809a9fc482f6b07a169c2504ebfde018d3fceb",
+      "monotonic_ctr": 1573858562,
+      "prev_poac_hash_hex": "d7de4be54ba1426a5fe3b2c7dafbc77064e06819c611772b5fba1d5877982c91",
+      "sensor_commitment_hex": "b4d2ea1bdce8fa82f36eac8815161a53b30194034720db71cb71e862ad342ba3",
+      "timestamp_ms": 547241796639,
+      "world_model_hash_hex": "e13c2b297b324ed36de127dac9145c7ffa70418eb4a3de36926797e2ec858b76"
+    },
+    "notes": "C1 random Mersenne Twister seed=0 sample 6",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-006"
+  },
+  {
+    "category": "random",
+    "expected": {
+      "body_hex": "db193ec48b3cb77590717a219da777bff592574607a7bb0c42ca4f5a274569fe6d784377c4b443ff370db7fae99e067053fdf6a0288446cd61a295c41e6a13a17fafe17385b0539c08b61d4db40bfb1f0c7b170673a7221fb0d8456ee5de48b79f5aa8d1c304d187ec153ed1c75701464b28a8795a7e0b565628da35ea4c148115060d507759a31700000012e3b4df81bfe50d9b1f795e80c0497e8867e9d958269b6c3b",
+      "body_sha256_hex": "b122ccabb2c8742e850515a295be8068e4935d70e5397f04dc9cbce11a6925f8",
+      "signature_hex": "1a31f5aac3d4d526b9e5f7ee1382930714e1ca8b1da6e927a5d87feb0170d3afb7e4a29d39eafedd10d2941400e9e9c521b220551b5b90836e4768dc73a09c83",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 6,
+      "battery_pct": 80,
+      "bounty_id": 647719995,
+      "confidence": 13,
+      "inference_result": 21,
+      "latitude": -0.6579108824470978,
+      "longitude": -50.98853777807625,
+      "model_manifest_hash_hex": "7fafe17385b0539c08b61d4db40bfb1f0c7b170673a7221fb0d8456ee5de48b7",
+      "monotonic_ctr": 2002363159,
+      "prev_poac_hash_hex": "db193ec48b3cb77590717a219da777bff592574607a7bb0c42ca4f5a274569fe",
+      "sensor_commitment_hex": "6d784377c4b443ff370db7fae99e067053fdf6a0288446cd61a295c41e6a13a1",
+      "timestamp_ms": 81129693057,
+      "world_model_hash_hex": "9f5aa8d1c304d187ec153ed1c75701464b28a8795a7e0b565628da35ea4c1481"
+    },
+    "notes": "C1 random Mersenne Twister seed=0 sample 7",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-007"
+  },
+  {
+    "category": "random",
+    "expected": {
+      "body_hex": "ea78b653cfac8afcc9079f93f0118613e9ca3dceb1fd1a0a8b1182946aaec5806a3ba87cb4534ea9041a4fb0b99596a5fdcedc57004816e240ae04f5836023d98e5956205038c4de889f9106db8f84a2af61dd48034fc4b8ed12d27408b95163b5fe097f7b8c5ed727e579e6336054e121daca8b81dfb6a72e9d0ffc058067cb1806c75970a8a50700000013d2928f4b402dc4a37ff067d8c04a2ccfbfd40cf42076d932",
+      "body_sha256_hex": "36110c3b525d832e4141c02593b5b47281a2c5121e810e81840743b56c91f35d",
+      "signature_hex": "03a8384dc51481cf5bac008eb91e78f04949f7a75e654465a253fa9b8e5f5c8f11aac126dd61aff7c607eb9ae10b87ae885d2eaa4a6703320d5deff7afb86b69",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 6,
+      "battery_pct": 89,
+      "bounty_id": 544659762,
+      "confidence": 199,
+      "inference_result": 24,
+      "latitude": 14.884059904190437,
+      "longitude": -52.350090006389934,
+      "model_manifest_hash_hex": "8e5956205038c4de889f9106db8f84a2af61dd48034fc4b8ed12d27408b95163",
+      "monotonic_ctr": 1890100487,
+      "prev_poac_hash_hex": "ea78b653cfac8afcc9079f93f0118613e9ca3dceb1fd1a0a8b1182946aaec580",
+      "sensor_commitment_hex": "6a3ba87cb4534ea9041a4fb0b99596a5fdcedc57004816e240ae04f5836023d9",
+      "timestamp_ms": 85137198923,
+      "world_model_hash_hex": "b5fe097f7b8c5ed727e579e6336054e121daca8b81dfb6a72e9d0ffc058067cb"
+    },
+    "notes": "C1 random Mersenne Twister seed=0 sample 8",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-008"
+  },
+  {
+    "category": "random",
+    "expected": {
+      "body_hex": "8ea70ccbf2451529b1b802236138f116a10ca1c9408cd0484bce9c1e534044f61716c65cb02a2959876785a78184e94fe54e135a11a12462e97aea51aa45f31d2aaf012835dab4e7abc1b93c45a20b5d4009ac6216d31f9fc71a56b727d11be1b5829ee8d35c0fe88761c620b7313f0db30a5ace06a5e9fdf3291acd860e31291505323c7bec385c0000004e08771fe640526852dea7e660404698857b9b51d8497e28aa",
+      "body_sha256_hex": "4e3e855f84c91fbf3054cfa1c4369e42a3885dfaef5852a826e9d39d122c4646",
+      "signature_hex": "61150e5cf3313cc6f328cad7909be0823b314f5c3b35c73a7c3ede2baf04964c39b91a0fd02c2cab22fca7a19639a111dea4524f779bb96219160a0db5767602",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 5,
+      "battery_pct": 60,
+      "bounty_id": 1233004714,
+      "confidence": 50,
+      "inference_result": 21,
+      "latitude": 73.63005796810603,
+      "longitude": 45.19157357295961,
+      "model_manifest_hash_hex": "2aaf012835dab4e7abc1b93c45a20b5d4009ac6216d31f9fc71a56b727d11be1",
+      "monotonic_ctr": 2079078492,
+      "prev_poac_hash_hex": "8ea70ccbf2451529b1b802236138f116a10ca1c9408cd0484bce9c1e534044f6",
+      "sensor_commitment_hex": "1716c65cb02a2959876785a78184e94fe54e135a11a12462e97aea51aa45f31d",
+      "timestamp_ms": 335149473766,
+      "world_model_hash_hex": "b5829ee8d35c0fe88761c620b7313f0db30a5ace06a5e9fdf3291acd860e3129"
+    },
+    "notes": "C1 random Mersenne Twister seed=0 sample 9",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-009"
+  },
+  {
+    "category": "random",
+    "expected": {
+      "body_hex": "1200c0ac504b5259517ca80cf7cb16737b90a85779b47353d7edba46c5065302c7584c090ca5011318394b4ec20dd6dfaa7e46ba6ecc2542d0b331dcdf7df1c373ca7af6cb23818dbe0bf2798d14a4c8361849c80dd7c9dd35ebec5256aef2d2519139bcb049b7f21b64835aa697c21595dc11d289c06ab1444338b6540fdccb1d01276336746bef000000468dcd7d64c04dc4df2207739cc05a540821e6526d3a6e8f12",
+      "body_sha256_hex": "af61bc8f9b4c8d150cf71819602cf60671ac56fdafa412d8942edb55e5a6be41",
+      "signature_hex": "1a12da089b5daa3cc67c77f1004773248835f6821d6c224b89834b0a697c0c451d93316f4ff8172d4d4130582001e95b0b83c648dbdb664f0d8b86c2b3cdb374",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 1,
+      "battery_pct": 99,
+      "bounty_id": 980324114,
+      "confidence": 39,
+      "inference_result": 29,
+      "latitude": -59.53805947650764,
+      "longitude": -105.31299636356717,
+      "model_manifest_hash_hex": "73ca7af6cb23818dbe0bf2798d14a4c8361849c80dd7c9dd35ebec5256aef2d2",
+      "monotonic_ctr": 913599471,
+      "prev_poac_hash_hex": "1200c0ac504b5259517ca80cf7cb16737b90a85779b47353d7edba46c5065302",
+      "sensor_commitment_hex": "c7584c090ca5011318394b4ec20dd6dfaa7e46ba6ecc2542d0b331dcdf7df1c3",
+      "timestamp_ms": 303026765156,
+      "world_model_hash_hex": "519139bcb049b7f21b64835aa697c21595dc11d289c06ab1444338b6540fdccb"
+    },
+    "notes": "C1 random Mersenne Twister seed=0 sample 10",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-010"
+  },
+  {
+    "category": "random",
+    "expected": {
+      "body_hex": "0f45fcb693ab3cd18651afa94ac09c78c1b1c7f19cd1d0324e4b023668388856c02b12053bb9f6a237e7bc81f9755127560d55d16ae0cf870a44c657e11bc02ccfab77e914f53489fbc9f2875c75ba519a49e92323f4c9d12f87f675389748b830461d46650310cffb36f2b1af31027b74fe9f8c7304fdb5ae2e279cd873bcc3090393195f069277000000f6c6b7e7cb403ccd06944f88744059575b614a675c486c0adf",
+      "body_sha256_hex": "09dd190030f73ee68a215d9e8b9b58cbea8de5fb0985db937a6d7e5226d18c22",
+      "signature_hex": "635def52e28865f1fc3bcfc2d77ca9cdf3c62388f767fd8c3377ab046227afe11771df8c285edef1a3d6e88c43a5a835823e42e9782e0f0887b6a9cae26bca51",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 3,
+      "battery_pct": 25,
+      "bounty_id": 1215040223,
+      "confidence": 147,
+      "inference_result": 9,
+      "latitude": 28.800881642739526,
+      "longitude": 101.36495239511481,
+      "model_manifest_hash_hex": "cfab77e914f53489fbc9f2875c75ba519a49e92323f4c9d12f87f675389748b8",
+      "monotonic_ctr": 1594266231,
+      "prev_poac_hash_hex": "0f45fcb693ab3cd18651afa94ac09c78c1b1c7f19cd1d0324e4b023668388856",
+      "sensor_commitment_hex": "c02b12053bb9f6a237e7bc81f9755127560d55d16ae0cf870a44c657e11bc02c",
+      "timestamp_ms": 1059895896011,
+      "world_model_hash_hex": "30461d46650310cffb36f2b1af31027b74fe9f8c7304fdb5ae2e279cd873bcc3"
+    },
+    "notes": "C1 random Mersenne Twister seed=0 sample 11",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-011"
+  },
+  {
+    "category": "random",
+    "expected": {
+      "body_hex": "c4423dcdb5f175bfb7dd8eb7cd9035f5953de44eb07c5fadff7538c4c7edec70cc9ff977a1002ff1a2c974dc1814d02f8666a75b395cba0e771604c302423b6629ee6500d4225a7774d4c3f300df6bc315890eb1bcace8442f8034348b0c4845c26aa367d73d36f33fe5f05be8ad41d582c128ab77e87fb3f6d20ce403cfe4721b03813d3ccfef1a00000074241813efc02545d63a3dd5b8c0493440f94d07787c76a592",
+      "body_sha256_hex": "bfc098c77a445c0e15f840cc06188b90e5109e0e47da16b50056a34c735273ce",
+      "signature_hex": "adb4575cdc068f064a3dc7a328fd1f6aeee7c28d89b460ebf9bd6b5d9309e749ae6d5e4f25e8af23a14442af9b0a2c17feff45125ba93b4521caf15d26c36c72",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 3,
+      "battery_pct": 61,
+      "bounty_id": 2088150418,
+      "confidence": 129,
+      "inference_result": 27,
+      "latitude": -10.636400051162909,
+      "longitude": -50.4082328439826,
+      "model_manifest_hash_hex": "29ee6500d4225a7774d4c3f300df6bc315890eb1bcace8442f8034348b0c4845",
+      "monotonic_ctr": 1020260122,
+      "prev_poac_hash_hex": "c4423dcdb5f175bfb7dd8eb7cd9035f5953de44eb07c5fadff7538c4c7edec70",
+      "sensor_commitment_hex": "cc9ff977a1002ff1a2c974dc1814d02f8666a75b395cba0e771604c302423b66",
+      "timestamp_ms": 498821764079,
+      "world_model_hash_hex": "c26aa367d73d36f33fe5f05be8ad41d582c128ab77e87fb3f6d20ce403cfe472"
+    },
+    "notes": "C1 random Mersenne Twister seed=0 sample 12",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-012"
+  },
+  {
+    "category": "random",
+    "expected": {
+      "body_hex": "4c2c60993e1e4faf12ab52efc760d2fe6255c818ad60a75dde4dfc6de1107cf9a26400161f447ce27237d992adfc6253beb6e0c8e0a2ef224b703a4fc9ed6bbc170acf6a2cd3d26b0245fa9ec22128fc0768d6b89f2a0b7a0ebc4eee8438e48e70c3c4ad74872d164fa1f820f5dea3c50c3bde44480f3cdc7e108b87c43bb0951709615f69891271000000ad0f424ffa40062a18bf670620c065df40b4778ce87ed61f4e",
+      "body_sha256_hex": "a6b6d1a746dc30e47ab80cf16189e83eacff900d16f43513a00d7fd5a2c4e662",
+      "signature_hex": "157776e2531053eab6cfb37b5b77c49f9311842f56b8b58395bb100a1ffc24f870823d6d992a938989156f448e2ea64ce9f039fe8b24e20b51a53dc7b13d6cde",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 9,
+      "battery_pct": 95,
+      "bounty_id": 2127961934,
+      "confidence": 97,
+      "inference_result": 23,
+      "latitude": 2.7705550149264724,
+      "longitude": -174.97664855336848,
+      "model_manifest_hash_hex": "170acf6a2cd3d26b0245fa9ec22128fc0768d6b89f2a0b7a0ebc4eee8438e48e",
+      "monotonic_ctr": 1770590833,
+      "prev_poac_hash_hex": "4c2c60993e1e4faf12ab52efc760d2fe6255c818ad60a75dde4dfc6de1107cf9",
+      "sensor_commitment_hex": "a26400161f447ce27237d992adfc6253beb6e0c8e0a2ef224b703a4fc9ed6bbc",
+      "timestamp_ms": 743285346298,
+      "world_model_hash_hex": "70c3c4ad74872d164fa1f820f5dea3c50c3bde44480f3cdc7e108b87c43bb095"
+    },
+    "notes": "C1 random Mersenne Twister seed=0 sample 13",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-013"
+  },
+  {
+    "category": "random",
+    "expected": {
+      "body_hex": "0b84a946b032d52280352641f81172b1316f5a75cc67e0b25089b2666eeea0418d002aa79da5112b07953a558c67b1e52dd4d13e29eda559977bdf92100b048927a0a293187f47841cc6d68f7381a0fae53ed8bf561a76f4c40f7a299d325d41e007b9d33f7eff9089cedcf11d54b6677f4d719a4a5f800d5c77d5507c41567e1300eb1907fb9f9300000055697b8538c0356ac5c52026b0c0442d68ab380f746282c33d",
+      "body_sha256_hex": "27920c3ca00e1fed94cae859b84ea38c3af6c64147a61fc7d771680d021e2057",
+      "signature_hex": "52cede736efe8cdd7df591ff683943e0db6ad137e15d78925eb0595d780dd63f39aab76f416682cea791be02a909edf66f94fc4e8499bacd89e916671fb7cf84",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 0,
+      "battery_pct": 25,
+      "bounty_id": 1652736829,
+      "confidence": 235,
+      "inference_result": 19,
+      "latitude": -21.4170802310461,
+      "longitude": -40.354756739018654,
+      "model_manifest_hash_hex": "27a0a293187f47841cc6d68f7381a0fae53ed8bf561a76f4c40f7a299d325d41",
+      "monotonic_ctr": 133930899,
+      "prev_poac_hash_hex": "0b84a946b032d52280352641f81172b1316f5a75cc67e0b25089b2666eeea041",
+      "sensor_commitment_hex": "8d002aa79da5112b07953a558c67b1e52dd4d13e29eda559977bdf92100b0489",
+      "timestamp_ms": 366841922872,
+      "world_model_hash_hex": "e007b9d33f7eff9089cedcf11d54b6677f4d719a4a5f800d5c77d5507c41567e"
+    },
+    "notes": "C1 random Mersenne Twister seed=0 sample 14",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-014"
+  },
+  {
+    "category": "random",
+    "expected": {
+      "body_hex": "fc34402c0529057ccae68dd3b0ca8427507c6b171b22e47fe64494064bb3b7bb9881440bf566cbadf29ae147f397a9b2c2cacd987860dc6e875547f3ae84dd9ae91a6383ea2309673483006e5e58b88904080a559e78c9ffb9b52cdd3b0c58078bb46ac464a35e5bfe4dd074011bdf10452bd69ea9601fad46a18cf8f6a98a271d0237412125144d000000d772a2761a403ec504a2941b244043588f7b48cf8c6b4de9de",
+      "body_sha256_hex": "15e1c8a9f94864f74f923ea6c6a983e11616224a96ee31bd88abaf21e8ce4bdf",
+      "signature_hex": "a36b58b2fa99fde9082bf8beb8fa941fda8ea236dbb0d5dd746501ff1b17dcbc6271db0aa4ece4501392ebed7305cc7c8ee8da55828e4884999fcd9f4e31f463",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 2,
+      "battery_pct": 65,
+      "bounty_id": 1800268254,
+      "confidence": 55,
+      "inference_result": 29,
+      "latitude": 30.769601975592323,
+      "longitude": 38.69187871031963,
+      "model_manifest_hash_hex": "e91a6383ea2309673483006e5e58b88904080a559e78c9ffb9b52cdd3b0c5807",
+      "monotonic_ctr": 556078157,
+      "prev_poac_hash_hex": "fc34402c0529057ccae68dd3b0ca8427507c6b171b22e47fe64494064bb3b7bb",
+      "sensor_commitment_hex": "9881440bf566cbadf29ae147f397a9b2c2cacd987860dc6e875547f3ae84dd9a",
+      "timestamp_ms": 925341218330,
+      "world_model_hash_hex": "8bb46ac464a35e5bfe4dd074011bdf10452bd69ea9601fad46a18cf8f6a98a27"
+    },
+    "notes": "C1 random Mersenne Twister seed=0 sample 15",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-015"
+  },
+  {
+    "category": "random",
+    "expected": {
+      "body_hex": "4039395ff69633d9868d38b626041407463ed0c5f60da0472bc873186bd30e18cc4398d0cf1ce44a416a562df09389816cce041a2305914f48443aaa03a54aa9202cbe6a81e6a9f8f02b29a1e0c4cef5da257049cca04b24494f11c43b22899ab4f4cda3eeb07613c4bbaf037f27f338bcde7c0c3914b714bb5cae89f8f7d6000f0af45f5cd59848000000b0e31b9123404081f055480f4c405f3fb583cab4a82924b159",
+      "body_sha256_hex": "50ec9f2699b846b0cab92f693cb6f5ec562666eed55c926a9c9ce621330d4fd6",
+      "signature_hex": "1492bbb0b8f55e915c01014bbba80f1b852cb65efba8f2cf690bc164a809db095b651726389c1f66a600664612d4633071e94aa1b44a213afe7edbc1d527df08",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 10,
+      "battery_pct": 95,
+      "bounty_id": 690270553,
+      "confidence": 244,
+      "inference_result": 15,
+      "latitude": 33.01514688509505,
+      "longitude": 124.9954537848995,
+      "model_manifest_hash_hex": "202cbe6a81e6a9f8f02b29a1e0c4cef5da257049cca04b24494f11c43b22899a",
+      "monotonic_ctr": 1557502024,
+      "prev_poac_hash_hex": "4039395ff69633d9868d38b626041407463ed0c5f60da0472bc873186bd30e18",
+      "sensor_commitment_hex": "cc4398d0cf1ce44a416a562df09389816cce041a2305914f48443aaa03a54aa9",
+      "timestamp_ms": 759724478755,
+      "world_model_hash_hex": "b4f4cda3eeb07613c4bbaf037f27f338bcde7c0c3914b714bb5cae89f8f7d600"
+    },
+    "notes": "C1 random Mersenne Twister seed=0 sample 16",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-016"
+  },
+  {
+    "category": "random",
+    "expected": {
+      "body_hex": "16f554c593f76d0de858e2a1a7dc49dbc879bcc3977b6c827bbee979ac4aa47c4983583ae4f5685cb77f2dfe6b96c78b67b5d0a10a16626453ea298093f9d6a0c51b3a1eab5188e09ed4f6bf702d292e08a931780a15309f2ec841658e97515e7346427484fd9b4a8a682845d05d6508b3f5408a298e7002496a01d6414af8151403593a288688ae00000076714d85bd4053d3f52106c9e84048b88d3983d45c467ccafa",
+      "body_sha256_hex": "79e980766d293574152ed3975effd5971061aba3988da05e50477f7e61f0440d",
+      "signature_hex": "708e161478ed523fc7856bbc9750776b1c466c93c0727bf3e337aca4046825d985d3e184e4c4cbc94d64fa55a66378be3286f03b37104243209b78af2eeef9fb",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 3,
+      "battery_pct": 58,
+      "bounty_id": 1182583546,
+      "confidence": 89,
+      "inference_result": 20,
+      "latitude": 79.31183648741683,
+      "longitude": 49.44180983483304,
+      "model_manifest_hash_hex": "c51b3a1eab5188e09ed4f6bf702d292e08a931780a15309f2ec841658e97515e",
+      "monotonic_ctr": 679905454,
+      "prev_poac_hash_hex": "16f554c593f76d0de858e2a1a7dc49dbc879bcc3977b6c827bbee979ac4aa47c",
+      "sensor_commitment_hex": "4983583ae4f5685cb77f2dfe6b96c78b67b5d0a10a16626453ea298093f9d6a0",
+      "timestamp_ms": 508707046845,
+      "world_model_hash_hex": "7346427484fd9b4a8a682845d05d6508b3f5408a298e7002496a01d6414af815"
+    },
+    "notes": "C1 random Mersenne Twister seed=0 sample 17",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-017"
+  },
+  {
+    "category": "random",
+    "expected": {
+      "body_hex": "6033b3fa8bb4906f92c82159c03a3046eb49d885635a2387e1a7c01ab0c7c4404d119ce3d46bef68c82c31cd3eee551067777b30c1d0236c656ffb2e62334263dcca86f10eb3b0691165e16e6c034979e8f12e8d94c8a8982d3ffebd2d7545d17a09f89049bd4a3ba4a326b8626697d9c1ca1249e127934f60fab34f4cdb876c070247387541cc310000009909cef0ea4046814007ca2a94403a3e4772d675c85dde2c6a",
+      "body_sha256_hex": "28116efb89288a2b2992f6e6fdc77cd59faa411f04f03ada3d45ce3059990177",
+      "signature_hex": "cfa625494b2ec2e93ef139e85c08dc28f74fc35b592a26e4c9e96a7b4418506dc4b2cb0db99ca975671559a50c2300fcf9d8259cbd35ff31473c236078c4d84d",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 2,
+      "battery_pct": 56,
+      "bounty_id": 1574841450,
+      "confidence": 71,
+      "inference_result": 7,
+      "latitude": 45.009766553606056,
+      "longitude": 26.24327771888582,
+      "model_manifest_hash_hex": "dcca86f10eb3b0691165e16e6c034979e8f12e8d94c8a8982d3ffebd2d7545d1",
+      "monotonic_ctr": 1967246385,
+      "prev_poac_hash_hex": "6033b3fa8bb4906f92c82159c03a3046eb49d885635a2387e1a7c01ab0c7c440",
+      "sensor_commitment_hex": "4d119ce3d46bef68c82c31cd3eee551067777b30c1d0236c656ffb2e62334263",
+      "timestamp_ms": 657294553322,
+      "world_model_hash_hex": "7a09f89049bd4a3ba4a326b8626697d9c1ca1249e127934f60fab34f4cdb876c"
+    },
+    "notes": "C1 random Mersenne Twister seed=0 sample 18",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-018"
+  },
+  {
+    "category": "random",
+    "expected": {
+      "body_hex": "3233fd7d150f2cee8583c053793e51fe7c067349494f5a22368f308aef84d6152648e71eb1aa82d0c70b977b6c2d497e6de7a30580d742a9c6669830e38a79869c2bbc4ae60dc5e51a92d9ef6352038836c58365f8f187ce43fe8958076aad85370fdf9ea562a9d2413f7fb7f1e258b5dadfd1ba362ce7433107c5f579c931d7030a974c15d045130000008e4d26c0c540135312dd32b4404034d84af5186b00565e5ae7",
+      "body_sha256_hex": "b459517118b394a3638c40753ed1d8943347a28c45f3c5b8d4ba060c15ca524f",
+      "signature_hex": "7fa80a06e752374f0263ba772519fd884a39d9c75bd58a09b79401251a10f4179be360e335e463497506bd9d08ed8ba827536b05447508ae314b5e94622fa968",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 10,
+      "battery_pct": 76,
+      "bounty_id": 1449024231,
+      "confidence": 151,
+      "inference_result": 3,
+      "latitude": 4.831126648158772,
+      "longitude": 20.844893759213846,
+      "model_manifest_hash_hex": "9c2bbc4ae60dc5e51a92d9ef6352038836c58365f8f187ce43fe8958076aad85",
+      "monotonic_ctr": 365970707,
+      "prev_poac_hash_hex": "3233fd7d150f2cee8583c053793e51fe7c067349494f5a22368f308aef84d615",
+      "sensor_commitment_hex": "2648e71eb1aa82d0c70b977b6c2d497e6de7a30580d742a9c6669830e38a7986",
+      "timestamp_ms": 611179741381,
+      "world_model_hash_hex": "370fdf9ea562a9d2413f7fb7f1e258b5dadfd1ba362ce7433107c5f579c931d7"
+    },
+    "notes": "C1 random Mersenne Twister seed=0 sample 19",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-019"
+  },
+  {
+    "category": "random",
+    "expected": {
+      "body_hex": "0049002fadace7657cbfec8557e6cc07340236a86a9f3a9a2f34931f7d3854e35454ee8455e10dc1083e339e2ac36a83c475edbc5fd904d77791b1a0f2ef81b08b535f71eca50bbef2927e0a34eb5d65c7a94410fbd3efe1bc06656822fb432ccf8e6a28db0bf4af016597d6e59120132cb1c2d3c37690f8cd00de93f84eccdc19099a3c4619e7a70000009b5ea2fdfbc02d40dafc31e92040629b6fb2ab912e2b8059d7",
+      "body_sha256_hex": "75e4c0755ccf1cf85eddfeb6dff29b5efc3e12ef058fbdaefbfdf22f57a2df94",
+      "signature_hex": "56c80fdf854c353e0d2cb537e0cc0f2151e384b20c206073eda19f09db731bcca8009aa82d12bb8c07bcf4f154a94e4f9e5ee2347fe79ee28285728634b7bb91",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 9,
+      "battery_pct": 60,
+      "bounty_id": 729831895,
+      "confidence": 154,
+      "inference_result": 25,
+      "latitude": -14.626670724003418,
+      "longitude": 148.8573850012703,
+      "model_manifest_hash_hex": "8b535f71eca50bbef2927e0a34eb5d65c7a94410fbd3efe1bc06656822fb432c",
+      "monotonic_ctr": 1176102823,
+      "prev_poac_hash_hex": "0049002fadace7657cbfec8557e6cc07340236a86a9f3a9a2f34931f7d3854e3",
+      "sensor_commitment_hex": "5454ee8455e10dc1083e339e2ac36a83c475edbc5fd904d77791b1a0f2ef81b0",
+      "timestamp_ms": 667307671035,
+      "world_model_hash_hex": "cf8e6a28db0bf4af016597d6e59120132cb1c2d3c37690f8cd00de93f84eccdc"
+    },
+    "notes": "C1 random Mersenne Twister seed=0 sample 20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-020"
+  }
+]

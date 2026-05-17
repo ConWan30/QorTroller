@@ -1,0 +1,702 @@
+[
+  {
+    "category": "hard_cheat",
+    "expected": {
+      "body_hex": "b113d9e0e19e2174a976c00cad4f5dfe23325a10755b05dfdc5b94cbe19f1351f550363bf2909c9ac81088a9ec221e9670e89e69c122d914152ebc03969e1d0010164f56f029470a453427213b6733f9dd293af2e4563446bed84229117f30c1bea5c89d7b2e4ecfba91b4bf0a040049836b465f3bfaf7408d85471458b3a5662808fd1250eee2d2000000a44056125cc04bf17e871bcc5ec0614aadd2a6ae6c3e3292db",
+      "body_sha256_hex": "0c589ed32a9b28e6ce6d713f7aa76e35797a2102e723a1ac375f40aab290178b",
+      "signature_hex": "0a8dea17bbec6681f3ec3dd943ed81ec11e0f70ec61e1524751282b13a429aa384b2a4913ec48ddd4cf62ca7ea8d429c60dcf688008053c04e7ef1115dc35bae",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 8,
+      "battery_pct": 18,
+      "bounty_id": 1043501787,
+      "confidence": 253,
+      "inference_result": 40,
+      "latitude": -55.886673821042436,
+      "longitude": -138.3337186103339,
+      "model_manifest_hash_hex": "10164f56f029470a453427213b6733f9dd293af2e4563446bed84229117f30c1",
+      "monotonic_ctr": 1357832914,
+      "prev_poac_hash_hex": "b113d9e0e19e2174a976c00cad4f5dfe23325a10755b05dfdc5b94cbe19f1351",
+      "sensor_commitment_hex": "f550363bf2909c9ac81088a9ec221e9670e89e69c122d914152ebc03969e1d00",
+      "timestamp_ms": 705454019164,
+      "world_model_hash_hex": "bea5c89d7b2e4ecfba91b4bf0a040049836b465f3bfaf7408d85471458b3a566"
+    },
+    "notes": "C3 hard-cheat 0x28 DRIVER_INJECT sample 1/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-041"
+  },
+  {
+    "category": "hard_cheat",
+    "expected": {
+      "body_hex": "b4cc348cc6b610a976c911d78a5186178928abd50388745b81bd3a57fe6625d0921584020f51a858cf77651061e8e6abb1ba3b08d6ba5ff574c50760fdd3c8524edbc3e36d812051019a5e324e805acb83d7a4d9fbed3d80a1838191c00bff67d88bd0120bd42b8e0d0ffcc7b3f1e3f35e0cb66b9ddc22703154e841fea1e14f2804fb2b5acf75b9000000b80b7ffede405301b47d5f652cc05541fc2091be5618a03a93",
+      "body_sha256_hex": "bed1a4adfa177f0e1f0efeaa5148322f12b84bbf6ceac04fe5592f702f58ec84",
+      "signature_hex": "4c16671375187aa838479dbd4803d8c40176da6dcc08539153db9f264d78aee7861e1e8798b18b4712fe8c3e68cba3aee35f2f34075163d6ccc25f2afd374280",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 4,
+      "battery_pct": 43,
+      "bounty_id": 413153939,
+      "confidence": 251,
+      "inference_result": 40,
+      "latitude": 76.0266412192911,
+      "longitude": -85.03101362450374,
+      "model_manifest_hash_hex": "4edbc3e36d812051019a5e324e805acb83d7a4d9fbed3d80a1838191c00bff67",
+      "monotonic_ctr": 1523545529,
+      "prev_poac_hash_hex": "b4cc348cc6b610a976c911d78a5186178928abd50388745b81bd3a57fe6625d0",
+      "sensor_commitment_hex": "921584020f51a858cf77651061e8e6abb1ba3b08d6ba5ff574c50760fdd3c852",
+      "timestamp_ms": 790466920158,
+      "world_model_hash_hex": "d88bd0120bd42b8e0d0ffcc7b3f1e3f35e0cb66b9ddc22703154e841fea1e14f"
+    },
+    "notes": "C3 hard-cheat 0x28 DRIVER_INJECT sample 2/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-042"
+  },
+  {
+    "category": "hard_cheat",
+    "expected": {
+      "body_hex": "9d42474a20ae63160dfaf1271947ee4584299ab642efbd15a83433389c9dbb5c03f3cfcf6d2ed588f8ddfcc04adb69d962892446eea4b995e6af7d53ec41ae70fe4f31e3a2592ca1538bb63b39c1a4a79eaa00609a5f5651f37b2884361ac12dc8edf848481d394d3dce309029336f9ace58e788ac59ce855a522b6cb7e92ea92804ea0711ec62410000005959616401bfb71bfc69336c00406352b7ecacddd210afa961",
+      "body_sha256_hex": "00294c2a802ca1bf9d20da35af7ffaf990ae811815c3cb9c396c9e1f4163437e",
+      "signature_hex": "e4d40f5a95420e02031b81374eba7b4fd0cb5f9df4365dac4a4b8ef51b66be1fd8ec703ab53d7b2814216f48f54bab055f51fa4e9e9df52e30ea9ba52e4070cd",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 4,
+      "battery_pct": 7,
+      "bounty_id": 279947617,
+      "confidence": 234,
+      "inference_result": 40,
+      "latitude": -0.0902707821691564,
+      "longitude": 154.58495172274576,
+      "model_manifest_hash_hex": "fe4f31e3a2592ca1538bb63b39c1a4a79eaa00609a5f5651f37b2884361ac12d",
+      "monotonic_ctr": 300704321,
+      "prev_poac_hash_hex": "9d42474a20ae63160dfaf1271947ee4584299ab642efbd15a83433389c9dbb5c",
+      "sensor_commitment_hex": "03f3cfcf6d2ed588f8ddfcc04adb69d962892446eea4b995e6af7d53ec41ae70",
+      "timestamp_ms": 383751644161,
+      "world_model_hash_hex": "c8edf848481d394d3dce309029336f9ace58e788ac59ce855a522b6cb7e92ea9"
+    },
+    "notes": "C3 hard-cheat 0x28 DRIVER_INJECT sample 3/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-043"
+  },
+  {
+    "category": "hard_cheat",
+    "expected": {
+      "body_hex": "40e1de32b8733da5446679a1feaff68a97095c8b64389fe1593818e9c0d6a2ac74a9fd4a0df647002b0946381ca49f632018755ab8c4bcd66bc8147203e405d44e662042a28f96e7afd3fba8889be3aacdabce8f076def98cedb425bf4615762278a535ef83ef67fde5e3b1b132e30464b6bb7bb3331c0fa40ab6872e39230472801605b10ac1b1100000088b016dddac04431970755afec404fbf5de0ce0d282b4d0a93",
+      "body_sha256_hex": "acce9a89c23e4f41f35a9f836b7d4e7fc43128574f84798c12d2af7d33ca9eb4",
+      "signature_hex": "71573b62f8ad095e3273354f0a96b71ade4813ff2d811b401e826c0700db0198bb57ea67c5c692b32769d840f4f138e9413ee3915eb7ad1de7cade997063bf97",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 1,
+      "battery_pct": 91,
+      "bounty_id": 726469267,
+      "confidence": 96,
+      "inference_result": 40,
+      "latitude": -40.38742152866311,
+      "longitude": 63.49505243359664,
+      "model_manifest_hash_hex": "4e662042a28f96e7afd3fba8889be3aacdabce8f076def98cedb425bf4615762",
+      "monotonic_ctr": 279714577,
+      "prev_poac_hash_hex": "40e1de32b8733da5446679a1feaff68a97095c8b64389fe1593818e9c0d6a2ac",
+      "sensor_commitment_hex": "74a9fd4a0df647002b0946381ca49f632018755ab8c4bcd66bc8147203e405d4",
+      "timestamp_ms": 587069840858,
+      "world_model_hash_hex": "278a535ef83ef67fde5e3b1b132e30464b6bb7bb3331c0fa40ab6872e3923047"
+    },
+    "notes": "C3 hard-cheat 0x28 DRIVER_INJECT sample 4/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-044"
+  },
+  {
+    "category": "hard_cheat",
+    "expected": {
+      "body_hex": "e4ac332eca051f60afde7fa9da3fa821f6fc987dc41eb0a9562d8dea035148ace822c78bef910ecf0ce9384399a8984ffae303a64fd40d985b5028d7e746d7ad43b8562a2f7c3967f4620ec0a887b581e2139fe4dd72f207caac6db296535a8f663cb4c14f9a8255cf0e275fc7d228277f226ea5e732565118e0856d1ffc2508280960153f0c96720000002c91627297c04f7815ce4e9ebe405f218e6062a82c0035d58b",
+      "body_sha256_hex": "ada921712f472abb8a99e65aab60e17c1e9e32891b06b6b46faba65f2cc15863",
+      "signature_hex": "9390f214e9512affcd6a63ebc8c4f0c26d4025eb01f52f20a0e94e86ab613b1342d6e5cd3d10dcf241e77c47d2c068f360211f5f3a41b3143f858093fc89c84a",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 9,
+      "battery_pct": 21,
+      "bounty_id": 3528075,
+      "confidence": 96,
+      "inference_result": 40,
+      "latitude": -62.9381654628646,
+      "longitude": 124.52431497225251,
+      "model_manifest_hash_hex": "43b8562a2f7c3967f4620ec0a887b581e2139fe4dd72f207caac6db296535a8f",
+      "monotonic_ctr": 1057789554,
+      "prev_poac_hash_hex": "e4ac332eca051f60afde7fa9da3fa821f6fc987dc41eb0a9562d8dea035148ac",
+      "sensor_commitment_hex": "e822c78bef910ecf0ce9384399a8984ffae303a64fd40d985b5028d7e746d7ad",
+      "timestamp_ms": 191417709207,
+      "world_model_hash_hex": "663cb4c14f9a8255cf0e275fc7d228277f226ea5e732565118e0856d1ffc2508"
+    },
+    "notes": "C3 hard-cheat 0x28 DRIVER_INJECT sample 5/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-045"
+  },
+  {
+    "category": "hard_cheat",
+    "expected": {
+      "body_hex": "ab9e739b06d3b524a88fb133994cb41307cd04dd77dcee960259e82207162e41c9c45970370f14c9cf9057c20da3d766b67d10d4fc1866adea5e646c12663d96a5a89c495cd48d1cc338fe53c271d1c641e2b917746eccf87228384e549b0ea33a435cd58306bb46166ee38ad51e7f8862ac3589fbbe961d8737b79163ae777b2803c10f4478aad000000080fbe30bf9403da9ef094cc7f4406528eb4568637a58a9b7d5",
+      "body_sha256_hex": "9513396665f81d34899bf0f9baeaf20df7ff36e250eeadfcf2ba3444ba01f7e5",
+      "signature_hex": "d5841db0769f5fbebc0c19efccd7ed94b1a1ced4b5d7d2eeba79c89bf4296ece452d3c641216d66780c3d21bdf89073a5cb45b6036c561883daa6e7f20545534",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 3,
+      "battery_pct": 15,
+      "bounty_id": 1487517653,
+      "confidence": 193,
+      "inference_result": 40,
+      "latitude": 29.663803654904726,
+      "longitude": 169.2787196196403,
+      "model_manifest_hash_hex": "a5a89c495cd48d1cc338fe53c271d1c641e2b917746eccf87228384e549b0ea3",
+      "monotonic_ctr": 1148758736,
+      "prev_poac_hash_hex": "ab9e739b06d3b524a88fb133994cb41307cd04dd77dcee960259e82207162e41",
+      "sensor_commitment_hex": "c9c45970370f14c9cf9057c20da3d766b67d10d4fc1866adea5e646c12663d96",
+      "timestamp_ms": 553981774841,
+      "world_model_hash_hex": "3a435cd58306bb46166ee38ad51e7f8862ac3589fbbe961d8737b79163ae777b"
+    },
+    "notes": "C3 hard-cheat 0x28 DRIVER_INJECT sample 6/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-046"
+  },
+  {
+    "category": "hard_cheat",
+    "expected": {
+      "body_hex": "c80d16de388266992b35d8b45b4b3e939659f8967e7b27f462b7da89a73447edb34220ebcdf6a39ff7489117d221ed5a2239c9769536d9970f19ced3bc747d53373b4a97b7f87edd4c5fae5c0bab4c34a17e3435f4fc92ab2e6a15ce84ae70ae8521e6411331e08fab82e309afa47cb4b9b7c06708c99dcd0b3ca00cde492f40280a9519607d2819000000b9a7b0a957c0472e90ffcac9bb40377c3639ba85c039175ae8",
+      "body_sha256_hex": "f67af7313d4ce91f373ac53d93f5003f7731bb0d8d73277b5433cb9b3fd26f17",
+      "signature_hex": "778f5560836bf3a9f85f126b449859fe7c8344b9654425bcc4d9cc8475ce5bcd52ddf202cdad7dc9b8fd086f54e045c0559d5707e02b3e4d7e68a3c80fe4a6c9",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 10,
+      "battery_pct": 25,
+      "bounty_id": 957831912,
+      "confidence": 149,
+      "inference_result": 40,
+      "latitude": -46.36380002404936,
+      "longitude": 23.485202415502272,
+      "model_manifest_hash_hex": "373b4a97b7f87edd4c5fae5c0bab4c34a17e3435f4fc92ab2e6a15ce84ae70ae",
+      "monotonic_ctr": 1618815001,
+      "prev_poac_hash_hex": "c80d16de388266992b35d8b45b4b3e939659f8967e7b27f462b7da89a73447ed",
+      "sensor_commitment_hex": "b34220ebcdf6a39ff7489117d221ed5a2239c9769536d9970f19ced3bc747d53",
+      "timestamp_ms": 797382322519,
+      "world_model_hash_hex": "8521e6411331e08fab82e309afa47cb4b9b7c06708c99dcd0b3ca00cde492f40"
+    },
+    "notes": "C3 hard-cheat 0x28 DRIVER_INJECT sample 7/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-047"
+  },
+  {
+    "category": "hard_cheat",
+    "expected": {
+      "body_hex": "dda2920a21eb8cc36d52e705500155192fbd1b7273fe829fbfa0fe197c426d76324736152edee8e6ca07a36b409996cd19ea7ec9879d3da08288e7e4349fa527dfae0337a835640209099eec380aff798c9a8766cde4f49da9079636ae2e4ec5e986b28e715de8ee84f3302a581a80b8aab81dc4ae5991f3169ba38aa326b20a2809582d7310cdd3000000969d930454404183ae91f98ebec0099085cf579080720c0d00",
+      "body_sha256_hex": "8d31ba893552a7b44597b28c7b8b98c6fb54676502652a6d9a06568fbb7c4966",
+      "signature_hex": "d443c400592ccc7fdc98e176cad28140c5da7f447f85f9a300e566d69a12230273dfeb09cf5e05b6adcf8590b28bdcac5a7f3b5ec15b19f0e782d12664797a2e",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 9,
+      "battery_pct": 45,
+      "bounty_id": 1913392384,
+      "confidence": 88,
+      "inference_result": 40,
+      "latitude": 35.02876496015004,
+      "longitude": -3.1955677221868086,
+      "model_manifest_hash_hex": "dfae0337a835640209099eec380aff798c9a8766cde4f49da9079636ae2e4ec5",
+      "monotonic_ctr": 1930481107,
+      "prev_poac_hash_hex": "dda2920a21eb8cc36d52e705500155192fbd1b7273fe829fbfa0fe197c426d76",
+      "sensor_commitment_hex": "324736152edee8e6ca07a36b409996cd19ea7ec9879d3da08288e7e4349fa527",
+      "timestamp_ms": 646888752212,
+      "world_model_hash_hex": "e986b28e715de8ee84f3302a581a80b8aab81dc4ae5991f3169ba38aa326b20a"
+    },
+    "notes": "C3 hard-cheat 0x28 DRIVER_INJECT sample 8/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-048"
+  },
+  {
+    "category": "hard_cheat",
+    "expected": {
+      "body_hex": "507cb1773a18c2e3c112a60d06eb806c5aee34cc1c8735461d0583d89122aaf6ad87ab761879e209c3a315673a7c0fa04c7bfcfcdd5ce4865813b897ae8c75c8021e3345a9540915534f28474d5fd0c709bd93b0087905bcbcaf2cbdbb21d160b8814c6c5e4539a33154b782ef86e45ecad6b831a24c845bace529bfbf89b44c280366144a84ce69000000da9837e3c9403c997863681a10403f2f0931a5a4e83e85bc2a",
+      "body_sha256_hex": "ad8f226e06f6a7286cbbdc22757c974224cce6a6c6009d34bc44d9ffd58cbac3",
+      "signature_hex": "45764f6aa1c779d92f0611e02f0136ab52d8a137780af2052ed06fa0cf7b706e6914369cae9c612421f707474a2c7de2ce61813fdf5e8dad431d794f06d79f65",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 3,
+      "battery_pct": 20,
+      "bounty_id": 1048951850,
+      "confidence": 102,
+      "inference_result": 40,
+      "latitude": 28.599493229785423,
+      "longitude": 31.183734038296194,
+      "model_manifest_hash_hex": "021e3345a9540915534f28474d5fd0c709bd93b0087905bcbcaf2cbdbb21d160",
+      "monotonic_ctr": 1250217577,
+      "prev_poac_hash_hex": "507cb1773a18c2e3c112a60d06eb806c5aee34cc1c8735461d0583d89122aaf6",
+      "sensor_commitment_hex": "ad87ab761879e209c3a315673a7c0fa04c7bfcfcdd5ce4865813b897ae8c75c8",
+      "timestamp_ms": 938856670153,
+      "world_model_hash_hex": "b8814c6c5e4539a33154b782ef86e45ecad6b831a24c845bace529bfbf89b44c"
+    },
+    "notes": "C3 hard-cheat 0x28 DRIVER_INJECT sample 9/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-049"
+  },
+  {
+    "category": "hard_cheat",
+    "expected": {
+      "body_hex": "00bb450fe1d1301ac69466dc0175cef8fcd9cecf1f9e5a55a43ee651c774408209eaa0f5b2709f0efb468a69bf0792dc740370c644816640c7f5b8f0450fcad8b09e4894ff85cb7bec675dfee913d16795d9359e8a534d6b9d4253b16b511e35408192915f1f8ebe37d385ab85371c0faed9f7a2753dd9d72a80b04c140440c52800be2a4217ced7000000cc97a6f416401c21d49ce87d90406294c7da631f641c723c20",
+      "body_sha256_hex": "b45ec8768822346539084880955526b47434eec6b34f306459bd8ecee291ae61",
+      "signature_hex": "59a619ebfbe2d5db8914abcdb40c9d0a27d7420b28f070d1d727a6ad3bae8ca3205147da5a63311ba22d37c12cf68cefa28c082f0aff692bbba77a2442f7ea21",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 0,
+      "battery_pct": 42,
+      "bounty_id": 477248544,
+      "confidence": 190,
+      "inference_result": 40,
+      "latitude": 7.033037616434186,
+      "longitude": 148.64939612731825,
+      "model_manifest_hash_hex": "b09e4894ff85cb7bec675dfee913d16795d9359e8a534d6b9d4253b16b511e35",
+      "monotonic_ctr": 1108856535,
+      "prev_poac_hash_hex": "00bb450fe1d1301ac69466dc0175cef8fcd9cecf1f9e5a55a43ee651c7744082",
+      "sensor_commitment_hex": "09eaa0f5b2709f0efb468a69bf0792dc740370c644816640c7f5b8f0450fcad8",
+      "timestamp_ms": 878717629462,
+      "world_model_hash_hex": "408192915f1f8ebe37d385ab85371c0faed9f7a2753dd9d72a80b04c140440c5"
+    },
+    "notes": "C3 hard-cheat 0x28 DRIVER_INJECT sample 10/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-050"
+  },
+  {
+    "category": "hard_cheat",
+    "expected": {
+      "body_hex": "35626ca5ce49152a10b56ad23bd26aad2e34468b78576ec4de6568058fd66e34b9aa8077ff6c1a3787dd331333a7a93a90327b9b2131c8f54ca673427946141beff478d97e6f31aa599734e5e667f386f561e7516dceb3dc86c75543fa3878b08d039ce46cca7394a10cb811da0c0b181bd099e7a90dc336d78c16ad161fb23c280a3249608f4ae2000000118a68c17bc049e5b01c56d9d7403d253c0c88c4a047951f79",
+      "body_sha256_hex": "bad5782d32c416c68d9b0222b7ab45534bdca30d0795966c728f5d06f59f0164",
+      "signature_hex": "85e5d110975b9eb854089d7807b403bff6b4ddf5556e71371ed7568246da7c56e54ea0ef73cf7168ca4beec3bb9a20446ecfdbf5df6b0417216ee0a67636e375",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 10,
+      "battery_pct": 73,
+      "bounty_id": 1200955257,
+      "confidence": 50,
+      "inference_result": 40,
+      "latitude": -51.79443697205323,
+      "longitude": 29.145447524443284,
+      "model_manifest_hash_hex": "eff478d97e6f31aa599734e5e667f386f561e7516dceb3dc86c75543fa3878b0",
+      "monotonic_ctr": 1620003554,
+      "prev_poac_hash_hex": "35626ca5ce49152a10b56ad23bd26aad2e34468b78576ec4de6568058fd66e34",
+      "sensor_commitment_hex": "b9aa8077ff6c1a3787dd331333a7a93a90327b9b2131c8f54ca673427946141b",
+      "timestamp_ms": 75336565115,
+      "world_model_hash_hex": "8d039ce46cca7394a10cb811da0c0b181bd099e7a90dc336d78c16ad161fb23c"
+    },
+    "notes": "C3 hard-cheat 0x28 DRIVER_INJECT sample 11/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-051"
+  },
+  {
+    "category": "hard_cheat",
+    "expected": {
+      "body_hex": "33375c3e4f7a76f785cc681af9267442c9ea217e743c4fdefbd7836212c74ffc47189dc5f5e9d7aa76209979ae9b7ade8b95c2a5a36a309b9963347cd153a16cd6ed7d8cbac821f3e131553d888704c7c9650c531ed4d9aadac21488f2072c124d7954aad94795f97e26894b637e44060ee28d9a0ac3ee55135504ccb52ea00d280876217e5ec5650000001e6084c9fcc02827c8585082a0c031eaa4f6da87207d085b15",
+      "body_sha256_hex": "6240be0e6132e94b12edd8cb5f37c162d8b003169fb301ac3bc8d6124c8def36",
+      "signature_hex": "7000467580620e2acd564b8fa580e9cdf8924aabab7419c060a5ded5c1064340f07440e4cf1df1b747c986083947bb4b3c7ab6f0b4f526569e2c2850664fe3f6",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 8,
+      "battery_pct": 33,
+      "bounty_id": 2097699605,
+      "confidence": 118,
+      "inference_result": 40,
+      "latitude": -12.077700385883247,
+      "longitude": -17.91657965502884,
+      "model_manifest_hash_hex": "d6ed7d8cbac821f3e131553d888704c7c9650c531ed4d9aadac21488f2072c12",
+      "monotonic_ctr": 2120140133,
+      "prev_poac_hash_hex": "33375c3e4f7a76f785cc681af9267442c9ea217e743c4fdefbd7836212c74ffc",
+      "sensor_commitment_hex": "47189dc5f5e9d7aa76209979ae9b7ade8b95c2a5a36a309b9963347cd153a16c",
+      "timestamp_ms": 130468334076,
+      "world_model_hash_hex": "4d7954aad94795f97e26894b637e44060ee28d9a0ac3ee55135504ccb52ea00d"
+    },
+    "notes": "C3 hard-cheat 0x28 DRIVER_INJECT sample 12/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-052"
+  },
+  {
+    "category": "hard_cheat",
+    "expected": {
+      "body_hex": "546e38306fcca48d761ea38e2c5e37eb0bf4b580de58135a52dc65991a1b750cbd83e8908ea9bf4222e13a314e54add46f80b4b5820520d738d7eb2533e94bc35ed111b0d98e90482ae3a0601670e3d14511649169871cbb91c44312629969e5960115dbdf055534bbd67689cdb54f2ea76e15c9c08ea8637912fb7e698f525e2803160a7f5ebaab000000ca3b520373c0327a0151fcf6c040476d36dce41020071001c5",
+      "body_sha256_hex": "d0af4bff65fba291a2f62c29b330fa175d42355a95eab830c6a93d2d61f6ee39",
+      "signature_hex": "024ec04296087f5ef3d4cc6923ec95d0038c0741cc899663e39831235c46162bc84f026e054ee02420941492cda01de8defe313e290dd2976ec8defac60a0baf",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 3,
+      "battery_pct": 10,
+      "bounty_id": 118489541,
+      "confidence": 22,
+      "inference_result": 40,
+      "latitude": -18.47658264566303,
+      "longitude": 46.853236781462556,
+      "model_manifest_hash_hex": "5ed111b0d98e90482ae3a0601670e3d14511649169871cbb91c44312629969e5",
+      "monotonic_ctr": 2136914603,
+      "prev_poac_hash_hex": "546e38306fcca48d761ea38e2c5e37eb0bf4b580de58135a52dc65991a1b750c",
+      "sensor_commitment_hex": "bd83e8908ea9bf4222e13a314e54add46f80b4b5820520d738d7eb2533e94bc3",
+      "timestamp_ms": 868578624371,
+      "world_model_hash_hex": "960115dbdf055534bbd67689cdb54f2ea76e15c9c08ea8637912fb7e698f525e"
+    },
+    "notes": "C3 hard-cheat 0x28 DRIVER_INJECT sample 13/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-053"
+  },
+  {
+    "category": "hard_cheat",
+    "expected": {
+      "body_hex": "4a939d166898f8c339b22deaba721633b7ec619e94320122de66fd68facff2524f02e825d3a35b29aee962fad61a50809596df00fc23f195efbbf5239d6bd6edb4e24af6b820836b4592295a02e9f78e5c02deb49adf1810177fd82e17c0f06b3b880958f2182209804ae0516f7a70091fe5faa94d241f181c74cd8704fd85332801bd5c28c13f2000000066fae203e1404f3902ee826574405011f120e54f44361e75fa",
+      "body_sha256_hex": "a501e4090a56355fc49057f1964f281f24290cbbaf91fbb98a58f817454cab29",
+      "signature_hex": "facf993f60ec5b791c2b2fa30122fb58370a7f3ef20a3934058ed41253b324d8d60a2db858a93bec35aa524e38039fa88bd1f2138e4adcf4194de85ee8465777",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 1,
+      "battery_pct": 92,
+      "bounty_id": 907965946,
+      "confidence": 189,
+      "inference_result": 40,
+      "latitude": 62.44540196768767,
+      "longitude": 64.28034231561202,
+      "model_manifest_hash_hex": "b4e24af6b820836b4592295a02e9f78e5c02deb49adf1810177fd82e17c0f06b",
+      "monotonic_ctr": 683753248,
+      "prev_poac_hash_hex": "4a939d166898f8c339b22deaba721633b7ec619e94320122de66fd68facff252",
+      "sensor_commitment_hex": "4f02e825d3a35b29aee962fad61a50809596df00fc23f195efbbf5239d6bd6ed",
+      "timestamp_ms": 442295780321,
+      "world_model_hash_hex": "3b880958f2182209804ae0516f7a70091fe5faa94d241f181c74cd8704fd8533"
+    },
+    "notes": "C3 hard-cheat 0x28 DRIVER_INJECT sample 14/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-054"
+  },
+  {
+    "category": "hard_cheat",
+    "expected": {
+      "body_hex": "997e505eb5223392d4d8824e38becb3d5f19d10f8ba178081c100b77a7392e9183ee1d36d877878a38453cbdb988bb1b20d195b98f0346faab706826d9b125525a772d92c21db66eec67ef34e264b3a0ae0cd936a1c7d8bf7a43bfc0c690606a23c06a5d6218acc1203517ba4e54b7ecd4ad9994a4da57e746ed47d1b4a23e0f2805a6551a0be67000000094ead6b26ac038b045e3289238c06452e6c7f8e336701b0592",
+      "body_sha256_hex": "2f5917597f1f0b5f05997a4d06a08ad47e661a2eca69e36bb4168a6720b1738a",
+      "signature_hex": "f86e16dfc008614faa9e98e306503839197c73cf2c5f849d483b713d6fc38f76cccaed14ea27da72614f001ed326b7fe144ee097ea6c84b913edf64ce82c967c",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 5,
+      "battery_pct": 85,
+      "bounty_id": 1880819090,
+      "confidence": 166,
+      "inference_result": 40,
+      "latitude": -24.688566396145887,
+      "longitude": -162.59067152605866,
+      "model_manifest_hash_hex": "5a772d92c21db66eec67ef34e264b3a0ae0cd936a1c7d8bf7a43bfc0c690606a",
+      "monotonic_ctr": 436987504,
+      "prev_poac_hash_hex": "997e505eb5223392d4d8824e38becb3d5f19d10f8ba178081c100b77a7392e91",
+      "sensor_commitment_hex": "83ee1d36d877878a38453cbdb988bb1b20d195b98f0346faab706826d9b12552",
+      "timestamp_ms": 639595098730,
+      "world_model_hash_hex": "23c06a5d6218acc1203517ba4e54b7ecd4ad9994a4da57e746ed47d1b4a23e0f"
+    },
+    "notes": "C3 hard-cheat 0x28 DRIVER_INJECT sample 15/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-055"
+  },
+  {
+    "category": "hard_cheat",
+    "expected": {
+      "body_hex": "7508e8f3217926686a65b6be03988f04ad1eb054d228dd4ae9f3a006bf0b2aeef8037e1d37c132d141f49bc502106f555aec5be7610517f0f8c689e8ad325714e5f8f588d9731710a7c3f8780b66ab634f965ddf3683c46f20bdcb4cd2fa3587d8b6bbccb6d285036aeabb6d2fa206c0d668d97fd6a23b086a98266d9a2b68512809de5129a5d66a0000007b28059a51403ad3313f378f50c000f62b9d7cf00021a2d9a0",
+      "body_sha256_hex": "13b8eeb700999901d7bce2e1fd54b48b2b2a01567f9abc4999acec08da1babac",
+      "signature_hex": "4b065ed76dcbb45e3dbdeba1f2d17dd26e481fdc197dc356c28b7604757d5e2e78048a32ae923cc8e79b7c81ae9d6307405471124af307e18f8da2b04ab3243a",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 9,
+      "battery_pct": 81,
+      "bounty_id": 564320672,
+      "confidence": 222,
+      "inference_result": 40,
+      "latitude": 26.82497019869271,
+      "longitude": -2.1202003768685245,
+      "model_manifest_hash_hex": "e5f8f588d9731710a7c3f8780b66ab634f965ddf3683c46f20bdcb4cd2fa3587",
+      "monotonic_ctr": 698734186,
+      "prev_poac_hash_hex": "7508e8f3217926686a65b6be03988f04ad1eb054d228dd4ae9f3a006bf0b2aee",
+      "sensor_commitment_hex": "f8037e1d37c132d141f49bc502106f555aec5be7610517f0f8c689e8ad325714",
+      "timestamp_ms": 528952433233,
+      "world_model_hash_hex": "d8b6bbccb6d285036aeabb6d2fa206c0d668d97fd6a23b086a98266d9a2b6851"
+    },
+    "notes": "C3 hard-cheat 0x28 DRIVER_INJECT sample 16/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-056"
+  },
+  {
+    "category": "hard_cheat",
+    "expected": {
+      "body_hex": "f821019de2896547ae9c455ea5ce97b3e6f6d45ae86b87d6dffb1faffbaf19a5fdbae0222f9197dfaee939b1e4d310cbb303b50bf0d9701e9c636f3acf3c1b86a3ad1ae74c09d080f68b7296537e66fb7c7c8ab060a64c20c463696ac353f89a28309d6f0e1bb22ce6949ffcc08d71be37a6c9bd3c4af3c4b3884c45264e2f83280a705340b501fe000000b6ecbac14d40448f7d9b222ac8403548e571af23101b0a23af",
+      "body_sha256_hex": "86fce585ca1b662ef1440a8626f0dea6d43c8ceb3ab16acf9991c08e652ff731",
+      "signature_hex": "1efd2eabd6ab8959f7d723e0bd1ed2ee756b8cad0fdb79585ea476f5076f4a37bb014dbac76a3c41a497592e480afccaa8b6859634f0c7e9d75d1bbfd56902cf",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 10,
+      "battery_pct": 83,
+      "bounty_id": 453649327,
+      "confidence": 112,
+      "inference_result": 40,
+      "latitude": 41.12102069061581,
+      "longitude": 21.284751038797424,
+      "model_manifest_hash_hex": "a3ad1ae74c09d080f68b7296537e66fb7c7c8ab060a64c20c463696ac353f89a",
+      "monotonic_ctr": 1085604350,
+      "prev_poac_hash_hex": "f821019de2896547ae9c455ea5ce97b3e6f6d45ae86b87d6dffb1faffbaf19a5",
+      "sensor_commitment_hex": "fdbae0222f9197dfaee939b1e4d310cbb303b50bf0d9701e9c636f3acf3c1b86",
+      "timestamp_ms": 785655710029,
+      "world_model_hash_hex": "28309d6f0e1bb22ce6949ffcc08d71be37a6c9bd3c4af3c4b3884c45264e2f83"
+    },
+    "notes": "C3 hard-cheat 0x28 DRIVER_INJECT sample 17/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-057"
+  },
+  {
+    "category": "hard_cheat",
+    "expected": {
+      "body_hex": "f00c67d20ad3d97c3529acd49c6dfcec5892f0ba3200aeb1eb4d8c1a20e75cfc9a4d51247b52eb133db4abdab37439d2f82def9b0faef53c9934be155c9f5daef472c2ac06beade468ead5a1dcdbf46151f51a6215fd005135536c393edb600a52c1523cd7ab73ea1e38386535352b28045c82ea4a9e9672a48e42fd55a8667a2809c93c30885db700000009ca85f48cc043a92a886499c0405d0dc10d090ebc6daa3c86",
+      "body_sha256_hex": "574ff5e0202a391d936f44bc228281aafcc8d6baf1236f6854d548abc2bf7476",
+      "signature_hex": "31ac76e5ccedc30b9b253baf7116a98ffc3e9fe9282e8aa6c1ea19962b64407fe488481d085e6a7065f34f736feea32beb9b35218479858edb899639dbc28c2c",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 9,
+      "battery_pct": 60,
+      "bounty_id": 1839873158,
+      "confidence": 201,
+      "inference_result": 40,
+      "latitude": -39.32161049759043,
+      "longitude": 116.21490789303328,
+      "model_manifest_hash_hex": "f472c2ac06beade468ead5a1dcdbf46151f51a6215fd005135536c393edb600a",
+      "monotonic_ctr": 814243255,
+      "prev_poac_hash_hex": "f00c67d20ad3d97c3529acd49c6dfcec5892f0ba3200aeb1eb4d8c1a20e75cfc",
+      "sensor_commitment_hex": "9a4d51247b52eb133db4abdab37439d2f82def9b0faef53c9934be155c9f5dae",
+      "timestamp_ms": 42052482188,
+      "world_model_hash_hex": "52c1523cd7ab73ea1e38386535352b28045c82ea4a9e9672a48e42fd55a8667a"
+    },
+    "notes": "C3 hard-cheat 0x28 DRIVER_INJECT sample 18/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-058"
+  },
+  {
+    "category": "hard_cheat",
+    "expected": {
+      "body_hex": "114c6c9c27620ae6c1dff26a8c26b4fbdaa908103af0e164e503817d1574a18d10c8bb6a7c60a10935192d70b536c88b665fe0e7ea702f5d3fae5e2584dd9b6944377c6b9e8118364bff86442a39667f7143e765fefd34b9d95a00d14143c7bc6568b773ff19d3ed15a467a1530ea6fb25ce9d5b7308f33b69e4949b9403b38a28000c3b7129d5be0000004c0c099d16c052a43f43d13a0040667e0e85d1c4024f9f9c7e",
+      "body_sha256_hex": "c7ea5e98bcb3f8660c855e7e98b0b18644e73fbfcaf59d021845033f5dbc7928",
+      "signature_hex": "2138e3c8db59383a2c72600b593a6ddcb88124ccd892b433c98f8bb29ef4dcf5198e8899ecbe5b15ba3a6522dcd46607bc6751865cb819dee38954f4940d3b53",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 0,
+      "battery_pct": 59,
+      "bounty_id": 1335860350,
+      "confidence": 12,
+      "inference_result": 40,
+      "latitude": -74.56636138374597,
+      "longitude": 179.93927279443602,
+      "model_manifest_hash_hex": "44377c6b9e8118364bff86442a39667f7143e765fefd34b9d95a00d14143c7bc",
+      "monotonic_ctr": 1898567102,
+      "prev_poac_hash_hex": "114c6c9c27620ae6c1dff26a8c26b4fbdaa908103af0e164e503817d1574a18d",
+      "sensor_commitment_hex": "10c8bb6a7c60a10935192d70b536c88b665fe0e7ea702f5d3fae5e2584dd9b69",
+      "timestamp_ms": 326619471126,
+      "world_model_hash_hex": "6568b773ff19d3ed15a467a1530ea6fb25ce9d5b7308f33b69e4949b9403b38a"
+    },
+    "notes": "C3 hard-cheat 0x28 DRIVER_INJECT sample 19/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-059"
+  },
+  {
+    "category": "hard_cheat",
+    "expected": {
+      "body_hex": "2520297211a0aaed0cf9ce940d7ab6b3a457d661ca1a0e896d994d06cd837e09145be74c72a898c827f370898711bb9882779daa958cc1f83927d564596a8cbee2e1d16be3af306ff49e350b102477d8a4302ef797fdef1e9ef2bdf2417319e67b7f74119138c5acd5b048c4e941d4507613bfece83aa88442981264958579292801f95f29157dcc0000005cdefe6dfcc041798ae816806bc061d04532fb22e034134d05",
+      "body_sha256_hex": "5b6d4d73657d1facfacfc547be93122da3e98d53993aac40cdac2427b000dbb6",
+      "signature_hex": "a99929efa6ece3d5012c127eb5ad06ad68975b216157bcbfe0df7960d62c3aa5c070ae88428951711f0a537813adb98b836ff8dfc16cfe23327d6aecf47188fc",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 1,
+      "battery_pct": 95,
+      "bounty_id": 873680133,
+      "confidence": 249,
+      "inference_result": 40,
+      "latitude": -34.949551592814565,
+      "longitude": -142.5084471611981,
+      "model_manifest_hash_hex": "e2e1d16be3af306ff49e350b102477d8a4302ef797fdef1e9ef2bdf2417319e6",
+      "monotonic_ctr": 689274316,
+      "prev_poac_hash_hex": "2520297211a0aaed0cf9ce940d7ab6b3a457d661ca1a0e896d994d06cd837e09",
+      "sensor_commitment_hex": "145be74c72a898c827f370898711bb9882779daa958cc1f83927d564596a8cbe",
+      "timestamp_ms": 398878207484,
+      "world_model_hash_hex": "7b7f74119138c5acd5b048c4e941d4507613bfece83aa8844298126495857929"
+    },
+    "notes": "C3 hard-cheat 0x28 DRIVER_INJECT sample 20/20",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-060"
+  }
+]

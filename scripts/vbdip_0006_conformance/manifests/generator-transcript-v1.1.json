@@ -1,0 +1,27 @@
+{
+  "category_counts": {
+    "chain_rollup": 20,
+    "counter_rollover": 20,
+    "edge_case": 20,
+    "hard_cheat": 20,
+    "random": 20
+  },
+  "deterministic_seed_random": 0,
+  "ephemeral_key_derivation_method": "ec.derive_private_key(int(ephemeral_key_seed_hex, 16), SECP256R1)",
+  "ephemeral_key_seed_hex": "6d2b56df3a6d5a8c1b8e3f04c0c2e6e1f7b6e8a2c4d8e9f0a1b2c3d4e5f60718",
+  "generator_run_ts_ns": 1778983578336693300,
+  "generator_script_path": "scripts/vbdip_0006_conformance/generator.py",
+  "generator_script_sha256": "19d1662a5eb9f7cf5265fd7bafa51edbddcc35a7c21eb38f23323163f1b432b2",
+  "no_private_key_attestation": "The ECDSA-P256 private key used for fixture signing was derived deterministically from a hardcoded seed in this generator's source (see EPHEMERAL_KEY_SEED_HEX constant). The private key was NOT persisted to any file under scripts/vbdip_0006_conformance/ \u2014 only the corresponding public key PEM + per-vector signatures are committed. The private key exists only within the generator process's memory and is garbage-collected when the script exits. Per VBDIP-0006 conformance harness M0.1 \u00a79.2 R2 binding contract: 'never commit the private key.' Anyone with the generator source (a known SHA-256) can reproduce the same key for re-signing purposes; this is acceptable for test-fixture signing where the key has no production authority. Production firmware MUST use SE-resident keys never derivable from a committed seed.",
+  "public_key_fingerprint_sha256_16": "a3e85fbe1fb1c16c",
+  "public_key_path": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem",
+  "schema": "vbdip-0006-conformance-generator-transcript-v1",
+  "signature_determinism_note": "ECDSA-P256 signatures use random k per Python `cryptography` library default. Vector body content (input + body_hex + body_sha256_hex) is byte-deterministic across generator reruns; signature bytes (expected.signature_hex) vary across reruns but verify against the deterministic public key. Determinism regression tests assert body-byte equality + signature verification, NOT signature byte-equality.",
+  "supersedes_v10_note": "Vectors generated against v1.1 reconciled wire layout per Appendix A.3. The SUPERSEDED v1.0 \u00a73.1 table is NOT used as a vector authority. See vsd-vault/manifests/proposals-VBDIP-0006/002.manifest.json for the v1.1 architect-signed manifest.",
+  "v11_manifest_commit": "975ea2bb",
+  "v11_manifest_path": "vsd-vault/manifests/proposals-VBDIP-0006/002.manifest.json",
+  "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+  "vbdip_spec_version": "VBDIP-0006-v1.1",
+  "vbdip_v10_spec_hash_superseded": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+  "vector_count": 100
+}

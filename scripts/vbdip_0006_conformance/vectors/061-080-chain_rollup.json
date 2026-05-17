@@ -1,0 +1,702 @@
+[
+  {
+    "category": "chain_rollup",
+    "expected": {
+      "body_hex": "0000000000000000000000000000000000000000000000000000000000000000704e4f8ff49ce49762af6945ecf45371dcc78d6fb29dec43ddc0e5d16c1a8219f618d3590e07815a23108baa0b99c834c2d0a9697f54e3c4a0e74b3190e73b459b7faed2ab22b9fc07394b45838d417a52b2ae71781763fabe59caf0fd68e5c413033d425d27d1e8000000a145baf444c052a18925d37abe4057e973ea7198f839fd3acd",
+      "body_sha256_hex": "5c05ab0954ea2e93cd25ad39122bb393474345edcc814fba41102aa60ef8d131",
+      "signature_hex": "a2584f67262d1bf2e4f4b94c4f7d16aab0be1d009d69cb664cab90a763c3f751ef5c3f11936ce69236ccdb9c1fd4b6bbb940fc76e4d20f26df91767cff759c75",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 3,
+      "battery_pct": 66,
+      "bounty_id": 972896973,
+      "confidence": 61,
+      "inference_result": 19,
+      "latitude": -74.52399583484927,
+      "longitude": 95.64769993871221,
+      "model_manifest_hash_hex": "f618d3590e07815a23108baa0b99c834c2d0a9697f54e3c4a0e74b3190e73b45",
+      "monotonic_ctr": 1562890728,
+      "prev_poac_hash_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+      "sensor_commitment_hex": "704e4f8ff49ce49762af6945ecf45371dcc78d6fb29dec43ddc0e5d16c1a8219",
+      "timestamp_ms": 692659614788,
+      "world_model_hash_hex": "9b7faed2ab22b9fc07394b45838d417a52b2ae71781763fabe59caf0fd68e5c4"
+    },
+    "notes": "C4 GIC chain link 1/20 \u2014 prev_poac_hash = SHA-256(prev_body)",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": null
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-061"
+  },
+  {
+    "category": "chain_rollup",
+    "expected": {
+      "body_hex": "5c05ab0954ea2e93cd25ad39122bb393474345edcc814fba41102aa60ef8d1317b0c28349ddac494a4f41e788ba9d3a71c2a2714a0441a9a8772a56d6946e5c14f2987c0a7a896dea96308d84aa125437641f79f17e3e14bc62b79ead5a772160a8ccd497075d4594a197b31027a3a2015627e4e6facd0d129bd2da1c63ea61a040096265afd58d000000056e244aca8c051a85cce86680c406461ab2a1be27a48d79878",
+      "body_sha256_hex": "fc5d81e5a64f9a681a009c073b6324d66ab5fb6d710a833383363cf2a82735b3",
+      "signature_hex": "8e1c5160a3c5eec0083277b41d22326032c8c0a90d612e2c505d55e05a3b663a06a9102d49f1d1b0a120351319a617e6837c58454e85fd071e759ac4990c0ad3",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 0,
+      "battery_pct": 38,
+      "bounty_id": 1222088824,
+      "confidence": 150,
+      "inference_result": 4,
+      "latitude": -70.63066447377804,
+      "longitude": 163.0521441025374,
+      "model_manifest_hash_hex": "4f2987c0a7a896dea96308d84aa125437641f79f17e3e14bc62b79ead5a77216",
+      "monotonic_ctr": 1526552784,
+      "prev_poac_hash_hex": "5c05ab0954ea2e93cd25ad39122bb393474345edcc814fba41102aa60ef8d131",
+      "sensor_commitment_hex": "7b0c28349ddac494a4f41e788ba9d3a71c2a2714a0441a9a8772a56d6946e5c1",
+      "timestamp_ms": 373163338920,
+      "world_model_hash_hex": "0a8ccd497075d4594a197b31027a3a2015627e4e6facd0d129bd2da1c63ea61a"
+    },
+    "notes": "C4 GIC chain link 2/20 \u2014 prev_poac_hash = SHA-256(prev_body)",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": "TV-061"
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-062"
+  },
+  {
+    "category": "chain_rollup",
+    "expected": {
+      "body_hex": "fc5d81e5a64f9a681a009c073b6324d66ab5fb6d710a833383363cf2a82735b3a2fd9d1b08fc413e106b80743d726197dd96ecf4d66d68026ebb559d6f11ded1ad6d42962c421ea91942223838183c4bc19c0fe1346106775404e087945cc9a135553d4af24f0511986f3c8584e6f8718adfe99ae370d636d6c8663eba7c0a230106b6195bfc2963000000a8347a5655c02728fab1188ba0c06470bcc9ff95b77dcc900a",
+      "body_sha256_hex": "83a35bed34f57c080f9b4408ac7288c63e37859f2c09ce679d443f99e643ccc1",
+      "signature_hex": "d730e58b0e2bcd9d7965f44b2eff4d56a27968e421b9d1ea774b95211834531ba130b66756ffe95b3dad07600cb36baf065199cbc9da26af0c1a71584bd49dd5",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 6,
+      "battery_pct": 25,
+      "bounty_id": 2110558218,
+      "confidence": 182,
+      "inference_result": 1,
+      "latitude": -11.580037626501337,
+      "longitude": -163.52304553908263,
+      "model_manifest_hash_hex": "ad6d42962c421ea91942223838183c4bc19c0fe1346106775404e087945cc9a1",
+      "monotonic_ctr": 1543252323,
+      "prev_poac_hash_hex": "fc5d81e5a64f9a681a009c073b6324d66ab5fb6d710a833383363cf2a82735b3",
+      "sensor_commitment_hex": "a2fd9d1b08fc413e106b80743d726197dd96ecf4d66d68026ebb559d6f11ded1",
+      "timestamp_ms": 722434938453,
+      "world_model_hash_hex": "35553d4af24f0511986f3c8584e6f8718adfe99ae370d636d6c8663eba7c0a23"
+    },
+    "notes": "C4 GIC chain link 3/20 \u2014 prev_poac_hash = SHA-256(prev_body)",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": "TV-062"
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-063"
+  },
+  {
+    "category": "chain_rollup",
+    "expected": {
+      "body_hex": "83a35bed34f57c080f9b4408ac7288c63e37859f2c09ce679d443f99e643ccc19fde9bde01fe689167069d31d0b9c3bbc36ba0041e34d538d4ac70aeabb2bd4ba0ad2b82af8c904dd3ca71357589e54291468d18047ab9aa3be71e8c4ef96e74aa2e3686fbef9cd7ba5e2e3c40ce8b2b9455f2d47dbf8c8aa859846f3295c5cc1507305508df9f25000000543e507e0fc01e8ac912f42970403d826baa351d50440c4ed5",
+      "body_sha256_hex": "a57b240e1a89cd46d2bf722588f7c13120074381ed3fa7ba302b01ce413d9acf",
+      "signature_hex": "74dece3262c9b254b54b7ba52b4b240dd1550d960a1d4b3014e881ff87d01480691cbf2f4d458cc90094b421a0818feec675c5571625510e8c0472b0cddebc64",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 7,
+      "battery_pct": 85,
+      "bounty_id": 1141657301,
+      "confidence": 48,
+      "inference_result": 21,
+      "latitude": -7.635532661583383,
+      "longitude": 29.509455335585983,
+      "model_manifest_hash_hex": "a0ad2b82af8c904dd3ca71357589e54291468d18047ab9aa3be71e8c4ef96e74",
+      "monotonic_ctr": 148872997,
+      "prev_poac_hash_hex": "83a35bed34f57c080f9b4408ac7288c63e37859f2c09ce679d443f99e643ccc1",
+      "sensor_commitment_hex": "9fde9bde01fe689167069d31d0b9c3bbc36ba0041e34d538d4ac70aeabb2bd4b",
+      "timestamp_ms": 361822715407,
+      "world_model_hash_hex": "aa2e3686fbef9cd7ba5e2e3c40ce8b2b9455f2d47dbf8c8aa859846f3295c5cc"
+    },
+    "notes": "C4 GIC chain link 4/20 \u2014 prev_poac_hash = SHA-256(prev_body)",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": "TV-063"
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-064"
+  },
+  {
+    "category": "chain_rollup",
+    "expected": {
+      "body_hex": "a57b240e1a89cd46d2bf722588f7c13120074381ed3fa7ba302b01ce413d9acff2e6a09e2a3a36267ed9e122ee0b5b48d2a955ab507cf6c85631bb51e9314daa133a999f8c596ac9f10a89cc3998bdc3939728e57394f20a7a09380babd849981434329def9d47db82b984d6d79ff7df795be89244315d4280908d36a23902640409a2437f7ad2a9000000880b83a6e8403279e182a9658cc013e1ec670f4da01ec18b76",
+      "body_sha256_hex": "054a96979ebeaf64738f1ecc096dc42f702c8889a3399beba8a5d16d609e1a93",
+      "signature_hex": "59e7ce71ab06caa7a249c6e352e4cd2a6551671b5b12fec1898161b5a99b486ce3ac21e2dd2e45321de36cd2a2ff09ea7b875c81526176d750f85d9deeabdf1f",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 9,
+      "battery_pct": 67,
+      "bounty_id": 516000630,
+      "confidence": 162,
+      "inference_result": 4,
+      "latitude": 18.47609726558362,
+      "longitude": -4.970628366765055,
+      "model_manifest_hash_hex": "133a999f8c596ac9f10a89cc3998bdc3939728e57394f20a7a09380babd84998",
+      "monotonic_ctr": 2138755753,
+      "prev_poac_hash_hex": "a57b240e1a89cd46d2bf722588f7c13120074381ed3fa7ba302b01ce413d9acf",
+      "sensor_commitment_hex": "f2e6a09e2a3a36267ed9e122ee0b5b48d2a955ab507cf6c85631bb51e9314daa",
+      "timestamp_ms": 584308729576,
+      "world_model_hash_hex": "1434329def9d47db82b984d6d79ff7df795be89244315d4280908d36a2390264"
+    },
+    "notes": "C4 GIC chain link 5/20 \u2014 prev_poac_hash = SHA-256(prev_body)",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": "TV-064"
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-065"
+  },
+  {
+    "category": "chain_rollup",
+    "expected": {
+      "body_hex": "054a96979ebeaf64738f1ecc096dc42f702c8889a3399beba8a5d16d609e1a93a152d2b8d8d59469cfd0d572eb2b05f312a6aca6f790241f22975e8b7c2c3061119bdf832b100942772bd943b3276975f22e72ed50eabf7f47399cf81ece6fdde840c514017ebb0f432d367054c6be6924d1654977f0d299b4508d98cbbf7a7c0c0646337ccea63c00000069e60d2adac04dd3d8b74dc8b7c0649fe639f613e35726adc9",
+      "body_sha256_hex": "8962f56c7090534c612a124d3d707906738a487db990dc8ba389e248e7c64d11",
+      "signature_hex": "1c76adbd57e6d43dae6ff2a167037100d1bf30a69945408c846be48b9ef72961356296fc8817e8c13c6d7527370aeff9bdc7d43418e5114c9681844a3ff8f16d",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 6,
+      "battery_pct": 51,
+      "bounty_id": 1462152649,
+      "confidence": 70,
+      "inference_result": 12,
+      "latitude": -59.655051148396005,
+      "longitude": -164.99685380994842,
+      "model_manifest_hash_hex": "119bdf832b100942772bd943b3276975f22e72ed50eabf7f47399cf81ece6fdd",
+      "monotonic_ctr": 2093917756,
+      "prev_poac_hash_hex": "054a96979ebeaf64738f1ecc096dc42f702c8889a3399beba8a5d16d609e1a93",
+      "sensor_commitment_hex": "a152d2b8d8d59469cfd0d572eb2b05f312a6aca6f790241f22975e8b7c2c3061",
+      "timestamp_ms": 454831188698,
+      "world_model_hash_hex": "e840c514017ebb0f432d367054c6be6924d1654977f0d299b4508d98cbbf7a7c"
+    },
+    "notes": "C4 GIC chain link 6/20 \u2014 prev_poac_hash = SHA-256(prev_body)",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": "TV-065"
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-066"
+  },
+  {
+    "category": "chain_rollup",
+    "expected": {
+      "body_hex": "8962f56c7090534c612a124d3d707906738a487db990dc8ba389e248e7c64d11f71bf84645b4e9a71f2a65002ad38b6a3bac78abf4c86276c824f8f808e0640064749e552ef8c9c8580e1f2732fd302468c8a48c1cf3a732ae840a8a1e11ceb202f1b35f7d5e548ce0eb466e8a5f3f71472a8ae6f0b0044964b37e1609835f121c04b74a0d8a2130000000c0f6e405cdc044aa13a61db36fc041b5de1dd3e2c8604e263e",
+      "body_sha256_hex": "120513e96fd163124553077d5c2fef2e35fb4010881b1410861902b8783a99cd",
+      "signature_hex": "eaa06cad1f7fea7952342aa05407a6cef9c871fda083db0900fa3f03cea55c2570d630449fc406dcff5d10f5ba2f90323941ffe65e79ccab8d2712176b2a2388",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 4,
+      "battery_pct": 74,
+      "bounty_id": 1615734334,
+      "confidence": 183,
+      "inference_result": 28,
+      "latitude": -41.328724636557006,
+      "longitude": -35.42084095808019,
+      "model_manifest_hash_hex": "64749e552ef8c9c8580e1f2732fd302468c8a48c1cf3a732ae840a8a1e11ceb2",
+      "monotonic_ctr": 227156272,
+      "prev_poac_hash_hex": "8962f56c7090534c612a124d3d707906738a487db990dc8ba389e248e7c64d11",
+      "sensor_commitment_hex": "f71bf84645b4e9a71f2a65002ad38b6a3bac78abf4c86276c824f8f808e06400",
+      "timestamp_ms": 828775859661,
+      "world_model_hash_hex": "02f1b35f7d5e548ce0eb466e8a5f3f71472a8ae6f0b0044964b37e1609835f12"
+    },
+    "notes": "C4 GIC chain link 7/20 \u2014 prev_poac_hash = SHA-256(prev_body)",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": "TV-066"
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-067"
+  },
+  {
+    "category": "chain_rollup",
+    "expected": {
+      "body_hex": "120513e96fd163124553077d5c2fef2e35fb4010881b1410861902b8783a99cd55a16a87b07dc8b0c1a4a9dfcf9577368e2baeeb4bf92a836c533c89a608ae004eb8f6347cc676871a02b089a30f00c67bebf79540c50d6f74d8212f9f24ac43db3a396c34596266bc287f8c64628c286cf57924b1009c586b09efb073cd47bb0a07261a3fdad11b000000f15cc93118404671f6b4b32f00c03dd0a1918890c82cf6c298",
+      "body_sha256_hex": "a74fddfc0eea1affe41e25ec5cb3b7800bc871aa979a2f99e392edfab949a7d6",
+      "signature_hex": "3a1c4633c2d18a03e98e11d76afcde54827752595f6f3979b364f51bffdd8955b67cf8956932f7da80a993db1b30df4a89e0ccf0e4f12afebcc3c3f3908c5a3c",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 7,
+      "battery_pct": 26,
+      "bounty_id": 754369176,
+      "confidence": 38,
+      "inference_result": 10,
+      "latitude": 44.89034136532973,
+      "longitude": -29.8149653395092,
+      "model_manifest_hash_hex": "4eb8f6347cc676871a02b089a30f00c67bebf79540c50d6f74d8212f9f24ac43",
+      "monotonic_ctr": 1071304987,
+      "prev_poac_hash_hex": "120513e96fd163124553077d5c2fef2e35fb4010881b1410861902b8783a99cd",
+      "sensor_commitment_hex": "55a16a87b07dc8b0c1a4a9dfcf9577368e2baeeb4bf92a836c533c89a608ae00",
+      "timestamp_ms": 1036643807512,
+      "world_model_hash_hex": "db3a396c34596266bc287f8c64628c286cf57924b1009c586b09efb073cd47bb"
+    },
+    "notes": "C4 GIC chain link 8/20 \u2014 prev_poac_hash = SHA-256(prev_body)",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": "TV-067"
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-068"
+  },
+  {
+    "category": "chain_rollup",
+    "expected": {
+      "body_hex": "a74fddfc0eea1affe41e25ec5cb3b7800bc871aa979a2f99e392edfab949a7d681b7531c3863f22fa07182e256db68e85ff842f2f6b8106b5421a0c1fecbce12a24951865356ec33b372cea446e337cbc095aae2a3c5e93640fef7e25a6d5839b2415de27172d0f05c168895300afb8dda1480f415f2f6acf3d88d13242c74600d04a15344c5b98100000059d8a7019f401f2d651876e5e0c0587931548351491698f0e4",
+      "body_sha256_hex": "dcc85287e810c60d0e19928fef22f2289d207eaae8c1cfe1c398072f6f436bfc",
+      "signature_hex": "07c42e7af762550aa273136439a26539cbf58bceef9de5aabbfe4b1f656cba10a2f88af58c8f57a55c060d14ca4423c611c3e81e5d56072990c13f6f1ea658e5",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 4,
+      "battery_pct": 83,
+      "bounty_id": 379121892,
+      "confidence": 161,
+      "inference_result": 13,
+      "latitude": 7.794330961472468,
+      "longitude": -97.89363587211587,
+      "model_manifest_hash_hex": "a24951865356ec33b372cea446e337cbc095aae2a3c5e93640fef7e25a6d5839",
+      "monotonic_ctr": 1153808769,
+      "prev_poac_hash_hex": "a74fddfc0eea1affe41e25ec5cb3b7800bc871aa979a2f99e392edfab949a7d6",
+      "sensor_commitment_hex": "81b7531c3863f22fa07182e256db68e85ff842f2f6b8106b5421a0c1fecbce12",
+      "timestamp_ms": 385886912927,
+      "world_model_hash_hex": "b2415de27172d0f05c168895300afb8dda1480f415f2f6acf3d88d13242c7460"
+    },
+    "notes": "C4 GIC chain link 9/20 \u2014 prev_poac_hash = SHA-256(prev_body)",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": "TV-068"
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-069"
+  },
+  {
+    "category": "chain_rollup",
+    "expected": {
+      "body_hex": "dcc85287e810c60d0e19928fef22f2289d207eaae8c1cfe1c398072f6f436bfcc4640ce0719c050495001f7ba9b9b32b8f0b451e23aa27894ab07d03dfaedbcbc4ec3b02e2853ab725fbabcac133005bd2cfb0111d51b55bea94f7a09833ba58fc12eadd89bd6303be7e3b69c49d570fd6beea5bd0976389b0a0c0d639c169120d07ac401d32db72000000f4bde63c4f40549e5c55c77350405790cf14fba1382234c048",
+      "body_sha256_hex": "84c987e7c618d7dd53d664996ea9f2ad05759265bd1c903ee81bc015e4306753",
+      "signature_hex": "ef4381a2b61baf68eaa7cd51803b4a1b755d7595d1e16f308f751c34e5053f9f05440e848fc1a6391111409f16732565c25827316efc5247bef8470fbccd726b",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 7,
+      "battery_pct": 64,
+      "bounty_id": 573882440,
+      "confidence": 172,
+      "inference_result": 13,
+      "latitude": 82.47438568570692,
+      "longitude": 94.26263928006381,
+      "model_manifest_hash_hex": "c4ec3b02e2853ab725fbabcac133005bd2cfb0111d51b55bea94f7a09833ba58",
+      "monotonic_ctr": 489872242,
+      "prev_poac_hash_hex": "dcc85287e810c60d0e19928fef22f2289d207eaae8c1cfe1c398072f6f436bfc",
+      "sensor_commitment_hex": "c4640ce0719c050495001f7ba9b9b32b8f0b451e23aa27894ab07d03dfaedbcb",
+      "timestamp_ms": 1051158002767,
+      "world_model_hash_hex": "fc12eadd89bd6303be7e3b69c49d570fd6beea5bd0976389b0a0c0d639c16912"
+    },
+    "notes": "C4 GIC chain link 10/20 \u2014 prev_poac_hash = SHA-256(prev_body)",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": "TV-069"
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-070"
+  },
+  {
+    "category": "chain_rollup",
+    "expected": {
+      "body_hex": "84c987e7c618d7dd53d664996ea9f2ad05759265bd1c903ee81bc015e4306753eb49689d2bea47803b54b8f4145ed6668904b300a3a832622ec315c6937d4032b16b60d352df098c802b01e7978dbb14d6101564004a2c67cad0a137337ba12a5b5b78f82fdd76ab8ac3e33700d129b0961d18be5d327eb711a97872a22d291c0605ff315067ae6f000000ceb070bdcbbfdb9c2812f14500c0495f935dcdc1100be31109",
+      "body_sha256_hex": "a143dd7f9c55d362830cd1fd4bb14c79d63e4aa10af6f9bb5c9fd37754767906",
+      "signature_hex": "1210a3133480ee1daee7636f574b379414008641f6b4d9e9e6fc5119133b946e079b4c2c993694ff78422c125918ca4fb9ac1e61ca3bbb112b16febee33e98a0",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 5,
+      "battery_pct": 49,
+      "bounty_id": 199430409,
+      "confidence": 255,
+      "inference_result": 6,
+      "latitude": -0.43140603875970385,
+      "longitude": -50.746684766260046,
+      "model_manifest_hash_hex": "b16b60d352df098c802b01e7978dbb14d6101564004a2c67cad0a137337ba12a",
+      "monotonic_ctr": 1348972143,
+      "prev_poac_hash_hex": "84c987e7c618d7dd53d664996ea9f2ad05759265bd1c903ee81bc015e4306753",
+      "sensor_commitment_hex": "eb49689d2bea47803b54b8f4145ed6668904b300a3a832622ec315c6937d4032",
+      "timestamp_ms": 887723441611,
+      "world_model_hash_hex": "5b5b78f82fdd76ab8ac3e33700d129b0961d18be5d327eb711a97872a22d291c"
+    },
+    "notes": "C4 GIC chain link 11/20 \u2014 prev_poac_hash = SHA-256(prev_body)",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": "TV-070"
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-071"
+  },
+  {
+    "category": "chain_rollup",
+    "expected": {
+      "body_hex": "a143dd7f9c55d362830cd1fd4bb14c79d63e4aa10af6f9bb5c9fd377547679061af54463de4b1468540b6a224e0265cdf404eccc8a0be059f8652563ed0fa6c53ccb5dc5d89f5ad3883dd42cb304f697c7e2fdb6f47d0db9757e9d81dcdf8e90400c7b45fe68fdff1cf116093374277b4dd99b486d84eb968f4b8273d5697d140804b81c21cec4de00000070ccfeb435404f8dfdc35f50bc405609126cb47ec8133df6e9",
+      "body_sha256_hex": "0fab974b5d949673d710483c702aac73a4987d8b64f0fdff611b5a49a6b39755",
+      "signature_hex": "d10a2ea072e765a6647aa275d01d02f76e6fbe246cb284075f523fc962e7699fb882022d7a79207e55528aae5d6c1e7599138866d31fd6c82c54bebcdd2e770c",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 4,
+      "battery_pct": 28,
+      "bounty_id": 322828009,
+      "confidence": 184,
+      "inference_result": 8,
+      "latitude": 63.109306737461765,
+      "longitude": 88.14174955011833,
+      "model_manifest_hash_hex": "3ccb5dc5d89f5ad3883dd42cb304f697c7e2fdb6f47d0db9757e9d81dcdf8e90",
+      "monotonic_ctr": 567198942,
+      "prev_poac_hash_hex": "a143dd7f9c55d362830cd1fd4bb14c79d63e4aa10af6f9bb5c9fd37754767906",
+      "sensor_commitment_hex": "1af54463de4b1468540b6a224e0265cdf404eccc8a0be059f8652563ed0fa6c5",
+      "timestamp_ms": 484475581493,
+      "world_model_hash_hex": "400c7b45fe68fdff1cf116093374277b4dd99b486d84eb968f4b8273d5697d14"
+    },
+    "notes": "C4 GIC chain link 12/20 \u2014 prev_poac_hash = SHA-256(prev_body)",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": "TV-071"
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-072"
+  },
+  {
+    "category": "chain_rollup",
+    "expected": {
+      "body_hex": "0fab974b5d949673d710483c702aac73a4987d8b64f0fdff611b5a49a6b397559a8cee84739a1f4975b4ab66f73bfe8167c9d116de1fc224ed6aa70b48e2ebd712424c71fb2517230e01a621b9176ef024669e9d0f71f85b79b01b1fe7a2c01716085e247bf97a1e70e205401656e779f230a3dce37a7e2288c0f7c85c9395860003731d3bc87fde0000002d01c3ba8a404e35e379f67cdcc04ff99d34e733bc116d5d35",
+      "body_sha256_hex": "a78e4cb2f41dbeda33d7f1a449f9f6b9d4414f64b20cd79dc64a00511c14088f",
+      "signature_hex": "8622d5413a88b04bf060292ce63a74bd68e06fe5ff86cb99f05c937ade9115d3ecec69496d0df853029e8302387dd76c987230bb82577d66a465ce7b2fae35ed",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 3,
+      "battery_pct": 29,
+      "bounty_id": 292379957,
+      "confidence": 115,
+      "inference_result": 0,
+      "latitude": 60.421004529338205,
+      "longitude": -63.95011006631054,
+      "model_manifest_hash_hex": "12424c71fb2517230e01a621b9176ef024669e9d0f71f85b79b01b1fe7a2c017",
+      "monotonic_ctr": 1002995678,
+      "prev_poac_hash_hex": "0fab974b5d949673d710483c702aac73a4987d8b64f0fdff611b5a49a6b39755",
+      "sensor_commitment_hex": "9a8cee84739a1f4975b4ab66f73bfe8167c9d116de1fc224ed6aa70b48e2ebd7",
+      "timestamp_ms": 193303132810,
+      "world_model_hash_hex": "16085e247bf97a1e70e205401656e779f230a3dce37a7e2288c0f7c85c939586"
+    },
+    "notes": "C4 GIC chain link 13/20 \u2014 prev_poac_hash = SHA-256(prev_body)",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": "TV-072"
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-073"
+  },
+  {
+    "category": "chain_rollup",
+    "expected": {
+      "body_hex": "a78e4cb2f41dbeda33d7f1a449f9f6b9d4414f64b20cd79dc64a00511c14088f5dcc9912a5060f067ebb672669156e5fb18ed634fc4dd903b75af4aa0300886b5ac9f2fb6772bcf7b9dc97df8091fa30180289c7c9621dc00ba6fe7eb9a91f1171e1d1fe8d902c09822e3679a57554fbd33cb4182f4e3f37c4f8c559a3fd0c6213057a153146c3ff000000894bc7051bc051d089e92b08c5c043d0dbe0c02a0458523bc0",
+      "body_sha256_hex": "8ec0438cf3455abbbde6d806bddab313ea97169720df362fb88767a1fa8cc88f",
+      "signature_hex": "fc91941de38a84a4ee70e813c4e5142453753a9837fc68350bf36e8b33329e7d4db485553708a9041bbacf3117a86698d111a203f7705b572fd250b4c5b41952",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 5,
+      "battery_pct": 21,
+      "bounty_id": 1481784256,
+      "confidence": 122,
+      "inference_result": 19,
+      "latitude": -71.25841740801395,
+      "longitude": -39.63171014197363,
+      "model_manifest_hash_hex": "5ac9f2fb6772bcf7b9dc97df8091fa30180289c7c9621dc00ba6fe7eb9a91f11",
+      "monotonic_ctr": 826721279,
+      "prev_poac_hash_hex": "a78e4cb2f41dbeda33d7f1a449f9f6b9d4414f64b20cd79dc64a00511c14088f",
+      "sensor_commitment_hex": "5dcc9912a5060f067ebb672669156e5fb18ed634fc4dd903b75af4aa0300886b",
+      "timestamp_ms": 589681853723,
+      "world_model_hash_hex": "71e1d1fe8d902c09822e3679a57554fbd33cb4182f4e3f37c4f8c559a3fd0c62"
+    },
+    "notes": "C4 GIC chain link 14/20 \u2014 prev_poac_hash = SHA-256(prev_body)",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": "TV-073"
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-074"
+  },
+  {
+    "category": "chain_rollup",
+    "expected": {
+      "body_hex": "8ec0438cf3455abbbde6d806bddab313ea97169720df362fb88767a1fa8cc88f59a0500299dfd4176225fd5b75ebec06c939866dc5602d333dce6a9f073bb9700fc71346354626e4bc6e548929d5a494a03a7a61cfd148277a7295de93d1191fc9c88f0dce3403390a921609c449f9302e19d1697e780025306f6be1beadb2051b06c24b3de578b10000000326f787edc0496d95acfbdcdec05a2a0481b9636965b9af9d",
+      "body_sha256_hex": "0da56a97d5ac4aaa419a3147586bbea7140264085c4021e3127f3a237ce2b775",
+      "signature_hex": "d738a4c25f6ae18dcceb1d02c3beefcb1b57f4dcff7981416d1e5b4f29cdde8cecba0e11e906f6310426f3872405ddae64d956f6c3b327420338169a45bdafe8",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 6,
+      "battery_pct": 75,
+      "bounty_id": 1706667933,
+      "confidence": 194,
+      "inference_result": 27,
+      "latitude": -50.856130240421166,
+      "longitude": -104.65652506927803,
+      "model_manifest_hash_hex": "0fc71346354626e4bc6e548929d5a494a03a7a61cfd148277a7295de93d1191f",
+      "monotonic_ctr": 1038448817,
+      "prev_poac_hash_hex": "8ec0438cf3455abbbde6d806bddab313ea97169720df362fb88767a1fa8cc88f",
+      "sensor_commitment_hex": "59a0500299dfd4176225fd5b75ebec06c939866dc5602d333dce6a9f073bb970",
+      "timestamp_ms": 13538658285,
+      "world_model_hash_hex": "c9c88f0dce3403390a921609c449f9302e19d1697e780025306f6be1beadb205"
+    },
+    "notes": "C4 GIC chain link 15/20 \u2014 prev_poac_hash = SHA-256(prev_body)",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": "TV-074"
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-075"
+  },
+  {
+    "category": "chain_rollup",
+    "expected": {
+      "body_hex": "0da56a97d5ac4aaa419a3147586bbea7140264085c4021e3127f3a237ce2b775e25db22b7ebbb96613a730bf800c2b8d45e18d962527473d217d1c42ac31264759b34485f28e7d01966db264c3fca782064a87759b99477ea64d2c36ffac2b779652148d070d289d84a2dad6453ad4e6b79af334e3da39df359ce48755c843d00c02524276cd3cd20000002feb8fca44c04851af98800585c05b70a551e055724c407098",
+      "body_sha256_hex": "00308ef7d563ba1bd51104dac79e7c9ff8cb03a7fd62ade500a0c978de435bf4",
+      "signature_hex": "802601d9ce874e18b0755b712dda3074d29c7f832c566ac318ba1944dc8aa6ba22cc0c736475d319604ec8bba99a981a5fd7a27ad42605955ffbab4443bb252a",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 2,
+      "battery_pct": 66,
+      "bounty_id": 1279291544,
+      "confidence": 82,
+      "inference_result": 12,
+      "latitude": -48.63817125559857,
+      "longitude": -109.76009032161326,
+      "model_manifest_hash_hex": "59b34485f28e7d01966db264c3fca782064a87759b99477ea64d2c36ffac2b77",
+      "monotonic_ctr": 1993161938,
+      "prev_poac_hash_hex": "0da56a97d5ac4aaa419a3147586bbea7140264085c4021e3127f3a237ce2b775",
+      "sensor_commitment_hex": "e25db22b7ebbb96613a730bf800c2b8d45e18d962527473d217d1c42ac312647",
+      "timestamp_ms": 205815532100,
+      "world_model_hash_hex": "9652148d070d289d84a2dad6453ad4e6b79af334e3da39df359ce48755c843d0"
+    },
+    "notes": "C4 GIC chain link 16/20 \u2014 prev_poac_hash = SHA-256(prev_body)",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": "TV-075"
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-076"
+  },
+  {
+    "category": "chain_rollup",
+    "expected": {
+      "body_hex": "00308ef7d563ba1bd51104dac79e7c9ff8cb03a7fd62ade500a0c978de435bf453b7fe786c95b4624d4bfe6cfc5e4ea78c074f8527e07bd97ae51dbc36da8e21ffb3602c5e230fde3faea53a50a9993945afd35f4a15ad9c667f92e002813e066a5ed00c42e7cfe2eba3e0f72d8a21db64282ab32bc4c9d560affc15a1449c9600021c1546925bb2000000a546501244c0316e4a7af07b44c056590f4073cf063a89591e",
+      "body_sha256_hex": "29dfa76733eb367669fa98cdb702623bfc5a7c2c6b12fab713a72783b73609c6",
+      "signature_hex": "a4ebe21d3647790df6db8a0021c15373a9dc1c4b304625e9dbbdfaab2c9a3b4de9f00a58a6f3db975149e9b5068a3b07c24dd149b52401d7d219538f3b31d0b4",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 2,
+      "battery_pct": 21,
+      "bounty_id": 982079774,
+      "confidence": 28,
+      "inference_result": 0,
+      "latitude": -17.43082397814875,
+      "longitude": -89.39155589398806,
+      "model_manifest_hash_hex": "ffb3602c5e230fde3faea53a50a9993945afd35f4a15ad9c667f92e002813e06",
+      "monotonic_ctr": 1183996850,
+      "prev_poac_hash_hex": "00308ef7d563ba1bd51104dac79e7c9ff8cb03a7fd62ade500a0c978de435bf4",
+      "sensor_commitment_hex": "53b7fe786c95b4624d4bfe6cfc5e4ea78c074f8527e07bd97ae51dbc36da8e21",
+      "timestamp_ms": 709849256516,
+      "world_model_hash_hex": "6a5ed00c42e7cfe2eba3e0f72d8a21db64282ab32bc4c9d560affc15a1449c96"
+    },
+    "notes": "C4 GIC chain link 17/20 \u2014 prev_poac_hash = SHA-256(prev_body)",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": "TV-076"
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-077"
+  },
+  {
+    "category": "chain_rollup",
+    "expected": {
+      "body_hex": "29dfa76733eb367669fa98cdb702623bfc5a7c2c6b12fab713a72783b73609c610448d8e89d165272a0b996f09a620a57524e4f7f5e0ed793718131cd9d1f5690ca502df6afd2e358ed04191610f5cdd70bf1c49cbe9c933c4991e8b7548c258a4701fbbcdd30e7925be53fa3232f6b9f00a525be069ff43da981fee5460f8240806371c6f8c0f28000000997e49eb8d403b1d04b34d82f44023f4a53eeda27012218a43",
+      "body_sha256_hex": "0a91dd0c27cdb92cf2e0db351f665b37fef9de1c676445802c862e249450aae8",
+      "signature_hex": "9e4484cea52bd816bb8426a3f4167ad16212eaedf7d2c6efb9738f7c8ee48dc95f1d713ded6efa4b8f27fc0a0184d1101177486c9c52e6afda323b5c3e3d5273",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 6,
+      "battery_pct": 28,
+      "bounty_id": 304187971,
+      "confidence": 55,
+      "inference_result": 8,
+      "latitude": 27.113352972434726,
+      "longitude": 9.977823225505944,
+      "model_manifest_hash_hex": "0ca502df6afd2e358ed04191610f5cdd70bf1c49cbe9c933c4991e8b7548c258",
+      "monotonic_ctr": 1871449896,
+      "prev_poac_hash_hex": "29dfa76733eb367669fa98cdb702623bfc5a7c2c6b12fab713a72783b73609c6",
+      "sensor_commitment_hex": "10448d8e89d165272a0b996f09a620a57524e4f7f5e0ed793718131cd9d1f569",
+      "timestamp_ms": 659248769933,
+      "world_model_hash_hex": "a4701fbbcdd30e7925be53fa3232f6b9f00a525be069ff43da981fee5460f824"
+    },
+    "notes": "C4 GIC chain link 18/20 \u2014 prev_poac_hash = SHA-256(prev_body)",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": "TV-077"
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-078"
+  },
+  {
+    "category": "chain_rollup",
+    "expected": {
+      "body_hex": "0a91dd0c27cdb92cf2e0db351f665b37fef9de1c676445802c862e249450aae802fb9abff11c800197907f5a9870306177e5d43b034257315ec664e1f46477219b441cd98c958af1cb82acc12631f22241abbb23d38dcc5c9d9b1d9c4df362de156a948d24e7528d2aa41d545adaafab05274bbbb4da0cb920b3af4aeb37e5431c06f6472783a1d9000000f8a71cbf0f4054a0f0a271e18ac03bcdd541c9acb006378948",
+      "body_sha256_hex": "454ab4c359bd8bdc256d853f88275c7e11876fa2787600517a331762f979b94f",
+      "signature_hex": "6a14b85da6c4df26ee74708b25835d560f5f4bc2789fb7cb60c49168d2a1d86bcf5f4ab3faea2d1ea0cc3a7f3d57f79bdf362e57b12a81404a6379b0b116b971",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 6,
+      "battery_pct": 71,
+      "bounty_id": 104302920,
+      "confidence": 246,
+      "inference_result": 28,
+      "latitude": 82.51468716736977,
+      "longitude": -27.80403529332824,
+      "model_manifest_hash_hex": "9b441cd98c958af1cb82acc12631f22241abbb23d38dcc5c9d9b1d9c4df362de",
+      "monotonic_ctr": 662938073,
+      "prev_poac_hash_hex": "0a91dd0c27cdb92cf2e0db351f665b37fef9de1c676445802c862e249450aae8",
+      "sensor_commitment_hex": "02fb9abff11c800197907f5a9870306177e5d43b034257315ec664e1f4647721",
+      "timestamp_ms": 1067955568399,
+      "world_model_hash_hex": "156a948d24e7528d2aa41d545adaafab05274bbbb4da0cb920b3af4aeb37e543"
+    },
+    "notes": "C4 GIC chain link 19/20 \u2014 prev_poac_hash = SHA-256(prev_body)",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": "TV-078"
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-079"
+  },
+  {
+    "category": "chain_rollup",
+    "expected": {
+      "body_hex": "454ab4c359bd8bdc256d853f88275c7e11876fa2787600517a331762f979b94fcf5eb8c03fd9aa84ab305be37a6132e554015eb61c9c78522aa7f529a60f14a53a34d4f5c2b28d127b8a6400fd020e02265ab9ebfd30ce51ec5fbcee5321ec0eeec4281aec2a394ee150113f16ddbfaf3ebed4fe341e623f5aea05fcd545084719013f4044777e030000003a066213bd403daee9827aa70840583e443cadda0c0a06c083",
+      "body_sha256_hex": "a0c14608f31a79ee133adb5e2790d7b7444b311ef65b598662c686919b4a751b",
+      "signature_hex": "5398c7ae04912eaa4b5339041ad1e72aac5b883958adbb4fae43a307905d8acb68a92801a75fff506bc65202a8992bc7a469be5db743aaead2888aea01d4e3b6",
+      "signature_status": "valid_test_fixture",
+      "signing_pubkey_ref": "scripts/vbdip_0006_conformance/test_signing_key_v1.1.pub.pem"
+    },
+    "input": {
+      "action_code": 1,
+      "battery_pct": 64,
+      "bounty_id": 168214659,
+      "confidence": 63,
+      "inference_result": 25,
+      "latitude": 29.683250575012636,
+      "longitude": 96.9729148576518,
+      "model_manifest_hash_hex": "3a34d4f5c2b28d127b8a6400fd020e02265ab9ebfd30ce51ec5fbcee5321ec0e",
+      "monotonic_ctr": 1148681731,
+      "prev_poac_hash_hex": "454ab4c359bd8bdc256d853f88275c7e11876fa2787600517a331762f979b94f",
+      "sensor_commitment_hex": "cf5eb8c03fd9aa84ab305be37a6132e554015eb61c9c78522aa7f529a60f14a5",
+      "timestamp_ms": 249215194045,
+      "world_model_hash_hex": "eec4281aec2a394ee150113f16ddbfaf3ebed4fe341e623f5aea05fcd5450847"
+    },
+    "notes": "C4 GIC chain link 20/20 \u2014 prev_poac_hash = SHA-256(prev_body)",
+    "spec_version": "VBDIP-0006-v1.1",
+    "validation": {
+      "expected_verdict": "pass",
+      "failure_mode_when_fail": null,
+      "verifies_chain_against_prev_vector_id": "TV-079"
+    },
+    "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+    "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+    "vector_id": "TV-080"
+  }
+]
