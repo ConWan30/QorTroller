@@ -4,7 +4,7 @@
 **Date:** 2026-05-16
 **Authoring discipline:** Mirrors `docs/mobile-companion-app.md` M0 pattern (plan only; stop at commit; phased commission downstream).
 **Anchors consumed:**
-- `wiki/methodology/VBDIP-0006-vapi-firmware-reference-implementation.md` §8 (SHA-256 `0667cd34...d3db`, architect-signed at commit `1f30057d` per `vsd-vault/manifests/proposals-VBDIP-0006/001.manifest.json`)
+- `wiki/methodology/VBDIP-0006-vapi-firmware-reference-implementation.md` v1.1 (current file with Appendix A wire-layout reconciliation, architect-signed via `vsd-vault/manifests/proposals-VBDIP-0006/002.manifest.json` SHA-256 `4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac`). v1.0 snapshot remains valid via git history at ceremony commit `1f30057d` (SHA-256 `0667cd34...d3db`) + manifest `001.manifest.json`; M1 vectors target v1.1 per Appendix A.3 authoritative wire layout. **v1.0 §3.1 byte-offset table is SUPERSEDED — do not use it as a vector generation reference.**
 - `bridge/vapi_bridge/codec.py` (the canonical 228B/164B PoAC wire-format implementation)
 - `docs/mobile-companion-app.md` (parallel M0 discipline reference)
 
@@ -68,7 +68,7 @@ The codec uses `struct.pack` over a frozen field-format string + raw 32-byte has
 | C2 | Edge case | 20 | Field-domain extremes: zero-valued, max-valued, negative L4 floats (NaN/Inf rejected per IEEE 754 float16 quiet-NaN rule), zero device_pubkey, max counter just below rollover, L5 entropy at 0.0 and at `log2(64)` ≈ 6.0, l5_rhythm_quant_flag both 0 and 1 |
 | C3 | Hard-cheat | 20 | `inference_code` set to `0x28` DRIVER_INJECT; other fields varied across the C2 edge-case distribution so the harness validates that hard-cheat encoding is independent of biometric field values (cheat detection happens at the inference_code level, not the L4/L5 level) |
 | C4 | GIC chain rollup | 20 | Sequence of 20 records with `prev_record_hash[i] = SHA-256(body[i-1])` chained; vector i carries the running-chain state so harness validates `verify_chain_link` end-to-end |
-| C5 | Counter rollover | 20 | `counter` values clustered near `2^64 - 1` (exact rollover behavior is uint64 wrap-around per `struct.pack("Q")`; verifies firmware handles the boundary without overflow) |
+| C5 | Counter rollover | 20 | `monotonic_ctr` values clustered near `2^32 - 1` per v1.1 Appendix A.3 (uint32 BE wrap-around per `struct.pack(">I")`; verifies firmware handles the 32-bit boundary without overflow). NOTE: original M0 plan said uint64 / `2^64 - 1`; v1.1 reconciliation corrects to uint32 / `2^32 - 1` matching codec.py. |
 
 **Total: 100 vectors.** Counts match VBDIP-0006 §8.1 verbatim. The allocation is operator-authorizable in §9.
 
@@ -94,35 +94,38 @@ The 100 vectors per §8 cover **wire-format compliance** primarily. Signing is a
 
 ## 3. Concrete vector schema
 
+> **v1.1 RECONCILED SCHEMA (2026-05-16):** This section was rewritten in the same commit that landed VBDIP-0006 v1.1 Appendix A wire-layout reconciliation. The original M0 schema below targets the v1.1 authoritative codec.py layout (see Appendix A.3), NOT the SUPERSEDED v1.0 §3.1 table. Specifically: dropped the raw L4 float16 fields + L5 rhythm fields (committed via hash per A.6); dropped the 16-byte record_hash_hex truncation (no such truncation exists per A.4); replaced uint64 `counter` with uint32 BE `monotonic_ctr` (per A.3); added the struct-packed fields at offsets 0x80-0xA3 (`action_code`, `confidence`, `battery_pct`, `latitude`, `longitude`, `bounty_id`). Signature method clarified to ECDSA-P256 (not Ed25519; firmware uses secp256r1 per A.3 + VBDIP-0006 §3.1).
+
 ### 3.1 Per-vector JSON shape
 
 ```json
 {
   "vector_id": "TV-001",
-  "vbdip_version": "0006-v1.0",
-  "vbdip_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
+  "vbdip_version": "0006-v1.1",
+  "vbdip_spec_hash": "4aea3a35042a0d59e909b332999fc0b4e673833ed69391cf111b9b3eaf9bfaac",
+  "vbdip_v10_spec_hash": "0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db",
   "category": "random",
   "input": {
-    "device_pubkey_hash_hex": "...",                                  // 64 hex chars = 32 bytes (keccak256 of full pubkey, per VBDIP-0006 §3.1)
-    "counter": 12345,                                                  // uint64
-    "timestamp_ms": 1747252800000,                                     // uint64
-    "prev_record_hash_hex": "0000...",                                 // 64 hex chars = 32 bytes (zero for first record in any C4 chain)
-    "model_manifest_hash_hex": "...",                                  // 64 hex chars
-    "world_model_hash_hex": "...",                                     // 64 hex chars
-    "sensor_commitment_hex": "...",                                    // 64 hex chars
-    "inference_code": 0,                                               // uint8
-    "l4_features_float16": [/* 13 IEEE 754 float16 values, hex */],
-    "l5_rhythm_cv_float16_hex": "...",
-    "l5_rhythm_entropy_float16_hex": "...",
-    "l5_rhythm_quant_flag": 0
+    "prev_poac_hash_hex":     "0000...",   // 64 hex chars = 32 bytes at body offset 0x00 (zero for first record in any C4 chain)
+    "sensor_commitment_hex":  "...",        // 64 hex chars = 32 bytes at body offset 0x20 (L4 + L5 features committed here per A.6)
+    "model_manifest_hash_hex": "...",        // 64 hex chars = 32 bytes at body offset 0x40
+    "world_model_hash_hex":   "...",        // 64 hex chars = 32 bytes at body offset 0x60
+    "inference_result":       0,             // uint8 at body offset 0x80
+    "action_code":            0,             // uint8 at body offset 0x81
+    "confidence":             255,           // uint8 at body offset 0x82
+    "battery_pct":            100,           // uint8 at body offset 0x83
+    "monotonic_ctr":          12345,         // uint32 BE at body offset 0x84 (NOT uint64 — see A.3)
+    "timestamp_ms":           1747252800000, // int64 BE at body offset 0x88 (signed for clock-correction events)
+    "latitude":               0.0,           // IEEE 754 double BE at body offset 0x90
+    "longitude":              0.0,           // IEEE 754 double BE at body offset 0x98
+    "bounty_id":              0              // uint32 BE at body offset 0xA0
   },
   "expected": {
-    "body_hex": "...",                                                 // 328 hex chars = 164 bytes (the FROZEN serialization)
-    "body_sha256_hex": "...",                                          // 64 hex chars = full SHA-256
-    "record_hash_hex": "...",                                          // 32 hex chars = SHA-256(body)[0:16] per CLAUDE.md hard rule
-    "signature_status": "valid_test_fixture",                          // 'valid_test_fixture' | 'unsigned' | 'invalid_intentional'
-    "signature_hex": "...",                                            // 128 hex chars = 64 bytes, OR null when signature_status is 'unsigned'
-    "signing_pubkey_hex": "..."                                        // 64 hex chars = 32 bytes raw Ed25519 pubkey, OR null
+    "body_hex":          "...",   // 328 hex chars = 164 bytes (the FROZEN serialization per codec.py oracle)
+    "body_sha256_hex":   "...",   // 64 hex chars = FULL 32-byte SHA-256(body) — chain link hash per CLAUDE.md
+    "signature_status":  "valid_test_fixture",  // 'valid_test_fixture' | 'unsigned' | 'invalid_intentional'
+    "signature_hex":     "...",   // 128 hex chars = 64 bytes (r ‖ s) ECDSA-P256, OR null when 'unsigned'
+    "signing_pubkey_hex": "..."   // 130 hex chars = 65 bytes uncompressed SEC1 secp256r1 (0x04 ‖ x ‖ y), OR null
   },
   "validation": {
     "expected_verdict": "pass",                                        // 'pass' | 'fail_format' | 'fail_signature' | 'fail_chain'
@@ -136,8 +139,8 @@ The 100 vectors per §8 cover **wire-format compliance** primarily. Signing is a
 ### 3.2 Field discipline
 
 - All hex fields are **lowercase, no 0x prefix**, fixed-length per the underlying byte count.
-- IEEE 754 float16 values stored as hex (4 hex chars = 2 bytes) rather than as JSON floats, since JSON numbers cannot losslessly represent float16 subnormals/NaN/Inf. Avoids parser drift.
-- `vbdip_spec_hash` pinned in every vector — if the spec is amended, regenerate-all is required and the hash change makes drift visible.
+- IEEE 754 doubles (latitude, longitude) stored as JSON numbers — JSON's standard number representation is lossless for IEEE 754 doubles when serialized via Python's `json.dumps(allow_nan=False)`. (v1.1 amendment: the v1.0 schema's float16 fields are GONE per A.6 — L4/L5 features are committed via hash, not serialized.)
+- `vbdip_spec_hash` pinned in every vector (v1.1 hash) — if the spec is amended again, regenerate-all is required and the hash change makes drift visible. `vbdip_v10_spec_hash` carried separately as the historical-record reference to v1.0.
 - `vector_id` format `TV-NNN` with zero-padded 3-digit sequence; 001-020 = C1 random, 021-040 = C2 edge-case, 041-060 = C3 hard-cheat, 061-080 = C4 GIC chain, 081-100 = C5 counter rollover. Naming convention operator-authorizable in §9.
 
 ### 3.3 Vector storage format
