@@ -2055,7 +2055,10 @@ class FleetSignalCoherenceAgent:
                 except Exception as e:
                     self._logger.warning(f"[FSCA] alert publish failed: {e}")
 
-            self._write_contradict_entry(entry)
+            # Phase 235.x-STABILITY-9 2026-05-17: write to wiki/ on worker thread
+            # (file I/O + lock acquisition can block 50-300ms; cumulatively
+            # contributes to loop_starvation events when many findings batch).
+            await asyncio.to_thread(self._write_contradict_entry, entry)
 
             # Check promotion threshold
             try:
@@ -2081,7 +2084,11 @@ class FleetSignalCoherenceAgent:
                             (entry["rule_name"],),
                         )
                         if not (rule_promoted and rule_promoted[0].get("n", 0) > 0):
-                            self._promote_to_wif(entry)
+                            # Phase 235.x-STABILITY-9 2026-05-17: HARD blocker
+                            # — _promote_to_wif runs subprocess.run(timeout=30)
+                            # which freezes the event loop for up to 30s.
+                            # Offload to worker thread.
+                            await asyncio.to_thread(self._promote_to_wif, entry)
             except Exception as e:
                 self._logger.warning(f"[FSCA] promotion check failed: {e}")
 
