@@ -1475,6 +1475,51 @@ ORPHAN_RULES: dict = {
         ),
     },
 
+    "DETECTOR_SILENT_24H_AFTER_DIVERGENCE": {
+        # Phase 235.x-STABILITY-9 stage 4b 2026-05-17 — Q3 deliverable.
+        # Stale-signal rule for event-driven DivergenceTriageAgent: fires when
+        # session_adjudicator_validator wrote a `validation_divergence` row to
+        # agent_events more than 24h ago AND DivergenceTriageAgent's
+        # divergence_triage_reports table has NO row since. This means either:
+        #   (a) the AgentMessageBus dropped the validation_divergence event
+        #       (QueueFull) and the 1h fallback poll in the triage agent also
+        #       missed it (very unlikely given fallback runs every 3600s);
+        #   (b) the triage agent crashed silently between events; or
+        #   (c) the triage agent's _triage_cycle threw an unhandled exception
+        #       per device and never wrote a report row.
+        # Each pre-stage-4b scenario degraded the divergence-detection surface
+        # silently because polling masked the failure. With event-driven mode,
+        # silence becomes detectable.
+        "trigger_table":         "agent_events",
+        "trigger_column":        "event_type",
+        "trigger_value":         "validation_divergence",
+        "trigger_ts_col":        "created_at",
+        "response_table":        "divergence_triage_reports",
+        "response_ts_col":       "created_at",
+        "orphan_window_seconds": 86400,  # 24 hours
+        "trigger_agent":         "session_adjudicator_validator (Phase 75)",
+        "response_agent":        "DivergenceTriageAgent (Phase 91, stage 4b event-driven)",
+        "severity": "MEDIUM",
+        "explanation": (
+            "session_adjudicator_validator wrote a validation_divergence event "
+            "to agent_events more than 24 hours ago, but DivergenceTriageAgent "
+            "has produced no divergence_triage_reports row since. With "
+            "DivergenceTriageAgent now event-driven (stage 4b ship 53ab8220), "
+            "silence means either the bus event was dropped (QueueFull) AND "
+            "the 1h fallback sweep also missed it, or the triage agent's "
+            "_triage_cycle is throwing per-device. Pre-stage-4b polling would "
+            "have masked this failure mode by re-scanning every 5 min "
+            "regardless of bus subscriber state — now the asymmetry is "
+            "auditable. Q3 deliverable per agent_rationalization_v1.md §7.3."
+        ),
+        "resolution": (
+            "Check bridge logs for `DivergenceTriageAgent: cycle error` "
+            "warnings. Verify DivergenceTriageAgent task is alive in the "
+            "asyncio task list. Restart bridge if the triage agent task is "
+            "missing. If recurring, raise AgentMessageBus _QUEUE_MAXSIZE."
+        ),
+    },
+
 }
 
 # ---------------------------------------------------------------------------

@@ -177,4 +177,5 @@ def test_T203_8_fsca_has_four_inversion_rules():
     assert "RULING_PREDATES_CALIBRATION" in INVERSION_RULES
     assert "CONTEXT_HASH_MISMATCH" in INVERSION_RULES
     # Also verify total ORPHAN count
-    assert len(ORPHAN_RULES) == 7  # 5 original + RATIO_VELOCITY_NEGATIVE + PER_PAIR_GAP_BLOCKER_UNRESOLVED
+    # Stage 4b 2026-05-17: +DETECTOR_SILENT_24H_AFTER_DIVERGENCE → 8
+    assert len(ORPHAN_RULES) == 8

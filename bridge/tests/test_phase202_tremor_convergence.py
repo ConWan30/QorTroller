@@ -165,7 +165,9 @@ def test_T202_7_ratio_velocity_negative_orphan_rule():
     assert rule["trigger_value"] == 0
     assert rule["severity"] == "HIGH"
     assert "MINT_QUORUM" in rule["explanation"] or "SeparationRatioRegistry" in rule["explanation"]
-    assert len(ORPHAN_RULES) == 6  # 5 original + 1 new Phase 202 rule
+    # Stage 4b 2026-05-17: +DETECTOR_SILENT_24H_AFTER_DIVERGENCE; Phase 217 added
+    # PER_PAIR_GAP_BLOCKER_UNRESOLVED earlier. Was 6 → 7 → 8.
+    assert len(ORPHAN_RULES) == 8
 
 
 # ── T202-8: session_type isolation — tremor_resting vs touchpad_corners ────

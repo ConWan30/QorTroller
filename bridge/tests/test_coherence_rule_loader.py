@@ -68,10 +68,11 @@ def _make_ext_rule(name: str = "EXT_TEST_RULE", category: str = "CONTRADICTION")
 class TestLoadAll:
     def test_load_all_returns_18_rules(self):
         # 41 → 40 on 2026-05-16 (H-1 Option B dropped VPM_MANIFEST_HASH_DRIFT
-        # from CONTRADICTION category). Total = 28 CONTRADICTION + 7 ORPHAN
-        # + 5 INVERSION.
+        # from CONTRADICTION category). 40 → 41 on 2026-05-17 (STABILITY-9
+        # stage 4b added DETECTOR_SILENT_24H_AFTER_DIVERGENCE to ORPHAN —
+        # Q3 deliverable). Total = 28 CONTRADICTION + 8 ORPHAN + 5 INVERSION.
         rules = CoherenceRuleLoader.load_all()
-        assert len(rules) == 40, f"Expected 40 rules, got {len(rules)}"
+        assert len(rules) == 41, f"Expected 41 rules, got {len(rules)}"
 
     def test_contradiction_count(self):
         # 29 → 28 on 2026-05-16 (H-1 Option B dropped VPM_MANIFEST_HASH_DRIFT).
@@ -80,9 +81,10 @@ class TestLoadAll:
         assert len(contradictions) == 28, f"Expected 28 CONTRADICTION rules, got {len(contradictions)}"
 
     def test_orphan_count(self):
+        # Stage 4b 2026-05-17: +DETECTOR_SILENT_24H_AFTER_DIVERGENCE → 8
         rules = CoherenceRuleLoader.load_all()
         orphans = [r for r in rules if r.category == "ORPHAN"]
-        assert len(orphans) == 7, f"Expected 7 ORPHAN rules, got {len(orphans)}"
+        assert len(orphans) == 8, f"Expected 8 ORPHAN rules, got {len(orphans)}"
 
     def test_inversion_count(self):
         rules = CoherenceRuleLoader.load_all()
@@ -149,9 +151,10 @@ class TestGuardPreservation:
     def test_most_rules_have_no_guard(self):
         rules = CoherenceRuleLoader.load_all()
         rules_without_guard = [r for r in rules if r.guard is None]
-        # Only 1 rule (IOSWARM_ACTIVE_NO_ADJUDICATIONS) has a guard; 39 should not
-        # (40 → 39 on 2026-05-16 after H-1 Option B dropped VPM_MANIFEST_HASH_DRIFT).
-        assert len(rules_without_guard) == 39
+        # Only 1 rule (IOSWARM_ACTIVE_NO_ADJUDICATIONS) has a guard; 40 should not
+        # (39 → 40 on 2026-05-17 after STABILITY-9 stage 4b added
+        # DETECTOR_SILENT_24H_AFTER_DIVERGENCE).
+        assert len(rules_without_guard) == 40
 
 
 # ---------------------------------------------------------------------------
@@ -180,11 +183,12 @@ class TestInjectRules:
         all_rules = CoherenceRuleLoader.load_all()
         assert any(r.name == "EXT_TEST_RULE" for r in all_rules)
 
-    def test_load_all_returns_18_plus_injected(self):  # noqa: D — count is now 40+1=41 after H-1
+    def test_load_all_returns_18_plus_injected(self):  # noqa: D — count is now 41+1=42 after STABILITY-9 stage 4b
         rule = _make_ext_rule()
         CoherenceRuleLoader.inject_rules([rule])
         all_rules = CoherenceRuleLoader.load_all()
-        assert len(all_rules) == 41  # 40 core (Phase O5 M.3 +2 Mythos; H-1 -1 VPM_MANIFEST_HASH_DRIFT) + 1 injected
+        # 41 core (40 + Stage 4b DETECTOR_SILENT_24H_AFTER_DIVERGENCE) + 1 injected
+        assert len(all_rules) == 42
 
     def test_inject_rule_with_guard_preserved_in_fsca_dict(self):
         guard_fn = lambda cfg: getattr(cfg, "test_flag", False)
