@@ -52,14 +52,16 @@ from vapi_bridge.fleet_signal_coherence_agent import (  # noqa: E402
 # ---------------------------------------------------------------------------
 class TestT204_1_RuleCount(unittest.TestCase):
     def test_contradiction_rules_length_is_8(self):
-        # Current count is 29 (post-Phase O5 M.3). Phase 204 introduced
+        # Current count is 28 (29 → 28 on 2026-05-16 after H-1 Option B
+        # dropped VPM_MANIFEST_HASH_DRIFT). Phase 204 introduced
         # IOSWARM_ACTIVE_NO_ADJUDICATIONS as the 8th rule; subsequent phases
-        # added more. The structural invariant exercised here is "the rule set
-        # grows monotonically and IOSWARM_ACTIVE_NO_ADJUDICATIONS is present".
+        # added more (and one was removed). The structural invariant
+        # exercised here is "IOSWARM_ACTIVE_NO_ADJUDICATIONS is present"
+        # — count value is bookkeeping only.
         self.assertEqual(
             len(CONTRADICTION_RULES),
-            29,
-            f"Expected 29 CONTRADICTION_RULES, got {len(CONTRADICTION_RULES)}: "
+            28,
+            f"Expected 28 CONTRADICTION_RULES, got {len(CONTRADICTION_RULES)}: "
             f"{list(CONTRADICTION_RULES)}",
         )
 
