@@ -207,12 +207,41 @@ class AbsorbedAgentTicker:
         # Phase 235.x-STABILITY-9 stage 5 2026-05-17: per-spec first-tick
         # jitter. Without this, all 9 absorbed agents become eligible
         # on the same first tick (last_invoked_at=0 → elapsed >= interval
-        # always true) — same thundering-herd at boot. Offset each spec's
-        # last_invoked_at by `time.time() - spec.interval_s + uniform(0, jitter)`
-        # so each first-fire is delayed by jitter[0, jitter_max] relative
-        # to boot. Reuses startup_grace's seeded RNG for reproducibility
-        # when cfg.startup_jitter_seed is set.
-        if getattr(cfg, "startup_jitter_enabled", True):
+        # always true) — same thundering-herd at boot.
+        #
+        # Phase 235.x-STABILITY-9 stage 10 2026-05-17: PREFER DETERMINISTIC
+        # SLOT SCHEDULING from BootCohortScheduler over random jitter.
+        # Stages 6-9 observation showed 17-agent random jitter [0, 30s]
+        # still clustered (4-5 agents in seconds 25-29 of window). The
+        # scheduler assigns each agent a stable slot * spacing_s offset
+        # so cohort first-fires are guaranteed to separate.
+        # Fallback chain: scheduler enabled → use slot; else stage 5
+        # random jitter; else immediate fire (pre-stage-5 behavior).
+        try:
+            from .boot_cohort_scheduler import get_scheduler
+            scheduler = get_scheduler(cfg)
+            scheduler_active = scheduler.enabled
+        except Exception:  # noqa: BLE001 — fail-open
+            scheduler = None
+            scheduler_active = False
+
+        if scheduler_active:
+            now = time.time()
+            for spec in specs:
+                # Each absorbed spec gets a deterministic slot; label
+                # includes steward name to avoid collisions across stewards.
+                offset_s = scheduler.first_fire_offset_for(
+                    f"{steward_name}.{spec.name}"
+                )
+                state = self._state[spec.name]
+                state.last_invoked_at = now + offset_s - spec.interval_s
+            log.info(
+                "%sStewardAbsorbedTicker: stage-10 deterministic slot "
+                "scheduling applied (spacing=%.1fs); per-spec first-tick "
+                "delays use stable slot assignment",
+                steward_name, scheduler.spacing_s,
+            )
+        elif getattr(cfg, "startup_jitter_enabled", True):
             try:
                 from .startup_grace import _get_rng
                 rng = _get_rng(cfg)
@@ -220,11 +249,6 @@ class AbsorbedAgentTicker:
                 now = time.time()
                 for spec in specs:
                     jitter_offset = rng.uniform(0.0, jitter_max)
-                    # Set last_invoked_at so first eligible tick is at
-                    # `now + jitter_offset` (NOT immediately on tick #1):
-                    # elapsed = now+t - last_invoked_at; we want
-                    # elapsed >= interval_s at time now+jitter_offset:
-                    # → last_invoked_at = now + jitter_offset - interval_s
                     state = self._state[spec.name]
                     state.last_invoked_at = (
                         now + jitter_offset - spec.interval_s

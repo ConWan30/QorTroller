@@ -47,6 +47,11 @@ def _stub_cfg(**overrides):
         "startup_jitter_enabled": True,
         "startup_jitter_max_s": 10.0,
         "startup_jitter_seed": "",
+        # Stage 10 2026-05-17: scheduler disabled in stage-4 tests so the
+        # interval-gating contract test (T-235-STAB9-4-11) still exercises
+        # the original last_invoked_at=0 fast-fire semantics.
+        "boot_cohort_scheduler_enabled": False,
+        "boot_cohort_spacing_s": 5.0,
     }
     base.update(overrides)
     return SimpleNamespace(**base)
