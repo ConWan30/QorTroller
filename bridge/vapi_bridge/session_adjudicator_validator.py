@@ -186,6 +186,27 @@ class SessionAdjudicatorValidationAgent:
                 device_id=device_id,
             )
 
+            # Phase 235.x-STABILITY-9 stage 4b 2026-05-17: dual-sink — also
+            # publish to in-process bus so DivergenceTriageAgent can subscribe
+            # event-driven instead of polling ruling_validation_log every 300s.
+            # The DB write above remains the durable audit trail; the bus
+            # publish is the live-trigger signal.
+            if self._bus is not None:
+                try:
+                    await self._bus.publish(
+                        "validation_divergence",
+                        {
+                            "ruling_id": ruling_id,
+                            "device_id": device_id,
+                            "llm_verdict": llm_verdict,
+                            "fallback_verdict": fb_verdict,
+                            "delta_confidence": round(delta_conf, 4),
+                        },
+                        source="session_adjudicator_validator",
+                    )
+                except Exception as _bus_exc:  # noqa: BLE001
+                    log.debug("validation_divergence bus publish failed: %s", _bus_exc)
+
         # Phase 88: extract divergence reason for operator insight (W1 mitigation)
         divergence_reason = (
             _extract_divergence_fields(evidence) if divergence else None
