@@ -2329,6 +2329,67 @@ class Config:
     6h default = 4×/day; balances batch throughput against operator review
     burden."""
 
+    # --- Phase O1-D-PATH-B v1 2026-05-17: per-agent live-write executor ---
+    phase_o3_anchor_sentry_live_writes_enabled: bool = field(
+        default_factory=lambda: _env_bool("PHASE_O3_ANCHOR_SENTRY_LIVE_WRITES_ENABLED", False)
+    )
+    """Phase O1-D-PATH-B v1 — Enable Sentry's live-write executor (chain ops
+    via chain.record_adjudication for PoAd anchoring). Default False = OPT-IN.
+    When True AND agent at O3_ACTING AND budget remaining AND emergency
+    kill-all not active AND global CHAIN_SUBMISSION_PAUSED=false, the
+    executor processes Sentry's accepted drafts → real chain operations."""
+
+    phase_o3_guardian_live_writes_enabled: bool = field(
+        default_factory=lambda: _env_bool("PHASE_O3_GUARDIAN_LIVE_WRITES_ENABLED", False)
+    )
+    """Phase O1-D-PATH-B v1 — Enable Guardian's live-write executor. Guardian's
+    O3 actions are local writes (audits/, ops/) — no chain dependency, so this
+    flag activates Guardian autonomously even with CHAIN_SUBMISSION_PAUSED=true.
+    Default False = OPT-IN."""
+
+    phase_o3_curator_live_writes_enabled: bool = field(
+        default_factory=lambda: _env_bool("PHASE_O3_CURATOR_LIVE_WRITES_ENABLED", False)
+    )
+    """Phase O1-D-PATH-B v1 — Enable Curator's live-write executor (chain ops
+    via VAPIDataMarketplaceListings.suspendListing). Default False = OPT-IN."""
+
+    # Per-agent daily IOTX budget caps — runaway prevention. Executor refuses
+    # drafts that would push daily spending over budget. Defaults align with
+    # DEFAULT_BUDGET_IOTX_BY_AGENT in operator_initiative_live_write_executor.py.
+    phase_o3_anchor_sentry_daily_iotx_budget: float = field(
+        default_factory=lambda: float(_env("PHASE_O3_ANCHOR_SENTRY_DAILY_IOTX_BUDGET", "0.5"))
+    )
+    """Phase O1-D-PATH-B v1 — Sentry's daily IOTX spending cap. At ~0.0008 IOTX
+    per PoAd anchor, default 0.5 = ~625 anchors/day budget. Default-conservative."""
+
+    phase_o3_guardian_daily_iotx_budget: float = field(
+        default_factory=lambda: float(_env("PHASE_O3_GUARDIAN_DAILY_IOTX_BUDGET", "0.0"))
+    )
+    """Phase O1-D-PATH-B v1 — Guardian's daily IOTX cap. Default 0.0 because
+    Guardian's O3 actions are local writes only (no chain ops). Operator can
+    raise if a future Guardian action requires chain submission."""
+
+    phase_o3_curator_daily_iotx_budget: float = field(
+        default_factory=lambda: float(_env("PHASE_O3_CURATOR_DAILY_IOTX_BUDGET", "0.5"))
+    )
+    """Phase O1-D-PATH-B v1 — Curator's daily IOTX cap. At ~0.001 IOTX per
+    marketplace suspension, default 0.5 = ~500 suspensions/day budget."""
+
+    phase_o3_executor_kill_all: bool = field(
+        default_factory=lambda: _env_bool("PHASE_O3_EXECUTOR_KILL_ALL", False)
+    )
+    """Phase O1-D-PATH-B v1 — Emergency kill-all flag. When True, the live-write
+    executor halts ALL agent executions regardless of per-agent flags. Single-
+    flip safety hatch for the operator. Default False (executor allowed to
+    operate when per-agent flags + budgets permit)."""
+
+    phase_o3_executor_interval_s: int = field(
+        default_factory=lambda: int(_env("PHASE_O3_EXECUTOR_INTERVAL_S", "60"))
+    )
+    """Phase O1-D-PATH-B v1 — Executor poll interval. 60s default; slower than
+    the 30s polling-loop cadence to keep executor load light + spread chain
+    op timing across cycles."""
+
     # --- Phase O1-D-AUTO-SUPERSEDE 2026-05-17 ---
     phase_o3_auto_supersede_enabled: bool = field(
         default_factory=lambda: _env_bool("PHASE_O3_AUTO_SUPERSEDE_ENABLED", False)
