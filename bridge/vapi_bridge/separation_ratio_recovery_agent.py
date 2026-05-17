@@ -188,6 +188,9 @@ class SeparationRatioRecoveryAgent:
     async def run_poll_loop(self) -> None:
         """1-hour poll loop — runs recovery assessment and persists result."""
         poll_s = int(getattr(self._cfg, "separation_recovery_poll_interval_s", 3600))
+        # Phase 235.x-STABILITY-9 stage 5 2026-05-17: startup-jitter.
+        from .startup_grace import startup_grace
+        await startup_grace(self._cfg, agent_name="SeparationRatioRecoveryAgent")
         while True:
             try:
                 assessment = self._run_assessment()

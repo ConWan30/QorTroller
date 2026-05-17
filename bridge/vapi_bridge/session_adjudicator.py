@@ -139,6 +139,10 @@ class SessionAdjudicator:
     async def run_event_consumer(self) -> None:
         """Background loop: poll every 5 minutes for ruling_request events."""
         log.info("SessionAdjudicator started (Phase 65/82) poll=%ds", _POLL_INTERVAL_S)
+        # Phase 235.x-STABILITY-9 stage 5 2026-05-17: spread first-poll across
+        # startup_jitter_max_s window to eliminate thundering-herd at boot.
+        from .startup_grace import startup_grace
+        await startup_grace(self._cfg, agent_name="SessionAdjudicator")
         if self._bus is not None:
             import asyncio as _asyncio
             # Phase 79: subscribe to ceremony_key_rotated for cache invalidation

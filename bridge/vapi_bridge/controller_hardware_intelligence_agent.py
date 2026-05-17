@@ -1015,6 +1015,10 @@ class ControllerHardwareIntelligenceAgent:
         Called by main.py as an asyncio task (Phase 155).
         """
         import asyncio as _asyncio
+        # Phase 235.x-STABILITY-9 stage 5 2026-05-17: startup-jitter to
+        # avoid hid.enumerate() race at boot.
+        from .startup_grace import startup_grace
+        await startup_grace(self._cfg, agent_name="ControllerHardwareIntelligenceAgent")
         while True:
             try:
                 await self.run_detection_cycle()

@@ -43,6 +43,10 @@ def _stub_cfg(**overrides):
         "validation_divergence_threshold": 0.3,
         "validation_max_divergence_rate": 1.0,
         "grind_session_id": "",
+        # Stage 5 2026-05-17: default jitter ON; per-test override available
+        "startup_jitter_enabled": True,
+        "startup_jitter_max_s": 10.0,
+        "startup_jitter_seed": "",
     }
     base.update(overrides)
     return SimpleNamespace(**base)
@@ -208,7 +212,10 @@ async def test_t_235_stab9_4_11_ticker_respects_intervals(tmp_path) -> None:
         interval_s=3600,
         is_async=False,
     )
-    cfg = _stub_cfg()
+    # Stage 5 2026-05-17: disable startup jitter in this test so we can
+    # verify the interval-gating contract without the per-spec jittered
+    # last_invoked_at offset (which would delay the first fire).
+    cfg = _stub_cfg(startup_jitter_enabled=False)
     ticker = AbsorbedAgentTicker(
         steward_name="TestSteward",
         specs=[spec],

@@ -100,6 +100,9 @@ class SessionAdjudicatorValidationAgent:
             "threshold=%.2f gate_n=%d",
             self._threshold, self._gate_n,
         )
+        # Phase 235.x-STABILITY-9 stage 5 2026-05-17: startup-jitter.
+        from .startup_grace import startup_grace
+        await startup_grace(self._cfg, agent_name="SessionAdjudicatorValidationAgent")
         _consecutive_failures = 0
         while True:
             try:
