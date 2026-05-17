@@ -90,7 +90,7 @@ class ActivationRunner:
                         "is_simulation": True,
                     })
                 except Exception:
-                    pass
+                    pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
             # Step 11: log to activation_simulation_log
             try:
@@ -104,7 +104,7 @@ class ActivationRunner:
                     tx_hash=result["tx_hash"],
                 )
             except Exception:
-                pass
+                pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
             result["fully_activated"] = (
                 result["gate_passed"]

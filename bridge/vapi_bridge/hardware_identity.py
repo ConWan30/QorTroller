@@ -170,7 +170,7 @@ class SoftwareIdentityBackend(SigningBackend):
                     if k in existing:
                         preserved[k] = existing[k]
             except Exception:
-                pass
+                pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         privkey = ec.generate_private_key(ec.SECP256R1())
         priv_der = privkey.private_bytes(
@@ -263,7 +263,7 @@ class YubiKeyIdentityBackend(SigningBackend):
                 try:
                     piv.authenticate(DEFAULT_MANAGEMENT_KEY)
                 except Exception:
-                    pass
+                    pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
             pub = piv.generate_key(self._slot, KEY_TYPE.ECCP256)
 
         from cryptography.hazmat.primitives.serialization import (

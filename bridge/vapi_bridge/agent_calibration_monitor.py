@@ -98,7 +98,7 @@ class AgentCalibrationMonitor:
                         details=str(exc),
                     )
                 except Exception:
-                    pass
+                    pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         log.info(
             "Phase 148: ACIM cycle complete — healthy=%d, degraded=%d, failed=%s",

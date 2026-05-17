@@ -1839,21 +1839,21 @@ class Bridge:
                 if _ba_prompt:
                     _phase203_agents.append(("bridge_agent", _ba_prompt))
             except Exception:
-                pass
+                pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
             try:
                 from . import session_adjudicator as _sa_mod203
                 _sa_prompt = getattr(_sa_mod203, "_SYSTEM_PROMPT", None)
                 if _sa_prompt:
                     _phase203_agents.append(("session_adjudicator", _sa_prompt))
             except Exception:
-                pass
+                pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
             try:
                 from . import calibration_intelligence_agent as _cia_mod203
                 _cia_prompt = getattr(_cia_mod203, "_CALIB_SYSTEM_PROMPT", None)
                 if _cia_prompt:
                     _phase203_agents.append(("calibration_intelligence_agent", _cia_prompt))
             except Exception:
-                pass
+                pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
             _current_phase203 = 203
             for _aid203, _prompt203 in _phase203_agents:
                 _sha203 = _hashlib203.sha256(_prompt203.encode()).hexdigest()

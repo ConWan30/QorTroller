@@ -238,7 +238,7 @@ class IoSwarmAdjudicationCoordinator:
             try:
                 self._store.update_ioswarm_poad_anchor_tx(anchor_id, "", "skipped_disabled")
             except Exception:
-                pass
+                pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
             return
 
         try:
@@ -254,4 +254,4 @@ class IoSwarmAdjudicationCoordinator:
             try:
                 self._store.update_ioswarm_poad_anchor_tx(anchor_id, "", "failed")
             except Exception:
-                pass
+                pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip

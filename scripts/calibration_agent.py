@@ -76,7 +76,7 @@ def _enable_ansi() -> None:
             ctypes.windll.kernel32.SetConsoleMode(
                 ctypes.windll.kernel32.GetStdHandle(-11), 7)
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
 
 # -- Controller detection ----------------------------------------------------
@@ -175,7 +175,7 @@ def _load_sessions(db: pathlib.Path) -> list:
             try:
                 feat = json.loads(raw)
             except Exception:
-                pass
+                pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         if dev != current_device or (ts - last_ts) > _GAP:
             _flush(current_device, best_feat, session_end_ts, record_count)
@@ -385,7 +385,7 @@ def _load_l4_dim_sync_ok(db: pathlib.Path) -> bool:
         try:
             return bool(rows[0].get("sync_completed", 0))
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
     return False
 
 

@@ -364,7 +364,7 @@ class CalibrationIntelligenceAgent:
                         pooled_ratio = float(snap.get("pooled_ratio") or 1.261)
                         n_players = int(snap.get("n_players") or 3)
                 except Exception:
-                    pass
+                    pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
                 return {
                     "interperson_separation_ratio": pooled_ratio,
                     "loo_classification_accuracy":  0.636,   # Phase 143: 7/11 proper LOO
