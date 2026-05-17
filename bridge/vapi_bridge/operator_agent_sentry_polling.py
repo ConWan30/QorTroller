@@ -186,9 +186,16 @@ class SentryPollingLoop:
 
     async def _dispatch_one_cycle(self) -> None:
         """Pull pending triggers; dispatch the head of the queue (one trigger).
-        Remaining triggers wait for the next cycle (rate-limit invariant)."""
+        Remaining triggers wait for the next cycle (rate-limit invariant).
+
+        Phase 235.x-STABILITY-9 stage 11 2026-05-17: trigger source callable
+        is invoked via asyncio.to_thread because GitTriggerSource runs
+        subprocess.run(["git", ...], timeout=5.0) synchronously — keeping
+        it on the event loop thread was the residual ~50s STARVATION peak
+        contributor that survived stages 5-10.
+        """
         try:
-            triggers = self._get_triggers()
+            triggers = await asyncio.to_thread(self._get_triggers)
         except Exception as exc:  # noqa: BLE001 — fail-open
             log.warning("SentryPollingLoop: get_pending_triggers raised: %s", exc)
             return
