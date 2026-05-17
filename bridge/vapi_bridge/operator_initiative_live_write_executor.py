@@ -258,37 +258,27 @@ class OperatorAgentLiveWriteExecutor:
             raise
 
     async def _process_cycle(self) -> None:
-        """One executor cycle: per-agent gate check + accepted-draft processing."""
+        """One executor cycle: per-agent gate check + accepted-draft processing.
+
+        Phase 235.x-STABILITY-8 2026-05-17: sync DB work (authorization
+        eval + draft fetch) wrapped in asyncio.to_thread to prevent SQL
+        queries from blocking the event loop. The 6 sync store calls in
+        the original implementation were a Phase 235.x-STABILITY-2
+        pattern violation that compounded with 4 MLGA trackers + 40+
+        other background tasks to cause sustained loop_starvation events
+        (6-25s) and bridge zombies.
+        """
         for agent_id in ("anchor_sentry", "guardian", "curator"):
             try:
-                # Cheap gate-only check first (no chain ops yet).
-                auth = evaluate_live_write_authorization_for_agent(
-                    agent_id=agent_id, cfg=self.cfg, store=self.store,
-                    intended_cost_iotx=0.0,
+                # All per-agent sync DB work bundled into one to_thread
+                # call so the event loop is yielded between agents.
+                agent_q9, auth, drafts = await asyncio.to_thread(
+                    self._gather_per_agent_state_sync, agent_id,
                 )
-                if not auth.authorized:
-                    # Most common case: per-agent live_writes_enabled=False.
-                    # Silent skip is correct; no spending row written.
+                if not auth.authorized or not agent_q9:
+                    # Silent skip is correct: per-agent live_writes_enabled=False
+                    # (most common case); no spending row written.
                     continue
-
-                # Authorized — pull accepted, not-yet-executed drafts.
-                agent_q9 = str(
-                    getattr(self.cfg, f"operator_agent_{agent_id}_id", "") or ""
-                ).lower()
-                if not agent_q9:
-                    continue
-
-                try:
-                    drafts = self.store.get_accepted_unexecuted_drafts(
-                        agent_q9, limit=5,
-                    )
-                except Exception as exc:
-                    log.warning(
-                        "live-write executor: get_drafts failed for %s: %s",
-                        agent_id, exc,
-                    )
-                    continue
-
                 for draft in drafts or []:
                     await self._execute_draft(agent_id, agent_q9, draft)
             except Exception as exc:
@@ -296,6 +286,30 @@ class OperatorAgentLiveWriteExecutor:
                     "live-write executor: per-agent loop failed for %s: %s",
                     agent_id, exc,
                 )
+
+    def _gather_per_agent_state_sync(self, agent_id: str):
+        """Sync helper — runs in worker thread via asyncio.to_thread.
+        Returns (agent_q9, auth, drafts). Empty drafts list on any failure."""
+        auth = evaluate_live_write_authorization_for_agent(
+            agent_id=agent_id, cfg=self.cfg, store=self.store,
+            intended_cost_iotx=0.0,
+        )
+        if not auth.authorized:
+            return None, auth, []
+        agent_q9 = str(
+            getattr(self.cfg, f"operator_agent_{agent_id}_id", "") or ""
+        ).lower()
+        if not agent_q9:
+            return None, auth, []
+        try:
+            drafts = self.store.get_accepted_unexecuted_drafts(agent_q9, limit=5)
+        except Exception as exc:
+            log.warning(
+                "live-write executor: get_drafts failed for %s: %s",
+                agent_id, exc,
+            )
+            drafts = []
+        return agent_q9, auth, (drafts or [])
 
     async def _execute_draft(
         self, agent_id: str, agent_q9: str, draft: dict,
@@ -314,13 +328,17 @@ class OperatorAgentLiveWriteExecutor:
         intended_cost = self._estimate_cost_iotx(action_name)
 
         # Per-call authorization (re-check with intended_cost for budget).
-        auth = evaluate_live_write_authorization_for_agent(
-            agent_id=agent_id, cfg=self.cfg, store=self.store,
-            intended_cost_iotx=intended_cost,
+        # Phase 235.x-STABILITY-8 2026-05-17: wrap sync DB read in
+        # to_thread (lambda needed because evaluate_* takes keyword-only).
+        auth = await asyncio.to_thread(
+            lambda: evaluate_live_write_authorization_for_agent(
+                agent_id=agent_id, cfg=self.cfg, store=self.store,
+                intended_cost_iotx=intended_cost,
+            )
         )
         if not auth.authorized:
-            self._record_refusal(
-                agent_q9, draft_id, action_name, auth.blockers,
+            await asyncio.to_thread(
+                self._record_refusal, agent_q9, draft_id, action_name, auth.blockers,
             )
             return
 
@@ -332,9 +350,10 @@ class OperatorAgentLiveWriteExecutor:
                 tx_hash, cost_iotx = await self._exec_curator_listing_suspend(draft)
             else:
                 # No executor routed for this action_name — record as refusal,
-                # leave draft for v2 routing.
-                self._record_refusal(
-                    agent_q9, draft_id, action_name,
+                # leave draft for v2 routing. Phase 235.x-STABILITY-8: sync
+                # DB write wrapped in to_thread.
+                await asyncio.to_thread(
+                    self._record_refusal, agent_q9, draft_id, action_name,
                     (f"no_executor_for_action_{action_name}",),
                 )
                 return
@@ -343,20 +362,25 @@ class OperatorAgentLiveWriteExecutor:
                 "live-write executor: action %s failed for draft id=%d: %s",
                 action_name, draft_id, exc,
             )
-            self._record_refusal(
-                agent_q9, draft_id, action_name,
+            await asyncio.to_thread(
+                self._record_refusal, agent_q9, draft_id, action_name,
                 (f"chain_call_failed_{type(exc).__name__}",),
             )
             return
 
-        # Record successful execution.
+        # Record successful execution. Phase 235.x-STABILITY-8: sync
+        # DB writes wrapped in to_thread.
         try:
-            self.store.insert_chain_spending_event(
-                agent_id=agent_q9, draft_id=draft_id, action_name=action_name,
-                cost_iotx=float(cost_iotx), tx_hash=str(tx_hash or ""),
-                error=None,
+            await asyncio.to_thread(
+                lambda: self.store.insert_chain_spending_event(
+                    agent_id=agent_q9, draft_id=draft_id, action_name=action_name,
+                    cost_iotx=float(cost_iotx), tx_hash=str(tx_hash or ""),
+                    error=None,
+                )
             )
-            self.store.mark_draft_executed(draft_id, str(tx_hash or ""))
+            await asyncio.to_thread(
+                self.store.mark_draft_executed, draft_id, str(tx_hash or ""),
+            )
             log.info(
                 "Phase O1-D-PATH-B: agent=%s draft=%d action=%s tx=%s cost=%.6f IOTX",
                 agent_id, draft_id, action_name,
