@@ -1648,6 +1648,39 @@ class Bridge:
                     "Phase O2-DRAFT-AUTOLOOP (Curator): task creation failed: %s", _cp_exc
                 )
 
+        # Phase O1-D-PATH-B v1.1 2026-05-17: per-agent live-write executor task.
+        # Always-spawn regardless of per-agent flags — the executor self-checks
+        # the four-gate safety contract per cycle (phase + per-agent flag +
+        # budget + kill-all) and structurally no-ops every agent that isn't
+        # opted-in. Halt via cfg.phase_o3_executor_kill_all=True (env flip;
+        # no restart needed). interval default 60s.
+        try:
+            from .operator_initiative_live_write_executor import (
+                OperatorAgentLiveWriteExecutor,
+            )
+            _live_write_executor = OperatorAgentLiveWriteExecutor(
+                cfg=self.cfg, store=self.store, chain=self.chain,
+                interval_s=int(getattr(self.cfg, "phase_o3_executor_interval_s", 60)),
+            )
+            _executor_task = asyncio.ensure_future(_live_write_executor.run_forever())
+            _executor_task.set_name("LiveWriteExecutor")
+            self._tasks.append(_executor_task)
+            log.info(
+                "Phase O1-D-PATH-B v1.1: live-write executor started "
+                "(interval=%ds, per-agent flags default False — structurally "
+                "no-op until operator explicitly opts in)",
+                int(getattr(self.cfg, "phase_o3_executor_interval_s", 60)),
+            )
+        except ImportError as _lwe_exc:
+            log.warning(
+                "Phase O1-D-PATH-B: live-write executor module unavailable: %s",
+                _lwe_exc,
+            )
+        except Exception as _lwe_exc:
+            log.warning(
+                "Phase O1-D-PATH-B: executor task creation failed: %s", _lwe_exc
+            )
+
         # Phase 238 Step I-AUTOLOOP-3: SSE Twin stream heartbeat task.
         # Cache itself was attached above inside the http_enabled block.
         # Heartbeat fires every 15s to keep idle SSE connections alive
