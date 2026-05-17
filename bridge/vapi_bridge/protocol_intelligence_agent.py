@@ -63,7 +63,11 @@ class ProtocolIntelligenceAgent:
 
     async def _compute_and_store(self) -> dict:
         try:
-            report = self.compute_report()
+            # Phase 235.x-STABILITY-9 stage 3 2026-05-17: compute_report makes
+            # 10+ sync SQLite queries on the event loop. Wrap in to_thread.
+            # insert_protocol_intelligence_report is single-row sync write —
+            # quick enough to keep on the main loop after to_thread returns.
+            report = await asyncio.to_thread(self.compute_report)
             self._store.insert_protocol_intelligence_report(report)
             log.info(
                 "ProtocolIntelligenceAgent: score=%.1f ready=%s bottleneck=%s",
