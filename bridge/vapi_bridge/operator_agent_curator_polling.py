@@ -71,6 +71,8 @@ class CuratorPollingLoop:
         store: Any,
         draft_generator: CuratorDraftGenerator,
         get_pending_triggers: GetPendingTriggersFn,
+        chain: Any = None,
+        bus: Any = None,
     ) -> None:
         self._cfg = cfg
         self._store = store
@@ -83,6 +85,26 @@ class CuratorPollingLoop:
             getattr(cfg, "operator_agent_curator_polling_interval_s",
                     _POLL_INTERVAL_DEFAULT_S)
         )
+        # Phase 235.x-STABILITY-9 stage 4e 2026-05-17: absorbed-agent ticker
+        # invokes CorpusDataCuratorAgent's 7-task data-coherence cycle at
+        # its original 30min cadence. Per agent_rationalization_v1.md §3.4
+        # + Q4=YES (DataCuratorAgent rename deferred to follow-up).
+        self._absorbed_ticker = None
+        if getattr(cfg, "stewards_absorb_enabled", True):
+            try:
+                from .operator_steward_absorbed_agents import (
+                    AbsorbedAgentTicker, CURATOR_ABSORBED,
+                )
+                self._absorbed_ticker = AbsorbedAgentTicker(
+                    steward_name="Curator",
+                    specs=CURATOR_ABSORBED,
+                    cfg=cfg, store=store, chain=chain, bus=bus,
+                )
+            except Exception as _exc:  # noqa: BLE001
+                log.warning(
+                    "CuratorPollingLoop: absorbed ticker setup failed (%s); "
+                    "absorbed agents will not run", _exc,
+                )
 
     def _drafts_this_session(self) -> int:
         return self._drafts_count
@@ -126,6 +148,16 @@ class CuratorPollingLoop:
                 triggers = self._safe_get_triggers()
                 if triggers:
                     self._dispatch_one(triggers[0])
+                # Phase 235.x-STABILITY-9 stage 4e 2026-05-17: tick absorbed
+                # CorpusDataCuratorAgent at its 30min cadence.
+                if self._absorbed_ticker is not None:
+                    try:
+                        await self._absorbed_ticker.tick_all()
+                    except Exception as _abs_exc:  # noqa: BLE001
+                        log.warning(
+                            "CuratorPollingLoop: absorbed tick failed (%s); "
+                            "continuing main loop", _abs_exc,
+                        )
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # noqa: BLE001
@@ -272,6 +304,8 @@ async def run_curator_polling_loop(
     store: Any,
     draft_generator: Optional[CuratorDraftGenerator] = None,
     get_pending_triggers: Optional[GetPendingTriggersFn] = None,
+    chain: Any = None,
+    bus: Any = None,
 ) -> None:
     """Module-level entrypoint invoked from main.py.
 
@@ -297,6 +331,8 @@ async def run_curator_polling_loop(
         store=store,
         draft_generator=gen,
         get_pending_triggers=triggers_fn,
+        chain=chain,
+        bus=bus,
     )
     await loop.start()
     try:
