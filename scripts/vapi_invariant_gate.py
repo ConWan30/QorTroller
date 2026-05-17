@@ -514,6 +514,27 @@ INVARIANTS: list[Invariant] = [
         min_matches=3,
     ),
     Invariant(
+        id="INV-O3-SUPERSEDE-001",
+        description="Phase O1-D-AUTO-SUPERSEDE FROZEN-v1 domain tag b\"VAPI-O3-SUPERSEDE-v1\" literal — distinguishes the Empirical-Evidence Supersession primitive commitments from all other PATTERN-017 family members; renaming silently breaks the byte-layout invariant of the attestation hash formula (Phase O1-D-AUTO-SUPERSEDE 2026-05-17)",
+        file="bridge/vapi_bridge/operator_initiative_auto_supersede.py",
+        pattern=r'b"VAPI-O3-SUPERSEDE-v1"',
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-O3-SUPERSEDE-002",
+        description="Phase O1-D-AUTO-SUPERSEDE compute_supersede_attestation_hash function preserved + 92-byte preimage sanity check — guards against silent byte-layout drift in the FROZEN-v1 attestation hash formula; any change to the preimage byte order or field set requires bumping the domain tag to v2 (Phase O1-D-AUTO-SUPERSEDE 2026-05-17)",
+        file="bridge/vapi_bridge/operator_initiative_auto_supersede.py",
+        pattern=r"def compute_supersede_attestation_hash|len\(preimage\) != 92",
+        min_matches=2,
+    ),
+    Invariant(
+        id="INV-O3-SUPERSEDE-003",
+        description="Phase O1-D-AUTO-SUPERSEDE operator_initiative_auto_supersede_log table + insert helper preserved — the cryptographic-attestation audit-trail backbone; without persistence the watcher's supersession events become unauditable (Phase O1-D-AUTO-SUPERSEDE 2026-05-17)",
+        file="bridge/vapi_bridge/store.py",
+        pattern=r"operator_initiative_auto_supersede_log|insert_operator_initiative_auto_supersede",
+        min_matches=2,
+    ),
+    Invariant(
         id="INV-O1-FRR-SDK-001",
         description="Phase O1-FRR-SDK VAPIFleetReadinessRoot client class exists in sdk/vapi_sdk.py — wraps GET /operator/fleet-readiness-root + GET /operator/operator-initiative-advancement-log; renaming or removing this class breaks the wire-contract parity discipline (endpoint -> SDK -> frontend -> NOTE) for the FRR primitive (Phase O1-FRR-SDK-LOCK)",
         file="sdk/vapi_sdk.py",

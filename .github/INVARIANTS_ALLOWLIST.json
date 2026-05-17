@@ -231,6 +231,18 @@
     "digest": "6a34ae7256d18276a2b1da000c9b5a2950f719e94918b07503f327a802074032",
     "description": "Phase O3-ACT-DRAFT bundle Merkle roots locked (Sentry + Guardian + Curator O3_ACTING) \u2014 three frozen Merkle roots pinned in test_phase_o3_act_draft_bundles.py; any policy edit re-anchors to NEW Merkle roots and breaks this invariant by design (governance event required) (Phase O3-WATCHER-LOCK)"
   },
+  "INV-O3-SUPERSEDE-001": {
+    "digest": "c35eb4bbfb10630f99518fd80144c1971f0c4cd3c4e18d0b3e30c3fd9ca45152",
+    "description": "Phase O1-D-AUTO-SUPERSEDE FROZEN-v1 domain tag b\"VAPI-O3-SUPERSEDE-v1\" literal \u2014 distinguishes the Empirical-Evidence Supersession primitive commitments from all other PATTERN-017 family members; renaming silently breaks the byte-layout invariant of the attestation hash formula (Phase O1-D-AUTO-SUPERSEDE 2026-05-17)"
+  },
+  "INV-O3-SUPERSEDE-002": {
+    "digest": "c3628a06d4f7b278abc89a4080996302c008ae2de76a695c24f85f4cd989fddd",
+    "description": "Phase O1-D-AUTO-SUPERSEDE compute_supersede_attestation_hash function preserved + 92-byte preimage sanity check \u2014 guards against silent byte-layout drift in the FROZEN-v1 attestation hash formula; any change to the preimage byte order or field set requires bumping the domain tag to v2 (Phase O1-D-AUTO-SUPERSEDE 2026-05-17)"
+  },
+  "INV-O3-SUPERSEDE-003": {
+    "digest": "048d50871e63dbd60b923e308483fd7af0ddd15fd88d2428f1facc286971c7e0",
+    "description": "Phase O1-D-AUTO-SUPERSEDE operator_initiative_auto_supersede_log table + insert helper preserved \u2014 the cryptographic-attestation audit-trail backbone; without persistence the watcher's supersession events become unauditable (Phase O1-D-AUTO-SUPERSEDE 2026-05-17)"
+  },
   "INV-O1-FRR-SDK-001": {
     "digest": "61e09d0446955ea230a062e3f309cefe964d89888042eef7e0c8cc516bf28e48",
     "description": "Phase O1-FRR-SDK VAPIFleetReadinessRoot client class exists in sdk/vapi_sdk.py \u2014 wraps GET /operator/fleet-readiness-root + GET /operator/operator-initiative-advancement-log; renaming or removing this class breaks the wire-contract parity discipline (endpoint -> SDK -> frontend -> NOTE) for the FRR primitive (Phase O1-FRR-SDK-LOCK)"
