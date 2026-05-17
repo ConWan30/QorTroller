@@ -39,15 +39,85 @@ FROZEN: separation_gate = 0.70.
 """
 
 import asyncio
+import contextlib
 import hashlib
 import json
 import logging
 import math
 import struct
+import threading
 import time
 from typing import Optional
 
 log = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Phase 235.x-STABILITY-9 stage 6 (2026-05-17): instrumentation helpers.
+#
+# Stage 5 startup-jitter empirical close test (10-min observation 2026-05-17
+# 14:08 boot) showed 67 STARVATION events / 9 min wave / 72.36s peak excess —
+# threshold NOT met. Smoking-gun adjacency: Task 6 readiness BLOCKED at
+# 14:09:08 then 72.36s STARVATION at 14:10:44. Hypothesis: Task 6 or Task 7
+# blocks 70+s via SQLite WAL contention or worker-pool starvation despite
+# `asyncio.to_thread` offload (stage 2).
+#
+# Stage 6 is INSTRUMENTATION-FIRST: do not guess the fix. Add tight per-task
+# + per-DB-block timing so the next 10-min observation window names the
+# offender by site. Fix work follows.
+# ---------------------------------------------------------------------------
+
+
+@contextlib.contextmanager
+def _timed_curator_task(task_name: str, cfg, logger):
+    """Time wrapper for a curator task body.
+
+    Always logs INFO with duration; logs WARNING when duration exceeds
+    cfg.curator_task_warn_duration_s (default 5.0s) — surfaces the
+    Task 6/7 70s blocker by name.
+    """
+    t_start = time.monotonic()
+    wall_start_ns = time.time_ns()
+    tid = threading.get_ident()
+    warn_s = float(getattr(cfg, "curator_task_warn_duration_s", 5.0))
+    try:
+        yield
+    finally:
+        dur_s = time.monotonic() - t_start
+        if dur_s > warn_s:
+            logger.warning(
+                "[CorpusDataCuratorAgent] STAGE-6 SLOW TASK: %s took %.2fs "
+                "(tid=%d, wall_start_ns=%d, warn_threshold=%.1fs) — "
+                "likely contributor to LOOP STARVATION",
+                task_name, dur_s, tid, wall_start_ns, warn_s,
+            )
+        else:
+            logger.info(
+                "[CorpusDataCuratorAgent] STAGE-6: %s duration=%.3fs (tid=%d)",
+                task_name, dur_s, tid,
+            )
+
+
+@contextlib.contextmanager
+def _timed_db_block(site_name: str, cfg, logger):
+    """Time wrapper for individual SQLite connection block inside a curator
+    task. Logs WARNING when block exceeds cfg.curator_db_warn_duration_s
+    (default 1.0s) — identifies WAL contention / cache-miss / cold-start
+    patterns vs CPU work."""
+    t_start = time.monotonic()
+    tid = threading.get_ident()
+    warn_s = float(getattr(cfg, "curator_db_warn_duration_s", 1.0))
+    try:
+        yield
+    finally:
+        dur_s = time.monotonic() - t_start
+        if dur_s > warn_s:
+            logger.warning(
+                "[CorpusDataCuratorAgent] STAGE-6 SLOW DB: %s took %.3fs "
+                "(tid=%d, warn_threshold=%.1fs) — investigate WAL contention "
+                "or query plan",
+                site_name, dur_s, tid, warn_s,
+            )
 
 _POLL_INTERVAL_S = 1800          # 30-minute unified cycle
 _TBD_LAMBDA = math.log(2) / 90  # FROZEN: BP-001 TBD decay constant
@@ -642,26 +712,38 @@ class CorpusDataCuratorAgent:
 
         FROZEN: separation_gate=0.70, vhp_expiry_days=90.
         certificate_hash = SHA-256(sorted_dims_json + ratio_str + ts_ns_bytes).
+
+        Stage 6 2026-05-17: instrumented — each DB block timed independently
+        to localize the 70+s starvation cause.
         """
+        with _timed_curator_task("Task6_readiness_certificate", self._cfg, self._logger):
+            self._run_readiness_certificate_body()
+
+    def _run_readiness_certificate_body(self) -> None:
+        """Untimed inner body — extracted so _timed_curator_task wraps cleanly."""
         ts_ns = time.time_ns()
 
         # Current separation ratio
         current_ratio = 0.569
         try:
-            with self._store._conn() as conn:
-                row = conn.execute(
-                    "SELECT ratio FROM separation_defensibility_log "
-                    "WHERE session_type='touchpad_corners' ORDER BY id DESC LIMIT 1"
-                ).fetchone()
-                if row and row[0] is not None:
-                    current_ratio = float(row[0])
+            with _timed_db_block("Task6_separation_defensibility_log",
+                                 self._cfg, self._logger):
+                with self._store._conn() as conn:
+                    row = conn.execute(
+                        "SELECT ratio FROM separation_defensibility_log "
+                        "WHERE session_type='touchpad_corners' ORDER BY id DESC LIMIT 1"
+                    ).fetchone()
+                    if row and row[0] is not None:
+                        current_ratio = float(row[0])
         except Exception:
             pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         # Persona break (centroid stability)
         any_persona_break = False
         try:
-            pb = self._store.get_persona_break_status()
+            with _timed_db_block("Task6_get_persona_break_status",
+                                 self._cfg, self._logger):
+                pb = self._store.get_persona_break_status()
             any_persona_break = bool(pb.get("persona_break_detected", False))
         except Exception:
             pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
@@ -669,34 +751,40 @@ class CorpusDataCuratorAgent:
         # Consent coverage
         n_consented, n_enrolled = 0, 0
         try:
-            with self._store._conn() as conn:
-                r1 = conn.execute(
-                    "SELECT COUNT(*) FROM device_enrollments WHERE enrolled=1"
-                ).fetchone()
-                n_enrolled = int(r1[0]) if r1 else 0
-                r2 = conn.execute(
-                    "SELECT COUNT(*) FROM device_enrollments WHERE consent_given=1"
-                ).fetchone()
-                n_consented = int(r2[0]) if r2 else 0
+            with _timed_db_block("Task6_device_enrollments_counts",
+                                 self._cfg, self._logger):
+                with self._store._conn() as conn:
+                    r1 = conn.execute(
+                        "SELECT COUNT(*) FROM device_enrollments WHERE enrolled=1"
+                    ).fetchone()
+                    n_enrolled = int(r1[0]) if r1 else 0
+                    r2 = conn.execute(
+                        "SELECT COUNT(*) FROM device_enrollments WHERE consent_given=1"
+                    ).fetchone()
+                    n_consented = int(r2[0]) if r2 else 0
         except Exception:
             pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         # Biometric TTL (commitment age)
         commitment_age_days = 0.0
         try:
-            with self._store._conn() as conn:
-                row = conn.execute(
-                    "SELECT created_at FROM biometric_renewal_log ORDER BY id DESC LIMIT 1"
-                ).fetchone()
-                if row and row[0] is not None:
-                    commitment_age_days = (time.time() - float(row[0])) / 86400
+            with _timed_db_block("Task6_biometric_renewal_log",
+                                 self._cfg, self._logger):
+                with self._store._conn() as conn:
+                    row = conn.execute(
+                        "SELECT created_at FROM biometric_renewal_log ORDER BY id DESC LIMIT 1"
+                    ).fetchone()
+                    if row and row[0] is not None:
+                        commitment_age_days = (time.time() - float(row[0])) / 86400
         except Exception:
             pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         # Corpus entropy adequacy
         entropy_adequate = True
         try:
-            entropy_row = self._store.get_latest_corpus_entropy()
+            with _timed_db_block("Task6_get_latest_corpus_entropy",
+                                 self._cfg, self._logger):
+                entropy_row = self._store.get_latest_corpus_entropy()
             if entropy_row:
                 entropy_adequate = float(entropy_row["corpus_entropy_score"]) >= 1.5
         except Exception:
@@ -705,12 +793,14 @@ class CorpusDataCuratorAgent:
         # Active attestations
         active_attestations = 0
         try:
-            with self._store._conn() as conn:
-                row = conn.execute(
-                    "SELECT COUNT(*) FROM re_enrollment_attestation_log "
-                    "WHERE token_consumed=0"
-                ).fetchone()
-                active_attestations = int(row[0]) if row else 0
+            with _timed_db_block("Task6_re_enrollment_attestation_log",
+                                 self._cfg, self._logger):
+                with self._store._conn() as conn:
+                    row = conn.execute(
+                        "SELECT COUNT(*) FROM re_enrollment_attestation_log "
+                        "WHERE token_consumed=0"
+                    ).fetchone()
+                    active_attestations = int(row[0]) if row else 0
         except Exception:
             pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
@@ -788,19 +878,21 @@ class CorpusDataCuratorAgent:
 
         valid_until_ts = int(time.time()) + 90 * 86400  # FROZEN: 90 days
 
-        self._store.insert_data_readiness_certificate(
-            certificate_hash=cert_hash,
-            certification_status=status,
-            blocking_failures=json.dumps(blocking_failures),
-            advisory_warnings=json.dumps(advisory_warnings),
-            dimension_results=json.dumps(
-                {k: {"passed": v["passed"], "value": v["value"], "gate": v["gate"]}
-                 for k, v in dims.items()}
-            ),
-            separation_ratio=current_ratio,
-            valid_until_ts=valid_until_ts,
-            ts_ns=ts_ns,
-        )
+        with _timed_db_block("Task6_insert_data_readiness_certificate",
+                             self._cfg, self._logger):
+            self._store.insert_data_readiness_certificate(
+                certificate_hash=cert_hash,
+                certification_status=status,
+                blocking_failures=json.dumps(blocking_failures),
+                advisory_warnings=json.dumps(advisory_warnings),
+                dimension_results=json.dumps(
+                    {k: {"passed": v["passed"], "value": v["value"], "gate": v["gate"]}
+                     for k, v in dims.items()}
+                ),
+                separation_ratio=current_ratio,
+                valid_until_ts=valid_until_ts,
+                ts_ns=ts_ns,
+            )
 
         self._logger.info(
             f"[CorpusDataCuratorAgent] Task 6 (readiness): status={status}, "
@@ -816,18 +908,27 @@ class CorpusDataCuratorAgent:
 
         FROZEN: lambda = ln(2)/90 (BP-001 TBD half-life = vhp_expiry_days = 90).
         effective_weight = tbd_weight * type_multiplier * stationarity_multiplier.
+
+        Stage 6 2026-05-17: instrumented — task body wrapped + DB sites timed.
         """
+        with _timed_curator_task("Task7_contribution_weights", self._cfg, self._logger):
+            self._run_contribution_weights_body()
+
+    def _run_contribution_weights_body(self) -> None:
+        """Untimed inner body — extracted so _timed_curator_task wraps cleanly."""
         if not getattr(self._cfg, "contribution_weight_enabled", True):
             return
 
         current_ts = int(time.time())
 
         try:
-            with self._store._conn() as conn:
-                rows = conn.execute(
-                    "SELECT session_type, found, created_at "
-                    "FROM separation_defensibility_log ORDER BY id DESC LIMIT 30"
-                ).fetchall()
+            with _timed_db_block("Task7_read_separation_defensibility_log",
+                                 self._cfg, self._logger):
+                with self._store._conn() as conn:
+                    rows = conn.execute(
+                        "SELECT session_type, found, created_at "
+                        "FROM separation_defensibility_log ORDER BY id DESC LIMIT 30"
+                    ).fetchall()
         except Exception:
             return
 
@@ -837,7 +938,9 @@ class CorpusDataCuratorAgent:
         # Get stationarity multiplier from persona_break TDI
         tdi = 0.0
         try:
-            pb = self._store.get_persona_break_status()
+            with _timed_db_block("Task7_get_persona_break_status",
+                                 self._cfg, self._logger):
+                pb = self._store.get_persona_break_status()
             tdi = float(pb.get("tdi_current", 0.0))
         except Exception:
             pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
@@ -861,26 +964,31 @@ class CorpusDataCuratorAgent:
         # Sort by effective_weight DESC and assign ranks
         weights_list.sort(key=lambda x: x[7], reverse=True)
         player_names = ["P1", "P2", "P3"]
-        for rank, (sf, st, capts, age, tbd_w, type_m, stat_m, eff_w) in enumerate(
-            weights_list, start=1
+        # Stage 6 2026-05-17: time the per-row INSERT loop — N up to 30; if
+        # contention is per-insert, this surfaces it.
+        with _timed_db_block(
+            f"Task7_insert_loop_N{len(weights_list)}", self._cfg, self._logger
         ):
-            player_id = player_names[rank % len(player_names)]
-            try:
-                self._store.insert_session_contribution_weight(
-                    session_file=sf,
-                    player_id=player_id,
-                    session_type=st,
-                    session_captured_at_ts=capts,
-                    age_days=round(age, 4),
-                    tbd_weight=round(tbd_w, 6),
-                    type_multiplier=type_m,
-                    stationarity_multiplier=round(stat_m, 4),
-                    effective_weight=round(eff_w, 6),
-                    centroid_influence_rank=rank,
-                    computed_at_ts=current_ts,
-                )
-            except Exception:
-                pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
+            for rank, (sf, st, capts, age, tbd_w, type_m, stat_m, eff_w) in enumerate(
+                weights_list, start=1
+            ):
+                player_id = player_names[rank % len(player_names)]
+                try:
+                    self._store.insert_session_contribution_weight(
+                        session_file=sf,
+                        player_id=player_id,
+                        session_type=st,
+                        session_captured_at_ts=capts,
+                        age_days=round(age, 4),
+                        tbd_weight=round(tbd_w, 6),
+                        type_multiplier=type_m,
+                        stationarity_multiplier=round(stat_m, 4),
+                        effective_weight=round(eff_w, 6),
+                        centroid_influence_rank=rank,
+                        computed_at_ts=current_ts,
+                    )
+                except Exception:
+                    pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         self._logger.debug(
             f"[CorpusDataCuratorAgent] Task 7 (weights): "

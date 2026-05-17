@@ -155,6 +155,27 @@ class Config:
     matches WIF-064 zombie pattern signature (12-30s blocks, much higher
     than 1s)."""
 
+    # --- Phase 235.x-STABILITY-9 stage 6 (2026-05-17): curator instrumentation ---
+    curator_task_warn_duration_s: float = field(
+        default_factory=lambda: float(_env("CURATOR_TASK_WARN_DURATION_S", "5.0"))
+    )
+    """Phase 235.x-STABILITY-9 stage 6 — Warning threshold (seconds) for
+    CorpusDataCuratorAgent task body wall duration. Logs WARNING when a
+    task (Task 6 readiness, Task 7 contribution_weights, etc.) exceeds
+    this duration; helps localize the 70+s starvation observed at boot.
+    Default 5.0s — generous enough to skip normal short tasks; tight
+    enough to catch the empirically-observed 70s blocker."""
+
+    curator_db_warn_duration_s: float = field(
+        default_factory=lambda: float(_env("CURATOR_DB_WARN_DURATION_S", "1.0"))
+    )
+    """Phase 235.x-STABILITY-9 stage 6 — Warning threshold (seconds) for
+    individual SQLite connection blocks inside curator task bodies.
+    Each `with self._store._conn() as conn:` site is timed via
+    _timed_db_block helper; logs WARNING when individual block exceeds
+    this. Default 1.0s identifies WAL contention vs cache-miss vs
+    cold-start patterns."""
+
     # --- Phase 235.x-STABILITY-9 stage 5 (2026-05-17): startup-jitter ---
     startup_jitter_enabled: bool = field(
         default_factory=lambda: _env_bool("STARTUP_JITTER_ENABLED", True)
