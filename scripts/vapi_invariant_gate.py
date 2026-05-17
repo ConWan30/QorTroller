@@ -535,6 +535,27 @@ INVARIANTS: list[Invariant] = [
         min_matches=2,
     ),
     Invariant(
+        id="INV-PATH-B-001",
+        description="Phase O1-D-PATH-B v1 evaluate_live_write_authorization_for_agent function + four-gate safety contract (phase_o3_executor_kill_all + per-agent live_writes_enabled + O3_ACTING phase + daily budget) — load-bearing authorization layer for the live-write executor; removing this would allow unauthorized chain operations to fire (Phase O1-D-PATH-B 2026-05-17)",
+        file="bridge/vapi_bridge/operator_initiative_live_write_executor.py",
+        pattern=r"def evaluate_live_write_authorization_for_agent|phase_o3_executor_kill_all",
+        min_matches=2,
+    ),
+    Invariant(
+        id="INV-PATH-B-002",
+        description="Phase O1-D-PATH-B v1 operator_agent_chain_spending_log table + insert_chain_spending_event + get_daily_chain_spending_for_agent helpers — the budget-enforcement audit backbone; without persistence the budget cap can be bypassed (Phase O1-D-PATH-B 2026-05-17)",
+        file="bridge/vapi_bridge/store.py",
+        pattern=r"operator_agent_chain_spending_log|insert_chain_spending_event|get_daily_chain_spending_for_agent",
+        min_matches=3,
+    ),
+    Invariant(
+        id="INV-PATH-B-003",
+        description="Phase O1-D-PATH-B v1 per-agent live-writes cfg flags (all three default False) + emergency kill-all + per-agent daily IOTX budgets — the cfg surface that operators flip to opt-in autonomous execution per agent. Renaming or removing any of the 3 enable flags / 3 budget fields / kill-all would silently degrade operator control (Phase O1-D-PATH-B 2026-05-17)",
+        file="bridge/vapi_bridge/config.py",
+        pattern=r"phase_o3_anchor_sentry_live_writes_enabled|phase_o3_guardian_live_writes_enabled|phase_o3_curator_live_writes_enabled|phase_o3_executor_kill_all|phase_o3_anchor_sentry_daily_iotx_budget|phase_o3_guardian_daily_iotx_budget|phase_o3_curator_daily_iotx_budget",
+        min_matches=7,
+    ),
+    Invariant(
         id="INV-O1-FRR-SDK-001",
         description="Phase O1-FRR-SDK VAPIFleetReadinessRoot client class exists in sdk/vapi_sdk.py — wraps GET /operator/fleet-readiness-root + GET /operator/operator-initiative-advancement-log; renaming or removing this class breaks the wire-contract parity discipline (endpoint -> SDK -> frontend -> NOTE) for the FRR primitive (Phase O1-FRR-SDK-LOCK)",
         file="sdk/vapi_sdk.py",

@@ -243,6 +243,18 @@
     "digest": "048d50871e63dbd60b923e308483fd7af0ddd15fd88d2428f1facc286971c7e0",
     "description": "Phase O1-D-AUTO-SUPERSEDE operator_initiative_auto_supersede_log table + insert helper preserved \u2014 the cryptographic-attestation audit-trail backbone; without persistence the watcher's supersession events become unauditable (Phase O1-D-AUTO-SUPERSEDE 2026-05-17)"
   },
+  "INV-PATH-B-001": {
+    "digest": "ed7b1529f0beb9ae90d1796821786fc3b00a887c6882ad041abde6e76afaf0d3",
+    "description": "Phase O1-D-PATH-B v1 evaluate_live_write_authorization_for_agent function + four-gate safety contract (phase_o3_executor_kill_all + per-agent live_writes_enabled + O3_ACTING phase + daily budget) \u2014 load-bearing authorization layer for the live-write executor; removing this would allow unauthorized chain operations to fire (Phase O1-D-PATH-B 2026-05-17)"
+  },
+  "INV-PATH-B-002": {
+    "digest": "ee93ce978a9e57b29e22291ca5024c446c5694eaaa32fd1f6794be6889679f3b",
+    "description": "Phase O1-D-PATH-B v1 operator_agent_chain_spending_log table + insert_chain_spending_event + get_daily_chain_spending_for_agent helpers \u2014 the budget-enforcement audit backbone; without persistence the budget cap can be bypassed (Phase O1-D-PATH-B 2026-05-17)"
+  },
+  "INV-PATH-B-003": {
+    "digest": "1554e079b792b4e8cff1068290a59d8af63721805d281688890b7e2ca6e65e5e",
+    "description": "Phase O1-D-PATH-B v1 per-agent live-writes cfg flags (all three default False) + emergency kill-all + per-agent daily IOTX budgets \u2014 the cfg surface that operators flip to opt-in autonomous execution per agent. Renaming or removing any of the 3 enable flags / 3 budget fields / kill-all would silently degrade operator control (Phase O1-D-PATH-B 2026-05-17)"
+  },
   "INV-O1-FRR-SDK-001": {
     "digest": "61e09d0446955ea230a062e3f309cefe964d89888042eef7e0c8cc516bf28e48",
     "description": "Phase O1-FRR-SDK VAPIFleetReadinessRoot client class exists in sdk/vapi_sdk.py \u2014 wraps GET /operator/fleet-readiness-root + GET /operator/operator-initiative-advancement-log; renaming or removing this class breaks the wire-contract parity discipline (endpoint -> SDK -> frontend -> NOTE) for the FRR primitive (Phase O1-FRR-SDK-LOCK)"
