@@ -151,14 +151,20 @@ def test_t_238_cur_fsca_3_rules_age_out_after_1h(tmp_store):
 
 # T-238-CUR-FSCA-4 ───────────────────────────────────────────────────────────
 def test_t_238_cur_fsca_4_rule_count_invariant():
-    """CONTRADICTION_RULES count assertion: 29 rules at current head."""
+    """CONTRADICTION_RULES count assertion: 28 rules at current head
+    (29 → 28 on 2026-05-16 after H-1 Option B dropped VPM_MANIFEST_HASH_DRIFT
+    per architectural-mismatch finding — the rule was checking a cross-table
+    referential integrity relationship the production MLGA-emission design
+    never honored; not all dropped rules are FROZEN-region edits)."""
     assert "LISTING_TIER_DRIFT" in CONTRADICTION_RULES
     assert "CONSENT_REVOKED_LISTING_ACTIVE" in CONTRADICTION_RULES
     # Total rule count — locks the structural invariant
-    assert len(CONTRADICTION_RULES) == 29, (
-        f"Expected 29 CONTRADICTION_RULES; got {len(CONTRADICTION_RULES)}. "
-        "If this test fails, either a new rule was added (update count) or "
-        "an existing rule was removed (which is FROZEN — reverse the change)."
+    assert len(CONTRADICTION_RULES) == 28, (
+        f"Expected 28 CONTRADICTION_RULES; got {len(CONTRADICTION_RULES)}. "
+        "If this test fails, either a new rule was added (update count + "
+        "this test's expected) or an existing rule was removed (which "
+        "requires architectural justification — see VPM_MANIFEST_HASH_DRIFT "
+        "removal commit 2026-05-16 as the precedent)."
     )
 
     # Required fields on the new rules

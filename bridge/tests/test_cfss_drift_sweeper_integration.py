@@ -288,8 +288,10 @@ def test_t_cfss_int_9_sweep_id_deterministic():
 # ---- T-CFSS-INT-10: CONTRADICTION_RULES count is 29 ------------------
 
 def test_t_cfss_int_10_total_rule_count():
-    """Pin the FSCA contradiction rule count at 29 (Phase O5 M.3 adds 2 Mythos rules; 26 pre-rule +
-    CFSS_LANE_AUTHORITY_DRIFT). Catches accidental rule
-    additions/removals at PR time."""
+    """Pin the FSCA contradiction rule count at 28 (29 → 28 on 2026-05-16
+    after H-1 Option B dropped VPM_MANIFEST_HASH_DRIFT per architectural-
+    mismatch finding — rule was checking a relationship the production
+    design never honored). Catches accidental rule additions/removals
+    at PR time."""
     from vapi_bridge.fleet_signal_coherence_agent import CONTRADICTION_RULES
-    assert len(CONTRADICTION_RULES) == 29
+    assert len(CONTRADICTION_RULES) == 28
