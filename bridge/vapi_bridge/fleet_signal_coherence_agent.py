@@ -1839,7 +1839,7 @@ class FleetSignalCoherenceAgent:
                         except (json.JSONDecodeError, KeyError):
                             continue
             except Exception:
-                pass
+                pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
             return False
         else:
             filter_clause = rule.get("response_filter", "1=1")
@@ -2112,7 +2112,7 @@ class FleetSignalCoherenceAgent:
                     "provenance":          f"[VAPI:Phase193:{self.NAME}:MEASURED]",
                 }, source=self.NAME)
             except Exception:
-                pass
+                pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
     async def run(self) -> None:
         """Main background polling loop. Runs every coherence_poll_interval_seconds."""

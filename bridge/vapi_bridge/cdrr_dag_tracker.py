@@ -123,7 +123,7 @@ class CdrrDagTracker:
                         if cid > best:
                             best = cid
                     except Exception:
-                        pass
+                        pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
                 if best > 0:
                     return best
                 # Fallback: don't replay history — start at current max

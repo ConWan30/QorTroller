@@ -143,4 +143,4 @@ class EnrollmentManager:
             try:
                 self._store.upsert_enrollment(device_id, 0, 0, 0.0, "failed")
             except Exception:
-                pass
+                pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip

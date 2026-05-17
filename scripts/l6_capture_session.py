@@ -110,7 +110,7 @@ def _get_l6_capture_counts() -> dict[int, int] | None:
             data = resp.json()
             return data.get("by_profile", {})
     except Exception:
-        pass
+        pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
     return None
 
 
@@ -129,7 +129,7 @@ def _disable_l6(player_id: str) -> None:
             timeout=5,
         )
     except Exception:
-        pass
+        pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
 
 # ---------------------------------------------------------------------------

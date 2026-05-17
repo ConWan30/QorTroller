@@ -221,7 +221,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         sys.stdout.reconfigure(encoding="utf-8")
     except Exception:
-        pass
+        pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
     report = scan(args.src)
     if args.json:

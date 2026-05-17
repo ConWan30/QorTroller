@@ -110,7 +110,7 @@ def _read_sessions(db_path: pathlib.Path) -> list:
             try:
                 feat = json.loads(raw)
             except Exception:
-                pass
+                pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         if dev != current_device or (ts - last_ts) > _GAP:
             _flush(current_device, best_feat, session_end_ts, record_count)

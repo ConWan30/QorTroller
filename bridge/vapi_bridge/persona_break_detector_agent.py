@@ -130,7 +130,7 @@ class PersonaBreakDetectorAgent:
                 aw_status = self._store.get_age_weight_analysis_status()
                 tdi = float(aw_status.get("temporal_drift_index", 0.0))
             except Exception:
-                pass
+                pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
             slope, mean_acc = self._compute_loo_accuracy_trend(player_id)
 
@@ -186,7 +186,7 @@ class PersonaBreakDetectorAgent:
             if hasattr(self._store, "get_distinct_players_from_snapshots"):
                 players = self._store.get_distinct_players_from_snapshots() or players
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         any_break = False
         worst_result: dict = {}

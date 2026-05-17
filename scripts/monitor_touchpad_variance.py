@@ -55,7 +55,7 @@ def _query_latest_variance(conn: sqlite3.Connection) -> tuple:
         if isinstance(features, list) and len(features) > 10:
             return float(features[10]), session_id
     except Exception:
-        pass
+        pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
     return 0.0, session_id
 
 

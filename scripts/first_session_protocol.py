@@ -264,7 +264,7 @@ The output becomes the biometric baseline for threshold calibration.
         try:
             h.close()
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
     # --- 5. Generate PoAC chain ---
     _banner("Step 5/7: PoAC Chain Generation")

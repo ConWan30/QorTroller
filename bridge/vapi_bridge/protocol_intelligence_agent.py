@@ -159,7 +159,7 @@ class ProtocolIntelligenceAgent:
                     fleet_health = "DEGRADED"
                 # else: keep "UNKNOWN" (fail-closed when most cores never fired)
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
         fleet_health_score = {"ALL_HEALTHY": 1.0, "DEGRADED": 0.5}.get(fleet_health, 0.0)
 
         # Component 3: Divergence Clarity
@@ -181,7 +181,7 @@ class ProtocolIntelligenceAgent:
                     diverged = int(drow["diverged"])
                     divergence_clarity_score = 1.0 - (unexplained / diverged)
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         # Component 4: Corpus Pass Score (0.5 neutral if no corpus runs)
         corpus_pass_score = 0.5
@@ -192,7 +192,7 @@ class ProtocolIntelligenceAgent:
                 passed = int(corpus.get("passed", 0))
                 corpus_pass_score = passed / total
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         # Component 5: Class J Confidence (0.5 neutral if no assessments)
         class_j_confidence_score = 0.5
@@ -208,7 +208,7 @@ class ProtocolIntelligenceAgent:
                     low_count = int(jrow["low_count"] or 0)
                     class_j_confidence_score = low_count / int(jrow["total"])
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         # Phase 90 bonus: Shadow Pass Score
         shadow_pass_score = None
@@ -222,7 +222,7 @@ class ProtocolIntelligenceAgent:
                 if srow and int(srow["total"] or 0) > 0:
                     shadow_pass_score = int(srow["passed"] or 0) / int(srow["total"])
         except Exception:
-            pass  # Phase 90 table not yet migrated
+            pass  # Phase 90 table not yet migrated; fail-open: M-1 cleanup 2026-05-16
 
         # Phase 91 bonus: Triage Confidence Score
         triage_confidence_score = None
@@ -236,7 +236,7 @@ class ProtocolIntelligenceAgent:
                 if trow and int(trow["total"] or 0) > 0:
                     triage_confidence_score = int(trow["clean"] or 0) / int(trow["total"])
         except Exception:
-            pass  # Phase 91 table not yet migrated
+            pass  # Phase 91 table not yet migrated; fail-open: M-1 cleanup 2026-05-16
 
         # Compute Score
         base_score = (
@@ -287,7 +287,7 @@ class ProtocolIntelligenceAgent:
                             if sessions_per_day > 0:
                                 estimated_days_to_gate = round(remaining / sessions_per_day, 1)
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         # Ready for live mode
         ready_for_live_mode = (

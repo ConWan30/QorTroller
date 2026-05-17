@@ -556,7 +556,7 @@ def create_app(cfg: Config, store: Store, on_record) -> FastAPI:
                         "continuity": float(_thresh.get("l4_continuity", l4_continuity)),
                     }]
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         # Phase 50: enrich threshold_history from store (overrides JSON file if records exist)
         try:
@@ -580,7 +580,7 @@ def create_app(cfg: Config, store: Store, on_record) -> FastAPI:
                 if _formatted:
                     threshold_history = _formatted
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         calibration_block = {
             "l4_anomaly_threshold":    l4_anomaly,
@@ -633,7 +633,7 @@ def create_app(cfg: Config, store: Store, on_record) -> FastAPI:
                 )
                 phg_block["component_scores"]["p_l5"] = round(min(_l5c, 1.0), 4)
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         # ── l6 ────────────────────────────────────────────────────────
         _l6_counts: dict = {}
@@ -642,7 +642,7 @@ def create_app(cfg: Config, store: Store, on_record) -> FastAPI:
                 player_id=getattr(cfg, "l6_capture_player_id", "")
             )
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         l6_block = {
             "enabled":             _l6_on,
@@ -683,7 +683,7 @@ def create_app(cfg: Config, store: Store, on_record) -> FastAPI:
             _pending_evts = store.read_unconsumed_events("calibration_intelligence_agent")
             phase50_block["calib_agent_events_pending"] = len(_pending_evts)
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
         try:
             _th_all = store.get_threshold_history(limit=100)
             phase50_block["threshold_history_count"] = len(_th_all)
@@ -694,7 +694,7 @@ def create_app(cfg: Config, store: Store, on_record) -> FastAPI:
                         _dt.datetime.fromtimestamp(float(_ts0), _dt.timezone.utc).isoformat().replace("+00:00", "Z")
                     )
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         # ── game_profile (Phase 51) ──────────────────────────────────────
         _gp_id   = getattr(cfg, "game_profile_id", "") if cfg else ""
@@ -712,7 +712,7 @@ def create_app(cfg: Config, store: Store, on_record) -> FastAPI:
                     _gp_map  = dict(_gp.button_map)
                     _gp_l6p  = _gp.l6_passive_enabled
             except Exception:
-                pass
+                pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         game_profile_block = {
             "active":        bool(_gp_id and _gp_name),

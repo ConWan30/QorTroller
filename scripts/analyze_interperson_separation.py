@@ -3321,7 +3321,7 @@ def _compute_weighted_centroid_ratio(result: dict, db_path: str | None = None) -
                 if store_weights:
                     weight_source = "corpus_curator"
             except Exception:
-                pass  # fallback to uniform
+                pass  # fallback to uniform; fail-open: M-1 cleanup 2026-05-16
 
         # Compute weighted centroids per player
         player_centroids: dict[str, np.ndarray] = {}

@@ -117,7 +117,7 @@ class SeparationRatioMonitorAgent:
             object.__setattr__(self._cfg, "confidence_multiplier_enabled", True)
             _log.info("Phase 129: confidence_multiplier_enabled=True (auto-set on breakthrough)")
         except Exception:
-            pass  # Config may not support attribute, non-blocking
+            pass  # Config may not support attribute, non-blocking; fail-open: M-1 cleanup 2026-05-16
 
         # 3. Fire bus event
         if self._bus is not None:

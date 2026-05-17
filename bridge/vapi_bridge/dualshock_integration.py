@@ -594,7 +594,7 @@ class DualShockTransport:
                         if _cands:
                             _tgt = _cands[0]
                 except Exception:
-                    pass
+                    pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
                 if _tgt is None:
                     if self._hid_counter_running:
                         time.sleep(2.0)
@@ -620,7 +620,7 @@ class DualShockTransport:
                         try:
                             handle.close()
                         except Exception:
-                            pass
+                            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
                 if self._hid_counter_running:
                     time.sleep(1.0)
 
@@ -1212,9 +1212,9 @@ class DualShockTransport:
                         _twin_frame_msg = _json.dumps({"type": "frame", "data": {"type": "frames", "frames": _out}})
                         asyncio.create_task(_twinfbc(_twin_device_id, _twin_frame_msg))
                 except Exception:
-                    pass
+                    pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
             except Exception:
-                pass
+                pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
             # --- Anti-cheat classification (Layer 1) ---
             inference, confidence = self._classify(frames)
@@ -1286,7 +1286,7 @@ class DualShockTransport:
                                         _d, _effective_thresh, _mult,
                                     )
                     except Exception:
-                        pass  # policy lookup is always non-fatal
+                        pass  # policy lookup is always non-fatal; fail-open: M-1 cleanup 2026-05-16
                 # Phase 38: per-player personal profile threshold (Mode 6 living calibration)
                 if bio_result is None and self._device_id is not None:
                     try:
@@ -1304,7 +1304,7 @@ class DualShockTransport:
                                 _d, _personal_thresh,
                             )
                     except Exception:
-                        pass  # personal profile lookup is always non-fatal
+                        pass  # personal profile lookup is always non-fatal; fail-open: M-1 cleanup 2026-05-16
                 if bio_result is not None:
                     inference, confidence = bio_result
                     log.debug(
@@ -1322,7 +1322,7 @@ class DualShockTransport:
                          if isinstance(v, (int, float))}
                     )
                 except Exception:
-                    pass
+                    pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
                 # Phase 25: two-track EMA — update stable fingerprint only on clean NOMINAL sessions.
                 #
                 # STABLE TRACK QUARANTINE INVARIANT:
@@ -1382,13 +1382,13 @@ class DualShockTransport:
                         _l5_anomaly_signals = int(_l5_feats.anomaly_signals)
                         _l5_source = str(_l5_feats.source)  # Phase 40: which button/pool scored
                 except Exception:
-                    pass
+                    pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
                 # Phase 25: positive humanity signal from L5 (inverts anomaly into [0,1] score)
                 if hasattr(self._temporal_oracle, "rhythm_humanity_score"):
                     try:
                         _l5_rhythm_humanity = self._temporal_oracle.rhythm_humanity_score()
                     except Exception:
-                        pass
+                        pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
             # --- Phase 17 Layer 2B: IMU-Button Cross-Modal Latency Oracle ---
             # Detects absence of physical IMU precursor before button press (advisory 0x31).
@@ -1407,7 +1407,7 @@ class DualShockTransport:
                         _l2b_coupled_fraction = float(_l2b_feats.coupled_fraction)
                         _l2b_p_human = self._imu_press_oracle.humanity_score()
                 except Exception:
-                    pass
+                    pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
             # --- Phase 17 Layer 2C: Stick-IMU Temporal Cross-Correlation Oracle ---
             # Detects absence of physical stick-to-gyro causal coupling (advisory 0x32).
@@ -1426,7 +1426,7 @@ class DualShockTransport:
                         _l2c_max_corr = float(_l2c_feats.max_causal_corr)
                         _l2c_p_human = self._stick_imu_oracle.humanity_score()
                 except Exception:
-                    pass
+                    pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
             # L2C inactive diagnostic: right stick in dead zone → oracle returned None.
             # Fires every cycle for dead-zone stick games (e.g. NCAA Football 26).
             # Visible at DEBUG level; l2c_inactive=True also emitted in _pending_pitl_meta.
@@ -1597,7 +1597,7 @@ class DualShockTransport:
                     _ioid_rec = self._store.get_ioid_device(self._device_id.hex())
                     _ioid_did = _ioid_rec.get("did") if _ioid_rec else None
                 except Exception:
-                    pass
+                    pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
             self._pending_pitl_meta = {
                 "l4_distance":        _l4_distance,
@@ -1652,7 +1652,7 @@ class DualShockTransport:
                 try:
                     _gad_feats = json.loads(_l4_features_json)
                 except Exception:
-                    pass
+                    pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
             self._pending_pitl_meta["trigger_active"] = int(
                 _gad_feats.get("trigger_onset_velocity_l2", 0.0) > 0.0
                 or _gad_feats.get("trigger_onset_velocity_r2", 0.0) > 0.0
@@ -1726,7 +1726,7 @@ class DualShockTransport:
                                 self._consecutive_fb_timeouts, _loop_iter,
                             )
                         except Exception:
-                            pass  # Never block on diagnostic logging
+                            pass  # Never block on diagnostic logging; fail-open: M-1 cleanup 2026-05-16
                     if _loop_iter % _FEEDBACK_COOLDOWN_MOD == 0:
                         try:
                             await asyncio.wait_for(
@@ -1820,7 +1820,7 @@ class DualShockTransport:
                                     notes=getattr(self._cfg, "l6_capture_notes", ""),
                                 ))
                             except Exception:
-                                pass
+                                pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
                         except Exception as _exc:
                             log.debug("Phase C: L6 response analysis failed (non-fatal): %s", _exc)
                         finally:
@@ -1833,7 +1833,7 @@ class DualShockTransport:
                                         self._l6_driver.clear_triggers(self._reader.ds)
                                     )
                                 except Exception:
-                                    pass
+                                    pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
             # --- Phase 63: L6b Neuromuscular Reflex pre-buffer + probe window ---
             if self._l6b_enabled and frames:
@@ -2056,7 +2056,7 @@ class DualShockTransport:
                 from world_model_continual import EWCWorldModel
                 return EWCWorldModel.build_session_vector(feature_frames)
             except Exception:
-                pass  # fall through to approximation
+                pass  # fall through to approximation; fail-open: M-1 cleanup 2026-05-16
 
         # Phase 14A approximation fallback (InputSnapshot attrs, 12 means + 12 stds + 6)
         _ATTRS = [
@@ -2152,7 +2152,7 @@ class DualShockTransport:
                         _l6_score = int(self._l6_p_human * 100)
                         commitment_bytes += struct.pack(">BHB", _l6_pid, _l6_phash, _l6_score)
                     except Exception:
-                        pass  # non-fatal — fall back to 48-byte commitment
+                        pass  # non-fatal — fall back to 48-byte commitment; fail-open: M-1 cleanup 2026-05-16
                 sensor_hash = hashlib.sha256(commitment_bytes).digest()
 
             # Phase 13 E4+E2: World model hash = SHA-256(EWC_weights || preference_weights)
@@ -2254,7 +2254,7 @@ class DualShockTransport:
             else:
                 self._reader.set_led(0, 255, 0)        # Green — clean play
         except Exception:
-            pass   # Feedback is non-critical
+            pass   # Feedback is non-critical; fail-open: M-1 cleanup 2026-05-16
 
     # ------------------------------------------------------------------
     # Dispatch and shutdown
@@ -2289,7 +2289,7 @@ class DualShockTransport:
                 )
                 self._last_checkpoint_mono = _now_mono
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
     async def _shutdown_cleanup(self):
         """Submit final SkillOracle update and reset controller state."""
@@ -2406,7 +2406,7 @@ class DualShockTransport:
             try:
                 self._reader.set_led(0, 0, 255)
             except Exception:
-                pass
+                pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
     # ------------------------------------------------------------------
     # Phase 23: Biometric Continuity

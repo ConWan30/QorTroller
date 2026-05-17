@@ -613,7 +613,7 @@ class Store:
                         f"ALTER TABLE credential_enforcement ADD COLUMN {_col} {_typedef}"
                     )
                 except Exception:
-                    pass  # column already exists — safe to ignore
+                    pass  # column already exists — safe to ignore; fail-open: M-1 cleanup 2026-05-16
             # Phase 69: Data Sovereignty + Oracle Publication tables
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS data_lineage (
@@ -1198,7 +1198,7 @@ class Store:
                         f"ALTER TABLE vhp_dual_gate_log ADD COLUMN {_col115} {_def115}"
                     )
                 except Exception:
-                    pass  # Column already exists
+                    pass  # Column already exists; fail-open: M-1 cleanup 2026-05-16
             # Phase 120 — Bluetooth Transport Foundation
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS bt_transport_log (
@@ -1444,7 +1444,7 @@ class Store:
                     "ait_defensibility_ok INTEGER NOT NULL DEFAULT 0"
                 )
             except Exception:
-                pass  # Column already exists
+                pass  # Column already exists; fail-open: M-1 cleanup 2026-05-16
             # Phase 152: centroid_velocity_log — per-probe biometric fingerprint drift rate monitor.
             # Tracks separation ratio velocity between successive defensibility snapshots.
             # stagnant=True when velocity_per_day < PLATEAU_THRESHOLD (0.001 ratio/day).
@@ -1555,7 +1555,7 @@ class Store:
                     "ADD COLUMN cov_regime_status TEXT NOT NULL DEFAULT 'unknown'"
                 )
             except Exception:
-                pass  # Column already exists (Phase 157 migration already applied)
+                pass  # Column already exists (Phase 157 migration already applied); fail-open: M-1 cleanup 2026-05-16
             # Phase 157: fleet_consensus_snapshot_log — FleetConsensusSnapshotAgent (agent #21)
             # Stores PoFC (Proof of Fleet Consensus) cryptographic snapshots.
             # pfc_hash = SHA-256(sorted_verdicts_json | separation_ratio_str | ts_ns_str)
@@ -2073,7 +2073,7 @@ class Store:
                     "ALTER TABLE protocol_maturity_log ADD COLUMN pmi_component REAL NOT NULL DEFAULT 1.0"
                 )
             except Exception:
-                pass  # column already exists
+                pass  # column already exists; fail-open: M-1 cleanup 2026-05-16
             conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_maturity_created
                 ON protocol_maturity_log(created_at DESC)
@@ -2332,7 +2332,7 @@ class Store:
                     "ALTER TABLE fleet_coherence_log ADD COLUMN on_chain_confirmed INTEGER NOT NULL DEFAULT 0"
                 )
             except Exception:
-                pass  # Column already exists on upgraded DBs — safe to ignore
+                pass  # Column already exists on upgraded DBs — safe to ignore; fail-open: M-1 cleanup 2026-05-16
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS coherence_fingerprint_log (
                     id                INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2515,7 +2515,7 @@ class Store:
                     "ALTER TABLE epistemic_consensus_log ADD COLUMN swarm_score REAL NOT NULL DEFAULT 0.0"
                 )
             except Exception:
-                pass  # Column already exists
+                pass  # Column already exists; fail-open: M-1 cleanup 2026-05-16
             # Phase 86: Synthetic session corpus (isolated — never touches ruling_validation_log)
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS synthetic_sessions (
@@ -2541,7 +2541,7 @@ class Store:
                     "ALTER TABLE ruling_validation_log ADD COLUMN divergence_reason TEXT"
                 )
             except Exception:
-                pass  # Column already exists — no-op
+                pass  # Column already exists — no-op; fail-open: M-1 cleanup 2026-05-16
             # Phase 89: Protocol Intelligence Reports
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS protocol_intelligence_reports (
@@ -3266,7 +3266,7 @@ class Store:
                     )
                 """)
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         # Phase 241-APOP: Active Play Occupancy Proof shadow/hybrid audit log.
         try:
@@ -3290,7 +3290,7 @@ class Store:
                         ON active_play_occupancy_log(created_at DESC);
                 """)
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         # Phase 236-CORPUS-SNAPSHOT: ZK-attested corpus snapshot table.
         # Sits below WEC and GIC in the chain stack. Each row binds the entire
@@ -13991,7 +13991,7 @@ class Store:
                     ),
                 )
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
         return entry["coherence_id"]
 
     def get_open_coherence_entries(
@@ -14034,7 +14034,7 @@ class Store:
             try:
                 d["agents_involved"] = _json.loads(d["agents_involved"])
             except Exception:
-                pass
+                pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
             result.append(d)
         return result
 
@@ -14103,7 +14103,7 @@ class Store:
                     (ts, resolved_by, coherence_id),
                 )
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
     def mark_coherence_promoted(self, coherence_id: str, wif_id: str) -> None:
         """Mark a coherence entry as promoted to a WIF entry."""
@@ -14115,7 +14115,7 @@ class Store:
                     (wif_id, coherence_id),
                 )
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
     # Phase 194: CoherenceFingerprintRegistry — coherence_fingerprint_log
 
@@ -14152,7 +14152,7 @@ class Store:
                     (now, failure_mode, N_PROMOTE_THRESHOLD, rule_name),
                 )
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
     def get_coherence_fingerprint_status(self) -> dict:
         """Return summary of coherence_fingerprint_log for GET /agent/coherence-fingerprint-status.
@@ -14277,7 +14277,7 @@ class Store:
                     resolved = _dt195.fromisoformat(str(r["resolved_at"]).replace(" ", "T"))
                     hours_list.append((resolved - created).total_seconds() / 3600.0)
                 except Exception:
-                    pass
+                    pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
             mean_hours = sum(hours_list) / len(hours_list) if hours_list else 0.0
             # pmi_score=1.0 when no ORPHAN history (healthy fleet) or fast resolution

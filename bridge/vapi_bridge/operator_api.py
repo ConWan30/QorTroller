@@ -636,7 +636,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             if hasattr(_ch, "get_zk_verifier_stats"):
                 proof_stats = _ch.get_zk_verifier_stats()
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         # Enrollment pipeline
         enrollment = {"eligible": 0, "in_progress": 0, "unenrolled": 0}
@@ -651,7 +651,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                 else:
                     enrollment["unenrolled"] += 1
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         # DataCuratorAgent stats from store tables
         curator_stats = {"lineage_count": 0, "oracle_publications": 0, "eligible_devices": 0}
@@ -664,7 +664,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                 row = conn.execute("SELECT COUNT(*) as cnt FROM token_eligibility WHERE eligibility_score > 0").fetchone()
                 curator_stats["eligible_devices"] = row["cnt"] if row else 0
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         # Ruling enforcement stats
         ruling_stats = {"total_rulings": 0, "block_rulings": 0, "active_suspensions": 0}
@@ -680,7 +680,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                 ).fetchone()
                 ruling_stats["active_suspensions"] = row["cnt"] if row else 0
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         return {
             "proof_stats":   proof_stats,
@@ -1924,7 +1924,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                         try:
                             store.increment_override_use_count(device_id)
                         except Exception:
-                            pass  # non-blocking
+                            pass  # non-blocking; fail-open: M-1 cleanup 2026-05-16
                 else:
                     _epoch_ok = False
                     _poad_age_s = -1.0
@@ -2049,9 +2049,9 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                             bt_strat_ratio=_bt_strat_ratio_122,
                         )
                     except Exception:
-                        pass  # non-blocking
+                        pass  # non-blocking; fail-open: M-1 cleanup 2026-05-16
             except Exception:
-                pass  # non-blocking — multiplier failure must not block mint
+                pass  # non-blocking — multiplier failure must not block mint; fail-open: M-1 cleanup 2026-05-16
 
         # Mint on-chain
         try:
@@ -2460,7 +2460,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                 try:
                     _bus.publish_sync("activation_committed", {"timestamp": time.time()})
                 except Exception:
-                    pass
+                    pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
             # Step 6: compute + store PMI
             pmi = store.compute_pmi()
             store.set_pmi(pmi, notes="post-commit")
@@ -3813,7 +3813,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                     conditions_met=conditions_met,
                 )
             except Exception:
-                pass  # Non-blocking — never fail the endpoint due to persistence error
+                pass  # Non-blocking — never fail the endpoint due to persistence error; fail-open: M-1 cleanup 2026-05-16
 
             return {
                 "score":            score,
@@ -4573,7 +4573,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                         "SELECT COUNT(*) FROM fleet_consensus_snapshot_log"
                     ).fetchone()[0]
             except Exception:
-                pass
+                pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
             return {
                 "fleet_consensus_enabled": _enabled157,
                 "total_snapshots":         _total_count,
@@ -5342,7 +5342,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                     delta=_corpus_delta,
                 )
             except Exception:
-                pass  # non-fatal: provenance snapshot must not block renewal
+                pass  # non-fatal: provenance snapshot must not block renewal; fail-open: M-1 cleanup 2026-05-16
 
             _chain_status = store.get_biometric_renewal_chain_status()
             return {
@@ -6352,7 +6352,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         try:
             _stages207 = store.get_all_graduation_stages()
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
         _active207 = sum(1 for s in _stages207 if not s.get("rollback_triggered"))
         return {
             "staged_graduation_enabled":  _enabled207,
@@ -6400,7 +6400,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         try:
             _body207 = await request.json()
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
         _agent_id207 = str(_body207.get("agent_id", "")).strip()
         if not _agent_id207:
             raise HTTPException(status_code=422, detail="agent_id required")
@@ -6464,7 +6464,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                 limit=10,
             )
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
         return {
             "graduation_autowatch_enabled": _enabled214,
             "trigger_count":               _status214.get("trigger_count", 0),
@@ -7232,7 +7232,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                                 grind_mode=_grind_mode,
                             )
                         except Exception:
-                            pass
+                            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
                 await asyncio.to_thread(_flush_transitions, _transitions)
         else:
             # Fallback: read last DB entry (controller not connected or monitor not wired)
@@ -7483,7 +7483,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                 device_id="",
             )
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
         log.warning(
             "GIC chain broken flag RESET by operator — was_broken=%s reason='%s'",
             _was_broken, reason,

@@ -96,7 +96,7 @@ class FleetConsensusSnapshotAgent:
                 if device_id:
                     verdicts.append((device_id, verdict))
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         sorted_verdicts = sorted(set(verdicts))
 
@@ -114,7 +114,7 @@ class FleetConsensusSnapshotAgent:
                     getattr(self._cfg, "separation_ratio_current", 0.0)
                 )
             except Exception:
-                pass
+                pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         # Compute PoFC hash
         pofc_hash = self.compute_pofc_hash(sorted_verdicts, separation_ratio, ts_ns)
@@ -158,7 +158,7 @@ class FleetConsensusSnapshotAgent:
                             "ts":               time.time(),
                         })
                     except Exception:
-                        pass
+                        pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
                 log.debug(
                     "[FleetConsensusSnapshotAgent] PoFC=%s... agents=%d ratio=%.3f",

@@ -159,7 +159,7 @@ class SeparationRatioRecoveryAgent:
         try:
             rows = self._store.get_separation_ratio_status(limit=self._TREND_WINDOW)
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         # Build ratio series (oldest first)
         ratios = [float(r.get("pooled_ratio", 0.0)) for r in reversed(rows)]
@@ -210,7 +210,7 @@ class SeparationRatioRecoveryAgent:
                             "ts":              time.time(),
                         })
                     except Exception:
-                        pass
+                        pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
                 log.debug(
                     "[SeparationRatioRecoveryAgent] ratio=%.3f velocity=%.4f "

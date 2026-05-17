@@ -93,7 +93,7 @@ class EnrollmentAutoGuidanceAgent:
                 defensible   = bool(def_status.get("defensible", False))
                 n_per_player = def_status.get("n_per_player", {}) or {}
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         overall_ready = guidance_overall_ready and defensible
 
@@ -131,7 +131,7 @@ class EnrollmentAutoGuidanceAgent:
             vel = self._store.compute_centroid_velocity(probe_type="touchpad_corners")
             velocity_stagnant = bool(vel.get("stagnant", True))
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         # Derive urgency
         if overall_ready:
@@ -206,7 +206,7 @@ class EnrollmentAutoGuidanceAgent:
                             "ts": time.time(),
                         })
                     except Exception:
-                        pass
+                        pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
                 log.debug(
                     "[EnrollmentAutoGuidanceAgent] urgency=%s sessions_needed=%d ready=%s",

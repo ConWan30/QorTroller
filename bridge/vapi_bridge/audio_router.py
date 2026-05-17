@@ -218,7 +218,7 @@ def _get_default_endpoint_id() -> str:
         try:
             ctypes.windll.ole32.CoTaskMemFree(id_ptr)
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         # Release IMMDevice
         ctypes.WINFUNCTYPE(ctypes.c_ulong, ctypes.c_void_p)(dev_vtbl[2])(dev_ptr.value)

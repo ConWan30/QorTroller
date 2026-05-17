@@ -116,7 +116,7 @@ def read_operator_api_key_from_env() -> str:
             if line.startswith("OPERATOR_API_KEY="):
                 return line.split("=", 1)[1].strip().strip("\"'")
     except Exception:
-        pass
+        pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
     return ""
 
 

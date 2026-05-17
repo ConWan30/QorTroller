@@ -744,7 +744,7 @@ class SessionAdjudicator:
                                 was_deferred=True,
                             )
                         except Exception:
-                            pass
+                            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
                 except asyncio.TimeoutError:
                     pass  # Normal — no Class J events in this window
                 except asyncio.CancelledError:
@@ -960,7 +960,7 @@ class SessionAdjudicator:
                                 was_deferred=True,
                             )
                         except Exception:
-                            pass
+                            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
                 except asyncio.TimeoutError:
                     pass  # Normal — no triage events in this window
                 except asyncio.CancelledError:

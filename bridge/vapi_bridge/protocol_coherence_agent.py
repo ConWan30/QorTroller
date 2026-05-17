@@ -265,7 +265,7 @@ class ProtocolCoherenceAgent:
             try:
                 reason_from_gate_log = self._store.get_latest_governance_reason(within_seconds=60.0)
             except Exception:
-                pass
+                pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
             try:
                 self._store.insert_allowlist_change_log(
                     previous_hash=self._last_allowlist_hash,

@@ -215,7 +215,7 @@ def create_monitoring_app(
             _devs = _hid.enumerate(0x054C, 0x0DF2)  # DualShock Edge VID/PID
             _controller_present = len(_devs) > 0
         except Exception:
-            pass  # hid not installed or device enumerate failed — non-fatal
+            pass  # hid not installed or device enumerate failed — non-fatal; fail-open: M-1 cleanup 2026-05-16
 
         _state.controller_detected_at_startup = _controller_present
         _state.startup_manifest = {
@@ -314,19 +314,19 @@ def create_monitoring_app(
             try:
                 critical_devices = len(_store.get_devices_by_risk_label("critical"))
             except Exception:
-                pass
+                pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
             try:
                 warming_devices = len(_store.get_devices_by_risk_label("warming"))
             except Exception:
-                pass
+                pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
             try:
                 digests_synthesized = len(_store.get_all_latest_digests())
             except Exception:
-                pass
+                pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
             try:
                 active_policies = len(_store.get_all_active_policies())
             except Exception:
-                pass
+                pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         _gauge("vapi_critical_devices",
                "Devices currently labeled critical by InsightSynthesizer",

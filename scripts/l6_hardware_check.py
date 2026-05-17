@@ -236,7 +236,7 @@ def step7_return_to_baseline(dev, pre_r2_mean: float) -> bool:
         for i in range(7):
             ds.triggerR.setForce(i, 0)
     except Exception:
-        pass  # best-effort clear
+        pass  # best-effort clear; fail-open: M-1 cleanup 2026-05-16
 
     time.sleep(0.1)
     r2_after = []
@@ -327,7 +327,7 @@ def main() -> int:
     try:
         dev.close()
     except Exception:
-        pass
+        pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
     print()
     passed = sum(results)

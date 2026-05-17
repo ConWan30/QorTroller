@@ -246,7 +246,7 @@ class BLETransport:
             try:
                 await self._client.disconnect()
             except Exception:
-                pass
+                pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
         self._client = None
 
     @property

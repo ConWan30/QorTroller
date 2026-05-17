@@ -4729,7 +4729,7 @@ class BridgeAgent:
                                 "SELECT COUNT(*) FROM fleet_consensus_snapshot_log"
                             ).fetchone()[0]
                     except Exception:
-                        pass
+                        pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
                     return {
                         "fleet_consensus_enabled": getattr(self._cfg, "fleet_consensus_enabled", True),
                         "total_snapshots":         _total157,
@@ -5100,7 +5100,7 @@ class BridgeAgent:
                                     error_msg=_n.get("error_msg", ""),
                                 )
                             except Exception:
-                                pass
+                                pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
                     else:
                         _health_list = []
                         _nodes_healthy = 0
@@ -5314,7 +5314,7 @@ class BridgeAgent:
                             conditions_met=_cmet128,
                         )
                     except Exception:
-                        pass
+                        pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
                     return {
                         "score":            _score128,
                         "separation_score": _sep_s128,

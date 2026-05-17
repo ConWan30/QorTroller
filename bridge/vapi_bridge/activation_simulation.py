@@ -44,7 +44,7 @@ class ActivationSimulator:
                     pcc_host_state="EXCLUSIVE_USB",
                 )
             except Exception:
-                pass
+                pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
         return count
 
     def seed_protocol_intelligence(self) -> None:
@@ -65,7 +65,7 @@ class ActivationSimulator:
             }
             self._store.insert_protocol_intelligence_report(report)
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
     def seed_live_mode_activation_log(self) -> None:
         """Insert ready_for_live_mode=1 -- establishes first_ready_check_at."""
@@ -79,7 +79,7 @@ class ActivationSimulator:
                 operator_notes="Phase 103 simulation seed",
             )
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
     def seed_gate_attestation(self) -> str:
         """Insert gate_attestation AFTER live_mode log. Returns attestation_hash."""
@@ -95,7 +95,7 @@ class ActivationSimulator:
                 on_chain_tx=None,
             )
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
         return attestation_hash
 
     def seed_enforcement_certificate(self, hmac_key: str = "sim_phase103") -> dict:
@@ -147,7 +147,7 @@ class ActivationSimulator:
                 to_address=self.SIM_TO_ADDRESS,
             )
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
         return {
             "device_id": self.SIM_DEVICE_ID,
             "token_id": token_id,

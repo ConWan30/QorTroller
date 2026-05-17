@@ -74,7 +74,7 @@ class Batcher:
                 from .monitoring import state as _mon_state
                 _mon_state.record_dropped()
             except Exception:
-                pass  # monitoring integration is always non-fatal
+                pass  # monitoring integration is always non-fatal; fail-open: M-1 cleanup 2026-05-16
 
     @property
     def dropped_records(self) -> int:

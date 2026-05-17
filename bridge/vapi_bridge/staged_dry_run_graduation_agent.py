@@ -103,7 +103,7 @@ class StagedDryRunGraduationAgent:
                 non_convergence_clear = False
                 blockers.append("non_convergence_detected=True")
         except Exception:
-            pass  # No tremor data yet → no non-convergence block
+            pass  # No tremor data yet → no non-convergence block; fail-open: M-1 cleanup 2026-05-16
 
         return {
             "preconditions_met":   len(blockers) == 0,
@@ -167,7 +167,7 @@ class StagedDryRunGraduationAgent:
                     "ts":          time.time(),
                 })
             except Exception:
-                pass
+                pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
         return {
             "activated":    True,
@@ -214,7 +214,7 @@ class StagedDryRunGraduationAgent:
                                 "ts":           time.time(),
                             })
                         except Exception:
-                            pass
+                            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
     # ------------------------------------------------------------------
     # Poll loop
@@ -278,7 +278,7 @@ class StagedDryRunGraduationAgent:
                         "ts":            asyncio.get_event_loop().time(),
                     })
                 except Exception:
-                    pass
+                    pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
         else:
             log.info(
                 "[StagedDryRunGraduationAgent] Phase 214: autowatch preconditions NOT met: %s",

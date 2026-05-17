@@ -77,7 +77,7 @@ def run_ps(script: str, *, elevated: bool = False, capture: bool = True) -> tupl
         try:
             transcript = log_path.read_text(encoding="utf-8", errors="replace")
         except Exception:
-            pass
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
         out = (r.stdout or "") + (r.stderr or "")
         # Trim the PowerShell transcript header noise
         if transcript:
