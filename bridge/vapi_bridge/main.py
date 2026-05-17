@@ -933,7 +933,11 @@ class Bridge:
             log.info("Phase 79: LiveModeActivationAgent skipped (OPERATOR_API_KEY not set)")
 
         # Phase 80: FederationBroadcastAgent — event-driven BLOCK ruling broadcaster
-        # First purely event-driven agent in VAPI fleet (no polling loop)
+        # Phase 235.x-STABILITY-9 stage 4a 2026-05-17: DELETE disposition per
+        # agent_rationalization_v1.md — disabled by default + no path to active
+        # in current protocol design. Module preserved for future re-activation
+        # (Q1=YES). Re-activate by reverting this block + setting
+        # FEDERATION_BROADCAST_ENABLED=true.
         if getattr(self.cfg, "federation_broadcast_enabled", False):
             try:
                 from .federation_broadcast_agent import FederationBroadcastAgent
@@ -942,16 +946,10 @@ class Bridge:
                 _t.set_name("FederationBroadcastAgent")
                 _t.add_done_callback(_task_done_handler)
                 self._tasks.append(_t)
-                log.info(
-                    "Phase 80: FederationBroadcastAgent started (event-driven, peers=%d)",
-                    len([p for p in getattr(self.cfg, "federation_broadcast_peers", "").split(",") if p.strip()]),
-                )
+                log.info("Phase 80: FederationBroadcastAgent started (REACTIVATED)")
             except Exception as _fba_exc:
                 log.warning("Phase 80: FederationBroadcastAgent unavailable: %s", _fba_exc)
-        else:
-            log.info(
-                "Phase 80: FederationBroadcastAgent skipped (FEDERATION_BROADCAST_ENABLED=false)"
-            )
+        # else: silent skip — see agent_rationalization_v1.md §3.1
 
         # Phase 81: ClassJDetector — per-device ML-bot entropy variance detection
         if getattr(self.cfg, "class_j_detection_enabled", True):
@@ -1034,7 +1032,12 @@ class Bridge:
         else:
             log.info("Phase 91: DivergenceTriageAgent skipped (DIVERGENCE_TRIAGE_ENABLED=false)")
 
-        # Phase 99B: GSRRegistryAgent — physiological biometric layer (gsr_enabled=false default)
+        # Phase 99B: GSRRegistryAgent — physiological biometric layer
+        # Phase 235.x-STABILITY-9 stage 4a 2026-05-17: DELETE disposition per
+        # agent_rationalization_v1.md — GSR hardware not in canonical sensor
+        # stack; N=0 calibration; deferred indefinitely per CLAUDE.md Hard Rule.
+        # Module preserved (Q1=YES). Re-activate via GSR_ENABLED=true if/when
+        # GSR sensors land in the corpus.
         if getattr(self.cfg, "gsr_enabled", False):
             try:
                 from .gsr_registry_agent import GSRRegistryAgent
@@ -1044,11 +1047,10 @@ class Bridge:
                 _gt.set_name("GSRRegistryAgent")
                 _gt.add_done_callback(_task_done_handler)
                 self._tasks.append(_gt)
-                log.info("Phase 99B: GSRRegistryAgent started (GSR_ENABLED=true)")
+                log.info("Phase 99B: GSRRegistryAgent started (REACTIVATED)")
             except Exception as _gsr_exc:
                 log.warning("Phase 99B: GSRRegistryAgent unavailable: %s", _gsr_exc)
-        else:
-            log.info("Phase 99B: GSRRegistryAgent skipped (GSR_ENABLED=false, default)")
+        # else: silent skip — see agent_rationalization_v1.md §3.1
 
         # Phase 102: VHPRenewalAgent — soulbound token TTL lifecycle manager (14th agent)
         if getattr(self.cfg, "vhp_renewal_enabled", True):
@@ -1072,6 +1074,11 @@ class Bridge:
             log.info("Phase 102: VHPRenewalAgent skipped (VHP_RENEWAL_ENABLED=false)")
 
         # Phase 112: PoAdAnchorAgent — on-chain anchoring of PoAd hashes
+        # Phase 235.x-STABILITY-9 stage 4d 2026-05-17: ABSORB → Sentry per
+        # agent_rationalization_v1.md §3.3 — at O3_ACTING this IS Sentry's
+        # `pda-attestation-anchor` capability. Module preserved (Q1=YES) for
+        # explicit-opt-in path; Sentry's existing live-write executor handles
+        # the steward-mediated chain-anchor flow.
         if getattr(self.cfg, "poad_on_chain_enabled", False):
             try:
                 from .poad_anchor_agent import PoAdAnchorAgent
@@ -1081,11 +1088,10 @@ class Bridge:
                 _pat.set_name("PoAdAnchorAgent")
                 _pat.add_done_callback(_task_done_handler)
                 self._tasks.append(_pat)
-                log.info("Phase 112: PoAdAnchorAgent started (poll=%ds)", 60)
+                log.info("Phase 112: PoAdAnchorAgent started (REACTIVATED — bypasses Sentry steward path)")
             except Exception as _poad_exc:
                 log.warning("Phase 112: PoAdAnchorAgent unavailable: %s", _poad_exc)
-        else:
-            log.info("Phase 112: PoAdAnchorAgent skipped (POAD_ON_CHAIN_ENABLED=false, default)")
+        # else: silent skip — Sentry @ O3_ACTING handles via live_write_executor
 
         # Phase 129: SeparationRatioMonitorAgent — agent #15
         # separation_ratio_monitor_enabled is not in config (always-on infrastructure)
@@ -1824,9 +1830,10 @@ class Bridge:
                 "(AUTO_TRIGGER_ENABLED=false; manual /agent/adjudicate triggers required)"
             )
 
-        # Phase 222: BiometricGovernanceAgent (agent #38) — BBG VHP-gated governance.
-        # Validates governance proposals against the proposer's live VHP.
-        # bbg_enabled=False default — requires BBG_CONTRACT_ADDRESS to activate.
+        # Phase 222: BiometricGovernanceAgent — BBG VHP-gated governance.
+        # Phase 235.x-STABILITY-9 stage 4a 2026-05-17: DELETE disposition per
+        # agent_rationalization_v1.md — VHP-gated proposal flow that only fires
+        # when proposals exist + BBG opted in. Module preserved (Q1=YES).
         if getattr(self.cfg, "bbg_enabled", False):
             try:
                 from .biometric_governance_agent import BiometricGovernanceAgent
@@ -1838,21 +1845,17 @@ class Bridge:
                 _bga222_task = asyncio.ensure_future(_bga222.run_poll_loop())
                 _bga222_task.set_name("BiometricGovernanceAgent")
                 self._tasks.append(_bga222_task)
-                log.info(
-                    "Phase 222: BiometricGovernanceAgent started (agent #38; "
-                    "bbg_max_age_sec=%d)",
-                    getattr(self.cfg, "bbg_max_age_seconds", 3600),
-                )
+                log.info("Phase 222: BiometricGovernanceAgent started (REACTIVATED)")
             except Exception as _bga222_exc:
-                log.warning(
-                    "Phase 222: BiometricGovernanceAgent unavailable: %s", _bga222_exc
-                )
-        else:
-            log.info("Phase 222: BiometricGovernanceAgent skipped (BBG_ENABLED=false)")
+                log.warning("Phase 222: BiometricGovernanceAgent unavailable: %s", _bga222_exc)
+        # else: silent skip — see agent_rationalization_v1.md §3.1
 
-        # Phase 221: ProtocolCoherenceAgent (agent #37) — PoPC Merkle root anchor.
-        # Computes Merkle root over 36 agent fleet observations; anchors on-chain when
-        # protocol_coherence_registry_address is set.  protocol_coherence_enabled=False default.
+        # Phase 221: ProtocolCoherenceAgent — PoPC Merkle root anchor.
+        # Phase 235.x-STABILITY-9 stage 4a 2026-05-17: DELETE disposition per
+        # agent_rationalization_v1.md — superseded by FRR (Phase O1-FRR) which
+        # Sentry anchors at O3_ACTING via Cedar bundle Merkle quintuple-bind.
+        # Module preserved (Q1=YES) for the lone case where a partner needs
+        # the legacy Merkle anchor surface.
         if getattr(self.cfg, "protocol_coherence_enabled", False):
             try:
                 from .protocol_coherence_agent import ProtocolCoherenceAgent
@@ -1864,17 +1867,10 @@ class Bridge:
                 _pca221_task = asyncio.ensure_future(_pca221.run_poll_loop())
                 _pca221_task.set_name("ProtocolCoherenceAgent")
                 self._tasks.append(_pca221_task)
-                log.info(
-                    "Phase 221: ProtocolCoherenceAgent started (agent #37; "
-                    "poll=%ss)",
-                    getattr(self.cfg, "protocol_coherence_anchor_interval_s", 3600),
-                )
+                log.info("Phase 221: ProtocolCoherenceAgent started (REACTIVATED — superseded by FRR)")
             except Exception as _pca221_exc:
-                log.warning(
-                    "Phase 221: ProtocolCoherenceAgent unavailable: %s", _pca221_exc
-                )
-        else:
-            log.info("Phase 221: ProtocolCoherenceAgent skipped (PROTOCOL_COHERENCE_ENABLED=false)")
+                log.warning("Phase 221: ProtocolCoherenceAgent unavailable: %s", _pca221_exc)
+        # else: silent skip — superseded by Sentry's FRR anchoring at O3_ACTING
 
         # Phase 203: AgentContextRegistry — commit SHA-256 of each LLM agent system
         # prompt to agent_context_log at startup. Enables CONTEXT_HASH_MISMATCH INVERSION
