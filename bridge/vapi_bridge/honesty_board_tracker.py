@@ -332,7 +332,9 @@ async def run_honesty_board_tracker_loop(
     )
     try:
         while True:
-            tracker.poll_once()
+            # Phase 235.x-STABILITY-8 2026-05-17: wrap sync poll_once in
+            # asyncio.to_thread per the 4-tracker fix.
+            await asyncio.to_thread(tracker.poll_once)
             await asyncio.sleep(interval_s)
     except asyncio.CancelledError:
         log.info("HONESTY-BOARD tracker cancelled")

@@ -397,7 +397,9 @@ async def run_gic_ledger_beta_tracker_loop(
     )
     try:
         while True:
-            tracker.poll_once()
+            # Phase 235.x-STABILITY-8 2026-05-17: wrap sync poll_once in
+            # asyncio.to_thread per the 4-tracker fix.
+            await asyncio.to_thread(tracker.poll_once)
             await asyncio.sleep(interval_s)
     except asyncio.CancelledError:
         log.info("GIC-BETA tracker cancelled")
