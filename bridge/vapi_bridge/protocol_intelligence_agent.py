@@ -62,13 +62,30 @@ class ProtocolIntelligenceAgent:
                 log.warning("ProtocolIntelligenceAgent: cycle error: %s", exc)
 
     async def _compute_and_store(self) -> dict:
+        from .loop_timing import timed_block
+        _warn_s = float(getattr(
+            self._cfg, "protocol_intel_compute_warn_duration_s", 2.0
+        ))
         try:
-            # Phase 235.x-STABILITY-9 stage 3 2026-05-17: compute_report makes
-            # 10+ sync SQLite queries on the event loop. Wrap in to_thread.
-            # insert_protocol_intelligence_report is single-row sync write —
-            # quick enough to keep on the main loop after to_thread returns.
-            report = await asyncio.to_thread(self.compute_report)
-            self._store.insert_protocol_intelligence_report(report)
+            # Phase 235.x-STABILITY-9 stage 7 (2026-05-17): instrumented.
+            # Outer timing covers both compute_report (10+ sync SQL via
+            # to_thread, stage 3) + insert_protocol_intelligence_report.
+            with timed_block(
+                "PIA_compute_and_store",
+                warn_s=_warn_s,
+                logger=log,
+                prefix="[ProtocolIntelligenceAgent] STAGE-7",
+                always_info=True,
+                slow_word="SLOW COMPUTE",
+                hint="compute_report (10+ SQL) or insert exceeded threshold "
+                     "— investigate query plan or executor saturation",
+            ):
+                # Phase 235.x-STABILITY-9 stage 3 2026-05-17: compute_report makes
+                # 10+ sync SQLite queries on the event loop. Wrap in to_thread.
+                # insert_protocol_intelligence_report is single-row sync write —
+                # quick enough to keep on the main loop after to_thread returns.
+                report = await asyncio.to_thread(self.compute_report)
+                self._store.insert_protocol_intelligence_report(report)
             log.info(
                 "ProtocolIntelligenceAgent: score=%.1f ready=%s bottleneck=%s",
                 report["protocol_health_score"],
