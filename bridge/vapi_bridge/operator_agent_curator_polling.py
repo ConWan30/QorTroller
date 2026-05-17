@@ -145,7 +145,13 @@ class CuratorPollingLoop:
         log.info("CuratorPollingLoop: started interval=%ds", self._interval_s)
         while not self._stop_event.is_set():
             try:
-                triggers = self._safe_get_triggers()
+                # Phase 235.x-STABILITY-9 stage 11 2026-05-17: trigger source
+                # invoked via asyncio.to_thread — _safe_get_triggers runs
+                # 3 sqlite3.connect + execute calls (marketplace listing,
+                # anchor freshness, periodic compliance) synchronously;
+                # keeping them on the event loop thread was the residual
+                # ~50s STARVATION contributor surviving stages 5-10.
+                triggers = await asyncio.to_thread(self._safe_get_triggers)
                 if triggers:
                     self._dispatch_one(triggers[0])
                 # Phase 235.x-STABILITY-9 stage 4e 2026-05-17: tick absorbed
