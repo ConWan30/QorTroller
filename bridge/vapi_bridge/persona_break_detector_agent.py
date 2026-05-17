@@ -62,7 +62,13 @@ class PersonaBreakDetectorAgent:
         - persona_break bus event when persona_break_detected=True
     """
 
-    _POLL_INTERVAL_S = 300
+    # Phase 235.x-STABILITY-9 stage 4b 2026-05-17: poll interval lengthened
+    # 300s → 1800s. Persona break detection requires LOO centroid drift > epsilon
+    # over N=10+ sessions; the underlying signal cannot change faster than the
+    # session arrival rate (~minutes to hours). Event-driven conversion
+    # (subscribe to `validation_record_inserted`) deferred per
+    # agent_rationalization_v1.md §3.5.
+    _POLL_INTERVAL_S = 1800
     _TREND_WINDOW    = 5
 
     def __init__(self, cfg, store, bus=None) -> None:
