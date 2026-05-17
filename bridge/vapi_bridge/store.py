@@ -16083,6 +16083,160 @@ class Store:
                 "error": str(exc),
             }
 
+    # --- Phase O1-D-PATH-B v1 2026-05-17: per-agent live-write executor ---
+    # `operator_agent_chain_spending_log` records every chain operation
+    # fired by the live-write executor (or refused/skipped event) with
+    # agent_id + draft_id + action_name + cost_iotx + tx_hash + error.
+    # Used by evaluate_live_write_authorization_for_agent for daily budget
+    # enforcement (SUM(cost_iotx) WHERE agent_id=? AND created_at >= today).
+
+    def _ensure_operator_agent_chain_spending_table(self, conn) -> None:
+        """Lazy-create the spending log table. Idempotent CREATE TABLE IF NOT
+        EXISTS pattern. Also lazily adds executed_at + executed_tx_hash
+        columns to operator_agent_drafts via PRAGMA-guarded ALTER TABLE
+        (no-op if columns already present)."""
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS operator_agent_chain_spending_log (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                agent_id    TEXT NOT NULL,
+                draft_id    INTEGER NOT NULL,
+                action_name TEXT NOT NULL,
+                cost_iotx   REAL NOT NULL DEFAULT 0.0,
+                tx_hash     TEXT NOT NULL DEFAULT '',
+                error       TEXT,
+                created_at  REAL NOT NULL DEFAULT (unixepoch('now'))
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_chain_spending_agent_created "
+            "ON operator_agent_chain_spending_log(agent_id, created_at DESC)"
+        )
+        # Add execution-tracking columns to operator_agent_drafts (idempotent).
+        existing_cols = {r[1] for r in conn.execute("PRAGMA table_info(operator_agent_drafts)").fetchall()}
+        if "executed_at" not in existing_cols:
+            try:
+                conn.execute("ALTER TABLE operator_agent_drafts ADD COLUMN executed_at REAL DEFAULT NULL")
+            except Exception:
+                pass  # fail-open: another process may have added column concurrently
+        if "executed_tx_hash" not in existing_cols:
+            try:
+                conn.execute("ALTER TABLE operator_agent_drafts ADD COLUMN executed_tx_hash TEXT DEFAULT ''")
+            except Exception:
+                pass
+        conn.execute(
+            "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at) "
+            "VALUES (?, ?, ?)",
+            (241, "operator_agent_chain_spending_log", time.time()),
+        )
+
+    def insert_chain_spending_event(
+        self, *,
+        agent_id: str,
+        draft_id: int,
+        action_name: str,
+        cost_iotx: float,
+        tx_hash: str,
+        error: "str | None" = None,
+    ) -> int:
+        """Record one chain spending event (success or refusal/skip).
+        Returns row id; returns 0 on DB failure (fail-open)."""
+        try:
+            with self._conn() as conn:
+                self._ensure_operator_agent_chain_spending_table(conn)
+                cur = conn.execute(
+                    "INSERT INTO operator_agent_chain_spending_log "
+                    "(agent_id, draft_id, action_name, cost_iotx, tx_hash, error) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (
+                        str(agent_id), int(draft_id), str(action_name),
+                        float(cost_iotx), str(tx_hash or ""),
+                        (str(error) if error else None),
+                    ),
+                )
+                return int(cur.lastrowid or 0)
+        except Exception:
+            return 0
+
+    def get_daily_chain_spending_for_agent(self, agent_id: str) -> float:
+        """Return sum of cost_iotx for `agent_id` within the current UTC day.
+        Used for budget enforcement. Returns 0.0 on any failure (fail-open
+        — refuses to over-charge agent on bad reads)."""
+        try:
+            # Day-boundary: midnight UTC. Use unixepoch('now', 'start of day').
+            with self._conn() as conn:
+                self._ensure_operator_agent_chain_spending_table(conn)
+                # Match by both raw agent_id AND canonical-name lookups (caller
+                # may pass either).
+                row = conn.execute(
+                    "SELECT COALESCE(SUM(cost_iotx), 0.0) FROM operator_agent_chain_spending_log "
+                    "WHERE (agent_id = ? OR agent_id = ?) "
+                    "AND created_at >= unixepoch('now', 'start of day')",
+                    (str(agent_id), str(agent_id).lower()),
+                ).fetchone()
+            return float(row[0] if row else 0.0)
+        except Exception:
+            return 0.0
+
+    def get_accepted_unexecuted_drafts(
+        self, agent_id: str, limit: int = 5,
+    ) -> "list[dict]":
+        """Return drafts that the operator has accepted but the executor
+        hasn't fired yet. Filtered by operator_decision='accept' AND
+        executed_at IS NULL.
+
+        Returns list of dicts with payload bytes decoded as payload_bytes_decoded
+        (UTF-8 string assumed; the operator_agent_drafts.payload_bytes is bytes
+        OR int per the schema column comment; this helper handles both).
+        """
+        try:
+            limit = max(1, min(50, int(limit)))
+            with self._conn() as conn:
+                self._ensure_operator_agent_chain_spending_table(conn)
+                rows = conn.execute(
+                    "SELECT id, agent_id, action_category, action_name, "
+                    "       draft_uri, payload_hash, payload_bytes, "
+                    "       operator_decision, operator_decision_at, "
+                    "       executed_at, executed_tx_hash, created_at "
+                    "FROM operator_agent_drafts "
+                    "WHERE agent_id = ? "
+                    "AND operator_decision = 'accept' "
+                    "AND (executed_at IS NULL OR executed_at = 0) "
+                    "ORDER BY id ASC LIMIT ?",
+                    (str(agent_id), limit),
+                ).fetchall()
+            out = []
+            for r in rows:
+                d = dict(r)
+                # Decode payload_bytes (may be int row count from schema or actual
+                # bytes blob). Helper for executor consumption.
+                pb = d.get("payload_bytes")
+                if isinstance(pb, (bytes, bytearray)):
+                    try:
+                        d["payload_bytes_decoded"] = pb.decode("utf-8")
+                    except Exception:
+                        d["payload_bytes_decoded"] = ""
+                else:
+                    d["payload_bytes_decoded"] = str(pb or "")
+                out.append(d)
+            return out
+        except Exception:
+            return []
+
+    def mark_draft_executed(self, draft_id: int, tx_hash: str) -> bool:
+        """Mark a draft as executed by the live-write executor.
+        Returns True on successful update, False on any failure."""
+        try:
+            with self._conn() as conn:
+                self._ensure_operator_agent_chain_spending_table(conn)
+                conn.execute(
+                    "UPDATE operator_agent_drafts SET executed_at = ?, "
+                    "executed_tx_hash = ? WHERE id = ?",
+                    (time.time(), str(tx_hash or ""), int(draft_id)),
+                )
+            return True
+        except Exception:
+            return False
+
     # --- Phase 235-A: Grind Integrity Chain (GIC) ---
 
     def get_prev_grind_chain_hash(self, grind_session_id: str) -> bytes | None:
