@@ -155,6 +155,34 @@ class Config:
     matches WIF-064 zombie pattern signature (12-30s blocks, much higher
     than 1s)."""
 
+    # --- Phase 235.x-STABILITY-9 stage 9 (2026-05-17): shared chain-read governor ---
+    chain_read_block_cache_ttl_s: float = field(
+        default_factory=lambda: float(_env("CHAIN_READ_BLOCK_CACHE_TTL_S", "5.0"))
+    )
+    """Phase 235.x-STABILITY-9 stage 9 — TTL for the shared chain-read
+    governor's block_number cache. Multiple agents calling
+    `governor.get_block_number()` within this window share one fetched
+    value. 5.0s is short enough that finality semantics are preserved
+    (ChainReconciler's 30s poll always sees fresh blocks) but long
+    enough that simultaneous boot-cohort calls coalesce into one RPC."""
+
+    chain_read_max_concurrent: int = field(
+        default_factory=lambda: int(_env("CHAIN_READ_MAX_CONCURRENT", "4"))
+    )
+    """Phase 235.x-STABILITY-9 stage 9 — Concurrency bound on read-side
+    chain RPCs. Default 4 prevents the boot cohort from saturating the
+    underlying httpx connection pool. Read calls beyond this limit
+    queue on the governor's semaphore (non-blocking; coroutines yield)."""
+
+    chain_read_timeout_s: float = field(
+        default_factory=lambda: float(_env("CHAIN_READ_TIMEOUT_S", "10.0"))
+    )
+    """Phase 235.x-STABILITY-9 stage 9 — Per-call timeout for governed
+    chain reads. Timeouts fail-open: cached value (block_number) or
+    None/fallback (other reads). Default 10.0s = generous for IoTeX
+    testnet's typical 5-8s; bound on the catastrophic 17.6s observed
+    in Stage 8."""
+
     # --- Phase 235.x-STABILITY-9 stage 7 (2026-05-17): first-fire cohort instrumentation ---
     acim_run_warn_duration_s: float = field(
         default_factory=lambda: float(_env("ACIM_RUN_WARN_DURATION_S", "5.0"))
