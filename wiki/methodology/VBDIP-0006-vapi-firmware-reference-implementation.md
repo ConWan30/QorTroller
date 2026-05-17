@@ -554,3 +554,175 @@ PV-CI count delta: 113 → 117 (this commit) + 1 future (FIRMWARE-REFERENCE-LESS
 ---
 
 *VBDIP-0006 v1.0 Draft — VAPI Principal Architect, 2026-05-15*
+
+
+---
+
+## Appendix A — v1.1 Wire-Layout Reconciliation
+
+**Status:** v1.1 amendment. Mirror of VBDIP-0002 Appendix B v1.1 amendment pattern + VBDIP-0006 §11.2 convention ("v1.x amendments ship via Appendix structure ... do not require re-signature of the v1.0 manifest; they add a v1.1 manifest with cross-reference").
+
+**Date:** 2026-05-16
+**Author:** VAPI Principal Architect
+**Triggering finding:** VBDIP-0006 conformance harness M1 pre-flight inspection on commit `d47d49eb` discovered §3.1's byte-layout table does not match `bridge/vapi_bridge/codec.py` — the file §3.1 simultaneously declared as authoritative ("Body fields and layout must match `bridge/vapi_bridge/codec.py` byte-for-byte"). Per the operator's discipline (Codex co-architect brief 2026-05-16), the conformance corpus is a CONTRACT artifact for VBDIP-0006, not merely a regression corpus for the current bridge. The contradiction must be reconciled at the spec layer before vectors ship.
+
+**v1.0 preservation invariant:** Lines 1-553 of this document — the entirety of v1.0 Sections 0 through 11 — remain BYTE-IDENTICAL to the v1.0 architect-signed snapshot. Verification of v1.0 against `vsd-vault/manifests/proposals-VBDIP-0006/001.manifest.json` (canonical hash `0667cd34ec2635e58da3fb7860d537018ed3b4f30290df2ccac4a84ecbf1d3db`) succeeds via git history: `git show 1f30057d:wiki/methodology/VBDIP-0006-vapi-firmware-reference-implementation.md` yields the v1.0 file exactly as signed. The v1.0 manifest stays valid against that git-snapshotted content.
+
+This appendix is APPENDED to the file. The v1.1 manifest at `vsd-vault/manifests/proposals-VBDIP-0006/002.manifest.json` signs the current-commit file (v1.0 + Appendix A v1.1 amendment). Both manifests coexist.
+
+---
+
+### A.1 The contradiction (named explicitly)
+
+VBDIP-0006 v1.0 §3.1 declared two contradictory authorities simultaneously:
+
+1. **Declared "Body fields and layout must match `bridge/vapi_bridge/codec.py` byte-for-byte"** — making codec.py the authoritative oracle.
+2. **Then provided a byte-offset table** that does NOT match what codec.py serializes.
+
+Both layouts sum to 164B body + 64B signature = 228B record. The total is correct. The field positions are NOT.
+
+The §3.1 table claimed `device_id` at bytes 0-7, `counter` at 8-15 (uint64), `record_hash` at 16-31 (16-byte truncation), `timestamp_ms` at 32-39, `prev_record_hash` at 40-71, `sensor_commitment` at 72-103, `inference_code` at byte 104, 13 × float16 L4 features at 105-117, L5 rhythm at 118-127, and 36B "extension_field reserved" at 128-163.
+
+codec.py actually serializes `prev_poac_hash` at 0x00 (32B), `sensor_commitment` at 0x20 (32B), `model_manifest_hash` at 0x40 (32B), `world_model_hash` at 0x60 (32B), then a struct-packed block at 0x80-0xA3 containing `inference_result` (1B), `action_code` (1B), `confidence` (1B), `battery_pct` (1B), `monotonic_ctr` (4B uint32 BE), `timestamp_ms` (8B int64 BE), `latitude` (8B double BE), `longitude` (8B double BE), `bounty_id` (4B uint32 BE).
+
+### A.2 Reconciliation rule (binding)
+
+**`bridge/vapi_bridge/codec.py` is authoritative for the FROZEN PoAC v1 wire layout.** The v1.0 §3.1 table is SUPERSEDED by this v1.1 amendment. The codec.py implementation is FROZEN per the CLAUDE.md hard rule ("Never modify the 228-byte PoAC wire format") + has been the source of truth for every PoAC record the bridge has parsed since Phase 17. The PoAC wire format has shipped through 49 LIVE contracts and ~3500 bridge tests against this exact byte layout. Re-aligning the codec to match v1.0 §3.1's table would be a FROZEN-region break — not permissible.
+
+**`codec.py` is not modified by this amendment.** The reconciliation moves at the SPEC layer only.
+
+### A.3 Authoritative wire layout (replaces v1.0 §3.1 table verbatim)
+
+The 228-byte PoAC record body layout per codec.py header docstring + `_FIELDS_FMT` struct format:
+
+| Offset | Field | Size | Format | Notes |
+|---|---|---|---|---|
+| 0x00 | `prev_poac_hash` | 32B | raw bytes | Full SHA-256 of the previous record's 164-byte body. Zero-bytes for first record in a chain. This is the GIC-chain backbone primitive. |
+| 0x20 | `sensor_commitment` | 32B | raw bytes | SHA-256 commitment over the sensor-feature canonical projection. L4/L5 biometric features are COMMITTED through this hash — NOT serialized as raw float16 fields in the body. |
+| 0x40 | `model_manifest_hash` | 32B | raw bytes | SHA-256 of the on-device TinyML model manifest. Bridge cross-references against published model registry. |
+| 0x60 | `world_model_hash` | 32B | raw bytes | SHA-256 of the EWCWorldModel state snapshot at record time. Used for cross-session continuity checks (E4 cognitive drift). |
+| 0x80 | `inference_result` | 1B | uint8 | 0x00 NOMINAL, 0x01 ANOMALY_LOW, 0x02 ANOMALY_HIGH, 0x10 STATIONARY, 0x11 WALKING, 0x12 VEHICLE, 0x13 FALL. Hard-cheat codes 0x28/0x29/0x2A per v1.0 §3.4 + advisory codes 0x2B/0x30-0x33 per §3.5 are also valid `inference_result` values when firmware-emitted. |
+| 0x81 | `action_code` | 1B | uint8 | ACTION_NAMES enum (NONE/REPORT/ALERT/BOUNTY_*/PSM_*/MODEL_UPDATE/BOOT/SWARM_SYNC). |
+| 0x82 | `confidence` | 1B | uint8 | 0-255 confidence in the inference (255 = highest). |
+| 0x83 | `battery_pct` | 1B | uint8 | 0-100 battery percentage. |
+| 0x84 | `monotonic_ctr` | 4B | uint32 BE | Non-decreasing counter; wraps at 2^32-1. Firmware MUST handle wrap-around. NOTE: v1.0 §3.1 erroneously specified uint64 at bytes 8-15; actual is uint32 at offset 0x84. |
+| 0x88 | `timestamp_ms` | 8B | int64 BE | Milliseconds since device boot (signed for clock-correction events). |
+| 0x90 | `latitude` | 8B | IEEE 754 double BE | GPS latitude; 0.0 when not reported. |
+| 0x98 | `longitude` | 8B | IEEE 754 double BE | GPS longitude; 0.0 when not reported. |
+| 0xA0 | `bounty_id` | 4B | uint32 BE | Bounty Market reference; 0 when not bounty-bound. |
+| ---  | body total | **164B** | | Everything above; signed by the device key. |
+| 0xA4 | `signature` | 64B | raw (r ‖ s) | ECDSA-P256 signature: 32-byte r ‖ 32-byte s. Computed as ECDSA-P256(SHA-256(body[0:164])) using the device's secp256r1 private key. |
+| ---  | record total | **228B** | | Wire-format complete. |
+
+### A.4 Clarification: chain link hash + record_hash semantics
+
+The CLAUDE.md hard rule states: **"chain link hash = SHA-256(164B body) — body ONLY, NOT 228B."** This is the FULL 32-byte SHA-256, not a truncation.
+
+v1.0 §3.1 erroneously specified `record_hash` as a 16-byte truncation occupying bytes 16-31 of the body. **This was wrong.** The actual semantics:
+
+- **`record_hash`** in codec.py is a DERIVED field, not a body field. After `parse_record()`, `PoACRecord.record_hash` holds the full 32-byte `hashlib.sha256(body).digest()`. It is NOT stored in the wire format.
+- **No 16-byte truncation exists** in the live wire format. The "first 16 bytes" claim in v1.0 §3.1 was unsourced.
+- **The hash chain** binds record N to record N-1 via `record[N].prev_poac_hash = SHA-256(record[N-1].body[0:164])` — a full 32-byte hash at body offset 0x00.
+
+This v1.1 amendment treats the v1.0 conformance-harness plan (`docs/vbdip-0006-conformance-harness.md` §3.1 vector schema) `record_hash_hex` field as SUPERSEDED by `body_sha256_hex` (full 32 bytes). The conformance harness plan is updated separately in the same commit.
+
+### A.5 Clarification: device identity layer separation
+
+v1.0 §3.1 placed `device_id = keccak256(pubkey)[0:8]` at body bytes 0-7. **This was wrong.**
+
+The reconciliation:
+
+- **`device_id`** is `keccak256(pubkey)` (full 32-byte hash per `codec.py:compute_device_id`). It is NOT embedded in the PoAC body at any offset.
+- **Device identity binds at the signing layer**: the bridge derives `device_id` from the verifying public key at signature-check time. The PoAC body itself carries no identity field; the signature + the public key together attest identity.
+- **The certificate layer** (`VAPIHardwareCertRegistry` at `0x1031b7840184D6c8f0EA03F051970578C3c874C2`) is where device identity attestation lives: the manufacturer registers the device's pubkey + the cert binds the family to a `profile_hash`. PoAC records flow under that established identity; they do not re-attest it per record.
+
+This division of concerns matches the canonical anchor in `docs/mobile-companion-app.md` §6 ("the phone never holds a key; identity binds at controller SE + cert registry").
+
+### A.6 Clarification: L4 / L5 biometric commitment via hashes
+
+v1.0 §3.1 placed `l4_features` as 13 × IEEE 754 float16 (26B) at bytes 105-117 + `l5_rhythm` as 10B at bytes 118-127. **This was wrong.**
+
+The reconciliation:
+
+- **L4 / L5 features are NOT serialized as raw floats in the PoAC body.** Doing so would expose biometric data on every record (contradicting BP-007 minimization), inflate body size beyond the FROZEN 164B, and require firmware float16 encoding the bridge does not consume.
+- **L4 / L5 features are COMMITTED via hash** into the three 32-byte hash fields at body offsets 0x20 (sensor_commitment), 0x40 (model_manifest_hash), 0x60 (world_model_hash). The commitment scheme: SHA-256 over the canonical-JSON projection of the feature vector.
+- **L4 / L5 EVIDENCE flows side-band** through the existing `pitl_*` fields on `PoACRecord` (the `pitl_l4_distance`, `pitl_l4_warmed_up`, `pitl_l5_cv`, `pitl_l5_entropy_bits`, etc. fields at `codec.py:101-113`). These are extension fields populated AFTER `parse_record()`; they are NOT part of the 228B wire format.
+
+VBDIP-0006-conformant firmware MUST emit the body without raw L4 / L5 floats. Firmware that wants to communicate L4 / L5 details to the bridge does so via the side-band channel (Phase 50 `agent_events` table or future VBDIP-0006-extension report types), NOT by inlining floats into the FROZEN body.
+
+### A.7 What this means for VBDIP-0006 firmware contract
+
+VBDIP-0006-conformant firmware MUST:
+
+1. Emit body bytes per the A.3 authoritative layout — byte-for-byte identical to what `codec.py:parse_record()` accepts and re-serializes.
+2. Sign the 164-byte body with ECDSA-P256 using the device's SE-resident private key (unchanged from v1.0).
+3. Register its public key with `VAPIHardwareCertRegistry` for identity attestation (unchanged from v1.0).
+4. NOT serialize raw L4 / L5 features into the body; commit them via the appropriate hash field.
+5. NOT embed a `device_id` field in the body; identity binds at the signing layer.
+6. NOT truncate any hash to 16 bytes in the wire format.
+
+VBDIP-0006-conformant firmware MAY:
+
+- Implement extended side-band reporting (Phase 50 agent_events compatibility) for L4 / L5 / advisory codes.
+- Emit hard cheat codes (0x28 DRIVER_INJECT firmware-emitted) as the `inference_result` byte at offset 0x80 when the firmware-side detector fires.
+
+### A.8 What v1.0 §3.1 claims are SUPERSEDED
+
+For audit traceability, the explicit list of v1.0 §3.1 claims this amendment supersedes:
+
+- ❌ `device_id` at body bytes 0-7 → **superseded.** device_id binds at signing/cert layer (A.5)
+- ❌ `counter` at body bytes 8-15 (uint64) → **superseded.** Actual field is `monotonic_ctr` (uint32 BE) at offset 0x84
+- ❌ `record_hash` at body bytes 16-31 (16B truncation) → **superseded.** No truncation exists; chain hash is full SHA-256 stored at the NEXT record's `prev_poac_hash` (A.4)
+- ❌ `timestamp_ms` at body bytes 32-39 → **superseded.** Actual offset is 0x88
+- ❌ `prev_record_hash` at body bytes 40-71 → **superseded.** Field exists but at offset 0x00 (named `prev_poac_hash` in codec.py)
+- ❌ `sensor_commitment` at body bytes 72-103 → **superseded.** Actual offset is 0x20
+- ❌ `inference_code` at body byte 104 → **superseded.** Actual offset is 0x80 (field named `inference_result`)
+- ❌ `l4_features` 13 × float16 at bytes 105-117 → **superseded.** L4 features committed via hash, not serialized (A.6)
+- ❌ `l5_rhythm` 10B at bytes 118-127 → **superseded.** L5 features committed via hash, not serialized (A.6)
+- ❌ `extension_field` 36B reserved at bytes 128-163 → **superseded.** Bytes 0x80-0xA3 contain the live struct-packed fields (`_FIELDS_FMT` `>BBBBIqddI`)
+
+The signature region at bytes 164-227 (64B ECDSA-P256) — the ONLY v1.0 §3.1 claim that matched codec.py — is preserved by this v1.1 amendment.
+
+### A.9 Conformance harness implications
+
+`docs/vbdip-0006-conformance-harness.md` is updated in the same commit to:
+
+- Target the v1.1 authoritative layout per A.3 (not the v1.0 §3.1 table)
+- Drop the 13 × float16 L4 features from the vector input schema; replace with `sensor_commitment_hex` (32-byte hash input)
+- Drop the L5 rhythm fields from the vector input schema; covered by `sensor_commitment_hex`
+- Use `body_sha256_hex` as the single canonical body hash field (no 16-byte truncation field)
+- Use `monotonic_ctr` (uint32) not `counter` (uint64)
+- Add `action_code`, `confidence`, `battery_pct`, `latitude`, `longitude`, `bounty_id` fields per A.3 layout
+- Categories C1-C5 remain (random / edge-case / hard-cheat / GIC chain / counter rollover); allocation 20×5=100 unchanged; counter rollover is now uint32 boundary near `2^32-1` per A.3 reconciliation
+
+The conformance harness plan amendment lands in the SAME COMMIT as this v1.1 spec amendment to maintain atomic consistency between the contract layer and the implementation layer.
+
+### A.10 Versioning + manifest cross-reference
+
+- **v1.0 manifest** at `vsd-vault/manifests/proposals-VBDIP-0006/001.manifest.json` — UNCHANGED. Signs the v1.0 file snapshot at commit `1f30057d`. Verification of v1.0 reads `git show 1f30057d:wiki/methodology/VBDIP-0006-vapi-firmware-reference-implementation.md`.
+- **v1.1 manifest** at `vsd-vault/manifests/proposals-VBDIP-0006/002.manifest.json` — NEW. Signs the current-commit file (v1.0 §0-11 + Appendix A v1.1 amendment). Verification reads the file at the v1.1 ceremony commit.
+- Both manifests coexist. Both verify against the same architect Ed25519 pubkey (`056e695f…8ca8`). Both anchored back to bridge wallet `0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692` via the shared attestation envelope.
+- v1.0 to v1.1 lineage: v1.1 manifest's `supersedes` field references the v1.0 manifest path + canonical hash, making the lineage cryptographically traversable.
+
+### A.11 PV-CI invariant impact
+
+`scripts/vapi_invariant_gate.py` carries `INV-VBDIP-0006-001..004` invariants pinning regions of v1.0 Sections 1, 3, 6, 8. **None of these regions are modified by this v1.1 amendment.** Appendix A is APPENDED to the file; v1.0 content is byte-identical. PV-CI invariants stay green.
+
+INV-VBDIP-0006-002 (which pins v1.0 §3 FROZEN cryptographic primitives) requires special note: it was authored against the v1.0 §3.1 table that A.1 now identifies as erroneous. The invariant TEXT in `vapi_invariant_gate.py` references the regions correctly (the 228-byte total + GIC genesis tag + hard cheat code 0x28); the regex matches succeed against the v1.0 file content (which is unchanged). **The PV-CI invariant remains technically correct** because it pins the FROZEN-region text in v1.0, not the §3.1 byte-offset claims that are corrected by A.3. A future maintenance amendment MAY tighten INV-VBDIP-0006-002 to explicitly include the A.3 layout — deferred to a separate operator-authorized work item.
+
+### A.12 Authoring discipline reaffirmed
+
+This v1.1 amendment follows the §11.2 lifecycle convention verbatim:
+
+- v1.0 spec content byte-identical (lines 1-553)
+- Appendix A appended (not interleaved)
+- v1.0 manifest unchanged; v1.1 manifest added with cross-reference
+- No reformat of v1.0 text; no renumbering of v1.0 sections
+- No PV-CI scope additions in this amendment (existing invariants cover the unchanged v1.0 regions; new invariants for A.3 layout deferred to maintenance amendment)
+- No new wire-format primitives; the amendment corrects spec drift, it does not introduce new contracts
+
+The v1.0 manifest's `verification_procedure` step 1 ("Read VBDIP-0006 from proposal_path at this commit") is satisfied by git history: any future verifier of v1.0 reads from commit `1f30057d` and gets the byte-identical v1.0 file. The v1.1 manifest's equivalent step reads the file at the v1.1 ceremony commit.
+
+---
+
+*VBDIP-0006 v1.1 Wire-Layout Reconciliation Appendix — VAPI Principal Architect, 2026-05-16*
