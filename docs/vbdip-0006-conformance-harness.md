@@ -399,6 +399,45 @@ Operator's three options (mirroring mobile companion §9 acceptance protocol):
 - **Accept some, modify others** — name overrides; this doc gets a follow-up amendment before M1.
 - **Defer entirely** — plan stays live as canonical reference; no harness work starts.
 
+### 9.2 Operator decisions accepted (M0.1 amendment, 2026-05-16)
+
+**All 8 recommended defaults R1-R8 ACCEPTED** by operator as the binding basis for M1 commissioning, with one clarification to R2. The §9 numbered list above remains as the M0 "as-proposed" record; this section carries the binding accepted state (per the §1.2 authoring discipline: amendments append; the original record persists).
+
+| # | Decision | Status |
+|---|---|---|
+| R1 | Vector counts §8.1 verbatim (20 × 5 = 100) | **ACCEPTED** |
+| R2 | Signature handling | **ACCEPTED (CLARIFIED — see below)** |
+| R3 | Per-vector `.bin` files in `vectors/binary/` | **ACCEPTED** |
+| R4 | Separate `negative_suite/` (negative vectors NOT in main 100) | **ACCEPTED** |
+| R5 | Per-category vector JSON files | **ACCEPTED** |
+| R6 | Per-vector pytest parametrization (granular failure isolation) | **ACCEPTED** |
+| R7 | Vectors versioned with spec (`vectors-v1.0/` alongside future `vectors-v1.x/`) | **ACCEPTED** |
+| R8 | Pubkey-from-firmware via Report ID 0x02 heartbeat (already in VBDIP-0006 §8.2) | **ACCEPTED** |
+
+#### R2 (CLARIFIED, BINDING) — deleted-key deterministic fixture signatures
+
+Replaces the original R2 recommended wording with the more specific operator-clarified contract. This is what M1 implements:
+
+- **M1 generator MAY create a deterministic ephemeral test key** for fixture generation (deterministic = produced from a fixed seed so a re-run of the generator yields an identical key pair before deletion; ephemeral = exists only for the duration of the M1 generator invocation).
+- **Generator commits ONLY** the following to the repo:
+  1. **Public key** — PEM-encoded at `scripts/vbdip_0006_conformance/test_signing_key_v1.0.pub.pem` (extension carries the spec-version tie from R7)
+  2. **Signatures** — one per vector whose `signature_status == 'valid_test_fixture'`, embedded in the vector JSON's `expected.signature_hex` field
+  3. **Vectors** — the 100 JSON files + binary fixtures under `scripts/vbdip_0006_conformance/vectors/`
+  4. **Generator transcript / deletion attestation** — an audit-bearing JSON document at `scripts/vbdip_0006_conformance/manifests/generator-transcript-v1.0.json` recording: (a) when the generator ran, (b) what deterministic seed was used, (c) what method produced the ephemeral key, (d) what method then destroyed the private key (`secure_zero_then_unlink` or equivalent), (e) the VBDIP-0006 spec hash the run was bound to (`0667cd34...d3db`), (f) the architect-signed manifest commit reference (`1f30057d`), (g) cryptographic hash of the generator script source at run time so post-hoc auditors can confirm no in-place tampering
+- **NEVER commits the private key.** No path under `scripts/vbdip_0006_conformance/` may contain a private key file. CI guard: static-grep regression test asserting the absence of `BEGIN PRIVATE KEY` / `BEGIN ED25519 PRIVATE KEY` / `BEGIN EC PRIVATE KEY` substrings under the conformance directory.
+- **Signature fixtures are reproducible ONLY through the recorded generator method + transcript**, NOT by retaining signing material. The transcript is the audit primitive that lets anyone confirm "yes, valid signatures were produced + the key was destroyed" — it does NOT enable signature regeneration without re-running the generator (which would produce identical signatures given the same deterministic seed + script hash + spec hash).
+
+#### Operational consequences
+
+- **Real firmware running with its own SE-resident key does NOT reproduce these fixture signatures byte-for-byte.** Impossible by design — the fixture key is gone. Firmware passes by verifying its OWN signatures against its OWN pubkey using the harness's ECDSA-P256 verifier (per the §6.3 parity contract).
+- **Fixture signatures function as an integrity artifact** proving "vectors were signed with a valid key at generation time" — they are not a reproducibility primitive for firmware conformance.
+- **The generator transcript provides post-hoc audit.** Anyone can read it and verify: no private key shipped, no private key retained, no private key recoverable from any committed file. Combined with the static-grep CI guard, this is belt-and-suspenders.
+- **A future spec amendment** (VBDIP-0006 v1.x per §11 versioning) triggers a fresh M1 generator run producing `vectors-v1.x/` + `test_signing_key_v1.x.pub.pem` + `generator-transcript-v1.x.json`. The v1.0 artifacts remain committed for backward-compat validation; the new key for v1.x is generated + destroyed independently of the v1.0 key.
+
+#### M1 commissioning basis
+
+§9.2 (this section) is now the binding basis for M1 commissioning. The original §9 list remains as the M0 "as-proposed" record. When M1 ships, the closure note at the bottom of this document will cite this §9.2 + the commit hash of the M1 ship.
+
 ---
 
 ## 10. Risk register
