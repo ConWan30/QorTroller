@@ -21,14 +21,25 @@ import time
 
 log = logging.getLogger(__name__)
 
-_POLL_INTERVAL_S = 300
+# Phase 235.x-STABILITY-9 stage 4b 2026-05-17: poll interval lengthened from
+# 300s → 3600s. The agent now primarily fires on validation_divergence bus
+# events (event-driven); the periodic sweep is a fallback safety net that
+# catches anything the bus dropped (QueueFull) or anything inserted directly
+# into ruling_validation_log without firing the bus event.
+_POLL_INTERVAL_S = 3600
 _ML_BOT_THRESHOLD = 2
 _CHEAT_THRESHOLD = 1
 _ENROLLMENT_THRESHOLD = 3
 
 
 class DivergenceTriageAgent:
-    """Phase 91 — Cross-session divergence pattern detector and escalator."""
+    """Phase 91 — Cross-session divergence pattern detector and escalator.
+
+    Phase 235.x-STABILITY-9 stage 4b (2026-05-17): event-driven via bus
+    subscription on `validation_divergence`. The validator's per-divergence
+    publish is the live trigger; the 1h fallback sweep catches anything the
+    bus dropped.
+    """
 
     def __init__(self, cfg, store, bus=None) -> None:
         self._cfg = cfg
@@ -36,15 +47,64 @@ class DivergenceTriageAgent:
         self._bus = bus
 
     async def run_event_consumer(self) -> None:
-        log.info("DivergenceTriageAgent started (Phase 91)")
+        log.info(
+            "DivergenceTriageAgent started (Phase 91, stage 4b: "
+            "event-driven on bus 'validation_divergence', fallback poll=%ds)",
+            _POLL_INTERVAL_S,
+        )
+
+        # Subscribe to the bus (defensive — fall back to pure poll if bus None
+        # or subscribe fails for any reason).
+        queue = None
+        if self._bus is not None:
+            try:
+                queue = await self._bus.subscribe("validation_divergence")
+            except Exception as _sub_exc:  # noqa: BLE001
+                log.warning(
+                    "DivergenceTriageAgent: bus subscribe failed (%s); "
+                    "falling back to pure poll mode",
+                    _sub_exc,
+                )
+                queue = None
+
+        last_sweep_ts = 0.0
         while True:
             try:
-                await asyncio.sleep(_POLL_INTERVAL_S)
-                await self._triage_cycle()
+                if queue is not None:
+                    # Event-driven path: wait for next event with timeout
+                    # equal to the fallback sweep interval, so a quiet
+                    # period still triggers the safety sweep.
+                    try:
+                        envelope = await asyncio.wait_for(
+                            queue.get(), timeout=_POLL_INTERVAL_S
+                        )
+                        # Event arrived — trigger a triage cycle focused on
+                        # the device the divergence was reported for.
+                        payload = envelope.get("payload", {}) if isinstance(envelope, dict) else {}
+                        device_id = payload.get("device_id", "")
+                        log.debug(
+                            "DivergenceTriageAgent: bus event for device=%s — triaging",
+                            device_id[:16] if device_id else "<unknown>",
+                        )
+                        await self._triage_cycle()
+                        last_sweep_ts = time.time()
+                    except asyncio.TimeoutError:
+                        # Fallback sweep — bus has been quiet for the
+                        # interval; run a full cycle in case events were
+                        # dropped.
+                        await self._triage_cycle()
+                        last_sweep_ts = time.time()
+                else:
+                    # Pure poll mode (bus subscribe failed): legacy behavior.
+                    await asyncio.sleep(_POLL_INTERVAL_S)
+                    await self._triage_cycle()
+                    last_sweep_ts = time.time()
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
                 log.warning("DivergenceTriageAgent: cycle error: %s", exc)
+                # Backoff on error to avoid tight retry loop
+                await asyncio.sleep(min(60.0, _POLL_INTERVAL_S / 60))
 
     async def _triage_cycle(self) -> None:
         try:
