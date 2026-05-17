@@ -421,7 +421,7 @@ shows a hash or hex value.
 
 ## Provenance
 
-| Stage | Commit       | Date       | Headline                                                        |
+| Stage | Commit       | Date       | Headline                                                         |
 |-------|--------------|------------|------------------------------------------------------------------|
 | 1     | `bc2a5cb8`   | 2026-05-15 | Shell + Evidence Graph vertical slice                            |
 | 2     | `b4a9b12b`   | 2026-05-15 | Live Match session-counts verdict                                |
@@ -431,6 +431,8 @@ shows a hash or hex value.
 | 5.1   | `ea72b638`   | 2026-05-16 | Mythos hardening audit + `docs/evidence-os.md`                   |
 | 5.2   | `7c307495`   | 2026-05-16 | L4 hook-contract regression guards + M5 `role="meter"` + M2 enum |
 | 6     | `d11bb07b`   | 2026-05-16 | Evidence Graph measured SVG edges via `EvidenceEdgeLayer`        |
+| 5.3   | `57516c0c`   | 2026-05-16 | iPhone 15 walk-through fixes: QueueSummary grid + StatusStrip overflow |
+| 5.4   | _this commit_ | 2026-05-16 | Android responsive audit: input zoom + viewport-fit + tap-highlight |
 
 **Stage 5.2 in detail** — picks off three Mythos audit deferrals in
 the operator's chosen triage order:
@@ -477,6 +479,66 @@ Verification: 132/132 frontend tests pass (122 prior + 10 new
 T-OS-EDGE-1..9 + T-OS-EDGE-7b), `npm run build` PASS, 0 IOTX wallet
 impact, no bridge restart required.
 
-Test counts: 132 frontend tests across 13 files. Bundle: `main`
+**Stage 5.3 in detail** — iPhone 15 walk-through findings closed.
+QueueSummary tile container swapped from flex+wrap to CSS grid
+`repeat(auto-fit, minmax(140px, 1fr))` so 6-tile content stays
+within rectangle bounds at 393px viewport (2 cols × 3 rows). StatusStrip
+right-edge dead space removed via `paddingRight: 0` + `borderRight:
+none` on last `MetricCell` (Blockers), with explicit `overflowX: auto`
++ `WebkitOverflowScrolling: touch` on the nav for iOS momentum-scroll.
+Logo Link + cells get `flexShrink: 0` so they don't squeeze illegibly.
+Flex spacer changed to `flex: '1 1 0'` + `minWidth: 0` so it collapses
+to zero when content overflows. Closed two `HIGH`-severity layout
+breaks the operator reported during the 393×852 phone walk; 133/133
+frontend tests pass; mobile companion app design can now treat the
+responsive Evidence OS surface as the canonical render path.
+
+**Stage 5.4 in detail** — pre-M1 Android responsive audit.
+**Audit constraint honestly noted**: this was a static-code + Android-
+vs-iOS-browser-quirk analysis, NOT an emulator walk-through (the agent
+environment cannot launch a Pixel emulator). Empirical Android walk
+remains pending the operator's Chrome-on-Android session before M1
+commissions. Four findings classified Stage-5.1-Mythos style:
+- **A1 HIGH** — `ReplaySearch.jsx` input rendered with `fontSize:
+  'var(--os-text-label)'` = 13px. Chrome Android (and iOS Safari)
+  auto-zoom on focus for any input below 16px; doesn't auto-zoom
+  back; operator stuck at zoomed level. **Fixed**: input now hard-
+  pins `fontSize: '16px'` at the input rendering site (token stays
+  13px for non-interactive labels).
+- **A2 HIGH** — `QueueDetailPanel.jsx` textarea same bug at `fontSize:
+  'var(--os-text-base)'` = 12px. Load-bearing because operator must
+  type ≥10-char audit reason on this control. **Fixed** identically
+  to A1.
+- **A3 MEDIUM** — `index.html` viewport meta lacked `viewport-fit=cover`.
+  Pixel gesture-nav system UI can clip content at bottom edge.
+  `user-scalable` deliberately left as default (yes) for a11y.
+  **Fixed**: viewport meta now `width=device-width, initial-scale=1.0,
+  viewport-fit=cover`.
+- **A4 MEDIUM** — `index.html` global style lacked
+  `-webkit-tap-highlight-color`. Chrome Android default tap-highlight
+  is a translucent box that clashes with the void-black aesthetic on
+  every tap. **Fixed**: `* { -webkit-tap-highlight-color: transparent }`
+  global rule in index.html — preserves focus-visible outlines from
+  theme.css for keyboard navigation.
+- **A5 LOW** — `WebkitOverflowScrolling: touch` in StatusStrip is
+  iOS-only; harmless on Android (Chrome handles momentum natively).
+  Kept as-is + documented as iOS-specific.
+- **A6 LOW** — No explicit `touch-action: pan-x` on AppShell horizontal
+  rail scroller. Empirical-walk-only verifiable; deferred to operator
+  walk before M1 starts.
+
+4 new regression guards in
+`frontend/src/__tests__/AndroidResponsiveGuards.test.jsx`
+(T-OS-A1..A4) — static-source guards using the
+EvidenceOSHookContracts.test.jsx T-OS-L4-4 discipline pattern. They
+lock the 16px input floor + viewport-fit=cover + tap-highlight rule
+into CI so future edits cannot reintroduce the Chrome-Android-auto-
+zoom or tap-highlight regressions.
+
+Verification: 137/137 frontend tests pass (133 prior + 4 Stage 5.4
+guards), `npm run build` PASS, 0 IOTX wallet impact, no bridge
+restart required, no Capacitor / native / protocol / wallet impact.
+
+Test counts: 137 frontend tests across 14 files. Bundle: `main`
 chunk ~358 KB raw / 107.31 → ~108.9 KB gzipped (Evidence OS arc
 remains within the existing main chunk; no new chunks created).
