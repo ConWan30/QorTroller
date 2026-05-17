@@ -2172,6 +2172,9 @@ class FleetSignalCoherenceAgent:
             self._logger.info("[FSCA] Fleet coherence disabled — agent idle.")
             return
         poll_interval = getattr(self._config, "coherence_poll_interval_seconds", 900)
+        # Phase 235.x-STABILITY-9 stage 5 2026-05-17: startup-jitter.
+        from .startup_grace import startup_grace
+        await startup_grace(self._config, agent_name="FleetSignalCoherenceAgent")
         self._logger.info(
             f"[FSCA] FleetSignalCoherenceAgent started. Poll: {poll_interval}s. "
             f"Rules: {len(CONTRADICTION_RULES)} CONTRADICTION / "

@@ -52,6 +52,10 @@ class SeparationRatioMonitorAgent:
     async def run_poll_loop(self) -> None:
         """Continuous poll loop — never raises."""
         _log.info("Phase 129: SeparationRatioMonitorAgent started (poll=%ds)", POLL_INTERVAL_S)
+        # Phase 235.x-STABILITY-9 stage 5 2026-05-17: WORK_FIRST agent — was
+        # firing heavy ratio compute on iteration 1. Add startup jitter.
+        from .startup_grace import startup_grace
+        await startup_grace(self._cfg, agent_name="SeparationRatioMonitorAgent")
         while True:
             try:
                 await self._check_and_record()

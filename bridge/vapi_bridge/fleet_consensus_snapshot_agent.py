@@ -139,6 +139,9 @@ class FleetConsensusSnapshotAgent:
     async def run_poll_loop(self) -> None:
         """30-minute poll loop — computes and persists PoFC snapshots."""
         poll_s = int(getattr(self._cfg, "fleet_consensus_snapshot_interval_s", 1800))
+        # Phase 235.x-STABILITY-9 stage 5 2026-05-17: startup-jitter.
+        from .startup_grace import startup_grace
+        await startup_grace(self._cfg, agent_name="FleetConsensusSnapshotAgent")
         while True:
             try:
                 snap = self._collect_snapshot()

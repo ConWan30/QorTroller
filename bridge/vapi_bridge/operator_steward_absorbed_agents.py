@@ -204,6 +204,43 @@ class AbsorbedAgentTicker:
         self._state: Dict[str, _AbsorbedAgentState] = {
             spec.name: _AbsorbedAgentState() for spec in specs
         }
+        # Phase 235.x-STABILITY-9 stage 5 2026-05-17: per-spec first-tick
+        # jitter. Without this, all 9 absorbed agents become eligible
+        # on the same first tick (last_invoked_at=0 → elapsed >= interval
+        # always true) — same thundering-herd at boot. Offset each spec's
+        # last_invoked_at by `time.time() - spec.interval_s + uniform(0, jitter)`
+        # so each first-fire is delayed by jitter[0, jitter_max] relative
+        # to boot. Reuses startup_grace's seeded RNG for reproducibility
+        # when cfg.startup_jitter_seed is set.
+        if getattr(cfg, "startup_jitter_enabled", True):
+            try:
+                from .startup_grace import _get_rng
+                rng = _get_rng(cfg)
+                jitter_max = float(getattr(cfg, "startup_jitter_max_s", 30.0))
+                now = time.time()
+                for spec in specs:
+                    jitter_offset = rng.uniform(0.0, jitter_max)
+                    # Set last_invoked_at so first eligible tick is at
+                    # `now + jitter_offset` (NOT immediately on tick #1):
+                    # elapsed = now+t - last_invoked_at; we want
+                    # elapsed >= interval_s at time now+jitter_offset:
+                    # → last_invoked_at = now + jitter_offset - interval_s
+                    state = self._state[spec.name]
+                    state.last_invoked_at = (
+                        now + jitter_offset - spec.interval_s
+                    )
+                log.info(
+                    "%sStewardAbsorbedTicker: stage-5 startup-jitter "
+                    "applied (max=%.1fs); per-spec first-tick delays "
+                    "spread over jitter window",
+                    steward_name, jitter_max,
+                )
+            except Exception as _exc:  # noqa: BLE001 — fail-open
+                log.warning(
+                    "%sStewardAbsorbedTicker: stage-5 jitter setup failed "
+                    "(%s); ticker fires all on first tick (pre-stage-5 behavior)",
+                    steward_name, _exc,
+                )
         log.info(
             "%sStewardAbsorbedTicker: configured with %d absorbed agents (%s)",
             steward_name, len(specs), ", ".join(s.name for s in specs),

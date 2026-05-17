@@ -155,6 +155,9 @@ class BiometricPrivacyComplianceAgent:
     async def run_poll_loop(self) -> None:
         """Long-running 6h poll loop.  Never raises."""
         log.info("BiometricPrivacyComplianceAgent (agent #22) starting poll loop")
+        # Phase 235.x-STABILITY-9 stage 5 2026-05-17: startup-jitter.
+        from .startup_grace import startup_grace
+        await startup_grace(self._cfg, agent_name="BiometricPrivacyComplianceAgent")
         while True:
             try:
                 enabled = bool(getattr(self._cfg, "biometric_privacy_enabled", True))
