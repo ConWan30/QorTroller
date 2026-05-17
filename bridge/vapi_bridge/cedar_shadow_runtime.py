@@ -94,33 +94,91 @@ class ShadowEvalResult:
         return not self.is_permit
 
 
-def _bundle_path_for_agent(agent_id_hex: str, cfg) -> Optional[Path]:
+def _resolve_bundle_path(bundle_path_str: str, cfg) -> Path:
+    """Resolve activation_log.bundle_path to a Path that .exists() can check.
+
+    Phase O1 Track 1 fix C-2 (2026-05-16): backward-compat handles three
+    historical storage shapes observed in production operator_agent_activation_log:
+
+      - Absolute path (test fixtures, some operator anchors): use as-is.
+      - Relative path with a directory component (2026-05-03 Phase O1 C1
+        Sentry+Guardian anchors stored full relative path
+        "bridge/vapi_bridge/cedar_bundles/anchor_sentry_o1_shadow_v1.json"):
+        use as-is; the bridge runs from project root so the relative resolves.
+      - Bare filename (2026-05-09+ anchors store "anchor_sentry_o2_suggest_v2.json"
+        etc.): prepend cfg.cedar_bundle_dir.
+
+    Pre-Track-1 the drift detector wrapped the value in Path() without
+    prefixing bundle_dir, so the bare-filename case (which became the
+    standard 2026-05-09+) was failing .exists() and producing 87+ false
+    BUNDLE_HASH_DRIFT "bundle_file_missing" findings per 24h. Real drift
+    would have been buried in the noise. Defense-in-depth: a Path with a
+    non-trivial .parent gets used as-is; a bare name routes through the
+    bundle_dir prefix.
+    """
+    p = Path(bundle_path_str)
+    if p.is_absolute() or p.parent != Path("."):
+        return p
+    bundle_dir = str(getattr(cfg, "cedar_bundle_dir", "bridge/vapi_bridge/cedar_bundles") or "")
+    return Path(bundle_dir) / bundle_path_str
+
+
+def _bundle_path_for_agent(agent_id_hex: str, cfg, store=None) -> Optional[Path]:
     """Resolve the agent's Cedar bundle file by Q9-frozen agentId.
 
     Reads cfg.operator_agent_anchor_sentry_id + cfg.operator_agent_guardian_id
     + cfg.operator_agent_curator_id + cfg.cedar_bundle_dir to map agent_id →
     bundle filename.  Returns None when no mapping found (caller fail-opens).
 
-    Phase O1-CURATOR C2 (2026-05-09): Curator added as third agent.  Its
-    bundle (curator_o1_shadow_v1.json) lives in the same cedar_bundles/
-    directory and is resolved by the same pattern.  Curator's architectural
-    divergence (MockKMSClient testnet path vs Sentry/Guardian's GitHub App
-    + AWS KMS) does NOT affect bundle resolution — that divergence is at
-    the attestation-signing layer (kms-sign action), not at policy
-    evaluation.
+    Phase O1-CURATOR C2 (2026-05-09): Curator added as third agent.
+
+    Phase O1 Track 1 fix C-4 (2026-05-16): primary path now reads the latest
+    activation_log row's bundle_path field via the optional store parameter
+    and returns the CANONICAL filename the operator wallet most recently
+    anchored on chain. Phase-aware by construction — no version-suffix
+    mapping table to maintain. Pre-Track-1 this function hardcoded
+    "_o1_shadow_v1.json" suffixes regardless of phase, so any shadow
+    evaluation after Track 2 C8 (2026-05-12 dual-anchor of *_o2_suggest_v2)
+    would have read stale O1_SHADOW v1 policies — actions permitted under
+    O2_SUGGEST would have been silently forbidden, and any v1-only permit
+    that was removed in v2 would silently pass. Polling is currently OFF
+    so the bug was latent; this fix is the prerequisite for safe polling
+    activation when the 504h shadow_age gate closes.
+
+    Fail-open fallback (no store / no activation row / store error): default
+    to "_o1_shadow_v1.json" for the matched agent prefix, matching pre-fix
+    behavior and the existing test fixture convention (some tests don't
+    pre-seed activation rows).
     """
     sentry_id = str(getattr(cfg, "operator_agent_anchor_sentry_id", "") or "").lower()
     guardian_id = str(getattr(cfg, "operator_agent_guardian_id", "") or "").lower()
     curator_id = str(getattr(cfg, "operator_agent_curator_id", "") or "").lower()
-    bundle_dir = str(getattr(cfg, "cedar_bundle_dir", "bridge/vapi_bridge/cedar_bundles") or "")
     aid_lower = agent_id_hex.lower()
+
     if aid_lower == sentry_id:
-        return Path(bundle_dir) / "anchor_sentry_o1_shadow_v1.json"
-    if aid_lower == guardian_id:
-        return Path(bundle_dir) / "guardian_o1_shadow_v1.json"
-    if aid_lower == curator_id:
-        return Path(bundle_dir) / "curator_o1_shadow_v1.json"
-    return None
+        prefix = "anchor_sentry"
+    elif aid_lower == guardian_id:
+        prefix = "guardian"
+    elif aid_lower == curator_id:
+        prefix = "curator"
+    else:
+        return None
+
+    bundle_dir = str(getattr(cfg, "cedar_bundle_dir", "bridge/vapi_bridge/cedar_bundles") or "")
+
+    # PRIMARY: latest activation_log row carries the post-ceremony bundle filename.
+    if store is not None:
+        try:
+            rows = store.get_operator_agent_activation_log(aid_lower, limit=1)
+            if rows:
+                bp_str = str(rows[0].get("bundle_path") or "")
+                if bp_str:
+                    return _resolve_bundle_path(bp_str, cfg)
+        except Exception:
+            pass  # fail-open to legacy default
+
+    # FAIL-OPEN FALLBACK: matches pre-Track-1 behavior + existing test fixtures.
+    return Path(bundle_dir) / f"{prefix}_o1_shadow_v1.json"
 
 
 def _safe_decision_value(d: CedarDecision) -> str:
@@ -166,7 +224,10 @@ async def evaluate_agent_action(
     context_json = json.dumps(ctx, sort_keys=True, separators=(",", ":"))
 
     # --- Resolve bundle ---
-    bundle_path = _bundle_path_for_agent(agent_id, cfg)
+    # Phase O1 Track 1 fix C-4: pass store so the resolver can read the
+    # latest activation_log bundle_path (phase-aware). Fail-open to legacy
+    # _o1_shadow_v1.json default if store unreachable.
+    bundle_path = _bundle_path_for_agent(agent_id, cfg, store=store)
     if bundle_path is None:
         # No mapping for this agent — fail-open, log + deny.
         return _persist_and_return(
@@ -421,9 +482,16 @@ def detect_bundle_hash_drift(
     sid = sweep_id or _sweep_id()
     findings: list[DriftFinding] = []
 
+    # Phase O1 Track 1 fix C-3 (2026-05-16): Curator added to candidates.
+    # Pre-Track-1 only Sentry+Guardian were iterated; Curator (live since
+    # 2026-05-09 with agentId 0xed6a2df5...) was structurally outside
+    # bundle-drift coverage. With marketplace-listing-suspend authority
+    # lifted at O2_SUGGEST and direct chain authority at O3_ACTING, bundle
+    # tampering on Curator was a path to unauthorized marketplace actions.
     sentry_id = str(getattr(cfg, "operator_agent_anchor_sentry_id", "") or "").lower()
     guardian_id = str(getattr(cfg, "operator_agent_guardian_id", "") or "").lower()
-    candidates = [aid for aid in (sentry_id, guardian_id) if aid]
+    curator_id = str(getattr(cfg, "operator_agent_curator_id", "") or "").lower()
+    candidates = [aid for aid in (sentry_id, guardian_id, curator_id) if aid]
 
     for aid in candidates:
         try:
@@ -440,7 +508,11 @@ def detect_bundle_hash_drift(
         anchored = rows[0]
         anchored_root = str(anchored.get("to_scope_root") or "").lower()
         bundle_path_str = str(anchored.get("bundle_path") or "")
-        bundle_path = Path(bundle_path_str)
+        # Phase O1 Track 1 fix C-2 (2026-05-16): resolve via _resolve_bundle_path
+        # so bare-filename rows (2026-05-09+ standard) get the cedar_bundle_dir
+        # prefix. Pre-fix this was a plain Path(bundle_path_str), which produced
+        # 87+ false-positive bundle_file_missing findings per 24h.
+        bundle_path = _resolve_bundle_path(bundle_path_str, cfg)
         if not bundle_path.exists():
             ev = json.dumps({
                 "reason": "bundle_file_missing",
@@ -535,9 +607,14 @@ async def detect_scope_hash_governance_drift(
             error="chain_not_configured",
         )
 
+    # Phase O1 Track 1 fix C-3 (2026-05-16): Curator added to candidates.
+    # Same gap as the bundle-drift sweep — pre-fix Curator was outside
+    # SCOPE_HASH_GOVERNANCE_DRIFT coverage despite being LIVE on chain
+    # since Sessions 1+2+3 2026-05-09.
     sentry_id = str(getattr(cfg, "operator_agent_anchor_sentry_id", "") or "").lower()
     guardian_id = str(getattr(cfg, "operator_agent_guardian_id", "") or "").lower()
-    candidates = [aid for aid in (sentry_id, guardian_id) if aid]
+    curator_id = str(getattr(cfg, "operator_agent_curator_id", "") or "").lower()
+    candidates = [aid for aid in (sentry_id, guardian_id, curator_id) if aid]
 
     for aid in candidates:
         op_root_hex = ""
