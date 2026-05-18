@@ -100,10 +100,22 @@ class ProactiveMonitor:
         return len(stale)
 
     async def _check_anomaly_clusters(self) -> None:
-        """Alert on newly-flagged bot-farm clusters (dedup by device-set frozenset)."""
+        """Alert on newly-flagged bot-farm clusters (dedup by device-set frozenset).
+
+        Phase 235.x-STABILITY-9 stage 13 2026-05-18: wrap O(N²) NCD pairwise
+        distance compute + DBSCAN in asyncio.to_thread. detect_clusters()
+        was the LOAD-BEARING 50s event-loop block surviving stages 5-12 +
+        9 BISECT cycles + 40 agents tested clean.
+        build_distance_matrix is doubly-nested loop computing
+        prover.compute_distance for every pair; with N=100 devices = 4,950
+        compression-based distance compute calls. Then DBSCAN on top.
+        Completely synchronous before stage 13 fix.
+        """
         self._evict_stale_clusters()
         try:
-            clusters = self._network_detector.detect_clusters()
+            clusters = await asyncio.to_thread(
+                self._network_detector.detect_clusters
+            )
         except Exception as exc:
             log.warning("_check_anomaly_clusters: detect_clusters error: %s", exc)
             return
@@ -135,15 +147,25 @@ class ProactiveMonitor:
             )
 
     async def _check_high_risk_trajectories(self) -> None:
-        """Alert on devices with high-risk behavioral trajectories."""
+        """Alert on devices with high-risk behavioral trajectories.
+
+        Phase 235.x-STABILITY-9 stage 13 2026-05-18: wrap sync
+        behavioral_archaeologist calls (SQL-backed scan + per-device
+        compute) in asyncio.to_thread to prevent secondary event-loop
+        blocks alongside Stage 13's primary _check_anomaly_clusters fix.
+        """
         try:
-            risky = self._behavioral_arch.get_high_risk_devices(threshold=0.7)
+            risky = await asyncio.to_thread(
+                self._behavioral_arch.get_high_risk_devices, 0.7
+            )
         except Exception as exc:
             log.warning("_check_high_risk_trajectories: error: %s", exc)
             return
         for device_id in risky:
             try:
-                report = self._behavioral_arch.analyze_device(device_id)
+                report = await asyncio.to_thread(
+                    self._behavioral_arch.analyze_device, device_id
+                )
             except Exception:
                 continue
             if not report.warning:
@@ -166,9 +188,14 @@ class ProactiveMonitor:
             )
 
     async def _check_eligibility_horizons(self) -> None:
-        """Alert when devices cross the eligibility threshold (PHG score > 0)."""
+        """Alert when devices cross the eligibility threshold (PHG score > 0).
+
+        Phase 235.x-STABILITY-9 stage 13 2026-05-18: wrap SQL
+        get_leaderboard call in asyncio.to_thread for consistency with
+        the other two surveillance checks.
+        """
         try:
-            leaderboard = self._store.get_leaderboard(100)
+            leaderboard = await asyncio.to_thread(self._store.get_leaderboard, 100)
         except Exception as exc:
             log.warning("_check_eligibility_horizons: error: %s", exc)
             return
