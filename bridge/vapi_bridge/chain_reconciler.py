@@ -51,9 +51,18 @@ class ChainReconciler:
             return self._governor
         try:
             from .chain_read_governor import ChainReadGovernor
+            # Phase 235.x-STABILITY-9 stage 12 2026-05-17: pass the sync
+            # Web3 companion if available so block_number reads route
+            # through asyncio.to_thread, closing the Windows
+            # ProactorEventLoop cancellation gap (Stage 11 measured the
+            # async path leak ~12s of uncancellable socket read after
+            # asyncio.wait_for cancellation; total event-loop block was
+            # 22s vs governor's 10s timeout).
+            _sync_w3 = getattr(self._chain, "_sync_w3", None)
             self._governor = ChainReadGovernor(
                 w3=self._chain._w3,
                 cfg=self._cfg if self._cfg is not None else type("_", (), {})(),
+                sync_w3=_sync_w3,
             )
             return self._governor
         except Exception as exc:  # noqa: BLE001 — fail-open

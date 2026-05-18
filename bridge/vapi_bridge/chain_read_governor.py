@@ -63,9 +63,21 @@ class ChainReadGovernor:
         *,
         w3: Any,
         cfg: Any,
+        sync_w3: Any = None,
     ) -> None:
         self._w3 = w3
         self._cfg = cfg
+        # Phase 235.x-STABILITY-9 stage 12 2026-05-17: optional sync Web3
+        # companion. When set, get_block_number routes through
+        # asyncio.to_thread(sync_w3.eth.block_number) so the blocking socket
+        # read lives on a worker thread instead of the event loop. This
+        # closes the Windows ProactorEventLoop cancellation gap empirically
+        # observed at Stage 11 (governor wait_for fires at 10s but outer
+        # measurement shows 22s — 12s of uncancellable socket read on the
+        # event loop after asyncio cancellation). Optional: when None, the
+        # original AsyncWeb3 path is used (pre-stage-12 behavior preserved
+        # for tests + non-Windows deployments).
+        self._sync_w3 = sync_w3
         # Read once + cache (read on every call; allow operator
         # to retune without restart if they later want).
         self._block_cache_ttl_s_default = float(getattr(
@@ -179,7 +191,20 @@ class ChainReadGovernor:
                 return self._block_cache_value
 
     async def _fetch_block_number(self) -> int:
-        """Inner uncached fetch — separated for testability + monkey-patching."""
+        """Inner uncached fetch — separated for testability + monkey-patching.
+
+        Phase 235.x-STABILITY-9 stage 12 2026-05-17: when sync_w3 is
+        injected, route through asyncio.to_thread so the blocking socket
+        read lives on a worker thread (Windows ProactorEventLoop cancellation
+        gap closure). Otherwise fall back to the AsyncWeb3 awaitable
+        (pre-stage-12 behavior).
+        """
+        if self._sync_w3 is not None:
+            # Worker-thread blocking read; event loop heartbeat unaffected
+            # even if IoTeX RPC stalls for the full OS socket timeout.
+            return await asyncio.to_thread(
+                lambda: int(self._sync_w3.eth.block_number)
+            )
         # AsyncWeb3.eth.block_number is awaitable property
         return await self._w3.eth.block_number
 
