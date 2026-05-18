@@ -843,6 +843,29 @@ class ChainClient:
     def __init__(self, cfg: Config):
         self._cfg = cfg
         self._w3 = AsyncWeb3(AsyncHTTPProvider(cfg.iotex_rpc_url))
+        # Phase 235.x-STABILITY-9 stage 12 2026-05-17: companion synchronous
+        # Web3 client. Created alongside the async client so that callers
+        # which want to offload blocking RPC reads to a worker thread (via
+        # asyncio.to_thread) can do so without losing AsyncWeb3 cancellation
+        # behavior for ordinary async paths. Rationale: on Windows
+        # ProactorEventLoop the AsyncHTTPProvider socket read does not honor
+        # asyncio.wait_for() cancellation cleanly — when IoTeX RPC stalls,
+        # the event loop blocks for the full OS socket timeout (~20-50s)
+        # regardless of any asyncio-level timeout. Routing the blocking
+        # read through asyncio.to_thread(sync_w3.eth.<call>) confines the
+        # blocked thread to a single ThreadPoolExecutor slot, leaving the
+        # event loop heartbeat healthy. Lazy-imported to avoid hard
+        # dependency at module import time.
+        try:
+            from web3 import Web3, HTTPProvider as _SyncHTTPProvider
+            self._sync_w3 = Web3(_SyncHTTPProvider(cfg.iotex_rpc_url))
+        except Exception as _sync_w3_exc:  # noqa: BLE001 — fail-open
+            log.warning(
+                "ChainClient: sync Web3 companion unavailable (%s); "
+                "STAGE-12 chain-read offload will fall back to AsyncWeb3 path",
+                _sync_w3_exc,
+            )
+            self._sync_w3 = None
 
         # Phase 11: Support encrypted keystore as an alternative to plaintext env key
         source = getattr(cfg, "bridge_private_key_source", "env")

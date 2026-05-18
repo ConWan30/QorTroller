@@ -59,6 +59,11 @@ class _StubW3:
 def _stub_chain(block_number=100, events=None):
     chain = MagicMock()
     chain._w3 = _StubW3(block_number)
+    # Phase 235.x-STABILITY-9 stage 12 2026-05-17: explicit None for
+    # sync_w3 mirrors production ChainClient fail-open behavior. Without
+    # this, MagicMock would auto-create a sync_w3 attribute and the
+    # governor would attempt int(MagicMock(...)) inside to_thread.
+    chain._sync_w3 = None
     chain.get_phg_checkpoint_events = AsyncMock(return_value=events or [])
     chain.wait_for_receipt = AsyncMock(return_value={"status": 1})
     return chain
