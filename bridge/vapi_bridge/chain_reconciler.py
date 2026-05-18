@@ -195,10 +195,24 @@ class ChainReconciler:
                 if gov:
                     _from = self._last_block + 1
                     _to = current_block
+                    # Phase 235.x-STABILITY-9 stage 14 2026-05-18: pass
+                    # sync_fn so governor routes get_logs via to_thread
+                    # when chain client has sync_w3 companion (Stage 12
+                    # closure for the get_logs path, symmetric to the
+                    # block_number sync offload). Closes the ~15s
+                    # ProactoEventLoop cancellation residual seen at
+                    # Stage 13 observation.
+                    _sync_w3_ok = getattr(self._chain, "_sync_w3", None) is not None
+                    _sync_fn = None
+                    if _sync_w3_ok:
+                        _sync_fn = lambda: self._chain.get_phg_checkpoint_events_sync(
+                            _from, _to,
+                        )
                     events = await gov.run_read(
                         lambda: self._chain.get_phg_checkpoint_events(_from, _to),
                         label=f"get_phg_checkpoint_events_range_{_to - _from + 1}",
                         fallback=[],
+                        sync_fn=_sync_fn,
                     )
                 else:
                     events = await self._chain.get_phg_checkpoint_events(

@@ -1656,6 +1656,55 @@ class ChainClient:
             log.warning("get_phg_checkpoint_events error: %s", exc)
             return []
 
+    def get_phg_checkpoint_events_sync(
+        self, from_block: int, to_block: int
+    ) -> list[dict]:
+        """Phase 235.x-STABILITY-9 stage 14 2026-05-18 — sync companion of
+        get_phg_checkpoint_events for asyncio.to_thread offload via
+        ChainReadGovernor.run_read(sync_fn=...).
+
+        Stage 12 fixed block_number reads via sync_w3 + to_thread but
+        left event-filter get_logs reads on the async (AsyncHTTPProvider)
+        path. Stage 13 observation showed 15.86s peak STARVATION
+        clustering at 10s = governor wait_for timeout + ~5.86s socket-
+        cancellation residual = exact Windows ProactorEventLoop signature.
+        This sync version uses self._sync_w3 to route the get_logs call
+        through a blocking socket on a worker thread, avoiding the
+        ProactorEventLoop cancellation gap.
+
+        Returns same list-of-dicts contract as the async version.
+        Fail-open on missing sync_w3 / missing _phg_registry / RPC error.
+        """
+        if self._sync_w3 is None:
+            log.debug(
+                "get_phg_checkpoint_events_sync: sync_w3 unavailable; "
+                "returning empty (caller should fall back to async path)"
+            )
+            return []
+        if not self._phg_registry:
+            return []
+        try:
+            addr = self._sync_w3.to_checksum_address(self._cfg.phg_registry_address)
+            sync_contract = self._sync_w3.eth.contract(
+                address=addr,
+                abi=PHG_REGISTRY_ABI,
+            )
+            event_filter = sync_contract.events.PHGCheckpointCommitted
+            events = event_filter.get_logs(
+                from_block=from_block, to_block=to_block
+            )
+            result = []
+            for evt in events:
+                result.append({
+                    "transactionHash": evt["transactionHash"],
+                    "deviceId":        evt["args"]["deviceId"].hex(),
+                    "cumulativeScore": evt["args"]["cumulativeScore"],
+                })
+            return result
+        except Exception as exc:  # noqa: BLE001 — fail-open
+            log.warning("get_phg_checkpoint_events_sync error: %s", exc)
+            return []
+
     # --- Phase 23: Identity Continuity Registry ---
 
     async def attest_continuity(
