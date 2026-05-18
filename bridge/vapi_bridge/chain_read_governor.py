@@ -215,6 +215,7 @@ class ChainReadGovernor:
         label: str,
         timeout_s: Optional[float] = None,
         fallback: Optional[T] = None,
+        sync_fn: Optional[Callable[[], T]] = None,
     ) -> T:
         """Run an arbitrary read coroutine under governor (semaphore + timeout).
 
@@ -227,6 +228,19 @@ class ChainReadGovernor:
           label:     site name for STAGE-9 timing logs
           timeout_s: per-call timeout (default cfg.chain_read_timeout_s)
           fallback:  returned on timeout/error (default None)
+          sync_fn:   Phase 235.x-STABILITY-9 stage 14 2026-05-18 — optional
+                     sync callable that performs the same read via
+                     blocking I/O. When provided, governor routes through
+                     `asyncio.to_thread(sync_fn)` instead of
+                     `asyncio.wait_for(coro_fn())`. Same pattern as Stage
+                     12 `_fetch_block_number` sync_w3 offload. Use this
+                     for AsyncWeb3 event-filter get_logs reads on Windows
+                     ProactorEventLoop where async cancellation does not
+                     propagate to the underlying socket. Stage 13
+                     observation showed 15.86s peak STARVATION clustering
+                     at the 10s governor timeout + ~5.86s socket-stall
+                     residual — exact signature of the ProactorEventLoop
+                     cancellation gap.
 
         Returns the coroutine's result OR `fallback` on timeout/error.
         Never raises out.
@@ -234,6 +248,19 @@ class ChainReadGovernor:
         self._ensure_async_primitives()
         self._reads_total += 1
         eff_timeout = timeout_s if timeout_s is not None else self._timeout_s_default
+        # Stage 14 path — sync_fn via to_thread, no async cancellation gap
+        if sync_fn is not None:
+            try:
+                async with self._semaphore:
+                    return await asyncio.to_thread(sync_fn)
+            except Exception as exc:  # noqa: BLE001 — fail-open
+                log.warning(
+                    "[ChainReadGovernor] STAGE-14 %s sync_fn ERROR (%s; "
+                    "returning fallback)",
+                    label, exc,
+                )
+                return fallback  # type: ignore[return-value]
+        # Original Stage 9 async path with wait_for
         try:
             async with self._semaphore:
                 return await asyncio.wait_for(coro_fn(), timeout=eff_timeout)
