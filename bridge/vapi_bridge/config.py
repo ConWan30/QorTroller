@@ -322,6 +322,30 @@ class Config:
     loop_health_monitor output for ~10 min — should be 0 STARVATION
     events. Then re-enable groups incrementally to localize the offender."""
 
+    # --- Phase 235.x-STABILITY-9-BISECT (2026-05-17): batch bisection ---
+    bisect_batch: str = field(
+        default_factory=lambda: os.environ.get("BISECT_BATCH", "").strip().upper()
+    )
+    """Phase 235.x-STABILITY-9-BISECT — When MINIMAL_TASK_MODE=true AND this
+    field is set to a recognized batch name, the bridge spawns ONLY the
+    agents in that batch (then parks via asyncio.Event().wait() to keep
+    HTTP serving alive). Recognized values:
+
+      B1 — SQLite-heavy compute: InsightSynthesizer + FleetSignalCoherence
+           + CorpusDataCurator
+      B2 — Polling stewards (Sentry + Guardian + Curator polling loops +
+           absorbed-agent tickers)
+      B3 — MLGA trackers (mlga_session + gic_ledger_beta + honesty_board +
+           cdrr_dag + agent_review + dispute_packet + market_listing)
+      B4 — Chain-side agents (ChainReconciler + watch_manufacturer_revocations
+           + VHPRenewalAgent + PoAdAnchorAgent if enabled)
+      (empty/unset) — pure MINIMAL_TASK_MODE (uvicorn + loop_health only)
+
+    Used to bisect the residual 45s STARVATION peak that survived
+    STABILITY-9 stages 5-12. Per-batch observation cycle = single env
+    var edit + bridge restart + 12-min observation. Default empty
+    (pure MINIMAL_TASK_MODE behavior preserved when bisect_batch unset)."""
+
     # --- Phase 235.x-STABILITY-4 (2026-05-09): on_record sync chain offload (WIF-066 closure) ---
     loop_persist_to_thread_enabled: bool = field(
         default_factory=lambda: _env_bool("LOOP_PERSIST_TO_THREAD_ENABLED", True)

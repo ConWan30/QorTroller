@@ -334,6 +334,408 @@ class Bridge:
         # In production, the uplink message should include the device_id as a header
         return None
 
+    async def _spawn_bisect_batch(self, batch: str) -> None:
+        """Phase 235.x-STABILITY-9-BISECT — Spawn only the agents in the
+        named batch, then return so the caller parks the bridge.
+
+        Per-batch spec:
+          B1 — SQLite-heavy compute: InsightSynthesizer + FleetSignalCoherence +
+               CorpusDataCurator (each is a self-running async loop with
+               internal SLEEP_FIRST + heavy SQLite query patterns)
+          B2 — Polling stewards: 3 stewards' polling loops (Sentry/Guardian/
+               Curator) + their absorbed-agent tickers
+          B3 — MLGA trackers: mlga_session + gic_ledger_beta + honesty_board +
+               cdrr_dag + agent_review + dispute_packet + market_listing
+          B4 — Chain-side agents: ChainReconciler + watch_manufacturer_revocations
+
+        Fail-open: any per-agent spawn failure is logged + skipped, never
+        raises. Wrapped tasks added to self._tasks for shutdown ordering.
+        """
+        batch = (batch or "").upper()
+        log.info(
+            "Phase 235.x-STABILITY-9-BISECT: _spawn_bisect_batch(%s) starting",
+            batch,
+        )
+        spawned: list[str] = []
+
+        def _spawn_named(coro, name: str) -> None:
+            try:
+                t = asyncio.ensure_future(coro)
+                t.set_name(name)
+                self._tasks.append(t)
+                spawned.append(name)
+            except Exception as _exc:  # noqa: BLE001 — fail-open
+                log.warning("BISECT %s spawn failed for %s: %s", batch, name, _exc)
+
+        if batch == "B1":
+            # B1 — SQLite-heavy compute trio: InsightSynthesizer (Mode 6
+            # numpy+SQLite every 6h with 50-record cold-corpus startup),
+            # FleetSignalCoherenceAgent (12+7+5 rules executing SQL per
+            # 15-min poll), CorpusDataCuratorAgent (7 sequential tasks
+            # per 30-min poll). Each uses class-based constructor + .run()
+            # coroutine — match the production spawn patterns.
+            try:
+                from .insight_synthesizer import InsightSynthesizer
+                _synth_interval = getattr(self.cfg, "synthesizer_poll_interval", 21600.0)
+                synth = InsightSynthesizer(
+                    self.store, self.cfg,
+                    poll_interval=_synth_interval,
+                    chain=self.chain,
+                    on_mode6_complete=None,
+                )
+                _spawn_named(synth.run(), "BISECT_B1_InsightSynthesizer")
+            except Exception as _imp_exc:  # noqa: BLE001 — fail-open
+                log.warning("BISECT B1 InsightSynthesizer import failed: %s", _imp_exc)
+            try:
+                from .fleet_signal_coherence_agent import FleetSignalCoherenceAgent
+                fsca = FleetSignalCoherenceAgent(
+                    self.store, self.cfg, bus=None, logger=log,
+                )
+                _spawn_named(fsca.run(), "BISECT_B1_FleetSignalCoherenceAgent")
+            except Exception as _imp_exc:  # noqa: BLE001 — fail-open
+                log.warning("BISECT B1 FleetSignalCoherenceAgent import failed: %s", _imp_exc)
+            try:
+                from .corpus_curator_agent import CorpusDataCuratorAgent
+                curator = CorpusDataCuratorAgent(
+                    self.store, self.cfg, bus=None, logger=log,
+                )
+                _spawn_named(curator.run(), "BISECT_B1_CorpusDataCuratorAgent")
+            except Exception as _imp_exc:  # noqa: BLE001 — fail-open
+                log.warning("BISECT B1 CorpusDataCuratorAgent import failed: %s", _imp_exc)
+        elif batch == "B2":
+            # B2 — Polling stewards: 3 stewards' run_*_polling_loop entrypoints.
+            # When cfg.stewards_absorb_enabled=True (production default), each
+            # steward also wires its own AbsorbedAgentTicker covering the 9
+            # absorbed agents (Sentry: VHPRenewal + CeremonyWatchdog +
+            # ChainReconciler + RulingProvenanceAnchor; Guardian: ProtocolIntel
+            # + AgentSupervisor + AgentCalibrationMonitor + RulingEnforcement;
+            # Curator: CorpusDataCurator). Pass draft_generator=None +
+            # get_pending_triggers=None — polling loops accept these defaults
+            # (no-op trigger stub returns []) so no drafts fire during
+            # bisection. Cycle observes whether the steward _run_loop bodies +
+            # their absorbed-ticker invocations produce STARVATION.
+            try:
+                from .operator_agent_sentry_polling import run_sentry_polling_loop
+                _spawn_named(
+                    run_sentry_polling_loop(
+                        cfg=self.cfg, store=self.store,
+                        chain=self.chain, bus=None,
+                    ),
+                    "BISECT_B2_SentryPollingLoop",
+                )
+            except Exception as _imp_exc:  # noqa: BLE001 — fail-open
+                log.warning("BISECT B2 Sentry import failed: %s", _imp_exc)
+            try:
+                from .operator_agent_guardian_polling import run_guardian_polling_loop
+                _spawn_named(
+                    run_guardian_polling_loop(
+                        cfg=self.cfg, store=self.store,
+                        chain=self.chain, bus=None,
+                    ),
+                    "BISECT_B2_GuardianPollingLoop",
+                )
+            except Exception as _imp_exc:  # noqa: BLE001 — fail-open
+                log.warning("BISECT B2 Guardian import failed: %s", _imp_exc)
+            try:
+                from .operator_agent_curator_polling import run_curator_polling_loop
+                _spawn_named(
+                    run_curator_polling_loop(
+                        cfg=self.cfg, store=self.store,
+                        chain=self.chain, bus=None,
+                    ),
+                    "BISECT_B2_CuratorPollingLoop",
+                )
+            except Exception as _imp_exc:  # noqa: BLE001 — fail-open
+                log.warning("BISECT B2 Curator import failed: %s", _imp_exc)
+        elif batch == "B3":
+            # B3 — MLGA trackers: 4 long-running poll loops. Each tracker
+            # has identical Tracker(store, cfg) + run_*_loop(tracker=...)
+            # signature shape per Phase O5-MLGA Stages 3/5/6/8. We spawn
+            # unconditionally (bypassing per-tracker cfg gates) to isolate
+            # whether MLGA polling contributes to the 45s STARVATION peak.
+            # 3 event-driven emitters (Stages 4/7/9/10) are NOT spawned
+            # here — they only fire on bus events, not via standalone task.
+            try:
+                from .mlga_session_tracker import (
+                    MLGASessionTracker, run_mlga_session_tracker_loop,
+                )
+                _mlga = MLGASessionTracker(store=self.store, cfg=self.cfg)
+                _spawn_named(
+                    run_mlga_session_tracker_loop(tracker=_mlga),
+                    "BISECT_B3_MLGASessionTracker",
+                )
+            except Exception as _imp_exc:  # noqa: BLE001 — fail-open
+                log.warning("BISECT B3 MLGASessionTracker failed: %s", _imp_exc)
+            try:
+                from .gic_ledger_beta_tracker import (
+                    GicLedgerBetaTracker, run_gic_ledger_beta_tracker_loop,
+                )
+                _gic_beta = GicLedgerBetaTracker(store=self.store, cfg=self.cfg)
+                _spawn_named(
+                    run_gic_ledger_beta_tracker_loop(tracker=_gic_beta),
+                    "BISECT_B3_GicLedgerBetaTracker",
+                )
+            except Exception as _imp_exc:  # noqa: BLE001 — fail-open
+                log.warning("BISECT B3 GicLedgerBetaTracker failed: %s", _imp_exc)
+            try:
+                from .honesty_board_tracker import (
+                    HonestyBoardTracker, run_honesty_board_tracker_loop,
+                )
+                _hb = HonestyBoardTracker(store=self.store, cfg=self.cfg)
+                _spawn_named(
+                    run_honesty_board_tracker_loop(tracker=_hb),
+                    "BISECT_B3_HonestyBoardTracker",
+                )
+            except Exception as _imp_exc:  # noqa: BLE001 — fail-open
+                log.warning("BISECT B3 HonestyBoardTracker failed: %s", _imp_exc)
+            try:
+                from .cdrr_dag_tracker import (
+                    CdrrDagTracker, run_cdrr_dag_tracker_loop,
+                )
+                _cdrr = CdrrDagTracker(store=self.store, cfg=self.cfg)
+                _spawn_named(
+                    run_cdrr_dag_tracker_loop(tracker=_cdrr),
+                    "BISECT_B3_CdrrDagTracker",
+                )
+            except Exception as _imp_exc:  # noqa: BLE001 — fail-open
+                log.warning("BISECT B3 CdrrDagTracker failed: %s", _imp_exc)
+        elif batch == "B4":
+            # B4 — Chain-side STANDALONE (not-absorbed) agents:
+            #   1. chain.watch_manufacturer_revocations() — Gate G3 listener
+            #   2. PoAdAnchorAgent — Phase 112 on-chain PoAd hash anchor
+            #   3. OperatorAgentLiveWriteExecutor — Phase O1-D-PATH-B v1.1
+            #      always-spawned executor consuming O3_ACTING accepted drafts
+            # NOTE: ChainReconciler + VHPRenewal + CeremonyWatchdog +
+            # RulingProvenanceAnchor are absorbed via SentryStewardAbsorbedTicker
+            # and are tested in B2, NOT here. Spawning them again would
+            # duplicate. Spawn unconditionally (bypass cfg gates) for
+            # bisection completeness.
+            if self.chain is not None:
+                try:
+                    _t = asyncio.ensure_future(
+                        self.chain.watch_manufacturer_revocations()
+                    )
+                    _t.set_name("BISECT_B4_watch_manufacturer_revocations")
+                    self._tasks.append(_t)
+                    spawned.append("BISECT_B4_watch_manufacturer_revocations")
+                except Exception as _imp_exc:  # noqa: BLE001 — fail-open
+                    log.warning("BISECT B4 watch_revocations failed: %s", _imp_exc)
+                try:
+                    from .poad_anchor_agent import PoAdAnchorAgent
+                    _poad_anchor = PoAdAnchorAgent(
+                        cfg=self.cfg, store=self.store, chain=self.chain,
+                    )
+                    _spawn_named(
+                        _poad_anchor.run_poll_loop(),
+                        "BISECT_B4_PoAdAnchorAgent",
+                    )
+                except Exception as _imp_exc:  # noqa: BLE001 — fail-open
+                    log.warning("BISECT B4 PoAdAnchorAgent failed: %s", _imp_exc)
+                try:
+                    from .operator_initiative_live_write_executor import (
+                        OperatorAgentLiveWriteExecutor,
+                    )
+                    _executor = OperatorAgentLiveWriteExecutor(
+                        cfg=self.cfg, store=self.store, chain=self.chain,
+                        interval_s=int(
+                            getattr(self.cfg, "phase_o3_executor_interval_s", 60)
+                        ),
+                    )
+                    _spawn_named(
+                        _executor.run_forever(),
+                        "BISECT_B4_LiveWriteExecutor",
+                    )
+                except Exception as _imp_exc:  # noqa: BLE001 — fail-open
+                    log.warning("BISECT B4 LiveWriteExecutor failed: %s", _imp_exc)
+            else:
+                log.warning("BISECT B4 — self.chain is None; nothing to spawn")
+        elif batch == "B5D":
+            # B5D — Sweepers / batcher / heartbeats / LiveModeActivationAgent.
+            # Most-suspect RETAIN sub-batch per Pareto-priors: batcher chain-
+            # submit retry loop is the highest-confidence uninstrumented sync
+            # site; cedar_drift_sweeper + cfss_drift_sweeper fire at 60s
+            # intervals matching boot+1:57 wave window. Spawn unconditionally
+            # (bypass cfg gates) for bisection completeness. Skip
+            # pcc_persistence (needs pcc_monitor from dualshock; not in bisect
+            # env) and protocol_state_cache_heartbeat (needs http_enabled +
+            # cache construction; complex). LiveModeActivationAgent uses
+            # bus=None acceptable.
+            try:
+                _spawn_named(self.batcher.run(), "BISECT_B5D_batcher")
+            except Exception as _imp_exc:  # noqa: BLE001 — fail-open
+                log.warning("BISECT B5D batcher failed: %s", _imp_exc)
+            try:
+                from .cedar_drift_sweeper import run_drift_sweep_loop
+                _spawn_named(
+                    run_drift_sweep_loop(
+                        cfg=self.cfg, store=self.store, chain=self.chain,
+                    ),
+                    "BISECT_B5D_cedar_drift_sweeper",
+                )
+            except Exception as _imp_exc:  # noqa: BLE001 — fail-open
+                log.warning("BISECT B5D cedar_drift_sweeper failed: %s", _imp_exc)
+            try:
+                from .cfss_drift_sweeper import run_cfss_drift_sweep_loop
+                _spawn_named(
+                    run_cfss_drift_sweep_loop(
+                        cfg=self.cfg, store=self.store,
+                    ),
+                    "BISECT_B5D_cfss_drift_sweeper",
+                )
+            except Exception as _imp_exc:  # noqa: BLE001 — fail-open
+                log.warning("BISECT B5D cfss_drift_sweeper failed: %s", _imp_exc)
+            try:
+                from .live_mode_activation_agent import LiveModeActivationAgent
+                _lma = LiveModeActivationAgent(self.cfg, self.store, bus=None)
+                _spawn_named(
+                    _lma.run(),
+                    "BISECT_B5D_LiveModeActivationAgent",
+                )
+            except Exception as _imp_exc:  # noqa: BLE001 — fail-open
+                log.warning("BISECT B5D LiveModeActivationAgent failed: %s", _imp_exc)
+        elif batch == "B5A":
+            # B5A — frontend-adjacent lightweight always-on:
+            # AlertRouter + CalibrationIntelligenceAgent. Skips
+            # ProactiveMonitor (complex dependency tree: BehavioralArchaeologist
+            # + NetworkCorrelationDetector + BridgeAgent + CalibrationAgent —
+            # too costly to construct in isolation; if needed, test in B5_ALL)
+            # and BridgeAgent (no standalone run loop — peer agent only).
+            try:
+                from .alert_router import AlertRouter
+                _ar = AlertRouter(self.cfg, self.store)
+                _spawn_named(_ar.run(), "BISECT_B5A_AlertRouter")
+            except Exception as _imp_exc:  # noqa: BLE001 — fail-open
+                log.warning("BISECT B5A AlertRouter failed: %s", _imp_exc)
+            try:
+                from .calibration_intelligence_agent import CalibrationIntelligenceAgent
+                _cia = CalibrationIntelligenceAgent(self.cfg, self.store)
+                _spawn_named(
+                    _cia.run_event_consumer(),
+                    "BISECT_B5A_CalibrationIntelligenceAgent",
+                )
+            except Exception as _imp_exc:  # noqa: BLE001 — fail-open
+                log.warning("BISECT B5A CalibrationIntelligenceAgent failed: %s", _imp_exc)
+        elif batch == "B5B":
+            # B5B — Corpus/session adjudication:
+            # DataCuratorAgent + SessionAdjudicator + SessionAdjudicator-
+            # ValidationAgent + ClassJDetector + LiveModeActivationPipeline
+            # + DivergenceTriageAgent. All take (cfg, store, bus=). Pass
+            # bus=None — bus-subscribed agents will fail-open gracefully
+            # on empty bus. SessionAdjudicator is the TOP REMAINING SUSPECT
+            # (anthropic LLM API call via httpx → Windows TCP socket can
+            # block).
+            try:
+                from .data_curator_agent import DataCuratorAgent
+                _dc = DataCuratorAgent(self.cfg, self.store, self.chain)
+                _spawn_named(_dc.run_poll_loop(), "BISECT_B5B_DataCuratorAgent")
+            except Exception as _imp_exc:  # noqa: BLE001 — fail-open
+                log.warning("BISECT B5B DataCuratorAgent failed: %s", _imp_exc)
+            try:
+                from .session_adjudicator import SessionAdjudicator
+                _adj = SessionAdjudicator(self.cfg, self.store, bus=None)
+                _spawn_named(
+                    _adj.run_event_consumer(),
+                    "BISECT_B5B_SessionAdjudicator",
+                )
+            except Exception as _imp_exc:  # noqa: BLE001 — fail-open
+                log.warning("BISECT B5B SessionAdjudicator failed: %s", _imp_exc)
+            try:
+                from .session_adjudicator_validator import SessionAdjudicatorValidationAgent
+                _val = SessionAdjudicatorValidationAgent(self.cfg, self.store, bus=None)
+                _spawn_named(
+                    _val.run_event_consumer(),
+                    "BISECT_B5B_SessionAdjudicatorValidator",
+                )
+            except Exception as _imp_exc:  # noqa: BLE001 — fail-open
+                log.warning("BISECT B5B SessionAdjudicatorValidator failed: %s", _imp_exc)
+            try:
+                from .class_j_detector import ClassJDetector
+                _cj = ClassJDetector(self.cfg, self.store, bus=None)
+                _spawn_named(_cj.run_poll_loop(), "BISECT_B5B_ClassJDetector")
+            except Exception as _imp_exc:  # noqa: BLE001 — fail-open
+                log.warning("BISECT B5B ClassJDetector failed: %s", _imp_exc)
+            try:
+                from .live_mode_activation_pipeline import LiveModeActivationPipeline
+                _lmap = LiveModeActivationPipeline(self.cfg, self.store, bus=None)
+                _spawn_named(
+                    _lmap.run_poll_loop(),
+                    "BISECT_B5B_LiveModeActivationPipeline",
+                )
+            except Exception as _imp_exc:  # noqa: BLE001 — fail-open
+                log.warning("BISECT B5B LiveModeActivationPipeline failed: %s", _imp_exc)
+            try:
+                from .divergence_triage_agent import DivergenceTriageAgent
+                _dt = DivergenceTriageAgent(self.cfg, self.store, bus=None)
+                _spawn_named(
+                    _dt.run_event_consumer(),
+                    "BISECT_B5B_DivergenceTriageAgent",
+                )
+            except Exception as _imp_exc:  # noqa: BLE001 — fail-open
+                log.warning("BISECT B5B DivergenceTriageAgent failed: %s", _imp_exc)
+        elif batch == "B5_PMONITOR":
+            # B5_PMONITOR — ProactiveMonitor (Phase 32) with full dependency
+            # tree. Last remaining suspect after 40 agents tested clean across
+            # B1-B5A-B5B-B5C-B5D. 60s poll interval matches boot+1-2 min wave
+            # window. Constructs BehavioralArchaeologist + ContinuityProver +
+            # NetworkCorrelationDetector as required deps. Passes agent=None
+            # and calibration_agent=None for minimal-isolation test (skips
+            # LLM coupling; surveillance hot path still fires per 60s poll).
+            try:
+                from .behavioral_archaeologist import BehavioralArchaeologist
+                from .continuity_prover import ContinuityProver
+                from .network_correlation_detector import NetworkCorrelationDetector
+                from .proactive_monitor import ProactiveMonitor
+                _arch = BehavioralArchaeologist(self.store)
+                _prover = ContinuityProver(self.store)
+                _net_det = NetworkCorrelationDetector(self.store, _prover)
+                _pmonitor = ProactiveMonitor(
+                    self.store, _arch, _net_det, None, self.cfg,
+                    poll_interval=getattr(self.cfg, "monitor_poll_interval", 60.0),
+                    calibration_agent=None,
+                )
+                _spawn_named(
+                    _pmonitor.run(),
+                    "BISECT_B5_PMONITOR",
+                )
+            except Exception as _imp_exc:  # noqa: BLE001 — fail-open
+                log.warning("BISECT B5_PMONITOR failed: %s", _imp_exc)
+        elif batch == "B5C":
+            # B5C — Separation/tournament/calibration. All (cfg, store, bus=).
+            for _spec in [
+                ("separation_ratio_monitor_agent", "SeparationRatioMonitorAgent", "run_poll_loop"),
+                ("tournament_activation_chain_agent", "TournamentActivationChainAgent", "run_event_consumer"),
+                ("controller_hardware_intelligence_agent", "ControllerHardwareIntelligenceAgent", "run_poll_loop"),
+                ("enrollment_auto_guidance_agent", "EnrollmentAutoGuidanceAgent", "run_poll_loop"),
+                ("fleet_consensus_snapshot_agent", "FleetConsensusSnapshotAgent", "run_poll_loop"),
+                ("biometric_privacy_compliance_agent", "BiometricPrivacyComplianceAgent", "run_poll_loop"),
+                ("separation_ratio_recovery_agent", "SeparationRatioRecoveryAgent", "run_poll_loop"),
+                ("session_boundary_detector_agent", "SessionBoundaryDetectorAgent", "run_poll_loop"),
+            ]:
+                _mod_name, _cls_name, _method_name = _spec
+                try:
+                    _mod = __import__(
+                        f"bridge.vapi_bridge.{_mod_name}",
+                        fromlist=[_cls_name],
+                    )
+                    _cls = getattr(_mod, _cls_name)
+                    _inst = _cls(self.cfg, self.store, bus=None)
+                    _coro = getattr(_inst, _method_name)()
+                    _spawn_named(_coro, f"BISECT_B5C_{_cls_name}")
+                except Exception as _imp_exc:  # noqa: BLE001 — fail-open
+                    log.warning("BISECT B5C %s failed: %s", _cls_name, _imp_exc)
+        else:
+            log.warning(
+                "BISECT_BATCH=%r not recognized (allowed: B1, B2, B3, B4, "
+                "B5_ALL, B5A, B5B, B5C, B5D); parking with no agents — "
+                "equivalent to pure MINIMAL_TASK_MODE.",
+                batch,
+            )
+
+        log.info(
+            "Phase 235.x-STABILITY-9-BISECT: batch %s spawned %d agents: %s",
+            batch, len(spawned), ", ".join(spawned) if spawned else "(none)",
+        )
+
     async def run(self):
         """Start all services and run until shutdown."""
         # Validate configuration
@@ -630,17 +1032,68 @@ class Bridge:
                 )
 
         if getattr(self.cfg, "minimal_task_mode", False):
-            log.warning(
-                "Phase 235.x-STABILITY-9 MINIMAL_TASK_MODE=true — skipping ALL "
-                "background agent tasks (batcher, transports, polling loops, "
-                "trackers, FSCA, drift sweepers, executors). Bridge will only "
-                "run uvicorn HTTP server + loop_health_monitor for baseline "
-                "stability measurement. To restore full operation: set "
-                "MINIMAL_TASK_MODE=false in bridge/.env + restart."
-            )
-            # Park forever so the bridge keeps running.
-            await asyncio.Event().wait()
-            return
+            _batch = (getattr(self.cfg, "bisect_batch", "") or "").upper()
+            if _batch == "B5_ALL":
+                # BISECT B5_ALL — fall-through to normal spawn sequence
+                # to test the entire RETAIN set after B1-B4 individually
+                # cleared. If STARVATION fires here (Stage 12 baseline:
+                # 59 events / 45.62s peak), offender is empirically
+                # isolated to the ~25 "RETAIN" agents not covered by
+                # B1-B4 (batcher + transports + bridge_agent +
+                # calibration_intel + ProactiveMonitor + AlertRouter +
+                # DataCuratorAgent + SessionAdjudicator + ClassJDetector
+                # + LiveModeActivationPipeline + DivergenceTriageAgent +
+                # SeparationRatioMonitorAgent + SeparationRatioRecoveryAgent
+                # + TournamentActivationChainAgent + ControllerHardware-
+                # IntelligenceAgent + EnrollmentAutoGuidanceAgent +
+                # FleetConsensusSnapshotAgent + BiometricPrivacyCompliance
+                # + SessionBoundaryDetectorAgent + cedar_drift_sweeper +
+                # cfss_drift_sweeper + protocol_state_cache_heartbeat +
+                # operator_initiative_auto_supersede + pcc_persistence +
+                # others). Three-line patch instead of duplicating ~25
+                # spawn-block constructors from main.py.
+                log.warning(
+                    "Phase 235.x-STABILITY-9-BISECT MINIMAL_TASK_MODE=true + "
+                    "BISECT_BATCH=B5_ALL — BYPASSING park; letting normal "
+                    "main.py spawn sequence proceed for full RETAIN-set test "
+                    "(includes B1/B2/B3/B4 agents — additive run). If "
+                    "STARVATION fires, offender is in agents not in B1-B4."
+                )
+                # Fall through to normal spawn — do NOT park.
+            elif _batch:
+                log.warning(
+                    "Phase 235.x-STABILITY-9-BISECT MINIMAL_TASK_MODE=true + "
+                    "BISECT_BATCH=%s — spawning ONLY the agents in batch %s; "
+                    "all others skipped. Used to localize the residual 45s "
+                    "STARVATION peak surviving stages 5-12. Recognized: "
+                    "B1=SQLite-heavy/InsightSynth/FSCA/CorpusCurator, "
+                    "B2=PollingStewards, B3=MLGA, B4=ChainAgents, "
+                    "B5_ALL=full RETAIN catch-all (bypasses park).",
+                    _batch, _batch,
+                )
+                try:
+                    await self._spawn_bisect_batch(_batch)
+                except Exception as _bx_exc:  # noqa: BLE001 — fail-open
+                    log.warning(
+                        "Phase 235.x-STABILITY-9-BISECT: batch %s spawn failed "
+                        "(%s); parking with no agents.",
+                        _batch, _bx_exc,
+                    )
+                # Park forever so the bridge keeps running.
+                await asyncio.Event().wait()
+                return
+            else:
+                log.warning(
+                    "Phase 235.x-STABILITY-9 MINIMAL_TASK_MODE=true — skipping ALL "
+                    "background agent tasks (batcher, transports, polling loops, "
+                    "trackers, FSCA, drift sweepers, executors). Bridge will only "
+                    "run uvicorn HTTP server + loop_health_monitor for baseline "
+                    "stability measurement. To restore full operation: set "
+                    "MINIMAL_TASK_MODE=false in bridge/.env + restart."
+                )
+                # Park forever so the bridge keeps running.
+                await asyncio.Event().wait()
+                return
 
         if self.cfg.dualshock_enabled:
             from .dualshock_integration import DualShockTransport
