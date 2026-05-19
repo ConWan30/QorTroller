@@ -125,7 +125,7 @@ export function MarketplaceView() {
         />
       </div>
 
-      {/* 7-primitive composition strip — VAPI exclusivity showcase */}
+      {/* 7-primitive composition strip — QorTroller exclusivity showcase */}
       <section>
         <SectionHeader>SEVEN-PRIMITIVE COMPOSITION (each LISTING-v1 binds these anchors)</SectionHeader>
         <div style={{
@@ -174,7 +174,7 @@ export function MarketplaceView() {
         </SectionHeader>
         <iframe
           src="/controller-twin.html?minimal=1"
-          title="VAPI 3D Controller Twin"
+          title="QorTroller 3D Controller Twin"
           style={{
             width:        '100%',
             height:       280,

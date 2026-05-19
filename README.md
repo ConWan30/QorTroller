@@ -1,6 +1,10 @@
-# VAPI — Verified Autonomous Physical Intelligence
+# QorTroller — Core Controllers of their gaming data
 
-**A Verified Autonomous Physical Intelligence architecture on IoTeX for cryptographic human-gameplay verification in competitive gaming.**
+> **The reference implementation of Verifiable Autonomous Physical Intelligence (V.A.P.I.)** — a Decentralized Physical Infrastructure (DePIN) sub-category coined to describe protocols where the physical-input source is also the cryptographic agency-holder over the data those physical interactions generate. In QorTroller's case: gamers and their controllers, producing data, owning that data.
+>
+> Built native to IoTeX's Internet of Trusted Things foundation. Anchored on IoTeX L1. Composable as a single on-chain call. Designed so cheating doesn't need to be punished — it can't exist when humanity is cryptographically proven and the gamer retains sovereignty.
+
+**V.A.P.I.** — pronounced as the acronym; styled with periods to distinguish from unrelated similarly-named projects in other categories. As a coined DePIN sub-category, V.A.P.I. is the conceptual scope; QorTroller is the project that implements it for competitive gaming.
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18966169.svg)](https://doi.org/10.5281/zenodo.18966169) (v3 — historical; v4 DOI pending release)
 
@@ -23,11 +27,13 @@
 
 ---
 
-## What VAPI is
+## What QorTroller is
 
-**The problem.** Cheat detection in competitive gaming has no cryptographic anchor. Existing solutions (BattlEye, Riot Vanguard, Easy Anti-Cheat) are kernel-level anti-cheat with no public verifiability surface; tournament organizers and viewers must trust the publisher's claim that a match was clean. Bot software keeps improving; controllers get repurposed; signed binaries get repurposed; injection vectors keep multiplying.
+**The problem.** Cheat detection in competitive gaming has no cryptographic anchor. Existing solutions (BattlEye, Riot Vanguard, Easy Anti-Cheat) are kernel-level enforcement layers with no public verifiability surface; tournament organizers and viewers must trust the publisher's claim that a match was clean. Bot software keeps improving; controllers get repurposed; signed binaries get repurposed; injection vectors keep multiplying. Worse: the enforcement model is zero-sum — the protocol *vs.* the gamer. The gamer surrenders sovereignty over their biometric, behavioral, and consent surfaces to participate.
 
-**The protocol.** VAPI binds every controller input event to a tamper-evident, on-chain-verifiable cryptographic record — a **Proof of Autonomous Cognition (PoAC)**. Each 228-byte PoAC binds raw sensor commitments (IMU dynamics, analog trigger dynamics, stick/button timing, biometric feature commitments) to a hardware-rooted ECDSA-P256 signature, hash-chains them into a per-session sequence, and exposes the resulting state through a single composable on-chain call: `VAPIProtocolLens.isFullyEligible(deviceIdHash)`. External tournament organizers can gate eligibility on that one view call without trusting a private publisher API or manually inspecting raw biometric data — the on-chain gate minimizes integrator trust by reducing eligibility to a public view-call over previously anchored protocol state.
+**The category — V.A.P.I.** Verifiable Autonomous Physical Intelligence is a coined DePIN sub-category for protocols where the **physical-input source is also the cryptographic agency-holder** over the data those physical interactions generate. V.A.P.I. inverts the enforcement frame: cheating doesn't need to be punished — it can't exist when humanity is cryptographically proven and the gamer retains sovereignty. Other future V.A.P.I.-compliant projects could implement the category for mobile, console, VR, IoT-sensor, or wearable scopes. QorTroller is the first.
+
+**The project — QorTroller.** Binds every controller input event to a tamper-evident, on-chain-verifiable cryptographic record — a **Proof of Autonomous Cognition (PoAC)**. Each 228-byte PoAC binds raw sensor commitments (IMU dynamics, analog trigger dynamics, stick/button timing, biometric feature commitments) to a hardware-rooted ECDSA-P256 signature, hash-chains them into a per-session sequence, and exposes the resulting state through a single composable on-chain call: `VAPIProtocolLens.isFullyEligible(deviceIdHash)`. External tournament organizers can gate eligibility on that one view call without trusting a private publisher API or manually inspecting raw biometric data — the on-chain gate minimizes integrator trust by reducing eligibility to a public view-call over previously anchored protocol state. The gamer keeps cryptographic credentials (PHGCredential / VHP), grants per-category consent (CONSENT v1), and exercises GDPR Article 17 right-to-be-forgotten — `msg.sender` on `VAPIConsentRegistry` IS the gamer.
 
 **The architecture.** Nine layers of Physical Input Trust (PITL L0–L6 deployed, L7 GSR advisory, L8 BT gated) verify each input event at increasing levels of biometric specificity. A 10-element family of FROZEN-v1 cryptographic primitives (PATTERN-017) anchors session continuity, cognition integrity, watchdog events, application-layer messaging, biometric snapshots, consent state, and Layer 7 ZKBA artifacts. Three Operator Initiative agents (Sentry, Guardian, Curator) hold Cross-Fleet Skill Separation (CFSS) lane authority on Cedar v2 bundles dual-anchored on chain.
 
@@ -234,7 +240,7 @@ Phase O4 elevated the **Methodology Layer (Layer 7) output surface** from a coll
 
 The **three-layer Anti-Hype Visual Grammar** is the protocol's first structural UX defense — preventing demo-as-production / revoked-as-active / unverified-as-verified overclaim attacks via a FROZEN DOM signature matrix enforced at three independent layers (Python compile-time + Python bridge-time + JavaScript browser-time).
 
-**VAPI now holds the frozen-primitive ↔ frozen-compiler ↔ frozen-visual-grammar ↔ frozen-iframe-sandbox quadruple-bind** — every cryptographic claim is independently verifiable by anyone with the canonical-JSON algorithm + SHA-256 + the public source of the four enforcement layers.
+**QorTroller (as a V.A.P.I.-compliant reference implementation) now holds the frozen-primitive ↔ frozen-compiler ↔ frozen-visual-grammar ↔ frozen-iframe-sandbox quadruple-bind** — every cryptographic claim is independently verifiable by anyone with the canonical-JSON algorithm + SHA-256 + the public source of the four enforcement layers.
 
 See [`wiki/phases/phase_o4_vpm_integration.md`](wiki/phases/phase_o4_vpm_integration.md) for the complete close provenance.
 
@@ -247,7 +253,7 @@ Until v4 receives its own Zenodo DOI at release, cite the historical v3 whitepap
 ```bibtex
 @software{battle_2026_vapi_v3,
   author    = {Battle, Contravious},
-  title     = {VAPI: Verifiable Controller Input Provenance with
+  title     = {QorTroller (V.A.P.I. Reference Implementation): Verifiable Controller Input Provenance with
                Physics-Backed Liveness for Competitive Gaming},
   year      = {2026},
   publisher = {Zenodo},
@@ -278,4 +284,4 @@ Issues, security disclosures, and partnership inquiries should be filed via GitH
 
 ---
 
-*VAPI is a reference implementation of Verified Autonomous Physical Intelligence for competitive gaming on IoTeX. This repository contains the canonical implementation as of Phase O4-VPM-INTEGRATION close — architecture anchor `e81e04aa` (2026-05-13), documentation commit `9f8581cd`.*
+*QorTroller is the reference implementation of Verifiable Autonomous Physical Intelligence (V.A.P.I.) — a Decentralized Physical Infrastructure (DePIN) sub-category — for competitive gaming on IoTeX. This repository contains the canonical implementation as of Phase O4-VPM-INTEGRATION close — architecture anchor `e81e04aa` (2026-05-13), documentation commit `9f8581cd`. Brand-rename QRESCE-0001 v0.5 landed 2026-05-18 (codebase identifiers preserve `VAPI` as categorical references per Layer C FROZEN-v1 discipline; project identity displays as **QorTroller** per medial-cap brand convention).*
