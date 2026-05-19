@@ -98,7 +98,7 @@ export default function PublicExplorerLandingView() {
         borderBottom: `1px solid ${_ACCENT}`, display: 'flex', gap: 16, alignItems: 'center',
       }}>
         <div style={{ fontFamily: _MONO, fontSize: 11, fontWeight: 700, color: _ACCENT, letterSpacing: '0.16em', textTransform: 'uppercase' }}>
-          VAPI · Public Forensic Explorer
+          QorTroller · Public Forensic Explorer
         </div>
         <div style={{ flex: 1 }} />
         <Link to="/" style={{ fontFamily: _MONO, fontSize: 11, color: '#7a8a9b', textDecoration: 'none' }}>operator dashboard →</Link>
@@ -111,7 +111,7 @@ export default function PublicExplorerLandingView() {
             Every claim · Verifiable in your browser
           </div>
           <div style={{ fontFamily: _MONO, fontSize: 11, color: '#ffe8d4', lineHeight: 1.7 }}>
-            VAPI is the first anti-cheat protocol where any external party — tournament organizer, sponsor, manufacturer, journalist, opposing team, regulator — can verify cryptographic claims <strong style={{ color: '#5bd6a3' }}>without trusting the operator</strong>. Paste a session hash below or browse the routes. Each viewer re-executes the protocol's SHA-256 algorithms in your browser via Web Crypto API and displays OK / MISMATCH per primitive.
+            QorTroller (the reference implementation of <strong style={{ color: '#5bd6a3' }}>Verifiable Autonomous Physical Intelligence — V.A.P.I.</strong>, a coined DePIN sub-category) is the first anti-cheat protocol where any external party — tournament organizer, sponsor, manufacturer, journalist, opposing team, regulator — can verify cryptographic claims <strong style={{ color: '#5bd6a3' }}>without trusting the operator</strong>. Paste a session hash below or browse the routes. Each viewer re-executes the protocol's SHA-256 algorithms in your browser via Web Crypto API and displays OK / MISMATCH per primitive.
           </div>
         </div>
 
@@ -189,7 +189,7 @@ export default function PublicExplorerLandingView() {
         )}
 
         <div style={{ marginTop: 30, padding: 18, fontFamily: _MONO, fontSize: 10, color: '#7a8a9b', lineHeight: 1.7, fontStyle: 'italic', borderTop: '1px solid rgba(122,138,155,0.18)' }}>
-          The VAPI Protocol's defensibility flows from cryptographic guarantees, not closed-source obscurity. The catalog of 14 FROZEN-v1 primitives — PoAC, GIC, MLGA, ZKBA, VHP, Cedar bundle Merkle, and the rest — is published in code, executable in browser, verifiable end-to-end. No other anti-cheat surfaces its hashing scheme this way. Riot Vanguard / Easy Anti-Cheat / BattlEye / kernel-level competitors all remain opaque; VAPI's commitment to verifiability is the moat.
+          QorTroller's defensibility flows from cryptographic guarantees, not closed-source obscurity. The catalog of 14 FROZEN-v1 V.A.P.I. primitives — PoAC, GIC, MLGA, ZKBA, VHP, Cedar bundle Merkle, and the rest — is published in code, executable in browser, verifiable end-to-end. No other anti-cheat surfaces its hashing scheme this way. Riot Vanguard / Easy Anti-Cheat / BattlEye / kernel-level competitors all remain opaque; QorTroller's commitment to verifiability is the moat.
         </div>
       </div>
     </div>

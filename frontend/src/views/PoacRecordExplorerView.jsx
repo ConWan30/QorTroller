@@ -7,7 +7,7 @@
  * highlighting, and recomputes record_hash = SHA-256(raw[:164]) in
  * browser via verifyPoacRecordHash.
  *
- * Strategic claim: VAPI is the only anti-cheat protocol where the
+ * Strategic claim: QorTroller is the only anti-cheat protocol where the
  * exact byte layout of its core proof record is publicly inspectable.
  * Every field offset matches the FROZEN spec; the body-vs-signature
  * boundary (byte 163) is visually marked.
@@ -123,7 +123,7 @@ export default function PoacRecordExplorerView() {
         padding: '16px 24px', background: 'rgba(2,4,8,0.9)',
         borderBottom: `1px solid ${_ACCENT}`, display: 'flex', gap: 16, alignItems: 'center',
       }}>
-        <Link to="/" style={{ fontFamily: _MONO, fontSize: 11, color: _ACCENT, textDecoration: 'none' }}>← VAPI</Link>
+        <Link to="/" style={{ fontFamily: _MONO, fontSize: 11, color: _ACCENT, textDecoration: 'none' }}>← QorTroller</Link>
         <div style={{ fontFamily: _MONO, fontSize: 11, fontWeight: 700, color: _ACCENT, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
           PoAC Record Byte Explorer
         </div>
