@@ -15,7 +15,7 @@
 
 | # | Prerequisite | Agent verification | Operator action required | Current state |
 |---|---|---|---|---|
-| 1 | Trademark clearance | ✓ SEO/brand-virginity confirmed; USPTO TESS query templates for QORTROLLER prepped | **✓ attorney engagement (1-3 wks async)** | **PRE-CLEARED at agent layer; legal opinion required** |
+| 1 | Trademark clearance | ✓ SEO/brand-virginity + 5/5 USPTO TESS queries CLEAN (operator-self-conducted 2026-05-18) | (attorney engagement deferred per pre-revenue policy) | **✓ EMPIRICALLY CLEARED — see `trademark_clearance_evidence.md`** |
 | 2 | Domain registration | ✓ **9/9 AVAILABLE** including .com (RDAP authoritative) | **✓ direct registration — NO decision required** | **CONFIRMED FREE — no squatter conflict** |
 | 3 | Pronunciation documentation | ✓ guide authored (v2 QorTroller-canonical) | **✓ 30s audio sample recording** | **DOC COMPLETE; audio pending** |
 | 4 | GitHub slot reservation | ✓ 8/8 AVAILABLE inc. alternates | **✓ reserve under operator account** | **CONFIRMED CLEAN** |
@@ -275,12 +275,17 @@ HTTP probes are inconclusive for social platforms (they often return 200/301 for
 **To certify R0 complete, operator confirms each row below**:
 
 ```
-[ ] Trademark attorney clearance opinion received (or self-search confirms no conflict in classes 9/38/42, accepting risk; brand-virginity SEO signal strong)
+[X] Trademark clearance — empirical evidence base sufficient for pre-revenue project policy:
+       - 5/5 USPTO TESS queries CLEAN (operator-self-conducted 2026-05-18; screenshots in uspto_tess_screenshots/)
+       - 9/9 domain TLDs AVAILABLE (RDAP authoritative)
+       - 8/8 GitHub + 4/4 PyPI + 5/5 npm namespaces AVAILABLE
+       - Bing SEO brand-virginity ratio 0.48 vs Qorvo NASDAQ:QRVO precedent (essentially virgin)
+       - Full evidence in trademark_clearance_evidence.md; USPTO TEAS Plus filing deferred until revenue
 [ ] Domain registrations confirmed for at least: qortroller.com + qortroller.io + qortroller.ai + qortroller.network (minimum-viable; full 9-TLD coverage recommended)
 [ ] Pronunciation guide documented + 30s audio sample recorded
 [ ] GitHub slots reserved: qortroller org + qortroller-pebble-prototype repo slot + (optional) QorTroller + Qortroller + qortroller-protocol case/alternate variants
 [ ] Social handles visually verified + reserved: @qortroller on X / Reddit / Telegram / Discord / Medium / LinkedIn
-[ ] Brand discipline understood: medial-cap "QorTroller" mandatory in display; lowercase "qortroller" in URLs/paths; uppercase "QORTROLLER" in byte-literals; tagline "Core Controllers of their gaming data" at first-mention
+[X] Brand discipline understood: medial-cap "QorTroller" mandatory in display; lowercase "qortroller" in URLs/paths; uppercase "QORTROLLER" in byte-literals; tagline "Core Controllers of their gaming data" at first-mention
 
 Operator signature: ______________________
 Date:               ______________________
