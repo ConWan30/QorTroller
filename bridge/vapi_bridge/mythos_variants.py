@@ -2067,6 +2067,294 @@ def _today_ymd() -> tuple[int, int, int]:
 
 
 # ==========================================================================
+# Mythos-Spending-Log-Drift — PATH-B v2 autoloop runtime audit
+# ==========================================================================
+
+# Q9 hex agent_id ↔ canonical name mapping (matches config.py defaults).
+# Used for spending_log row → cfg field lookup.
+_SPENDING_AGENT_Q9_BY_NAME = {
+    "anchor_sentry": "0xb21e1ec258d2d381c313f84944bd36fbc63badb2c9a24c2412212d3a27e3e42c",
+    "guardian":      "0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1",
+    "curator":       "0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8",
+}
+_SPENDING_NAME_BY_Q9 = {v.lower(): k for k, v in _SPENDING_AGENT_Q9_BY_NAME.items()}
+
+# Default per-agent daily budgets (per L38 PATH-B v1 NOTE conservative defaults).
+# Variant reads cfg first; falls back to these if cfg fields unavailable.
+_SPENDING_BUDGET_DEFAULTS = {
+    "anchor_sentry": 0.5,
+    "guardian":      0.0,   # Guardian has no chain ops (local writes only)
+    "curator":       0.5,
+}
+
+_REFUSAL_BURST_THRESHOLD = 5   # > 5 refusals in last hour fires
+_REFUSAL_WINDOW_SECONDS = 3600
+
+
+async def mythos_spending_log_drift(
+    *,
+    repo_root: Path | None = None,
+    db_path: str | None = None,
+) -> list[MythosFindingResult]:
+    """PATH-B v2 autoloop runtime audit — surfaces drift in
+    operator_agent_chain_spending_log once the executor is active.
+
+    Born 2026-05-19 after the PATH-B v2 wire-shipped commit `6e4d1e8e`
+    + activation_log reconstruction `45b5b00e`. The spending_log table
+    is the operational truth surface for live-write executor cycles;
+    this variant audits its contents for anomalies that would indicate
+    config drift, chain-side failures, or invariant violations.
+
+    Four finding classes:
+
+      1. DAILY_BUDGET_EXCEEDED — CRITICAL — agent's 24h cumulative
+         cost_iotx exceeds its configured per-agent daily budget.
+         Should be impossible per PATH-B v1 Gate 3 design (budget
+         enforcement before submission); if it fires, signals a
+         protocol violation requiring immediate operator review.
+
+      2. REFUSAL_BURST — MEDIUM — agent has >5 spending events with
+         cost_iotx=0 + error populated in the last hour. Indicates
+         possible chain-side issue (RPC unreachable, contract revert)
+         or operator-side config drift (suddenly-disabled flag).
+
+      3. UNATTRIBUTED_CHAIN_TX — HIGH — spending row has cost_iotx > 0
+         (real chain operation) but tx_hash is empty. Should be
+         impossible per insert_chain_spending_event contract; if it
+         fires, signals data-integrity issue.
+
+      4. SPENDING_WITHOUT_ACTIVATION — HIGH — spending_log references
+         an agent_id not present in operator_agent_activation_log.
+         Indicates cross-table integrity drift (e.g., manual DB edit,
+         migration failure).
+
+    Fail-open: missing table returns [] (expected before bridge runs);
+    individual query errors logged + skipped; never raises."""
+    root = _resolve_repo_root(repo_root)
+    if db_path is None:
+        db_path = str(root / "bridge" / "vapi_store.db")
+    findings: list[MythosFindingResult] = []
+
+    try:
+        import sqlite3
+        con = sqlite3.connect(db_path)
+        con.row_factory = sqlite3.Row
+    except Exception as exc:  # noqa: BLE001
+        log.debug("mythos_spending_log_drift: db connect failed: %s", exc)
+        return findings
+
+    try:
+        # Confirm table exists; if not, fail-open with empty result
+        try:
+            con.execute("SELECT 1 FROM operator_agent_chain_spending_log LIMIT 1")
+        except sqlite3.OperationalError:
+            log.debug(
+                "mythos_spending_log_drift: spending_log table not present "
+                "(bridge hasn't migrated yet); returning 0 findings."
+            )
+            con.close()
+            return findings
+
+        # Load per-agent budgets from cfg (or defaults if cfg unavailable)
+        budgets: dict[str, float] = dict(_SPENDING_BUDGET_DEFAULTS)
+        try:
+            from .config import Config
+            cfg = Config()
+            budgets["anchor_sentry"] = float(getattr(
+                cfg, "phase_o3_anchor_sentry_daily_iotx_budget",
+                _SPENDING_BUDGET_DEFAULTS["anchor_sentry"],
+            ))
+            budgets["guardian"] = float(getattr(
+                cfg, "phase_o3_guardian_daily_iotx_budget",
+                _SPENDING_BUDGET_DEFAULTS["guardian"],
+            ))
+            budgets["curator"] = float(getattr(
+                cfg, "phase_o3_curator_daily_iotx_budget",
+                _SPENDING_BUDGET_DEFAULTS["curator"],
+            ))
+        except Exception as exc:  # noqa: BLE001
+            log.debug("mythos_spending_log_drift: cfg load failed, using defaults: %s", exc)
+
+        now = time.time()
+        day_cutoff = now - 86400
+        hour_cutoff = now - _REFUSAL_WINDOW_SECONDS
+
+        # Check 1: DAILY_BUDGET_EXCEEDED per agent
+        for agent_name, agent_q9 in _SPENDING_AGENT_Q9_BY_NAME.items():
+            budget = budgets.get(agent_name, 0.0)
+            try:
+                row = con.execute(
+                    "SELECT COALESCE(SUM(cost_iotx), 0.0) AS total, COUNT(*) AS n "
+                    "FROM operator_agent_chain_spending_log "
+                    "WHERE LOWER(agent_id) = ? AND created_at >= ?",
+                    (agent_q9.lower(), day_cutoff),
+                ).fetchone()
+                total = float(row["total"])
+                n = int(row["n"])
+            except Exception as exc:  # noqa: BLE001
+                log.debug("budget-check failed for %s: %s", agent_name, exc)
+                continue
+            if total > budget and n > 0:
+                findings.append(MythosFindingResult(
+                    variant="spending_log_drift",
+                    severity="CRITICAL",
+                    description=(
+                        f"DAILY_BUDGET_EXCEEDED: {agent_name} cumulative 24h "
+                        f"cost {total:.6f} IOTX > budget {budget:.6f} IOTX "
+                        f"(across {n} events). PATH-B v1 Gate 3 (daily budget) "
+                        "should have prevented submission; budget breach indicates "
+                        "protocol violation requiring immediate operator review."
+                    ),
+                    recommended_fix=(
+                        "Engage phase_o3_executor_kill_all=true IMMEDIATELY to "
+                        "halt all live writes. Investigate operator_agent_chain_"
+                        "spending_log for the agent + reconcile against on-chain "
+                        "tx evidence. Re-evaluate budget configuration before "
+                        "lifting kill-all."
+                    ),
+                    coherence_id=_coherence_id(
+                        "spending_log_drift", f"budget_exceeded:{agent_name}"
+                    ),
+                    file_path="bridge/vapi_store.db:operator_agent_chain_spending_log",
+                    frozen_region=False,
+                    fix_authority_tier=3,
+                    evidence_sources=["operator_agent_chain_spending_log"],
+                ))
+
+        # Check 2: REFUSAL_BURST — > N refusals in last hour per agent
+        for agent_name, agent_q9 in _SPENDING_AGENT_Q9_BY_NAME.items():
+            try:
+                row = con.execute(
+                    "SELECT COUNT(*) AS n FROM operator_agent_chain_spending_log "
+                    "WHERE LOWER(agent_id) = ? AND created_at >= ? "
+                    "AND cost_iotx = 0.0 AND error IS NOT NULL AND error != ''",
+                    (agent_q9.lower(), hour_cutoff),
+                ).fetchone()
+                n = int(row["n"])
+            except Exception as exc:  # noqa: BLE001
+                log.debug("refusal-burst check failed for %s: %s", agent_name, exc)
+                continue
+            if n > _REFUSAL_BURST_THRESHOLD:
+                findings.append(MythosFindingResult(
+                    variant="spending_log_drift",
+                    severity="MEDIUM",
+                    description=(
+                        f"REFUSAL_BURST: {agent_name} has {n} refusal events "
+                        f"(cost_iotx=0 + error populated) in the last hour "
+                        f"(threshold {_REFUSAL_BURST_THRESHOLD}). Indicates "
+                        "possible chain-side issue (RPC unreachable, contract "
+                        "revert) OR config drift (suddenly-disabled per-agent flag)."
+                    ),
+                    recommended_fix=(
+                        "Inspect recent error fields in the spending_log for "
+                        "this agent. If chain-side: wait for RPC stability "
+                        "before continued operation. If config drift: verify "
+                        f"phase_o3_{agent_name}_live_writes_enabled state and "
+                        "kill_all flag."
+                    ),
+                    coherence_id=_coherence_id(
+                        "spending_log_drift",
+                        f"refusal_burst:{agent_name}:{n // 5}",  # bucketed
+                    ),
+                    file_path="bridge/vapi_store.db:operator_agent_chain_spending_log",
+                    frozen_region=False,
+                    fix_authority_tier=2,
+                    evidence_sources=["operator_agent_chain_spending_log"],
+                ))
+
+        # Check 3: UNATTRIBUTED_CHAIN_TX — cost_iotx > 0 but tx_hash empty
+        try:
+            rows = con.execute(
+                "SELECT id, agent_id, action_name, cost_iotx FROM "
+                "operator_agent_chain_spending_log "
+                "WHERE cost_iotx > 0.0 AND (tx_hash IS NULL OR tx_hash = '') "
+                "ORDER BY created_at DESC LIMIT 20"
+            ).fetchall()
+        except Exception as exc:  # noqa: BLE001
+            log.debug("unattributed-tx check failed: %s", exc)
+            rows = []
+        for row in rows:
+            agent_q9 = (row["agent_id"] or "").lower()
+            agent_name = _SPENDING_NAME_BY_Q9.get(agent_q9, agent_q9[:18] + "…")
+            findings.append(MythosFindingResult(
+                variant="spending_log_drift",
+                severity="HIGH",
+                description=(
+                    f"UNATTRIBUTED_CHAIN_TX: row id={row['id']} for "
+                    f"{agent_name} action={row['action_name']} has "
+                    f"cost_iotx={row['cost_iotx']:.6f} but empty tx_hash. "
+                    "Per insert_chain_spending_event contract, this should "
+                    "be impossible; signals data-integrity issue."
+                ),
+                recommended_fix=(
+                    "Cross-reference operator_agent_drafts.executed_tx_hash "
+                    "for this draft_id. If tx_hash recoverable, UPDATE the "
+                    "spending_log row. Otherwise audit chain-side for "
+                    "actually-fired tx + reconcile."
+                ),
+                coherence_id=_coherence_id(
+                    "spending_log_drift", f"unattributed_tx:row_{row['id']}"
+                ),
+                file_path="bridge/vapi_store.db:operator_agent_chain_spending_log",
+                line_number=int(row["id"]),
+                frozen_region=False,
+                fix_authority_tier=3,
+                evidence_sources=["operator_agent_chain_spending_log"],
+            ))
+
+        # Check 4: SPENDING_WITHOUT_ACTIVATION — agent in spending but not activation_log
+        try:
+            rows = con.execute("""
+                SELECT DISTINCT sp.agent_id
+                FROM operator_agent_chain_spending_log sp
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM operator_agent_activation_log al
+                    WHERE LOWER(al.agent_id) = LOWER(sp.agent_id)
+                )
+            """).fetchall()
+        except Exception as exc:  # noqa: BLE001
+            log.debug("activation-cross-ref check failed: %s", exc)
+            rows = []
+        for row in rows:
+            agent_q9 = (row["agent_id"] or "").lower()
+            agent_name = _SPENDING_NAME_BY_Q9.get(agent_q9, agent_q9[:18] + "…")
+            findings.append(MythosFindingResult(
+                variant="spending_log_drift",
+                severity="HIGH",
+                description=(
+                    f"SPENDING_WITHOUT_ACTIVATION: agent {agent_name} appears "
+                    "in operator_agent_chain_spending_log but has NO row in "
+                    "operator_agent_activation_log. Cross-table integrity "
+                    "violation."
+                ),
+                recommended_fix=(
+                    "Run scripts/reconstruct_operator_activation_log.py to "
+                    "rebuild activation_log from on-chain truth. If the "
+                    "spending row is from an agent that should not have "
+                    "fired, investigate executor authorization flow."
+                ),
+                coherence_id=_coherence_id(
+                    "spending_log_drift",
+                    f"spending_without_activation:{agent_q9[:18]}",
+                ),
+                file_path="bridge/vapi_store.db:operator_agent_chain_spending_log",
+                frozen_region=False,
+                fix_authority_tier=3,
+                evidence_sources=[
+                    "operator_agent_chain_spending_log",
+                    "operator_agent_activation_log",
+                ],
+            ))
+    finally:
+        try:
+            con.close()
+        except Exception:  # noqa: BLE001
+            pass
+
+    return findings
+
+
+# ==========================================================================
 # Mythos-Frontend-Brand-Drift — display-string VAPI -> QorTroller guardrail
 # ==========================================================================
 
