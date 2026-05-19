@@ -158,8 +158,16 @@ def evaluate_live_write_authorization_for_agent(
             daily_spent = 0.0  # fail-open to 0 spent; budget check still runs
 
         projected = daily_spent + max(0.0, float(intended_cost_iotx))
+        # Gap 1 closure 2026-05-19: budget=0.0 means "no IOTX budget"; if the
+        # intended op also costs nothing (e.g., Guardian's audit-drafting
+        # writes locally — no chain dependency, no IOTX cost), permit it.
+        # Per L38 PATH-B v1 NOTE: "Guardian 0.0 by default (its O3 authority
+        # is local writes — no chain dependency, no budget needed)."
         if daily_budget <= 0.0:
-            blockers.append(f"daily_budget_zero_no_chain_ops_permitted")
+            if float(intended_cost_iotx) > 0.0:
+                # Chain ops require positive budget; this is the original block.
+                blockers.append(f"daily_budget_zero_no_chain_ops_permitted")
+            # else: budget=0 + cost=0 = local-only action; permit (no blocker added).
         elif projected > daily_budget:
             blockers.append(
                 f"daily_budget_exceeded_spent_{daily_spent:.6f}"
@@ -343,11 +351,16 @@ class OperatorAgentLiveWriteExecutor:
             return
 
         # Route by action_name. v1 set is minimal — extend in v2.
+        # Gap 1 closure 2026-05-19: route audit-drafting through Guardian's
+        # local handler (no chain dependency, synthetic local: tx_hash for
+        # spending_log audit trail distinction).
         try:
             if action_name == "pda-attestation-anchor":
                 tx_hash, cost_iotx = await self._exec_sentry_pda_anchor(draft)
             elif action_name == "marketplace-listing-suspend":
                 tx_hash, cost_iotx = await self._exec_curator_listing_suspend(draft)
+            elif action_name == "audit-drafting":
+                tx_hash, cost_iotx = await self._exec_guardian_audit_draft(draft)
             else:
                 # No executor routed for this action_name — record as refusal,
                 # leave draft for v2 routing. Phase 235.x-STABILITY-8: sync
@@ -415,6 +428,9 @@ class OperatorAgentLiveWriteExecutor:
         return {
             "pda-attestation-anchor":      0.001,   # PoAd anchor ~0.0008 typical
             "marketplace-listing-suspend": 0.002,   # suspension ~0.001 typical
+            # Gap 1 closure 2026-05-19: audit-drafting is a LOCAL write
+            # (Guardian's O3 authority); no chain dependency, zero IOTX cost.
+            "audit-drafting":              0.0,
         }.get(action_name, 0.001)
 
     async def _exec_sentry_pda_anchor(self, draft: dict) -> tuple[str, float]:
@@ -443,6 +459,32 @@ class OperatorAgentLiveWriteExecutor:
         tx_hash = str(result.get("tx_hash", "") or "")
         cost_iotx = float(result.get("cost_iotx", 0.0) or 0.0)
         return tx_hash, cost_iotx
+
+    async def _exec_guardian_audit_draft(self, draft: dict) -> tuple[str, float]:
+        """Guardian's audit-drafting: LOCAL write (no chain dependency).
+
+        Gap 1 closure 2026-05-19. Per L38 PATH-B v1 NOTE: "Guardian's O3
+        authority is `audit-drafting` on `lane://audits/**` (live writes
+        to audit trail)" — these writes do NOT touch chain. The synthetic
+        tx_hash format `local:audit:<draft_id>` distinguishes local audit
+        writes from chain operations in the spending_log audit trail.
+
+        The actual audit content lives in operator_agent_drafts.payload_*;
+        marking the draft as executed records its execution. Future
+        extension can write structured audit rows to a dedicated audit
+        table (lane://audits/**), but for the MVP closure, the spending
+        log row + the drafts table executed_at marker provide the audit
+        trail.
+
+        Returns (synthetic_local_tx_hash, 0.0).
+        """
+        draft_id = int(draft.get("id", 0) or 0)
+        # Synthetic local: tx_hash for audit trail distinction in spending_log.
+        # mythos_spending_log_drift's UNATTRIBUTED_CHAIN_TX check fires only on
+        # cost > 0 with empty tx_hash; cost=0 + local: prefix is fine.
+        synthetic_tx_hash = f"local:audit:{draft_id}"
+        cost_iotx = 0.0
+        return synthetic_tx_hash, cost_iotx
 
     async def _exec_curator_listing_suspend(self, draft: dict) -> tuple[str, float]:
         """Curator's marketplace-listing-suspend: call chain.suspend_marketplace_listing.
