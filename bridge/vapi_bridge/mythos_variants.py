@@ -1852,3 +1852,215 @@ async def mythos_corpus_drift(
         ))
 
     return findings
+
+
+# ==========================================================================
+# Mythos-Claude-MD-Curation — documentation curation guardrail
+# ==========================================================================
+
+# Date marker inside a NOTE: looks for YYYY-MM-DD in the first 200 chars
+_PAT_NOTE_DATE = re.compile(r"\b(20\d{2}-\d{2}-\d{2})\b")
+
+# Closure markers — a NOTE containing one of these for some arc tag
+# supersedes earlier mid-arc NOTEs for the same tag
+_CLOSURE_MARKERS = (
+    "EMPIRICAL CLOSURE",
+    "COMPLETE",
+    "FINAL",
+    "CLOSED",
+    "TERMINAL",
+    "SHIPPED",
+)
+
+# Arc-tag regex — extracts identifiers like "STABILITY-9", "PHASE 235.x-STABILITY-9",
+# "PHASE O1-D-PATH-B", "PHASE 237-ZK-SEPPROOF"
+_PAT_ARC_TAG = re.compile(
+    r"(PHASE\s+[A-Z0-9]+(?:[-.][A-Z0-9]+)*|STABILITY-\d+|ZKBA-TRACK\d+|"
+    r"VBDIP-\d{4}|QRESCE-\d{4}|MLGA|VPM|EVIDENCE OS)",
+    re.IGNORECASE,
+)
+
+
+def _marker_matches(marker: str, upper_text: str) -> bool:
+    """Word-boundary match for closure markers — avoids 'COMPLETE' matching
+    'COMPLETED' or 'INCOMPLETE'. Uses simple regex anchored on non-word
+    chars around the marker."""
+    pattern = r"(?:^|[^A-Z])" + re.escape(marker) + r"(?:$|[^A-Z])"
+    return bool(re.search(pattern, upper_text))
+
+
+def _extract_arc_tags(text: str) -> set[str]:
+    """Extract canonical arc tags from a NOTE first ~300 chars."""
+    head = text[:300].upper()
+    return {m.group(1).upper() for m in _PAT_ARC_TAG.finditer(head)}
+
+
+async def mythos_claude_md_curation(
+    *,
+    repo_root: Path | None = None,
+    stale_days_threshold: int = 30,
+    target_chars: int = 60_000,
+    warn_chars: int = 100_000,
+) -> list[MythosFindingResult]:
+    """Documentation curation guardrail — audits CLAUDE.md for staleness.
+
+    Born from 2026-05-18 manual prune (400k -> 139k chars after operator
+    intervention). Future arcs that append NOTEs without retiring older
+    ones will re-bloat the file; this variant flags candidates for
+    archival to wiki/phases/ so the prune work doesn't have to recur
+    manually.
+
+    Three finding classes:
+
+      1. CLAUDE_MD_OVERSIZE — file >warn_chars (default 100k). LOW
+         informational; recommends running the prune script.
+
+      2. STALE_NOTE_SUPERSEDED — NOTE for an arc-tag where a LATER NOTE
+         exists with one of _CLOSURE_MARKERS for the same tag. MEDIUM
+         severity. Recommendation: archive to wiki/phases/ + replace
+         with pointer NOTE.
+
+      3. STALE_NOTE_OLDER_THAN_30D — NOTE with an explicit date marker
+         older than stale_days_threshold (default 30) days from today.
+         LOW severity. Recommendation: review for archival.
+
+    Fail-open: errors reading CLAUDE.md are swallowed; returns []."""
+    root = _resolve_repo_root(repo_root)
+    findings: list[MythosFindingResult] = []
+    claude_md = root / "CLAUDE.md"
+
+    try:
+        text = claude_md.read_text(encoding="utf-8")
+    except Exception as exc:  # noqa: BLE001 — fail-open
+        log.debug("mythos_claude_md_curation: cannot read CLAUDE.md (%s)", exc)
+        return findings
+
+    char_count = len(text)
+
+    # Check 1: oversize
+    if char_count > warn_chars:
+        findings.append(MythosFindingResult(
+            variant="claude_md_curation",
+            severity="LOW",
+            description=(
+                f"CLAUDE.md is {char_count:,} chars (>{warn_chars:,} warn threshold; "
+                f"target {target_chars:,}). Claude Code degrades performance above "
+                "40,000 chars; ~120k is acceptable, >200k recurring needs prune."
+            ),
+            recommended_fix=(
+                "Run scripts/_prune_claude_md.py + scripts/_prune_claude_md_pass2.py "
+                "(or write a fresh prune script). Migrate completed-arc NOTEs to "
+                "wiki/phases/ + leave one-line pointer NOTEs. Aim to keep only 5-7 "
+                "most-recent NOTEs inline."
+            ),
+            coherence_id=_coherence_id("claude_md_curation", f"oversize:{char_count // 10_000}"),
+            file_path="CLAUDE.md",
+            frozen_region=False,
+            fix_authority_tier=2,
+            evidence_sources=["CLAUDE.md"],
+        ))
+
+    # Parse NOTE block boundaries (each NOTE is on a single line by VAPI convention)
+    note_entries: list[tuple[int, str]] = []  # (line_no_1_indexed, content)
+    for line_no, line in enumerate(text.splitlines(), start=1):
+        if line.startswith("NOTE:"):
+            note_entries.append((line_no, line))
+
+    # Check 2: superseded NOTEs (arc-tag has a later closure NOTE)
+    # NOTE entries are chronologically newest-first per VAPI convention.
+    # An EARLIER (higher index = older) NOTE is superseded by a LATER
+    # (lower index = newer) NOTE matching the same arc tag with a closure marker.
+    closure_tags: set[str] = set()
+    # First pass: identify closure NOTEs (top of file = most recent)
+    for line_no, content in note_entries:
+        upper = content.upper()
+        if any(_marker_matches(marker, upper) for marker in _CLOSURE_MARKERS):
+            tags = _extract_arc_tags(content)
+            closure_tags |= tags
+
+    # Second pass: any non-closure NOTE matching a closed arc tag is superseded
+    for line_no, content in note_entries:
+        upper = content.upper()
+        if any(_marker_matches(marker, upper) for marker in _CLOSURE_MARKERS):
+            continue  # this IS a closure NOTE — keep
+        # Skip curation tombstones (they reference closed arcs by design)
+        if "ARCHIVED" in upper or "CURATION" in upper or "POINTER" in upper:
+            continue
+        tags = _extract_arc_tags(content)
+        superseded_by = tags & closure_tags
+        if superseded_by:
+            # First 80 chars for evidence
+            preview = content[:120].replace("NOTE: ", "").rstrip()
+            findings.append(MythosFindingResult(
+                variant="claude_md_curation",
+                severity="MEDIUM",
+                description=(
+                    f"CLAUDE.md L{line_no}: superseded NOTE — arc tag(s) "
+                    f"{sorted(superseded_by)} have a closure NOTE elsewhere in the "
+                    f"file. Preview: '{preview}...'"
+                ),
+                recommended_fix=(
+                    f"Archive L{line_no} to wiki/phases/phase_<arc>_archive.md + "
+                    "replace inline with a single-line pointer NOTE. Keep closure "
+                    "NOTE in CLAUDE.md as canonical entry for the arc."
+                ),
+                coherence_id=_coherence_id("claude_md_curation", f"superseded:L{line_no}"),
+                file_path="CLAUDE.md",
+                line_number=line_no,
+                frozen_region=False,
+                fix_authority_tier=2,
+                evidence_sources=["CLAUDE.md"],
+            ))
+
+    # Check 3: NOTEs older than stale_days_threshold (best-effort date parse)
+    today_y, today_m, today_d = _today_ymd()
+    today_ordinal = today_y * 372 + today_m * 31 + today_d  # rough days-since-epoch proxy
+    for line_no, content in note_entries:
+        m = _PAT_NOTE_DATE.search(content[:200])
+        if not m:
+            continue
+        try:
+            y, mo, d = m.group(1).split("-")
+            note_ordinal = int(y) * 372 + int(mo) * 31 + int(d)
+        except Exception:  # noqa: BLE001
+            continue
+        age_days = today_ordinal - note_ordinal
+        if age_days <= stale_days_threshold:
+            continue
+        # Skip if also flagged as superseded (avoid duplicate finding)
+        upper = content.upper()
+        tags = _extract_arc_tags(content)
+        if any(marker in upper for marker in _CLOSURE_MARKERS) and tags <= closure_tags:
+            # This IS a closure NOTE — old but canonical, keep
+            continue
+        preview = content[:100].replace("NOTE: ", "").rstrip()
+        findings.append(MythosFindingResult(
+            variant="claude_md_curation",
+            severity="LOW",
+            description=(
+                f"CLAUDE.md L{line_no}: NOTE is {age_days} days old "
+                f"(date marker {m.group(1)}; threshold {stale_days_threshold}). "
+                f"Preview: '{preview}...'"
+            ),
+            recommended_fix=(
+                f"Review L{line_no} for archival. Old NOTEs that document closed "
+                "arcs should migrate to wiki/phases/; old NOTEs that pin still-load-"
+                "bearing reference (Hard Rules, FROZEN-v1 formulas, brand discipline) "
+                "should stay verbatim and are exempt by operator review."
+            ),
+            coherence_id=_coherence_id("claude_md_curation", f"stale:L{line_no}"),
+            file_path="CLAUDE.md",
+            line_number=line_no,
+            frozen_region=False,
+            fix_authority_tier=2,
+            evidence_sources=["CLAUDE.md"],
+        ))
+
+    return findings
+
+
+def _today_ymd() -> tuple[int, int, int]:
+    """Year/month/day tuple from system clock. Isolated for test injection."""
+    import datetime as _dt
+    today = _dt.date.today()
+    return (today.year, today.month, today.day)
