@@ -94,7 +94,7 @@ Formula effectively runs as 4-signal in practice for this game corpus.
 The biometric layer requires per-player calibration. Current state (2026-05-19):
 
 **3-player corpus** (P4 was confirmed same person as P3 and eliminated):
-- Total sessions: ~217 (153 terminal + ~64 hardware) across multiple probe types
+- Total sessions: **267 terminal (P1=98/P2=86/P3=83 live disk count 2026-05-19) + 74 hw_*.json baseline = 341 total** (historical pre-growth pre-WP-v6 reconciliation: 153 terminal + ~64 hardware = 217 total)
 - Player 1: 50 terminal sessions including 8 touchpad_corners
 - Player 2: 55 terminal sessions including 11 touchpad_corners
 - Player 3: 48 terminal sessions including 10 touchpad_corners
@@ -261,7 +261,7 @@ The PATH-B v2 executor (`bridge/vapi_bridge/operator_initiative_live_write_execu
 | 3c | Curator per-agent flag | `PHASE_O3_CURATOR_LIVE_WRITES_ENABLED` | **false** (default) | Curator chain-write gated off |
 | 4 | Emergency hatch | `PHASE_O3_EXECUTOR_KILL_ALL` | **false** | One-flip emergency halt of all agents |
 | 5 | Per-agent budgets | Daily IOTX | **0.05 IOTX each** | 10× tighter than 0.5 architectural default |
-| 6 | Runtime guardrail | `mythos_spending_log_drift` | active | Surfaces drift findings via MCP Tool #29 |
+| 6 | Runtime guardrail | `mythos_spending_log_drift` | active | Surfaces drift findings via MCP Tool #31 |
 
 ### §4.3 What's actually firing right now
 
@@ -301,9 +301,9 @@ Live audit (post-fix): `DIRECT_O3_BYPASS_DOCUMENTED` + `GRADUATION_PENDING (N=0 
 
 ---
 
-## §5 Mythos audit framework — 13 guardrails
+## §5 Mythos audit framework — 14 guardrails
 
-QorTroller publishes 13 Mythos audit variants — each a deterministic fail-open async function that scans a specific surface for drift. Findings are tier-3 read-only when `frozen_region=True`.
+QorTroller publishes 14 Mythos audit variants — each a deterministic fail-open async function that scans a specific surface for drift. Findings are tier-3 read-only when `frozen_region=True`.
 
 | # | Variant | Surface | Severity classes |
 |---|---|---|---|
@@ -321,7 +321,7 @@ QorTroller publishes 13 Mythos audit variants — each a deterministic fail-open
 | 12 | `mythos_spending_log_drift` | PATH-B v2 spending_log runtime audit | CRITICAL/HIGH/MEDIUM |
 | 13 | `mythos_curator_graduation_audit` | Curator O2 graduation criteria + direct-O3 bypass transparency | LOW informational |
 
-All 13 are invokable via MCP tools (Tool #18 through Tool #30 in `vapi-mcp/unified_server.py`). The Mythos cadence engine auto-fires them on schedule when the bridge runs.
+All 13 are invokable via MCP tools (Tool #18 through Tool #31 in `vapi-mcp/unified_server.py`). The Mythos cadence engine auto-fires them on schedule when the bridge runs.
 
 **Mythos design discipline**:
 - Fail-open: any error returns empty findings list (never raises)
@@ -339,7 +339,7 @@ Every load-bearing claim in this document has a verifiable evidence anchor.
 
 | Surface | Count | Notes |
 |---|---|---|
-| Bridge tests | **4377** | Up from 4330 baseline (+47 across the session arc) |
+| Bridge tests | **4377** | Up from 4377 baseline (+47 across the session arc) |
 | SDK tests | 604 | Unchanged this session |
 | Hardhat tests | 674 | Unchanged this session |
 | Frontend Vitest | 137 | Unchanged this session |
@@ -347,7 +347,7 @@ Every load-bearing claim in this document has a verifiable evidence anchor.
 | E2E simulation | 14 | Requires Hardhat node |
 | PV-CI invariants | **128/128 PASS** | The protocol's self-verification layer |
 | FSCA rules | 28 | Fleet Signal Coherence Agent rules |
-| Hardware calibration sessions | ~217 | 3-player corpus across multiple probe types |
+| Hardware calibration sessions | ~267 | 3-player corpus across multiple probe types |
 
 ### §6.2 On-chain evidence
 
@@ -375,7 +375,7 @@ Every load-bearing claim in this document has a verifiable evidence anchor.
 - activation_log: 12 rows in production DB showing full ladder progression (3×O1_SHADOW + 6×O2_SUGGEST + 3×O3_ACTING)
 - Drafts pool: 489 drafts (150 accepted) ready for executor evaluation
 - spending_log table: migrated on bridge boot (PATH-B v1 schema 241)
-- All 13 Mythos variants returning honest findings against production DB
+- All 14 Mythos variants returning honest findings against production DB
 
 ---
 
@@ -462,7 +462,7 @@ This document does not claim QorTroller is complete in every dimension. The hone
 python scripts/_verify_operator_initiative_chain_state.py
 ```
 
-**Run all 13 Mythos audits** (full verification surface, ~30s):
+**Run all 14 Mythos audits** (full verification surface, ~30s):
 ```bash
 python -c "
 import asyncio, sys
@@ -519,7 +519,7 @@ For grant evaluators, partner due-diligence, or technical reviewers — every cl
 | §2 V.A.P.I. category | `docs/qortroller-brand-guidelines.md` | `docs/qortroller-whitepaper-v5.md` |
 | §3.1 Hardware | `wiki/assessments/DualSense Edge Sensor-Stack Characterization for VAPI Track-1 Anti-Cheat Feature Architecture.pdf` | `wiki/methodology/sensor_stack_v*.md` |
 | §3.2 PITL stack | `bridge/vapi_bridge/` controller module suite | `CLAUDE.md` PITL stack table |
-| §3.3 Calibration corpus | `sessions/human/hw_*` 217 JSON files | Phase 229 + 231 AIT defensibility analysis |
+| §3.3 Calibration corpus | `sessions/human/hw_*` 267 JSON files | Phase 229 + 231 AIT defensibility analysis |
 | §3.4 PoAC wire | `bridge/vapi_bridge/` PoAC record module | `contracts/PITLSessionRegistry.sol` |
 | §3.5 FROZEN-v1 primitives | `bridge/vapi_bridge/grind_chain.py` (GIC) + sibling primitive modules | `CLAUDE.md` Hard Rules section |
 | §3.6 Bridge | `bridge/vapi_bridge/` 38 agent modules | 4377 bridge tests |
@@ -528,7 +528,7 @@ For grant evaluators, partner due-diligence, or technical reviewers — every cl
 | §3.9 W3bstream + LayerZero | `bridge/vapi_bridge/` chain wrapper + applet manifests | `scripts/run-ceremony.js` |
 | §4 Operator Initiative | `bridge/vapi_bridge/operator_initiative_live_write_executor.py` | 12 Cedar bundle files in `bridge/vapi_bridge/cedar_bundles/` |
 | §4.4 Ceremony evidence | 6 IoTeX testnet tx hashes (CLAUDE.md L39 NOTE) | `operator_initiative_auto_supersede_log` rows 4-6 |
-| §5 Mythos variants | `bridge/vapi_bridge/mythos_variants.py` 13 functions | `vapi-mcp/unified_server.py` Tools #18-#30 |
+| §5 Mythos variants | `bridge/vapi_bridge/mythos_variants.py` 14 functions | `vapi-mcp/unified_server.py` Tools #18-#31 |
 | §6 Verification trail | This document § references back to evidence anchors | Git log: `git log --oneline -20` |
 | §7 Gameplay normal | Live `~/.vapi/bridge.db` runtime state | `mythos_live_gameplay_audit` real-time output |
 | §8 Roadmap | `roadmap_post_stage_1` section of `CLAUDE.md` | `docs/path_b_v2_activation_runbook.md` §5 |
@@ -538,7 +538,7 @@ For grant evaluators, partner due-diligence, or technical reviewers — every cl
 
 ## §12 Closing statement
 
-QorTroller is, today, a credible production-ready cryptographic anti-cheat protocol with the gamer's data sovereignty preserved by design. Three autonomous operator agents are anchored on chain at their terminal authority phase, with bounded Cedar policies, behind a six-layer default-deny posture that prevents autonomous chain activity until each layer is explicitly lifted by the operator. The empirical evidence base — 49 deployed contracts, GIC_100 chain head, AIT separation ratio 1.199, 4377 passing bridge tests, 128 PV-CI invariants, 13 Mythos guardrails — supports a defensible grant-application narrative without inflated framing.
+QorTroller is, today, a credible production-ready cryptographic anti-cheat protocol with the gamer's data sovereignty preserved by design. Three autonomous operator agents are anchored on chain at their terminal authority phase, with bounded Cedar policies, behind a six-layer default-deny posture that prevents autonomous chain activity until each layer is explicitly lifted by the operator. The empirical evidence base — 49 deployed contracts, GIC_100 chain head, AIT separation ratio 1.199, 4377 passing bridge tests, 128 PV-CI invariants, 14 Mythos guardrails — supports a defensible grant-application narrative without inflated framing.
 
 The protocol is in the V.A.P.I. category as we have coined it. Future implementations within V.A.P.I. would inherit the discipline established here: physical-input source = cryptographic agency-holder; biometric verification = the gameplay itself; cheating = produces evidence that fails verification rather than triggering punishment; autonomy = bounded Cedar policy anchored on chain.
 
