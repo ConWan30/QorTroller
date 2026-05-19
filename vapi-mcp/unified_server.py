@@ -3788,6 +3788,50 @@ async def vapi_mythos_spending_log_drift(**kwargs):
     return _findings_to_dict("spending_log_drift", findings)
 
 
+# ── Tool 30 ── vapi_mythos_curator_graduation_audit ──────────────────────────
+
+@tool(
+    name="vapi_mythos_curator_graduation_audit",
+    description=(
+        "Mythos-Curator-Graduation-Audit variant (2026-05-19, Gap 2 closure). "
+        "Audits Curator's empirical state vs the pre-authored O2_SUGGEST "
+        "graduation criteria (N>=50 reviews + 0 false-positive rate). "
+        "Curator was directly anchored at O3_ACTING via the 2026-05-17 "
+        "operator-authorized ceremony, bypassing the formal review-pace gate. "
+        "This variant surfaces three informational findings: "
+        "(1) CURATOR_DIRECT_O3_BYPASS_DOCUMENTED — always fires while Curator "
+        "is at O3_ACTING; documents the bypass for transparency; "
+        "(2) CURATOR_GRADUATION_BACKFILLED — fires when N>=50 reviews "
+        "accumulated (direct-O3 now post-hoc justified by empirical evidence); "
+        "(3) CURATOR_GRADUATION_PENDING — fires when N<50 (bypass remains "
+        "operator-authority-only). All findings LOW severity + frozen_region="
+        "False (legitimate operator pathway, not violation). Fail-open."
+    ),
+    schema={"type": "object", "properties": {
+        "db_path": {"type": "string",
+            "description": "Override bridge SQLite path"}
+    }, "required": []}
+)
+async def vapi_mythos_curator_graduation_audit(**kwargs):
+    _ensure_bridge_on_path()
+    try:
+        from vapi_bridge.mythos_variants import (
+            mythos_curator_graduation_audit as _runner,
+        )
+    except Exception as exc:
+        return {"variant": "curator_graduation_audit", "error": f"import failed: {exc}",
+                "total_findings": 0, "findings": [], "timestamp": time.time()}
+    try:
+        findings = await _runner(
+            repo_root=PROJECT_ROOT,
+            db_path=kwargs.get("db_path"),
+        )
+    except Exception as exc:
+        return {"variant": "curator_graduation_audit", "error": f"variant raised: {exc}",
+                "total_findings": 0, "findings": [], "timestamp": time.time()}
+    return _findings_to_dict("curator_graduation_audit", findings)
+
+
 async def main():
     # Preload workflow corpus files into mtime cache
     for key in WORKFLOW_FILES:
