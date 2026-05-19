@@ -1290,7 +1290,9 @@ async def mythos_live_gameplay_audit(
     root = _resolve_repo_root(repo_root)
     findings: list[MythosFindingResult] = []
     if db_path is None:
-        db_path = str(root / "bridge" / "vapi_store.db")
+        # 2026-05-19 path-discovery fix: canonical production DB path.
+        from .db_path_resolver import resolve_canonical_db_path
+        db_path = resolve_canonical_db_path()
 
     try:
         from vapi_bridge.store import Store
@@ -1552,7 +1554,11 @@ async def mythos_post_o3_ceremony_audit(
             return findings
 
         if db_path is None:
-            db_path = str(root / "bridge" / "vapi_store.db")
+            # 2026-05-19 path-discovery fix: use canonical production DB
+            # path that matches bridge runtime, not the stale sandbox at
+            # bridge/vapi_store.db. See db_path_resolver.py docstring.
+            from .db_path_resolver import resolve_canonical_db_path
+            db_path = resolve_canonical_db_path()
         audit = await audit_mod.run_audit(
             db_path=db_path,
             include_chain_reads=include_chain_reads,
@@ -1711,7 +1717,9 @@ async def mythos_corpus_drift(
     """
     root = _resolve_repo_root(repo_root)
     if db_path is None:
-        db_path = str(root / "bridge" / "vapi_store.db")
+        # 2026-05-19 path-discovery fix: canonical production DB path.
+        from .db_path_resolver import resolve_canonical_db_path
+        db_path = resolve_canonical_db_path()
     findings: list[MythosFindingResult] = []
 
     try:
@@ -2132,7 +2140,11 @@ async def mythos_spending_log_drift(
     individual query errors logged + skipped; never raises."""
     root = _resolve_repo_root(repo_root)
     if db_path is None:
-        db_path = str(root / "bridge" / "vapi_store.db")
+        # 2026-05-19 path-discovery fix: use canonical production DB
+        # path that matches bridge runtime, not the stale sandbox at
+        # bridge/vapi_store.db. See db_path_resolver.py docstring.
+        from .db_path_resolver import resolve_canonical_db_path
+        db_path = resolve_canonical_db_path()
     findings: list[MythosFindingResult] = []
 
     try:

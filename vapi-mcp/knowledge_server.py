@@ -52,10 +52,19 @@ import httpx
 # ============================================================
 
 BRIDGE_URL   = os.environ.get("VAPI_BRIDGE_URL", "http://localhost:8080")
-DB_PATH      = os.environ.get("VAPI_DB_PATH", "bridge/vapi_store.db")
+# 2026-05-19 path-discovery fix: default to canonical production DB path
+# (~/.vapi/bridge.db or $DB_PATH), NOT the stale sandbox at bridge/
+# vapi_store.db. See bridge/vapi_bridge/db_path_resolver.py.
+DB_PATH      = os.environ.get(
+    "VAPI_DB_PATH",
+    os.environ.get("DB_PATH") or str(Path.home() / ".vapi" / "bridge.db"),
+)
 # VAPI_*.md files live in VAPI-WORKFLOW.v2/ — not the project root
 CORPUS_DIR   = os.environ.get("VAPI_CORPUS_DIR", "VAPI-WORKFLOW.v2")
-PROJECT_ROOT = Path(os.environ.get("VAPI_ROOT", "."))
+# 2026-05-19 path-discovery fix: PROJECT_ROOT now resolves to ABSOLUTE
+# path regardless of MCP server CWD (matching the fix in unified_server.py).
+_DEFAULT_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(os.environ.get("VAPI_ROOT", str(_DEFAULT_PROJECT_ROOT)))
 
 # ============================================================
 # CLAUDE.md Live Parser — shared with server.py, never stale

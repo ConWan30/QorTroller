@@ -461,10 +461,16 @@ def main(argv: List[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Operator Initiative POST-O3 ceremony verification audit."
     )
-    parser.add_argument(
-        "--db",
-        default=str(PROJECT_ROOT / "bridge" / "vapi_store.db"),
-    )
+    # 2026-05-19 path-discovery fix: default to canonical production DB
+    # path (~/.vapi/bridge.db or $DB_PATH), NOT the stale sandbox at
+    # bridge/vapi_store.db. See bridge/vapi_bridge/db_path_resolver.py.
+    try:
+        sys.path.insert(0, str(PROJECT_ROOT / "bridge"))
+        from vapi_bridge.db_path_resolver import resolve_canonical_db_path
+        _default_db = resolve_canonical_db_path()
+    except Exception:
+        _default_db = str(PROJECT_ROOT / "bridge" / "vapi_store.db")
+    parser.add_argument("--db", default=_default_db)
     parser.add_argument(
         "--include-chain-reads", action="store_true",
         help="Also eth_call AgentScope.getScopeRoot per agent (read-only; "

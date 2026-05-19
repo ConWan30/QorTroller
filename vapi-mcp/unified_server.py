@@ -78,7 +78,14 @@ import httpx
 # ============================================================
 
 BRIDGE_URL   = os.environ.get("VAPI_BRIDGE_URL", "http://localhost:8080")
-DB_PATH      = os.environ.get("VAPI_DB_PATH",     "bridge/vapi_store.db")
+# 2026-05-19 path-discovery fix: default to canonical production DB path
+# (~/.vapi/bridge.db or $DB_PATH) matching bridge runtime, NOT the stale
+# sandbox at bridge/vapi_store.db. See bridge/vapi_bridge/db_path_resolver.
+# VAPI_DB_PATH env override still honored if set explicitly.
+DB_PATH      = os.environ.get(
+    "VAPI_DB_PATH",
+    os.environ.get("DB_PATH") or str(Path.home() / ".vapi" / "bridge.db"),
+)
 # 2026-05-19: PROJECT_ROOT now resolves to ABSOLUTE path regardless of MCP
 # server CWD. Previously `Path(".")` resolved against whatever CWD spawned
 # the MCP server — which could be Claude Code's home dir, not the project
