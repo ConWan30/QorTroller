@@ -76,7 +76,7 @@ A reasonable evaluator response to §1.3 (portability invitation) and §1.4 (ope
 
 **What is not portable** — QorTroller's position rests on three hardware-and-time-bound assets that a later V.A.P.I.-compliant entrant cannot clone:
 
-1. **The calibration corpus** — ~217 physical sessions on real DualShock Edge CFI-ZCP1 hardware, with three distinct humans across multiple probe types (AIT, touchpad_corners, tremor_resting, free-form). A competing implementation starts at N=0; reaching N=37 AIT corpus with all-pairs > 1.0 separation ratio requires real hardware time with real humans, which neither the FROZEN-v1 byte specifications nor a code fork can shortcut. The grant submission's Track A explicitly funds scaling this corpus from 3-player → 10+ player; that scaling is the most valuable asset the grant produces, because it cannot be cloned ex post by anyone reading the published architecture.
+1. **The calibration corpus** — **267 physical terminal sessions** on real DualShock Edge CFI-ZCP1 hardware (P1=98, P2=86, P3=83), with three distinct humans across multiple probe types (AIT, touchpad_corners, touchpad_freeform, touchpad_swipes, tremor_resting); verified at `sessions/human/terminal_cal_P{1,2,3}/` on 2026-05-19. A competing implementation starts at N=0; reaching N=37 AIT corpus with all-pairs > 1.0 separation ratio requires real hardware time with real humans, which neither the FROZEN-v1 byte specifications nor a code fork can shortcut. The grant submission's Track A explicitly funds scaling this corpus from 3-player → 10+ player; that scaling is the most valuable asset the grant produces, because it cannot be cloned ex post by anyone reading the published architecture.
 
 2. **The dated frozen-primitive lineage with on-chain anchoring history** — the FROZEN-v1 primitives were anchored on IoTeX testnet starting from Phase O0 (2026-05-03) through the present, with specific transaction hashes timestamping each ceremony. A later entrant can adopt the byte-domain specification but cannot retroactively produce the on-chain commitment history. The 6 ceremony transactions of 2026-05-17 (Sentry + Guardian + Curator op_tx + gov_tx pairs) at IoTeX testnet block timestamps are singular historical facts.
 
@@ -253,9 +253,11 @@ Note: p_L2C resolves to 0.5 neutral prior in dead-zone stick games (NCAA CFB 26 
 The formula effectively runs as 4-signal in practice for the current game corpus.
 ```
 
-The weight assignment is calibrated against the 3-player N=37 AIT corpus + 217 free-form sessions. Weights can be re-tuned with additional players + new game corpora; the formula is configurable in `bridge/vapi_bridge/insight_synthesizer.py`.
+The weight assignment is calibrated against the 3-player N=37 AIT corpus + the broader terminal calibration session pool (267 sessions on disk as of 2026-05-19; weights were originally derived at an earlier corpus stage and remain stable across corpus growth). Weights can be re-tuned with additional players + new game corpora; the formula is configurable in `bridge/vapi_bridge/insight_synthesizer.py`.
 
-### 5.3 L4 calibration state (Phase 57, N=74)
+### 5.3 L4 calibration state (Phase 57, N=74 — distinct from current separation corpus)
+
+The N=74 cited in this section header is the **Phase 57 hardware threshold calibration corpus** — the older `sessions/human/hw_*.json` set (74 JSON files at the root of `sessions/human/`), distinct from the current 267-session separation corpus at `sessions/human/terminal_cal_P{1,2,3}/` referenced in §5.4. The hw_* corpus established the L4 anomaly + continuity thresholds at Phase 57; subsequent terminal_cal corpus growth produced the separation ratios cited in §5.4.
 
 The L4 layer's 12-feature Mahalanobis distance computation uses 10 active features (2 structurally zero / excluded):
 
@@ -280,7 +282,7 @@ These thresholds were calibrated on the foundational 74-session corpus and are c
 
 ### 5.4 Honest calibration corpus state
 
-QorTroller's biometric calibration is currently a 3-player corpus. A prior Player 4 designation was eliminated 2026-04-02 after confirmation that the captured sessions were the same person as Player 3; provenance anchored at `VAPI_CORPUS.md:53` ("P4 ELIMINATED — confirmed same person as P3 (2026-04-02)") with the disposition retained in `CLAUDE.md:84`. Live disk distribution as of 2026-05-19 verified at `sessions/human/terminal_cal_P{1,2,3}/`:
+QorTroller's biometric calibration is currently a **3-player corpus of 267 terminal sessions** as of 2026-05-19, verified at `sessions/human/terminal_cal_P{1,2,3}/`. A prior Player 4 designation was eliminated 2026-04-02 after confirmation that the captured sessions were the same person as Player 3; provenance anchored at `VAPI_CORPUS.md:53` ("P4 ELIMINATED — confirmed same person as P3 (2026-04-02)") with the disposition retained in `CLAUDE.md:84`. Live disk distribution:
 
 | Player | Total terminal sessions | AIT | touchpad_corners | touchpad_freeform | touchpad_swipes | tremor_resting |
 |---|---|---|---|---|---|---|
@@ -574,7 +576,8 @@ Every load-bearing claim in this whitepaper has a verifiable evidence anchor. Th
 | On-chain scope_roots | IoTeX testnet AgentScope contract | `python scripts/_verify_operator_initiative_chain_state.py` |
 | Mythos audit cleanliness | All 13 variants returning honest findings | `python -c "import asyncio; from vapi_bridge.mythos_variants import *; ..."` |
 | Brand-discipline evidence | `vsd-vault/proposals/drafts/qresce-0001-r0-artifacts/trademark_clearance_evidence.md` | Read document; verify USPTO TESS screenshots in `uspto_tess_screenshots/` |
-| Calibration corpus | `sessions/human/hw_*` 217 JSON files | Inspect; run `python scripts/analyze_interperson_separation.py` |
+| Calibration corpus — separation analysis | `sessions/human/terminal_cal_P{1,2,3}/` — 267 JSON files (live disk count 2026-05-19; P1=98 / P2=86 / P3=83) | `ls sessions/human/terminal_cal_P{1,2,3}/*.json \| wc -l`; run `python scripts/analyze_interperson_separation.py` |
+| Calibration corpus — L4 threshold baseline | `sessions/human/hw_*.json` — 74 JSON files (Phase 57 hardware corpus, distinct from separation corpus above) | `ls sessions/human/hw_*.json \| wc -l` |
 | Operator Initiative ceremony | CLAUDE.md L39 NOTE + 6 IoTeX testnet tx hashes | `eth_getTransactionReceipt` for each tx hash |
 | GIC_100 chain head | On-chain at IoTeX testnet block 43348052 | `eth_getTransactionByHash(0xe807347eb…)` |
 | Six-layer defense-in-depth | `bridge/.env` posture + Config field defaults | `python -c "from vapi_bridge.config import Config; ..."` |
