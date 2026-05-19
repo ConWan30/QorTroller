@@ -3832,6 +3832,41 @@ async def vapi_mythos_curator_graduation_audit(**kwargs):
     return _findings_to_dict("curator_graduation_audit", findings)
 
 
+# ── Tool 31 ── vapi_mythos_doc_number_consistency ────────────────────────────
+
+@tool(
+    name="vapi_mythos_doc_number_consistency",
+    description=(
+        "Mythos-Doc-Number-Consistency variant (2026-05-19, Layer 2 of the "
+        "WP-v6-arc verification fix). Audits known cross-referenced numeric "
+        "facts in target documents for asymmetric-update drift — the failure "
+        "mode where a fact updates in one register but stale residuals "
+        "persist in others. Reads canonical facts from "
+        "bridge/vapi_bridge/doc_consistency_registry.py REGISTRY; for each "
+        "fact's superseded_values, greps target documents for residuals. "
+        "Each match = MEDIUM finding with the document/line/context + "
+        "verification command + recommended fix. Catches the exact failure "
+        "mode that recurred 3x during WP v6 development. Fail-open."
+    ),
+    schema={"type": "object", "properties": {}, "required": []}
+)
+async def vapi_mythos_doc_number_consistency(**kwargs):
+    _ensure_bridge_on_path()
+    try:
+        from vapi_bridge.mythos_variants import (
+            mythos_doc_number_consistency as _runner,
+        )
+    except Exception as exc:
+        return {"variant": "doc_number_consistency", "error": f"import failed: {exc}",
+                "total_findings": 0, "findings": [], "timestamp": time.time()}
+    try:
+        findings = await _runner(repo_root=PROJECT_ROOT)
+    except Exception as exc:
+        return {"variant": "doc_number_consistency", "error": f"variant raised: {exc}",
+                "total_findings": 0, "findings": [], "timestamp": time.time()}
+    return _findings_to_dict("doc_number_consistency", findings)
+
+
 async def main():
     # Preload workflow corpus files into mtime cache
     for key in WORKFLOW_FILES:

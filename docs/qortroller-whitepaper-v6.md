@@ -20,7 +20,7 @@ We coin **Verifiable Autonomous Physical Intelligence (V.A.P.I.)** as a Decentra
 
 The architectural commitments are portable. The V.A.P.I. category is intended to host future implementations beyond QorTroller — other physical-input modalities (steering wheels, flight sticks, motion controllers, biometric peripherals) under the same cryptographic-sovereignty discipline.
 
-This whitepaper documents QorTroller's current state at v6: 49 contracts deployed on IoTeX testnet, three autonomous Operator Initiative agents at terminal O3_ACTING phase under six-layer default-deny posture, 11 commitment-family FROZEN-v1 cryptographic primitives plus the POSEIDON-BN254-AS hash capability, 4377 passing bridge tests, 128/128 PV-CI invariants, 13 Mythos audit guardrails, and the GIC_100 chain head permanently anchored at `0x0e9d453d…1ab48da` (block 43348052, tx `0xe807347eb…`, 2026-05-06). Honest gaps — the touchpad_corners separation ratio remaining below 1.0 as the tournament BLOCK enforcement gate, Curator's direct-O3 anchoring bypass of the formal review-pace graduation, the limited 3-player calibration corpus — are explicitly surfaced rather than narrated past.
+This whitepaper documents QorTroller's current state at v6: 49 contracts deployed on IoTeX testnet, three autonomous Operator Initiative agents at terminal O3_ACTING phase under six-layer default-deny posture, 11 commitment-family FROZEN-v1 cryptographic primitives plus the POSEIDON-BN254-AS hash capability, 4377 passing bridge tests, 128/128 PV-CI invariants, 14 Mythos audit guardrails, and the GIC_100 chain head permanently anchored at `0x0e9d453d…1ab48da` (block 43348052, tx `0xe807347eb…`, 2026-05-06). Honest gaps — the touchpad_corners separation ratio remaining below 1.0 as the tournament BLOCK enforcement gate, Curator's direct-O3 anchoring bypass of the formal review-pace graduation, the limited 3-player calibration corpus — are explicitly surfaced rather than narrated past.
 
 ---
 
@@ -69,7 +69,7 @@ A reasonable evaluator response to §1.3 (portability invitation) and §1.4 (ope
 **What is portable by design** (and intentionally so — this is the V.A.P.I. category's pitch, not its weakness):
 - The FROZEN-v1 byte-domain discipline + the 11 commitment-family preimage structures + the POSEIDON-AS hash capability
 - The Cedar policy bundle pattern + the four-rung agent ladder (O0 → O1_SHADOW → O2_SUGGEST → O3_ACTING) + the six-layer default-deny posture
-- The 13 Mythos audit guardrails as an operational discipline template
+- The 14 Mythos audit guardrails as an operational discipline template
 - The composability invariant `isFullyEligible(deviceId)` as a single view call
 - The smart contract architecture as a reference set (49 contract source files; deployment scripts; testnet ABIs)
 - The gamer-sovereignty enforcement primitives — per-category consent registry, `msg.sender == gamer` invariants, FSCA contradiction rules detecting GDPR Art. 17 violations
@@ -129,7 +129,7 @@ QorTroller spans eight architectural layers, each with distinct responsibilities
 │   - PITL Nine-Level Stack (L0-L6 + L2B/L2C)                      │
 │   - PoAC record emission per cognition cycle                     │
 │   - Operator Initiative live-write executor (PATH-B v2)          │
-│   - 13 Mythos audit guardrails                                   │
+│   - 14 Mythos audit guardrails                                   │
 ├──────────────────────────────────────────────────────────────────┤
 │ IoTeX L1 smart contracts (49 deployed at chain ID 4690)          │
 │   - PITLSessionRegistry · AdjudicationRegistry · AgentScope ·    │
@@ -434,9 +434,9 @@ This whitepaper explicitly does NOT claim Curator graduated through the formal r
 
 ---
 
-## 8. Mythos audit framework — 13 guardrails
+## 8. Mythos audit framework — 14 guardrails
 
-QorTroller publishes 13 Mythos audit variants that monitor specific drift surfaces continuously. Each variant is a deterministic, fail-open async function. Findings with `frozen_region=True` automatically force tier-3 (read-only) at the store layer per `INV-MYTHOS-FROZEN-PROTECTION-001` — Mythos NEVER auto-fixes FROZEN material.
+QorTroller publishes 14 Mythos audit variants that monitor specific drift surfaces continuously. Each variant is a deterministic, fail-open async function. Findings with `frozen_region=True` automatically force tier-3 (read-only) at the store layer per `INV-MYTHOS-FROZEN-PROTECTION-001` — Mythos NEVER auto-fixes FROZEN material.
 
 | # | Variant | Surface | Primary severity |
 |---|---|---|---|
@@ -574,7 +574,7 @@ Every load-bearing claim in this whitepaper has a verifiable evidence anchor. Th
 | PV-CI invariants | 128/128 PASS | `python scripts/vapi_invariant_gate.py` |
 | Cryptographic primitives | `bridge/vapi_bridge/grind_chain.py` (GIC) + sibling primitive modules | `python -m pytest bridge/tests/test_grind_chain.py` |
 | On-chain scope_roots | IoTeX testnet AgentScope contract | `python scripts/_verify_operator_initiative_chain_state.py` |
-| Mythos audit cleanliness | All 13 variants returning honest findings | `python -c "import asyncio; from vapi_bridge.mythos_variants import *; ..."` |
+| Mythos audit cleanliness | All 14 variants returning honest findings | `python -c "import asyncio; from vapi_bridge.mythos_variants import *; ..."` |
 | Brand-discipline evidence | `vsd-vault/proposals/drafts/qresce-0001-r0-artifacts/trademark_clearance_evidence.md` | Read document; verify USPTO TESS screenshots in `uspto_tess_screenshots/` |
 | Calibration corpus — separation analysis | `sessions/human/terminal_cal_P{1,2,3}/` — 267 JSON files (live disk count 2026-05-19; P1=98 / P2=86 / P3=83) | `ls sessions/human/terminal_cal_P{1,2,3}/*.json \| wc -l`; run `python scripts/analyze_interperson_separation.py` |
 | Calibration corpus — L4 threshold baseline | `sessions/human/hw_*.json` — 74 JSON files (Phase 57 hardware corpus, distinct from separation corpus above) | `ls sessions/human/hw_*.json \| wc -l` |
