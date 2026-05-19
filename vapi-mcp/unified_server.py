@@ -3737,6 +3737,50 @@ async def vapi_mythos_frontend_brand_drift(**kwargs):
     return _findings_to_dict("frontend_brand_drift", findings)
 
 
+# ── Tool 29 ── vapi_mythos_spending_log_drift ────────────────────────────────
+
+@tool(
+    name="vapi_mythos_spending_log_drift",
+    description=(
+        "Mythos-Spending-Log-Drift variant (2026-05-19). PATH-B v2 autoloop "
+        "runtime audit — surfaces drift in operator_agent_chain_spending_log "
+        "once the executor is active. Four finding classes: "
+        "(1) DAILY_BUDGET_EXCEEDED (CRITICAL) — agent's 24h cumulative "
+        "cost_iotx exceeds configured per-agent daily budget (should be "
+        "impossible per Gate 3; signals protocol violation); "
+        "(2) REFUSAL_BURST (MEDIUM) — > 5 refusal events (cost_iotx=0 + "
+        "error populated) in last hour (chain-side issue or config drift); "
+        "(3) UNATTRIBUTED_CHAIN_TX (HIGH) — cost_iotx > 0 but tx_hash empty "
+        "(data-integrity violation); "
+        "(4) SPENDING_WITHOUT_ACTIVATION (HIGH) — agent in spending_log not "
+        "in activation_log (cross-table integrity violation). Fail-open: "
+        "missing table returns []."
+    ),
+    schema={"type": "object", "properties": {
+        "db_path": {"type": "string",
+            "description": "Override bridge SQLite path"}
+    }, "required": []}
+)
+async def vapi_mythos_spending_log_drift(**kwargs):
+    _ensure_bridge_on_path()
+    try:
+        from vapi_bridge.mythos_variants import (
+            mythos_spending_log_drift as _runner,
+        )
+    except Exception as exc:
+        return {"variant": "spending_log_drift", "error": f"import failed: {exc}",
+                "total_findings": 0, "findings": [], "timestamp": time.time()}
+    try:
+        findings = await _runner(
+            repo_root=PROJECT_ROOT,
+            db_path=kwargs.get("db_path"),
+        )
+    except Exception as exc:
+        return {"variant": "spending_log_drift", "error": f"variant raised: {exc}",
+                "total_findings": 0, "findings": [], "timestamp": time.time()}
+    return _findings_to_dict("spending_log_drift", findings)
+
+
 async def main():
     # Preload workflow corpus files into mtime cache
     for key in WORKFLOW_FILES:
