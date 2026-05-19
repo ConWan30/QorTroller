@@ -125,7 +125,7 @@ export default function StatusStrip() {
           flexShrink:     0,
           whiteSpace:     'nowrap',
         }}
-      >VAPI · Evidence OS</Link>
+      >QorTroller · Evidence OS</Link>
 
       <DataBadge
         status={bridgeStatus}

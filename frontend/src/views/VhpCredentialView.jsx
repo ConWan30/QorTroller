@@ -5,7 +5,7 @@
  * Proof credential as a card embedding cert_level + expires_at
  * countdown + linked device_id + consecutive_clean grind streak. The
  * strategic target is streamer/sponsor embed: a streamer can link to
- * /vhp/<tokenId> to demonstrate VAPI-verified human gameplay history.
+ * /vhp/<tokenId> to demonstrate QorTroller-verified human gameplay history.
  */
 import { Link, useParams } from 'react-router-dom'
 import { usePublicVhp } from '../api/publicForensic'
@@ -43,7 +43,7 @@ export default function VhpCredentialView() {
         padding: '16px 24px', background: 'rgba(2,4,8,0.9)',
         borderBottom: `1px solid ${_ACCENT}`, display: 'flex', gap: 16, alignItems: 'center',
       }}>
-        <Link to="/" style={{ fontFamily: _MONO, fontSize: 11, color: _ACCENT, textDecoration: 'none' }}>← VAPI</Link>
+        <Link to="/" style={{ fontFamily: _MONO, fontSize: 11, color: _ACCENT, textDecoration: 'none' }}>← QorTroller</Link>
         <div style={{ fontFamily: _MONO, fontSize: 11, fontWeight: 700, color: _ACCENT, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
           Verified Human Proof
         </div>
@@ -75,7 +75,7 @@ export default function VhpCredentialView() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
                 <div>
                   <div style={{ fontFamily: _MONO, fontSize: 9, color: '#7a8a9b', letterSpacing: '0.16em' }}>
-                    VAPI · VERIFIED HUMAN PROOF
+                    QorTroller · VERIFIED HUMAN PROOF
                   </div>
                   <div style={{ fontFamily: _MONO, fontSize: 22, fontWeight: 700, color: '#ffe8d4', marginTop: 6 }}>
                     #{data.vhp.token_id}

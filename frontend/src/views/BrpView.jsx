@@ -6,7 +6,7 @@
 // Phase 238-FRONTEND-V4 (BRP CROWN-JEWEL REVAMP) 2026-05-09:
 //   The BRP is the gamer's CRYPTOGRAPHIC PORTRAIT — every polygon of the
 //   ambient mesh is derived from PoAC frozenOutput bytes via keccak256.
-//   This view is the most VAPI-distinctive surface because it visualizes
+//   This view is the most QorTroller-distinctive surface because it visualizes
 //   the protocol's data as art.
 //
 // V4 changes vs V3:

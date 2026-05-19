@@ -19,7 +19,7 @@ export default function AlgorithmCatalogView() {
         padding: '16px 24px', background: 'rgba(2,4,8,0.9)',
         borderBottom: `1px solid ${_ACCENT}`, display: 'flex', gap: 16, alignItems: 'center',
       }}>
-        <Link to="/" style={{ fontFamily: _MONO, fontSize: 11, color: _ACCENT, textDecoration: 'none' }}>← VAPI</Link>
+        <Link to="/" style={{ fontFamily: _MONO, fontSize: 11, color: _ACCENT, textDecoration: 'none' }}>← QorTroller</Link>
         <div style={{ fontFamily: _MONO, fontSize: 11, fontWeight: 700, color: _ACCENT, letterSpacing: '0.12em', textTransform: 'uppercase' }}>
           FROZEN-v1 Cryptographic Algorithm Catalog
         </div>
@@ -28,7 +28,7 @@ export default function AlgorithmCatalogView() {
       </div>
       <div style={{ padding: '24px' }}>
         <div style={{ marginBottom: 18, fontFamily: _MONO, fontSize: 11, color: '#7a8a9b', lineHeight: 1.7 }}>
-          The complete VAPI Protocol cryptographic primitive catalog. Every
+          The complete QorTroller (V.A.P.I. reference implementation) cryptographic primitive catalog. Every
           domain tag listed below has a corresponding Python implementation
           AND a browser-side verifier in <code style={{ color: '#5bd6a3' }}>
           frontend/src/crypto/vapi_verifier.js</code>. Each one produces a

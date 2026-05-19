@@ -1,4 +1,4 @@
-// VAPI Gamer Dashboard — Phase 235-GAMER-REDESIGN
+// QorTroller Gamer Dashboard — Phase 235-GAMER-REDESIGN
 // Phase 235-DASH-UPGRADE-3: consecutive_clean (true grind metric),
 // GrindAnalytics velocity strip, PCCIntelligence episode history, AIT chip.
 //
@@ -829,7 +829,7 @@ export function GamerView() {
       <iframe
         src="/controller-twin.html?minimal=1"
         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none', background: 'transparent', zIndex: 1 }}
-        title="VAPI 3D Controller Twin"
+        title="QorTroller 3D Controller Twin"
       />
 
       {/* Edge vignette — center fully transparent, controller stays sharp */}

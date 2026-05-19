@@ -183,7 +183,7 @@ export default function ForensicReplayWorkspace() {
     <>
       <WorkspaceHeader
         title="Forensic Replay"
-        description="Paste any cryptographic claim from VAPI and re-derive it in this browser. No operator API key required. The same six public routes mounted at /explorer · /session · /gic · /record · /vhp · /algorithms are reused unchanged here, inside the Evidence OS shell."
+        description="Paste any cryptographic claim from QorTroller and re-derive it in this browser. No operator API key required. The same six public routes mounted at /explorer · /session · /gic · /record · /vhp · /algorithms are reused unchanged here, inside the Evidence OS shell."
         right={sourceLink && (
           <ReplaySourceLink href={sourceLink.href} label={sourceLink.label}/>
         )}

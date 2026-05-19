@@ -10,7 +10,7 @@
  * the session ID + first link's ts_ns and confirms the FROZEN-v1
  * VAPI-GIC-GENESIS-v1 tag binding.
  *
- * Strategic claim: VAPI is the only anti-cheat protocol where any
+ * Strategic claim: QorTroller is the only anti-cheat protocol where any
  * external party can audit the cryptographic chain underneath a
  * grind session. 100+ links from grind_phase235_v1 genesis to the
  * Phase 239 G3 GIC_100 milestone, every one browser-replayable.
@@ -58,7 +58,7 @@ function HeaderBanner({ sessionId, chainLength, chainIntact }) {
       gap:          16,
     }}>
       <Link to="/" style={{ fontFamily: _MONO, fontSize: 11, color: _ACCENT, textDecoration: 'none' }}>
-        ← VAPI
+        ← QorTroller
       </Link>
       <div style={{
         fontFamily: _MONO, fontSize: 11, fontWeight: 700, color: _ACCENT,

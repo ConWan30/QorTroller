@@ -4,7 +4,7 @@
  * Top-level public route at /session/:commitmentHex. Composes the
  * four public panels (CryptoReplayPanel + AlgorithmCatalog +
  * GicChainTimeline + PoacBodyHasher) into a single page anyone can
- * load to verify a VAPI session's cryptographic claims independently.
+ * load to verify a QorTroller session's cryptographic claims independently.
  *
  * Zero auth. Zero operator state. Read-only from /public/* endpoints.
  */
@@ -29,7 +29,7 @@ function HeaderBanner({ commitmentHex, found }) {
       gap:          16,
     }}>
       <Link to="/" style={{ fontFamily: _MONO, fontSize: 11, color: _ACCENT, textDecoration: 'none' }}>
-        ← VAPI
+        ← QorTroller
       </Link>
       <div style={{
         fontFamily: _MONO, fontSize: 11, fontWeight: 700, color: _ACCENT,
