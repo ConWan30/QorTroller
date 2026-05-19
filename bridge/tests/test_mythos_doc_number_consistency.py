@@ -23,15 +23,27 @@ sys.path.insert(0, str(ROOT / "bridge"))
 # ----- T-MYTHOS-DNC-1 -----------------------------------------------------
 
 def test_t_mythos_dnc_1_empty_superseded_yields_zero():
-    """A registry entry with no superseded_values is skipped — nothing to scan for."""
+    """A registry entry with no superseded_values is skipped — nothing to scan for.
+
+    Note (2026-05-19 honesty refinement): the variant always emits ONE
+    COVERAGE_BOUNDARY informational finding describing what it audits, so
+    a green result names its own scope. Drift findings (MEDIUM) are
+    separate. This test asserts variant returns a list + the boundary
+    finding is present + entries with empty superseded_values produce
+    no drift findings."""
     from vapi_bridge.mythos_variants import mythos_doc_number_consistency
 
-    # Use the live registry; entries with empty superseded_values (e.g.,
-    # hw_threshold_calibration_baseline_n at 74) should not produce findings.
     findings = asyncio.run(mythos_doc_number_consistency())
-    # No-superseded entries cannot produce findings; just confirm variant
-    # returns a list and doesn't crash on entries with empty tuples.
     assert isinstance(findings, list)
+    # COVERAGE_BOUNDARY finding always present (1 LOW informational)
+    boundary_findings = [
+        f for f in findings if "COVERAGE_BOUNDARY" in f.description
+    ]
+    assert len(boundary_findings) == 1, \
+        "Variant must always emit exactly one COVERAGE_BOUNDARY finding"
+    assert boundary_findings[0].severity == "LOW"
+    # The boundary describes the registry; check it names a count of facts
+    assert "registered canonical facts" in boundary_findings[0].description
 
 
 # ----- T-MYTHOS-DNC-2 -----------------------------------------------------
@@ -108,10 +120,10 @@ def test_t_mythos_dnc_5_missing_doc_silently_skipped():
     # Run against a temp root that has NO docs/ directory.
     with tempfile.TemporaryDirectory() as td:
         findings = asyncio.run(mythos_doc_number_consistency(repo_root=Path(td)))
-        # Missing docs → no findings; not an error
-        assert findings == [] or all(
-            "missing" not in f.description.lower() for f in findings
-        )
+        # Missing docs → no drift findings (only the COVERAGE_BOUNDARY
+        # informational); not an error
+        drift = [f for f in findings if "STALE_RESIDUAL" in f.description]
+        assert drift == []
 
 
 # ----- T-MYTHOS-DNC-6 -----------------------------------------------------
@@ -143,8 +155,10 @@ def test_t_mythos_dnc_7_live_docs_no_surprise_findings():
     findings = asyncio.run(mythos_doc_number_consistency())
 
     # Filter to findings specifically about '217' in WP v6
+    # Filter to drift findings (exclude COVERAGE_BOUNDARY informational)
+    drift = [f for f in findings if "STALE_RESIDUAL" in f.description]
     wp_217_findings = [
-        f for f in findings
+        f for f in drift
         if "'217'" in f.description and "qortroller-whitepaper-v6" in (f.file_path or "")
     ]
     assert wp_217_findings == [], (
