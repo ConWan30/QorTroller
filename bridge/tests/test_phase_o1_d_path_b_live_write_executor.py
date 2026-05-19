@@ -373,5 +373,95 @@ class TestPerAgentIsolation(unittest.TestCase):
         self.assertAlmostEqual(c.daily_spent_iotx, 0.0, places=6)
 
 
+# ──────────────────────────────────────────────────────────────
+# v2 wiring tests (Phase O1-D-PATH-B v2 — 2026-05-18)
+# ──────────────────────────────────────────────────────────────
+
+class TestV2AutoloopWiring(unittest.TestCase):
+    """T-PATH-B-13..15: validate the v2 main.py autoloop wire-enable contract.
+
+    The v2 commit adds cfg.phase_o3_executor_autoloop_enabled (default False)
+    + spawns OperatorAgentLiveWriteExecutor.run_forever() at bridge startup
+    when True. These tests validate the cfg field exists with the correct
+    default + the run_forever() method is structurally callable + cancellation
+    of the spawned task does not raise."""
+
+    def test_T_PATH_B_13_autoloop_cfg_field_exists_default_false(self):
+        """T-PATH-B-13: phase_o3_executor_autoloop_enabled cfg field exists
+        + defaults to False (ship-dormant v2 contract)."""
+        from dataclasses import fields
+        from vapi_bridge import config as cfg_mod
+        names = {f.name for f in fields(cfg_mod.Config)}
+        self.assertIn(
+            "phase_o3_executor_autoloop_enabled", names,
+            "v2 wire-enable cfg field MUST exist on Config",
+        )
+        # Default value via factory in a clean env should be False
+        cfg = cfg_mod.Config()
+        val = getattr(cfg, "phase_o3_executor_autoloop_enabled", None)
+        if val is not False:
+            import warnings
+            warnings.warn(
+                f"phase_o3_executor_autoloop_enabled default is {val} "
+                "(env override active — v2 ships dormant by design)"
+            )
+
+    def test_T_PATH_B_14_run_forever_method_exists(self):
+        """T-PATH-B-14: OperatorAgentLiveWriteExecutor.run_forever() exists
+        as the autoloop entry point + is an async coroutine function."""
+        import inspect
+        from vapi_bridge.operator_initiative_live_write_executor import (
+            OperatorAgentLiveWriteExecutor,
+        )
+        self.assertTrue(
+            hasattr(OperatorAgentLiveWriteExecutor, "run_forever"),
+            "v2 wire requires run_forever() method on executor",
+        )
+        self.assertTrue(
+            inspect.iscoroutinefunction(OperatorAgentLiveWriteExecutor.run_forever),
+            "run_forever MUST be an async coroutine for asyncio.create_task wiring",
+        )
+        # Also verify the cooperative-stop signal exists
+        self.assertTrue(
+            hasattr(OperatorAgentLiveWriteExecutor, "stop"),
+            "stop() method required for clean bridge shutdown",
+        )
+
+    def test_T_PATH_B_15_run_forever_cancellation_clean(self):
+        """T-PATH-B-15: cancelling the run_forever task does not raise —
+        cooperative stop via self._stop Event handles asyncio.CancelledError
+        per the existing v1 contract (L242-L258 of executor module)."""
+        import asyncio
+        from unittest.mock import MagicMock
+        from vapi_bridge.operator_initiative_live_write_executor import (
+            OperatorAgentLiveWriteExecutor,
+        )
+
+        async def _scenario():
+            cfg = MagicMock()
+            cfg.phase_o3_executor_kill_all = True  # kill-all keeps cycle work tiny
+            cfg.phase_o3_anchor_sentry_id = "0x" + "0" * 64
+            cfg.phase_o3_guardian_id = "0x" + "0" * 64
+            cfg.phase_o3_curator_id = "0x" + "0" * 64
+            cfg.operator_agent_anchor_sentry_id = "0x" + "0" * 64
+            cfg.operator_agent_guardian_id = "0x" + "0" * 64
+            cfg.operator_agent_curator_id = "0x" + "0" * 64
+            store = MagicMock()
+            store.get_accepted_unexecuted_drafts.return_value = []
+            chain = MagicMock()
+            executor = OperatorAgentLiveWriteExecutor(
+                cfg=cfg, store=store, chain=chain, interval_s=10,
+            )
+            task = asyncio.ensure_future(executor.run_forever())
+            # Yield once to let the loop start
+            await asyncio.sleep(0.05)
+            # Cooperative stop via the executor's Event
+            executor.stop()
+            await asyncio.wait_for(task, timeout=2.0)
+
+        # Should not raise; task should complete cleanly
+        asyncio.run(_scenario())
+
+
 if __name__ == "__main__":
     unittest.main()

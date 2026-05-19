@@ -1792,6 +1792,50 @@ class Bridge:
                     "Phase O1 C4: cedar_drift_sweeper unavailable: %s", _drift_exc
                 )
 
+        # Phase O1-D-PATH-B v2 (2026-05-18) — Live-write executor autoloop wire.
+        # Default disabled (operator opts in via PHASE_O3_EXECUTOR_AUTOLOOP_
+        # ENABLED=true in bridge/.env). When enabled, spawns
+        # OperatorAgentLiveWriteExecutor.run_forever() so accepted drafts at
+        # O3_ACTING agents fire chain operations every
+        # phase_o3_executor_interval_s seconds (default 60s). The executor's
+        # 4-gate authorization contract still applies per-agent
+        # (live_writes_enabled flag + daily budget + kill-all + O3_ACTING phase).
+        # CHAIN_SUBMISSION_PAUSED at bridge level remains the final defense
+        # layer regardless of autoloop activation.
+        # Fail-open: any spawn error is caught + logged; bridge continues.
+        if getattr(self.cfg, "phase_o3_executor_autoloop_enabled", False):
+            try:
+                from .operator_initiative_live_write_executor import (
+                    OperatorAgentLiveWriteExecutor,
+                )
+                _o3_executor = OperatorAgentLiveWriteExecutor(
+                    cfg=self.cfg, store=self.store, chain=self.chain,
+                    interval_s=int(
+                        getattr(self.cfg, "phase_o3_executor_interval_s", 60)
+                    ),
+                )
+                _o3_executor_task = asyncio.ensure_future(
+                    _o3_executor.run_forever()
+                )
+                _o3_executor_task.set_name("OperatorAgentLiveWriteExecutor")
+                self._tasks.append(_o3_executor_task)
+                self._o3_executor = _o3_executor  # retain for clean shutdown
+                log.info(
+                    "Phase O1-D-PATH-B v2: live-write executor autoloop "
+                    "started (interval=%ds; kill_all=%s; per-agent flags: "
+                    "sentry=%s/guardian=%s/curator=%s)",
+                    getattr(self.cfg, "phase_o3_executor_interval_s", 60),
+                    getattr(self.cfg, "phase_o3_executor_kill_all", False),
+                    getattr(self.cfg, "phase_o3_anchor_sentry_live_writes_enabled", False),
+                    getattr(self.cfg, "phase_o3_guardian_live_writes_enabled", False),
+                    getattr(self.cfg, "phase_o3_curator_live_writes_enabled", False),
+                )
+            except Exception as _exec_exc:
+                log.warning(
+                    "Phase O1-D-PATH-B v2: live-write executor unavailable: %s",
+                    _exec_exc,
+                )
+
         # Phase O5-MLGA Stage 3 — runtime session tracker. Polls
         # capture_health_log + records + APOP + ruling_validation_log
         # every mlga_session_tracker_interval_s seconds; opens session

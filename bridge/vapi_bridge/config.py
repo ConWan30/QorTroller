@@ -2581,6 +2581,21 @@ class Config:
     the 30s polling-loop cadence to keep executor load light + spread chain
     op timing across cycles."""
 
+    phase_o3_executor_autoloop_enabled: bool = field(
+        default_factory=lambda: _env_bool("PHASE_O3_EXECUTOR_AUTOLOOP_ENABLED", False)
+    )
+    """Phase O1-D-PATH-B v2 (2026-05-18) — Master wire-enable for the live-write
+    executor autoloop in main.py. When True, the bridge spawns
+    OperatorAgentLiveWriteExecutor.run_forever() at startup so accepted drafts
+    are evaluated against the 4-gate authorization contract every
+    phase_o3_executor_interval_s seconds (default 60s). When False (default),
+    the executor module remains importable + explicitly callable but does NOT
+    auto-start; this preserves v1 behavior (operator can invoke executor
+    cycles ad-hoc but no autonomous chain operations fire). Pair with the
+    per-agent phase_o3_{agent}_live_writes_enabled flags (also default False
+    except Guardian which is .env-opted-in) for two-layer activation gating.
+    Bridge-level CHAIN_SUBMISSION_PAUSED remains the final defense."""
+
     # --- Phase O1-D-AUTO-SUPERSEDE 2026-05-17 ---
     phase_o3_auto_supersede_enabled: bool = field(
         default_factory=lambda: _env_bool("PHASE_O3_AUTO_SUPERSEDE_ENABLED", False)
