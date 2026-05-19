@@ -5,7 +5,8 @@
 **Version**: 6 (grant-tailored, supersedes v5 light revamp + v4 technical baseline)
 **Date**: 2026-05-19
 **Brand-lock**: QRESCE-0001 v0.5 (`2c762835`)
-**HEAD**: `39f7d26d`
+**Protocol-state HEAD** (last source-code commit; bridge test counts measured here): `4f8068e9`
+**Documentation HEAD at v6 drafting time**: `aeb6db58` after WP v6 commit; this version supersedes any earlier draft `39f7d26d` state-document parallel reference
 **Canonical repo**: https://github.com/ConWan30/QorTroller
 **Verification discipline**: every load-bearing claim has a verifiable evidence anchor; no flat first-of-its-kind claims; empirical figures paired with their limits
 
@@ -60,6 +61,28 @@ The category framing creates ecosystem space. By coining V.A.P.I. as a distinct 
 ### 1.4 Honest scope note on V.A.P.I. positioning
 
 V.A.P.I. as a named category is operator-coined. It does not yet have external adoption or other implementations. This whitepaper treats V.A.P.I. as the conceptual framing under which QorTroller's design choices make architectural sense, not as a claim of category leadership. The grant submission requests support for both QorTroller's mainnet readiness AND the V.A.P.I. category's ecosystem space — a category establishes itself through implementations, and additional V.A.P.I.-compliant projects emerging from the grant ecosystem would be the strongest possible validation of the category framing.
+
+### 1.5 What is portable and what is not — why fund QorTroller specifically
+
+A reasonable evaluator response to §1.3 (portability invitation) and §1.4 (operator-coined disclosure) is: if the category is open and the discipline is portable, why fund QorTroller rather than wait for a later entrant to inherit the work? The honest distinction:
+
+**What is portable by design** (and intentionally so — this is the V.A.P.I. category's pitch, not its weakness):
+- The FROZEN-v1 byte-domain discipline + the 11 commitment-family preimage structures + the POSEIDON-AS hash capability
+- The Cedar policy bundle pattern + the four-rung agent ladder (O0 → O1_SHADOW → O2_SUGGEST → O3_ACTING) + the six-layer default-deny posture
+- The 13 Mythos audit guardrails as an operational discipline template
+- The composability invariant `isFullyEligible(deviceId)` as a single view call
+- The smart contract architecture as a reference set (49 contract source files; deployment scripts; testnet ABIs)
+- The gamer-sovereignty enforcement primitives — per-category consent registry, `msg.sender == gamer` invariants, FSCA contradiction rules detecting GDPR Art. 17 violations
+
+**What is not portable** — QorTroller's position rests on three hardware-and-time-bound assets that a later V.A.P.I.-compliant entrant cannot clone:
+
+1. **The calibration corpus** — ~217 physical sessions on real DualShock Edge CFI-ZCP1 hardware, with three distinct humans across multiple probe types (AIT, touchpad_corners, tremor_resting, free-form). A competing implementation starts at N=0; reaching N=37 AIT corpus with all-pairs > 1.0 separation ratio requires real hardware time with real humans, which neither the FROZEN-v1 byte specifications nor a code fork can shortcut. The grant submission's Track A explicitly funds scaling this corpus from 3-player → 10+ player; that scaling is the most valuable asset the grant produces, because it cannot be cloned ex post by anyone reading the published architecture.
+
+2. **The dated frozen-primitive lineage with on-chain anchoring history** — the FROZEN-v1 primitives were anchored on IoTeX testnet starting from Phase O0 (2026-05-03) through the present, with specific transaction hashes timestamping each ceremony. A later entrant can adopt the byte-domain specification but cannot retroactively produce the on-chain commitment history. The 6 ceremony transactions of 2026-05-17 (Sentry + Guardian + Curator op_tx + gov_tx pairs) at IoTeX testnet block timestamps are singular historical facts.
+
+3. **The GIC_100 chain head as a singular on-chain historical fact** — head `0x0e9d453d…1ab48da` anchored at IoTeX testnet block 43348052 (tx `0xe807347eb…`, 2026-05-06). This is the cryptographic record of 100 consecutive clean gaming sessions under the dual-connection EXCLUSIVE_USB capture posture. No later V.A.P.I.-compliant project can produce a competing GIC_100 head at an earlier block; this is the strongest single piece of empirical evidence the protocol has.
+
+**Strategic framing**: V.A.P.I.'s category openness is the pitch — additional implementations validate the category, not threaten QorTroller's position. QorTroller is the proven reference seed for V.A.P.I. Its lead is measured in sessions and on-chain facts, not in code that can be forked. The grant accelerates the assets that cannot be cloned (Track A: corpus scaling; Track B: same-controller separability; Track C: L8 BT witness; Track D: mainnet deploy) — each grant deliverable widens the moat QorTroller has built since Phase O0, in a way no later entrant can match without putting the same hardware time + on-chain time on the clock.
 
 ---
 
@@ -159,10 +182,10 @@ A flat statement of "12 primitives" would conflate commitment families with hash
 | 4 | **VAME** (Agent Mid-cycle Evidence) | `VAPI-VAME-v1` | `tag[12] ‖ chain_head[16] ‖ ts_ns_be[8] ‖ endpoint ‖ body_bytes` | SHA-256 → 32B |
 | 5 | **CORPUS-SNAPSHOT-v1** | `VAPI-CORPUS-SNAPSHOT-v1` | `tag[24] ‖ wiki_hash[32] ‖ agent_root[32] ‖ ratio_milli_be[8] ‖ corpus_n_be[8] ‖ ts_ns_be[8]` | SHA-256 → 32B |
 | 6 | **CONSENT-v1** | `VAPI-CONSENT-v1` | `tag[15] ‖ device_id_b32 ‖ category_bitmask_be[4] ‖ expires_at_be[8] ‖ ts_ns_be[8]` | SHA-256 → 32B |
-| 7 | **BIOMETRIC-SNAPSHOT-v1** | (Phase 237 frozen) | Per-session biometric vector commitment | SHA-256 → 32B |
-| 8 | **LISTING-v1** (Phase 238 PALL) | (Phase 238 frozen) | Marketplace listing provenance commitment | SHA-256 → 32B |
-| 9 | **FRR** (Fleet Readiness Root) | (Phase 238 frozen) | Multi-agent fleet attestation root | SHA-256 → 32B |
-| 10 | **ZKBA** (ZK Biometric Attestation) | (Phase O3 frozen) | ZK-circuit-bound biometric continuity proof | SHA-256 → 32B |
+| 7 | **BIOMETRIC-SNAPSHOT-v1** | `VAPI-BIOMETRIC-SNAPSHOT-v1` (26B) | `tag[26] ‖ feature_dim_be[1] ‖ n_players_be[1] ‖ sorted_player_ids[N] ‖ centroids_scaled_be[N×F×8] ‖ cov_inv_scaled_be[F×F×8] ‖ ts_ns_be[8]` (scale factor 1e9 FROZEN; for AIT F=4 N=3 → 263B) | SHA-256 → 32B |
+| 8 | **LISTING-v1** (Phase 238 PALL) | `VAPI-LISTING-v1` (15B; source self-documents the original 16B design approximation — 15B is the correct count) | `tag[15] ‖ sepproof_commitment[32] ‖ biometric_snapshot_hash[32] ‖ corpus_snapshot_hash[32] ‖ gic_hash[32] ‖ consent_bitmask_be[4] ‖ data_class_be[1] ‖ price_micro_iotx_be[8] ‖ ipfs_cid_hash[32] ‖ ts_ns_be[8]` (229B; MARKETPLACE consent bit MUST be set) | SHA-256 → 32B |
+| 9 | **FRR** (Fleet Readiness Root) | `VAPI-FRR-v1` (11B) | `tag[11] ‖ sorted_by_agent_id(agent_id_be[32] ‖ phase_code[1]) for each agent ‖ ts_ns_be[8]` (phase codes FROZEN: O0=0x00, O1_SHADOW=0x01, O2_SUGGEST=0x02, O3_ACT=0x03, UNKNOWN=0xFF; for 3 agents → 118B) | SHA-256 → 32B |
+| 10 | **ZKBA-ARTIFACT-v1** | `VAPI-ZKBA-ARTIFACT-v1` (21B) | `tag[21] ‖ zkba_class_byte[1] ‖ proof_weight_byte[1] ‖ n_components_byte[1] ‖ sorted_component_hashes[n×32] ‖ ts_ns_be[8]` (ZKBAClass FROZEN enum: AIT=1, GIC=2, VHP=3, HARDWARE=4, CONSENT=5, TOURNAMENT=6, MARKET=7; total 24 + n×32 bytes) | SHA-256 → 32B |
 | 11 | **VAPI-O3-SUPERSEDE-v1** | `VAPI-O3-SUPERSEDE-v1` | `tag[20] ‖ agent_id[32] ‖ draft_count[8] ‖ disagreement_milli[4] ‖ bundle_drift_30d[4] ‖ scope_drift_30d[4] ‖ dual_key[1] ‖ kms_hsm[1] ‖ github_oauth[1] ‖ marketplace_role[1] ‖ fp_milli[4] ‖ shadow_age_hours[4] ‖ ts_ns_be[8]` (92B) | SHA-256 → 32B |
 
 ### 4.3 The capability primitive
@@ -257,7 +280,7 @@ These thresholds were calibrated on the foundational 74-session corpus and are c
 
 ### 5.4 Honest calibration corpus state
 
-QorTroller's biometric calibration is currently a 3-player corpus. Distribution:
+QorTroller's biometric calibration is currently a 3-player corpus. A prior Player 4 designation was eliminated 2026-04-02 after confirmation that the captured sessions were the same person as Player 3; provenance anchored at `VAPI_CORPUS.md:53` ("P4 ELIMINATED — confirmed same person as P3 (2026-04-02)") with the disposition retained in `CLAUDE.md:84`. Distribution:
 
 | Player | Total sessions | AIT (active isometric trigger) | Touchpad corners |
 |---|---|---|---|
@@ -269,9 +292,9 @@ The separation ratio per probe type — the load-bearing cross-player discrimina
 
 | Probe type | N | Ratio | Status |
 |---|---|---|---|
-| AIT (Active Isometric Trigger) | 37 (P1=13/P2=10/P3=14) | **1.199** | ✓ first probe type to clear all-pairs > 1.0; meaningful empirical evidence the biometric layer discriminates |
+| AIT (Active Isometric Trigger) | 37 (P1=13/P2=10/P3=14) | **1.199** (all-pairs cleared) | ✓ first probe type to clear all-pairs > 1.0; meaningful empirical evidence the biometric layer discriminates |
 | touchpad_corners | 35 | **0.728** | ⚠ Tournament BLOCKER — required > 1.0 before BLOCK enforcement |
-| tremor_resting | 27 | 1.177 | all_pairs_p0_ok=False (P1vP3=0.032 corpus-specific issue); cast out as dev progress blocker per operator authorization 2026-05-09; mainnet TGE invariant remains in force |
+| tremor_resting *(under recapture — not cleared)* | 27 | 1.177 (excludes P1vP3 — all_pairs_p0_ok=False, P1vP3=0.032 corpus-specific issue) | Excluded from the readiness surface pending P1vP3 corpus recapture; mainnet TGE invariant remains in force |
 | Pooled free-form | 127 | 0.417 | Expected/known — free-form gameplay doesn't separate players (WIF-009 plateau regime); never used as tournament gate |
 
 **Honest framing for grant evaluation**: AIT clearing all-pairs > 1.0 at ratio 1.199 is real empirical evidence that the biometric layer CAN discriminate human players at the per-trigger level. The touchpad_corners ratio at 0.728 remains the tournament BLOCK enforcement gate. The mainnet TGE invariant "no token launch before separation_ratio > 1.0 confirmed" remains in force for token-issuance economic defensibility, distinct from the development-stage progress gate.
@@ -556,6 +579,8 @@ Every load-bearing claim in this whitepaper has a verifiable evidence anchor. Th
 ---
 
 ## 13. References
+
+**Terminology note — V acronym evolution**: This whitepaper standardizes on **Verifiable** Autonomous Physical Intelligence (V.A.P.I.) as the precise term for the coined DePIN sub-category. Whitepaper versions v1–v5 and the Zenodo DOI v3 historical deposit use **Verified** Autonomous Physical Intelligence; v6 changes this to **Verifiable** because verification is a continuous protocol-layer property of the data (cryptographic commitments + chain anchoring make data verifiable by any third party at any future time), whereas "Verified" implies a pass/fail state at a single moment. An evaluator pulling the v3 Zenodo DOI should expect to see "Verified"; v6 onward uses "Verifiable" — the change is named here rather than left to surprise.
 
 [Industry anti-cheat]
 - BattlEye documentation, behavioral pattern matching protocols
