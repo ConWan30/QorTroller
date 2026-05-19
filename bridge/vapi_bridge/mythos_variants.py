@@ -2123,6 +2123,44 @@ async def mythos_doc_number_consistency(
         log.debug("mythos_doc_number_consistency: registry import failed: %s", exc)
         return findings
 
+    # 2026-05-19 honesty-first refinement (per operator close-out): emit a
+    # COVERAGE_BOUNDARY finding so a green result names its own scope.
+    # Per operator framing: "If mythos_doc_number_consistency returns 0,
+    # that means 'the registered facts are consistent', not 'the document
+    # has no drift'. Make sure the variant's output says the former, so a
+    # future reader doesn't over-trust a green result."
+    fact_names = sorted(f.name for f in registry)
+    target_docs = sorted({doc for f in registry for doc in f.target_doc_globs})
+    findings.append(MythosFindingResult(
+        variant="doc_number_consistency",
+        severity="LOW",
+        description=(
+            f"COVERAGE_BOUNDARY: this variant audits {len(registry)} registered "
+            f"canonical facts ({', '.join(fact_names)}) across "
+            f"{len(target_docs)} target document(s): {', '.join(target_docs)}. "
+            f"A 0-finding result means the registered facts are consistent — "
+            f"NOT that the documents are drift-free. Unregistered facts "
+            f"(contract addresses, GIC chain head hashes, ratio values, wallet "
+            f"addresses, transaction hashes, deployed-addresses.json entries) "
+            f"are NOT scanned and may still contain drift. Registry expansion "
+            f"is the path to broader coverage; see doc_consistency_registry.py."
+        ),
+        recommended_fix=(
+            "Informational only — no action required when this is the only "
+            "finding. To expand coverage, add new CanonicalFact entries to "
+            "bridge/vapi_bridge/doc_consistency_registry.py REGISTRY. Each "
+            "new entry should include current_value + superseded_values + "
+            "verification_command + target_doc_globs + context_hints + "
+            "exclusion_substrings (if any pedagogical references exist)."
+        ),
+        coherence_id=_coherence_id(
+            "doc_number_consistency", f"coverage_boundary:{len(registry)}"
+        ),
+        frozen_region=False,
+        fix_authority_tier=2,
+        evidence_sources=["bridge/vapi_bridge/doc_consistency_registry.py"],
+    ))
+
     for fact in registry:
         if not fact.superseded_values:
             # Nothing to detect for this fact yet — no prior drift values
