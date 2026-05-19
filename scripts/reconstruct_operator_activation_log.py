@@ -113,7 +113,11 @@ async def reconstruct(*, db_path: str | None = None, dry_run: bool = False) -> i
     os.environ["VAPI_ROOT"] = str(ROOT)
     cfg = Config()
     if db_path is None:
-        db_path = str(ROOT / "bridge" / "vapi_store.db")
+        # 2026-05-19 path-discovery fix: use canonical production DB path
+        # (cfg.db_path = ~/.vapi/bridge.db or $DB_PATH) matching bridge
+        # runtime, NOT the stale sandbox at bridge/vapi_store.db. See
+        # bridge/vapi_bridge/db_path_resolver.py.
+        db_path = cfg.db_path
     store = Store(db_path)
     print(f"  DB:           {db_path}")
     print(f"  IoTeX RPC:    {cfg.iotex_rpc_url}")

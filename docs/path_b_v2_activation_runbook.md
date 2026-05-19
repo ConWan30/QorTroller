@@ -35,7 +35,10 @@ print(asyncio.run(mythos_post_o3_ceremony_audit(include_chain_reads=True)))
 # Gate 3: activation_log has 3 rows (Sentry/Guardian/Curator @ O3_ACTING)
 python -c "
 import sqlite3
-con = sqlite3.connect('bridge/vapi_store.db')
+import os
+from pathlib import Path
+db = os.environ.get('DB_PATH') or str(Path.home() / '.vapi' / 'bridge.db')
+con = sqlite3.connect(db)
 rows = con.execute('SELECT agent_id, to_phase FROM operator_agent_activation_log').fetchall()
 print(f'{len(rows)} rows: {rows}')
 "
@@ -79,15 +82,21 @@ Verify the following state by reading `bridge/.env`:
 
 ## §2 Activation sequence
 
-### Step 1 — Add the master enable to bridge/.env
+### Step 1 — Add the master enable to the project-root `.env`
 
-Open `bridge/.env` in your editor. Add this line:
+**Important** (corrected 2026-05-19 per path-discovery investigation): the bridge process loads its env via `load_dotenv()` (no args), which discovers `.env` starting from the bridge's CWD. When the operator runs `python -m bridge.vapi_bridge.main` from the project root, the file actually loaded is **`<project_root>/.env`** — NOT `bridge/.env`.
+
+There are two `.env` files in the repo (both gitignored):
+- `<project_root>/.env` ← **what the bridge actually reads**
+- `bridge/.env` ← kept mirrored for documentation but NOT read by the bridge process
+
+Open `<project_root>/.env` in your editor and append this line:
 
 ```bash
 PHASE_O3_EXECUTOR_AUTOLOOP_ENABLED=true
 ```
 
-Save and close.
+Save and close. (Optionally mirror the change to `bridge/.env` for documentation symmetry; not required for activation.)
 
 ### Step 2 — Restart the bridge
 
@@ -117,7 +126,10 @@ curl -s http://localhost:8080/health | python -m json.tool
 # Verify spending_log table was migrated at startup:
 python -c "
 import sqlite3
-con = sqlite3.connect('bridge/vapi_store.db')
+import os
+from pathlib import Path
+db = os.environ.get('DB_PATH') or str(Path.home() / '.vapi' / 'bridge.db')
+con = sqlite3.connect(db)
 n = con.execute('SELECT COUNT(*) FROM operator_agent_chain_spending_log').fetchone()[0]
 print(f'spending_log: N={n} events')
 "
@@ -142,7 +154,10 @@ Watch for spending_log rows accumulating:
 # Every 5 minutes, query:
 python -c "
 import sqlite3
-con = sqlite3.connect('bridge/vapi_store.db')
+import os
+from pathlib import Path
+db = os.environ.get('DB_PATH') or str(Path.home() / '.vapi' / 'bridge.db')
+con = sqlite3.connect(db)
 rows = con.execute('SELECT agent_id, action_name, cost_iotx, tx_hash, error FROM operator_agent_chain_spending_log ORDER BY created_at DESC LIMIT 10').fetchall()
 for r in rows:
     agent_short = r[0][:10]+'...'
@@ -180,7 +195,10 @@ Confirm Guardian remains within its 0.0 IOTX budget (zero spending — local wri
 ```bash
 python -c "
 import sqlite3
-con = sqlite3.connect('bridge/vapi_store.db')
+import os
+from pathlib import Path
+db = os.environ.get('DB_PATH') or str(Path.home() / '.vapi' / 'bridge.db')
+con = sqlite3.connect(db)
 g = '0xbd8c7fba08815b7ed343973c9c7300c062303b1acd19e8d9847a953ce5fa38d1'
 row = con.execute('SELECT COALESCE(SUM(cost_iotx), 0.0) FROM operator_agent_chain_spending_log WHERE agent_id=?', (g,)).fetchone()
 print(f'Guardian 24h spend: {row[0]:.6f} IOTX (budget 0.0)')
@@ -239,7 +257,10 @@ If kill-all + autoloop disable didn't prevent unexpected behavior:
 # Query last 100 spending events to understand what fired:
 python -c "
 import sqlite3
-con = sqlite3.connect('bridge/vapi_store.db')
+import os
+from pathlib import Path
+db = os.environ.get('DB_PATH') or str(Path.home() / '.vapi' / 'bridge.db')
+con = sqlite3.connect(db)
 rows = con.execute('SELECT * FROM operator_agent_chain_spending_log ORDER BY created_at DESC LIMIT 100').fetchall()
 for r in rows: print(r)
 "
