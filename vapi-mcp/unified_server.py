@@ -3688,6 +3688,43 @@ async def vapi_mythos_claude_md_curation(**kwargs):
     return _findings_to_dict("claude_md_curation", findings)
 
 
+# ── Tool 28 ── vapi_mythos_frontend_brand_drift ──────────────────────────────
+
+@tool(
+    name="vapi_mythos_frontend_brand_drift",
+    description=(
+        "Mythos-Frontend-Brand-Drift variant (2026-05-18). Frontend brand-"
+        "discipline guardrail — flags display-string `VAPI` that should be "
+        "`QorTroller` per QRESCE-0001 v0.5 brand reframing. Scans "
+        "frontend/src/**/*.{jsx,tsx,html} excluding artifacts/ (SHA256-"
+        "addressed historical snapshots), legacy/, __tests__/, crypto/, "
+        "manifest/. Three finding classes (MEDIUM): "
+        "(1) JSX text node `>VAPI<` patterns; "
+        "(2) HTML `<title>VAPI`; "
+        "(3) HTML `<h1>VAPI` / `<h2>VAPI` etc. "
+        "Layer C identifiers (VAPIToken, VITE_VAPI_API_KEY, vapi_verifier.js) "
+        "stay verbatim per brand discipline doc §3-4 — patterns target ONLY "
+        "display contexts. Fail-open."
+    ),
+    schema={"type": "object", "properties": {}, "required": []}
+)
+async def vapi_mythos_frontend_brand_drift(**kwargs):
+    _ensure_bridge_on_path()
+    try:
+        from vapi_bridge.mythos_variants import (
+            mythos_frontend_brand_drift as _runner,
+        )
+    except Exception as exc:
+        return {"variant": "frontend_brand_drift", "error": f"import failed: {exc}",
+                "total_findings": 0, "findings": [], "timestamp": time.time()}
+    try:
+        findings = await _runner(repo_root=PROJECT_ROOT)
+    except Exception as exc:
+        return {"variant": "frontend_brand_drift", "error": f"variant raised: {exc}",
+                "total_findings": 0, "findings": [], "timestamp": time.time()}
+    return _findings_to_dict("frontend_brand_drift", findings)
+
+
 async def main():
     # Preload workflow corpus files into mtime cache
     for key in WORKFLOW_FILES:

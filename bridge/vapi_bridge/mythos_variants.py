@@ -2064,3 +2064,186 @@ def _today_ymd() -> tuple[int, int, int]:
     import datetime as _dt
     today = _dt.date.today()
     return (today.year, today.month, today.day)
+
+
+# ==========================================================================
+# Mythos-Frontend-Brand-Drift — display-string VAPI -> QorTroller guardrail
+# ==========================================================================
+
+# JSX text node: `>VAPI<` or `>VAPI followed by space/dot/hyphen/em-dash + cap letter`
+# Targets actual rendered text between JSX tags, not code identifiers.
+_PAT_DISPLAY_VAPI_JSX = re.compile(
+    r">\s*VAPI(?:\s+[A-Z]|[\s\-·•—]+[A-Za-z]|<)"
+)
+
+# HTML <title>VAPI...</title>
+_PAT_DISPLAY_VAPI_TITLE = re.compile(
+    r"<title>\s*VAPI[\s\-·•—]",
+    re.IGNORECASE,
+)
+
+# HTML heading <h1>VAPI / <h2>VAPI / etc.
+_PAT_DISPLAY_VAPI_HEADING = re.compile(
+    r"<h[1-6][^>]*>\s*VAPI[\s\-·•—<]",
+    re.IGNORECASE,
+)
+
+# Display directories — only audit user-visible frontend rendering layer.
+# Skip:
+#   - artifacts/        — SHA256-content-addressed historical snapshots
+#                         (renaming breaks content-addressing invariant)
+#   - legacy/           — deprecated SVG TwinControllerStream (Phase 238-V3
+#                         unified to 3D Twin; not rendered in current SPA)
+#   - __tests__/        — test fixtures may legitimately contain VAPI
+#   - crypto/           — Layer C cryptographic primitive identifiers
+#   - api/              — Layer C technical API clients (vame.js etc.)
+#   - manifest          — Layer C byte literals (brp.manifest.json)
+#   - shared/design/    — Layer C tokens.js (technical token names)
+_FRONTEND_DISPLAY_EXTS = (".jsx", ".tsx", ".html")
+_FRONTEND_DISPLAY_EXCLUDE_DIRS = (
+    "artifacts", "legacy", "__tests__", "crypto", "manifest",
+)
+
+
+def _iter_frontend_display_files(root: Path) -> Iterable[Path]:
+    """Yield frontend JSX/TSX/HTML files that render user-facing display."""
+    frontend_src = root / "frontend" / "src"
+    if not frontend_src.exists():
+        return
+    for path in frontend_src.rglob("*"):
+        if not path.is_file():
+            continue
+        if path.suffix.lower() not in _FRONTEND_DISPLAY_EXTS:
+            continue
+        # Exclude by ancestor directory
+        if any(part in _FRONTEND_DISPLAY_EXCLUDE_DIRS for part in path.parts):
+            continue
+        yield path
+
+
+async def mythos_frontend_brand_drift(
+    *,
+    repo_root: Path | None = None,
+) -> list[MythosFindingResult]:
+    """Frontend brand-discipline guardrail — flags display-string `VAPI`
+    that should be `QorTroller` per QRESCE-0001 v0.5 brand reframing.
+
+    Born from 2026-05-18 frontend audit that found `VAPI · PHASE 235` as
+    the most-visible residual display-VAPI in the top-left dashboard
+    chrome (commit `88c26d4c` fixed it manually). Future arcs that add
+    new JSX views may re-introduce display VAPI; this variant auto-flags.
+
+    Three finding classes (all MEDIUM — display-string brand drift is
+    user-visible but not load-bearing for correctness):
+
+      1. DISPLAY_VAPI_IN_JSX_TEXT — `>VAPI<` or `>VAPI · text<` patterns
+         inside JSX text nodes. Matches rendered text, not code refs.
+      2. DISPLAY_VAPI_IN_HTML_TITLE — `<title>VAPI ...</title>`.
+      3. DISPLAY_VAPI_IN_HTML_HEADING — `<h1>VAPI` / `<h2>VAPI` etc.
+
+    Scope: `frontend/src/**/*.{jsx,tsx,html}` MINUS:
+      - **/artifacts/**     (SHA256-content-addressed historical snapshots
+                            — renaming breaks content-addressing)
+      - **/legacy/**        (deprecated SVG TwinControllerStream)
+      - **/__tests__/**     (test fixtures)
+      - **/crypto/**        (Layer C cryptographic primitive identifiers)
+      - **/manifest/**      (Layer C byte literals)
+
+    Layer C exemption: identifiers like `VAPIDataMarketplaceListings`,
+    `VITE_VAPI_API_KEY`, `class VAPISession`, `b"VAPI-GIC-GENESIS-v1"`
+    are technical references that STAY per brand discipline doc §3-4.
+    Patterns above target ONLY display contexts (JSX text + HTML title/
+    heading) where the user sees the brand string, not code identifiers.
+
+    Fail-open: file read errors are logged + skipped; variant continues."""
+    root = _resolve_repo_root(repo_root)
+    findings: list[MythosFindingResult] = []
+
+    for path in _iter_frontend_display_files(root):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except Exception as exc:  # noqa: BLE001
+            log.debug("mythos_frontend_brand_drift: skip %s (%s)", path, exc)
+            continue
+
+        rel = path.relative_to(root).as_posix()
+
+        # Pattern 1: JSX text node VAPI
+        for m in _PAT_DISPLAY_VAPI_JSX.finditer(text):
+            line_no = text.count("\n", 0, m.start()) + 1
+            preview = text[max(0, m.start() - 20):m.end() + 30].replace("\n", " ")
+            findings.append(MythosFindingResult(
+                variant="frontend_brand_drift",
+                severity="MEDIUM",
+                description=(
+                    f"{rel}:{line_no} — JSX text node renders display 'VAPI' "
+                    f"that should be 'QorTroller' per QRESCE-0001 v0.5 brand "
+                    f"reframing. Preview: '...{preview}...'"
+                ),
+                recommended_fix=(
+                    "Replace display 'VAPI' with 'QorTroller' (medial-cap T). "
+                    "If the reference is to the coined V.A.P.I. category, use "
+                    "'V.A.P.I.' (with periods) instead. Layer C code identifiers "
+                    "(VAPIToken, VITE_VAPI_API_KEY, etc.) stay as `VAPI` per "
+                    "docs/qortroller-brand-guidelines.md §3-4."
+                ),
+                coherence_id=_coherence_id(
+                    "frontend_brand_drift", f"jsx_text:{rel}:{line_no}"
+                ),
+                file_path=rel,
+                line_number=line_no,
+                frozen_region=False,
+                fix_authority_tier=2,
+                evidence_sources=[rel],
+            ))
+
+        # Pattern 2: HTML <title> VAPI
+        for m in _PAT_DISPLAY_VAPI_TITLE.finditer(text):
+            line_no = text.count("\n", 0, m.start()) + 1
+            findings.append(MythosFindingResult(
+                variant="frontend_brand_drift",
+                severity="MEDIUM",
+                description=(
+                    f"{rel}:{line_no} — HTML <title> tag begins with 'VAPI'. "
+                    "Browser tab title is a primary brand surface."
+                ),
+                recommended_fix=(
+                    "Update <title> to begin with 'QorTroller' (e.g., "
+                    "'QorTroller — <feature> | V.A.P.I. Reference Implementation')."
+                ),
+                coherence_id=_coherence_id(
+                    "frontend_brand_drift", f"html_title:{rel}:{line_no}"
+                ),
+                file_path=rel,
+                line_number=line_no,
+                frozen_region=False,
+                fix_authority_tier=2,
+                evidence_sources=[rel],
+            ))
+
+        # Pattern 3: HTML <hN> VAPI
+        for m in _PAT_DISPLAY_VAPI_HEADING.finditer(text):
+            line_no = text.count("\n", 0, m.start()) + 1
+            findings.append(MythosFindingResult(
+                variant="frontend_brand_drift",
+                severity="MEDIUM",
+                description=(
+                    f"{rel}:{line_no} — HTML heading <h?> renders 'VAPI' as "
+                    "primary page title. Headings are second-most-visible brand "
+                    "surface after <title>."
+                ),
+                recommended_fix=(
+                    "Replace heading 'VAPI' with 'QorTroller' or "
+                    "'QorTroller — V.A.P.I. <descriptor>' depending on context."
+                ),
+                coherence_id=_coherence_id(
+                    "frontend_brand_drift", f"html_heading:{rel}:{line_no}"
+                ),
+                file_path=rel,
+                line_number=line_no,
+                frozen_region=False,
+                fix_authority_tier=2,
+                evidence_sources=[rel],
+            ))
+
+    return findings
