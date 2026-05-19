@@ -280,15 +280,18 @@ These thresholds were calibrated on the foundational 74-session corpus and are c
 
 ### 5.4 Honest calibration corpus state
 
-QorTroller's biometric calibration is currently a 3-player corpus. A prior Player 4 designation was eliminated 2026-04-02 after confirmation that the captured sessions were the same person as Player 3; provenance anchored at `VAPI_CORPUS.md:53` ("P4 ELIMINATED — confirmed same person as P3 (2026-04-02)") with the disposition retained in `CLAUDE.md:84`. Distribution:
+QorTroller's biometric calibration is currently a 3-player corpus. A prior Player 4 designation was eliminated 2026-04-02 after confirmation that the captured sessions were the same person as Player 3; provenance anchored at `VAPI_CORPUS.md:53` ("P4 ELIMINATED — confirmed same person as P3 (2026-04-02)") with the disposition retained in `CLAUDE.md:84`. Live disk distribution as of 2026-05-19 verified at `sessions/human/terminal_cal_P{1,2,3}/`:
 
-| Player | Total sessions | AIT (active isometric trigger) | Touchpad corners |
-|---|---|---|---|
-| P1 | 50 | 13 | 8 |
-| P2 | 55 | 10 | 11 |
-| P3 | 48 | 14 | 10 |
+| Player | Total terminal sessions | AIT | touchpad_corners | touchpad_freeform | touchpad_swipes | tremor_resting |
+|---|---|---|---|---|---|---|
+| P1 | **98** | 13 | 12 | 12 | 13 | 14 |
+| P2 | **86** | 10 | 12 | 12 | 13 | 14 |
+| P3 | **83** | 14 | 11 | 11 | 11 | 14 |
+| **Total** | **267** | **37** | **35** | **35** | **37** | **42** |
 
-The separation ratio per probe type — the load-bearing cross-player discriminability metric:
+**Reconciliation note** (surfaces drift rather than burying it): earlier internal narrative documents (e.g., `CLAUDE.md` Phase-143-era snapshot at L84-90; `VAPI_CORPUS.md` corpus table) describe smaller per-player totals reflecting older corpus growth points. The disk counts above are the ground truth as of this whitepaper's drafting and what a grant evaluator running `scripts/analyze_interperson_separation.py` against `sessions/human/terminal_cal_P{1,2,3}/` will find.
+
+The separation ratio per probe type — the load-bearing cross-player discriminability metric. Note that each `N` below is the **separation analysis baseline** at the time the ratio was measured (Phase 229 for AIT; Phase 202 for tremor_resting; Phase 121 for touchpad_corners). The disk corpus has grown beyond those analysis-time N values for some probe types; the ratios remain honest empirical evidence at the analysis baseline, but a re-run analysis against today's larger corpus would produce updated figures:
 
 | Probe type | N | Ratio | Status |
 |---|---|---|---|
