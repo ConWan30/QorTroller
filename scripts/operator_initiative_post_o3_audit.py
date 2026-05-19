@@ -97,8 +97,20 @@ _EXPECTED_BUNDLE_FILES: Dict[str, str] = {
 }
 
 
-def _norm_hex(s: str) -> str:
-    s = (s or "").strip().lower()
+def _norm_hex(s) -> str:
+    """Normalize bytes-or-str hex input to lowercase hex string sans 0x prefix.
+
+    Defends against chain.get_agent_scope_root() returning raw bytes32
+    (which it does per its ``-> bytes`` signature) vs Section 1 paths
+    that pass hex strings. Both inputs converge to the same canonical
+    form for equality comparison."""
+    if s is None:
+        return ""
+    if isinstance(s, (bytes, bytearray)):
+        s = s.hex()
+    elif not isinstance(s, str):
+        s = str(s)
+    s = s.strip().lower()
     return s[2:] if s.startswith("0x") else s
 
 
@@ -236,10 +248,14 @@ async def _section_2_chain_scope_root(
                 "expected": _EXPECTED_O3_ACTING_MERKLES[agent_canonical],
             }
             try:
-                # chain.get_agent_scope_root is async; returns hex string or None
-                live_hex = await chain.get_agent_scope_root(agent_q9)
+                # chain.get_agent_scope_root is async; returns BYTES (per its
+                # -> bytes signature). Normalize to hex string for both
+                # storage in entry["live"] (rendered output) AND equality
+                # comparison below. Defends against bytes-vs-str TypeError.
+                live_raw = await chain.get_agent_scope_root(agent_q9)
+                live_hex = "0x" + live_raw.hex() if isinstance(live_raw, (bytes, bytearray)) else (live_raw or "")
                 entry["live"] = live_hex
-                if not live_hex:
+                if not live_hex or live_hex == "0x" + "00" * 32:
                     entry["pass"] = False
                     entry["error"] = "getScopeRoot returned empty"
                 else:

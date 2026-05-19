@@ -79,7 +79,19 @@ import httpx
 
 BRIDGE_URL   = os.environ.get("VAPI_BRIDGE_URL", "http://localhost:8080")
 DB_PATH      = os.environ.get("VAPI_DB_PATH",     "bridge/vapi_store.db")
-PROJECT_ROOT = Path(os.environ.get("VAPI_ROOT", "."))
+# 2026-05-19: PROJECT_ROOT now resolves to ABSOLUTE path regardless of MCP
+# server CWD. Previously `Path(".")` resolved against whatever CWD spawned
+# the MCP server — which could be Claude Code's home dir, not the project
+# root. This broke mythos_post_o3_ceremony_audit (and any other variant
+# that depends on PROJECT_ROOT) when the MCP server CWD was misaligned:
+# wrapper returned 0 findings even though the underlying variant reported
+# 6 CRITICAL findings when invoked directly. Empirically diagnosed
+# 2026-05-19 against the activation_log-empty / on-chain-canonical state
+# discrepancy. Resolution: anchor PROJECT_ROOT to the parent of vapi-mcp/
+# (which is the repo root by construction). VAPI_ROOT env override still
+# honored if set explicitly.
+_DEFAULT_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(os.environ.get("VAPI_ROOT", str(_DEFAULT_PROJECT_ROOT)))
 
 WORKFLOW_DIR    = PROJECT_ROOT / "VAPI-WORKFLOW.v2"
 WIKI_DIR        = PROJECT_ROOT / "wiki"
