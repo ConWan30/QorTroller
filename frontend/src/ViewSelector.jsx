@@ -13,7 +13,7 @@ const VIEWS = [
   // surfaced in the tab so the operator can identify the audit-state at a glance.
   { id: 'brp',         label: 'BRP',          accent: '#9bc4e8',           icon: '◉', liveFalse: true },
   // 5th tab: Phase 238 PALL Marketplace — sellers + buyers + auditors.
-  // Cyan accent (verified-data theme) per VAPI tier palette LOCKED.
+  // Cyan accent (verified-data theme) per V.A.P.I. tier palette LOCKED.
   { id: 'marketplace', label: 'MARKETPLACE',  accent: '#22d3ee',           icon: '⬢' },
   // 6th tab: Phase O4-VPM-INT Stream C — VPM Registry. Read-only
   // inspection surface for Verified Projection Media artifacts. Amber
@@ -40,21 +40,36 @@ export function ViewSelector({ activeView, onViewChange }) {
       zIndex:         100,
       flexShrink:     0,
     }}>
-      {/* Left: VAPI wordmark */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      {/* Left: QorTroller wordmark — V.A.P.I. reference implementation.
+          Typography: Syne (heavy weight, crafted curves, distinctive vs
+          generic Rajdhani treatment used pre-QRESCE-0001 v0.5). Medial-T
+          accent surfaces the Qor+Troller compound per brand discipline
+          §6 hostile-read mitigation. V.A.P.I. category tag follows the
+          2-layer reframing — brand = QorTroller, category = V.A.P.I. */}
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
         <span style={{
-          fontFamily:    FONTS.display,
-          fontSize:      18,
+          fontFamily:    FONTS.body,
+          fontSize:      19,
           fontWeight:    700,
-          letterSpacing: '0.12em',
-          color:         '#c8d8e8',
-        }}>VAPI</span>
+          letterSpacing: '-0.005em',
+          color:         '#d4dde8',
+          display:       'inline-flex',
+          alignItems:    'baseline',
+        }}>
+          <span>Qor</span>
+          <span style={{ color: '#f0a868', fontWeight: 800 }}>T</span>
+          <span>roller</span>
+        </span>
         <span style={{
-          fontFamily: FONTS.mono,
-          fontSize:   9,
-          color:      'rgba(74,158,255,0.5)',
-          letterSpacing: '0.08em',
-        }}>PHASE 235</span>
+          fontFamily:    FONTS.mono,
+          fontSize:      9,
+          color:         'rgba(74,158,255,0.55)',
+          letterSpacing: '0.12em',
+          textTransform: 'uppercase',
+        }}>
+          <span style={{ color: 'rgba(240,168,104,0.65)' }}>V.A.P.I.</span>
+          {' · phase 235'}
+        </span>
         {isMock && (
           <span style={{
             fontFamily:  FONTS.mono,
