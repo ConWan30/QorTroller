@@ -3643,6 +3643,51 @@ async def vapi_mythos_live_gameplay_audit(**kwargs):
     return _findings_to_dict("live_gameplay", findings)
 
 
+# ── Tool 27 ── vapi_mythos_claude_md_curation ────────────────────────────────
+
+@tool(
+    name="vapi_mythos_claude_md_curation",
+    description=(
+        "Mythos-Claude-MD-Curation variant (2026-05-18). Documentation "
+        "curation guardrail — audits CLAUDE.md for staleness so future "
+        "arcs don't re-bloat past Claude Code's 40k char warning threshold. "
+        "Three finding classes: (1) CLAUDE_MD_OVERSIZE — file >100k chars; "
+        "(2) STALE_NOTE_SUPERSEDED — NOTE for an arc-tag where a later "
+        "closure NOTE exists; (3) STALE_NOTE_OLDER_THAN_30D — date marker "
+        "older than 30 days. Recommendation: archive to wiki/phases/ + "
+        "replace inline with pointer NOTE. Fail-open."
+    ),
+    schema={"type": "object", "properties": {
+        "stale_days_threshold": {"type": "integer",
+            "description": "Days-old threshold for STALE_NOTE_OLDER_THAN_30D (default 30)"},
+        "target_chars": {"type": "integer",
+            "description": "Aspirational CLAUDE.md size (default 60_000)"},
+        "warn_chars": {"type": "integer",
+            "description": "OVERSIZE trigger threshold (default 100_000)"}
+    }, "required": []}
+)
+async def vapi_mythos_claude_md_curation(**kwargs):
+    _ensure_bridge_on_path()
+    try:
+        from vapi_bridge.mythos_variants import (
+            mythos_claude_md_curation as _runner,
+        )
+    except Exception as exc:
+        return {"variant": "claude_md_curation", "error": f"import failed: {exc}",
+                "total_findings": 0, "findings": [], "timestamp": time.time()}
+    try:
+        findings = await _runner(
+            repo_root=PROJECT_ROOT,
+            stale_days_threshold=int(kwargs.get("stale_days_threshold", 30)),
+            target_chars=int(kwargs.get("target_chars", 60_000)),
+            warn_chars=int(kwargs.get("warn_chars", 100_000)),
+        )
+    except Exception as exc:
+        return {"variant": "claude_md_curation", "error": f"variant raised: {exc}",
+                "total_findings": 0, "findings": [], "timestamp": time.time()}
+    return _findings_to_dict("claude_md_curation", findings)
+
+
 async def main():
     # Preload workflow corpus files into mtime cache
     for key in WORKFLOW_FILES:
