@@ -2075,6 +2075,155 @@ def _today_ymd() -> tuple[int, int, int]:
 
 
 # ==========================================================================
+# Mythos-Doc-Number-Consistency — Layer 2 of WP-v6-arc verification fix
+# ==========================================================================
+
+async def mythos_doc_number_consistency(
+    *,
+    repo_root: Path | None = None,
+) -> list[MythosFindingResult]:
+    """Audit known cross-referenced numeric facts for asymmetric-update drift.
+
+    Born 2026-05-19 after the WP v6 verification arc demonstrated the
+    failure mode three times in a row: a numeric fact lives in multiple
+    registers (table + prose + verification trail) in the same document;
+    an edit updates one register; stale residuals persist in others.
+    External verification caught each occurrence; this variant makes
+    internal detection automatic so external verification becomes the
+    second line of defense rather than the only one.
+
+    Variant strategy (Strategy A — registry-based):
+      For each canonical fact in doc_consistency_registry.REGISTRY:
+        For each target document the fact references:
+          Grep for any superseded value of the fact
+          If context_hints provided, only flag matches near the hint context
+          Each match = MEDIUM finding identifying the stale residual
+
+    Each finding includes:
+      - The canonical fact name + current value
+      - The stale superseded value found
+      - The document + line number of the residual
+      - The verification command an evaluator would use
+      - The recommended fix (update the residual to current value)
+
+    Severity: MEDIUM for all findings (document-text drift is user-visible
+    but not load-bearing for protocol correctness; matches the severity
+    pattern of mythos_frontend_brand_drift).
+
+    Fail-open: missing documents are silently skipped; registry import
+    errors return [] (informational LOW). Never raises.
+    """
+    root = _resolve_repo_root(repo_root)
+    findings: list[MythosFindingResult] = []
+
+    try:
+        from .doc_consistency_registry import get_registry
+        registry = get_registry()
+    except Exception as exc:  # noqa: BLE001
+        log.debug("mythos_doc_number_consistency: registry import failed: %s", exc)
+        return findings
+
+    for fact in registry:
+        if not fact.superseded_values:
+            # Nothing to detect for this fact yet — no prior drift values
+            continue
+        for doc_rel in fact.target_doc_globs:
+            doc_path = root / doc_rel
+            if not doc_path.exists():
+                continue
+            try:
+                text = doc_path.read_text(encoding="utf-8")
+            except Exception as exc:  # noqa: BLE001
+                log.debug(
+                    "mythos_doc_number_consistency: skip %s (%s)",
+                    doc_path, exc,
+                )
+                continue
+
+            for stale_value in fact.superseded_values:
+                exclusions = getattr(fact, "exclusion_substrings", ())
+                for match in _find_value_in_doc(
+                    text, stale_value, fact.context_hints, exclusions,
+                ):
+                    line_no, context = match
+                    findings.append(MythosFindingResult(
+                        variant="doc_number_consistency",
+                        severity="MEDIUM",
+                        description=(
+                            f"STALE_RESIDUAL_DETECTED: {doc_rel}:{line_no} "
+                            f"contains superseded value '{stale_value}' for "
+                            f"canonical fact '{fact.name}' (current canonical: "
+                            f"{fact.current_value}). Context: ...{context}..."
+                        ),
+                        recommended_fix=(
+                            f"Update {doc_rel}:{line_no} from '{stale_value}' to "
+                            f"'{fact.current_value}'. Verify via: "
+                            f"{fact.verification_command}. Then re-run "
+                            f"grep -n '{stale_value}' {doc_rel} to confirm "
+                            "zero residuals before considering edit complete."
+                        ),
+                        coherence_id=_coherence_id(
+                            "doc_number_consistency",
+                            f"{fact.name}:{doc_rel}:{line_no}",
+                        ),
+                        file_path=doc_rel,
+                        line_number=line_no,
+                        frozen_region=False,
+                        fix_authority_tier=2,
+                        evidence_sources=[doc_rel, "doc_consistency_registry.py"],
+                    ))
+
+    return findings
+
+
+def _find_value_in_doc(
+    text: str,
+    needle: str,
+    context_hints: tuple[str, ...],
+    exclusion_substrings: tuple[str, ...] = (),
+) -> Iterable[tuple[int, str]]:
+    """Find lines containing `needle` with at least one context_hint nearby
+    (within ~80 chars). Yields (line_no, context_preview) per match.
+
+    If context_hints is empty, ANY occurrence of needle is yielded (no
+    context filter). If exclusion_substrings is provided, lines containing
+    any exclusion substring are SKIPPED (treated as known false positives —
+    pedagogical references, byte-count contexts, etc.).
+
+    Numeric `needle` is matched with word boundaries to avoid sub-string
+    false positives (e.g., needle='12' should NOT match '128' or '4377')."""
+    import re
+    # Word-boundary numeric match: bracketed by non-word chars (or string edges)
+    # so '267' matches the literal 267 but not 2670 or 12670.
+    pattern = r"(?:^|[^0-9])" + re.escape(needle) + r"(?:$|[^0-9])"
+
+    for line_match in re.finditer(r"[^\n]*", text):
+        line = line_match.group(0)
+        if not line:
+            continue
+        if not re.search(pattern, line):
+            continue
+        # Compute line number from match start in original text
+        line_no = text.count("\n", 0, line_match.start()) + 1
+        # Apply context filter if hints provided
+        if context_hints:
+            lower = line.lower()
+            if not any(h.lower() in lower for h in context_hints):
+                continue
+        # Apply exclusion filter (suppress known false positives)
+        if exclusion_substrings:
+            lower = line.lower()
+            if any(excl.lower() in lower for excl in exclusion_substrings):
+                continue
+        # Build a short context preview around the needle for the finding
+        idx = line.find(needle)
+        start = max(0, idx - 30)
+        end = min(len(line), idx + len(needle) + 30)
+        context_preview = line[start:end].strip()
+        yield (line_no, context_preview)
+
+
+# ==========================================================================
 # Mythos-Curator-Graduation-Audit — Gap 2 closure
 # ==========================================================================
 
