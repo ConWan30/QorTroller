@@ -231,9 +231,20 @@ class OperatorAgentLiveWriteExecutor:
         self.chain = chain
         self.interval_s = max(10, int(interval_s))
         self._stop = asyncio.Event()
+        self._kms = None          # lazily-constructed KMSClient (Guardian/Sentry HSM)
+        self._kms_key_spec = ""   # cached describe_key spec for the signature audit
 
     def stop(self) -> None:
         self._stop.set()
+
+    def _get_kms_client(self):
+        """Lazily construct + cache the real AWS-KMS client. Raises if AWS is
+        not provisioned (caught by _execute_draft → recorded as a refusal, so
+        the bridge never crashes when KMS is unavailable, e.g. in tests)."""
+        if self._kms is None:
+            from .kms_client import KMSClient
+            self._kms = KMSClient()
+        return self._kms
 
     async def run_forever(self) -> None:
         """Main loop. Yields to event loop between cycles.
@@ -372,6 +383,8 @@ class OperatorAgentLiveWriteExecutor:
                 tx_hash, cost_iotx = await self._exec_guardian_audit_draft(draft)
             elif action_name == "operational-diagnostic":
                 tx_hash, cost_iotx = await self._exec_guardian_operational_diagnostic(draft)
+            elif action_name == "kms-sign":
+                tx_hash, cost_iotx = await self._exec_guardian_kms_sign(draft)
             else:
                 # No executor routed for this action_name — structurally
                 # permanent, so record ONCE and mark refused (drops out of the
@@ -548,6 +561,64 @@ class OperatorAgentLiveWriteExecutor:
         synthetic_tx_hash = f"local:diag:{draft_id}"
         cost_iotx = 0.0
         return synthetic_tx_hash, cost_iotx
+
+    async def _exec_guardian_kms_sign(self, draft: dict) -> tuple[str, float]:
+        """Guardian's kms-sign on draft://commit_hashes/* — Tier 1 (2026-05-20).
+
+        REAL autonomous AWS-KMS-HSM signature, ZERO IOTX (KMS signing is an
+        off-chain crypto op — an AWS API call — NOT a chain transaction). This
+        is the headline 'attested non-human agent autonomously signs' artifact.
+
+        Steps: derive a 32-byte SHA-256 digest from the draft's commit-hash
+        payload; sign it with Guardian's KMS key; KMS-verify the signature;
+        persist (subject, digest, signature, key_spec, verified) to the
+        operator_agent_signature_log audit table. Returns (local:kmssign:<id>,
+        0.0) — cost 0 keeps the budget gate honest + the spending log clean.
+        """
+        import hashlib as _hashlib
+        import json as _json
+        draft_id = int(draft.get("id", 0) or 0)
+        # Subject = the commit hash the draft was created over. Pull from the
+        # payload (operator_agent_guardian_drafting.draft_kms_sign), else the URI.
+        subject = ""
+        try:
+            payload = _json.loads(str(draft.get("payload_bytes_decoded", "{}")) or "{}")
+            subject = str(payload.get("commit_hash", "") or "")
+        except Exception:
+            payload = {}
+        if not subject:
+            subject = str(draft.get("draft_uri", "") or f"draft:{draft_id}")
+        # KMS requires a 32-byte digest; SHA-256 over the subject is canonical.
+        digest = _hashlib.sha256(subject.encode("utf-8")).digest()
+
+        kms = self._get_kms_client()
+        signature = await kms.sign("guardian", digest)
+        try:
+            kms_verified = bool(await kms.verify("guardian", digest, signature))
+        except Exception:
+            kms_verified = False
+        if not self._kms_key_spec:
+            try:
+                meta = await kms.describe_key("guardian")
+                self._kms_key_spec = str(meta.get("KeySpec", "") or "")
+            except Exception:
+                self._kms_key_spec = ""
+
+        await asyncio.to_thread(
+            lambda: self.store.insert_operator_agent_signature(
+                agent_id="guardian", draft_id=draft_id, subject=subject,
+                digest_hex=digest.hex(), signature_hex=signature.hex(),
+                kms_key_spec=self._kms_key_spec, kms_verified=kms_verified,
+                ts_ns=time.time_ns(),
+            )
+        )
+        log.info(
+            "Phase O-TIER1: Guardian autonomous KMS-HSM signature OK draft=%d "
+            "subject=%s digest=%s sig_len=%d kms_verified=%s (0 IOTX, off-chain)",
+            draft_id, subject[:16], digest.hex()[:12], len(signature), kms_verified,
+        )
+        # local: prefix + cost 0 -> not a chain tx; spending-log stays clean.
+        return f"local:kmssign:{draft_id}", 0.0
 
     async def _exec_curator_listing_suspend(self, draft: dict) -> tuple[str, float]:
         """Curator's marketplace-listing-suspend: call chain.suspend_marketplace_listing.
