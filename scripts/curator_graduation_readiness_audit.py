@@ -219,6 +219,18 @@ def section_2_watcher(db_path: Path) -> dict:
             "shadow_age_hours": curator_state.shadow_age_hours,
             "cedar_eval_count": curator_state.cedar_eval_count,
         }
+    except ImportError as exc:
+        # Environmental gap (a dependency missing in the audit-runner venv,
+        # e.g. python-dotenv / web3), NOT a protocol failure. Degrade to SKIP
+        # so a tooling-env shortfall can't crash the consolidated verdict to
+        # ERROR; SKIP is treated as insufficient-signal (BLOCKED) downstream.
+        return {
+            "section": "2_operator_initiative_watcher",
+            "verdict_class": "SKIP",
+            "error": f"{type(exc).__name__}: {exc}",
+            "note": "watcher dependency unavailable in audit runner; section "
+                    "skipped (environmental, not a graduation failure)",
+        }
     except Exception as exc:
         return {
             "section": "2_operator_initiative_watcher",
@@ -360,18 +372,22 @@ def section_5_consolidated(s1: dict, s2: dict, s3: dict, s4: dict) -> dict:
             "reason": f"Sections failing hard: {failed}. "
                       f"DO NOT fire parallel_o3_act_anchor.py.",
         }
-    if "BLOCKED" in classes:
-        blocked = [
-            ("g7" if i == 0 else "watcher" if i == 1
-             else "cfss" if i == 2 else "on_chain")
-            for i, c in enumerate(classes) if c == "BLOCKED"
-        ]
+    if "BLOCKED" in classes or "SKIP" in classes:
+        _names = ["g7", "watcher", "cfss", "on_chain"]
+        blocked = [_names[i] for i, c in enumerate(classes) if c == "BLOCKED"]
+        skipped = [_names[i] for i, c in enumerate(classes) if c == "SKIP"]
+        # SKIP = section couldn't run for environmental reasons; treated as
+        # insufficient-signal so the audit never green-lights graduation on an
+        # incomplete read, but it is NOT a hard ERROR (exit 1, not 3).
         return {
             "section": "5_consolidated_verdict",
             "verdict": "BLOCKED",
             "exit_code": 1,
-            "reason": f"Sections blocked (insufficient signal): "
-                      f"{blocked}. Continue observation.",
+            "reason": (
+                f"Insufficient signal — blocked: {blocked}; skipped "
+                f"(environmental): {skipped}. Continue observation; do NOT "
+                f"fire parallel_o3_act_anchor.py."
+            ),
         }
     return {
         "section": "5_consolidated_verdict",

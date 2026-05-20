@@ -8,9 +8,16 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from dotenv import load_dotenv
-
-load_dotenv()
+# python-dotenv is a convenience for local .env loading, NOT a hard dependency:
+# every value is read via os.environ with a default below, so the bridge runs
+# fine without it. Importing it unconditionally made any importer of this module
+# (e.g. the curator-graduation audit subprocess, or a minimal tooling venv)
+# crash with ModuleNotFoundError. Degrade gracefully instead.
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:  # pragma: no cover — env without python-dotenv
+    pass
 
 
 def _env(key: str, default: str = "") -> str:
