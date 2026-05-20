@@ -7,7 +7,7 @@ The immediate pipeline (auto_grind.py driving adjudication + bridge running) is 
 This plan addresses the six-component architecture vision requested for Phase 236+ development,
 plus the Personal Readiness Dashboard (Component 7) added as a post-Phase-236 candidate.
 
-**Authoritative state:** Bridge 2477 | SDK 535 | Hardhat 502 | Contracts 45 LIVE | 38 agents
+**Authoritative state:** Bridge 2477 | SDK 535 | Hardhat 502 | Contracts 45 LIVE | 29 standalone agents + 3 stewards (9 absorbed)
 AIT ratio=1.199 (all_pairs_p0_ok=True) | tremor_resting=1.177 (all_pairs_p0_ok=False P1vP3=0.032)
 L4: anomaly=7.009 / continuity=5.367 | dry_run=True | GIC formula v1 FROZEN
 

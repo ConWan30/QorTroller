@@ -157,7 +157,7 @@ python scripts/vpm_audit.py
 
 ```
 vapi-pebble-prototype/
-├── bridge/                  Python asyncio bridge (3344 tests; PITL L0–L6 oracle pipeline + 38-agent fleet)
+├── bridge/                  Python asyncio bridge (PITL L0–L6 oracle pipeline + 29 standalone agents + 3 Operator Initiative stewards)
 │   ├── vapi_bridge/         Source — store / chain / agents / endpoint surface
 │   └── tests/               Bridge test bands (Phase O3 ZKBA + Phase O4 VPM + earlier)
 ├── contracts/               Solidity 0.8 + Hardhat — 49 substantive live testnet contracts

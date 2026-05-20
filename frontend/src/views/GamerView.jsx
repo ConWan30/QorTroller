@@ -27,9 +27,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useHeartbeatStore } from '../heartbeat/useHeartbeat'
+import { useAccount } from 'wagmi'
 import {
   useCaptureHealth, useGrindChain, useGrindAnalytics,
-  usePCCIntelligence, useActivePlayOccupancy, useCuratorStatus,
+  usePCCIntelligence, useActivePlayOccupancy, useConsentStatus,
 } from '../api/bridgeApi'
 import { ConsentPanel } from '../components/ConsentPanel'
 import { FONTS, GAMER } from '../shared/design/tokens'
@@ -84,11 +85,13 @@ const APOP_AXES = [
 
 // FROZEN consent categories (CLAUDE.md CONSENT FORMULA v1 — bitmask positions
 // MUST match VAPIConsentRegistry.sol position-for-position).
+// key MUST match the bridge consent_ledger category names + ConsentPanel.jsx
+// CATEGORIES (the FROZEN CONSENT v1 bitmask positions).
 const CONSENT_CATEGORIES = [
-  { bit: 0, scope: 'TOURNAMENT · GATE' },
-  { bit: 1, scope: 'ANONYMIZED · RESEARCH' },
-  { bit: 2, scope: 'MANUFACTURER · CERT' },
-  { bit: 3, scope: 'MARKETPLACE' },
+  { bit: 0, key: 'TOURNAMENT_GATE',     scope: 'TOURNAMENT · GATE' },
+  { bit: 1, key: 'ANONYMIZED_RESEARCH', scope: 'ANONYMIZED · RESEARCH' },
+  { bit: 2, key: 'MANUFACTURER_CERT',   scope: 'MANUFACTURER · CERT' },
+  { bit: 3, key: 'MARKETPLACE',         scope: 'MARKETPLACE' },
 ]
 
 function tone(map, value, fallback = GAMER.t3) {
@@ -253,19 +256,30 @@ function LatestGicPanel({ grind, bridgeDown, magnitude }) {
 // Bottom-left: CONSENT MATRIX (real bitmask → frozen categories)
 // ---------------------------------------------------------------------------
 
-function ConsentPanelOverlay({ bitmask, onOpen }) {
-  const rows = CONSENT_CATEGORIES.map((c) => ({ ...c, granted: ((bitmask >> c.bit) & 1) === 1 }))
-  const granted = rows.filter((r) => r.granted).length
+// Real per-category consent from /agent/gamer-consent-status (keyed by the
+// gamer's wallet-derived device_id). When no wallet is connected we CANNOT
+// know consent state — show an honest "—" rather than fabricating GRANTED
+// (the prior bug read a non-existent curator.consent_bitmask and defaulted to
+// all-GRANTED). The full grant/revoke flow lives in the ConsentPanel drawer.
+function ConsentPanelOverlay({ consentStatus, connected, onOpen }) {
+  const known = connected && consentStatus && consentStatus.categories
+  const rows = CONSENT_CATEGORIES.map((c) => ({
+    ...c,
+    granted: known ? Boolean(consentStatus.categories?.[c.key]?.granted) : null,
+  }))
+  const grantedCount = rows.filter((r) => r.granted === true).length
   return (
     <OverlayPanel style={{ bottom: 92, left: 16, width: 264, cursor: 'pointer' }}>
       <div onClick={onOpen} title="Open per-category consent panel">
         <PanelHead eye="CONSENT · MATRIX">
-          <span className="p-head__meta">{granted} / {rows.length}</span>
+          <span className="p-head__meta">
+            {known ? `${grantedCount} / ${rows.length}` : 'CONNECT WALLET'}
+          </span>
         </PanelHead>
         <div style={{ padding: '4px 14px 12px' }}>
           {rows.map((row, i) => (
             <div key={row.bit} style={{
-              display: 'grid', gridTemplateColumns: '1fr auto', gap: 10,
+              display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 10,
               padding: '6px 0', alignItems: 'center',
               borderBottom: i < rows.length - 1 ? '1px solid var(--border-soft)' : 0,
             }}>
@@ -273,9 +287,13 @@ function ConsentPanelOverlay({ bitmask, onOpen }) {
                 fontSize: 10, letterSpacing: '0.04em',
                 color: row.granted ? 'var(--text)' : 'var(--text-faint)',
               }}>{row.scope}</span>
-              <StatusChip tone={row.granted ? 'live' : 'dormant'}>
-                {row.granted ? 'GRANTED' : 'WITHHELD'}
-              </StatusChip>
+              {row.granted === null ? (
+                <StatusChip tone="dormant">—</StatusChip>
+              ) : (
+                <StatusChip tone={row.granted ? 'live' : 'dormant'}>
+                  {row.granted ? 'GRANTED' : 'WITHHELD'}
+                </StatusChip>
+              )}
             </div>
           ))}
         </div>
@@ -590,7 +608,11 @@ export function GamerView() {
   const { data: grindAnalytics }  = useGrindAnalytics()
   const { data: pccIntelligence } = usePCCIntelligence()
   const { data: apop }            = useActivePlayOccupancy()
-  const { data: curator }         = useCuratorStatus()
+  // Real per-category consent: device_id is the gamer's wallet (lower-cased,
+  // no 0x), matching ConsentPanel.jsx + the bridge consent_ledger row key.
+  const { address }               = useAccount()
+  const consentDeviceId           = address ? address.toLowerCase().replace(/^0x/, '') : ''
+  const { data: consentStatus }   = useConsentStatus(consentDeviceId)
 
   // chain_length = cumulative GIC stamps (fills the ribbon; matches check_grind.py)
   // consecutive_clean = leading streak; diverges when a session breaks the streak.
@@ -621,8 +643,6 @@ export function GamerView() {
   // panels' honest "—" / STALE states.
   const bridgeOffline = !captureHealth && !grindChain
 
-  const consentBitmask = curator?.consent_bitmask ?? 0b1111
-
   return (
     <div className="qt-design-root" style={{ overflow: 'hidden' }}>
       {/* z0 — forensic-instrument graticule (shows through the transparent twin) */}
@@ -646,7 +666,7 @@ export function GamerView() {
           the clean 4-corner composition; fleet coherence lives in OperatorView.) */}
       <CaptureHealthPanel capture={captureHealth} paused={paused} bridgeDown={bridgeOffline} />
       <LatestGicPanel grind={grindChain} bridgeDown={bridgeOffline} magnitude={magnitude} />
-      <ConsentPanelOverlay bitmask={consentBitmask} onOpen={() => setConsentOpen(true)} />
+      <ConsentPanelOverlay consentStatus={consentStatus} connected={Boolean(address)} onOpen={() => setConsentOpen(true)} />
       <AnalyticsPanel analytics={grindAnalytics} topBlocker={topBlocker} />
 
       <ApopEvidencePrism apop={apop} />

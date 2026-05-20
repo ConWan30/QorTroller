@@ -179,6 +179,45 @@ REGISTRY: list[CanonicalFact] = [
         ),
     ),
     CanonicalFact(
+        name="autonomous_agent_fleet_count",
+        # Post-STABILITY-9 steward absorption (operator_steward_absorbed_agents.py
+        # + agent_rationalization_v1.md): 9 formerly-standalone agents fold into
+        # the 3 Operator Initiative stewards (Sentry 4 / Guardian 4 / Curator 1)
+        # and run as steward-invoked skills. The _AGENT_IDS roster stays 38 (the
+        # absorbed agents keep their registered IDs); the documented OPERATIONAL
+        # fleet is "29 standalone + 3 stewards". Operator directive 2026-05-20:
+        # no doc may claim "38 [autonomous] agents" as the live fleet size.
+        current_value="29 standalone + 3 stewards (9 absorbed)",
+        superseded_values=("38", "36", "35"),
+        verification_command=(
+            "python -c \"import sys; sys.path.insert(0,'bridge'); "
+            "from vapi_bridge.protocol_coherence_agent import _AGENT_IDS; "
+            "from vapi_bridge.operator_steward_absorbed_agents import "
+            "SENTRY_ABSORBED, GUARDIAN_ABSORBED, CURATOR_ABSORBED; "
+            "print('roster', len(_AGENT_IDS), 'absorbed', "
+            "len(SENTRY_ABSORBED)+len(GUARDIAN_ABSORBED)+len(CURATOR_ABSORBED))\""
+        ),
+        target_doc_globs=(
+            "docs/qortroller-whitepaper-v6.md",
+            "docs/qortroller-state-of-the-protocol-2026-05-19.md",
+            "README.md",
+        ),
+        # Only flag fleet-SIZE claims. The number must sit in an agent-fleet
+        # context for a match to count.
+        context_hints=(
+            "autonomous agent", "agent fleet", "agents on", "standalone agent",
+            "agent modules", "Hosts", "-agent fleet", "-agent asyncio",
+        ),
+        # Roster-index references ("agent #38", "slot #38"), the on-chain Merkle
+        # leaf count ("38 leaves"), _AGENT_IDS growth rows, and historical phase
+        # records legitimately carry these numbers and are NOT stale fleet-size
+        # claims. Byte/block contexts excluded too.
+        exclusion_substrings=(
+            "#38", "#36", "#35", "leaves", "_AGENT_IDS", "Merkle", "slot",
+            "block", "0x", "byte", "historical", "Phase 22", "Phase 23",
+        ),
+    ),
+    CanonicalFact(
         name="mcp_tool_count",
         current_value="31",  # After this commit ships Tool #31
         superseded_values=("30", "29", "28", "27"),

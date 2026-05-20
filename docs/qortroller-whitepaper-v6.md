@@ -125,7 +125,7 @@ QorTroller spans eight architectural layers, each with distinct responsibilities
 │   6 tabs: Gamer · Developer · Manufacturer · BRP · Marketplace · │
 │   VPM + Evidence OS forensic replay workspace                    │
 ├──────────────────────────────────────────────────────────────────┤
-│ Bridge service (Python asyncio · 38 agents · ~1.3GB SQLite)      │
+│ Bridge service (Python asyncio · 29+3 agents · ~1.3GB SQLite)    │
 │   - PITL Nine-Level Stack (L0-L6 + L2B/L2C)                      │
 │   - PoAC record emission per cognition cycle                     │
 │   - Operator Initiative live-write executor (PATH-B v2)          │
@@ -338,7 +338,7 @@ The full address inventory is `contracts/deployed-addresses.json`. Key contracts
 |---|---|---|
 | `SeparationRatioRegistry` | `0xB39CeE732cf91c93539Bd064D9426642a095a026` | On-chain proof of biometric calibration commitment |
 | `VHPReenrollmentBadge` | `0x42E7A25d0E5667BBae45e5cF33a6e2CC6E42d45C` | Soulbound re-enrollment credential |
-| `ProtocolCoherenceRegistry` | `0xfAfe4E8BEE45be22836b90D542045510dDd927Dd` | 38-agent Merkle root anchoring |
+| `ProtocolCoherenceRegistry` | `0xfAfe4E8BEE45be22836b90D542045510dDd927Dd` | agent-fleet Merkle root anchoring |
 | `VAPIBiometricGovernance` | `0x06782293F1CFC1AA30C0Baee0437c2B336796A00` | VHP-gated proposal contract |
 
 **Marketplace + economic:**
