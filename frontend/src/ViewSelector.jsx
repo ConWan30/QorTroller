@@ -30,12 +30,19 @@ export function ViewSelector({ activeView, onViewChange }) {
       display:        'flex',
       alignItems:     'center',
       justifyContent: 'space-between',
+      gap:            12,
       padding:        '6px 16px',
       borderBottom:   '1px solid rgba(255,255,255,0.06)',
       background:     'rgba(2,4,8,0.95)',
       backdropFilter: 'blur(12px)',
       zIndex:         100,
       flexShrink:     0,
+      // Bulletproof against horizontal overflow: the bar never widens the
+      // window (html/body is overflow:auto for the public-viewer routes, so a
+      // too-wide header would otherwise produce a side-scrollbar on the SPA).
+      minWidth:       0,
+      maxWidth:       '100vw',
+      overflow:       'hidden',
     }}>
       {/* Left: QorTroller wordmark — V.A.P.I. reference implementation.
           Typography: Syne (heavy weight, crafted curves, distinctive vs
@@ -43,15 +50,20 @@ export function ViewSelector({ activeView, onViewChange }) {
           accent surfaces the Qor+Troller compound per brand discipline
           §6 hostile-read mitigation. V.A.P.I. category tag follows the
           2-layer reframing — brand = QorTroller, category = V.A.P.I. */}
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+      <div style={{
+        display: 'flex', alignItems: 'baseline', gap: 10,
+        minWidth: 0, flexShrink: 1, overflow: 'hidden',
+      }}>
         <span style={{
           fontFamily:    FONTS.body,
-          fontSize:      19,
+          fontSize:      18,
           fontWeight:    700,
-          letterSpacing: '-0.005em',
+          letterSpacing: '-0.02em',
           color:         '#d4dde8',
           display:       'inline-flex',
           alignItems:    'baseline',
+          whiteSpace:    'nowrap',
+          flexShrink:    0,
         }}>
           <span>Qor</span>
           <span style={{ color: '#f0a868', fontWeight: 800 }}>T</span>
@@ -63,6 +75,11 @@ export function ViewSelector({ activeView, onViewChange }) {
           color:         'rgba(74,158,255,0.55)',
           letterSpacing: '0.12em',
           textTransform: 'uppercase',
+          whiteSpace:    'nowrap',
+          overflow:      'hidden',
+          textOverflow:  'ellipsis',
+          flexShrink:    1,
+          minWidth:      0,
         }}>
           <span style={{ color: 'rgba(240,168,104,0.65)' }}>V.A.P.I.</span>
           {' · phase 235'}
@@ -89,8 +106,9 @@ export function ViewSelector({ activeView, onViewChange }) {
         >Evidence OS →</Link>
       </div>
 
-      {/* Center: view tabs */}
-      <div style={{ display: 'flex', gap: 2 }}>
+      {/* Center: view tabs — priority element; never shrinks (the 01–04
+          numbered sequence stays intact + on one line). */}
+      <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
         {VIEWS.map((v) => {
           const active = v.id === activeView
           return (
@@ -112,6 +130,7 @@ export function ViewSelector({ activeView, onViewChange }) {
                 display:       'flex',
                 alignItems:    'baseline',
                 gap:           7,
+                whiteSpace:    'nowrap',
               }}
             >
               <span style={{
@@ -139,8 +158,14 @@ export function ViewSelector({ activeView, onViewChange }) {
         })}
       </div>
 
-      {/* Right: live merkle / agent status */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontFamily: FONTS.mono, fontSize: 9 }}>
+      {/* Right: live merkle / agent status — shrinks/truncates first so it
+          never forces a horizontal scrollbar on narrow viewports. */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 12,
+        fontFamily: FONTS.mono, fontSize: 9,
+        minWidth: 0, flexShrink: 1, overflow: 'hidden', whiteSpace: 'nowrap',
+        justifyContent: 'flex-end',
+      }}>
         <span style={{ color: onChain ? '#00ff88' : 'rgba(255,59,92,0.7)' }}>
           {onChain ? '● ON-CHAIN' : '○ PENDING'}
         </span>
