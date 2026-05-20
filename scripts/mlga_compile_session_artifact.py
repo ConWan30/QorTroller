@@ -237,22 +237,38 @@ def _render_html(inputs: dict) -> str:
 <html lang="en" data-vpm-visual-state="{visual_state}">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="vpm-template-version" content="2">
 <title>MLGA Session Artifact — {sid}</title>
 <style>
   :root {{
+    --matte: #04060a;
     --bg: #0a0e14;
-    --bg1: #0d1117;
-    --bg2: #161b22;
-    --bd: #30363d;
-    --t1: #c9d1d9;
-    --t2: #8b949e;
-    --t3: #6e7681;
-    --accent-live: #3fb950;
-    --accent-warn: #d29922;
+    --bg1: #04060a;
+    --bg2: #04060a;
+    --bd: #1b2433;
+    --bd2: #2a3850;
+    --t1: #d4dde8;
+    --t2: #8a98ab;
+    --t3: #5a6878;
+    --accent-live: #5bd6a3;
+    --accent-warn: #f0a868;
     --accent-orange: #f0a868;
-    --mono: ui-monospace, SFMono-Regular, monospace;
+    --chain: #5bd6a3;
+    --mono: ui-monospace, 'JetBrains Mono', 'SF Mono', 'Cascadia Code', Menlo, Consolas, 'Courier New', monospace;
   }}
-  body {{ margin: 0; padding: 24px; background: var(--bg); color: var(--t1); font-family: var(--mono); font-size: 13px; }}
+  /* TEMPLATE v2 (QRESCE-0001 v0.5): full-viewport void+graticule matte (html)
+     with the proof as a centred framed certificate card (body). Self-contained;
+     no external fonts/URLs; bytewise-deterministic. */
+  html {{ background-color: var(--matte);
+    background-image: linear-gradient(to right, rgba(26,34,48,0.20) 1px, transparent 1px),
+                      linear-gradient(to bottom, rgba(26,34,48,0.20) 1px, transparent 1px);
+    background-size: 28px 28px; }}
+  body {{ margin: 0 auto; max-width: 980px; min-height: 100vh; box-sizing: border-box;
+    padding: clamp(20px, 3vw, 36px); background: var(--bg); color: var(--t1);
+    font-family: var(--mono); font-size: 13.5px; line-height: 1.55;
+    border: 1px solid var(--bd2); border-radius: 10px;
+    box-shadow: 0 0 0 1px rgba(240,168,104,0.06), 0 24px 60px -24px rgba(0,0,0,0.80); }}
   h1 {{ font-size: 16px; margin: 0 0 8px 0; color: var(--accent-orange); }}
   h2 {{ font-size: 13px; margin: 16px 0 6px 0; color: var(--t2); text-transform: uppercase; letter-spacing: 1px; }}
   .visual-state {{ display: inline-block; padding: 2px 8px; border-radius: 3px; margin-left: 8px; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; }}
