@@ -149,7 +149,7 @@ The bridge is a single Python process (currently 4377 tests in the bridge suite)
 - Reads HID input from the DualShock Edge controller continuously
 - Generates PoAC records per cognition cycle
 - Runs the 9-layer PITL stack
-- Hosts 38 autonomous agents on shared async event loop
+- Hosts 29 standalone autonomous agents + 3 Operator Initiative stewards (Sentry/Guardian/Curator) on a shared async event loop — the stewards absorbed 9 formerly-standalone agents (run as steward-invoked skills) per the post-STABILITY-9 agent rationalization
 - Persists state to SQLite at `~/.vapi/bridge.db` (canonical production DB; ~1.3 GB)
 - Serves HTTP endpoints at localhost:8080 for the frontend dashboard + operator API
 - Submits chain operations to IoTeX testnet (when authorized — see §4)
@@ -183,7 +183,7 @@ The bridge is a single Python process (currently 4377 tests in the bridge suite)
 | `SeparationRatioRegistry` | `0xB39CeE732cf91c93539Bd064D9426642a095a026` | On-chain proof of biometric calibration commitment |
 | `VAPIDataMarketplaceListings` | `0x78Df84Cc512EdCaC0e58a03e4852627E2F62E3bC` | Curator-suspended marketplace per LISTING-v1 |
 | `Groth16VerifierZKSepProof` | `0xD63EEf1372Cb496071bf963bEE395F7e0A3f2Ab6` | ZK-SEPPROOF biometric continuity verifier |
-| `ProtocolCoherenceRegistry` | `0xfAfe4E8BEE45be22836b90D542045510dDd927Dd` | 38-agent Merkle root anchoring |
+| `ProtocolCoherenceRegistry` | `0xfAfe4E8BEE45be22836b90D542045510dDd927Dd` | agent-fleet Merkle root anchoring |
 | `VAPIBiometricGovernance` | `0x06782293F1CFC1AA30C0Baee0437c2B336796A00` | VHP-gated proposal contract |
 | `VHPReenrollmentBadge` | `0x42E7A25d0E5667BBae45e5cF33a6e2CC6E42d45C` | Soulbound re-enrollment credential |
 
@@ -522,7 +522,7 @@ For grant evaluators, partner due-diligence, or technical reviewers — every cl
 | §3.3 Calibration corpus | `sessions/human/hw_*` 267 JSON files | Phase 229 + 231 AIT defensibility analysis |
 | §3.4 PoAC wire | `bridge/vapi_bridge/` PoAC record module | `contracts/PITLSessionRegistry.sol` |
 | §3.5 FROZEN-v1 primitives | `bridge/vapi_bridge/grind_chain.py` (GIC) + sibling primitive modules | `CLAUDE.md` Hard Rules section |
-| §3.6 Bridge | `bridge/vapi_bridge/` 38 agent modules | 4377 bridge tests |
+| §3.6 Bridge | `bridge/vapi_bridge/` 29 standalone + 3 steward agent modules (9 absorbed) | 4377 bridge tests |
 | §3.7 Contracts | `contracts/deployed-addresses.json` | IoTeX testnet RPC eth_getTransactionReceipt for each ceremony tx |
 | §3.8 Frontend | `frontend/src/` 6 view modules + Evidence OS | 137 Vitest tests |
 | §3.9 W3bstream + LayerZero | `bridge/vapi_bridge/` chain wrapper + applet manifests | `scripts/run-ceremony.js` |

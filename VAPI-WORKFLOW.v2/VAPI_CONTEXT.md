@@ -540,8 +540,10 @@ When prioritizing work:
 **Update Trigger**: Phase 235 milestone — REAL GRIND CLEARED 2026-04-25 (PCC-RATE-FIX → 1152 Hz USB poll;
 auto-trigger agent #38 SessionBoundaryDetectorAgent live; 12th CONTRADICTION rule
 AUTO_TRIGGER_RATE_LIMIT_VIOLATION; dashboard six-chip strip + COHERENCE + AUTO-TRIGGER + WAITING gameplay state).
-Bridge 2447 / SDK 527 / Hardhat 502 / Contracts 45 ALL LIVE. Agent fleet 38 (Phase 222 BBG dormant /
-Phase 235 SessionBoundaryDetectorAgent live share slot #38; Phase 221 ProtocolCoherenceAgent #37).
+Bridge 2447 / SDK 527 / Hardhat 502 / Contracts 45 ALL LIVE. Agent fleet: 29 standalone agents + 3
+Operator Initiative stewards (Sentry/Guardian/Curator), which absorbed 9 formerly-standalone agents
+into steward-invoked skills post-STABILITY-9 (agent_rationalization_v1.md). The 38-ID `_AGENT_IDS`
+roster is retained on-chain (ProtocolCoherenceAgent Merkle); 9 of those run as steward skills.
 **Update Method**: sync_vapi_workflow.py + manual edit 2026-04-25 (regex agent-count bug fixed in
 3 MCP servers; corpus narrative caught up Phase 181→235; INV-016 + INV-019..022 documented).
 **Maturity Loop Last Run**: 2026-04-09 (cycle 8, WIF-031 W1/W2, score=0.752; next cycle pending unified-server activation)

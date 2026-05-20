@@ -50,9 +50,17 @@ log = logging.getLogger(__name__)
 _GATE_SCRIPT = Path(__file__).parent.parent.parent / "scripts" / "vapi_invariant_gate.py"
 
 # ---------------------------------------------------------------------------
-# Canonical 38-agent fleet IDs (Phase 238 Step I-FINAL — curator_agent added
+# Canonical 38-ID agent ROSTER (Phase 238 Step I-FINAL — curator_agent added
 # as the third Operator Initiative agent post on-chain mint + dual-anchor
-# 2026-05-09; Merkle leaves 38 -> 39 incl. virtual allowlist leaf)
+# 2026-05-09; Merkle leaves 38 -> 39 incl. virtual allowlist leaf).
+#
+# NOTE (post-STABILITY-9 agent rationalization, agent_rationalization_v1.md):
+# this tuple is the REGISTERED roster used for the on-chain coherence Merkle —
+# it stays 38. Operationally the fleet is documented as "29 standalone agents +
+# 3 Operator Initiative stewards": 9 of these IDs (Sentry 4 / Guardian 4 /
+# Curator 1, see operator_steward_absorbed_agents.py) no longer spawn standalone
+# background loops — they run as steward-invoked skills. Do NOT document "38
+# autonomous agents" as the live fleet size (operator directive 2026-05-20).
 # ---------------------------------------------------------------------------
 
 _AGENT_IDS: tuple[str, ...] = (
