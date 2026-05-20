@@ -72,10 +72,10 @@ class AgentCalibrationMonitor:
         """
         from .loop_timing import timed_block
         _outer_warn_s = float(getattr(
-            self._cfg, "acim_run_warn_duration_s", 5.0
+            self.cfg, "acim_run_warn_duration_s", 5.0
         ))
         _subtest_warn_s = float(getattr(
-            self._cfg, "acim_subtest_warn_duration_s", 1.0
+            self.cfg, "acim_subtest_warn_duration_s", 1.0
         ))
         with timed_block(
             "ACIM_run_all_tests",
