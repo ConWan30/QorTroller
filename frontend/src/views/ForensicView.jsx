@@ -141,7 +141,7 @@ export function ForensicView() {
 
           <Panel eyebrow="VERIFIERS · REGISTRY" meta="FROZEN · V.A.P.I. v1">
             <div style={{
-              display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8,
+              display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8,
               fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-dim)',
             }}>
               {verifierNames.map((name) => (
