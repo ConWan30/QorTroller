@@ -19,7 +19,7 @@
  * useVpmManifest (noMock:true), vpmArtifactUrl, VpmFilterChips, VpmIframe,
  * VpmManifestPanel, VpmGrammarVerifier, and every data-testid.
  */
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useVpmList, useVpmManifest } from '../api/bridgeApi'
 import { VpmFilterChips, VISUAL_STATE_OPTIONS } from '../components/VpmFilterChips'
 import { VpmIframe } from '../components/VpmIframe'
@@ -30,9 +30,17 @@ import '../design/qortroller-kit.css'
 
 // Build URL for /operator/vpm-artifact/{commit} the iframe loads via src.
 // Includes the read-key query param so the iframe's HTTP GET passes auth.
-function vpmArtifactUrl(commit, readKey) {
+function vpmArtifactUrl(commit, readKey, version) {
   const params = new URLSearchParams()
   if (readKey) params.set('api_key', readKey)
+  // Content-version cache-bust: the iframe loads via src=, and the browser
+  // caches that URL aggressively. For VPM-family artifacts the path-commit is
+  // the INPUT commitment (stable across re-renders), so a restyle/regeneration
+  // changes the HTML bytes WITHOUT changing the URL — the browser would keep
+  // serving the cached old proof. Keying on compiler_output_hash_hex (the
+  // SHA-256 of the rendered HTML) makes the URL change exactly when the proof
+  // content changes, forcing a fresh fetch. The bridge ignores the extra param.
+  if (version) params.set('v', version)
   const qs = params.toString()
   // Doubled-prefix convention per Phase O1 C9: operator endpoints live under
   // /operator/<inner> at the live URL.
@@ -109,6 +117,29 @@ export function VpmRegistryView() {
 
   const rows = listQ.data?.rows || []
   const selectedRow = rows.find((r) => r.commitment_hex === selectedCommit) || null
+
+  // Render the proof via srcDoc, not iframe src=, to defeat browser caching.
+  // The iframe src= path was caching the rendered proof aggressively (for
+  // VPM-family the URL is keyed on the INPUT commitment, which is stable across
+  // re-renders, so the browser kept serving the cached old HTML even after the
+  // artifact was regenerated). Fetching the HTML ourselves with cache:'no-store'
+  // and feeding it to VpmIframe (which switches to srcDoc for inline content)
+  // guarantees the freshly-regenerated v2 proof always renders.
+  const apiKey = import.meta.env.VITE_VAPI_API_KEY
+  const [artifactHtml, setArtifactHtml] = useState('')
+  useEffect(() => {
+    if (!selectedRow) { setArtifactHtml(''); return undefined }
+    let cancelled = false
+    const url = vpmArtifactUrl(selectedCommit, apiKey, selectedRow.compiler_output_hash_hex)
+    fetch(url, { headers: apiKey ? { 'x-api-key': apiKey } : {}, cache: 'no-store' })
+      .then((r) => r.text())
+      .then((t) => {
+        // Only treat HTML as a proof; the endpoint returns JSON on not-found.
+        if (!cancelled) setArtifactHtml(t && t.trimStart().startsWith('<') ? t : '')
+      })
+      .catch(() => { if (!cancelled) setArtifactHtml('') })
+    return () => { cancelled = true }
+  }, [selectedCommit, selectedRow, apiKey])
 
   return (
     <div data-vpm-registry-view className="qt-design-root" style={{
@@ -208,7 +239,12 @@ export function VpmRegistryView() {
                 </div>
                 <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
                   <VpmIframe
-                    artifactUrl={vpmArtifactUrl(selectedCommit, import.meta.env.VITE_VAPI_API_KEY)}
+                    htmlText={artifactHtml}
+                    artifactUrl={vpmArtifactUrl(
+                      selectedCommit,
+                      apiKey,
+                      selectedRow.compiler_output_hash_hex,
+                    )}
                     onIframeReady={(el) => { iframeRef.current = el }}
                     title={`VPM Artifact ${selectedCommit.slice(0, 12)}`}
                   />
