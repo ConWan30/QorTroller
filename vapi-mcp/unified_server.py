@@ -992,7 +992,7 @@ async def vapi_unified_state(include_bridge_live: bool = False, **_):
             "bridge":       s.get("bridge",    "2510"),     # Phase 237-EXTEND fallback
             "sdk":          s.get("sdk",       "539"),      # Phase 237-EXTEND fallback (+4 SDK)
             "hardhat":      s.get("hardhat",   "528"),      # Phase 237 core fallback (+6)
-            "agents":       s.get("agents",    "38"),       # Phase 235 fleet
+            "agents":       "29 standalone + 3 stewards (9 absorbed; 38-ID roster)",  # post-STABILITY-9 steward absorption
             "contracts":    f"{s.get('contracts', '46')} ALL LIVE (IoTeX Testnet 4690)",  # Phase 237-EXTEND deploy
             "dry_run":      True,
             "ioswarm":      "emulator_only",
@@ -2207,7 +2207,8 @@ async def vapi_skill_state_sync(current_skill_phase: int = 0,
             "bridge":       live_bridge,
             "sdk":          live_sdk,
             "hardhat":      live_hardhat,
-            "agents":       live_agents,
+            "agents":       "29 standalone + 3 stewards (9 absorbed)",
+            "registered_roster_ids": live_agents,  # _AGENT_IDS — on-chain Merkle roster
             "contracts":    live_contracts,
             "l4_anomaly":   live_anomaly,
             "l4_continuity": live_cont,
