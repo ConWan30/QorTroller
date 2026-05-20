@@ -110,7 +110,7 @@ from vapi_bridge.zkba_artifact import (  # noqa: E402
     ProofWeightClass,
     compute_zkba_commitment,
 )
-from vsd_ui_compiler import ZKBAManifest, compile_artifact  # noqa: E402
+from vsd_ui_compiler import ZKBAManifest, brand_card_css_v2, compile_artifact  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -232,24 +232,16 @@ def _render_tournament_card_html(inputs: dict) -> str:
         "<head>\n"
         "  <meta charset=\"utf-8\">\n"
         f"  <title>Tournament Eligibility Card - tournament {tournament_id}</title>\n"
+        "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
+        "  <meta name=\"vpm-template-version\" content=\"2\">\n"
         "  <style>\n"
-        "    body { font-family: 'Courier New', monospace; "
-        "background: #020408; color: #cfe8ff; margin: 0; padding: 1.5em; }\n"
-        "    h1 { color: #5a8fb8; border-bottom: 1px solid #1a2a40; "
-        "padding-bottom: 0.3em; }\n"
-        "    h2 { color: #93a5b8; font-size: 1em; margin-top: 1em; "
-        "border-bottom: 1px dashed #1a2a40; padding-bottom: 0.2em; }\n"
-        "    .meta { color: #93a5b8; font-size: 0.9em; line-height: 1.6; }\n"
-        "    code { color: #d4f0ff; background: #0a0e14; padding: 1px 4px; "
-        "border-radius: 2px; word-break: break-all; }\n"
-        "    .footer { margin-top: 2em; color: #607a93; font-size: 0.8em; "
-        "border-top: 1px solid #1a2a40; padding-top: 0.5em; }\n"
-        "    .weight { background: #1a2a40; color: #93a5b8; padding: 2px 8px; "
+        f"{brand_card_css_v2()}"
+        "    .weight { background: #1b2433; color: #8a98ab; padding: 2px 8px; "
         "border-radius: 4px; }\n"
-        f"    .eligible-badge {{ background: {eligible_color}; color: #020408; "
+        f"    .eligible-badge {{ background: {eligible_color}; color: #04060a; "
         "padding: 4px 12px; border-radius: 4px; font-weight: bold; "
         "font-size: 1.1em; }}\n"
-        f"    .vhp-badge {{ background: {vhp_color}; color: #020408; "
+        f"    .vhp-badge {{ background: {vhp_color}; color: #04060a; "
         "padding: 2px 8px; border-radius: 4px; font-weight: bold; }}\n"
         "  </style>\n"
         "</head>\n"

@@ -106,6 +106,14 @@ VISUAL_STATE_SIGNATURES = {
 META_TAG_SIGNATURE = '<meta name="vpm-visual-state"'
 ARIA_LABEL_SIGNATURE = 'role="status"'
 
+# Proof-template version (provenance only — NOT a FROZEN signature). Bumped to
+# "2" with the QRESCE-0001 v0.5 brand/full-frame base_style_block redesign.
+# Emitted as a <meta> tag by assemble_vpm_head so each newly-compiled artifact
+# records which template produced it. Existing artifacts are immutable HTML
+# files on disk (served verbatim), so this never affects already-anchored
+# commitments — only new compiles.
+VPM_TEMPLATE_VERSION = "2"
+
 
 # Required 9 Integrity Label field markers — mirrored from
 # scripts/vsd_ui_compiler.py:_VPM_INTEGRITY_LABEL_FIELDS so both modules
@@ -387,29 +395,74 @@ def base_style_block() -> str:
     """Shared base CSS (font + colors + layout) inlined by every VPM
     renderer. Returns inner-CSS only; caller wraps with <style>...</style>.
 
-    No @font-face, no @import, no external URLs. system-monospace per
-    Phase O4 plan §3 Stream A.0 compiler-discipline item 2.
+    TEMPLATE v2 (QRESCE-0001 v0.5 grant-evaluator remodel): the proof now
+    renders as a centred, framed "certificate" card on a full-viewport void
+    matte with a subtle forensic graticule — fixing the prior narrow-column /
+    uncovered-frame look — and aligns the artifact palette to the QorTroller
+    design system (void #04060a, amber #f0a868, chain-green #5bd6a3).
+
+    Constraints preserved per Phase O4 plan §3 Stream A.0 compiler discipline:
+    NO @font-face, NO @import, NO external URLs (so the artifact stays
+    self-contained + bytewise-deterministic + offline-renderable). Brand
+    typography is therefore a refined SYSTEM-monospace stack (JetBrains Mono is
+    NAMED as a hint and used iff locally installed; never web-loaded). This
+    function styles ONLY base chrome — every FROZEN visual-state DOM signature
+    lives in visual_state_css()/visual_state_overlay()/vpm_body_class() and is
+    untouched here, so the 6-state grammar band is unaffected.
     """
     return (
-        "body { font-family: 'Courier New', monospace; "
-        "background: #020408; color: #cfe8ff; margin: 0; padding: 1.5em; "
-        "line-height: 1.5; }\n"
-        "h1 { color: #5a8fb8; border-bottom: 1px solid #1a2a40; "
-        "padding-bottom: 0.3em; }\n"
-        "h2 { color: #5a8fb8; font-size: 1.0em; margin-top: 1.4em; "
-        "border-bottom: 1px dotted #1a2a40; padding-bottom: 0.2em; }\n"
-        ".vpm-body { padding: 1em; }\n"
-        ".vpm-integrity-label { border: 1px solid #1a2a40; "
-        "padding: 1em; margin-top: 1.2em; background: #0a0e14; }\n"
-        ".vpm-integrity-label dt { color: #5a8fb8; font-weight: bold; "
-        "display: inline-block; min-width: 14em; }\n"
-        ".vpm-integrity-label dd { display: inline; margin: 0 0 0.4em 0; "
-        "color: #cfe8ff; }\n"
-        ".vpm-integrity-label dd::after { content: ''; display: block; }\n"
-        "code { color: #d4f0ff; background: #0a0e14; padding: 1px 4px; "
-        "border-radius: 2px; word-break: break-all; }\n"
-        ".vpm-footer { margin-top: 2em; color: #607a93; font-size: 0.8em; "
-        "border-top: 1px solid #1a2a40; padding-top: 0.5em; }\n"
+        "html { box-sizing: border-box; }\n"
+        "*, *::before, *::after { box-sizing: inherit; }\n"
+        # full-viewport void matte + subtle forensic graticule (pure CSS, no deps)
+        "body { margin: 0; min-height: 100vh; "
+        "font-family: ui-monospace, 'JetBrains Mono', 'SF Mono', 'Cascadia Code', "
+        "Menlo, Consolas, 'Courier New', monospace; "
+        "background-color: #04060a; color: #d4dde8; "
+        "line-height: 1.55; font-size: 13.5px; letter-spacing: 0.01em; "
+        "padding: clamp(16px, 4vw, 48px); "
+        "background-image: "
+        "linear-gradient(to right, rgba(26,34,48,0.20) 1px, transparent 1px), "
+        "linear-gradient(to bottom, rgba(26,34,48,0.20) 1px, transparent 1px); "
+        "background-size: 28px 28px; }\n"
+        # the proof itself: a centred framed certificate card on the matte
+        ".vpm-body { max-width: 980px; margin: 0 auto; "
+        "background-color: #0a0e14; border: 1px solid #2a3850; "
+        "border-radius: 10px; padding: clamp(20px, 3vw, 36px); "
+        "box-shadow: 0 0 0 1px rgba(240,168,104,0.06), "
+        "0 24px 60px -24px rgba(0,0,0,0.80); }\n"
+        # headings — brand amber title, eyebrow-style sub-heads
+        "h1 { color: #f0a868; font-size: 1.5em; margin: 0 0 0.2em 0; "
+        "letter-spacing: 0.02em; border-bottom: 1px solid #2a3850; "
+        "padding-bottom: 0.4em; }\n"
+        "h2 { color: #8a98ab; font-size: 0.82em; text-transform: uppercase; "
+        "letter-spacing: 0.18em; margin: 1.8em 0 0.6em 0; "
+        "border-bottom: 1px dotted #1b2433; padding-bottom: 0.3em; }\n"
+        # status table + meta blocks
+        "table.vpm-status { width: 100%; border-collapse: collapse; margin: 0.4em 0; }\n"
+        ".vpm-status td { padding: 7px 10px; border-bottom: 1px solid #141b27; "
+        "vertical-align: top; }\n"
+        ".vpm-status td:first-child { color: #8a98ab; white-space: nowrap; width: 42%; }\n"
+        ".vpm-meta { margin: 0.4em 0; color: #8a98ab; }\n"
+        ".vpm-meta > div { padding: 4px 0; }\n"
+        # integrity nutrition label — the cryptographic-honesty surface, elevated
+        ".vpm-integrity-label { border: 1px solid rgba(240,168,104,0.35); "
+        "border-radius: 8px; padding: 16px 18px; margin-top: 1.8em; "
+        "background-color: #04060a; }\n"
+        ".vpm-integrity-label h2 { margin: 0 0 12px 0; color: #f0a868; "
+        "font-size: 0.78em; letter-spacing: 0.20em; border: none; padding: 0; }\n"
+        ".vpm-integrity-label dl { display: grid; "
+        "grid-template-columns: minmax(11em, max-content) 1fr; gap: 0; margin: 0; }\n"
+        ".vpm-integrity-label dt { color: #8a98ab; font-weight: 600; "
+        "padding: 7px 14px 7px 0; border-bottom: 1px solid #141b27; display: block; }\n"
+        ".vpm-integrity-label dd { color: #d4dde8; margin: 0; padding: 7px 0; "
+        "border-bottom: 1px solid #141b27; display: block; word-break: break-word; }\n"
+        ".vpm-integrity-label dd::after { content: none; display: none; }\n"
+        # code / hashes — chain green, wrappable
+        "code { color: #5bd6a3; background-color: #04060a; padding: 1px 5px; "
+        "border-radius: 3px; word-break: break-all; border: 1px solid #141b27; }\n"
+        # footer
+        ".vpm-footer { margin-top: 2.2em; color: #5a6878; font-size: 0.78em; "
+        "border-top: 1px solid #1b2433; padding-top: 0.8em; line-height: 1.6; }\n"
     )
 
 
@@ -438,7 +491,9 @@ def assemble_vpm_head(
     return (
         '<head>\n'
         '  <meta charset="utf-8">\n'
+        '  <meta name="viewport" content="width=device-width, initial-scale=1">\n'
         f'  {meta_state}\n'
+        f'  <meta name="vpm-template-version" content="{VPM_TEMPLATE_VERSION}">\n'
         f'  <title>{html.escape(title)}</title>\n'
         '  <style>\n'
         f'{base_style_block()}'

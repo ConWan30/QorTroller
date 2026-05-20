@@ -61,6 +61,11 @@ import {
   useCaptureHealth,
   useEnrollmentStatus,
 } from '../api/bridgeApi'
+// QRESCE-0001 v0.5 grant-evaluator remodel — align BRP (the other canvas-hero
+// tab) with the GamerView design language. Chrome-only re-skin: the BrpMount
+// renderer, telemetry hooks, SSE imprinting, per-prop honesty indicators, and
+// the live:false Block-W posture are all preserved verbatim.
+import '../design/qortroller-kit.css'
 
 // Synthetic device_id from the vendored fixture. Used as fallback when
 // useBrpDeviceDiscovery (commit η) cannot resolve a live device_id from
@@ -182,29 +187,29 @@ function ProvenanceHUD({ deviceId, frozenHashHex, chainLength, apopState, apopSc
         alignItems: 'center',
         gap: 16,
         padding: '8px 16px',
-        background: 'linear-gradient(180deg, transparent 0%, rgba(10,10,15,0.92) 60%)',
-        borderTop: '1px solid rgba(34,211,238,0.10)',
-        fontFamily: FONTS.mono,
+        background: 'linear-gradient(180deg, transparent 0%, rgba(2,4,8,0.92) 60%)',
+        borderTop: '1px solid var(--border-soft)',
+        fontFamily: 'var(--font-mono)',
         fontSize: 10,
-        color: 'var(--vapi-tier-basic)',
+        color: 'var(--text-faint)',
         letterSpacing: '0.06em',
         zIndex: 5,
         pointerEvents: 'none',
       }}
     >
-      <span style={{ color: 'var(--vapi-orange)', fontWeight: 600 }}>BRP</span>
-      <span style={{ color: 'var(--vapi-tier-basic)' }}>·</span>
-      <span>device <span style={{ color: 'var(--vapi-cyan)' }}>{shortDevice}</span></span>
-      <span style={{ color: 'var(--vapi-tier-basic)' }}>·</span>
-      <span>chain_len <span style={{ color: 'var(--vapi-cyan)' }}>{chainLength ?? 0}</span></span>
-      <span style={{ color: 'var(--vapi-tier-basic)' }}>·</span>
-      <span>latest <span style={{ color: 'var(--vapi-cyan)', fontFamily: FONTS.mono }}>{shortHash}</span></span>
-      <span style={{ color: 'var(--vapi-tier-basic)' }}>·</span>
+      <span style={{ color: 'var(--accent-amber)', fontWeight: 600 }}>BRP</span>
+      <span style={{ color: 'var(--text-faint)' }}>·</span>
+      <span>device <span style={{ color: 'var(--chain)' }}>{shortDevice}</span></span>
+      <span style={{ color: 'var(--text-faint)' }}>·</span>
+      <span>chain_len <span style={{ color: 'var(--chain)' }}>{chainLength ?? 0}</span></span>
+      <span style={{ color: 'var(--text-faint)' }}>·</span>
+      <span>latest <span style={{ color: 'var(--chain)', fontFamily: 'var(--font-mono)' }}>{shortHash}</span></span>
+      <span style={{ color: 'var(--text-faint)' }}>·</span>
       <span>{apopLabel}</span>
       <span style={{ flex: 1 }} />
       {/* SSE pulse indicator — flashes cyan when an event fires */}
       <SsePulseIndicator pulseTs={ssePulseTs} />
-      <span style={{ color: 'var(--vapi-tier-basic)', opacity: 0.6, fontSize: 9 }}>
+      <span style={{ color: 'var(--text-faint)', opacity: 0.6, fontSize: 9 }}>
         keccak256(frozenOutput) → mesh
       </span>
     </div>
@@ -227,7 +232,7 @@ function SsePulseIndicator({ pulseTs }) {
         alignItems: 'center',
         gap: 5,
         fontSize: 9,
-        color: glow ? 'var(--vapi-cyan)' : 'var(--vapi-tier-basic)',
+        color: glow ? 'var(--chain)' : 'var(--text-faint)',
         transition: 'color 0.4s',
       }}
     >
@@ -236,8 +241,8 @@ function SsePulseIndicator({ pulseTs }) {
           width: 6,
           height: 6,
           borderRadius: 3,
-          background: glow ? 'var(--vapi-cyan)' : 'var(--vapi-tier-basic)',
-          boxShadow: glow ? 'var(--vapi-cyan-glow)' : 'none',
+          background: glow ? 'var(--chain)' : 'var(--text-faint)',
+          boxShadow: glow ? '0 0 8px var(--chain)' : 'none',
           transition: 'all 0.3s',
         }}
       />
@@ -486,19 +491,24 @@ export function BrpView() {
   return (
     <div
       data-testid="brp-view-root"
+      className="qt-design-root"
       style={{
         display: 'flex',
         flexDirection: 'column',
         flex: 1,
-        background: 'var(--vapi-void)',
+        background: 'var(--bg)',
         overflow: 'hidden',
         position: 'relative',
       }}
     >
       {/* Renderer + cinematic vignette + provenance HUD strip */}
       <main style={{ flex: 1, position: 'relative', minHeight: 0 }}>
+        {/* Forensic-instrument graticule (z0) — matches the GamerView twin
+            stage; shows through wherever the mesh canvas is transparent. */}
+        <div className="twin-stage" style={{ position: 'absolute', inset: 0, zIndex: 0, border: 'none', borderRadius: 0 }} />
+
         {/* The Canvas itself — fills the entire main */}
-        <div style={{ position: 'absolute', inset: 0 }}>
+        <div style={{ position: 'absolute', inset: 0, zIndex: 1 }}>
           <Suspense fallback={null}>
             <BrpMount
               frozenOutput={frozenBytes}
@@ -533,7 +543,7 @@ export function BrpView() {
             inset: 0,
             pointerEvents: 'none',
             background:
-              'radial-gradient(ellipse at center, transparent 35%, rgba(10,10,15,0.55) 75%, rgba(10,10,15,0.95) 100%)',
+              'radial-gradient(ellipse at center, transparent 35%, rgba(2,4,8,0.55) 75%, rgba(2,4,8,0.95) 100%)',
             zIndex: 2,
           }}
         />
@@ -551,22 +561,22 @@ export function BrpView() {
           }}
         >
           <div style={{
-            fontFamily: "'Rajdhani', sans-serif",
-            fontSize: 22,
+            fontFamily: 'var(--font-display)',
+            fontSize: 24,
             fontWeight: 700,
-            letterSpacing: '0.10em',
-            color: 'var(--vapi-cyan)',
-            textShadow: '0 0 14px rgba(34,211,238,0.45)',
+            letterSpacing: '0.06em',
+            color: 'var(--text)',
           }}>
-            BRP
+            B<span style={{ color: 'var(--accent-amber)', fontWeight: 800 }}>R</span>P
           </div>
           <div style={{
-            fontFamily: FONTS.mono,
+            fontFamily: 'var(--font-mono)',
             fontSize: 9,
-            color: 'var(--vapi-tier-basic)',
-            letterSpacing: '0.08em',
+            color: 'var(--text-faint)',
+            letterSpacing: '0.14em',
+            textTransform: 'uppercase',
           }}>
-            BIOMETRIC RENDERER · cryptographic portrait
+            BIOMETRIC RENDERER · CRYPTOGRAPHIC PORTRAIT
           </div>
         </div>
 
@@ -585,8 +595,8 @@ export function BrpView() {
             transform: 'translateY(-50%)',
             width: 32,
             height: 110,
-            background: 'rgba(34, 211, 238, 0.08)',
-            border: `1px solid ${drawerOpen ? 'var(--vapi-cyan)' : 'rgba(34, 211, 238, 0.35)'}`,
+            background: 'var(--accent-amber-trace)',
+            border: `1px solid ${drawerOpen ? 'var(--accent-amber)' : 'var(--border-strong)'}`,
             borderRight: 'none',
             borderRadius: '6px 0 0 6px',
             cursor: 'pointer',
@@ -597,7 +607,7 @@ export function BrpView() {
             justifyContent: 'center',
             gap: 6,
             transition: 'right 0.32s ease, background 0.2s, border-color 0.2s',
-            color: 'var(--vapi-cyan)',
+            color: 'var(--accent-amber)',
             fontFamily: 'inherit',
             padding: 0,
           }}
@@ -609,16 +619,16 @@ export function BrpView() {
               width: 7,
               height: 7,
               borderRadius: 3.5,
-              background: 'var(--vapi-cyan)',
-              boxShadow: drawerOpen ? 'var(--vapi-cyan-glow)' : 'none',
+              background: 'var(--chain)',
+              boxShadow: drawerOpen ? '0 0 8px var(--chain)' : 'none',
               transition: 'box-shadow 0.3s',
             }}
           />
           <span
             style={{
-              fontFamily: FONTS.mono,
+              fontFamily: 'var(--font-mono)',
               fontSize: 10,
-              color: 'var(--vapi-cyan)',
+              color: 'var(--accent-amber)',
               letterSpacing: '0.18em',
               writingMode: 'vertical-rl',
               transform: 'rotate(180deg)',
@@ -646,15 +656,15 @@ export function BrpView() {
                 bottom: 36, // leave room for provenance HUD strip
                 width: 380,
                 zIndex: 10,
-                background: 'rgba(8, 10, 14, 0.97)',
+                background: 'rgba(10, 14, 20, 0.97)',
                 backdropFilter: 'blur(14px)',
-                borderLeft: '1px solid var(--vapi-cyan)',
-                color: 'var(--vapi-tier-verified)',
-                fontFamily: FONTS.mono,
+                borderLeft: '1px solid var(--accent-amber)',
+                color: 'var(--text)',
+                fontFamily: 'var(--font-mono)',
                 fontSize: 11,
                 padding: '20px 18px',
                 overflowY: 'auto',
-                boxShadow: '0 0 28px rgba(34,211,238,0.10)',
+                boxShadow: '0 0 28px rgba(240,168,104,0.10)',
               }}
             >
               <div
@@ -669,11 +679,11 @@ export function BrpView() {
                 <div>
                   <div
                     style={{
-                      fontFamily: "'Rajdhani', sans-serif",
+                      fontFamily: 'var(--font-display)',
                       fontSize: 16,
                       fontWeight: 700,
-                      letterSpacing: '0.10em',
-                      color: 'var(--vapi-cyan)',
+                      letterSpacing: '0.08em',
+                      color: 'var(--accent-amber)',
                       lineHeight: 1.1,
                     }}
                   >
@@ -683,7 +693,7 @@ export function BrpView() {
                     style={{
                       fontSize: 9,
                       letterSpacing: '0.06em',
-                      color: 'var(--vapi-tier-basic)',
+                      color: 'var(--text-faint)',
                       marginTop: 3,
                     }}
                   >
@@ -694,9 +704,9 @@ export function BrpView() {
                   onClick={() => setDrawerOpen(false)}
                   style={{
                     background: 'transparent',
-                    border: '1px solid rgba(34, 211, 238, 0.25)',
+                    border: '1px solid var(--border-strong)',
                     borderRadius: 3,
-                    color: 'var(--vapi-cyan)',
+                    color: 'var(--accent-amber)',
                     cursor: 'pointer',
                     fontFamily: 'inherit',
                     fontSize: 12,

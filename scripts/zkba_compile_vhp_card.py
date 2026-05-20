@@ -89,6 +89,7 @@ from vapi_bridge.zkba_artifact import (  # noqa: E402
 )
 from vsd_ui_compiler import (  # noqa: E402
     ZKBAManifest,
+    brand_card_css_v2,
     compile_artifact,
 )
 
@@ -183,19 +184,13 @@ def _render_vhp_card_html(inputs: dict) -> str:
         "<head>\n"
         "  <meta charset=\"utf-8\">\n"
         f"  <title>VHP Verification Card - token {token_id}</title>\n"
+        "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
+        "  <meta name=\"vpm-template-version\" content=\"2\">\n"
         "  <style>\n"
-        "    body { font-family: 'Courier New', monospace; "
-        "background: #020408; color: #cfe8ff; margin: 0; padding: 1.5em; }\n"
-        "    h1 { color: #5a8fb8; border-bottom: 1px solid #1a2a40; "
-        "padding-bottom: 0.3em; }\n"
-        "    .meta { color: #93a5b8; font-size: 0.9em; line-height: 1.6; }\n"
-        "    code { color: #d4f0ff; background: #0a0e14; padding: 1px 4px; "
-        "border-radius: 2px; }\n"
-        "    .footer { margin-top: 2em; color: #607a93; font-size: 0.8em; "
-        "border-top: 1px solid #1a2a40; padding-top: 0.5em; }\n"
-        "    .weight { background: #1a2a40; color: #93a5b8; padding: 2px 8px; "
+        f"{brand_card_css_v2()}"
+        "    .weight { background: #1b2433; color: #8a98ab; padding: 2px 8px; "
         "border-radius: 4px; }\n"
-        f"    .valid-badge {{ background: {valid_color}; color: #020408; "
+        f"    .valid-badge {{ background: {valid_color}; color: #04060a; "
         "padding: 4px 12px; border-radius: 4px; font-weight: bold; }}\n"
         "  </style>\n"
         "</head>\n"

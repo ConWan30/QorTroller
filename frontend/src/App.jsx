@@ -5,7 +5,6 @@ import { HeartbeatProvider } from './heartbeat/HeartbeatProvider'
 import { FONTS } from './shared/design/tokens'
 import { DriftAlertBadge } from './components/DriftAlertBadge'
 import { OperatorBar } from './components/OperatorBar'
-import GlobalMockBanner from './components/GlobalMockBanner'
 // Phase 238 Frontend Foundation Revamp — VAPI theme tokens (CSS variable lock)
 import './styles/vapi-theme.css'
 
@@ -24,9 +23,15 @@ const MarketplaceView  = lazy(() => import('./views/MarketplaceView').then((m) =
 // Stream A.1+A.2 compilers. Sandboxed iframe rendering + Layer 3
 // Anti-Hype Visual Grammar verification.
 const VpmRegistryView  = lazy(() => import('./views/VpmRegistryView').then((m) => ({ default: m.VpmRegistryView })))
+// QRESCE-0001 v0.5 grant-evaluator remodel — two design-language views wired
+// to the real bridge hooks + real in-browser verifiers (named exports).
+const ForensicView     = lazy(() => import('./views/ForensicView').then((m) => ({ default: m.ForensicView })))
+const OperatorView     = lazy(() => import('./views/OperatorView').then((m) => ({ default: m.OperatorView })))
 
 const VIEW_MAP = {
   gamer:        GamerView,
+  forensic:     ForensicView,
+  operator:     OperatorView,
   developer:    DeveloperView,
   manufacturer: ManufacturerView,
   brp:          BrpView,
@@ -57,11 +62,6 @@ export function App() {
 
   return (
     <HeartbeatProvider>
-      {/* Mythos audit fix (post-/goal 2026-05-15): App-level mock
-          indicator. Shows the 'bridge offline' banner across ALL tabs
-          (previously only GamerView surfaced it). Auto-clears on the
-          next successful fetch via client.js apiGet/apiPost hooks. */}
-      <GlobalMockBanner />
       <div style={{
         display:       'flex',
         flexDirection: 'column',
@@ -72,14 +72,16 @@ export function App() {
         <ViewSelector activeView={activeView} onViewChange={setActiveView} />
 
         {/* Phase 238 — three-pill Operator bar (Sentry/Guardian/Curator).
-            Always visible; click navigates to DeveloperView for drill-down. */}
+            Always visible; click navigates to the OperatorView O3 fleet-evidence
+            dashboard (QRESCE-0001 v0.5 remodel). Previously routed to
+            DeveloperView, which predated the dedicated OperatorView surface. */}
         <div style={{
           padding:        '4px 16px',
           borderBottom:   '1px solid rgba(255,255,255,0.04)',
           background:     'rgba(2,4,8,0.85)',
           backdropFilter: 'blur(8px)',
         }}>
-          <OperatorBar onClick={() => setActiveView('developer')} />
+          <OperatorBar onClick={() => setActiveView('operator')} />
         </div>
 
         {/* Phase O1 C8 — cross-view drift alert. Hidden by default; renders

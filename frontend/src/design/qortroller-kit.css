@@ -1,0 +1,273 @@
+/* QorTroller design-system kit — grant-evaluator remodel (QRESCE-0001 v0.5).
+ *
+ * Ported from the Claude-design export (bundle 5). The export's components
+ * reference bare CSS custom properties (var(--bg) etc.) whose foundation file
+ * (colors_and_type.css) was NOT included in the export — so the token values
+ * below are reconstructed from the export's own hardcoded usages
+ * (kit.css: #5bd6a3 chain, #d65b78 blocked, #f0a868 amber, #04060a void) and
+ * the canonical brand palette (docs/qortroller-brand-guidelines.md).
+ *
+ * EVERYTHING is scoped under .qt-design-root so the design palette + kit
+ * classes apply ONLY to the three remodeled grant-facing views and never
+ * collide with the existing six tier-palette views (which keep tokens.js +
+ * vapi-theme.css). Wrap each design view's root element in
+ * className="qt-design-root".
+ *
+ * Typography is brand-correct: Syne for display/wordmark (NOT the legacy
+ * Rajdhani in tokens.js), JetBrains Mono for all data. Both already loaded
+ * via the FONT_IMPORT in index.html.
+ */
+
+.qt-design-root {
+  /* ── Surfaces (void-black forensic instrument panel) ── */
+  --bg:            #04060a;
+  --panel:         #0a0e14;
+  --panel-soft:    #0b1119;
+  --panel-raised:  #11161f;
+
+  /* ── Borders ── */
+  --border:        #1b2433;
+  --border-soft:   #141b27;
+  --border-strong: #2a3850;
+
+  /* ── Text ── */
+  --text:        #d4dde8;
+  --text-dim:    #8a98ab;
+  --text-faint:  #5a6878;
+  --text-ghost:  #36404e;
+
+  /* ── Brand amber (medial-T accent) ── */
+  --accent-amber:       #f0a868;
+  --accent-amber-soft:  rgba(240, 168, 104, 0.35);
+  --accent-amber-trace: rgba(240, 168, 104, 0.08);
+
+  /* ── Cryptographic chain green (the "verified / re-derived OK" color) ── */
+  --chain: #5bd6a3;
+
+  /* ── Status palette ── */
+  --status-live:     #5bd6a3;
+  --status-pending:  #f0a868;
+  --status-blocked:  #d65b78;
+  --status-dormant:  #5a6878;
+  --status-verified: #22d3ee;
+  --status-mock:     #d65b78;
+
+  /* ── Type ── */
+  --font-display: 'Syne', system-ui, sans-serif;
+  --font-body:    'Syne', system-ui, sans-serif;
+  --font-mono:    'JetBrains Mono', ui-monospace, monospace;
+
+  /* ── Geometry / spacing ── */
+  --radius: 6px;
+  --s-3: 8px;
+  --s-4: 10px;
+  --s-5: 14px;
+  --s-6: 20px;
+  --strip-h: 48px;
+
+  /* ── Motion ── */
+  --dur-tick:   150ms;
+  --dur-breath: 4s;
+  --ease-snap:       cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-instrument: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* root layout */
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+}
+
+.qt-design-root *,
+.qt-design-root *::before,
+.qt-design-root *::after { box-sizing: border-box; }
+
+/* ── Panel primitives ───────────────────────────────────────── */
+.qt-design-root .p-panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  position: relative;
+}
+.qt-design-root .p-panel--soft   { background: var(--panel-soft); }
+.qt-design-root .p-panel--raised { background: var(--panel-raised); box-shadow: 0 0 0 1px var(--border-strong); }
+.qt-design-root .p-panel--breath { animation: qt-breath var(--dur-breath) ease-in-out infinite; }
+@keyframes qt-breath { 50% { box-shadow: 0 0 28px -10px #5bd6a344, 0 0 0 1px var(--border-strong); } }
+
+.qt-design-root .p-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 12px var(--s-5) 10px;
+  gap: var(--s-3);
+  border-bottom: 1px solid var(--border);
+}
+.qt-design-root .p-head__eye {
+  font-family: var(--font-mono); font-size: 10.5px;
+  color: var(--text-faint); letter-spacing: 0.14em; text-transform: uppercase;
+}
+.qt-design-root .p-head__meta {
+  font-family: var(--font-mono); font-size: 10.5px;
+  color: var(--text-dim); letter-spacing: 0.06em; text-transform: uppercase;
+}
+.qt-design-root .p-body { padding: var(--s-5); }
+
+/* ── MOTION KEYFRAMES — each tied to a real event ──────────── */
+@keyframes qt-settle {
+  0%   { color: var(--accent-amber); text-shadow: 0 0 8px var(--accent-amber-soft); }
+  100% { color: var(--chain);        text-shadow: 0 0 0   transparent; }
+}
+@keyframes qt-mismatch-flash {
+  0%, 100% { color: var(--status-blocked); background: #d65b7811; }
+  50%      { color: var(--status-blocked); background: #d65b7833; }
+}
+@keyframes qt-land {
+  0%   { transform: translateY(-6px); opacity: 0; box-shadow: 0 0 24px -2px #5bd6a3aa; }
+  60%  { transform: translateY(0);    opacity: 1; box-shadow: 0 0 24px -2px #5bd6a3aa; }
+  100% { transform: translateY(0);    opacity: 1; box-shadow: 0 0  0    -2px transparent; }
+}
+@keyframes qt-pulse-soft { 50% { opacity: 0.4; } }
+@keyframes qt-scan { to { transform: translateX(100%); } }
+
+.qt-design-root .motion--settle   { animation: qt-settle 280ms var(--ease-instrument); }
+.qt-design-root .motion--mismatch { animation: qt-mismatch-flash 1.2s ease-in-out infinite; }
+.qt-design-root .motion--land     { animation: qt-land 480ms var(--ease-instrument); }
+.qt-design-root .motion--pulse    { animation: qt-pulse-soft 1.4s ease-in-out infinite; }
+.qt-design-root .motion--scan { position: relative; overflow: hidden; }
+.qt-design-root .motion--scan::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, #f0a86844 50%, transparent 100%);
+  transform: translateX(-100%);
+  animation: qt-scan 600ms linear;
+  pointer-events: none;
+}
+
+/* ── Status chip — ALWAYS paired with a text label, never color-only ─── */
+.qt-design-root .s-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 9px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  line-height: 1;
+  width: fit-content;
+}
+.qt-design-root .s-chip::before {
+  content: "";
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+}
+.qt-design-root .s-chip--live     { color: var(--status-live); }
+.qt-design-root .s-chip--pending  { color: var(--status-pending); }
+.qt-design-root .s-chip--blocked  { color: var(--status-blocked); }
+.qt-design-root .s-chip--dormant  { color: var(--status-dormant); }
+.qt-design-root .s-chip--verified { color: var(--status-verified); }
+.qt-design-root .s-chip--mock     { color: var(--status-mock); background: #d65b7811; }
+.qt-design-root .s-chip--mock::before { animation: qt-blink 1.2s steps(2) infinite; }
+@keyframes qt-blink { 50% { opacity: 0.3; } }
+
+/* ── Button ─────────────────────────────────────────────────── */
+.qt-design-root .btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 14px;
+  font-family: var(--font-mono); font-size: 12px; font-weight: 500;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  line-height: 1;
+  transition: background var(--dur-tick), border-color var(--dur-tick), color var(--dur-tick);
+}
+.qt-design-root .btn--primary   { color: #04060a; background: var(--accent-amber); border: 1px solid var(--accent-amber); }
+.qt-design-root .btn--primary:hover { background: #ffba80; }
+.qt-design-root .btn--secondary { color: var(--accent-amber); border: 1px solid var(--accent-amber); background: var(--accent-amber-trace); }
+.qt-design-root .btn--secondary:hover { background: var(--accent-amber-soft); }
+.qt-design-root .btn--ghost     { color: var(--text); border: 1px solid var(--border-strong); }
+.qt-design-root .btn--ghost:hover { background: var(--panel-raised); }
+.qt-design-root .btn--danger    { color: var(--status-blocked); border: 1px solid var(--status-blocked); background: #d65b7811; }
+.qt-design-root .btn--sm        { padding: 5px 9px; font-size: 11px; }
+
+/* ── Hash + mono primitives ─────────────────────────────────── */
+.qt-design-root .mono  { font-family: var(--font-mono); letter-spacing: 0.02em; font-variant-ligatures: none; }
+.qt-design-root .hash  { font-family: var(--font-mono); letter-spacing: 0.02em; font-variant-ligatures: none; color: var(--chain); word-break: break-all; }
+.qt-design-root .dim   { color: var(--text-dim); }
+.qt-design-root .faint { color: var(--text-faint); }
+.qt-design-root .amber { color: var(--accent-amber); }
+.qt-design-root .chain { color: var(--chain); }
+.qt-design-root .err   { color: var(--status-blocked); }
+
+/* ── Eyebrows / labels ──────────────────────────────────────── */
+.qt-design-root .eye   { font-family: var(--font-mono); font-size: 10.5px; color: var(--text-faint); letter-spacing: 0.14em; text-transform: uppercase; }
+.qt-design-root .label { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); letter-spacing: 0.06em; text-transform: uppercase; }
+
+/* ── Wordmark ───────────────────────────────────────────────── */
+.qt-design-root .qt-wordmark { font-family: var(--font-display); font-weight: 700; letter-spacing: -0.02em; line-height: 1; color: var(--text); white-space: nowrap; }
+.qt-design-root .qt-wordmark .t { font-weight: 800; color: var(--accent-amber); }
+
+/* ── Floating overlay panel — twin-dominant Gamer view ─────────── */
+.qt-design-root .overlay-panel {
+  background: rgba(10, 14, 20, 0.92);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  position: relative;
+  z-index: 3;
+  backdrop-filter: blur(6px);
+}
+.qt-design-root .overlay-panel--accent {
+  border-color: var(--accent-amber);
+  box-shadow: 0 0 0 1px var(--accent-amber-soft);
+}
+
+/* ── Live grind ribbon along the bottom of the twin ──────────── */
+.qt-design-root .ribbon {
+  display: flex;
+  gap: 1px;
+  height: 18px;
+  background: var(--border-soft);
+  padding: 1px;
+  border-radius: 2px;
+}
+.qt-design-root .ribbon__cell {
+  flex: 1;
+  background: transparent;
+  border-top: 1px solid var(--border-strong);
+  border-bottom: 1px solid var(--border-strong);
+  opacity: 0.5;
+  position: relative;
+  min-width: 4px;
+}
+.qt-design-root .ribbon__cell--filled { background: var(--chain); border-color: var(--chain); opacity: 0.7; }
+.qt-design-root .ribbon__cell--latest { opacity: 1; box-shadow: 0 0 12px #5bd6a3, inset 0 0 8px #5bd6a3aa; animation: qt-pulse-soft 1.8s ease-in-out infinite; }
+
+/* ── Graticule overlay for the full-bleed twin stage ──────────── */
+.qt-design-root .twin-stage {
+  position: relative;
+  background-color: var(--bg);
+  background-image:
+    linear-gradient(to right,  #1a223044 1px, transparent 1px),
+    linear-gradient(to bottom, #1a223044 1px, transparent 1px),
+    linear-gradient(to right,  #1a223018 1px, transparent 1px),
+    linear-gradient(to bottom, #1a223018 1px, transparent 1px);
+  background-size: 96px 96px, 96px 96px, 24px 24px, 24px 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+}
+
+/* Scrollbar — barely there, scoped to design views */
+.qt-design-root ::-webkit-scrollbar { width: 6px; height: 6px; }
+.qt-design-root ::-webkit-scrollbar-track { background: transparent; }
+.qt-design-root ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+.qt-design-root ::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }

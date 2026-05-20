@@ -2,28 +2,25 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Link } from 'react-router-dom'
 import { useHeartbeatStore } from './heartbeat/useHeartbeat'
-import { FONTS, GAMER, DEVELOPER, MANUFACTURER } from './shared/design/tokens'
+import { FONTS, GAMER } from './shared/design/tokens'
 
+// QRESCE-0001 v0.5 grant-evaluator remodel — slimmed 4-tab bar. Only the
+// design-language, grant-facing surfaces are shown: Gamer (hero) · Forensic
+// (cryptographic depth) · Operator (self-monitoring honesty) · VPM (autonomous
+// HTML snapshot proofs). Developer / Manufacturer / Marketplace / BRP are
+// intentionally OFF the bar (deferred — dense tooling / zero partners / zero
+// listings / BRP abstract-mesh pending a legibility pass). All remain in
+// App.jsx VIEW_MAP (preserved in code); Developer is still reachable via the
+// drift-alert badge for operator-agent drill-down.
 const VIEWS = [
-  { id: 'gamer',        label: 'GAMER',        accent: GAMER.cyan,          icon: '◈' },
-  { id: 'developer',   label: 'DEVELOPER',    accent: DEVELOPER.orange,    icon: '◇' },
-  { id: 'manufacturer',label: 'MANUFACTURER', accent: MANUFACTURER.blue,   icon: '⬡' },
-  // 4th tab: BRP renderer post-milestone incorporation (OQ-7).
-  // Pre-ceremony, live: false. Distinct accent + small live:false dot
-  // surfaced in the tab so the operator can identify the audit-state at a glance.
-  { id: 'brp',         label: 'BRP',          accent: '#9bc4e8',           icon: '◉', liveFalse: true },
-  // 5th tab: Phase 238 PALL Marketplace — sellers + buyers + auditors.
-  // Cyan accent (verified-data theme) per V.A.P.I. tier palette LOCKED.
-  { id: 'marketplace', label: 'MARKETPLACE',  accent: '#22d3ee',           icon: '⬢' },
-  // 6th tab: Phase O4-VPM-INT Stream C — VPM Registry. Read-only
-  // inspection surface for Verified Projection Media artifacts. Amber
-  // accent (operator-audit theme; distinct from DEVELOPER orange so the
-  // two operator-facing tabs remain visually distinguishable).
-  { id: 'vpm',         label: 'VPM',          accent: '#f0a868',           icon: '◫' },
+  { id: 'gamer',     label: 'GAMER',     accent: GAMER.cyan, icon: '◈' },
+  { id: 'forensic',  label: 'FORENSIC',  accent: '#5bd6a3',  icon: '⌗' },
+  { id: 'operator',  label: 'OPERATOR',  accent: '#f0a868',  icon: '◎' },
+  // VPM Registry — autonomous Verified Projection Media (HTML snapshot proofs).
+  { id: 'vpm',       label: 'VPM',       accent: '#f0a868',  icon: '◫' },
 ]
 
 export function ViewSelector({ activeView, onViewChange }) {
-  const isMock        = useHeartbeatStore((s) => s.isMock)
   const merkleRoot    = useHeartbeatStore((s) => s.merkleRoot)
   const onChain       = useHeartbeatStore((s) => s.onChainConfirmed)
   const agentCount    = useHeartbeatStore((s) => s.agentCount)
@@ -70,18 +67,6 @@ export function ViewSelector({ activeView, onViewChange }) {
           <span style={{ color: 'rgba(240,168,104,0.65)' }}>V.A.P.I.</span>
           {' · phase 235'}
         </span>
-        {isMock && (
-          <span style={{
-            fontFamily:  FONTS.mono,
-            fontSize:    8,
-            color:       '#ff9500',
-            background:  'rgba(255,149,0,0.12)',
-            border:      '1px solid rgba(255,149,0,0.3)',
-            borderRadius: 2,
-            padding:     '1px 5px',
-            letterSpacing: '0.05em',
-          }}>MOCK DATA — bridge offline</span>
-        )}
         {/* Phase O5-EVIDENCE-OS Stage 1 — entry point to the new IA.
             Preserves existing 6 tabs; this is an additive cross-link. */}
         <Link
