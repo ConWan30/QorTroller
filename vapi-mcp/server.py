@@ -41,7 +41,7 @@ Tools (10 total):
   vapi_separation_ratio    Live ratio with history, gap analysis, fresh-run option
   vapi_separation_analysis Phase 137A/B analysis: --balance-corpus + --session-type
   vapi_run_calibration     Launch terminal calibration for any player + battery
-  vapi_agent_fleet         All 16 agents, epistemic consensus, ioSwarm status
+  vapi_agent_fleet         29 standalone + 3 stewards, epistemic consensus, ioSwarm status
   vapi_sync_memory         Auto-generate MEMORY.md from live data
   vapi_tournament_preflight Run all P0 conditions atomically
   vapi_phase_context       Full context for any phase before implementing it
@@ -368,8 +368,20 @@ async def vapi_protocol_state(**_):
     }
 
     state["agent_fleet"] = {
-        "total": s.get("agents", 38),  # Phase 235 fleet
-        "note": f"Fleet size read from CLAUDE.md (auto-synced). Bridge offline — live agent status unavailable.",
+        # Operational framing post-STABILITY-9 steward absorption
+        # (agent_rationalization_v1.md + operator_steward_absorbed_agents.py):
+        # 9 formerly-standalone agents run as steward-invoked skills, so the
+        # live fleet is "29 standalone + 3 stewards" — NOT 38. The 38-ID
+        # _AGENT_IDS roster is retained for the on-chain coherence Merkle.
+        "operational_fleet": "29 standalone agents + 3 Operator Initiative stewards",
+        "standalone_agents": 29,
+        "stewards": 3,
+        "absorbed_into_stewards": 9,  # Sentry 4 / Guardian 4 / Curator 1
+        "registered_roster_ids": 38,  # _AGENT_IDS — on-chain Merkle roster (9 absorbed)
+        "note": "Post-STABILITY-9 steward absorption: 9 formerly-standalone agents "
+                "run as steward-invoked skills (Sentry 4 / Guardian 4 / Curator 1). "
+                "Operational fleet = 29 standalone + 3 stewards. The 38-ID _AGENT_IDS "
+                "roster is retained for the on-chain coherence Merkle, not the live count.",
         "key_agents": {
             "16": "TournamentActivationChainAgent (auto_activate=False PERMANENT)",
             "19": "ControllerHardwareIntelligenceAgent (multi_controller_enabled=False)",
@@ -666,9 +678,12 @@ async def vapi_run_calibration(player: str, battery: str, **_):
 @tool(
     name="vapi_agent_fleet",
     description=(
-        "Returns live status of all 16 VAPI autonomous agents: name, phase introduced, "
-        "active/inactive status, dry_run state, and ioSwarm emulation status. "
-        "Includes recent adjudication log entries and epistemic consensus scores."
+        "Returns live status of the VAPI autonomous fleet — 29 standalone agents + "
+        "3 Operator Initiative stewards (Sentry/Guardian/Curator) that absorbed 9 "
+        "formerly-standalone agents post-STABILITY-9 (38-ID _AGENT_IDS roster retained "
+        "for the on-chain Merkle): name, phase introduced, active/inactive status, "
+        "dry_run state, and ioSwarm emulation status. Includes recent adjudication "
+        "log entries and epistemic consensus scores."
     ),
     schema={
         "type": "object",
@@ -690,7 +705,11 @@ async def vapi_agent_fleet(include_recent_rulings=True, **_):
     except Exception:
         _s = _parse_claude_md()
         result["fleet"] = {
-            "total_agents": _s.get("agents", 36),
+            "operational_fleet": "29 standalone agents + 3 Operator Initiative stewards",
+            "standalone_agents": 29,
+            "stewards": 3,
+            "absorbed_into_stewards": 9,
+            "registered_roster_ids": 38,
             "agents": {
                 "1-20":  "Core fleet phases 1-156 (all live, dry_run=True)",
                 "21":    "FleetConsensusSnapshotAgent (PoFC hash, Phase 157)",
@@ -701,7 +720,8 @@ async def vapi_agent_fleet(include_recent_rulings=True, **_):
                 "36":    "FleetSignalCoherenceAgent (CONTRADICTION+ORPHAN+INVERSION, Phase 193)",
                 "207":   "StagedDryRunGraduationAgent (GRADUATION_SEQUENCE, Phase 207)",
             },
-            "note": f"bridge offline — agent count ({_s.get('agents', 36)}) read from CLAUDE.md"
+            "note": "bridge offline — operational fleet 29 standalone + 3 stewards "
+                    "(9 absorbed; 38-ID _AGENT_IDS roster retained for the on-chain Merkle)"
         }
 
     result["epistemic_consensus"] = {
