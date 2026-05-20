@@ -299,7 +299,7 @@ function VpmInspector({ row, srcText, tamperByte, onTamper, onReset }) {
             ['manifest_uri', row.manifest_uri || '—'],
             ['ts_ns', String(row.ts_ns)],
           ].map(([k, v]) => (
-            <div key={k} style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10 }}>
+            <div key={k} style={{ display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', gap: 10 }}>
               <span className="label">{k}</span>
               <span className="mono" style={{ fontSize: 11, color: 'var(--text)', wordBreak: 'break-all', textAlign: 'right' }}>{v}</span>
             </div>

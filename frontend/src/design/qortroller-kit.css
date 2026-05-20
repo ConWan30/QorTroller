@@ -75,10 +75,25 @@
   position: relative;
   width: 100%;
   height: 100%;
+  max-width: 100%;
+  /* Contain horizontal blowout (a long unbreakable hash inside a 1fr/auto grid
+     track widens the track past the container — the classic CSS grid-overflow
+     bug). With responsive minmax(0,…) grids the content reflows; this clip is
+     the belt-and-suspenders so the SPA never shows a side-scrollbar. */
+  overflow-x: hidden;
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-body);
 }
+
+/* Grid/flex children default to min-width:auto, which is what lets unbreakable
+   content blow a track out. Force them to be shrinkable inside design panels so
+   the layout fits the tab without side-scroll. Long hashes already wrap via
+   .hash/.mono { word-break }. */
+.qt-design-root .p-body,
+.qt-design-root .p-panel { min-width: 0; }
+.qt-design-root .mono,
+.qt-design-root .hash { overflow-wrap: anywhere; }
 
 .qt-design-root *,
 .qt-design-root *::before,

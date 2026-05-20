@@ -29,7 +29,7 @@ function PreflightGate({ label, passed }) {
   const known = passed != null
   return (
     <div style={{
-      display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, padding: '10px 12px',
+      display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 10, padding: '10px 12px',
       background: 'var(--panel-soft)',
       border: `1px solid ${known ? (passed ? 'var(--chain)' : 'var(--status-blocked)') : 'var(--border)'}`,
       borderRadius: 4, alignItems: 'center',
@@ -65,7 +65,7 @@ function PairDistanceMatrix({ pairs }) {
     return p[`${a}v${b}`] ?? p[`${b}v${a}`]
   }
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '40px repeat(3, 1fr)', gap: 4 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: '40px repeat(3, minmax(0, 1fr))', gap: 4 }}>
       <span></span>
       {players.map((p) => <span key={p} className="label" style={{ textAlign: 'center' }}>{p}</span>)}
       {players.map((a) => (
@@ -141,7 +141,7 @@ export function OperatorView() {
       <div style={{ display: 'grid', gridAutoRows: 'min-content', gap: 16, padding: 16 }}>
 
         {/* ═══ ROW 1 — HONESTY HEROES: KILL-SWITCH + FLEET COHERENCE ═══ */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 16 }}>
           <Panel padding={false}>
             <header className="p-head">
               <span className="p-head__eye">KILL · SWITCH · OPERATOR</span>
@@ -174,7 +174,7 @@ export function OperatorView() {
                 {totalOpen == null ? '—' : totalOpen === 0 ? 'COHERENT · 0 OPEN' : `${totalOpen} OPEN`}
               </StatusChip>
             </header>
-            <div style={{ padding: '14px 18px', display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+            <div style={{ padding: '14px 18px', display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12 }}>
               <CoherenceBucket label="contradiction" count={fleet?.active_contradictions} />
               <CoherenceBucket label="orphan"        count={fleet?.active_orphans} />
               <CoherenceBucket label="inversion"     count={fleet?.active_inversions} />
@@ -195,7 +195,7 @@ export function OperatorView() {
           eyebrow="TOURNAMENT · PRE-FLIGHT · GATES"
           meta={preflight == null ? 'AWAITING BRIDGE' : preflight.overall_pass ? 'CLEARED' : 'BLOCKED'}
         >
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', gap: 10 }}>
             <PreflightGate label="separation"  passed={preflight?.separation_ok} />
             <PreflightGate label="l4 · stamps" passed={preflight?.l4_ok} />
             <PreflightGate label="gate"        passed={preflight?.gate_ok} />
@@ -215,7 +215,7 @@ export function OperatorView() {
         </Panel>
 
         {/* ═══ ROW 3 — AIT + PCC + PROTOCOL COHERENCE ═══ */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 0.8fr 1.2fr', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 0.8fr) minmax(0, 1.2fr)', gap: 16 }}>
           <Panel
             eyebrow="A.I.T. · BIOMETRIC · SEPARATION"
             meta={ait == null ? '—' : `RATIO ${ait.separation_ratio?.toFixed?.(3) ?? '—'}${ait.loo_accuracy != null ? ` · LOO ${(ait.loo_accuracy * 100).toFixed(1)}%` : ''}`}
@@ -279,7 +279,7 @@ export function OperatorView() {
               No blocking reasons recorded — pipeline clean (or no grind data yet).
             </div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 10 }}>
               {Object.entries(blocking).map(([k, v]) => (
                 <div key={k} style={{
                   padding: '12px 14px', background: 'var(--panel-soft)', border: '1px solid var(--border)',

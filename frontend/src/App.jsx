@@ -65,7 +65,10 @@ export function App() {
         display:       'flex',
         flexDirection: 'column',
         height:        '100dvh',
+        width:         '100%',
+        maxWidth:      '100vw',
         overflow:      'hidden',
+        overflowX:     'hidden',
         background:    '#020408',
       }}>
         <ViewSelector activeView={activeView} onViewChange={setActiveView} />
