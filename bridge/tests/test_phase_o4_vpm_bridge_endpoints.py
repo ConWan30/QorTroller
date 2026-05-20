@@ -338,7 +338,8 @@ def test_t_vpm_b2_2_vpm_artifact_hit_serves_html_with_csp_headers(tmp_path):
     assert resp.status_code == 200
     # HTML body returned (not JSON wrapper)
     body_text = resp.text
-    assert "VAPI Honesty Board" in body_text
+    # TEMPLATE v3 design certificate: title is the vpm class id.
+    assert "HONESTY-BOARD-v1" in body_text
     assert 'class="vpm-integrity-label"' in body_text
     # FROZEN CSP header set
     csp = resp.headers.get("content-security-policy", "")

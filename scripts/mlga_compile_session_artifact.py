@@ -87,6 +87,10 @@ except ImportError:
 from vsd_ui_compiler import (  # noqa: E402
     compile_vpm_artifact,
 )
+from vpm_visual_grammar import (  # noqa: E402
+    cert_section,
+    render_vpm_certificate,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -193,147 +197,72 @@ def _render_html(inputs: dict) -> str:
     apop_counts         = inputs["apop_state_counts"]
     bt_obs              = int(inputs["bt_observability"])
     gic_advances        = int(inputs["gic_advances_in_session"])
-    dataproof_hex       = inputs["dataproof_hex"]
+    dataproof_hex       = str(inputs["dataproof_hex"])
     visual_state        = inputs["visual_state"]
-    label               = inputs["integrity_label"]
 
-    bt_label = {0: "Not observed", 1: "Observed", 2: "Held↔Placed identified"}.get(
-        bt_obs, "Unknown"
+    import html as _html  # local alias; module top has no html import
+
+    bt_label = {0: "Not observed", 1: "Observed",
+                2: "Held↔Placed identified"}.get(bt_obs, "Unknown")
+    if duration_s >= 60:
+        dur_disp = f"{int(duration_s // 60)} m {int(duration_s % 60)} s"
+    else:
+        dur_disp = f"{duration_s:.2f} s"
+
+    trigger_v = (
+        '<div class="row"><span class="lbl">R2 · special-cancel</span>'
+        f'<span class="val amber">{n_r2:,}</span></div>'
+        '<div class="row"><span class="lbl">L2 · guard-cancel</span>'
+        f'<span class="val amber">{n_l2:,}</span></div>'
     )
 
-    # APOP state rows — sorted ascending by state name for determinism
-    apop_rows_html = ""
-    for state in sorted(apop_counts.keys()):
-        count = int(apop_counts[state])
-        apop_rows_html += (
-            f"  <tr><td class='apop-state'>{state}</td>"
-            f"<td class='apop-count'>{count}</td></tr>\n"
+    _apop_cls = {"NOMINAL": "chain", "DEGRADED": "amber", "CONTESTED": "err"}
+    apop_parts = []
+    for st in sorted(apop_counts.keys()):
+        cnt = int(apop_counts[st])
+        cls = _apop_cls.get(str(st).upper(), "dim")
+        apop_parts.append(
+            f'<div class="row"><span class="lbl">{_html.escape(str(st))}</span>'
+            f'<span class="val {cls}">{cnt:,}</span></div>'
         )
-    if not apop_rows_html:
-        apop_rows_html = (
-            "  <tr><td colspan='2' class='apop-empty'>"
-            "No APOP samples in this session.</td></tr>\n"
-        )
+    apop_v = "".join(apop_parts) if apop_parts else "no APOP samples in session"
+    apop_cls = "mono" if apop_parts else "dim mono"
 
-    # 9-field Integrity Label DOM — mandatory class + data markers
-    label_rows_html = ""
-    field_order = (
-        "proof_type", "capture_mode", "raw_biometrics_exposed",
-        "consent_active", "zk_verified", "on_chain_anchor",
-        "proof_weight", "revocation_status", "limitations",
+    content = cert_section(
+        "Session · Aggregates",
+        f"{n_records:,} records · APOP-bounded",
+        [
+            ("session_id", "amber mono", f"<code>{_html.escape(str(sid))}</code>"),
+            ("session_window", "dim mono",
+             '<div class="row"><span class="lbl">start_ts_ns</span>'
+             f'<span class="val">{start_ts}</span></div>'
+             '<div class="row"><span class="lbl">end_ts_ns</span>'
+             f'<span class="val">{end_ts}</span></div>'),
+            ("session_duration", "amber mono", _html.escape(dur_disp)),
+            ("n_poac_records", "chain mono", f"{n_records:,} · all body[:164]-hashed"),
+            ("trigger_pulls", "mono", trigger_v),
+            ("gic_advances", "chain mono", f"{gic_advances} · genesis → milestone"),
+            ("bt_observability", "dim mono",
+             f"{_html.escape(bt_label)} · 0x{bt_obs:02x}"),
+            ("apop_state_counts", apop_cls, apop_v),
+        ],
     )
-    for field in field_order:
-        v = label.get(field, "")
-        label_rows_html += (
-            f"  <div class='label-row' data-vpm-field=\"{field}\">"
-            f"<span class='label-key'>{field}</span>"
-            f"<span class='label-val'>{v}</span></div>\n"
-        )
 
-    # data-vpm-visual-state marker — Layer 3 grammar verifier reads this
-    visual_badge_color = "live" if visual_state == "live" else "warn"
-
-    html = f"""<!DOCTYPE html>
-<html lang="en" data-vpm-visual-state="{visual_state}">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="vpm-template-version" content="2">
-<title>MLGA Session Artifact — {sid}</title>
-<style>
-  :root {{
-    --matte: #04060a;
-    --bg: #0a0e14;
-    --bg1: #04060a;
-    --bg2: #04060a;
-    --bd: #1b2433;
-    --bd2: #2a3850;
-    --t1: #d4dde8;
-    --t2: #8a98ab;
-    --t3: #5a6878;
-    --accent-live: #5bd6a3;
-    --accent-warn: #f0a868;
-    --accent-orange: #f0a868;
-    --chain: #5bd6a3;
-    --mono: ui-monospace, 'JetBrains Mono', 'SF Mono', 'Cascadia Code', Menlo, Consolas, 'Courier New', monospace;
-  }}
-  /* TEMPLATE v2 (QRESCE-0001 v0.5): full-viewport void+graticule matte (html)
-     with the proof as a centred framed certificate card (body). Self-contained;
-     no external fonts/URLs; bytewise-deterministic. */
-  html {{ background-color: var(--matte);
-    background-image: linear-gradient(to right, rgba(26,34,48,0.20) 1px, transparent 1px),
-                      linear-gradient(to bottom, rgba(26,34,48,0.20) 1px, transparent 1px);
-    background-size: 28px 28px; }}
-  body {{ margin: 0 auto; max-width: 980px; min-height: 100vh; box-sizing: border-box;
-    padding: clamp(20px, 3vw, 36px); background: var(--bg); color: var(--t1);
-    font-family: var(--mono); font-size: 13.5px; line-height: 1.55;
-    border: 1px solid var(--bd2); border-radius: 10px;
-    box-shadow: 0 0 0 1px rgba(240,168,104,0.06), 0 24px 60px -24px rgba(0,0,0,0.80); }}
-  h1 {{ font-size: 16px; margin: 0 0 8px 0; color: var(--accent-orange); }}
-  h2 {{ font-size: 13px; margin: 16px 0 6px 0; color: var(--t2); text-transform: uppercase; letter-spacing: 1px; }}
-  .visual-state {{ display: inline-block; padding: 2px 8px; border-radius: 3px; margin-left: 8px; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; }}
-  .visual-state.live {{ background: var(--accent-live); color: #000; }}
-  .visual-state.warn {{ background: var(--accent-warn); color: #000; }}
-  .header {{ display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--bd); }}
-  .meta {{ color: var(--t2); }}
-  table {{ width: 100%; border-collapse: collapse; margin: 8px 0 16px 0; }}
-  th, td {{ padding: 4px 8px; text-align: left; border-bottom: 1px solid var(--bd); font-size: 12px; }}
-  th {{ color: var(--t3); font-weight: normal; text-transform: uppercase; letter-spacing: 1px; }}
-  td.num {{ text-align: right; }}
-  .dataproof {{ background: var(--bg1); padding: 8px; border: 1px solid var(--bd); border-radius: 3px; word-break: break-all; }}
-  .vpm-integrity-label {{ background: var(--bg2); padding: 12px; border: 1px solid var(--bd); border-radius: 3px; }}
-  .label-row {{ display: flex; padding: 3px 0; gap: 12px; font-size: 11px; }}
-  .label-key {{ color: var(--t3); min-width: 180px; }}
-  .label-val {{ color: var(--t1); flex: 1; }}
-  .apop-empty {{ color: var(--t3); font-style: italic; text-align: center; }}
-  footer {{ margin-top: 24px; padding-top: 12px; border-top: 1px solid var(--bd); color: var(--t3); font-size: 10px; }}
-</style>
-</head>
-<body>
-  <header class="header">
-    <h1>MLGA Session Artifact</h1>
-    <span class="visual-state {visual_badge_color}">{visual_state}</span>
-    <span class="meta">session_id: <code>{sid}</code></span>
-  </header>
-
-  <h2>Session metadata</h2>
-  <table>
-    <tr><th>Field</th><th>Value</th></tr>
-    <tr><td>start_ts_ns</td><td class="num">{start_ts}</td></tr>
-    <tr><td>end_ts_ns</td><td class="num">{end_ts}</td></tr>
-    <tr><td>duration_s</td><td class="num">{duration_s:.2f}</td></tr>
-    <tr><td>bt_observability</td><td>{bt_label} (0x{bt_obs:02x})</td></tr>
-  </table>
-
-  <h2>Aggregates</h2>
-  <table>
-    <tr><th>Counter</th><th>Value</th></tr>
-    <tr><td>n_poac_records</td><td class="num">{n_records}</td></tr>
-    <tr><td>n_trigger_pulls_r2</td><td class="num">{n_r2}</td></tr>
-    <tr><td>n_trigger_pulls_l2</td><td class="num">{n_l2}</td></tr>
-    <tr><td>gic_advances_in_session</td><td class="num">{gic_advances}</td></tr>
-  </table>
-
-  <h2>APOP state distribution</h2>
-  <table>
-    <tr><th>State</th><th>Count</th></tr>
-{apop_rows_html}  </table>
-
-  <h2>Cryptographic anchor — MLGA dataproof commitment</h2>
-  <div class="dataproof">0x{dataproof_hex}</div>
-  <p class="meta">32-byte SHA-256 over 89-byte FROZEN preimage per b"VAPI-MLGA-SESSION-v1" capability (Phase O5-MLGA Stage 2).</p>
-
-  <h2>Integrity Label (9-field FROZEN)</h2>
-  <div class="vpm-integrity-label">
-{label_rows_html}  </div>
-
-  <footer>
-    Phase O5-MLGA Stage 4 artifact — Anti-Hype Visual Grammar enforced. Wrapper schema: vapi-mlga-session-artifact-v1.
-  </footer>
-</body>
-</html>
-"""
-    return html
+    return render_vpm_certificate(
+        vpm_class="MLGA-SESSION-v1",
+        title_text="MLGA-SESSION-v1",
+        subtitle="Tournament-grade gameplay session · operator-verifiable",
+        visual_state=visual_state,
+        commitment_hex=dataproof_hex,  # MLGA dataproof IS the cryptographic commitment
+        content_html=content,
+        integrity_label=inputs["integrity_label"],
+        footer_fields=[
+            ("schema", "mlga-session-v1"),
+            ("vpm_id", "MLGA-SESSION-v1"),
+            ("dataproof", dataproof_hex[:16] + "…"),
+            ("ts_ns", str(int(inputs["ts_ns"]))),
+        ],
+    )
 
 
 def build_mlga_session_artifact(
