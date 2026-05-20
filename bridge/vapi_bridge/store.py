@@ -16271,6 +16271,81 @@ class Store:
         except Exception:
             return False
 
+    # --- Tier-1 autonomous signing audit (2026-05-20) ---
+    # Durable record of every signature an Operator steward produces via its
+    # KMS key (Guardian kms-sign on commit hashes is the first). cost_iotx is
+    # ZERO — KMS signing is an off-chain AWS crypto op, not a chain tx — so this
+    # is purely a provenance/audit artifact, NOT a spending record.
+
+    def _ensure_operator_agent_signature_table(self, conn) -> None:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS operator_agent_signature_log (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                agent_id      TEXT NOT NULL,
+                draft_id      INTEGER NOT NULL DEFAULT 0,
+                subject       TEXT NOT NULL DEFAULT '',
+                digest_hex    TEXT NOT NULL,
+                signature_hex TEXT NOT NULL,
+                kms_key_spec  TEXT NOT NULL DEFAULT '',
+                kms_verified  INTEGER NOT NULL DEFAULT 0,
+                ts_ns         INTEGER NOT NULL,
+                created_at    REAL NOT NULL DEFAULT (unixepoch('now'))
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_agent_sig_agent_ts "
+            "ON operator_agent_signature_log(agent_id, ts_ns DESC)"
+        )
+
+    def insert_operator_agent_signature(
+        self, *, agent_id: str, draft_id: int, subject: str,
+        digest_hex: str, signature_hex: str, kms_key_spec: str,
+        kms_verified: bool, ts_ns: int,
+    ) -> int:
+        """Record one Operator-agent KMS signature (audit/provenance; cost 0).
+        Returns row id; 0 on failure (fail-open)."""
+        try:
+            with self._conn() as conn:
+                self._ensure_operator_agent_signature_table(conn)
+                cur = conn.execute(
+                    "INSERT INTO operator_agent_signature_log "
+                    "(agent_id, draft_id, subject, digest_hex, signature_hex, "
+                    " kms_key_spec, kms_verified, ts_ns) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        str(agent_id), int(draft_id), str(subject)[:200],
+                        str(digest_hex), str(signature_hex), str(kms_key_spec),
+                        1 if kms_verified else 0, int(ts_ns),
+                    ),
+                )
+                return int(cur.lastrowid or 0)
+        except Exception:
+            return 0
+
+    def get_operator_agent_signatures(
+        self, agent_id: "str | None" = None, limit: int = 10,
+    ) -> "list[dict]":
+        """Return recent Operator-agent signatures (newest first)."""
+        try:
+            limit = max(1, min(100, int(limit)))
+            with self._conn() as conn:
+                self._ensure_operator_agent_signature_table(conn)
+                if agent_id:
+                    rows = conn.execute(
+                        "SELECT * FROM operator_agent_signature_log "
+                        "WHERE agent_id = ? ORDER BY ts_ns DESC LIMIT ?",
+                        (str(agent_id), limit),
+                    ).fetchall()
+                else:
+                    rows = conn.execute(
+                        "SELECT * FROM operator_agent_signature_log "
+                        "ORDER BY ts_ns DESC LIMIT ?",
+                        (limit,),
+                    ).fetchall()
+            return [dict(r) for r in rows]
+        except Exception:
+            return []
+
     # --- Phase 235-A: Grind Integrity Chain (GIC) ---
 
     def get_prev_grind_chain_hash(self, grind_session_id: str) -> bytes | None:

@@ -151,7 +151,8 @@ class KMSClient:
         self._aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY")
         self._aws_region = os.getenv("AWS_REGION")
 
-        # Validate required env vars present
+        # AWS credentials + region are HARD requirements (the client cannot
+        # talk to KMS without them).
         missing = []
         if not self._aws_access_key_id:
             missing.append("AWS_ACCESS_KEY_ID")
@@ -159,20 +160,35 @@ class KMSClient:
             missing.append("AWS_SECRET_ACCESS_KEY")
         if not self._aws_region:
             missing.append("AWS_REGION")
-
-        # Resolve agent → alias mapping
-        self._agent_aliases: dict[str, str] = {}
-        for agent, env_var in _AGENT_ALIAS_ENV_VARS.items():
-            alias = os.getenv(env_var)
-            if not alias:
-                missing.append(env_var)
-            else:
-                self._agent_aliases[agent] = alias
-
         if missing:
             raise KMSClientConfigError(
                 f"Missing required env vars: {', '.join(missing)}. "
                 f"See bridge/.env.example for the full template."
+            )
+
+        # Agent → alias mapping is resolved LAZILY: register the aliases that
+        # are present; a MISSING alias is NOT a construction error. Rationale
+        # (2026-05-20): Curator is mock-only by design (VAPI_KMS_CURATOR_ALIAS
+        # is intentionally unset until real KMS provisioning), and the strict
+        # "all aliases required" constructor coupled Sentry/Guardian real-HSM
+        # signing to Curator's mock posture — blocking Guardian from
+        # constructing the real client at all. With lazy resolution,
+        # _resolve_alias raises KMSClientValidationError at CALL time only for
+        # an agent whose alias is absent (fail-closed at the point of use).
+        self._agent_aliases: dict[str, str] = {}
+        absent_agents = []
+        for agent, env_var in _AGENT_ALIAS_ENV_VARS.items():
+            alias = os.getenv(env_var)
+            if alias:
+                self._agent_aliases[agent] = alias
+            else:
+                absent_agents.append(agent)
+        if absent_agents:
+            log.warning(
+                "KMSClient: no KMS alias configured for agents %s — signing as "
+                "those agents will fail at call time (expected when mock-only / "
+                "not yet provisioned).",
+                absent_agents,
             )
 
         # Pass 2C Section 12 D1 sanity check: us-east-1 expected
