@@ -501,7 +501,8 @@ def test_t_vpm_b7_2_compile_then_fetch_artifact_round_trip(tmp_path):
         headers={"x-api-key": _API_KEY},
     )
     assert r2.status_code == 200
-    assert "VAPI Honesty Board" in r2.text
+    # TEMPLATE v3 design certificate: title is the vpm class id.
+    assert "HONESTY-BOARD-v1" in r2.text
 
     # GET manifest (sidecar JSON)
     r3 = client.get(

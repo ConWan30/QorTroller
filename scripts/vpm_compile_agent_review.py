@@ -52,14 +52,12 @@ from vapi_bridge.zkba_artifact import ZKBAClass, ProofWeightClass  # noqa: E402
 from vsd_ui_compiler import (  # noqa: E402
     VPMArtifactManifest,
     compile_vpm_artifact,
+    compute_input_commitment,
 )
 from vpm_visual_grammar import (  # noqa: E402
     VISUAL_STATES,
-    assemble_vpm_head,
-    integrity_label_html,
-    visual_state_aria_block,
-    visual_state_overlay,
-    vpm_body_class,
+    cert_section,
+    render_vpm_certificate,
 )
 
 
@@ -70,21 +68,20 @@ _VALID_PHASES = ("O1_SHADOW", "O2_SUGGEST", "O3_ACT")
 _VALID_DECISIONS = ("accept", "reject", "overturn_curator", "none")
 
 
-def _render_agent_review_html(inputs: dict) -> str:
-    """Render AGENT-REVIEW-v1 HTML body deterministically."""
-    state = inputs["visual_state"]
-    head = assemble_vpm_head(
-        title=f"VAPI Agent Review — {html.escape(str(inputs['agent_canonical_name']))} — {state.upper()}",
-        visual_state=state,
-    )
+def _short_hex(h: str) -> str:
+    """4-char space-grouped hex for compact table display."""
+    s = str(h).lower().removeprefix("0x")
+    if not s or any(c not in "0123456789abcdef" for c in s):
+        return html.escape(str(h))
+    return " ".join(s[i:i + 4] for i in range(0, min(len(s), 32), 4))
 
-    overlay = visual_state_overlay(state)
-    aria_block = visual_state_aria_block(state)
-    integrity_block = integrity_label_html(inputs["integrity_label"])
-    body_class = vpm_body_class(state)
+
+def _render_agent_review_html(inputs: dict) -> str:
+    """Render AGENT-REVIEW-v1 as the Claude-Design certificate (TEMPLATE v3)."""
+    state = inputs["visual_state"]
 
     agent_name = html.escape(str(inputs["agent_canonical_name"]))
-    agent_id = html.escape(str(inputs["agent_id_hex"]))
+    agent_id = str(inputs["agent_id_hex"])
     phase = html.escape(str(inputs["current_phase"]))
     shadow_count = int(inputs["shadow_log_row_count"])
     drift_count = int(inputs["drift_log_row_count"])
@@ -92,60 +89,64 @@ def _render_agent_review_html(inputs: dict) -> str:
     last_decision_ts = int(inputs["last_decision_ts_ns"])
     disagreement = float(inputs["disagreement_rate_30d"])
     false_positive = float(inputs["false_positive_rate_30d"])
-    o2_ready = "READY" if inputs["o2_ready"] else "PENDING"
-    o3_ready = "READY" if inputs["o3_ready"] else "PENDING"
-    ts_ns = int(inputs["ts_ns"])
-    zkba_hash = html.escape(inputs["zkba_manifest_hash_hex"])
+    o2_ready = bool(inputs["o2_ready"])
+    o3_ready = bool(inputs["o3_ready"])
+    zkba_hash = str(inputs["zkba_manifest_hash_hex"])
 
-    body = (
-        '<body>\n'
-        f'  <div class="{body_class}">\n'
-        f'  {overlay}\n'
-        f'  <h1>Agent Review — {agent_name}</h1>\n'
-        f'  {aria_block}\n'
-        '  <h2>Identity</h2>\n'
-        '  <table class="vpm-status">\n'
-        f'    <tr><td>Canonical name:</td><td><code>{agent_name}</code></td></tr>\n'
-        f'    <tr><td>On-chain agentId:</td><td><code>{agent_id}</code></td></tr>\n'
-        f'    <tr><td>Current phase:</td><td><span class="vpm-state-pill vpm-state-{state}">{phase}</span></td></tr>\n'
-        '  </table>\n'
-        '  <h2>Activity</h2>\n'
-        '  <table class="vpm-status">\n'
-        f'    <tr><td>Cedar shadow log rows:</td><td>{shadow_count}</td></tr>\n'
-        f'    <tr><td>Drift findings:</td><td>{drift_count}</td></tr>\n'
-        '  </table>\n'
-        '  <h2>Operator Decisions</h2>\n'
-        '  <table class="vpm-status">\n'
-        f'    <tr><td>Last decision:</td><td><code>{last_decision}</code></td></tr>\n'
-        f'    <tr><td>Last decision ts_ns:</td><td><code>{last_decision_ts}</code></td></tr>\n'
-        f'    <tr><td>Disagreement rate (30d):</td><td>{disagreement:.4f}</td></tr>\n'
-        f'    <tr><td>False-positive rate (30d):</td><td>{false_positive:.4f}</td></tr>\n'
-        '  </table>\n'
-        '  <h2>Readiness</h2>\n'
-        '  <table class="vpm-status">\n'
-        f'    <tr><td>O2 SUGGEST readiness:</td><td>{o2_ready}</td></tr>\n'
-        f'    <tr><td>O3 ACTING readiness:</td><td>{o3_ready}</td></tr>\n'
-        '  </table>\n'
-        '  <h2>Underlying ZKBA Projection</h2>\n'
-        '  <div class="vpm-meta">\n'
-        f'    <div>ZKBA manifest hash: <code>{zkba_hash}</code></div>\n'
-        '  </div>\n'
-        f'  {integrity_block}\n'
-        '  <div class="vpm-footer">\n'
-        f'    VPM ID: <code>{_VPM_ID}</code>. Lifecycle: Test Fixture. '
-        'Guardian-lane audit surface. Self-contained projection. No CDN; '
-        f'no network; no wall-clock; compile-time ts_ns: <code>{ts_ns}</code>.\n'
-        '  </div>\n'
-        '  </div>\n'
-        '</body>\n'
+    drift_cls = "amber mono" if drift_count > 0 else "chain mono"
+    o2_v = ('<span class="pill chain">READY</span>' if o2_ready
+            else '<span class="pill dim">PENDING</span>')
+    o3_v = ('<span class="pill chain">READY</span>' if o3_ready
+            else '<span class="pill dim">PENDING</span>')
+
+    content = (
+        cert_section(
+            "Agent · Identity", agent_name,
+            [
+                ("canonical_name", "amber mono", agent_name),
+                ("on_chain_agent_id", "chain mono",
+                 f'<code>{html.escape(agent_id)}</code>'),
+                ("current_phase", "chain mono", phase),
+            ],
+        )
+        + "\n"
+        + cert_section(
+            "Activity · 30d", "",
+            [
+                ("cedar_shadow_log_rows", "mono", str(shadow_count)),
+                ("drift_findings", drift_cls, str(drift_count)),
+                ("last_operator_decision", "mono", f"<code>{last_decision}</code>"),
+                ("last_decision_ts_ns", "dim mono",
+                 str(last_decision_ts) if last_decision_ts else "none"),
+                ("disagreement_rate_30d", "mono", f"{disagreement:.4f}"),
+                ("false_positive_rate_30d", "mono", f"{false_positive:.4f}"),
+            ],
+        )
+        + "\n"
+        + cert_section(
+            "Phase · Readiness", "",
+            [
+                ("o2_suggest", "mono", o2_v),
+                ("o3_acting", "mono", o3_v),
+                ("zkba_manifest_hash", "dim mono", _short_hex(zkba_hash)),
+            ],
+        )
     )
 
-    return (
-        '<!DOCTYPE html>\n'
-        '<html lang="en">\n'
-        f'{head}\n'
-        f'{body}'
-        '</html>\n'
+    return render_vpm_certificate(
+        vpm_class=_VPM_ID,
+        title_text=f"AGENT-REVIEW · {agent_name}",
+        subtitle="Operator-decision provenance · Guardian-lane audit surface",
+        visual_state=state,
+        commitment_hex=compute_input_commitment(inputs),
+        content_html=content,
+        integrity_label=inputs["integrity_label"],
+        footer_fields=[
+            ("schema", "agent-review-v1"),
+            ("vpm_id", _VPM_ID),
+            ("zkba_manifest", _short_hex(zkba_hash)),
+            ("ts_ns", str(int(inputs["ts_ns"]))),
+        ],
     )
 
 
