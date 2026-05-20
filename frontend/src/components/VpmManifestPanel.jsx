@@ -301,7 +301,7 @@ export function VpmManifestPanel({ manifest, commitmentHex }) {
       }}>
         <h3 style={{
           margin:        0,
-          fontFamily:    FONTS.display,
+          fontFamily:    'var(--font-display, ' + FONTS.display + ')',
           fontSize:      14,
           color:         '#f0a868',
           letterSpacing: '0.08em',

@@ -1,61 +1,62 @@
 /**
- * Phase O4-VPM-INT Stream C.1 — VpmRegistryView
+ * VPM Registry — QRESCE-0001 v0.5 grant-evaluator remodel.
  *
- * Two-pane layout per Phase O4 plan section 3 Stream C.1:
- *   Left  pane (~360px wide): filter chips + scrollable list of VPM
- *                             artifacts; each row clickable to select.
- *   Right pane (flex):        sandboxed iframe rendering the selected
- *                             artifact + manifest panel + grammar
- *                             verifier badge.
+ * Verified Projection Media: the protocol AUTONOMOUSLY compiles HTML snapshot
+ * proofs (one per ZKBA artifact / MLGA gameplay session) and records each in a
+ * registry with a 9-field FROZEN Integrity Nutrition Label + a client-side
+ * tamper-detect hash. This view makes that autonomous output legible:
  *
- * Audit-critical: useVpmList + useVpmManifest are noMock:true (per
- * bridgeApi.js comments) — fabricated entries would corrupt operator
- * audit posture. On bridge offline, the panel shows "Bridge offline /
- * no recorded artifacts" with no fake rows.
+ *   LEFT  — filter chips + scrollable list of compiled artifacts.
+ *   RIGHT — for the selected artifact:
+ *             • the Integrity Label (real in-browser HASH OK/MISMATCH check)
+ *             • a clearly-framed "AUTONOMOUS HTML SNAPSHOT PROOF" — the
+ *               compiled artifact rendered in a sandboxed iframe, with the
+ *               visual-grammar verifier confirming the rendered DOM matches
+ *               the declared visual state.
+ *
+ * Chrome ported to the .qt-design-root design language (Syne + Panel + void)
+ * to match Gamer/Forensic/Operator. All wiring preserved: useVpmList +
+ * useVpmManifest (noMock:true), vpmArtifactUrl, VpmFilterChips, VpmIframe,
+ * VpmManifestPanel, VpmGrammarVerifier, and every data-testid.
  */
 import { useState, useRef } from 'react'
 import { useVpmList, useVpmManifest } from '../api/bridgeApi'
-import { FONTS } from '../shared/design/tokens'
 import { VpmFilterChips, VISUAL_STATE_OPTIONS } from '../components/VpmFilterChips'
 import { VpmIframe } from '../components/VpmIframe'
 import { VpmManifestPanel } from '../components/VpmManifestPanel'
 import { VpmGrammarVerifier } from '../components/VpmGrammarVerifier'
+import { Panel, StatusChip } from '../design/Primitives'
+import '../design/qortroller-kit.css'
 
-
-// VPM accent (matches the tab accent in ViewSelector.jsx)
-const VPM_ACCENT = '#f0a868'
-
-// Build URL for /operator/vpm-artifact/{commit} that the iframe loads via
-// src (when srcdoc not used / large artifact). Includes the read-key
-// query param so the iframe's HTTP GET passes auth.
+// Build URL for /operator/vpm-artifact/{commit} the iframe loads via src.
+// Includes the read-key query param so the iframe's HTTP GET passes auth.
 function vpmArtifactUrl(commit, readKey) {
   const params = new URLSearchParams()
   if (readKey) params.set('api_key', readKey)
   const qs = params.toString()
-  // Doubled-prefix convention per Phase O1 C9 codebase: operator endpoints
-  // live under /operator/<inner> at the live URL.
+  // Doubled-prefix convention per Phase O1 C9: operator endpoints live under
+  // /operator/<inner> at the live URL.
   return `/operator/operator/vpm-artifact/${commit}${qs ? '?' + qs : ''}`
 }
-
 
 function StateBadge({ state }) {
   const opt = VISUAL_STATE_OPTIONS.find((o) => o.value === state) || VISUAL_STATE_OPTIONS[0]
   return (
     <span style={{
-      background:    `${opt.color}1a`,
-      color:         opt.color,
-      border:        `1px solid ${opt.color}40`,
-      borderRadius:  3,
-      padding:       '1px 5px',
-      fontFamily:    FONTS.mono,
-      fontSize:      9,
+      background: `${opt.color}1a`,
+      color: opt.color,
+      border: `1px solid ${opt.color}40`,
+      borderRadius: 3,
+      padding: '1px 6px',
+      fontFamily: 'var(--font-mono)',
+      fontSize: 9,
       letterSpacing: '0.05em',
+      whiteSpace: 'nowrap',
     }}>
       {opt.label}
     </span>
   )
 }
-
 
 function VpmListRow({ row, selected, onSelect }) {
   return (
@@ -63,53 +64,39 @@ function VpmListRow({ row, selected, onSelect }) {
       data-vpm-list-row={row.commitment_hex}
       onClick={() => onSelect(row.commitment_hex)}
       style={{
-        display:        'block',
-        width:          '100%',
-        textAlign:      'left',
-        padding:        '8px 10px',
-        background:     selected ? `${VPM_ACCENT}14` : 'transparent',
-        border:         selected ? `1px solid ${VPM_ACCENT}50` : '1px solid rgba(255,255,255,0.04)',
-        borderRadius:   4,
-        cursor:         'pointer',
-        marginBottom:   3,
-        transition:     'all 0.12s ease',
+        display: 'block',
+        width: '100%',
+        textAlign: 'left',
+        padding: '9px 11px',
+        background: selected ? 'var(--accent-amber-trace)' : 'transparent',
+        border: `1px solid ${selected ? 'var(--accent-amber)' : 'var(--border-soft)'}`,
+        borderRadius: 4,
+        cursor: 'pointer',
+        marginBottom: 4,
+        transition: 'all 0.12s ease',
       }}
     >
-      <div style={{
-        display:        'flex',
-        justifyContent: 'space-between',
-        alignItems:     'center',
-        gap:            6,
-      }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
         <span style={{
-          fontFamily: FONTS.mono,
-          fontSize:   11,
-          color:      VPM_ACCENT,
+          fontFamily: 'var(--font-mono)',
+          fontSize: 11,
+          color: 'var(--accent-amber)',
           fontWeight: selected ? 600 : 500,
         }}>{row.vpm_id}</span>
         <StateBadge state={row.visual_state} />
       </div>
       <div style={{
-        fontFamily: FONTS.mono,
-        fontSize:   9,
-        color:      'rgba(200,216,232,0.55)',
-        marginTop:  3,
-        wordBreak:  'break-all',
+        fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-dim)',
+        marginTop: 4, wordBreak: 'break-all',
       }}>
         {row.commitment_hex.slice(0, 32)}…
       </div>
-      <div style={{
-        fontFamily: FONTS.mono,
-        fontSize:   9,
-        color:      'rgba(122,138,155,0.65)',
-        marginTop:  2,
-      }}>
-        capture: {row.capture_mode} · zkba_class: {row.zkba_class} · pw: {row.proof_weight}
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--text-faint)', marginTop: 2 }}>
+        capture: {row.capture_mode} · zkba: {row.zkba_class} · pw: {row.proof_weight}
       </div>
     </button>
   )
 }
-
 
 export function VpmRegistryView() {
   const [vpmId, setVpmId] = useState('')
@@ -123,83 +110,38 @@ export function VpmRegistryView() {
   const rows = listQ.data?.rows || []
   const selectedRow = rows.find((r) => r.commitment_hex === selectedCommit) || null
 
-  // The read-key for iframe URL — apiGet() in client.js already appends
-  // VITE_VAPI_API_KEY to operator URLs. For srcdoc the auth isn't needed
-  // because the HTML is fetched by react-query (auth-injected) + passed
-  // into srcdoc. For src= mode we'd need explicit auth in URL; we use
-  // src= only as fallback. Today we always use srcdoc.
-
   return (
-    <div data-vpm-registry-view style={{
-      flex:           1,
-      display:        'flex',
-      flexDirection:  'column',
-      overflow:       'hidden',
-      background:     '#020408',
+    <div data-vpm-registry-view className="qt-design-root" style={{
+      display: 'flex', flexDirection: 'column', overflow: 'hidden',
     }}>
-      {/* Header */}
-      <div style={{
-        padding:       '10px 16px',
-        borderBottom:  `1px solid ${VPM_ACCENT}26`,
-        background:    'rgba(2,4,8,0.85)',
-        display:       'flex',
-        alignItems:    'center',
-        justifyContent: 'space-between',
-      }}>
-        <div>
+      {/* Header strip */}
+      <div className="p-head" style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
           <span style={{
-            fontFamily:    FONTS.display,
-            fontSize:      14,
-            fontWeight:    600,
-            letterSpacing: '0.10em',
-            color:         VPM_ACCENT,
-          }}>
-            VPM REGISTRY
-          </span>
-          <span style={{
-            fontFamily: FONTS.mono,
-            fontSize:   9,
-            color:      'rgba(200,216,232,0.45)',
-            marginLeft: 10,
-            letterSpacing: '0.06em',
-          }}>
-            PHASE O4 · {rows.length} ARTIFACT{rows.length === 1 ? '' : 'S'}
-          </span>
+            fontFamily: 'var(--font-display)', fontSize: 16, fontWeight: 700,
+            letterSpacing: '0.04em', color: 'var(--accent-amber)',
+          }}>VPM REGISTRY</span>
+          <span className="p-head__eye">AUTONOMOUS · HTML · SNAPSHOT · PROOFS</span>
+          <span className="p-head__meta">{rows.length} ARTIFACT{rows.length === 1 ? '' : 'S'}</span>
         </div>
-        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {selectedRow && (
-            <VpmGrammarVerifier
-              iframeRef={iframeRef}
-              declaredState={selectedRow.visual_state}
-            />
+            <VpmGrammarVerifier iframeRef={iframeRef} declaredState={selectedRow.visual_state} />
           )}
           {listQ.isError && (
-            <span data-vpm-bridge-status="offline" style={{
-              fontFamily: FONTS.mono,
-              fontSize:   10,
-              color:      '#d65b78',
-              border:     '1px solid #d65b78',
-              padding:    '2px 8px',
-              borderRadius: 4,
-            }}>BRIDGE OFFLINE</span>
+            <span data-vpm-bridge-status="offline">
+              <StatusChip tone="blocked">BRIDGE OFFLINE</StatusChip>
+            </span>
           )}
         </div>
       </div>
 
       {/* Two-pane body */}
-      <div style={{
-        flex:    1,
-        display: 'flex',
-        overflow: 'hidden',
-      }}>
-        {/* LEFT pane: filter chips + list */}
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+        {/* LEFT — filters + list */}
         <div style={{
-          width:         360,
-          minWidth:      360,
-          display:       'flex',
-          flexDirection: 'column',
-          borderRight:   `1px solid ${VPM_ACCENT}1a`,
-          background:    'rgba(2,4,8,0.5)',
+          width: 360, minWidth: 360, display: 'flex', flexDirection: 'column',
+          borderRight: '1px solid var(--border)', background: 'var(--panel-soft)',
         }}>
           <VpmFilterChips
             vpmId={vpmId}
@@ -207,27 +149,14 @@ export function VpmRegistryView() {
             onVpmIdChange={setVpmId}
             onVisualStateChange={setVisualState}
           />
-          <div style={{
-            flex:      1,
-            overflowY: 'auto',
-            padding:   '8px 10px',
-          }}>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '8px 10px' }}>
             {listQ.isLoading && (
-              <div style={{
-                fontFamily: FONTS.mono,
-                fontSize:   10,
-                color:      'rgba(200,216,232,0.4)',
-                padding:    '8px',
-              }}>loading…</div>
+              <div className="mono" style={{ fontSize: 10, color: 'var(--text-faint)', padding: 8 }}>loading…</div>
             )}
             {!listQ.isLoading && rows.length === 0 && (
-              <div data-vpm-list-empty style={{
-                fontFamily: FONTS.mono,
-                fontSize:   10,
-                color:      'rgba(200,216,232,0.5)',
-                padding:    '8px',
-              }}>
-                No artifacts recorded.<br/>
+              <div data-vpm-list-empty className="mono" style={{ fontSize: 10, color: 'var(--text-faint)', padding: 8, lineHeight: 1.6 }}>
+                No artifacts recorded.<br />
+                The compiler emits one VPM proof per ZKBA artifact / MLGA session.<br />
                 POST /operator/vpm-compile to populate the registry.
               </div>
             )}
@@ -242,74 +171,50 @@ export function VpmRegistryView() {
           </div>
         </div>
 
-        {/* RIGHT pane: iframe + manifest panel */}
-        <div style={{
-          flex:          1,
-          display:       'flex',
-          flexDirection: 'column',
-          overflow:      'hidden',
-        }}>
+        {/* RIGHT — integrity label + framed HTML snapshot proof */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: 'var(--bg)' }}>
           {!selectedRow && (
             <div data-vpm-view-empty style={{
-              flex:          1,
-              display:       'flex',
-              alignItems:    'center',
-              justifyContent: 'center',
-              fontFamily:    FONTS.mono,
-              fontSize:      11,
-              color:         'rgba(200,216,232,0.4)',
-              letterSpacing: '0.08em',
+              flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
+              justifyContent: 'center', gap: 8,
             }}>
-              SELECT AN ARTIFACT
+              <span className="eye" style={{ fontSize: 12, letterSpacing: '0.18em' }}>SELECT AN ARTIFACT</span>
+              <span className="mono" style={{ fontSize: 10, color: 'var(--text-faint)' }}>
+                each row is an autonomously-compiled, independently-verifiable HTML proof
+              </span>
             </div>
           )}
           {selectedRow && (
-            <>
-              {/* Integrity Nutrition Label panel on TOP — the operator's
-                  primary cryptographic-honesty surface. The 9-field
-                  FROZEN integrity contract is what makes this protocol
-                  defensible, so it deserves the prime above-the-fold
-                  position. Fixed height (no scroll bar) since the 9
-                  fields + audit-fingerprint footer fit in ~340px;
-                  if a future class needs more rows, lift this and
-                  re-balance. */}
-              <div style={{
-                flex:       '0 0 auto',
-                padding:    '12px',
-                background: 'rgba(10,14,20,0.85)',
-                borderBottom: `1px solid ${VPM_ACCENT}1a`,
-              }}>
-                <VpmManifestPanel
-                  manifest={manifestQ.data?.manifest}
-                  commitmentHex={selectedCommit}
-                />
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: 16, gap: 12 }}>
+              {/* Integrity Nutrition Label — the cryptographic-honesty surface
+                  (real in-browser HASH OK/MISMATCH). Prime above-the-fold. */}
+              <div style={{ flex: '0 0 auto' }}>
+                <VpmManifestPanel manifest={manifestQ.data?.manifest} commitmentHex={selectedCommit} />
               </div>
-              {/* Iframe takes the remaining space. Iframe loads via src=
-                  since the manifest doesn't embed the HTML; the bridge
-                  serves it under /operator/operator/vpm-artifact/{commit}.
-                  NOTE: in operator-console-internal deployment the
-                  iframe inherits the parent origin so the FROZEN
-                  sandbox flags allow-scripts+allow-same-origin work.
-                  The read-key MUST be passed in the URL because an
-                  iframe with src= cannot set custom headers
-                  (bridge's _check_read_key requires x-api-key OR
-                  query api_key). The earlier null-readKey form
-                  surfaced as 403 'Invalid x-api-key header' in the
-                  iframe body. Read-key in URL is acceptable here
-                  because (a) operator console is internal-only
-                  deployment, (b) the same key already appears in
-                  every apiGet wrapper's query string. */}
-              <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
-                <VpmIframe
-                  artifactUrl={vpmArtifactUrl(
-                    selectedCommit,
-                    import.meta.env.VITE_VAPI_API_KEY,
-                  )}
-                  onIframeReady={(el) => { iframeRef.current = el }}
-                  title={`VPM Artifact ${selectedCommit.slice(0, 12)}`}
-                />
-              </div>
-            </>
+
+              {/* The autonomous HTML snapshot proof, explicitly framed. */}
+              <Panel padding={false} style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+                <header className="p-head">
+                  <span className="p-head__eye">AUTONOMOUS · HTML · SNAPSHOT · PROOF</span>
+                  <span className="p-head__meta">
+                    {selectedRow.vpm_id} · <StateBadge state={selectedRow.visual_state} />
+                  </span>
+                </header>
+                <div className="mono" style={{
+                  padding: '6px 14px', fontSize: 9.5, color: 'var(--text-faint)',
+                  borderBottom: '1px solid var(--border-soft)', letterSpacing: '0.04em',
+                }}>
+                  rendered in a sandboxed iframe · DOM re-verified against declared visual state · keccak/SHA-256 anchored
+                </div>
+                <div style={{ flex: 1, position: 'relative', minHeight: 0 }}>
+                  <VpmIframe
+                    artifactUrl={vpmArtifactUrl(selectedCommit, import.meta.env.VITE_VAPI_API_KEY)}
+                    onIframeReady={(el) => { iframeRef.current = el }}
+                    title={`VPM Artifact ${selectedCommit.slice(0, 12)}`}
+                  />
+                </div>
+              </Panel>
+            </div>
           )}
         </div>
       </div>

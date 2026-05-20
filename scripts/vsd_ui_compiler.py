@@ -87,6 +87,66 @@ class ZKBAManifest:
 # Deterministic helpers
 # ---------------------------------------------------------------------------
 
+def brand_card_css_v2() -> str:
+    """Shared QorTroller brand chrome for ZKBA card artifacts (TEMPLATE v2).
+
+    Single source of truth so every autonomously-generated ZKBA HTML proof
+    (VHP / AIT / tournament / marketplace / consent / hardware / GIC ledger)
+    shares the same look as the VPM-family base_style_block v2: a centred
+    framed certificate card (body) on a full-viewport void+graticule matte
+    (html), brand palette (void #04060a, amber #f0a868, chain-green #5bd6a3),
+    refined SYSTEM-monospace stack.
+
+    Returns inner-CSS ONLY (caller wraps with <style>...</style>) and provides
+    the common chrome selectors — html, body, h1, h2, code, .meta, .footer,
+    plus a generic .badge — so each compiler keeps only its truly card-specific
+    rules. Each card's content is a direct child of <body> (no wrapper div), so
+    the matte lives on html and the card on body — no HTML-structure change.
+
+    Discipline: NO external URLs / @import / @font-face (self-contained +
+    bytewise-deterministic). ZKBA commitment is over INPUTS (not HTML), so
+    restyling here has ZERO effect on any commitment hash.
+    """
+    return (
+        "html { box-sizing: border-box; background-color: #04060a; "
+        "background-image: "
+        "linear-gradient(to right, rgba(26,34,48,0.20) 1px, transparent 1px), "
+        "linear-gradient(to bottom, rgba(26,34,48,0.20) 1px, transparent 1px); "
+        "background-size: 28px 28px; }\n"
+        "*, *::before, *::after { box-sizing: inherit; }\n"
+        "body { margin: 0 auto; max-width: 880px; min-height: 100vh; "
+        "padding: clamp(20px, 3vw, 36px); "
+        "font-family: ui-monospace, 'JetBrains Mono', 'SF Mono', 'Cascadia Code', "
+        "Menlo, Consolas, 'Courier New', monospace; "
+        "background-color: #0a0e14; color: #d4dde8; line-height: 1.55; "
+        "font-size: 13.5px; letter-spacing: 0.01em; "
+        "border: 1px solid #2a3850; border-radius: 10px; "
+        "box-shadow: 0 0 0 1px rgba(240,168,104,0.06), "
+        "0 24px 60px -24px rgba(0,0,0,0.80); }\n"
+        "h1 { color: #f0a868; font-size: 1.5em; margin: 0 0 0.3em 0; "
+        "letter-spacing: 0.02em; border-bottom: 1px solid #2a3850; "
+        "padding-bottom: 0.4em; }\n"
+        "h2 { color: #8a98ab; font-size: 0.82em; text-transform: uppercase; "
+        "letter-spacing: 0.18em; margin: 1.6em 0 0.6em 0; "
+        "border-bottom: 1px dotted #1b2433; padding-bottom: 0.3em; }\n"
+        ".meta { color: #8a98ab; font-size: 0.92em; line-height: 1.8; }\n"
+        ".meta > div { padding: 3px 0; }\n"
+        "table { width: 100%; border-collapse: collapse; margin: 1em 0; font-size: 0.9em; }\n"
+        "th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #141b27; }\n"
+        "th { color: #8a98ab; font-weight: 600; text-transform: uppercase; "
+        "letter-spacing: 0.08em; font-size: 0.85em; }\n"
+        "em { color: #8a98ab; font-style: italic; }\n"
+        "pre { background-color: #04060a; padding: 0.7em; border-radius: 4px; "
+        "color: #5bd6a3; overflow-x: auto; border: 1px solid #141b27; }\n"
+        "code { color: #5bd6a3; background-color: #04060a; padding: 1px 5px; "
+        "border-radius: 3px; word-break: break-all; border: 1px solid #141b27; }\n"
+        ".badge { padding: 3px 10px; border-radius: 4px; font-weight: bold; "
+        "letter-spacing: 0.04em; }\n"
+        ".footer { margin-top: 2.2em; color: #5a6878; font-size: 0.78em; "
+        "border-top: 1px solid #1b2433; padding-top: 0.8em; line-height: 1.6; }\n"
+    )
+
+
 def canonical_json(obj) -> bytes:
     """Sorted-key UTF-8 JSON encoding for deterministic byte output.
 
