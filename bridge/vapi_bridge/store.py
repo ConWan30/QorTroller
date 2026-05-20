@@ -16123,6 +16123,20 @@ class Store:
                 conn.execute("ALTER TABLE operator_agent_drafts ADD COLUMN executed_tx_hash TEXT DEFAULT ''")
             except Exception:
                 pass
+        # 2026-05-20 refusal-churn cap: terminally-refused drafts (no executor
+        # route, or chain-cost action under a budget=0 agent) were re-fetched +
+        # re-refused every executor cycle, accumulating 7k+ identical
+        # spending_log rows. Mark them so they drop out of the fetch.
+        if "refused_at" not in existing_cols:
+            try:
+                conn.execute("ALTER TABLE operator_agent_drafts ADD COLUMN refused_at REAL DEFAULT NULL")
+            except Exception:
+                pass
+        if "refusal_reason" not in existing_cols:
+            try:
+                conn.execute("ALTER TABLE operator_agent_drafts ADD COLUMN refusal_reason TEXT DEFAULT ''")
+            except Exception:
+                pass
         conn.execute(
             "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at) "
             "VALUES (?, ?, ?)",
@@ -16201,6 +16215,7 @@ class Store:
                     "WHERE agent_id = ? "
                     "AND operator_decision = 'accept' "
                     "AND (executed_at IS NULL OR executed_at = 0) "
+                    "AND (refused_at IS NULL OR refused_at = 0) "
                     "ORDER BY id ASC LIMIT ?",
                     (str(agent_id), limit),
                 ).fetchall()
@@ -16232,6 +16247,25 @@ class Store:
                     "UPDATE operator_agent_drafts SET executed_at = ?, "
                     "executed_tx_hash = ? WHERE id = ?",
                     (time.time(), str(tx_hash or ""), int(draft_id)),
+                )
+            return True
+        except Exception:
+            return False
+
+    def mark_draft_refused(self, draft_id: int, reason: str) -> bool:
+        """Mark a draft as TERMINALLY refused by the live-write executor so it
+        drops out of get_accepted_unexecuted_drafts and is not re-attempted/
+        re-logged every cycle (2026-05-20 refusal-churn cap). Use ONLY for
+        structurally-permanent refusals (no executor route, or a chain-cost
+        action under a budget=0 agent) — NOT for transient ones (RPC failure,
+        daily budget exceeded) which should retry. Returns True on success."""
+        try:
+            with self._conn() as conn:
+                self._ensure_operator_agent_chain_spending_table(conn)
+                conn.execute(
+                    "UPDATE operator_agent_drafts SET refused_at = ?, "
+                    "refusal_reason = ? WHERE id = ?",
+                    (time.time(), str(reason or "")[:200], int(draft_id)),
                 )
             return True
         except Exception:

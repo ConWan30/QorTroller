@@ -348,6 +348,15 @@ class OperatorAgentLiveWriteExecutor:
             await asyncio.to_thread(
                 self._record_refusal, agent_q9, draft_id, action_name, auth.blockers,
             )
+            # Refusal-churn cap (2026-05-20): if the refusal is structurally
+            # permanent (no executor route, or a chain-cost action under a
+            # budget=0 agent), mark the draft refused so it drops out of the
+            # next fetch instead of being re-evaluated + re-logged every cycle.
+            if self._is_terminal_refusal(auth.blockers):
+                await asyncio.to_thread(
+                    self.store.mark_draft_refused, draft_id,
+                    "; ".join(auth.blockers) if auth.blockers else "terminal_refusal",
+                )
             return
 
         # Route by action_name. v1 set is minimal — extend in v2.
@@ -361,13 +370,19 @@ class OperatorAgentLiveWriteExecutor:
                 tx_hash, cost_iotx = await self._exec_curator_listing_suspend(draft)
             elif action_name == "audit-drafting":
                 tx_hash, cost_iotx = await self._exec_guardian_audit_draft(draft)
+            elif action_name == "operational-diagnostic":
+                tx_hash, cost_iotx = await self._exec_guardian_operational_diagnostic(draft)
             else:
-                # No executor routed for this action_name — record as refusal,
-                # leave draft for v2 routing. Phase 235.x-STABILITY-8: sync
-                # DB write wrapped in to_thread.
+                # No executor routed for this action_name — structurally
+                # permanent, so record ONCE and mark refused (drops out of the
+                # next fetch; no per-cycle re-logging). Phase 235.x-STABILITY-8:
+                # sync DB writes wrapped in to_thread.
+                _reason = f"no_executor_for_action_{action_name}"
                 await asyncio.to_thread(
-                    self._record_refusal, agent_q9, draft_id, action_name,
-                    (f"no_executor_for_action_{action_name}",),
+                    self._record_refusal, agent_q9, draft_id, action_name, (_reason,),
+                )
+                await asyncio.to_thread(
+                    self.store.mark_draft_refused, draft_id, _reason,
                 )
                 return
         except Exception as exc:
@@ -417,6 +432,23 @@ class OperatorAgentLiveWriteExecutor:
             pass  # fail-open: idempotent spending log writes
 
     @staticmethod
+    def _is_terminal_refusal(blockers) -> bool:
+        """True when a refusal is structurally permanent under current routing/
+        config and will recur identically every cycle — so the draft should be
+        marked refused (dropped from the fetch) rather than re-attempted +
+        re-logged forever. Transient blockers (RPC failure, daily-budget-
+        exceeded which resets at midnight) are NOT terminal and should retry."""
+        for b in (blockers or ()):
+            b = str(b)
+            if b.startswith("no_executor_for_action"):
+                return True
+            if b == "daily_budget_zero_no_chain_ops_permitted":
+                # Permanent for a budget=0 (local-only) agent: a chain-cost
+                # action will never be permitted without a config change.
+                return True
+        return False
+
+    @staticmethod
     def _estimate_cost_iotx(action_name: str) -> float:
         """Conservative per-action cost estimate for budget pre-check.
 
@@ -428,9 +460,22 @@ class OperatorAgentLiveWriteExecutor:
         return {
             "pda-attestation-anchor":      0.001,   # PoAd anchor ~0.0008 typical
             "marketplace-listing-suspend": 0.002,   # suspension ~0.001 typical
-            # Gap 1 closure 2026-05-19: audit-drafting is a LOCAL write
-            # (Guardian's O3 authority); no chain dependency, zero IOTX cost.
+            # Guardian's O3 authority is LOCAL writes (lane://audits/** +
+            # lane://ops/**); no chain dependency, zero IOTX cost. Both
+            # audit-drafting (Gap 1 closure 2026-05-19) AND operational-
+            # diagnostic (2026-05-20: was falling to the default 0.001 and
+            # getting refused at Guardian's budget=0 as daily_budget_zero_
+            # no_chain_ops_permitted — 7k+ refusal rows). Both are local.
             "audit-drafting":              0.0,
+            "operational-diagnostic":      0.0,
+            # Guardian's kms-sign on draft://commit_hashes/* IS Cedar-permitted
+            # (all 4 Guardian bundles) — it signs a commit hash locally, no
+            # chain submission, zero IOTX. Zero-costed so it is NOT mislabeled
+            # as a budget refusal; it currently has NO executor route (no fake
+            # signer — that would falsely claim a signature), so it resolves to
+            # an honest no_executor_for_action_kms-sign terminal refusal until a
+            # real Guardian signing executor is deliberately wired.
+            "kms-sign":                    0.0,
         }.get(action_name, 0.001)
 
     async def _exec_sentry_pda_anchor(self, draft: dict) -> tuple[str, float]:
@@ -483,6 +528,24 @@ class OperatorAgentLiveWriteExecutor:
         # mythos_spending_log_drift's UNATTRIBUTED_CHAIN_TX check fires only on
         # cost > 0 with empty tx_hash; cost=0 + local: prefix is fine.
         synthetic_tx_hash = f"local:audit:{draft_id}"
+        cost_iotx = 0.0
+        return synthetic_tx_hash, cost_iotx
+
+    async def _exec_guardian_operational_diagnostic(self, draft: dict) -> tuple[str, float]:
+        """Guardian's operational-diagnostic: LOCAL write (no chain dependency).
+
+        2026-05-20. Guardian's lane is audits + ops (lane://audits/** +
+        lane://ops/**); operational-diagnostic is the ops-side local skill
+        (fleet-health / calibration / supervisor diagnostics absorbed into
+        Guardian per agent_rationalization_v1.md). Like audit-drafting it does
+        NOT touch chain — it must NOT be budget-gated as a chain op. The
+        synthetic tx_hash format `local:diag:<draft_id>` distinguishes local
+        diagnostic writes from chain operations in the spending_log audit trail.
+
+        Returns (synthetic_local_tx_hash, 0.0).
+        """
+        draft_id = int(draft.get("id", 0) or 0)
+        synthetic_tx_hash = f"local:diag:{draft_id}"
         cost_iotx = 0.0
         return synthetic_tx_hash, cost_iotx
 
