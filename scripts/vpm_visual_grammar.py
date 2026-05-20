@@ -107,12 +107,16 @@ META_TAG_SIGNATURE = '<meta name="vpm-visual-state"'
 ARIA_LABEL_SIGNATURE = 'role="status"'
 
 # Proof-template version (provenance only — NOT a FROZEN signature). Bumped to
-# "2" with the QRESCE-0001 v0.5 brand/full-frame base_style_block redesign.
-# Emitted as a <meta> tag by assemble_vpm_head so each newly-compiled artifact
-# records which template produced it. Existing artifacts are immutable HTML
-# files on disk (served verbatim), so this never affects already-anchored
-# commitments — only new compiles.
-VPM_TEMPLATE_VERSION = "2"
+# "3" with the QRESCE-0001 v0.5 Claude-Design certificate shell
+# (render_vpm_certificate): corner-bracket framed card, eyebrow/wordmark/title/
+# state-stamp/commitment-block + per-class content table + design integrity-
+# label table + 4-up provenance footer. "2" was the interim centred-frame look.
+# Emitted as a <meta> tag so each newly-compiled artifact records which template
+# produced it. Existing artifacts are immutable HTML files on disk (served
+# verbatim), so the bump never affects already-anchored commitments — only new
+# compiles. The input_commitment is over INPUTS (not HTML), so re-rendering an
+# artifact with a new template changes only its output_hash, never its identity.
+VPM_TEMPLATE_VERSION = "3"
 
 
 # Required 9 Integrity Label field markers — mirrored from
@@ -534,3 +538,395 @@ def signature_substrings_for_state(state: str) -> Iterable[str]:
             f"state must be one of {VISUAL_STATES}; got {state!r}"
         )
     return VISUAL_STATE_SIGNATURES[state]
+
+
+# ===========================================================================
+# Claude-Design certificate shell (TEMPLATE v3) — render_vpm_certificate()
+# ---------------------------------------------------------------------------
+# Translates the design bundle's vpm_artifacts/*.html into a single shared
+# renderer so EVERY compiled artifact looks like the corner-bracket framed
+# certificate (eyebrow / wordmark / big title / state-stamp / commitment
+# block + per-class content table + design integrity label + 4-up footer).
+#
+# FROZEN-safe by construction: every load-bearing visual-state signature is
+# sourced from the existing (unchanged) helpers —
+#   visual_state_meta_tag()  -> <meta name="vpm-visual-state">
+#   visual_state_css()       -> per-state CSS incl. the literal #d65b78 /
+#                               #020408 / filter: grayscale(100%) /
+#                               text-decoration: line-through substrings
+#   visual_state_overlay()   -> saturation bar / stripe svg / lock svg /
+#                               redacted banner markup
+#   vpm_body_class()         -> "vpm-body vpm-emulated" for emulated
+# plus a design grammar-marker carrying role="status" + data-vpm-visual-state.
+# The certificate base CSS uses var(--vpm-accent) for the state accent so the
+# frame border + corner brackets + stamp + commitment hash share one color
+# without per-state CSS branching. The design's webfont @import is dropped;
+# typography is the same self-contained system stack as base_style_block().
+# ===========================================================================
+
+
+# Per-state stamp label + accent color. The label is ALWAYS a text phrase
+# (brand discipline: color never carries meaning alone). Accent feeds the
+# CSS custom property --vpm-accent on <main class="frame">.
+_CERT_STAMP_BY_STATE = {
+    "live":            ("LIVE · CRYPTOGRAPHICALLY ANCHORED", "#5bd6a3"),
+    "dry-run":         ("DRY-RUN · NOT PRODUCTION-ANCHORED", "#f0a868"),
+    "emulated":        ("EMULATED · MOCK / NON-PRODUCTION SOURCE", "#7a8a9b"),
+    "frozen-disabled": ("FROZEN · PRIMITIVE DISABLED AT RUNTIME", "#5a6675"),
+    "revoked":         ("REVOKED · DO NOT RELY ON THIS PROJECTION", "#d65b78"),
+    "unverified":      ("UNVERIFIED · MATERIAL MISSING OR DRIFTED", "#d65b78"),
+}
+
+
+def _group_hex(hex_str: str, group: int = 8) -> str:
+    """Space-group a hex string into `group`-char blocks (design commitment
+    block style: 'a91d0c4e b8f2710d ...'). Non-hex input is returned escaped
+    as-is so the function never raises on a malformed commitment."""
+    h = str(hex_str).lower().removeprefix("0x")
+    if not h or any(c not in "0123456789abcdef" for c in h):
+        return html.escape(str(hex_str))
+    return " ".join(h[i:i + group] for i in range(0, len(h), group))
+
+
+def cert_data_table(rows: Iterable) -> str:
+    """Emit a design content table (<table><tbody>…</tbody></table>) of
+    key/value rows using the certificate's td.k / td.v classes.
+
+    Each row is a 2- or 3-tuple:
+      (key, value_html)               -> td.v (neutral)
+      (key, value_classes, value_html)-> td.v {value_classes}
+
+    `value_html` is inserted verbatim (callers build trusted markup, e.g.
+    nested .row spans or .pill chips); `key` is escaped.
+    """
+    out: list[str] = ['<table>\n  <tbody>']
+    for row in rows:
+        if len(row) == 3:
+            key, vcls, vhtml = row
+        else:
+            key, vhtml = row
+            vcls = ""
+        cls = ("v " + vcls).strip()
+        out.append(
+            f'    <tr><td class="k">{html.escape(str(key))}</td>'
+            f'<td class="{cls}">{vhtml}</td></tr>'
+        )
+    out.append('  </tbody>\n</table>')
+    return "\n".join(out)
+
+
+def cert_section(heading: str, count_html: str, rows: Iterable) -> str:
+    """Emit a per-class content section: <h2>heading <span class=count>…</span>
+    </h2> + a cert_data_table(rows). `count_html` may be '' (no count chip)."""
+    count = (
+        f' <span class="count">{count_html}</span>' if count_html else ""
+    )
+    return (
+        f'<h2>{html.escape(str(heading))}{count}</h2>\n'
+        + cert_data_table(rows)
+    )
+
+
+def _integrity_display(field: str, value) -> str:
+    """Human display string for an integrity-label value, design-flavored."""
+    if field == "on_chain_anchor":
+        if isinstance(value, bool):
+            return "IoTeX L1" if value else "none"
+        return str(value)
+    if isinstance(value, bool):
+        return "YES" if value else "NO"
+    if isinstance(value, (list, tuple)):
+        return " · ".join(str(v) for v in value)
+    return str(value)
+
+
+def _integrity_value_class(field: str, display: str) -> str:
+    """Semantic td.v color class for an integrity field — chain-green for
+    anchored, amber for weights, red ONLY for genuine risk values."""
+    d = display.strip().upper()
+    if field == "on_chain_anchor":
+        return "chain" if d not in ("", "NO", "FALSE", "NONE", "N/A") else "dim"
+    if field == "proof_weight":
+        return "amber"
+    if field == "raw_biometrics_exposed":
+        return "err" if d in ("YES", "TRUE") else ""
+    if field == "consent_active":
+        # red ONLY for an explicit NO; N/A is not-applicable, not a risk.
+        return "err" if d in ("NO", "FALSE") else ""
+    if field == "revocation_status":
+        return "" if d in ("NONE", "ACTIVE", "N/A", "") else "err"
+    return ""
+
+
+def integrity_label_table_html(label: dict) -> str:
+    """Emit the 9-field Integrity Nutrition Label as the design certificate
+    table (vs. the legacy <dl> in integrity_label_html()).
+
+    Carries `class="vpm-integrity-label"` on the table (satisfies the
+    compiler's _verify_integrity_label_in_dom container check) and a
+    `data-vpm-field="<field>"` marker on every value cell (satisfies the
+    9-field marker check + the frontend grammar verifier). Missing fields
+    raise ValueError so renderer authors fail fast.
+    """
+    if not isinstance(label, dict):
+        raise TypeError(f"label must be dict; got {type(label).__name__}")
+    missing = [f for f in INTEGRITY_LABEL_FIELDS if f not in label]
+    if missing:
+        raise ValueError(f"integrity_label missing required fields: {missing}")
+
+    rows: list[str] = []
+    for field in INTEGRITY_LABEL_FIELDS:
+        display = _integrity_display(field, label[field])
+        vcls = _integrity_value_class(field, display)
+        cls = ("v mono " + vcls).strip()
+        rows.append(
+            f'    <tr><td class="k">{field}</td>'
+            f'<td class="{cls}" data-vpm-field="{field}">'
+            f'{html.escape(display)}</td></tr>'
+        )
+    return (
+        '<h2>Integrity · Nutrition · Label '
+        '<span class="count">9 FROZEN fields</span></h2>\n'
+        '<table class="vpm-integrity-label" '
+        'aria-label="Integrity Nutrition Label">\n  <tbody>\n'
+        + "\n".join(rows)
+        + '\n  </tbody>\n</table>'
+    )
+
+
+def _certificate_base_css() -> str:
+    """Design certificate chrome CSS (TEMPLATE v3). Inner-CSS only; caller
+    wraps with <style>. Self-contained: NO @import / @font-face / external
+    URLs (the design mockup's Google-Fonts @import is intentionally dropped
+    and replaced with the same system stack as base_style_block()). The
+    state accent is var(--vpm-accent) set inline on .frame."""
+    return (
+        "* { box-sizing: border-box; }\n"
+        "html, body { margin: 0; padding: 0; }\n"
+        "body {\n"
+        "  background: #04060a; color: #d4dde8;\n"
+        "  font-family: ui-monospace, 'JetBrains Mono', 'SF Mono', "
+        "'Cascadia Code', Menlo, Consolas, 'Courier New', monospace;\n"
+        "  font-size: 13px; line-height: 1.45; font-variant-ligatures: none;\n"
+        "  background-image:\n"
+        "    linear-gradient(to right,  rgba(26,34,48,0.27) 1px, transparent 1px),\n"
+        "    linear-gradient(to bottom, rgba(26,34,48,0.27) 1px, transparent 1px),\n"
+        "    linear-gradient(to right,  rgba(26,34,48,0.10) 1px, transparent 1px),\n"
+        "    linear-gradient(to bottom, rgba(26,34,48,0.10) 1px, transparent 1px);\n"
+        "  background-size: 96px 96px, 96px 96px, 24px 24px, 24px 24px;\n"
+        "  padding: 28px; }\n"
+        # visually-hidden grammar marker (keeps verifier honest)
+        ".vpm-grammar-marker { position: absolute; width: 1px; height: 1px;\n"
+        "  margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0);\n"
+        "  white-space: nowrap; border: 0; }\n"
+        # frame — corner-bracket card; accent via --vpm-accent
+        ".frame { position: relative; background: #0a0e14;\n"
+        "  border: 1px solid var(--vpm-accent, #5bd6a3);\n"
+        "  padding: 32px 36px 28px; max-width: 1200px; margin: 0 auto; }\n"
+        ".frame::before, .frame::after { content: \"\"; position: absolute;\n"
+        "  width: 22px; height: 22px; border: 1px solid var(--vpm-accent, #5bd6a3); }\n"
+        ".frame::before { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }\n"
+        ".frame::after  { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }\n"
+        # header
+        ".head { display: grid; grid-template-columns: 1fr auto; gap: 18px;\n"
+        "  align-items: start; padding-bottom: 20px; border-bottom: 1px solid #1a2230; }\n"
+        ".eyebrow { font-size: 10.5px; color: #5a6675; letter-spacing: 0.18em;\n"
+        "  text-transform: uppercase; line-height: 1; }\n"
+        ".wm { font-family: 'Syne', system-ui, sans-serif; font-weight: 700;\n"
+        "  color: #d4dde8; font-size: 22px; letter-spacing: -0.02em; line-height: 1;\n"
+        "  margin-top: 12px; }\n"
+        ".wm .t { font-weight: 800; color: #f0a868; }\n"
+        ".frame h1 { font-family: 'Syne', system-ui, sans-serif; font-weight: 700;\n"
+        "  font-size: 38px; color: #d4dde8; letter-spacing: -0.01em; line-height: 1.1;\n"
+        "  margin: 14px 0 8px; border: 0; padding: 0; }\n"
+        ".subtitle { font-size: 11.5px; color: #8a96a5; letter-spacing: 0.06em;\n"
+        "  text-transform: uppercase; }\n"
+        ".stamp { display: inline-flex; align-items: center; gap: 9px;\n"
+        "  padding: 5px 11px; border: 1px solid var(--vpm-accent, #5bd6a3);\n"
+        "  border-radius: 2px; color: var(--vpm-accent, #5bd6a3); font-size: 11px;\n"
+        "  letter-spacing: 0.1em; text-transform: uppercase; line-height: 1;\n"
+        "  white-space: nowrap; }\n"
+        ".stamp::before { content: \"\"; width: 8px; height: 8px; border-radius: 50%;\n"
+        "  background: var(--vpm-accent, #5bd6a3); }\n"
+        # commitment block
+        ".commit-block { margin: 22px 0 26px; }\n"
+        ".commit-block .label { font-size: 10px; color: #5a6675;\n"
+        "  letter-spacing: 0.16em; text-transform: uppercase; margin-bottom: 8px; }\n"
+        ".commit-block .hash { font-size: 16px; color: var(--vpm-accent, #5bd6a3);\n"
+        "  letter-spacing: 0.04em; line-height: 1.5; word-break: break-all; }\n"
+        # section headers + tables
+        ".frame h2 { font-family: 'Syne', system-ui, sans-serif; font-weight: 600;\n"
+        "  font-size: 16px; color: #d4dde8; letter-spacing: 0.06em;\n"
+        "  text-transform: uppercase; margin: 26px 0 12px; border: 0; padding: 0; }\n"
+        ".frame h2 .count { font-family: ui-monospace, monospace; font-weight: 500;\n"
+        "  font-size: 11px; color: #5a6675; letter-spacing: 0.06em; margin-left: 10px;\n"
+        "  text-transform: none; }\n"
+        ".frame table { width: 100%; border-collapse: separate; border-spacing: 0;\n"
+        "  background: #0d1218; border: 1px solid #1a2230; border-radius: 4px;\n"
+        "  overflow: hidden; margin: 0; }\n"
+        ".frame tr + tr td { border-top: 1px solid rgba(26,34,48,0.4); }\n"
+        ".frame td { padding: 11px 16px; font-size: 12.5px; vertical-align: baseline; }\n"
+        ".frame td.k { color: #8a96a5; width: 280px; font-size: 11px;\n"
+        "  letter-spacing: 0.08em; text-transform: uppercase; }\n"
+        ".frame td.v { color: #d4dde8; }\n"
+        ".frame td.v.chain { color: #5bd6a3; }\n"
+        ".frame td.v.amber { color: #f0a868; }\n"
+        ".frame td.v.err   { color: #d65b78; }\n"
+        ".frame td.v.dim   { color: #8a96a5; }\n"
+        ".frame td.v.mono  { letter-spacing: 0.04em; }\n"
+        ".frame td.v .row { display: flex; justify-content: space-between; gap: 14px; }\n"
+        ".frame td.v .row + .row { margin-top: 4px; padding-top: 4px;\n"
+        "  border-top: 1px solid rgba(26,34,48,0.4); }\n"
+        ".frame td.v .row .lbl { color: #5a6675; font-size: 10.5px;\n"
+        "  letter-spacing: 0.08em; text-transform: uppercase; }\n"
+        ".frame td.v .row .val { color: inherit; }\n"
+        ".frame code { color: #5bd6a3; background: transparent; border: 0;\n"
+        "  padding: 0; word-break: break-all; }\n"
+        # status pill chips inside value cells
+        ".pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px;\n"
+        "  border: 1px solid currentColor; border-radius: 2px; font-size: 10px;\n"
+        "  letter-spacing: 0.08em; text-transform: uppercase; line-height: 1; }\n"
+        ".pill::before { content: \"\"; width: 6px; height: 6px; border-radius: 50%;\n"
+        "  background: currentColor; }\n"
+        ".pill.chain { color: #5bd6a3; } .pill.amber { color: #f0a868; }\n"
+        ".pill.err { color: #d65b78; } .pill.dim { color: #5a6675; }\n"
+        # footer 4-up
+        ".frame footer { margin-top: 26px; padding-top: 16px;\n"
+        "  border-top: 1px solid #1a2230; display: grid;\n"
+        "  grid-template-columns: repeat(4, 1fr); gap: 14px 24px; font-size: 11.5px; }\n"
+        ".frame footer .k { color: #5a6675; letter-spacing: 0.14em;\n"
+        "  text-transform: uppercase; font-size: 10px; display: block; margin-bottom: 4px; }\n"
+        ".frame footer .v { color: #d4dde8; letter-spacing: 0.02em; word-break: break-all; }\n"
+        # live saturation bar (FROZEN class; design styling, accent-colored)
+        ".vpm-saturation-class { display: inline-block; width: 4px; height: 18px;\n"
+        "  background: var(--vpm-accent, #5bd6a3); vertical-align: middle;\n"
+        "  margin-right: 8px; }\n"
+        # dry-run stripe svg pinned top-right
+        ".vpm-stripe-mask { position: fixed; top: 12px; right: 12px;\n"
+        "  width: 80px; height: 14px; pointer-events: none; }\n"
+        # frozen-disabled lock pinned top-right
+        ".vpm-lock-icon { position: fixed; top: 16px; right: 16px; width: 22px;\n"
+        "  height: 22px; opacity: 0.7; }\n"
+        # revoked redacted banner under header
+        ".vpm-redacted-banner { background: #d65b7811; border: 1px solid #d65b78;\n"
+        "  color: #d65b78; padding: 8px 14px; margin: 0 0 22px; font-size: 11.5px;\n"
+        "  letter-spacing: 0.16em; text-transform: uppercase;\n"
+        "  text-decoration: line-through; text-decoration-color: rgba(214,91,120,0.6); }\n"
+    )
+
+
+def render_vpm_certificate(
+    *,
+    vpm_class: str,
+    title_text: str,
+    subtitle: str,
+    visual_state: str,
+    commitment_hex: str,
+    content_html: str,
+    integrity_label: dict,
+    footer_fields: Iterable,
+    page_title: str | None = None,
+    extra_style: str = "",
+) -> str:
+    """Render a complete self-contained VPM proof certificate (TEMPLATE v3).
+
+    Shared shell for every compiler. Produces the corner-bracket framed
+    certificate from the Claude-Design bundle, with all FROZEN visual-state
+    signatures embedded (via the unchanged visual_state_* helpers) so the
+    6-state grammar band + frontend VpmGrammarVerifier stay green.
+
+    Args:
+      vpm_class:       class id shown as <title>/meta + (default) big title,
+                       e.g. "GIC-LEDGER-BETA-v1".
+      title_text:      big <h1> text (usually == vpm_class).
+      subtitle:        JBM uppercase sub-line under the title.
+      visual_state:    1-of-6 FROZEN states.
+      commitment_hex:  the input commitment (64 hex); shown space-grouped.
+      content_html:    per-class section markup (trusted; built via
+                       cert_section()/cert_data_table()).
+      integrity_label: 9-field dict -> design integrity table.
+      footer_fields:   iterable of (label, value) — the 4-up provenance row.
+      page_title:      <title> tag; defaults "VPM Proof · {vpm_class}".
+      extra_style:     optional extra inner-CSS appended last.
+    """
+    if visual_state not in VISUAL_STATES:
+        raise ValueError(
+            f"visual_state must be one of {VISUAL_STATES}; got {visual_state!r}"
+        )
+
+    stamp_label, accent = _CERT_STAMP_BY_STATE[visual_state]
+    body_class = f"vpm-body vpm-{visual_state}"  # 'vpm-body vpm-emulated' for emulated (FROZEN)
+    meta_state = visual_state_meta_tag(visual_state)
+    aria_text = _ARIA_LABEL_BY_STATE[visual_state]
+    grammar_marker = (
+        f'<div role="status" data-vpm-visual-state="{visual_state}" '
+        f'aria-label="{html.escape(aria_text)}" '
+        f'class="vpm-grammar-marker">{visual_state}</div>'
+    )
+    overlay = visual_state_overlay(visual_state)
+    live_marker = overlay if visual_state == "live" else ""
+    post_header_overlay = "" if visual_state == "live" else overlay
+
+    pg_title = page_title or f"VPM Proof · {vpm_class}"
+    grouped = _group_hex(commitment_hex)
+
+    footer_cells = []
+    for label, value in footer_fields:
+        footer_cells.append(
+            f'    <div><span class="k">{html.escape(str(label))}</span>'
+            f'<span class="v">{html.escape(str(value))}</span></div>'
+        )
+    footer_html = "\n".join(footer_cells)
+
+    integrity_table = integrity_label_table_html(integrity_label)
+
+    # visual_state_css FIRST (carries FROZEN literals incl. #d65b78/#020408);
+    # design chrome SECOND so higher-specificity .frame rules win visually.
+    css = (
+        visual_state_css(visual_state)
+        + _certificate_base_css()
+        + (extra_style or "")
+    )
+
+    return (
+        "<!doctype html>\n"
+        '<html lang="en">\n'
+        "<head>\n"
+        '<meta charset="utf-8">\n'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+        f"{meta_state}\n"
+        f'<meta name="vpm-class" content="{html.escape(vpm_class)}">\n'
+        f'<meta name="vpm-template-version" content="{VPM_TEMPLATE_VERSION}">\n'
+        f"<title>{html.escape(pg_title)}</title>\n"
+        "<style>\n"
+        f"{css}"
+        "</style>\n"
+        "</head>\n"
+        f'<body class="{body_class}" data-vpm-id="{html.escape(vpm_class)}" '
+        f'data-visual-state="{visual_state}" '
+        f'data-commitment-hex="{html.escape(str(commitment_hex))}">\n'
+        f"{grammar_marker}\n"
+        f'<main class="frame" style="--vpm-accent: {accent}">\n'
+        '  <header class="head">\n'
+        "    <div>\n"
+        f'      <div class="eyebrow">VERIFIED · PROJECTION · MEDIA · v{VPM_TEMPLATE_VERSION}</div>\n'
+        f'      <div class="wm">{live_marker}Qor<span class="t">T</span>roller</div>\n'
+        f"      <h1>{html.escape(title_text)}</h1>\n"
+        f'      <div class="subtitle">{html.escape(subtitle)}</div>\n'
+        "    </div>\n"
+        f'    <span class="stamp">{html.escape(stamp_label)}</span>\n'
+        "  </header>\n"
+        f"  {post_header_overlay}\n"
+        '  <section class="commit-block">\n'
+        '    <div class="label">COMMITMENT_HEX · the input this proof commits to</div>\n'
+        f'    <div class="hash">{grouped}</div>\n'
+        "  </section>\n"
+        f"  {content_html}\n"
+        f"  {integrity_table}\n"
+        "  <footer>\n"
+        f"{footer_html}\n"
+        "  </footer>\n"
+        "</main>\n"
+        "</body>\n"
+        "</html>\n"
+    )

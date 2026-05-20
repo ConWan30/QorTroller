@@ -98,14 +98,12 @@ from vapi_bridge.zkba_artifact import ZKBAClass, ProofWeightClass  # noqa: E402
 from vsd_ui_compiler import (  # noqa: E402
     VPMArtifactManifest,
     compile_vpm_artifact,
+    compute_input_commitment,
 )
 from vpm_visual_grammar import (  # noqa: E402
     VISUAL_STATES,
-    assemble_vpm_head,
-    integrity_label_html,
-    visual_state_aria_block,
-    visual_state_overlay,
-    vpm_body_class,
+    cert_data_table,
+    render_vpm_certificate,
 )
 
 
@@ -222,26 +220,9 @@ def render_procedural_art_svg(zkba_manifest_hash_hex: str) -> str:
 # ---------------------------------------------------------------------------
 
 def _render_market_listing_html(inputs: dict) -> str:
+    """Render MARKET-LISTING-v1 as the Claude-Design certificate (TEMPLATE v3),
+    keeping the FROZEN procedural-art SVG + all data-listing-field markers."""
     state = inputs["visual_state"]
-    head = assemble_vpm_head(
-        title=f"VAPI Market Listing — {html.escape(str(inputs['listing_title']))[:40]} — {state.upper()}",
-        visual_state=state,
-        extra_style=(
-            ".market-listing-art { display: block; margin: 1em auto; "
-            "border: 1px solid #1a2a40; }\n"
-            ".tier-badge { background: #f0a868; color: #020408; "
-            "padding: 4px 12px; border-radius: 4px; font-weight: bold; }\n"
-            ".price-badge { background: #5bd6a3; color: #020408; "
-            "padding: 4px 12px; border-radius: 4px; font-weight: bold; }\n"
-            ".suspend-badge { background: #d65b78; color: #020408; "
-            "padding: 4px 12px; border-radius: 4px; font-weight: bold; }\n"
-        ),
-    )
-
-    overlay = visual_state_overlay(state)
-    aria_block = visual_state_aria_block(state)
-    integrity_block = integrity_label_html(inputs["integrity_label"])
-    body_class = vpm_body_class(state)
 
     listing_commitment = html.escape(str(inputs["listing_commitment_hex"]))
     title = html.escape(str(inputs["listing_title"]))
@@ -251,58 +232,64 @@ def _render_market_listing_html(inputs: dict) -> str:
     consent_hash = html.escape(str(inputs["consent_hash_hex"]))
     suspended = bool(inputs["suspended"])
     suspended_label = "SUSPENDED" if suspended else "ACTIVE"
-    suspended_class = "suspend-badge" if suspended else "price-badge"
+    status_pill_cls = "err" if suspended else "chain"
     owner = html.escape(str(inputs["listing_owner_address"]))
     price_milli = int(inputs["price_iotx_milli"])
     price_display = f"{price_milli / 1000.0:.3f} IOTX"
-    ts_ns = int(inputs["ts_ns"])
     zkba_hash = html.escape(inputs["zkba_manifest_hash_hex"])
 
     art_svg = render_procedural_art_svg(zkba_manifest_hash_hex=inputs["zkba_manifest_hash_hex"])
 
-    body = (
-        '<body>\n'
-        f'  <div class="{body_class}" data-listing-id="{listing_commitment}">\n'
-        f'  {overlay}\n'
-        f'  <h1>{title}</h1>\n'
-        f'  {aria_block}\n'
-        '  <h2>Visual Fingerprint</h2>\n'
-        f'  {art_svg}\n'
-        '  <p class="market-art-explain">Procedural geometric art rendered '
-        'deterministically from the SHA-256 hash of the underlying ZKBA '
-        'manifest. Two listings with identical underlying hashes show '
-        'identical art; any change to the hash produces visually distinct art.</p>\n'
-        '  <h2>Listing Details</h2>\n'
-        '  <table class="vpm-status">\n'
-        f'    <tr><td>Listing commitment:</td><td><code data-listing-field="commitment">{listing_commitment}</code></td></tr>\n'
-        f'    <tr><td>Tier multiplier:</td><td><span class="tier-badge" data-listing-field="tier">{tier_display}</span></td></tr>\n'
-        f'    <tr><td>Price:</td><td><span class="{suspended_class}" data-listing-field="price">{price_display}</span></td></tr>\n'
-        f'    <tr><td>Status:</td><td><span class="{suspended_class}" data-listing-field="status">{suspended_label}</span></td></tr>\n'
-        f'    <tr><td>Owner address:</td><td><code data-listing-field="owner">{owner}</code></td></tr>\n'
-        '  </table>\n'
-        '  <h2>Buyer Verification Material</h2>\n'
-        '  <table class="vpm-status">\n'
-        f'    <tr><td>IPFS CID:</td><td><code data-listing-field="ipfs_cid">{ipfs_cid}</code></td></tr>\n'
-        f'    <tr><td>Consent commitment:</td><td><code data-listing-field="consent">{consent_hash}</code></td></tr>\n'
-        f'    <tr><td>ZKBA manifest hash:</td><td><code data-listing-field="zkba_manifest">{zkba_hash}</code></td></tr>\n'
-        '  </table>\n'
-        f'  {integrity_block}\n'
-        '  <div class="vpm-footer">\n'
-        f'    VPM ID: <code>{_VPM_ID}</code>. Lifecycle: Compiler Target. '
-        'Curator-lane buyer-facing surface. Sentry + Guardian FORBIDDEN at '
-        'Cedar policy level. Self-contained projection. compile-time ts_ns: '
-        f'<code>{ts_ns}</code>.\n'
-        '  </div>\n'
-        '  </div>\n'
-        '</body>\n'
+    content = (
+        f'<div data-listing-id="{listing_commitment}">\n'
+        '<h2>Visual · Fingerprint '
+        '<span class="count">deterministic from ZKBA manifest hash</span></h2>\n'
+        f'<div class="market-art-wrap">{art_svg}</div>\n'
+        '<h2>Listing · Details</h2>\n'
+        + cert_data_table([
+            ("listing_commitment", "chain mono",
+             f'<code data-listing-field="commitment">{listing_commitment}</code>'),
+            ("tier_multiplier", "amber mono",
+             f'<span data-listing-field="tier">{tier_display}</span>'),
+            ("price", "amber mono",
+             f'<span data-listing-field="price">{price_display}</span>'),
+            ("status", f"{status_pill_cls} mono",
+             f'<span class="pill {status_pill_cls}" data-listing-field="status">'
+             f'{suspended_label}</span>'),
+            ("owner_address", "dim mono",
+             f'<code data-listing-field="owner">{owner}</code>'),
+        ])
+        + '\n<h2>Buyer · Verification · Material</h2>\n'
+        + cert_data_table([
+            ("ipfs_cid", "mono",
+             f'<code data-listing-field="ipfs_cid">{ipfs_cid}</code>'),
+            ("consent_commitment", "mono",
+             f'<code data-listing-field="consent">{consent_hash}</code>'),
+            ("zkba_manifest_hash", "dim mono",
+             f'<code data-listing-field="zkba_manifest">{zkba_hash}</code>'),
+        ])
+        + '\n</div>'
     )
 
-    return (
-        '<!DOCTYPE html>\n'
-        '<html lang="en">\n'
-        f'{head}\n'
-        f'{body}'
-        '</html>\n'
+    return render_vpm_certificate(
+        vpm_class=_VPM_ID,
+        title_text=title,
+        subtitle="Marketplace listing · buyer / Curator surface",
+        visual_state=state,
+        commitment_hex=str(inputs["listing_commitment_hex"]),
+        content_html=content,
+        integrity_label=inputs["integrity_label"],
+        footer_fields=[
+            ("schema", "market-listing-v1"),
+            ("vpm_id", _VPM_ID),
+            ("zkba_manifest", str(inputs["zkba_manifest_hash_hex"])[:16] + "…"),
+            ("ts_ns", str(int(inputs["ts_ns"]))),
+        ],
+        extra_style=(
+            ".market-art-wrap { margin: 12px 0 4px; text-align: center; }\n"
+            ".market-listing-art { display: inline-block; "
+            "border: 1px solid #1a2230; border-radius: 4px; }\n"
+        ),
     )
 
 

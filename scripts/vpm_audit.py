@@ -238,11 +238,16 @@ SOURCE_FORBIDDEN_PATTERNS = [
 ]
 
 
-# Mandatory imports each compiler must reference
+# Mandatory imports each compiler must reference.
+# TEMPLATE v3 (Claude-Design certificate): every active compiler now inherits
+# the canonical Anti-Hype Visual Grammar through the shared
+# render_vpm_certificate() shell, which internally emits visual_state_meta_tag /
+# visual_state_css / visual_state_overlay + the FROZEN 6-state signatures. The
+# single required import is therefore the shell entrypoint; the legacy
+# per-helper imports (assemble_vpm_head / visual_state_overlay) are no longer
+# mandated because the shell owns them.
 REQUIRED_GRAMMAR_IMPORTS = (
-    "VISUAL_STATES",
-    "assemble_vpm_head",
-    "visual_state_overlay",
+    "render_vpm_certificate",
 )
 
 

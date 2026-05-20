@@ -60,14 +60,12 @@ from vapi_bridge.zkba_artifact import ZKBAClass, ProofWeightClass  # noqa: E402
 from vsd_ui_compiler import (  # noqa: E402
     VPMArtifactManifest,
     compile_vpm_artifact,
+    compute_input_commitment,
 )
 from vpm_visual_grammar import (  # noqa: E402
     VISUAL_STATES,
-    assemble_vpm_head,
-    integrity_label_html,
-    visual_state_aria_block,
-    visual_state_overlay,
-    vpm_body_class,
+    cert_data_table,
+    render_vpm_certificate,
 )
 
 
@@ -78,24 +76,9 @@ _VALID_STATUSES = ("open", "under_review", "resolved", "escalated")
 
 
 def _render_dispute_packet_html(inputs: dict) -> str:
+    """Render DISPUTE-PACKET-v1 as the Claude-Design certificate (TEMPLATE v3),
+    preserving the data-dispute-field markers + data-dispute-id."""
     state = inputs["visual_state"]
-    head = assemble_vpm_head(
-        title=f"VAPI Dispute Packet — {html.escape(str(inputs['dispute_id']))} — {state.upper()}",
-        visual_state=state,
-        extra_style=(
-            ".dispute-status-badge { padding: 4px 12px; border-radius: 4px; "
-            "font-weight: bold; }\n"
-            ".dispute-status-open { background: #f0a868; color: #020408; }\n"
-            ".dispute-status-under_review { background: #5a8fb8; color: #020408; }\n"
-            ".dispute-status-resolved { background: #5bd6a3; color: #020408; }\n"
-            ".dispute-status-escalated { background: #d65b78; color: #020408; }\n"
-        ),
-    )
-
-    overlay = visual_state_overlay(state)
-    aria_block = visual_state_aria_block(state)
-    integrity_block = integrity_label_html(inputs["integrity_label"])
-    body_class = vpm_body_class(state)
 
     dispute_id = html.escape(str(inputs["dispute_id"]))
     tournament_id = int(inputs["tournament_id"])
@@ -106,61 +89,62 @@ def _render_dispute_packet_html(inputs: dict) -> str:
     attestation_hash = html.escape(str(inputs["attestation_chain_hash_hex"]))
     dispute_status = str(inputs["dispute_status"])
     created_ts = int(inputs["created_ts_ns"])
-    ts_ns = int(inputs["ts_ns"])
     zkba_hash = html.escape(inputs["zkba_manifest_hash_hex"])
 
-    body = (
-        '<body>\n'
-        f'  <div class="{body_class}" data-dispute-id="{dispute_id}">\n'
-        f'  {overlay}\n'
-        f'  <h1>VAPI Dispute Packet</h1>\n'
-        f'  {aria_block}\n'
-        '  <h2>Case Header</h2>\n'
-        '  <table class="vpm-status">\n'
-        f'    <tr><td>Dispute ID:</td><td><code data-dispute-field="id">{dispute_id}</code></td></tr>\n'
-        f'    <tr><td>Tournament ID:</td><td><code data-dispute-field="tournament">{tournament_id}</code></td></tr>\n'
-        f'    <tr><td>Status:</td><td><span class="dispute-status-badge dispute-status-{dispute_status}" data-dispute-field="status">{html.escape(dispute_status.upper())}</span></td></tr>\n'
-        f'    <tr><td>Created ts_ns:</td><td><code>{created_ts}</code></td></tr>\n'
-        '  </table>\n'
-        '  <h2>Contesting Party</h2>\n'
-        '  <div class="vpm-meta">\n'
-        f'    <div>Player address: <code data-dispute-field="player">{disputed_player}</code></div>\n'
-        '  </div>\n'
-        '  <h2>Disputed Ruling</h2>\n'
-        '  <table class="vpm-status">\n'
-        f'    <tr><td>Ruling hash:</td><td><code data-dispute-field="ruling_hash">{ruling_hash}</code></td></tr>\n'
-        f'    <tr><td>Adjudicating agent:</td><td><code data-dispute-field="adjudicator">{adjudicator}</code></td></tr>\n'
-        f'    <tr><td>Evidence count:</td><td>{evidence_count}</td></tr>\n'
-        '  </table>\n'
-        '  <h2>Attestation Chain</h2>\n'
-        '  <div class="vpm-meta">\n'
-        f'    <div>Chain hash: <code data-dispute-field="attestation_chain">{attestation_hash}</code></div>\n'
-        '    <div>The attestation chain records the operator-decision sequence '
-        'that led to the disputed ruling. Verifiers reproduce the chain hash '
-        'from the bridge operator_agent_drafts table over the disputed ts_ns '
-        'window to confirm chain integrity.</div>\n'
-        '  </div>\n'
-        '  <h2>Underlying ZKBA Projection</h2>\n'
-        '  <div class="vpm-meta">\n'
-        f'    <div>ZKBA manifest hash: <code>{zkba_hash}</code></div>\n'
-        '  </div>\n'
-        f'  {integrity_block}\n'
-        '  <div class="vpm-footer">\n'
-        f'    VPM ID: <code>{_VPM_ID}</code>. Lifecycle: Compiler Target. '
-        'Guardian-lane audit-trail surface. Sentry + Curator FORBIDDEN at '
-        'Cedar policy level. Self-contained projection. compile-time ts_ns: '
-        f'<code>{ts_ns}</code>.\n'
-        '  </div>\n'
-        '  </div>\n'
-        '</body>\n'
+    _status_cls = {
+        "open": "amber", "under_review": "amber",
+        "resolved": "chain", "escalated": "err",
+    }.get(dispute_status, "dim")
+
+    content = (
+        f'<div data-dispute-id="{dispute_id}">\n'
+        '<h2>Case · Header</h2>\n'
+        + cert_data_table([
+            ("dispute_id", "amber mono",
+             f'<code data-dispute-field="id">{dispute_id}</code>'),
+            ("tournament_id", "mono",
+             f'<code data-dispute-field="tournament">{tournament_id}</code>'),
+            ("status", f"{_status_cls} mono",
+             f'<span class="pill {_status_cls}" data-dispute-field="status">'
+             f'{html.escape(dispute_status.upper())}</span>'),
+            ("created_ts_ns", "dim mono", str(created_ts)),
+        ])
+        + '\n<h2>Contesting · Party</h2>\n'
+        + cert_data_table([
+            ("player_address", "mono",
+             f'<code data-dispute-field="player">{disputed_player}</code>'),
+        ])
+        + '\n<h2>Disputed · Ruling</h2>\n'
+        + cert_data_table([
+            ("ruling_hash", "chain mono",
+             f'<code data-dispute-field="ruling_hash">{ruling_hash}</code>'),
+            ("adjudicating_agent", "amber mono",
+             f'<code data-dispute-field="adjudicator">{adjudicator}</code>'),
+            ("evidence_count", "mono", str(evidence_count)),
+        ])
+        + '\n<h2>Attestation · Chain</h2>\n'
+        + cert_data_table([
+            ("attestation_chain_hash", "chain mono",
+             f'<code data-dispute-field="attestation_chain">{attestation_hash}</code>'),
+            ("zkba_manifest_hash", "dim mono", f'<code>{zkba_hash}</code>'),
+        ])
+        + '\n</div>'
     )
 
-    return (
-        '<!DOCTYPE html>\n'
-        '<html lang="en">\n'
-        f'{head}\n'
-        f'{body}'
-        '</html>\n'
+    return render_vpm_certificate(
+        vpm_class=_VPM_ID,
+        title_text=f"DISPUTE-PACKET · {dispute_id}",
+        subtitle="Contested-ruling audit packet · Guardian-lane surface",
+        visual_state=state,
+        commitment_hex=compute_input_commitment(inputs),
+        content_html=content,
+        integrity_label=inputs["integrity_label"],
+        footer_fields=[
+            ("schema", "dispute-packet-v1"),
+            ("vpm_id", _VPM_ID),
+            ("zkba_manifest", str(inputs["zkba_manifest_hash_hex"])[:16] + "…"),
+            ("ts_ns", str(int(inputs["ts_ns"]))),
+        ],
     )
 
 

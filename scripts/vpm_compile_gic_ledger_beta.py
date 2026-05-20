@@ -61,14 +61,12 @@ from vapi_bridge.zkba_artifact import ZKBAClass, ProofWeightClass  # noqa: E402
 from vsd_ui_compiler import (  # noqa: E402
     VPMArtifactManifest,
     compile_vpm_artifact,
+    compute_input_commitment,
 )
 from vpm_visual_grammar import (  # noqa: E402
     VISUAL_STATES,
-    assemble_vpm_head,
-    integrity_label_html,
-    visual_state_aria_block,
-    visual_state_overlay,
-    vpm_body_class,
+    cert_section,
+    render_vpm_certificate,
 )
 
 
@@ -76,120 +74,78 @@ _VPM_ID = "HONESTY-BOARD-v1"
 _GIC_BETA_INTERNAL_ID = "GIC-LEDGER-BETA-v1"
 
 
-def _render_gic_chain_svg(chain_length: int) -> str:
-    """Render a deterministic horizontal chain-link sparkline as inline SVG.
-
-    For chain_length N we render min(N, 50) link dots arranged horizontally.
-    No xmlns attribute (HTML5 inline-SVG); no animation; no scripting;
-    fully self-contained.
-
-    Layout: 50 dots × 12px stride = 600px wide; height 24px. Color amber
-    (#f0a868) for completed links, dimmer (#1a2a40) for absent (when
-    chain_length < 50).
-    """
-    visible = max(0, min(50, int(chain_length)))
-    dots: list[str] = []
-    for i in range(50):
-        x = 12 + (i * 12)
-        if i < visible:
-            color = "#f0a868"
-        else:
-            color = "#1a2a40"
-        dots.append(
-            f'<circle cx="{x}" cy="12" r="4" fill="{color}" data-gic-link-index="{i}"/>'
-        )
-    return (
-        '<svg class="gic-chain-sparkline" width="612" height="24" '
-        'viewBox="0 0 612 24" aria-label="GIC chain dots; one dot per link">\n'
-        '<rect x="0" y="0" width="612" height="24" fill="#0a0e14"/>\n'
-        + '\n'.join(dots) + '\n'
-        '</svg>'
-    )
+def _short_hex(h: str) -> str:
+    """Space-group a hex string into 4-char blocks for compact table display
+    (design head_hash/genesis_hash style: '7f3a 4b21 c8e0 …')."""
+    s = str(h).lower().removeprefix("0x")
+    if not s or any(c not in "0123456789abcdef" for c in s):
+        return html.escape(str(h))
+    return " ".join(s[i:i + 4] for i in range(0, min(len(s), 32), 4))
 
 
 def _render_gic_ledger_beta_html(inputs: dict) -> str:
-    """Render GIC Continuity Ledger Beta HTML body deterministically."""
+    """Render GIC Continuity Ledger Beta as the Claude-Design certificate
+    (TEMPLATE v3). Content block: Chain · Continuity."""
     state = inputs["visual_state"]
-    head = assemble_vpm_head(
-        title=f"VAPI GIC Continuity Ledger (BETA) — {state.upper()}",
-        visual_state=state,
-        extra_style=(
-            ".gic-chain-sparkline { display: block; margin: 1em auto; "
-            "max-width: 612px; }\n"
-            ".gic-milestone-badge { background: #5bd6a3; color: #020408; "
-            "padding: 4px 12px; border-radius: 4px; font-weight: bold; }\n"
-        ),
-    )
 
-    overlay = visual_state_overlay(state)
-    aria_block = visual_state_aria_block(state)
-    integrity_block = integrity_label_html(inputs["integrity_label"])
-    body_class = vpm_body_class(state)
-
-    chain_head = html.escape(str(inputs["gic_chain_head_hex"]))
+    chain_head = str(inputs["gic_chain_head_hex"])
     chain_length = int(inputs["gic_chain_length"])
-    genesis = html.escape(str(inputs["gic_genesis_hash_hex"]))
+    genesis = str(inputs["gic_genesis_hash_hex"])
     genesis_ts = int(inputs["gic_genesis_ts_ns"])
-    anchor_tx = html.escape(str(inputs["on_chain_anchor_tx_hash"]))
+    anchor_tx = str(inputs["on_chain_anchor_tx_hash"])
     anchor_block = int(inputs["on_chain_anchor_block"])
     session_id = html.escape(str(inputs["grind_session_id"]))
-    ts_ns = int(inputs["ts_ns"])
-    zkba_hash = html.escape(inputs["zkba_manifest_hash_hex"])
+    zkba_hash = str(inputs["zkba_manifest_hash_hex"])
 
-    chain_svg = _render_gic_chain_svg(chain_length)
-    milestone_html = (
-        f'<span class="gic-milestone-badge">GIC_{chain_length} MILESTONE</span>'
-        if chain_length >= 100
-        else f'<span>{chain_length} / 100 links</span>'
-    )
-    anchor_status = (
-        f'<span data-gic-on-chain="true">ANCHORED at block {anchor_block} '
-        f'(tx <code>{anchor_tx[:10]}...{anchor_tx[-8:]}</code>)</span>'
-        if anchor_tx and anchor_tx != "n/a" and anchor_block > 0
-        else '<span data-gic-on-chain="false">NOT ON CHAIN (filesystem-only)</span>'
-    )
+    on_chain = bool(anchor_tx and anchor_tx not in ("", "n/a") and anchor_block > 0)
+    # Milestone text — machine + human; T-VPM-GIC-5 pins these literals.
+    if chain_length >= 100:
+        milestone_v = f"GIC_{chain_length} MILESTONE · INTACT"
+    else:
+        milestone_v = f"{chain_length} / 100 links · INTACT"
 
-    body = (
-        '<body>\n'
-        f'  <div class="{body_class}" data-gic-beta-id="{_GIC_BETA_INTERNAL_ID}">\n'
-        f'  {overlay}\n'
-        '  <h1>GIC Continuity Ledger (BETA)</h1>\n'
-        f'  {aria_block}\n'
-        '  <h2>Chain Continuity</h2>\n'
-        '  <table class="vpm-status">\n'
-        f'    <tr><td>Grind session ID:</td><td><code>{session_id}</code></td></tr>\n'
-        f'    <tr><td>Chain length:</td><td>{milestone_html}</td></tr>\n'
-        f'    <tr><td>Head hash:</td><td><code data-gic-head>{chain_head}</code></td></tr>\n'
-        f'    <tr><td>Genesis hash:</td><td><code data-gic-genesis>{genesis}</code></td></tr>\n'
-        f'    <tr><td>Genesis ts_ns:</td><td><code>{genesis_ts}</code></td></tr>\n'
-        '  </table>\n'
-        '  <h2>Chain Visualization</h2>\n'
-        f'  {chain_svg}\n'
-        '  <h2>On-Chain Anchor</h2>\n'
-        f'  <div class="vpm-meta">{anchor_status}</div>\n'
-        '  <h2>Underlying ZKBA Projection (Alpha)</h2>\n'
-        '  <div class="vpm-meta">\n'
-        f'    <div>ZKBA manifest hash: <code>{zkba_hash}</code></div>\n'
-        '    <div>The Alpha projection is unchanged; this Beta wraps it '
-        'with the Phase O4 compiler discipline + Anti-Hype Visual Grammar.</div>\n'
-        '  </div>\n'
-        f'  {integrity_block}\n'
-        '  <div class="vpm-footer">\n'
-        f'    Internal ID: <code>{_GIC_BETA_INTERNAL_ID}</code> (under '
-        f'<code>{_VPM_ID}</code> umbrella). Lifecycle: Test Fixture. '
-        'Self-contained projection. No CDN; no network; no wall-clock; '
-        f'compile-time ts_ns: <code>{ts_ns}</code>.\n'
-        '  </div>\n'
-        '  </div>\n'
-        '</body>\n'
+    if on_chain:
+        anchor_v = (
+            '<span data-gic-on-chain="true">'
+            f'ANCHORED at block {anchor_block} '
+            f'(tx <code>{html.escape(anchor_tx[:10])}…'
+            f'{html.escape(anchor_tx[-8:])}</code>)</span>'
+        )
+        anchor_cls = "chain mono"
+    else:
+        anchor_v = '<span data-gic-on-chain="false">NOT ON CHAIN · filesystem-only</span>'
+        anchor_cls = "dim mono"
+
+    content = cert_section(
+        "Chain · Continuity",
+        f"chain_length {chain_length}",
+        [
+            ("grind_session_id", "amber mono", session_id),
+            ("chain_length", "chain mono", html.escape(milestone_v)),
+            ("head_hash", "chain mono",
+             f'<code data-gic-head>{html.escape(chain_head)}</code>'),
+            ("genesis_hash", "dim mono",
+             f'<code data-gic-genesis>{html.escape(genesis)}</code>'),
+            ("genesis_ts", "mono", str(genesis_ts)),
+            ("on_chain_anchor", anchor_cls, anchor_v),
+            ("zkba_manifest_hash", "dim mono", _short_hex(zkba_hash)),
+        ],
     )
 
-    return (
-        '<!DOCTYPE html>\n'
-        '<html lang="en">\n'
-        f'{head}\n'
-        f'{body}'
-        '</html>\n'
+    return render_vpm_certificate(
+        vpm_class=_GIC_BETA_INTERNAL_ID,
+        title_text=_GIC_BETA_INTERNAL_ID,
+        subtitle="Proof-of-continuity ledger · IoTeX-anchored",
+        visual_state=state,
+        commitment_hex=compute_input_commitment(inputs),
+        content_html=content,
+        integrity_label=inputs["integrity_label"],
+        footer_fields=[
+            ("schema", "gic-ledger-beta-v1"),
+            ("vpm_id", _VPM_ID),
+            ("zkba_manifest", _short_hex(zkba_hash)),
+            ("ts_ns", str(int(inputs["ts_ns"]))),
+        ],
     )
 
 

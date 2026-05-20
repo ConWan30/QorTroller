@@ -55,14 +55,12 @@ from vapi_bridge.zkba_artifact import ZKBAClass, ProofWeightClass  # noqa: E402
 from vsd_ui_compiler import (  # noqa: E402
     VPMArtifactManifest,
     compile_vpm_artifact,
+    compute_input_commitment,
 )
 from vpm_visual_grammar import (  # noqa: E402
     VISUAL_STATES,
-    assemble_vpm_head,
-    integrity_label_html,
-    visual_state_aria_block,
-    visual_state_overlay,
-    vpm_body_class,
+    cert_data_table,
+    render_vpm_certificate,
 )
 
 
@@ -186,71 +184,65 @@ def _render_cdrr_svg() -> str:
     )
 
 
+def _short_hex(h: str) -> str:
+    """4-char space-grouped hex for compact table display."""
+    s = str(h).lower().removeprefix("0x")
+    if not s or any(c not in "0123456789abcdef" for c in s):
+        return html.escape(str(h))
+    return " ".join(s[i:i + 4] for i in range(0, min(len(s), 32), 4))
+
+
 def _render_cdrr_dag_html(inputs: dict) -> str:
-    """Render the CDRR DAG VPM HTML body deterministically."""
+    """Render the CDRR DAG VPM as the Claude-Design certificate (TEMPLATE v3).
+
+    Content is the FROZEN composition lattice (what these artifacts actually
+    commit to) — NOT a fabricated contradiction-count summary. The lattice
+    SVG + the per-edge design table preserve the data-cdrr-* markers the
+    test band asserts.
+    """
     state = inputs["visual_state"]
-    head = assemble_vpm_head(
-        title=f"VAPI CDRR DAG — {state.upper()}",
-        visual_state=state,
-        extra_style=(
-            ".cdrr-dag { display: block; margin: 1em auto; "
-            "max-width: 640px; border: 1px solid #1a2a40; }\n"
-            ".cdrr-legend { color: #93a5b8; font-size: 0.85em; "
-            "margin: 0.5em 0 1em 0; }\n"
-        ),
-    )
-
-    overlay = visual_state_overlay(state)
-    aria_block = visual_state_aria_block(state)
-    integrity_block = integrity_label_html(inputs["integrity_label"])
-    body_class = vpm_body_class(state)
     dag_svg = _render_cdrr_svg()
-    ts_ns = int(inputs["ts_ns"])
-    zkba_hash = html.escape(inputs["zkba_manifest_hash_hex"])
+    zkba_hash = str(inputs["zkba_manifest_hash_hex"])
 
-    # Render an edge list as <ul> for accessibility + grep-testability
-    edge_items = "\n".join(
-        f'    <li data-cdrr-edge="{child}-to-{parent}">'
-        f'<code>{child}</code> &rarr; <code>{parent}</code>'
-        '</li>'
+    edge_rows = [
+        (child, "mono",
+         f'<span data-cdrr-edge="{child}-to-{parent}">composes '
+         f'<span class="val chain">{parent}</span></span>')
         for child, parent in CDRR_EDGES
+    ]
+
+    content = (
+        f'<div data-cdrr-id="{_CDRR_INTERNAL_ID}">\n'
+        '<h2>Composition · Lattice '
+        '<span class="count">7 ZKBA classes · 5 edges</span></h2>\n'
+        f'<div class="cdrr-dag-wrap">{dag_svg}</div>\n'
+        '<h2>Composition · Edges '
+        '<span class="count">child → parent · parent committed in child preimage</span></h2>\n'
+        + cert_data_table(edge_rows)
+        + '\n<h2>Underlying · ZKBA · Projection</h2>\n'
+        + cert_data_table([("zkba_manifest_hash", "dim mono", _short_hex(zkba_hash))])
+        + '\n</div>'
     )
 
-    body = (
-        '<body>\n'
-        f'  <div class="{body_class}" data-cdrr-id="{_CDRR_INTERNAL_ID}">\n'
-        f'  {overlay}\n'
-        '  <h1>CDRR DAG — Cross-Domain Reasoning Record Lattice</h1>\n'
-        f'  {aria_block}\n'
-        '  <p class="cdrr-legend">7 ZKBA classes (FROZEN-v1 enum) connected '
-        'by 5 composition edges. Edge direction: child &rarr; parent (the '
-        'parent\'s output is committed in the child\'s preimage).</p>\n'
-        f'  {dag_svg}\n'
-        '  <h2>Composition Edges</h2>\n'
-        '  <ul class="cdrr-edge-list">\n'
-        f'{edge_items}\n'
-        '  </ul>\n'
-        '  <h2>Underlying ZKBA Projection</h2>\n'
-        '  <div class="vpm-meta">\n'
-        f'    <div>ZKBA manifest hash: <code>{zkba_hash}</code></div>\n'
-        '  </div>\n'
-        f'  {integrity_block}\n'
-        '  <div class="vpm-footer">\n'
-        f'    Internal ID: <code>{_CDRR_INTERNAL_ID}</code> (under '
-        f'<code>{_VPM_ID}</code> umbrella per VBDIP-0002A §10 discipline). '
-        f'Lifecycle: Test Fixture. Self-contained projection. compile-time '
-        f'ts_ns: <code>{ts_ns}</code>.\n'
-        '  </div>\n'
-        '  </div>\n'
-        '</body>\n'
-    )
-
-    return (
-        '<!DOCTYPE html>\n'
-        '<html lang="en">\n'
-        f'{head}\n'
-        f'{body}'
-        '</html>\n'
+    return render_vpm_certificate(
+        vpm_class=_CDRR_INTERNAL_ID,
+        title_text=_CDRR_INTERNAL_ID,
+        subtitle="Cross-domain reasoning record · composition DAG",
+        visual_state=state,
+        commitment_hex=compute_input_commitment(inputs),
+        content_html=content,
+        integrity_label=inputs["integrity_label"],
+        footer_fields=[
+            ("schema", "cdrr-dag-v1"),
+            ("vpm_id", _VPM_ID),
+            ("zkba_manifest", _short_hex(zkba_hash)),
+            ("ts_ns", str(int(inputs["ts_ns"]))),
+        ],
+        extra_style=(
+            ".cdrr-dag-wrap { margin: 12px 0 4px; }\n"
+            ".cdrr-dag { display: block; margin: 0 auto; max-width: 640px; "
+            "border: 1px solid #1a2230; border-radius: 4px; background: #0d1218; }\n"
+        ),
     )
 
 

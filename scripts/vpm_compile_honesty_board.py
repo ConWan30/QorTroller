@@ -61,14 +61,12 @@ from vapi_bridge.zkba_artifact import ZKBAClass, ProofWeightClass  # noqa: E402
 from vsd_ui_compiler import (  # noqa: E402
     VPMArtifactManifest,
     compile_vpm_artifact,
+    compute_input_commitment,
 )
 from vpm_visual_grammar import (  # noqa: E402
     VISUAL_STATES,
-    assemble_vpm_head,
-    integrity_label_html,
-    visual_state_aria_block,
-    visual_state_overlay,
-    vpm_body_class,
+    cert_section,
+    render_vpm_certificate,
 )
 
 
@@ -99,70 +97,78 @@ def _render_honesty_board_html(inputs: dict) -> str:
       - "ts_ns":                      int
     """
     state = inputs["visual_state"]
-    head = assemble_vpm_head(
-        title=f"VAPI Honesty Board — {state.upper()}",
-        visual_state=state,
-    )
-
-    overlay = visual_state_overlay(state)
-    aria_block = visual_state_aria_block(state)
-    integrity_block = integrity_label_html(inputs["integrity_label"])
 
     fleet_aligned = "ALIGNED" if inputs["fleet_phase_aligned"] else "DRIFT"
     fleet_target = html.escape(str(inputs["fleet_phase_target"]))
     coverage = int(inputs["zkba_class_coverage_count"])
-    paused = "PAUSED (kill-switch held)" if inputs["chain_submission_paused"] else "ACTIVE"
+    paused = bool(inputs["chain_submission_paused"])
     cedar_anchored = "ANCHORED" if inputs["cedar_v2_bundles_anchored"] else "PENDING"
     pv_ci = int(inputs["pv_ci_invariants_count"])
     wallet = html.escape(str(inputs["wallet_balance_iotx"]))
-    last_tx = html.escape(str(inputs["last_anchor_tx_hash"]))
+    last_tx = str(inputs["last_anchor_tx_hash"])
     last_block = int(inputs["last_anchor_block"])
-    ts_ns = int(inputs["ts_ns"])
-    zkba_hash = html.escape(inputs["zkba_manifest_hash_hex"])
+    zkba_hash = str(inputs["zkba_manifest_hash_hex"])
 
-    body_class = vpm_body_class(state)
-    body = (
-        '<body>\n'
-        f'  <div class="{body_class}">\n'
-        f'  {overlay}\n'
-        '  <h1>VAPI Honesty Board</h1>\n'
-        f'  {aria_block}\n'
-        '  <h2>Protocol State Summary</h2>\n'
-        '  <table class="vpm-status">\n'
-        f'    <tr><td>Operator fleet phase:</td><td>{fleet_target} '
-        f'<span class="vpm-state-pill vpm-state-{state}">{fleet_aligned}</span></td></tr>\n'
-        f'    <tr><td>ZKBA class coverage:</td><td>{coverage} / 7</td></tr>\n'
-        f'    <tr><td>Chain submission gate:</td><td>{paused}</td></tr>\n'
-        f'    <tr><td>Cedar v2 lane bundles:</td><td>{cedar_anchored}</td></tr>\n'
-        f'    <tr><td>PV-CI invariants:</td><td>{pv_ci}</td></tr>\n'
-        f'    <tr><td>Operator wallet:</td><td><code>{wallet}</code></td></tr>\n'
-        '  </table>\n'
-        '  <h2>Last Anchor</h2>\n'
-        '  <div class="vpm-meta">\n'
-        f'    <div>Last anchor tx: <code>{last_tx}</code></div>\n'
-        f'    <div>Block: <code>{last_block}</code></div>\n'
-        '  </div>\n'
-        '  <h2>Underlying ZKBA Projection</h2>\n'
-        '  <div class="vpm-meta">\n'
-        f'    <div>ZKBA manifest hash: <code>{zkba_hash}</code></div>\n'
-        '  </div>\n'
-        f'  {integrity_block}\n'
-        '  <div class="vpm-footer">\n'
-        f'    VPM ID: <code>{_VPM_ID}</code>. Lifecycle: Test Fixture. '
-        'Self-contained projection. No CDN; no network; no wall-clock; '
-        f'compile-time ts_ns: <code>{ts_ns}</code>.\n'
-        '  </div>\n'
-        '  </div>\n'
-        '</body>\n'
+    fleet_align_cls = "chain" if inputs["fleet_phase_aligned"] else "amber"
+    gate_pill = (
+        '<span class="pill dim">PAUSED · KILL-SWITCH HELD</span>'
+        if paused
+        else '<span class="pill chain">ARMED · ACCEPTING</span>'
+    )
+    cedar_cls = "chain" if inputs["cedar_v2_bundles_anchored"] else "amber"
+    has_anchor = bool(last_tx and last_tx != "n/a")
+    if has_anchor:
+        anchor_v = (
+            '<div class="row"><span class="lbl">tx</span>'
+            f'<span class="val chain"><code>{html.escape(last_tx[:10])}…'
+            f'{html.escape(last_tx[-8:])}</code></span></div>'
+            f'<div class="row"><span class="lbl">block</span>'
+            f'<span class="val chain">{last_block}</span></div>'
+        )
+        anchor_cls = "mono"
+    else:
+        anchor_v = "no anchor recorded"
+        anchor_cls = "dim mono"
+
+    content = cert_section(
+        "Protocol · State",
+        "QRESCE-0001 v0.5",
+        [
+            ("fleet_phase", f"{fleet_align_cls} mono",
+             f"{fleet_target} · {fleet_aligned}"),
+            ("zkba_class_coverage", "chain mono", f"{coverage} / 7 classes"),
+            ("chain_submission_gate", "mono", gate_pill),
+            ("cedar_v2_bundles", f"{cedar_cls} mono", cedar_anchored),
+            ("pv_ci_invariants_count", "chain mono", f"{pv_ci} / {pv_ci} PASS"),
+            ("operator_wallet", "mono", f"<code>{wallet} IOTX</code>"),
+            ("last_anchor", anchor_cls, anchor_v),
+            ("zkba_manifest_hash", "dim mono", _short_hex(zkba_hash)),
+        ],
     )
 
-    return (
-        '<!DOCTYPE html>\n'
-        '<html lang="en">\n'
-        f'{head}\n'
-        f'{body}'
-        '</html>\n'
+    return render_vpm_certificate(
+        vpm_class=_VPM_ID,
+        title_text=_VPM_ID,
+        subtitle="Public protocol-state snapshot · grant-evaluator surface",
+        visual_state=state,
+        commitment_hex=compute_input_commitment(inputs),
+        content_html=content,
+        integrity_label=inputs["integrity_label"],
+        footer_fields=[
+            ("schema", "honesty-board-v1"),
+            ("vpm_id", _VPM_ID),
+            ("zkba_manifest", _short_hex(zkba_hash)),
+            ("ts_ns", str(int(inputs["ts_ns"]))),
+        ],
     )
+
+
+def _short_hex(h: str) -> str:
+    """4-char space-grouped hex for compact table display."""
+    s = str(h).lower().removeprefix("0x")
+    if not s or any(c not in "0123456789abcdef" for c in s):
+        return html.escape(str(h))
+    return " ".join(s[i:i + 4] for i in range(0, min(len(s), 32), 4))
 
 
 # ---------------------------------------------------------------------------

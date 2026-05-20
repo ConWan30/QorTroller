@@ -17,11 +17,11 @@ const BrpView          = lazy(() => import('./views/BrpView').then((m) => ({ def
 // Sellers + buyers + auditors share this surface; operator listing form
 // hidden in O1.
 const MarketplaceView  = lazy(() => import('./views/MarketplaceView').then((m) => ({ default: m.MarketplaceView })))
-// 6th view: Phase O4-VPM-INT Stream C — VPM Registry tab. Read-only
-// inspection surface for the Phase O4 VPM artifacts emitted by the
-// Stream A.1+A.2 compilers. Sandboxed iframe rendering + Layer 3
-// Anti-Hype Visual Grammar verification.
-const VpmRegistryView  = lazy(() => import('./views/VpmRegistryView').then((m) => ({ default: m.VpmRegistryView })))
+// VPM Proof page (tab 04) — Claude-Design certificate gallery + forensic
+// inspector. Renders each registry artifact via fetch + srcDoc + cache:no-store,
+// recomputes its SHA-256 in-browser (HASH-OK), and runs verifyVpmGrammar
+// against the FROZEN 6-state visual-grammar markers.
+const VpmProofView     = lazy(() => import('./views/VpmProofView').then((m) => ({ default: m.VpmProofView })))
 // QRESCE-0001 v0.5 grant-evaluator remodel — two design-language views wired
 // to the real bridge hooks + real in-browser verifiers (named exports).
 const ForensicView     = lazy(() => import('./views/ForensicView').then((m) => ({ default: m.ForensicView })))
@@ -35,7 +35,7 @@ const VIEW_MAP = {
   manufacturer: ManufacturerView,
   brp:          BrpView,
   marketplace:  MarketplaceView,
-  vpm:          VpmRegistryView,
+  vpm:          VpmProofView,
 }
 
 function ViewLoader() {
