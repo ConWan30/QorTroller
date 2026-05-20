@@ -97,19 +97,22 @@ function FieldRow({ label, value, accent = '#f0a868' }) {
       <td style={{
         fontFamily:    FONTS.mono,
         fontSize:      11,
-        color:         accent,
-        padding:       '4px 12px 4px 0',
+        color:         '#8a98ab',
+        fontWeight:    600,
+        padding:       '7px 14px 7px 0',
         verticalAlign: 'top',
         whiteSpace:    'nowrap',
+        borderBottom:  '1px solid #141b27',
       }}>
         {label}
       </td>
       <td style={{
         fontFamily: FONTS.mono,
         fontSize:   11,
-        color:      'rgba(200,216,232,0.95)',
-        padding:    '4px 0',
+        color:      '#d4dde8',
+        padding:    '7px 0',
         wordBreak:  'break-word',
+        borderBottom: '1px solid #141b27',
       }}>
         {display}
       </td>
@@ -287,10 +290,10 @@ export function VpmManifestPanel({ manifest, commitmentHex }) {
 
   return (
     <div data-vpm-manifest-panel="present" style={{
-      padding:       '1em',
-      background:    'rgba(10,14,20,0.85)',
-      border:        '1px solid rgba(240,168,104,0.18)',
-      borderRadius:  6,
+      padding:       '16px 18px',
+      background:    '#04060a',
+      border:        '1px solid rgba(240,168,104,0.35)',
+      borderRadius:  8,
       fontFamily:    FONTS.mono,
     }}>
       <div style={{
@@ -325,12 +328,12 @@ export function VpmManifestPanel({ manifest, commitmentHex }) {
 
       <div style={{
         marginTop:    '1em',
-        padding:      '0.6em',
-        background:   'rgba(2,4,8,0.6)',
-        borderRadius: 4,
+        paddingTop:   '0.8em',
+        borderTop:    '1px solid #1b2433',
         fontSize:     10,
-        color:        'rgba(122,138,155,0.85)',
+        color:        '#5a6878',
         wordBreak:    'break-all',
+        lineHeight:   1.6,
       }}>
         <div><strong>commitment_hex:</strong> {commitmentHex || '—'}</div>
         {recomputedHex && (
