@@ -714,31 +714,34 @@ def _certificate_base_css() -> str:
         "    linear-gradient(to right,  rgba(26,34,48,0.10) 1px, transparent 1px),\n"
         "    linear-gradient(to bottom, rgba(26,34,48,0.10) 1px, transparent 1px);\n"
         "  background-size: 96px 96px, 96px 96px, 24px 24px, 24px 24px;\n"
-        "  padding: 28px; }\n"
+        "  padding: clamp(10px, 1.6vw, 18px); }\n"
         # visually-hidden grammar marker (keeps verifier honest)
         ".vpm-grammar-marker { position: absolute; width: 1px; height: 1px;\n"
         "  margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0);\n"
         "  white-space: nowrap; border: 0; }\n"
         # frame — corner-bracket card; accent via --vpm-accent
+        # max-width:none + margin:0 -> the card FILLS the iframe stage (no
+        # side void / 'black space on left'); the body padding is the breathing
+        # room. Compact internal padding so the header eats less vertical space.
         ".frame { position: relative; background: #0a0e14;\n"
         "  border: 1px solid var(--vpm-accent, #5bd6a3);\n"
-        "  padding: 32px 36px 28px; max-width: 1200px; margin: 0 auto; }\n"
+        "  padding: 20px 24px 18px; max-width: none; margin: 0; }\n"
         ".frame::before, .frame::after { content: \"\"; position: absolute;\n"
         "  width: 22px; height: 22px; border: 1px solid var(--vpm-accent, #5bd6a3); }\n"
         ".frame::before { top: -1px; left: -1px; border-right: 0; border-bottom: 0; }\n"
         ".frame::after  { bottom: -1px; right: -1px; border-left: 0; border-top: 0; }\n"
         # header
-        ".head { display: grid; grid-template-columns: 1fr auto; gap: 18px;\n"
-        "  align-items: start; padding-bottom: 20px; border-bottom: 1px solid #1a2230; }\n"
-        ".eyebrow { font-size: 10.5px; color: #5a6675; letter-spacing: 0.18em;\n"
+        ".head { display: grid; grid-template-columns: 1fr auto; gap: 14px;\n"
+        "  align-items: start; padding-bottom: 12px; border-bottom: 1px solid #1a2230; }\n"
+        ".eyebrow { font-size: 10px; color: #5a6675; letter-spacing: 0.18em;\n"
         "  text-transform: uppercase; line-height: 1; }\n"
         ".wm { font-family: 'Syne', system-ui, sans-serif; font-weight: 700;\n"
-        "  color: #d4dde8; font-size: 22px; letter-spacing: -0.02em; line-height: 1;\n"
-        "  margin-top: 12px; }\n"
+        "  color: #d4dde8; font-size: 19px; letter-spacing: -0.02em; line-height: 1;\n"
+        "  margin-top: 8px; }\n"
         ".wm .t { font-weight: 800; color: #f0a868; }\n"
         ".frame h1 { font-family: 'Syne', system-ui, sans-serif; font-weight: 700;\n"
-        "  font-size: 38px; color: #d4dde8; letter-spacing: -0.01em; line-height: 1.1;\n"
-        "  margin: 14px 0 8px; border: 0; padding: 0; }\n"
+        "  font-size: 26px; color: #d4dde8; letter-spacing: -0.01em; line-height: 1.1;\n"
+        "  margin: 6px 0 4px; border: 0; padding: 0; }\n"
         ".subtitle { font-size: 11.5px; color: #8a96a5; letter-spacing: 0.06em;\n"
         "  text-transform: uppercase; }\n"
         ".stamp { display: inline-flex; align-items: center; gap: 9px;\n"
@@ -749,15 +752,15 @@ def _certificate_base_css() -> str:
         ".stamp::before { content: \"\"; width: 8px; height: 8px; border-radius: 50%;\n"
         "  background: var(--vpm-accent, #5bd6a3); }\n"
         # commitment block
-        ".commit-block { margin: 22px 0 26px; }\n"
+        ".commit-block { margin: 14px 0 16px; }\n"
         ".commit-block .label { font-size: 10px; color: #5a6675;\n"
-        "  letter-spacing: 0.16em; text-transform: uppercase; margin-bottom: 8px; }\n"
-        ".commit-block .hash { font-size: 16px; color: var(--vpm-accent, #5bd6a3);\n"
+        "  letter-spacing: 0.16em; text-transform: uppercase; margin-bottom: 6px; }\n"
+        ".commit-block .hash { font-size: 14px; color: var(--vpm-accent, #5bd6a3);\n"
         "  letter-spacing: 0.04em; line-height: 1.5; word-break: break-all; }\n"
         # section headers + tables
         ".frame h2 { font-family: 'Syne', system-ui, sans-serif; font-weight: 600;\n"
-        "  font-size: 16px; color: #d4dde8; letter-spacing: 0.06em;\n"
-        "  text-transform: uppercase; margin: 26px 0 12px; border: 0; padding: 0; }\n"
+        "  font-size: 15px; color: #d4dde8; letter-spacing: 0.06em;\n"
+        "  text-transform: uppercase; margin: 16px 0 8px; border: 0; padding: 0; }\n"
         ".frame h2 .count { font-family: ui-monospace, monospace; font-weight: 500;\n"
         "  font-size: 11px; color: #5a6675; letter-spacing: 0.06em; margin-left: 10px;\n"
         "  text-transform: none; }\n"
@@ -765,7 +768,7 @@ def _certificate_base_css() -> str:
         "  background: #0d1218; border: 1px solid #1a2230; border-radius: 4px;\n"
         "  overflow: hidden; margin: 0; }\n"
         ".frame tr + tr td { border-top: 1px solid rgba(26,34,48,0.4); }\n"
-        ".frame td { padding: 11px 16px; font-size: 12.5px; vertical-align: baseline; }\n"
+        ".frame td { padding: 8px 14px; font-size: 12.5px; vertical-align: baseline; }\n"
         ".frame td.k { color: #8a96a5; width: 280px; font-size: 11px;\n"
         "  letter-spacing: 0.08em; text-transform: uppercase; }\n"
         ".frame td.v { color: #d4dde8; }\n"
@@ -791,7 +794,7 @@ def _certificate_base_css() -> str:
         ".pill.chain { color: #5bd6a3; } .pill.amber { color: #f0a868; }\n"
         ".pill.err { color: #d65b78; } .pill.dim { color: #5a6675; }\n"
         # footer 4-up
-        ".frame footer { margin-top: 26px; padding-top: 16px;\n"
+        ".frame footer { margin-top: 18px; padding-top: 14px;\n"
         "  border-top: 1px solid #1a2230; display: grid;\n"
         "  grid-template-columns: repeat(4, 1fr); gap: 14px 24px; font-size: 11.5px; }\n"
         ".frame footer .k { color: #5a6675; letter-spacing: 0.14em;\n"
@@ -809,9 +812,24 @@ def _certificate_base_css() -> str:
         "  height: 22px; opacity: 0.7; }\n"
         # revoked redacted banner under header
         ".vpm-redacted-banner { background: #d65b7811; border: 1px solid #d65b78;\n"
-        "  color: #d65b78; padding: 8px 14px; margin: 0 0 22px; font-size: 11.5px;\n"
+        "  color: #d65b78; padding: 8px 14px; margin: 0 0 16px; font-size: 11.5px;\n"
         "  letter-spacing: 0.16em; text-transform: uppercase;\n"
         "  text-decoration: line-through; text-decoration-color: rgba(214,91,120,0.6); }\n"
+        # unverified: SUBTLE red hatch over the graticule (design treatment).
+        # Higher specificity than visual_state_css's harsh `.vpm-body` rule, so
+        # this WINS visually while the FROZEN literal substrings (#d65b78 /
+        # #020408 / repeating-linear-gradient) remain present for the verifier.
+        "body.vpm-unverified { background-image:\n"
+        "    repeating-linear-gradient(135deg, rgba(214,91,120,0.07) 0 6px, "
+        "rgba(2,4,8,0) 6px 15px),\n"
+        "    linear-gradient(to right,  rgba(26,34,48,0.27) 1px, transparent 1px),\n"
+        "    linear-gradient(to bottom, rgba(26,34,48,0.27) 1px, transparent 1px),\n"
+        "    linear-gradient(to right,  rgba(26,34,48,0.10) 1px, transparent 1px),\n"
+        "    linear-gradient(to bottom, rgba(26,34,48,0.10) 1px, transparent 1px);\n"
+        "  background-size: auto, 96px 96px, 96px 96px, 24px 24px, 24px 24px; }\n"
+        # unverified frame border reads red (accent var already set inline, but
+        # pin it here so the harsh visual_state_css body rule never bleeds in).
+        "body.vpm-unverified .frame { background: #0a0e14; }\n"
     )
 
 
