@@ -341,7 +341,7 @@ done
 | Metric | Concern | Green threshold | Red threshold |
 |--------|---------|----------------|---------------|
 | RSS memory | Unbounded agent state, ring buffers | < 200MB after 8h | > 400MB or linear growth |
-| `agent_rulings` table size | Polling every 5 min × 38 agents | < 10k rows / 8h | Unbounded growth (missing cleanup) |
+| `agent_rulings` table size | Polling every 5 min × ~29 standalone agents + 3 stewards | < 10k rows / 8h | Unbounded growth (missing cleanup) |
 | HTTP API p95 response time | Event loop stalls | < 100ms | > 500ms |
 | Log file size | Verbose debug logging | < 500MB / 8h | Unbounded (missing rotation) |
 | SQLite WAL file size | Transaction batching | < 50MB | > 200MB (checkpoint not running) |
@@ -424,7 +424,7 @@ The genesis GIC hash is permanent. Its `ts_ns` becomes part of the Phase 236 Zen
         Expected: grind_ready=true, session_counting_paused=false
         Observe: sustained_duration_s >= 30
 
-[ ] 8. Verify all 38 agents initialized (no startup errors in bridge log)
+[ ] 8. Verify all 29 standalone agents + 3 stewards initialized (no startup errors in bridge log)
 
 [ ] 9. Verify InsightSynthesizer Mode 6 initialization complete (log: "Mode 6" no errors)
 
