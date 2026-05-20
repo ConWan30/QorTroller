@@ -13,11 +13,11 @@ import { FONTS, GAMER } from './shared/design/tokens'
 // App.jsx VIEW_MAP (preserved in code); Developer is still reachable via the
 // drift-alert badge for operator-agent drill-down.
 const VIEWS = [
-  { id: 'gamer',     label: 'GAMER',     accent: GAMER.cyan, icon: '◈' },
-  { id: 'forensic',  label: 'FORENSIC',  accent: '#5bd6a3',  icon: '⌗' },
-  { id: 'operator',  label: 'OPERATOR',  accent: '#f0a868',  icon: '◎' },
+  { id: 'gamer',    num: '01', label: 'Gamer',                 accent: GAMER.cyan },
+  { id: 'forensic', num: '02', label: 'Forensic · Explorer',   accent: '#5bd6a3' },
+  { id: 'operator', num: '03', label: 'Operator · Evidence',   accent: '#f0a868' },
   // VPM Registry — autonomous Verified Projection Media (HTML snapshot proofs).
-  { id: 'vpm',       label: 'VPM',       accent: '#f0a868',  icon: '◫' },
+  { id: 'vpm',      num: '04', label: 'VPM · Proofs',          accent: '#f0a868' },
 ]
 
 export function ViewSelector({ activeView, onViewChange }) {
@@ -102,33 +102,26 @@ export function ViewSelector({ activeView, onViewChange }) {
                 border:        `1px solid ${active ? v.accent + '55' : 'rgba(255,255,255,0.06)'}`,
                 borderRadius:  4,
                 padding:       '4px 14px',
-                fontFamily:    FONTS.display,
-                fontSize:      11,
-                fontWeight:    600,
-                letterSpacing: '0.12em',
-                color:         active ? v.accent : 'rgba(200,216,232,0.45)',
+                fontFamily:    FONTS.body,
+                fontSize:      13,
+                fontWeight:    active ? 700 : 500,
+                letterSpacing: '0.01em',
+                color:         active ? v.accent : 'rgba(200,216,232,0.50)',
                 cursor:        'pointer',
                 transition:    'all 0.15s ease',
                 display:       'flex',
-                alignItems:    'center',
-                gap:           5,
+                alignItems:    'baseline',
+                gap:           7,
               }}
             >
-              <span style={{ fontSize: 9 }}>{v.icon}</span>
+              <span style={{
+                fontFamily:    FONTS.mono,
+                fontSize:      9,
+                fontWeight:    500,
+                color:         active ? v.accent : 'rgba(200,216,232,0.30)',
+                letterSpacing: '0.05em',
+              }}>{v.num}</span>
               {v.label}
-              {v.liveFalse && (
-                <span
-                  title="live: false (Block W — pre-ceremony)"
-                  style={{
-                    width:        5,
-                    height:       5,
-                    borderRadius: '50%',
-                    background:   '#e85a5a',
-                    boxShadow:    '0 0 4px rgba(232,90,90,0.6)',
-                    marginLeft:   2,
-                  }}
-                />
-              )}
               {active && (
                 <motion.span
                   layoutId="tab-indicator"

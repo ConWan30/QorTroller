@@ -28,9 +28,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useHeartbeatStore } from '../heartbeat/useHeartbeat'
 import {
-  useCaptureHealth, useGrindChain, useFleetCoherenceStatus,
-  useAutoTriggerStatus, useGrindAnalytics, useAITSeparation, usePCCIntelligence,
-  useActivePlayOccupancy, useCuratorStatus,
+  useCaptureHealth, useGrindChain, useGrindAnalytics,
+  usePCCIntelligence, useActivePlayOccupancy, useCuratorStatus,
 } from '../api/bridgeApi'
 import { ConsentPanel } from '../components/ConsentPanel'
 import { FONTS, GAMER } from '../shared/design/tokens'
@@ -251,34 +250,6 @@ function LatestGicPanel({ grind, bridgeDown, magnitude }) {
 }
 
 // ---------------------------------------------------------------------------
-// Left-mid: FLEET COHERENCE + agents / on-chain (heartbeat + coherence hook)
-// ---------------------------------------------------------------------------
-
-function FleetPanel({ coherence, agentCount, onChain, merkleRoot }) {
-  const cohC = coherence?.active_contradictions ?? 0
-  const cohH = coherence?.active_orphans ?? 0
-  const cohI = coherence?.active_inversions ?? 0
-  const clean = cohC === 0 && cohH === 0 && cohI === 0
-  return (
-    <OverlayPanel style={{ top: 132, left: 16, width: 264 }}>
-      <PanelHead eye="FLEET · COHERENCE">
-        <StatusChip tone={clean ? 'live' : cohC > 0 ? 'blocked' : 'pending'}>
-          {clean ? 'COHERENT' : `${cohC}C·${cohH}H·${cohI}I`}
-        </StatusChip>
-      </PanelHead>
-      <div className="p-body" style={{ display: 'grid', gap: 9 }}>
-        <Row label="agents" value={agentCount ?? '—'} color="var(--text)" />
-        <Row label="anchor" value={onChain ? '● ON-CHAIN' : '○ PENDING'}
-          color={onChain ? 'var(--chain)' : 'var(--accent-amber)'} size={11} />
-        {merkleRoot && (
-          <Row label="merkle" value={`…${merkleRoot.slice(-10)}`} size={11} color="var(--text-faint)" />
-        )}
-      </div>
-    </OverlayPanel>
-  )
-}
-
-// ---------------------------------------------------------------------------
 // Bottom-left: CONSENT MATRIX (real bitmask → frozen categories)
 // ---------------------------------------------------------------------------
 
@@ -401,82 +372,6 @@ function GrindRibbon({ chainLen, target, intact, paused, bridgeDown, consecutive
           )
         })}
       </div>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Secondary status chip strip (top-center) — statuses not in the corner panels
-// ---------------------------------------------------------------------------
-
-function ChipStrip({ gctx, ready, autoTrigger, ait, apop, curator }) {
-  const chips = []
-
-  // GAMEPLAY (only authoritative in APOP shadow mode)
-  if (!apop || apop.gate_mode === 'shadow') {
-    chips.push({
-      label: 'GAMEPLAY',
-      value: gctx ?? 'WAITING',
-      color: gctx ? tone(GCTX_TONE, gctx) : GAMER.t2,
-    })
-  }
-
-  chips.push({ label: 'READY', value: ready ? 'YES' : 'NO', color: ready ? GAMER.green : GAMER.orange })
-
-  // AUTO-TRIGGER
-  let atValue = 'OFF', atColor = GAMER.t3
-  if (autoTrigger && autoTrigger.agent_alive !== false) {
-    if (autoTrigger.stopped) { atValue = 'DONE'; atColor = GAMER.green }
-    else if (autoTrigger.next_eligible_in_s > 0) { atValue = `NEXT ~${Math.round(autoTrigger.next_eligible_in_s)}s`; atColor = GAMER.cyan }
-    else { atValue = 'ARMED'; atColor = GAMER.green }
-  }
-  chips.push({ label: 'AUTO-TRIGGER', value: atValue, color: atColor })
-
-  // AIT separation
-  const aitAbove = ait?.all_pairs_above_1 ?? false
-  const aitRatio = ait?.separation_ratio
-  chips.push({
-    label: 'AIT',
-    value: aitAbove ? (aitRatio != null ? `${aitRatio.toFixed(3)} ✓` : 'CLEAR') : ait == null ? '—' : 'PENDING',
-    color: aitAbove ? GAMER.green : ait == null ? GAMER.t3 : GAMER.orange,
-  })
-
-  // APOP
-  if (apop) {
-    const apopState = apop.latest_state ?? 'WAITING'
-    const conf = (apop.latest_confidence ?? 0) > 0 ? ` · ${(apop.latest_confidence * 100).toFixed(0)}%` : ''
-    chips.push({
-      label: `APOP·${(apop.gate_mode ?? 'shadow').toUpperCase()}`,
-      value: `${apopState}${conf}`,
-      color: apop.latest_state ? (APOP_TONE[apop.latest_state] ?? GAMER.t3) : GAMER.t2,
-    })
-  }
-
-  // CURATOR
-  if (curator?.curator_review_enabled) {
-    const flagged = Number(curator.flagged_reviews || 0)
-    const total = Number(curator.total_reviews || 0)
-    chips.push({
-      label: 'CURATOR',
-      value: flagged > 0 ? `${flagged}/${total}` : (total > 0 ? `${total}` : 'IDLE'),
-      color: flagged > 0 ? GAMER.orange : total > 0 ? GAMER.cyan : GAMER.t2,
-    })
-  }
-
-  return (
-    <div style={{
-      position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)',
-      display: 'flex', gap: 8, zIndex: 5, flexWrap: 'wrap', justifyContent: 'center',
-      maxWidth: 'calc(100% - 600px)',
-    }}>
-      {chips.map((c) => (
-        <Glass key={c.label} accent={c.color} style={{ padding: '5px 11px', minWidth: 80 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            <span style={{ fontFamily: FONTS.mono, fontSize: 6.5, letterSpacing: '0.16em', color: GAMER.t3 }}>{c.label}</span>
-            <span style={{ fontFamily: FONTS.mono, fontSize: 10, fontWeight: 600, color: c.color, letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>{c.value}</span>
-          </div>
-        </Glass>
-      ))}
     </div>
   )
 }
@@ -688,17 +583,11 @@ function PCCDrawer({ captureHealth, pccIntelligence, manualOpen, onCloseManual }
 // ---------------------------------------------------------------------------
 
 export function GamerView() {
-  const magnitude  = useHeartbeatStore((s) => s.magnitude)
-  const merkleRoot = useHeartbeatStore((s) => s.merkleRoot)
-  const onChain    = useHeartbeatStore((s) => s.onChainConfirmed)
-  const agentCount = useHeartbeatStore((s) => s.agentCount)
+  const magnitude = useHeartbeatStore((s) => s.magnitude)
 
   const { data: captureHealth }   = useCaptureHealth()
   const { data: grindChain }      = useGrindChain()
-  const { data: coherence }       = useFleetCoherenceStatus()
-  const { data: autoTrigger }     = useAutoTriggerStatus()
   const { data: grindAnalytics }  = useGrindAnalytics()
-  const { data: ait }             = useAITSeparation()
   const { data: pccIntelligence } = usePCCIntelligence()
   const { data: apop }            = useActivePlayOccupancy()
   const { data: curator }         = useCuratorStatus()
@@ -709,8 +598,6 @@ export function GamerView() {
   const chainLen = grindChain?.chain_length ?? 0
   const target   = captureHealth?.grind_target ?? grindChain?.grind_target ?? 100
   const intact   = grindChain?.chain_intact
-  const gctx     = captureHealth?.latest_gameplay_context
-  const ready    = captureHealth?.grind_ready ?? false
   const paused   = captureHealth?.session_counting_paused ?? false
 
   const latestHash = grindChain?.latest_gic_hash || ''
@@ -754,17 +641,13 @@ export function GamerView() {
         background: 'radial-gradient(ellipse at center, transparent 52%, rgba(2,4,8,0.55) 100%)',
       }} />
 
-      {/* z3+ — forensic-instrument overlay panels */}
+      {/* z3+ — the design's four floating forensic-instrument corner panels.
+          (FleetPanel + the top-center ChipStrip were removed — they overcrowded
+          the clean 4-corner composition; fleet coherence lives in OperatorView.) */}
       <CaptureHealthPanel capture={captureHealth} paused={paused} bridgeDown={bridgeOffline} />
       <LatestGicPanel grind={grindChain} bridgeDown={bridgeOffline} magnitude={magnitude} />
-      <FleetPanel coherence={coherence} agentCount={agentCount} onChain={onChain} merkleRoot={merkleRoot} />
       <ConsentPanelOverlay bitmask={consentBitmask} onOpen={() => setConsentOpen(true)} />
       <AnalyticsPanel analytics={grindAnalytics} topBlocker={topBlocker} />
-
-      <ChipStrip
-        gctx={gctx} ready={ready} autoTrigger={autoTrigger}
-        ait={ait} apop={apop} curator={curator}
-      />
 
       <ApopEvidencePrism apop={apop} />
 

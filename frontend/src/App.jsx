@@ -4,7 +4,6 @@ import { ViewSelector } from './ViewSelector'
 import { HeartbeatProvider } from './heartbeat/HeartbeatProvider'
 import { FONTS } from './shared/design/tokens'
 import { DriftAlertBadge } from './components/DriftAlertBadge'
-import { OperatorBar } from './components/OperatorBar'
 // Phase 238 Frontend Foundation Revamp — VAPI theme tokens (CSS variable lock)
 import './styles/vapi-theme.css'
 
@@ -70,19 +69,6 @@ export function App() {
         background:    '#020408',
       }}>
         <ViewSelector activeView={activeView} onViewChange={setActiveView} />
-
-        {/* Phase 238 — three-pill Operator bar (Sentry/Guardian/Curator).
-            Always visible; click navigates to the OperatorView O3 fleet-evidence
-            dashboard (QRESCE-0001 v0.5 remodel). Previously routed to
-            DeveloperView, which predated the dedicated OperatorView surface. */}
-        <div style={{
-          padding:        '4px 16px',
-          borderBottom:   '1px solid rgba(255,255,255,0.04)',
-          background:     'rgba(2,4,8,0.85)',
-          backdropFilter: 'blur(8px)',
-        }}>
-          <OperatorBar onClick={() => setActiveView('operator')} />
-        </div>
 
         {/* Phase O1 C8 — cross-view drift alert. Hidden by default; renders
             only when O1 SHADOW agents are anchored AND drift findings exist
