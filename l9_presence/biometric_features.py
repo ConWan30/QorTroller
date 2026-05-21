@@ -132,6 +132,20 @@ def between_player_separation(paths: list[str], coupling_floor: float = 0.2) -> 
     pairs = [(players[i], players[j]) for i in range(len(players)) for j in range(i + 1, len(players))]
     between = float(np.mean([np.linalg.norm(cent[a] - cent[b]) for a, b in pairs]))
     ratio = between / (within + _EPS)
+
+    # proper leave-one-out: classify each session to the nearest OTHER-sessions centroid
+    labels = [pl for pl in players for _ in range(counts[pl])]
+    correct = 0
+    for i in range(len(labels)):
+        cents = {}
+        for pl in players:
+            idx = [j for j in range(len(labels)) if labels[j] == pl and j != i]
+            if idx:
+                cents[pl] = Z[idx].mean(0)
+        pred = min(cents, key=lambda pl: float(np.linalg.norm(Z[i] - cents[pl])))
+        correct += int(pred == labels[i])
+    loo_acc = correct / len(labels)
+
     return {
         "players": counts,
         "n_players": len(players),
@@ -140,6 +154,9 @@ def between_player_separation(paths: list[str], coupling_floor: float = 0.2) -> 
         "between_player_spread": round(between, 4),
         "separation_ratio": round(ratio, 4),
         "separable": bool(ratio > 1.0),
+        "loo_accuracy": round(loo_acc, 4),
+        "loo_correct": correct,
+        "loo_total": len(labels),
     }
 
 
