@@ -101,3 +101,5 @@ def test_between_player_separates_distinct_styles(tmp_path):
     assert rep["n_players"] == 2
     assert rep["separation_ratio"] > 1.0     # distinct aim styles -> separable
     assert rep["separable"] is True
+    assert rep["loo_accuracy"] > 0.7         # proper LOO classifies the two styles
+    assert rep["loo_total"] == 8
