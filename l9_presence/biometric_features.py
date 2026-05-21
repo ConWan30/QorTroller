@@ -95,14 +95,65 @@ def within_player_stability(paths: list[str], coupling_floor: float = 0.2) -> di
     return out
 
 
+# stable within-player features (lag excluded until 60fps capture sharpens it)
+_SEP_FEATURES = ("dominant_coupling", "yaw_pitch_ratio", "yaw_decoupled")
+
+
+def between_player_separation(paths: list[str], coupling_floor: float = 0.2) -> dict:
+    """GATE 2 — does the render-loop feature vector SEPARATE players? Groups reliable
+    sessions by player id, z-scores the stable features, and reports the separation
+    ratio = mean between-player centroid distance / mean within-player spread (the
+    same between/within concept as the project's biometric separation). ratio > 1.0 =
+    the feature carries inter-person identity (necessary for it to help the tournament
+    gate). Sessions with no player id are grouped as 'P1'. Needs >= 2 players."""
+    from collections import defaultdict
+    groups: dict = defaultdict(list)
+    for p in paths:
+        s = load_session(p)
+        v = extract_feature_vector(s, coupling_floor)
+        if v is None or not v["reliable"]:
+            continue
+        player = (getattr(s, "player", "") or "P1")
+        groups[player].append([v[k] for k in _SEP_FEATURES])
+    players = sorted(groups)
+    counts = {pl: len(groups[pl]) for pl in players}
+    if len(players) < 2:
+        return {"status": "need_>=2_players", "players": counts}
+    X = np.array([row for pl in players for row in groups[pl]], float)
+    mu, sd = X.mean(0), X.std(0)
+    sd[sd < 1e-9] = 1.0
+    Z = (X - mu) / sd
+    z, idx = {}, 0
+    for pl in players:
+        z[pl] = Z[idx: idx + counts[pl]]
+        idx += counts[pl]
+    cent = {pl: z[pl].mean(0) for pl in players}
+    within = float(np.mean([np.linalg.norm(r - cent[pl]) for pl in players for r in z[pl]]))
+    pairs = [(players[i], players[j]) for i in range(len(players)) for j in range(i + 1, len(players))]
+    between = float(np.mean([np.linalg.norm(cent[a] - cent[b]) for a, b in pairs]))
+    ratio = between / (within + _EPS)
+    return {
+        "players": counts,
+        "n_players": len(players),
+        "features_used": list(_SEP_FEATURES),
+        "within_player_spread": round(within, 4),
+        "between_player_spread": round(between, 4),
+        "separation_ratio": round(ratio, 4),
+        "separable": bool(ratio > 1.0),
+    }
+
+
 def _cli() -> int:
     import argparse
     import json
-    ap = argparse.ArgumentParser(description="L9 render-loop biometric stability")
+    ap = argparse.ArgumentParser(description="L9 render-loop biometric stability/separation")
     ap.add_argument("paths", nargs="+")
     ap.add_argument("--coupling-floor", type=float, default=0.2)
+    ap.add_argument("--between", action="store_true",
+                    help="gate 2: between-player separation (needs >=2 player ids)")
     a = ap.parse_args()
-    print(json.dumps(within_player_stability(a.paths, a.coupling_floor), indent=2, default=str))
+    fn = between_player_separation if a.between else within_player_stability
+    print(json.dumps(fn(a.paths, a.coupling_floor), indent=2, default=str))
     return 0
 
 
