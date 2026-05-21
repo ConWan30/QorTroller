@@ -64,12 +64,13 @@ class SessionData:
     mo_yaw: np.ndarray
     mo_pitch: np.ndarray
     label: str
+    in_fire: Optional[np.ndarray] = None   # R2/fire analog per input sample (0-255); enables engagement-locked analysis
 
 
 def record_session(out_path: str, duration_s: float = 60.0, label: str = "human",
                    region: Optional[Region] = None,
                    stick_parser: Optional[StickParser] = None,
-                   backend: str = "mss") -> str:
+                   backend: str = "mss", fire_offset: int = 6) -> str:
     """Record one labeled probe session to .npz. Hardware + Remote Play required.
 
     backend defaults to "mss": on Python 3.13 the DXGI backends (dxcam/bettercam)
@@ -88,7 +89,7 @@ def record_session(out_path: str, duration_s: float = 60.0, label: str = "human"
     mx = MotionExtractor()
     dev = hid.device(); dev.open(DUALSENSE_VID, DUALSENSE_EDGE_PID); dev.set_nonblocking(True)
 
-    in_ts, in_sx, in_sy = [], [], []
+    in_ts, in_sx, in_sy, in_fire = [], [], [], []
     mo_ts, mo_yaw, mo_pitch = [], [], []
     t0 = time.time()
     try:
@@ -96,8 +97,10 @@ def record_session(out_path: str, duration_s: float = 60.0, label: str = "human"
             now_ms = (time.time() - t0) * 1000.0
             rep = dev.read(64)
             if rep:
-                sx, sy = parse(bytes(rep))
-                in_ts.append(now_ms); in_sx.append(sx); in_sy.append(sy)
+                rb = bytes(rep)
+                sx, sy = parse(rb)
+                fire = float(rb[fire_offset]) if len(rb) > fire_offset else 0.0
+                in_ts.append(now_ms); in_sx.append(sx); in_sy.append(sy); in_fire.append(fire)
             frame = cap.grab()
             if frame is not None:
                 out = mx.push_frame(frame, now_ms)
@@ -109,6 +112,7 @@ def record_session(out_path: str, duration_s: float = 60.0, label: str = "human"
 
     np.savez(out_path,
              in_ts=np.array(in_ts), in_sx=np.array(in_sx), in_sy=np.array(in_sy),
+             in_fire=np.array(in_fire),
              mo_ts=np.array(mo_ts), mo_yaw=np.array(mo_yaw), mo_pitch=np.array(mo_pitch),
              label=label)
     return out_path
@@ -116,8 +120,9 @@ def record_session(out_path: str, duration_s: float = 60.0, label: str = "human"
 
 def load_session(path: str) -> SessionData:
     d = np.load(path, allow_pickle=True)
+    fire = d["in_fire"] if "in_fire" in d.files else None  # back-compat: pre-fire sessions
     return SessionData(d["in_ts"], d["in_sx"], d["in_sy"],
-                       d["mo_ts"], d["mo_yaw"], d["mo_pitch"], str(d["label"]))
+                       d["mo_ts"], d["mo_yaw"], d["mo_pitch"], str(d["label"]), fire)
 
 
 def analyze_session_data(s: SessionData) -> dict:
@@ -147,6 +152,60 @@ def analyze_session_data(s: SessionData) -> dict:
 def analyze_session(path: str) -> dict:
     """Load a recorded .npz session and score it (see analyze_session_data)."""
     return analyze_session_data(load_session(path))
+
+
+def engagement_locked_residual(s: SessionData, fire_threshold: float = 64.0) -> dict:
+    """Residual (unexplained-aim) energy DURING fire vs the rest of the session.
+
+    A real aimbot's unexplained corrections cluster at engagement moments (the
+    trigger pull), so its residual spikes when firing; a human aims with their own
+    stick whether or not they're firing, so fire ~ rest. This catches the partial-
+    assist case the global residual averages away. Requires a session recorded with
+    the fire (R2) stream. Metric: per-window decoupled-energy fraction; fire_minus_rest
+    > 0 is the engagement-locked aimbot signature."""
+    fire = s.in_fire
+    if fire is None or np.asarray(fire).size < 4:
+        return {"status": "no_fire_data"}
+    o = _oracle_for(s.in_ts, s.in_sx, s.in_sy, s.mo_ts, s.mo_yaw, s.mo_pitch)
+    feat = o.extract_features()
+    if feat is None:
+        return {"status": "insufficient_aim_activity"}
+    in_ts = np.asarray(s.in_ts, float)
+    mo_ts = np.asarray(s.mo_ts, float)
+    t0, t1 = max(in_ts[0], mo_ts[0]), min(in_ts[-1], mo_ts[-1])
+    grid = np.arange(t0, t1, 1000.0 / C.COMMON_RATE_HZ)
+    axis_x = s.in_sx if feat.dominant_axis == "yaw" else s.in_sy
+    axis_cam = s.mo_yaw if feat.dominant_axis == "yaw" else s.mo_pitch
+    stick = np.asarray(axis_x, float)
+    stick = stick - np.median(stick)
+    pred_g = C.resample_uniform(in_ts, C.aim_response(stick), grid)
+    meas_g = C.resample_uniform(mo_ts, np.asarray(axis_cam, float), grid)
+    fire_g = C.resample_uniform(in_ts, np.asarray(fire, float), grid)
+    lag = int(round(feat.lag_ms / 1000.0 * C.COMMON_RATE_HZ))
+    resid, meas_al = C.residual_series(pred_g, meas_g, lag)
+    fire_al = fire_g[: resid.size]  # input-time aligned with the residual (see residual_series)
+    mask = fire_al > fire_threshold
+    if int(mask.sum()) < 5 or int((~mask).sum()) < 5:
+        return {"status": "too_few_fire_frames", "fire_frames": int(mask.sum())}
+
+    def _frac(sel) -> float:
+        v = float(meas_al[sel].var())
+        return float(resid[sel].var() / v) if v > 1e-12 else 0.0
+
+    fire_res, rest_res = _frac(mask), _frac(~mask)
+    return {
+        "dominant_axis": feat.dominant_axis,
+        "lag_ms": feat.lag_ms,
+        "fire_frames": int(mask.sum()),
+        "rest_frames": int((~mask).sum()),
+        "residual_energy_fire": fire_res,
+        "residual_energy_rest": rest_res,
+        "fire_minus_rest": fire_res - rest_res,
+    }
+
+
+def engagement_locked_session(path: str) -> dict:
+    return engagement_locked_residual(load_session(path))
 
 
 def compare_sessions(paths: list[str]) -> dict:
@@ -243,9 +302,14 @@ def _cli() -> int:
     pr.add_argument("--ry", type=int, default=4, help="right-stick Y byte offset (see hid_probe)")
     pr.add_argument("--region", nargs=4, type=int, metavar=("L", "T", "R", "B"), default=None)
     pr.add_argument("--backend", default="mss", choices=("auto", "bettercam", "dxcam", "mss"))
+    pr.add_argument("--fire-offset", type=int, default=6, help="R2/fire byte offset (standard report=6)")
 
     pa = sub.add_parser("analyze", help="analyze one recorded session")
     pa.add_argument("path")
+
+    pe = sub.add_parser("engagement", help="engagement-locked residual (needs fire stream)")
+    pe.add_argument("path")
+    pe.add_argument("--fire-threshold", type=float, default=64.0)
 
     pc = sub.add_parser("compare", help="contrast human vs scripted across sessions")
     pc.add_argument("paths", nargs="+")
@@ -258,12 +322,18 @@ def _cli() -> int:
     if a.cmd == "record":
         region = tuple(a.region) if a.region else None
         out = record_session(a.out, duration_s=a.duration, label=a.label, region=region,
-                             stick_parser=make_stick_parser(a.rx, a.ry), backend=a.backend)
+                             stick_parser=make_stick_parser(a.rx, a.ry), backend=a.backend,
+                             fire_offset=a.fire_offset)
         print(f"recorded {a.label} session -> {out}")
         return 0
     if a.cmd == "analyze":
         import json
         print(json.dumps(analyze_session(a.path), indent=2, default=str))
+        return 0
+    if a.cmd == "engagement":
+        import json
+        print(json.dumps(engagement_locked_residual(load_session(a.path), a.fire_threshold),
+                         indent=2, default=str))
         return 0
     if a.cmd == "compare":
         import json

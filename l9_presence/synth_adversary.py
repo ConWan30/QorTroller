@@ -67,7 +67,7 @@ def synthesize(session: SessionData, injection: float = 1.0,
     yaw = (1.0 - b) * np.asarray(session.mo_yaw, float) + b * iy
     pitch = (1.0 - b) * np.asarray(session.mo_pitch, float) + b * ip
     return SessionData(session.in_ts, session.in_sx, session.in_sy,
-                       session.mo_ts, yaw, pitch, "scripted")
+                       session.mo_ts, yaw, pitch, "scripted", session.in_fire)
 
 
 def _metrics_of(s: SessionData) -> tuple:
