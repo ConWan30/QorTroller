@@ -120,10 +120,9 @@ def load_session(path: str) -> SessionData:
                        d["mo_ts"], d["mo_yaw"], d["mo_pitch"], str(d["label"]))
 
 
-def analyze_session(path: str) -> dict:
-    """Feed a recorded session through the coupling oracle. Returns a result dict
-    with coupling_score, decoupled_energy, negative_control, and the honest margin."""
-    s = load_session(path)
+def analyze_session_data(s: SessionData) -> dict:
+    """Score an in-memory SessionData through the coupling oracle. Returns a result
+    dict with coupling_score, decoupled_energy, negative_control, and the margin."""
     o = C.InputOutputCouplingOracle()
     for t, x, y in zip(s.in_ts, s.in_sx, s.in_sy):
         o.push_input(float(t), float(x), float(y))
@@ -143,6 +142,11 @@ def analyze_session(path: str) -> dict:
         "neg_control_margin": (f.coupling_score - nc) if nc is not None else None,
         "coupled": f.coupled,
     }
+
+
+def analyze_session(path: str) -> dict:
+    """Load a recorded .npz session and score it (see analyze_session_data)."""
+    return analyze_session_data(load_session(path))
 
 
 def compare_sessions(paths: list[str]) -> dict:
