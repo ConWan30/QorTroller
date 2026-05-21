@@ -97,16 +97,21 @@ def within_player_stability(paths: list[str], coupling_floor: float = 0.2) -> di
 
 # stable within-player features (lag excluded until 60fps capture sharpens it)
 _SEP_FEATURES = ("dominant_coupling", "yaw_pitch_ratio", "yaw_decoupled")
+# richer set: gives BOTH axes a voice (P3 is pitch-dominant). 5 features, N/p=3.6 at N=18.
+_SEP_FEATURES_RICH = ("dominant_coupling", "yaw_pitch_ratio", "yaw_decoupled",
+                      "pitch_coupling", "pitch_decoupled")
 
 
-def between_player_separation(paths: list[str], coupling_floor: float = 0.2) -> dict:
+def between_player_separation(paths: list[str], coupling_floor: float = 0.2,
+                              features=None) -> dict:
     """GATE 2 — does the render-loop feature vector SEPARATE players? Groups reliable
-    sessions by player id, z-scores the stable features, and reports the separation
-    ratio = mean between-player centroid distance / mean within-player spread (the
-    same between/within concept as the project's biometric separation). ratio > 1.0 =
-    the feature carries inter-person identity (necessary for it to help the tournament
-    gate). Sessions with no player id are grouped as 'P1'. Needs >= 2 players."""
+    sessions by player id, z-scores the features, and reports the separation ratio =
+    mean between-player centroid distance / mean within-player spread (the same
+    between/within concept as the project's biometric separation). ratio > 1.0 = the
+    feature carries inter-person identity. Sessions with no player id group as 'P1'.
+    `features` defaults to _SEP_FEATURES; pass _SEP_FEATURES_RICH to give both axes a voice."""
     from collections import defaultdict
+    feats = tuple(features) if features else _SEP_FEATURES
     groups: dict = defaultdict(list)
     for p in paths:
         s = load_session(p)
@@ -114,7 +119,7 @@ def between_player_separation(paths: list[str], coupling_floor: float = 0.2) -> 
         if v is None or not v["reliable"]:
             continue
         player = (getattr(s, "player", "") or "P1")
-        groups[player].append([v[k] for k in _SEP_FEATURES])
+        groups[player].append([v[k] for k in feats])
     players = sorted(groups)
     counts = {pl: len(groups[pl]) for pl in players}
     if len(players) < 2:
@@ -149,7 +154,7 @@ def between_player_separation(paths: list[str], coupling_floor: float = 0.2) -> 
     return {
         "players": counts,
         "n_players": len(players),
-        "features_used": list(_SEP_FEATURES),
+        "features_used": list(feats),
         "within_player_spread": round(within, 4),
         "between_player_spread": round(between, 4),
         "separation_ratio": round(ratio, 4),
@@ -160,15 +165,16 @@ def between_player_separation(paths: list[str], coupling_floor: float = 0.2) -> 
     }
 
 
-def _load_reliable(paths, coupling_floor):
+def _load_reliable(paths, coupling_floor, features=None):
     """(Z standardized matrix, labels array, players list) for reliable sessions."""
+    feats = tuple(features) if features else _SEP_FEATURES
     rows, labels = [], []
     for p in paths:
         s = load_session(p)
         v = extract_feature_vector(s, coupling_floor)
         if v is None or not v["reliable"]:
             continue
-        rows.append([v[k] for k in _SEP_FEATURES])
+        rows.append([v[k] for k in feats])
         labels.append(s.player or "P1")
     X = np.array(rows, float)
     labels = np.array(labels)
@@ -188,12 +194,12 @@ def _ratio_for(Z, labels, players):
 
 
 def permutation_test(paths: list[str], n_perm: int = 2000, coupling_floor: float = 0.2,
-                     seed: int = 0) -> dict:
+                     seed: int = 0, features=None) -> dict:
     """Is the observed separation real, or could random player labels do as well? Keeps
     group sizes fixed, shuffles labels n_perm times, and reports the fraction of
     permutations whose ratio >= the real one (p-value). The decisive robustness check
     at small N / few players (no extra players required)."""
-    Z, labels, players = _load_reliable(paths, coupling_floor)
+    Z, labels, players = _load_reliable(paths, coupling_floor, features)
     if Z is None:
         return {"status": "insufficient_data"}
     real = _ratio_for(Z, labels, players)
@@ -211,6 +217,79 @@ def permutation_test(paths: list[str], n_perm: int = 2000, coupling_floor: float
     }
 
 
+def _balance(Z, labels, players, seed=0):
+    """Subsample each player to the min session count (WIF-007 imbalance fix)."""
+    rng = np.random.default_rng(seed)
+    m = min(int((labels == pl).sum()) for pl in players)
+    keep = []
+    for pl in players:
+        idx = np.where(labels == pl)[0]
+        keep.extend(rng.choice(idx, size=m, replace=False))
+    keep = np.array(sorted(keep))
+    return Z[keep], labels[keep]
+
+
+def _loo_accuracy(Z, labels, players, metric="euclidean", reg=0.1):
+    """Leave-one-out nearest-centroid accuracy. metric='mahalanobis' uses the pooled
+    within-class covariance (Tikhonov-regularized) — accounts for feature correlations;
+    'euclidean' is the isotropic baseline."""
+    n = len(labels)
+    correct = 0
+    for i in range(n):
+        tr = [j for j in range(n) if j != i]
+        cents = {pl: Z[[j for j in tr if labels[j] == pl]].mean(0) for pl in players
+                 if any(labels[j] == pl for j in tr)}
+        if metric == "mahalanobis":
+            dev = [Z[[j for j in tr if labels[j] == pl]] - cents[pl]
+                   for pl in players if any(labels[j] == pl for j in tr)]
+            D = np.vstack(dev)
+            W = D.T @ D / max(1, (D.shape[0] - len(cents)))
+            W = W + reg * np.eye(W.shape[0])
+            try:
+                Winv = np.linalg.inv(W)
+            except np.linalg.LinAlgError:
+                Winv = np.linalg.pinv(W)
+            def _d(pl):
+                v = Z[i] - cents[pl]
+                return float(v @ Winv @ v)
+        else:
+            def _d(pl):
+                return float(np.linalg.norm(Z[i] - cents[pl]))
+        correct += int(min(cents, key=_d) == labels[i])
+    return correct / n
+
+
+def mahalanobis_separation(paths: list[str], balance: bool = False, reg: float = 0.1,
+                           n_perm: int = 2000, coupling_floor: float = 0.2, seed: int = 0,
+                           features=None) -> dict:
+    """Stronger classifier (Mahalanobis) vs the Euclidean baseline, WITH a permutation
+    guardrail so a covariance-overfit gain (the Phase-138 trap) cannot masquerade as
+    real: the null shuffles labels and recomputes the SAME Mahalanobis LOO, so spurious
+    small-N fits inflate the null too. Real iff mahalanobis_loo beats null_p95 (p<0.05)."""
+    Z, labels, players = _load_reliable(paths, coupling_floor, features)
+    if Z is None:
+        return {"status": "insufficient_data"}
+    if balance:
+        Z, labels = _balance(Z, labels, players, seed)
+    eucl = _loo_accuracy(Z, labels, players, "euclidean")
+    maha = _loo_accuracy(Z, labels, players, "mahalanobis", reg)
+    rng = np.random.default_rng(seed)
+    null = np.array([_loo_accuracy(Z, rng.permutation(labels), players, "mahalanobis", reg)
+                     for _ in range(n_perm)])
+    pval = float((null >= maha).mean())
+    return {
+        "players": {pl: int((labels == pl).sum()) for pl in players},
+        "balanced": balance, "reg": reg,
+        "euclidean_loo": round(eucl, 4),
+        "mahalanobis_loo": round(maha, 4),
+        "null_loo_mean": round(float(null.mean()), 4),
+        "null_loo_p95": round(float(np.percentile(null, 95)), 4),
+        "p_value": round(pval, 4),
+        "reaches_80": bool(maha >= 0.80),
+        "significant_and_real": bool(pval < 0.05 and maha > float(np.percentile(null, 95))),
+    }
+
+
 def _cli() -> int:
     import argparse
     import json
@@ -221,11 +300,20 @@ def _cli() -> int:
                     help="gate 2: between-player separation (needs >=2 player ids)")
     ap.add_argument("--permute", action="store_true",
                     help="label-permutation null test (is the separation significant?)")
+    ap.add_argument("--mahalanobis", action="store_true",
+                    help="Mahalanobis LOO vs Euclidean baseline + permutation guardrail")
+    ap.add_argument("--balance", action="store_true", help="balance sessions per player")
+    ap.add_argument("--rich", action="store_true",
+                    help="use the 5-feature set (both axes) instead of 3")
     a = ap.parse_args()
-    if a.permute:
-        out = permutation_test(a.paths, coupling_floor=a.coupling_floor)
+    feats = _SEP_FEATURES_RICH if a.rich else None
+    if a.mahalanobis:
+        out = mahalanobis_separation(a.paths, balance=a.balance,
+                                     coupling_floor=a.coupling_floor, features=feats)
+    elif a.permute:
+        out = permutation_test(a.paths, coupling_floor=a.coupling_floor, features=feats)
     elif a.between:
-        out = between_player_separation(a.paths, a.coupling_floor)
+        out = between_player_separation(a.paths, a.coupling_floor, features=feats)
     else:
         out = within_player_stability(a.paths, a.coupling_floor)
     print(json.dumps(out, indent=2, default=str))

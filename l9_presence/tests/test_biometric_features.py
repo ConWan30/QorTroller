@@ -2,8 +2,8 @@
 import numpy as np
 
 from l9_presence.biometric_features import (
-    between_player_separation, extract_feature_vector, permutation_test,
-    within_player_stability,
+    between_player_separation, extract_feature_vector, mahalanobis_separation,
+    permutation_test, within_player_stability,
 )
 from l9_presence.session_recorder import SessionData, load_session
 
@@ -114,3 +114,25 @@ def test_permutation_test_flags_real_separation(tmp_path):
     rep = permutation_test(paths, n_perm=500)
     assert rep["real_ratio"] > rep["null_p95"]   # real separation beats the null
     assert rep["significant"] is True
+
+
+def test_mahalanobis_separation_real_signal(tmp_path):
+    paths = []
+    for i in range(5):
+        paths.append(_write_player(tmp_path / f"p1_{i}.npz", "P1", axis="yaw", seed=i))
+        paths.append(_write_player(tmp_path / f"p2_{i}.npz", "P2", axis="pitch", seed=50 + i))
+    rep = mahalanobis_separation(paths, n_perm=400)
+    assert rep["mahalanobis_loo"] >= rep["euclidean_loo"] - 1e-9   # not worse than baseline
+    assert rep["significant_and_real"] is True                     # real, beats null p95
+
+
+def test_mahalanobis_guardrail_catches_structureless(tmp_path):
+    # all sessions from ONE distribution; player labels are arbitrary -> no real signal.
+    # Structureless data must classify well BELOW the distinct-player level (~0.9);
+    # this guards against the method manufacturing accuracy from covariance overfit.
+    paths = []
+    for i in range(18):
+        pl = ["P1", "P2", "P3"][i % 3]
+        paths.append(_write_player(tmp_path / f"s{i}.npz", pl, axis="yaw", seed=i))
+    rep = mahalanobis_separation(paths, n_perm=300)
+    assert rep["mahalanobis_loo"] < 0.7
