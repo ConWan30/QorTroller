@@ -16252,6 +16252,43 @@ class Store:
         except Exception:
             return False
 
+    def claim_draft_for_execution(self, draft_id: int) -> bool:
+        """Atomically claim a draft for execution (strictly-once guarantee,
+        2026-05-20). Sets executed_at iff it is currently NULL, in a single
+        UPDATE; returns True ONLY for the caller that won the claim. A second
+        concurrent executor/cycle sees rowcount==0 and must NOT execute. The
+        winner proceeds to sign/anchor and then mark_draft_executed (which sets
+        the real tx); a non-success path calls unclaim_draft_execution to
+        release it for retry. This makes execution idempotent even if more than
+        one executor instance is ever running."""
+        try:
+            with self._conn() as conn:
+                self._ensure_operator_agent_chain_spending_table(conn)
+                cur = conn.execute(
+                    "UPDATE operator_agent_drafts SET executed_at = ? "
+                    "WHERE id = ? AND (executed_at IS NULL OR executed_at = 0)",
+                    (time.time(), int(draft_id)),
+                )
+                return int(cur.rowcount) == 1
+        except Exception:
+            return False
+
+    def unclaim_draft_execution(self, draft_id: int) -> bool:
+        """Release a claim (reset executed_at to NULL) so a draft retries on a
+        later cycle — used when execution fails AFTER claiming (e.g. transient
+        RPC/KMS error). Returns True on success."""
+        try:
+            with self._conn() as conn:
+                self._ensure_operator_agent_chain_spending_table(conn)
+                conn.execute(
+                    "UPDATE operator_agent_drafts SET executed_at = NULL "
+                    "WHERE id = ?",
+                    (int(draft_id),),
+                )
+            return True
+        except Exception:
+            return False
+
     def mark_draft_refused(self, draft_id: int, reason: str) -> bool:
         """Mark a draft as TERMINALLY refused by the live-write executor so it
         drops out of get_accepted_unexecuted_drafts and is not re-attempted/
