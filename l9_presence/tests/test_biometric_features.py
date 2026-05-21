@@ -2,7 +2,8 @@
 import numpy as np
 
 from l9_presence.biometric_features import (
-    between_player_separation, extract_feature_vector, within_player_stability,
+    between_player_separation, extract_feature_vector, permutation_test,
+    within_player_stability,
 )
 from l9_presence.session_recorder import SessionData, load_session
 
@@ -103,3 +104,13 @@ def test_between_player_separates_distinct_styles(tmp_path):
     assert rep["separable"] is True
     assert rep["loo_accuracy"] > 0.7         # proper LOO classifies the two styles
     assert rep["loo_total"] == 8
+
+
+def test_permutation_test_flags_real_separation(tmp_path):
+    paths = []
+    for i in range(4):
+        paths.append(_write_player(tmp_path / f"p1_{i}.npz", "P1", axis="yaw", seed=i))
+        paths.append(_write_player(tmp_path / f"p2_{i}.npz", "P2", axis="pitch", seed=100 + i))
+    rep = permutation_test(paths, n_perm=500)
+    assert rep["real_ratio"] > rep["null_p95"]   # real separation beats the null
+    assert rep["significant"] is True
