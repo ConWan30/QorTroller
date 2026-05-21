@@ -370,6 +370,18 @@ class OperatorAgentLiveWriteExecutor:
                 )
             return
 
+        # Strictly-once claim (2026-05-20): atomically take the draft BEFORE any
+        # side-effecting execution. If another executor instance/cycle already
+        # claimed it, rowcount==0 -> skip silently. This is the idempotency
+        # guarantee that prevents the double-sign two concurrent executors
+        # produced for Guardian draft #2 (root-fixed separately by de-duping the
+        # spawn in main.py; this is the belt-and-suspenders at the data layer).
+        claimed = await asyncio.to_thread(
+            self.store.claim_draft_for_execution, draft_id,
+        )
+        if not claimed:
+            return
+
         # Route by action_name. v1 set is minimal — extend in v2.
         # Gap 1 closure 2026-05-19: route audit-drafting through Guardian's
         # local handler (no chain dependency, synthetic local: tx_hash for
@@ -391,6 +403,10 @@ class OperatorAgentLiveWriteExecutor:
                 # next fetch; no per-cycle re-logging). Phase 235.x-STABILITY-8:
                 # sync DB writes wrapped in to_thread.
                 _reason = f"no_executor_for_action_{action_name}"
+                # Release the claim, then terminally mark refused (refused_at
+                # excludes it from future fetches; executed_at stays NULL since
+                # nothing actually executed).
+                await asyncio.to_thread(self.store.unclaim_draft_execution, draft_id)
                 await asyncio.to_thread(
                     self._record_refusal, agent_q9, draft_id, action_name, (_reason,),
                 )
@@ -403,6 +419,9 @@ class OperatorAgentLiveWriteExecutor:
                 "live-write executor: action %s failed for draft id=%d: %s",
                 action_name, draft_id, exc,
             )
+            # Transient failure — release the claim so the draft retries next
+            # cycle (do NOT leave it falsely marked executed).
+            await asyncio.to_thread(self.store.unclaim_draft_execution, draft_id)
             await asyncio.to_thread(
                 self._record_refusal, agent_q9, draft_id, action_name,
                 (f"chain_call_failed_{type(exc).__name__}",),
