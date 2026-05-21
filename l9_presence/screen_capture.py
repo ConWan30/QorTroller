@@ -2,12 +2,18 @@
 
 Per the capture research (2026-05): PS Remote Play is NOT hard-DRM; black frames
 come from per-window capture + GPU hardware-overlay decode. Known-good path:
-  * dxcam (DXGI Desktop Duplication): full-screen monitor duplication + REGION CROP,
-    fastest (~100-240fps). PRIMARY. Keep Remote Play MAXIMIZED.
+  * bettercam (DXGI Desktop Duplication): full-screen monitor duplication + REGION
+    CROP, fastest (~100-240fps). PRIMARY — maintained successor to dxcam, fixes the
+    comtypes COM-release access-violation crash on Python 3.12/3.13. Keep Remote
+    Play MAXIMIZED.
+  * dxcam: same DXGI path, older + unmaintained (2022). FALLBACK only — known to
+    double-free a COM pointer under comtypes>=1.4 + Python 3.13 (access violation).
   * if frames are black -> overlay-decode gotcha. Workarounds (operator-side):
       (a) disable Windows "Hardware-accelerated GPU scheduling" + reboot, OR
       (b) use a WGC backend (windows-capture / wincam) which handles overlays.
-  * mss: cross-platform, ~30-60fps. LAST RESORT (too slow for 60fps real-time).
+  * mss: cross-platform GDI BitBlt, ~30-60fps. LAST RESORT — slow AND frequently
+    returns black on hardware-overlay surfaces (it is NOT DXGI), so a black result
+    on mss is inconclusive; confirm with a DXGI backend before declaring NO-GO.
 
 This module provides a uniform ScreenCapturer over whichever backend is available,
 plus is_black_frame() for the decisive de-risk check.
@@ -21,6 +27,14 @@ from typing import Optional, Tuple
 import numpy as np
 
 # ---- optional backends (import-guarded) ----
+# bettercam is the maintained drop-in for dxcam (same .create()/.grab() API); it is
+# preferred because dxcam 0.3.0 crashes on Python 3.13 during COM Release.
+try:
+    import bettercam  # type: ignore
+    _BETTERCAM = True
+except Exception:  # pragma: no cover
+    _BETTERCAM = False
+
 try:
     import dxcam  # type: ignore
     _DXCAM = True
@@ -36,9 +50,19 @@ except Exception:  # pragma: no cover
 
 Region = Tuple[int, int, int, int]  # (left, top, right, bottom)
 
+# DXGI backends share the bettercam/dxcam API surface (.create / .grab / .release).
+_DXGI_MODULES = {}
+if _BETTERCAM:
+    _DXGI_MODULES["bettercam"] = bettercam
+if _DXCAM:
+    _DXGI_MODULES["dxcam"] = dxcam
+
 
 def available_backends() -> list[str]:
+    """Backends in PREFERENCE order (most reliable first)."""
     out = []
+    if _BETTERCAM:
+        out.append("bettercam")
     if _DXCAM:
         out.append("dxcam")
     if _MSS:
@@ -66,8 +90,11 @@ def is_black_frame(frame: Optional["np.ndarray"], mean_thresh: float = 6.0,
 
 
 class ScreenCapturer:
-    """Uniform capture surface. Prefers dxcam (full-screen + crop), falls back to
-    mss. Returns BGR uint8 ndarrays (OpenCV convention) or None on a missed grab.
+    """Uniform capture surface. Prefers a DXGI backend (bettercam, then dxcam) with
+    full-screen duplication + region crop, falls back to mss. Returns BGR uint8
+    ndarrays (OpenCV convention) or None on a missed grab. grab() never raises — a
+    backend error returns None so the de-risk loop can record it as a missed frame
+    rather than crashing.
     """
 
     def __init__(self, region: Optional[Region] = None, monitor_idx: int = 0,
@@ -75,23 +102,29 @@ class ScreenCapturer:
         self.region = region
         self.monitor_idx = monitor_idx
         self._backend = backend
+        self._dxgi_module = None  # the bettercam/dxcam module actually in use
         self._cam = None
         self._sct = None
         self._init_backend()
 
     def _init_backend(self) -> None:
         want = self._backend
-        if want in ("auto", "dxcam") and _DXCAM:
-            self._cam = dxcam.create(output_idx=self.monitor_idx, output_color="BGR")
-            self._backend = "dxcam"
-            return
+        # explicit or auto DXGI selection, in preference order
+        for name in ("bettercam", "dxcam"):
+            if want in ("auto", name) and name in _DXGI_MODULES:
+                mod = _DXGI_MODULES[name]
+                self._cam = mod.create(output_idx=self.monitor_idx, output_color="BGR")
+                self._dxgi_module = mod
+                self._backend = name
+                return
         if want in ("auto", "mss") and _MSS:
             self._sct = mss.mss()
             self._backend = "mss"
             return
         raise RuntimeError(
-            "No screen-capture backend available. Install one of: "
-            "`pip install dxcam` (recommended, Windows) or `pip install mss`."
+            f"No screen-capture backend available for backend={want!r}. Install one "
+            "of: `pip install bettercam` (recommended, Windows DXGI) or `pip install "
+            "mss`. (dxcam is supported but unmaintained and crashes on Python 3.13.)"
         )
 
     @property
@@ -99,24 +132,40 @@ class ScreenCapturer:
         return self._backend
 
     def grab(self) -> Optional["np.ndarray"]:
-        if self._backend == "dxcam":
-            frame = self._cam.grab(region=self.region) if self.region else self._cam.grab()
-            return frame  # BGR ndarray or None if no new frame since last grab
-        # mss path
-        if self.region:
-            l, t, r, b = self.region
-            mon = {"left": l, "top": t, "width": r - l, "height": b - t}
-        else:
-            mon = self._sct.monitors[self.monitor_idx + 1]
-        raw = self._sct.grab(mon)
-        arr = np.asarray(raw)  # BGRA
-        return arr[:, :, :3][:, :, ::-1].copy() if arr.shape[2] == 4 else arr  # -> BGR
+        try:
+            if self._cam is not None:  # DXGI backend (bettercam / dxcam)
+                return (self._cam.grab(region=self.region) if self.region
+                        else self._cam.grab())  # BGR ndarray or None if no new frame
+            # mss path
+            if self.region:
+                l, t, r, b = self.region
+                mon = {"left": l, "top": t, "width": r - l, "height": b - t}
+            else:
+                mon = self._sct.monitors[self.monitor_idx + 1]
+            raw = self._sct.grab(mon)
+            arr = np.asarray(raw)  # BGRA
+            return arr[:, :, :3][:, :, ::-1].copy() if arr.shape[2] == 4 else arr  # -> BGR
+        except Exception:
+            return None
 
     def close(self) -> None:
         try:
             if self._cam is not None and hasattr(self._cam, "release"):
                 self._cam.release()
+        except Exception:
+            pass
+        self._cam = None
+        # release the module-level DXGI device/output COM objects so the interpreter
+        # does not double-free them at GC (the dxcam access-violation signature).
+        try:
+            if self._dxgi_module is not None and hasattr(self._dxgi_module, "clean_up"):
+                self._dxgi_module.clean_up()
+        except Exception:
+            pass
+        self._dxgi_module = None
+        try:
             if self._sct is not None:
                 self._sct.close()
         except Exception:
             pass
+        self._sct = None

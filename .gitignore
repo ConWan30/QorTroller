@@ -198,3 +198,6 @@ contracts/artifacts/build-info/
 # blocks, not below them.
 !frontend/src/brp/
 !frontend/src/brp/**
+
+# L9 probe capture data (binary .npz; local-only)
+sessions_l9/
