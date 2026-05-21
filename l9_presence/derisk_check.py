@@ -53,13 +53,13 @@ def _probe_hid() -> tuple[bool, str]:
         return False, f"HID open failed: {exc}"
 
 
-def _run(region, n_frames: int) -> int:
+def _run(region, n_frames: int, backend: str = "auto") -> int:
     backends = available_backends()
     print(f"  capture backends available: {backends or 'NONE'}")
     if not backends:
-        print("  ABORT: install `dxcam` (recommended) or `mss`."); return 3
+        print("  ABORT: install `bettercam` (recommended) or `mss`."); return 3
 
-    cap = ScreenCapturer(region=region, backend="auto")
+    cap = ScreenCapturer(region=region, backend=backend)
     print(f"  using backend: {cap.backend}  region: {region or 'full monitor'}")
 
     grabbed, black = 0, 0
@@ -106,12 +106,14 @@ def main() -> int:
     ap.add_argument("--region", nargs=4, type=int, metavar=("L", "T", "R", "B"),
                     default=None, help="crop region (left top right bottom); default full monitor")
     ap.add_argument("--frames", type=int, default=120, help="frames to sample")
+    ap.add_argument("--backend", choices=("auto", "bettercam", "dxcam", "mss"),
+                    default="auto", help="capture backend (default auto: bettercam>dxcam>mss)")
     a = ap.parse_args()
     region = tuple(a.region) if a.region else None
     print("=" * 64)
     print("QorTroller L9 — Remote Play capture + HID de-risk check")
     print("=" * 64)
-    return _run(region, a.frames)
+    return _run(region, a.frames, a.backend)
 
 
 if __name__ == "__main__":
