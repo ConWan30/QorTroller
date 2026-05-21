@@ -2235,32 +2235,48 @@ class Bridge:
         # budget + kill-all) and structurally no-ops every agent that isn't
         # opted-in. Halt via cfg.phase_o3_executor_kill_all=True (env flip;
         # no restart needed). interval default 60s.
-        try:
-            from .operator_initiative_live_write_executor import (
-                OperatorAgentLiveWriteExecutor,
-            )
-            _live_write_executor = OperatorAgentLiveWriteExecutor(
-                cfg=self.cfg, store=self.store, chain=self.chain,
-                interval_s=int(getattr(self.cfg, "phase_o3_executor_interval_s", 60)),
-            )
-            _executor_task = asyncio.ensure_future(_live_write_executor.run_forever())
-            _executor_task.set_name("LiveWriteExecutor")
-            self._tasks.append(_executor_task)
+        #
+        # 2026-05-20 DE-DUP: the v2 autoloop block above (gated by
+        # phase_o3_executor_autoloop_enabled) ALSO spawns this exact executor.
+        # When that flag is True, spawning here too produced TWO concurrent
+        # executor instances that each fetched + signed the same accepted draft
+        # before either marked it executed (observed: Guardian draft #2 signed
+        # twice). Spawn the v1.1 executor ONLY when the v2 autoloop is NOT
+        # enabled, so exactly one executor runs in every config. (The atomic
+        # claim_draft_for_execution gate is the additional strictly-once
+        # guarantee inside the executor itself.)
+        if getattr(self.cfg, "phase_o3_executor_autoloop_enabled", False):
             log.info(
-                "Phase O1-D-PATH-B v1.1: live-write executor started "
-                "(interval=%ds, per-agent flags default False — structurally "
-                "no-op until operator explicitly opts in)",
-                int(getattr(self.cfg, "phase_o3_executor_interval_s", 60)),
+                "Phase O1-D-PATH-B v1.1: executor spawn SKIPPED — v2 autoloop "
+                "is enabled and owns the single executor instance (de-dup)."
             )
-        except ImportError as _lwe_exc:
-            log.warning(
-                "Phase O1-D-PATH-B: live-write executor module unavailable: %s",
-                _lwe_exc,
-            )
-        except Exception as _lwe_exc:
-            log.warning(
-                "Phase O1-D-PATH-B: executor task creation failed: %s", _lwe_exc
-            )
+        else:
+            try:
+                from .operator_initiative_live_write_executor import (
+                    OperatorAgentLiveWriteExecutor,
+                )
+                _live_write_executor = OperatorAgentLiveWriteExecutor(
+                    cfg=self.cfg, store=self.store, chain=self.chain,
+                    interval_s=int(getattr(self.cfg, "phase_o3_executor_interval_s", 60)),
+                )
+                _executor_task = asyncio.ensure_future(_live_write_executor.run_forever())
+                _executor_task.set_name("LiveWriteExecutor")
+                self._tasks.append(_executor_task)
+                log.info(
+                    "Phase O1-D-PATH-B v1.1: live-write executor started "
+                    "(interval=%ds, per-agent flags default False — structurally "
+                    "no-op until operator explicitly opts in)",
+                    int(getattr(self.cfg, "phase_o3_executor_interval_s", 60)),
+                )
+            except ImportError as _lwe_exc:
+                log.warning(
+                    "Phase O1-D-PATH-B: live-write executor module unavailable: %s",
+                    _lwe_exc,
+                )
+            except Exception as _lwe_exc:
+                log.warning(
+                    "Phase O1-D-PATH-B: executor task creation failed: %s", _lwe_exc
+                )
 
         # Phase 238 Step I-AUTOLOOP-3: SSE Twin stream heartbeat task.
         # Cache itself was attached above inside the http_enabled block.
