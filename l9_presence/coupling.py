@@ -152,6 +152,23 @@ def decoupled_energy_fraction(pred: np.ndarray, meas: np.ndarray, lag: int) -> f
     return float(np.clip(resid.var() / vb, 0.0, 1.0))
 
 
+def residual_series(pred: np.ndarray, meas: np.ndarray, lag: int) -> Tuple[np.ndarray, np.ndarray]:
+    """Lag-aligned (residual, measured) arrays after removing the best-fit linear
+    response: residual = meas_shifted - g*pred_shifted. Element k of the result
+    corresponds to input time-index k (the camera it predicts is at k+lag), so an
+    external per-sample signal sampled on the SAME input grid (e.g. the fire button)
+    aligns by simple slicing [:residual.size]. Powers engagement-locked analysis."""
+    n = pred.size
+    lag = max(int(lag), 0)
+    a = pred[: n - lag] if lag > 0 else pred
+    b = meas[lag:] if lag > 0 else meas
+    m = min(a.size, b.size)
+    a, b = a[:m], b[:m]
+    va = float(a.var())
+    g = float(np.cov(a, b)[0, 1] / va) if va > 1e-12 else 0.0
+    return b - g * a, b
+
+
 # ---------------------------------------------------------------------------
 # Feature dataclass
 # ---------------------------------------------------------------------------
