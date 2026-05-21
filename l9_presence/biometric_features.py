@@ -160,6 +160,57 @@ def between_player_separation(paths: list[str], coupling_floor: float = 0.2) -> 
     }
 
 
+def _load_reliable(paths, coupling_floor):
+    """(Z standardized matrix, labels array, players list) for reliable sessions."""
+    rows, labels = [], []
+    for p in paths:
+        s = load_session(p)
+        v = extract_feature_vector(s, coupling_floor)
+        if v is None or not v["reliable"]:
+            continue
+        rows.append([v[k] for k in _SEP_FEATURES])
+        labels.append(s.player or "P1")
+    X = np.array(rows, float)
+    labels = np.array(labels)
+    if X.shape[0] < 4 or len(set(labels)) < 2:
+        return None, None, None
+    mu, sd = X.mean(0), X.std(0)
+    sd[sd < 1e-9] = 1.0
+    return (X - mu) / sd, labels, sorted(set(labels))
+
+
+def _ratio_for(Z, labels, players):
+    cent = {pl: Z[labels == pl].mean(0) for pl in players}
+    within = np.mean([np.linalg.norm(Z[i] - cent[labels[i]]) for i in range(len(labels))])
+    pairs = [(players[i], players[j]) for i in range(len(players)) for j in range(i + 1, len(players))]
+    between = np.mean([np.linalg.norm(cent[a] - cent[b]) for a, b in pairs])
+    return float(between / (within + _EPS))
+
+
+def permutation_test(paths: list[str], n_perm: int = 2000, coupling_floor: float = 0.2,
+                     seed: int = 0) -> dict:
+    """Is the observed separation real, or could random player labels do as well? Keeps
+    group sizes fixed, shuffles labels n_perm times, and reports the fraction of
+    permutations whose ratio >= the real one (p-value). The decisive robustness check
+    at small N / few players (no extra players required)."""
+    Z, labels, players = _load_reliable(paths, coupling_floor)
+    if Z is None:
+        return {"status": "insufficient_data"}
+    real = _ratio_for(Z, labels, players)
+    rng = np.random.default_rng(seed)
+    null = np.array([_ratio_for(Z, rng.permutation(labels), players) for _ in range(n_perm)])
+    pval = float((null >= real).mean())
+    return {
+        "players": {pl: int((labels == pl).sum()) for pl in players},
+        "real_ratio": round(real, 4),
+        "null_mean": round(float(null.mean()), 4),
+        "null_p95": round(float(np.percentile(null, 95)), 4),
+        "p_value": round(pval, 4),
+        "n_perm": n_perm,
+        "significant": bool(pval < 0.05),
+    }
+
+
 def _cli() -> int:
     import argparse
     import json
@@ -168,9 +219,16 @@ def _cli() -> int:
     ap.add_argument("--coupling-floor", type=float, default=0.2)
     ap.add_argument("--between", action="store_true",
                     help="gate 2: between-player separation (needs >=2 player ids)")
+    ap.add_argument("--permute", action="store_true",
+                    help="label-permutation null test (is the separation significant?)")
     a = ap.parse_args()
-    fn = between_player_separation if a.between else within_player_stability
-    print(json.dumps(fn(a.paths, a.coupling_floor), indent=2, default=str))
+    if a.permute:
+        out = permutation_test(a.paths, coupling_floor=a.coupling_floor)
+    elif a.between:
+        out = between_player_separation(a.paths, a.coupling_floor)
+    else:
+        out = within_player_stability(a.paths, a.coupling_floor)
+    print(json.dumps(out, indent=2, default=str))
     return 0
 
 
