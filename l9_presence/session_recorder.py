@@ -65,12 +65,13 @@ class SessionData:
     mo_pitch: np.ndarray
     label: str
     in_fire: Optional[np.ndarray] = None   # R2/fire analog per input sample (0-255); enables engagement-locked analysis
+    player: str = ""                       # player id (e.g. P1/P2/P3) for between-player separation
 
 
 def record_session(out_path: str, duration_s: float = 60.0, label: str = "human",
                    region: Optional[Region] = None,
                    stick_parser: Optional[StickParser] = None,
-                   backend: str = "mss", fire_offset: int = 6) -> str:
+                   backend: str = "mss", fire_offset: int = 6, player: str = "") -> str:
     """Record one labeled probe session to .npz. Hardware + Remote Play required.
 
     backend defaults to "mss": on Python 3.13 the DXGI backends (dxcam/bettercam)
@@ -114,15 +115,16 @@ def record_session(out_path: str, duration_s: float = 60.0, label: str = "human"
              in_ts=np.array(in_ts), in_sx=np.array(in_sx), in_sy=np.array(in_sy),
              in_fire=np.array(in_fire),
              mo_ts=np.array(mo_ts), mo_yaw=np.array(mo_yaw), mo_pitch=np.array(mo_pitch),
-             label=label)
+             label=label, player=player)
     return out_path
 
 
 def load_session(path: str) -> SessionData:
     d = np.load(path, allow_pickle=True)
-    fire = d["in_fire"] if "in_fire" in d.files else None  # back-compat: pre-fire sessions
+    fire = d["in_fire"] if "in_fire" in d.files else None    # back-compat: pre-fire sessions
+    player = str(d["player"]) if "player" in d.files else ""  # back-compat: pre-player sessions
     return SessionData(d["in_ts"], d["in_sx"], d["in_sy"],
-                       d["mo_ts"], d["mo_yaw"], d["mo_pitch"], str(d["label"]), fire)
+                       d["mo_ts"], d["mo_yaw"], d["mo_pitch"], str(d["label"]), fire, player)
 
 
 def analyze_session_data(s: SessionData) -> dict:
@@ -304,6 +306,18 @@ def _cli() -> int:
     pr.add_argument("--backend", default="mss", choices=("auto", "bettercam", "dxcam", "mss"))
     pr.add_argument("--fire-offset", type=int, default=6, help="R2/fire byte offset (standard report=6)")
 
+    pcap = sub.add_parser("capture", help="record N sessions for ONE player (gate-2 corpus)")
+    pcap.add_argument("--player", required=True, help="player id, e.g. P2")
+    pcap.add_argument("--count", type=int, default=8)
+    pcap.add_argument("--duration", type=float, default=60.0)
+    pcap.add_argument("--rx", type=int, default=3)
+    pcap.add_argument("--ry", type=int, default=4)
+    pcap.add_argument("--fire-offset", type=int, default=6)
+    pcap.add_argument("--region", nargs=4, type=int, metavar=("L", "T", "R", "B"), default=None)
+    pcap.add_argument("--backend", default="mss", choices=("auto", "bettercam", "dxcam", "mss"))
+    pcap.add_argument("--label", default="human", choices=("human", "scripted"))
+    pcap.add_argument("--out-dir", default="sessions_l9")
+
     pa = sub.add_parser("analyze", help="analyze one recorded session")
     pa.add_argument("path")
 
@@ -325,6 +339,21 @@ def _cli() -> int:
                              stick_parser=make_stick_parser(a.rx, a.ry), backend=a.backend,
                              fire_offset=a.fire_offset)
         print(f"recorded {a.label} session -> {out}")
+        return 0
+    if a.cmd == "capture":
+        import glob
+        import os
+        os.makedirs(a.out_dir, exist_ok=True)
+        region = tuple(a.region) if a.region else None
+        existing = glob.glob(os.path.join(a.out_dir, f"{a.player}_*.npz"))
+        start = len(existing) + 1
+        for k in range(a.count):
+            out = os.path.join(a.out_dir, f"{a.player}_{start + k:02d}.npz")
+            record_session(out, duration_s=a.duration, label=a.label, region=region,
+                           stick_parser=make_stick_parser(a.rx, a.ry), backend=a.backend,
+                           fire_offset=a.fire_offset, player=a.player)
+            print(f"[{k + 1}/{a.count}] player {a.player} -> {out}")
+        print(f"done: {a.count} sessions for player {a.player} in {a.out_dir}")
         return 0
     if a.cmd == "analyze":
         import json
