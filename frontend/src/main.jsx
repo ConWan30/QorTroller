@@ -23,12 +23,15 @@ import PublicExplorerLandingView from './views/PublicExplorerLandingView'
 // gradually. Existing legacy views preserved at /, /session, /gic,
 // /record, /vhp, /algorithms, /explorer.
 import AppShell from './os/AppShell'
-import LiveMatchWorkspace from './os/workspaces/LiveMatchWorkspace'
 import EvidenceGraphWorkspace from './os/workspaces/EvidenceGraphWorkspace'
-import OperatorQueueWorkspace from './os/workspaces/OperatorQueueWorkspace'
 import ForensicReplayWorkspace from './os/workspaces/ForensicReplayWorkspace'
 import ProtocolStateWorkspace from './os/workspaces/ProtocolStateWorkspace'
 import { Navigate } from 'react-router-dom'
+import { markReality } from './design/realityHeartbeat'
+// LiveMatchWorkspace + OperatorQueueWorkspace are intentionally NOT routed here:
+// they duplicated the dashboard's Gamer / Operator·Evidence tabs and were
+// de-duplicated out of Evidence OS (QRESCE-0001 v0.5 design alignment). The
+// component files are preserved (still unit-tested) but no longer have an /os tab.
 
 import './index.css'
 
@@ -39,6 +42,14 @@ const queryClient = new QueryClient({
       refetchOnWindowFocus: false,
     },
   },
+})
+
+// v2 · item D — feed the reality heartbeat from the data layer: any successful
+// bridge query is a real beat that drives the app-wide ● LIVE signal.
+queryClient.getQueryCache().subscribe((event) => {
+  if (event?.type === 'updated' && event.query?.state?.status === 'success') {
+    markReality(event.query.state.dataUpdatedAt)
+  }
 })
 
 // Phase O5-PUBLIC-VIEWER — BrowserRouter wraps the app so the public
@@ -61,9 +72,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                 /os redirects to /os/evidence (signature workspace). */}
             <Route path="/os" element={<AppShell />}>
               <Route index element={<Navigate to="evidence" replace />} />
-              <Route path="live"     element={<LiveMatchWorkspace />} />
               <Route path="evidence" element={<EvidenceGraphWorkspace />} />
-              <Route path="queue"    element={<OperatorQueueWorkspace />} />
               {/* Stage 4 — Forensic Replay folds the 6 public viewers
                   inside the OS shell via nested routes. The viewers
                   themselves are reused unchanged; they read params

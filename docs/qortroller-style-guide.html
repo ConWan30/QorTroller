@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>QorTroller — Living Style Guide</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<!-- ============================================================
+     QorTroller — Living Style Guide (visual companion to
+     docs/qortroller-frontend-current-design-brief.md).
+     For Claude Design: this is what the frontend looks like NOW.
+     Brand-lock QRESCE-0001 v0.5. Self-contained.
+     NOTE: fonts load from Google Fonts CDN here for portability so
+     the file renders anywhere — the SHIPPED app + iframe pages serve
+     Syne + JetBrains Mono LOCALLY (no CDN). Don't copy the CDN link
+     into production surfaces.
+     ============================================================ -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --bg:#04060a; --panel:#0a0e14; --panel-soft:#0b1119; --panel-raised:#11161f;
+  --border:#1b2433; --border-soft:#141b27; --border-strong:#2a3850;
+  --text:#d4dde8; --text-dim:#8a98ab; --text-faint:#5a6878; --text-ghost:#36404e;
+  --accent-amber:#f0a868; --accent-amber-soft:rgba(240,168,104,.35); --accent-amber-trace:rgba(240,168,104,.08);
+  --chain:#5bd6a3; --chain-soft:rgba(91,214,163,.18); --gamer-cyan:#00d4ff;
+  --status-live:#5bd6a3; --status-pending:#f0a868; --status-blocked:#d65b78; --status-dormant:#5a6878; --status-verified:#22d3ee;
+  --font-display:'Syne',system-ui,sans-serif; --font-mono:'JetBrains Mono',ui-monospace,monospace;
+  --radius:6px; --radius-sm:2px;
+  --ease-instrument:cubic-bezier(.16,1,.3,1);
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);}
+body{
+  font-family:var(--font-mono); font-size:13px; line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+  background-image:
+    linear-gradient(to right,#1a223022 1px,transparent 1px),
+    linear-gradient(to bottom,#1a223022 1px,transparent 1px),
+    linear-gradient(to right,#1a223011 1px,transparent 1px),
+    linear-gradient(to bottom,#1a223011 1px,transparent 1px);
+  background-size:96px 96px,96px 96px,24px 24px,24px 24px;
+}
+::-webkit-scrollbar{width:8px;height:8px;} ::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:4px;}
+a{color:var(--accent-amber);text-decoration:none;}
+
+.wordmark{font-family:var(--font-display);font-weight:700;letter-spacing:-0.02em;color:var(--text);display:inline-flex;align-items:baseline;}
+.wordmark .t{font-weight:800;color:var(--accent-amber);}
+
+.strip{position:sticky;top:0;z-index:10;display:flex;align-items:center;justify-content:space-between;gap:16px;height:56px;padding:0 28px;background:rgba(4,6,10,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--border);}
+.strip .wordmark{font-size:20px;}
+.strip__eye{font-size:10px;letter-spacing:0.2em;text-transform:uppercase;color:var(--text-faint);}
+
+.wrap{max-width:1180px;margin:0 auto;padding:0 28px 96px;}
+section{padding:48px 0;border-top:1px solid var(--border-soft);}
+section:first-of-type{border-top:none;padding-top:40px;}
+.sec-head{display:flex;align-items:baseline;gap:14px;margin-bottom:24px;}
+.sec-num{font-family:var(--font-mono);font-size:11px;letter-spacing:0.16em;color:var(--accent-amber);}
+h2.sec{font-family:var(--font-display);font-weight:700;letter-spacing:-0.01em;font-size:26px;margin:0;color:var(--text);}
+h3{font-family:var(--font-display);font-weight:600;font-size:15px;margin:0 0 10px;color:var(--text);}
+p{margin:0 0 12px;color:var(--text-dim);max-width:70ch;}
+.eye{font-family:var(--font-mono);font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-faint);}
+.label{font-family:var(--font-mono);font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:var(--text-dim);}
+.mono{font-family:var(--font-mono);} .amber{color:var(--accent-amber);} .chain{color:var(--chain);} .dim{color:var(--text-dim);} .faint{color:var(--text-faint);}
+.hash{font-family:var(--font-mono);color:var(--chain);letter-spacing:0.02em;font-variant-ligatures:none;word-break:break-all;}
+
+.grid{display:grid;gap:14px;}
+.g2{grid-template-columns:repeat(2,minmax(0,1fr));} .g3{grid-template-columns:repeat(3,minmax(0,1fr));}
+.g4{grid-template-columns:repeat(4,minmax(0,1fr));} .g6{grid-template-columns:repeat(6,minmax(0,1fr));}
+@media(max-width:860px){.g3,.g4,.g6{grid-template-columns:repeat(2,minmax(0,1fr));}}
+
+/* swatches */
+.sw{border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--panel);}
+.sw__chip{height:56px;}
+.sw__meta{padding:8px 10px;display:flex;flex-direction:column;gap:2px;}
+.sw__name{font-size:11px;color:var(--text);}
+.sw__hex{font-size:10.5px;color:var(--text-faint);letter-spacing:0.04em;}
+
+/* panels / chips / buttons */
+.p-panel{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;}
+.p-panel--soft{background:var(--panel-soft);}
+.p-panel--raised{background:var(--panel-raised);box-shadow:0 0 0 1px var(--border-strong);}
+.p-head{display:flex;justify-content:space-between;align-items:baseline;padding-bottom:10px;margin-bottom:10px;border-bottom:1px solid var(--border);}
+.s-chip{display:inline-flex;align-items:center;gap:7px;padding:4px 9px;border:1px solid currentColor;border-radius:var(--radius-sm);font-family:var(--font-mono);font-size:11px;letter-spacing:0.06em;text-transform:uppercase;line-height:1;}
+.s-chip::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;box-shadow:0 0 8px currentColor;}
+.s-chip--live{color:var(--status-live);} .s-chip--pending{color:var(--status-pending);} .s-chip--blocked{color:var(--status-blocked);} .s-chip--dormant{color:var(--status-dormant);} .s-chip--verified{color:var(--status-verified);} .s-chip--mock{color:var(--status-blocked);background:rgba(214,91,120,.07);}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;font-family:var(--font-mono);font-size:12px;font-weight:500;letter-spacing:0.06em;text-transform:uppercase;border-radius:4px;background:transparent;cursor:pointer;line-height:1;}
+.btn--primary{color:#04060a;background:var(--accent-amber);border:1px solid var(--accent-amber);}
+.btn--secondary{color:var(--accent-amber);border:1px solid var(--accent-amber);background:var(--accent-amber-trace);}
+.btn--ghost{color:var(--text);border:1px solid var(--border-strong);}
+.btn--danger{color:var(--status-blocked);border:1px solid var(--status-blocked);background:rgba(214,91,120,.07);}
+
+/* byte band + ribbon */
+.byteband{display:flex;height:50px;border:1px solid var(--border-strong);border-radius:var(--radius);overflow:hidden;}
+.bb__seg{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;}
+.bb__body{flex:164;background:linear-gradient(180deg,#0d1a18,#0a1512);border-right:1px solid var(--chain);}
+.bb__sig{flex:64;background:linear-gradient(180deg,#1a1410,#15100a);}
+.bb__n{font-family:var(--font-display);font-weight:800;font-size:18px;}
+.bb__l{font-size:9.5px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-faint);}
+.ribbon{display:flex;gap:2px;height:16px;}
+.ribbon i{flex:1;background:var(--chain);opacity:.55;border-radius:1px;}
+.ribbon i:last-child{opacity:1;box-shadow:0 0 12px var(--chain);animation:pulse 1.8s ease-in-out infinite;}
+
+/* tabs preview */
+.tabs{display:flex;gap:2px;flex-wrap:wrap;}
+.tab{display:flex;flex-direction:column;gap:3px;padding:8px 14px;border:1px solid var(--border);border-radius:4px;background:transparent;}
+.tab.is-active{border-color:var(--accent-amber);background:var(--accent-amber-trace);}
+.tab .num{font-family:var(--font-mono);font-size:9px;letter-spacing:0.14em;color:var(--text-faint);}
+.tab.is-active .num{color:var(--accent-amber);}
+.tab .lbl{font-family:var(--font-display);font-size:13px;font-weight:500;color:var(--text-dim);}
+.tab.is-active .lbl{color:var(--text);font-weight:700;}
+
+/* motion demos */
+.formula{font-family:var(--font-mono);font-size:13px;background:var(--panel-soft);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;}
+.demo-hash{font-family:var(--font-mono);font-size:13px;letter-spacing:0.02em;word-break:break-all;color:var(--text-dim);}
+.demo-hash.ok{animation:settle 280ms var(--ease-instrument);color:var(--chain);}
+.demo-hash.bad{animation:mismatch 1.2s ease-in-out infinite;color:var(--status-blocked);}
+.breathe{animation:breathe 2.8s ease-in-out infinite;}
+@keyframes pulse{50%{opacity:.5;}}
+@keyframes settle{0%{color:var(--accent-amber);text-shadow:0 0 8px var(--accent-amber-soft);}100%{color:var(--chain);text-shadow:none;}}
+@keyframes mismatch{0%,100%{background:rgba(214,91,120,.06);}50%{background:rgba(214,91,120,.18);}}
+@keyframes breathe{50%{box-shadow:0 0 28px -10px var(--chain-soft),0 0 0 1px var(--border-strong);}}
+
+/* honesty do/dont */
+.dd{border-radius:var(--radius);border:1px solid var(--border);padding:14px 16px;}
+.dd--do{border-left:2px solid var(--chain);} .dd--dont{border-left:2px solid var(--status-blocked);}
+.strike{text-decoration:line-through;color:var(--text-faint);}
+
+footer{padding:40px 0 0;border-top:1px solid var(--border);color:var(--text-faint);font-size:11px;display:flex;flex-wrap:wrap;gap:8px 24px;justify-content:space-between;}
+
+@media (prefers-reduced-motion: reduce){*{animation:none !important;}}
+</style>
+</head>
+<body>
+
+<div class="strip">
+  <span class="wordmark">Qor<span class="t">T</span>roller</span>
+  <span class="strip__eye">Living Style Guide · QRESCE-0001 v0.5</span>
+</div>
+
+<div class="wrap">
+
+  <!-- 00 BRAND -->
+  <section>
+    <div class="sec-head"><span class="sec-num">00</span><h2 class="sec">Brand &amp; wordmark</h2></div>
+    <div class="grid g2">
+      <div class="p-panel">
+        <div class="eye" style="margin-bottom:14px;">Wordmark · medial-T amber</div>
+        <div class="wordmark" style="font-size:48px;">Qor<span class="t">T</span>roller</div>
+        <p style="margin-top:14px;">Tagline — lead with it at first mention:</p>
+        <div class="amber" style="font-family:var(--font-display);font-weight:600;font-size:16px;">QorTroller — Core Controllers of their gaming data.</div>
+      </div>
+      <div class="p-panel">
+        <div class="eye" style="margin-bottom:14px;">Forbidden forms</div>
+        <div style="display:flex;flex-direction:column;gap:8px;font-family:var(--font-display);font-size:20px;">
+          <span class="strike">Qortroller</span>
+          <span class="strike">QORTROLLER</span>
+          <span class="strike">Qor Troller</span>
+          <span class="strike">qorTroller</span>
+        </div>
+        <p class="faint" style="margin-top:14px;font-size:11px;">Category: <span class="amber">V.A.P.I.</span> (periods) in display; <span class="mono">VAPI</span> (no periods) only in code/byte literals. Never emoji.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 01 COLOR -->
+  <section>
+    <div class="sec-head"><span class="sec-num">01</span><h2 class="sec">Color — void-black forensic</h2></div>
+    <h3>Surfaces &amp; borders</h3>
+    <div class="grid g6" style="margin-bottom:18px;">
+      <div class="sw"><div class="sw__chip" style="background:#04060a;border-bottom:1px solid var(--border);"></div><div class="sw__meta"><span class="sw__name">bg</span><span class="sw__hex">#04060a</span></div></div>
+      <div class="sw"><div class="sw__chip" style="background:#0a0e14;"></div><div class="sw__meta"><span class="sw__name">panel</span><span class="sw__hex">#0a0e14</span></div></div>
+      <div class="sw"><div class="sw__chip" style="background:#0b1119;"></div><div class="sw__meta"><span class="sw__name">panel-soft</span><span class="sw__hex">#0b1119</span></div></div>
+      <div class="sw"><div class="sw__chip" style="background:#11161f;"></div><div class="sw__meta"><span class="sw__name">panel-raised</span><span class="sw__hex">#11161f</span></div></div>
+      <div class="sw"><div class="sw__chip" style="background:#1b2433;"></div><div class="sw__meta"><span class="sw__name">border</span><span class="sw__hex">#1b2433</span></div></div>
+      <div class="sw"><div class="sw__chip" style="background:#2a3850;"></div><div class="sw__meta"><span class="sw__name">border-strong</span><span class="sw__hex">#2a3850</span></div></div>
+    </div>
+    <h3>Text</h3>
+    <div class="grid g4" style="margin-bottom:18px;">
+      <div class="sw"><div class="sw__chip" style="background:#d4dde8;"></div><div class="sw__meta"><span class="sw__name">text</span><span class="sw__hex">#d4dde8</span></div></div>
+      <div class="sw"><div class="sw__chip" style="background:#8a98ab;"></div><div class="sw__meta"><span class="sw__name">text-dim</span><span class="sw__hex">#8a98ab</span></div></div>
+      <div class="sw"><div class="sw__chip" style="background:#5a6878;"></div><div class="sw__meta"><span class="sw__name">text-faint</span><span class="sw__hex">#5a6878</span></div></div>
+      <div class="sw"><div class="sw__chip" style="background:#36404e;"></div><div class="sw__meta"><span class="sw__name">text-ghost</span><span class="sw__hex">#36404e</span></div></div>
+    </div>
+    <h3>Accents &amp; status <span class="faint" style="font-weight:400;text-transform:none;letter-spacing:0;">— semantic, always paired with a text label</span></h3>
+    <div class="grid g6">
+      <div class="sw"><div class="sw__chip" style="background:#f0a868;"></div><div class="sw__meta"><span class="sw__name">accent-amber</span><span class="sw__hex">#f0a868 · operator / medial-T</span></div></div>
+      <div class="sw"><div class="sw__chip" style="background:#5bd6a3;"></div><div class="sw__meta"><span class="sw__name">chain</span><span class="sw__hex">#5bd6a3 · verified flow</span></div></div>
+      <div class="sw"><div class="sw__chip" style="background:#00d4ff;"></div><div class="sw__meta"><span class="sw__name">gamer-cyan</span><span class="sw__hex">#00d4ff</span></div></div>
+      <div class="sw"><div class="sw__chip" style="background:#f0a868;"></div><div class="sw__meta"><span class="sw__name">pending</span><span class="sw__hex">#f0a868 · honest pause</span></div></div>
+      <div class="sw"><div class="sw__chip" style="background:#d65b78;"></div><div class="sw__meta"><span class="sw__name">blocked</span><span class="sw__hex">#d65b78 · honest fail</span></div></div>
+      <div class="sw"><div class="sw__chip" style="background:#5a6878;"></div><div class="sw__meta"><span class="sw__name">dormant</span><span class="sw__hex">#5a6878</span></div></div>
+    </div>
+  </section>
+
+  <!-- 02 TYPE -->
+  <section>
+    <div class="sec-head"><span class="sec-num">02</span><h2 class="sec">Typography</h2></div>
+    <div class="grid g2">
+      <div class="p-panel">
+        <div class="eye" style="margin-bottom:12px;">Syne — display / wordmark / headings</div>
+        <div style="font-family:var(--font-display);">
+          <div style="font-weight:800;font-size:40px;letter-spacing:-0.02em;line-height:1.05;">Forensic, alive.</div>
+          <div style="font-weight:700;font-size:24px;margin-top:8px;">Section heading</div>
+          <div style="font-weight:600;font-size:16px;margin-top:8px;color:var(--text-dim);">Subsection heading</div>
+        </div>
+      </div>
+      <div class="p-panel">
+        <div class="eye" style="margin-bottom:12px;">JetBrains Mono — all data / hashes / numbers</div>
+        <div class="hash" style="font-size:14px;">7f3a4b21…d91c0e4e</div>
+        <div class="mono" style="margin-top:10px;font-size:13px;color:var(--text);">poll_rate_hz <span class="amber">1002</span> · chain_length <span class="amber">100</span></div>
+        <div class="eye" style="margin-top:14px;">EYEBROW · 0.14EM TRACKING</div>
+        <div class="label" style="margin-top:6px;">LABEL · 0.06EM TRACKING</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 03 COMPONENTS -->
+  <section>
+    <div class="sec-head"><span class="sec-num">03</span><h2 class="sec">Components</h2></div>
+
+    <h3>Panels</h3>
+    <div class="grid g3" style="margin-bottom:24px;">
+      <div class="p-panel"><div class="p-head"><span class="eye">CAPTURE · HEALTH</span><span class="s-chip s-chip--live">NOMINAL</span></div><div class="mono dim">host <span class="chain">EXCLUSIVE_USB</span> · 1002 HZ</div></div>
+      <div class="p-panel p-panel--soft"><div class="eye" style="margin-bottom:8px;">PANEL · SOFT</div><div class="dim">Nested / secondary surface.</div></div>
+      <div class="p-panel p-panel--raised breathe"><div class="eye" style="margin-bottom:8px;">PANEL · RAISED + BREATH</div><div class="dim">"Alive" surface respires.</div></div>
+    </div>
+
+    <h3>Status chips <span class="faint" style="font-weight:400;text-transform:none;letter-spacing:0;">— never color-only</span></h3>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:24px;">
+      <span class="s-chip s-chip--live">VERIFIED · LIVE</span>
+      <span class="s-chip s-chip--pending">KILL-SWITCH PAUSED</span>
+      <span class="s-chip s-chip--blocked">MISMATCH</span>
+      <span class="s-chip s-chip--mock">MOCK DATA</span>
+      <span class="s-chip s-chip--dormant">DORMANT</span>
+      <span class="s-chip s-chip--verified">EMULATED</span>
+    </div>
+
+    <h3>Buttons</h3>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:24px;">
+      <button class="btn btn--primary">RUN PRE-FLIGHT</button>
+      <button class="btn btn--secondary">RE-FETCH · NO-STORE</button>
+      <button class="btn btn--ghost">DETAILS</button>
+      <button class="btn btn--danger">FLIP A BYTE</button>
+    </div>
+
+    <h3>Data heroes</h3>
+    <div class="grid g2">
+      <div class="p-panel">
+        <div class="eye" style="margin-bottom:10px;">PoAC · 228-BYTE RECORD</div>
+        <div class="byteband"><div class="bb__seg bb__body"><span class="bb__n chain">164</span><span class="bb__l">signed body</span></div><div class="bb__seg bb__sig"><span class="bb__n amber">64</span><span class="bb__l">ECDSA-P256 sig</span></div></div>
+        <div class="formula" style="margin-top:12px;font-size:12px;">chain_link = <span class="chain">SHA-256</span>( raw[<span class="amber">0:164</span>] )</div>
+      </div>
+      <div class="p-panel">
+        <div class="eye" style="margin-bottom:10px;">GRIND · INTEGRITY · CHAIN</div>
+        <div class="ribbon"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        <div class="mono" style="margin-top:10px;"><span class="amber" style="font-size:15px;font-weight:600;">100</span><span class="faint"> / 100 · </span><span class="chain">● INTACT</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 04 MOTION -->
+  <section>
+    <div class="sec-head"><span class="sec-num">04</span><h2 class="sec">Motion — evidence of computation</h2></div>
+    <p>Three primitives, never decorative: <span class="amber">hash re-derive / settle</span> (amber→chain), <span class="chain">chain-link landing</span>, and <span class="amber">breathing</span>. Live demo (uses real <span class="mono">crypto.subtle.digest</span>):</p>
+    <div class="p-panel" style="max-width:640px;">
+      <div class="p-head"><span class="eye">INTEGRITY · VERDICT</span><span id="verdict" class="s-chip s-chip--dormant">IDLE</span></div>
+      <div class="label" style="margin-bottom:6px;">computed (in-browser)</div>
+      <div id="demoHash" class="demo-hash">— press re-derive —</div>
+      <div style="display:flex;gap:10px;margin-top:14px;">
+        <button class="btn btn--secondary" id="btnDerive">RE-DERIVE · SHA-256</button>
+        <button class="btn btn--danger" id="btnFlip">FLIP A BYTE</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 05 GAMER-VIBE -->
+  <section>
+    <div class="sec-head"><span class="sec-num">05</span><h2 class="sec">Gamer-vibe layer (opt-in via Tweaks)</h2></div>
+    <p>Default is forensic-restraint. A bottom-right <span class="amber">✦ Tweaks</span> toggle reveals: vibe presets, accent palette, scanlines, CRT, film grain, glow, hash-storm, twin-breath, GIC landing FX. Honesty preserved (a <span class="amber">VIBE · ARCADE</span> foot label shows when off-forensic; green stays earned).</p>
+    <div class="grid g3">
+      <div class="p-panel"><div class="eye" style="margin-bottom:8px;">FORENSIC <span class="chain">· default</span></div><div class="dim">No overlays. Glow 35%. Restraint.</div></div>
+      <div class="p-panel"><div class="eye" style="margin-bottom:8px;">CINEMATIC</div><div class="dim">Glow 65% · film grain · hash-storm · bloom landing.</div></div>
+      <div class="p-panel"><div class="eye" style="margin-bottom:8px;">ARCADE</div><div class="dim">Scanlines · CRT · glow 100% · neon-pink accent · shockwave landing.</div></div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;">
+      <span class="sw" style="display:inline-flex;align-items:center;gap:8px;padding:6px 10px;"><span style="width:14px;height:14px;border-radius:50%;background:#00d4ff;"></span><span class="label" style="text-transform:none;">gamer-cyan</span></span>
+      <span class="sw" style="display:inline-flex;align-items:center;gap:8px;padding:6px 10px;"><span style="width:14px;height:14px;border-radius:50%;background:#5bd6a3;"></span><span class="label" style="text-transform:none;">chain-green</span></span>
+      <span class="sw" style="display:inline-flex;align-items:center;gap:8px;padding:6px 10px;"><span style="width:14px;height:14px;border-radius:50%;background:#ff4dcc;"></span><span class="label" style="text-transform:none;">neon-pink</span></span>
+      <span class="sw" style="display:inline-flex;align-items:center;gap:8px;padding:6px 10px;"><span style="width:14px;height:14px;border-radius:50%;background:#a78bfa;"></span><span class="label" style="text-transform:none;">ultraviolet</span></span>
+    </div>
+  </section>
+
+  <!-- 06 IA -->
+  <section>
+    <div class="sec-head"><span class="sec-num">06</span><h2 class="sec">Information architecture</h2></div>
+    <h3>Dashboard — 6 numbered tabs</h3>
+    <div class="tabs" style="margin-bottom:16px;">
+      <div class="tab is-active"><span class="num">01</span><span class="lbl">Gamer</span></div>
+      <div class="tab"><span class="num">02</span><span class="lbl">Forensic · Explorer</span></div>
+      <div class="tab"><span class="num">03</span><span class="lbl">Operator · Evidence</span></div>
+      <div class="tab"><span class="num">04</span><span class="lbl">VPM · Proofs</span></div>
+      <div class="tab"><span class="num">05</span><span class="lbl">Grant · Brief</span></div>
+      <div class="tab"><span class="num">06</span><span class="lbl">Reference</span></div>
+    </div>
+    <div class="grid g3" style="margin-bottom:24px;">
+      <div class="p-panel"><div class="eye" style="margin-bottom:6px;">01 · Gamer</div><div class="dim" style="font-size:12px;">Full-bleed real 3D twin iframe + 4 floating corner panels + grind ribbon + APOP prism + PCC drawer. noMock.</div></div>
+      <div class="p-panel"><div class="eye" style="margin-bottom:6px;">02 · Forensic</div><div class="dim" style="font-size:12px;">Side-by-side workbench: byte table + verifier readouts; chain timeline; real SHA-256.</div></div>
+      <div class="p-panel"><div class="eye" style="margin-bottom:6px;">03 · Operator</div><div class="dim" style="font-size:12px;">Kill-switch + fleet coherence heroes; pre-flight gates; AIT/PCC/coherence; blockers.</div></div>
+      <div class="p-panel"><div class="eye" style="margin-bottom:6px;">04 · VPM</div><div class="dim" style="font-size:12px;">Gallery rail + FROZEN render rule (fetch no-store → srcDoc); page-scrolls, auto-height proof, sticky inspector, HASH-OK / FLIP-A-BYTE.</div></div>
+      <div class="p-panel"><div class="eye" style="margin-bottom:6px;">05 · Grant Brief</div><div class="dim" style="font-size:12px;">Iframe deck (9 slides, arrow-key nav, 1/9). Public.</div></div>
+      <div class="p-panel"><div class="eye" style="margin-bottom:6px;">06 · Reference</div><div class="dim" style="font-size:12px;">Iframe codex — what / how / forward. Self-contained.</div></div>
+    </div>
+    <h3>Evidence OS (/os) — same design language, de-duplicated</h3>
+    <div class="tabs">
+      <div class="tab is-active"><span class="num">01</span><span class="lbl">Evidence Graph</span></div>
+      <div class="tab"><span class="num">02</span><span class="lbl">Forensic Replay</span></div>
+      <div class="tab"><span class="num">03</span><span class="lbl">Protocol State</span></div>
+    </div>
+  </section>
+
+  <!-- 07 HONESTY -->
+  <section>
+    <div class="sec-head"><span class="sec-num">07</span><h2 class="sec">Honesty discipline</h2></div>
+    <div class="grid g2">
+      <div class="dd dd--do">
+        <div class="eye chain" style="margin-bottom:10px;">DO — say it plainly</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <span class="s-chip s-chip--live">VERIFIED · LIVE</span>
+          <span class="s-chip s-chip--pending">KILL-SWITCH PAUSED</span>
+          <span class="s-chip s-chip--blocked">BRIDGE UNREACHABLE</span>
+        </div>
+        <p class="faint" style="margin-top:12px;font-size:11px;">Green only when a verifier returned OK. Every red/amber names its reason.</p>
+      </div>
+      <div class="dd dd--dont">
+        <div class="eye" style="color:var(--status-blocked);margin-bottom:10px;">DON'T</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <span class="strike">Faked green when the bridge is down</span>
+          <span class="strike">Color-only status (no text label)</span>
+          <span class="strike">Invented numbers on noMock surfaces</span>
+          <span class="strike">Emoji · marketing-cheerful copy</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>QorTroller — Core Controllers of their gaming data.</span>
+    <span class="faint">Living style guide · companion to qortroller-frontend-current-design-brief.md · <span class="amber">V.A.P.I.</span> · IoTeX L1</span>
+  </footer>
+
+</div>
+
+<script>
+  // Live motion demo — REAL crypto.subtle. Settle = amber→chain on OK;
+  // mismatch = red. Demonstrates the "green is earned" rule.
+  (function(){
+    var SAMPLE = 'VAPI-REFERENCE-SAMPLE-164B-BODY';
+    var hashEl = document.getElementById('demoHash');
+    var verdict = document.getElementById('verdict');
+    var tampered = false;
+    // crypto.subtle needs a secure context (https / localhost). If absent
+    // (e.g. opened from file:// in some browsers), degrade honestly.
+    if (!(window.crypto && crypto.subtle)) {
+      hashEl.textContent = 'crypto.subtle unavailable — serve over http(s) to run the live verifier';
+      verdict.className = 's-chip s-chip--pending';
+      verdict.textContent = 'NEEDS HTTPS';
+      return;
+    }
+    function fmt(h){ return h.slice(0,16) + '…' + h.slice(-16); }
+    async function sha256(str){
+      var buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+      return Array.from(new Uint8Array(buf)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
+    }
+    async function derive(){
+      var h = await sha256(SAMPLE + (tampered ? '!' : ''));
+      hashEl.textContent = fmt(h);
+      hashEl.className = 'demo-hash ' + (tampered ? 'bad' : 'ok');
+      verdict.className = 's-chip ' + (tampered ? 's-chip--blocked' : 's-chip--live');
+      verdict.textContent = tampered ? '● MISMATCH' : '● HASH OK';
+    }
+    document.getElementById('btnDerive').addEventListener('click', function(){ tampered = false; derive(); });
+    document.getElementById('btnFlip').addEventListener('click', function(){ tampered = true; derive(); });
+  })();
+</script>
+</body>
+</html>

@@ -22,9 +22,12 @@ export default function WorkspaceHeader({ title, description, right }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
         <h1 style={{
           margin:         0,
+          // Syne display heading — matches the dashboard's headings (data stays
+          // mono via the parent header fontFamily).
+          fontFamily:     "'Syne', system-ui, sans-serif",
           fontSize:       'var(--os-text-h1)',
-          fontWeight:     700,
-          letterSpacing:  '0.04em',
+          fontWeight:     600,
+          letterSpacing:  '-0.01em',
           color:          'var(--os-text)',
         }}>{title}</h1>
         {description && (
