@@ -220,10 +220,11 @@ def main() -> int:
     a = ap.parse_args()
     if a.control:
         print("=" * 64)
-        print("QorTroller PoEP — IN-GAME negative control (buzz vs sham)")
+        print("QorTroller PoEP — negative control (buzz vs sham)")
         print("=" * 64)
-        print("  Keep playing normally. React to a buzz when you feel one; some trials")
-        print("  fire no buzz (sham) to measure gameplay false-positives.\n")
+        print("  React to a buzz when you feel one; some trials fire no buzz (sham).")
+        print("  STANDALONE (not playing) validates the enrollment form (expect SHAM rate ~0);")
+        print("  in-game tests that mode (gameplay usually trips SHAM -> confounded).\n")
         r = run_controlled_derisk(max(a.trials, 12))
         print("  " + "=" * 60)
         if r.get("status") != "ok":
