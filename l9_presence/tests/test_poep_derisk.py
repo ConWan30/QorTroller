@@ -1,5 +1,5 @@
 """Tests for the PoEP de-risk decision logic (no hardware)."""
-from l9_presence.poep_derisk import in_human_band, reaction_detected
+from l9_presence.poep_derisk import assess_control, in_human_band, reaction_detected
 
 _CENTER = {"RX": 128, "RY": 128, "R2": 0, "L2": 0, "buttons": 0}
 
@@ -29,3 +29,18 @@ def test_reaction_detected_on_button():
 
 def test_no_reaction_when_idle():
     assert reaction_detected(_CENTER, {**_CENTER, "RX": 130, "R2": 5}) is False  # tiny drift, not a reaction
+
+
+def test_control_genuine_when_buzz_drives_and_sham_quiet():
+    # buzz reactions in human band; gameplay (sham) rarely trips the detector
+    r = assess_control(buzz_lats=[260, 290, 310, 275, 300], sham_lats=[],
+                       n_buzz=5, n_sham=5)
+    assert r["genuine_buzz_driven"] is True
+
+
+def test_control_confounded_when_sham_trips_too():
+    # gameplay trips the detector on most sham trials too -> in-game confounded
+    r = assess_control(buzz_lats=[200, 180, 220, 190, 210],
+                       sham_lats=[150, 170, 160, 180], n_buzz=5, n_sham=5)
+    assert r["genuine_buzz_driven"] is False
+    assert "confounded" in r["verdict"]

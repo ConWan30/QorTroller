@@ -45,6 +45,25 @@ def reaction_detected(baseline: dict, current: dict) -> bool:
     return current.get("buttons", 0) != baseline.get("buttons", 0)
 
 
+def assess_control(buzz_lats, sham_lats, n_buzz: int, n_sham: int) -> dict:
+    """Negative-control verdict: is the in-game reaction genuinely BUZZ-driven, or just
+    gameplay tripping the detector? buzz_lats/sham_lats = detected latencies (ms) for
+    live (buzz) vs sham (no-buzz) trials. Genuine iff buzz reactions are common + in the
+    human band AND sham trials (gameplay alone) rarely trip the detector."""
+    buzz_rate = (len(buzz_lats) / n_buzz) if n_buzz else 0.0
+    sham_rate = (len(sham_lats) / n_sham) if n_sham else 0.0
+    buzz_med = statistics.median(buzz_lats) if buzz_lats else None
+    sham_med = statistics.median(sham_lats) if sham_lats else None
+    genuine = bool(buzz_rate >= 0.6 and buzz_med is not None
+                   and in_human_band(buzz_med) and sham_rate <= 0.3)
+    return {"buzz_detect_rate": round(buzz_rate, 3), "sham_detect_rate": round(sham_rate, 3),
+            "buzz_median_ms": round(buzz_med, 1) if buzz_med is not None else None,
+            "sham_median_ms": round(sham_med, 1) if sham_med is not None else None,
+            "genuine_buzz_driven": genuine,
+            "verdict": ("in-game PoEP viable (reflex is buzz-driven, not gameplay)" if genuine
+                        else "in-game confounded by gameplay -> use enrollment/between-match form")}
+
+
 def _snapshot(ds) -> dict:
     s = ds.state
     btn = sum(int(bool(getattr(s, b, False))) for b in
@@ -141,11 +160,78 @@ def run_derisk(trials: int = 6, timeout_s: float = 1.2) -> dict:
     }
 
 
+def run_controlled_derisk(trials: int = 12, timeout_s: float = 1.2) -> dict:
+    """In-game negative-control: interleave BUZZ and SHAM (no-stimulus) trials and compare.
+    Isolates a genuine buzz-reaction from gameplay tripping the detector."""
+    try:
+        from pydualsense import pydualsense
+    except Exception as exc:
+        return {"status": "no_pydualsense", "error": str(exc)}
+    ds = pydualsense()
+    try:
+        ds.init()
+    except Exception as exc:
+        return {"status": "controller_unreachable", "error": str(exc)}
+    write = _test_write(ds)
+    buzz_lats, sham_lats, n_buzz, n_sham = [], [], 0, 0
+    try:
+        for i in range(trials):
+            is_buzz = random.random() < 0.5
+            time.sleep(random.uniform(1.0, 3.0))
+            base = _snapshot(ds)
+            if is_buzz:
+                _fire(ds)
+            t0 = time.time(); lat = None
+            while time.time() - t0 < timeout_s:
+                if reaction_detected(base, _snapshot(ds)):
+                    lat = (time.time() - t0) * 1000.0
+                    break
+                time.sleep(0.001)
+            if is_buzz:
+                _stop(ds); n_buzz += 1
+                if lat is not None:
+                    buzz_lats.append(lat)
+            else:
+                n_sham += 1
+                if lat is not None:
+                    sham_lats.append(lat)
+            tag = "BUZZ" if is_buzz else "SHAM"
+            print(f"  trial {i + 1}/{trials} [{tag}]: "
+                  f"{f'{lat:.0f} ms' if lat is not None else 'no detection'}")
+            time.sleep(0.3)
+    finally:
+        _stop(ds)
+        try:
+            ds.close()
+        except Exception:
+            pass
+    out = assess_control(buzz_lats, sham_lats, n_buzz, n_sham)
+    out["status"] = "ok"
+    out["write_ok"] = bool(write["rumble"] or write["trigger"])
+    return out
+
+
 def main() -> int:
     import argparse
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--trials", type=int, default=6)
+    ap.add_argument("--control", action="store_true",
+                    help="in-game negative control: interleave sham (no-buzz) trials to rule out gameplay confound")
     a = ap.parse_args()
+    if a.control:
+        print("=" * 64)
+        print("QorTroller PoEP — IN-GAME negative control (buzz vs sham)")
+        print("=" * 64)
+        print("  Keep playing normally. React to a buzz when you feel one; some trials")
+        print("  fire no buzz (sham) to measure gameplay false-positives.\n")
+        r = run_controlled_derisk(max(a.trials, 12))
+        print("  " + "=" * 60)
+        if r.get("status") != "ok":
+            print(f"  ABORT: {r.get('status')} {r.get('error','')}"); return 4
+        print(f"  BUZZ: detect_rate={r['buzz_detect_rate']} median={r['buzz_median_ms']} ms")
+        print(f"  SHAM: detect_rate={r['sham_detect_rate']} median={r['sham_median_ms']} ms (gameplay false-positives)")
+        print(f"  RESULT: {r['verdict']}")
+        return 0 if r["genuine_buzz_driven"] else 6
     print("=" * 64)
     print("QorTroller PoEP — stimulus-write + reflex-capture de-risk")
     print("=" * 64)
