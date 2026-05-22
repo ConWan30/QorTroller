@@ -100,6 +100,22 @@ def fuse(records, views, weights: Optional[list] = None, temp=1.0):
             "per_view": per_view, "labels": labels}
 
 
+def assemble_rounds(l9_by_player: dict, ait_by_player: dict, seed: int = 0):
+    """Option B (FB0): pair each player's L9 vectors with their AIT vectors 1:1 (min
+    count) into MultiViewSession rounds for player-level fusion. Valid because a
+    person's sessions are exchangeable; shuffled to avoid capture-order artifacts."""
+    rng = np.random.default_rng(seed)
+    rounds = []
+    for pl in sorted(set(l9_by_player) & set(ait_by_player)):
+        l9s, aits = list(l9_by_player[pl]), list(ait_by_player[pl])
+        if not l9s or not aits:
+            continue
+        rng.shuffle(l9s); rng.shuffle(aits)
+        for i in range(min(len(l9s), len(aits))):
+            rounds.append(MultiViewSession(pl, {"l9": list(l9s[i]), "ait": list(aits[i])}))
+    return rounds
+
+
 def fusion_report(records, views, n_perm=2000, temp=1.0, seed=0) -> dict:
     """Full F0 verdict: per-view accuracy, fused accuracy + gain, pairwise error
     independence, and a permutation null on the fused accuracy. Recommendation fires
