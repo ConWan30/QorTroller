@@ -268,6 +268,8 @@ class CoCaptureRecorder:
                     if out is not None:
                         _, m = out
                         mo_ts.append(now_ms); mo_yaw.append(m.yaw_rate); mo_pitch.append(m.pitch_rate)
+                else:
+                    time.sleep(0.0008)   # yield GIL so async (WGC) capture + HID threads run
         finally:
             stop.set(); th.join(timeout=2.0); cap.close()
 
