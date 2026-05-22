@@ -85,7 +85,8 @@ def run_force_derisk(trials: int = 8, capture_s: float = 2.0) -> dict:
                   " — press R2 fully, then release")
             traj, t0 = [], time.time()
             while time.time() - t0 < capture_s:
-                traj.append({"t_ms": (time.time() - t0) * 1000.0, "r2": getattr(ds.state, "R2", 0)})
+                r2v = getattr(ds.state, "R2_value", getattr(ds.state, "R2", 0))  # analog 0-255 (R2 is digital)
+                traj.append({"t_ms": (time.time() - t0) * 1000.0, "r2": float(r2v)})
                 time.sleep(0.002)
             f = extract_force_features(traj)
             (on_feats if resistance else off_feats).append(f)

@@ -134,7 +134,8 @@ def _snapshot(ds) -> dict:
     else:
         accel_mag = 0.0
     return {"RX": getattr(s, "RX", 128), "RY": getattr(s, "RY", 128),
-            "R2": getattr(s, "R2", 0), "L2": getattr(s, "L2", 0), "accel_mag": accel_mag}
+            "R2": getattr(s, "R2_value", getattr(s, "R2", 0)),   # analog 0-255 (R2 is digital bool)
+            "L2": getattr(s, "L2_value", getattr(s, "L2", 0)), "accel_mag": accel_mag}
 
 
 @dataclass
