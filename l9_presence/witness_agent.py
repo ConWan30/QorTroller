@@ -346,7 +346,19 @@ def _cli() -> int:
                     default=[640, 360, 1280, 720])
     pr.add_argument("--once", action="store_true", help="capture a single session and exit")
 
+    hm = sub.add_parser("harvest-menu",
+                        help="run ONE sub-lane B PoEP micro-challenge (hardware; react to the buzz)")
+    hm.add_argument("--player", default="P1")
+    hm.add_argument("--out-dir", default="bcc_l9")
+
     a = ap.parse_args()
+    if a.cmd == "harvest-menu":
+        cfg = WitnessConfig(player=a.player, bcc_enabled=True, bcc_sublane_b_enabled=True,
+                            bcc_out_dir=a.out_dir)
+        print("PoEP sub-lane B micro-challenge — hold the controller STILL; react to the buzz,\n"
+              "then stay still for the no-buzz (sham) check.\n")
+        print(json.dumps(WitnessAgent(cfg).harvest_menu_sample(), indent=2, default=str))
+        return 0
     if a.cmd == "process":
         m = process_session(a.path, WitnessConfig(player=a.player))
         print(json.dumps({k: v for k, v in m.items() if k != "biometric_vector"},
