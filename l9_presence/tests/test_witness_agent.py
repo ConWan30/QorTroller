@@ -3,9 +3,10 @@ import json
 
 import numpy as np
 
+from l9_presence.bcc import BCCStore
 from l9_presence.pocp import compute_pocp_commitment, preimage_len
 from l9_presence.verification_card import render_card
-from l9_presence.witness_agent import WitnessConfig, process_session
+from l9_presence.witness_agent import WitnessConfig, _should_harvest_l9, process_session
 
 
 def _write_coupled(path, n=500, rate_hz=100.0, lag_ms=40.0, seed=0, player="P1"):
@@ -76,3 +77,52 @@ def test_process_session_handoff_goes_live_when_enabled(tmp_path):
     assert m["handoffs"]["sentry"]["enabled"] is True
     assert m["handoffs"]["sentry"]["action"] == "live_pending_governance"
     assert m["handoffs"]["guardian"]["enabled"] is False  # others still dry-run
+
+
+def _write_uncoupled(path, n=500, rate_hz=100.0, seed=1, player="P1"):
+    rng = np.random.default_rng(seed)
+    ts = np.arange(n) * (1000.0 / rate_hz)
+    sx = 128 + 60.0 * np.sin(2 * np.pi * 0.8 * ts / 1000.0)   # active aim...
+    sy = 128 + 8.0 * np.sin(2 * np.pi * 0.3 * ts / 1000.0)
+    yaw = rng.normal(0, 0.4, n)                                # ...but render motion is pure noise
+    pitch = rng.normal(0, 0.4, n)
+    fire = np.zeros(n); fire[n // 2:] = 200.0
+    np.savez(path, in_ts=ts, in_sx=sx, in_sy=sy, in_fire=fire,
+             mo_ts=ts, mo_yaw=yaw, mo_pitch=pitch, label="human", player=player)
+    return str(path)
+
+
+# ---- BCC sealed-lane harvest wiring ----
+
+def test_should_harvest_gate():
+    assert _should_harvest_l9("PRESENT", True) is True
+    assert _should_harvest_l9("PRESENT", False) is False        # unreliable -> no
+    assert _should_harvest_l9("DECOUPLED", True) is False        # not causally present -> no
+    assert _should_harvest_l9("INSUFFICIENT_AIM", True) is False
+
+
+def test_bcc_dormant_by_default(tmp_path):
+    p = _write_coupled(tmp_path / "P1_01.npz")
+    m = process_session(p, WitnessConfig(out_dir=str(tmp_path)))   # bcc_enabled False
+    assert m["bcc"]["harvested"] is False and m["bcc"]["reason"] == "bcc_disabled"
+
+
+def test_bcc_harvests_present_session(tmp_path):
+    lane = str(tmp_path / "bcc")
+    p = _write_coupled(tmp_path / "P1_01.npz")
+    m = process_session(p, WitnessConfig(out_dir=str(tmp_path), bcc_enabled=True, bcc_out_dir=lane))
+    assert m["verdict"] == "PRESENT"
+    assert m["bcc"]["harvested"] is True and m["bcc"]["sub_lane"] == "A"
+    st = BCCStore(lane)
+    assert st.status()["chain_length"] == 1 and st.verify() is True
+    rec = st.load()[0]
+    assert rec["payload"]["pocp_commitment"] == m["pocp_commitment"]   # provenance link to L9 verification
+
+
+def test_bcc_skips_non_present_session(tmp_path):
+    lane = str(tmp_path / "bcc")
+    p = _write_uncoupled(tmp_path / "P1_01.npz")
+    m = process_session(p, WitnessConfig(out_dir=str(tmp_path), bcc_enabled=True, bcc_out_dir=lane))
+    assert m["verdict"] != "PRESENT"
+    assert m["bcc"]["harvested"] is False                    # causal-presence gate rejected it
+    assert BCCStore(lane).status()["chain_length"] == 0      # nothing entered the lane
