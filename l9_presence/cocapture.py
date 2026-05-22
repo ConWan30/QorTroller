@@ -298,9 +298,17 @@ class CoCaptureRecorder:
         l9_streams = {"in_ts": in_ts, "in_sx": in_sx, "in_sy": in_sy,
                       "mo_ts": mo_ts, "mo_yaw": mo_yaw, "mo_pitch": mo_pitch}
         save_cocapture(out, s, raw_reports=reports, ts_us=ts_us, l9_streams=l9_streams)
-        return {"path": out, "player": s.player, "l9_reliable": s.l9_reliable,
-                "l9_coupling": round(s.l9_coupling, 4), "l4_present": s.l4_vec is not None,
-                "n_hid": s.n_hid, "n_frames": s.n_frames}
+        motion_std = float(max(np.std(mo_yaw) if mo_yaw else 0.0,
+                               np.std(mo_pitch) if mo_pitch else 0.0))
+        res = {"path": out, "player": s.player, "l9_reliable": s.l9_reliable,
+               "l9_coupling": round(s.l9_coupling, 4), "l4_present": s.l4_vec is not None,
+               "camera_motion_std": round(motion_std, 4),
+               "n_hid": s.n_hid, "n_frames": s.n_frames}
+        if motion_std < 0.5:
+            res["warning"] = ("CAMERA STATIC (no on-screen motion) — the moving game must be "
+                              "VISIBLE in the capture region. Bring Remote Play to the front "
+                              "(don't let the terminal/another window cover the screen center).")
+        return res
 
 
 def _cli() -> int:
@@ -324,7 +332,13 @@ def _cli() -> int:
         for k in range(a.count):
             r = rec.record_once()
             print(f"[{k + 1}/{a.count}] {a.player}: {r['path']} "
-                  f"(l9_reliable={r['l9_reliable']}, l4={r['l4_present']})")
+                  f"(l9_reliable={r['l9_reliable']}, motion_std={r['camera_motion_std']}, "
+                  f"l4={r['l4_present']})")
+            if "warning" in r:
+                print(f"    !! {r['warning']}")
+                if k == 0:
+                    print("    Stopping the batch — fix the capture window, then re-run.")
+                    break
         return 0
     if a.cmd == "readiness":
         print(json.dumps(fusion_readiness(a.corpus_dir, a.min_per_player), indent=2, default=str))
