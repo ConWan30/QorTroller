@@ -661,7 +661,7 @@ export function GamerView() {
   // v2 · item A — name this view + its live readouts in the persistent eyebrow.
   useViewEyebrow({
     num: '01',
-    name: 'GAMER · LIVE',
+    name: 'GAMER',
     status: bridgeOffline ? 'BRIDGE UNREACHABLE' : paused ? 'COUNTING PAUSED' : 'LIVE',
     statusTone: bridgeOffline ? 'blocked' : paused ? 'pending' : 'live',
     readouts: [
