@@ -122,7 +122,8 @@ class CoCaptureSession:
     n_frames: int = 0
 
 
-def save_cocapture(path: str, s: CoCaptureSession, raw_reports=None, ts_us=None) -> str:
+def save_cocapture(path: str, s: CoCaptureSession, raw_reports=None, ts_us=None,
+                   l9_streams=None) -> str:
     payload = dict(player=s.player, l9_vec=np.array(s.l9_vec, float),
                    l4_vec=(np.array(s.l4_vec, float) if s.l4_vec is not None else np.array([])),
                    l9_reliable=s.l9_reliable, l9_coupling=s.l9_coupling,
@@ -130,8 +131,28 @@ def save_cocapture(path: str, s: CoCaptureSession, raw_reports=None, ts_us=None)
     if raw_reports is not None and ts_us is not None:   # keep raw for offline L4 recompute
         payload["raw"] = np.array([list(r[:64]) for r in raw_reports], dtype=np.uint8)
         payload["raw_ts_us"] = np.array(ts_us, dtype=np.int64)
+    if l9_streams is not None:   # keep L9 streams so coupling is recomputable / diagnosable
+        for k in ("in_ts", "in_sx", "in_sy", "mo_ts", "mo_yaw", "mo_pitch"):
+            payload[k] = np.asarray(l9_streams[k], float)
     np.savez(path, **payload)
     return path
+
+
+def recompute_l9_from_file(path: str) -> dict:
+    """Re-run the L9 coupling analysis from a co-capture file's stored streams (for
+    verifying/diagnosing the recorder). Returns the full analyze_session_data dict."""
+    from .session_recorder import analyze_session_data
+    d = np.load(path, allow_pickle=True)
+    if "in_ts" not in d.files:
+        return {"status": "no_l9_streams_stored"}
+    sd = SessionData(d["in_ts"], d["in_sx"], d["in_sy"], d["mo_ts"], d["mo_yaw"],
+                     d["mo_pitch"], "human", None, str(d["player"]))
+    r = analyze_session_data(sd)
+    r["stick_x_std"] = float(np.std(d["in_sx"]))
+    r["stick_y_std"] = float(np.std(d["in_sy"]))
+    r["n_hid"] = int(d["in_ts"].size)
+    r["n_frames"] = int(d["mo_ts"].size)
+    return r
 
 
 def load_cocapture(path: str) -> CoCaptureSession:
@@ -219,10 +240,10 @@ class CoCaptureRecorder:
             raise RuntimeError("opencv-python required")
         reports, ts_us = [], []
         stop = threading.Event()
+        t0 = time.time()   # SHARED zero for BOTH streams — keeps stick/camera lag aligned
 
         def _hid_loop():
             d = hid.device(); d.open(DUALSENSE_VID, DUALSENSE_EDGE_PID); d.set_nonblocking(True)
-            t0 = time.time()
             try:
                 while not stop.is_set():
                     r = d.read(64)
@@ -237,9 +258,9 @@ class CoCaptureRecorder:
         cap = ScreenCapturer(region=self.cfg.region, backend=self.cfg.backend)
         mx = MotionExtractor()
         mo_ts, mo_yaw, mo_pitch = [], [], []
-        t0 = time.time()
+        frame_start = time.time()   # frames span duration_s from here; timestamps stay vs shared t0
         try:
-            while time.time() - t0 < self.cfg.duration_s:
+            while time.time() - frame_start < self.cfg.duration_s:
                 now_ms = (time.time() - t0) * 1000.0
                 frame = cap.grab()
                 if frame is not None:
@@ -274,7 +295,9 @@ class CoCaptureRecorder:
             n_hid=len(reports), n_frames=len(mo_ts))
         n = len(glob.glob(os.path.join(self.cfg.out_dir, f"{self.cfg.player}_*.npz"))) + 1
         out = os.path.join(self.cfg.out_dir, f"{self.cfg.player}_{n:02d}.npz")
-        save_cocapture(out, s, raw_reports=reports, ts_us=ts_us)
+        l9_streams = {"in_ts": in_ts, "in_sx": in_sx, "in_sy": in_sy,
+                      "mo_ts": mo_ts, "mo_yaw": mo_yaw, "mo_pitch": mo_pitch}
+        save_cocapture(out, s, raw_reports=reports, ts_us=ts_us, l9_streams=l9_streams)
         return {"path": out, "player": s.player, "l9_reliable": s.l9_reliable,
                 "l9_coupling": round(s.l9_coupling, 4), "l4_present": s.l4_vec is not None,
                 "n_hid": s.n_hid, "n_frames": s.n_frames}
