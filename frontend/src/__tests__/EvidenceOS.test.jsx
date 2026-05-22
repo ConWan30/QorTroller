@@ -94,22 +94,27 @@ function renderRoute(initialPath) {
 }
 
 describe('Evidence OS AppShell', () => {
-  it('T-OS-SHELL-1: renders 5 workspace nav links + 3 legacy links', () => {
+  it('T-OS-SHELL-1: renders 3 de-duplicated workspace nav links + 3 legacy links', () => {
     const { container } = renderRoute('/os/evidence')
-    // Five workspace nav-link data attrs (scoped to nav, not workspace body)
+    // QRESCE-0001 v0.5 design alignment: Evidence OS keeps ONLY the surfaces
+    // with no dashboard analog. Live Match (≈ Gamer) + Operator Queue
+    // (≈ Operator·Evidence) were de-duplicated out of the nav.
     const navLinks = container.querySelectorAll('[data-os-nav-link]')
-    expect(navLinks.length).toBe(5)
-    // Each nav link includes the workspace label
+    expect(navLinks.length).toBe(3)
     const navText = Array.from(navLinks).map(n => n.textContent).join(' | ')
-    for (const label of ['Live Match', 'Evidence Graph', 'Operator Queue', 'Forensic Replay', 'Protocol State']) {
+    for (const label of ['Evidence Graph', 'Forensic Replay', 'Protocol State']) {
       expect(navText, `nav missing: ${label}`).toContain(label)
     }
-    // Three legacy links appear in the nav region
-    const nav = container.querySelector('nav[aria-label="Evidence OS workspaces"]')
-    expect(nav).not.toBeNull()
-    expect(nav.textContent).toContain('Classic Operator Cockpit')
-    expect(nav.textContent).toContain('Public Forensic Explorer')
-    expect(nav.textContent).toContain('Algorithm Catalog')
+    // The dropped tabs must NOT appear in the nav.
+    for (const gone of ['Live Match', 'Operator Queue']) {
+      expect(navText, `nav should not list: ${gone}`).not.toContain(gone)
+    }
+    // Three legacy links are reachable (now in the footer nav, off the strip).
+    const legacyNav = container.querySelector('nav[aria-label="Legacy and public links"]')
+    expect(legacyNav).not.toBeNull()
+    expect(legacyNav.textContent).toContain('Classic Operator Cockpit')
+    expect(legacyNav.textContent).toContain('Public Forensic Explorer')
+    expect(legacyNav.textContent).toContain('Algorithm Catalog')
   })
 
   it('T-OS-SHELL-2: /os index redirects to /os/evidence', () => {
