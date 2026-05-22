@@ -320,6 +320,8 @@ def _cli() -> int:
     pc.add_argument("--count", type=int, default=1, help="number of back-to-back sessions")
     pc.add_argument("--duration", type=float, default=60.0)
     pc.add_argument("--region", nargs=4, type=int, default=[640, 360, 1280, 720])
+    pc.add_argument("--backend", default="mss", choices=("auto", "wgc", "bettercam", "dxcam", "mss"),
+                    help="capture backend; use 'wgc' for 60fps (sharper lag) once windows-capture is installed")
     pc.add_argument("--out-dir", default="cocapture_l9")
     pr = sub.add_parser("readiness", help="autonomously check if F3 needs more players")
     pr.add_argument("--corpus-dir", default="cocapture_l9")
@@ -327,7 +329,7 @@ def _cli() -> int:
     a = ap.parse_args()
     if a.cmd == "capture":
         cfg = CoCaptureConfig(player=a.player, duration_s=a.duration,
-                              region=tuple(a.region), out_dir=a.out_dir)
+                              region=tuple(a.region), backend=a.backend, out_dir=a.out_dir)
         rec = CoCaptureRecorder(cfg)
         for k in range(a.count):
             r = rec.record_once()

@@ -30,3 +30,15 @@ def test_overlay_black_with_few_stray_pixels_is_black():
     f = np.zeros((180, 320, 3), dtype=np.uint8)
     f[0, :5, :] = 200  # < 2% active
     assert is_black_frame(f) is True
+
+
+def test_wgc_listed_iff_available():
+    import l9_presence.screen_capture as sc
+    assert ("wgc" in sc.available_backends()) == sc._WGC
+
+
+def test_unavailable_backend_raises_clear_error():
+    import pytest
+    from l9_presence.screen_capture import ScreenCapturer
+    with pytest.raises(RuntimeError):
+        ScreenCapturer(backend="does_not_exist")
