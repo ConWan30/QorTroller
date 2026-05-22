@@ -16,6 +16,35 @@ Scope validated live against QorTroller's established infrastructure:
 - **mythos_frozen_drift = 1 HIGH (pre-existing INV-016, from `1e8f8c23`)** → guardrail:
   PoEP adds **no new pinned PV-CI invariant except via the governance ceremony**, and must
   **not compound INV-016** (which stays operator-gated, not auto-fixed).
+- **mythos_crypto_drift = 1 HIGH (pre-existing `VAPI-O3-SUPERSEDE-v1` not in audit allowlist)** →
+  confirms the entire **PATTERN-017 commitment family is SHA-256 (hash-based) → already
+  post-quantum-safe** (Grover only halves; no Shor break). PoEP's commitment inherits this;
+  only the *signature* layer is quantum-exposed (see PQ posture below).
+
+## Post-Quantum posture (IoTeX IIP-64 / ML-DSA-65 alignment)
+IoTeX is migrating secp256k1/ECDSA → **ML-DSA-65 (FIPS 204)** under IIP-64 (hybrid → full PQ,
+2026–2033) because Shor breaks ECDLP. QorTroller's domain — **long-lived (10–20 yr) device +
+human identity** — is the *highest HNDL (harvest-now-decrypt-later) risk class* in that doc, so
+PoEP is built quantum-aware from line one.
+
+**Quantum exposure map (what survives vs breaks):**
+- ✅ **Survives (hash-based, confirmed by crypto_drift):** all PATTERN-017 commitments + chain
+  links (SHA-256) — GIC/WEC/VAME/CORPUS/CONSENT/FRR/PoCP and **PoEP's own commitment**.
+- ❌ **Breaks under Shor:** the *signature* layer — PoAC's 64-byte ECDSA-P256 sig, wallet/Guardian
+  secp256k1, architect Ed25519; and **Groth16/BN254 ZK** (pairing-based: ZKBA, ZKSepProof).
+
+**PoEP is therefore born post-quantum** (where PoAC, being FROZEN ECDSA, will need a painful v2):
+- PoEP **commitment** = SHA-256 (PQ-safe, no change).
+- PoEP **presence/device credential signature** = **hybrid ECDSA + ML-DSA-65** now (IIP-64 hybrid
+  phase), PQ-only later; register the device's PQ key in IoTeX's **PQ Key Registry**; verify via
+  the forthcoming **PQ signature precompile** (the ML-DSA analog of the P256 precompile at 0x0100).
+- **Size discipline:** ML-DSA sigs ≈ 2.4 KB (vs 64 B ECDSA) — too big per cognition cycle. PoEP
+  follows QorTroller's existing split: **sign low-frequency credentials/checkpoints with ML-DSA,
+  keep high-frequency per-event records as SHA-256 hash commitments** (unchanged, PQ-safe). This is
+  also the template for an eventual **PoAC-v2** (ML-DSA-signed chain-head checkpoints, hash layer intact).
+- v1 caveat: IoTeX's PQ precompile/registry are still in IIP-64 preparation, so PoEP v1 uses a
+  software ML-DSA lib for the hybrid signature and **defers on-chain PQ verification** until the
+  precompile lands — designed-for, not blocked-on.
 
 ## The claim PoEP proves (and why it's the right one)
 "Prove a gamer's presence using a specific device" = three claims; PoEP targets the two
