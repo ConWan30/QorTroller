@@ -128,6 +128,9 @@ Design docs: `FUSION_SCOPE.md` (overall) and `FUSION_SCOPE_B.md` (strong-partner
   is minted later through the governed ceremony).
 - Synthetic adversary tests against a **model** of a cheat; a real aimbot / cheat-free decoupled
   capture (killcam/spectator) is the field confirmation. Physiological/GSR is blocked (`GSR_ENABLED=false`).
-- 60 fps **WGC capture is now BUILT** (`screen_capture.py` `wgc` backend via `windows-capture`):
-  opt in with `--backend wgc` to sharpen the lag feature (16 ms frame bins vs ~33 ms at 31 fps).
-  Needs on-rig validation (de-risk + a re-capture); falls back to mss if `windows-capture` absent.
+- **WGC capture BUILT + VALIDATED** (`screen_capture.py` `wgc` backend via `windows-capture`):
+  `--backend wgc` runs **~44 fps during gameplay** (vs mss ~31; ~23 ms frame bins vs ~33 ms) after a
+  GIL-yield fix to the capture loop — overlay-capable, crash-free, falls back to mss if absent. Sharpens
+  the lag feature; confirming the lag-feature CV actually drops needs a few WGC sessions re-run through
+  within-player stability (the remaining check). Not the full 60 fps (Remote Play stream rate + 1 kHz
+  HID/optical-flow contention cap it).
