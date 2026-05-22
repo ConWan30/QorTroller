@@ -1,12 +1,13 @@
 # QorTroller L9 — Input-Output Causal Presence
 
 **Status (2026-05-21): Stream A (causal presence / anti-cheat) VALIDATED + banked.
-Stream B (render-loop biometric → separation) — FUSION PHASE COMPLETE: L9 alone 72%
-three-way; fusion with gameplay biometrics 77.8% (validated, complementary errors);
-fusion with the AIT battery ruled out (correlated errors). No available signal partner
-reaches the 80% bar — the remaining lever is MORE PLAYERS (4-way capture is the live
-next step), not more signals.** Touches **no FROZEN-v1 primitive, no 228-byte PoAC wire
-format, no chain, no contract, no grind/PCC mode.**
+Stream B (render-loop biometric → separation) — investigation COMPLETE across 4 players:
+L9 alone is a real, GENERALIZING, latency-robust separator (90.9% / 72.2% / 62.5% LOO at
+2/3/4 players, all p≤0.0007, 1.8×→2.5× chance) but not tournament-grade alone; FUSION did
+NOT reliably help (the 3-player 77.8% relied on error-complementarity that flipped to
+correlated when a 4th player was added; AIT was correlated throughout). No signal partner
+is a reliable path to 80% — the lever is MORE PLAYERS, not more signals.** Touches **no
+FROZEN-v1 primitive, no 228-byte PoAC wire format, no chain, no contract, no grind/PCC mode.**
 
 ## The idea
 The next PITL layer after L8 (BT presence). Where **L2C** correlates right-stick
@@ -30,31 +31,45 @@ reaction lag, with the link collapsing under a time-shuffle negative control.
   fire-moment residual for that case.
 - Emits a **Proof of Causal Presence (PoCP)** commitment + a gamer-facing **HTML verification card**.
 
-### Stream B — render-loop biometric → separation ⏸ 77.8% (below 80% bar)
+### Stream B — render-loop biometric → separation ⏸ generalizes, not standalone-tournament-grade
 A render-derived play-style fingerprint (coupling, yaw/pitch ratio, decoupled energy).
 - Gate-1 (within-player stability): **passed** (CV 0.06–0.19 on 3 features; lag noisy at 31 fps).
-- Gate-2 (between-player): 2-way LOO **90.9%**; **3-way LOO 72.2%** (P1/P2/P3), ratio 1.90,
-  permutation **p=0.0005** (real). Beats existing controller biometrics (touchpad 63.6%, AIT 66.7%).
-- Below the 80% tournament bar alone → went to fusion.
+- Gate-2 (between-player), L9 alone, **all permutation-significant (p≤0.0007):**
 
-#### Fusion phase outcome (F0–F3 / FB0–FB3)
-Score-level fusion of L9 with controller biometrics, each validated with a permutation
-guardrail + an **error-independence (Yule's Q)** test. Two partners tried, on real co-captured data:
+  | Players | LOO | chance | ratio to chance |
+  |---|---|---|---|
+  | 2-way (P1/P2) | 90.9% | 50% | 1.8× |
+  | 3-way (P1–P3) | 72.2% | 33% | 2.2× |
+  | 4-way (P1–P4) | 62.5% | 25% | **2.5×** |
 
-| Partner | partner LOO | errors vs L9 | fused LOO |
+  Accuracy falls as classes grow (expected) but the **signal-to-chance margin widens** — it
+  **generalizes** to new people, not an artifact of a fixed three. Beats controller biometrics
+  (touchpad 63.6%, AIT 66.7%). Below 80% standalone.
+
+#### Fusion investigation (F0–F3 / FB0–FB3) — fusion did NOT reliably help
+Score-level fusion of L9 with controller biometrics, validated with a permutation guardrail +
+an **error-independence (Yule's Q)** test:
+
+| Partner | players | errors vs L9 | fused LOO |
 |---|---|---|---|
-| free-gameplay L4 (Option A) | 50% | **complementary** (Q = −0.47) | **77.8%** (p = 0.0007) |
-| AIT trigger battery (Option B) | 56% | **correlated** (Q = +0.875) | 72.2% |
+| free-gameplay L4 | 3 | complementary (Q = −0.47) | 77.8% (p=0.0007) |
+| free-gameplay L4 | **4** | **correlated (Q = +0.88)** | **58.3% (hurts)** |
+| AIT trigger battery | 3 | correlated (Q = +0.875) | 72.2% |
 
-**Findings:** (1) **fusion is real** — complementary errors lift L9 +11 pts to 77.8%; (2)
-**independence beats partner strength** — the weak-but-orthogonal gameplay signal fused
-*better* than the strong-but-correlated AIT (AIT shares L9's physiological failure modes);
-(3) **no available signal partner crosses 80%.** The remaining lever is **more players**
-(the 3-player ceiling), not more signals — a 4-way capture is the live next step.
+**Findings:** (1) the promising 3-player fusion (77.8%) **did not generalize** — adding a 4th
+player flipped the errors to correlated and fusion stopped helping; (2) **independence, not
+partner strength, drives fusion** — and it wasn't stable across players/partners; (3) **fusion
+is not a reliable path to 80%.** The durable result is **L9 alone**, which generalizes.
+
+**Latency robustness (P4 finding):** P4 ran a high-latency stream — clean coupling (up to 0.955)
+at **~400–500 ms** lag vs ~40–80 ms on the low-latency rig. The causal-lag window was widened
+260→500 ms; L9 detects human causal presence even across a 400 ms cloud-stream (strengthens the
+cloud-client-attestation thesis).
 
 **Dead-ends ruled out with data (not opinion):** Mahalanobis / richer-feature classifiers
-(covariance-regime sweep showed the diagonal endpoint 72% dominates the whole continuum);
-weight-tuning and bar-lowering (refused — would not generalize).
+(covariance-regime sweep: diagonal endpoint 72% dominates the whole continuum); fusion as a
+reliable booster (above); weight-tuning and bar-lowering (refused — would not generalize). The
+one lever that consistently helps the signal hold up is **more players**.
 
 ## Modules
 | file | role |
