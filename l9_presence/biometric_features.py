@@ -17,7 +17,21 @@ from typing import Optional
 import numpy as np
 
 from . import coupling as C
-from .session_recorder import load_session
+from .session_recorder import SessionData, load_session
+
+
+def _session_from_file(path):
+    """Load a SessionData from EITHER a session_recorder .npz (has 'label') or a
+    cocapture .npz (rebuild from the stored L9 streams). Returns None if neither."""
+    d = np.load(path, allow_pickle=True)
+    if "label" in d.files:
+        return load_session(path)
+    if "in_ts" not in d.files:
+        return None
+    fire = d["in_fire"] if "in_fire" in d.files else None
+    player = str(d["player"]) if "player" in d.files else ""
+    return SessionData(d["in_ts"], d["in_sx"], d["in_sy"], d["mo_ts"], d["mo_yaw"],
+                       d["mo_pitch"], "human", fire, player)
 
 _EPS = 1e-9
 _LAG_MIN = int(round(C.LAG_MIN_MS / 1000.0 * C.COMMON_RATE_HZ))
@@ -114,7 +128,9 @@ def between_player_separation(paths: list[str], coupling_floor: float = 0.2,
     feats = tuple(features) if features else _SEP_FEATURES
     groups: dict = defaultdict(list)
     for p in paths:
-        s = load_session(p)
+        s = _session_from_file(p)
+        if s is None:
+            continue
         v = extract_feature_vector(s, coupling_floor)
         if v is None or not v["reliable"]:
             continue
@@ -170,12 +186,14 @@ def _load_reliable(paths, coupling_floor, features=None):
     feats = tuple(features) if features else _SEP_FEATURES
     rows, labels = [], []
     for p in paths:
-        s = load_session(p)
+        s = _session_from_file(p)
+        if s is None:
+            continue
         v = extract_feature_vector(s, coupling_floor)
         if v is None or not v["reliable"]:
             continue
         rows.append([v[k] for k in feats])
-        labels.append(s.player or "P1")
+        labels.append((getattr(s, "player", "") or "P1"))
     X = np.array(rows, float)
     labels = np.array(labels)
     if X.shape[0] < 4 or len(set(labels)) < 2:
@@ -290,6 +308,46 @@ def mahalanobis_separation(paths: list[str], balance: bool = False, reg: float =
     }
 
 
+def _eer_for_player(Z, labels, player):
+    """Equal-error rate for one player's 1-vs-rest verification. Genuine = LOO distance
+    of the player's sessions to their own centroid (excluding self); impostor = other
+    players' distance to that centroid. EER = min over thresholds of max(FRR, FAR)."""
+    own = np.where(labels == player)[0]
+    oth = np.where(labels != player)[0]
+    if len(own) < 2 or len(oth) < 1:
+        return None
+    gen = np.array([np.linalg.norm(Z[i] - Z[[j for j in own if j != i]].mean(0)) for i in own])
+    cfull = Z[own].mean(0)
+    imp = np.array([np.linalg.norm(Z[i] - cfull) for i in oth])
+    ts = np.linspace(min(gen.min(), imp.min()), max(gen.max(), imp.max()), 1000)
+    return float(min(max(float((gen > t).mean()), float((imp <= t).mean())) for t in ts))
+
+
+def verification_eer(paths: list[str], coupling_floor: float = 0.2, features=None) -> dict:
+    """Per-player VERIFICATION EER — the correct deployment metric (is this session the
+    enrolled human?). Unlike N-way identification it is 1-vs-rest, independent per player,
+    and does not degrade as players are added. EER <= ~0.10 ~ tournament-grade; lower is
+    better. See GOAL_verification_gate.md."""
+    Z, labels, players = _load_reliable(paths, coupling_floor, features)
+    if Z is None:
+        return {"status": "insufficient_data"}
+    per = {}
+    for p in players:
+        e = _eer_for_player(Z, labels, p)
+        if e is not None:
+            per[p] = round(e, 4)
+    if not per:
+        return {"status": "insufficient_data"}
+    mean_eer = float(np.mean(list(per.values())))
+    return {
+        "players": {p: int((labels == p).sum()) for p in players},
+        "per_player_eer": per,
+        "mean_eer": round(mean_eer, 4),
+        "tournament_grade": bool(mean_eer <= 0.10),
+        "note": "1-vs-rest verification; EER<=0.10 ~ tournament-grade; lower=better",
+    }
+
+
 def _cli() -> int:
     import argparse
     import json
@@ -302,12 +360,16 @@ def _cli() -> int:
                     help="label-permutation null test (is the separation significant?)")
     ap.add_argument("--mahalanobis", action="store_true",
                     help="Mahalanobis LOO vs Euclidean baseline + permutation guardrail")
+    ap.add_argument("--eer", action="store_true",
+                    help="per-player verification EER (the deployment metric; see GOAL_verification_gate.md)")
     ap.add_argument("--balance", action="store_true", help="balance sessions per player")
     ap.add_argument("--rich", action="store_true",
                     help="use the 5-feature set (both axes) instead of 3")
     a = ap.parse_args()
     feats = _SEP_FEATURES_RICH if a.rich else None
-    if a.mahalanobis:
+    if a.eer:
+        out = verification_eer(a.paths, a.coupling_floor, features=feats)
+    elif a.mahalanobis:
         out = mahalanobis_separation(a.paths, balance=a.balance,
                                      coupling_floor=a.coupling_floor, features=feats)
     elif a.permute:
