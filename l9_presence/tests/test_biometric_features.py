@@ -3,7 +3,7 @@ import numpy as np
 
 from l9_presence.biometric_features import (
     between_player_separation, extract_feature_vector, mahalanobis_separation,
-    permutation_test, within_player_stability,
+    permutation_test, verification_eer, within_player_stability,
 )
 from l9_presence.session_recorder import SessionData, load_session
 
@@ -124,6 +124,23 @@ def test_mahalanobis_separation_real_signal(tmp_path):
     rep = mahalanobis_separation(paths, n_perm=400)
     assert rep["mahalanobis_loo"] >= rep["euclidean_loo"] - 1e-9   # not worse than baseline
     assert rep["significant_and_real"] is True                     # real, beats null p95
+
+
+def test_verification_eer_low_for_distinct_players(tmp_path):
+    paths = []
+    for i in range(5):
+        paths.append(_write_player(tmp_path / f"p1_{i}.npz", "P1", axis="yaw", seed=i))
+        paths.append(_write_player(tmp_path / f"p2_{i}.npz", "P2", axis="pitch", seed=50 + i))
+    rep = verification_eer(paths)
+    assert set(rep["per_player_eer"]) == {"P1", "P2"}
+    assert rep["mean_eer"] < 0.3              # distinct styles -> low EER
+
+
+def test_verification_eer_high_for_structureless(tmp_path):
+    paths = [_write_player(tmp_path / f"s{i}.npz", ["P1", "P2", "P3"][i % 3], axis="yaw", seed=i)
+             for i in range(18)]
+    rep = verification_eer(paths)
+    assert rep["mean_eer"] > 0.25             # no real per-player structure -> near chance
 
 
 def test_mahalanobis_guardrail_catches_structureless(tmp_path):
