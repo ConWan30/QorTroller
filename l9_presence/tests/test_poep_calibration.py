@@ -15,13 +15,15 @@ def _session(player="P1", device="Edge", k=10, lat=290.0, seed=0):
             "peak_stick_deflection": 70.0, "peak_r2": 180.0 + rng.uniform(-10, 10),
             "grip_micro_adjustment": 0.5 + rng.uniform(-0.05, 0.05),
             "force_response_auc": 5000.0 + rng.uniform(-200, 200)}})
-    return PoEPSession(player, device, recs, "deadbeef", 1)
+    da = {"slope_on": 1.15, "slope_off": 4.48, "delta": 0.743, "adaptive_response_detected": True}
+    return PoEPSession(player, device, recs, "deadbeef", 1, False, da)
 
 
-_GENUINE = {"reaction_latency_ms": 290, "peak_r2": 180.0, "grip_micro_adjustment": 0.5,
-            "force_response_auc": 5000.0}
-_EMULATOR = {"reaction_latency_ms": 290, "peak_r2": 0.0, "grip_micro_adjustment": 0.0,
-             "force_response_auc": 0.0}  # no adaptive-trigger physics
+_REACTION = {"reaction_latency_ms": 290}                              # in-band liveness
+_GENUINE_DA = {"slope_on": 1.15, "slope_off": 4.48, "delta": 0.743,   # real Edge force-challenge
+               "adaptive_response_detected": True}
+_EMULATOR_DA = {"slope_on": 4.4, "slope_off": 4.4, "delta": 0.0,      # no adaptive trigger -> ON==OFF
+                "adaptive_response_detected": False}
 
 
 def test_model_counts_and_band():
@@ -61,17 +63,18 @@ def test_liveness_pass_and_fail_when_calibrated():
 
 def test_device_auth_passes_genuine_fails_emulator():
     m = population_reflex_model([_session(k=60)], min_n=50)
-    assert device_auth_score(_GENUINE, m, "Edge")["device_auth_pass"] is True
-    assert device_auth_score(_EMULATOR, m, "Edge")["device_auth_pass"] is False   # flat force-response
+    assert "Edge" in m["device_signatures"]
+    assert device_auth_score(_GENUINE_DA, m, "Edge")["device_auth_pass"] is True
+    assert device_auth_score(_EMULATOR_DA, m, "Edge")["device_auth_pass"] is False  # ON==OFF, no adaptive trigger
 
 
 def test_poep_verify_present_and_reject():
     m = population_reflex_model([_session(k=60)], min_n=50)
-    assert poep_verify(_GENUINE, m, "Edge")["verdict"] == "PRESENT"
-    assert poep_verify({**_GENUINE, "reaction_latency_ms": 45}, m, "Edge")["verdict"] == "REJECT"  # liveness fail
-    assert poep_verify(_EMULATOR, m, "Edge")["verdict"] == "REJECT"                                # device-auth fail
+    assert poep_verify(_REACTION, _GENUINE_DA, m, "Edge")["verdict"] == "PRESENT"
+    assert poep_verify({"reaction_latency_ms": 45}, _GENUINE_DA, m, "Edge")["verdict"] == "REJECT"  # liveness fail
+    assert poep_verify(_REACTION, _EMULATOR_DA, m, "Edge")["verdict"] == "REJECT"                   # device-auth fail
 
 
 def test_poep_verify_gated_until_calibrated():
     incomplete = population_reflex_model([_session(k=10)], min_n=50)
-    assert poep_verify(_GENUINE, incomplete, "Edge")["status"] == "calibration_incomplete"
+    assert poep_verify(_REACTION, _GENUINE_DA, incomplete, "Edge")["status"] == "calibration_incomplete"

@@ -48,12 +48,17 @@ def test_commitment_deterministic_and_sensitive():
     assert a == compute_poep_commitment(**kw) and len(a) == 64
     recs2 = [{**recs[0], "features": {**recs[0]["features"], "reaction_latency_ms": 301}}]
     assert compute_poep_commitment(**{**kw, "challenge_records": recs2}) != a
+    # device_auth=None reproduces the legacy hash; a real device_auth changes it (bound)
+    da = {"slope_on": 1.15, "slope_off": 4.48, "delta": 0.743}
+    assert compute_poep_commitment(**kw, device_auth=da) != a
 
 
 def test_session_roundtrip(tmp_path):
+    da = {"slope_on": 1.15, "slope_off": 4.48, "delta": 0.743, "adaptive_response_detected": True}
     s = PoEPSession("P1", "Edge", [{"nonce": "cd" * 16, "stim_t_ms": 0.0, "features": {}}],
-                    "deadbeef", 999)
+                    "deadbeef", 999, False, da)
     p = str(tmp_path / "P1_01.poep.json")
     save_poep_session(p, s)
     r = load_poep_session(p)
     assert r.player == "P1" and r.commitment == "deadbeef" and r.poep_enabled is False
+    assert r.device_auth["delta"] == 0.743 and r.device_auth["adaptive_response_detected"] is True

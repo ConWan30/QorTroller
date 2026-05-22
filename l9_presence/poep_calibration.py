@@ -23,7 +23,6 @@ import numpy as np
 from .poep import load_poep_session
 
 _MIN_N = 50              # L6B neuromuscular-reflex calibration hard rule
-_FORCE_KEYS = ("peak_r2", "force_response_auc", "grip_micro_adjustment")
 
 
 def load_enrollment_sessions(corpus_dir: str = "poep_l9"):
@@ -55,14 +54,19 @@ def population_reflex_model(sessions, min_n: int = _MIN_N) -> dict:
         model["latency_std_ms"] = round(sd, 1)
         model["band_lo_ms"] = round(mu - 2.5 * sd, 1)
         model["band_hi_ms"] = round(mu + 2.5 * sd, 1)
+    # device-auth signature from the per-session adaptive-trigger force-challenge (P4a)
     devs: dict = {}
-    for _, dev, f in rx:
-        d = devs.setdefault(dev, {k: [] for k in _FORCE_KEYS})
-        for k in _FORCE_KEYS:
-            d[k].append(float(f.get(k, 0.0)))
+    for s in sessions:
+        da = getattr(s, "device_auth", None) or {}
+        if not da:
+            continue
+        d = devs.setdefault(s.device_id, {"slope_on": [], "slope_off": [], "delta": []})
+        for k in ("slope_on", "slope_off", "delta"):
+            if da.get(k) is not None:
+                d[k].append(float(da[k]))
     model["device_signatures"] = {
         dev: {k: {"mean": round(float(np.mean(v)), 3), "std": round(float(np.std(v)), 3)}
-              for k, v in sig.items()} for dev, sig in devs.items()}
+              for k, v in sig.items() if v} for dev, sig in devs.items() if any(sig.values())}
     return model
 
 
@@ -102,41 +106,36 @@ def liveness_score(features: dict, model: dict, device_id: str = None) -> dict:
             "latency_ms": lat, "band": [model["band_lo_ms"], model["band_hi_ms"]]}
 
 
-def device_auth_score(features: dict, model: dict, device_id: str) -> dict:
-    """Device-auth via the adaptive-trigger force-response signature. A real Edge produces
-    a non-trivial force-response (peak_r2 / force-AUC / grip) consistent with the registered
-    signature; an emulator/translator (Cronus/XIM) can't render the adaptive-trigger physics,
-    so its flat/zero response falls far outside the registered mean -> fails. P3 strengthens
-    P2's 'registered' check into a physics-consistency check."""
+def device_auth_score(device_auth: dict, model: dict, device_id: str) -> dict:
+    """Device-auth via the adaptive-trigger force-challenge (P4a). `device_auth` is the
+    session's {slope_on, slope_off, delta, adaptive_response_detected}. A real Edge reshapes
+    the press under resistance (~4× slope drop -> high delta); an emulator/translator
+    (Cronus/XIM) has no adaptive-trigger hardware so ON==OFF (delta~0) -> not detected ->
+    fails. Pass iff the device is registered AND the adaptive response was detected."""
     sig = model.get("device_signatures", {}).get(device_id)
     if not sig:
         return {"device_auth_pass": False, "reason": "device_not_registered", "score": 0.0}
-    checks, ok = {}, 0
-    for k in _FORCE_KEYS:
-        s = sig[k]
-        v = float(features.get(k, 0.0))
-        within = abs(v - s["mean"]) <= (3.0 * s["std"] + 1e-6)   # zero/flat emulator -> far below mean -> fails
-        checks[k] = bool(within)
-        ok += int(within)
-    score = ok / len(_FORCE_KEYS)
-    return {"device_auth_pass": bool(score >= 0.5), "score": round(score, 3), "checks": checks}
+    detected = bool((device_auth or {}).get("adaptive_response_detected"))
+    delta = float((device_auth or {}).get("delta", 0.0))
+    return {"device_auth_pass": detected, "score": round(min(1.0, delta), 3), "delta": round(delta, 3)}
 
 
-def poep_verify(features: dict, model: dict, device_id: str = None) -> dict:
-    """Full PoEP verdict = liveness (population reflex band) AND device-auth (force-response
-    physics). Honors the L6B gate (calibration_incomplete until N>=50). PRESENT only if both
-    pass; the nonce (capture-time) is the third, anti-replay layer."""
-    live = liveness_score(features, model, device_id)
+def poep_verify(reaction_features: dict, device_auth: dict, model: dict, device_id: str = None) -> dict:
+    """Full PoEP verdict = liveness (population reflex band) AND device-auth (adaptive-trigger
+    force-challenge). Honors the L6B gate (calibration_incomplete until N>=50). PRESENT only if
+    both pass; the nonce (capture-time) is the third, anti-replay layer."""
+    live = liveness_score(reaction_features, model, device_id)
     if live.get("status") == "calibration_incomplete":
         return live
-    dev = device_auth_score(features, model, device_id) if device_id else {"device_auth_pass": True, "score": 1.0}
+    dev = (device_auth_score(device_auth, model, device_id) if device_id
+           else {"device_auth_pass": True, "score": 1.0})
     present = bool(live.get("liveness_pass") and dev.get("device_auth_pass"))
     return {
         "verdict": "PRESENT" if present else "REJECT",
         "liveness_pass": bool(live.get("liveness_pass")),
         "device_auth_pass": bool(dev.get("device_auth_pass")),
         "device_auth_score": dev.get("score"),
-        "latency_ms": features.get("reaction_latency_ms"),
+        "latency_ms": reaction_features.get("reaction_latency_ms"),
         "band": live.get("band"),
     }
 
