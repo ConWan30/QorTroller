@@ -28,6 +28,7 @@ import numpy as np
 from .poep_derisk import _fire, _stop, _test_write, in_human_band
 
 _DOMAIN = b"QORTROLLER-POEP-v0"
+_trapz = getattr(np, "trapezoid", getattr(np, "trapz"))  # np.trapz deprecated -> trapezoid
 _STICK_DELTA = 40
 _TRIG_PRESS = 64
 _FEATURE_KEYS = ("reaction_latency_ms", "peak_stick_deflection", "peak_r2",
@@ -68,7 +69,7 @@ def extract_reflex_features(window: list, stim_t_ms: float, baseline: dict) -> d
     lat = (onset - stim_t_ms) if onset is not None else None
     accels = [s.get("accel_mag", 0.0) for s in window]
     grip = float(np.std(accels)) if len(accels) > 1 else 0.0
-    auc = (float(np.trapz([s["R2"] for s in window], [s["t_ms"] for s in window]))
+    auc = (float(_trapz([s["R2"] for s in window], [s["t_ms"] for s in window]))
            if len(window) > 1 else 0.0)
     return {
         "reaction_latency_ms": lat,
