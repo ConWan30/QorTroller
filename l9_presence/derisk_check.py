@@ -106,8 +106,8 @@ def main() -> int:
     ap.add_argument("--region", nargs=4, type=int, metavar=("L", "T", "R", "B"),
                     default=None, help="crop region (left top right bottom); default full monitor")
     ap.add_argument("--frames", type=int, default=120, help="frames to sample")
-    ap.add_argument("--backend", choices=("auto", "bettercam", "dxcam", "mss"),
-                    default="auto", help="capture backend (default auto: bettercam>dxcam>mss)")
+    ap.add_argument("--backend", choices=("auto", "wgc", "bettercam", "dxcam", "mss"),
+                    default="auto", help="capture backend (default auto: wgc>bettercam>dxcam>mss)")
     a = ap.parse_args()
     region = tuple(a.region) if a.region else None
     print("=" * 64)

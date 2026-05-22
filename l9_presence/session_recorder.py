@@ -303,7 +303,7 @@ def _cli() -> int:
     pr.add_argument("--rx", type=int, default=3, help="right-stick X byte offset (see hid_probe)")
     pr.add_argument("--ry", type=int, default=4, help="right-stick Y byte offset (see hid_probe)")
     pr.add_argument("--region", nargs=4, type=int, metavar=("L", "T", "R", "B"), default=None)
-    pr.add_argument("--backend", default="mss", choices=("auto", "bettercam", "dxcam", "mss"))
+    pr.add_argument("--backend", default="mss", choices=("auto", "wgc", "bettercam", "dxcam", "mss"))
     pr.add_argument("--fire-offset", type=int, default=6, help="R2/fire byte offset (standard report=6)")
 
     pcap = sub.add_parser("capture", help="record N sessions for ONE player (gate-2 corpus)")
@@ -314,7 +314,7 @@ def _cli() -> int:
     pcap.add_argument("--ry", type=int, default=4)
     pcap.add_argument("--fire-offset", type=int, default=6)
     pcap.add_argument("--region", nargs=4, type=int, metavar=("L", "T", "R", "B"), default=None)
-    pcap.add_argument("--backend", default="mss", choices=("auto", "bettercam", "dxcam", "mss"))
+    pcap.add_argument("--backend", default="mss", choices=("auto", "wgc", "bettercam", "dxcam", "mss"))
     pcap.add_argument("--label", default="human", choices=("human", "scripted"))
     pcap.add_argument("--out-dir", default="sessions_l9")
 
