@@ -6,7 +6,7 @@ when the two views' errors are independent, and NOT help when they're correlated
 import numpy as np
 
 from l9_presence.fusion import (
-    MultiViewSession, error_independence, fuse, fusion_report, view_loo,
+    MultiViewSession, assemble_rounds, error_independence, fuse, fusion_report, view_loo,
 )
 
 _PLAYERS = ("P1", "P2", "P3")
@@ -51,6 +51,16 @@ def test_fusion_no_help_with_correlated_errors():
     # identical views -> errors fully correlated -> Q at the ceiling, no real gain
     assert rep["error_independence"]["l9|l4"]["yule_q"] > 0.9
     assert rep["gain_over_best_view"] <= 0.0
+
+
+def test_assemble_rounds_pairs_per_player():
+    l9 = {"P1": [[1, 2], [3, 4], [5, 6]], "P2": [[7, 8], [9, 10]]}
+    ait = {"P1": [[0.1, 0.2, 0.3, 0.4]] * 5, "P2": [[1, 1, 1, 1]] * 2}
+    rounds = assemble_rounds(l9, ait)
+    assert len(rounds) == 3 + 2          # min(3,5)=3 for P1, min(2,2)=2 for P2
+    r = rounds[0]
+    assert set(r.views.keys()) == {"l9", "ait"}
+    assert len(r.views["l9"]) == 2 and len(r.views["ait"]) == 4
 
 
 def test_view_loo_runs():
