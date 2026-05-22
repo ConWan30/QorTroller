@@ -108,6 +108,58 @@ def _maybe_harvest_bcc(cfg: "WitnessConfig", manifest: dict, bvec: Optional[dict
         return {"harvested": False, "reason": f"error:{exc}"}
 
 
+def make_hardware_callbacks(buzz_timeout_s: float = 1.2, sham_timeout_s: float = 1.2):
+    """Real HandoffMachine callbacks (Option A): pydualsense acquire -> buzz+capture + a SHAM
+    control -> release. The Witness holds no persistent reader between sessions, so passive
+    release/reacquire are no-op availability returns. Reuses the validated PoEP capture helpers
+    (analog R2_value via _snapshot). Defensive; needs the controller on-rig."""
+    import time as _t
+
+    from .poep_derisk import _fire, _snapshot, _stop, reaction_detected
+    state = {"ds": None}
+
+    def release_passive():
+        return True
+
+    def acquire_active():
+        from pydualsense import pydualsense
+        ds = pydualsense(); ds.init(); state["ds"] = ds
+        return True
+
+    def fire_capture():
+        ds = state["ds"]
+        if ds is None:
+            return None
+        base = _snapshot(ds); _fire(ds); t0 = _t.time(); lat = None
+        while _t.time() - t0 < buzz_timeout_s:
+            if reaction_detected(base, _snapshot(ds)):
+                lat = (_t.time() - t0) * 1000.0
+                break
+            _t.sleep(0.001)
+        _stop(ds); _t.sleep(0.4)
+        base2 = _snapshot(ds); t1 = _t.time(); sham = False     # no-buzz control
+        while _t.time() - t1 < sham_timeout_s:
+            if reaction_detected(base2, _snapshot(ds)):
+                sham = True
+                break
+            _t.sleep(0.001)
+        return {"reflex_latency_ms": lat, "sham_reaction": sham}
+
+    def release_active():
+        if state["ds"] is not None:
+            try:
+                state["ds"].close()
+            except Exception:
+                pass
+            state["ds"] = None
+        return True
+
+    def reacquire_passive():
+        return True
+
+    return release_passive, acquire_active, fire_capture, release_active, reacquire_passive
+
+
 def _handoff(name: str, enabled: bool, payload: dict) -> dict:
     """Stubbed operator-fleet / ZKBA hand-off. Dry-run unless explicitly enabled."""
     return {
@@ -225,6 +277,29 @@ class WitnessAgent:
         n = len(glob.glob(os.path.join(self.cfg.out_dir, f"{self.cfg.player}_*.npz"))) + 1
         return os.path.join(self.cfg.out_dir, f"{self.cfg.player}_{n:02d}.npz")
 
+    def harvest_menu_sample(self, handoff_machine=None) -> dict:
+        """Run ONE sub-lane B micro-challenge at a (between-session) lull and harvest if it
+        passes. The SHAM control is the safety net if the player is actually still active
+        (active -> sham fires -> gate rejects). Hardware unless a handoff_machine is injected."""
+        if not (self.cfg.bcc_enabled and self.cfg.bcc_sublane_b_enabled):
+            return {"harvested": False, "reason": "sublane_b_disabled"}
+        try:
+            from .bcc import BCCConfig, BCCHarvester
+            from .poep_menu_harvest import HandoffMachine, MenuHarvestConfig, MenuHarvester
+            bcc = BCCHarvester(BCCConfig(enabled=True, sublane_b_enabled=True, out_dir=self.cfg.bcc_out_dir))
+            mh = MenuHarvester(bcc, MenuHarvestConfig(enabled=True))
+            machine = handoff_machine or HandoffMachine(*make_hardware_callbacks())
+            res = machine.run_one()
+            if not res.get("ok") or res.get("sample") is None:
+                return {"harvested": False, "reason": f"handoff:{res.get('error') or res.get('stage')}",
+                        "reacquired": res.get("reacquired")}
+            s = res["sample"]
+            out = mh.offer_sample(True, s.get("reflex_latency_ms"), s.get("sham_reaction"))
+            out["handoff_ok"] = True
+            return out
+        except Exception as exc:                       # never let sub-lane B break the Witness
+            return {"harvested": False, "reason": f"error:{exc}"}
+
     def run_once(self) -> dict:
         """Capture one live session and process it (hardware required)."""
         out = self._next_path()
@@ -245,6 +320,10 @@ class WitnessAgent:
                 made += 1
                 print(f"[witness] {m['session_id']}: {m['verdict']} "
                       f"coupling={m['coupling_score']:.3f} -> {m['verification_card']}")
+                if self.cfg.bcc_enabled:
+                    print(f"[witness] sub-lane A: {m.get('bcc')}")
+                    if self.cfg.bcc_sublane_b_enabled:                 # opportunistic between-session lull
+                        print(f"[witness] sub-lane B: {self.harvest_menu_sample()}")
                 if max_sessions and made >= max_sessions:
                     return
             else:
