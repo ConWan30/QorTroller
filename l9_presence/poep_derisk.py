@@ -69,7 +69,8 @@ def _snapshot(ds) -> dict:
     btn = sum(int(bool(getattr(s, b, False))) for b in
               ("cross", "circle", "square", "triangle", "R1", "L1"))
     return {"RX": getattr(s, "RX", 128), "RY": getattr(s, "RY", 128),
-            "R2": getattr(s, "R2", 0), "L2": getattr(s, "L2", 0), "buttons": btn}
+            "R2": getattr(s, "R2_value", getattr(s, "R2", 0)),   # analog 0-255 (R2 is digital bool)
+            "L2": getattr(s, "L2_value", getattr(s, "L2", 0)), "buttons": btn}
 
 
 def _test_write(ds) -> dict:
