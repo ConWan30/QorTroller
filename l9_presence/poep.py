@@ -222,7 +222,8 @@ class PoEPRecorder:
                                              challenge_records=records, ts_ns=ts_ns, device_auth=device_auth)
         sess = PoEPSession(self.cfg.player, self.cfg.device_id, records, commitment, ts_ns,
                            False, device_auth)
-        n = len([f for f in os.listdir(self.cfg.out_dir) if f.startswith(self.cfg.player)]) + 1
+        n = len([f for f in os.listdir(self.cfg.out_dir)
+                 if f.startswith(self.cfg.player + "_") and f.endswith(".poep.json")]) + 1
         out = os.path.join(self.cfg.out_dir, f"{self.cfg.player}_{n:02d}.poep.json")
         save_poep_session(out, sess)
         in_band = sum(1 for r in records if r["features"]["in_band"])
