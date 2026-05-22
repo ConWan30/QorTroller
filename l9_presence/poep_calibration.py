@@ -102,6 +102,45 @@ def liveness_score(features: dict, model: dict, device_id: str = None) -> dict:
             "latency_ms": lat, "band": [model["band_lo_ms"], model["band_hi_ms"]]}
 
 
+def device_auth_score(features: dict, model: dict, device_id: str) -> dict:
+    """Device-auth via the adaptive-trigger force-response signature. A real Edge produces
+    a non-trivial force-response (peak_r2 / force-AUC / grip) consistent with the registered
+    signature; an emulator/translator (Cronus/XIM) can't render the adaptive-trigger physics,
+    so its flat/zero response falls far outside the registered mean -> fails. P3 strengthens
+    P2's 'registered' check into a physics-consistency check."""
+    sig = model.get("device_signatures", {}).get(device_id)
+    if not sig:
+        return {"device_auth_pass": False, "reason": "device_not_registered", "score": 0.0}
+    checks, ok = {}, 0
+    for k in _FORCE_KEYS:
+        s = sig[k]
+        v = float(features.get(k, 0.0))
+        within = abs(v - s["mean"]) <= (3.0 * s["std"] + 1e-6)   # zero/flat emulator -> far below mean -> fails
+        checks[k] = bool(within)
+        ok += int(within)
+    score = ok / len(_FORCE_KEYS)
+    return {"device_auth_pass": bool(score >= 0.5), "score": round(score, 3), "checks": checks}
+
+
+def poep_verify(features: dict, model: dict, device_id: str = None) -> dict:
+    """Full PoEP verdict = liveness (population reflex band) AND device-auth (force-response
+    physics). Honors the L6B gate (calibration_incomplete until N>=50). PRESENT only if both
+    pass; the nonce (capture-time) is the third, anti-replay layer."""
+    live = liveness_score(features, model, device_id)
+    if live.get("status") == "calibration_incomplete":
+        return live
+    dev = device_auth_score(features, model, device_id) if device_id else {"device_auth_pass": True, "score": 1.0}
+    present = bool(live.get("liveness_pass") and dev.get("device_auth_pass"))
+    return {
+        "verdict": "PRESENT" if present else "REJECT",
+        "liveness_pass": bool(live.get("liveness_pass")),
+        "device_auth_pass": bool(dev.get("device_auth_pass")),
+        "device_auth_score": dev.get("score"),
+        "latency_ms": features.get("reaction_latency_ms"),
+        "band": live.get("band"),
+    }
+
+
 def _cli() -> int:
     import argparse
     import json
