@@ -123,10 +123,12 @@ class BCCHarvester:
         self.cfg = cfg or BCCConfig()
         self.store = BCCStore(self.cfg.out_dir)
 
-    def record_l9(self, feature_vec, nominal: bool = True) -> Optional[dict]:
+    def record_l9(self, feature_vec, nominal: bool = True, extra: Optional[dict] = None) -> Optional[dict]:
         if not self.cfg.enabled or not nominal:
             return None
         payload = {"type": "l9", "features": [float(x) for x in feature_vec]}
+        if extra:
+            payload.update(extra)        # e.g. pocp_commitment + verdict (provenance link to the L9 verification)
         return self.store.append(payload, _Q_NOMINAL, _LANE_A)
 
     def record_poep(self, sample: dict, nominal: bool = True) -> Optional[dict]:

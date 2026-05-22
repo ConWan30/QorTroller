@@ -26,7 +26,7 @@ from typing import Optional, Tuple
 import numpy as np
 
 from . import pocp
-from .biometric_features import extract_feature_vector
+from .biometric_features import _SEP_FEATURES, extract_feature_vector
 from .session_recorder import (
     SessionData, analyze_session_data, load_session, make_stick_parser, record_session,
 )
@@ -59,6 +59,11 @@ class WitnessConfig:
     guardian_sign_enabled: bool = False
     curator_govern_enabled: bool = False
     zkba_enabled: bool = False
+    # BCC sealed-lane harvest — default OFF (dormant). Sub-lane A only accumulates PRESENT
+    # (causally-verified) reliable sessions; writes only to bcc_out_dir; touches no proven number.
+    bcc_enabled: bool = False
+    bcc_sublane_b_enabled: bool = False
+    bcc_out_dir: str = "bcc_l9"
 
 
 def _verdict(analysis: dict) -> str:
@@ -70,6 +75,37 @@ def _verdict(analysis: dict) -> str:
     nc = analysis.get("negative_control") or 0.0
     cs = analysis.get("coupling_score") or 0.0
     return "DECOUPLED" if cs <= nc + 0.02 else "REVIEW_LOW_COUPLING"
+
+
+def _should_harvest_l9(verdict: str, reliable: bool) -> bool:
+    """The synergistic BCC quality gate: accumulate a capture into the sealed lane ONLY when
+    the Witness already certified it PRESENT (input causally drove the render, coupling beat
+    the time-shuffle negative control) AND the biometric vector is reliable. So the corpus is
+    'provably causally-present captures', self-cleaned by the validated L9 result — not a raw
+    session dump. AFK / replay / decoupled / video-only sessions never enter."""
+    return verdict == "PRESENT" and bool(reliable)
+
+
+def _maybe_harvest_bcc(cfg: "WitnessConfig", manifest: dict, bvec: Optional[dict]) -> dict:
+    """Hand a PRESENT+reliable session's _SEP_FEATURES to the sealed BCC lane. Isolated
+    (writes only bcc_out_dir), guarded (never breaks the Witness), dormant unless bcc_enabled."""
+    if not cfg.bcc_enabled:
+        return {"harvested": False, "reason": "bcc_disabled"}
+    reliable = bool(bvec and bvec.get("reliable"))
+    if not _should_harvest_l9(manifest["verdict"], reliable):
+        return {"harvested": False, "reason": f"gate:verdict={manifest['verdict']},reliable={reliable}"}
+    try:
+        from .bcc import BCCConfig, BCCHarvester
+        h = BCCHarvester(BCCConfig(enabled=True, sublane_b_enabled=cfg.bcc_sublane_b_enabled,
+                                   out_dir=cfg.bcc_out_dir))
+        fvec = [bvec[k] for k in _SEP_FEATURES]
+        rec = h.record_l9(fvec, nominal=True, extra={
+            "session_id": manifest["session_id"], "verdict": manifest["verdict"],
+            "pocp_commitment": manifest["pocp_commitment"]})
+        return {"harvested": True, "sub_lane": "A", "bcc_seq": rec["seq"],
+                "bcc_hash": rec["bcc_hash"][:16] + "…"}
+    except Exception as exc:                       # never let harvesting break the witness
+        return {"harvested": False, "reason": f"error:{exc}"}
 
 
 def _handoff(name: str, enabled: bool, payload: dict) -> dict:
@@ -140,6 +176,7 @@ def process_session(path: str, cfg: Optional[WitnessConfig] = None) -> dict:
             "zkba": _handoff("zkba", cfg.zkba_enabled, handoff_payload),
         },
     }
+    manifest["bcc"] = _maybe_harvest_bcc(cfg, manifest, bvec)
     with open(base + ".manifest.json", "w", encoding="utf-8") as fh:
         json.dump(manifest, fh, indent=2, default=str)
     return manifest
