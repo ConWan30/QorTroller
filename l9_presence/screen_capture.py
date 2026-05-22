@@ -47,6 +47,16 @@ try:
 except Exception:  # pragma: no cover
     _MSS = False
 
+# WGC (Windows.Graphics.Capture) via the Rust-backed `windows-capture` package: 60fps,
+# overlay-capable (correct for Remote Play), and NO comtypes (so no DXGI access-violation
+# crash). Event-driven, so it runs in a background thread and grab() returns the latest
+# new frame. Preferred when present — sharpens the L9 lag feature (16ms vs ~33ms bins).
+try:
+    from windows_capture import WindowsCapture  # type: ignore
+    _WGC = True
+except Exception:  # pragma: no cover
+    _WGC = False
+
 
 Region = Tuple[int, int, int, int]  # (left, top, right, bottom)
 
@@ -59,8 +69,10 @@ if _DXCAM:
 
 
 def available_backends() -> list[str]:
-    """Backends in PREFERENCE order (most reliable first)."""
+    """Backends in PREFERENCE order (most reliable/capable first)."""
     out = []
+    if _WGC:
+        out.append("wgc")
     if _BETTERCAM:
         out.append("bettercam")
     if _DXCAM:
@@ -105,10 +117,46 @@ class ScreenCapturer:
         self._dxgi_module = None  # the bettercam/dxcam module actually in use
         self._cam = None
         self._sct = None
+        self._wgc_control = None   # windows-capture background capture control
+        self._wgc_latest = None    # latest BGR frame from the WGC thread
+        self._wgc_id = 0           # increments per delivered frame
+        self._wgc_last_id = -1     # last id returned by grab() (dedup)
         self._init_backend()
+
+    def _wgc_setup(self) -> None:
+        """Start a background WGC capture; on_frame_arrived stores the latest cropped
+        BGR frame. grab() then returns each new frame once (None if unchanged)."""
+        cap = WindowsCapture(cursor_capture=False, draw_border=False,
+                             monitor_index=self.monitor_idx + 1, window_name=None)
+        region = self.region
+
+        @cap.event
+        def on_frame_arrived(frame, capture_control):  # runs in WGC's thread
+            try:
+                buf = frame.frame_buffer  # (h, w, 4) BGRA uint8
+                if region:
+                    l, t, r, b = region
+                    bgr = buf[t:b, l:r, :3]
+                else:
+                    bgr = buf[:, :, :3]
+                self._wgc_latest = np.ascontiguousarray(bgr)
+                self._wgc_id += 1
+            except Exception:
+                pass
+
+        @cap.event
+        def on_closed():
+            pass
+
+        self._wgc_control = cap.start_free_threaded()
 
     def _init_backend(self) -> None:
         want = self._backend
+        # WGC first when available (60fps, overlay-capable, crash-free)
+        if want in ("auto", "wgc") and _WGC:
+            self._wgc_setup()
+            self._backend = "wgc"
+            return
         # explicit or auto DXGI selection, in preference order
         for name in ("bettercam", "dxcam"):
             if want in ("auto", name) and name in _DXGI_MODULES:
@@ -122,9 +170,10 @@ class ScreenCapturer:
             self._backend = "mss"
             return
         raise RuntimeError(
-            f"No screen-capture backend available for backend={want!r}. Install one "
-            "of: `pip install bettercam` (recommended, Windows DXGI) or `pip install "
-            "mss`. (dxcam is supported but unmaintained and crashes on Python 3.13.)"
+            f"No screen-capture backend available for backend={want!r}. Install one of: "
+            "`pip install windows-capture` (WGC, 60fps + overlay-capable, recommended), "
+            "`pip install bettercam` (DXGI), or `pip install mss`. (dxcam is supported but "
+            "unmaintained and crashes on Python 3.13.)"
         )
 
     @property
@@ -133,6 +182,11 @@ class ScreenCapturer:
 
     def grab(self) -> Optional["np.ndarray"]:
         try:
+            if self._wgc_control is not None:  # WGC: return each new frame once
+                if self._wgc_id == self._wgc_last_id or self._wgc_latest is None:
+                    return None
+                self._wgc_last_id = self._wgc_id
+                return self._wgc_latest
             if self._cam is not None:  # DXGI backend (bettercam / dxcam)
                 return (self._cam.grab(region=self.region) if self.region
                         else self._cam.grab())  # BGR ndarray or None if no new frame
@@ -149,6 +203,13 @@ class ScreenCapturer:
             return None
 
     def close(self) -> None:
+        try:
+            if self._wgc_control is not None and hasattr(self._wgc_control, "stop"):
+                self._wgc_control.stop()
+        except Exception:
+            pass
+        self._wgc_control = None
+        self._wgc_latest = None
         try:
             if self._cam is not None and hasattr(self._cam, "release"):
                 self._cam.release()

@@ -91,10 +91,12 @@ one lever that consistently helps the signal hold up is **more players**.
 
 ## Install (operator rig)
 ```
-pip install bettercam mss opencv-python hidapi numpy
+pip install windows-capture mss opencv-python hidapi numpy   # windows-capture = WGC, 60fps
 ```
-(`bettercam`/`mss` for capture; on Python 3.13 the DXGI backends crash in `comtypes` —
-`mss` is the crash-free path and captures Remote Play's overlay non-black.)
+Backends, preference order: **`wgc`** (Windows.Graphics.Capture, 60 fps, overlay-capable,
+no comtypes — sharpens the lag feature; `pip install windows-capture`) → `mss` (GDI,
+crash-free ~31 fps, the proven fallback) → `bettercam`/`dxcam` (DXGI; crash in `comtypes`
+on Python 3.13 — avoid). Pass `--backend wgc` for 60 fps.
 
 ## Run order
 ```
@@ -126,4 +128,6 @@ Design docs: `FUSION_SCOPE.md` (overall) and `FUSION_SCOPE_B.md` (strong-partner
   is minted later through the governed ceremony).
 - Synthetic adversary tests against a **model** of a cheat; a real aimbot / cheat-free decoupled
   capture (killcam/spectator) is the field confirmation. Physiological/GSR is blocked (`GSR_ENABLED=false`).
-- 60 fps WGC (`windows-capture`) is the reserved upgrade to sharpen the noisy lag feature; not built.
+- 60 fps **WGC capture is now BUILT** (`screen_capture.py` `wgc` backend via `windows-capture`):
+  opt in with `--backend wgc` to sharpen the lag feature (16 ms frame bins vs ~33 ms at 31 fps).
+  Needs on-rig validation (de-risk + a re-capture); falls back to mss if `windows-capture` absent.
