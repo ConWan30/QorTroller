@@ -129,8 +129,11 @@ Design docs: `FUSION_SCOPE.md` (overall) and `FUSION_SCOPE_B.md` (strong-partner
 - Synthetic adversary tests against a **model** of a cheat; a real aimbot / cheat-free decoupled
   capture (killcam/spectator) is the field confirmation. Physiological/GSR is blocked (`GSR_ENABLED=false`).
 - **WGC capture BUILT + VALIDATED** (`screen_capture.py` `wgc` backend via `windows-capture`):
-  `--backend wgc` runs **~44 fps during gameplay** (vs mss ~31; ~23 ms frame bins vs ~33 ms) after a
-  GIL-yield fix to the capture loop — overlay-capable, crash-free, falls back to mss if absent. Sharpens
-  the lag feature; confirming the lag-feature CV actually drops needs a few WGC sessions re-run through
-  within-player stability (the remaining check). Not the full 60 fps (Remote Play stream rate + 1 kHz
-  HID/optical-flow contention cap it).
+  `--backend wgc` runs **~44 fps during gameplay** (vs mss ~31) after a GIL-yield fix — overlay-capable,
+  crash-free, falls back to mss if absent. **BUT WGC adds ~400 ms of capture latency** (DWM compositor
+  buffering): same player's lag reads ~580 ms on WGC vs ~110 ms on mss. Implications: (a) the **lag feature
+  does NOT sharpen** — its noise was a search-window / spurious-peak issue, not frame-rate, and WGC confounds
+  it with pipeline latency → **lag stays excluded from the biometric** (the 3 stable features remain);
+  (b) **don't mix backends in one biometric corpus** (coupling/lag differ by backend latency); (c) for WGC,
+  set `L9_LAG_MAX_MS≈800` or coupling truncates at the 500 ms default. WGC's real value is higher-fps,
+  overlay-capable, crash-free *coupling* capture — not lag.
