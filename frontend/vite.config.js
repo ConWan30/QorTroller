@@ -22,6 +22,10 @@ export default defineConfig({
       '/federation': { target: 'http://127.0.0.1:8080', changeOrigin: true },
       '/health':     { target: 'http://127.0.0.1:8080', changeOrigin: true },
       '/operator':   { target: 'http://127.0.0.1:8080', changeOrigin: true },
+      // Phase O5-PUBLIC-VIEWER — public Forensic Replay-and-Verify
+      // sub-app mounted at /public on the bridge. NO auth required;
+      // any browser can hit these URLs to verify protocol claims.
+      '/public':     { target: 'http://127.0.0.1:8080', changeOrigin: true },
       '/ws':         { target: 'ws://127.0.0.1:8080',   changeOrigin: true, ws: true },
     },
   },
