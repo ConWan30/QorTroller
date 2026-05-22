@@ -201,3 +201,6 @@ contracts/artifacts/build-info/
 
 # L9 probe capture data (binary .npz; local-only)
 sessions_l9/
+
+# L9 fusion co-capture data (binary; local-only)
+cocapture_l9/
