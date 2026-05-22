@@ -51,11 +51,33 @@ def _i16le(b: bytes, i: int) -> int:
     return int.from_bytes(b[i:i + 2], "little", signed=True) if len(b) >= i + 2 else 0
 
 
-def raw_reports_to_snapshots(reports, ts_us, offsets=None):
+VALIDATED_OFFSETS_PATH = os.path.join("cocapture_l9", "imu_offsets.json")
+
+
+def load_validated_offsets(path: str = VALIDATED_OFFSETS_PATH):
+    """Load on-device-validated IMU offsets+scale from imu_probe, or None if absent.
+    Returns (offsets_dict, scale) where offsets merges validated IMU over stick/trigger."""
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, encoding="utf-8") as fh:
+            v = json.load(fh)
+        if "gyro_x" not in v:
+            return None
+        offs = dict(DEFAULT_OFFSETS)
+        for k in ("gyro_x", "gyro_y", "gyro_z", "accel_x", "accel_y", "accel_z"):
+            offs[k] = int(v[k])
+        return offs, float(v.get("scale", _IMU_SCALE))
+    except Exception:
+        return None
+
+
+def raw_reports_to_snapshots(reports, ts_us, offsets=None, scale=None):
     """Map raw 64-byte HID reports -> _InputSnapshotLike objects for the extractor.
-    IMU fields are PROVISIONAL pending on-device validation."""
+    IMU fields are PROVISIONAL unless `offsets`/`scale` come from imu_probe validation."""
     from controller.tinyml_biometric_fusion import _InputSnapshotLike  # guarded by caller
     o = offsets or DEFAULT_OFFSETS
+    sc = scale if scale is not None else _IMU_SCALE
     snaps = []
     for k, rb in enumerate(reports):
         dt_us = int(ts_us[k] - ts_us[k - 1]) if k > 0 else 1000
@@ -63,26 +85,27 @@ def raw_reports_to_snapshots(reports, ts_us, offsets=None):
             left_stick_x=rb[o["lx"]], left_stick_y=rb[o["ly"]],
             right_stick_x=rb[o["rx"]], right_stick_y=rb[o["ry"]],
             l2_trigger=rb[o["l2"]], r2_trigger=rb[o["r2"]],
-            gyro_x=_i16le(rb, o["gyro_x"]) * _IMU_SCALE,
-            gyro_y=_i16le(rb, o["gyro_y"]) * _IMU_SCALE,
-            gyro_z=_i16le(rb, o["gyro_z"]) * _IMU_SCALE,
-            accel_x=_i16le(rb, o["accel_x"]) * _IMU_SCALE,
-            accel_y=_i16le(rb, o["accel_y"]) * _IMU_SCALE,
-            accel_z=_i16le(rb, o["accel_z"]) * _IMU_SCALE,
+            gyro_x=_i16le(rb, o["gyro_x"]) * sc,
+            gyro_y=_i16le(rb, o["gyro_y"]) * sc,
+            gyro_z=_i16le(rb, o["gyro_z"]) * sc,
+            accel_x=_i16le(rb, o["accel_x"]) * sc,
+            accel_y=_i16le(rb, o["accel_y"]) * sc,
+            accel_z=_i16le(rb, o["accel_z"]) * sc,
             inter_frame_us=max(1, dt_us)))
     return snaps
 
 
-def compute_l4_features(reports, ts_us, offsets=None) -> Optional[np.ndarray]:
+def compute_l4_features(reports, ts_us, offsets=None, scale=None) -> Optional[np.ndarray]:
     """13-dim L4 biometric vector via the existing BiometricFeatureExtractor, or None
-    if the extractor isn't importable. PROVISIONAL until IMU mapping is validated."""
+    if the extractor isn't importable. Uses imu_probe-validated offsets/scale when
+    available (offsets/scale args override; else falls back to provisional defaults)."""
     try:
         from controller.tinyml_biometric_fusion import BiometricFeatureExtractor
     except Exception:
         return None
     if len(reports) < 8:
         return None
-    snaps = raw_reports_to_snapshots(reports, ts_us, offsets)
+    snaps = raw_reports_to_snapshots(reports, ts_us, offsets, scale)
     frame = BiometricFeatureExtractor().extract(snaps, window_frames=CALIBRATION_WINDOW_FRAMES)
     return np.asarray(frame.to_vector(), float)
 
@@ -236,13 +259,19 @@ class CoCaptureRecorder:
                          np.array(mo_pitch), "human", None, self.cfg.player)
         fv = extract_feature_vector(sd, self.cfg.coupling_floor)
         l9_vec = [fv[k] for k in _SEP_FEATURES] if fv else [0.0] * len(_SEP_FEATURES)
-        l4 = compute_l4_features(reports, ts_us)
+        validated = load_validated_offsets()
+        if validated:
+            voff, vscale = validated
+            l4 = compute_l4_features(reports, ts_us, voff, vscale)
+        else:
+            l4 = compute_l4_features(reports, ts_us)
         s = CoCaptureSession(
             player=self.cfg.player, l9_vec=l9_vec,
             l4_vec=(list(map(float, l4)) if l4 is not None else None),
             l9_reliable=bool(fv["reliable"]) if fv else False,
             l9_coupling=float(fv["dominant_coupling"]) if fv else 0.0,
-            l4_provisional=True, n_hid=len(reports), n_frames=len(mo_ts))
+            l4_provisional=(validated is None) or (l4 is None),
+            n_hid=len(reports), n_frames=len(mo_ts))
         n = len(glob.glob(os.path.join(self.cfg.out_dir, f"{self.cfg.player}_*.npz"))) + 1
         out = os.path.join(self.cfg.out_dir, f"{self.cfg.player}_{n:02d}.npz")
         save_cocapture(out, s, raw_reports=reports, ts_us=ts_us)
