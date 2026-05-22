@@ -84,6 +84,25 @@ def test_readiness_needs_more_sessions(tmp_path):
     assert any("P3 needs" in g for g in rep["gaps"])
 
 
+def test_recompute_l9_from_stored_streams(tmp_path):
+    from l9_presence.cocapture import recompute_l9_from_file
+    # synthetic coupled streams (camera = lagged stick), stored alongside the session
+    n, dt = 500, 10.0
+    ts = np.arange(n) * dt
+    sx = 128 + 60 * np.sin(2 * np.pi * 0.8 * ts / 1000.0)
+    sy = 128 + 8 * np.sin(2 * np.pi * 0.3 * ts / 1000.0)
+    yaw = np.zeros(n); yaw[4:] = (sx[:-4] - 128) * 1.5
+    streams = {"in_ts": ts, "in_sx": sx, "in_sy": sy,
+               "mo_ts": ts, "mo_yaw": yaw, "mo_pitch": np.zeros(n)}
+    s = CoCaptureSession(player="P1", l9_vec=[0.4, 0.6, 0.84], l4_vec=[0.1] * 13,
+                         l9_reliable=True, l9_coupling=0.4, l4_provisional=False)
+    p = str(tmp_path / "P1_01.npz")
+    save_cocapture(p, s, l9_streams=streams)
+    r = recompute_l9_from_file(p)
+    assert r["coupling_score"] > 0.3          # aligned streams -> real coupling
+    assert r["stick_x_std"] > 2.0             # stick actually varied
+
+
 def test_readiness_ignores_l4_missing(tmp_path):
     _write(tmp_path, "P1", 6, l4=False)           # no L4 view -> not usable
     rep = fusion_readiness(str(tmp_path), min_per_player=5)
