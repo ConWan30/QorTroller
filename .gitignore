@@ -204,3 +204,6 @@ sessions_l9/
 
 # L9 fusion co-capture data (binary; local-only)
 cocapture_l9/
+
+# PoEP enrollment data (local-only)
+poep_l9/
