@@ -207,3 +207,6 @@ cocapture_l9/
 
 # PoEP enrollment data (local-only)
 poep_l9/
+
+# BCC sealed developer-reference lane (local-only)
+bcc_l9/
