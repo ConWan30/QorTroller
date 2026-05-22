@@ -54,10 +54,14 @@ COMMON_RATE_HZ: float = float(_os.getenv("L9_COMMON_RATE_HZ", "120.0"))
 """Uniform grid both signals are resampled onto before correlation."""
 
 LAG_MIN_MS: float = float(_os.getenv("L9_LAG_MIN_MS", "0.0"))
-LAG_MAX_MS: float = float(_os.getenv("L9_LAG_MAX_MS", "260.0"))
+LAG_MAX_MS: float = float(_os.getenv("L9_LAG_MAX_MS", "500.0"))
 """Causal-lag search window in ms. Wide vs L2C's 10-60ms grip window because
-Remote Play adds variable network+codec delay (best case ~30ms, often more).
-Input precedes on-screen motion, so only NON-NEGATIVE lags are physical."""
+Remote Play adds variable network+codec delay. Default raised 260->500ms after P4
+(2026-05-21) showed a genuine high-latency stream: clean coupling (up to 0.955, neg
+control 0.09) at ~400-500ms lag, 10x the ~40-80ms of a low-latency rig. 260ms
+truncated it. Input precedes on-screen motion, so only NON-NEGATIVE lags are physical.
+A per-session adaptive window (widen until the peak is interior, guarded by the negative
+control) is the better long-term fix; 500ms covers realistic cloud-stream variation."""
 
 MIN_GRID_SAMPLES: int = int(_os.getenv("L9_MIN_GRID_SAMPLES", "120"))
 """Minimum resampled samples (>= ~1s at 120Hz) before a score is returned."""
