@@ -284,8 +284,9 @@ def _cli() -> int:
     import argparse
     ap = argparse.ArgumentParser(description="L9 F1 co-capture + F3 readiness")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    pc = sub.add_parser("capture", help="record one co-capture session")
+    pc = sub.add_parser("capture", help="record co-capture session(s) for one player")
     pc.add_argument("--player", required=True)
+    pc.add_argument("--count", type=int, default=1, help="number of back-to-back sessions")
     pc.add_argument("--duration", type=float, default=60.0)
     pc.add_argument("--region", nargs=4, type=int, default=[640, 360, 1280, 720])
     pc.add_argument("--out-dir", default="cocapture_l9")
@@ -296,7 +297,11 @@ def _cli() -> int:
     if a.cmd == "capture":
         cfg = CoCaptureConfig(player=a.player, duration_s=a.duration,
                               region=tuple(a.region), out_dir=a.out_dir)
-        print(json.dumps(CoCaptureRecorder(cfg).record_once(), indent=2, default=str))
+        rec = CoCaptureRecorder(cfg)
+        for k in range(a.count):
+            r = rec.record_once()
+            print(f"[{k + 1}/{a.count}] {a.player}: {r['path']} "
+                  f"(l9_reliable={r['l9_reliable']}, l4={r['l4_present']})")
         return 0
     if a.cmd == "readiness":
         print(json.dumps(fusion_readiness(a.corpus_dir, a.min_per_player), indent=2, default=str))
