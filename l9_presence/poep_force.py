@@ -66,6 +66,26 @@ def _set_trigger(ds, resistance: bool) -> bool:
         return False
 
 
+def capture_force_trial(ds, resistance: bool, capture_s: float = 2.0):
+    """Set trigger resistance, capture one R2 press trajectory, return (features, write_ok)."""
+    write_ok = _set_trigger(ds, resistance)
+    traj, t0 = [], time.time()
+    while time.time() - t0 < capture_s:
+        r2v = getattr(ds.state, "R2_value", getattr(ds.state, "R2", 0))  # analog 0-255
+        traj.append({"t_ms": (time.time() - t0) * 1000.0, "r2": float(r2v)})
+        time.sleep(0.002)
+    return extract_force_features(traj), write_ok
+
+
+def summarize_force_auth(on_feats: list, off_feats: list) -> dict:
+    """Aggregate ON/OFF force trials into a device-auth signature via force_auth_delta."""
+    def _mean_slope(fs):
+        vals = [f["mean_slope"] for f in fs if f.get("mean_slope")]
+        return float(np.mean(vals)) if vals else 0.0
+    return force_auth_delta({"mean_slope": _mean_slope(on_feats)},
+                            {"mean_slope": _mean_slope(off_feats)})
+
+
 def run_force_derisk(trials: int = 8, capture_s: float = 2.0) -> dict:
     try:
         from pydualsense import pydualsense
@@ -80,15 +100,10 @@ def run_force_derisk(trials: int = 8, capture_s: float = 2.0) -> dict:
     try:
         for i in range(trials):
             resistance = (i % 2 == 0)
-            write_ok = _set_trigger(ds, resistance) or write_ok
             print(f"  trial {i + 1}/{trials} [{'RESISTANCE' if resistance else 'no resistance'}]"
                   " — press R2 fully, then release")
-            traj, t0 = [], time.time()
-            while time.time() - t0 < capture_s:
-                r2v = getattr(ds.state, "R2_value", getattr(ds.state, "R2", 0))  # analog 0-255 (R2 is digital)
-                traj.append({"t_ms": (time.time() - t0) * 1000.0, "r2": float(r2v)})
-                time.sleep(0.002)
-            f = extract_force_features(traj)
+            f, w = capture_force_trial(ds, resistance, capture_s)
+            write_ok = w or write_ok
             (on_feats if resistance else off_feats).append(f)
             print(f"    peak_r2={f['peak_r2']:.0f} rise={f['rise_time_ms']} slope={f['mean_slope']:.2f}")
             time.sleep(0.4)
@@ -99,12 +114,7 @@ def run_force_derisk(trials: int = 8, capture_s: float = 2.0) -> dict:
         except Exception:
             pass
 
-    def _agg(fs, k):
-        vals = [f[k] for f in fs if f.get(k)]
-        return float(np.mean(vals)) if vals else 0.0
-    on = {"mean_slope": _agg(on_feats, "mean_slope")}
-    off = {"mean_slope": _agg(off_feats, "mean_slope")}
-    d = force_auth_delta(on, off)
+    d = summarize_force_auth(on_feats, off_feats)
     d["status"] = "ok"; d["write_ok"] = write_ok
     d["go"] = bool(write_ok and d["adaptive_response_detected"])
     return d

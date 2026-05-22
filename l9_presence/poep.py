@@ -26,6 +26,7 @@ from typing import Optional
 import numpy as np
 
 from .poep_derisk import _fire, _stop, _test_write, in_human_band
+from .poep_force import capture_force_trial, summarize_force_auth
 
 _DOMAIN = b"QORTROLLER-POEP-v0"
 _trapz = getattr(np, "trapezoid", getattr(np, "trapz"))  # np.trapz deprecated -> trapezoid
@@ -83,9 +84,11 @@ def extract_reflex_features(window: list, stim_t_ms: float, baseline: dict) -> d
 
 
 def compute_poep_commitment(*, player: str, device_id: str, challenge_records: list,
-                            ts_ns: int) -> str:
+                            ts_ns: int, device_auth: dict = None) -> str:
     """Born-PQ PoEP commitment: SHA-256 over device + per-challenge (nonce + quantized
-    features). Hash-based → quantum-safe (Grover only). v0 candidate; not anchored."""
+    features) + the adaptive-trigger device-auth signature (if present). Hash-based →
+    quantum-safe (Grover only). v0 candidate; not anchored. device_auth=None reproduces
+    the pre-force-challenge hash (backward-compatible)."""
     h = hashlib.sha256()
     h.update(_DOMAIN)
     h.update(hashlib.sha256(player.encode()).digest())
@@ -95,6 +98,10 @@ def compute_poep_commitment(*, player: str, device_id: str, challenge_records: l
         feats = c.get("features", {})
         for k in _FEATURE_KEYS:
             v = feats.get(k) or 0.0
+            h.update(int(round(float(v) * 1000)).to_bytes(8, "big", signed=True))
+    if device_auth:
+        for k in ("slope_on", "slope_off", "delta"):
+            v = device_auth.get(k) or 0.0
             h.update(int(round(float(v) * 1000)).to_bytes(8, "big", signed=True))
     h.update(int(ts_ns).to_bytes(8, "big", signed=False))
     return h.hexdigest()
@@ -108,13 +115,15 @@ class PoEPSession:
     commitment: str
     ts_ns: int
     poep_enabled: bool = False   # L6B hard rule: no liveness verdict until N>=50
+    device_auth: dict = field(default_factory=dict)  # {slope_on, slope_off, delta, adaptive_response_detected}
 
 
 def save_poep_session(path: str, s: PoEPSession) -> str:
     with open(path, "w", encoding="utf-8") as fh:
         json.dump({"player": s.player, "device_id": s.device_id,
                    "challenge_records": s.challenge_records, "commitment": s.commitment,
-                   "ts_ns": s.ts_ns, "poep_enabled": s.poep_enabled}, fh, indent=2)
+                   "ts_ns": s.ts_ns, "poep_enabled": s.poep_enabled,
+                   "device_auth": s.device_auth}, fh, indent=2)
     return path
 
 
@@ -122,7 +131,8 @@ def load_poep_session(path: str) -> PoEPSession:
     with open(path, encoding="utf-8") as fh:
         d = json.load(fh)
     return PoEPSession(d["player"], d["device_id"], d["challenge_records"],
-                       d["commitment"], int(d["ts_ns"]), bool(d.get("poep_enabled", False)))
+                       d["commitment"], int(d["ts_ns"]), bool(d.get("poep_enabled", False)),
+                       dict(d.get("device_auth", {})))
 
 
 def _snapshot(ds) -> dict:
@@ -144,6 +154,7 @@ class PoEPConfig:
     device_id: str = "Sony_DualShock_Edge_CFI-ZCP1"
     challenges: int = 20
     window_ms: float = 600.0
+    force_trials: int = 6        # adaptive-trigger force-challenge trials (device-auth); 0 disables
     out_dir: str = "poep_l9"
 
 
@@ -160,7 +171,9 @@ class PoEPRecorder:
         ds = pydualsense(); ds.init()
         _test_write(ds)
         records = []
+        device_auth: dict = {}
         try:
+            # Phase 1 — reflex (liveness) challenges
             for nonce, gap in nonce_schedule(self.cfg.challenges):
                 time.sleep(gap)
                 base = _snapshot(ds)
@@ -179,22 +192,44 @@ class PoEPRecorder:
                       f"{f'{lat:.0f} ms' if lat is not None else 'no reaction'}"
                       f"{' (in band)' if feats['in_band'] else ''}")
                 time.sleep(0.3)
+            # Phase 2 — adaptive-trigger force-challenge (device-auth)
+            if self.cfg.force_trials > 0:
+                print("\n  Device-auth force-challenge: press R2 fully against the trigger, then release.")
+                on_feats, off_feats = [], []
+                for i in range(self.cfg.force_trials):
+                    resistance = (i % 2 == 0)
+                    print(f"  force {i + 1}/{self.cfg.force_trials} "
+                          f"[{'RESISTANCE' if resistance else 'no resistance'}] — press R2 fully, release")
+                    f, _ = capture_force_trial(ds, resistance)
+                    (on_feats if resistance else off_feats).append(f)
+                    time.sleep(0.4)
+                device_auth = summarize_force_auth(on_feats, off_feats)
+                print(f"  device-auth: slope ON={device_auth['slope_on']} OFF={device_auth['slope_off']} "
+                      f"delta={device_auth['delta']} detected={device_auth['adaptive_response_detected']}")
         finally:
             _stop(ds)
+            try:
+                from .poep_force import _set_trigger
+                _set_trigger(ds, False)
+            except Exception:
+                pass
             try:
                 ds.close()
             except Exception:
                 pass
         ts_ns = time.time_ns()
         commitment = compute_poep_commitment(player=self.cfg.player, device_id=self.cfg.device_id,
-                                             challenge_records=records, ts_ns=ts_ns)
-        sess = PoEPSession(self.cfg.player, self.cfg.device_id, records, commitment, ts_ns)
+                                             challenge_records=records, ts_ns=ts_ns, device_auth=device_auth)
+        sess = PoEPSession(self.cfg.player, self.cfg.device_id, records, commitment, ts_ns,
+                           False, device_auth)
         n = len([f for f in os.listdir(self.cfg.out_dir) if f.startswith(self.cfg.player)]) + 1
         out = os.path.join(self.cfg.out_dir, f"{self.cfg.player}_{n:02d}.poep.json")
         save_poep_session(out, sess)
         in_band = sum(1 for r in records if r["features"]["in_band"])
         return {"path": out, "player": self.cfg.player, "challenges": len(records),
-                "in_band": in_band, "commitment": commitment[:16] + "…", "poep_enabled": False}
+                "in_band": in_band, "commitment": commitment[:16] + "…", "poep_enabled": False,
+                "device_auth_detected": device_auth.get("adaptive_response_detected", False),
+                "device_auth_delta": device_auth.get("delta")}
 
 
 def _cli() -> int:
@@ -204,11 +239,15 @@ def _cli() -> int:
     pe = sub.add_parser("enroll", help="record one enrollment PoEP session (controller still, react to buzzes)")
     pe.add_argument("--player", required=True)
     pe.add_argument("--challenges", type=int, default=20)
+    pe.add_argument("--force-trials", type=int, default=6,
+                    help="adaptive-trigger force-challenge trials for device-auth (0 disables)")
     pe.add_argument("--out-dir", default="poep_l9")
     a = ap.parse_args()
     if a.cmd == "enroll":
-        cfg = PoEPConfig(player=a.player, challenges=a.challenges, out_dir=a.out_dir)
-        print("PoEP enrollment — hold the controller STILL (not in a game); react to each buzz.\n")
+        cfg = PoEPConfig(player=a.player, challenges=a.challenges,
+                         force_trials=a.force_trials, out_dir=a.out_dir)
+        print("PoEP enrollment — hold the controller STILL (not in a game).")
+        print("Phase 1: react to each buzz. Phase 2: press R2 against the trigger when prompted.\n")
         print(json.dumps(PoEPRecorder(cfg).enroll(), indent=2, default=str))
         return 0
     return 1
