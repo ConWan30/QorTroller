@@ -1,0 +1,48 @@
+# QorTroller — production reverse proxy (Caddy)
+# ---------------------------------------------------------------------------
+# In dev, vite.config.js proxies the bridge prefixes to 127.0.0.1:8080. In
+# production there is no Vite dev server, so the built frontend's RELATIVE paths
+# (/operator … /public … /api …) must reach the bridge same-origin. This config
+# serves the built frontend AND proxies those prefixes to the bridge.
+#
+#   1) cd frontend && npm run build          # → frontend/dist
+#   2) point `root` below at that dist path
+#   3) start the bridge:  python -m bridge.vapi_bridge.main   # binds :8080
+#   4) caddy run --config deploy/Caddyfile
+#
+# Replace the site address with your domain (Caddy auto-provisions HTTPS), or use
+# `:80` / `localhost` for a local single-box demo.
+#
+# SECURITY: the built bundle bakes in VITE_VAPI_API_KEY (the operator key) — do
+# NOT publish an operator build to an untrusted audience. The /public/* routes
+# need no key; for a public/grant deploy, build WITHOUT the operator key (only
+# the public viewer + Reference/Grant tabs work) or put the operator build
+# behind its own auth on a separate host. See deploy/README.md.
+
+qortroller.example.com {
+    encode gzip zstd
+    root * /srv/qortroller/frontend/dist
+
+    # ── Bridge API + mounted sub-apps (same prefix set as the Vite dev proxy) ──
+    @bridge path /operator/* /public/* /api/* /agent/* /bridge/* /gate/* \
+                 /devices/* /proof/* /enrollment/* /curator/* /dash/* \
+                 /federation/* /monitor/* /health /health/*
+    handle @bridge {
+        reverse_proxy 127.0.0.1:8080
+    }
+
+    # ── WebSocket twin stream (Caddy upgrades automatically) ──
+    @ws path /ws/*
+    handle @ws {
+        reverse_proxy 127.0.0.1:8080
+    }
+
+    # ── SPA: serve built assets + the self-contained html pages
+    #    (controller-twin.html, grant-brief.html, qortroller-reference.html,
+    #    /assets/*, /fonts/*, /deck-stage.js), else fall back to index.html for
+    #    client routes (/, /os/evidence, /session/:hash, …). ──
+    handle {
+        try_files {path} /index.html
+        file_server
+    }
+}
