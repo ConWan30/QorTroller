@@ -62,19 +62,22 @@ def _run(region, n_frames: int, backend: str = "auto") -> int:
     cap = ScreenCapturer(region=region, backend=backend)
     print(f"  using backend: {cap.backend}  region: {region or 'full monitor'}")
 
+    # warm up async backends (WGC delivers via a background thread on content change)
+    for _ in range(300):
+        cap.grab(); time.sleep(0.002)
     grabbed, black = 0, 0
     res = None
     t0 = time.time()
-    for _ in range(n_frames):
+    deadline = t0 + 8.0   # measure over wall-clock so async backends report a true fps
+    while grabbed < n_frames and time.time() < deadline:
         f = cap.grab()
         if f is None:
-            time.sleep(0.005); continue
+            time.sleep(0.001); continue
         grabbed += 1
         if res is None:
             res = f.shape
         if is_black_frame(f):
             black += 1
-        time.sleep(0.001)
     dt = max(time.time() - t0, 1e-3)
     cap.close()
 
