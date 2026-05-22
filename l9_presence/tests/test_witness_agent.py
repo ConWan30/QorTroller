@@ -5,8 +5,11 @@ import numpy as np
 
 from l9_presence.bcc import BCCStore
 from l9_presence.pocp import compute_pocp_commitment, preimage_len
+from l9_presence.poep_menu_harvest import HandoffMachine
 from l9_presence.verification_card import render_card
-from l9_presence.witness_agent import WitnessConfig, _should_harvest_l9, process_session
+from l9_presence.witness_agent import (
+    WitnessAgent, WitnessConfig, _should_harvest_l9, make_hardware_callbacks, process_session,
+)
 
 
 def _write_coupled(path, n=500, rate_hz=100.0, lag_ms=40.0, seed=0, player="P1"):
@@ -126,3 +129,50 @@ def test_bcc_skips_non_present_session(tmp_path):
     assert m["verdict"] != "PRESENT"
     assert m["bcc"]["harvested"] is False                    # causal-presence gate rejected it
     assert BCCStore(lane).status()["chain_length"] == 0      # nothing entered the lane
+
+
+# ---- sub-lane B: real callbacks wired into the Witness (injected machine, no hardware) ----
+
+def _machine(sample):
+    return HandoffMachine(lambda: True, lambda: True, lambda: sample, lambda: True, lambda: True)
+
+
+def _b_agent(tmp_path):
+    lane = str(tmp_path / "b")
+    cfg = WitnessConfig(out_dir=str(tmp_path), bcc_enabled=True, bcc_sublane_b_enabled=True,
+                        bcc_out_dir=lane)
+    return WitnessAgent(cfg), lane
+
+
+def test_menu_harvest_records_present_micro_sample(tmp_path):
+    agent, lane = _b_agent(tmp_path)
+    out = agent.harvest_menu_sample(_machine({"reflex_latency_ms": 290, "sham_reaction": False}))
+    assert out["harvested"] is True and out["handoff_ok"] is True
+    assert BCCStore(lane).status()["sub_lane_b"] == 1
+
+
+def test_menu_harvest_sham_noisy_skips(tmp_path):
+    agent, lane = _b_agent(tmp_path)
+    out = agent.harvest_menu_sample(_machine({"reflex_latency_ms": 290, "sham_reaction": True}))
+    assert out["harvested"] is False                          # active player -> sham fires -> reject
+    assert BCCStore(lane).status()["sub_lane_b"] == 0
+
+
+def test_menu_harvest_handoff_failure_skips(tmp_path):
+    agent, lane = _b_agent(tmp_path)
+    bad = HandoffMachine(lambda: True, lambda: False, lambda: None, lambda: True, lambda: True)  # acquire fails
+    out = agent.harvest_menu_sample(bad)
+    assert out["harvested"] is False and "handoff" in out["reason"]
+
+
+def test_menu_harvest_disabled_by_default(tmp_path):
+    agent = WitnessAgent(WitnessConfig(out_dir=str(tmp_path)))     # sub-lane B off
+    out = agent.harvest_menu_sample(_machine({"reflex_latency_ms": 290, "sham_reaction": False}))
+    assert out["reason"] == "sublane_b_disabled"
+
+
+def test_hardware_callbacks_factory_shape():
+    cbs = make_hardware_callbacks()
+    assert len(cbs) == 5 and all(callable(c) for c in cbs)
+    rp, _aa, _fc, _ra, rq = cbs
+    assert rp() is True and rq() is True                          # passive release/reacquire are no-op (no hardware)
