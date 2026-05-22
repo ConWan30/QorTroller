@@ -4,6 +4,16 @@ import { ViewSelector } from './ViewSelector'
 import { HeartbeatProvider } from './heartbeat/HeartbeatProvider'
 import { FONTS } from './shared/design/tokens'
 import { DriftAlertBadge } from './components/DriftAlertBadge'
+// QRESCE-0001 v0.5 gamer-aesthetic Tweaks layer (newer Claude-Design export).
+// Mounted at the app root — matching the design's
+// root.render(<QtTweaksProvider><App/></QtTweaksProvider>) — so the opt-in vibe
+// (scanlines / CRT / grain / hash-storm / glow / GIC landing FX) + the visible
+// toggle + the foot vibe-label are app-wide. Default state is forensic-restraint.
+import { QtTweaksProvider } from './design/Tweaks'
+// v2 design pass · item A — the persistent eyebrow-row spine (shared across all
+// 6 dashboard tabs + the 3 Evidence OS workspaces). Each view names itself here.
+import { EyebrowProvider, ViewEyebrowBar } from './design/Eyebrow'
+import './design/qortroller-kit.css'
 // Phase 238 Frontend Foundation Revamp — VAPI theme tokens (CSS variable lock)
 import './styles/vapi-theme.css'
 
@@ -26,11 +36,19 @@ const VpmProofView     = lazy(() => import('./views/VpmProofView').then((m) => (
 // to the real bridge hooks + real in-browser verifiers (named exports).
 const ForensicView     = lazy(() => import('./views/ForensicView').then((m) => ({ default: m.ForensicView })))
 const OperatorView     = lazy(() => import('./views/OperatorView').then((m) => ({ default: m.OperatorView })))
+// Tab 05 — IoTeX grant-evaluator deck (brand-locked Claude-Design export served
+// from /grant-brief.html). Public; no auth gate (sharable with evaluators).
+const GrantBriefView   = lazy(() => import('./views/GrantBriefView').then((m) => ({ default: m.GrantBriefView })))
+// Tab 06 — Reference codex (brand-locked /qortroller-reference.html): the
+// canonical "what / how / forward" reference for QorTroller. Public; no auth.
+const ReferenceView    = lazy(() => import('./views/ReferenceView').then((m) => ({ default: m.ReferenceView })))
 
 const VIEW_MAP = {
   gamer:        GamerView,
   forensic:     ForensicView,
   operator:     OperatorView,
+  grant:        GrantBriefView,
+  reference:    ReferenceView,
   developer:    DeveloperView,
   manufacturer: ManufacturerView,
   brp:          BrpView,
@@ -61,6 +79,8 @@ export function App() {
 
   return (
     <HeartbeatProvider>
+      <QtTweaksProvider>
+      <EyebrowProvider>
       <div style={{
         display:       'flex',
         flexDirection: 'column',
@@ -72,6 +92,10 @@ export function App() {
         background:    '#020408',
       }}>
         <ViewSelector activeView={activeView} onViewChange={setActiveView} />
+
+        {/* v2 · item A — persistent eyebrow spine. Same 32px row on every tab;
+            each view registers its name + live readouts via useViewEyebrow. */}
+        <ViewEyebrowBar />
 
         {/* Phase O1 C8 — cross-view drift alert. Hidden by default; renders
             only when O1 SHADOW agents are anchored AND drift findings exist
@@ -97,6 +121,8 @@ export function App() {
           </motion.div>
         </AnimatePresence>
       </div>
+      </EyebrowProvider>
+      </QtTweaksProvider>
     </HeartbeatProvider>
   )
 }

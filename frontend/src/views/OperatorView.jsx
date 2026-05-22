@@ -23,6 +23,7 @@ import {
 } from '../api/bridgeApi'
 import { usePublicProtocolState } from '../api/publicForensic'
 import { Panel, StatusChip } from '../design/Primitives'
+import { useViewEyebrow } from '../design/Eyebrow'
 import '../design/qortroller-kit.css'
 
 function PreflightGate({ label, passed }) {
@@ -135,6 +136,23 @@ export function OperatorView() {
   const totalOpen = fleet?.total_open
   const sev = fleet?.by_severity || {}
   const blocking = analytics?.blocking_reason_counts || {}
+
+  // v2 · item A — eyebrow: the two honesty heroes (kill-switch + coherence).
+  useViewEyebrow({
+    num: '03',
+    name: 'OPERATOR · EVIDENCE',
+    status: !killKnown ? 'STATE UNAVAILABLE' : killPaused ? 'KILL-SWITCH PAUSED' : 'CHAIN ARMED',
+    statusTone: !killKnown ? 'dormant' : killPaused ? 'pending' : 'live',
+    readouts: [
+      // Biometric-TTL promoted to the eyebrow — for an evaluator the "still
+      // valid" honesty signal is the most important line on the page.
+      { label: 'BIO-TTL',
+        value: preflight?.biometric_ttl_ok == null ? '—' : preflight.biometric_ttl_ok ? 'VALID' : 'EXPIRED',
+        tone: preflight?.biometric_ttl_ok == null ? 'dim' : preflight.biometric_ttl_ok ? 'chain' : 'blocked' },
+      { label: 'COHERENCE', value: totalOpen != null ? (totalOpen === 0 ? '0 OPEN' : `${totalOpen} OPEN`) : '—', tone: totalOpen === 0 ? 'chain' : totalOpen != null ? 'amber' : 'dim' },
+      { label: 'AIT', value: ait?.separation_ratio != null ? ait.separation_ratio.toFixed(3) : '—', tone: 'amber' },
+    ],
+  })
 
   return (
     <div className="qt-design-root" style={{ overflow: 'auto' }}>

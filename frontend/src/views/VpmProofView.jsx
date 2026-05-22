@@ -21,11 +21,12 @@
 //     prototype's data-grammar stub anchors.
 //   - useVpmList is noMock:true; honest empty states; no fabricated rows.
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useVpmList } from '../api/bridgeApi'
 import { verifyVpmGrammar } from '../components/VpmGrammarVerifier'
-import { Panel, StatusChip } from '../design/Primitives'
+import { Panel, StatusChip, HashSpecimen } from '../design/Primitives'
 import { useReDeriveHash } from '../design/motion'
+import { useViewEyebrow } from '../design/Eyebrow'
 import '../design/qortroller-kit.css'
 
 // ── Visual-state vocabulary (the 6 FROZEN states) ────────────────────────
@@ -115,6 +116,28 @@ function VpmProofStage({ row, tamperByte, onText }) {
   const [srcDoc, setSrcDoc] = useState('')
   const [fetchTime, setFetchTime] = useState(0)
   const [err, setErr] = useState(null)
+  // Auto-size the iframe to the certificate's full content height so the WHOLE
+  // card is visible by scrolling the page — never trapped behind the iframe's
+  // own short scrollbar. (The design preview rendered the proof in a tall
+  // viewport so the card fit; on a laptop viewport the fixed-height stage
+  // clipped it. Measuring scrollHeight reproduces the design's full-card view.)
+  const iframeRef = useRef(null)
+  const [frameH, setFrameH] = useState(640)
+
+  const measure = () => {
+    try {
+      const d = iframeRef.current?.contentDocument
+      if (!d) return
+      const read = () => Math.max(
+        d.documentElement?.scrollHeight || 0,
+        d.body?.scrollHeight || 0,
+      )
+      const h = read()
+      if (h) setFrameH(h)
+      // Re-measure after webfonts (Syne/JBM) load + reflow the certificate.
+      setTimeout(() => { const h2 = read(); if (h2) setFrameH(h2) }, 450)
+    } catch { /* cross-origin guard — same-origin srcDoc, should not throw */ }
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -141,10 +164,10 @@ function VpmProofStage({ row, tamperByte, onText }) {
   }, [row.commitment_hex, row.compiler_output_hash_hex, tamperByte])
 
   return (
-    <div style={{
+    <div className="qt-specimen" style={{
       position: 'relative', background: 'var(--panel)', border: '1px solid var(--border)',
       borderRadius: 'var(--radius)', overflow: 'hidden', display: 'flex',
-      flexDirection: 'column', minHeight: 0,
+      flexDirection: 'column', alignSelf: 'start',
     }}>
       <header className="p-head">
         <span className="p-head__eye">FRAMED · PROOF · STAGE</span>
@@ -153,17 +176,21 @@ function VpmProofStage({ row, tamperByte, onText }) {
           {'{'}<span style={{ color: 'var(--chain)' }}>cache: 'no-store'</span>{'}'}) → srcDoc · {fetchTime} MS
         </span>
       </header>
-      <div style={{ flex: 1, position: 'relative', minHeight: 0, background: 'var(--bg)' }}>
+      <div style={{ position: 'relative', background: 'var(--bg)' }}>
         {srcDoc ? (
           <iframe
+            ref={iframeRef}
             srcDoc={srcDoc}
             sandbox="allow-scripts allow-same-origin"
             title={`VPM Proof · ${row.vpm_id} · ${row.commitment_hex.slice(0, 8)}`}
-            style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none', background: 'transparent' }}
+            onLoad={measure}
+            // height = measured certificate height → the whole card renders; the
+            // page (not the iframe) scrolls to reveal it all.
+            style={{ display: 'block', width: '100%', height: frameH, border: 'none', background: 'transparent' }}
           />
         ) : (
           <div style={{
-            position: 'absolute', inset: 0, display: 'grid', placeItems: 'center',
+            minHeight: 360, display: 'grid', placeItems: 'center',
             fontFamily: 'var(--font-mono)', fontSize: 11, color: err ? 'var(--status-blocked)' : 'var(--text-faint)',
             letterSpacing: '0.14em', textTransform: 'uppercase', textAlign: 'center', padding: 16,
           }}>
@@ -195,7 +222,14 @@ function VpmInspector({ row, srcText, tamperByte, onTamper, onReset }) {
   }, [srcText])
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minHeight: 0, overflow: 'auto' }}>
+    <div style={{
+      display: 'flex', flexDirection: 'column', gap: 16,
+      // Sticky beside the (now full-height) proof card so the verdict stays in
+      // view while the page scrolls the whole certificate. Scrolls internally
+      // only in the rare case it exceeds the viewport.
+      position: 'sticky', top: 0, alignSelf: 'start',
+      maxHeight: 'calc(100dvh - 96px)', overflowY: 'auto',
+    }}>
       {/* INTEGRITY VERDICT */}
       <Panel padding={false}>
         <header className="p-head">
@@ -205,36 +239,32 @@ function VpmInspector({ row, srcText, tamperByte, onTamper, onReset }) {
         <div style={{ padding: 16 }}>
           <div style={{
             display: 'grid', gap: 10, padding: '14px 16px',
-            border: `1px solid ${hashOk ? 'var(--chain)' : 'var(--status-blocked)'}`,
-            borderRadius: 'var(--radius)', background: hashOk ? '#5bd6a30a' : '#d65b7811',
+            // computing → amber (it's working right now), then settle green / red.
+            border: `1px solid ${hashState === 'computing' ? 'var(--accent-amber)' : hashOk ? 'var(--chain)' : 'var(--status-blocked)'}`,
+            borderRadius: 'var(--radius)',
+            background: hashState === 'computing' ? 'var(--accent-amber-trace)' : hashOk ? '#5bd6a30a' : '#d65b7811',
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span className="eye">verdict</span>
               <span
-                key={`${hashOk}-${computedHash}`}
-                className={hashOk ? 'motion--settle' : 'motion--mismatch'}
+                key={`${hashState}-${hashOk}-${computedHash}`}
+                className={hashState === 'computing' ? 'motion--pulse' : hashOk ? 'motion--settle' : 'motion--mismatch'}
                 style={{
-                  fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 22,
-                  letterSpacing: '0.08em', color: hashOk ? 'var(--chain)' : 'var(--status-blocked)', lineHeight: 1,
+                  fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 22, letterSpacing: '0.08em',
+                  color: hashState === 'computing' ? 'var(--accent-amber)' : hashOk ? 'var(--chain)' : 'var(--status-blocked)',
+                  lineHeight: 1,
                 }}
               >
-                {hashState === 'computing' ? '… COMPUTING' : hashOk ? '● HASH OK' : '● MISMATCH'}
+                {hashState === 'computing' ? '● COMPUTING' : hashOk ? '● HASH OK' : '● MISMATCH'}
               </span>
             </div>
             <div style={{ display: 'grid', gap: 4 }}>
               <span className="label">computed (in-browser, {duration} ms)</span>
-              <span className="mono" style={{
-                fontSize: 11.5, color: hashOk ? 'var(--chain)' : 'var(--status-blocked)',
-                letterSpacing: '0.02em', fontVariantLigatures: 'none', wordBreak: 'break-all',
-              }}>
-                {computedHash ? `${computedHash.slice(0, 16)}…${computedHash.slice(-16)}` : '— —'}
-              </span>
+              <HashSpecimen value={computedHash} size="sm" tone={hashOk ? 'chain' : 'err'} truncate ends={16} />
             </div>
             <div style={{ display: 'grid', gap: 4 }}>
               <span className="label">claimed (compiler_output_hash)</span>
-              <span className="hash" style={{ fontSize: 11.5 }}>
-                {claimedHash ? `${claimedHash.slice(0, 16)}…${claimedHash.slice(-16)}` : '—'}
-              </span>
+              <HashSpecimen value={claimedHash} size="sm" tone="chain" truncate ends={16} />
             </div>
           </div>
           <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
@@ -336,10 +366,26 @@ export function VpmProofView() {
 
   const selected = rows.find((r) => r.commitment_hex === selectedHex) || rows[0] || null
 
+  // v2 · item A — eyebrow: registry size + selected proof state.
+  useViewEyebrow({
+    num: '04',
+    name: 'VPM · PROOFS',
+    status: isError ? 'BRIDGE OFFLINE' : selected ? (selected.visual_state || '').toUpperCase() : 'NO ARTIFACTS',
+    statusTone: isError ? 'blocked' : selected?.visual_state === 'live' ? 'live' : selected ? 'pending' : 'dormant',
+    readouts: [
+      { label: 'ARTIFACTS', value: isError ? '—' : String(rows.length), tone: 'chain' },
+      { label: 'RENDER', value: 'NO-STORE', tone: 'amber' },
+    ],
+  })
+
   return (
     <div className="qt-design-root" style={{
-      display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr)', gap: 16, padding: 16,
-      height: '100%', minHeight: 0, overflow: 'hidden',
+      // Page-scrolls vertically: the gallery + the full-height proof card + the
+      // inspector flow as one scrollable page so the WHOLE card is viewable
+      // (was a fixed-height grid that clipped tall certificates into the
+      // iframe's own scrollbar).
+      display: 'grid', gridTemplateRows: 'auto auto', gap: 16, padding: 16,
+      height: '100%', minHeight: 0, overflowY: 'auto', overflowX: 'hidden',
     }}>
       {/* TOP — filter chips + gallery rail */}
       <Panel padding={false}>
@@ -387,9 +433,10 @@ export function VpmProofView() {
         </div>
       </Panel>
 
-      {/* BOTTOM — proof stage + inspector */}
+      {/* BOTTOM — proof stage + inspector (top-aligned; each sizes to content
+          so the proof card renders full-height and the page scrolls to it) */}
       {selected ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 360px', gap: 16, minHeight: 0 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 360px', gap: 16, alignItems: 'start' }}>
           <VpmProofStage row={selected} tamperByte={tamperByte} onText={setSrcText} />
           <VpmInspector
             row={selected}
@@ -400,8 +447,8 @@ export function VpmProofView() {
           />
         </div>
       ) : (
-        <div style={{ display: 'grid', placeItems: 'center', minHeight: 0 }}>
-          <span className="eye" style={{ fontSize: 12, letterSpacing: '0.18em' }}>
+        <div style={{ display: 'grid', placeItems: 'center', minHeight: 360 }}>
+          <span className="eye" style={{ fontSize: 12, letterSpacing: '0.14em' }}>
             {isError ? 'BRIDGE OFFLINE' : 'SELECT AN ARTIFACT'}
           </span>
         </div>
