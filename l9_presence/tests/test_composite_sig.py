@@ -325,3 +325,105 @@ def test_label_registry_complete():
         C.LABEL_MLDSA44,
         C.LABEL_SLHDSA128S,
     }
+
+
+# ===========================================================================
+# v1.1 capability extension — public-key wire format (backlog #8)
+# encode_pubkey / decode_pubkey. Same KAT discipline as the signature vectors.
+# ===========================================================================
+
+import slhdsa  # noqa: E402
+from cryptography.hazmat.primitives.asymmetric import ec as _ec  # noqa: E402
+
+_FIXED_EC_PUB = _ec.derive_private_key(0x1111, _ec.SECP256R1()).public_key()
+
+# Byte-pinned blob digests for FIXED inputs (fixed-scalar ec pubkey + deterministic
+# pq_raw = bytes(range(n) & 0xFF)). PQ keygen is random per run, so the byte-pin is
+# over fixed-input construction; the round-trip property tests random keys.
+_PUBKEY_KAT_SHA256 = {
+    C.LABEL_MLDSA65: ("4850642d5b222834d51f5c6221077346ca00eff39efafc9b628dfa690b5bafd8", 1952, 2058),
+    C.LABEL_MLDSA44: ("3634a7e27263d9bd4223bca20930a96523bbf40f1ac5611f21a4f390bdd58e97", 1312, 1418),
+    C.LABEL_SLHDSA128S: ("872b9b8ad257738b9135eb3941de648d391bc7746e56d367d5199f8b1375232a", 32, 152),
+}
+
+
+def _fixed_pubkey(alg, n):
+    pq_raw = bytes([i & 0xFF for i in range(n)])
+    if alg.pq_kind == "slhdsa128s":
+        pqpub = slhdsa.PublicKey((pq_raw[:16], pq_raw[16:]), slhdsa.sha2_128s)
+    else:
+        pqpub = pq_raw
+    return C.CompositePublicKey(alg=alg, ec_public=_FIXED_EC_PUB, pq_public=pqpub)
+
+
+@pytest.mark.parametrize("alg", ALL_ALGS, ids=lambda a: a.label.decode())
+def test_pubkey_byte_pinned_kat(alg):
+    digest, n, exp_len = _PUBKEY_KAT_SHA256[alg.label]
+    blob = C.encode_pubkey(_fixed_pubkey(alg, n))
+    assert len(blob) == exp_len
+    assert hashlib.sha256(blob).hexdigest() == digest
+
+
+@pytest.mark.parametrize("alg", ALL_ALGS, ids=lambda a: a.label.decode())
+def test_pubkey_envelope_structure(alg):
+    # version(1) || label_len(1) || label || ec_len(2) || ec_point(65) || pq_len(4) || pq_raw
+    blob = C.encode_pubkey(_fixed_pubkey(alg, C._PQ_PUBKEY_LEN[alg.pq_kind]))
+    assert blob[0] == 0x01
+    assert blob[1] == len(alg.label)
+    off = 2 + len(alg.label)
+    ec_len = int.from_bytes(blob[off:off + 2], "big"); off += 2
+    assert ec_len == 65
+    assert blob[off] == 0x04  # SEC1 uncompressed prefix
+    off += ec_len
+    pq_len = int.from_bytes(blob[off:off + 4], "big")
+    assert pq_len == C._PQ_PUBKEY_LEN[alg.pq_kind]
+
+
+@pytest.mark.parametrize("alg", MLDSA_ALGS + [C.ALG_SLHDSA128S_ECDSA_P256_SHA256],
+                         ids=lambda a: a.label.decode())
+def test_pubkey_roundtrip_and_functional(alg):
+    # round-trip on REAL random keys: encode -> decode -> re-encode is identical,
+    # and a signature made by the keypair verifies under the DECODED public key.
+    kp = C.generate_keypair(alg)
+    blob = C.encode_pubkey(kp.public())
+    decoded = C.decode_pubkey(blob)
+    assert C.encode_pubkey(decoded) == blob
+    sig = C.sign(kp, CTX, M)
+    assert C.verify(decoded, CTX, M, sig) is True
+
+
+def test_pubkey_version_byte_strict_acceptance():
+    # Forward-compatibility lock: ONLY version=0x01 is accepted.
+    blob = bytearray(C.encode_pubkey(C.generate_keypair(C.ALG_MLDSA44_ECDSA_P256_SHA256).public()))
+    assert C.decode_pubkey(bytes(blob)) is not None  # 0x01 accepted
+    for bad in (0x00, 0x02, 0xFF):
+        with pytest.raises(ValueError, match="version"):
+            C.decode_pubkey(bytes([bad]) + bytes(blob[1:]))
+
+
+def test_pubkey_malformed_rejected():
+    good = C.encode_pubkey(C.generate_keypair(C.ALG_MLDSA44_ECDSA_P256_SHA256).public())
+    with pytest.raises(ValueError):
+        C.decode_pubkey(good + b"\x00")          # trailing bytes
+    with pytest.raises(ValueError):
+        C.decode_pubkey(good[:-5])               # truncated pq
+    with pytest.raises(ValueError, match="unknown composite label"):
+        # valid frame, unknown label
+        bad = bytes([0x01, 4]) + b"NOPE" + (65).to_bytes(2, "big") + b"\x04" + b"\x00" * 64 + (32).to_bytes(4, "big") + b"\x00" * 32
+        C.decode_pubkey(bad)
+
+
+def test_pubkey_wrong_pq_width_rejected():
+    # an ML-DSA-44 label with an ML-DSA-65-sized pq field must be rejected
+    kp = C.generate_keypair(C.ALG_MLDSA65_ECDSA_P256_SHA512)
+    blob = C.encode_pubkey(kp.public())  # label=MLDSA65, pq=1952
+    # relabel to MLDSA44 (expects 1312) while keeping the 1952-byte pq → width mismatch
+    relabeled = bytearray(blob)
+    # replace label bytes (both labels differ in length, so rebuild via decode is easier):
+    # construct a frame with MLDSA44 label but 1952 pq
+    lbl = C.LABEL_MLDSA44
+    ec_point = b"\x04" + b"\x11" * 64
+    pq = b"\x00" * 1952
+    forged = bytes([0x01, len(lbl)]) + lbl + (65).to_bytes(2, "big") + ec_point + (1952).to_bytes(4, "big") + pq
+    with pytest.raises(ValueError, match="must be 1312 bytes"):
+        C.decode_pubkey(forged)
