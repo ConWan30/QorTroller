@@ -7550,6 +7550,34 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
+    # Phase B backlog #8 — POST /operator/ipact-challenge
+    # ------------------------------------------------------------------
+    # Issue a fresh iPACT re-attestation challenge (bridge-issued 32-byte CSPRNG
+    # nonce, single-use + TTL). The device composite-signs the nonce (①) under the
+    # dedicated CHALLENGE_TAG; VHPRenewalAgent verifies + computes the reattest_proof.
+    # Stdlib-only path (no PQ libs) — the verify (composite_sig) is lazy-imported in
+    # the agent only when enforcement is ON.
+    @app.post("/operator/ipact-challenge")
+    def issue_ipact_challenge(
+        device_id: str = Query(..., description="Device requesting a re-attestation challenge"),
+        api_key: str = Query(..., description="Shared operator API key"),
+    ):
+        """Issue a fresh iPACT re-attestation challenge (Phase B #8).
+
+        Returns: challenge_id, device_id, nonce_hex (32B), expires_at, challenge_tag.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        from .ipact_challenge import SHARED_CHALLENGE_STORE, CHALLENGE_TAG
+        ch = SHARED_CHALLENGE_STORE.issue(device_id)
+        return {
+            "challenge_id": ch.challenge_id,
+            "device_id": ch.device_id,
+            "nonce_hex": ch.nonce.hex(),
+            "expires_at": ch.expires_at,
+            "challenge_tag": CHALLENGE_TAG.decode(),
+        }
+
     # Phase 236-CORPUS-SNAPSHOT — GET /agent/corpus-snapshot-status
     # ------------------------------------------------------------------
     # Read-only audit surface for the corpus-snapshot chain (the third
