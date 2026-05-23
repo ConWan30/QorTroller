@@ -38,6 +38,7 @@ import { OverlayPanel, StatusChip, HashSpecimen } from '../design/Primitives'
 import { useChainPulse, useRelativeTime } from '../design/motion'
 import { useQtTweaks, LevelUpBadge } from '../design/Tweaks'
 import { useViewEyebrow } from '../design/Eyebrow'
+import { usePublicGicLinks } from '../api/publicForensic'
 import { GicChainConstellation } from '../design/GicChainConstellation'
 import '../design/qortroller-kit.css'
 
@@ -617,6 +618,10 @@ export function GamerView() {
   const { data: grindAnalytics }  = useGrindAnalytics()
   const { data: pccIntelligence } = usePCCIntelligence()
   const { data: apop }            = useActivePlayOccupancy()
+  // Per-link GIC records (oldest-first → orb i maps to links[i]) for the
+  // verdict-coloured constellation. Public, no-auth, PII-safe; polled slowly
+  // (links only grow). Degrades to uniform chain-green if unavailable.
+  const { data: gicLinks }        = usePublicGicLinks(grindChain?.grind_session_id)
   // Real per-category consent: device_id is the gamer's wallet (lower-cased,
   // no 0x), matching ConsentPanel.jsx + the bridge consent_ledger row key.
   const { address }               = useAccount()
@@ -651,6 +656,17 @@ export function GamerView() {
   // This reflects actual bridge reachability — not a mock flag — and drives the
   // panels' honest "—" / STALE states.
   const bridgeOffline = !captureHealth && !grindChain
+
+  // Constellation v2 inputs — all REAL polled state (never fabricated):
+  //  • links      → per-orb verdict colour + contested-host rim
+  //  • present    → web breathes when a human is actually on the controller
+  //                 (capture NOMINAL and not navigating a menu); stills on AFK
+  //  • chainBroken→ fracture the chain at the head when chain_intact is false
+  const gicChainLinks = gicLinks?.links ?? null
+  const present = !bridgeOffline
+    && captureHealth?.capture_state === 'NOMINAL'
+    && captureHealth?.latest_gameplay_context !== 'MENU_DETECTED'
+  const chainBroken = intact === false && chainLen > 0
 
   // GIC chain display mode — orb-web constellation (default) vs classic ribbon,
   // gamer-selectable via Tweaks. Constellation frees the bottom strip, so the
@@ -698,6 +714,7 @@ export function GamerView() {
         <GicChainConstellation
           chainLen={chainLen} target={target}
           paused={paused} bridgeDown={bridgeOffline}
+          links={gicChainLinks} present={present} broken={chainBroken}
         />
       )}
 
