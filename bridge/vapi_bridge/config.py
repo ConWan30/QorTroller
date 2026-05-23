@@ -1147,6 +1147,19 @@ class Config:
     )
     """Renew VHPs expiring within this many days (Phase 102)."""
 
+    # Phase B item ③ — iPACT-DePIN renewal cadence (QORTROLLER-IPACT-RENEWAL-v1)
+    ipact_renewal_enforcement_enabled: bool = field(
+        default_factory=lambda: _env_bool("IPACT_RENEWAL_ENFORCEMENT_ENABLED", False)
+    )
+    """Phase B ③ — when True, a VHP renewal REQUIRES a valid fresh re-attestation proof
+    (default validator: ① composite-sig over a bridge-issued challenge), closing the
+    dormant-blind gap. DEFAULT-OFF: when False, the renewal-cadence commitment chain still
+    accumulates (with NO_REATTEST_PROOF sentinel) for the observation period, but renewals
+    are NOT gated — behavior is byte-identical to pre-③. Flip-on is a separate tracked
+    governance event (its own observation period + V-check + commit lineage). Until that
+    flip, the dormant-blind vulnerability remains OPEN. See
+    wiki/methodology/ipact_renewal_cadence_v1_scope.md §0."""
+
     # Phase 104 — Persistent Activation + PMI
     protocol_maturity_enabled: bool = field(
         default_factory=lambda: _env_bool("PROTOCOL_MATURITY_ENABLED", True)
