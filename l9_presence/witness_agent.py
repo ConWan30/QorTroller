@@ -130,19 +130,36 @@ def make_hardware_callbacks(buzz_timeout_s: float = 1.2, sham_timeout_s: float =
         ds = state["ds"]
         if ds is None:
             return None
-        base = _snapshot(ds); _fire(ds); t0 = _t.time(); lat = None
-        while _t.time() - t0 < buzz_timeout_s:
-            if reaction_detected(base, _snapshot(ds)):
-                lat = (_t.time() - t0) * 1000.0
-                break
-            _t.sleep(0.001)
-        _stop(ds); _t.sleep(0.4)
-        base2 = _snapshot(ds); t1 = _t.time(); sham = False     # no-buzz control
-        while _t.time() - t1 < sham_timeout_s:
-            if reaction_detected(base2, _snapshot(ds)):
+
+        def _settle(ms: float = 400.0, timeout_s: float = 3.0) -> bool:
+            """Wait until input is below the reaction threshold continuously for `ms` (hand at
+            rest), so a measurement window isn't contaminated by residual/anticipatory motion."""
+            base = _snapshot(ds); quiet0 = _t.time(); t0 = _t.time()
+            while _t.time() - t0 < timeout_s:
+                if reaction_detected(base, _snapshot(ds)):
+                    base = _snapshot(ds); quiet0 = _t.time()      # movement -> restart quiet clock
+                elif (_t.time() - quiet0) * 1000.0 >= ms:
+                    return True
+                _t.sleep(0.005)
+            return False
+
+        # SHAM FIRST — measure stillness BEFORE the buzz primes the hand to react
+        _settle()
+        base_s = _snapshot(ds); ts = _t.time(); sham = False
+        while _t.time() - ts < sham_timeout_s:
+            if reaction_detected(base_s, _snapshot(ds)):
                 sham = True
                 break
             _t.sleep(0.001)
+        # BUZZ — settle again, then fire + capture the reflex
+        _settle()
+        base_b = _snapshot(ds); _fire(ds); tb = _t.time(); lat = None
+        while _t.time() - tb < buzz_timeout_s:
+            if reaction_detected(base_b, _snapshot(ds)):
+                lat = (_t.time() - tb) * 1000.0
+                break
+            _t.sleep(0.001)
+        _stop(ds)
         return {"reflex_latency_ms": lat, "sham_reaction": sham}
 
     def release_active():
