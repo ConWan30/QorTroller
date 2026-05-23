@@ -68,7 +68,7 @@ from typing import Callable, Optional
 
 # --- classical half -------------------------------------------------------
 from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.ec import (
     EllipticCurvePrivateKey,
@@ -420,3 +420,129 @@ def verify(
     if not alg._backend().verify(public.pq_public, mprime, pq_sig, native_ctx=alg.label):
         return False
     return True
+
+
+# ===========================================================================
+# v1.1 capability extension - public-key wire format (backlog #8)
+# See wiki/methodology/composite_sig_v1_scope.md §9. Capability extension, NOT a
+# spec change: M' construction, tier table, OIDs, divergences all UNTOUCHED.
+# ===========================================================================
+
+#: Expected ML-DSA / SLH-DSA raw public-key lengths per pq_kind (FIPS 204 / 205).
+_PQ_PUBKEY_LEN = {
+    "mldsa65": 1952,      # FIPS 204
+    "mldsa44": 1312,      # FIPS 204
+    "slhdsa128s": 32,     # FIPS 205 (PK.seed16 || PK.root16)
+}
+
+
+def _ec_pubkey_to_bytes(ec_public: EllipticCurvePublicKey) -> bytes:
+    """SEC1 uncompressed P-256 point: 0x04 || X(32) || Y(32) = 65 bytes."""
+    return ec_public.public_bytes(
+        serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint
+    )
+
+
+def _pq_pubkey_to_bytes(alg: CompositeAlg, pq_public: object) -> bytes:
+    """Raw PQ public-key bytes per tier.
+
+    ML-DSA: quantcrypt returns the public key as raw FIPS-204 bytes already.
+    SLH-DSA-128s: slh-dsa exposes PublicKey.key == (PK.seed16, PK.root16); concatenate
+    key[0] || key[1] = FIPS-205 §10 canonical pk = PK.seed || PK.root (seed first).
+    """
+    if alg.pq_kind == "slhdsa128s":
+        seed, root = pq_public.key  # (PK.seed16, PK.root16) - FIPS-205 tuple order
+        return bytes(seed) + bytes(root)
+    return bytes(pq_public)  # ML-DSA: raw FIPS-204 bytes
+
+
+def encode_pubkey(public: CompositePublicKey) -> bytes:
+    """Serialize a CompositePublicKey to the v1.1 wire format.
+
+        version(1)=0x01 || label_len(1) || label
+        || ec_len(2,BE) || ec_point(65, SEC1 uncompressed)
+        || pq_len(4,BE) || pq_pubkey_raw (1952 / 1312 / 32 per tier)
+
+    Length-prefixed framing mirrors encode_composite. Deterministic / byte-pinnable.
+    """
+    alg = public.alg
+    ec_point = _ec_pubkey_to_bytes(public.ec_public)
+    pq_raw = _pq_pubkey_to_bytes(alg, public.pq_public)
+    if len(alg.label) > 255:
+        raise ValueError("label too long")
+    if len(ec_point) >= (1 << (8 * _EC_LEN_BYTES)):
+        raise ValueError("ec_point too long for framing")
+    if len(pq_raw) >= (1 << (8 * _PQ_LEN_BYTES)):
+        raise ValueError("pq_pubkey too long for framing")
+    return (
+        bytes([_WIRE_VERSION])
+        + bytes([len(alg.label)])
+        + alg.label
+        + len(ec_point).to_bytes(_EC_LEN_BYTES, "big")
+        + ec_point
+        + len(pq_raw).to_bytes(_PQ_LEN_BYTES, "big")
+        + pq_raw
+    )
+
+
+def decode_pubkey(blob: bytes) -> CompositePublicKey:
+    """Inverse of ``encode_pubkey``. Reconstructs a CompositePublicKey.
+
+    Forward-compatibility: accepts ONLY version=0x01. A future v2 of the pubkey wire
+    format requires a new domain tag/Label or a new function (e.g. encode_pubkey_v2),
+    NOT a version-range expansion. Version-byte changes are explicit freeze events.
+
+    Raises ValueError on any malformation (truncation, trailing bytes, unknown version,
+    unknown label, wrong-width fields).
+    """
+    try:
+        mv = memoryview(blob)
+        if len(mv) < 2:
+            raise ValueError("too short")
+        if mv[0] != _WIRE_VERSION:
+            raise ValueError(f"unknown wire version {mv[0]} (only 0x01 accepted)")
+        off = 1
+        label_len = mv[off]
+        off += 1
+        label = bytes(mv[off : off + label_len])
+        if len(label) != label_len:
+            raise ValueError("truncated label")
+        off += label_len
+        ec_len = int.from_bytes(mv[off : off + _EC_LEN_BYTES], "big")
+        off += _EC_LEN_BYTES
+        ec_point = bytes(mv[off : off + ec_len])
+        if len(ec_point) != ec_len:
+            raise ValueError("truncated ec_point")
+        off += ec_len
+        pq_len = int.from_bytes(mv[off : off + _PQ_LEN_BYTES], "big")
+        off += _PQ_LEN_BYTES
+        pq_raw = bytes(mv[off : off + pq_len])
+        if len(pq_raw) != pq_len:
+            raise ValueError("truncated pq_pubkey")
+        off += pq_len
+        if off != len(mv):
+            raise ValueError("trailing bytes")
+    except (IndexError, ValueError) as e:
+        raise ValueError(f"malformed composite pubkey: {e}") from None
+
+    alg = ALGS_BY_LABEL.get(label)
+    if alg is None:
+        raise ValueError(f"unknown composite label {label!r}")
+    if ec_len != 65:
+        raise ValueError(f"ec_point must be 65 bytes (SEC1 uncompressed), got {ec_len}")
+    expected_pq = _PQ_PUBKEY_LEN[alg.pq_kind]
+    if pq_len != expected_pq:
+        raise ValueError(
+            f"pq_pubkey for {alg.pq_kind} must be {expected_pq} bytes, got {pq_len}"
+        )
+    # reconstruct ECDSA-P256 public key from the SEC1 uncompressed point
+    try:
+        ec_public = ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), ec_point)
+    except ValueError as e:
+        raise ValueError(f"invalid ec_point: {e}") from None
+    # reconstruct the PQ public key
+    if alg.pq_kind == "slhdsa128s":
+        pq_public: object = _slhdsa.PublicKey((pq_raw[:16], pq_raw[16:]), _slhdsa.sha2_128s)
+    else:
+        pq_public = pq_raw  # ML-DSA: raw bytes consumed directly by the backend verify
+    return CompositePublicKey(alg=alg, ec_public=ec_public, pq_public=pq_public)
