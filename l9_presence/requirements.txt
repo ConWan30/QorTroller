@@ -1,0 +1,9 @@
+# l9_presence sub-project dependencies.
+#
+# composite_sig.py (Phase B item ①) — composite classical+PQ credential signatures:
+cryptography>=46          # ECDSA-P256 + SHA-256/512 (classical half)
+quantcrypt==1.0.1         # ML-DSA-44 / ML-DSA-65 (PQClean ml-dsa-44 / ml-dsa-65)
+slh-dsa==0.2.2            # SLH-DSA-SHA2-128s (FIPS-205; KAT-validated 42/42 NIST ACVP sigVer-128s)
+#
+# PoEP / L9 / BCC empirical probes (pre-existing l9_presence modules):
+numpy
