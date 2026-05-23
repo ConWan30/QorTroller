@@ -849,7 +849,7 @@ INVARIANTS: list[Invariant] = [
     ),
     Invariant(
         id="INV-MYTHOS-FAMILIES-001",
-        description="Mythos-Crypto _PATTERN_017_FROZEN_TAGS frozenset declaration pinned (Priority 5). 11 commitment families per the empirical audit finding 2026-05-15 (CLAUDE.md previously stated 10; PHYSICAL_DATA_ATTESTATION v1 confirmed as 11th by its own module docstring). The frozenset declaration line is pinned; the contents are pinned by the per-family domain tag literals being checked by their own existing invariants.",
+        description="Mythos-Crypto _PATTERN_017_FROZEN_TAGS frozenset declaration pinned (Priority 5). 12 commitment families: PHYSICAL_DATA_ATTESTATION v1 was the 11th (2026-05-15 audit finding; CLAUDE.md previously stated 10), and VAPI-O3-SUPERSEDE-v1 registered as the 12th 2026-05-23 per Decision O3-CLASS=A. The frozenset declaration line is pinned; the contents are pinned by the per-family domain tag literals being checked by their own existing invariants.",
         file="bridge/vapi_bridge/mythos_variants.py",
         pattern=r"_PATTERN_017_FROZEN_TAGS: frozenset\[bytes\] = frozenset",
         min_matches=1,
@@ -911,7 +911,7 @@ INVARIANTS: list[Invariant] = [
     ),
     Invariant(
         id="INV-MLGA-CAPABILITY-NOT-FAMILY-001",
-        description='Phase O5-MLGA: b"VAPI-MLGA-SESSION-v1" must appear in _KNOWN_CAPABILITY_TAGS in bridge/vapi_bridge/mythos_variants.py (NOT in _PATTERN_017_FROZEN_TAGS). MLGA is a capability tag per the POSEIDON-BN254-AS reframe precedent; commitment-family count stays 10 + PHYSICAL_DATA_ATTESTATION = 11 (per the Mythos-Crypto empirical correction). MLGA-LESSON-001 ratified.',
+        description='Phase O5-MLGA: b"VAPI-MLGA-SESSION-v1" must appear in _KNOWN_CAPABILITY_TAGS in bridge/vapi_bridge/mythos_variants.py (NOT in _PATTERN_017_FROZEN_TAGS). MLGA is a capability tag per the POSEIDON-BN254-AS reframe precedent; commitment-family count is 12 (10 base + PHYSICAL_DATA_ATTESTATION + VAPI-O3-SUPERSEDE-v1) while MLGA stays a capability tag, not a family. MLGA-LESSON-001 ratified.',
         file="bridge/vapi_bridge/mythos_variants.py",
         pattern=r'b"VAPI-MLGA-SESSION-v1"',
         min_matches=1,
