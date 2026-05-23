@@ -281,8 +281,379 @@
   height: 100%;
 }
 
+/* ── Specimen frame (v2 · item C) — the evidence-room corner brackets from the
+   VPM certificate, reusable anywhere bytes-as-evidence appears (PoAC byte
+   table on Forensic, the proof stage on VPM, the byte/formula blocks on the
+   Reference codex). Accent defaults to chain-green (cryptographic evidence);
+   override per-instance with --qt-specimen-accent. Two diagonal brackets,
+   matching the certificate. ── */
+.qt-design-root .qt-specimen { position: relative; }
+.qt-design-root .qt-specimen::before,
+.qt-design-root .qt-specimen::after {
+  content: "";
+  position: absolute;
+  width: 16px; height: 16px;
+  border: 1px solid var(--qt-specimen-accent, var(--chain));
+  pointer-events: none;
+}
+/* offsets at 0 (not -1px) so brackets stay visible inside overflow:hidden
+   containers like the VPM proof stage */
+.qt-design-root .qt-specimen::before { top: 0;    left: 0;  border-right: 0; border-bottom: 0; }
+.qt-design-root .qt-specimen::after  { bottom: 0; right: 0; border-left: 0;  border-top: 0; }
+
 /* Scrollbar — barely there, scoped to design views */
 .qt-design-root ::-webkit-scrollbar { width: 6px; height: 6px; }
 .qt-design-root ::-webkit-scrollbar-track { background: transparent; }
 .qt-design-root ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
 .qt-design-root ::-webkit-scrollbar-thumb:hover { background: var(--text-faint); }
+
+/* ============================================================
+   GAMER-VIBE OVERLAYS — opt-in via the Tweaks panel.
+   Ported faithfully from the newer Claude-Design export iteration
+   ("Create stunning animations and aesthetics that align with what
+   gamers would enjoy looking at when opening their qortroller
+   dashboard", chat 2026-05-20). Default state is forensic-restraint;
+   these only activate when the gamer opts in via Tweaks.
+
+   Honesty discipline preserved: green is still earned (real SHA-256
+   lives in ForensicView), every red/amber state keeps its text label,
+   and the active vibe is announced in the foot label.
+
+   Driven by CSS custom properties the QtTweaksProvider pushes onto
+   :root (and clears on unmount):
+     --qt-glow            0..1   glow intensity for halos/breath
+     --qt-breath          <s>    twin / panel breathing period
+     --qt-scanline-alpha  0..1   scanline darkness
+     --qt-accent          <hex>  gamer accent (cyan / pink / etc.)
+   ============================================================ */
+
+/* ── Reality heartbeat dot (v2 · item D) — global (renders in the strips,
+   outside .qt-design-root). Gentle 2s respiration while live. ── */
+.qt-live-pulse { animation: qt-live-pulse 2s ease-in-out infinite; }
+@keyframes qt-live-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .qt-live-pulse { animation: none; } }
+
+/* ── Scanlines — CRT-style horizontal lines drifting down the viewport ── */
+.qt-scanlines-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 100;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 2px,
+    rgba(0, 0, 0, calc(0.5 * var(--qt-scanline-alpha, 0.24))) 2px,
+    rgba(0, 0, 0, calc(0.5 * var(--qt-scanline-alpha, 0.24))) 3px
+  );
+  animation: qt-scanline-drift 8s linear infinite;
+  mix-blend-mode: multiply;
+}
+@keyframes qt-scanline-drift {
+  from { background-position: 0 0; }
+  to   { background-position: 0 12px; }
+}
+
+/* ── CRT — radial vignette + subtle chromatic aberration on the edges ── */
+.qt-crt-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 101;
+  background:
+    radial-gradient(ellipse 110% 90% at center, transparent 55%, rgba(0, 0, 0, 0.55) 100%);
+  box-shadow:
+    inset  2px 0 0 rgba(255, 80, 80,  0.08),
+    inset -2px 0 0 rgba(80, 200, 255, 0.08);
+}
+
+/* ── Film grain — animated noise via inline SVG fractal ── */
+.qt-noise-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 102;
+  opacity: 0.08;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.8  0 0 0 0 0.85  0 0 0 0 0.9  0 0 0 0.5 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  animation: qt-noise-jitter 0.32s steps(2) infinite;
+  mix-blend-mode: overlay;
+}
+@keyframes qt-noise-jitter {
+  0%   { transform: translate(0, 0); }
+  25%  { transform: translate(-1%, 1%); }
+  50%  { transform: translate(1%, -1%); }
+  75%  { transform: translate(-1%, -1%); }
+  100% { transform: translate(1%, 1%); }
+}
+
+/* ── Hash storm canvas — positioned by JS; floats over the twin scene
+   (z2, below the corner overlay panels at z3) and never intercepts input ── */
+.qt-storm-canvas { pointer-events: none; }
+
+/* ── Twin-breath vignette — the "alive" pulse; respires at --qt-breath ── */
+.qt-design-root .qt-twin-breath {
+  animation: qt-vignette-breath var(--qt-breath, 2.8s) ease-in-out infinite;
+}
+@keyframes qt-vignette-breath {
+  0%, 100% { opacity: 0.85; }
+  50%      { opacity: 1; }
+}
+
+/* ── Glow intensity — additive halos scaled by --qt-glow.
+   At 0 these add nothing; the design's forensic default is 0.35. ── */
+.qt-design-root .overlay-panel--accent {
+  box-shadow:
+    0 0 0 1px var(--accent-amber-soft),
+    0 0 calc(28px * var(--qt-glow, 0.35)) calc(-8px * var(--qt-glow, 0.35)) var(--accent-amber);
+}
+.qt-design-root .p-panel--breath {
+  animation:
+    qt-breath var(--qt-breath, 2.8s) ease-in-out infinite,
+    qt-breath-glow var(--qt-breath, 2.8s) ease-in-out infinite;
+}
+@keyframes qt-breath-glow {
+  50% {
+    box-shadow:
+      0 0 0 1px var(--border-strong),
+      0 0 calc(36px * var(--qt-glow, 0.35)) calc(-8px * var(--qt-glow, 0.35)) #5bd6a3;
+  }
+}
+.qt-design-root .ribbon__cell--latest {
+  box-shadow:
+    0 0 calc(12px * var(--qt-glow, 0.35)) #5bd6a3,
+    inset 0 0 calc(8px * var(--qt-glow, 0.35)) #5bd6a3aa;
+}
+
+/* ── GIC landing FX — one-shot animations on the freshest ribbon cell.
+   Mode chosen via .ribbon__cell--fx-{pulse|bloom|shockwave}; "off" = no class ── */
+.qt-design-root .ribbon__cell--fx-pulse {
+  animation: qt-land 480ms var(--ease-instrument);
+}
+.qt-design-root .ribbon__cell--fx-bloom {
+  animation: qt-fx-bloom 640ms var(--ease-instrument);
+}
+@keyframes qt-fx-bloom {
+  0%   { transform: scaleY(0.6); opacity: 0; filter: brightness(2); }
+  40%  { transform: scaleY(1.6); opacity: 1; filter: brightness(2.4); box-shadow: 0 0 24px #5bd6a3; }
+  100% { transform: scaleY(1);   opacity: 1; filter: brightness(1);   box-shadow: 0 0 6px #5bd6a3; }
+}
+.qt-design-root .ribbon__cell--fx-shockwave { position: relative; }
+.qt-design-root .ribbon__cell--fx-shockwave::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border: 1px solid #5bd6a3;
+  border-radius: 2px;
+  animation: qt-fx-shock 700ms var(--ease-instrument);
+  pointer-events: none;
+}
+@keyframes qt-fx-shock {
+  0%   { transform: scale(1); opacity: 1; }
+  100% { transform: scale(3); opacity: 0; }
+}
+
+/* ── "Level up" badge — when the chain crosses a multiple of 10 it flashes
+   briefly from the top center. Subtle, not gameshow. ── */
+.qt-levelup {
+  position: fixed;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 200;
+  pointer-events: none;
+  padding: 10px 22px;
+  background: rgba(10, 14, 20, 0.92);
+  border: 1px solid var(--accent-amber, #f0a868);
+  border-radius: 4px;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 13px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent-amber, #f0a868);
+  text-align: center;
+  animation: qt-levelup 1600ms var(--ease-instrument, ease) forwards;
+  box-shadow: 0 0 32px -4px var(--accent-amber, #f0a868);
+}
+.qt-levelup__big {
+  display: block;
+  font-family: var(--font-display, 'Syne', sans-serif);
+  font-weight: 800;
+  font-size: 24px;
+  letter-spacing: 0.04em;
+  color: var(--accent-amber, #f0a868);
+  margin-top: 4px;
+  line-height: 1;
+}
+@keyframes qt-levelup {
+  0%   { opacity: 0; transform: translate(-50%, -20px) scale(0.95); }
+  18%  { opacity: 1; transform: translate(-50%,   0)  scale(1); }
+  78%  { opacity: 1; transform: translate(-50%,   0)  scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -10px) scale(0.98); }
+}
+
+/* ── Tweaks toggle + foot vibe label (production-adapted, brand-dark) ── */
+.qt-tweaks-toggle {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2147483646;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 13px;
+  background: rgba(10, 14, 20, 0.92);
+  border: 1px solid var(--border-strong, #2a3850);
+  border-radius: 4px;
+  backdrop-filter: blur(6px);
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim, #8a98ab);
+  cursor: pointer;
+  transition: color 150ms, border-color 150ms;
+}
+.qt-tweaks-toggle:hover { color: var(--accent-amber, #f0a868); border-color: var(--accent-amber, #f0a868); }
+.qt-tweaks-toggle__star { color: var(--accent-amber, #f0a868); font-size: 12px; }
+.qt-tweaks-toggle[data-vibe="cinematic"],
+.qt-tweaks-toggle[data-vibe="arcade"] { color: var(--accent-amber, #f0a868); border-color: var(--accent-amber, #f0a868); }
+
+.qt-vibe-foot {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 2147483645;
+  pointer-events: none;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent-amber, #f0a868);
+}
+
+/* ── Brand-dark control panel (replaces the host-coupled light twk-panel
+   shell; same controls, same behavior, void-black instrument styling) ── */
+.qt-tweaks-panel {
+  position: fixed;
+  right: 16px;
+  bottom: 60px;
+  z-index: 2147483646;
+  width: 288px;
+  max-height: calc(100vh - 92px);
+  display: flex;
+  flex-direction: column;
+  background: rgba(8, 11, 17, 0.97);
+  border: 1px solid var(--border-strong, #2a3850);
+  border-radius: 6px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(12px);
+  overflow: hidden;
+  color: var(--text, #d4dde8);
+}
+.qt-tweaks-panel__hd {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 11px 12px 11px 14px;
+  border-bottom: 1px solid var(--border, #1b2433);
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--text, #d4dde8);
+}
+.qt-tweaks-panel__hd b { font-weight: 600; }
+.qt-tweaks-panel__x {
+  appearance: none; border: 0; background: transparent; cursor: pointer;
+  color: var(--text-faint, #5a6878); font-size: 14px; line-height: 1;
+  width: 22px; height: 22px; border-radius: 4px;
+}
+.qt-tweaks-panel__x:hover { color: var(--text, #d4dde8); background: rgba(255,255,255,0.05); }
+.qt-tweaks-panel__body {
+  padding: 12px 14px 16px;
+  display: flex; flex-direction: column; gap: 11px;
+  overflow-y: auto; overflow-x: hidden; min-height: 0;
+}
+.qt-tweaks-sect {
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 10px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--text-faint, #5a6878);
+  padding-top: 8px;
+}
+.qt-tweaks-sect:first-child { padding-top: 0; }
+.qt-tweaks-row { display: flex; flex-direction: column; gap: 6px; }
+.qt-tweaks-row--h { flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; }
+.qt-tweaks-lbl {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 11px; letter-spacing: 0.04em; color: var(--text-dim, #8a98ab);
+}
+.qt-tweaks-val { color: var(--text-faint, #5a6878); font-variant-numeric: tabular-nums; }
+
+/* segmented radio */
+.qt-tweaks-seg {
+  display: flex; padding: 2px; gap: 2px;
+  background: var(--panel-soft, #0b1119);
+  border: 1px solid var(--border, #1b2433);
+  border-radius: 4px;
+}
+.qt-tweaks-seg button {
+  appearance: none; flex: 1; min-width: 0; border: 0; cursor: pointer;
+  background: transparent; color: var(--text-dim, #8a98ab);
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase;
+  padding: 5px 4px; border-radius: 3px; line-height: 1.1;
+  transition: background 120ms, color 120ms;
+}
+.qt-tweaks-seg button[data-on="1"] {
+  background: var(--accent-amber-trace, rgba(240,168,104,0.08));
+  color: var(--accent-amber, #f0a868);
+  box-shadow: inset 0 0 0 1px var(--accent-amber-soft, rgba(240,168,104,0.35));
+}
+.qt-tweaks-seg button:hover { color: var(--text, #d4dde8); }
+
+/* toggle switch */
+.qt-tweaks-switch {
+  position: relative; width: 32px; height: 18px; flex-shrink: 0;
+  border: 0; border-radius: 999px; cursor: pointer; padding: 0;
+  background: var(--border-strong, #2a3850); transition: background 150ms;
+}
+.qt-tweaks-switch[data-on="1"] { background: var(--chain, #5bd6a3); }
+.qt-tweaks-switch i {
+  position: absolute; top: 2px; left: 2px; width: 14px; height: 14px;
+  border-radius: 50%; background: #04060a; transition: transform 150ms;
+}
+.qt-tweaks-switch[data-on="1"] i { transform: translateX(14px); }
+
+/* slider */
+.qt-tweaks-slider {
+  appearance: none; -webkit-appearance: none; width: 100%; height: 3px;
+  border-radius: 999px; background: var(--border-strong, #2a3850); outline: none;
+}
+.qt-tweaks-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 13px; height: 13px;
+  border-radius: 50%; background: var(--accent-amber, #f0a868); cursor: pointer;
+  box-shadow: 0 0 6px var(--accent-amber-soft, rgba(240,168,104,0.35));
+}
+.qt-tweaks-slider::-moz-range-thumb {
+  width: 13px; height: 13px; border: 0; border-radius: 50%;
+  background: var(--accent-amber, #f0a868); cursor: pointer;
+}
+
+/* accent swatch chips */
+.qt-tweaks-chips { display: flex; gap: 6px; }
+.qt-tweaks-chip {
+  appearance: none; flex: 1; height: 26px; border-radius: 4px; cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.12); padding: 0; position: relative;
+  transition: transform 120ms, box-shadow 120ms;
+}
+.qt-tweaks-chip:hover { transform: translateY(-1px); }
+.qt-tweaks-chip[data-on="1"] { box-shadow: 0 0 0 2px #04060a, 0 0 0 3px currentColor; }
+
+@media (prefers-reduced-motion: reduce) {
+  .qt-scanlines-overlay,
+  .qt-noise-overlay,
+  .qt-design-root .qt-twin-breath,
+  .qt-design-root .p-panel--breath,
+  .qt-design-root .ribbon__cell--fx-pulse,
+  .qt-design-root .ribbon__cell--fx-bloom,
+  .qt-design-root .ribbon__cell--fx-shockwave::after,
+  .qt-levelup { animation: none !important; }
+}
