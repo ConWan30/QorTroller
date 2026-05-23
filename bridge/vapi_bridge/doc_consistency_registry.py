@@ -115,8 +115,8 @@ REGISTRY: list[CanonicalFact] = [
     ),
     CanonicalFact(
         name="frozen_v1_commitment_family_count",
-        current_value="11",
-        superseded_values=("12",),  # The "12 primitives" flat overclaim R3 caught
+        current_value="12",  # 2026-05-23: VAPI-O3-SUPERSEDE-v1 registered as the 12th PATTERN-017 commitment family (Decision O3-CLASS=A). NOTE: an earlier "12" was an R3-caught flat overclaim; it is now the genuine count.
+        superseded_values=("11", "10"),  # "11" superseded by the O3-SUPERSEDE registration; "10" was the pre-PHYSICAL-DATA-ATTESTATION count
         verification_command=(
             "Count of PATTERN-017 commitment-family entries — see WP v6 §4.1"
         ),
