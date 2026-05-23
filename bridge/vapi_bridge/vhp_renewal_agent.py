@@ -14,7 +14,7 @@ import asyncio
 import logging
 import time
 
-from . import ipact_renewal
+from . import ipact_challenge, ipact_renewal
 from .ipact_renewal import IPACT_RENEWAL_EPOCH_DAYS
 
 log = logging.getLogger(__name__)
@@ -32,11 +32,21 @@ class VHPRenewalAgent:
 
     POLL_INTERVAL_S = 21_600  # 6 hours
 
-    def __init__(self, cfg, store, chain=None, bus=None) -> None:
+    def __init__(self, cfg, store, chain=None, bus=None,
+                 reattest_signer=None, device_pubkey_provider=None) -> None:
         self._cfg   = cfg
         self._store = store
         self._chain = chain
         self._bus   = bus
+        # Phase B #8 handshake seams (W-1/W-2) — BOTH default None in production →
+        # fail-closed. Production wires _device_pubkey_provider from ② P4b key
+        # registration (#12) and _reattest_signer from the VBDIP-0006 device path
+        # (#11). TESTS inject both from bridge/tests/fixtures/ (module-isolated, never
+        # imported by vapi_bridge — EDIT 2 structural guard). No key→signer factory
+        # exists in vapi_bridge; the seam carries a callable, never a key.
+        self._reattest_signer = reattest_signer            # Optional[Callable[[bytes], bytes]]
+        self._device_pubkey_provider = device_pubkey_provider  # Optional[Callable[[str], bytes|None]]
+        self._challenge_store = ipact_challenge.ChallengeStore()
 
     async def run_poll_loop(self) -> None:
         """Main agent loop — runs forever, never raises."""
@@ -49,19 +59,44 @@ class VHPRenewalAgent:
             await asyncio.sleep(self.POLL_INTERVAL_S)
 
     def _obtain_reattest_proof(self, vhp: dict) -> bytes | None:
-        """Phase B ③ — pluggable re-attestation-proof hook (default validator: ① composite-sig
-        over a bridge-issued fresh challenge).
+        """Phase B #8 — re-attestation handshake: bridge-issued challenge → device
+        composite-sig (①) → verify → ③ reattest_proof.
 
-        Returns a 32-byte ``reattest_proof`` (see ipact_renewal.compute_reattest_proof) when a
-        fresh, valid device re-attestation is available for this renewal; otherwise None.
+        Returns a 32-byte ``reattest_proof`` (ipact_renewal.compute_reattest_proof) when a
+        fresh, valid device re-attestation is obtained; otherwise None (fail-closed).
 
-        v1 default: returns None — the live challenge-issuance ↔ device-signing ↔ verify
-        handshake is NOT wired in this commit (enforcement ships DEFAULT-OFF). When enforcement
-        is later flipped ON, this hook is the single integration point to wire (or inject in
-        tests); until wired it returns None, so an ON gate is FAIL-CLOSED (renewals skip rather
-        than auto-renew a dormant device). Subclass / monkeypatch to supply a real proof.
+        **Fail-closed by construction:** both the signer seam (`_reattest_signer`) and the
+        device composite-pubkey source (`_device_pubkey_provider`) default to None in
+        production (the VBDIP-0006 device signer #11 and ② P4b key registration #12 are
+        deferred). With either unset, this returns None → an enforcement-ON gate SKIPS the
+        renewal rather than auto-renewing a dormant device. Tests inject both from the
+        module-isolated fixture. `composite_sig` is LAZY-IMPORTED here (W-3) so the bridge
+        does not hard-require quantcrypt/slh-dsa unless enforcement is ON and wired.
         """
-        return None
+        signer = self._reattest_signer
+        pubkey_provider = self._device_pubkey_provider
+        if signer is None or pubkey_provider is None:
+            return None  # fail-closed: seams not wired (production default)
+        device_id = vhp["device_id"]
+        try:
+            pubkey_blob = pubkey_provider(device_id)
+            if not pubkey_blob:
+                return None
+            challenge = self._challenge_store.issue(device_id)
+            composite_sig_blob = signer(challenge.nonce)
+            # lazy-import the PQ verifier ONLY on the wired enforcement path (W-3)
+            from . import ipact_challenge as _ic
+            from .ipact_renewal import compute_reattest_proof
+            from l9_presence import composite_sig as _csig
+            pub = _csig.decode_pubkey(pubkey_blob)
+            if not _csig.verify(pub, _ic.CHALLENGE_TAG, challenge.nonce, composite_sig_blob):
+                return None
+            if not self._challenge_store.consume(challenge.challenge_id):
+                return None  # single-use / expiry guard
+            return compute_reattest_proof(challenge.nonce, composite_sig_blob)
+        except Exception as exc:
+            log.debug("VHPRenewalAgent: #8 reattest handshake error (fail-closed): %s", exc)
+            return None
 
     async def _check_and_renew(self) -> None:
         """Core renewal logic. Called once per poll cycle."""

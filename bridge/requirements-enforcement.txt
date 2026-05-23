@@ -1,0 +1,11 @@
+# Phase B backlog #8 — iPACT renewal-enforcement (post-quantum) dependencies.
+#
+# These are required ONLY when ipact_renewal_enforcement_enabled=true (the dormant-blind
+# re-attestation gate is ON). Default bridge operation (enforcement OFF) does NOT need them —
+# composite_sig is lazy-imported inside VHPRenewalAgent._obtain_reattest_proof, reached only on
+# the wired enforcement-ON path (W-3). Install on top of bridge/requirements.txt for
+# enforcement-ON deployments:  pip install -r bridge/requirements-enforcement.txt
+#
+cryptography>=46          # ECDSA-P256 + SHA-256/512 (composite classical half)
+quantcrypt==1.0.1         # ML-DSA-44 / ML-DSA-65 (PQClean) — composite PQ half
+slh-dsa==0.2.2            # SLH-DSA-SHA2-128s (FIPS-205, NIST-ACVP-validated) — device-identity tier

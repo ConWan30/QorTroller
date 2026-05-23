@@ -250,6 +250,49 @@ ECDSA + ML-DSA / SLH-DSA over a domain-tagged SHA-256 commitment**.
   not evidence of absence** in the broader prior-art space. A USPTO + EPO patent search
   (tracked, grant item 05) should precede any external/IP assertion.
 
+## 9. v1.1 capability extension — public-key wire format (backlog #8)
+**Status:** capability extension, **not a spec change**. v1's M′ construction (§2), tier table +
+OIDs (§3), Decision-C3 / OID-2b reasoning (§3.1/§3.2), and all divergence statements (§7/§7.1)
+remain **byte-for-byte UNTOUCHED**. This section adds a **public-key** wire format alongside the
+existing **signature** wire format (`encode_composite`/`decode_composite`).
+
+**Why v1 omitted it / why v1.1 adds it.** v1 shipped signature serialization only — no consumer
+needed verifier-side key reconstruction. Backlog #8 (iPACT renewal handshake wiring) is the first
+consumer: the bridge verifier must reconstruct a `CompositePublicKey` from stored bytes to call
+`verify(...)` on a device's re-attestation. The consuming design is
+`wiki/methodology/ipact_handshake_wiring_v1_scope.md` §2.2.
+
+**`encode_pubkey` / `decode_pubkey` — wire format (byte-pinned, empirically verified 2026-05-23
+against cryptography 46 / quantcrypt 1.0.1 / slh-dsa 0.2.2):**
+```
+pubkey_blob = version(1)=0x01 || label_len(1) || label
+            || ec_len(2,BE) || ec_point          # ec_len==65; SEC1 uncompressed 0x04||X(32)||Y(32)
+            || pq_len(4,BE) || pq_pubkey_raw       # 1952 (ML-DSA-65) / 1312 (ML-DSA-44) / 32 (SLH-DSA-128s)
+```
+Length-prefixed framing mirrors `encode_composite` exactly; the **Label** selects the PQ backend on
+decode; `decode_pubkey` rejects truncation / trailing bytes / unknown version / unknown label /
+wrong-width fields. **Forward-compatibility:** `decode_pubkey` accepts only `version=0x01`. A future
+v2 of the pubkey wire format requires either a new domain tag/Label or a new function (e.g.
+`encode_pubkey_v2`), not a version-range expansion. Version-byte changes are explicit freeze events.
+ML-DSA `pq_pubkey_raw` = raw FIPS-204 bytes (verbatim from quantcrypt). **SLH-DSA-128s
+`pq_pubkey_raw` = FIPS-205 §10 canonical `pk = PK.seed || PK.root` (32 B)** — the slh-dsa lib's
+`PublicKey.key` tuple is `(PK.seed, PK.root)`, so `key[0]||key[1]` is FIPS-aligned (verified via
+source + NIST ACVP); the wire bytes are interoperable with any FIPS-205 implementation, not
+library-specific.
+
+**Test coverage.** `l9_presence/tests/test_composite_sig.py` gains byte-pinned pubkey KATs
+(`decode_pubkey(encode_pubkey(pk)) == pk` round-trip per pairing + SHA-256-pinned fixed-input blobs +
+envelope-structure assertions + version-byte-strict acceptance + malformed/wrong-width rejection),
+using the same KAT discipline as v1's signature vectors.
+
+**Freeze-surface note.** The composite-sig FROZEN-v1 tag was RESERVED in ceremony `ffa887d6`
+(reservation only; the byte literal was not pinned because v1 of the wire format had not yet
+shipped). At reservation time, the reservation covered "whatever the composite-sig wire format is at
+freeze time." v1 shipped at commit `94d36357` with signature format only; v1.1 (this section, plus
+backlog #8's bundle) adds public-key format. The eventual freeze ceremony pins **v1.1 = signature
+format + public-key format**. The freeze remains a separate later step, defensible after backlog #8
+exercises both formats in real integration.
+
 ---
 
 ## Dependencies unblocked
