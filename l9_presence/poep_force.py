@@ -42,15 +42,22 @@ def extract_force_features(traj: list) -> dict:
             "plateau_r2": float(np.mean(tail)) if tail else 0.0}
 
 
-def force_auth_delta(on: dict, off: dict, min_delta: float = 0.15) -> dict:
+def force_auth_delta(on: dict, off: dict, min_delta: float = 0.15, min_slope: float = 0.5) -> dict:
     """Device-auth signal: how much the adaptive resistance reshapes the force ramp (slope).
     Real Edge -> resistance-ON slope differs from OFF (delta high); emulator -> identical
-    (delta ~0). adaptive_response_detected when the relative slope delta >= min_delta."""
+    (delta ~0). adaptive_response_detected when the relative slope delta >= min_delta.
+
+    If EITHER phase has no real press (slope below min_slope), the capture is INCOMPLETE: we
+    return delta=0.0 + incomplete=True (NOT a misleading high delta) so a missed press can
+    never look like a strong result."""
     so, sf = float(on.get("mean_slope", 0.0)), float(off.get("mean_slope", 0.0))
+    if so < min_slope or sf < min_slope:
+        return {"delta": 0.0, "slope_on": round(so, 3), "slope_off": round(sf, 3),
+                "adaptive_response_detected": False, "incomplete": True}
     base = max(so, sf, 1e-9)
     delta = abs(so - sf) / base
     return {"delta": round(delta, 3), "slope_on": round(so, 3), "slope_off": round(sf, 3),
-            "adaptive_response_detected": bool(so > 1e-9 and sf > 1e-9 and delta >= min_delta)}
+            "adaptive_response_detected": bool(delta >= min_delta), "incomplete": False}
 
 
 def _set_trigger(ds, resistance: bool) -> bool:

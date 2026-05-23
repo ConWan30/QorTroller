@@ -40,3 +40,12 @@ def test_force_delta_handles_flat_emulator():
     flat = extract_force_features([{"t_ms": float(t), "r2": 0.0} for t in range(0, 600, 2)])
     d = force_auth_delta(flat, flat)
     assert d["adaptive_response_detected"] is False
+
+
+def test_force_delta_incomplete_press_not_misleading():
+    # one phase has no real press (slope ~0) -> incomplete, delta 0 (NOT a misleading high value)
+    on = extract_force_features([{"t_ms": float(t), "r2": 0.0} for t in range(0, 600, 2)])  # no press
+    off = extract_force_features(_ramp(100))                                                  # real press
+    d = force_auth_delta(on, off)
+    assert d["incomplete"] is True
+    assert d["delta"] == 0.0 and d["adaptive_response_detected"] is False
