@@ -410,12 +410,12 @@ footer { padding:48px 0 0; border-top:1px solid var(--border); color:var(--text-
     </div>
 
     <p class="dim" style="margin:22px 0 6px;font-size:13px;letter-spacing:0.14em;text-transform:uppercase;">
-      <span style="color:#f0a868">Still forward</span> · activation · hardening · hardware
+      <span style="color:#f0a868">Still forward</span> · activation · hardening · hardware · aligned to IoTeX IIP-64 (PR #72)
     </p>
     <div class="grid grid-2" style="margin-top:8px;">
-      <div class="panel"><div class="panel__eye">PoEP activation · born-PQ credential</div><p class="dim" style="margin:0;">On-chain commitment registration + hybrid ECDSA + ML-DSA-65 signing (NIST FIPS&nbsp;204-aligned, designed for IoTeX's PQ migration). The SHA-256 commitment is post-quantum-safe today; the device key rotates at VHP renewal — honest born-PQ, by design.</p></div>
-      <div class="panel"><div class="panel__eye">PoAC-v2 · Groth16 → STARK</div><p class="dim" style="margin:0;">Migrate the zero-knowledge layer to a hash-based STARK (Plonky3 / StarkWare S-two) for a post-quantum verification horizon — independent of the chain's own migration.</p></div>
-      <div class="panel"><div class="panel__eye">Controller-firmware reference</div><p class="dim" style="margin:0;">Root the adaptive-trigger device-auth in the controller's secure element — making QorTroller interoperable in future hardware as an IoTeX device standard, not just an app on top of one.</p></div>
+      <div class="panel"><div class="panel__eye">PoEP activation · born-PQ credential</div><p class="dim" style="margin:0;">On-chain commitment registration + a born-PQ device credential aligned to IoTeX <strong>IIP-64</strong> (Draft, PR&nbsp;#72). Per its device-class tiering, the long-lived controller identity targets <strong>SLH-DSA-128s / ML-DSA-44</strong> (§4.6), not consensus-tier ML-DSA-65. The SHA-256 commitment is post-quantum-safe today; the device key rotates at VHP renewal — QorTroller's analog of IIP-64 §4.8.5 <em>iPACT-DePIN</em>. Honest born-PQ, by design.</p></div>
+      <div class="panel"><div class="panel__eye">PoAC-v2 · Groth16 → STARK</div><p class="dim" style="margin:0;">Migrate the zero-knowledge layer Groth16 → a hash-based STARK for a post-quantum verification horizon — aligning with IIP-64's <strong>SP1, STARK-native</strong> choice that avoids the quantum-vulnerable Groth16 recursion step.</p></div>
+      <div class="panel"><div class="panel__eye">Controller-firmware reference</div><p class="dim" style="margin:0;">Root the adaptive-trigger device-auth + born-PQ identity in the controller's secure element, provisioned at manufacture — a reference implementation of IIP-64 <strong>§4.6</strong> (DePIN device provisioning) + <strong>§4.8.5</strong> (iPACT-DePIN). QorTroller as a device standard for IoTeX, not just an app on one.</p></div>
       <div class="panel"><div class="panel__eye">Token issuance</div><p class="dim" style="margin:0;">Gated, by hard rule, on a per-player separation ratio &gt; 1.0 — economic defensibility before any TGE. Honesty over hype.</p></div>
     </div>
 
