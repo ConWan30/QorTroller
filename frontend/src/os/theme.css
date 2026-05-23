@@ -82,29 +82,16 @@
 .os-edge--dashed  { stroke: var(--os-predicate); stroke-width: 1.2; stroke-dasharray: 6 4; }
 .os-edge--ghost   { stroke: var(--os-ghost);     stroke-width: 1.2; stroke-dasharray: 1 4; }
 
-/* Narrow-viewport rail collapse — Mythos audit H2. Below 760px the
- * left rail rotates to a horizontal top strip so the workspace gets
- * the full viewport width. Above 760px the original two-column grid
- * is preserved unchanged.
+/* QRESCE-0001 v0.5 design alignment: the left rail was replaced by the
+ * dashboard's numbered top-tab bar (.os-tabbar in AppShell). The bar already
+ * scrolls horizontally (overflow-x:auto). On narrow viewports the subtle
+ * legacy/public links wrap below the tabs so the numbered tabs stay legible.
  */
 @media (max-width: 760px) {
-  .os-shell__body {
-    grid-template-columns: minmax(0, 1fr) !important;
-    grid-template-rows: auto 1fr !important;
-  }
-  .os-shell__rail {
-    border-right: none !important;
-    border-bottom: 1px solid var(--os-border);
-    flex-direction: row !important;
-    overflow-x: auto;
-    padding: 8px 4px !important;
+  .os-tabbar {
+    flex-direction: column !important;
+    align-items: stretch !important;
     gap: 4px !important;
-  }
-  .os-shell__rail [data-os-nav-link],
-  .os-shell__rail a {
-    border-left: none !important;
-    border-bottom: 3px solid transparent;
-    flex-shrink: 0;
-    padding: 8px 14px !important;
+    padding: 4px 12px 8px !important;
   }
 }

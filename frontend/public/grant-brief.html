@@ -1,0 +1,1068 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>QorTroller — IoTeX Grant Brief</title>
+
+<!-- Brand foundations — inlined from colors_and_type.css per integration STEP 3(a).
+     Only change vs source: @font-face url('fonts/…') → url('/fonts/…') so the
+     local Syne + JetBrains Mono variable fonts resolve at the served root
+     (frontend/public/fonts/). No CDN dependency — the deck stays self-contained
+     and sharable. Brand tokens/layout are otherwise FROZEN. -->
+<style>
+@font-face {
+  font-family: 'Syne';
+  src: url('/fonts/Syne-VariableFont_wght.ttf') format('truetype-variations'),
+       url('/fonts/Syne-VariableFont_wght.ttf') format('truetype');
+  font-weight: 400 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/JetBrainsMono-VariableFont_wght.ttf') format('truetype-variations'),
+       url('/fonts/JetBrainsMono-VariableFont_wght.ttf') format('truetype');
+  font-weight: 400 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* ─── PALETTE ── void-black forensic, NOT cyber-neon ── */
+  --bg:              #04060a;
+  --panel:           #0a0e14;
+  --panel-soft:      #0d1218;
+  --panel-raised:    #11161f;
+  --border:          #1a2230;
+  --border-soft:     #131a24;
+  --border-strong:   #243044;
+
+  /* ─── TEXT ── */
+  --text:            #d4dde8;
+  --text-dim:        #8a96a5;
+  --text-faint:      #5a6675;
+  --text-ghost:      #3a4452;
+
+  /* ─── ACCENTS ── */
+  --accent-amber:    #f0a868;
+  --accent-amber-soft: #f0a86833;
+  --accent-amber-trace: #f0a86811;
+  --gamer-cyan:      #00d4ff;
+  --gamer-cyan-soft: #00d4ff22;
+  --chain:           #5bd6a3;
+  --chain-soft:      #5bd6a322;
+  --derived:         #8a96a5;
+  --predicate:       #f0a868;
+  --ghost-line:      #5a667555;
+
+  /* ─── STATUS (semantic — ALWAYS paired with text label) ─── */
+  --status-live:        #5bd6a3;
+  --status-verified:    #5bd6a3;
+  --status-pending:     #f0a868;
+  --status-blocked:     #d65b78;
+  --status-mock:        #d65b78;
+  --status-killswitch:  #f0a868;
+  --status-dormant:     #5a6675;
+
+  /* ─── TYPOGRAPHY ── */
+  --font-display: 'Syne', system-ui, sans-serif;
+  --font-body:    'Syne', system-ui, sans-serif;
+  --font-mono:    'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
+
+  --t-min:        11px;
+  --t-base:       12px;
+  --t-label:      13px;
+  --t-body:       14px;
+  --t-h3:         16px;
+  --t-h2:         20px;
+  --t-h1:         28px;
+  --t-display:    44px;
+
+  --lh-tight:     1.15;
+  --lh-snug:      1.3;
+  --lh-base:      1.5;
+
+  --ls-eyebrow:   0.14em;
+  --ls-caps:      0.06em;
+  --ls-hash:      0.02em;
+
+  /* ─── LAYOUT ── */
+  --radius:       4px;
+  --radius-sm:    2px;
+  --radius-pill:  999px;
+  --rail-w:       220px;
+  --strip-h:      56px;
+
+  /* ─── SPACING SCALE ── */
+  --s-0: 0;  --s-1: 4px;  --s-2: 8px;  --s-3: 12px; --s-4: 16px;
+  --s-5: 20px; --s-6: 24px; --s-7: 32px; --s-8: 40px; --s-9: 56px; --s-10: 72px;
+
+  /* ─── ELEVATION ── */
+  --shadow-hairline: inset 0 0 0 1px var(--border);
+  --shadow-edge:     0 0 0 1px var(--border), 0 1px 0 0 #0009;
+  --shadow-glow-amber: 0 0 24px -8px var(--accent-amber-soft);
+  --shadow-glow-chain: 0 0 24px -8px var(--chain-soft);
+  --shadow-deep:     0 8px 24px -12px #000c, 0 0 0 1px var(--border);
+
+  /* ─── MOTION ── */
+  --ease-instrument: cubic-bezier(0.2, 0.6, 0.2, 1);
+  --ease-snap:       cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-tick:        120ms;
+  --dur-settle:      280ms;
+  --dur-breath:      2800ms;
+}
+</style>
+
+<style>
+  :root {
+    --slide-w: 1920px;
+    --slide-h: 1080px;
+  }
+
+  html, body {
+    margin: 0; padding: 0;
+    background: #000;
+    font-family: var(--font-body);
+    color: var(--text);
+  }
+
+  /* Each <section> = a slide, sized at 1920×1080. deck-stage scales. */
+  deck-stage > section {
+    width: var(--slide-w);
+    height: var(--slide-h);
+    background: var(--bg);
+    color: var(--text);
+    position: relative;
+    overflow: hidden;
+    background-image:
+      linear-gradient(to right,  #1a223044 1px, transparent 1px),
+      linear-gradient(to bottom, #1a223044 1px, transparent 1px),
+      linear-gradient(to right,  #1a223018 1px, transparent 1px),
+      linear-gradient(to bottom, #1a223018 1px, transparent 1px);
+    background-size: 96px 96px, 96px 96px, 24px 24px, 24px 24px;
+    padding: 72px 96px;
+    box-sizing: border-box;
+    font-family: var(--font-body);
+  }
+
+  /* Slide chrome — wordmark + slide number — appears on every slide */
+  .chrome-mark {
+    position: absolute;
+    top: 36px;
+    left: 96px;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 22px;
+    letter-spacing: -0.02em;
+    color: var(--text);
+    line-height: 1;
+  }
+  .chrome-mark .t { font-weight: 800; color: var(--accent-amber); }
+
+  .chrome-meta {
+    position: absolute;
+    top: 36px;
+    right: 96px;
+    display: flex;
+    gap: 24px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--text-faint);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    line-height: 1;
+  }
+  .chrome-meta .amber { color: var(--accent-amber); }
+
+  .chrome-foot {
+    position: absolute;
+    bottom: 36px;
+    left: 96px;
+    right: 96px;
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-faint);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    line-height: 1;
+  }
+  .chrome-foot .amber { color: var(--accent-amber); }
+
+  /* Shared eyebrows + titles */
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-weight: 500;
+    font-size: 14px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    line-height: 1;
+    margin: 0 0 22px;
+  }
+  .eyebrow .chain { color: var(--chain); }
+  .eyebrow .amber { color: var(--accent-amber); }
+
+  h1 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 96px;
+    line-height: 0.96;
+    letter-spacing: -0.025em;
+    color: var(--text);
+    margin: 0;
+  }
+  h1.giant {
+    font-size: 132px;
+  }
+  h1 .amber { color: var(--accent-amber); font-weight: 800; }
+  h1 .chain { color: var(--chain); }
+
+  h2 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 64px;
+    line-height: 1.02;
+    letter-spacing: -0.02em;
+    color: var(--text);
+    margin: 0 0 26px;
+  }
+  h2 .amber { color: var(--accent-amber); font-weight: 800; }
+
+  h3 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 26px;
+    line-height: 1.1;
+    color: var(--text);
+    margin: 0 0 12px;
+  }
+
+  .lede {
+    font-family: var(--font-body);
+    font-size: 28px;
+    line-height: 1.45;
+    color: var(--text-dim);
+    max-width: 1280px;
+    margin: 0;
+  }
+  .lede .amber { color: var(--accent-amber); }
+  .lede .text  { color: var(--text); }
+
+  .mono {
+    font-family: var(--font-mono);
+    font-variant-ligatures: none;
+    letter-spacing: 0.02em;
+  }
+
+  /* Big hash specimen — used on the "the math is the imagery" slide */
+  .specimen-hash {
+    font-family: var(--font-mono);
+    font-size: 36px;
+    letter-spacing: 0.04em;
+    color: var(--chain);
+    line-height: 1.5;
+    word-break: break-all;
+    font-variant-ligatures: none;
+  }
+
+  /* ── PANELS (mini design-system) ────────────────────────────── */
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 24px 28px;
+  }
+  .panel--soft { background: var(--panel-soft); }
+  .panel--accent {
+    border-color: var(--accent-amber);
+    box-shadow: 0 0 0 1px #f0a86833;
+  }
+  .panel--chain {
+    border-color: var(--chain);
+    box-shadow: 0 0 0 1px #5bd6a322;
+  }
+
+  .panel__eye {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--border-soft);
+    margin-bottom: 16px;
+  }
+  .panel__eye .lbl {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--text-faint);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    line-height: 1;
+  }
+  .panel__eye .meta {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--text-dim);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    line-height: 1;
+  }
+
+  /* ── CHIP (semantic, always paired with text) ──────────────── */
+  .chip {
+    display: inline-flex; align-items: center; gap: 9px;
+    padding: 6px 12px;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border: 1px solid currentColor;
+    border-radius: 2px;
+    line-height: 1;
+    width: fit-content;
+  }
+  .chip::before {
+    content: ""; width: 8px; height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+    box-shadow: 0 0 10px currentColor;
+  }
+  .chip--live    { color: var(--chain); }
+  .chip--pending { color: var(--accent-amber); }
+  .chip--blocked { color: var(--status-blocked); }
+
+  /* ── Layout helpers ────────────────────────────────────────── */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; }
+  .stack  { display: grid; gap: 22px; }
+  .stack-sm { display: grid; gap: 12px; }
+
+  .kv {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 18px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .kv:last-child { border-bottom: 0; }
+  .kv .k {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    color: var(--text-faint);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    line-height: 1.3;
+  }
+  .kv .v {
+    font-family: var(--font-mono);
+    font-size: 17px;
+    color: var(--text);
+    letter-spacing: 0.02em;
+    line-height: 1.35;
+  }
+  .kv .v.amber { color: var(--accent-amber); }
+  .kv .v.chain { color: var(--chain); }
+  .kv .v.err   { color: var(--status-blocked); }
+  .kv .v.dim   { color: var(--text-dim); }
+
+  /* ── twin-stage replica ───────────────────────────────────── */
+  .twin-rect {
+    position: relative;
+    flex: 1;
+    border: 1px dashed var(--text-ghost);
+    border-radius: 4px;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    min-height: 340px;
+    background-color: var(--bg);
+    background-image:
+      linear-gradient(to right,  #1a223044 1px, transparent 1px),
+      linear-gradient(to bottom, #1a223044 1px, transparent 1px),
+      linear-gradient(to right,  #1a223018 1px, transparent 1px),
+      linear-gradient(to bottom, #1a223018 1px, transparent 1px);
+    background-size: 96px 96px, 96px 96px, 24px 24px, 24px 24px;
+  }
+  .twin-rect .bracket {
+    position: absolute;
+    width: 22px; height: 22px;
+    border: 1px solid var(--accent-amber);
+  }
+  .twin-rect .bracket.tl { top: 12px; left: 12px; border-right: 0; border-bottom: 0; }
+  .twin-rect .bracket.tr { top: 12px; right: 12px; border-left: 0; border-bottom: 0; }
+  .twin-rect .bracket.bl { bottom: 12px; left: 12px; border-right: 0; border-top: 0; }
+  .twin-rect .bracket.br { bottom: 12px; right: 12px; border-left: 0; border-top: 0; }
+  .twin-rect .center {
+    text-align: center;
+  }
+  .twin-rect .center .l1 {
+    font-family: var(--font-mono);
+    font-size: 18px;
+    color: var(--text-dim);
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    line-height: 1.4;
+  }
+  .twin-rect .center .l2 {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--text-faint);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    margin-top: 12px;
+  }
+  .twin-rect .corner-label {
+    position: absolute;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-faint);
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    line-height: 1;
+  }
+  .twin-rect .corner-label.tl { top: 22px; left: 42px; }
+  .twin-rect .corner-label.tr { top: 22px; right: 42px; color: var(--chain); }
+  .twin-rect .corner-label.bl { bottom: 22px; left: 42px; }
+  .twin-rect .corner-label.br { bottom: 22px; right: 42px; }
+
+  /* ── byte-table specimen ──────────────────────────────────── */
+  .byte-mini {
+    display: grid;
+    grid-template-columns: 56px repeat(8, 1fr);
+    gap: 1px;
+    background: var(--border-soft);
+    padding: 1px;
+    border-radius: 2px;
+  }
+  .byte-mini > div {
+    background: var(--panel);
+    font-family: var(--font-mono);
+    font-size: 14px;
+    text-align: center;
+    padding: 7px 0;
+    color: var(--text);
+    letter-spacing: 0.04em;
+  }
+  .byte-mini > div.h     { background: var(--panel-soft); color: var(--text-faint); font-size: 11px; letter-spacing: 0.1em; }
+  .byte-mini > div.addr  { background: var(--panel-soft); color: var(--text-faint); font-size: 11px; }
+  .byte-mini > div.sig   { color: var(--accent-amber); background: #f0a86808; }
+
+  /* ── chain ribbon specimen ────────────────────────────────── */
+  .ribbon {
+    display: flex;
+    gap: 2px;
+    height: 24px;
+  }
+  .ribbon > div {
+    flex: 1;
+    border-top: 1px solid var(--border-strong);
+    border-bottom: 1px solid var(--border-strong);
+    opacity: 0.45;
+  }
+  .ribbon > div.f { background: var(--chain); border-color: var(--chain); opacity: 0.7; }
+  .ribbon > div.latest { opacity: 1; box-shadow: 0 0 16px var(--chain), inset 0 0 8px #5bd6a3aa; }
+
+  /* ── wordmark stage ────────────────────────────────────────── */
+  .cover-wm {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 240px;
+    line-height: 0.9;
+    letter-spacing: -0.04em;
+    color: var(--text);
+    margin: 0;
+  }
+  .cover-wm .t { font-weight: 800; color: var(--accent-amber); }
+
+  /* utility */
+  .hr {
+    height: 1px; background: var(--border); margin: 28px 0; border: 0;
+  }
+  .center { text-align: center; }
+  .right { text-align: right; }
+</style>
+</head>
+<body>
+
+<deck-stage>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- 01 · COVER — wordmark hero                                        -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section data-screen-label="01 Cover" style="padding: 0; display: grid; place-items: center;">
+  <div style="position: absolute; top: 72px; left: 96px; right: 96px;
+              display: flex; justify-content: space-between;
+              font-family: var(--font-mono); font-size: 16px;
+              color: var(--text-faint); letter-spacing: 0.18em; text-transform: uppercase;">
+    <span>QRESCE-0001 · v0.5 · COMMIT 2C762835</span>
+    <span style="color: var(--chain)">● IoTeX · INTERNET OF TRUSTED THINGS</span>
+  </div>
+
+  <div style="text-align: center;">
+    <p class="cover-wm">Qor<span class="t">T</span>roller</p>
+    <p style="font-family: var(--font-mono); font-size: 22px;
+              color: var(--accent-amber); letter-spacing: 0.16em;
+              text-transform: uppercase; margin: 36px 0 0;">
+      Core Controllers · of their gaming data
+    </p>
+  </div>
+
+  <div style="position: absolute; bottom: 72px; left: 96px; right: 96px;">
+    <p style="font-family: var(--font-body); font-size: 28px;
+              color: var(--text-dim); max-width: 1280px;
+              margin: 0 auto; text-align: center; line-height: 1.45;">
+      The reference implementation of <span class="amber" style="color: var(--accent-amber)">Verifiable Autonomous Physical Intelligence (V.A.P.I.)</span>
+      — a coined DePIN sub-category, built native to IoTeX L1.
+    </p>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- 02 · THESIS — what we're solving                                  -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section data-screen-label="02 Thesis">
+  <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
+  <span class="chrome-meta"><span>02 · THESIS</span><span class="amber">V.A.P.I.</span></span>
+
+  <p class="eyebrow"><span class="amber">The thesis</span></p>
+  <h1 class="giant">Cheating doesn't need<br>to be punished —</h1>
+  <p style="font-family: var(--font-display); font-weight: 700; font-size: 96px;
+            line-height: 0.96; letter-spacing: -0.02em;
+            color: var(--accent-amber); margin: 16px 0 0; font-weight: 800;">
+    it can't exist.
+  </p>
+
+  <p class="lede" style="margin-top: 56px; max-width: 1380px;">
+    When humanity is <span class="text">cryptographically proven</span> and the gamer
+    retains <span class="text">sovereignty over the data their physical interactions generate</span>,
+    there is no surface left for fabrication. The protocol verifies; the gamer owns.
+  </p>
+
+  <span class="chrome-foot">
+    <span class="amber">QRESCE-0001 v0.5</span>
+    <span>HONORED · NOT · SURVEILLED</span>
+  </span>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- 03 · THREE SURFACES                                               -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section data-screen-label="03 Surfaces">
+  <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
+  <span class="chrome-meta"><span>03 · SURFACES</span><span class="amber">3 + 1</span></span>
+
+  <p class="eyebrow">Curated grant-evaluator surface area</p>
+  <h2>Four views <span class="amber">·</span> one cryptographic spine</h2>
+
+  <div class="grid-4" style="margin-top: 56px;">
+    <div class="panel panel--chain">
+      <p class="eyebrow" style="margin-bottom: 16px;">01 · <span class="chain">GAMER</span></p>
+      <h3>The Twin is the Hero</h3>
+      <p class="mono" style="font-size: 15px; color: var(--text-dim); line-height: 1.55;">
+        Full-bleed 3D controller twin iframe centerpiece · grind chain ribbon · capture health · consent matrix · live GIC hash
+      </p>
+      <hr class="hr" style="margin: 18px 0;">
+      <p class="mono" style="font-size: 12px; color: var(--text-faint); letter-spacing: 0.1em; text-transform: uppercase;">Glanceable · alive · the gamer</p>
+    </div>
+    <div class="panel panel--accent">
+      <p class="eyebrow" style="margin-bottom: 16px;">02 · <span class="amber">FORENSIC</span></p>
+      <h3>The Math is the Image</h3>
+      <p class="mono" style="font-size: 15px; color: var(--text-dim); line-height: 1.55;">
+        228-byte record table · in-browser SHA-256 re-derivation · 15-verifier registry · GIC chain timeline
+      </p>
+      <hr class="hr" style="margin: 18px 0;">
+      <p class="mono" style="font-size: 12px; color: var(--text-faint); letter-spacing: 0.1em; text-transform: uppercase;">Cryptographer · auditor</p>
+    </div>
+    <div class="panel">
+      <p class="eyebrow" style="margin-bottom: 16px;">03 · OPERATOR</p>
+      <h3>Honesty as Aesthetic</h3>
+      <p class="mono" style="font-size: 15px; color: var(--text-dim); line-height: 1.55;">
+        Kill-switch · fleet coherence · pre-flight gates · A.I.T. biometric separation · IoTeX anchor
+      </p>
+      <hr class="hr" style="margin: 18px 0;">
+      <p class="mono" style="font-size: 12px; color: var(--text-faint); letter-spacing: 0.1em; text-transform: uppercase;">Operator · the human running it</p>
+    </div>
+    <div class="panel panel--accent">
+      <p class="eyebrow" style="margin-bottom: 16px;">04 · <span class="amber">VPM PROOFS</span></p>
+      <h3>Verifiable Anywhere</h3>
+      <p class="mono" style="font-size: 15px; color: var(--text-dim); line-height: 1.55;">
+        Self-contained HTML certificates · live SHA-256 in-browser · tamper a byte → instant red · 6 FROZEN visual states
+      </p>
+      <hr class="hr" style="margin: 18px 0;">
+      <p class="mono" style="font-size: 12px; color: var(--text-faint); letter-spacing: 0.1em; text-transform: uppercase;">Grant evaluator · auditor</p>
+    </div>
+  </div>
+
+  <span class="chrome-foot">
+    <span class="amber">FORENSIC · INSTRUMENT · PANEL</span>
+    <span>MEETS · LIVING · CRYPTOGRAPHIC · SPECIMEN</span>
+  </span>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- 04 · THE TWIN IS THE HERO (Gamer)                                 -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section data-screen-label="04 Gamer">
+  <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
+  <span class="chrome-meta"><span>04 · GAMER · VIEW</span><span class="amber">01</span></span>
+
+  <p class="eyebrow"><span class="amber">The 3D twin is the hero</span> · the gamer's humanity made visible</p>
+  <h2>A real human <span class="amber">is on the controller.</span></h2>
+
+  <div style="display: grid; grid-template-columns: 280px 1fr 280px; gap: 28px; margin-top: 36px; height: 600px;">
+    <!-- Left overlay -->
+    <div class="panel" style="height: fit-content;">
+      <div class="panel__eye">
+        <span class="lbl">CAPTURE · HEALTH</span>
+        <span class="meta" style="color: var(--chain)">● NOMINAL</span>
+      </div>
+      <div class="stack-sm">
+        <div class="kv" style="grid-template-columns: 1fr auto; padding: 6px 0;">
+          <span class="k">host</span>
+          <span class="v">EXCLUSIVE_USB</span>
+        </div>
+        <div class="kv" style="grid-template-columns: 1fr auto; padding: 6px 0;">
+          <span class="k">poll</span>
+          <span class="v amber" style="font-size: 22px;">240 HZ</span>
+        </div>
+        <div class="kv" style="grid-template-columns: 1fr auto; padding: 6px 0; border-bottom: 0;">
+          <span class="k">sustained</span>
+          <span class="v">30m 42s</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Twin slot -->
+    <div class="twin-rect" style="height: 600px;">
+      <span class="bracket tl"></span>
+      <span class="bracket tr"></span>
+      <span class="bracket bl"></span>
+      <span class="bracket br"></span>
+      <span class="corner-label tl">RESERVED · 3D · CONTROLLER · TWIN · Z-INDEX 1</span>
+      <span class="corner-label tr">● WS · CONNECTED · 240 HZ</span>
+      <span class="corner-label bl">/CONTROLLER-TWIN.HTML?MINIMAL=1</span>
+      <span class="corner-label br">NEVER · REGENERATE</span>
+      <div class="center">
+        <div class="l1">3D · Controller · Twin</div>
+        <div class="l2">live iframe at integration</div>
+        <div style="font-family: var(--font-mono); font-size: 18px;
+                    color: var(--accent-amber); margin-top: 28px;
+                    letter-spacing: 0.08em;">
+          ► STREET FIGHTER VI · RANKED · MENTOR MODE
+        </div>
+      </div>
+    </div>
+
+    <!-- Right overlay — latest GIC -->
+    <div class="panel panel--accent" style="height: fit-content;">
+      <div class="panel__eye">
+        <span class="lbl">LATEST · GIC · HASH</span>
+        <span class="meta" style="color: var(--chain)">● LIVE</span>
+      </div>
+      <p class="mono" style="font-size: 17px; color: var(--chain); line-height: 1.5; font-variant-ligatures: none; margin: 0;">
+        7f3a 4b21 c8e0 9d4f<br>
+        1a2b 3c5d 6e7f 8091
+      </p>
+      <div style="display: flex; justify-content: space-between; margin-top: 14px;
+                  padding-top: 12px; border-top: 1px solid var(--border-soft);">
+        <span class="mono" style="font-size: 12px; color: var(--text-faint); letter-spacing: 0.1em; text-transform: uppercase;">re-derived</span>
+        <span class="mono" style="font-size: 12px; color: var(--accent-amber); letter-spacing: 0.06em;">● 1 MS · 280 MS AGO</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Chain ribbon at bottom -->
+  <div class="panel panel--chain" style="margin-top: 28px;">
+    <div style="display: flex; justify-content: space-between; margin-bottom: 12px;">
+      <span class="mono" style="font-size: 13px; color: var(--text-faint); letter-spacing: 0.18em; text-transform: uppercase;">
+        GRIND · INTEGRITY · CHAIN
+      </span>
+      <span class="mono" style="font-size: 15px;">
+        <span style="color: var(--accent-amber); font-size: 19px; font-weight: 600;">47</span>
+        <span style="color: var(--text-faint);"> / 100 · </span>
+        <span style="color: var(--chain)">● INTACT · 280 MS AGO</span>
+      </span>
+    </div>
+    <div class="ribbon" id="ribbon-04"></div>
+  </div>
+
+  <span class="chrome-foot">
+    <span class="amber">SLOT · NOT · DRAWING</span>
+    <span>THE · DESIGN · COMPOSES · AROUND · IT</span>
+  </span>
+  <script>
+    (function() {
+      const r = document.getElementById('ribbon-04');
+      if (!r) return;
+      for (let i = 0; i < 100; i++) {
+        const cell = document.createElement('div');
+        if (i < 47) cell.className = 'f';
+        if (i === 46) cell.className = 'f latest';
+        r.appendChild(cell);
+      }
+    })();
+  </script>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- 05 · THE MATH IS THE IMAGERY (Forensic)                           -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section data-screen-label="05 Forensic">
+  <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
+  <span class="chrome-meta"><span>05 · FORENSIC · WORKBENCH</span><span class="amber">02</span></span>
+
+  <p class="eyebrow"><span class="chain">This is real.</span> A cryptographer opens dev tools and re-runs every hash.</p>
+  <h2>The bytes <span class="amber">·</span> the math <span class="amber">·</span> the verdict.</h2>
+
+  <div class="grid-2" style="margin-top: 36px;">
+    <!-- LEFT: byte table -->
+    <div class="panel">
+      <div class="panel__eye">
+        <span class="lbl">LEFT · THE · BYTES</span>
+        <span class="meta">PoAC · 228-BYTE RECORD</span>
+      </div>
+      <p class="mono" style="font-size: 13px; color: var(--text-faint); letter-spacing: 0.1em; text-transform: uppercase; margin: 0 0 16px;">
+        HASH BODY[0:164] · SIG OCCUPIES 164–227
+      </p>
+      <div class="byte-mini">
+        <div class="h">addr</div>
+        <div class="h">00</div><div class="h">01</div><div class="h">02</div><div class="h">03</div>
+        <div class="h">04</div><div class="h">05</div><div class="h">06</div><div class="h">07</div>
+        <div class="addr">0000</div>
+        <div>51</div><div>54</div><div>52</div><div>4C</div>
+        <div>01</div><div>00</div><div>17</div><div>A2</div>
+        <div class="addr">0008</div>
+        <div>B3</div><div>8F</div><div>2C</div><div>04</div>
+        <div>D9</div><div>7F</div><div>3A</div><div>4B</div>
+        <div class="addr">00A0</div>
+        <div>1F</div><div>2E</div><div>3D</div><div>4C</div>
+        <div class="sig">5B</div><div class="sig">6A</div><div class="sig">79</div><div class="sig">88</div>
+        <div class="addr">00A8</div>
+        <div class="sig">97</div><div class="sig">A6</div><div class="sig">B5</div><div class="sig">C4</div>
+        <div class="sig">D3</div><div class="sig">E2</div><div class="sig">F1</div><div class="sig">00</div>
+      </div>
+      <div style="display: flex; justify-content: space-between; margin-top: 14px;
+                  padding-top: 12px; border-top: 1px solid var(--border-soft);">
+        <span class="mono" style="font-size: 12px; color: var(--text-faint); letter-spacing: 0.14em; text-transform: uppercase;">
+          ⬛ signed body 0–163 · <span style="color: var(--accent-amber)">⬛ ECDSA sig 164–227</span>
+        </span>
+      </div>
+    </div>
+
+    <!-- RIGHT: verifier readout -->
+    <div class="panel">
+      <div class="panel__eye">
+        <span class="lbl">RIGHT · THE · MATH</span>
+        <span class="meta">SHA-256 · WEB CRYPTO · LIVE</span>
+      </div>
+
+      <div class="stack-sm">
+        <div class="kv" style="grid-template-columns: 1fr; padding: 0 0 8px;">
+          <span class="k">computed (in-browser, 1 ms)</span>
+          <span class="v chain" style="font-size: 16px;">7f3a4b21c8e09d4f1a2b3c5d6e7f8091</span>
+        </div>
+        <p class="mono center" style="font-size: 24px; color: var(--chain); margin: 4px 0;">=</p>
+        <div class="kv" style="grid-template-columns: 1fr; padding: 0; border-bottom: 0;">
+          <span class="k">claimed (manifest)</span>
+          <span class="v chain" style="font-size: 16px;">7f3a4b21c8e09d4f1a2b3c5d6e7f8091</span>
+        </div>
+        <div style="display: flex; justify-content: center; margin-top: 18px;">
+          <span class="chip chip--live" style="font-size: 18px; padding: 9px 16px;">● HASH OK · 1 MS</span>
+        </div>
+      </div>
+
+      <hr class="hr">
+
+      <p class="eyebrow" style="margin: 0 0 12px;">tamper a byte →</p>
+      <div class="stack-sm">
+        <span class="mono" style="font-size: 14px; color: var(--status-blocked);">b3c4d5e6f70819297f3a4b21c8e09d4f</span>
+        <p class="mono center" style="font-size: 24px; color: var(--status-blocked); margin: 0;">≠</p>
+        <span class="mono" style="font-size: 14px; color: var(--text);">7f3a4b21c8e09d4f1a2b3c5d6e7f8091</span>
+        <div style="display: flex; justify-content: center; margin-top: 8px;">
+          <span class="chip chip--blocked" style="font-size: 18px; padding: 9px 16px;">● MISMATCH</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <span class="chrome-foot">
+    <span class="amber">SHA-256 · WEB CRYPTO · NO EXTERNAL LIBS</span>
+    <span>RE-DERIVED · IN-BROWSER · PER SESSION</span>
+  </span>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- 06 · HONESTY AS AESTHETIC (Operator)                              -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section data-screen-label="06 Honesty">
+  <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
+  <span class="chrome-meta"><span>06 · OPERATOR · HONESTY</span><span class="amber">03</span></span>
+
+  <p class="eyebrow"><span class="amber">Honesty is the aesthetic</span> · the protocol monitors itself and says so</p>
+  <h2>Green is earned. <span class="amber">Red always says why.</span></h2>
+
+  <div class="grid-2" style="margin-top: 44px;">
+    <!-- Kill switch -->
+    <div class="panel">
+      <div class="panel__eye">
+        <span class="lbl">KILL · SWITCH · OPERATOR</span>
+        <span class="meta">CHAIN-SUBMISSION · GATE</span>
+      </div>
+      <span class="chip chip--live" style="font-size: 16px; padding: 8px 14px;">ARMED · ACCEPTING SUBMISSIONS</span>
+      <p class="mono" style="font-size: 14px; color: var(--text-faint); letter-spacing: 0.1em; text-transform: uppercase; margin: 14px 0 4px;">
+        last toggle · 2026-05-18 09:14 UTC · op-9af3
+      </p>
+      <p class="mono" style="font-size: 14px; color: var(--text-dim); letter-spacing: 0.02em; margin: 0;">
+        sessions count · GIC chain advancing · public anchor live
+      </p>
+    </div>
+
+    <!-- Fleet coherence -->
+    <div class="panel">
+      <div class="panel__eye">
+        <span class="lbl">FLEET · COHERENCE · MONITOR</span>
+        <span class="meta" style="color: var(--accent-amber)">3 OPEN</span>
+      </div>
+      <div class="grid-3" style="gap: 12px;">
+        <div style="padding: 12px 14px; background: var(--panel-soft); border: 1px solid var(--accent-amber); border-radius: 4px;">
+          <p class="mono" style="font-size: 28px; color: var(--accent-amber); margin: 0;">1</p>
+          <p class="mono" style="font-size: 11px; color: var(--text-dim); letter-spacing: 0.12em; text-transform: uppercase; margin: 6px 0 0;">contradiction</p>
+        </div>
+        <div style="padding: 12px 14px; background: var(--panel-soft); border: 1px solid var(--accent-amber); border-radius: 4px;">
+          <p class="mono" style="font-size: 28px; color: var(--accent-amber); margin: 0;">1</p>
+          <p class="mono" style="font-size: 11px; color: var(--text-dim); letter-spacing: 0.12em; text-transform: uppercase; margin: 6px 0 0;">orphan</p>
+        </div>
+        <div style="padding: 12px 14px; background: var(--panel-soft); border: 1px solid var(--accent-amber); border-radius: 4px;">
+          <p class="mono" style="font-size: 28px; color: var(--accent-amber); margin: 0;">1</p>
+          <p class="mono" style="font-size: 11px; color: var(--text-dim); letter-spacing: 0.12em; text-transform: uppercase; margin: 6px 0 0;">inversion</p>
+        </div>
+      </div>
+      <p class="mono" style="font-size: 13px; color: var(--text-dim); letter-spacing: 0.06em; margin: 14px 0 0;">
+        <span style="color: var(--chain)">P0 · 0</span> · <span style="color: var(--accent-amber)">P1 · 1</span> · <span style="color: var(--text-dim)">P2 · 2</span>
+      </p>
+    </div>
+  </div>
+
+  <!-- The discipline rule -->
+  <div class="panel panel--accent" style="margin-top: 28px;">
+    <p class="eyebrow" style="color: var(--accent-amber);">discipline rule · never violated</p>
+    <div class="grid-2" style="margin-top: 18px; gap: 36px;">
+      <div>
+        <p class="mono" style="font-size: 22px; color: var(--text); letter-spacing: 0.06em;">
+          ✓ paused → <span class="chip chip--pending" style="display: inline-flex; margin-left: 12px;">KILL-SWITCH PAUSED</span>
+        </p>
+        <p class="mono" style="font-size: 22px; color: var(--text); letter-spacing: 0.06em; margin-top: 18px;">
+          ✓ offline → <span class="chip chip--blocked" style="display: inline-flex; margin-left: 12px;">BRIDGE UNREACHABLE</span>
+        </p>
+        <p class="mono" style="font-size: 22px; color: var(--text); letter-spacing: 0.06em; margin-top: 18px;">
+          ✓ unverified → <span class="chip chip--blocked" style="display: inline-flex; margin-left: 12px;">MOCK DATA</span>
+        </p>
+      </div>
+      <div>
+        <p class="mono" style="font-size: 22px; color: var(--text-faint); text-decoration: line-through; text-decoration-color: var(--status-blocked); letter-spacing: 0.06em;">
+          ✗ silent green
+        </p>
+        <p class="mono" style="font-size: 22px; color: var(--text-faint); text-decoration: line-through; text-decoration-color: var(--status-blocked); letter-spacing: 0.06em; margin-top: 18px;">
+          ✗ fabricated fallbacks
+        </p>
+        <p class="mono" style="font-size: 22px; color: var(--text-faint); text-decoration: line-through; text-decoration-color: var(--status-blocked); letter-spacing: 0.06em; margin-top: 18px;">
+          ✗ red without text
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <span class="chrome-foot">
+    <span class="amber">HONESTY · IS · THE · AESTHETIC</span>
+    <span>SHIPPED · DASHBOARDS · TELL · THE · TRUTH</span>
+  </span>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- 07 · VPM PROOFS — verifiable anywhere                             -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section data-screen-label="07 VPM Proofs">
+  <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
+  <span class="chrome-meta"><span>07 · VPM · PROOFS</span><span class="amber">04</span></span>
+
+  <p class="eyebrow"><span class="chain">Self-contained HTML certificates.</span> Open one in any browser, re-run its SHA-256 — the claim holds.</p>
+  <h2>Verifiable <span class="amber">·</span> anywhere <span class="amber">·</span> by anyone.</h2>
+
+  <div style="display: grid; grid-template-columns: 1.4fr 1fr; gap: 36px; margin-top: 36px; align-items: start;">
+
+    <!-- The render rule, big -->
+    <div class="panel panel--chain">
+      <p class="eyebrow" style="color: var(--chain);">the render rule · FROZEN</p>
+      <pre class="mono" style="font-size: 18px; color: var(--text); line-height: 1.7; margin: 16px 0 0; padding: 16px 18px;
+                                background: var(--panel-soft); border-radius: 2px; overflow: hidden;
+                                white-space: pre-wrap; word-break: break-word;"><span style="color: var(--accent-amber)">fetch</span>(artifactUrl, {
+  cache: <span style="color: var(--chain)">'no-store'</span>
+})
+  .then(r => r.<span style="color: var(--accent-amber)">text</span>())
+  .then(html =&gt; &lt;iframe
+    sandbox=<span style="color: var(--chain)">"allow-scripts allow-same-origin"</span>
+    srcDoc={html} /&gt;)</pre>
+      <p class="mono" style="font-size: 14px; color: var(--text-dim); margin: 18px 0 0; line-height: 1.55;">
+        <span style="color: var(--accent-amber)">Never</span> iframe <span class="mono">src=</span> at the artifact URL — that path caches old proofs forever.
+        VPM URLs key on the input commitment, which is stable across re-renders.
+      </p>
+      <p class="mono" style="font-size: 14px; color: var(--text-dim); margin: 14px 0 0;">
+        Sandbox attribute is FROZEN — allows the proof's inline JS + the grammar verifier reading the DOM. Nothing more.
+      </p>
+    </div>
+
+    <!-- The 6 FROZEN states -->
+    <div>
+      <p class="eyebrow">6 FROZEN visual states</p>
+      <div class="stack-sm" style="margin-top: 16px;">
+        <span class="chip chip--live">LIVE · CRYPTOGRAPHICALLY ANCHORED</span>
+        <span class="chip chip--pending">DRY-RUN · NOT ANCHORED</span>
+        <span class="chip" style="color: var(--gamer-cyan);">EMULATED · SYNTHETIC TIMING</span>
+        <span class="chip" style="color: var(--text-faint);">FROZEN-DISABLED · COMPILATION FROZEN</span>
+        <span class="chip chip--blocked">REVOKED · CONSENT WITHDRAWN</span>
+        <span class="chip" style="color: var(--text-dim);">UNVERIFIED · AWAITING ATTESTATION</span>
+      </div>
+      <hr class="hr">
+      <p class="eyebrow">artifact classes</p>
+      <p class="mono" style="font-size: 15px; color: var(--text-dim); line-height: 1.6; margin: 12px 0 0; letter-spacing: 0.04em;">
+        MLGA-SESSION-v1 · GIC-LEDGER-BETA-v1<br>
+        HONESTY-BOARD-v1 · CDRR-DAG-v1<br>
+        CONSENT-COMMIT-v1 · VHP-ZKBA-v1
+      </p>
+    </div>
+  </div>
+
+  <span class="chrome-foot">
+    <span class="amber">15 · VERIFIERS · IN · THE · FROZEN · REGISTRY</span>
+    <span>9 · INTEGRITY · LABEL · FIELDS · PER · ARTIFACT</span>
+  </span>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- 08 · BRAND DISCIPLINE                                              -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section data-screen-label="08 Brand">
+  <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
+  <span class="chrome-meta"><span>08 · BRAND · LOCK</span><span class="amber">QRESCE-0001 v0.5</span></span>
+
+  <p class="eyebrow"><span class="amber">Brand-lock</span> · QRESCE-0001 v0.5 · commit 2c762835</p>
+  <h2>Forensic instrument panel <span class="amber">·</span> meets <span class="amber">·</span> living cryptographic specimen.</h2>
+
+  <div class="grid-3" style="margin-top: 56px;">
+    <!-- Wordmark -->
+    <div class="panel">
+      <p class="eyebrow" style="margin-bottom: 24px;">wordmark · canonical</p>
+      <p style="font-family: var(--font-display); font-weight: 700; font-size: 64px; letter-spacing: -0.02em; line-height: 1; margin: 0 0 28px;">
+        Qor<span style="font-weight: 800; color: var(--accent-amber);">T</span>roller
+      </p>
+      <p class="mono" style="font-size: 14px; color: var(--text-dim); letter-spacing: 0.06em; line-height: 1.6; margin: 0;">
+        Syne 700 + Syne 800 · medial-T amber #f0a868
+      </p>
+      <hr class="hr">
+      <p class="mono" style="font-size: 13px; color: var(--text-faint); letter-spacing: 0.08em; text-transform: uppercase; line-height: 1.4;">
+        Never:<br>
+        <span style="text-decoration: line-through; text-decoration-color: var(--status-blocked);">Qortroller · QORTROLLER · Qor Troller · qorTroller</span>
+      </p>
+    </div>
+
+    <!-- Palette -->
+    <div class="panel">
+      <p class="eyebrow" style="margin-bottom: 22px;">palette · void-black forensic</p>
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 18px;">
+        <div style="height: 60px; background: #04060a; border: 1px solid var(--border);"></div>
+        <div style="height: 60px; background: #0a0e14; border: 1px solid var(--border);"></div>
+        <div style="height: 60px; background: #0d1218; border: 1px solid var(--border);"></div>
+        <div style="height: 60px; background: #11161f; border: 1px solid var(--border);"></div>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
+        <div style="height: 44px; background: #f0a868; border-radius: 2px;"></div>
+        <div style="height: 44px; background: #5bd6a3; border-radius: 2px;"></div>
+        <div style="height: 44px; background: #d65b78; border-radius: 2px;"></div>
+      </div>
+      <p class="mono" style="font-size: 13px; color: var(--text-dim); letter-spacing: 0.06em; margin: 18px 0 0; line-height: 1.55;">
+        bg #04060a · accent-amber #f0a868 · chain #5bd6a3 · blocked #d65b78
+      </p>
+    </div>
+
+    <!-- V.A.P.I. -->
+    <div class="panel">
+      <p class="eyebrow" style="margin-bottom: 22px;">category · v.a.p.i.</p>
+      <p style="font-family: var(--font-display); font-weight: 700; font-size: 44px; letter-spacing: -0.01em; line-height: 1; color: var(--accent-amber); margin: 0 0 22px;">
+        V.A.P.I.
+      </p>
+      <p class="mono" style="font-size: 14px; color: var(--text-dim); letter-spacing: 0.04em; line-height: 1.55; margin: 0;">
+        Display: <span style="color: var(--chain)">V.A.P.I.</span> (with periods)<br>
+        Code: <span style="color: var(--accent-amber)">VAPI</span> (no periods)
+      </p>
+      <hr class="hr">
+      <p class="mono" style="font-size: 13px; color: var(--text-faint); letter-spacing: 0.06em; line-height: 1.55;">
+        Verifiable<br>
+        Autonomous<br>
+        Physical<br>
+        Intelligence
+      </p>
+    </div>
+  </div>
+
+  <span class="chrome-foot">
+    <span class="amber">DISCIPLINE · COMPOUNDS</span>
+    <span>EVERY · STATUS · COLOR · PAIRS · A · TEXT · LABEL</span>
+  </span>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- 09 · CLOSING — the ask                                            -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section data-screen-label="09 Closing" style="display: grid; place-items: center; padding: 96px;">
+  <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
+  <span class="chrome-meta"><span>09 · CLOSING</span><span class="amber">IoTeX · L1</span></span>
+
+  <div style="text-align: center; max-width: 1480px;">
+    <p class="eyebrow center" style="margin-bottom: 28px;">
+      <span class="chain">CRYPTOGRAPHICALLY PROVEN</span> · <span class="amber">GAMER-SOVEREIGN</span> · <span class="chain">IoTeX-NATIVE</span>
+    </p>
+    <h1 style="font-size: 108px; line-height: 0.96;">
+      Built so cheating <br>
+      <span class="amber">can't exist.</span>
+    </h1>
+    <p class="lede center" style="margin-top: 56px; font-size: 32px; max-width: 1280px; margin-left: auto; margin-right: auto;">
+      <span class="text">QorTroller</span> — the reference implementation of
+      <span class="amber">V.A.P.I.</span>, a coined DePIN sub-category, built native to IoTeX's Internet of Trusted Things foundation.
+    </p>
+  </div>
+
+  <span class="chrome-foot">
+    <span class="amber">QORTROLLER.IO</span>
+    <span>github.com/ConWan30/QorTroller</span>
+  </span>
+</section>
+
+</deck-stage>
+
+<script src="/deck-stage.js"></script>
+
+<script type="application/json" id="speaker-notes">
+[
+  "QorTroller — Core Controllers of their gaming data. The reference implementation of Verifiable Autonomous Physical Intelligence, a coined DePIN sub-category, anchored to IoTeX. Lead with the tagline; let the wordmark do the rest.",
+
+  "The thesis isn't anti-cheat as enforcement. It's anti-cheat as impossibility. When the gamer's humanity is cryptographically proven and they retain sovereignty over the data their physical interactions generate, there is no surface left for fabrication. The protocol verifies; the gamer owns. Honored, not surveilled.",
+
+  "Four views compose the curated grant-evaluator surface. Gamer — twin-dominant, glanceable, alive. Forensic — for the cryptographer on the panel, where the math is visible. Operator — where honesty IS the dashboard. VPM Proofs — self-contained HTML certificates that anyone can re-verify in their own browser.",
+
+  "The 3D Controller Twin is a 54MB GLB plus React-Three-Fiber plus physics plus WebSocket streams. The design system never tries to render it — that's the unlock. The twin owns its rectangle at z-index 1; the design composes around it at z-index 2 and above. Capture-health top-left. Latest GIC hash top-right, re-derived in-browser every five seconds. Consent matrix bottom-left. Grind chain ribbon spans the bottom, advancing one cell every five seconds toward the GIC-100 milestone.",
+
+  "This is where a grant evaluator spends time. The 228-byte PoAC record on the left — body bytes 0 through 163 are signed payload, bytes 164 through 227 are the ECDSA signature, visually delineated. The right panel re-derives every claim using crypto.subtle.digest in the browser — no external libraries. Computed equals claimed equals OK in chain-green. Flip a single byte and the hash diverges instantly into red MISMATCH. The math is the imagery.",
+
+  "Honesty is the aesthetic. The kill-switch reports ARMED in chain-green only when sessions are actually counting. The fleet coherence monitor counts contradictions, orphans, and inversions and shows them in amber when non-zero — never in green. Paused is paused. Offline is BRIDGE UNREACHABLE. Mock data wears a red banner the moment it appears. Green is earned by a verifier returning OK; it is never decorative. Every red state names its reason.",
+
+  "Every VPM proof is a self-contained HTML certificate, bytewise-deterministic per input. The render rule is FROZEN: fetch with cache: no-store, then srcDoc — never iframe src=, which caches the old proof forever. The sandbox attribute is exactly allow-scripts allow-same-origin. Six visual states, each with its own DOM signature the grammar verifier reads. Fifteen verifiers in the frozen registry. Nine integrity-label fields per artifact. Open one in any browser, re-run its SHA-256 in dev tools, and the claim holds.",
+
+  "Brand-locked under QRESCE-0001 v0.5. The wordmark renders QorTroller with a medial capital T in amber #f0a868 at Syne weight 800, with Qor and roller in #d4dde8 at Syne weight 700 — every time, no exceptions. The palette is void-black forensic, not cyber neon. The category is V dot A dot P dot I dot with periods in display copy and VAPI without periods in code. Discipline compounds.",
+
+  "Cheating can't exist when humanity is cryptographically proven and the gamer is the Core Controller of their gaming data. QorTroller is the reference implementation of V.A.P.I., built native to IoTeX. Repository: github.com/ConWan30/QorTroller. Thank you."
+]
+</script>
+
+</body>
+</html>

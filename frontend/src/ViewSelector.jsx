@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Link } from 'react-router-dom'
 import { useHeartbeatStore } from './heartbeat/useHeartbeat'
 import { FONTS, GAMER } from './shared/design/tokens'
+import { RealityDot } from './design/realityHeartbeat'
 
 // QRESCE-0001 v0.5 grant-evaluator remodel — slimmed 4-tab bar. Only the
 // design-language, grant-facing surfaces are shown: Gamer (hero) · Forensic
@@ -18,12 +19,15 @@ const VIEWS = [
   { id: 'operator', num: '03', label: 'Operator · Evidence',   accent: '#f0a868' },
   // VPM Registry — autonomous Verified Projection Media (HTML snapshot proofs).
   { id: 'vpm',      num: '04', label: 'VPM · Proofs',          accent: '#f0a868' },
+  // Grant Brief — brand-locked IoTeX grant-evaluator deck (public, no auth).
+  { id: 'grant',    num: '05', label: 'Grant · Brief',         accent: '#f0a868' },
+  // Reference — canonical what/how/forward codex (public, no auth).
+  { id: 'reference', num: '06', label: 'Reference',            accent: '#5bd6a3' },
 ]
 
 export function ViewSelector({ activeView, onViewChange }) {
   const merkleRoot    = useHeartbeatStore((s) => s.merkleRoot)
   const onChain       = useHeartbeatStore((s) => s.onChainConfirmed)
-  const agentCount    = useHeartbeatStore((s) => s.agentCount)
 
   return (
     <div style={{
@@ -82,7 +86,6 @@ export function ViewSelector({ activeView, onViewChange }) {
           minWidth:      0,
         }}>
           <span style={{ color: 'rgba(240,168,104,0.65)' }}>V.A.P.I.</span>
-          {' · phase 235'}
         </span>
         {/* Phase O5-EVIDENCE-OS Stage 1 — entry point to the new IA.
             Preserves existing 6 tabs; this is an additive cross-link. */}
@@ -127,10 +130,16 @@ export function ViewSelector({ activeView, onViewChange }) {
                 color:         active ? v.accent : 'rgba(200,216,232,0.50)',
                 cursor:        'pointer',
                 transition:    'all 0.15s ease',
-                display:       'flex',
-                alignItems:    'baseline',
-                gap:           7,
-                whiteSpace:    'nowrap',
+                // Stacked tab — number above label, per the design's final
+                // iteration ("01 / Gamer"). Number sits on its own line in
+                // amber-on-active; label below. Container stays flexShrink:0
+                // so the 01–04 sequence never wraps or triggers side-scroll.
+                display:        'flex',
+                flexDirection:  'column',
+                alignItems:     'flex-start',
+                gap:            2,
+                lineHeight:     1.1,
+                whiteSpace:     'nowrap',
               }}
             >
               <span style={{
@@ -138,21 +147,23 @@ export function ViewSelector({ activeView, onViewChange }) {
                 fontSize:      9,
                 fontWeight:    500,
                 color:         active ? v.accent : 'rgba(200,216,232,0.30)',
-                letterSpacing: '0.05em',
+                letterSpacing: '0.14em',
               }}>{v.num}</span>
-              {v.label}
-              {active && (
-                <motion.span
-                  layoutId="tab-indicator"
-                  style={{
-                    width:        4,
-                    height:       4,
-                    borderRadius: '50%',
-                    background:   v.accent,
-                    boxShadow:    `0 0 6px ${v.accent}`,
-                  }}
-                />
-              )}
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {v.label}
+                {active && (
+                  <motion.span
+                    layoutId="tab-indicator"
+                    style={{
+                      width:        4,
+                      height:       4,
+                      borderRadius: '50%',
+                      background:   v.accent,
+                      boxShadow:    `0 0 6px ${v.accent}`,
+                    }}
+                  />
+                )}
+              </span>
             </button>
           )
         })}
@@ -166,11 +177,9 @@ export function ViewSelector({ activeView, onViewChange }) {
         minWidth: 0, flexShrink: 1, overflow: 'hidden', whiteSpace: 'nowrap',
         justifyContent: 'flex-end',
       }}>
+        <RealityDot />
         <span style={{ color: onChain ? '#00ff88' : 'rgba(255,59,92,0.7)' }}>
           {onChain ? '● ON-CHAIN' : '○ PENDING'}
-        </span>
-        <span style={{ color: 'rgba(74,158,255,0.5)' }}>
-          {agentCount} AGENTS
         </span>
         {merkleRoot && (
           <span style={{ color: 'rgba(74,158,255,0.35)', letterSpacing: '0.04em' }}>

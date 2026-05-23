@@ -19,16 +19,22 @@ export function StatusChip({ tone = 'live', children }) {
   return <span className={`s-chip s-chip--${tone}`}>{children}</span>
 }
 
-/* Panel — surface with optional eyebrow + meta + breathing animation. */
-export function Panel({ eyebrow, meta, children, soft, raised, breath, padding = true, style }) {
+/* Panel — surface with optional eyebrow + meta + breathing animation.
+   `specimen` adds the evidence-room corner-bracket frame (v2 · item C);
+   `specimenAccent` (hex) overrides the bracket color via --qt-specimen-accent. */
+export function Panel({ eyebrow, meta, children, soft, raised, breath, specimen, specimenAccent, padding = true, style }) {
   const cls = [
     'p-panel',
     soft && 'p-panel--soft',
     raised && 'p-panel--raised',
     breath && 'p-panel--breath',
+    specimen && 'qt-specimen',
   ].filter(Boolean).join(' ')
+  const mergedStyle = specimenAccent
+    ? { ...style, '--qt-specimen-accent': specimenAccent }
+    : style
   return (
-    <section className={cls} style={style}>
+    <section className={cls} style={mergedStyle}>
       {(eyebrow || meta) && (
         <header className="p-head">
           {eyebrow && <span className="p-head__eye">{eyebrow}</span>}
@@ -37,6 +43,41 @@ export function Panel({ eyebrow, meta, children, soft, raised, breath, padding =
       )}
       {padding ? <div className="p-body">{children}</div> : children}
     </section>
+  )
+}
+
+/* HashSpecimen (v2 · item C + G) — the ONE way hashes render across surfaces.
+   JetBrains Mono, ligatures off, 0.02em tracking, 4-char grouping
+   (7f3a 4b21 c8e0 9d4f) or middle-ellipsis when truncate. Sizes lock the
+   hash rhythm: sm 11 / md 14 (default) / lg 16 — no more ad-hoc 13.5/14/16. */
+export function HashSpecimen({ value, size = 'md', tone = 'chain', group = 4, truncate = false, ends = 8, title, style }) {
+  const SIZES = { sm: 11, md: 14, lg: 16 }
+  const TONES = {
+    chain: 'var(--chain)', amber: 'var(--accent-amber)',
+    err: 'var(--status-blocked)', dim: 'var(--text-dim)', text: 'var(--text)',
+  }
+  const text = !value
+    ? '— —'
+    : truncate
+      ? `${value.slice(0, ends)}…${value.slice(-ends)}`
+      : (value.match(new RegExp(`.{1,${group}}`, 'g')) || [value]).join(' ')
+  return (
+    <span
+      className="mono"
+      title={title || value || undefined}
+      style={{
+        fontFamily: 'var(--font-mono)',
+        fontSize: SIZES[size] || 14,
+        lineHeight: 1.5,
+        letterSpacing: '0.02em',
+        fontVariantLigatures: 'none',
+        wordBreak: 'break-all',
+        color: TONES[tone] || TONES.chain,
+        ...style,
+      }}
+    >
+      {text}
+    </span>
   )
 }
 

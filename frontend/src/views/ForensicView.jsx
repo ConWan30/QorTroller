@@ -28,6 +28,7 @@ import PoacBodyHasher from '../components/public/PoacBodyHasher'
 import CryptoReplayPanel from '../components/public/CryptoReplayPanel'
 import GicChainTimeline from '../components/public/GicChainTimeline'
 import { Panel } from '../design/Primitives'
+import { useViewEyebrow } from '../design/Eyebrow'
 import '../design/qortroller-kit.css'
 
 function CommitmentInput({ value, onChange, onSubmit }) {
@@ -66,6 +67,19 @@ export function ForensicView() {
 
   const verifierNames = Object.keys(VERIFIERS)
 
+  // v2 · item A — eyebrow: the workbench's frozen facts + live verifier count.
+  useViewEyebrow({
+    num: '02',
+    name: 'FORENSIC · WORKBENCH',
+    status: 'SHA-256',
+    statusTone: 'chain',
+    readouts: [
+      { label: 'PoAC', value: '228 B', tone: 'chain' },
+      { label: 'BODY', value: '164 B', tone: 'amber' },
+      { label: 'VERIFIERS', value: String(VERIFIER_COUNT), tone: 'chain' },
+    ],
+  })
+
   return (
     <div className="qt-design-root" style={{ overflow: 'auto' }}>
       {/* Header strip */}
@@ -73,7 +87,7 @@ export function ForensicView() {
         display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
         padding: '14px 16px 0',
       }}>
-        <span className="eye" style={{ fontSize: 12, letterSpacing: '0.18em' }}>
+        <span className="eye" style={{ fontSize: 12, letterSpacing: '0.14em' }}>
           FORENSIC · EXPLORER · IN-BROWSER RE-DERIVATION
         </span>
         <span className="mono" style={{ fontSize: 10.5, color: 'var(--text-faint)' }}>
@@ -84,7 +98,7 @@ export function ForensicView() {
       <div style={{ display: 'grid', gap: 16, padding: 16 }}>
         {/* ═══ TOP ROW — the workbench (bytes · math) ═══ */}
         <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.05fr) minmax(0, 1fr)', gap: 16, alignItems: 'start' }}>
-          <Panel padding={false}>
+          <Panel padding={false} specimen>
             <header className="p-head">
               <span className="p-head__eye">LEFT · THE BYTES</span>
               <span className="p-head__meta">POAC · 228-BYTE RECORD</span>

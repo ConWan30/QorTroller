@@ -34,8 +34,11 @@ import {
 } from '../api/bridgeApi'
 import { ConsentPanel } from '../components/ConsentPanel'
 import { FONTS, GAMER } from '../shared/design/tokens'
-import { OverlayPanel, StatusChip } from '../design/Primitives'
+import { OverlayPanel, StatusChip, HashSpecimen } from '../design/Primitives'
 import { useChainPulse, useRelativeTime } from '../design/motion'
+import { useQtTweaks, LevelUpBadge } from '../design/Tweaks'
+import { useViewEyebrow } from '../design/Eyebrow'
+import { GicChainConstellation } from '../design/GicChainConstellation'
 import '../design/qortroller-kit.css'
 
 // ---------------------------------------------------------------------------
@@ -161,7 +164,7 @@ function CaptureHealthPanel({ capture, paused, bridgeDown }) {
       : (capture?.capture_state ?? '—')
   const sustained = capture?.sustained_duration_s ?? 0
   return (
-    <OverlayPanel style={{ top: 16, left: 16, width: 264 }}>
+    <OverlayPanel style={{ top: 16, left: 16, width: 264, maxHeight: 'calc(50% - 28px)', overflowY: 'auto' }}>
       <PanelHead eye="CAPTURE · HEALTH">
         <StatusChip tone={stateTone}>{stateText}</StatusChip>
       </PanelHead>
@@ -202,11 +205,8 @@ function LatestGicPanel({ grind, bridgeDown, magnitude }) {
   const changedAgo = useRelativeTime(settledAt)
   const sessionId = grind?.grind_session_id ?? '—'
   const glow = 4 + (magnitude ?? 0) * 8
-  const hexGroups = hash
-    ? hash.match(/.{1,8}/g)
-    : null
   return (
-    <OverlayPanel accent style={{ top: 16, right: 16, width: 332 }}>
+    <OverlayPanel accent style={{ top: 16, right: 16, width: 332, maxHeight: 'calc(50% - 28px)', overflowY: 'auto' }}>
       <PanelHead eye="LATEST · GIC · HASH">
         <span className="p-head__meta motion--pulse" style={{ color: bridgeDown ? 'var(--status-blocked)' : 'var(--chain)' }}>
           {bridgeDown ? '● STALE' : '● LIVE · SHA-256'}
@@ -217,20 +217,13 @@ function LatestGicPanel({ grind, bridgeDown, magnitude }) {
           key={hash}
           className={hash ? 'motion--settle' : ''}
           style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 13,
-            lineHeight: 1.45,
-            color: 'var(--chain)',
-            letterSpacing: '0.02em',
-            fontVariantLigatures: 'none',
-            wordBreak: 'break-all',
             minHeight: 38,
             textShadow: hash ? `0 0 ${glow}px #5bd6a355` : 'none',
           }}
         >
-          {hexGroups
-            ? hexGroups.slice(0, 4).join(' ') + ' ' + hexGroups.slice(4).join(' ')
-            : '— awaiting first GIC stamp —'}
+          {hash
+            ? <HashSpecimen value={hash} size="md" group={4} tone="chain" />
+            : <span className="mono" style={{ fontSize: 13, color: 'var(--text-faint)' }}>— awaiting first GIC stamp —</span>}
         </div>
         <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--border-soft)', display: 'grid', gap: 5 }}>
           <Row label="chain"
@@ -261,7 +254,7 @@ function LatestGicPanel({ grind, bridgeDown, magnitude }) {
 // know consent state — show an honest "—" rather than fabricating GRANTED
 // (the prior bug read a non-existent curator.consent_bitmask and defaulted to
 // all-GRANTED). The full grant/revoke flow lives in the ConsentPanel drawer.
-function ConsentPanelOverlay({ consentStatus, connected, onOpen }) {
+function ConsentPanelOverlay({ consentStatus, connected, onOpen, ribbonMode }) {
   const known = connected && consentStatus && consentStatus.categories
   const rows = CONSENT_CATEGORIES.map((c) => ({
     ...c,
@@ -269,7 +262,10 @@ function ConsentPanelOverlay({ consentStatus, connected, onOpen }) {
   }))
   const grantedCount = rows.filter((r) => r.granted === true).length
   return (
-    <OverlayPanel style={{ bottom: 92, left: 16, width: 264, cursor: 'pointer' }}>
+    <OverlayPanel style={{
+      bottom: ribbonMode ? 100 : 16, left: 16, width: 264, cursor: 'pointer',
+      maxHeight: ribbonMode ? 'calc(50% - 124px)' : 'calc(50% - 40px)', overflowY: 'auto',
+    }}>
       <div onClick={onOpen} title="Open per-category consent panel">
         <PanelHead eye="CONSENT · MATRIX">
           <span className="p-head__meta">
@@ -306,10 +302,13 @@ function ConsentPanelOverlay({ consentStatus, connected, onOpen }) {
 // Bottom-right: ANALYTICS (real grind pipeline stats)
 // ---------------------------------------------------------------------------
 
-function AnalyticsPanel({ analytics, topBlocker }) {
+function AnalyticsPanel({ analytics, topBlocker, ribbonMode }) {
   const total = analytics?.total_validated
   return (
-    <OverlayPanel style={{ bottom: 92, right: 16, width: 264 }}>
+    <OverlayPanel style={{
+      bottom: ribbonMode ? 100 : 16, right: 16, width: 264,
+      maxHeight: ribbonMode ? 'calc(50% - 124px)' : 'calc(50% - 40px)', overflowY: 'auto',
+    }}>
       <PanelHead eye="ANALYTICS · GRIND">
         <span className="p-head__meta">{total != null ? total.toLocaleString() : '—'} TOTAL</span>
       </PanelHead>
@@ -341,6 +340,11 @@ function AnalyticsPanel({ analytics, topBlocker }) {
 
 function GrindRibbon({ chainLen, target, intact, paused, bridgeDown, consecutiveClean, changedAgo }) {
   const { landingAt } = useChainPulse(chainLen)
+  // GIC landing FX is gamer-selectable via Tweaks (pulse / bloom / shockwave /
+  // off). It only ever fires on a REAL chain advance (useChainPulse observes the
+  // polled chain_length; it never simulates growth) — the vibe layer never
+  // fabricates an advancing chain.
+  const { landingFx } = useQtTweaks()
   const showStreak = consecutiveClean != null && consecutiveClean !== chainLen
   // Cap the rendered cell count so very large targets stay performant.
   const cells = Math.min(target ?? 100, 100)
@@ -348,9 +352,12 @@ function GrindRibbon({ chainLen, target, intact, paused, bridgeDown, consecutive
   return (
     <div style={{
       position: 'absolute', left: 16, right: 16, bottom: 16,
+      // Fixed-height container (v2 · item F) so the ribbon never grows into the
+      // bottom corner panels as the chain advances; cells scale-X within it.
+      height: 72, boxSizing: 'border-box', overflow: 'hidden',
       background: 'rgba(10, 14, 20, 0.92)',
       border: `1px solid ${paused ? 'var(--status-pending)' : 'var(--border)'}`,
-      borderRadius: 'var(--radius)', padding: '12px 16px', zIndex: 4,
+      borderRadius: 'var(--radius)', padding: '10px 16px', zIndex: 4,
       backdropFilter: 'blur(6px)',
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, alignItems: 'baseline' }}>
@@ -380,11 +387,13 @@ function GrindRibbon({ chainLen, target, intact, paused, bridgeDown, consecutive
           const filled = (chainLen ?? 0) >= cellThreshold
           const isLatest = filled && (i + 1) * scale > (chainLen ?? 0) - scale
           const justLanded = isLatest && landingAt && (Date.now() - landingAt) < 800
+          const fxClass = justLanded && landingFx && landingFx !== 'off'
+            ? `ribbon__cell--fx-${landingFx}`
+            : ''
           return (
             <div
               key={i}
-              className={`ribbon__cell ${filled ? 'ribbon__cell--filled' : ''} ${isLatest ? 'ribbon__cell--latest' : ''}`}
-              style={justLanded ? { animation: 'qt-land 480ms var(--ease-instrument)' } : undefined}
+              className={`ribbon__cell ${filled ? 'ribbon__cell--filled' : ''} ${isLatest ? 'ribbon__cell--latest' : ''} ${fxClass}`}
               title={filled ? `≈ GIC #${Math.round(cellThreshold)}` : undefined}
             />
           )
@@ -409,22 +418,22 @@ function ApopEvidencePrism({ apop }) {
   }))
   return (
     <div style={{
-      position: 'absolute', bottom: 84, left: '50%', transform: 'translateX(-50%)',
-      zIndex: 4, width: 420, pointerEvents: 'none',
+      position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)',
+      zIndex: 4, width: 'min(520px, calc(100vw - 600px))', minWidth: 300, pointerEvents: 'none',
     }}>
-      <Glass accent={stateColor} intensity={0.7} style={{ padding: '6px 10px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 5 }}>
-          <span style={{ fontFamily: FONTS.mono, fontSize: 6.5, letterSpacing: '0.18em', color: GAMER.t3 }}>
+      <Glass accent={stateColor} intensity={0.7} style={{ padding: '12px 16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 9 }}>
+          <span style={{ fontFamily: FONTS.mono, fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase', color: GAMER.t3 }}>
             EVIDENCE PRISM · APOP
           </span>
           <span style={{
-            fontFamily: FONTS.mono, fontSize: 8, color: stateColor, letterSpacing: '0.04em', fontWeight: 600,
+            fontFamily: FONTS.mono, fontSize: 13, color: stateColor, letterSpacing: '0.04em', fontWeight: 600,
             textShadow: isCompetitive ? `0 0 6px ${stateColor}66` : 'none',
           }}>
             {(apop.latest_score ?? 0).toFixed(3)} · h{(evidence.history_score ?? 0).toFixed(2)}
           </span>
         </div>
-        <div style={{ display: 'flex', gap: 2, height: 8, alignItems: 'stretch' }}>
+        <div style={{ display: 'flex', gap: 3, height: 16, alignItems: 'stretch' }}>
           {segments.map((seg) => (
             <div key={seg.key} style={{
               flex: seg.weight, background: '#0a1620', borderRadius: 2,
@@ -439,10 +448,10 @@ function ApopEvidencePrism({ apop }) {
             </div>
           ))}
         </div>
-        <div style={{ display: 'flex', gap: 2, marginTop: 3 }}>
+        <div style={{ display: 'flex', gap: 3, marginTop: 6 }}>
           {segments.map((seg) => (
             <div key={seg.key} style={{
-              flex: seg.weight, fontFamily: FONTS.mono, fontSize: 5.5, letterSpacing: '0.14em',
+              flex: seg.weight, fontFamily: FONTS.mono, fontSize: 11, letterSpacing: '0.06em',
               color: seg.score > 0.4 ? GAMER.t1 : GAMER.t3, textAlign: 'center', transition: 'color 0.4s ease',
             }}>
               {seg.label}
@@ -643,6 +652,25 @@ export function GamerView() {
   // panels' honest "—" / STALE states.
   const bridgeOffline = !captureHealth && !grindChain
 
+  // GIC chain display mode — orb-web constellation (default) vs classic ribbon,
+  // gamer-selectable via Tweaks. Constellation frees the bottom strip, so the
+  // bottom corner panels drop to the corner; ribbon mode keeps them raised.
+  const { gicView } = useQtTweaks()
+  const ribbonMode = gicView === 'ribbon'
+
+  // v2 · item A — name this view + its live readouts in the persistent eyebrow.
+  useViewEyebrow({
+    num: '01',
+    name: 'GAMER',
+    status: bridgeOffline ? 'BRIDGE UNREACHABLE' : paused ? 'COUNTING PAUSED' : 'LIVE',
+    statusTone: bridgeOffline ? 'blocked' : paused ? 'pending' : 'live',
+    readouts: [
+      { label: 'CHAIN', value: `${chainLen}/${target}`, tone: 'chain' },
+      { label: 'HOST', value: captureHealth?.host_state || '—', tone: bridgeOffline ? 'blocked' : 'amber' },
+      { label: 'POLL', value: bridgeOffline ? '—' : `${captureHealth?.poll_rate_hz ?? 0}HZ`, tone: 'amber' },
+    ],
+  })
+
   return (
     <div className="qt-design-root" style={{ overflow: 'hidden' }}>
       {/* z0 — forensic-instrument graticule (shows through the transparent twin) */}
@@ -655,27 +683,41 @@ export function GamerView() {
         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none', background: 'transparent', zIndex: 1 }}
       />
 
-      {/* z2 — edge vignette; center stays sharp on the controller */}
-      <div style={{
+      {/* z2 — edge vignette; center stays sharp on the controller. The vignette
+          respires at the Tweaks "twin breath" rate (--qt-breath) — the "alive"
+          signal: a real human is on the controller. */}
+      <div className="qt-twin-breath" style={{
         position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2,
         background: 'radial-gradient(ellipse at center, transparent 52%, rgba(2,4,8,0.55) 100%)',
       }} />
+
+      {/* z2 — GIC chain as an orb-web constellation around the controller
+          (default). The lit-orb count is the REAL chain_length; the chain line
+          wraps the controller as it grows. Toggle to the ribbon via Tweaks. */}
+      {!ribbonMode && (
+        <GicChainConstellation
+          chainLen={chainLen} target={target}
+          paused={paused} bridgeDown={bridgeOffline}
+        />
+      )}
 
       {/* z3+ — the design's four floating forensic-instrument corner panels.
           (FleetPanel + the top-center ChipStrip were removed — they overcrowded
           the clean 4-corner composition; fleet coherence lives in OperatorView.) */}
       <CaptureHealthPanel capture={captureHealth} paused={paused} bridgeDown={bridgeOffline} />
       <LatestGicPanel grind={grindChain} bridgeDown={bridgeOffline} magnitude={magnitude} />
-      <ConsentPanelOverlay consentStatus={consentStatus} connected={Boolean(address)} onOpen={() => setConsentOpen(true)} />
-      <AnalyticsPanel analytics={grindAnalytics} topBlocker={topBlocker} />
+      <ConsentPanelOverlay consentStatus={consentStatus} connected={Boolean(address)} onOpen={() => setConsentOpen(true)} ribbonMode={ribbonMode} />
+      <AnalyticsPanel analytics={grindAnalytics} topBlocker={topBlocker} ribbonMode={ribbonMode} />
 
       <ApopEvidencePrism apop={apop} />
 
-      <GrindRibbon
-        chainLen={chainLen} target={target} intact={intact}
-        paused={paused} bridgeDown={bridgeOffline}
-        consecutiveClean={consecutiveClean} changedAgo={changedAgo}
-      />
+      {ribbonMode && (
+        <GrindRibbon
+          chainLen={chainLen} target={target} intact={intact}
+          paused={paused} bridgeDown={bridgeOffline}
+          consecutiveClean={consecutiveClean} changedAgo={changedAgo}
+        />
+      )}
 
       <PCCDrawer
         captureHealth={captureHealth}
@@ -685,6 +727,9 @@ export function GamerView() {
       />
 
       <ConsentPanel manualOpen={consentOpen} onCloseManual={setConsentOpen} />
+
+      {/* GIC milestone flash — fires only on a real chain-length 10x crossing */}
+      <LevelUpBadge chainLen={chainLen} />
     </div>
   )
 }

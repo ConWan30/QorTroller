@@ -54,23 +54,21 @@ function MetricCell({ label, value, accent, isLast }) {
   )
 }
 
-export default function StatusStrip() {
+/* v2 design pass · item E — the Evidence OS status, extracted so both the
+   (legacy) StatusStrip and the new AppShell strip + eyebrow read one source.
+   All values are honest: bridge observed (LIVE/MOCK/UNREACHABLE), coherence
+   "—" when unauthenticated/offline (never fake green). */
+export function useOsStatus() {
   const { data: state, error: stateErr } = usePublicProtocolState()
   const { data: roots } = usePublicAgentRoots()
-  // Mythos audit C2 — real fleet-coherence aggregate replaces hardcoded 0.
-  // useFleetCoherenceStatus is operator-side (api_key); when unauthenticated
-  // OR mock/offline, fall through to dormant "—" instead of fake green.
   const { data: coherence, isError: coherenceErr } = useFleetCoherenceStatus()
 
-  // Bridge state — observation, not inference
   let bridgeStatus = 'live'
   let bridgeLabel = 'LIVE'
   if (isMockActive()) {
-    bridgeStatus = 'mock'
-    bridgeLabel = 'MOCK'
+    bridgeStatus = 'mock'; bridgeLabel = 'MOCK'
   } else if (stateErr) {
-    bridgeStatus = 'blocked'
-    bridgeLabel = 'UNREACHABLE'
+    bridgeStatus = 'blocked'; bridgeLabel = 'UNREACHABLE'
   }
 
   const killSwitchPaused = Boolean(state?.kill_switch_paused)
@@ -79,15 +77,28 @@ export default function StatusStrip() {
   const merkleShort = firstAgentMerkle
     ? `${firstAgentMerkle.slice(0, 8)}…${firstAgentMerkle.slice(-4)}`
     : '—'
-  // Real fleet-coherence aggregate. When coherence data unavailable (auth
-  // missing / mock / offline), the strip honestly reads "—" + dormant
-  // status — NOT green 0. This is the C2 honesty fix from Mythos audit.
   const coherenceAvailable = Boolean(coherence) && !coherenceErr && !isMockActive()
   const blockerCount = coherenceAvailable
     ? (coherence.active_contradictions ?? coherence.by_mode?.CONTRADICTION ?? 0)
       + (coherence.active_orphans     ?? coherence.by_mode?.ORPHAN ?? 0)
       + (coherence.active_inversions  ?? coherence.by_mode?.INVERSION ?? 0)
     : '—'
+
+  return {
+    bridgeStatus, bridgeLabel, killSwitchPaused, agentCount,
+    pvCi: state?.pv_ci_invariants_count ?? '—',
+    vpm: state?.total_vpm_artifacts ?? '—',
+    gic: state?.total_grind_chain_links ?? '—',
+    firstAgentMerkle, merkleShort, blockerCount, coherenceAvailable,
+  }
+}
+
+export default function StatusStrip() {
+  const {
+    bridgeStatus, bridgeLabel, killSwitchPaused, agentCount,
+    firstAgentMerkle, merkleShort, blockerCount, coherenceAvailable,
+  } = useOsStatus()
+  const { data: state } = usePublicProtocolState()
 
   return (
     <nav
@@ -111,21 +122,42 @@ export default function StatusStrip() {
         WebkitOverflowScrolling: 'touch',
       }}
     >
+      {/* Syne medial-T wordmark — identical treatment to the dashboard
+          ViewSelector so Evidence OS reads as the same product. */}
       <Link
         to="/"
         aria-label="Return to operator dashboard"
         style={{
-          fontSize:       'var(--os-text-h3)',
-          fontWeight:     700,
-          color:          'var(--os-accent)',
-          letterSpacing:  '0.12em',
+          display:        'inline-flex',
+          alignItems:     'baseline',
+          gap:            8,
           textDecoration: 'none',
           paddingRight:   18,
           borderRight:    '1px solid var(--os-border)',
           flexShrink:     0,
           whiteSpace:     'nowrap',
         }}
-      >QorTroller · Evidence OS</Link>
+      >
+        <span style={{
+          fontFamily:    "'Syne', system-ui, sans-serif",
+          fontWeight:    700,
+          fontSize:      18,
+          letterSpacing: '-0.02em',
+          color:         'var(--os-text)',
+          display:       'inline-flex',
+          alignItems:    'baseline',
+        }}>
+          <span>Qor</span>
+          <span style={{ color: 'var(--os-accent)', fontWeight: 800 }}>T</span>
+          <span>roller</span>
+        </span>
+        <span style={{
+          fontSize:      'var(--os-text-min)',
+          letterSpacing: '0.12em',
+          textTransform: 'uppercase',
+          color:         'var(--os-accent)',
+        }}>Evidence OS</span>
+      </Link>
 
       <DataBadge
         status={bridgeStatus}
