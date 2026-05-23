@@ -100,19 +100,29 @@ def _parse_claude_md() -> dict:
 
     s: dict = {}
 
-    # Current phase: "Current phase: Phase 207 — COMPLETE (...)"
+    # Current phase: legacy "Current phase: Phase NNN — COMPLETE" OR post-Phase-238
+    # HEAD-commit milestone format "Current phase: HEAD `<sha>` — <headline>" (2026-05+)
     m = _re.search(r"Current phase:\s*Phase\s*(\d+)", text)
-    s["phase_num"] = m.group(1) if m else "207"
-    s["phase"] = f"{s['phase_num']} COMPLETE"
+    if m:
+        s["phase_num"] = m.group(1)
+        s["phase"] = f"{m.group(1)} COMPLETE"
+    else:
+        mh = _re.search(r"Current phase:\s*HEAD\s*`?([0-9a-f]{6,40})`?\s*[—\-]+\s*\*{0,2}([^.\n]{5,90})", text)
+        if mh:
+            s["phase_num"] = mh.group(1)[:8]
+            s["phase"] = f"HEAD {mh.group(1)[:8]} — {mh.group(2).strip()}"
+        else:
+            s["phase_num"] = "238+"
+            s["phase"] = "post-Phase-238 (HEAD-commit milestone; see CLAUDE.md)"
 
     # Test counts: "Bridge: 2510 passing. Contract: 528. SDK: 539." (Phase 237-EXTEND, 2026-04-26)
     # Fallbacks used only when CLAUDE.md parse fails — updated to current truth.
     m = _re.search(r"Bridge:\s*(\d+)\s*passing", text)
-    s["bridge"] = int(m.group(1)) if m else 2510
+    s["bridge"] = int(m.group(1)) if m else 4330
     m = _re.search(r"Contract:\s*(\d+)", text)
-    s["hardhat"] = int(m.group(1)) if m else 528
+    s["hardhat"] = int(m.group(1)) if m else 674
     m = _re.search(r"SDK:\s*(\d+)", text)
-    s["sdk"] = int(m.group(1)) if m else 539
+    s["sdk"] = int(m.group(1)) if m else 604
     m = _re.search(r"Hardware:\s*(\d+)", text)
     s["hardware"] = int(m.group(1)) if m else 37
     m = _re.search(r"E2E:\s*(\d+)", text)
@@ -244,7 +254,7 @@ async def vapi_protocol_state(**_):
     # Parse CLAUDE.md for current state — auto-refreshes when file changes (every phase)
     s = _parse_claude_md()
     state = {
-        "phase": s.get("phase", "237.5 COMPLETE"),  # Phase 237.5 fallback (CORPUS-SNAPSHOT on-chain anchoring via AdjudicationRegistry)
+        "phase": s.get("phase", "HEAD Guardian-KMS (O3 ACTING; see CLAUDE.md)"),  # 2026-05-23 fallback
         "timestamp": datetime.utcnow().isoformat() + "Z",
         "test_counts": {
             "bridge":   s.get("bridge",   2510),  # Phase 237-EXTEND fallback
