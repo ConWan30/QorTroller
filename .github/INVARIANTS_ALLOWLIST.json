@@ -60,7 +60,7 @@
     "description": "Phase 67 circuitId = sha3_256(circuitName.encode())"
   },
   "INV-016": {
-    "digest": "7b0cc679545a22aa94afe301d7e34a3ff264c97fa70f8f0a59c34b443609968e",
+    "digest": "f7f3c2e7a7c8eebbb37c3213e29967389f259b3208b1772a4acb7842be058354",
     "description": "Allowlist hash included as virtual leaf in ProtocolCoherenceAgent Merkle root"
   },
   "INV-017": {
@@ -401,7 +401,7 @@
   },
   "INV-MYTHOS-FAMILIES-001": {
     "digest": "d6ced1dc4712c8e63c063193588fe4d0807671b24bea98f5231db91b684d1c63",
-    "description": "Mythos-Crypto _PATTERN_017_FROZEN_TAGS frozenset declaration pinned (Priority 5). 11 commitment families per the empirical audit finding 2026-05-15 (CLAUDE.md previously stated 10; PHYSICAL_DATA_ATTESTATION v1 confirmed as 11th by its own module docstring). The frozenset declaration line is pinned; the contents are pinned by the per-family domain tag literals being checked by their own existing invariants."
+    "description": "Mythos-Crypto _PATTERN_017_FROZEN_TAGS frozenset declaration pinned (Priority 5). 12 commitment families: PHYSICAL_DATA_ATTESTATION v1 was the 11th (2026-05-15 audit finding; CLAUDE.md previously stated 10), and VAPI-O3-SUPERSEDE-v1 registered as the 12th 2026-05-23 per Decision O3-CLASS=A. The frozenset declaration line is pinned; the contents are pinned by the per-family domain tag literals being checked by their own existing invariants."
   },
   "INV-MYTHOS-METHODOLOGY-FILES-001": {
     "digest": "b66e72022b57ac9fe041c6ee38e30d07dc6f45d61e65021beebbf6b1dc0b6bf6",
@@ -433,7 +433,7 @@
   },
   "INV-MLGA-CAPABILITY-NOT-FAMILY-001": {
     "digest": "357c2a274f5fd39eb65a9d549088627689cb0b8b0c20253ee3237d357f40675d",
-    "description": "Phase O5-MLGA: b\"VAPI-MLGA-SESSION-v1\" must appear in _KNOWN_CAPABILITY_TAGS in bridge/vapi_bridge/mythos_variants.py (NOT in _PATTERN_017_FROZEN_TAGS). MLGA is a capability tag per the POSEIDON-BN254-AS reframe precedent; commitment-family count stays 10 + PHYSICAL_DATA_ATTESTATION = 11 (per the Mythos-Crypto empirical correction). MLGA-LESSON-001 ratified."
+    "description": "Phase O5-MLGA: b\"VAPI-MLGA-SESSION-v1\" must appear in _KNOWN_CAPABILITY_TAGS in bridge/vapi_bridge/mythos_variants.py (NOT in _PATTERN_017_FROZEN_TAGS). MLGA is a capability tag per the POSEIDON-BN254-AS reframe precedent; commitment-family count is 12 (10 base + PHYSICAL_DATA_ATTESTATION + VAPI-O3-SUPERSEDE-v1) while MLGA stays a capability tag, not a family. MLGA-LESSON-001 ratified."
   },
   "INV-MLGA-DATAPROOF-PREIMAGE-001": {
     "digest": "994ea215f6bcdd3cb91be688084e44c00209b7e6ad2e78db75465e97b47df06e",

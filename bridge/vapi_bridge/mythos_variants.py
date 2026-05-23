@@ -821,6 +821,7 @@ _PATTERN_017_FROZEN_TAGS: frozenset[bytes] = frozenset({
     b"VAPI-FRR-v1",                  # operator_initiative_advancement.py
     b"VAPI-ZKBA-ARTIFACT-v1",        # zkba_artifact.py
     b"VAPI-AGENT-COMMIT-v1",         # agent_commit.py
+    b"VAPI-O3-SUPERSEDE-v1",         # operator_initiative_auto_supersede.py (O3-CLASS=A, 2026-05-23 — 12th family)
     b"VAPI-PHYSICAL-DATA-ATTESTATION-v1",  # physical_data_attestation.py
                                      # (Pass 2C Section 4.2 ratified; the
                                      # docstring explicitly identifies it
