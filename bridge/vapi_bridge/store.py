@@ -3268,6 +3268,29 @@ class Store:
         except Exception:
             pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
+        # Phase B item ③ — iPACT-DePIN renewal-cadence commitment chain (idempotent)
+        try:
+            with self._conn() as conn:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS ipact_renewal_commitments (
+                        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+                        device_id       TEXT    NOT NULL,
+                        token_id        INTEGER NOT NULL,
+                        epoch_index     INTEGER NOT NULL,
+                        prev_commitment TEXT    NOT NULL,
+                        reattest_proof  TEXT    NOT NULL,
+                        commitment      TEXT    NOT NULL,
+                        ts_ns           INTEGER NOT NULL,
+                        enforced        INTEGER NOT NULL DEFAULT 0,
+                        created_at      REAL    NOT NULL DEFAULT 0.0,
+                        UNIQUE(device_id, epoch_index)
+                    );
+                    CREATE INDEX IF NOT EXISTS idx_ipact_renewal_device
+                        ON ipact_renewal_commitments(device_id, epoch_index);
+                """)
+        except Exception:
+            pass  # idempotent — table already exists
+
         # Phase 241-APOP: Active Play Occupancy Proof shadow/hybrid audit log.
         try:
             with self._conn() as conn:
@@ -7752,6 +7775,93 @@ class Store:
         with self._conn() as conn:
             row = conn.execute("SELECT COUNT(*) FROM vhp_issuances").fetchone()
             return int(row[0]) if row else 0
+
+    # --- Phase B item ③ — iPACT-DePIN renewal-cadence commitment chain ---------
+
+    def get_ipact_renewal_head(self, device_id: str) -> dict | None:
+        """Return the latest renewal commitment for a device (highest epoch_index), or None.
+
+        Keys: commitment (bytes), epoch_index (int), ts_ns (int). Used to chain the next
+        renewal (prev_commitment) and to seed the monotonic ts_ns / epoch guards.
+        """
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT commitment, epoch_index, ts_ns FROM ipact_renewal_commitments "
+                "WHERE device_id = ? ORDER BY epoch_index DESC LIMIT 1",
+                (device_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "commitment": bytes.fromhex(row[0]),
+            "epoch_index": int(row[1]),
+            "ts_ns": int(row[2]),
+        }
+
+    def get_prev_ipact_ts_ns(self, device_id: str) -> int:
+        """Return MAX(ts_ns) for a device's renewal commitments (0 if none).
+
+        Mirrors get_prev_gic_ts_ns — the monotonicity guard input (INV-GIC-002 pattern).
+        """
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT MAX(ts_ns) FROM ipact_renewal_commitments WHERE device_id = ?",
+                (device_id,),
+            ).fetchone()
+        return int(row[0]) if row and row[0] is not None else 0
+
+    def insert_ipact_renewal_commitment(
+        self,
+        device_id: str,
+        token_id: int,
+        epoch_index: int,
+        prev_commitment: bytes,
+        reattest_proof: bytes,
+        commitment: bytes,
+        ts_ns: int,
+        enforced: bool = False,
+    ) -> int:
+        """Persist one renewal-cadence commitment link (Phase B ③).
+
+        UNIQUE(device_id, epoch_index) enforces anti-replay at the DB layer.
+        Stores 32-byte values as hex.
+        """
+        with self._conn() as conn:
+            cur = conn.execute(
+                """INSERT INTO ipact_renewal_commitments
+                   (device_id, token_id, epoch_index, prev_commitment, reattest_proof,
+                    commitment, ts_ns, enforced, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    device_id, int(token_id), int(epoch_index),
+                    prev_commitment.hex(), reattest_proof.hex(), commitment.hex(),
+                    int(ts_ns), int(bool(enforced)), __import__("time").time(),
+                ),
+            )
+            return cur.lastrowid
+
+    def get_ipact_renewal_chain(self, device_id: str) -> list[dict]:
+        """Return a device's renewal links ordered by epoch_index ASC for verify_chain().
+
+        Each dict: epoch_index (int), reattest_proof (bytes), ts_ns (int),
+        commitment (bytes) — the exact shape ipact_renewal.verify_chain() consumes.
+        """
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT epoch_index, reattest_proof, ts_ns, commitment "
+                "FROM ipact_renewal_commitments WHERE device_id = ? "
+                "ORDER BY epoch_index ASC",
+                (device_id,),
+            ).fetchall()
+        return [
+            {
+                "epoch_index": int(r[0]),
+                "reattest_proof": bytes.fromhex(r[1]),
+                "ts_ns": int(r[2]),
+                "commitment": bytes.fromhex(r[3]),
+            }
+            for r in rows
+        ]
 
     def get_first_vhp_status(self) -> dict | None:
         """Return earliest VHP issuance record + is_valid + is_simulation flags (Phase 103).
