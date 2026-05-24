@@ -861,6 +861,31 @@ _KNOWN_CAPABILITY_TAGS: frozenset[bytes] = frozenset({
 })
 
 
+# ==========================================================================
+# QorTroller-branded (QRESCE) PATTERN-017 namespace — SEPARATE from the VAPI
+# Layer-C `_PATTERN_017_FROZEN_TAGS` above. Per Phase B freeze ceremony
+# Decision FC-(a) (wiki/methodology/phase_b_freeze_ceremony_plan.md), the VAPI
+# namespace stays UNTOUCHED byte-for-byte; QorTroller-branded commitment
+# families live in this parallel namespace and are audited by a parallel
+# scanner (`mythos_qortroller_crypto_drift`). These tags use the QRESCE
+# `QORTROLLER-*` prefix (QorTroller brand lock, QRESCE-0001 v0.5).
+# Each "family" may pin multiple tag-entries (e.g. a domain tag + a genesis
+# tag); the count of FAMILIES is governance-defining, not the count of tags.
+_QORTROLLER_FROZEN_FAMILY_TAGS: frozenset[bytes] = frozenset({
+    b"QORTROLLER-IPACT-RENEWAL-v1",          # ipact_renewal.py — ③ iPACT renewal
+    b"QORTROLLER-IPACT-RENEWAL-GENESIS-v1",  # ipact_renewal.py — ③ iPACT renewal genesis
+})  # 2 tag-entries = 1 family (③ iPACT renewal cadence, QORTROLLER-IPACT-RENEWAL)
+
+# QorTroller-branded capability tags — distinct from QorTroller PATTERN-017
+# commitment families (mirrors the VAPI `_KNOWN_CAPABILITY_TAGS` precedent).
+# NOT counted toward the QorTroller PATTERN-017 family invariant.
+_QORTROLLER_KNOWN_CAPABILITY_TAGS: frozenset[bytes] = frozenset({
+    b"QORTROLLER-IPACT-CHALLENGE-v1",  # ipact_challenge.py — dedicated challenge
+                                       # domain tag (W-5); capability, not a
+                                       # commitment family
+})
+
+
 async def mythos_crypto_drift(
     *,
     repo_root: Path | None = None,
@@ -1025,6 +1050,127 @@ async def mythos_crypto_drift(
             # status 404 = still unavailable (current state); no finding emitted
         except Exception as exc:  # noqa: BLE001 — fail-open
             log.debug("npm poll error (non-fatal): %s", exc)
+
+    return findings
+
+
+# ==========================================================================
+# Mythos-QorTroller-Crypto — QorTroller (QRESCE) PATTERN-017 namespace audit
+# ==========================================================================
+# Parallel scanner to mythos_crypto_drift, covering the QorTroller-branded
+# `QORTROLLER-*` commitment-family namespace (Phase B freeze ceremony, Decision
+# FC-(a)). Identical fail-open contract + finding structure; same bridge dir.
+# The VAPI `_PATTERN_017_FROZEN_TAGS` namespace is NOT scanned here — that is
+# mythos_crypto_drift's responsibility. This keeps the two brand namespaces
+# auditable independently without coupling either frozenset to the other.
+
+
+async def mythos_qortroller_crypto_drift(
+    *,
+    repo_root: Path | None = None,
+) -> list[MythosFindingResult]:
+    """QorTroller (QRESCE) PATTERN-017 commitment-family integrity audit.
+
+    Scans bridge/vapi_bridge/*.py for `b"QORTROLLER-..."` domain tag literals
+    and cross-checks against the FROZEN QorTroller frozenset
+    (_QORTROLLER_FROZEN_FAMILY_TAGS) + the QorTroller capability-tag set
+    (_QORTROLLER_KNOWN_CAPABILITY_TAGS). Findings:
+      CRITICAL: a QorTroller PATTERN-017 tag in the FROZEN set is MISSING from
+                production code (commitment family was removed without
+                governance ceremony).
+      HIGH:     an unknown `b"QORTROLLER-..."` literal appears in production
+                code (potential new commitment family without invariant
+                pinning — needs governance ceremony to add).
+
+    Parallel to mythos_crypto_drift but scoped to the QorTroller-branded
+    namespace per Phase B Decision FC-(a). NEVER raises (fail-open contract).
+    All findings frozen_region=True. Healthy = 0 findings.
+    """
+    root = _resolve_repo_root(repo_root)
+    findings: list[MythosFindingResult] = []
+    bridge_dir = root / "bridge" / "vapi_bridge"
+
+    # Discover all b"QORTROLLER-..." literal occurrences in production code.
+    discovered_tags: set[bytes] = set()
+    discovered_by_file: dict[bytes, list[str]] = {}
+    pat = re.compile(rb'b"(QORTROLLER-[A-Za-z0-9_\-]+-v\d+)"')
+    if bridge_dir.is_dir():
+        for f in bridge_dir.rglob("*.py"):
+            try:
+                src = f.read_bytes()
+            except Exception:  # noqa: BLE001 — fail-open
+                continue
+            for m in pat.finditer(src):
+                raw_tag = m.group(1)            # without surrounding quotes
+                discovered_tags.add(raw_tag)
+                rel = str(f.relative_to(root)).replace("\\", "/")
+                discovered_by_file.setdefault(raw_tag, []).append(rel)
+            await asyncio.sleep(0)
+
+    all_known = (
+        set(_QORTROLLER_FROZEN_FAMILY_TAGS)
+        | set(_QORTROLLER_KNOWN_CAPABILITY_TAGS)
+    )
+    discovered_bytes = {b for b in discovered_tags}
+
+    # Check 1: every FROZEN QorTroller PATTERN-017 tag must appear in code.
+    missing = _QORTROLLER_FROZEN_FAMILY_TAGS - discovered_bytes
+    for tag in missing:
+        findings.append(MythosFindingResult(
+            variant="qortroller_crypto",
+            severity="CRITICAL",
+            description=(
+                f"QORTROLLER PATTERN-017 FAMILY DRIFT: FROZEN commitment-"
+                f"family tag {tag!r} is missing from bridge/vapi_bridge/*.py. "
+                "The QorTroller (QRESCE) PATTERN-017 commitment families are "
+                "protocol-defining; removal requires governance ceremony + "
+                "invariant change."
+            ),
+            recommended_fix=(
+                f"Restore the {tag!r} primitive module from git history. "
+                "Do NOT update _QORTROLLER_FROZEN_FAMILY_TAGS — the "
+                "frozenset is the FROZEN invariant."
+            ),
+            coherence_id=_coherence_id(
+                "qortroller_crypto", f"missing_family:{tag.decode()}"
+            ),
+            frozen_region=True,
+            fix_authority_tier=3,
+            evidence_sources=["bridge/vapi_bridge/", "CLAUDE.md"],
+        ))
+
+    # Check 2: every discovered QORTROLLER tag should be in the known set
+    # (FROZEN QorTroller PATTERN-017 ∪ QorTroller capability tags). Unknown
+    # tags = potential new commitment family without invariant pinning.
+    unknown = discovered_bytes - all_known
+    for tag in sorted(unknown):
+        files_ref = discovered_by_file.get(tag, [])
+        findings.append(MythosFindingResult(
+            variant="qortroller_crypto",
+            severity="HIGH",
+            description=(
+                f"UNKNOWN QORTROLLER CRYPTOGRAPHIC TAG: {tag!r} appears in "
+                f"production code at {files_ref} but is NOT in "
+                "_QORTROLLER_FROZEN_FAMILY_TAGS or "
+                "_QORTROLLER_KNOWN_CAPABILITY_TAGS. Either (a) a new "
+                "commitment family was added without governance ceremony, OR "
+                "(b) a new capability tag was added without updating this audit."
+            ),
+            recommended_fix=(
+                "If this is a new commitment family: invoke governance "
+                "ceremony (--reason 'invariant_change' + governance phrase) "
+                "to update _QORTROLLER_FROZEN_FAMILY_TAGS + add PV-CI "
+                "invariant. If a capability tag: update "
+                "_QORTROLLER_KNOWN_CAPABILITY_TAGS."
+            ),
+            coherence_id=_coherence_id(
+                "qortroller_crypto", f"unknown_tag:{tag.decode()}"
+            ),
+            file_path=files_ref[0] if files_ref else None,
+            frozen_region=True,
+            fix_authority_tier=3,
+            evidence_sources=files_ref or ["bridge/vapi_bridge/"],
+        ))
 
     return findings
 
