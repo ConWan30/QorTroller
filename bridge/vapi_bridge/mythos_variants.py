@@ -805,8 +805,10 @@ async def mythos_operator_initiative_audit(
 # ==========================================================================
 # Mythos-Crypto — PATTERN-017 commitment-family integrity (Priority 5)
 # ==========================================================================
-# Pinned PATTERN-017 domain tags (10 commitment families per CLAUDE.md
-# Hard Rules). Drift here (additions OR removals) reshapes the protocol
+# Pinned PATTERN-017 domain tags — 12 commitment families (the canonical
+# frozenset; early CLAUDE.md Hard Rules said 10, before
+# PHYSICAL-DATA-ATTESTATION-v1 [2026-05-15] and O3-SUPERSEDE-v1
+# [2026-05-23, the 12th]). Drift here (additions OR removals) reshapes the protocol
 # surface; any change requires governance ceremony + new PV-CI invariants.
 # This list is the audit's source-of-truth — if a new commitment family
 # is added in production code, this list MUST be updated in the same PR.
@@ -834,10 +836,11 @@ _PATTERN_017_FROZEN_TAGS: frozenset[bytes] = frozenset({
 # surfaced VAPI-PHYSICAL-DATA-ATTESTATION-v1 as an UNKNOWN HIGH finding.
 # Investigation confirmed PHYSICAL_DATA_ATTESTATION v1 is a genuine
 # FROZEN-v1 commitment family (Pass 2C Section 4.2 ratified). The pin
-# list now includes it explicitly, bringing the empirically-observed
-# count to 11. CLAUDE.md's stated "10 PATTERN-017 commitment families"
-# may need a sync update — surfaced here for operator review without
-# silently editing CLAUDE.md.
+# list now includes it explicitly. (Historical: that brought the count to
+# 11 as of 2026-05-15; VAPI-O3-SUPERSEDE-v1 was later added as the 12th
+# family on 2026-05-23, so the current canonical count is 12. WP v6.1 +
+# state-of-protocol §3.5 reconciled their docs to 12 on 2026-05-24; this
+# frozenset remains the audit source-of-truth.)
 
 # Capability tags — distinct from PATTERN-017 commitment families per
 # the POSEIDON-BN254-AS reframe precedent. These are NOT counted toward
