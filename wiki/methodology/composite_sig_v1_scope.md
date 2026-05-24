@@ -299,6 +299,14 @@ exercises both formats in real integration.
 **P4b** (PoEP commitment registration) and **PoEP P4c** (hybrid signing) both consume this
 wire format.
 
+## Tracked external dependency (IIP-64 0x0B PQ-signature precompile)
+①'s **on-chain** composite-sig verification surface depends on IoTeX's IIP-64 §4.2 `0x0B` PQ-signature
+precompile (ML-DSA / SLH-DSA). Until `0x0B` ships, on-chain ① verification is either expensive (an
+in-EVM PQ verifier) or off-chain-only. This is an **① concern, not an ④ (ZK proving-system) concern** —
+surfaced by the ④ pre-investigation's primary-source re-verification of IIP-64 §4.2/§4.7 (see
+`poac_v2_choice_pre_investigation.md` §4.A). Tracked, not a freeze-surface change to ①. Memory:
+`iip64-0x0b-precompile-affects-composite-sig-on-chain`.
+
 ## Provenance
 Pre-implementation V-check `vapi_validate_proposal` → APPROVED (0 violations / 0 warnings),
 2026-05-23, HEAD `11761759`. This is a **DRAFT scope held for operator review** before
