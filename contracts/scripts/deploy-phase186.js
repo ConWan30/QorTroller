@@ -8,10 +8,16 @@
  *   - Events: AttestationRegistered + AttestationBoundRenewal
  *   - ReentrancyGuard on attestedRenewCommit (CEI pattern enforced)
  *
- * NOTE: SeparationRatioRegistry.sol is NOT yet deployed on IoTeX testnet.
- * It has been code-complete since Phase 153 (deploy deferred — wallet ~0.35 IOTX).
- * Phase 178 added renewCommit(); Phase 186 adds registerAttestation() + attestedRenewCommit().
- * All three phases' functionality is included in this single deploy.
+ * STATUS (corrected 2026-05-24): SeparationRatioRegistry IS already deployed and
+ * LIVE on IoTeX testnet at 0xB39CeE732cf91c93539Bd064D9426642a095a026 (Phase 153
+ * LIVE 2026-04-10, including Phase 178 renewCommit) — eth_getCode-verified
+ * 2026-05-24 (8258 hex bytecode). The earlier "NOT yet deployed / PENDING_DEPLOY"
+ * header was STALE. The LIVE bytecode does NOT contain the Phase 186 attestation
+ * extension (registerAttestation/attestedRenewCommit, added to source 2026-05-24);
+ * EVM bytecode is immutable + this is a plain non-upgradeable Ownable contract, so
+ * running this script deploys a NEW instance (NEW address) carrying Phase 153+178+186.
+ * It is OPTIONAL / DEMAND-DRIVEN — run only if on-chain attestation is actually wanted;
+ * the existing 0xB39C… stays live with Phase 153+178.
  *
  * VAPI Exclusivity:
  *   After Phase 186, VAPI is the ONLY protocol where:
@@ -22,11 +28,13 @@
  *   Prerequisite stack: Phases 153+163+164+173+178+180+182+185+186 — non-replicable.
  *
  * Gas estimate: ~0.12 IOTX (Ownable + ReentrancyGuard + attestation mapping + 2 new functions)
- * Wallet balance required: >= 0.15 IOTX (buffer above estimate)
- * Wallet: 0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692 (~0.35 IOTX as of Phase 185)
+ * Wallet: 0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692 (live balance 14.257596 IOTX as of
+ *   2026-05-24 — ample; NOT wallet-gated. The earlier "~0.35 IOTX" figure was STALE.)
  *
- * Deploy Status: DEFERRED — wallet feasible but pending token launch sequencing.
- * separationRatioRegistry key in deployed-addresses.json: "PENDING_DEPLOY"
+ * Deploy Status: OPTIONAL / DEMAND-DRIVEN. This deploys a NEW-address instance carrying
+ * Phase 153+178+186; the existing 0xB39C… (Phase 153+178) stays live. deployed-addresses.json
+ * already records the live 0xB39C… as SeparationRatioRegistry (reconciled 2026-05-24); a
+ * new deploy here would add a distinct key (e.g. separationRatioRegistryV186).
  *
  * Usage (when ready):
  *   npx hardhat run scripts/deploy-phase186.js --network iotex_testnet

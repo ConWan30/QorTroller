@@ -4,7 +4,7 @@
   "_deployer_phase62": "0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692",
   "_network": "iotex_testnet",
   "_chainId": 4690,
-  "_status": "COMPLETE — 31 contracts LIVE (Phase 69+70 deployed 2026-03-19: DataSovereigntyRegistry, HumanityOracle, RulingOracle, PassportOracle, VAPIRewardDistributor, VAPIDataMarketplace, VAPIGovernanceTimelock, VAPIProtocolLens)",
+  "_status": "HISTORICAL header (2026-03-19, 31 contracts). RECONCILED 2026-05-24 to on-chain reality — see _reconciliation_2026_05_24 at end of file. Original: Phase 69+70 deployed 2026-03-19: DataSovereigntyRegistry, HumanityOracle, RulingOracle, PassportOracle, VAPIRewardDistributor, VAPIDataMarketplace, VAPIGovernanceTimelock, VAPIProtocolLens",
   "_explorer": "https://testnet.iotexscan.io/address/",
   "_iotx_spent": "~7.2 IOTX original + ~1.7 IOTX Phase 62 + ~0.3 IOTX Phase 66/68 + ~6.2 IOTX Phase 69/70 = ~15.4 IOTX total",
   "_wallet_remaining": "~4.1 IOTX remaining (0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692 as of 2026-03-19)",
@@ -114,5 +114,15 @@
   "ZKSepProofVerifier": "0xd51a21E234a800a6621f4c23a8fcA44e3bF01002",
   "_phase237_zk_sepproof_status": "LIVE (testnet)",
   "_phase237_zk_sepproof_ceremony_beacon_block": 43451392,
-  "_phase237_zk_sepproof_vk_hash": "0x32fda2857bdfb0612dd5cb305aa6798fabd64bb3f9362f362c6d73cdc49c4c1f"
+  "_phase237_zk_sepproof_vk_hash": "0x32fda2857bdfb0612dd5cb305aa6798fabd64bb3f9362f362c6d73cdc49c4c1f",
+  "_reconciliation_2026_05_24": "Deployment-record reconciliation: the four contracts below were LIVE on-chain (eth_getCode-verified on IoTeX testnet 2026-05-24) AND listed in CLAUDE.md but were MISSING from this file. Added with bytecode-size proof. The historical header above (Phase 74 / 31 contracts / wallet ~4.1 IOTX as of 2026-03-19) is point-in-time; bridge wallet 0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692 live balance is 14.257596 IOTX as of 2026-05-24. A full forensic sweep of all ~49 CLAUDE.md contracts is a follow-on (candidate Mythos variant: deploy_record_drift).",
+  "VAPISwarmOperatorGate": "0x969c0F1EFb28504a95Acf14331A59FBCb2944F98",
+  "_vapiswarmoperatorgate_note": "Phase 130, LIVE 2026-04-10; eth_getCode-verified 2026-05-24 (3692 hex bytecode). Was missing from this file.",
+  "SeparationRatioRegistry": "0xB39CeE732cf91c93539Bd064D9426642a095a026",
+  "_separationratioregistry_note": "Phase 153 (+ Phase 178 renewCommit), LIVE 2026-04-10; eth_getCode-verified 2026-05-24 (8258 hex bytecode). Was missing from this file. The LIVE bytecode is Phase 153+178 ONLY — the Phase 186 attestation extension (registerAttestation/attestedRenewCommit, added to source 2026-05-24) is NOT in the deployed bytecode (immutable, non-upgradeable Ownable contract). Making the Phase 186 functions callable on-chain would require a NEW-address deploy and is optional/demand-driven.",
+  "CeremonyAuditRegistry": "0xb9164E6d74Dde1508df2a39b01d3702ACC8230C2",
+  "_ceremonyauditregistry_note": "Phase 179, LIVE 2026-04-10; eth_getCode-verified 2026-05-24 (3592 hex bytecode). Was missing from this file.",
+  "VHPReenrollmentBadge": "0x42E7A25d0E5667BBae45e5cF33a6e2CC6E42d45C",
+  "_vhpreenrollmentbadge_note": "Phase 187, LIVE 2026-04-10; eth_getCode-verified 2026-05-24 (3902 hex bytecode). Was missing from this file.",
+  "_vapioperatoragentnft_correction_2026_05_24": "CORRECTION: VAPIOperatorAgentNFT (0xa0CDD2B3E292c56030185c66a3d423278A4c467b) IS DEPLOYED — eth_getCode-verified 2026-05-24 (14346 hex bytecode). The _phase_o0_section_6_4_block_b_status above ('code-complete; deployment pending operator-driven session') and its 'Address is placeholder zero until ... executes' note are STALE and superseded by this correction."
 }
