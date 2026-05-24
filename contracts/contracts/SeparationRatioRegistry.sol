@@ -2,13 +2,18 @@
 pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-/// @title SeparationRatioRegistry — Phase 153 + Phase 178
+/// @title SeparationRatioRegistry — Phase 153 + Phase 178 + Phase 186
 /// @notice Stores SHA-256 proof-of-calibration commitments on IoTeX L1.
 ///         Phase 153: commit_hash = SHA-256(ratio_str + N + players_sorted + ts_ns)
 ///         Phase 178: adds ttl_days field and renewCommit() function.
 ///         renewCommit() links a new commitment to a previous one, enabling
 ///         a renewal chain for biometric credential TTL (WIF-029 W1 closure).
 ///         Anti-replay: UNIQUE commitHash guard on both commitRatio and renewCommit.
+///         Phase 186 (WIF-032 W2): attestation-bound renewal — the on-chain
+///         counterpart of the bridge AttestationBoundRenewalAgent. An attestation
+///         (HMAC hash) is registered with a TTL, then consumed exactly once by
+///         attestedRenewCommit (single-use + TTL anti-replay). Autoresearch-specced
+///         (commit 2b01831b); validation suite = test/Phase186.test.js.
 contract SeparationRatioRegistry is Ownable {
 
     struct RatioCommit {
@@ -124,5 +129,96 @@ contract SeparationRatioRegistry is Ownable {
             }
         }
         revert("SeparationRatioRegistry: hash not found");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Phase 186 (WIF-032 W2) — Attestation-bound renewal
+    // On-chain counterpart of the bridge AttestationBoundRenewalAgent. An
+    // attestation (HMAC hash) is registered with a TTL, then consumed exactly
+    // once by attestedRenewCommit. Anti-replay: single-use flag + TTL window.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    struct AttestationRecord {
+        uint32  ttlDays;       // attestation validity window in days
+        uint256 registeredAt;  // block.timestamp at registration (0 = never registered)
+        bool    used;          // true once consumed by attestedRenewCommit (single-use)
+    }
+
+    mapping(bytes32 => AttestationRecord) private _attestations;
+
+    /// @notice Emitted when an attestation is registered.
+    event AttestationRegistered(
+        bytes32 indexed attestationHash,
+        uint32  ttlDays,
+        uint256 timestamp
+    );
+
+    /// @notice Emitted when a renewal is bound to (and consumes) an attestation.
+    event AttestationBoundRenewal(
+        bytes32 indexed prevCommitHash,
+        bytes32 indexed newCommitHash,
+        bytes32 indexed attestationHash,
+        uint32  ttlDays,
+        uint256 blockNumber
+    );
+
+    /// @notice Register an attestation hash with a TTL (in days). Single-use:
+    ///         re-registering the same hash reverts (prevents resetting a used flag).
+    function registerAttestation(bytes32 attestationHash, uint32 ttlDays) external onlyOwner {
+        require(attestationHash != bytes32(0), "SeparationRatioRegistry: zero attestation hash");
+        require(_attestations[attestationHash].registeredAt == 0, "SeparationRatioRegistry: attestation exists");
+        _attestations[attestationHash] = AttestationRecord({
+            ttlDays:      ttlDays,
+            registeredAt: block.timestamp,
+            used:         false
+        });
+        emit AttestationRegistered(attestationHash, ttlDays, block.timestamp);
+    }
+
+    /// @notice Read an attestation record.
+    function getAttestation(bytes32 attestationHash) external view returns (AttestationRecord memory) {
+        return _attestations[attestationHash];
+    }
+
+    /// @notice Renew a commitment, consuming a registered attestation exactly once.
+    ///         Reverts if the attestation is unknown, already used, or past its TTL.
+    ///         The renewal itself mirrors renewCommit() semantics (prev recorded,
+    ///         new unique, inherits ratio/N from the previous commit).
+    function attestedRenewCommit(
+        bytes32 prevCommitHash,
+        bytes32 newCommitHash,
+        uint32  ttlDays,
+        bytes32 attestationHash
+    ) external onlyOwner {
+        AttestationRecord storage att = _attestations[attestationHash];
+        require(att.registeredAt != 0, "SeparationRatioRegistry: attestation not found");
+        require(!att.used, "SeparationRatioRegistry: attestation already used");
+        require(
+            block.timestamp <= att.registeredAt + uint256(att.ttlDays) * 1 days,
+            "SeparationRatioRegistry: attestation expired"
+        );
+
+        // Renewal preconditions (mirror renewCommit)
+        require(ttlDays > 0, "SeparationRatioRegistry: ttlDays must be > 0");
+        require(commitRecorded[prevCommitHash], "SeparationRatioRegistry: prevCommitHash not found");
+        require(!commitRecorded[newCommitHash], "SeparationRatioRegistry: duplicate newCommitHash");
+
+        // Consume the attestation (single-use) before recording the renewal.
+        att.used = true;
+
+        commitRecorded[newCommitHash] = true;
+        RatioCommit memory prev = _findByHash(prevCommitHash);
+        _commits.push(RatioCommit({
+            commitHash:     newCommitHash,
+            ratioMillis:    prev.ratioMillis,
+            nSessions:      prev.nSessions,
+            nPlayers:       prev.nPlayers,
+            committedAt:    block.timestamp,
+            blockNumber:    block.number,
+            ttlDays:        ttlDays,
+            prevCommitHash: prevCommitHash
+        }));
+        totalCommits++;
+        emit AttestationBoundRenewal(prevCommitHash, newCommitHash, attestationHash, ttlDays, block.number);
     }
 }
