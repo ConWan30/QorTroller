@@ -584,6 +584,33 @@ PITL_SESSION_REGISTRY_ABI = [
     },
 ]
 
+# Phase B item ② P4b — minimal VAPIPoEPRegistry read ABI (view calls + the DeviceRegistered
+# event the bridge consumes to resolve a device's composite pubkey). Read-only surface only.
+_VAPI_POEP_REGISTRY_ABI = [
+    {
+        "name": "getCompositePubkeyHash", "type": "function", "stateMutability": "view",
+        "inputs": [{"name": "gamer", "type": "address"}, {"name": "deviceId", "type": "bytes32"}],
+        "outputs": [{"type": "bytes32"}],
+    },
+    {
+        "name": "isRegistrationValid", "type": "function", "stateMutability": "view",
+        "inputs": [{"name": "gamer", "type": "address"}, {"name": "deviceId", "type": "bytes32"}],
+        "outputs": [{"type": "bool"}],
+    },
+    {
+        "name": "DeviceRegistered", "type": "event", "anonymous": False,
+        "inputs": [
+            {"name": "gamer", "type": "address", "indexed": True},
+            {"name": "deviceId", "type": "bytes32", "indexed": True},
+            {"name": "compositePubkeyHash", "type": "bytes32", "indexed": True},
+            {"name": "poepCommitment", "type": "bytes32", "indexed": False},
+            {"name": "compositePubkeyBlob", "type": "bytes", "indexed": False},
+            {"name": "expiresAt", "type": "uint64", "indexed": False},
+            {"name": "blockNumber", "type": "uint256", "indexed": False},
+        ],
+    },
+]
+
 IOID_REGISTRY_ABI = [
     {
         "name": "register",
@@ -1704,6 +1731,54 @@ class ChainClient:
         except Exception as exc:  # noqa: BLE001 — fail-open
             log.warning("get_phg_checkpoint_events_sync error: %s", exc)
             return []
+
+    # --- Phase B item ② P4b: VAPIPoEPRegistry read (resolves #8 W-1) ---
+
+    def get_registered_composite_pubkey(self, device_id):
+        """② P4b — SYNC, fail-open read of a device's registered composite pubkey blob.
+
+        Returns the integrity-verified ① ``encode_pubkey`` blob (two-RPC pattern: event-log blob
+        + on-chain hash view call, verified via poep_registry_handler.resolve_composite_pubkey), or
+        None. **Fail-OPEN** when POEP_REGISTRY_ADDRESS is unset (v1; registry not deployed) or
+        sync_w3 is unavailable — bridge readiness must not depend on the deploy (CONSENT precedent).
+        **Fail-CLOSED** on integrity mismatch (handled inside resolve_composite_pubkey). The
+        deployed read path is validated at the wallet-gated E2E.
+        """
+        from .consent_categories import device_id_to_bytes32
+        from .poep_registry_handler import resolve_composite_pubkey
+
+        addr_str = getattr(self._cfg, "poep_registry_address", "") or ""
+        if not addr_str:
+            return None  # fail-open: registry not deployed (v1 wallet-free)
+        if self._sync_w3 is None:
+            return None
+        try:
+            b32 = device_id_to_bytes32(device_id)
+            addr = self._sync_w3.to_checksum_address(addr_str)
+            contract = self._sync_w3.eth.contract(address=addr, abi=_VAPI_POEP_REGISTRY_ABI)
+            # latest DeviceRegistered for this (indexed) deviceId → registering gamer + event blob
+            evs = contract.events.DeviceRegistered.get_logs(
+                from_block=0, argument_filters={"deviceId": b32}
+            )
+            if not evs:
+                return None
+            ev = evs[-1]
+            gamer = ev["args"]["gamer"]
+            event_blob = bytes(ev["args"]["compositePubkeyBlob"])
+
+            class _ChainReader:  # two-call integrity surface over the deployed contract
+                def is_registration_valid(self, g, d):
+                    return bool(contract.functions.isRegistrationValid(g, d).call())
+                def get_composite_pubkey_hash(self, g, d):
+                    h = bytes(contract.functions.getCompositePubkeyHash(g, d).call())
+                    return h if h and h != b"\x00" * 32 else None
+                def get_registration_blob(self, g, d):
+                    return event_blob
+
+            return resolve_composite_pubkey(_ChainReader(), gamer, b32)
+        except Exception as exc:  # noqa: BLE001 — fail-open on RPC/contract error
+            log.warning("get_registered_composite_pubkey error (fail-open): %s", exc)
+            return None
 
     # --- Phase 23: Identity Continuity Registry ---
 
