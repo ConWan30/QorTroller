@@ -1,9 +1,10 @@
-# QorTroller — Whitepaper v6
+# QorTroller — Whitepaper v6.1
 
 **Title**: QorTroller: Verifiable Autonomous Physical Intelligence (V.A.P.I.) — A Reference Implementation for Gamer-Sovereign Anti-Cheat on IoTeX
 
-**Version**: 6 (grant-tailored, supersedes v5 light revamp + v4 technical baseline)
-**Date**: 2026-05-19
+**Version**: 6.1 (grant-tailored; supersedes v6 §4, v5, v4)
+**Date**: 2026-05-19 · **v6.1 §4 reconciliation**: 2026-05-24
+**v6.1 revision note**: reconciles §4.1/§4.2 to the canonical **12-family** PATTERN-017 frozenset (v6's §4 undercounted — it miscounted PoAC as a family and omitted the already-frozen AGENT-COMMIT-v1 + PHYSICAL-DATA-ATTESTATION-v1). Documentation-only correction; no FROZEN value changed; PoAC (228-byte wire format) unchanged and carved out as wire format, not a family. Filename retained as `qortroller-whitepaper-v6.md` to preserve cross-references.
 **Brand-lock**: QRESCE-0001 v0.5 (`2c762835`)
 **Protocol-state HEAD** (last source-code commit; bridge test counts measured here): `4f8068e9`
 **Documentation HEAD at v6 drafting time**: `aeb6db58` after WP v6 commit; this version supersedes any earlier draft `39f7d26d` state-document parallel reference
@@ -20,7 +21,7 @@ We coin **Verifiable Autonomous Physical Intelligence (V.A.P.I.)** as a Decentra
 
 The architectural commitments are portable. The V.A.P.I. category is intended to host future implementations beyond QorTroller — other physical-input modalities (steering wheels, flight sticks, motion controllers, biometric peripherals) under the same cryptographic-sovereignty discipline.
 
-This whitepaper documents QorTroller's current state at v6: 49 contracts deployed on IoTeX testnet, three autonomous Operator Initiative agents at terminal O3_ACTING phase under six-layer default-deny posture, 11 commitment-family FROZEN-v1 cryptographic primitives plus the POSEIDON-BN254-AS hash capability, 4377 passing bridge tests, 128/128 PV-CI invariants, 14 Mythos audit guardrails, and the GIC_100 chain head permanently anchored at `0x0e9d453d…1ab48da` (block 43348052, tx `0xe807347eb…`, 2026-05-06). Honest gaps — the touchpad_corners separation ratio remaining below 1.0 as the tournament BLOCK enforcement gate, Curator's direct-O3 anchoring bypass of the formal review-pace graduation, the limited 3-player calibration corpus — are explicitly surfaced rather than narrated past.
+This whitepaper documents QorTroller's current state at v6: 49 contracts deployed on IoTeX testnet, three autonomous Operator Initiative agents at terminal O3_ACTING phase under six-layer default-deny posture, 12 commitment-family FROZEN-v1 cryptographic primitives plus the POSEIDON-BN254-AS hash capability, 4377 passing bridge tests, 128/128 PV-CI invariants, 14 Mythos audit guardrails, and the GIC_100 chain head permanently anchored at `0x0e9d453d…1ab48da` (block 43348052, tx `0xe807347eb…`, 2026-05-06). Honest gaps — the touchpad_corners separation ratio remaining below 1.0 as the tournament BLOCK enforcement gate, Curator's direct-O3 anchoring bypass of the formal review-pace graduation, the limited 3-player calibration corpus — are explicitly surfaced rather than narrated past.
 
 ---
 
@@ -67,7 +68,7 @@ V.A.P.I. as a named category is operator-coined. It does not yet have external a
 A reasonable evaluator response to §1.3 (portability invitation) and §1.4 (operator-coined disclosure) is: if the category is open and the discipline is portable, why fund QorTroller rather than wait for a later entrant to inherit the work? The honest distinction:
 
 **What is portable by design** (and intentionally so — this is the V.A.P.I. category's pitch, not its weakness):
-- The FROZEN-v1 byte-domain discipline + the 11 commitment-family preimage structures + the POSEIDON-AS hash capability
+- The FROZEN-v1 byte-domain discipline + the 12 commitment-family preimage structures + the POSEIDON-AS hash capability
 - The Cedar policy bundle pattern + the four-rung agent ladder (O0 → O1_SHADOW → O2_SUGGEST → O3_ACTING) + the six-layer default-deny posture
 - The 14 Mythos audit guardrails as an operational discipline template
 - The composability invariant `isFullyEligible(deviceId)` as a single view call
@@ -168,25 +169,28 @@ QorTroller publishes a family of cryptographic primitives under FROZEN-v1 discip
 
 ### 4.1 Precise primitive count
 
-The protocol publishes **11 commitment-family FROZEN-v1 cryptographic primitives plus one hash-function capability** (POSEIDON-BN254-AS). The commitment-family primitives produce 32-byte SHA-256 commitments over structured byte-domain preimages; the hash capability is a Poseidon-over-BN254 hash function used inside ZK circuit composition.
+The protocol publishes **12 commitment-family FROZEN-v1 cryptographic primitives plus one hash-function capability** (POSEIDON-BN254-AS). The commitment-family primitives produce 32-byte SHA-256 commitments over structured byte-domain preimages; the hash capability is a Poseidon-over-BN254 hash function used inside ZK circuit composition. (Two further byte-tagged *capabilities* — BT-WITNESS-v1 and its reserved BLE variant — are likewise not commitment families.)
 
-A flat statement of "12 primitives" would conflate commitment families with hash capabilities. A grant evaluator with a cryptographer on staff should read the precise distinction: 11 commitment-family + 1 hash capability. This precision was established during the operator's R3 refinement of the POSEIDON-AS framing.
+A flat statement of "13 primitives" would conflate commitment families with the hash capability. A grant evaluator with a cryptographer on staff should read the precise distinction: **12 commitment-family + 1 hash capability**. This follows the operator's R3 refinement of the POSEIDON-AS framing (family vs capability). **v6.1 reconciles the family count from 11 to 12** to match the canonical PATTERN-017 frozenset (§4.2): VAPI-O3-SUPERSEDE-v1 is the 12th family, and AGENT-COMMIT-v1 + PHYSICAL-DATA-ATTESTATION-v1 were already-frozen families omitted from the v6 enumeration. **PoAC is the 228-byte wire-format record (§4.5), the substrate these families commit over — not itself a PATTERN-017 commitment family.**
 
 ### 4.2 Commitment-family primitives — detailed
 
+> **Note:** PoAC (the 228-byte wire-format record, §4.5) is the substrate these families commit over — it is **not** a PATTERN-017 commitment family and is not counted among the 12 below. The table is ordered to match the canonical `_PATTERN_017_FROZEN_TAGS` frozenset (the audit's source-of-truth).
+
 | # | Primitive | Domain tag | Preimage structure | Output |
 |---|---|---|---|---|
-| 1 | **PoAC** (Proof of Autonomous Cognition) | (no prefix; wire format) | `body[164B]` ‖ `sig[64B]` | SHA-256(body) → 32B chain link |
-| 2 | **GIC** (Grind Integrity Chain) | `VAPI-GIC-GENESIS-v1` | `prev_gic[32] ‖ commitment[32] ‖ verdict[1] ‖ host[1] ‖ ts_ns_be[8]` (74B) | SHA-256 → 32B |
-| 3 | **WEC** (Watchdog Event Chain) | `VAPI-WEC-GENESIS-v1` | `prev[32] ‖ code[1] ‖ pid[4] ‖ sid_hash[16] ‖ ts_ns_be[8]` (61B) | SHA-256 → 32B |
-| 4 | **VAME** (Agent Mid-cycle Evidence) | `VAPI-VAME-v1` | `tag[12] ‖ chain_head[16] ‖ ts_ns_be[8] ‖ endpoint ‖ body_bytes` | SHA-256 → 32B |
-| 5 | **CORPUS-SNAPSHOT-v1** | `VAPI-CORPUS-SNAPSHOT-v1` | `tag[24] ‖ wiki_hash[32] ‖ agent_root[32] ‖ ratio_milli_be[8] ‖ corpus_n_be[8] ‖ ts_ns_be[8]` | SHA-256 → 32B |
-| 6 | **CONSENT-v1** | `VAPI-CONSENT-v1` | `tag[15] ‖ device_id_b32 ‖ category_bitmask_be[4] ‖ expires_at_be[8] ‖ ts_ns_be[8]` | SHA-256 → 32B |
-| 7 | **BIOMETRIC-SNAPSHOT-v1** | `VAPI-BIOMETRIC-SNAPSHOT-v1` (26B) | `tag[26] ‖ feature_dim_be[1] ‖ n_players_be[1] ‖ sorted_player_ids[N] ‖ centroids_scaled_be[N×F×8] ‖ cov_inv_scaled_be[F×F×8] ‖ ts_ns_be[8]` (scale factor 1e9 FROZEN; for AIT F=4 N=3 → 263B) | SHA-256 → 32B |
-| 8 | **LISTING-v1** (Phase 238 PALL) | `VAPI-LISTING-v1` (15B; source self-documents the original 16B design approximation — 15B is the correct count) | `tag[15] ‖ sepproof_commitment[32] ‖ biometric_snapshot_hash[32] ‖ corpus_snapshot_hash[32] ‖ gic_hash[32] ‖ consent_bitmask_be[4] ‖ data_class_be[1] ‖ price_micro_iotx_be[8] ‖ ipfs_cid_hash[32] ‖ ts_ns_be[8]` (229B; MARKETPLACE consent bit MUST be set) | SHA-256 → 32B |
-| 9 | **FRR** (Fleet Readiness Root) | `VAPI-FRR-v1` (11B) | `tag[11] ‖ sorted_by_agent_id(agent_id_be[32] ‖ phase_code[1]) for each agent ‖ ts_ns_be[8]` (phase codes FROZEN: O0=0x00, O1_SHADOW=0x01, O2_SUGGEST=0x02, O3_ACT=0x03, UNKNOWN=0xFF; for 3 agents → 118B) | SHA-256 → 32B |
-| 10 | **ZKBA-ARTIFACT-v1** | `VAPI-ZKBA-ARTIFACT-v1` (21B) | `tag[21] ‖ zkba_class_byte[1] ‖ proof_weight_byte[1] ‖ n_components_byte[1] ‖ sorted_component_hashes[n×32] ‖ ts_ns_be[8]` (ZKBAClass FROZEN enum: AIT=1, GIC=2, VHP=3, HARDWARE=4, CONSENT=5, TOURNAMENT=6, MARKET=7; total 24 + n×32 bytes) | SHA-256 → 32B |
+| 1 | **GIC** (Grind Integrity Chain) | `VAPI-GIC-GENESIS-v1` | `prev_gic[32] ‖ commitment[32] ‖ verdict[1] ‖ host[1] ‖ ts_ns_be[8]` (74B) | SHA-256 → 32B |
+| 2 | **WEC** (Watchdog Event Chain) | `VAPI-WEC-GENESIS-v1` | `prev[32] ‖ code[1] ‖ pid[4] ‖ sid_hash[16] ‖ ts_ns_be[8]` (61B) | SHA-256 → 32B |
+| 3 | **VAME** (Agent Mid-cycle Evidence) | `VAPI-VAME-v1` | `tag[12] ‖ chain_head[16] ‖ ts_ns_be[8] ‖ endpoint ‖ body_bytes` | SHA-256 → 32B |
+| 4 | **CORPUS-SNAPSHOT-v1** | `VAPI-CORPUS-SNAPSHOT-v1` | `tag[24] ‖ wiki_hash[32] ‖ agent_root[32] ‖ ratio_milli_be[8] ‖ corpus_n_be[8] ‖ ts_ns_be[8]` | SHA-256 → 32B |
+| 5 | **CONSENT-v1** | `VAPI-CONSENT-v1` | `tag[15] ‖ device_id_b32 ‖ category_bitmask_be[4] ‖ expires_at_be[8] ‖ ts_ns_be[8]` | SHA-256 → 32B |
+| 6 | **BIOMETRIC-SNAPSHOT-v1** | `VAPI-BIOMETRIC-SNAPSHOT-v1` (26B) | `tag[26] ‖ feature_dim_be[1] ‖ n_players_be[1] ‖ sorted_player_ids[N] ‖ centroids_scaled_be[N×F×8] ‖ cov_inv_scaled_be[F×F×8] ‖ ts_ns_be[8]` (scale factor 1e9 FROZEN; for AIT F=4 N=3 → 263B) | SHA-256 → 32B |
+| 7 | **LISTING-v1** (Phase 238 PALL) | `VAPI-LISTING-v1` (15B; source self-documents the original 16B design approximation — 15B is the correct count) | `tag[15] ‖ sepproof_commitment[32] ‖ biometric_snapshot_hash[32] ‖ corpus_snapshot_hash[32] ‖ gic_hash[32] ‖ consent_bitmask_be[4] ‖ data_class_be[1] ‖ price_micro_iotx_be[8] ‖ ipfs_cid_hash[32] ‖ ts_ns_be[8]` (229B; MARKETPLACE consent bit MUST be set) | SHA-256 → 32B |
+| 8 | **FRR** (Fleet Readiness Root) | `VAPI-FRR-v1` (11B) | `tag[11] ‖ sorted_by_agent_id(agent_id_be[32] ‖ phase_code[1]) for each agent ‖ ts_ns_be[8]` (phase codes FROZEN: O0=0x00, O1_SHADOW=0x01, O2_SUGGEST=0x02, O3_ACT=0x03, UNKNOWN=0xFF; for 3 agents → 118B) | SHA-256 → 32B |
+| 9 | **ZKBA-ARTIFACT-v1** | `VAPI-ZKBA-ARTIFACT-v1` (21B) | `tag[21] ‖ zkba_class_byte[1] ‖ proof_weight_byte[1] ‖ n_components_byte[1] ‖ sorted_component_hashes[n×32] ‖ ts_ns_be[8]` (ZKBAClass FROZEN enum: AIT=1, GIC=2, VHP=3, HARDWARE=4, CONSENT=5, TOURNAMENT=6, MARKET=7; total 24 + n×32 bytes) | SHA-256 → 32B |
+| 10 | **AGENT-COMMIT-v1** | `VAPI-AGENT-COMMIT-v1` (20B) | `tag[20] ‖ agent_id[32] ‖ commit_sha[20] ‖ prev_commit_hash[32] ‖ repo_uri_sha[32] ‖ ts_ns_be[8]` (144B; agent_id = bytes32 of ioID DID + TBA binding; commit_sha = git SHA-1; 32 zero bytes for genesis prev) | SHA-256 → 32B |
 | 11 | **VAPI-O3-SUPERSEDE-v1** | `VAPI-O3-SUPERSEDE-v1` | `tag[20] ‖ agent_id[32] ‖ draft_count[8] ‖ disagreement_milli[4] ‖ bundle_drift_30d[4] ‖ scope_drift_30d[4] ‖ dual_key[1] ‖ kms_hsm[1] ‖ github_oauth[1] ‖ marketplace_role[1] ‖ fp_milli[4] ‖ shadow_age_hours[4] ‖ ts_ns_be[8]` (92B) | SHA-256 → 32B |
+| 12 | **PHYSICAL-DATA-ATTESTATION-v1** | `VAPI-PHYSICAL-DATA-ATTESTATION-v1` (33B) | `tag[33] ‖ hardware_data_hash[32] ‖ agent_id[32] ‖ attestation_type_hash[32] (keccak256 of canonical type string) ‖ ts_ns_be[8]` (137B; inner type-hash uses keccak256, outer hash SHA-256 — both part of the v1 freeze) | SHA-256 → 32B |
 
 ### 4.3 The capability primitive
 

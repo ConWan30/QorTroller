@@ -122,11 +122,12 @@ This format is FROZEN. The byte layout is committed under PATTERN-017 cryptograp
 
 QorTroller publishes a family of cryptographic primitives committed under FROZEN-v1 discipline. Each primitive has a byte-domain tag, a defined preimage structure, and an immutable on-disk + on-chain location.
 
-**Current count** (precision-tuned per operator pushback on flat counts):
-- **11 commitment-family primitives** (PoAC + GIC + WEC + VAME + CORPUS-SNAPSHOT + CONSENT + BIOMETRIC-SNAPSHOT + LISTING-v1 + FRR + ZKBA + VAPI-O3-SUPERSEDE-v1)
-- **+1 cryptographic capability** (POSEIDON-BN254-AS — hash function capability, not a commitment family per the operator's R3 framing)
+**Current count** (precision-tuned per operator pushback on flat counts; v6.1 reconciliation 2026-05-24):
+- **12 commitment-family primitives** (GIC + WEC + VAME + CORPUS-SNAPSHOT + CONSENT + BIOMETRIC-SNAPSHOT + LISTING-v1 + FRR + ZKBA + AGENT-COMMIT + VAPI-O3-SUPERSEDE-v1 + PHYSICAL-DATA-ATTESTATION-v1) — the canonical PATTERN-017 frozenset
+- **+1 cryptographic capability** (POSEIDON-BN254-AS — hash function capability, not a commitment family per the operator's R3 framing; BT-WITNESS-v1 / reserved BLE variant are likewise capabilities, not families)
+- **PoAC** is the 228-byte wire-format record (the substrate these families commit over) — NOT itself a PATTERN-017 commitment family
 
-A grant evaluator with a cryptographer on staff should read this as "11 commitment-family FROZEN-v1 cryptographic primitives plus one hash-function capability." Stating "12 primitives" flatly is the framing the R3 refinement explicitly corrected; the precise enumeration is the load-bearing claim.
+A grant evaluator with a cryptographer on staff should read this as "12 commitment-family FROZEN-v1 cryptographic primitives plus one hash-function capability." Stating "13 primitives" flatly is the framing the R3 refinement explicitly corrected; the precise enumeration is the load-bearing claim. (v6.1 reconciled the family count from 11 to 12 to match the canonical frozenset: AGENT-COMMIT-v1 + PHYSICAL-DATA-ATTESTATION-v1 were already-frozen families omitted from the earlier enumeration, and PoAC was carved out as wire format.)
 
 Each primitive has a domain tag of the form `b"VAPI-<name>-v<n>"`. These byte literals remain prefixed `VAPI-` per **Layer C FROZEN-v1 discipline** — the rename to QorTroller (QRESCE-0001 v0.5, 2026-05-18) was deliberately a brand-layer reframing only, NOT a code-layer rewrite. The byte literals encode V.A.P.I.-category cryptographic infrastructure, which any V.A.P.I.-compliant project (including future ones beyond QorTroller) would share.
 
