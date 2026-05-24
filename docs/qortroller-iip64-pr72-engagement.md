@@ -82,6 +82,58 @@ STARK, and account key → PQ Key Registry.
 
 ---
 
+## D5 follow-up comment DRAFT (app-layer STARK-verify reuse) — ⚠️ NOT YET POSTED
+
+**Status:** ready-to-post DRAFT. **The operator posts this under their own GitHub identity** — it is a
+third-party governance PR; it is NOT auto-posted. Prepared 2026-05-24 from the ④ PoAC-v2 investigation
+(`wiki/methodology/poac_v2_choice_pre_investigation.md`) after §4.7 was re-verified against the live PR
+via the GitHub files API.
+
+**Why this follow-up exists (decision context):** QorTroller committed **D1 = SP1** for its app-layer ZK
+proving layer (Path C, commit `e840e03d` / main `a5baae92`), and the 14a seamlessness pre-validation
+confirmed SP1 integrates additively into the bridge (code-GREEN, commit `5383d760`). The one question
+the IIP-64 document could not answer — and the load-bearing input to QorTroller's on-chain verification
+strategy (D4) — is whether §4.7's STARK-verify surface is **app-layer-reusable** or **migration-only**.
+
+**0x0B correction carried into this engagement (so we don't restate the conflation):** §4.2's `0x0B` is
+the **PQ-*signature*** precompile (ML-DSA / SLH-DSA) — relevant to QorTroller's composite-sig *record*
+layer, **distinct** from any STARK-*proof* verification surface. The SP1 alignment is philosophical
+(§4.7 names SP1), not address-specific.
+
+### Verbatim draft (paste as a PR #72 comment)
+
+> Following up on the §4.7 ZK-migration path — thank you for naming **SP1** explicitly and for the
+> design choice to keep migration proofs *"entirely within the STARK,"* avoiding the quantum-vulnerable
+> Groth16 final recursion. That end-to-end-PQ posture is exactly what a downstream app-layer protocol
+> wants from its L1.
+>
+> We've committed to **SP1** for QorTroller's *application-layer* ZK circuits (verifiable anti-cheat /
+> presence proofs over controller biometrics on IoTeX). One planning question that determines our
+> on-chain verification strategy:
+>
+> **Does the §4.7 SP1/STARK verification surface extend to app-layer reuse — i.e. can a downstream
+> contract verify its *own* SP1/STARK proofs on IoTeX — or is the STARK-verification path
+> migration-proof-specific (account-key migration only)?**
+>
+> - If **app-layer-reusable**: we'd plan to verify QorTroller proofs against that surface and stay
+>   end-to-end PQ (no Groth16 wrap).
+> - If **migration-specific** (for now): we'd Groth16-wrap as an interim deployment posture and track
+>   the app-layer surface as it matures.
+>
+> Either answer (including "TBD / on the roadmap") fully unblocks our planning — we just want to design
+> the right verification path rather than assume one. (Separately: we read §4.2's `0x0B` as the
+> PQ-*signature* precompile, which we'll consume for our composite device-identity signatures — that's
+> a distinct surface from STARK-proof verification, noted to keep the two from being conflated.)
+
+### Posting checklist (operator)
+- [ ] Post under operator GitHub identity (`ConWan30`), NOT via tooling.
+- [ ] Honesty guardrails hold: cite IIP-64 as **Draft**; QorTroller app-layer ZK is **pre-prototype**
+      (D1 decided, 14a/14b-step-1a mock landed; no real SP1 guest yet); no overclaim of deployment.
+- [ ] On reply, route per the **Response-handling phase note** above; a "share your design" invite →
+      pursue reference-implementation status. Update backlog #13 (D5) state.
+
+---
+
 ## Cross-references
 - Assessment: `IIP-64 and QorTroller PoEP_ Post-Quantum Verification and Novelty Assessment.pdf`
 - PoEP scope: `l9_presence/POEP_SCOPE.md` · L9 arc: `l9_presence/README.md`
