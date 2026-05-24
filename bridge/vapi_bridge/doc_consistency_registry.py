@@ -229,6 +229,45 @@ REGISTRY: list[CanonicalFact] = [
         ),
         context_hints=("MCP tool", "Tool #"),
     ),
+    CanonicalFact(
+        name="qortroller_commitment_family_count",
+        # 2026-05-24 Phase B freeze ceremony: count of QORTROLLER-namespace
+        # (QorTroller-branded / QRESCE) FROZEN commitment families. Currently 1:
+        # QORTROLLER-IPACT-RENEWAL-v1 (the ③ iPACT renewal family — its GENESIS
+        # tag is the SAME family, not a separate one). NOTE:
+        # QORTROLLER-IPACT-CHALLENGE-v1 is a CAPABILITY, not a commitment family,
+        # so it is explicitly NOT counted here. This fact is SEPARATE from
+        # frozen_v1_commitment_family_count (the VAPI Layer-C count, which
+        # stays 12) — the two namespaces are tracked independently.
+        current_value="1",
+        superseded_values=(),  # Brand-new fact; no prior values
+        verification_command=(
+            "Count of QORTROLLER-namespace (QorTroller-branded / QRESCE) FROZEN "
+            "commitment families — currently 1 (QORTROLLER-IPACT-RENEWAL-v1; its "
+            "GENESIS tag is the same family). QORTROLLER-IPACT-CHALLENGE-v1 is a "
+            "capability, NOT a commitment family, and is not counted. Distinct "
+            "from the VAPI Layer-C frozen_v1_commitment_family_count (12)."
+        ),
+        target_doc_globs=(
+            "docs/qortroller-whitepaper-v6.md",
+            "docs/qortroller-state-of-the-protocol-2026-05-19.md",
+        ),
+        context_hints=(
+            "qortroller commitment",
+            "QorTroller-namespace",
+            "qortroller_commitment_family_count",
+            "QORTROLLER-IPACT-RENEWAL",
+        ),
+        # Exclude the VAPI Layer-C count's own context so a line discussing the
+        # 12-family VAPI count does not collide with this 1-family QorTroller
+        # count, and exclude byte/preimage structure references.
+        exclusion_substrings=(
+            "Layer-C",
+            "PATTERN-017",
+            "VAPI commitment",
+            "byte", "bytes", "preimage",
+        ),
+    ),
 ]
 
 

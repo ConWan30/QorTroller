@@ -1082,6 +1082,117 @@ INVARIANTS: list[Invariant] = [
         pattern=r"BrowserRouter|/session/:commitmentHex",
         min_matches=2,
     ),
+    # ------------------------------------------------------------------
+    # QorTroller Phase B freeze ceremony — pin the (1) composite-sig v1.1
+    # and (3) iPACT renewal cadence FROZEN-v1 byte-format constructs plus
+    # the dedicated #8 challenge-step domain tag and the QorTroller
+    # PATTERN-017 family frozenset. These primitives were RESERVED-not-
+    # frozen at ship time; the freeze ceremony elevates their load-bearing
+    # literals to PV-CI gate enforcement so any silent byte-layout drift
+    # surfaces at PR time. Mirrors the BT-WITNESS / MLGA capability-pin
+    # convention (per-literal source-line pinning).
+    #
+    # #6 (1) composite-sig v1.1 (l9_presence/composite_sig.py) — draft-16
+    # AND-composite (ML-DSA-65/44 + SLH-DSA-128s, all + ECDSA-P256).
+    # ------------------------------------------------------------------
+    Invariant(
+        id="INV-COMPOSITE-SIG-PREFIX-001",
+        description='Phase B (1): PREFIX = b"CompositeAlgorithmSignatures2025" (32-byte draft-16 Section 2.2 domain-separation Prefix) FROZEN literal in l9_presence/composite_sig.py. Bound verbatim into every M\' message-representative; any change breaks every composite signature ever produced. Width asserted at module import.',
+        file="l9_presence/composite_sig.py",
+        pattern=r'PREFIX: bytes = b"CompositeAlgorithmSignatures2025"',
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-COMPOSITE-SIG-LABELS-001",
+        description='Phase B (1): the 3 per-algorithm COMPSIG-* Labels pinned in l9_presence/composite_sig.py — LABEL_MLDSA65 = b"COMPSIG-MLDSA65-ECDSA-P256-SHA512" / LABEL_MLDSA44 = b"COMPSIG-MLDSA44-ECDSA-P256-SHA256" / LABEL_SLHDSA128S = b"COMPSIG-SLHDSA128S-ECDSA-P256-SHA256-QORTROLLER". The Labels are the ASCII alg-ids bound into M\' and the wire container (alg-identifier validation on verify). min_matches=3 catches any single-label rename. The SLHDSA128S label is QorTroller-custom (Decision OID-2b); any reorder/rename is a v2 break.',
+        file="l9_presence/composite_sig.py",
+        pattern=r'LABEL_MLDSA65 = b"COMPSIG-MLDSA65-ECDSA-P256-SHA512"|LABEL_MLDSA44 = b"COMPSIG-MLDSA44-ECDSA-P256-SHA256"|LABEL_SLHDSA128S = b"COMPSIG-SLHDSA128S-ECDSA-P256-SHA256-QORTROLLER"',
+        min_matches=3,
+    ),
+    Invariant(
+        id="INV-COMPOSITE-SIG-ENVELOPE-001",
+        description="Phase B (1): outer-container framing constants pinned in l9_presence/composite_sig.py — _WIRE_VERSION = 0x01 (single shared version byte for encode_composite + encode_pubkey) / _EC_LEN_BYTES = 2 (ECDSA-P256 DER sig length prefix width) / _PQ_LEN_BYTES = 4 (PQ signature length prefix width). These three constants define the QorTroller composite-sig v1 length-prefixed wire framing (divergence #3); any change requires a v2 container + new version byte. min_matches=3 catches any single-constant edit.",
+        file="l9_presence/composite_sig.py",
+        pattern=r"_WIRE_VERSION = 0x01|_EC_LEN_BYTES = 2|_PQ_LEN_BYTES = 4",
+        min_matches=3,
+    ),
+    Invariant(
+        id="INV-COMPOSITE-SIG-PUBKEY-LEN-001",
+        description='Phase B (1) v1.1 pubkey format: _PQ_PUBKEY_LEN raw PQ public-key widths pinned in l9_presence/composite_sig.py — mldsa65=1952 (FIPS 204) / mldsa44=1312 (FIPS 204) / slhdsa128s=32 (FIPS 205, PK.seed16||PK.root16). decode_pubkey enforces these exact widths; drift would silently accept malformed keys. min_matches=3 catches any single-width edit.',
+        file="l9_presence/composite_sig.py",
+        pattern=r'"mldsa65": 1952|"mldsa44": 1312|"slhdsa128s": 32',
+        min_matches=3,
+    ),
+    Invariant(
+        id="INV-COMPOSITE-SIG-PUBKEY-FORMAT-001",
+        description='Phase B (1) v1.1 pubkey format: the SEC1-uncompressed ec-point width gate (decode_pubkey raises unless ec_len == 65, i.e. 0x04 || X(32) || Y(32)) plus the pubkey wire version byte (version(1)=0x01) pinned in l9_presence/composite_sig.py. Together these fix the v1.1 public-key wire shape; a future v2 requires a new function or domain tag, NOT a version-range expansion. min_matches=2 catches removal of either the 65-byte ec-point guard or the version-byte declaration.',
+        file="l9_presence/composite_sig.py",
+        pattern=r"if ec_len != 65:|version\(1\)=0x01",
+        min_matches=2,
+    ),
+    # ------------------------------------------------------------------
+    # #10 (3) iPACT renewal cadence (bridge/vapi_bridge/ipact_renewal.py) —
+    # 13th PATTERN-017 family QORTROLLER-IPACT-RENEWAL-v1 (chained SHA-256
+    # renewal commitment, 147-byte preimage) closing the dormant-blind
+    # VHP-renewal gap.
+    # ------------------------------------------------------------------
+    Invariant(
+        id="INV-IPACT-RENEWAL-DOMAIN-001",
+        description='Phase B (3): _DOMAIN_TAG = b"QORTROLLER-IPACT-RENEWAL-v1" (27-byte FROZEN-v1 domain tag, 13th PATTERN-017 family) pinned in bridge/vapi_bridge/ipact_renewal.py. Bound at the head of every renewal-cadence commitment preimage; renaming silently breaks the byte-layout of the chained SHA-256 commitment. Width asserted at module import.',
+        file="bridge/vapi_bridge/ipact_renewal.py",
+        pattern=r'_DOMAIN_TAG = b"QORTROLLER-IPACT-RENEWAL-v1"',
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-IPACT-RENEWAL-GENESIS-001",
+        description='Phase B (3): _GENESIS_TAG = b"QORTROLLER-IPACT-RENEWAL-GENESIS-v1" (35-byte FROZEN-v1 genesis tag) pinned in bridge/vapi_bridge/ipact_renewal.py. Used to derive the deterministic chain anchor (prev_commitment for the first renewal) from (device_id, token_id); any change reseats every chain root. Width asserted at module import.',
+        file="bridge/vapi_bridge/ipact_renewal.py",
+        pattern=r'_GENESIS_TAG = b"QORTROLLER-IPACT-RENEWAL-GENESIS-v1"',
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-IPACT-RENEWAL-EPOCH-001",
+        description="Phase B (3): IPACT_RENEWAL_EPOCH_DAYS = 90 FROZEN cadence parameter (v1; single-tier) pinned in bridge/vapi_bridge/ipact_renewal.py. Promoted from the prior hardcoded 90*86_400 literal in vhp_renewal_agent.py (no value change); per-device-tier cadence deferred to v2. Drift changes the renewal epoch the dormant-blind closure depends on.",
+        file="bridge/vapi_bridge/ipact_renewal.py",
+        pattern=r"IPACT_RENEWAL_EPOCH_DAYS = 90",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-IPACT-RENEWAL-PREIMAGE-001",
+        description="Phase B (3): renewal-cadence commitment preimage FROZEN v1 at 27 (domain tag) + 32 (device_id) + 8 (token_id) + 32 (prev_commitment) + 8 (epoch_index) + 32 (reattest_proof) + 8 (ts_ns) = 147 bytes input -> 32 bytes SHA-256 output. Pins the '= 147 bytes input' structure statement in the module docstring; any reordering or width change requires v2 + new domain tags.",
+        file="bridge/vapi_bridge/ipact_renewal.py",
+        pattern=r"= 147 bytes input",
+        min_matches=1,
+    ),
+    # ------------------------------------------------------------------
+    # #8 CHALLENGE — dedicated challenge-step domain tag for the (1)<->(3)
+    # re-attestation handshake (W-5 domain separation). RESERVED capability
+    # tag (NOT a PATTERN-017 family); pinned so cross-protocol signature
+    # reuse cannot be opened by a silent tag rename.
+    # ------------------------------------------------------------------
+    Invariant(
+        id="INV-IPACT-CHALLENGE-001",
+        description='Phase B #8: CHALLENGE_TAG = b"QORTROLLER-IPACT-CHALLENGE-v1" (29-byte dedicated challenge-step domain tag, W-5) pinned in bridge/vapi_bridge/ipact_challenge.py. Distinct from the commitment-family tag b"QORTROLLER-IPACT-RENEWAL-v1" — the family tag identifies the commitment family, the challenge tag identifies the protocol step; distinct domain separation prevents cross-protocol signature-reuse attacks. Width asserted at module import. Capability tag (NOT a PATTERN-017 commitment family).',
+        file="bridge/vapi_bridge/ipact_challenge.py",
+        pattern=r'CHALLENGE_TAG = b"QORTROLLER-IPACT-CHALLENGE-v1"',
+        min_matches=1,
+    ),
+    # ------------------------------------------------------------------
+    # QorTroller-namespace frozen-family frozenset — pins that mythos_variants.py
+    # declares the _QORTROLLER_FROZEN_FAMILY_TAGS frozenset containing exactly
+    # the two iPACT-renewal tag-literals (2 tag-entries = 1 family = the 1st
+    # QorTroller-namespace family; qortroller_commitment_family_count=1).
+    # Per FC-(a) this is a SEPARATE namespace from VAPI Layer-C: the VAPI
+    # frozen_v1_commitment_family_count stays 12 and INV-MYTHOS-FAMILIES-001 is
+    # untouched. Parallels INV-MYTHOS-FAMILIES-001 on the QorTroller side.
+    # ------------------------------------------------------------------
+    Invariant(
+        id="INV-QORTROLLER-FAMILIES-001",
+        description='QorTroller-namespace frozen-family frozenset pinned in bridge/vapi_bridge/mythos_variants.py — _QORTROLLER_FROZEN_FAMILY_TAGS declares exactly the two tag-literals b"QORTROLLER-IPACT-RENEWAL-v1" and b"QORTROLLER-IPACT-RENEWAL-GENESIS-v1" (2 tag-entries = 1 family = the 1st QorTroller-namespace family, (3) iPACT renewal cadence; qortroller_commitment_family_count=1). Per FC-(a) this is SEPARATE from VAPI Layer-C: frozen_v1_commitment_family_count stays 12 and INV-MYTHOS-FAMILIES-001 is untouched. Pins the frozenset declaration line + both member literals; min_matches=3 catches removal of the declaration or either tag.',
+        file="bridge/vapi_bridge/mythos_variants.py",
+        pattern=r'_QORTROLLER_FROZEN_FAMILY_TAGS: frozenset\[bytes\] = frozenset|b"QORTROLLER-IPACT-RENEWAL-v1"|b"QORTROLLER-IPACT-RENEWAL-GENESIS-v1"',
+        min_matches=3,
+    ),
 ]
 
 
