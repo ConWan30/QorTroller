@@ -225,6 +225,18 @@ Offset  Length  Field
 
 This format has been FROZEN since the foundational Phases (17 through ~60). The chain link hash is `SHA-256(raw[0:164])` — body bytes only, NOT 228 bytes. This subtle invariant has been preserved across every protocol revision because changing it would require atomic migration of every consuming smart contract.
 
+### 4.6 QorTroller-namespace frozen families (FC-(a); v6.1)
+
+Distinct from the 12 VAPI Layer-C commitment families (§4.2), the protocol publishes a **QorTroller-branded namespace** (QRESCE-0001) for QorTroller-era primitives, frozen 2026-05-24 in the Phase B freeze ceremony. Per **Decision FC-(a)** the two namespaces are tracked **separately**: the VAPI Layer-C `frozen_v1_commitment_family_count` stays **12**, and a separate **`qortroller_commitment_family_count` = 1** tracks frozen QorTroller-branded commitment families. (The `VAPI-` prefix on the 12 Layer-C families is permanent technical infrastructure under brand-lock discipline; the QorTroller namespace uses the `QORTROLLER-` prefix.) A parallel `mythos_qortroller_crypto_drift` scanner audits this namespace, leaving the VAPI `mythos_crypto_drift` byte-identical.
+
+| QorTroller commitment family | Domain tag | Preimage structure | Output |
+|---|---|---|---|
+| **iPACT renewal cadence (③)** | `QORTROLLER-IPACT-RENEWAL-v1` (27B) + genesis `QORTROLLER-IPACT-RENEWAL-GENESIS-v1` (35B) | `tag[27] ‖ device_id[32] ‖ token_id[8] ‖ prev_commitment[32] ‖ epoch_index[8] ‖ reattest_proof[32] ‖ ts_ns[8]` (147B; `IPACT_RENEWAL_EPOCH_DAYS=90`) | SHA-256 → 32B |
+
+Two further QorTroller-namespace primitives are frozen (PV-CI-pinned) but are **not** commitment families, so they do **not** count toward `qortroller_commitment_family_count`:
+- **Composite-sig v1.1 (①)** — a *signature* primitive (ECDSA-P256 + ML-DSA / SLH-DSA, draft-ietf-lamps-pq-composite-sigs-16). Its wire format is pinned: `PREFIX` (32B), the 3 `COMPSIG-*` labels, the length-prefixed envelope, and the v1.1 public-key format. Like the PoAC record (§4.5), it is a signature, not a commitment family.
+- **iPACT challenge (CHALLENGE)** — `QORTROLLER-IPACT-CHALLENGE-v1` (29B), a capability tag for the challenge protocol step (mirrors POSEIDON-BN254-AS §4.3 / BT-WITNESS being capabilities, not families).
+
 ---
 
 ## 5. PITL Nine-Level Stack — anti-cheat verification
