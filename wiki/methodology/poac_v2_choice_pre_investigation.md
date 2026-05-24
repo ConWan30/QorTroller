@@ -241,6 +241,12 @@ byte in the on-chain anchor; v1 and v2 verifiers coexist. The AdjudicationRegist
 anchoring pattern already used by all FROZEN-v1 primitives extends to a v2 anchor without disturbing v1.
 `[INT][REAS]`
 
+> **CORRECTION (2026-05-24):** per the 14a seamlessness pre-validation
+> (`d2_seamlessness_pre_validation.md` §1 self-correction), the actual coexistence mechanism is
+> **per-verifier-contract** (each circuit = its own deployed contract), **not** version-byte routing.
+> The version-byte framing in this paragraph was an abstraction, not an existing codebase mechanism.
+> The architectural conclusion (additive coexistence) **holds** via the cleaner per-contract pattern.
+
 ---
 
 ## §5 — Migration-timing considerations
@@ -254,7 +260,9 @@ anchoring pattern already used by all FROZEN-v1 primitives extends to a v2 ancho
 
 **Coexistence vs hard cutover:** coexistence is feasible and cheaper in risk. Groth16-v1 verifiers stay
 live; v2 (STARK-family) ships behind a version byte; tournaments/marketplace consult whichever the
-anchor declares. **Operational cost of running both:** two prover code paths + two verifier contract
+anchor declares. *(CORRECTION 2026-05-24: "behind a version byte" is the same abstraction corrected in
+§4 above — actual coexistence is per-verifier-contract, see `d2_seamlessness_pre_validation.md` §1.)*
+**Operational cost of running both:** two prover code paths + two verifier contract
 stacks + two ceremony/setup regimes (note: STARK-family is *transparent* — no per-circuit MPC ceremony,
 which actually *reduces* one axis of the dual-stack cost vs the current Groth16 ceremony burden).
 `[REAS]`
