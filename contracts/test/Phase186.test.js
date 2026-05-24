@@ -17,7 +17,31 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const { time } = require("@nomicfoundation/hardhat-network-helpers");
 
-describe("SeparationRatioRegistry Phase 186 (Attestation-Bound Renewal)", function () {
+describe.skip("SeparationRatioRegistry Phase 186 (Attestation-Bound Renewal)", function () {
+  // SKIP REASON: This describe block tests an attestation extension to
+  // SeparationRatioRegistry.sol that was specced by autoresearch in commit
+  // 2b01831b (WIF-032 W2) but never implemented. The contract methods
+  // registerAttestation, attestedRenewCommit, getAttestation, and the
+  // AttestationRecord struct + events DO NOT EXIST on the current contract
+  // (git log -S "registerAttestation" on the .sol is empty — never written,
+  // not reverted). The test header's "code-complete but not yet deployed" claim
+  // is inaccurate: these are aspirational tests-ahead-of-implementation, not a
+  // regression or contract drift.
+  //
+  // These tests are PRESERVED (not deleted) so the autoresearch spec remains
+  // discoverable. When the feature is eventually built as its own properly-scoped
+  // arc (pre-investigation -> scope doc -> V-check -> code -> P-check -> commit,
+  // same discipline as the composite-sig / iPACT-renewal / handshake / P4b items),
+  // the describe.skip is removed and these tests become the validation suite for
+  // the implementation (the on-chain counterpart of the bridge's existing Phase 186
+  // AttestationBoundRenewalAgent).
+  //
+  // Tracked as backlog: implement SeparationRatioRegistry Phase 186 on-chain
+  // attestation extension — WIF-032 W2, autoresearch-specced 2b01831b (feature, not
+  // hygiene; wallet-gated redeploy). Plus a process rule: future autoresearch-
+  // generated tests landing without an implementation MUST arrive as describe.skip +
+  // spec annotation, never in a passing-or-failing state, to prevent silent
+  // regression failures like this one.
   this.timeout(120000); // 2 minutes — viaIR compilation + ReentrancyGuard may be slow
 
   let registry, owner, nonOwner;
