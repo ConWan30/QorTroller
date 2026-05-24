@@ -114,9 +114,17 @@ def test_t180_5_anti_replay_duplicate_raises():
 
 def test_t180_6_renewal_enabled_default_false(monkeypatch):
     # Phase 180 documented default is False. Tests must isolate from
-    # bridge/.env which may set RENEWAL_ENABLED=true for live operation
+    # bridge/.env which sets RENEWAL_ENABLED=true for live operation
     # (per CLAUDE.md T199-8 env-isolation precedent).
-    monkeypatch.delenv("RENEWAL_ENABLED", raising=False)
+    #
+    # Use setenv("RENEWAL_ENABLED", "false"), not delenv:
+    # config.py's module-level load_dotenv(override=False) runs on first import
+    # and re-adds missing variables from .env. If we delenv'd RENEWAL_ENABLED
+    # and the first config import happened after our patch (test isolation or
+    # suite ordering), load_dotenv would restore RENEWAL_ENABLED=true from .env:151.
+    # setenv keeps the variable present with our test value; load_dotenv(override=False)
+    # then correctly leaves it alone.
+    monkeypatch.setenv("RENEWAL_ENABLED", "false")
     from vapi_bridge.config import Config
     cfg = Config(
         verifier_address="0x1234",
