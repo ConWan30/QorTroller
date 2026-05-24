@@ -9457,3 +9457,88 @@ class VAPIZKBAValidator:
         except Exception as exc:
             return ZKBAValidateResult(error=str(exc))
 
+
+
+# ===========================================================================
+# Phase B ② P4b — VAPIPoEPRegistry client (composite-key / PoEP-commitment registration)
+# ===========================================================================
+
+
+class VAPIPoEPRegistryClient:
+    """Client-side helper for VAPIPoEPRegistry (Phase B ②).
+
+    Two surfaces:
+      - build_register_tx(...)  : build an UNSIGNED registerDevice transaction for the gamer's
+                                  wallet to sign (gamer-sovereign / W1).
+      - get_record(...)         : read a device's registration via the bridge read endpoint.
+
+    SDK NO-KEY-HANDLING PROPERTY (auditable): build_register_tx returns an unsigned transaction
+    object containing calldata + suggested gas + nonce; the caller (gamer's wallet) is responsible
+    for signing. The SDK never holds, accepts, or proxies private keys. (There is intentionally no
+    sign/send method on this client — verify by inspection that no private-key parameter exists.)
+    """
+
+    # registerDevice(bytes32 deviceId, bytes compositePubkeyBlob, bytes32 poepCommitment, uint64 expiresAt)
+    _REGISTER_SIG = b"registerDevice(bytes32,bytes,bytes32,uint64)"
+
+    def __init__(self, registry_address: str = "", bridge_base_url: str = "http://localhost:8080"):
+        self.registry_address = registry_address
+        self.bridge_base_url = bridge_base_url.rstrip("/")
+
+    def build_register_tx(
+        self,
+        device_id_b32: bytes,
+        composite_pubkey_blob: bytes,
+        poep_commitment: bytes,
+        *,
+        from_address: str | None = None,
+        nonce: int | None = None,
+        gas: int = 400_000,
+        chain_id: int = 4690,
+        registry_address: str | None = None,
+    ) -> dict:
+        """Build the UNSIGNED registerDevice tx. Option A (v1): no expiresAt parameter — the
+        contract forces expiresAt == 0 (Property X), so the calldata always encodes 0; a v2 that
+        supports a registry-level expiry will add the parameter to this signature then.
+
+        device_id_b32 MUST be the 32-byte on-chain device id (see bridge device_id_to_bytes32:
+        sha256(device_id.utf-8) for non-hex ids). Returns an unsigned tx dict the caller signs.
+        """
+        from eth_abi import encode as _abi_encode
+        from eth_utils import keccak
+
+        if not (isinstance(device_id_b32, (bytes, bytearray)) and len(device_id_b32) == 32):
+            raise TypeError("device_id_b32 must be exactly 32 bytes (see device_id_to_bytes32)")
+        if not (isinstance(poep_commitment, (bytes, bytearray)) and len(poep_commitment) == 32):
+            raise TypeError("poep_commitment must be exactly 32 bytes")
+        if not composite_pubkey_blob:
+            raise ValueError("composite_pubkey_blob must be non-empty")
+        to_addr = registry_address or self.registry_address
+        if not to_addr:
+            raise ValueError("registry_address not set")
+
+        selector = keccak(self._REGISTER_SIG)[:4]
+        args = _abi_encode(
+            ["bytes32", "bytes", "bytes32", "uint64"],
+            [bytes(device_id_b32), bytes(composite_pubkey_blob), bytes(poep_commitment), 0],
+        )
+        tx: dict = {
+            "to": to_addr,
+            "data": "0x" + (selector + args).hex(),
+            "value": 0,
+            "gas": gas,
+            "chainId": chain_id,
+        }
+        if from_address is not None:
+            tx["from"] = from_address
+        if nonce is not None:
+            tx["nonce"] = nonce
+        return tx
+
+    def get_record(self, device_id: str, api_key: str = "", timeout: float = 8.0) -> dict:
+        """Read a device's registration via the bridge GET /operator/poep-registry/{device_id}.
+        Returns the JSON dict (registry_deployed, registered, composite_pubkey_hex)."""
+        url = f"{self.bridge_base_url}/operator/poep-registry/{device_id}"
+        req = urllib.request.Request(url, headers={"x-api-key": api_key} if api_key else {})
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read().decode())

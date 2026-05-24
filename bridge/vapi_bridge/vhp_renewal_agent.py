@@ -75,8 +75,17 @@ class VHPRenewalAgent:
         """
         signer = self._reattest_signer
         pubkey_provider = self._device_pubkey_provider
+        # ② P4b production wiring: when no provider is injected, default to reading the
+        # registered composite pubkey from VAPIPoEPRegistry via the chain (fail-open None when
+        # the registry is undeployed — v1). Tests inject their own provider (over an in-memory
+        # reader); the #8 fixture path stays test-only behind the Option B module-separation guard.
+        if pubkey_provider is None and self._chain is not None and hasattr(
+            self._chain, "get_registered_composite_pubkey"
+        ):
+            from .poep_registry_handler import make_chain_backed_provider
+            pubkey_provider = make_chain_backed_provider(self._chain)
         if signer is None or pubkey_provider is None:
-            return None  # fail-closed: seams not wired (production default)
+            return None  # fail-closed: signer (VBDIP-0006 #11) or pubkey source not wired
         device_id = vhp["device_id"]
         try:
             pubkey_blob = pubkey_provider(device_id)

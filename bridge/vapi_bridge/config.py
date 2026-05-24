@@ -1160,6 +1160,14 @@ class Config:
     flip, the dormant-blind vulnerability remains OPEN. See
     wiki/methodology/ipact_renewal_cadence_v1_scope.md §0."""
 
+    # Phase B item ② P4b — VAPIPoEPRegistry address (composite-key / PoEP-commitment registry)
+    poep_registry_address: str = field(
+        default_factory=lambda: _env("POEP_REGISTRY_ADDRESS", "")
+    )
+    """Phase B ② — deployed VAPIPoEPRegistry address. EMPTY in v1 (wallet-free build; registry not
+    yet deployed). chain.get_registered_composite_pubkey FAIL-OPENS (returns None) when empty — bridge
+    readiness must not depend on the deploy (CONSENT precedent). Set at the wallet-gated deploy commit."""
+
     # Phase 104 — Persistent Activation + PMI
     protocol_maturity_enabled: bool = field(
         default_factory=lambda: _env_bool("PROTOCOL_MATURITY_ENABLED", True)
