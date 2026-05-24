@@ -7578,6 +7578,37 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "challenge_tag": CHALLENGE_TAG.decode(),
         }
 
+    # Phase B item ② P4b — GET /operator/poep-registry/{device_id}
+    # ------------------------------------------------------------------
+    # Read-only: returns a device's registered composite pubkey (integrity-verified via the
+    # two-RPC pattern in chain.get_registered_composite_pubkey). Fail-open: when the registry
+    # is undeployed (v1) registered=False/registry_deployed=False. The bridge never writes;
+    # gamers register via their own wallet (W1).
+    @app.get("/operator/poep-registry/{device_id}")
+    def get_poep_registry(
+        device_id: str,
+        x_api_key: str = Header(default=""),
+    ):
+        """Composite-pubkey registration lookup for a device (Phase B ②).
+
+        Returns: device_id, registry_deployed (bool), registered (bool),
+        composite_pubkey_hex (str|None — the integrity-verified ① encode_pubkey blob).
+        """
+        _check_read_key(x_api_key)
+        deployed = bool(getattr(cfg, "poep_registry_address", "") or "")
+        blob = None
+        if chain is not None:
+            try:
+                blob = chain.get_registered_composite_pubkey(device_id)
+            except Exception:
+                blob = None
+        return {
+            "device_id": device_id,
+            "registry_deployed": deployed,
+            "registered": blob is not None,
+            "composite_pubkey_hex": blob.hex() if blob else None,
+        }
+
     # Phase 236-CORPUS-SNAPSHOT — GET /agent/corpus-snapshot-status
     # ------------------------------------------------------------------
     # Read-only audit surface for the corpus-snapshot chain (the third
