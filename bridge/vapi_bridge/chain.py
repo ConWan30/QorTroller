@@ -3709,6 +3709,38 @@ class ChainClient:
             "poad_valid": bool(result[2]),
         }
 
+    async def is_fully_eligible(self, device_id_bytes32_hex: str) -> bool:
+        """Query VAPIProtocolLens.isFullyEligible(deviceId) — the composable single-call gate.
+
+        Phase 3 Path B (Gameplay Workflow). Pure VIEW call (no gas, no transaction), so it is
+        UNAFFECTED by CHAIN_SUBMISSION_PAUSED — the kill-switch only gates submissions, not reads.
+
+        device_id_bytes32_hex — 64-char hex (bytes32). The lens composes PHGCredential active +
+        not-suspended + no active BLOCK ruling (see bridge/vapi_bridge/KNOWN_EXTERNAL_BEHAVIORS.md
+        for the four authoritative device states). Returns False (never reverts) for unknown or
+        zero-padded device IDs — fail-closed by the contract's design.
+
+        Raises RuntimeError if protocol_lens_address is not configured (caller fail-opens to an
+        "unavailable" status rather than a misleading False).
+        """
+        addr = getattr(self._cfg, "protocol_lens_address", "")
+        if not addr:
+            raise RuntimeError("is_fully_eligible: protocol_lens_address not configured")
+        _ABI = [{
+            "name": "isFullyEligible", "type": "function",
+            "stateMutability": "view",
+            "inputs": [{"name": "deviceId", "type": "bytes32"}],
+            "outputs": [{"type": "bool"}],
+        }]
+        contract = self._w3.eth.contract(
+            address=self._w3.to_checksum_address(addr), abi=_ABI
+        )
+        device_id_bytes32 = bytes.fromhex(device_id_bytes32_hex)
+        result = await contract.functions.isFullyEligible(device_id_bytes32).call()
+        log.debug("is_fully_eligible: device=%s eligible=%s",
+                  device_id_bytes32_hex[:16], bool(result))
+        return bool(result)
+
     async def is_swarm_quorum_valid(self, node_addresses: list[str]) -> bool:
         """View call (no gas). Calls VAPISwarmOperatorGate.isQuorumValid(address[]).
         Raises RuntimeError if swarm_operator_gate_address not configured. Phase 130A."""
