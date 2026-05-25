@@ -1166,7 +1166,27 @@ class Config:
     )
     """Phase B ② — deployed VAPIPoEPRegistry address. EMPTY in v1 (wallet-free build; registry not
     yet deployed). chain.get_registered_composite_pubkey FAIL-OPENS (returns None) when empty — bridge
-    readiness must not depend on the deploy (CONSENT precedent). Set at the wallet-gated deploy commit."""
+    readiness must not depend on the deploy (CONSENT precedent). Set at the wallet-gated deploy commit.
+    LIVE 2026-05-24: 0x4Dcfa11d7a4d661065784Acbb1AeCC2f124C7B38."""
+
+    poep_registry_deploy_block: int = field(
+        default_factory=lambda: int(_env("POEP_REGISTRY_DEPLOY_BLOCK", "43947835"))
+    )
+    """Phase 3 (Path B) — block at which VAPIPoEPRegistry was deployed (43947835). The
+    DeviceRegistered event scan in chain.get_registered_composite_pubkey starts here, NOT block 0:
+    IoTeX's eth_getLogs caps wide ranges and returns EMPTY for from_block=0 over ~44M blocks, which
+    would make the chain-backed composite-pubkey provider silently return None (closure inert). The
+    deploy-block floor keeps the scan within the RPC's range."""
+
+    # Phase 3 (Path B) — host-side composite-sig re-attestation signer
+    ipact_host_signer_enabled: bool = field(
+        default_factory=lambda: _env_bool("IPACT_HOST_SIGNER_ENABLED", False)
+    )
+    """Phase 3 (Path B) — when True, VHPRenewalAgent._obtain_reattest_proof auto-loads the host-held
+    composite keypair (composite_device_identity.make_reattest_signer) as the re-attestation signer.
+    DEFAULT-OFF (the seam stays None → fail-closed). The host private key lives in ~/.vapi (software
+    backend); the proof attests a live host-signer + live Edge sensor stream, not controller-silicon
+    presence (Path A). Pairs with ipact_renewal_enforcement_enabled for the dormant-blind closure."""
 
     # Phase 104 — Persistent Activation + PMI
     protocol_maturity_enabled: bool = field(

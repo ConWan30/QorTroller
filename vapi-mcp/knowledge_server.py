@@ -91,9 +91,19 @@ def _parse_claude_md() -> dict:
         return _CLAUDE_CACHE_KS.get("state", {})
 
     s: dict = {}
+    # Legacy "Current phase: Phase NNN" OR post-Phase-238 "Current phase: HEAD <sha>" format
     m = re.search(r"Current phase:\s*Phase\s*(\d+)", text)
-    s["phase_num"] = m.group(1) if m else "207"
-    s["phase"] = f"{s['phase_num']} COMPLETE"
+    if m:
+        s["phase_num"] = m.group(1)
+        s["phase"] = f"{m.group(1)} COMPLETE"
+    else:
+        mh = re.search(r"Current phase:\s*HEAD\s*`?([0-9a-f]{6,40})`?\s*[—\-]+\s*\*{0,2}([^.\n]{5,90})", text)
+        if mh:
+            s["phase_num"] = mh.group(1)[:8]
+            s["phase"] = f"HEAD {mh.group(1)[:8]} — {mh.group(2).strip()}"
+        else:
+            s["phase_num"] = "238+"
+            s["phase"] = "post-Phase-238 (HEAD-commit milestone; see CLAUDE.md)"
 
     m = re.search(r"Bridge:\s*(\d+)\s*passing", text)
     s["bridge"] = int(m.group(1)) if m else 2252
