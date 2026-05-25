@@ -58,7 +58,9 @@ try:
     if existing and existing != b"\x00" * 32:
         print("NOTE: a composite pubkey is ALREADY registered for (gamer, device); registerDevice would overwrite.")
 except Exception:
-    pass
+    pass  # fail-open: the already-registered pre-check is advisory only; a read failure
+          # (method absent / RPC hiccup) must not block provisioning. Real errors surface
+          # at the estimate_gas / send step below.
 
 GP = w3.eth.gas_price
 est = reg.functions.registerDevice(b32, blob, commitment, 0).estimate_gas({"from": gamer.address})
