@@ -75,6 +75,19 @@ class VHPRenewalAgent:
         """
         signer = self._reattest_signer
         pubkey_provider = self._device_pubkey_provider
+        # Phase 3 (Path B) production wiring: when no signer is injected AND the host-signer
+        # flag is on, default to the host-held composite keypair (~/.vapi). Mirrors the
+        # pubkey-provider auto-default below — covers BOTH the standalone main.py path and the
+        # absorbed-via-Sentry ticker (which builds the agent by signature inspection and never
+        # passes a signer kwarg). Lazy-import keeps quantcrypt/slh-dsa off the boot path unless
+        # enforcement+signer are both wired (W-3). Fail-open to None on any error → fail-closed gate.
+        if signer is None and getattr(self._cfg, "ipact_host_signer_enabled", False):
+            try:
+                from .composite_device_identity import make_reattest_signer
+                signer = make_reattest_signer()
+            except Exception as exc:  # noqa: BLE001 — fail-closed: no signer → renewal skipped
+                log.debug("VHPRenewalAgent: host signer load failed (fail-closed): %s", exc)
+                signer = None
         # ② P4b production wiring: when no provider is injected, default to reading the
         # registered composite pubkey from VAPIPoEPRegistry via the chain (fail-open None when
         # the registry is undeployed — v1). Tests inject their own provider (over an in-memory
