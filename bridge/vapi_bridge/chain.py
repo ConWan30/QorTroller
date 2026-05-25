@@ -1756,9 +1756,14 @@ class ChainClient:
             b32 = device_id_to_bytes32(device_id)
             addr = self._sync_w3.to_checksum_address(addr_str)
             contract = self._sync_w3.eth.contract(address=addr, abi=_VAPI_POEP_REGISTRY_ABI)
-            # latest DeviceRegistered for this (indexed) deviceId → registering gamer + event blob
+            # latest DeviceRegistered for this (indexed) deviceId → registering gamer + event blob.
+            # from_block = registry deploy block (NOT 0): IoTeX's eth_getLogs caps wide ranges and
+            # returns EMPTY for 0→~44M blocks, which would silently make this provider return None
+            # (the dormant-blind closure would skip renewals for correctly-registered devices). The
+            # deploy-block floor keeps the scan inside the RPC's range. Phase 3 (Path B) fix.
+            _from_block = int(getattr(self._cfg, "poep_registry_deploy_block", 0) or 0)
             evs = contract.events.DeviceRegistered.get_logs(
-                from_block=0, argument_filters={"deviceId": b32}
+                from_block=_from_block, argument_filters={"deviceId": b32}
             )
             if not evs:
                 return None
