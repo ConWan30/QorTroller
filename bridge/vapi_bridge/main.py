@@ -40,6 +40,17 @@ def _log_startup_diagnostics(cfg):
         _dlog.info("ZK %s: %s", circuit, "READY" if zkey.exists() else "MISSING (.zkey not found — run contracts/scripts/run-ceremony.js)")
     _dlog.info("PHGCredential: %s", getattr(cfg, "phg_credential_address", "") or "NOT SET")
     _dlog.info("OperatorAPI: %s", "ENABLED" if getattr(cfg, "operator_api_key", "") else "DISABLED (set OPERATOR_API_KEY to enable)")
+    # Phase 3 Path B — surface the EFFECTIVE dormant-blind enforcement state so a flip
+    # placed in the wrong .env can never again be silently inert (the keys must be in the
+    # project-root .env that load_dotenv() actually resolves, not bridge/.env).
+    _enf = getattr(cfg, "ipact_renewal_enforcement_enabled", False)
+    _hs = getattr(cfg, "ipact_host_signer_enabled", False)
+    _dlog.info(
+        "iPACT renewal enforcement (dormant-blind): %s | host signer: %s | PoEP registry: %s",
+        "ON" if _enf else "OFF (renewals NOT gated — gap OPEN)",
+        "ON" if _hs else "OFF",
+        getattr(cfg, "poep_registry_address", "") or "NOT SET",
+    )
 
 
 async def _run_ds_with_restart(ds, max_restarts: int = 3) -> None:
