@@ -395,13 +395,35 @@ footer { padding:48px 0 0; border-top:1px solid var(--border); color:var(--text-
   <section id="forward" data-anim="reveal">
     <div class="sec-head"><span class="sec-num">11</span><h2 class="sec">How it functions going forward</h2></div>
     <p>The roadmap deepens the physical-evidence surface and widens composability — every step
-       gated on empirical evidence, never shipped on a calendar.</p>
-    <div class="grid grid-2" style="margin-top:18px;">
-      <div class="panel"><div class="panel__eye">L6-Response · haptic biometrics</div><p class="dim" style="margin:0;">Sub-perceptual haptic stimuli during play; capture reflex response in the 80–280 ms human band. Activates only once a per-player corpus exists.</p></div>
-      <div class="panel"><div class="panel__eye">L8 · Bluetooth co-presence</div><p class="dim" style="margin:0;">A LAN witness attests session-bound controller presence to close the cloud-gaming-bot stealth gap — BR/EDR-correct, forensically non-repudiable.</p></div>
-      <div class="panel"><div class="panel__eye">Sensor-stack v2</div><p class="dim" style="margin:0;">Adaptive-trigger force-curve as a primary discriminator; touchpad + lightbar witness channels. Translator hardware can't synthesize biomechanical force curves.</p></div>
+       gated on empirical evidence, never shipped on a calendar. The newest layer — <span class="amber">presence</span> —
+       is a novel inhabitant on the existing foundation: it touches no FROZEN-v1 primitive, no PoAC wire format,
+       no chain, no contract.</p>
+
+    <p class="dim" style="margin:14px 0 6px;font-size:13px;letter-spacing:0.14em;text-transform:uppercase;">
+      <span style="color:#5bd6a3">Validated on the foundation</span> · 2026-05 · on-rig, negative-controlled, Mythos-gated
+    </p>
+    <div class="grid grid-2" style="margin-top:8px;">
+      <div class="panel"><div class="panel__eye">PoEP · Proof of Embodied Presence <span style="color:#5bd6a3">· VALIDATED</span></div><p class="dim" style="margin:0;">Proves a live human on the certified Edge <em>now</em> — the claim the protocol actually needs, distinct from sub-grade identity. Liveness reflex band + adaptive-trigger device-auth + nonce freshness, folded into one born-PQ commitment. Reflex band validated across 5 players; activates only at N≥50 per player + governance.</p></div>
+      <div class="panel"><div class="panel__eye">Adaptive-trigger device-auth <span style="color:#f0a868">· NOVEL</span></div><p class="dim" style="margin:0;">No known production prior art: physical-control-response as a device-auth primitive. A real Edge reshapes its force-response under adaptive-trigger resistance; an emulator, Cronus, or XIM renders no such physics — so it fails. The embodied differentiator, not just "a human is present."</p></div>
+      <div class="panel"><div class="panel__eye">L9 · Proof of Causal Presence <span style="color:#5bd6a3">· BANKED</span></div><p class="dim" style="margin:0;">Input causally drives the rendered camera motion at a human reaction lag; the link collapses under a time-shuffle control and is robust to 400–500 ms cloud streams — closing the cloud-gaming-bot stealth gap from the input side.</p></div>
+      <div class="panel"><div class="panel__eye">BCC · Behavioral Capture Chain <span style="color:#5bd6a3">· DORMANT</span></div><p class="dim" style="margin:0;">Casual play grows a provenance-chained corpus, harvesting only causally-PRESENT sessions — self-cleaning, isolated, structurally unable to mutate a proven number. The engine that closes the one open gap: breadth.</p></div>
+    </div>
+
+    <p class="dim" style="margin:22px 0 6px;font-size:13px;letter-spacing:0.14em;text-transform:uppercase;">
+      <span style="color:#f0a868">Still forward</span> · activation · hardening · hardware · aligned to IoTeX IIP-64 (PR #72)
+    </p>
+    <div class="grid grid-2" style="margin-top:8px;">
+      <div class="panel"><div class="panel__eye">PoEP activation · born-PQ credential</div><p class="dim" style="margin:0;">On-chain commitment registration + a born-PQ device credential aligned to IoTeX <strong>IIP-64</strong> (Draft, PR&nbsp;#72). Per its device-class tiering, the long-lived controller identity targets <strong>SLH-DSA-128s / ML-DSA-44</strong> (§4.6), not consensus-tier ML-DSA-65. The SHA-256 commitment is post-quantum-safe today; the device key rotates at VHP renewal — QorTroller's analog of IIP-64 §4.8.5 <em>iPACT-DePIN</em>. Honest born-PQ, by design.</p></div>
+      <div class="panel"><div class="panel__eye">PoAC-v2 · Groth16 → STARK</div><p class="dim" style="margin:0;">Migrate the zero-knowledge layer Groth16 → a hash-based STARK for a post-quantum verification horizon — aligning with IIP-64's <strong>SP1, STARK-native</strong> choice that avoids the quantum-vulnerable Groth16 recursion step.</p></div>
+      <div class="panel"><div class="panel__eye">Controller-firmware reference</div><p class="dim" style="margin:0;">Root the adaptive-trigger device-auth + born-PQ identity in the controller's secure element, provisioned at manufacture — a reference implementation of IIP-64 <strong>§4.6</strong> (DePIN device provisioning) + <strong>§4.8.5</strong> (iPACT-DePIN). QorTroller as a device standard for IoTeX, not just an app on one.</p></div>
       <div class="panel"><div class="panel__eye">Token issuance</div><p class="dim" style="margin:0;">Gated, by hard rule, on a per-player separation ratio &gt; 1.0 — economic defensibility before any TGE. Honesty over hype.</p></div>
     </div>
+
+    <p class="dim" style="margin-top:20px;font-style:italic;">
+      Published negative — the behavioral-lattice (GCAP) catches more adversaries than even a strong Mahalanobis
+      baseline, but rejects too many real humans (acceptance 0.81 → 0.58): data-limited, not a primitive. We
+      publish what doesn't work, because a trust protocol that hides its negatives isn't one.
+    </p>
   </section>
 
   <footer>
