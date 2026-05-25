@@ -329,6 +329,27 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         }
 
     # ------------------------------------------------------------------
+    # Phase 3 Path B — Gameplay Workflow Layer (player-facing session status)
+    # ------------------------------------------------------------------
+    # 60s TTL cache for on-chain eligibility VIEW calls so GET /player/session-status
+    # can be polled at 5s without an RPC round-trip per request. Closure-captured; the
+    # route mutates it in place (dict mutation needs no `nonlocal`).
+    _eligibility_cache: dict = {}
+
+    def _bridge_local_eligible(device_id: str) -> bool:
+        """Bridge-local proxy for VAPIProtocolLens.isFullyEligible (see
+        KNOWN_EXTERNAL_BEHAVIORS.md): enrolled AND credential minted AND not suspended.
+        Meaningful when the on-chain lens view is unavailable (bridge offline, RPC down,
+        or device not yet on-chain-enrolled). Fail-closed on any error."""
+        try:
+            enrolled  = store.get_enrollment(device_id) is not None
+            minted    = store.get_credential_mint(device_id) is not None
+            suspended = bool(store.is_credential_suspended(device_id))
+            return enrolled and minted and not suspended
+        except Exception:
+            return False
+
+    # ------------------------------------------------------------------
     # Routes
     # ------------------------------------------------------------------
 
@@ -7521,6 +7542,153 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             return {**_status, "latest_gameplay_context": _latest_gctx, "timestamp": _t235a.time()}
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    # Phase 3 Path B — Gameplay Workflow Layer: GET /player/session-status
+    # ------------------------------------------------------------------
+    # Single-glance "am I verified?" for the casual player. Read-only COMPOSITION over
+    # existing surfaces (capture health + latest PoAC record + on-chain isFullyEligible +
+    # bridge-local proxy + dual-primitive + VHP + GIC chain + enforcement state). Adds NO
+    # new capture/adjudication authority. Every chain call is a pure VIEW — kill-switch safe.
+    @app.get("/player/session-status")
+    async def player_session_status(
+        device_id: str = Query(default="", description="Device id; defaults to the most recent active device"),
+        x_api_key: str = Header(default=""),
+    ):
+        _check_read_key(x_api_key)
+        import time as _t_pss
+        _now = _t_pss.time()
+        _enf = bool(getattr(cfg, "ipact_renewal_enforcement_enabled", False))
+        _hs  = bool(getattr(cfg, "ipact_host_signer_enabled", False))
+        _presence = {
+            "poep": {"enabled": bool(getattr(cfg, "poep_enabled", False)),
+                     "status": "pending calibration (N=0/50)"},
+            "bcc":  {"enabled": False, "status": "dormant"},
+        }
+
+        # --- device resolution: explicit ?device_id=, else most-recent record ---
+        dev = device_id
+        if not dev:
+            _recent = await asyncio.to_thread(store.get_recent_records, 1, None)
+            dev = _recent[0]["device_id"] if _recent else ""
+        if not dev:
+            return {
+                "controller_connected": False, "session_active": False, "device_id": "",
+                "humanity_prob": None, "pitl_layers": {},
+                "is_fully_eligible": {"onchain": None, "bridge_local": False, "source": "no_device"},
+                "dual_eligible": {"available": False, "source": "no_device"},
+                "vhp_status": None,
+                "gic_chain": {"length": 0, "integrity": "empty", "last_anchor": None},
+                "records_count": {"device": 0,
+                                  "total": await asyncio.to_thread(store.count_records, None)},
+                "enforcement_active": _enf, "host_signer_active": _hs,
+                "last_adjudication": None, "presence": _presence, "timestamp": _now,
+            }
+
+        # --- capture health → connection + activity ---
+        _cap = await asyncio.to_thread(store.get_capture_health_status, 5)
+        _cap_state = _cap.get("capture_state", "DISCONNECTED")
+        controller_connected = _cap_state in ("NOMINAL", "DEGRADED")
+
+        # --- latest record → humanity + PITL layer snapshot ---
+        _recent_dev = await asyncio.to_thread(store.get_recent_records, 1, dev)
+        _rec = _recent_dev[0] if _recent_dev else {}
+        _hp = _rec.get("pitl_humanity_prob")
+        humanity_prob = float(_hp) if _hp is not None else None
+        _rec_age = (_now - float(_rec.get("created_at", 0.0))) if _rec else 1e9
+        session_active = controller_connected and _rec_age <= 120.0
+        _infer = _rec.get("inference")
+        # Honest layer snapshot: only what the record actually carries. inference==0x20 (32) is
+        # the NOMINAL L2/L3 verdict; L4 distance is raw (lower is better, threshold 7.009). L0/L1/L5
+        # are not stored per-record, so they are reported as null rather than fabricated as "pass".
+        pitl_layers = {
+            "inference_code": int(_infer) if _infer is not None else None,
+            "nominal": (int(_infer) == 32) if _infer is not None else None,
+            "l4_distance": (float(_rec["pitl_l4_distance"]) if _rec.get("pitl_l4_distance") is not None else None),
+            "humanity_prob": humanity_prob,
+        }
+
+        # --- on-chain isFullyEligible (cached 60s) + bridge-local proxy ---
+        _cached = _eligibility_cache.get(dev)
+        if _cached and (_now - _cached["ts"] < 60.0):
+            _elig = _cached["value"]
+        else:
+            import hashlib as _hl_pss
+            _dev_hash = _hl_pss.sha256(dev.encode()).hexdigest()
+            _onchain, _source = None, "unavailable"
+            if chain is not None:
+                try:
+                    _onchain = bool(await chain.is_fully_eligible(_dev_hash))
+                    _source = "onchain"
+                except Exception as _exc_elig:
+                    log.debug("player_session_status: isFullyEligible unavailable: %s", _exc_elig)
+            _elig = {"onchain": _onchain, "source": _source}
+            _eligibility_cache[dev] = {"ts": _now, "value": _elig}
+        is_fully_eligible = {
+            "onchain":      _elig["onchain"],
+            "bridge_local": _bridge_local_eligible(dev),
+            "source":       _elig["source"],
+        }
+
+        # --- dual-primitive (secondary; requires a PoAd, so often "unavailable" in casual play) ---
+        dual_eligible = {"available": False, "source": "unavailable"}
+
+        # --- VHP status ---
+        vhp_status = None
+        _vhp = await asyncio.to_thread(store.get_vhp_status, dev)
+        if _vhp:
+            _exp = _vhp.get("expires_at")
+            _renew = await asyncio.to_thread(store.get_vhp_renewal_log, dev, 1)
+            vhp_status = {
+                "valid": bool(_exp and float(_exp) > _now),
+                "expires_in_days": (round((float(_exp) - _now) / 86400.0, 1) if _exp else None),
+                "last_renewed": (_renew[0].get("new_expires_at") if _renew else None),
+            }
+
+        # --- GIC chain (DISTINCT from records_count) ---
+        _gic = await asyncio.to_thread(store.get_grind_chain_status, getattr(cfg, "grind_session_id", ""), cfg)
+        gic_chain = {
+            "length":      _gic.get("chain_length", 0),
+            "integrity":   "intact" if _gic.get("chain_intact", True) else "broken",
+            "last_anchor": (_gic.get("latest_gic_hash") or None),
+        }
+
+        # --- last adjudication ---
+        last_adjudication = None
+        try:
+            _rulings = await asyncio.to_thread(store.get_agent_rulings, dev, 1)
+            if _rulings:
+                _r0 = _rulings[0]
+                last_adjudication = {
+                    "verdict": _r0.get("verdict"),
+                    "confidence": _r0.get("confidence"),
+                    "ts": _r0.get("created_at"),
+                }
+        except Exception as _exc_rul:
+            log.debug("player_session_status: rulings unavailable: %s", _exc_rul)
+
+        return {
+            "controller_connected": controller_connected,
+            "session_active": session_active,
+            "device_id": dev,
+            "capture_state": _cap_state,
+            "host_state": _cap.get("host_state", "UNKNOWN"),
+            "poll_rate_hz": _cap.get("poll_rate_hz", 0.0),
+            "humanity_prob": humanity_prob,
+            "pitl_layers": pitl_layers,
+            "is_fully_eligible": is_fully_eligible,
+            "dual_eligible": dual_eligible,
+            "vhp_status": vhp_status,
+            "gic_chain": gic_chain,
+            "records_count": {
+                "device": await asyncio.to_thread(store.count_records, dev),
+                "total":  await asyncio.to_thread(store.count_records, None),
+            },
+            "enforcement_active": _enf,
+            "host_signer_active": _hs,
+            "last_adjudication": last_adjudication,
+            "presence": _presence,
+            "timestamp": _now,
+        }
 
     # Phase 236-WATCHDOG — GET /operator/watchdog-status
     # ------------------------------------------------------------------

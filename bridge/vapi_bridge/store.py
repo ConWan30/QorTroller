@@ -4423,6 +4423,24 @@ class Store:
                 """, (limit,)).fetchall()
             return [dict(r) for r in rows]
 
+    def count_records(self, device_id: str | None = None) -> int:
+        """Total PoAC records (optionally scoped to one device).
+
+        Phase 3 Path B (Gameplay Workflow) — surfaced by GET /player/session-status as a field
+        DISTINCT from the GIC grind-chain length. The two are different artifacts: the GIC chain
+        is the per-grind cognitive-session continuity chain (length ~= grind_target), whereas this
+        is the raw count of 228-byte PoAC records emitted per cognition cycle. Conflating them
+        (e.g. reporting a 600k+ record count as the GIC chain length) is a known reporting error.
+        """
+        with self._conn() as conn:
+            if device_id:
+                row = conn.execute(
+                    "SELECT COUNT(*) FROM records WHERE device_id=?", (device_id,)
+                ).fetchone()
+            else:
+                row = conn.execute("SELECT COUNT(*) FROM records").fetchone()
+        return int(row[0]) if row else 0
+
     def get_player_profile(self, device_id: str) -> dict | None:
         """PHG Trust Score, record counts, confidence mean, PHCI context."""
         with self._conn() as conn:
