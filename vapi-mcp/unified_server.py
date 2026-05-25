@@ -136,9 +136,20 @@ def _parse_claude_md() -> dict:
 
     s: dict[str, Any] = {}
 
-    # Phase number — find first "Phase NNN" in phase header context
+    # Phase — legacy "Current phase: Phase NNN" OR post-Phase-238 HEAD-commit
+    # milestone format "Current phase: HEAD `<sha>` — <headline>" (2026-05 onward)
     m = re.search(r"Current phase:\s*Phase\s*(\d+)", text)
-    s["phase_num"] = m.group(1) if m else "211"
+    if m:
+        s["phase_num"]   = m.group(1)
+        s["phase_label"] = f"Phase {m.group(1)} COMPLETE"
+    else:
+        mh = re.search(r"Current phase:\s*HEAD\s*`?([0-9a-f]{6,40})`?\s*[—\-]+\s*\*{0,2}([^.\n]{5,90})", text)
+        if mh:
+            s["phase_num"]   = mh.group(1)[:8]
+            s["phase_label"] = f"HEAD {mh.group(1)[:8]} — {mh.group(2).strip()}"
+        else:
+            s["phase_num"]   = "238+"
+            s["phase_label"] = "post-Phase-238 (HEAD-commit milestone; see CLAUDE.md)"
 
     # Test counts
     for label, key in [("Bridge:", "bridge"), ("Contract:", "contract"),
@@ -154,7 +165,7 @@ def _parse_claude_md() -> dict:
         s["bridge"] = m3.group(1)
 
     # SDK test count
-    m4 = re.search(r"SDK[:\s]+([\d]+)\s*\|", text)
+    m4 = re.search(r"SDK[:\s]+([\d]+)", text)  # CLAUDE.md format "SDK: 604." (no pipe)
     if m4:
         s["sdk"] = m4.group(1)
 
@@ -986,14 +997,14 @@ async def vapi_unified_state(include_bridge_live: bool = False, **_):
     s = _parse_claude_md()
 
     result: dict[str, Any] = {
-        "source": "CLAUDE.md + unified_server (Phase 211; fallbacks updated Phase 237.5)",
+        "source": "CLAUDE.md + unified_server (fallbacks refreshed 2026-05-23 to Guardian-KMS HEAD)",
         "protocol": {
-            "phase":        f"Phase {s.get('phase_num', '?')} COMPLETE",
-            "bridge":       s.get("bridge",    "2510"),     # Phase 237-EXTEND fallback
-            "sdk":          s.get("sdk",       "539"),      # Phase 237-EXTEND fallback (+4 SDK)
-            "hardhat":      s.get("hardhat",   "528"),      # Phase 237 core fallback (+6)
+            "phase":        s.get("phase_label", "post-Phase-238 (HEAD-commit milestone; see CLAUDE.md)"),
+            "bridge":       s.get("bridge",    "4330"),     # 2026-05-23 fallback
+            "sdk":          s.get("sdk",       "604"),      # 2026-05-23 fallback
+            "hardhat":      s.get("hardhat",   "674"),      # 2026-05-23 fallback
             "agents":       "29 standalone + 3 stewards (9 absorbed; 38-ID roster)",  # post-STABILITY-9 steward absorption
-            "contracts":    f"{s.get('contracts', '46')} ALL LIVE (IoTeX Testnet 4690)",  # Phase 237-EXTEND deploy
+            "contracts":    f"{s.get('contracts', '49')} ALL LIVE (IoTeX Testnet 4690)",  # 49 live as of 2026-05-23
             "dry_run":      True,
             "ioswarm":      "emulator_only",
         },
@@ -1150,7 +1161,7 @@ async def vapi_session_context(domain: str = "general", task_description: str = 
 
     return {
         "session_timestamp":      datetime.now(timezone.utc).isoformat(),
-        "phase":                  f"Phase {s.get('phase_num','211')} COMPLETE",
+        "phase":                  s.get("phase_label", "post-Phase-238 (HEAD-commit milestone; see CLAUDE.md)"),
         "domain":                 domain,
         "invariant_checklist":    invariant_checklist,
         "invariant_checklist_all_clear": True,  # No violations in checklist above

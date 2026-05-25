@@ -115,8 +115,8 @@ REGISTRY: list[CanonicalFact] = [
     ),
     CanonicalFact(
         name="frozen_v1_commitment_family_count",
-        current_value="11",
-        superseded_values=("12",),  # The "12 primitives" flat overclaim R3 caught
+        current_value="12",  # 2026-05-23: VAPI-O3-SUPERSEDE-v1 registered as the 12th PATTERN-017 commitment family (Decision O3-CLASS=A). NOTE: an earlier "12" was an R3-caught flat overclaim; it is now the genuine count.
+        superseded_values=("11", "10"),  # "11" superseded by the O3-SUPERSEDE registration; "10" was the pre-PHYSICAL-DATA-ATTESTATION count
         verification_command=(
             "Count of PATTERN-017 commitment-family entries — see WP v6 §4.1"
         ),
@@ -228,6 +228,45 @@ REGISTRY: list[CanonicalFact] = [
             "docs/qortroller-state-of-the-protocol-2026-05-19.md",
         ),
         context_hints=("MCP tool", "Tool #"),
+    ),
+    CanonicalFact(
+        name="qortroller_commitment_family_count",
+        # 2026-05-24 Phase B freeze ceremony: count of QORTROLLER-namespace
+        # (QorTroller-branded / QRESCE) FROZEN commitment families. Currently 1:
+        # QORTROLLER-IPACT-RENEWAL-v1 (the ③ iPACT renewal family — its GENESIS
+        # tag is the SAME family, not a separate one). NOTE:
+        # QORTROLLER-IPACT-CHALLENGE-v1 is a CAPABILITY, not a commitment family,
+        # so it is explicitly NOT counted here. This fact is SEPARATE from
+        # frozen_v1_commitment_family_count (the VAPI Layer-C count, which
+        # stays 12) — the two namespaces are tracked independently.
+        current_value="1",
+        superseded_values=(),  # Brand-new fact; no prior values
+        verification_command=(
+            "Count of QORTROLLER-namespace (QorTroller-branded / QRESCE) FROZEN "
+            "commitment families — currently 1 (QORTROLLER-IPACT-RENEWAL-v1; its "
+            "GENESIS tag is the same family). QORTROLLER-IPACT-CHALLENGE-v1 is a "
+            "capability, NOT a commitment family, and is not counted. Distinct "
+            "from the VAPI Layer-C frozen_v1_commitment_family_count (12)."
+        ),
+        target_doc_globs=(
+            "docs/qortroller-whitepaper-v6.md",
+            "docs/qortroller-state-of-the-protocol-2026-05-19.md",
+        ),
+        context_hints=(
+            "qortroller commitment",
+            "QorTroller-namespace",
+            "qortroller_commitment_family_count",
+            "QORTROLLER-IPACT-RENEWAL",
+        ),
+        # Exclude the VAPI Layer-C count's own context so a line discussing the
+        # 12-family VAPI count does not collide with this 1-family QorTroller
+        # count, and exclude byte/preimage structure references.
+        exclusion_substrings=(
+            "Layer-C",
+            "PATTERN-017",
+            "VAPI commitment",
+            "byte", "bytes", "preimage",
+        ),
     ),
 ]
 
