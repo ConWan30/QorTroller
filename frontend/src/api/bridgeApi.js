@@ -197,6 +197,32 @@ export function useGrindChain() {
   })
 }
 
+// Phase 3 Path B — Gameplay Workflow Layer (Commit 2): player session-status.
+// Composes capture-health + latest PoAC + on-chain isFullyEligible + VHP + GIC
+// into the gamer-facing "am I verified?" surface. The on-chain VIEW is cached
+// server-side for 60s, so a 5s client refetch is the right cadence: live
+// indicators (controller_connected, humanity_prob, gic_chain) refresh fast
+// while the cached eligibility read returns immediately without a wallet hit.
+//
+// noMock=true — gamer-identity-critical: a fabricated "verified" reading would
+// mislead the player about their own eligibility state. Mirrors the discipline
+// of useCaptureHealth / useGrindChain / useTournamentPreflight.
+//
+// deviceId='' resolves to the most recent active device server-side; pass an
+// explicit hex id when the GamerView is locked to a specific Edge.
+export function usePlayerSessionStatus(deviceId = '') {
+  const path = deviceId
+    ? `/player/session-status?device_id=${encodeURIComponent(deviceId)}`
+    : '/player/session-status'
+  return useQuery({
+    queryKey: ['playerSessionStatus', deviceId || 'default'],
+    queryFn: () => get(path, 'playerSessionStatus', { noMock: true }),
+    refetchInterval: 5000,
+    staleTime: 3000,
+    retry: 1,
+  })
+}
+
 // Phase 229 — AIT inter-player separation analysis
 // noMock=true: AIT separation is corpus state, not live telemetry.
 // Mock fakes (1.199 / all_pairs_above_1=true) would mislead during a real grind.
