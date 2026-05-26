@@ -31,8 +31,10 @@ import { useAccount } from 'wagmi'
 import {
   useCaptureHealth, useGrindChain, useGrindAnalytics,
   usePCCIntelligence, useActivePlayOccupancy, useConsentStatus,
+  usePlayerSessionStatus,
 } from '../api/bridgeApi'
 import { ConsentPanel } from '../components/ConsentPanel'
+import { VerificationBadge } from '../components/VerificationBadge'
 import { FONTS, GAMER } from '../shared/design/tokens'
 import { OverlayPanel, StatusChip, HashSpecimen } from '../design/Primitives'
 import { useChainPulse, useRelativeTime } from '../design/motion'
@@ -627,6 +629,10 @@ export function GamerView() {
   const { address }               = useAccount()
   const consentDeviceId           = address ? address.toLowerCase().replace(/^0x/, '') : ''
   const { data: consentStatus }   = useConsentStatus(consentDeviceId)
+  // Player-facing "am I verified?" composite. deviceId='' → bridge resolves
+  // the most recent active device server-side. noMock contract guarantees the
+  // badge renders DORMANT (not fabricated VERIFIED) on transient bridge loss.
+  const { data: playerSession }   = usePlayerSessionStatus('')
 
   // chain_length = cumulative GIC stamps (fills the ribbon; matches check_grind.py)
   // consecutive_clean = leading streak; diverges when a session breaks the streak.
@@ -717,6 +723,12 @@ export function GamerView() {
           links={gicChainLinks} present={present} broken={chainBroken}
         />
       )}
+
+      {/* z4 — top-center "am I verified?" badge. Single compact pill (NOT a
+          5th corner — see comment below) hanging just under the eyebrow.
+          Click-expands a small tray with the four sub-signals. Dormant when
+          the bridge is offline or no device data is available. */}
+      <VerificationBadge data={playerSession} bridgeDown={bridgeOffline} />
 
       {/* z3+ — the design's four floating forensic-instrument corner panels.
           (FleetPanel + the top-center ChipStrip were removed — they overcrowded
