@@ -23,6 +23,7 @@ import { useOsStatus } from './components/StatusStrip'
 import DataBadge from './components/DataBadge'
 import { ViewEyebrowBar } from '../design/Eyebrow'
 import { RealityDot } from '../design/realityHeartbeat'
+import { Wordmark } from '../design/Primitives'
 import './theme.css'
 import '../design/qortroller-kit.css'
 
@@ -76,16 +77,19 @@ export default function AppShell() {
         background: 'rgba(4,6,10,0.95)', backdropFilter: 'blur(12px)',
         minWidth: 0, maxWidth: '100vw', overflow: 'hidden',
       }}>
-        {/* left — wordmark + dashboard link */}
+        {/* left — wordmark + dashboard link.
+            Design-audit PR-A: replaced inline wordmark JSX with the
+            scope-independent <Wordmark> primitive (same dedup pattern
+            as ViewSelector PR 1). Companion "Evidence OS" text bumped
+            from 9px to 11px per brand-spec floor. */}
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, minWidth: 0, flexShrink: 1 }}>
           <NavLink to="/" aria-label="Return to operator dashboard" style={{
-            fontFamily: "'Syne', system-ui, sans-serif", fontSize: 18, fontWeight: 700,
-            letterSpacing: '-0.02em', color: '#d4dde8', textDecoration: 'none',
+            textDecoration: 'none',
             display: 'inline-flex', alignItems: 'baseline', whiteSpace: 'nowrap', flexShrink: 0,
           }}>
-            <span>Qor</span><span style={{ color: '#f0a868', fontWeight: 800 }}>T</span><span>roller</span>
+            <Wordmark size={18} />
           </NavLink>
-          <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9,
+          <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11,
             letterSpacing: '0.12em', textTransform: 'uppercase', color: '#f0a868a6', whiteSpace: 'nowrap' }}>
             Evidence OS
           </span>
