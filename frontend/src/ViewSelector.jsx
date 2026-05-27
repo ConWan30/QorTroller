@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { useHeartbeatStore } from './heartbeat/useHeartbeat'
 import { FONTS, GAMER } from './shared/design/tokens'
 import { RealityDot } from './design/realityHeartbeat'
+import { Wordmark } from './design/Primitives'
 
 // QRESCE-0001 v0.5 grant-evaluator remodel — slimmed 4-tab bar. Only the
 // design-language, grant-facing surfaces are shown: Gamer (hero) · Forensic
@@ -49,33 +50,19 @@ export function ViewSelector({ activeView, onViewChange }) {
       overflow:       'hidden',
     }}>
       {/* Left: QorTroller wordmark — V.A.P.I. reference implementation.
-          Typography: Syne (heavy weight, crafted curves, distinctive vs
-          generic Rajdhani treatment used pre-QRESCE-0001 v0.5). Medial-T
-          accent surfaces the Qor+Troller compound per brand discipline
-          §6 hostile-read mitigation. V.A.P.I. category tag follows the
-          2-layer reframing — brand = QorTroller, category = V.A.P.I. */}
+          Path A handoff PR 1: replaced 14 lines of inline-JSX wordmark
+          with the scope-independent <Wordmark> primitive (Primitives.jsx).
+          Eliminates the drift v3 audit flagged ("wordmark duplicated as
+          inline JSX rather than using the shared primitive"). All sub-11px
+          font sizes in this strip bumped to 11px per brand-spec floor. */}
       <div style={{
         display: 'flex', alignItems: 'baseline', gap: 10,
         minWidth: 0, flexShrink: 1, overflow: 'hidden',
       }}>
-        <span style={{
-          fontFamily:    FONTS.body,
-          fontSize:      18,
-          fontWeight:    700,
-          letterSpacing: '-0.02em',
-          color:         '#d4dde8',
-          display:       'inline-flex',
-          alignItems:    'baseline',
-          whiteSpace:    'nowrap',
-          flexShrink:    0,
-        }}>
-          <span>Qor</span>
-          <span style={{ color: '#f0a868', fontWeight: 800 }}>T</span>
-          <span>roller</span>
-        </span>
+        <Wordmark size={18} />
         <span style={{
           fontFamily:    FONTS.mono,
-          fontSize:      9,
+          fontSize:      11,
           color:         'rgba(74,158,255,0.55)',
           letterSpacing: '0.12em',
           textTransform: 'uppercase',
@@ -94,7 +81,7 @@ export function ViewSelector({ activeView, onViewChange }) {
           aria-label="Evidence OS — new proof-native IA"
           style={{
             fontFamily:    FONTS.mono,
-            fontSize:      9,
+            fontSize:      11,
             fontWeight:    700,
             color:         '#f0a868',
             background:    'rgba(240,168,104,0.10)',
@@ -144,7 +131,7 @@ export function ViewSelector({ activeView, onViewChange }) {
             >
               <span style={{
                 fontFamily:    FONTS.mono,
-                fontSize:      9,
+                fontSize:      11,
                 fontWeight:    500,
                 color:         active ? v.accent : 'rgba(200,216,232,0.30)',
                 letterSpacing: '0.14em',
@@ -173,7 +160,7 @@ export function ViewSelector({ activeView, onViewChange }) {
           never forces a horizontal scrollbar on narrow viewports. */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 12,
-        fontFamily: FONTS.mono, fontSize: 9,
+        fontFamily: FONTS.mono, fontSize: 11,
         minWidth: 0, flexShrink: 1, overflow: 'hidden', whiteSpace: 'nowrap',
         justifyContent: 'flex-end',
       }}>

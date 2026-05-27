@@ -6,10 +6,32 @@
    ancestor so the var(--*) tokens resolve. */
 import { useMemo } from 'react'
 
+/* Wordmark — scope-independent (Path A handoff PR 1).
+ * Inlines the medial-T amber + Syne weight 800 styling so the primitive
+ * works both inside `.qt-design-root` (where the kit.css `.qt-wordmark`
+ * class also applies, redundantly but harmlessly) AND in unscoped chrome
+ * like the top-of-app ViewSelector strip. The className is retained so
+ * any kit.css selector targeting `.qt-wordmark` (decks, exports) still
+ * matches; the inline styles dominate via specificity and guarantee
+ * correct rendering even with no kit.css loaded. */
 export function Wordmark({ size = 22 }) {
   return (
-    <span className="qt-wordmark" style={{ fontSize: size }}>
-      Qor<span className="t">T</span>roller
+    <span
+      className="qt-wordmark"
+      style={{
+        fontFamily:    "'Syne', system-ui, sans-serif",
+        fontSize:      size,
+        fontWeight:    700,
+        letterSpacing: '-0.02em',
+        color:         '#d4dde8',
+        display:       'inline-flex',
+        alignItems:    'baseline',
+        whiteSpace:    'nowrap',
+      }}
+    >
+      Qor
+      <span className="t" style={{ color: '#f0a868', fontWeight: 800 }}>T</span>
+      roller
     </span>
   )
 }
