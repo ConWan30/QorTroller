@@ -7666,6 +7666,35 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         except Exception as _exc_rul:
             log.debug("player_session_status: rulings unavailable: %s", _exc_rul)
 
+        # --- Path A Arc 1 Commit 4 additions ---
+        # signing_path: 1->"A", 2->"B", 0->None (unregistered in MFG registry)
+        # proof_tier:   1->"FULL", 2->"STANDARD", 3->"BASIC", 0->None
+        # controller_model: reverse-lookup via controller_models.name_for_hash
+        # path_a_eligible: composite via lens v2 (isFullyEligible AND isPathA AND active)
+        signing_path = None
+        proof_tier   = None
+        controller_model = None
+        path_a_eligible  = False
+        try:
+            _sp = await asyncio.to_thread(chain.get_device_signing_path, dev) if chain else 0
+            signing_path = {1: "A", 2: "B"}.get(int(_sp))
+            _pt = await asyncio.to_thread(chain.get_proof_tier, dev) if chain else 0
+            proof_tier = {1: "FULL", 2: "STANDARD", 3: "BASIC"}.get(int(_pt))
+            if chain:
+                _cm_bytes = await asyncio.to_thread(chain.get_device_controller_model, dev)
+                if _cm_bytes is not None:
+                    from .controller_models import name_for_hash as _name_for_hash
+                    controller_model = _name_for_hash(_cm_bytes)
+        except Exception as _exc_mfg:
+            log.debug("player_session_status: MFG registry read unavailable (honest dormant): %s", _exc_mfg)
+        try:
+            if chain is not None:
+                import hashlib as _hl_pa
+                _dev_hash = _hl_pa.sha256(dev.encode()).hexdigest()
+                path_a_eligible = bool(await chain.is_fully_eligible_path_a(_dev_hash))
+        except Exception as _exc_pa:
+            log.debug("player_session_status: isFullyEligible_PathA unavailable (honest false): %s", _exc_pa)
+
         return {
             "controller_connected": controller_connected,
             "session_active": session_active,
@@ -7687,6 +7716,12 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "host_signer_active": _hs,
             "last_adjudication": last_adjudication,
             "presence": _presence,
+            # Path A Arc 1 Commit 4 — manufacturer attestation surface (honest
+            # dormant defaults when MFG registry unread or device not registered)
+            "signing_path":     signing_path,
+            "proof_tier":       proof_tier,
+            "controller_model": controller_model,
+            "path_a_eligible":  path_a_eligible,
             "timestamp": _now,
         }
 
