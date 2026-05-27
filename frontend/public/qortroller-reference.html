@@ -183,6 +183,127 @@ footer { padding:48px 0 0; border-top:1px solid var(--border); color:var(--text-
 /* GIC formula operands settle in left→right, amber→inherit */
 .qt-anim-on [data-anim="gic-formula"] .op { opacity:0; }
 @keyframes op-settle { from { opacity:0; color:var(--accent-amber); } to { opacity:1; color:inherit; } }
+
+/* ── Claude-Design pass: living-codex motion layer.
+   Reduced-motion safe — everything gates on .qt-anim-on. */
+
+.qt-progress {
+  position:fixed; top:0; left:0; right:0; height:2px;
+  background:linear-gradient(to right, var(--accent-amber) 0%, var(--accent-amber) var(--p,0%), transparent var(--p,0%));
+  z-index:50; pointer-events:none; opacity:0.85;
+}
+
+.qt-hash-storm {
+  position:absolute; inset:0; width:100%; height:100%;
+  pointer-events:none; opacity:0.5; mix-blend-mode:screen;
+}
+.hero { position:relative; overflow:hidden; }
+.hero > *:not(.qt-hash-storm) { position:relative; z-index:1; }
+.qt-anim-on .hero .wordmark .t { animation:t-settle 1.2s ease-out 0.2s both; }
+@keyframes t-settle {
+  0%   { color:var(--text-faint); text-shadow:0 0 0 transparent; }
+  60%  { color:var(--accent-amber); text-shadow:0 0 24px var(--accent-amber-soft); }
+  100% { color:var(--accent-amber); text-shadow:0 0 8px var(--accent-amber-soft); }
+}
+
+.qt-rail {
+  position:fixed; top:50%; right:18px; transform:translateY(-50%);
+  display:flex; flex-direction:column; gap:6px; z-index:9;
+  font-family:var(--font-mono); font-size:11px;
+  letter-spacing:0.12em; text-transform:uppercase;
+}
+.qt-rail a {
+  display:inline-flex; align-items:center; gap:8px;
+  color:var(--text-faint); text-decoration:none; padding:2px 0;
+  border-right:1px solid transparent; padding-right:8px;
+  transition:color 200ms ease, border-color 200ms ease;
+}
+.qt-rail a::before {
+  content:""; display:inline-block; width:14px; height:1px;
+  background:currentColor; opacity:0.4;
+}
+.qt-rail a.is-active { color:var(--accent-amber); border-right-color:var(--accent-amber); }
+.qt-rail a.is-active::before { opacity:1; width:22px; }
+@media (max-width:1180px) { .qt-rail { display:none; } }
+
+.qt-anim-on [data-anim="poac-bytes"] .byteband__body { transform-origin:left center; transform:scaleX(0); opacity:0.6; }
+.qt-anim-on [data-anim="poac-bytes"] .byteband__sig  { opacity:0; transform:translateX(8px); }
+.qt-anim-on [data-anim="poac-bytes"].bb-go .byteband__body { transform:scaleX(1); opacity:1; transition:transform 480ms cubic-bezier(0.2,0.6,0.2,1), opacity 280ms ease; }
+.qt-anim-on [data-anim="poac-bytes"].bb-go .byteband__sig  { opacity:1; transform:none; transition:transform 220ms ease 480ms, opacity 220ms ease 480ms; }
+
+.qt-anim-on [data-anim="gic-chain"] i { opacity:0; transform:translateY(-3px); }
+.qt-anim-on [data-anim="gic-chain"].rb-go i { opacity:0.55; transform:none; transition:opacity 180ms ease, transform 180ms ease; }
+.qt-anim-on [data-anim="gic-chain"].rb-go i:last-child { opacity:1; animation:link-breathe 2.6s ease-in-out 1.2s infinite; }
+@keyframes link-breathe {
+  0%, 100% { box-shadow:0 0 12px var(--chain); opacity:0.9; }
+  50%      { box-shadow:0 0 22px var(--chain), 0 0 4px var(--chain); opacity:1; }
+}
+
+.qt-gauge {
+  margin:14px 0 4px; padding:14px 16px;
+  background:var(--panel-soft); border:1px solid var(--border); border-radius:var(--radius);
+  display:flex; flex-direction:column; gap:8px;
+}
+.qt-gauge__head { display:flex; justify-content:space-between; align-items:baseline; }
+.qt-gauge__lbl { font-size:10.5px; letter-spacing:0.14em; text-transform:uppercase; color:var(--text-faint); }
+.qt-gauge__val { font-family:var(--font-mono); font-size:18px; color:var(--chain); letter-spacing:0.04em; font-variant-ligatures:none; }
+.qt-gauge__track { height:6px; background:var(--bg); border:1px solid var(--border-soft); border-radius:2px; overflow:hidden; }
+.qt-gauge__fill { height:100%; width:0; background:linear-gradient(to right, var(--accent-amber), var(--chain)); transition:width 900ms cubic-bezier(0.2,0.6,0.2,1); }
+.qt-anim-on .qt-gauge.in .qt-gauge__fill { width:var(--p,0%); }
+.qt-gauge__legend { font-size:10px; color:var(--text-faint); letter-spacing:0.06em; display:flex; gap:14px; flex-wrap:wrap; }
+.qt-gauge__legend b { color:var(--accent-amber); font-weight:500; }
+
+.qt-anim-on .ladder__step { opacity:0.45; transition:opacity 280ms ease, border-color 280ms ease; }
+.qt-anim-on .ladder.in .ladder__step { opacity:1; }
+.qt-anim-on .ladder.in .ladder__step--now { animation:step-breathe 2.6s ease-in-out infinite; }
+@keyframes step-breathe {
+  0%, 100% { box-shadow:inset 0 0 0 1px var(--accent-amber); }
+  50%      { box-shadow:inset 0 0 0 1px var(--accent-amber), 0 0 14px -2px var(--accent-amber-soft); }
+}
+
+.qt-anim-on table[data-anim="stack-table"] tbody tr { opacity:0.55; transition:opacity 260ms ease; }
+.qt-anim-on table[data-anim="stack-table"].in tbody tr { opacity:1; }
+.qt-anim-on table[data-anim="stack-table"].in tbody tr.hard-row { animation:hard-flash 900ms ease-out 200ms 1; }
+@keyframes hard-flash {
+  0%   { box-shadow:inset 3px 0 0 var(--status-blocked); }
+  100% { box-shadow:inset 3px 0 0 transparent; }
+}
+
+.qt-anim-on [data-anim="primitives"].in .panel { animation:primitive-glint 6.2s ease-in-out infinite; }
+.qt-anim-on [data-anim="primitives"].in .panel:nth-child(1) { animation-delay:0s; }
+.qt-anim-on [data-anim="primitives"].in .panel:nth-child(2) { animation-delay:0.7s; }
+.qt-anim-on [data-anim="primitives"].in .panel:nth-child(3) { animation-delay:1.4s; }
+.qt-anim-on [data-anim="primitives"].in .panel:nth-child(4) { animation-delay:2.1s; }
+.qt-anim-on [data-anim="primitives"].in .panel:nth-child(5) { animation-delay:2.8s; }
+.qt-anim-on [data-anim="primitives"].in .panel:nth-child(6) { animation-delay:3.5s; }
+@keyframes primitive-glint {
+  0%, 92%, 100% { box-shadow:none; border-color:var(--border); }
+  95%           { box-shadow:0 0 12px -2px var(--chain-soft); border-color:var(--chain); }
+}
+
+.qt-anim-on .qt-hash-live { color:var(--accent-amber); }
+.qt-anim-on .qt-hash-live.settled { color:var(--chain); transition:color 280ms cubic-bezier(0.2,0.6,0.2,1); }
+
+@media (prefers-reduced-motion: reduce) {
+  .qt-progress, .qt-hash-storm { display:none !important; }
+}
+
+.qt-cite {
+  opacity: 0; transition: opacity 200ms ease;
+  display: inline-block; margin-left: 10px;
+  font-family: var(--font-mono); font-size: 12px;
+  color: var(--accent-amber);
+  cursor: pointer; user-select: none;
+  border: 1px solid transparent; padding: 0 6px;
+  border-radius: 2px; line-height: 1.4;
+  vertical-align: middle;
+}
+section[id]:hover .qt-cite,
+.qt-cite:focus-visible { opacity: 0.7; border-color: var(--border); }
+.qt-cite:hover { opacity: 1; border-color: var(--accent-amber); color: var(--accent-amber); }
+.qt-cite.is-copied { color: var(--chain); border-color: var(--chain); opacity: 1; }
+.qt-cite.is-copied::after { content: " · COPIED"; font-size: 10px; letter-spacing: 0.14em; }
+
 </style>
 </head>
 
@@ -198,6 +319,7 @@ footer { padding:48px 0 0; border-top:1px solid var(--border); color:var(--text-
 
   <!-- HERO -->
   <header class="hero" data-anim="hero">
+    <canvas class="qt-hash-storm" id="qt-storm" aria-hidden="true"></canvas>
     <p class="eyebrow">QorTroller · Reference</p>
     <h1 class="display">Core Controllers<br>of their gaming data.</h1>
     <p class="tagline">QorTroller — Core Controllers of their gaming data.</p>
@@ -271,6 +393,7 @@ footer { padding:48px 0 0; border-top:1px solid var(--border); color:var(--text-
     </div>
     <div class="formula qt-specimen" data-anim="hash" style="margin-top:14px;">
       chain_link_hash = <span class="s">SHA-256</span>( raw[<span class="w">0:164</span>] )
+      <span class="hash qt-hash-live" id="qt-sample-hash" style="display:block; font-size:11.5px; margin-top:8px; opacity:0.85;">— computing sample —</span>
       <span class="faint" style="display:block; font-size:11px; margin-top:6px;">— the 164-byte body only, never the full 228 bytes. Wire format is FROZEN.</span>
     </div>
   </section>
@@ -354,7 +477,7 @@ footer { padding:48px 0 0; border-top:1px solid var(--border); color:var(--text-
   <!-- 08 ON-CHAIN -->
   <section id="chain" data-anim="reveal">
     <div class="sec-head"><span class="sec-num">08</span><h2 class="sec">Anchored on IoTeX</h2></div>
-    <p>QorTroller runs on IoTeX (chain ID <span class="amber">4690</span>, testnet) — 49 contracts live.
+    <p>QorTroller runs on IoTeX (chain ID <span class="amber">4690</span>, testnet) — <span class="amber">51 contracts</span> live.
        Eligibility is a single composable view: <span class="mono amber">isFullyEligible()</span>.</p>
     <div class="grid grid-2" style="margin-top:18px;">
       <div class="panel"><div class="panel__eye">AdjudicationRegistry</div><div class="hash" style="font-size:11px;">0x44CF981f46a52ADE56476Ce894255954a7776fb4</div></div>
@@ -433,6 +556,75 @@ footer { padding:48px 0 0; border-top:1px solid var(--border); color:var(--text-
 
 </div>
 
+
+  <!-- 12 CURRENT FOOTPRINT -->
+  <section id="footprint" data-anim="reveal">
+    <div class="sec-head"><span class="sec-num">12</span><h2 class="sec">Current footprint <span class="faint" style="font-size:13px;letter-spacing:0.14em;text-transform:uppercase;margin-left:10px;">· 2026-05-27</span></h2></div>
+    <p class="lead">
+      Operationally honest. Every load-bearing claim has an in-CI test, an on-chain artifact,
+      or an explicit pending marker. There is no aspirational technology pretending to be shipped.
+    </p>
+
+    <div class="grid grid-2" style="margin-top:18px;">
+      <div class="panel panel--soft">
+        <div class="eyebrow">CONTRACTS · IoTeX 4690</div>
+        <div style="font-family:var(--font-display);font-weight:700;font-size:34px;color:var(--chain);line-height:1;margin:8px 0 4px;">51</div>
+        <div class="faint">deployed · testnet live</div>
+      </div>
+      <div class="panel panel--soft">
+        <div class="eyebrow">FROZEN · PRIMITIVES</div>
+        <div style="font-family:var(--font-display);font-weight:700;font-size:34px;color:var(--chain);line-height:1;margin:8px 0 4px;">13</div>
+        <div class="faint">PATTERN-017 · 12 VAPI · 1 QORTROLLER</div>
+      </div>
+      <div class="panel panel--soft">
+        <div class="eyebrow">CI · INVARIANTS</div>
+        <div style="font-family:var(--font-display);font-weight:700;font-size:34px;color:var(--chain);line-height:1;margin:8px 0 4px;">35</div>
+        <div class="faint">enforced · vapi_invariant_gate.py</div>
+      </div>
+      <div class="panel panel--soft">
+        <div class="eyebrow">AGENT · ROSTER</div>
+        <div style="font-family:var(--font-display);font-weight:700;font-size:34px;color:var(--accent-amber);line-height:1;margin:8px 0 4px;">38</div>
+        <div class="faint">O3_ACTING · first ≥3-agent fleet in DePIN gaming</div>
+      </div>
+    </div>
+
+    <h3 style="font-family:var(--font-display);font-weight:600;font-size:16px;color:var(--text);margin:22px 0 8px;">Proven · live · demonstrable today</h3>
+    <ul style="list-style:none;padding:0;margin:0;display:grid;gap:6px;">
+      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--chain);font-size:13px;line-height:1.5;"><span class="chain">●</span>&nbsp; Operator Initiative at <b>O3_ACTING</b> · first ≥3-agent fleet · 6 transactions landed cleanly · FRR <code class="amber">0x54b4b698…</code> committed.</li>
+      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--chain);font-size:13px;line-height:1.5;"><span class="chain">●</span>&nbsp; Guardian autonomous KMS-HSM signing · first non-human steward to produce an HSM-rooted signature AND anchor it on IoTeX.</li>
+      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--chain);font-size:13px;line-height:1.5;"><span class="chain">●</span>&nbsp; Path A Arc 1 complete · <code class="amber">VAPIManufacturerDeviceRegistry</code> deployed · <code class="amber">verify_device_cert.py</code> VERDICT VALID against DualShock with <b>637K+</b> PoAC records.</li>
+      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--chain);font-size:13px;line-height:1.5;"><span class="chain">●</span>&nbsp; GamerView <em>Am I Verified?</em> surface live · tri-state · never fabricates green.</li>
+      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--chain);font-size:13px;line-height:1.5;"><span class="chain">●</span>&nbsp; 13th frozen primitive · <code class="amber">QORTROLLER-IPACT-RENEWAL-v1</code> (FC-a ceremony · 2026-05-24) · first QorTroller-namespace family.</li>
+    </ul>
+
+    <h3 style="font-family:var(--font-display);font-weight:600;font-size:16px;color:var(--text);margin:22px 0 8px;">Pending · honestly named</h3>
+    <ul style="list-style:none;padding:0;margin:0;display:grid;gap:6px;">
+      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--accent-amber);font-size:13px;line-height:1.5;"><span class="amber">○</span>&nbsp; AIT separation · <code class="amber">N=37</code> · <code class="amber">separation_ratio=1.199</code> · Stage 1 graduation API call pending.</li>
+      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--accent-amber);font-size:13px;line-height:1.5;"><span class="amber">○</span>&nbsp; PoEP enrollment · <code class="amber">poep_enabled=false</code> · L6B N≥50 gate · current N=0.</li>
+      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--accent-amber);font-size:13px;line-height:1.5;"><span class="amber">○</span>&nbsp; Mainnet TGE · hard-rule <code class="amber">separation_ratio &gt; 1.0</code> cleared 2026-04-18 · Phase 99 deploy + wallet refill gating issuance.</li>
+      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--accent-amber);font-size:13px;line-height:1.5;"><span class="amber">○</span>&nbsp; Curator O1 → O2 graduation · Cedar bundle Merkle <code class="amber">0xeb400a5c…</code> pre-authored · N≥50 reviews under shadow.</li>
+    </ul>
+
+    <h3 style="font-family:var(--font-display);font-weight:600;font-size:16px;color:var(--text);margin:22px 0 8px;">Forward · operator-fired</h3>
+    <ul style="list-style:none;padding:0;margin:0;display:grid;gap:6px;">
+      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--text-faint);font-size:13px;line-height:1.5;"><span class="amber">▸</span>&nbsp; <b>Arc 2</b> · ATECC608A + CH341A · first silicon-rooted Path A device on-chain · ~0.05–0.10 IOTX.</li>
+      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--text-faint);font-size:13px;line-height:1.5;"><span class="amber">▸</span>&nbsp; <b>IIP-64 design partner</b> · Xinxin Fan's PR #72 engaged · path from self-signed root CA to standardized PQ device identity at L1.</li>
+      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--text-faint);font-size:13px;line-height:1.5;"><span class="amber">▸</span>&nbsp; <b>Partner manufacturer</b> · spec partner-handoff-ready · 12-step ceremony + deployed bytecode + demonstrated POC.</li>
+      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--text-faint);font-size:13px;line-height:1.5;"><span class="amber">▸</span>&nbsp; <b>Tournament integration</b> · <code class="amber">isFullyEligible_PathA(bytes32)</code> · single eth_call · zero off-chain infra.</li>
+    </ul>
+
+    <div style="margin-top:24px;padding:16px 18px;border-left:2px solid var(--accent-amber);background:rgba(240,168,104,0.05);">
+      <span class="amber" style="font-family:var(--font-mono);font-size:10.5px;letter-spacing:0.18em;text-transform:uppercase;">The position, plainly</span>
+      <p style="margin:8px 0 0;font-size:14px;color:var(--text-dim);line-height:1.6;">
+        QorTroller is the first protocol to take "humanity proof" out of the identity space and into the
+        <b style="color:var(--text);">interaction-physics</b> space — on hardware Sony &amp; Microsoft have already shipped,
+        on a chain architecturally designed for DePIN composability, with primitives born quantum-safe.
+        <br><br>
+        <b class="amber">The wedge is narrow. The narrowness is the strength.</b>
+      </p>
+    </div>
+  </section>
+
 <script>
 /* v2 · item F — wire the data-anim hooks. Three treatments only: section
    reveals + eyebrow count-ups, the PoAC byteband assembling, and the GIC
@@ -472,13 +664,148 @@ footer { padding:48px 0 0; border-top:1px solid var(--border); color:var(--text-
       el.classList.add('in');
       var num = el.querySelector('.sec-num');
       if (num) countUp(num);
-      var bb = el.querySelector('.byteband');
-      if (bb) bb.classList.add('bb-go');
+      var bb = el.querySelector('[data-anim="poac-bytes"]'); if (bb) bb.classList.add('bb-go');
+      var rb = el.querySelector('[data-anim="gic-chain"]'); if (rb) rb.classList.add('rb-go');
+      var ladder = el.querySelector('.ladder'); if (ladder) ladder.classList.add('in');
+      var tbl = el.querySelector('table[data-anim="stack-table"]'); if (tbl) tbl.classList.add('in');
+      var prim = el.querySelector('[data-anim="primitives"]'); if (prim) prim.classList.add('in');
+      var gauge = el.querySelector('.qt-gauge[data-anim="humanity-gauge"]');
+      if (gauge && !gauge.dataset.fired) {
+        gauge.dataset.fired = '1';
+        gauge.classList.add('in');
+        var target = parseFloat(gauge.dataset.p || '0');
+        var valEl = gauge.querySelector('[data-gauge-val]');
+        var start = performance.now(), dur = 900;
+        (function tick(now) {
+          var k = Math.min(1, (now - start) / dur);
+          var v = target * (k * (2 - k));
+          if (valEl) valEl.textContent = v.toFixed(2);
+          if (k < 1) requestAnimationFrame(tick);
+        })(performance.now());
+      }
       if (el.querySelector('[data-anim="gic-formula"]')) settleOps(el);
     });
-  }, { threshold: 0.2 });
+  }, { threshold: 0.15 });
 
   document.querySelectorAll('[data-anim="reveal"]').forEach(function (s) { io.observe(s); });
+
+  var progress = document.getElementById('qt-progress');
+  if (progress) {
+    var lastP = -1;
+    function onScroll() {
+      var max = Math.max(1, document.documentElement.scrollHeight - innerHeight);
+      var p = Math.min(100, Math.max(0, (scrollY / max) * 100));
+      var rounded = Math.round(p * 10) / 10;
+      if (rounded !== lastP) { progress.style.setProperty('--p', rounded + '%'); lastP = rounded; }
+    }
+    document.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+  }
+
+  (function buildRail() {
+    var rail = document.getElementById('qt-rail'); if (!rail) return;
+    var sections = document.querySelectorAll('main.wrap > section[id]');
+    sections.forEach(function (s, i) {
+      var a = document.createElement('a');
+      a.href = '#' + s.id;
+      a.textContent = String(i + 1).padStart(2, '0');
+      a.setAttribute('data-target', s.id);
+      rail.appendChild(a);
+    });
+    var ro = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        var id = e.target.id;
+        rail.querySelectorAll('a').forEach(function (a) {
+          a.classList.toggle('is-active', a.dataset.target === id);
+        });
+      });
+    }, { rootMargin: '-40% 0px -55% 0px', threshold: 0 });
+    sections.forEach(function (s) { ro.observe(s); });
+  })();
+
+  (function hashStorm() {
+    var c = document.getElementById('qt-storm'); if (!c) return;
+    var hero = c.parentElement;
+    var ctx = c.getContext('2d');
+    var dpr = Math.min(2, devicePixelRatio || 1);
+    function fit() {
+      var r = hero.getBoundingClientRect();
+      c.width = Math.max(1, r.width * dpr); c.height = Math.max(1, r.height * dpr);
+      c.style.width = r.width + 'px'; c.style.height = r.height + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    fit(); addEventListener('resize', fit);
+    var hex = '0123456789abcdef';
+    function rand8() { var s=''; for (var i=0;i<8;i++) s += hex[Math.floor(Math.random()*16)]; return s; }
+    var w = c.clientWidth, h = c.clientHeight;
+    var COUNT = Math.max(14, Math.floor((w*h)/22000));
+    var bits = []; for (var i=0;i<COUNT;i++) bits.push({
+      x: Math.random()*w, y: Math.random()*h*1.4,
+      v: 0.4 + Math.random()*0.9, t: rand8(),
+      a: 0.18 + Math.random()*0.36,
+      r: Math.random() < 0.18 ? 'amber' : (Math.random() < 0.35 ? 'chain' : 'dim')
+    });
+    function frame() {
+      if (document.hidden || hero.getBoundingClientRect().bottom < 0) {
+        requestAnimationFrame(frame); return;
+      }
+      var w2 = c.clientWidth, h2 = c.clientHeight;
+      ctx.clearRect(0, 0, w2, h2);
+      ctx.font = '11px "JetBrains Mono", ui-monospace, monospace';
+      ctx.textBaseline = 'top';
+      for (var i = 0; i < bits.length; i++) {
+        var b = bits[i];
+        b.y -= b.v;
+        if (b.y < -16) { b.y = h2 + Math.random()*20; b.x = Math.random()*w2; b.t = rand8(); }
+        var color = b.r === 'amber' ? '240,168,104' : b.r === 'chain' ? '91,214,163' : '138,150,165';
+        ctx.fillStyle = 'rgba(' + color + ',' + b.a + ')';
+        ctx.fillText(b.t, b.x, b.y);
+      }
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  })();
+
+  (async function hashLive() {
+    var el = document.getElementById('qt-sample-hash');
+    if (!el || !(window.crypto && crypto.subtle)) return;
+    var sample = new Uint8Array(164);
+    for (var i = 0; i < 164; i++) sample[i] = (i * 31 + 17) & 0xff;
+    var buf = await crypto.subtle.digest('SHA-256', sample);
+    var hexs = Array.from(new Uint8Array(buf)).map(function (b) { return b.toString(16).padStart(2, '0'); }).join('');
+    var grouped = hexs.match(/.{1,8}/g).join(' ');
+    el.textContent = 'sample · ' + grouped;
+    requestAnimationFrame(function () { el.classList.add('settled'); });
+  })();
+
+  (function citeSections() {
+    var sections = document.querySelectorAll('main.wrap > section[id]');
+    sections.forEach(function (s) {
+      var heading = s.querySelector('h2, h1');
+      if (!heading) return;
+      var btn = document.createElement('button');
+      btn.className = 'qt-cite';
+      btn.type = 'button';
+      btn.setAttribute('aria-label', 'copy section citation');
+      btn.textContent = '¶';
+      btn.addEventListener('click', function (e) {
+        e.preventDefault();
+        var idx = Array.from(sections).indexOf(s) + 1;
+        var pad = String(idx).padStart(2, '0');
+        var title = heading.textContent.replace(/[¶\s]+$/g, '').trim();
+        var d = new Date().toISOString().slice(0, 10);
+        var url = location.origin + location.pathname + '#' + s.id;
+        var block = 'QorTroller Reference · §' + pad + ' ' + title + ' · ' + d + '\nqortroller.io/reference#' + s.id;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(block);
+        }
+        btn.classList.add('is-copied');
+        setTimeout(function () { btn.classList.remove('is-copied'); }, 1400);
+      });
+      heading.appendChild(btn);
+    });
+  })();
 })();
 </script>
 </body>
