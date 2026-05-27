@@ -248,12 +248,9 @@ function VpmInspector({ row, srcText, tamperByte, onTamper, onReset }) {
               <span className="eye">verdict</span>
               <span
                 key={`${hashState}-${hashOk}-${computedHash}`}
-                className={hashState === 'computing' ? 'motion--pulse' : hashOk ? 'motion--settle' : 'motion--mismatch'}
-                style={{
-                  fontFamily: 'var(--font-mono)', fontWeight: 600, fontSize: 22, letterSpacing: '0.08em',
-                  color: hashState === 'computing' ? 'var(--accent-amber)' : hashOk ? 'var(--chain)' : 'var(--status-blocked)',
-                  lineHeight: 1,
-                }}
+                className={`qt-verdict qt-verdict--${
+                  hashState === 'computing' ? 'computing' : hashOk ? 'ok' : 'err'
+                }`}
               >
                 {hashState === 'computing' ? '● COMPUTING' : hashOk ? '● HASH OK' : '● MISMATCH'}
               </span>

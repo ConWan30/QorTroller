@@ -667,3 +667,54 @@
   .qt-design-root .ribbon__cell--fx-shockwave::after,
   .qt-levelup { animation: none !important; }
 }
+
+/* ====================================================================
+ * Path A handoff PR 2 — Layout primitives + verdict triplet
+ * Per CLAUDE-CODE-SPEC §B and §F.4.
+ * ==================================================================== */
+
+/* ── B · Layout primitives ──
+ * The only way to lay out a view body going forward. Replaces bespoke
+ * gridTemplateColumns per view. .qt-grid for 12-column cluster layouts;
+ * .qt-row for top-of-view honesty-hero strips; .qt-stage for views that
+ * opt out of grid entirely (twin stage, iframe full-bleed).
+ *
+ * Outside the .qt-design-root scope intentionally — these are pure layout
+ * helpers that any surface can adopt without dragging the full token
+ * palette along. */
+.qt-grid   { display: grid; grid-template-columns: repeat(12, 1fr); gap: 16px; }
+.qt-row    { display: grid; gap: 16px; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+.qt-row--2 { grid-template-columns: 1fr 1fr; }
+.qt-row--3 { grid-template-columns: 1fr 1fr 1fr; }
+.qt-stage  { margin: -16px; height: calc(100% + 32px); position: relative; }
+
+.qt-grid > .span-3  { grid-column: span 3; }
+.qt-grid > .span-4  { grid-column: span 4; }
+.qt-grid > .span-5  { grid-column: span 5; }
+.qt-grid > .span-6  { grid-column: span 6; }
+.qt-grid > .span-7  { grid-column: span 7; }
+.qt-grid > .span-8  { grid-column: span 8; }
+.qt-grid > .span-12 { grid-column: span 12; }
+
+/* ── F.4 · Verdict triplet ──
+ * Single chip primitive with three explicit settled states. The amber-
+ * pulse-while-computing window is now visible across the app: any
+ * verifier surface (VpmProofView's hash chip, future CryptoReplayPanel,
+ * etc.) can adopt the same triplet for visual consistency.
+ *
+ * Honest motion discipline: only the COMPUTING state animates. OK and
+ * ERR are settled, color-only — once a verdict resolves it stays put.
+ * No ongoing flash on err (the prior motion--mismatch 1.2s loop is
+ * superseded for verdicts; that class stays defined for non-verdict
+ * surfaces that may still consume it). */
+.qt-design-root .qt-verdict {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono); font-weight: 600;
+  font-size: 22px; letter-spacing: 0.08em; line-height: 1;
+}
+.qt-design-root .qt-verdict--computing {
+  color: var(--accent-amber);
+  animation: qt-pulse-soft 0.7s ease-in-out infinite;
+}
+.qt-design-root .qt-verdict--ok  { color: var(--chain); }
+.qt-design-root .qt-verdict--err { color: var(--status-blocked); }
