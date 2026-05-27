@@ -1178,6 +1178,17 @@ class Config:
     would make the chain-backed composite-pubkey provider silently return None (closure inert). The
     deploy-block floor keeps the scan within the RPC's range."""
 
+    # Path A Arc 1 Commit 2 — VAPIManufacturerDeviceRegistry (manufacturer-authoritative
+    # device birth registry). Deliberate divergence from VAPIPoEPRegistry trust model:
+    # PoEP = gamer-sovereign (msg.sender); MFG registry = manufacturer-authoritative
+    # (onlyOwner). Both registries coexist. EMPTY in Arc 1 pre-deploy; chain view methods
+    # (get_device_signing_path, is_path_a, get_proof_tier, is_active_in_mfg_registry)
+    # FAIL-OPEN dormant (return 0/False) when empty — bridge readiness MUST NOT depend on
+    # the deploy (CONSENT + PoEP precedent). Set at the wallet-gated Commit 2 deploy.
+    manufacturer_device_registry_address: str = field(
+        default_factory=lambda: _env("MANUFACTURER_DEVICE_REGISTRY_ADDRESS", "")
+    )
+
     # Phase 3 (Path B) — host-side composite-sig re-attestation signer
     ipact_host_signer_enabled: bool = field(
         default_factory=lambda: _env_bool("IPACT_HOST_SIGNER_ENABLED", False)
