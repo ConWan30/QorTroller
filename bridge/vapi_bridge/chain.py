@@ -651,6 +651,49 @@ _VAPI_MANUFACTURER_DEVICE_REGISTRY_ABI = [
         "name": "DeviceRevoked", "type": "event", "anonymous": False,
         "inputs": [{"name": "deviceId", "type": "bytes32", "indexed": True}],
     },
+    # Path A Arc 1 Commit 4 — extend MFG ABI with getDevice so the bridge can
+    # read the full DeviceRegistration tuple (specifically controllerModel for
+    # name reverse-lookup via controller_models.name_for_hash). Still views-
+    # only; writers remain excluded from the bridge ABI.
+    {
+        "name": "getDevice", "type": "function", "stateMutability": "view",
+        "inputs":  [{"name": "deviceId", "type": "bytes32"}],
+        "outputs": [{
+            "type": "tuple",
+            "components": [
+                {"name": "pubkeyHash",         "type": "bytes32"},
+                {"name": "controllerModel",    "type": "bytes32"},
+                {"name": "signingPath",        "type": "uint8"},
+                {"name": "proofTier",          "type": "uint8"},
+                {"name": "registeredAt",       "type": "uint64"},
+                {"name": "birthCertHash",      "type": "bytes32"},
+                {"name": "manufacturerWallet", "type": "address"},
+                {"name": "active",             "type": "bool"},
+            ],
+        }],
+    },
+]
+
+
+# Path A Arc 1 Commit 4 — VAPIProtocolLensV2 read-only ABI. Replaces the
+# inline 4-line ABI that lived in is_fully_eligible (commit dca29217). Adds
+# the two new Path A entries (isFullyEligible_PathA + getDeviceTier).
+_VAPI_PROTOCOL_LENS_V2_ABI = [
+    {
+        "name": "isFullyEligible", "type": "function", "stateMutability": "view",
+        "inputs":  [{"name": "deviceId", "type": "bytes32"}],
+        "outputs": [{"type": "bool"}],
+    },
+    {
+        "name": "isFullyEligible_PathA", "type": "function", "stateMutability": "view",
+        "inputs":  [{"name": "deviceId", "type": "bytes32"}],
+        "outputs": [{"type": "bool"}],
+    },
+    {
+        "name": "getDeviceTier", "type": "function", "stateMutability": "view",
+        "inputs":  [{"name": "deviceId", "type": "bytes32"}],
+        "outputs": [{"type": "uint8"}],
+    },
 ]
 
 
@@ -3847,20 +3890,82 @@ class ChainClient:
         addr = getattr(self._cfg, "protocol_lens_address", "")
         if not addr:
             raise RuntimeError("is_fully_eligible: protocol_lens_address not configured")
-        _ABI = [{
-            "name": "isFullyEligible", "type": "function",
-            "stateMutability": "view",
-            "inputs": [{"name": "deviceId", "type": "bytes32"}],
-            "outputs": [{"type": "bool"}],
-        }]
+        # Path A Arc 1 C4 — inline single-function ABI superseded by the
+        # module-level _VAPI_PROTOCOL_LENS_V2_ABI constant. v2 contains
+        # isFullyEligible (byte-for-byte v1) + Path A additions; calling
+        # the v1 function on v2 returns identical behavior.
         contract = self._w3.eth.contract(
-            address=self._w3.to_checksum_address(addr), abi=_ABI
+            address=self._w3.to_checksum_address(addr), abi=_VAPI_PROTOCOL_LENS_V2_ABI,
         )
         device_id_bytes32 = bytes.fromhex(device_id_bytes32_hex)
         result = await contract.functions.isFullyEligible(device_id_bytes32).call()
         log.debug("is_fully_eligible: device=%s eligible=%s",
                   device_id_bytes32_hex[:16], bool(result))
         return bool(result)
+
+    async def is_fully_eligible_path_a(self, device_id_bytes32_hex: str) -> bool:
+        """Path A Arc 1 C4 — composable single-call Path A gate.
+
+        Returns true iff: isFullyEligible(deviceId) AND device registered as
+        Path A in the manufacturer registry AND device active. Pure VIEW
+        (unaffected by CHAIN_SUBMISSION_PAUSED). Mirrors is_fully_eligible's
+        async signature + fail-open posture: raises RuntimeError when the
+        protocol_lens_address is unset (caller surfaces 'unavailable' rather
+        than a misleading False)."""
+        addr = getattr(self._cfg, "protocol_lens_address", "")
+        if not addr:
+            raise RuntimeError("is_fully_eligible_path_a: protocol_lens_address not configured")
+        contract = self._w3.eth.contract(
+            address=self._w3.to_checksum_address(addr), abi=_VAPI_PROTOCOL_LENS_V2_ABI,
+        )
+        device_id_bytes32 = bytes.fromhex(device_id_bytes32_hex)
+        result = await contract.functions.isFullyEligible_PathA(device_id_bytes32).call()
+        log.debug("is_fully_eligible_path_a: device=%s eligible=%s",
+                  device_id_bytes32_hex[:16], bool(result))
+        return bool(result)
+
+    async def get_device_tier_from_lens(self, device_id_bytes32_hex: str) -> int:
+        """Path A Arc 1 C4 — read the MFG-registered proof tier via the lens.
+        Returns 0/1/2/3 (FROZEN per INV-MFG-002). Async + raises if lens
+        unset (mirrors is_fully_eligible). Equivalent data to the SYNC
+        chain.get_proof_tier (which reads MFG directly via the VMDR ABI) —
+        this is the tournament-integrator convenience surface."""
+        addr = getattr(self._cfg, "protocol_lens_address", "")
+        if not addr:
+            raise RuntimeError("get_device_tier_from_lens: protocol_lens_address not configured")
+        contract = self._w3.eth.contract(
+            address=self._w3.to_checksum_address(addr), abi=_VAPI_PROTOCOL_LENS_V2_ABI,
+        )
+        device_id_bytes32 = bytes.fromhex(device_id_bytes32_hex)
+        return int(await contract.functions.getDeviceTier(device_id_bytes32).call())
+
+    def get_device_controller_model(self, device_id) -> bytes | None:
+        """Path A Arc 1 C4 — read the device's controllerModel bytes32 from
+        VAPIManufacturerDeviceRegistry. SYNC (uses sync_w3 alongside the other
+        VMDR view bundle). Returns None on any fault OR if address unset OR
+        if the device is not registered. Caller reverse-looks-up the name
+        via controller_models.name_for_hash()."""
+        from .consent_categories import device_id_to_bytes32
+        addr_str = getattr(self._cfg, "manufacturer_device_registry_address", "") or ""
+        if not addr_str or self._sync_w3 is None:
+            return None
+        try:
+            b32 = device_id_to_bytes32(device_id)
+            addr = self._sync_w3.to_checksum_address(addr_str)
+            contract = self._sync_w3.eth.contract(
+                address=addr, abi=_VAPI_MANUFACTURER_DEVICE_REGISTRY_ABI,
+            )
+            record = contract.functions.getDevice(b32).call()
+            # tuple order: pubkeyHash[0], controllerModel[1], signingPath[2],
+            # proofTier[3], registeredAt[4], birthCertHash[5],
+            # manufacturerWallet[6], active[7]
+            cm = bytes(record[1])
+            if cm == b"\x00" * 32:
+                return None  # zero-init record = unregistered
+            return cm
+        except Exception as exc:  # noqa: BLE001 — fail-open
+            log.debug("get_device_controller_model error (fail-open None): %s", exc)
+            return None
 
     async def is_swarm_quorum_valid(self, node_addresses: list[str]) -> bool:
         """View call (no gas). Calls VAPISwarmOperatorGate.isQuorumValid(address[]).

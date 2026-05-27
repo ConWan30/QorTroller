@@ -1213,6 +1213,16 @@ INVARIANTS: list[Invariant] = [
         pattern=r"PROOF_TIER_FULL\s*=\s*1|PROOF_TIER_STANDARD\s*=\s*2|PROOF_TIER_BASIC\s*=\s*3",
         min_matches=3,
     ),
+    # Path A Arc 1 Commit 4 — VAPIProtocolLensV2 FROZEN function surface.
+    # Tournament integrators bind against these two function names; renaming
+    # either is a wire-break for every Path A consumer.
+    Invariant(
+        id="INV-LENS-V2-001",
+        description="VAPIProtocolLensV2 FROZEN function surface: isFullyEligible_PathA(bytes32) + getDeviceTier(bytes32) — both pinned in the v2 source. Tournament integrators bind against these names; renaming either is a wire-break for every Path A consumer.",
+        file="contracts/contracts/VAPIProtocolLensV2.sol",
+        pattern=r"function isFullyEligible_PathA\(bytes32 deviceId\)|function getDeviceTier\(bytes32 deviceId\)",
+        min_matches=2,
+    ),
 ]
 
 
