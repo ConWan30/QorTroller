@@ -21,6 +21,7 @@ import {
 } from '../../api/publicForensic'
 import { useFleetCoherenceStatus } from '../../api/bridgeApi'
 import DataBadge from './DataBadge'
+import { Wordmark } from '../../design/Primitives'
 
 function MetricCell({ label, value, accent, isLast }) {
   return (
@@ -138,19 +139,13 @@ export default function StatusStrip() {
           whiteSpace:     'nowrap',
         }}
       >
-        <span style={{
-          fontFamily:    "'Syne', system-ui, sans-serif",
-          fontWeight:    700,
-          fontSize:      18,
-          letterSpacing: '-0.02em',
-          color:         'var(--os-text)',
-          display:       'inline-flex',
-          alignItems:    'baseline',
-        }}>
-          <span>Qor</span>
-          <span style={{ color: 'var(--os-accent)', fontWeight: 800 }}>T</span>
-          <span>roller</span>
-        </span>
+        {/* Design-audit PR-A: replaced inline wordmark JSX (12 lines) with
+            the scope-independent <Wordmark> primitive. The primitive
+            hardcodes canonical brand amber (#f0a868) + canonical text
+            (#d4dde8) per brand-lock QRESCE-0001 v0.5; previously bound to
+            --os-text / --os-accent vars (which resolve to the same values
+            in production, so visual output is byte-identical). */}
+        <Wordmark size={18} />
         <span style={{
           fontSize:      'var(--os-text-min)',
           letterSpacing: '0.12em',

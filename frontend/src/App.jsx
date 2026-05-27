@@ -64,7 +64,7 @@ function ViewLoader() {
       alignItems:     'center',
       justifyContent: 'center',
       fontFamily:     FONTS.mono,
-      fontSize:       9,
+      fontSize:       11,
       letterSpacing:  '2px',
       color:          'rgba(74,158,255,0.4)',
     }}>

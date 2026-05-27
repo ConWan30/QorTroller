@@ -75,7 +75,7 @@ export function RealityDot() {
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 6,
       fontFamily: "'JetBrains Mono', ui-monospace, monospace",
-      fontSize: 9, letterSpacing: '0.08em', textTransform: 'uppercase',
+      fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase',
       color, whiteSpace: 'nowrap',
     }}>
       <span
