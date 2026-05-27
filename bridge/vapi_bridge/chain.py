@@ -611,6 +611,49 @@ _VAPI_POEP_REGISTRY_ABI = [
     },
 ]
 
+# Path A Arc 1 Commit 2 — VAPIManufacturerDeviceRegistry read-only ABI.
+# Bridge consumes view calls + events ONLY; registerDevice/revokeDevice are operator/
+# manufacturer-wallet calls, never bridge calls. Trust model is MANUFACTURER-
+# AUTHORITATIVE (onlyOwner writes) — deliberate divergence from the gamer-sovereign
+# VAPIPoEPRegistry. See VAPIManufacturerDeviceRegistry.sol NatSpec header for the
+# full divergence rationale.
+_VAPI_MANUFACTURER_DEVICE_REGISTRY_ABI = [
+    {
+        "name": "getSigningPath", "type": "function", "stateMutability": "view",
+        "inputs":  [{"name": "deviceId", "type": "bytes32"}],
+        "outputs": [{"type": "uint8"}],
+    },
+    {
+        "name": "getProofTier", "type": "function", "stateMutability": "view",
+        "inputs":  [{"name": "deviceId", "type": "bytes32"}],
+        "outputs": [{"type": "uint8"}],
+    },
+    {
+        "name": "isPathA", "type": "function", "stateMutability": "view",
+        "inputs":  [{"name": "deviceId", "type": "bytes32"}],
+        "outputs": [{"type": "bool"}],
+    },
+    {
+        "name": "isActive", "type": "function", "stateMutability": "view",
+        "inputs":  [{"name": "deviceId", "type": "bytes32"}],
+        "outputs": [{"type": "bool"}],
+    },
+    {
+        "name": "DeviceRegistered", "type": "event", "anonymous": False,
+        "inputs": [
+            {"name": "deviceId",        "type": "bytes32", "indexed": True},
+            {"name": "controllerModel", "type": "bytes32", "indexed": False},
+            {"name": "signingPath",     "type": "uint8",   "indexed": False},
+            {"name": "proofTier",       "type": "uint8",   "indexed": False},
+        ],
+    },
+    {
+        "name": "DeviceRevoked", "type": "event", "anonymous": False,
+        "inputs": [{"name": "deviceId", "type": "bytes32", "indexed": True}],
+    },
+]
+
+
 IOID_REGISTRY_ABI = [
     {
         "name": "register",
@@ -1784,6 +1827,84 @@ class ChainClient:
         except Exception as exc:  # noqa: BLE001 — fail-open on RPC/contract error
             log.warning("get_registered_composite_pubkey error (fail-open): %s", exc)
             return None
+
+    # --- Path A Arc 1 Commit 2: VAPIManufacturerDeviceRegistry reads ---
+    #
+    # Four SYNC view-call methods + a 60s TTL cache. Fail-OPEN posture: when
+    # MANUFACTURER_DEVICE_REGISTRY_ADDRESS is unset (Arc 1 pre-deploy) OR sync_w3
+    # is unavailable OR the RPC call raises, return the dormant default (0 for
+    # path/tier, False for booleans). Bridge readiness MUST NOT depend on the
+    # registry deploy — same precedent as get_registered_composite_pubkey and
+    # is_consent_valid. UI honesty is preserved upstream: GET /player/session-
+    # status surfaces signing_path=null/"B" honestly when this returns 0/False.
+
+    _VMDR_CACHE_TTL_S = 60.0
+
+    def _vmdr_cache(self):
+        # Lazy-init per-instance cache: {device_id_hex: (ts, {sig, tier, isA, isAct})}
+        if not hasattr(self, "_vmdr_view_cache"):
+            self._vmdr_view_cache = {}
+        return self._vmdr_view_cache
+
+    def _vmdr_read_views(self, device_id):
+        """Read all 4 views in one shot + cache the bundle for 60s. Returns
+        (signing_path:int, proof_tier:int, is_path_a:bool, is_active:bool). On
+        any fault returns the dormant default (0, 0, False, False)."""
+        import time as _t
+        from .consent_categories import device_id_to_bytes32
+
+        cache = self._vmdr_cache()
+        now = _t.time()
+        cached = cache.get(device_id)
+        if cached and (now - cached[0] < self._VMDR_CACHE_TTL_S):
+            return cached[1]
+
+        dormant = (0, 0, False, False)
+
+        addr_str = getattr(self._cfg, "manufacturer_device_registry_address", "") or ""
+        if not addr_str or self._sync_w3 is None:
+            cache[device_id] = (now, dormant)  # cache the dormant answer too — RPC isn't free
+            return dormant
+
+        try:
+            b32 = device_id_to_bytes32(device_id)
+            addr = self._sync_w3.to_checksum_address(addr_str)
+            contract = self._sync_w3.eth.contract(
+                address=addr, abi=_VAPI_MANUFACTURER_DEVICE_REGISTRY_ABI,
+            )
+            sig  = int(contract.functions.getSigningPath(b32).call())
+            tier = int(contract.functions.getProofTier(b32).call())
+            isA  = bool(contract.functions.isPathA(b32).call())
+            isAct = bool(contract.functions.isActive(b32).call())
+            bundle = (sig, tier, isA, isAct)
+            cache[device_id] = (now, bundle)
+            return bundle
+        except Exception as exc:  # noqa: BLE001 — fail-open
+            log.warning("VMDR view read error (fail-open dormant): %s", exc)
+            cache[device_id] = (now, dormant)
+            return dormant
+
+    def get_device_signing_path(self, device_id) -> int:
+        """Returns 1 (Path A silicon-rooted) / 2 (Path B host-held) / 0 (unregistered
+        or registry unavailable). Fail-open dormant on any fault."""
+        return self._vmdr_read_views(device_id)[0]
+
+    def get_proof_tier(self, device_id) -> int:
+        """Returns 1 (FULL — DualSense Edge CFI-ZCP1) / 2 (STANDARD — CFI-ZCT1) /
+        3 (BASIC — third-party) / 0 (unregistered or registry unavailable)."""
+        return self._vmdr_read_views(device_id)[1]
+
+    def is_path_a(self, device_id) -> bool:
+        """True iff registered + active + signingPath == SIGNING_PATH_A. False on
+        any fault (fail-open dormant — honest default, not a false-positive Path A)."""
+        return self._vmdr_read_views(device_id)[2]
+
+    def is_active_in_mfg_registry(self, device_id) -> bool:
+        """True iff registered + active in the manufacturer registry (regardless of
+        signing path). Distinct from VHP / PoEP activity — this is hardware-birth
+        activity. Named with _in_mfg_registry suffix to avoid clash with the future
+        protocol-wide is_active concept."""
+        return self._vmdr_read_views(device_id)[3]
 
     # --- Phase 23: Identity Continuity Registry ---
 
