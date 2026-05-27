@@ -57,6 +57,16 @@
   --font-body:    'Syne', system-ui, sans-serif;
   --font-mono:    'JetBrains Mono', ui-monospace, monospace;
 
+  /* ── Type alignment locks (Path A handoff PR 1, item G) ──
+   * Named CSS vars for the four most-load-bearing type properties so a
+   * single find-replace site-wide ensures eyebrows, chips, h2 section
+   * headers, and hash specimens never drift to one-off values. Per the
+   * v2-chrome-alignment CLAUDE-CODE-SPEC §G. */
+  --eye-tracking:   0.14em;   /* eyebrows: ALWAYS */
+  --chip-tracking:  0.06em;   /* chips: ALWAYS */
+  --h2-size:        20px;     /* section headers: ALWAYS */
+  --hash-size:      14px;     /* default hash specimen: ALWAYS */
+
   /* ── Geometry / spacing ── */
   --radius: 6px;
   --s-3: 8px;

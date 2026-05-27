@@ -210,3 +210,6 @@ poep_l9/
 
 # BCC sealed developer-reference lane (local-only)
 bcc_l9/
+
+# Design system handoff staging (read-only reference; never commit)
+.design-handoff-staging/
