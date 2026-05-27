@@ -26,10 +26,30 @@ secure-element sign-latency study (~3 ms per sign on ATECC608A vs the 1000 Hz
 PoAC pipeline; needs buffering architecture) OR a faster signing surface
 (e.g. STM32 with onboard ECDSA acceleration).
 
-**Path A v1 reference implementation demonstrated:** QorTroller Foundation
-on IoTeX testnet — VAPIManufacturerDeviceRegistry at
-`0x2e5B5FB110890f498e289E3045d0f54Cfb0F91b0`. Manufacturers deploying their
-own registry instance follow the same contract bytecode.
+**Path A v1 reference implementation demonstrated on IoTeX testnet
+(2026-05-27):**
+
+| Component | Address / Tx | Block |
+|---|---|---|
+| VAPIManufacturerDeviceRegistry | `0x2e5B5FB110890f498e289E3045d0f54Cfb0F91b0` | 44019764 |
+| VAPIProtocolLensV2 | `0x32Bf1A01a0a2629955A3Fd5ce74c0571DAd7C989` | 44028226 |
+| First device registration | tx `0x68f6cf49564ed2b193d00e881e5cc9488111a8bc05951c2f2af55e25050ac9c0` | 44028531 |
+
+The first device registered is the reference DualShock Edge (CFI-ZCP1) at
+`device_id = 581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8`,
+registered as `signing_path = B` (Arc 1 reference — host-held composite key)
+and `proof_tier = FULL`. The cert was signed by the QorTroller Foundation
+reference-implementation ManufacturerRootCA (ECDSA-P256, software-backed at
+`~/.vapi/qortroller_foundation_mfg_ca.json`). Tournament-operator audit
+(`scripts/verify_device_cert.py`) returns **VERDICT VALID** against the live
+registry — cert sig OK + on-chain `birthCertHash` byte-match + `isActive=true`.
+
+Manufacturers deploying their own registry instance follow the same contract
+bytecode (`contracts/contracts/VAPIManufacturerDeviceRegistry.sol`) with their
+own HSM wallet as `initialOwner`. The cert format, on-chain schema, and
+verification tooling are identical regardless of the operating manufacturer —
+only the signing-authority custody changes (from QorTroller Foundation's
+software root CA to a partner's hardware HSM).
 
 ---
 
