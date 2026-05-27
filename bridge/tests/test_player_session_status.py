@@ -22,9 +22,17 @@ from unittest.mock import AsyncMock
 BRIDGE_DIR = Path(__file__).parents[1]
 sys.path.insert(0, str(BRIDGE_DIR))
 
+# Path A Arc 1 C3 fix (2026-05-27): only install stub modules when the real ones
+# CAN'T be imported. Prior version unconditionally stubbed if not in sys.modules,
+# which on cold pytest start meant the REAL web3 (installed in the bridge env) got
+# replaced with empty stubs — breaking subsequent tests that import chain.py and
+# need real AsyncWeb3. Try real import first; fall back to stub only on ImportError.
 for _mod in ["web3", "web3.exceptions", "eth_account", "eth_account.signers.local"]:
     if _mod not in sys.modules:
-        sys.modules[_mod] = types.ModuleType(_mod)
+        try:
+            __import__(_mod)
+        except ImportError:
+            sys.modules[_mod] = types.ModuleType(_mod)
 
 _KEY = "psstestkey"
 _H = {"x-api-key": _KEY}

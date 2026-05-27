@@ -11,6 +11,30 @@ DER/Raw-RS contract:
     All hardware backends return 64-byte raw r||s.
     _HardwareKeyProxy converts to DER for PoACEngine, which decodes it back to r||s.
     SoftwareIdentityBackend also returns raw r||s (not DER) for consistency.
+
+⚠ NAMING NOTE (Path A Arc 1 cross-reference, 2026-05-26):
+    A SECOND class also named ``SigningBackend`` lives in
+    ``bridge/vapi_bridge/signing_backends/base.py`` (a Protocol, not an ABC).
+    The two abstractions cover DIFFERENT scopes and are intentionally separate
+    per Arc 1 D-α operator decision:
+
+      THIS ``SigningBackend`` (ABC, hardware_identity)
+        → PoAC RECORD signing hot path (~1000 Hz, dualshock_integration.py)
+        → ECDSA-P256 over raw 228-byte body
+        → returns 64-byte raw r||s
+        → impls: SoftwareIdentityBackend, YubiKeyIdentityBackend,
+                 ATECC608IdentityBackend
+
+      signing_backends.SigningBackend (Protocol)
+        → iPACT renewal challenge signing (low-volume, vhp_renewal_agent.py)
+        → COMPOSITE signing (ECDSA-P256 + ML-DSA-44 AND-composite via l9_presence)
+        → returns CompositeSignature (wire blob + decomposed halves)
+        → impls: HostKeyBackend, SecureElementBackend (stub for Arc 2)
+
+    Arc 2 will integrate ATECC608A silicon. ``ATECC608IdentityBackend`` here
+    is the PoAC-path integration; the composite-sig path's ATECC608A wrapper
+    is the deferred SecureElementBackend. They may share the underlying
+    cryptoauthlib calls but are wired into separate signing surfaces.
 """
 
 import abc

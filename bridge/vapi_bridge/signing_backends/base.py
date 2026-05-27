@@ -1,5 +1,29 @@
 """SigningBackend Protocol + composite-signature dataclasses (Path A Arc 1 C1).
 
+⚠ NAMING NOTE (Commit 3 cross-reference, 2026-05-26):
+    A SECOND class also named ``SigningBackend`` lives in
+    ``bridge/vapi_bridge/hardware_identity.py`` (an ABC, not a Protocol). The
+    two abstractions cover DIFFERENT scopes and are intentionally separate
+    per Arc 1 D-α operator decision:
+
+      THIS ``SigningBackend`` (Protocol, signing_backends/base.py)
+        → iPACT renewal challenge signing (low-volume, vhp_renewal_agent.py)
+        → COMPOSITE signing (ECDSA-P256 + ML-DSA-44 via l9_presence.composite_sig)
+        → returns CompositeSignature (wire blob + decomposed halves)
+        → impls: HostKeyBackend, SecureElementBackend (Arc 2 stub)
+
+      hardware_identity.SigningBackend (ABC)
+        → PoAC RECORD signing hot path (~1000 Hz, dualshock_integration.py)
+        → ECDSA-P256 over raw 228-byte body
+        → returns 64-byte raw r||s
+        → impls: SoftwareIdentityBackend, YubiKeyIdentityBackend,
+                 ATECC608IdentityBackend (already integrated for the PoAC path)
+
+    Arc 2's ATECC608A wrapper for THIS Protocol is the deferred
+    SecureElementBackend; it may delegate to hardware_identity's ATECC608
+    integration but lives in this package because the scope (composite-sig
+    not raw-r||s) is different.
+
 Wire-format honesty (V-7 finding 2026-05-26): the protocol's underlying
 `l9_presence.composite_sig` produces:
   • ECDSA-P256 signatures in DER encoding (variable length, typically 70-72 B
