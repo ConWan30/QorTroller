@@ -1193,6 +1193,26 @@ INVARIANTS: list[Invariant] = [
         pattern=r'_QORTROLLER_FROZEN_FAMILY_TAGS: frozenset\[bytes\] = frozenset|b"QORTROLLER-IPACT-RENEWAL-v1"|b"QORTROLLER-IPACT-RENEWAL-GENESIS-v1"',
         min_matches=3,
     ),
+    # Path A Arc 1 Commit 2 — VAPIManufacturerDeviceRegistry FROZEN enum constants.
+    # signingPath drift silently inverts every Path A eligibility decision (an active
+    # Path B device would suddenly read as Path A or vice-versa); proofTier drift
+    # silently reclassifies hardware capability (a CFI-ZCP1 could read as BASIC). Both
+    # contract-source-pinned via regex alternation with min_matches = count of
+    # constants (matches the INV-PCC-002 / INV-IPACT-RENEWAL-PREIMAGE-001 precedent).
+    Invariant(
+        id="INV-MFG-001",
+        description="VAPIManufacturerDeviceRegistry FROZEN signingPath enum: SIGNING_PATH_A=1, SIGNING_PATH_B=2 (Path A Arc 1; pinned because changing these values silently inverts every Path A eligibility decision — a Path B device would read as Path A or vice versa).",
+        file="contracts/contracts/VAPIManufacturerDeviceRegistry.sol",
+        pattern=r"SIGNING_PATH_A\s*=\s*1|SIGNING_PATH_B\s*=\s*2",
+        min_matches=2,
+    ),
+    Invariant(
+        id="INV-MFG-002",
+        description="VAPIManufacturerDeviceRegistry FROZEN proofTier enum: PROOF_TIER_FULL=1, PROOF_TIER_STANDARD=2, PROOF_TIER_BASIC=3 (Path A Arc 1; tiers correspond to DualSense Edge CFI-ZCP1 / DualSense CFI-ZCT1 / third-party — drift would silently reclassify hardware capability).",
+        file="contracts/contracts/VAPIManufacturerDeviceRegistry.sol",
+        pattern=r"PROOF_TIER_FULL\s*=\s*1|PROOF_TIER_STANDARD\s*=\s*2|PROOF_TIER_BASIC\s*=\s*3",
+        min_matches=3,
+    ),
 ]
 
 
