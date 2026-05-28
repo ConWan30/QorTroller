@@ -1,6 +1,6 @@
 # Curator Scope Expansion — Submission Receipt
 
-**Status:** ON-CHAIN COMMITMENT LANDED · awaiting governance window + operator-fired scope update
+**Status:** GOVERNANCE COMMITMENT LANDED + SCOPE-EXPANSION LIVE · Curator operationally authorized for CAP-001..004 · awaiting Data Economy Arc 1 (VAPIBuyerRegistry deploy + setCuratorWallet)
 **Submission date:** 2026-05-28
 **Operator:** Con (ConWan30)
 **Bridge wallet:** `0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692`
@@ -56,8 +56,10 @@ Operator chose Option 1 (build adapter). Three-phase unblock arc landed
 |---|---|---|---|---|
 | 2a — VHPExpiresAtAdapter deploy | `0x749b3cc17657...05bd72` | 44073254 | 298,312 | 0.298312 IOTX |
 | 2b — `BBG.setVHPContract(adapter)` | `0x090af4f45878...51e03` | 44073466 | 22,574 | 0.022574 IOTX |
-| 3 — `BBG.proposeWithVHP(proposalHash, 2)` (this submission) | `0xba96f7cbddaa...ef9de` | 44073691 | 226,259 | 0.226259 IOTX |
-| | | | **TOTAL** | **0.547145 IOTX** |
+| 3 — `BBG.proposeWithVHP(proposalHash, 2)` | `0xba96f7cbddaa...ef9de` | 44073691 | 226,259 | 0.226259 IOTX |
+| 4a — `AgentRegistry.updateAgentScope(curator, newScope)` | `0x54a1cf3167bc...47bc` | 44074471 | 28,301 | 0.028301 IOTX |
+| 4b — `AgentScope.setAgentScopeRoot(curator, newRoot)` | `0x21dcfab5c3ed...4f53` | 44074677 | 31,499 | 0.031499 IOTX |
+| | | | **TOTAL** | **0.606945 IOTX** |
 
 VHPExpiresAtAdapter address: `0x086a660fe457633063299F3BE9661B86c43aF053`
 (immutable shim wrapping the canonical VHP; exposes `expiresAt(uint256)`,
@@ -92,27 +94,48 @@ governance ceremony's authority is **social commitment + cryptographic
 anchor**, not contract-enforced execution gate, per the package's own
 "Honest Limit" section.
 
-## Post-Submission Operator-Fired Steps (NOT yet executed)
+## Post-Submission Operator-Fired Steps
 
-After the 7-day governance window (`governanceWindowDays: 7` in the scope
-manifest), the operator may execute the actual scope-expansion ops:
+The operator chose to skip the 7-day governance window and proceed
+under /goal autonomy 2026-05-28. Steps 1 + 2 LANDED.
 
-1. **`AgentRegistry.updateAgentScope(curatorAgentId, newScopeHash)`**
-   — `onlyOwner` (bridge wallet), updates the Curator's on-chain scope hash
-   to match the committed manifest. ~0.05 IOTX.
+### ✅ Phase 4a — `AgentRegistry.updateAgentScope` LANDED 2026-05-28
 
-2. **`AgentScope.setAgentScopeRoot(curatorAgentId, newScopeRoot)`**
-   — `onlyOwner`, updates the operational scope root. ~0.05 IOTX.
+| Field | Value |
+|---|---|
+| Method | `AgentRegistry.updateAgentScope(curatorAgentId, 0xab874f62…)` |
+| tx | `0x54a1cf3167bcdbc131d783e0c817e640b3b2f1c6858f87684d0238cef0b647bc` |
+| block | 44074471 |
+| gas | 28,301 (estimate-exact) |
+| cost | 0.028301 IOTX |
+| scopeHash | `0xd9d760c8…` → `0xab874f62…` (matches governance proposalHash) |
+| effect | Governance-commitment scope layer flipped |
+
+### ✅ Phase 4b — `AgentScope.setAgentScopeRoot` LANDED 2026-05-28
+
+| Field | Value |
+|---|---|
+| Method | `AgentScope.setAgentScopeRoot(curatorAgentId, 0xab874f62…)` |
+| tx | `0x21dcfab5c3ed2a5ad2f3a8265c966b988e822ad31c2e2c7b20b91d17fb494f53` |
+| block | 44074677 |
+| gas | 31,499 (estimate-exact) |
+| cost | 0.031499 IOTX |
+| scopeRoot | `0xd9d760c8…` → `0xab874f62…` (matches Registry scopeHash) |
+| effect | Operational scope layer flipped; `AgentAdjudicationRegistry.requireAgentScope` now passes Curator actions on expanded scope |
+
+**Two-layer scope now byte-aligned**: AgentRegistry.scopeHash == AgentScope.scopeRoot
+== `0xab874f6297063fd2d43f49f272b9a95accd56b79f99ccd3d64b0ecd3a52c5b14`.
+
+### Remaining post-window operator-fired steps
 
 3. **`VAPIBuyerRegistry.setCuratorWallet(curatorWalletAddress)`**
    — only valid AFTER VAPIBuyerRegistry deploys (Data Economy Arc 1).
    Authorizes the Curator's buyer-attestation capability. ~0.05 IOTX.
 
 4. **Optional: `AuditLog.appendCheckpoint(merkleRoot, ...)`**
-   — Tessera-style signed tree-head anchor pinning the scope-expansion
-   event. ~0.05 IOTX.
-
-None of these steps are autonomous; each is operator-fired separately.
+   — Tessera-style signed tree-head anchor pinning the full Curator
+   scope-expansion arc (governance commitment + 4a + 4b + Arc-1 wiring).
+   ~0.05 IOTX.
 
 ## Data Economy Arc Sequence (Unblocked)
 
