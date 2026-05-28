@@ -675,6 +675,22 @@ _VAPI_MANUFACTURER_DEVICE_REGISTRY_ABI = [
 ]
 
 
+# Data Economy Arc 1 — VAPIBuyerRegistry read-only ABI. Views only; the bridge
+# never issues/revokes credentials (that is the Curator's on-chain write path).
+_VAPI_BUYER_REGISTRY_ABI = [
+    {
+        "name": "isValidCredential", "type": "function", "stateMutability": "view",
+        "inputs":  [{"name": "buyerDID", "type": "bytes32"}, {"name": "categoryId", "type": "uint8"}],
+        "outputs": [{"type": "bool"}],
+    },
+    {
+        "name": "getCategory", "type": "function", "stateMutability": "view",
+        "inputs":  [{"name": "buyerDID", "type": "bytes32"}],
+        "outputs": [{"type": "uint8"}],
+    },
+]
+
+
 # Path A Arc 1 Commit 4 — VAPIProtocolLensV2 read-only ABI. Replaces the
 # inline 4-line ABI that lived in is_fully_eligible (commit dca29217). Adds
 # the two new Path A entries (isFullyEligible_PathA + getDeviceTier).
@@ -1948,6 +1964,93 @@ class ChainClient:
         activity. Named with _in_mfg_registry suffix to avoid clash with the future
         protocol-wide is_active concept."""
         return self._vmdr_read_views(device_id)[3]
+
+    # --- Data Economy Arc 1: VAPIBuyerRegistry reads ---
+    #
+    # Two SYNC view-call methods + a 60s TTL cache. Fail-OPEN posture identical
+    # to the VMDR block above: when buyer_registry_address is unset OR sync_w3 is
+    # unavailable OR the RPC call raises, return the dormant default (False for
+    # validity, 0 for category). The bridge only READS this registry — credential
+    # issuance/revocation is the Curator's on-chain write via the bridge wallet
+    # (curator_attestation module, Arc 1 Commit 2). buyerDID is normalised through
+    # the project's device_id_to_bytes32 (generic bytes32 normaliser: 0x-hex used
+    # directly, arbitrary DID string SHA-256'd) so the read path and the future
+    # write path agree byte-for-byte on the on-chain key.
+
+    _BUYER_CACHE_TTL_S = 60.0
+
+    def _buyer_cache(self):
+        # Lazy-init per-instance cache: {cache_key: (ts, value)}
+        if not hasattr(self, "_buyer_view_cache"):
+            self._buyer_view_cache = {}
+        return self._buyer_view_cache
+
+    def _buyer_contract(self):
+        """Return (sync) VAPIBuyerRegistry contract handle, or None when the
+        registry address is unset or sync_w3 is unavailable (fail-open)."""
+        addr_str = getattr(self._cfg, "buyer_registry_address", "") or ""
+        if not addr_str or self._sync_w3 is None:
+            return None
+        addr = self._sync_w3.to_checksum_address(addr_str)
+        return self._sync_w3.eth.contract(address=addr, abi=_VAPI_BUYER_REGISTRY_ABI)
+
+    def is_valid_buyer_credential(self, buyer_did: str, category_id: int) -> bool:
+        """True iff the buyer holds a registered + active + unexpired credential
+        for category_id (authoritative on-chain isValidCredential check). Fail-open
+        False on any fault (registry unset / RPC error) — an unavailable registry
+        must never grant a buyer access it does not hold on-chain."""
+        import time as _t
+        from .consent_categories import device_id_to_bytes32
+
+        cache = self._buyer_cache()
+        now = _t.time()
+        key = ("valid", str(buyer_did), int(category_id))
+        cached = cache.get(key)
+        if cached and (now - cached[0] < self._BUYER_CACHE_TTL_S):
+            return cached[1]
+
+        contract = self._buyer_contract()
+        if contract is None:
+            cache[key] = (now, False)
+            return False
+        try:
+            b32 = device_id_to_bytes32(buyer_did)
+            valid = bool(contract.functions.isValidCredential(b32, int(category_id)).call())
+            cache[key] = (now, valid)
+            return valid
+        except Exception as exc:  # noqa: BLE001 — fail-open False
+            log.warning("is_valid_buyer_credential error (fail-open False): %s", exc)
+            cache[key] = (now, False)
+            return False
+
+    def get_buyer_category(self, buyer_did: str) -> int:
+        """Return the buyer's attested category id (1=ACADEMIC .. 4=BRAND), or 0
+        when unregistered / registry unavailable. NOTE: getCategory returns the
+        stored category regardless of active/expiry — use is_valid_buyer_credential
+        for an authorization decision; this is for display/lookup only."""
+        import time as _t
+        from .consent_categories import device_id_to_bytes32
+
+        cache = self._buyer_cache()
+        now = _t.time()
+        key = ("cat", str(buyer_did))
+        cached = cache.get(key)
+        if cached and (now - cached[0] < self._BUYER_CACHE_TTL_S):
+            return cached[1]
+
+        contract = self._buyer_contract()
+        if contract is None:
+            cache[key] = (now, 0)
+            return 0
+        try:
+            b32 = device_id_to_bytes32(buyer_did)
+            cat = int(contract.functions.getCategory(b32).call())
+            cache[key] = (now, cat)
+            return cat
+        except Exception as exc:  # noqa: BLE001 — fail-open 0
+            log.warning("get_buyer_category error (fail-open 0): %s", exc)
+            cache[key] = (now, 0)
+            return 0
 
     # --- Phase 23: Identity Continuity Registry ---
 

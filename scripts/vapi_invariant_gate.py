@@ -1223,6 +1223,25 @@ INVARIANTS: list[Invariant] = [
         pattern=r"function isFullyEligible_PathA\(bytes32 deviceId\)|function getDeviceTier\(bytes32 deviceId\)",
         min_matches=2,
     ),
+    # Data Economy Arc 1 — VAPIBuyerRegistry FROZEN category enum + range guard.
+    # The category constants are the bitmask/credential domain shared between the
+    # contract, the chain.py read views, and the curator_attestation write path;
+    # reordering or renumbering them silently mis-categorises every buyer
+    # credential (an Academic credential reads as GameDev, etc.).
+    Invariant(
+        id="INV-BUY-001",
+        description="VAPIBuyerRegistry FROZEN category enum: CATEGORY_ACADEMIC=1, CATEGORY_GAME_DEV=2, CATEGORY_ESPORTS=3, CATEGORY_BRAND=4. These values are the credential domain — drift silently reclassifies every issued buyer credential.",
+        file="contracts/contracts/VAPIBuyerRegistry.sol",
+        pattern=r"CATEGORY_ACADEMIC\s*=\s*1|CATEGORY_GAME_DEV\s*=\s*2|CATEGORY_ESPORTS\s*=\s*3|CATEGORY_BRAND\s*=\s*4",
+        min_matches=4,
+    ),
+    Invariant(
+        id="INV-BUY-002",
+        description="VAPIBuyerRegistry issueCredential enforces the FROZEN category range (categoryId >= CATEGORY_ACADEMIC && categoryId <= CATEGORY_BRAND) — the on-chain guard that makes INV-BUY-001 load-bearing. Removing it would let the Curator mint credentials in unallocated category slots (5+).",
+        file="contracts/contracts/VAPIBuyerRegistry.sol",
+        pattern=r"categoryId\s*>=\s*CATEGORY_ACADEMIC\s*&&\s*categoryId\s*<=\s*CATEGORY_BRAND",
+        min_matches=1,
+    ),
 ]
 
 
