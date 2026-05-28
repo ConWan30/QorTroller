@@ -84,12 +84,13 @@
     "CHAIN_SUBMISSION_PAUSED kill-switch: respected by all new capabilities"
   ],
   "rollbackMechanism": {
-    "method": "VAPIBiometricGovernance.revokeScope(agentId, capabilityIds[])",
-    "effect": "VAPIBuyerRegistry.curatorWallet set to address(0) — Curator cannot attest buyers",
+    "method": "AgentRegistry.updateAgentScope(agentId, OLD_scopeHash) + AgentScope.setAgentScopeRoot(agentId, OLD_scopeRoot)",
+    "methodNote": "Both methods are onlyOwner on the deployed contracts (owner = bridge wallet 0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692). The governance ceremony's commitment to a new scope is social/process — VAPIBiometricGovernance.proposeWithVHP() commits the operator to a proposal hash but does NOT contract-enforce the subsequent AgentRegistry.updateAgentScope() call. Rollback uses the same direct-owner path as the original update. VAPIBiometricGovernance v1 (Phase 222) does not expose a revokeScope method; rollback semantics live in the operator's social commitment, anchored on-chain by a fresh proposeWithVHP() commitment to the rollback scope hash.",
+    "effect": "VAPIBuyerRegistry.curatorWallet set to address(0) — Curator cannot attest buyers (operator-fired AgentRegistry update points scope back to pre-expansion hash)",
     "packageLoopEffect": "curator_packaging_enabled flag set False in config — loop disabled at next restart",
     "marketplaceEffect": "Existing listings remain; new listing capability revoked",
     "timeToEffect": "One bridge restart after config flag propagates",
-    "auditTrail": "Revocation tx hash anchored on AuditLog"
+    "auditTrail": "Rollback proposeWithVHP() proposalHash + AgentRegistry.updateAgentScope() tx hash both visible on-chain; AuditLog.appendCheckpoint() optionally pins a Tessera signed tree-head over the rollback event"
   },
   "governanceWindowDays": 7,
   "requiredSignatures": 1,
