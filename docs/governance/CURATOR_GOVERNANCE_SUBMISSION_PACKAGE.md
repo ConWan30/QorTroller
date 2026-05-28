@@ -23,43 +23,79 @@ on-chain proposal. Any deviation means the authorization was tampered with.
 
 ### Canonical Hash Computation
 
-```python
-# scripts/compute_governance_hashes.py
-import hashlib, json, sys
+The actual `scripts/compute_governance_hashes.py` shipped in the repo
+implements the canonical hash computation + the on-chain submission template.
+Run it after finalizing both governance documents:
 
-def keccak256(data: bytes) -> bytes:
-    from eth_utils import keccak
-    return keccak(data)
-
-def sha256(data: bytes) -> bytes:
-    return hashlib.sha256(data).digest()
-
-# Scope manifest: canonical JSON (sorted keys, no whitespace)
-with open("docs/governance/curator-scope-manifest.json", "rb") as f:
-    manifest_bytes = f.read()
-scope_hash = keccak256(manifest_bytes)
-print(f"newScopeHash:       0x{scope_hash.hex()}")
-
-# Justification document: UTF-8 bytes of the markdown below
-with open("docs/governance/curator-governance-justification.md", "rb") as f:
-    justification_bytes = f.read()
-justification_hash = sha256(justification_bytes)
-print(f"justificationHash:  0x{justification_hash.hex()}")
-
-# On-chain submission
-print(f"""
-VAPIBiometricGovernance.submitProposal(
-    agentId=          bytes32({hex(int("0xed6a2df5...", 16))}),
-    newScopeHash=     bytes32(0x{scope_hash.hex()}),
-    justificationHash=bytes32(0x{justification_hash.hex()}),
-    duration=         GOVERNANCE_WINDOW
-)
-""")
+```bash
+python scripts/compute_governance_hashes.py
 ```
 
-**Critical:** Run this script AFTER finalizing both documents. Any edit to
-either document changes its hash and invalidates the on-chain proposal.
-Finalize → hash → submit. Never submit → edit.
+The script produces three hashes (all bytes32):
+
+| Hash | Formula | Use |
+|---|---|---|
+| `newScopeHash` | `keccak256(canonical_json(manifest))` | off-chain commitment to the scope manifest content |
+| `justificationHash` | `sha256(raw_utf8(justification.md))` | off-chain commitment to the justification document |
+| `proposalHash` | `sha256(b"VAPI-CURATOR-SCOPE-PROPOSAL-v1" \|\| agentId \|\| newScopeHash \|\| justificationHash)` — 126-byte preimage → 32 bytes | the single on-chain commitment submitted via `proposeWithVHP` |
+
+### On-Chain ABI Reality Check (V-check finding 2026-05-28)
+
+The deployed `VAPIBiometricGovernance` (Phase 222, address
+`0x06782293F1CFC1AA30C0Baee0437c2B336796A00`) does **NOT** expose
+`submitProposal(agentId, newScopeHash, justificationHash, duration)`. The
+real on-chain method is:
+
+```solidity
+function proposeWithVHP(bytes32 proposalHash, uint256 vhpTokenId) external nonReentrant;
+```
+
+The contract takes a single opaque commitment + a VHP-gated proposer
+identity (msg.sender must own the soulbound VHP). The structured shape
+of the proposal (agentId, scopeHash, justificationHash) is enforced
+**off-chain** — anyone re-deriving the proposalHash from the three component
+hashes can verify the on-chain commitment matches the documents in this
+package.
+
+The bridge wallet `0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692` holds the
+required VHP at `tokenId = 2` (Phase 99 demo mint, `isValid = True`).
+That is the `vhpTokenId` argument.
+
+### Submission Template (verified against deployed ABI)
+
+After running `compute_governance_hashes.py`, submit via:
+
+```
+VAPIBiometricGovernance.proposeWithVHP(
+    proposalHash = bytes32(0x<proposalHash from script output>),
+    vhpTokenId   = 2  // bridge wallet's Phase 99 VHP
+)
+```
+
+**Critical:** Run the hash script AFTER finalizing both documents. Any edit
+to either document changes its hash and invalidates the proposalHash. Any
+edit AFTER on-chain submission means future auditors will detect the
+mismatch when they re-derive the hash from the post-edit file. Finalize -->
+hash --> submit. **Never** submit --> edit.
+
+### Honest Limit: On-Chain Enforcement vs Social Commitment
+
+The Phase 222 governance contract's role is to anchor a VHP-gated
+commitment to the proposalHash. It does **NOT** contract-enforce the
+subsequent scope-expansion action. Specifically:
+
+- `AgentRegistry.updateAgentScope(agentId, newScopeHash)` is `onlyOwner`
+  (bridge wallet) — the operator can call it without any governance
+  proposal at all.
+- `AgentScope.setAgentScopeRoot(agentId, scopeRoot)` is also `onlyOwner`.
+
+The governance ceremony's authority is therefore **social + cryptographic**:
+the operator publicly commits to the proposal (via on-chain VHP-gated
+proposalHash) before executing the scope change. Honoring the commitment
+is the operator's discipline; the smart contract trusts the operator
+to follow through. A future Phase 222.v2 could close this loop by gating
+`updateAgentScope` on a passed governance proposal — that is a separate
+arc, not part of this expansion.
 
 ---
 

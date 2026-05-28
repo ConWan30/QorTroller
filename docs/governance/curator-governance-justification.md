@@ -221,29 +221,78 @@ if any constraint is found to be violated in production:
 
 ```
 Immediate rollback (operator-executable, no governance required):
-  bridge/.env: CURATOR_PACKAGING_ENABLED=false → restart bridge
+  bridge/.env: CURATOR_PACKAGING_ENABLED=false -> restart bridge
   Effect: packaging loop disabled at next restart. No new listings.
   Existing listings: unaffected (on-chain, already committed).
 
-Full revocation (governance required):
-  VAPIBiometricGovernance.revokeScope(
-    agentId=0xed6a2df5...,
-    capabilityIds=["CAP-001","CAP-002","CAP-003","CAP-004"]
+Full revocation (operator-fired, anchored on-chain):
+  AgentRegistry.updateAgentScope(
+    agentId   = bytes32(0xed6a2df58e5ec50c1f88e127f6982a348f6855202b662b8ad73ffa1c1fda11a8),
+    newScope  = bytes32(PRE-EXPANSION_SCOPE_HASH)  // the scopeHash before this proposal
   )
-  Effect: VAPIBuyerRegistry.curatorWallet → address(0)
-  Effect: Curator cannot attest buyers or submit listings
-  AuditLog: revocation anchored on-chain
-  Time to effect: one bridge restart
+  AgentScope.setAgentScopeRoot(
+    agentId    = bytes32(0xed6a2df5...),
+    scopeRoot  = bytes32(PRE-EXPANSION_SCOPE_ROOT)
+  )
+  Effect: agent's scopeHash + scopeRoot revert to pre-expansion values
+  Effect: VAPIBuyerRegistry.curatorWallet operator-fired set to address(0)
+          (separate tx — operator action, not governance-enforced)
+  Effect: bridge config flag CURATOR_PACKAGING_ENABLED=false -> restart
+          (closes the local loop)
 
-Partial revocation (governance required):
-  Individual capabilities can be revoked without revoking all four.
-  CAP-001 revocation: Curator cannot issue new credentials (existing valid)
-  CAP-003 revocation: Curator cannot submit new listings (existing remain)
+Cryptographic anchor for the rollback (recommended, not required):
+  1. Author rollback-scope-manifest.json (mirror of current state pre-expansion)
+  2. Compute rollback proposalHash via scripts/compute_governance_hashes.py
+  3. VAPIBiometricGovernance.proposeWithVHP(rollback_proposalHash, vhpTokenId=2)
+  4. Then fire the AgentRegistry.updateAgentScope() above
+  The proposeWithVHP commitment is the public, VHP-gated commitment that the
+  rollback was deliberate and operator-authorized. Optional but matches the
+  social-commitment pattern of the original expansion.
+
+Partial revocation (operator-fired, anchored on-chain):
+  Individual capabilities can be revoked by deploying a narrower scope:
+    CAP-001 revocation: VAPIBuyerRegistry.setCuratorWallet(address(0))
+                        Curator cannot issue new credentials (existing valid)
+    CAP-002 revocation: bridge CURATOR_PACKAGING_ENABLED=false
+                        Curator does not run the packaging loop
+    CAP-003 revocation: scope manifest without "marketplace_listing" capability
+                        + AgentRegistry.updateAgentScope(new_narrower_hash)
+                        Existing listings remain; new listing capability revoked
 ```
 
 The rollback mechanisms exist before any code arc fires. The governance
-infrastructure (VAPIBiometricGovernance, AgentSlashing, AuditLog) is already
-deployed. Rolling back this expansion does not require building new tooling.
+infrastructure (VAPIBiometricGovernance, AgentRegistry, AgentScope,
+AgentSlashing, AuditLog) is already deployed. Rolling back this expansion
+does not require building new tooling. The deployed `VAPIBiometricGovernance`
+v1 (Phase 222) does not expose a single `revokeScope(agentId, capabilityIds[])`
+method; rollback is composed from the existing onlyOwner methods on
+AgentRegistry + AgentScope, optionally anchored by a fresh `proposeWithVHP()`
+VHP-gated commitment to the rollback scope hash.
+
+### Honesty Note on Governance Enforcement (V-check finding 2026-05-28)
+
+The Phase 222 `VAPIBiometricGovernance` contract anchors VHP-gated
+commitments to opaque `bytes32 proposalHash` values via `proposeWithVHP()`.
+It does NOT contract-enforce the subsequent execution of the proposal.
+Specifically: `AgentRegistry.updateAgentScope()` and `AgentScope.setAgentScopeRoot()`
+are both `onlyOwner` (bridge wallet) — the operator can call them without
+any governance proposal at all.
+
+The authority of this governance ceremony is therefore **social commitment +
+cryptographic anchor**: the operator publicly commits to the proposal (via
+the VHP-gated `proposeWithVHP` call) BEFORE executing the scope change. The
+proposalHash on-chain is the receipt that the operator committed to exactly
+these documents. Future auditors re-derive the hash from these files and
+verify the commitment matches.
+
+Trust this governance ceremony to the same extent you trust the operator
+to honor a publicly-committed proposal. The contract layer ensures the
+commitment is anchored + tamper-evident; the operator's discipline ensures
+the subsequent execution matches the commitment.
+
+A future Phase 222.v2 could close this loop by gating `updateAgentScope`
+on a passed governance proposal. That is a separate architectural arc,
+not part of this expansion.
 
 ---
 
