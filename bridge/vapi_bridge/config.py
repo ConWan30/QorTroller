@@ -1189,6 +1189,19 @@ class Config:
         default_factory=lambda: _env("MANUFACTURER_DEVICE_REGISTRY_ADDRESS", "")
     )
 
+    # Data Economy Arc 1 — VAPIBuyerRegistry (LIVE 0x3742189e… on IoTeX testnet).
+    # Read-only bridge views (is_valid_buyer_credential, get_buyer_category) FAIL-OPEN
+    # (return False/0) when empty — same readiness-independence precedent as the
+    # manufacturer registry + CONSENT + PoEP. The bridge only ever READS this
+    # registry; credential issuance is the Curator's on-chain write via the bridge
+    # wallet (curator_attestation module, Commit 2). Defaults to the live address so
+    # a fresh checkout reads the deployed registry without env wiring.
+    buyer_registry_address: str = field(
+        default_factory=lambda: _env(
+            "BUYER_REGISTRY_ADDRESS", "0x3742189eBDC09B115FA7e841C884247E9856130B"
+        )
+    )
+
     # Phase 3 (Path B) — host-side composite-sig re-attestation signer
     ipact_host_signer_enabled: bool = field(
         default_factory=lambda: _env_bool("IPACT_HOST_SIGNER_ENABLED", False)
