@@ -1,0 +1,97 @@
+{
+  "version": "1.0",
+  "manifestType": "AGENT_SCOPE_EXPANSION",
+  "timestamp_iso": "[FILL: ISO 8601 timestamp at finalization]",
+  "agent": {
+    "name": "vapi-curator",
+    "onChainId": "0xed6a2df5...",
+    "registryContract": "AgentRegistry",
+    "currentPhase": "O3_ACTING",
+    "executorStatus": "DISABLED_TWO_KEY_GATE"
+  },
+  "currentScope": [
+    "marketplace_monitoring",
+    "tier_drift_monitoring",
+    "consent_monitoring",
+    "listing_observation",
+    "dispute_flagging_advisory"
+  ],
+  "addedCapabilities": [
+    {
+      "id": "CAP-001",
+      "name": "buyer_attestation",
+      "description": "Issue and revoke buyer credentials in VAPIBuyerRegistry on behalf of the protocol",
+      "contract": "VAPIBuyerRegistry",
+      "methods": ["issueCredential", "revokeCredential"],
+      "constraints": [
+        "Requires off-chain documentation review before issuance",
+        "Every issuance logged to AuditLog on-chain",
+        "Credentials expire in 365 days and require re-attestation",
+        "CATEGORY_BRAND issuance requires explicit secondary operator confirmation"
+      ]
+    },
+    {
+      "id": "CAP-002",
+      "name": "post_session_packaging",
+      "description": "Read local bridge.db post-session and prepare ZK proof packages per gamer consent manifest",
+      "contract": "none (local bridge operation)",
+      "methods": ["CuratorPackagingLoop.on_session_complete"],
+      "constraints": [
+        "Raw biometric data (Mahalanobis vectors, force curves, IMU, HID frames) NEVER packaged — protocol invariant",
+        "Consent manifest hash verified against VAPIConsentRegistry on-chain before every session",
+        "Aggregation floor enforced: min 10 sessions per package (non-bypassable)",
+        "Cooling period enforced: min 72 hours post-session (non-bypassable)",
+        "Autonomy level default: approval_required — never initialize as full_autonomy",
+        "Fail-closed on consent manifest mismatch: abort packaging, log error"
+      ]
+    },
+    {
+      "id": "CAP-003",
+      "name": "marketplace_listing",
+      "description": "Submit ZK proof package listings to VAPIDataMarketplace on gamer's behalf",
+      "contract": "VAPIDataMarketplace",
+      "methods": ["createListing", "cancelListing"],
+      "constraints": [
+        "Only lists packages that passed full consent manifest enforcement",
+        "Every listing includes consent_policy_hash field (auditable)",
+        "Listing requires gamer approval if autonomy_level = approval_required (default)",
+        "Revenue routing: 80% gamer wallet, 15% protocol treasury, 5% Curator operational budget",
+        "CHAIN_SUBMISSION_PAUSED respected — no listings submitted when kill-switch active"
+      ]
+    },
+    {
+      "id": "CAP-004",
+      "name": "behavioral_anomaly_monitoring",
+      "description": "Monitor buyer purchasing patterns on-chain and flag anomalies for slashing review",
+      "contract": "AgentSlashing (propose only, not execute)",
+      "methods": ["proposeSlashing (advisory — governance executes)"],
+      "constraints": [
+        "Curator PROPOSES slashing events — VAPIBiometricGovernance executes",
+        "Curator cannot execute slashing autonomously (governance gate preserved)",
+        "Every anomaly flag logged to AuditLog with evidence hash",
+        "False-positive slashing proposals do not punish buyer until governance confirms"
+      ]
+    }
+  ],
+  "invariantsPreserved": [
+    "228-byte PoAC wire format: UNCHANGED",
+    "13 FROZEN PATTERN-017 families: UNCHANGED",
+    "35 PV-CI invariants: unchanged (data economy arcs add new ones, not modify existing)",
+    "VAPIPoEPRegistry gamer-sovereign model: UNCHANGED",
+    "Curator cannot self-expand authority beyond this manifest without new governance proposal",
+    "Operator two-key gate for Curator executor: PRESERVED (Curator submits txs via bridge wallet, not independent key)",
+    "Data floor (raw biometrics never packaged): PROTOCOL INVARIANT enforced in code",
+    "CHAIN_SUBMISSION_PAUSED kill-switch: respected by all new capabilities"
+  ],
+  "rollbackMechanism": {
+    "method": "VAPIBiometricGovernance.revokeScope(agentId, capabilityIds[])",
+    "effect": "VAPIBuyerRegistry.curatorWallet set to address(0) — Curator cannot attest buyers",
+    "packageLoopEffect": "curator_packaging_enabled flag set False in config — loop disabled at next restart",
+    "marketplaceEffect": "Existing listings remain; new listing capability revoked",
+    "timeToEffect": "One bridge restart after config flag propagates",
+    "auditTrail": "Revocation tx hash anchored on AuditLog"
+  },
+  "governanceWindowDays": 7,
+  "requiredSignatures": 1,
+  "signatoryAddress": "[FILL: operator wallet address]"
+}
