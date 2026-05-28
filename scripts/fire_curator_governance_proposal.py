@@ -60,7 +60,13 @@ VHP_TOKEN_ID     = 2
 _PROPOSAL_DOMAIN_TAG = b"VAPI-CURATOR-SCOPE-PROPOSAL-v1"
 
 VAPI_BIOMETRIC_GOVERNANCE_ADDR = "0x06782293F1CFC1AA30C0Baee0437c2B336796A00"
-VHP_TOKEN_ADDR                 = "0xD3B2E259A4B69EF08e263e3A57B2507B7eac3dcF"  # VAPIVerifiedHumanProof
+# VHP_TOKEN_ADDR is now resolved DYNAMICALLY from BBG.vhpContract() so this
+# script auto-adapts to whichever VHP-or-adapter contract BBG is currently
+# pointed at. The 2026-05-28 governance-unblock arc pointed BBG at
+# VHPExpiresAtAdapter (0x086a660fe457633063299F3BE9661B86c43aF053); reading
+# vhpContract() at runtime means a future setVHPContract() flip needs no
+# script edit. Sanity reads (ownerOf/isValid/expiresAt) hit the actual
+# contract BBG will hit during proposeWithVHP -> same revert classes catch.
 
 HARD_CAP_IOTX = 0.5   # governance proposal is a small state-write call
 GAS_BUFFER    = 1.25  # estimate_gas x 1.25 (IoTeX gotcha discipline)
@@ -184,7 +190,22 @@ def main():
     print()
     print("--- PRE-BROADCAST SANITY ---")
 
-    vhp = w3.eth.contract(address=w3.to_checksum_address(VHP_TOKEN_ADDR), abi=_VHP_ABI)
+    # Resolve BBG.vhpContract() dynamically so we hit the same contract BBG
+    # will hit when proposeWithVHP() runs. As of 2026-05-28 this is the
+    # VHPExpiresAtAdapter (governance-unblock arc Phase 2b).
+    bbg_for_resolve = w3.eth.contract(
+        address=w3.to_checksum_address(VAPI_BIOMETRIC_GOVERNANCE_ADDR),
+        abi=[{"name": "vhpContract", "type": "function", "stateMutability": "view",
+              "inputs": [], "outputs": [{"type": "address"}]}],
+    )
+    try:
+        vhp_addr = bbg_for_resolve.functions.vhpContract().call()
+    except Exception as exc:
+        print(f"ERROR: could not resolve BBG.vhpContract(): {exc}", file=sys.stderr)
+        sys.exit(3)
+    print(f"  BBG.vhpContract()    : {vhp_addr}")
+
+    vhp = w3.eth.contract(address=w3.to_checksum_address(vhp_addr), abi=_VHP_ABI)
     try:
         vhp_owner = vhp.functions.ownerOf(VHP_TOKEN_ID).call()
         vhp_valid = vhp.functions.isValid(VHP_TOKEN_ID).call()
@@ -193,7 +214,11 @@ def main():
         print(f"  VHP tokenId {VHP_TOKEN_ID} isValid : {vhp_valid}")
         print(f"  VHP tokenId {VHP_TOKEN_ID} expires : {vhp_expires} (epoch)")
     except Exception as exc:
-        print(f"ERROR: VHP sanity read failed: {exc}", file=sys.stderr)
+        print(f"ERROR: VHP sanity read failed against {vhp_addr}: {exc}",
+              file=sys.stderr)
+        print(f"       (If this is the adapter, ensure Phase 2b has fired and "
+              f"BBG.vhpContract() returns the adapter address — see "
+              f"deployed-addresses.json:_phase222_note)", file=sys.stderr)
         sys.exit(3)
 
     if vhp_owner.lower() != account.address.lower():
