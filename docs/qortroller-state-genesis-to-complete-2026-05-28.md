@@ -253,23 +253,41 @@ Combined cost: 0.074 IOTX. Post-fire, the Curator's expanded scope
 
 ### 5.2 Arc 1 — VAPIBuyerRegistry
 
-Contract enabling Curator to issue + revoke buyer credentials. ABI:
+**DEPLOYED 2026-05-28** at `0x3742189eBDC09B115FA7e841C884247E9856130B`
+(tx `0xd4346f0b…`, block 44080863, gasUsed 864345, status 1,
+owner=bridge wallet; cost 0.864345 IOTX). Contract enabling Curator to
+issue + revoke buyer credentials.
 
-- `issueCredential(buyerAddr, category, expiresAt)` — onlyCurator;
-  emits `CredentialIssued`. Categories: `RESEARCH_ACADEMIC`,
-  `BRAND_ADVERTISING`, `INTEGRATOR_TECHNICAL`. Each credential is a
-  365-day attestation re-attested via re-issuance.
-- `revokeCredential(buyerAddr, reason)` — onlyCurator; emits
+**ABI as deployed (framework-doc spec, operator-ratified 2026-05-28).**
+The earlier draft of this section specified an `address buyerAddr` /
+3-category / `isAuthorizedBuyer` ABI. At deploy time the operator
+ratified the framework-doc spec instead — `bytes32 buyerDID` identifier,
+4 categories, `isValidCredential`. The deployed surface is therefore:
+
+- `issueCredential(bytes32 buyerDID, uint8 categoryId, bytes32 evidenceHash)`
+  — onlyCurator; emits `CredentialIssued`. Categories (FROZEN-v1, to be
+  pinned by INV-BUY-001/002): `CATEGORY_ACADEMIC=1`, `CATEGORY_GAME_DEV=2`,
+  `CATEGORY_ESPORTS=3`, `CATEGORY_BRAND=4`. Each credential is a 365-day
+  attestation; v1 has no re-attestation path (the `buyerDID` slot stays
+  consumed on revoke/expiry).
+- `revokeCredential(bytes32 buyerDID)` — Curator OR owner; emits
   `CredentialRevoked`.
-- `isAuthorizedBuyer(buyerAddr, category)` — public view; gates buyer
-  purchase paths.
+- `isValidCredential(bytes32 buyerDID, uint8 categoryId)` — public view;
+  gates buyer purchase paths (false on unregistered / revoked / expired /
+  category mismatch). `getCategory` + `getCredential` views also exposed.
 - Owner controls: `setCuratorWallet(addr)` — only-owner; flips Curator
-  authority on/off via a single tx.
+  authority on/off via a single tx. `address(0)` pauses issuance.
 
-Expected deploy cost: ~0.8 IOTX.
+Actual deploy cost: 0.864345 IOTX (estimate was ~0.8).
 
-Pre-deploy gates: Phase 4a + 4b must have landed (the Curator must be
-operationally authorized before its registry can be wired).
+Pre-deploy gates (SATISFIED): Phase 4a + 4b landed before the deploy (the
+Curator was operationally authorized first). Post-deploy: `setCuratorWallet`
+FIRED 2026-05-28 (tx `0xaf1209fb…`, block 44080937, gasUsed 39691, status 1,
+0.039691 IOTX) — `curatorWallet` is now the bridge wallet (v1: Curator submits
+via the bridge wallet; two-key gate preserved). The registry is fully
+authorized for `issueCredential` / `revokeCredential`. Remaining Arc 1 work:
+bridge read methods + `INV-BUY-001` (Commit 2), `curator_attestation.py` +
+`POST /curator/attest-buyer` (Commit 3).
 
 ### 5.3 Arc 2 — VAPIBuyerCategoryVerifier (ZK)
 
