@@ -1212,6 +1212,17 @@ class Config:
         default_factory=lambda: _env("BUYER_CATEGORY_VERIFIER_ADDRESS", "")
     )
 
+    # Data Economy Arc 3 — Post-Session Curator Packaging Loop.
+    # Default False: the loop is DORMANT until the operator opts in. While off,
+    # on_session_complete() short-circuits to a DISABLED result and never reads
+    # session data, never computes a listing, never touches the chain. Turning
+    # it on (CURATOR_PACKAGING_ENABLED=true) only enables LOCAL packaging-decision
+    # work — actual marketplace listing submission remains dry-run-defaulted and
+    # operator-fired (mirrors CuratorAttestationModule.attest_buyer).
+    curator_packaging_enabled: bool = field(
+        default_factory=lambda: _env_bool("CURATOR_PACKAGING_ENABLED", False)
+    )
+
     # Phase 3 (Path B) — host-side composite-sig re-attestation signer
     ipact_host_signer_enabled: bool = field(
         default_factory=lambda: _env_bool("IPACT_HOST_SIGNER_ENABLED", False)
