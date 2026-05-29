@@ -83,6 +83,45 @@ OUTCOME_ABORTED_NO_SESSION = "ABORTED_NO_SESSION"
 OUTCOME_PENDING_APPROVAL = "PENDING_APPROVAL"
 OUTCOME_READY_FOR_SUBMISSION = "READY_FOR_SUBMISSION"
 
+# ── ZK proof tiers (framework lines 982-985) ─────────────────────────────────
+# Tiers 1-2 are default-ON (skill-ranking + trajectory). Tiers 3-4
+# (context-performance + full-session) require an EXPLICIT consent flag in the
+# manifest — they are never permitted by default.
+PROOF_TIER_SKILL_RANKING = 1        # default ON
+PROOF_TIER_TRAJECTORY = 2           # default ON
+PROOF_TIER_CONTEXT_PERFORMANCE = 3  # requires allow_context_performance_proof
+PROOF_TIER_FULL_SESSION = 4         # requires allow_full_session_proof
+_DEFAULT_ON_TIERS = (PROOF_TIER_SKILL_RANKING, PROOF_TIER_TRAJECTORY)
+_TIER_CONSENT_FLAG = {
+    PROOF_TIER_CONTEXT_PERFORMANCE: "allow_context_performance_proof",
+    PROOF_TIER_FULL_SESSION: "allow_full_session_proof",
+}
+
+# ── Buyer categories (INV-BUY-001 FROZEN enum) ──────────────────────────────
+# Position-for-position with VAPIBuyerRegistry. Each maps to a Layer-4
+# damage-bounding category key HKDF-derived from the master secret (§6).
+BUYER_CATEGORY_ACADEMIC = 1
+BUYER_CATEGORY_GAME_DEV = 2
+BUYER_CATEGORY_ESPORTS = 3
+BUYER_CATEGORY_BRAND = 4
+_BUYER_CATEGORY_LABEL = {
+    BUYER_CATEGORY_ACADEMIC: "academic",
+    BUYER_CATEGORY_GAME_DEV: "gamedev",
+    BUYER_CATEGORY_ESPORTS: "esports",
+    BUYER_CATEGORY_BRAND: "brand",
+}
+
+
+class BuyerCategoryRejected(Exception):
+    """Raised when a listing is requested for a buyer category the gamer's
+    consent manifest does not permit. Fail-closed — no listing is produced."""
+
+
+class CategoryKeyUnavailable(Exception):
+    """Raised when category-package encryption is requested but no master key is
+    configured. Fail-closed — Layer-4 damage-bounding must never silently
+    produce an unencrypted package."""
+
 
 class CuratorPackagingLoop:
     """Post-session data packaging orchestrator (Arc 3 Commit 1 core).
@@ -327,3 +366,212 @@ class CuratorPackagingLoop:
                 self._store.update_curator_session_status(session_id, outcome)
             except Exception:
                 log.exception("update_curator_session_status failed (non-fatal)")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Arc 3 Commit 2 — CuratorListingBuilder
+#
+# Turns an APPROVED packaging decision into a tier-gated, category-encrypted,
+# operator-fireable marketplace listing. Three load-bearing properties:
+#
+#   * TIER GATING. Tiers 1-2 (skill-ranking / trajectory) are default-ON; tiers
+#     3-4 (context-performance / full-session) are produced ONLY when the gamer's
+#     manifest carries the explicit consent flag. _permitted_proof_tiers is the
+#     single source of truth; generate_proof_package refuses an ungated tier.
+#   * LAYER-4 DAMAGE BOUNDING (§6). Every package is AES-GCM encrypted under a
+#     per-category key HKDF-derived from a master secret. A breach of one
+#     category's key never exposes another category's packages. No master key →
+#     CategoryKeyUnavailable (fail-closed — never ship plaintext).
+#   * NO AUTONOMOUS BROADCAST. submit_listing defaults dry_run=True and refuses
+#     to broadcast while the chain kill-switch is engaged. A real marketplace tx
+#     is operator-fired only; full_autonomy does not change this.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_HKDF_INFO_PREFIX = b"VAPI-CURATOR-CATEGORY-KEY-v1:"
+
+
+class CuratorListingBuilder:
+    """Builds tier-gated, category-encrypted, operator-fireable listings.
+
+    Construct with the live Config (for the master key + kill-switch), an
+    optional PITLProver (defaults to a fresh one — mock mode when ZK artifacts
+    are absent), and an optional DataMarketplace (only needed for a real
+    operator-fired submission; absent in dry-run / unit tests).
+    """
+
+    def __init__(self, cfg: Any, prover: Optional[Any] = None,
+                 marketplace: Optional[Any] = None) -> None:
+        self._cfg = cfg
+        self._prover = prover
+        self._marketplace = marketplace
+        self._master_key = (getattr(cfg, "curator_category_master_key", "") or "")
+
+    # ── tier gating ──────────────────────────────────────────────────────────
+
+    def _permitted_proof_tiers(self, manifest: dict) -> tuple[int, ...]:
+        """Return the proof tiers the gamer's manifest permits. Tiers 1-2 always;
+        tiers 3-4 only when their explicit consent flag is truthy."""
+        tiers = list(_DEFAULT_ON_TIERS)
+        for tier, flag in _TIER_CONSENT_FLAG.items():
+            if bool(manifest.get(flag, False)):
+                tiers.append(tier)
+        return tuple(sorted(tiers))
+
+    def generate_proof_package(self, session_data: dict, tier: int,
+                               manifest: dict) -> dict:
+        """Generate the ZK proof package for a permitted tier. Raises
+        ProtocolViolationError if ``tier`` is not in the manifest's permitted
+        set (a tier-3/4 request without explicit consent fails closed)."""
+        permitted = self._permitted_proof_tiers(manifest)
+        if int(tier) not in permitted:
+            raise ProtocolViolationError(
+                f"proof tier {tier} not permitted by consent manifest "
+                f"(permitted={permitted}) — fail closed"
+            )
+        prover = self._prover if self._prover is not None else _default_prover()
+        device_id = str(session_data.get("device_id", ""))
+        features = dict(session_data.get("features", {}) or {})
+        proof, fc, hp, null = prover.generate_proof(
+            features_dict=features,
+            device_id=device_id,
+            l5_humanity=float(session_data.get("l5_humanity", 0.0) or 0.0),
+            e4_drift=float(session_data.get("e4_drift", 0.0) or 0.0),
+            inference_result=int(session_data.get("inference_result", 0) or 0),
+            epoch=int(session_data.get("epoch", 0) or 0),
+        )
+        return {
+            "tier": int(tier),
+            "proof": bytes(proof),
+            "feature_commitment": int(fc),
+            "humanity_prob": int(hp),
+            "nullifier": int(null),
+            "device_id": device_id,
+        }
+
+    # ── Layer-4 category encryption (§6) ───────────────────────────────────────
+
+    def _category_key(self, buyer_category: int) -> bytes:
+        """HKDF-SHA256-derive the 32-byte per-category key from the master secret.
+        Fail-closed (CategoryKeyUnavailable) when no master key is configured."""
+        if not self._master_key:
+            raise CategoryKeyUnavailable(
+                "curator_category_master_key unset — refusing to ship an "
+                "unencrypted package (Layer-4 damage bounding, §6)"
+            )
+        label = _BUYER_CATEGORY_LABEL.get(int(buyer_category))
+        if label is None:
+            raise BuyerCategoryRejected(
+                f"unknown buyer category {buyer_category} (INV-BUY-001 enum 1..4)"
+            )
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+        hkdf = HKDF(
+            algorithm=hashes.SHA256(), length=32, salt=None,
+            info=_HKDF_INFO_PREFIX + label.encode("ascii"),
+        )
+        return hkdf.derive(self._master_key.encode("utf-8"))
+
+    def encrypt_package(self, plaintext: bytes, buyer_category: int) -> dict:
+        """AES-GCM encrypt ``plaintext`` under the per-category key. Returns
+        {nonce, ciphertext, category, key_label}. Distinct categories use
+        distinct keys — a breach of one never decrypts another's packages."""
+        import os
+        from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+        key = self._category_key(buyer_category)
+        nonce = os.urandom(12)
+        ct = AESGCM(key).encrypt(nonce, bytes(plaintext), None)
+        return {
+            "nonce": nonce,
+            "ciphertext": ct,
+            "category": int(buyer_category),
+            "key_label": _BUYER_CATEGORY_LABEL[int(buyer_category)],
+        }
+
+    # ── buyer-category gating ──────────────────────────────────────────────────
+
+    def assert_buyer_category_allowed(self, buyer_category: int,
+                                      manifest: dict) -> None:
+        """Raise BuyerCategoryRejected if the buyer category is not in the gamer's
+        allowed_categories. Fail-closed — an empty/absent list permits nothing."""
+        allowed = {int(c) for c in (manifest.get("allowed_categories") or [])}
+        if int(buyer_category) not in allowed:
+            raise BuyerCategoryRejected(
+                f"buyer category {buyer_category} not in gamer consent policy "
+                f"(allowed={sorted(allowed)}) — fail closed"
+            )
+
+    # ── listing metadata ──────────────────────────────────────────────────────
+
+    def build_listing_metadata(self, session_data: dict, manifest: dict,
+                               proof_package: dict, buyer_category: int) -> dict:
+        """Assemble the listing metadata dict. ALWAYS carries the
+        consent_policy_hash so a buyer/auditor can bind the listing to the exact
+        consent policy that authorised it."""
+        return {
+            "schema": "vapi-curator-listing-v1",
+            "device_id": str(session_data.get("device_id", "")),
+            "session_id": str(session_data.get("session_id", "")),
+            "buyer_category": int(buyer_category),
+            "buyer_category_label": _BUYER_CATEGORY_LABEL.get(int(buyer_category), ""),
+            "proof_tier": int(proof_package.get("tier", 0)),
+            "feature_commitment": int(proof_package.get("feature_commitment", 0)),
+            "nullifier": int(proof_package.get("nullifier", 0)),
+            "consent_policy_hash": manifest.get("manifest_hash"),
+            "allowed_categories": list(manifest.get("allowed_categories", [])),
+            "ts_ns": time.time_ns(),
+        }
+
+    # ── operator-fired submission ──────────────────────────────────────────────
+
+    async def submit_listing(self, seller_address: str, listing_metadata: dict,
+                             price_iotx: float, consent_bitmask: int,
+                             *, dry_run: bool = True) -> dict:
+        """Submit (or dry-run) a marketplace listing.
+
+        DEFAULT dry_run=True: computes the listing decision and returns a
+        prepared result WITHOUT contacting the chain. A real broadcast requires
+        dry_run=False AND the chain kill-switch lifted AND a marketplace handle —
+        this path is operator-fired only; the loop never calls it autonomously.
+        """
+        prepared = {
+            "dry_run": bool(dry_run),
+            "broadcast": False,
+            "seller_address": seller_address,
+            "consent_policy_hash": listing_metadata.get("consent_policy_hash"),
+            "buyer_category": listing_metadata.get("buyer_category"),
+            "tx_hash": "",
+            "error": "",
+        }
+        if dry_run:
+            prepared["reason"] = "dry_run=True (default) — no chain contact"
+            return prepared
+
+        if bool(getattr(self._cfg, "chain_submission_paused", True)):
+            prepared["error"] = "chain kill-switch engaged — refusing to broadcast"
+            return prepared
+        if self._marketplace is None:
+            prepared["error"] = "no marketplace handle — cannot broadcast"
+            return prepared
+
+        result = await self._marketplace.create_listing(
+            seller_address=seller_address,
+            sepproof_commitment=None,
+            biometric_snapshot_hash=None,
+            corpus_snapshot_hash=None,
+            gic_hash=None,
+            consent_bitmask=int(consent_bitmask),
+            data_class=4,
+            price_iotx=float(price_iotx),
+            listing_metadata=listing_metadata,
+            trigger_reason="curator_packaging_arc3",
+        )
+        prepared["broadcast"] = not bool(result.get("error"))
+        prepared["tx_hash"] = result.get("tx_hash", "")
+        prepared["error"] = result.get("error", "")
+        prepared["marketplace_result"] = result
+        return prepared
+
+
+def _default_prover() -> Any:
+    from .pitl_prover import PITLProver
+    return PITLProver()

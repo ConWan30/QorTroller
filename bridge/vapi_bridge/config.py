@@ -1223,6 +1223,17 @@ class Config:
         default_factory=lambda: _env_bool("CURATOR_PACKAGING_ENABLED", False)
     )
 
+    # Data Economy Arc 3 Commit 2 — master secret from which per-category package
+    # encryption keys (K_academic / K_gamedev / K_esports / K_brand) are HKDF-
+    # derived. Default EMPTY: with no master key the builder cannot encrypt, so a
+    # package is marked encryption_unavailable and is NOT shippable — a deliberate
+    # fail-closed for the damage-bounding layer (framework §6 Layer 4). Set
+    # CURATOR_CATEGORY_MASTER_KEY (hex or passphrase) only in a key-managed
+    # environment; never commit a real value.
+    curator_category_master_key: str = field(
+        default_factory=lambda: _env("CURATOR_CATEGORY_MASTER_KEY", "")
+    )
+
     # Phase 3 (Path B) — host-side composite-sig re-attestation signer
     ipact_host_signer_enabled: bool = field(
         default_factory=lambda: _env_bool("IPACT_HOST_SIGNER_ENABLED", False)
