@@ -691,6 +691,24 @@ _VAPI_BUYER_REGISTRY_ABI = [
 ]
 
 
+# Data Economy Arc 2 — VAPIBuyerCategoryVerifier read-only ABI. Pure Groth16
+# view verifier (snarkjs-generated): verifyProof is the only entrypoint and
+# takes no state. The bridge calls it via staticcall to check a private
+# buyer-category proof without learning the buyerDID. Views only — no writer.
+_VAPI_BUYER_CATEGORY_VERIFIER_ABI = [
+    {
+        "name": "verifyProof", "type": "function", "stateMutability": "view",
+        "inputs": [
+            {"name": "_pA", "type": "uint256[2]"},
+            {"name": "_pB", "type": "uint256[2][2]"},
+            {"name": "_pC", "type": "uint256[2]"},
+            {"name": "_pubSignals", "type": "uint256[5]"},
+        ],
+        "outputs": [{"type": "bool"}],
+    },
+]
+
+
 # Path A Arc 1 Commit 4 — VAPIProtocolLensV2 read-only ABI. Replaces the
 # inline 4-line ABI that lived in is_fully_eligible (commit dca29217). Adds
 # the two new Path A entries (isFullyEligible_PathA + getDeviceTier).
@@ -2051,6 +2069,37 @@ class ChainClient:
             log.warning("get_buyer_category error (fail-open 0): %s", exc)
             cache[key] = (now, 0)
             return 0
+
+    # --- Data Economy Arc 2: VAPIBuyerCategoryVerifier (ZK Groth16) ---
+
+    def _buyer_category_verifier_contract(self):
+        """Return (sync) VAPIBuyerCategoryVerifier contract handle, or None when
+        the verifier address is unset or sync_w3 is unavailable (fail-open).
+        Address is empty until the operator deploys the verifier on-chain."""
+        addr_str = getattr(self._cfg, "buyer_category_verifier_address", "") or ""
+        if not addr_str or self._sync_w3 is None:
+            return None
+        addr = self._sync_w3.to_checksum_address(addr_str)
+        return self._sync_w3.eth.contract(
+            address=addr, abi=_VAPI_BUYER_CATEGORY_VERIFIER_ABI
+        )
+
+    def verify_buyer_category_proof_onchain(self, pA, pB, pC, pub_signals) -> bool:
+        """staticcall VAPIBuyerCategoryVerifier.verifyProof. Fail-open False when
+        the verifier is undeployed (address unset) or the RPC raises — an
+        unavailable verifier must never validate a proof it cannot check."""
+        contract = self._buyer_category_verifier_contract()
+        if contract is None:
+            return False
+        try:
+            return bool(
+                contract.functions.verifyProof(
+                    list(pA), [list(pB[0]), list(pB[1])], list(pC), list(pub_signals)
+                ).call()
+            )
+        except Exception as exc:  # noqa: BLE001 — fail-open False
+            log.warning("verify_buyer_category_proof_onchain error (fail-open False): %s", exc)
+            return False
 
     # --- Phase 23: Identity Continuity Registry ---
 

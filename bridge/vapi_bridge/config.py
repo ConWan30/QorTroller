@@ -1202,6 +1202,16 @@ class Config:
         )
     )
 
+    # Data Economy Arc 2 — VAPIBuyerCategoryVerifier (ZK Groth16 view verifier).
+    # Defaults to EMPTY until the operator deploys the verifier on-chain (deploy
+    # is operator-fired, ~0.5-0.8 IOTX). Empty address => zk_buyer_verifier reads
+    # fail-open False, exactly like the consent-registry pattern: a missing
+    # verifier must not block the bridge, and must not validate proofs it cannot
+    # check. Populate via BUYER_CATEGORY_VERIFIER_ADDRESS after deploy.
+    buyer_category_verifier_address: str = field(
+        default_factory=lambda: _env("BUYER_CATEGORY_VERIFIER_ADDRESS", "")
+    )
+
     # Phase 3 (Path B) — host-side composite-sig re-attestation signer
     ipact_host_signer_enabled: bool = field(
         default_factory=lambda: _env_bool("IPACT_HOST_SIGNER_ENABLED", False)
