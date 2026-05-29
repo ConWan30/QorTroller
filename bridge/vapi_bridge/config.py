@@ -1819,6 +1819,17 @@ class Config:
     fail-open default values (False / empty dict).  Set after deploy-phase237.js
     runs successfully."""
 
+    # --- Data Economy Arc 4: structured 7-dimension consent manifest ---
+    consent_manifest_registry_address: str = field(
+        default_factory=lambda: _env("CONSENT_MANIFEST_REGISTRY_ADDRESS", "")
+    )
+    """Data Economy Arc 4 — Deployed VAPIConsentManifestRegistry address on IoTeX
+    testnet. ADDITIVE to (separate contract from) consent_registry_address above.
+    Empty string = structured-manifest reads disabled; chain.get_consent_manifest()
+    returns an empty dict (fail-open at chain layer). The Curator packaging loop
+    treats an absent manifest as fail-closed (no listing). Set after the Arc 4
+    deploy runs (operator-fired)."""
+
     vpm_anchor_registry_address: str = field(
         default_factory=lambda: _env("VPM_ANCHOR_REGISTRY_ADDRESS", "")
     )
