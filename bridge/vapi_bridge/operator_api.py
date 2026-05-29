@@ -737,6 +737,64 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         )
         return result
 
+    # --- Data Economy Arc 3 Commit 3: autonomy-ladder approval endpoints ---
+    # The approval_required / manual autonomy levels queue listing intents into
+    # pending_listings; these endpoints are the gamer-facing (operator-proxied)
+    # surface to review and act on that queue. Approving a listing only marks it
+    # APPROVED — it does NOT broadcast. The actual marketplace tx remains the
+    # dry-run-defaulted + kill-switch-gated + operator-fired CuratorListingBuilder
+    # path. Rejecting removes the intent from the queue. No chain contact here.
+
+    @app.get("/curator/pending-listings")
+    def get_pending_listings(
+        status: str = "pending",
+        api_key: str = Query(..., description="Shared operator API key"),
+    ):
+        """List packaging intents awaiting the gamer's decision (Arc 3).
+
+        These are sessions packaged under approval_required / manual autonomy.
+        Read-only; no chain contact.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        rows = store.get_pending_listings(status=status.strip() or "pending")
+        return {"status": status, "count": len(rows), "listings": rows}
+
+    @app.post("/curator/approve-listing/{listing_id}")
+    def approve_listing(
+        listing_id: int,
+        api_key: str = Query(..., description="Shared operator API key"),
+    ):
+        """Approve a queued listing intent (Arc 3 autonomy ladder).
+
+        Marks the intent APPROVED. Does NOT broadcast — the marketplace tx stays
+        dry-run-defaulted + kill-switch-gated + operator-fired. Returns 404 if the
+        listing id is unknown.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        ok = store.update_pending_listing_status(int(listing_id), "approved")
+        if not ok:
+            raise HTTPException(404, f"pending listing {listing_id} not found")
+        return {"listing_id": listing_id, "status": "approved", "broadcast": False}
+
+    @app.post("/curator/reject-listing/{listing_id}")
+    def reject_listing(
+        listing_id: int,
+        api_key: str = Query(..., description="Shared operator API key"),
+    ):
+        """Reject a queued listing intent (Arc 3 autonomy ladder).
+
+        Marks the intent REJECTED — it is never packaged or listed. Returns 404
+        if the listing id is unknown.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        ok = store.update_pending_listing_status(int(listing_id), "rejected")
+        if not ok:
+            raise HTTPException(404, f"pending listing {listing_id} not found")
+        return {"listing_id": listing_id, "status": "rejected"}
+
     # --- Phase 75: Validation gate status ---
 
     @app.get("/agent/validation-gate")
