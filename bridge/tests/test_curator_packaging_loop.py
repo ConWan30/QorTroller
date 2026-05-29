@@ -238,3 +238,162 @@ async def test_T_CPL_9_dormant_short_circuits():
     assert store.pending == []
     assert store.packaging_actions == []
     assert store.session_status_updates == []
+
+
+# ─── Commit 2 — CuratorListingBuilder (T-CLB-1..6) ──────────────────────────────
+"""Commit 2 — tier-gated, category-encrypted, operator-fired listing builder.
+
+   T-CLB-1  Proof generation succeeds for default-ON tiers 1-2.
+   T-CLB-2  Tier 3/4 proof requires the explicit consent flag (else fail-closed).
+   T-CLB-3  Encryption uses a DISTINCT key per buyer category (round-trips; one
+            category's key never decrypts another's ciphertext).
+   T-CLB-4  submit_listing dry-runs by default (no broadcast) + broadcasts only
+            when dry_run=False, kill-switch off, and a marketplace handle exists.
+   T-CLB-5  Listing rejected when the buyer category is not in the consent policy.
+   T-CLB-6  Listing metadata always carries the consent_policy_hash.
+"""
+from bridge.vapi_bridge.curator_packaging_loop import (
+    CuratorListingBuilder,
+    BuyerCategoryRejected,
+    CategoryKeyUnavailable,
+)
+
+
+class _Prover:
+    """Deterministic stand-in for PITLProver (mock-mode equivalent)."""
+
+    def generate_proof(self, *, features_dict, device_id, l5_humanity,
+                       e4_drift, inference_result, epoch):
+        return (b"\x01" * 256, 111, 222, 333)
+
+
+class _Cfg2:
+    def __init__(self, master_key="master-secret", paused=True):
+        self.curator_category_master_key = master_key
+        self.chain_submission_paused = paused
+
+
+class _Marketplace:
+    def __init__(self):
+        self.calls = []
+
+    async def create_listing(self, **kw):
+        self.calls.append(kw)
+        return {"error": "", "tx_hash": "0xdeadbeef", "row_id": 1}
+
+
+def _builder(master_key="master-secret", paused=True, marketplace=None):
+    return CuratorListingBuilder(
+        _Cfg2(master_key=master_key, paused=paused),
+        prover=_Prover(),
+        marketplace=marketplace,
+    )
+
+
+def _sess():
+    return {"device_id": _DEVICE, "session_id": "sess-clb",
+            "features": {"micro_tremor_accel_variance": 1.0},
+            "l5_humanity": 0.8, "e4_drift": 0.1,
+            "inference_result": 0x20, "epoch": 100}
+
+
+# ── T-CLB-1 ───────────────────────────────────────────────────────────────────
+
+def test_T_CLB_1_default_tiers_generate():
+    b = _builder()
+    m = _manifest()  # no tier-3/4 consent flags
+    assert b._permitted_proof_tiers(m) == (1, 2)
+    for tier in (cpl.PROOF_TIER_SKILL_RANKING, cpl.PROOF_TIER_TRAJECTORY):
+        pkg = b.generate_proof_package(_sess(), tier, m)
+        assert pkg["tier"] == tier
+        assert len(pkg["proof"]) == 256
+        assert pkg["feature_commitment"] == 111
+
+
+# ── T-CLB-2 ───────────────────────────────────────────────────────────────────
+
+def test_T_CLB_2_high_tier_requires_consent():
+    b = _builder()
+    base = _manifest()
+    # Without the flag, tier 3/4 are NOT permitted → fail closed.
+    for tier in (cpl.PROOF_TIER_CONTEXT_PERFORMANCE, cpl.PROOF_TIER_FULL_SESSION):
+        with pytest.raises(cpl.ProtocolViolationError):
+            b.generate_proof_package(_sess(), tier, base)
+    # With explicit flags, they become permitted.
+    consented = _manifest(allow_context_performance_proof=True,
+                          allow_full_session_proof=True)
+    assert b._permitted_proof_tiers(consented) == (1, 2, 3, 4)
+    assert b.generate_proof_package(_sess(), 3, consented)["tier"] == 3
+    assert b.generate_proof_package(_sess(), 4, consented)["tier"] == 4
+
+
+# ── T-CLB-3 ───────────────────────────────────────────────────────────────────
+
+def test_T_CLB_3_per_category_key_isolation():
+    b = _builder()
+    k_acad = b._category_key(cpl.BUYER_CATEGORY_ACADEMIC)
+    k_brand = b._category_key(cpl.BUYER_CATEGORY_BRAND)
+    assert len(k_acad) == 32 and k_acad != k_brand          # distinct keys
+    assert b._category_key(cpl.BUYER_CATEGORY_ACADEMIC) == k_acad  # deterministic
+
+    enc = b.encrypt_package(b"payload-bytes", cpl.BUYER_CATEGORY_ACADEMIC)
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    # Correct category key round-trips.
+    assert AESGCM(k_acad).decrypt(enc["nonce"], enc["ciphertext"], None) == b"payload-bytes"
+    # A different category's key CANNOT decrypt it (Layer-4 damage bounding).
+    with pytest.raises(Exception):
+        AESGCM(k_brand).decrypt(enc["nonce"], enc["ciphertext"], None)
+
+    # No master key → fail closed (never ship plaintext).
+    with pytest.raises(CategoryKeyUnavailable):
+        _builder(master_key="").encrypt_package(b"x", cpl.BUYER_CATEGORY_ACADEMIC)
+
+
+# ── T-CLB-4 ───────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_T_CLB_4_submit_dry_run_default_and_gated_broadcast():
+    meta = {"consent_policy_hash": "0xabc", "buyer_category": 1}
+    # Default: dry-run, no broadcast, no marketplace contact.
+    mkt = _Marketplace()
+    res = await _builder(marketplace=mkt).submit_listing(
+        "0xseller", meta, price_iotx=5.0, consent_bitmask=8)
+    assert res["dry_run"] is True and res["broadcast"] is False
+    assert mkt.calls == []
+
+    # dry_run=False but kill-switch ON → refuse, still no broadcast.
+    res = await _builder(paused=True, marketplace=mkt).submit_listing(
+        "0xseller", meta, price_iotx=5.0, consent_bitmask=8, dry_run=False)
+    assert res["broadcast"] is False and "kill-switch" in res["error"]
+    assert mkt.calls == []
+
+    # dry_run=False + kill-switch OFF + marketplace present → broadcast (stub).
+    res = await _builder(paused=False, marketplace=mkt).submit_listing(
+        "0xseller", meta, price_iotx=5.0, consent_bitmask=8, dry_run=False)
+    assert res["broadcast"] is True and res["tx_hash"] == "0xdeadbeef"
+    assert len(mkt.calls) == 1 and mkt.calls[0]["seller_address"] == "0xseller"
+
+
+# ── T-CLB-5 ───────────────────────────────────────────────────────────────────
+
+def test_T_CLB_5_buyer_category_not_in_policy_rejected():
+    b = _builder()
+    m = _manifest(allowed_categories=[1, 2])
+    b.assert_buyer_category_allowed(1, m)              # permitted → no raise
+    with pytest.raises(BuyerCategoryRejected):
+        b.assert_buyer_category_allowed(4, m)          # BRAND not allowed
+    with pytest.raises(BuyerCategoryRejected):
+        b.assert_buyer_category_allowed(3, _manifest(allowed_categories=[]))
+
+
+# ── T-CLB-6 ───────────────────────────────────────────────────────────────────
+
+def test_T_CLB_6_metadata_carries_consent_policy_hash():
+    b = _builder()
+    m = _manifest(manifest_hash="0xPOLICY", allowed_categories=[1, 2])
+    pkg = b.generate_proof_package(_sess(), 1, m)
+    meta = b.build_listing_metadata(_sess(), m, pkg, cpl.BUYER_CATEGORY_ACADEMIC)
+    assert meta["consent_policy_hash"] == "0xPOLICY"
+    assert meta["buyer_category"] == 1
+    assert meta["proof_tier"] == 1
+    assert meta["schema"] == "vapi-curator-listing-v1"
