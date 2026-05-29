@@ -1672,6 +1672,42 @@ class Store:
                 CREATE INDEX IF NOT EXISTS idx_consent_gate_device
                 ON consent_gate_violation_log(device_id, created_at DESC)
             """)
+            # Data Economy Arc 3 — Curator post-session packaging loop tables.
+            # pending_listings: listing intents awaiting gamer approval (approval_required
+            #   autonomy). curator_packaging_log: full audit trail of every packaging
+            #   decision (deferral / abort / pending / ready) per session.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS pending_listings (
+                    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id          TEXT    NOT NULL,
+                    device_id           TEXT    NOT NULL,
+                    autonomy_level      TEXT    NOT NULL,
+                    consent_policy_hash TEXT,
+                    allowed_categories  TEXT    NOT NULL DEFAULT '[]',  -- JSON array
+                    status              TEXT    NOT NULL DEFAULT 'pending',
+                    ts_ns               INTEGER NOT NULL,
+                    created_at          REAL    NOT NULL DEFAULT (unixepoch('now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_pending_listings_status
+                ON pending_listings(status, created_at DESC)
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS curator_packaging_log (
+                    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                    action              TEXT    NOT NULL,
+                    session_id          TEXT    NOT NULL,
+                    outcome             TEXT    NOT NULL,
+                    extra               TEXT    NOT NULL DEFAULT '{}',  -- JSON object
+                    ts_ns               INTEGER NOT NULL,
+                    created_at          REAL    NOT NULL DEFAULT (unixepoch('now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_curator_packaging_session
+                ON curator_packaging_log(session_id, created_at DESC)
+            """)
             # Phase 163: add n_consented column to separation_ratio_registry_log (idempotent).
             # Binds active consent count into SHA-256 preimage (WIF-022 closure).
             # DEFAULT 0 preserves semantics for pre-163 rows (legacy hashes had no consent filtering).
@@ -11739,6 +11775,77 @@ class Store:
             "erasure_completed": False,
             "found":            False,
         }
+
+    # ── Data Economy Arc 3 — Curator packaging loop persistence ──────────────
+
+    def insert_pending_listing(self, intent: dict) -> int:
+        """Enqueue a listing intent awaiting gamer approval (approval_required
+        autonomy). Returns the new row id. Arc 3 Commit 1."""
+        with self._conn() as con:
+            cur = con.execute(
+                "INSERT INTO pending_listings"
+                " (session_id, device_id, autonomy_level, consent_policy_hash,"
+                "  allowed_categories, status, ts_ns)"
+                " VALUES (?,?,?,?,?,?,?)",
+                (
+                    str(intent.get("session_id", "")),
+                    str(intent.get("device_id", "")),
+                    str(intent.get("autonomy_level", "")),
+                    intent.get("consent_policy_hash"),
+                    json.dumps(list(intent.get("allowed_categories", []))),
+                    "pending",
+                    int(intent.get("ts_ns", 0)),
+                ),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def record_curator_packaging_action(self, entry: dict) -> int:
+        """Append a packaging decision to the audit trail. Returns row id.
+        Arc 3 Commit 1."""
+        with self._conn() as con:
+            cur = con.execute(
+                "INSERT INTO curator_packaging_log"
+                " (action, session_id, outcome, extra, ts_ns)"
+                " VALUES (?,?,?,?,?)",
+                (
+                    str(entry.get("action", "packaging")),
+                    str(entry.get("session_id", "")),
+                    str(entry.get("outcome", "")),
+                    json.dumps(entry.get("extra", {})),
+                    int(entry.get("ts_ns", 0)),
+                ),
+            )
+        return cur.lastrowid  # type: ignore[return-value]
+
+    def get_pending_listings(self, status: str = "pending") -> list[dict]:
+        """Return pending listing intents at the given status (default 'pending').
+        Arc 3 Commit 1 (consumed by Commit 3 endpoints)."""
+        with self._conn() as con:
+            rows = con.execute(
+                "SELECT * FROM pending_listings WHERE status=?"
+                " ORDER BY created_at DESC",
+                (status,),
+            ).fetchall()
+        out: list[dict] = []
+        for row in rows:
+            d = dict(row)
+            try:
+                d["allowed_categories"] = json.loads(d.get("allowed_categories") or "[]")
+            except Exception:
+                d["allowed_categories"] = []
+            out.append(d)
+        return out
+
+    def update_pending_listing_status(self, listing_id: int, status: str) -> bool:
+        """Transition a pending listing to a terminal status (approved / rejected /
+        submitted). Returns True if a row was updated. Arc 3 Commit 1
+        (consumed by Commit 3 endpoints)."""
+        with self._conn() as con:
+            cur = con.execute(
+                "UPDATE pending_listings SET status=? WHERE id=?",
+                (str(status), int(listing_id)),
+            )
+        return cur.rowcount > 0
 
     def mark_erasure_complete(self, device_id: str) -> int:
         """Mark erasure as completed and log the erasure action (Phase 160 BP-002).
