@@ -4824,6 +4824,93 @@ class ChainClient:
             log.debug("get_consent_record call failed: %s", e)
             return {}
 
+    # --- Data Economy Arc 4: VAPIConsentManifestRegistry view call ---
+    #
+    # ADDITIVE to the Phase 237 bitmask surface above (separate contract,
+    # separate address). Same fail-open contract as is_consent_valid /
+    # get_consent_record: a missing manifest registry must NOT block the
+    # bridge — the Curator packaging loop treats an absent manifest as
+    # fail-closed at ITS layer (no listing), not as a chain error here.
+
+    _CONSENT_MANIFEST_ABI = [
+        {
+            "name": "getManifest",
+            "type": "function",
+            "stateMutability": "view",
+            "inputs": [{"name": "gamer", "type": "address"}],
+            "outputs": [{"components": [
+                {"name": "allowAggregateStats",          "type": "bool"},
+                {"name": "allowSkillRankingProof",        "type": "bool"},
+                {"name": "allowTrajectoryProof",          "type": "bool"},
+                {"name": "allowContextPerformanceProof",  "type": "bool"},
+                {"name": "allowFullSessionProof",         "type": "bool"},
+                {"name": "allowAcademic",                 "type": "bool"},
+                {"name": "allowGameDev",                  "type": "bool"},
+                {"name": "allowEsports",                  "type": "bool"},
+                {"name": "allowBrand",                    "type": "bool"},
+                {"name": "allowAnonymous",                "type": "bool"},
+                {"name": "minSessionsPerPackage",         "type": "uint16"},
+                {"name": "coolingPeriodHours",            "type": "uint32"},
+                {"name": "minPriceVapi",                  "type": "uint256"},
+                {"name": "listingType",                   "type": "uint8"},
+                {"name": "autonomyLevel",                 "type": "uint8"},
+                {"name": "updatedAt",                     "type": "uint64"},
+                {"name": "manifestHash",                  "type": "bytes32"},
+            ], "name": "", "type": "tuple"}],
+        },
+        {
+            "name": "hasManifest",
+            "type": "function",
+            "stateMutability": "view",
+            "inputs": [{"name": "gamer", "type": "address"}],
+            "outputs": [{"name": "", "type": "bool"}],
+        },
+    ]
+
+    async def get_consent_manifest(self, gamer_address: str) -> dict:
+        """Query VAPIConsentManifestRegistry.getManifest(address) — Arc 4 view (no gas).
+
+        Returns the structured 7-dimension manifest as a dict, or an empty
+        dict when the manifest registry is unset OR no manifest is stored
+        (updatedAt == 0). The empty-dict case is fail-open at the chain
+        layer; the Curator loop treats absence as fail-closed (no listing).
+        """
+        addr = getattr(self._cfg, "consent_manifest_registry_address", "")
+        if not addr:
+            return {}
+        try:
+            contract = self._w3.eth.contract(
+                address=self._w3.to_checksum_address(addr),
+                abi=self._CONSENT_MANIFEST_ABI,
+            )
+            checksum_gamer = self._w3.to_checksum_address(gamer_address)
+            t = await contract.functions.getManifest(checksum_gamer).call()
+            if int(t[15]) == 0:  # updatedAt == 0 → no manifest set
+                return {}
+            mh = t[16]
+            return {
+                "allow_aggregate_stats":           bool(t[0]),
+                "allow_skill_ranking_proof":       bool(t[1]),
+                "allow_trajectory_proof":          bool(t[2]),
+                "allow_context_performance_proof": bool(t[3]),
+                "allow_full_session_proof":        bool(t[4]),
+                "allow_academic":                  bool(t[5]),
+                "allow_game_dev":                  bool(t[6]),
+                "allow_esports":                   bool(t[7]),
+                "allow_brand":                     bool(t[8]),
+                "allow_anonymous":                 bool(t[9]),
+                "min_sessions_per_package":        int(t[10]),
+                "cooling_period_hours":            int(t[11]),
+                "min_price_vapi":                  int(t[12]),
+                "listing_type":                    int(t[13]),
+                "autonomy_level":                  int(t[14]),
+                "updated_at":                      int(t[15]),
+                "manifest_hash":                   mh.hex() if isinstance(mh, (bytes, bytearray)) else str(mh),
+            }
+        except Exception as e:
+            log.debug("get_consent_manifest call failed: %s", e)
+            return {}
+
     # ------------------------------------------------------------------
     # Phase 238 Step I — Curator anchor verification view (zero gas)
     # ------------------------------------------------------------------

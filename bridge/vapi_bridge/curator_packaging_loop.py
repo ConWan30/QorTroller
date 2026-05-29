@@ -97,6 +97,16 @@ _TIER_CONSENT_FLAG = {
     PROOF_TIER_FULL_SESSION: "allow_full_session_proof",
 }
 
+# ── Arc 4 autonomy-level mapping (on-chain uint8 → loop string) ──────────────
+# VAPIConsentManifestRegistry stores autonomyLevel as 0=manual / 1=approval /
+# 2=notify / 3=full. The loop reasons in strings; this is the single mapping.
+_AUTONOMY_INT_TO_STR = {
+    0: AUTONOMY_MANUAL,
+    1: AUTONOMY_APPROVAL_REQUIRED,
+    2: AUTONOMY_NOTIFY_ONLY,
+    3: AUTONOMY_FULL,
+}
+
 # ── Buyer categories (INV-BUY-001 FROZEN enum) ──────────────────────────────
 # Position-for-position with VAPIBuyerRegistry. Each maps to a Layer-4
 # damage-bounding category key HKDF-derived from the master secret (§6).
@@ -241,6 +251,69 @@ class CuratorPackagingLoop:
             log.exception("on-chain consent manifest hash read failed (fail-open None)")
             return None
 
+    # ── Arc 4: structured on-chain manifest ─────────────────────────────────────
+
+    @staticmethod
+    def normalize_structured_manifest(raw: dict) -> dict:
+        """Map a VAPIConsentManifestRegistry.getManifest() dict (chain.py shape)
+        into the loop's manifest-dict shape. Pure — no I/O.
+
+        autonomy_level int → loop string; the five allow* buyer flags →
+        ``allowed_categories`` (INV-BUY-001 ids); tier flags + floors carried
+        through verbatim. ``manifest_hash`` is the on-chain keccak digest."""
+        allowed: list[int] = []
+        if raw.get("allow_academic"):  allowed.append(BUYER_CATEGORY_ACADEMIC)
+        if raw.get("allow_game_dev"):  allowed.append(BUYER_CATEGORY_GAME_DEV)
+        if raw.get("allow_esports"):   allowed.append(BUYER_CATEGORY_ESPORTS)
+        if raw.get("allow_brand"):     allowed.append(BUYER_CATEGORY_BRAND)
+        # allow_anonymous is an academic/anonymised flag, not an INV-BUY-001 id.
+        autonomy = _AUTONOMY_INT_TO_STR.get(
+            int(raw.get("autonomy_level", 1)), AUTONOMY_APPROVAL_REQUIRED
+        )
+        return {
+            "autonomy_level": autonomy,
+            "min_sessions": int(raw.get("min_sessions_per_package", MIN_SESSIONS_DEFAULT)),
+            "cooling_hours": int(raw.get("cooling_period_hours", COOLING_HOURS_DEFAULT)),
+            "allowed_categories": allowed,
+            "allow_context_performance_proof": bool(raw.get("allow_context_performance_proof")),
+            "allow_full_session_proof": bool(raw.get("allow_full_session_proof")),
+            "allow_aggregate_stats": bool(raw.get("allow_aggregate_stats")),
+            "allow_anonymous": bool(raw.get("allow_anonymous")),
+            "min_price_vapi": int(raw.get("min_price_vapi", 0)),
+            "listing_type": int(raw.get("listing_type", 0)),
+            "manifest_hash": raw.get("manifest_hash"),
+            "_source": "on_chain_structured",
+        }
+
+    async def _resolve_consent_manifest(self, device_id: str,
+                                        gamer_address: Optional[str]) -> dict:
+        """Arc 4: prefer the structured on-chain manifest when the manifest
+        registry is configured AND the gamer address is resolvable; otherwise
+        fall back to the Arc 3 local manifest path. FAIL-CLOSED: when the
+        registry IS configured and the gamer has no on-chain manifest, abort —
+        a configured registry is the authority and absence is not a deferral."""
+        manifest_addr = getattr(self._cfg, "consent_manifest_registry_address", "") or ""
+        getter = getattr(self._chain, "get_consent_manifest", None)
+        if manifest_addr and gamer_address and getter is not None:
+            try:
+                raw = await getter(gamer_address)
+            except Exception:
+                log.exception("get_consent_manifest read failed")
+                raw = None
+            if not raw:
+                raise ConsentTamperError(
+                    f"manifest registry configured but no on-chain manifest for "
+                    f"{str(gamer_address)[:18]} — fail closed"
+                )
+            normalized = self.normalize_structured_manifest(raw)
+            if normalized["autonomy_level"] not in _VALID_AUTONOMY:
+                raise ConsentTamperError(
+                    f"invalid autonomy_level in on-chain manifest — fail closed"
+                )
+            return normalized
+        # Arc 3 path: local manifest with opaque hash (sync).
+        return self._load_consent_manifest(device_id)
+
     # ── orchestration ─────────────────────────────────────────────────────────
 
     async def on_session_complete(self, session_id: str) -> dict:
@@ -260,9 +333,13 @@ class CuratorPackagingLoop:
             return {"outcome": OUTCOME_ABORTED_NO_SESSION, "session_id": session_id}
 
         device_id = str(session.get("device_id", ""))
+        gamer_address = (session.get("gamer_address")
+                         or session.get("wallet_address") or None)
 
-        # Step 1-2: consent manifest — fail closed on tamper/absence.
-        manifest = self._load_consent_manifest(device_id)
+        # Step 1-2: consent manifest — fail closed on tamper/absence. Arc 4
+        # prefers the structured on-chain manifest when its registry is wired;
+        # otherwise the Arc 3 local-manifest path is used unchanged.
+        manifest = await self._resolve_consent_manifest(device_id, gamer_address)
         autonomy = str(manifest.get("autonomy_level", AUTONOMY_APPROVAL_REQUIRED))
         min_sessions = int(manifest.get("min_sessions", MIN_SESSIONS_DEFAULT))
         cooling_hours = int(manifest.get("cooling_hours", COOLING_HOURS_DEFAULT))

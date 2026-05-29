@@ -397,3 +397,117 @@ def test_T_CLB_6_metadata_carries_consent_policy_hash():
     assert meta["buyer_category"] == 1
     assert meta["proof_tier"] == 1
     assert meta["schema"] == "vapi-curator-listing-v1"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Arc 4 — structured on-chain consent manifest wiring
+#
+#   T-CM4-1  normalize_structured_manifest maps autonomy int + buyer flags +
+#            floors into the loop's manifest shape (INV-BUY-001 ids only).
+#   T-CM4-2  _resolve_consent_manifest reads the structured on-chain manifest
+#            when the manifest registry is configured + gamer address present.
+#   T-CM4-3  registry configured but NO on-chain manifest → fail-closed abort.
+#   T-CM4-4  registry UNCONFIGURED → falls back to the Arc 3 local-manifest path.
+# ─────────────────────────────────────────────────────────────────────────────
+
+class _Cfg4:
+    def __init__(self, *, manifest_registry="", enabled=True):
+        self.curator_packaging_enabled = enabled
+        self.consent_registry_address = ""
+        self.consent_manifest_registry_address = manifest_registry
+
+
+class _ChainManifest:
+    """Async chain stub exposing Arc 4 get_consent_manifest(gamer)."""
+
+    def __init__(self, manifest=None):
+        self._m = manifest
+
+    async def get_consent_manifest(self, gamer_address):
+        return dict(self._m) if self._m else {}
+
+
+def _onchain_raw(**kw):
+    raw = {
+        "allow_aggregate_stats": True,
+        "allow_skill_ranking_proof": True,
+        "allow_trajectory_proof": True,
+        "allow_context_performance_proof": False,
+        "allow_full_session_proof": False,
+        "allow_academic": True,
+        "allow_game_dev": True,
+        "allow_esports": False,
+        "allow_brand": False,
+        "allow_anonymous": False,
+        "min_sessions_per_package": 10,
+        "cooling_period_hours": 72,
+        "min_price_vapi": 1000,
+        "listing_type": 0,
+        "autonomy_level": 1,
+        "updated_at": 123,
+        "manifest_hash": "0xdeadbeef",
+    }
+    raw.update(kw)
+    return raw
+
+
+def test_T_CM4_1_normalize_structured_manifest():
+    norm = CuratorPackagingLoop.normalize_structured_manifest(
+        _onchain_raw(allow_academic=True, allow_game_dev=True,
+                     allow_esports=True, allow_brand=True,
+                     autonomy_level=3, min_sessions_per_package=25,
+                     cooling_period_hours=120,
+                     allow_context_performance_proof=True)
+    )
+    assert norm["autonomy_level"] == cpl.AUTONOMY_FULL
+    assert norm["allowed_categories"] == [1, 2, 3, 4]
+    assert norm["min_sessions"] == 25
+    assert norm["cooling_hours"] == 120
+    assert norm["allow_context_performance_proof"] is True
+    assert norm["manifest_hash"] == "0xdeadbeef"
+    assert norm["_source"] == "on_chain_structured"
+    # allow_anonymous is NOT an INV-BUY-001 buyer id.
+    norm2 = CuratorPackagingLoop.normalize_structured_manifest(
+        _onchain_raw(allow_academic=False, allow_game_dev=False,
+                     allow_anonymous=True, autonomy_level=0)
+    )
+    assert norm2["allowed_categories"] == []
+    assert norm2["autonomy_level"] == cpl.AUTONOMY_MANUAL
+
+
+@pytest.mark.asyncio
+async def test_T_CM4_2_resolve_reads_onchain_when_registry_set():
+    loop = CuratorPackagingLoop(
+        _ChainManifest(manifest=_onchain_raw(autonomy_level=2)),
+        _Cfg4(manifest_registry="0xMANIFESTREG"),
+        _Store(),
+    )
+    m = await loop._resolve_consent_manifest(_DEVICE, "0xGAMER")
+    assert m["_source"] == "on_chain_structured"
+    assert m["autonomy_level"] == cpl.AUTONOMY_NOTIFY_ONLY
+    assert m["allowed_categories"] == [1, 2]
+
+
+@pytest.mark.asyncio
+async def test_T_CM4_3_registry_set_but_no_manifest_fails_closed():
+    loop = CuratorPackagingLoop(
+        _ChainManifest(manifest=None),                 # getManifest → {}
+        _Cfg4(manifest_registry="0xMANIFESTREG"),
+        _Store(),
+    )
+    with pytest.raises(ConsentTamperError):
+        await loop._resolve_consent_manifest(_DEVICE, "0xGAMER")
+
+
+@pytest.mark.asyncio
+async def test_T_CM4_4_registry_unset_falls_back_to_local():
+    # No manifest registry → Arc 3 local path; local manifest present → used.
+    store = _Store(manifest=_manifest(autonomy=cpl.AUTONOMY_APPROVAL_REQUIRED))
+    loop = CuratorPackagingLoop(
+        _ChainManifest(manifest=_onchain_raw()),       # present but must be ignored
+        _Cfg4(manifest_registry=""),
+        store,
+    )
+    m = await loop._resolve_consent_manifest(_DEVICE, "0xGAMER")
+    assert m.get("_source") != "on_chain_structured"
+    assert m["autonomy_level"] == cpl.AUTONOMY_APPROVAL_REQUIRED
