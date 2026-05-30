@@ -207,6 +207,57 @@ class VHRCircuitInputs:
         }
 
 
+@dataclass(frozen=True)
+class VHRCircuitInputsV2:
+    """The snarkjs input.json contents for one VAPIReplayProofVerifier_v2
+    proof (Arc 6 PoSR). Extends Arc 5's 8-field shape with the 4 beacon
+    public inputs + 2 beacon-hash private witnesses.
+
+    Public/private partition matches VAPIReplayProofVerifier_v2.circom
+    `component main {public [...]}` declaration order EXACTLY. Pinned by
+    PV-CI INV-POSR-CIRCUIT-001.
+
+    All values are decimal strings as required by snarkjs.
+    """
+    # Public (in declaration order — snarkjs public.json output order):
+    sanitized_trace_root:    str
+    poac_chain_root:         str
+    consent_policy_hash:     str
+    humanity_threshold:      str
+    vhp_commitment:          str
+    open_beacon_block:       str
+    close_beacon_block:      str
+    open_beacon_commitment:  str
+    close_beacon_commitment: str
+
+    # Private witnesses:
+    humanity_probability_witness: str
+    vhp_token_id:                 str
+    session_nonce:                str
+    open_beacon_hash:             str
+    close_beacon_hash:            str
+
+    def to_input_dict(self) -> dict[str, str]:
+        """Render the input dict snarkjs fullprove expects for v2. Field
+        names MUST match the circuit's `signal input` declarations exactly."""
+        return {
+            "sanitizedTraceRoot":          self.sanitized_trace_root,
+            "poacChainRoot":               self.poac_chain_root,
+            "consentPolicyHash":           self.consent_policy_hash,
+            "humanityThreshold":           self.humanity_threshold,
+            "vhpCommitment":               self.vhp_commitment,
+            "openBeaconBlock":             self.open_beacon_block,
+            "closeBeaconBlock":            self.close_beacon_block,
+            "openBeaconCommitment":        self.open_beacon_commitment,
+            "closeBeaconCommitment":       self.close_beacon_commitment,
+            "humanityProbabilityWitness":  self.humanity_probability_witness,
+            "vhpTokenId":                  self.vhp_token_id,
+            "sessionNonce":                self.session_nonce,
+            "openBeaconHash":              self.open_beacon_hash,
+            "closeBeaconHash":             self.close_beacon_hash,
+        }
+
+
 class WitnessGenerator:
     """Assembles the snarkjs input.json for VAPIReplayProofVerifier proofs.
 
@@ -231,6 +282,59 @@ class WitnessGenerator:
 
     HUMANITY_SCALE = HUMANITY_SCALE
     H_GAP_MAX = H_GAP_MAX
+
+    def build_inputs_v2(
+        self,
+        *,
+        humanity_probability: float,
+        humanity_threshold: float,
+        vhp_token_id: int,
+        session_nonce: int,
+        sanitized_trace_root,
+        poac_chain_root,
+        consent_policy_hash,
+        vhp_commitment,
+        open_beacon_block: int,
+        close_beacon_block: int,
+        open_beacon_hash: int,
+        close_beacon_hash: int,
+        open_beacon_commitment,
+        close_beacon_commitment,
+    ) -> VHRCircuitInputsV2:
+        """Build Arc 6 v2 (PoSR) circuit inputs. The two beacon Poseidon
+        commitments (open_beacon_commitment, close_beacon_commitment) must
+        be precomputed via circomlibjs by the node helper — passed in as
+        decimal-string field elements. Block hashes are precomputed BN254
+        field-element representations (Python doesn't reimplement Poseidon)."""
+        _ = compute_h_gap(humanity_probability, humanity_threshold)
+        scaled_witness = scale_probability(humanity_probability)
+        scaled_threshold = scale_probability(humanity_threshold)
+        if not isinstance(vhp_token_id, int) or vhp_token_id < 0:
+            raise ValueError(f"vhp_token_id must be a non-negative int")
+        if not isinstance(session_nonce, int) or session_nonce < 0:
+            raise ValueError(f"session_nonce must be a non-negative int")
+        if not isinstance(open_beacon_block, int) or open_beacon_block < 0:
+            raise ValueError("open_beacon_block must be a non-negative int")
+        if not isinstance(close_beacon_block, int) or close_beacon_block < 0:
+            raise ValueError("close_beacon_block must be a non-negative int")
+        if close_beacon_block <= open_beacon_block:
+            raise ValueError("close_beacon_block must be > open_beacon_block")
+        return VHRCircuitInputsV2(
+            sanitized_trace_root=_validate_field_decimal(sanitized_trace_root, "sanitized_trace_root"),
+            poac_chain_root=_validate_field_decimal(poac_chain_root, "poac_chain_root"),
+            consent_policy_hash=_validate_field_decimal(consent_policy_hash, "consent_policy_hash"),
+            humanity_threshold=str(scaled_threshold),
+            vhp_commitment=_validate_field_decimal(vhp_commitment, "vhp_commitment"),
+            open_beacon_block=str(open_beacon_block),
+            close_beacon_block=str(close_beacon_block),
+            open_beacon_commitment=_validate_field_decimal(open_beacon_commitment, "open_beacon_commitment"),
+            close_beacon_commitment=_validate_field_decimal(close_beacon_commitment, "close_beacon_commitment"),
+            humanity_probability_witness=str(scaled_witness),
+            vhp_token_id=str(vhp_token_id),
+            session_nonce=str(session_nonce),
+            open_beacon_hash=str(int(open_beacon_hash)),
+            close_beacon_hash=str(int(close_beacon_hash)),
+        )
 
     def build_inputs(
         self,
