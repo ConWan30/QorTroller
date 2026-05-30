@@ -1341,6 +1341,27 @@ INVARIANTS: list[Invariant] = [
         pattern=r"const CHUNK_BYTES\s*=\s*30;",
         min_matches=1,
     ),
+    Invariant(
+        id="INV-VHR-WIRING-001",
+        description="SessionAdjudicatorValidationAgent constructor accepts curator_loop kwarg (Arc 5 Commit 6) so the bridge-boot path in main.py can inject CuratorPackagingLoop. Without this, the VHR hook is unreachable from live session validation — exactly the gap that left VHR dormant pre-Commit-6.",
+        file="bridge/vapi_bridge/session_adjudicator_validator.py",
+        pattern=r"def __init__\(self,\s*cfg,\s*store,\s*bus=None,\s*pcc_monitor=None,\s*curator_loop=None\)",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-VHR-WIRING-002",
+        description="SessionAdjudicatorValidationAgent._maybe_fire_vhr_hook is invoked after the GIC stamp inside _validate_ruling. The post-stamp position ensures the VHR proof commits to the same fallback-verdict the chain commits to (INV-GIC-001 honesty rail). Drift moving this call before the GIC stamp would let the proof bind to a different verdict than the chain.",
+        file="bridge/vapi_bridge/session_adjudicator_validator.py",
+        pattern=r"self\._maybe_fire_vhr_hook\(ruling_id\)",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-VHR-WIRING-003",
+        description="Store.get_curator_session_aggregate exists and JOINs agent_rulings with ruling_validation_log on ruling_id (Arc 5 Commit 6). Returns None when the ruling isn't validated yet — the orchestrator gracefully treats that as vhr_aborted_no_session rather than fabricating a session.",
+        file="bridge/vapi_bridge/store.py",
+        pattern=r"def get_curator_session_aggregate\(self, session_id\)",
+        min_matches=1,
+    ),
 ]
 
 

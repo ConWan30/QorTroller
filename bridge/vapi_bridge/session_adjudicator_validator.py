@@ -84,7 +84,7 @@ class SessionAdjudicatorValidationAgent:
     Once threshold is reached with zero divergences, emits dry_run_gate_passed event.
     """
 
-    def __init__(self, cfg, store, bus=None, pcc_monitor=None) -> None:
+    def __init__(self, cfg, store, bus=None, pcc_monitor=None, curator_loop=None) -> None:
         self._cfg = cfg
         self._store = store
         self._bus = bus
@@ -92,6 +92,10 @@ class SessionAdjudicatorValidationAgent:
         self._threshold = float(getattr(cfg, "validation_divergence_threshold", 0.3))
         self._gate_n = int(getattr(cfg, "validation_gate_n", 100))
         self._gate_already_emitted = False
+        # Arc 5 Commit 6 — live-session VHR hook. None when bridge boot did
+        # not wire a CuratorPackagingLoop (curator_packaging_enabled=False);
+        # in that case _maybe_fire_vhr_hook is a no-op.
+        self._curator_loop = curator_loop
 
     async def run_event_consumer(self) -> None:
         """Background loop — polls for unvalidated rulings every 5 minutes."""
@@ -146,6 +150,58 @@ class SessionAdjudicatorValidationAgent:
                     "SessionAdjudicatorValidationAgent: validation error ruling_id=%s: %s",
                     row["id"] if hasattr(row, "__getitem__") else "?", exc,
                 )
+
+    def _maybe_fire_vhr_hook(self, ruling_id: int) -> None:
+        """Arc 5 Commit 6 — fire CuratorPackagingLoop.on_session_complete_vhr
+        as a fire-and-forget task if the operator has opted in.
+
+        Gated by THREE conditions (any of which false → silent no-op):
+          1. cfg.vhr_hook_enabled == True (operator opt-in)
+          2. self._curator_loop is not None (boot wired it)
+          3. cfg.session_gamer_address is non-empty (single-tenant gamer set)
+
+        The hook itself is dormant-safe: even with all 3 conditions true,
+        outcomes like vhr_disabled (pipeline flag off), vhr_deferred_no_consent
+        (no Arc 4 manifest for gamer_address), vhr_deferred_verdict, etc. all
+        surface honestly as audit-log entries without producing fake proofs.
+        """
+        if not getattr(self._cfg, "vhr_hook_enabled", False):
+            return
+        if self._curator_loop is None:
+            return
+        gamer_address = str(getattr(self._cfg, "session_gamer_address", "") or "")
+        if not gamer_address:
+            # Honest defer — pipeline can't lookup consent without a key.
+            log.debug(
+                "VHR hook skip ruling_id=%d: SESSION_GAMER_ADDRESS not set",
+                ruling_id,
+            )
+            return
+
+        async def _fire():
+            try:
+                result = await self._curator_loop.on_session_complete_vhr(
+                    session_id=str(ruling_id),
+                    gamer_address=gamer_address,
+                )
+                # Trace one line per fired ruling so operators can grep the
+                # audit-log without hitting the HTTP surface.
+                log.info(
+                    "VHR hook ruling_id=%d outcome=%s",
+                    ruling_id, result.get("outcome", "?"),
+                )
+            except Exception as exc:
+                log.warning(
+                    "VHR hook ruling_id=%d failed (non-fatal): %s",
+                    ruling_id, exc,
+                )
+
+        try:
+            asyncio.create_task(_fire())
+        except RuntimeError:
+            # No running event loop — happens in unit tests that exercise
+            # _validate_ruling synchronously. Honestly skip rather than block.
+            log.debug("VHR hook ruling_id=%d skipped: no running event loop", ruling_id)
 
     async def _validate_ruling(self, row: dict) -> None:
         """Cross-validate one ruling and record in ruling_validation_log."""
@@ -372,6 +428,12 @@ class SessionAdjudicatorValidationAgent:
                     "SessionAdjudicatorValidationAgent: GIC stamp failed ruling_id=%d: %s",
                     ruling_id, _gic_exc,
                 )
+
+        # Arc 5 Commit 6 — live VHR hook. Default OFF (vhr_hook_enabled=False).
+        # Fire after GIC stamping so the hook sees the same fallback-verdict
+        # state the chain commits to. Non-blocking (asyncio.create_task) so the
+        # validator's poll cycle isn't paused by the snarkjs subprocess (~1-3s).
+        self._maybe_fire_vhr_hook(ruling_id)
 
         # Check gate condition (emit once per bridge lifetime)
         # Phase 78: pass max_divergence_rate so gate logic is consistent with operator_api

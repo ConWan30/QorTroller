@@ -1850,6 +1850,28 @@ class Config:
     PROOF_BUILT_NO_VERIFIER on otherwise-successful packaging. Set after the
     Arc 5 deploy ceremony (operator-fired)."""
 
+    # --- Arc 5 live-session VHR hook (Commit 6 wiring) ---
+    vhr_hook_enabled: bool = field(
+        default_factory=lambda: _env_bool("VHR_HOOK_ENABLED", False)
+    )
+    """Data Economy Arc 5 — fire CuratorPackagingLoop.on_session_complete_vhr
+    after each SessionAdjudicatorValidationAgent ruling validation. Default
+    False: the orchestrator + hook are wired but dormant until operator opts
+    in. When True, every validated ruling becomes a VHR proof attempt (gated
+    in turn by Arc 4 consent manifest + verdict + humanity_probability).
+    Snarkjs subprocess (~1-3s) runs in a fire-and-forget task so it doesn't
+    block the validator's poll cycle."""
+
+    session_gamer_address: str = field(
+        default_factory=lambda: _env("SESSION_GAMER_ADDRESS", "")
+    )
+    """Data Economy Arc 5 — gamer address associated with every session for
+    consent lookup. Single-tenant testnet/dev configuration: one wallet plays
+    one bridge. Empty string + vhr_hook_enabled=True surfaces
+    vhr_deferred_no_consent on every session. A future device-keyed registry
+    would replace this with a per-device gamer lookup; for v1, env-driven
+    is sufficient."""
+
     vpm_anchor_registry_address: str = field(
         default_factory=lambda: _env("VPM_ANCHOR_REGISTRY_ADDRESS", "")
     )
