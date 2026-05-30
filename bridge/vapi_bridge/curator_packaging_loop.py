@@ -148,6 +148,10 @@ class CuratorPackagingLoop:
         self._registry_address = (getattr(cfg, "consent_registry_address", "") or "")
         # Local audit surface (operational truth alongside any store persistence).
         self.audit_log: list[dict] = []
+        # Arc 5 VHR pipeline — lazily constructed on first VHR call to avoid
+        # importing replay_proof_pipeline (and its numpy dep) into the skill-
+        # proof hot path. None until cfg.replay_proof_pipeline_enabled flips.
+        self._vhr_pipeline: Optional[Any] = None
         if self._enabled:
             log.info(
                 "[CURATOR] Packaging loop active. Raw biometric data never "
@@ -399,6 +403,73 @@ class CuratorPackagingLoop:
                     {"consent_policy_hash": consent_policy_hash, "autonomy": autonomy})
         return {"outcome": OUTCOME_READY_FOR_SUBMISSION, "session_id": session_id,
                 "listing_intent": listing_intent}
+
+    # ── Arc 5 VHR session-boundary hook ───────────────────────────────────────
+    #
+    # Parallel entry point to on_session_complete above; the existing skill-proof
+    # flow is deliberately untouched. Both can fire on the same session — they
+    # produce orthogonal listing types (SKILL_PROOF vs REPLAY_PROOF) per spec §7.
+    #
+    # Dormant by default (cfg.replay_proof_pipeline_enabled = False). When the
+    # operator flips the flag, the VHR pipeline is instantiated on first call
+    # and reused. Audit logs are unified onto self.audit_log so the existing
+    # GET /curator/audit-log surface picks them up without changes.
+
+    def _get_vhr_pipeline(self):
+        if self._vhr_pipeline is not None:
+            return self._vhr_pipeline
+        if not bool(getattr(self._cfg, "replay_proof_pipeline_enabled", False)):
+            return None
+        # Lazy import — avoids pulling numpy into bridge boot when VHR is OFF.
+        from .replay_proof_pipeline import VAPIReplayProofPipeline
+        self._vhr_pipeline = VAPIReplayProofPipeline(
+            chain=self._chain, cfg=self._cfg, store=self._store,
+        )
+        log.info("[CURATOR] VHR pipeline active (Arc 5). Default prover is "
+                 "DeferredProver until ceremony populates zk_artifacts.")
+        return self._vhr_pipeline
+
+    async def on_session_complete_vhr(
+        self,
+        session_id: str,
+        *,
+        gamer_address: Optional[str] = None,
+        session_nonce: Optional[int] = None,
+    ) -> dict:
+        """Arc 5 parallel session-boundary entry. Returns the orchestrator's
+        result dict verbatim. When replay_proof_pipeline_enabled is False,
+        returns a dormant outcome without touching pre-processor / prover /
+        chain — mirrors on_session_complete's `OUTCOME_DISABLED` short-circuit.
+
+        Spec anchor: docs/VAPI_REPLAY_PROOF_PIPELINE_SPEC (1).md §6.
+        """
+        pipeline = self._get_vhr_pipeline()
+        if pipeline is None:
+            return {
+                "outcome":     "vhr_disabled",
+                "session_id":  session_id,
+                "reason":      "replay_proof_pipeline_enabled=False (dormant)",
+            }
+        result = await pipeline.package_session(
+            session_id,
+            gamer_address=gamer_address,
+            session_nonce=session_nonce,
+        )
+        # Mirror VHR audit entries onto the shared audit_log so downstream
+        # observers (GET /curator/audit-log) see both flows in one stream.
+        if pipeline.audit_log:
+            self.audit_log.extend(
+                e for e in pipeline.audit_log if e not in self.audit_log
+            )
+        return result
+
+    def list_pending_replay_proofs(self) -> list[dict]:
+        """Pass-through to the orchestrator's pending surface. Returns [] when
+        the pipeline is dormant — empty is the honest answer; no fabrication."""
+        pipeline = self._get_vhr_pipeline()
+        if pipeline is None:
+            return []
+        return pipeline.list_pending_replay_proofs()
 
     # ── persistence helpers (all optional / non-fatal) ────────────────────────
 

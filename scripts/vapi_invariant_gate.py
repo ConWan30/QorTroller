@@ -1299,6 +1299,13 @@ INVARIANTS: list[Invariant] = [
         pattern=r"VHR_OUTCOME_PROOF_DEFERRED\s*=",
         min_matches=1,
     ),
+    Invariant(
+        id="INV-VHR-009",
+        description="CuratorPackagingLoop.on_session_complete_vhr is the parallel Arc 5 session-boundary entry point — orthogonal to the existing skill-proof on_session_complete (spec §7 listing-type orthogonality). The hook is dormant by default (replay_proof_pipeline_enabled=False) and lazily constructs VAPIReplayProofPipeline on first call. Drift here breaks the bridge boot wiring + the GET /curator/pending-replay-proofs audit surface.",
+        file="bridge/vapi_bridge/curator_packaging_loop.py",
+        pattern=r"async def on_session_complete_vhr\s*\(",
+        min_matches=1,
+    ),
 ]
 
 

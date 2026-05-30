@@ -1830,6 +1830,26 @@ class Config:
     treats an absent manifest as fail-closed (no listing). Set after the Arc 4
     deploy runs (operator-fired)."""
 
+    # --- Data Economy Arc 5: VAPIReplayProofPipeline (VHR proofs) ---
+    replay_proof_pipeline_enabled: bool = field(
+        default_factory=lambda: _env_bool("REPLAY_PROOF_PIPELINE_ENABLED", False)
+    )
+    """Data Economy Arc 5 — VHR (Verified Human Replay) packaging on session
+    boundary. Default False — the orchestrator is dormant until the operator
+    explicitly opts in via REPLAY_PROOF_PIPELINE_ENABLED=true. When False,
+    on_session_complete_vhr returns DISABLED without any pre-processor / prover /
+    chain work. Flipping ON without (a) a deployed Arc 5 verifier wired below or
+    (b) a populated zk_artifacts directory still produces an honest
+    PROOF_BUILT_NO_VERIFIER / PROOF_DEFERRED outcome — no fabrication."""
+
+    replay_proof_verifier_address: str = field(
+        default_factory=lambda: _env("REPLAY_PROOF_VERIFIER_ADDRESS", "")
+    )
+    """Data Economy Arc 5 — Deployed VAPIReplayProofVerifier wrapper address.
+    Empty string = no on-chain verifier wired; the orchestrator surfaces
+    PROOF_BUILT_NO_VERIFIER on otherwise-successful packaging. Set after the
+    Arc 5 deploy ceremony (operator-fired)."""
+
     vpm_anchor_registry_address: str = field(
         default_factory=lambda: _env("VPM_ANCHOR_REGISTRY_ADDRESS", "")
     )
