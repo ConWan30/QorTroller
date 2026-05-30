@@ -650,9 +650,39 @@ class Bridge:
                 )
             except Exception as _imp_exc:  # noqa: BLE001 — fail-open
                 log.warning("BISECT B5B SessionAdjudicator failed: %s", _imp_exc)
+            # Arc 5 Commit 6 — instantiate CuratorPackagingLoop so the live-
+            # session VHR hook below can fire it. Construction is cheap; the
+            # loop's on_session_complete_vhr is dormant unless
+            # cfg.replay_proof_pipeline_enabled is True (Commit 4.5 lazy init).
+            # The boot-level cfg.curator_packaging_enabled is the gate for the
+            # SKILL-PROOF loop (Arc 3); the VHR hook is gated separately by
+            # cfg.vhr_hook_enabled (Commit 6 — both default False).
+            _curator_loop = None
+            try:
+                from .curator_packaging_loop import CuratorPackagingLoop
+                _chain_for_curator = getattr(self, "chain", None)
+                _curator_loop = CuratorPackagingLoop(
+                    chain=_chain_for_curator, cfg=self.cfg, store=self.store,
+                )
+                log.info(
+                    "CuratorPackagingLoop constructed (vhr_hook_enabled=%s, "
+                    "replay_proof_pipeline_enabled=%s, "
+                    "session_gamer_address=%s)",
+                    getattr(self.cfg, "vhr_hook_enabled", False),
+                    getattr(self.cfg, "replay_proof_pipeline_enabled", False),
+                    (getattr(self.cfg, "session_gamer_address", "") or "<unset>")[:18],
+                )
+            except Exception as _imp_exc:  # noqa: BLE001 — fail-open
+                log.warning(
+                    "Arc 5 Commit 6 — CuratorPackagingLoop construction failed "
+                    "(VHR hook will be a no-op): %s", _imp_exc,
+                )
             try:
                 from .session_adjudicator_validator import SessionAdjudicatorValidationAgent
-                _val = SessionAdjudicatorValidationAgent(self.cfg, self.store, bus=None)
+                _val = SessionAdjudicatorValidationAgent(
+                    self.cfg, self.store, bus=None,
+                    curator_loop=_curator_loop,   # Arc 5 Commit 6
+                )
                 _spawn_named(
                     _val.run_event_consumer(),
                     "BISECT_B5B_SessionAdjudicatorValidator",
