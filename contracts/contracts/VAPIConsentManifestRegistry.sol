@@ -42,6 +42,16 @@ contract VAPIConsentManifestRegistry is Ownable, ReentrancyGuard {
     ///   0 = manual, 1 = approval, 2 = notify, 3 = full
     uint8 public constant AUTONOMY_MAX = 3;
 
+    /// Dimension 8 (Data Economy Arc 5) — VHR (Verified Human Replay) policy.
+    /// Quantization-bit floor pinned to the FROZEN circuit grid (Arc 5
+    /// INV-VHR-001: RADIAL_BITS=4). A consent that lowered this would request
+    /// a finer grid than the pre-processor produces, which is either
+    /// impossible (no such pipeline output) or a covert biometric-leakage
+    /// vector. Equality at the floor is the only sane value; the field exists
+    /// for future-version policy expressiveness while the protocol holds the
+    /// floor immutably.
+    uint8 public constant REPLAY_QUANTIZATION_BITS_FLOOR = 4;
+
     struct ConsentManifest {
         // Dimension 1 — Data categories (above the immutable data floor)
         bool allowAggregateStats;
@@ -71,6 +81,16 @@ contract VAPIConsentManifestRegistry is Ownable, ReentrancyGuard {
 
         // Dimension 7 — Autonomy level (0=manual,1=approval,2=notify,3=full)
         uint8   autonomyLevel;
+
+        // Dimension 8 (Arc 5) — VHR (Verified Human Replay) policy. ADDITIVE
+        // to the v1 7-dimension struct; landed in-place because Arc 4 is not
+        // yet deployed (deploy-hold posture). Once deployed, any further
+        // dimension expansion requires a v2 redeploy by the same precedent
+        // VAPIConsentRegistry → VAPIConsentManifestRegistry sets here.
+        bool    allowReplayProofs;          // default false — explicit opt-in
+        uint8   replayHumanityThreshold;    // scaled ×100 (e.g. 70 = 0.70 AIT floor)
+        uint8   replayQuantizationBits;     // == REPLAY_QUANTIZATION_BITS_FLOOR
+        bool    replayRequireVerdict;       // default true — only HUMAN/CERTIFY sessions
 
         // Manifest versioning (set by the contract on store)
         uint64  updatedAt;
@@ -106,6 +126,16 @@ contract VAPIConsentManifestRegistry is Ownable, ReentrancyGuard {
                 "VCMR: cooling floor (min 72 hours)");
         require(m.autonomyLevel <= AUTONOMY_MAX, "VCMR: bad autonomyLevel");
         require(m.listingType <= 1, "VCMR: bad listingType");
+        // Dimension 8 — Arc 5 protocol floor: replayQuantizationBits must
+        // equal the FROZEN circuit grid (INV-VHR-001 RADIAL_BITS=4). A lower
+        // value would request a finer biometric grid than the pre-processor
+        // produces; a higher value would request more bits than the field
+        // can carry. Pinned to equality.
+        require(m.replayQuantizationBits == REPLAY_QUANTIZATION_BITS_FLOOR,
+                "VCMR: replayQuantizationBits must equal floor");
+        // 100 = "1.00 probability" upper bound on the ×100 scale.
+        require(m.replayHumanityThreshold <= 100,
+                "VCMR: replayHumanityThreshold > 1.00");
 
         bytes32 h = _computeManifestHash(m);
         ConsentManifest memory stored = m;
@@ -158,7 +188,12 @@ contract VAPIConsentManifestRegistry is Ownable, ReentrancyGuard {
             m.coolingPeriodHours,
             m.minPriceVapi,
             m.listingType,
-            m.autonomyLevel
+            m.autonomyLevel,
+            // Dimension 8 (Arc 5) — extend in declaration order.
+            m.allowReplayProofs,
+            m.replayHumanityThreshold,
+            m.replayQuantizationBits,
+            m.replayRequireVerdict
         ));
     }
 }

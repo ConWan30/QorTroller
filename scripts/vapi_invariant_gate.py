@@ -1278,6 +1278,27 @@ INVARIANTS: list[Invariant] = [
         pattern=r"^\s*sanitizedTraceRoot,\s*$",
         min_matches=1,
     ),
+    Invariant(
+        id="INV-VHR-006",
+        description="VAPIConsentManifestRegistry Dimension 8 (Arc 5) fields: allowReplayProofs, replayHumanityThreshold, replayQuantizationBits, replayRequireVerdict. Dimension 8 is the on-chain consent surface the Arc 5 orchestrator reads to gate VHR packaging; drift in field names breaks the bridge ABI (chain.get_consent_manifest) and the Curator packaging hook.",
+        file="contracts/contracts/VAPIConsentManifestRegistry.sol",
+        pattern=r"bool\s+allowReplayProofs",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-VHR-007",
+        description="REPLAY_QUANTIZATION_BITS_FLOOR = 4 in VAPIConsentManifestRegistry equals Arc 5 INV-VHR-001 RADIAL_BITS = 4. A drift here would let a gamer's consent request a finer or coarser grid than the pre-processor produces — covert biometric leakage vector or unbuildable matrix. Equality pinned by setManifest revert.",
+        file="contracts/contracts/VAPIConsentManifestRegistry.sol",
+        pattern=r"REPLAY_QUANTIZATION_BITS_FLOOR\s*=\s*4",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-VHR-008",
+        description="VAPIReplayProofPipeline outcome codes preserve the honest-defer set (deferred_no_consent, deferred_verdict, deferred_humanity, deferred_no_frames, proof_deferred, proof_built_no_verifier). These mirror CuratorPackagingLoop's OUTCOME_* and are the load-bearing audit surface for GET /curator/pending-replay-proofs.",
+        file="bridge/vapi_bridge/replay_proof_pipeline/pipeline.py",
+        pattern=r"VHR_OUTCOME_PROOF_DEFERRED\s*=",
+        min_matches=1,
+    ),
 ]
 
 

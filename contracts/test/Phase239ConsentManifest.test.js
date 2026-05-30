@@ -23,6 +23,9 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
 // Manifest struct field order MUST match ConsentManifest in the contract.
+// Dimension 8 (Arc 5) fields default to a NO-VHR-OPT-IN posture: allowReplayProofs
+// false, threshold at the AIT default 70 (×100), quantization at the FROZEN floor,
+// require-verdict on. Existing v1 tests pass through unchanged.
 function manifest(overrides = {}) {
   return {
     allowAggregateStats:        true,
@@ -40,6 +43,11 @@ function manifest(overrides = {}) {
     minPriceVapi:               1000n,
     listingType:                0,
     autonomyLevel:              1,
+    // Dimension 8 (Arc 5) defaults
+    allowReplayProofs:          false,
+    replayHumanityThreshold:    70,   // 0.70 AIT floor on ×100 scale
+    replayQuantizationBits:     4,    // == REPLAY_QUANTIZATION_BITS_FLOOR
+    replayRequireVerdict:       true,
     updatedAt:                  0,
     manifestHash:               ethers.ZeroHash,
     ...overrides,
@@ -163,6 +171,67 @@ describe("VAPIConsentManifestRegistry (Data Economy Arc 4)", function () {
 
     expect(await reg.totalManifests()).to.equal(2n);
     expect((await reg.getManifest(gamer1.address)).autonomyLevel).to.equal(2n);
+  });
+
+  // ── Dimension 8 (Arc 5) ───────────────────────────────────────────────
+
+  it("T239-CM-D8-1: REPLAY_QUANTIZATION_BITS_FLOOR constant pinned at 4", async function () {
+    expect(await reg.REPLAY_QUANTIZATION_BITS_FLOOR()).to.equal(4n);
+  });
+
+  it("T239-CM-D8-2: defaults — allowReplayProofs false; replay-require-verdict true; threshold 70; bits 4", async function () {
+    const m = manifest();
+    expect(m.allowReplayProofs).to.equal(false);
+    expect(m.replayRequireVerdict).to.equal(true);
+    expect(m.replayHumanityThreshold).to.equal(70);
+    expect(m.replayQuantizationBits).to.equal(4);
+    // Round-trip through storage.
+    await reg.connect(gamer1).setManifest(m);
+    const s = await reg.getManifest(gamer1.address);
+    expect(s.allowReplayProofs).to.equal(false);
+    expect(s.replayRequireVerdict).to.equal(true);
+    expect(s.replayHumanityThreshold).to.equal(70n);
+    expect(s.replayQuantizationBits).to.equal(4n);
+  });
+
+  it("T239-CM-D8-3: setManifest reverts when replayQuantizationBits < floor (=4)", async function () {
+    await expect(
+      reg.connect(gamer1).setManifest(manifest({ replayQuantizationBits: 3 }))
+    ).to.be.revertedWith("VCMR: replayQuantizationBits must equal floor");
+  });
+
+  it("T239-CM-D8-4: setManifest reverts when replayQuantizationBits > floor (=5)", async function () {
+    await expect(
+      reg.connect(gamer1).setManifest(manifest({ replayQuantizationBits: 5 }))
+    ).to.be.revertedWith("VCMR: replayQuantizationBits must equal floor");
+  });
+
+  it("T239-CM-D8-5: setManifest reverts when replayHumanityThreshold > 100 (×100 scale)", async function () {
+    await expect(
+      reg.connect(gamer1).setManifest(manifest({ replayHumanityThreshold: 101 }))
+    ).to.be.revertedWith("VCMR: replayHumanityThreshold > 1.00");
+  });
+
+  it("T239-CM-D8-6: manifestHash includes Dimension 8 — toggling allowReplayProofs changes hash", async function () {
+    const m_off = manifest({ allowReplayProofs: false });
+    const m_on  = manifest({ allowReplayProofs: true  });
+    const h_off = await reg.computeManifestHash(m_off);
+    const h_on  = await reg.computeManifestHash(m_on);
+    expect(h_off).to.not.equal(h_on);
+  });
+
+  it("T239-CM-D8-7: manifestHash includes Dimension 8 — flipping replayRequireVerdict changes hash", async function () {
+    const m_a = manifest({ replayRequireVerdict: true  });
+    const m_b = manifest({ replayRequireVerdict: false });
+    expect(await reg.computeManifestHash(m_a)).to.not.equal(await reg.computeManifestHash(m_b));
+  });
+
+  it("T239-CM-D8-8: enabling replay proofs round-trips through getManifest", async function () {
+    const m = manifest({ allowReplayProofs: true, replayHumanityThreshold: 85 });
+    await reg.connect(gamer1).setManifest(m);
+    const s = await reg.getManifest(gamer1.address);
+    expect(s.allowReplayProofs).to.equal(true);
+    expect(s.replayHumanityThreshold).to.equal(85n);
   });
 });
 

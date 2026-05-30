@@ -37,6 +37,23 @@ from .witness_generator import (
     H_GAP_BITS,
     H_GAP_MAX,
 )
+from .pipeline import (
+    DeferredProver,
+    ProofResult,
+    Prover,
+    VAPIReplayProofPipeline,
+    VHRProofPackage,
+    VHR_OUTCOME_ABORTED_NO_SESSION,
+    VHR_OUTCOME_DATA_FLOOR_VIOLATION,
+    VHR_OUTCOME_DEFERRED_HUMANITY,
+    VHR_OUTCOME_DEFERRED_NO_CONSENT,
+    VHR_OUTCOME_DEFERRED_NO_FRAMES,
+    VHR_OUTCOME_DEFERRED_VERDICT,
+    VHR_OUTCOME_DISABLED,
+    VHR_OUTCOME_PROOF_BUILT,
+    VHR_OUTCOME_PROOF_BUILT_NO_VERIFIER,
+    VHR_OUTCOME_PROOF_DEFERRED,
+)
 
 __all__ = [
     "DataFloorViolationError",
@@ -58,4 +75,19 @@ __all__ = [
     "HUMANITY_SCALE",
     "H_GAP_BITS",
     "H_GAP_MAX",
+    "DeferredProver",
+    "ProofResult",
+    "Prover",
+    "VAPIReplayProofPipeline",
+    "VHRProofPackage",
+    "VHR_OUTCOME_ABORTED_NO_SESSION",
+    "VHR_OUTCOME_DATA_FLOOR_VIOLATION",
+    "VHR_OUTCOME_DEFERRED_HUMANITY",
+    "VHR_OUTCOME_DEFERRED_NO_CONSENT",
+    "VHR_OUTCOME_DEFERRED_NO_FRAMES",
+    "VHR_OUTCOME_DEFERRED_VERDICT",
+    "VHR_OUTCOME_DISABLED",
+    "VHR_OUTCOME_PROOF_BUILT",
+    "VHR_OUTCOME_PROOF_BUILT_NO_VERIFIER",
+    "VHR_OUTCOME_PROOF_DEFERRED",
 ]
