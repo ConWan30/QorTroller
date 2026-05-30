@@ -1320,6 +1320,27 @@ INVARIANTS: list[Invariant] = [
         pattern=r'"protocol":\s*"groth16"',
         min_matches=1,
     ),
+    Invariant(
+        id="INV-VHR-MATRIX-001",
+        description="VAPI-VHR-MATRIX-v1 canonical sponge encoding domain tag — the 18-byte ASCII prefix prepended to every SanitizedReplayMatrix before chunking + Poseidon-2 chaining. Every off-chain verifier MUST use this exact tag; drift = unverifiable proofs.",
+        file="bridge/vapi_bridge/replay_proof_pipeline/zk_artifacts/compute_inputs_replay_proof.js",
+        pattern=r'Buffer\.from\("VAPI-VHR-MATRIX-v1",\s*"utf8"\)',
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-VHR-MATRIX-002",
+        description="VAPI-VHR-MATRIX-v1 per-tick byte layout: 7 bytes per tick in fixed order (stick_L, stick_R, trigger_L, trigger_R, button_lo, button_hi, imu). Drift changes sanitizedTraceRoot for the same gameplay → silent verifier mismatch.",
+        file="bridge/vapi_bridge/replay_proof_pipeline/zk_artifacts/compute_inputs_replay_proof.js",
+        pattern=r"const PER_TICK_BYTES\s*=\s*7;",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-VHR-MATRIX-003",
+        description="VAPI-VHR-MATRIX-v1 chunk size = 30 bytes — keeps each BN254 field element comfortably under the 254-bit modulus (top 2 bytes implicitly zero). Drift would either overflow the field (>30B chunks) or break the on-chain off-chain root agreement.",
+        file="bridge/vapi_bridge/replay_proof_pipeline/zk_artifacts/compute_inputs_replay_proof.js",
+        pattern=r"const CHUNK_BYTES\s*=\s*30;",
+        min_matches=1,
+    ),
 ]
 
 

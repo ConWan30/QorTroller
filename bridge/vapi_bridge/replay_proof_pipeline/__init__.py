@@ -54,6 +54,12 @@ from .pipeline import (
     VHR_OUTCOME_PROOF_BUILT_NO_VERIFIER,
     VHR_OUTCOME_PROOF_DEFERRED,
 )
+from .groth16_prover import (
+    Groth16Prover,
+    artifacts_available,
+    auto_prover,
+    missing_artifacts,
+)
 
 __all__ = [
     "DataFloorViolationError",
@@ -90,4 +96,8 @@ __all__ = [
     "VHR_OUTCOME_PROOF_BUILT",
     "VHR_OUTCOME_PROOF_BUILT_NO_VERIFIER",
     "VHR_OUTCOME_PROOF_DEFERRED",
+    "Groth16Prover",
+    "artifacts_available",
+    "auto_prover",
+    "missing_artifacts",
 ]

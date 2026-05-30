@@ -1,0 +1,12 @@
+{
+  "name": "vapi-replay-proof-pipeline-helpers",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Data Economy Arc 5 — node helpers for the VHR pipeline. Parallels bridge/vapi_bridge/zk_artifacts/ from Phase 237. Used by VAPIReplayProofPipeline's Groth16Prover to compute the two public Poseidon commitments (vhpCommitment + sanitizedTraceRoot) and assemble the snarkjs `groth16 fullprove` input.json. circomlibjs is the only runtime dep.",
+  "scripts": {
+    "compute-inputs": "node compute_inputs_replay_proof.js"
+  },
+  "dependencies": {
+    "circomlibjs": "^0.1.7"
+  }
+}
