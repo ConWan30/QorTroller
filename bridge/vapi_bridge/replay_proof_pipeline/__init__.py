@@ -6,7 +6,9 @@ human produced the gameplay trace while information-theoretically erasing the
 L4/L5/E4/AIT biometric fingerprint.
 
 Commit 1 ships the pre-processor (φ = φ_spatial ∘ φ_temporal) + data floor.
-Circuit, contract, and orchestrator land in later commits of the arc; all
+Commit 2 ships the circuit (contracts/circuits/VAPIReplayProofVerifier.circom)
++ the Python WitnessGenerator that assembles its input.json.
+Contract, deploy, and orchestrator land in later commits of the arc; all
 on-chain deploys are HELD until the full Data Economy ladder is verified
 end-to-end under explicit operator GO (see
 docs/data-economy-deploy-hold-and-arc5-readiness.md).
@@ -23,6 +25,18 @@ from .pre_processor import (
     TRIGGER_BITS,
     WINDOW_FRAMES,
 )
+from .witness_generator import (
+    HumanityFloorNotClearedError,
+    InvalidCommitmentError,
+    VHRCircuitInputs,
+    WitnessGenerator,
+    compute_h_gap,
+    scale_probability,
+    BN254_PRIME,
+    HUMANITY_SCALE,
+    H_GAP_BITS,
+    H_GAP_MAX,
+)
 
 __all__ = [
     "DataFloorViolationError",
@@ -34,4 +48,14 @@ __all__ = [
     "SOURCE_HZ",
     "TRIGGER_BITS",
     "WINDOW_FRAMES",
+    "HumanityFloorNotClearedError",
+    "InvalidCommitmentError",
+    "VHRCircuitInputs",
+    "WitnessGenerator",
+    "compute_h_gap",
+    "scale_probability",
+    "BN254_PRIME",
+    "HUMANITY_SCALE",
+    "H_GAP_BITS",
+    "H_GAP_MAX",
 ]
