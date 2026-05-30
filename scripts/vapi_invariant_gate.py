@@ -1376,6 +1376,20 @@ INVARIANTS: list[Invariant] = [
         pattern=r"ANCHOR_CADENCE\s*=\s*64",
         min_matches=1,
     ),
+    Invariant(
+        id="INV-POSR-001",
+        description="PoSR bridge-side commitment uses FROZEN-v1 #14 domain tag b'VAPI-TEMPORAL-BEACON-v1' (23 bytes). The same string is keccak256-pinned in VAPITemporalBeaconRegistry's BEACON_DOMAIN (INV-TBR-001). Drift here = silent verifier mismatch — off-chain recomputation produces different commitment than what the proof bound to.",
+        file="bridge/vapi_bridge/replay_proof_pipeline/posr.py",
+        pattern=r'BEACON_DOMAIN_TAG:\s*bytes\s*=\s*b"VAPI-TEMPORAL-BEACON-v1"',
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-POSR-002",
+        description="PoSR close-beacon commitment CHAINS to open-beacon commitment — close cannot be repaired with a different open (the inseparability claim). The literal `open_beacon_commitment` must appear at minimum 2x in posr.py: once in compute_close_beacon_commitment's parameter list AND once in its update() chaining call. Drift = stale/forward-replay attack opens up.",
+        file="bridge/vapi_bridge/replay_proof_pipeline/posr.py",
+        pattern=r"open_beacon_commitment",
+        min_matches=2,
+    ),
 ]
 
 
