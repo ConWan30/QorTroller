@@ -760,6 +760,29 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         rows = store.get_pending_listings(status=status.strip() or "pending")
         return {"status": status, "count": len(rows), "listings": rows}
 
+    @app.get("/curator/pending-replay-proofs")
+    def get_pending_replay_proofs(
+        limit: int = 100,
+        api_key: str = Query(..., description="Shared operator API key"),
+    ):
+        """List Arc 5 VHR packaging entries in a pending state.
+
+        Outcomes returned:
+          • vhr_proof_deferred           — witness assembled; ceremony absent so
+                                           snarkjs cannot prove. Honest no-op.
+          • vhr_proof_built_no_verifier  — proof generated; cfg.replay_proof_verifier
+                                           _address is empty (no on-chain wire).
+          • vhr_proof_built              — full success, awaiting operator-fired
+                                           marketplace submission.
+
+        Read-only; no chain contact. Reads from curator_packaging_log via
+        store.get_pending_replay_proofs. Dormant pipeline → empty list.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        rows = store.get_pending_replay_proofs(limit=int(limit))
+        return {"count": len(rows), "pending_replay_proofs": rows}
+
     @app.post("/curator/approve-listing/{listing_id}")
     def approve_listing(
         listing_id: int,
