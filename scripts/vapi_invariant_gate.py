@@ -1397,6 +1397,13 @@ INVARIANTS: list[Invariant] = [
         pattern=r"^\s*closeBeaconCommitment\s*$",
         min_matches=1,
     ),
+    Invariant(
+        id="INV-VHR-V2-001",
+        description="VAPIReplayProofVerifier_v2 contract PROOF_TYPE FROZEN as keccak256('VAPI-REPLAY-PROOF-v2') — distinct discriminator for PoSR-bound VHR proofs. Does NOT overload Arc 5's INV-VHR-003. Coexists with v1 in the marketplace (recency is opt-in until tournament operator requires).",
+        file="contracts/contracts/VAPIReplayProofVerifier_v2.sol",
+        pattern=r'keccak256\("VAPI-REPLAY-PROOF-v2"\)',
+        min_matches=1,
+    ),
 ]
 
 
