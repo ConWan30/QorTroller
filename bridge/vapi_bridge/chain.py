@@ -4854,6 +4854,13 @@ class ChainClient:
                 {"name": "minPriceVapi",                  "type": "uint256"},
                 {"name": "listingType",                   "type": "uint8"},
                 {"name": "autonomyLevel",                 "type": "uint8"},
+                # Dimension 8 (Arc 5) — VHR policy. Order must match the
+                # Solidity struct declaration exactly; reordering silently
+                # breaks ABI decoding of the getManifest tuple.
+                {"name": "allowReplayProofs",             "type": "bool"},
+                {"name": "replayHumanityThreshold",       "type": "uint8"},
+                {"name": "replayQuantizationBits",        "type": "uint8"},
+                {"name": "replayRequireVerdict",          "type": "bool"},
                 {"name": "updatedAt",                     "type": "uint64"},
                 {"name": "manifestHash",                  "type": "bytes32"},
             ], "name": "", "type": "tuple"}],
@@ -4885,9 +4892,11 @@ class ChainClient:
             )
             checksum_gamer = self._w3.to_checksum_address(gamer_address)
             t = await contract.functions.getManifest(checksum_gamer).call()
-            if int(t[15]) == 0:  # updatedAt == 0 → no manifest set
+            # Dimension 8 added 4 fields (indices 15-18) before updatedAt/hash,
+            # shifting those to 19/20.
+            if int(t[19]) == 0:  # updatedAt == 0 → no manifest set
                 return {}
-            mh = t[16]
+            mh = t[20]
             return {
                 "allow_aggregate_stats":           bool(t[0]),
                 "allow_skill_ranking_proof":       bool(t[1]),
@@ -4904,7 +4913,12 @@ class ChainClient:
                 "min_price_vapi":                  int(t[12]),
                 "listing_type":                    int(t[13]),
                 "autonomy_level":                  int(t[14]),
-                "updated_at":                      int(t[15]),
+                # Dimension 8 (Arc 5) — VHR policy fields.
+                "allow_replay_proofs":             bool(t[15]),
+                "replay_humanity_threshold":       int(t[16]),
+                "replay_quantization_bits":        int(t[17]),
+                "replay_require_verdict":          bool(t[18]),
+                "updated_at":                      int(t[19]),
                 "manifest_hash":                   mh.hex() if isinstance(mh, (bytes, bytearray)) else str(mh),
             }
         except Exception as e:
