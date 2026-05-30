@@ -1306,6 +1306,20 @@ INVARIANTS: list[Invariant] = [
         pattern=r"async def on_session_complete_vhr\s*\(",
         min_matches=1,
     ),
+    Invariant(
+        id="INV-VHR-CEREMONY-001",
+        description="Groth16VerifierVAPIReplayProof.sol is the snarkjs-exported Solidity verifier from the Arc 5 trusted-setup ceremony (2026-05-30; 2 contributors + IoTeX block 44188831 beacon). Renamed from snarkjs default `contract Groth16Verifier` to disambiguate from Phase 237's `Groth16VerifierZKSepProof`. Drift here breaks the wrapper constructor's Groth16 address binding + Hardhat compile (two contracts with the same name).",
+        file="contracts/contracts/Groth16VerifierVAPIReplayProof.sol",
+        pattern=r"contract Groth16VerifierVAPIReplayProof\b",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-VHR-CEREMONY-002",
+        description="VAPIReplayProofVerifier_verification_key.json is the snarkjs-exported verification key, protocol=groth16 + curve=bn128 (BN254). Auditor-reproducible artifact — third parties recompute from the published intermediate zkeys per docs/data-economy-arc5-ceremony-transcript.md §7.",
+        file="contracts/circuits/VAPIReplayProofVerifier_verification_key.json",
+        pattern=r'"protocol":\s*"groth16"',
+        min_matches=1,
+    ),
 ]
 
 
