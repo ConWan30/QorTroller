@@ -1243,7 +1243,13 @@ INVARIANTS: list[Invariant] = [
         min_matches=1,
     ),
     # --- Data Economy Arc 5 — VAPIReplayProofPipeline (VHR proofs) ---------
-    # INV-VHR-003 (contract PROOF_TYPE) is added with the contract in Commit 3.
+    Invariant(
+        id="INV-VHR-003",
+        description="VAPIReplayProofVerifier contract PROOF_TYPE FROZEN as keccak256('VAPI-REPLAY-PROOF-v1') — distinguishes VHR proofs from PitlSessionProof / ZKSepProof on the marketplace; drift here mis-routes listing-type discrimination and breaks Curator orchestration.",
+        file="contracts/contracts/VAPIReplayProofVerifier.sol",
+        pattern=r'keccak256\("VAPI-REPLAY-PROOF-v1"\)',
+        min_matches=1,
+    ),
     Invariant(
         id="INV-VHR-001",
         description="VAPIReplayProofPipeline FROZEN quantization params: RADIAL_BITS=4, TRIGGER_BITS=4, IMU_BITS=3. These pin the phi_spatial grid; drift would change every gamer's quantized replay and break verifier compatibility with anchored proofs.",
