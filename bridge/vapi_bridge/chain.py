@@ -4925,6 +4925,92 @@ class ChainClient:
             log.debug("get_consent_manifest call failed: %s", e)
             return {}
 
+    # --- Data Economy Arc 6: VAPITemporalBeaconRegistry view calls ---
+    #
+    # FROZEN-v1 #14 — BEACON_DOMAIN keccak256("VAPI-TEMPORAL-BEACON-v1").
+    # Read-only access to the on-chain block-hash anchor used for PoSR
+    # session-boundary recency binding. Same fail-open contract as other
+    # Arc-N reads: a missing registry address returns the empty/zero
+    # sentinel; the PoSR binder treats absence as "no PoSR upgrade for
+    # this session" rather than blocking VHR proof generation.
+
+    _TEMPORAL_BEACON_ABI = [
+        {
+            "name": "latestBeacon",
+            "type": "function",
+            "stateMutability": "view",
+            "inputs": [],
+            "outputs": [
+                {"name": "blockNumber", "type": "uint256"},
+                {"name": "blockHash",   "type": "bytes32"},
+            ],
+        },
+        {
+            "name": "verifyBeacon",
+            "type": "function",
+            "stateMutability": "view",
+            "inputs": [
+                {"name": "blockNumber", "type": "uint256"},
+                {"name": "claimedHash", "type": "bytes32"},
+            ],
+            "outputs": [{"name": "", "type": "bool"}],
+        },
+        {
+            "name": "anchoredHash",
+            "type": "function",
+            "stateMutability": "view",
+            "inputs": [{"name": "blockNumber", "type": "uint256"}],
+            "outputs": [{"name": "", "type": "bytes32"}],
+        },
+        {
+            "name": "ANCHOR_CADENCE",
+            "type": "function",
+            "stateMutability": "view",
+            "inputs": [],
+            "outputs": [{"name": "", "type": "uint256"}],
+        },
+    ]
+
+    async def get_latest_temporal_beacon(self) -> tuple[int, bytes]:
+        """Read VAPITemporalBeaconRegistry.latestBeacon(). Returns
+        (block_number, 32-byte block_hash). Fail-open: (0, b"\\x00"*32)
+        when registry address unset OR no anchor yet OR RPC error."""
+        addr = getattr(self._cfg, "temporal_beacon_registry_address", "")
+        if not addr:
+            return (0, b"\x00" * 32)
+        try:
+            contract = self._w3.eth.contract(
+                address=self._w3.to_checksum_address(addr),
+                abi=self._TEMPORAL_BEACON_ABI,
+            )
+            block_number, block_hash = await contract.functions.latestBeacon().call()
+            return (int(block_number), bytes(block_hash))
+        except Exception as e:
+            log.debug("get_latest_temporal_beacon call failed: %s", e)
+            return (0, b"\x00" * 32)
+
+    async def verify_temporal_beacon(
+        self, block_number: int, claimed_hash: bytes,
+    ) -> bool:
+        """Read VAPITemporalBeaconRegistry.verifyBeacon(block, hash). Used
+        by off-chain verifiers to confirm a claimed beacon hash matches the
+        anchored hash for the given block. Fail-closed: returns False on
+        any chain error or unset registry."""
+        addr = getattr(self._cfg, "temporal_beacon_registry_address", "")
+        if not addr:
+            return False
+        try:
+            contract = self._w3.eth.contract(
+                address=self._w3.to_checksum_address(addr),
+                abi=self._TEMPORAL_BEACON_ABI,
+            )
+            return bool(await contract.functions.verifyBeacon(
+                int(block_number), bytes(claimed_hash),
+            ).call())
+        except Exception as e:
+            log.debug("verify_temporal_beacon call failed: %s", e)
+            return False
+
     # ------------------------------------------------------------------
     # Phase 238 Step I — Curator anchor verification view (zero gas)
     # ------------------------------------------------------------------

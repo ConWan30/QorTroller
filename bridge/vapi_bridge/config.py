@@ -1872,6 +1872,17 @@ class Config:
     would replace this with a per-device gamer lookup; for v1, env-driven
     is sufficient."""
 
+    # --- Data Economy Arc 6: VAPITemporalBeaconRegistry (PoSR) ---
+    temporal_beacon_registry_address: str = field(
+        default_factory=lambda: _env("TEMPORAL_BEACON_REGISTRY_ADDRESS", "")
+    )
+    """Data Economy Arc 6 — Deployed VAPITemporalBeaconRegistry address on
+    IoTeX testnet (FROZEN-v1 #14 VAPI-TEMPORAL-BEACON-v1). Empty string =
+    PoSR upgrade dormant; chain.get_latest_temporal_beacon() returns the
+    zero sentinel and the PoSR binder returns None — VHR proofs land
+    without the recency upgrade (v1 Arc 5 behavior). Set after the Arc 6
+    Commit 1 deploy + setKeeper + first anchorBeacon call."""
+
     vpm_anchor_registry_address: str = field(
         default_factory=lambda: _env("VPM_ANCHOR_REGISTRY_ADDRESS", "")
     )
