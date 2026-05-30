@@ -1265,6 +1265,13 @@ INVARIANTS: list[Invariant] = [
         pattern=r'"l4_mahalanobis_distance"',
         min_matches=1,
     ),
+    Invariant(
+        id="INV-VHR-005",
+        description="VAPIReplayProofVerifier circuit off-circuit-root design: sanitizedTraceRoot is a PUBLIC input (drift D-9 resolution; the matrix root is computed off-circuit and recomputed by the verifier off-chain, NOT re-hashed in-circuit as a private witness). The comma-terminated form appears only inside `component main {public [...]}` — private signal declarations end with `;`. Drift here breaks the contract layout (Commit 3) and orchestrator assembly (Commit 4).",
+        file="contracts/circuits/VAPIReplayProofVerifier.circom",
+        pattern=r"^\s*sanitizedTraceRoot,\s*$",
+        min_matches=1,
+    ),
 ]
 
 
