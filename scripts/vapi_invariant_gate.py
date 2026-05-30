@@ -1390,6 +1390,13 @@ INVARIANTS: list[Invariant] = [
         pattern=r"open_beacon_commitment",
         min_matches=2,
     ),
+    Invariant(
+        id="INV-POSR-CIRCUIT-001",
+        description="VAPIReplayProofVerifier_v2 circuit declares the 9-element public-input partition in FROZEN order: sanitizedTraceRoot, poacChainRoot, consentPolicyHash, humanityThreshold, vhpCommitment (Arc 5 5 publics, unchanged), then openBeaconBlock, closeBeaconBlock, openBeaconCommitment, closeBeaconCommitment (Arc 6 4 PoSR publics). The on-chain v2 wrapper's INPUT_* index constants must match this order byte-for-byte. The comma-terminated form below only appears inside `component main {public [...]}`.",
+        file="contracts/circuits/VAPIReplayProofVerifier_v2.circom",
+        pattern=r"^\s*closeBeaconCommitment\s*$",
+        min_matches=1,
+    ),
 ]
 
 
