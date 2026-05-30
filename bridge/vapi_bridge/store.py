@@ -11817,6 +11817,67 @@ class Store:
             )
         return cur.lastrowid  # type: ignore[return-value]
 
+    def get_curator_session_aggregate(self, session_id) -> dict | None:
+        """Return the session-aggregate shape that CuratorPackagingLoop /
+        VAPIReplayProofPipeline expect — for the live bridge's session model
+        where "session" == "validated ruling" (Arc 5 Commit 6 wiring).
+
+        session_id is interpreted as the ruling_id (string or int). Returns
+        None if the ruling doesn't exist OR hasn't been validated yet. Maps:
+            ruling.id           -> session_id
+            ruling.device_id    -> device_id
+            ruling.created_at   -> ended_at
+            ruling.commitment_hash -> session_nonce (deterministic, 32B field)
+            validation.fallback_verdict     -> verdict (HUMAN/CERTIFY/FLAG/...)
+            validation.fallback_confidence  -> humanity_probability
+                  Why fallback rather than llm: matches GIC honesty rail —
+                  GIC stamps the deterministic fallback only (INV-GIC-001),
+                  so the VHR proof must commit to the same verdict the chain
+                  commits to. LLM divergence is recorded separately.
+            0                              -> vhp_token_id (no VHP minted in
+                  v1; orchestrator handles vhp_token_id=0 as "no VHP binding"
+                  honestly — the inner Groth16 still computes vhpCommitment
+                  over (0, sessionNonce) which is a valid commitment over a
+                  null token id).
+
+        Honest gap surfaced: this aggregate has NO gamer_address field. The
+        Arc 5 live-session hook in SessionAdjudicatorValidationAgent passes
+        gamer_address EXPLICITLY from cfg.session_gamer_address rather than
+        reading it from this aggregate (single-tenant testnet posture). If
+        a future commit adds a device->gamer registry, the aggregate's
+        gamer_address would become an actual lookup result.
+        """
+        try:
+            rid = int(session_id)
+        except (TypeError, ValueError):
+            return None
+        with self._conn() as con:
+            row = con.execute(
+                "SELECT r.id, r.device_id, r.commitment_hash, r.created_at,"
+                "       v.fallback_verdict, v.fallback_confidence"
+                " FROM agent_rulings r"
+                " LEFT JOIN ruling_validation_log v ON v.ruling_id = r.id"
+                " WHERE r.id = ? LIMIT 1",
+                (rid,),
+            ).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        if d.get("fallback_verdict") is None:
+            # Ruling exists but not yet validated — caller should defer.
+            return None
+        return {
+            "session_id":           str(d["id"]),
+            "device_id":            d["device_id"],
+            "verdict":              d["fallback_verdict"],
+            "humanity_probability": float(d["fallback_confidence"] or 0.0),
+            "vhp_token_id":         0,
+            "session_nonce":        int(d["commitment_hash"] or "0", 16) if isinstance(d.get("commitment_hash"), str) else 0,
+            "ended_at":             float(d.get("created_at") or 0.0),
+            # gamer_address intentionally omitted — the hook supplies it from
+            # cfg.session_gamer_address at the call site (single-tenant v1).
+        }
+
     def get_pending_replay_proofs(self, limit: int = 100) -> list[dict]:
         """Return Arc 5 VHR packaging audit entries currently in a 'pending'
         state — i.e. proof_deferred (ceremony absent), proof_built_no_verifier
