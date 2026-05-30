@@ -11817,6 +11817,39 @@ class Store:
             )
         return cur.lastrowid  # type: ignore[return-value]
 
+    def get_pending_replay_proofs(self, limit: int = 100) -> list[dict]:
+        """Return Arc 5 VHR packaging audit entries currently in a 'pending'
+        state — i.e. proof_deferred (ceremony absent), proof_built_no_verifier
+        (no on-chain verifier wired), or proof_built (awaiting operator-fired
+        submission). Read directly from the curator_packaging_log table
+        populated by VAPIReplayProofPipeline._audit_and_return — no separate
+        durable surface needed.
+
+        Consumed by GET /curator/pending-replay-proofs.
+        """
+        pending = (
+            "vhr_proof_deferred",
+            "vhr_proof_built_no_verifier",
+            "vhr_proof_built",
+        )
+        placeholders = ",".join("?" for _ in pending)
+        with self._conn() as con:
+            rows = con.execute(
+                f"SELECT * FROM curator_packaging_log "
+                f"WHERE action='vhr_packaging' AND outcome IN ({placeholders}) "
+                f"ORDER BY ts_ns DESC LIMIT ?",
+                (*pending, int(limit)),
+            ).fetchall()
+        out: list[dict] = []
+        for row in rows:
+            d = dict(row)
+            try:
+                d["extra"] = json.loads(d.get("extra") or "{}")
+            except Exception:
+                d["extra"] = {}
+            out.append(d)
+        return out
+
     def get_pending_listings(self, status: str = "pending") -> list[dict]:
         """Return pending listing intents at the given status (default 'pending').
         Arc 3 Commit 1 (consumed by Commit 3 endpoints)."""
