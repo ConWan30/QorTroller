@@ -60,6 +60,15 @@ from .groth16_prover import (
     auto_prover,
     missing_artifacts,
 )
+from .posr import (
+    ANCHOR_CADENCE_BLOCKS,
+    BEACON_DOMAIN_TAG,
+    BeaconReference,
+    PoSRBeaconBinder,
+    PoSRSessionBeacon,
+    compute_close_beacon_commitment,
+    compute_open_beacon_commitment,
+)
 
 __all__ = [
     "DataFloorViolationError",
@@ -100,4 +109,11 @@ __all__ = [
     "artifacts_available",
     "auto_prover",
     "missing_artifacts",
+    "ANCHOR_CADENCE_BLOCKS",
+    "BEACON_DOMAIN_TAG",
+    "BeaconReference",
+    "PoSRBeaconBinder",
+    "PoSRSessionBeacon",
+    "compute_close_beacon_commitment",
+    "compute_open_beacon_commitment",
 ]
