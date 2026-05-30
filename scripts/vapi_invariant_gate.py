@@ -1362,6 +1362,20 @@ INVARIANTS: list[Invariant] = [
         pattern=r"def get_curator_session_aggregate\(self, session_id\)",
         min_matches=1,
     ),
+    Invariant(
+        id="INV-TBR-001",
+        description="VAPITemporalBeaconRegistry BEACON_DOMAIN FROZEN as keccak256('VAPI-TEMPORAL-BEACON-v1') — FROZEN-v1 primitive #14. Drift here cascades through every off-chain verifier reproducing the open/close beacon commitment AND VAPIReplayProofVerifier_v2's recency check.",
+        file="contracts/contracts/VAPITemporalBeaconRegistry.sol",
+        pattern=r'keccak256\("VAPI-TEMPORAL-BEACON-v1"\)',
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-TBR-002",
+        description="Beacon anchor cadence FROZEN at ANCHOR_CADENCE=64 blocks. Bridge clients must align session-boundary beacon reads to this cadence so the hash is always retrievable from the registry at verification time. Drift breaks the bind-to-nearest-cadence-block rule the bridge depends on.",
+        file="contracts/contracts/VAPITemporalBeaconRegistry.sol",
+        pattern=r"ANCHOR_CADENCE\s*=\s*64",
+        min_matches=1,
+    ),
 ]
 
 
