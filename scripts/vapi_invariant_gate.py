@@ -1242,6 +1242,29 @@ INVARIANTS: list[Invariant] = [
         pattern=r"categoryId\s*>=\s*CATEGORY_ACADEMIC\s*&&\s*categoryId\s*<=\s*CATEGORY_BRAND",
         min_matches=1,
     ),
+    # --- Data Economy Arc 5 — VAPIReplayProofPipeline (VHR proofs) ---------
+    # INV-VHR-003 (contract PROOF_TYPE) is added with the contract in Commit 3.
+    Invariant(
+        id="INV-VHR-001",
+        description="VAPIReplayProofPipeline FROZEN quantization params: RADIAL_BITS=4, TRIGGER_BITS=4, IMU_BITS=3. These pin the phi_spatial grid; drift would change every gamer's quantized replay and break verifier compatibility with anchored proofs.",
+        file="bridge/vapi_bridge/replay_proof_pipeline/pre_processor.py",
+        pattern=r"RADIAL_BITS:\s*int\s*=\s*4|TRIGGER_BITS:\s*int\s*=\s*4|IMU_BITS:\s*int\s*=\s*3",
+        min_matches=3,
+    ),
+    Invariant(
+        id="INV-VHR-002",
+        description="VAPIReplayProofPipeline FROZEN output frequency: OUTPUT_HZ=60. The 60 Hz downsample target defines phi_temporal window size; drift changes the median window and the non-invertibility guarantee.",
+        file="bridge/vapi_bridge/replay_proof_pipeline/pre_processor.py",
+        pattern=r"OUTPUT_HZ:\s*int\s*=\s*60",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-VHR-004",
+        description="VAPIReplayProofPipeline FORBIDDEN_COLUMNS frozenset includes l4_mahalanobis_distance, l5_cv, e4_spectral_entropy, ait_rms — the data floor that keeps biometric features out of the replay pipeline (enforced at JSON-key allowlist level; frames_json never persists these).",
+        file="bridge/vapi_bridge/replay_proof_pipeline/pre_processor.py",
+        pattern=r'"l4_mahalanobis_distance"',
+        min_matches=1,
+    ),
 ]
 
 
