@@ -65,7 +65,8 @@ describe("Phase 69 — Data Sovereignty Layer", function () {
 
         it("test_2: grantLicense issues license with correct tier", async function () {
             // DEVELOPER tier = 1, SESSION_DATA = 0
-            const expiry = Math.floor(Date.now() / 1000) + 86400;
+            const blockTs = (await ethers.provider.getBlock("latest")).timestamp;
+            const expiry = blockTs + 86400;
             const tx = await sovereignty.grantLicense(alice.address, 1, 0, expiry);
             await tx.wait();
             const hasAccess = await sovereignty.hasAccess(alice.address, 0);
@@ -73,7 +74,8 @@ describe("Phase 69 — Data Sovereignty Layer", function () {
         });
 
         it("test_3: revokeLicense removes access", async function () {
-            const expiry = Math.floor(Date.now() / 1000) + 86400;
+            const blockTs = (await ethers.provider.getBlock("latest")).timestamp;
+            const expiry = blockTs + 86400;
             await (await sovereignty.grantLicense(alice.address, 1, 0, expiry)).wait();
             const licenseId = 1n;
             await (await sovereignty.revokeLicense(licenseId)).wait();
@@ -116,7 +118,8 @@ describe("Phase 69 — Data Sovereignty Layer", function () {
 
         it("test_6: updateRulingState stores suspension + streaks correctly", async function () {
             const lastHash = "0x" + "cc".repeat(32);
-            const suspendedUntil = Math.floor(Date.now() / 1000) + 3600;
+            const blockTs = (await ethers.provider.getBlock("latest")).timestamp;
+            const suspendedUntil = blockTs + 3600;
             await ruling.updateRulingState(DEVICE_ID_A, true, 3, 1, suspendedUntil, lastHash);
             const s = await ruling.getRulingState(DEVICE_ID_A);
             expect(s.suspended).to.be.true;
@@ -127,7 +130,8 @@ describe("Phase 69 — Data Sovereignty Layer", function () {
         });
 
         it("test_7: isSuspended and isEligible reflect ruling state", async function () {
-            const future = Math.floor(Date.now() / 1000) + 3600;
+            const blockTs = (await ethers.provider.getBlock("latest")).timestamp;
+            const future = blockTs + 3600;
             await ruling.updateRulingState(DEVICE_ID_A, true, 3, 0, future, "0x" + "00".repeat(32));
             expect(await ruling.isSuspended(DEVICE_ID_A)).to.be.true;
             expect(await ruling.isEligible(DEVICE_ID_A)).to.be.false;
