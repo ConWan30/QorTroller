@@ -1,0 +1,9 @@
+# .antigravity/agent-rules.yaml
+# Hard blocking gates evaluated automatically by the Antigravity CLI engine
+exclusion_zones:
+  - path: "**/bridge.db"
+    reason: "DATA FLOOR VIOLATION: Access to raw 1002 Hz HID / 250 Hz IMU time-series log frames denied."
+  - path: "**/*.env"
+    reason: "SECURITY BREACH: Plaintext RPC network configurations or provider secrets are strictly out of scope."
+  - path: "**/*.hex"
+    reason: "CRYPTOGRAPHIC FAILURE: Silicon-rooted private hardware provisioning keys must never be processed by LLM runtimes."
