@@ -79,6 +79,13 @@ sessions/
 *.sqlite3
 
 # Keys / secrets (NEVER commit)
+.vapi/
+*accessKeys.csv
+*.env*
+id_rsa*
+id_dsa*
+id_ed25519*
+id_ecdsa*
 *.pem
 *.der
 *.key

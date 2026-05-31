@@ -1,0 +1,26 @@
+# .claudeignore
+# Claude Code ignore rules to prevent scanning sensitive files
+
+# Database files
+**/bridge.db
+**/*.db
+**/*.sqlite
+**/*.sqlite3
+
+# Environment files
+**/*.env*
+
+# Credentials & Keys
+**/*.pem
+**/*.der
+**/*.key
+**/id_rsa*
+**/id_dsa*
+**/id_ed25519*
+**/id_ecdsa*
+**/*accessKeys.csv
+device_key.json
+identity.json
+.env.local
+.env.*.local
+bridge_config.json
