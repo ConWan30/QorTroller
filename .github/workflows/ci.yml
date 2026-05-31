@@ -5,80 +5,86 @@ on:
     branches: [main, develop, fix/external-review-v1]
   pull_request:
     branches: [main, develop]
+  workflow_dispatch:
 
 jobs:
-  # ── Job 1: Smart Contract tests (Hardhat) — Node 18 + 20 matrix ───────────
-  contracts:
-    name: Smart Contracts (Hardhat / Node ${{ matrix.node-version }})
+  # ── Job 1: Unified Matrix CI Enforcement ────────────────────────────────────
+  ci-enforcement:
+    name: CI Matrix (Python ${{ matrix.python-version }}, Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
+        python-version: ["3.10", "3.11", "3.12"]
         node-version: ["18", "20"]
-    defaults:
-      run:
-        working-directory: contracts
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node-version }}
-          cache: npm
-          cache-dependency-path: contracts/package-lock.json
-
-      # Install circomlib at project root so circuit includes (../../node_modules/circomlib) resolve
-      - name: Install circomlib (project root)
-        working-directory: .
-        run: npm install circomlib
-
-      - name: Install contract dependencies
-        run: npm ci
-
-      - name: Compile contracts
-        run: npx hardhat compile
-
-      - name: Run Hardhat tests
-        run: npx hardhat test
-
-  # ── Job 2: Bridge + SDK pytest — Python 3.11 / 3.12 / 3.13 matrix ─────────
-  bridge:
-    name: Bridge + SDK Tests (Python ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.11", "3.12", "3.13"]
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
           cache-dependency-path: bridge/requirements.txt
 
-      - name: Install bridge dependencies
+      - name: Set up Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+          cache-dependency-path: contracts/package-lock.json
+
+      - name: Set up Rust stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+
+      - name: Install Python dependencies
         run: |
           pip install -r bridge/requirements.txt
-          pip install pytest pytest-asyncio pytest-cov httpx
+          pip install pytest pytest-asyncio pytest-cov httpx cryptography eth-hash[pycryptodome]
 
-      - name: Install SDK dependencies
+      - name: Install Node.js dependencies
         run: |
-          pip install cryptography eth-hash[pycryptodome]
+          npm install circomlib
+          cd contracts
+          npm ci
 
-      - name: Run bridge tests
+      - name: Run 173-Invariant Gate Check
         run: |
-          python -m pytest bridge/tests/ \
-            --ignore=bridge/tests/test_e2e_simulation.py \
-            -m "not hardware" \
-            -q
+          python scripts/vapi_invariant_gate.py
 
-      - name: Run SDK tests
+      - name: Compile Rust WebAssembly Applet
+        run: |
+          cd w3bstream/applet
+          cargo build --target wasm32-unknown-unknown --release
+
+      - name: Run Pytest Bridge Suite
+        run: |
+          python -m pytest bridge/tests/ --ignore=bridge/tests/test_e2e_simulation.py -m "not hardware" -q
+
+      - name: Run Pytest SDK Suite
         run: |
           python -m pytest sdk/tests/ -q
 
-  # ── Job 3: OpenAPI YAML lint ────────────────────────────────────────────────
+      - name: Run W3bstream Ingestion Invariant Test
+        run: |
+          python scripts/test_w3bstream_ingestion.py
+
+      - name: Compile Hardhat Contracts
+        working-directory: contracts
+        run: |
+          npx hardhat compile
+
+      - name: Run Hardhat Contract Tests
+        working-directory: contracts
+        run: |
+          npx hardhat test
+
+  # ── Job 2: OpenAPI YAML lint (Preserved) ────────────────────────────────────
   yaml-lint:
     name: OpenAPI YAML Lint
     runs-on: ubuntu-latest
@@ -106,7 +112,7 @@ jobs:
           print(f'openapi.yaml valid — version={version} paths={len(doc[\"paths\"])}')
           "
 
-  # ── Job 4: Firmware lint (header guards, C source check) ──────────────────
+  # ── Job 3: Firmware lint (Preserved) ────────────────────────────────────────
   firmware-lint:
     name: Firmware Lint
     runs-on: ubuntu-latest
