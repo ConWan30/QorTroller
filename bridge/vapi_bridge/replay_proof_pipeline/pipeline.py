@@ -41,6 +41,7 @@ Spec anchor: docs/VAPI_REPLAY_PROOF_PIPELINE_SPEC (1).md §6 + §10 Commit 4.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
@@ -308,7 +309,10 @@ class VAPIReplayProofPipeline:
         # Step 5 — prover. Defer cleanly when ceremony hasn't fired; never
         # fabricate proof bytes.
         try:
-            proof = self._prover.prove(
+            # Thread C: Offload CPU-heavy proving out-of-band to prevent scheduling
+            # jitter on the 1002 Hz real-time ingestion loop (Thread A).
+            proof = await asyncio.to_thread(
+                self._prover.prove,
                 matrix=matrix,
                 humanity_probability=humanity_prob,
                 humanity_threshold=threshold,
