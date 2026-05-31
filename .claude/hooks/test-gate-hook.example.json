@@ -1,0 +1,28 @@
+{
+  "_doc": "Reference hook config for the test-gate agent. Copy the 'hooks' block below into your .claude/settings.local.json under the top-level object. CC self-modification rail prevents agents from writing to settings.local.json directly, so this is the manual copy step.",
+  "_install_steps": [
+    "1. Open .claude/settings.local.json",
+    "2. Add a top-level 'hooks' key (or merge into an existing one) with the content under 'hooks' below",
+    "3. Save. The hook fires on the next Claude Code session."
+  ],
+  "_what_the_hook_does": [
+    "Intercepts EVERY Bash tool call whose command matches `pytest|hardhat test|forge test`.",
+    "AFTER the tool runs (PostToolUse), checks the exit code from $CLAUDE_TOOL_EXIT.",
+    "If non-zero AND it looks like a real test failure, emits a structured prompt that Claude treats as user input — instructing Claude to invoke the test-gate subagent on the failing command for self-healing classification.",
+    "The hook itself is a single bash one-liner; the workaround logic lives in the test-gate agent."
+  ],
+
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if echo \"$CLAUDE_TOOL_COMMAND\" | grep -qE '(pytest|hardhat[[:space:]]+test|forge[[:space:]]+test)' && [ \"${CLAUDE_TOOL_EXIT:-0}\" -ne 0 ]; then printf '[test-gate-hook] FAILED pytest/hardhat detected (exit %s). Re-dispatch via test-gate subagent to classify pass/fail/known-friction. Spec at .claude/agents/test-gate.md. Failing command: %s' \"$CLAUDE_TOOL_EXIT\" \"$CLAUDE_TOOL_COMMAND\"; fi"
+          }
+        ]
+      }
+    ]
+  }
+}
