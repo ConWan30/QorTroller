@@ -4952,6 +4952,7 @@ class ChainClient:
             "inputs": [
                 {"name": "blockNumber", "type": "uint256"},
                 {"name": "claimedHash", "type": "bytes32"},
+                {"name": "pqCommitment", "type": "bytes32"},
             ],
             "outputs": [{"name": "", "type": "bool"}],
         },
@@ -4990,9 +4991,9 @@ class ChainClient:
             return (0, b"\x00" * 32)
 
     async def verify_temporal_beacon(
-        self, block_number: int, claimed_hash: bytes,
+        self, block_number: int, claimed_hash: bytes, pq_commitment: bytes,
     ) -> bool:
-        """Read VAPITemporalBeaconRegistry.verifyBeacon(block, hash). Used
+        """Read VAPITemporalBeaconRegistry.verifyBeacon(block, hash, pqCommitment). Used
         by off-chain verifiers to confirm a claimed beacon hash matches the
         anchored hash for the given block. Fail-closed: returns False on
         any chain error or unset registry."""
@@ -5005,7 +5006,7 @@ class ChainClient:
                 abi=self._TEMPORAL_BEACON_ABI,
             )
             return bool(await contract.functions.verifyBeacon(
-                int(block_number), bytes(claimed_hash),
+                int(block_number), bytes(claimed_hash), bytes(pq_commitment),
             ).call())
         except Exception as e:
             log.debug("verify_temporal_beacon call failed: %s", e)

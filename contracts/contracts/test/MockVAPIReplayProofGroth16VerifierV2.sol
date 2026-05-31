@@ -14,7 +14,8 @@ contract MockVAPIReplayProofGroth16VerifierV2 {
 contract MockVAPITemporalBeaconRegistry {
     mapping(uint256 => bytes32) public anchoredHash;
     function setAnchored(uint256 blk, bytes32 h) external { anchoredHash[blk] = h; }
-    function verifyBeacon(uint256 blk, bytes32 claimed) external view returns (bool) {
+    function verifyBeacon(uint256 blk, bytes32 claimed, bytes32 pqCommitment) external view returns (bool) {
+        require(pqCommitment != bytes32(0), "VAPI: Zero PQ Commitment Disallowed");
         return anchoredHash[blk] != bytes32(0) && anchoredHash[blk] == claimed;
     }
 }
