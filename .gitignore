@@ -213,3 +213,5 @@ bcc_l9/
 
 # Design system handoff staging (read-only reference; never commit)
 .design-handoff-staging/
+
+.claude/test-gate/
