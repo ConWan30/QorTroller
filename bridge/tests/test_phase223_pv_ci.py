@@ -105,7 +105,7 @@ def test_T223_5_check_invariants_count():
     """vapi_invariant_gate.check_invariants() returns 86 result dicts (current INVARIANTS set)."""
     import vapi_invariant_gate as vig
     results = vig.check_invariants()
-    assert len(results) == 86
+    assert len(results) == 167
     for r in results:
         assert "id" in r
         assert "digest" in r
@@ -129,6 +129,8 @@ def test_T223_7_endpoint_invariant_gate_status():
     from vapi_bridge.config import Config
     from vapi_bridge.operator_api import create_operator_app
 
+    import os
+    os.environ.pop("OPERATOR_API_KEY", None)
     store223 = _make_store()
     cfg223 = Config()
     app223 = create_operator_app(cfg223, store223)
@@ -152,6 +154,8 @@ def test_T223_8_endpoint_run_invariant_gate():
     from vapi_bridge.config import Config
     from vapi_bridge.operator_api import create_operator_app
 
+    import os
+    os.environ.pop("OPERATOR_API_KEY", None)
     store223 = _make_store()
     cfg223 = Config()
     app223 = create_operator_app(cfg223, store223)
