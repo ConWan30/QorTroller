@@ -15,6 +15,7 @@ describe("Arc 6 — VAPIReplayProofVerifier_v2 (PoSR wrapper)", function () {
     const CLOSE_BEACON_COMMIT   = ethers.toBigInt("0x17".padEnd(66, "17"));
     const OPEN_BEACON_HASH      = "0x" + "ab".repeat(32);
     const CLOSE_BEACON_HASH     = "0x" + "cd".repeat(32);
+    const MOCK_PQ_COMMITMENT    = "0x" + "12".repeat(32);
     const PUBLIC_INPUTS = [
         REPLAY_PROOF_TOKEN, SANITIZED_TRACE_ROOT, POAC_CHAIN_ROOT,
         CONSENT_POLICY_HASH, HUMANITY_THRESHOLD, VHP_COMMITMENT,
@@ -68,7 +69,7 @@ describe("Arc 6 — VAPIReplayProofVerifier_v2 (PoSR wrapper)", function () {
     it("T-VHR-V2-4: happy path — verify + check beacons + emit event", async function () {
         await expect(verifier.verifyWithRecency(
             PROOF_A, PROOF_B, PROOF_C, PUBLIC_INPUTS,
-            OPEN_BEACON_HASH, CLOSE_BEACON_HASH,
+            OPEN_BEACON_HASH, CLOSE_BEACON_HASH, MOCK_PQ_COMMITMENT,
         )).to.emit(verifier, "ReplayProofVerifiedV2");
     });
 
@@ -76,7 +77,7 @@ describe("Arc 6 — VAPIReplayProofVerifier_v2 (PoSR wrapper)", function () {
         await groth16Mock.setVerifyResult(false);
         await expect(verifier.verifyWithRecency(
             PROOF_A, PROOF_B, PROOF_C, PUBLIC_INPUTS,
-            OPEN_BEACON_HASH, CLOSE_BEACON_HASH,
+            OPEN_BEACON_HASH, CLOSE_BEACON_HASH, MOCK_PQ_COMMITMENT,
         )).to.be.revertedWithCustomError(verifier, "InvalidGroth16Proof");
     });
 
@@ -84,7 +85,7 @@ describe("Arc 6 — VAPIReplayProofVerifier_v2 (PoSR wrapper)", function () {
         await expect(verifier.verifyWithRecency(
             PROOF_A, PROOF_B, PROOF_C, PUBLIC_INPUTS,
             "0x" + "00".repeat(32),   // wrong open hash
-            CLOSE_BEACON_HASH,
+            CLOSE_BEACON_HASH, MOCK_PQ_COMMITMENT,
         )).to.be.revertedWithCustomError(verifier, "OpenBeaconUnverified");
     });
 
@@ -92,14 +93,21 @@ describe("Arc 6 — VAPIReplayProofVerifier_v2 (PoSR wrapper)", function () {
         // Wrong close hash
         await expect(verifier.verifyWithRecency(
             PROOF_A, PROOF_B, PROOF_C, PUBLIC_INPUTS,
-            OPEN_BEACON_HASH, "0x" + "00".repeat(32),
+            OPEN_BEACON_HASH, "0x" + "00".repeat(32), MOCK_PQ_COMMITMENT,
         )).to.be.revertedWithCustomError(verifier, "CloseBeaconUnverified");
         // close == open via shuffled publicInputs
         const equalBlocks = [...PUBLIC_INPUTS];
         equalBlocks[7] = OPEN_BEACON_BLOCK;
         await expect(verifier.verifyWithRecency(
             PROOF_A, PROOF_B, PROOF_C, equalBlocks,
-            OPEN_BEACON_HASH, OPEN_BEACON_HASH,
+            OPEN_BEACON_HASH, OPEN_BEACON_HASH, MOCK_PQ_COMMITMENT,
         )).to.be.revertedWithCustomError(verifier, "CloseNotAfterOpen");
+    });
+
+    it("T-VHR-V2-8: revert when pqCommitment is zero-address / ZeroHash", async function () {
+        await expect(verifier.verifyWithRecency(
+            PROOF_A, PROOF_B, PROOF_C, PUBLIC_INPUTS,
+            OPEN_BEACON_HASH, CLOSE_BEACON_HASH, ethers.ZeroHash,
+        )).to.be.revertedWith("VAPI: Zero PQ Commitment Disallowed");
     });
 });

@@ -45,7 +45,7 @@ interface IVAPIReplayProofGroth16VerifierV2 {
 }
 
 interface IVAPITemporalBeaconRegistry {
-    function verifyBeacon(uint256 blockNumber, bytes32 claimedHash)
+    function verifyBeacon(uint256 blockNumber, bytes32 claimedHash, bytes32 pqCommitment)
         external view returns (bool);
 }
 
@@ -106,7 +106,8 @@ contract VAPIReplayProofVerifier_v2 {
         uint256[2] calldata c,
         uint256[10] calldata publicInputs,
         bytes32 openBeaconHashBytes32,
-        bytes32 closeBeaconHashBytes32
+        bytes32 closeBeaconHashBytes32,
+        bytes32 pqCommitment
     ) external returns (bool, uint256, uint256) {
         // 1. Groth16 proof valid (in-circuit constraints include open/close
         //    commitment integrity + temporal ordering)
@@ -124,8 +125,8 @@ contract VAPIReplayProofVerifier_v2 {
         // 3. Beacon hashes match the registry's durable anchor — closes the
         //    loop between in-circuit Poseidon commitment and on-chain truth
         IVAPITemporalBeaconRegistry reg = IVAPITemporalBeaconRegistry(beaconRegistry);
-        if (!reg.verifyBeacon(openBlock,  openBeaconHashBytes32))  revert OpenBeaconUnverified();
-        if (!reg.verifyBeacon(closeBlock, closeBeaconHashBytes32)) revert CloseBeaconUnverified();
+        if (!reg.verifyBeacon(openBlock,  openBeaconHashBytes32, pqCommitment))  revert OpenBeaconUnverified();
+        if (!reg.verifyBeacon(closeBlock, closeBeaconHashBytes32, pqCommitment)) revert CloseBeaconUnverified();
 
         emit ReplayProofVerifiedV2(
             bytes32(publicInputs[INPUT_REPLAY_PROOF_TOKEN]),
@@ -147,7 +148,8 @@ contract VAPIReplayProofVerifier_v2 {
         uint256[2] calldata c,
         uint256[10] calldata publicInputs,
         bytes32 openBeaconHashBytes32,
-        bytes32 closeBeaconHashBytes32
+        bytes32 closeBeaconHashBytes32,
+        bytes32 pqCommitment
     ) external view returns (bool) {
         bool ok = IVAPIReplayProofGroth16VerifierV2(groth16Verifier)
             .verifyProof(a, b, c, publicInputs);
@@ -156,8 +158,8 @@ contract VAPIReplayProofVerifier_v2 {
         uint256 closeBlock = publicInputs[INPUT_CLOSE_BEACON_BLOCK];
         if (closeBlock <= openBlock) return false;
         IVAPITemporalBeaconRegistry reg = IVAPITemporalBeaconRegistry(beaconRegistry);
-        if (!reg.verifyBeacon(openBlock,  openBeaconHashBytes32))  return false;
-        if (!reg.verifyBeacon(closeBlock, closeBeaconHashBytes32)) return false;
+        if (!reg.verifyBeacon(openBlock,  openBeaconHashBytes32, pqCommitment))  return false;
+        if (!reg.verifyBeacon(closeBlock, closeBeaconHashBytes32, pqCommitment)) return false;
         return true;
     }
 }

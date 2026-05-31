@@ -115,11 +115,18 @@ describe("Arc 6 — VAPITemporalBeaconRegistry", function () {
         let target = cur - 10; target -= (target % 64);
         const expectedHash = (await ethers.provider.getBlock(target)).hash;
         await reg.connect(keeper).anchorBeacon(target);
-        expect(await reg.verifyBeacon(target, expectedHash)).to.equal(true);
+        
+        const mockPQ = ethers.id("mock-pq-commitment");
+        
+        expect(await reg.verifyBeacon(target, expectedHash, mockPQ)).to.equal(true);
         // Wrong hash → false
-        expect(await reg.verifyBeacon(target, ethers.ZeroHash)).to.equal(false);
+        expect(await reg.verifyBeacon(target, ethers.ZeroHash, mockPQ)).to.equal(false);
         // Unanchored block → false
         const otherTarget = target - 64;
-        expect(await reg.verifyBeacon(otherTarget, expectedHash)).to.equal(false);
+        expect(await reg.verifyBeacon(otherTarget, expectedHash, mockPQ)).to.equal(false);
+        
+        // Zero commitment -> reverts
+        await expect(reg.verifyBeacon(target, expectedHash, ethers.ZeroHash))
+            .to.be.revertedWith("VAPI: Zero PQ Commitment Disallowed");
     });
 });

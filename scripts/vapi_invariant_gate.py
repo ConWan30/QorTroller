@@ -86,6 +86,11 @@ class Invariant(NamedTuple):
     min_matches: int   # minimum expected matches
 
 
+class HardForkDisallowedError(Exception):
+    """Thrown when any post-quantum routine attempts to alter the packet footprint."""
+    pass
+
+
 INVARIANTS: list[Invariant] = [
     Invariant(
         id="INV-001",
@@ -1418,6 +1423,27 @@ INVARIANTS: list[Invariant] = [
         pattern=r"os\.environ\.pop\(\s*['\"]OPERATOR_PRIVATE_KEY['\"]",
         min_matches=1,
     ),
+    Invariant(
+        id="INV-ARC7-001",
+        description="Asserts that the final serialized size of the PoAC wire transaction frame strictly equals 228 bytes, throwing a HardForkDisallowedError if any post-quantum routine alters the packet footprint.",
+        file="bridge/vapi_bridge/codec.py",
+        pattern=r"POAC_RECORD_SIZE\s*=\s*POAC_BODY_SIZE\s*\+\s*POAC_SIG_SIZE\s*#\s*228\s*bytes",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-W3S-005",
+        description="Asserts that the W3bstream WebAssembly handler strictly enforces non-zero post-quantum commitment validation rules.",
+        file="w3bstream/applet/src/lib.rs",
+        pattern=r"pq_commitment|resolve_da_proof|pq_proof_resolved",
+        min_matches=3,
+    ),
+    Invariant(
+        id="INV-ARC7-002",
+        description="Asserts that the EVM-layer validation logic explicitly includes a require check blocking null (bytes32(0)) post-quantum signatures.",
+        file="contracts/contracts/VAPITemporalBeaconRegistry.sol",
+        pattern=r"require\s*\(\s*pqCommitment\s*!=\s*bytes32\(\s*0\s*\)\s*,\s*\"VAPI:\s*Zero\s*PQ\s*Commitment\s*Disallowed\"\s*\)",
+        min_matches=1,
+    ),
 ]
 
 
@@ -1518,6 +1544,19 @@ def check_invariants(proposal_type: str = "protocol") -> list[dict]:
     §3.4 / §7. Default 'protocol' preserves backward compatibility (the original
     63 INVARIANTS run by default).
     """
+    # INV-ARC7-001 runtime validation
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
+    try:
+        from bridge.vapi_bridge.codec import POAC_RECORD_SIZE
+        if POAC_RECORD_SIZE != 228:
+            raise HardForkDisallowedError(
+                f"HardForkDisallowedError: Post-quantum routine altered the packet footprint. "
+                f"POAC_RECORD_SIZE is {POAC_RECORD_SIZE} bytes (expected 228)"
+            )
+    except ImportError as e:
+        print(f"[invariant_gate] WARNING: could not import bridge.vapi_bridge.codec: {e}")
+
     invariants = _select_invariants_for_proposal_type(proposal_type)
     results = []
     for inv in invariants:

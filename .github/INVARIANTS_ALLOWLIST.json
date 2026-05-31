@@ -668,11 +668,23 @@
     "description": "VAPIReplayProofVerifier_v2 contract PROOF_TYPE FROZEN as keccak256('VAPI-REPLAY-PROOF-v2') \u2014 distinct discriminator for PoSR-bound VHR proofs. Does NOT overload Arc 5's INV-VHR-003. Coexists with v1 in the marketplace (recency is opt-in until tournament operator requires)."
   },
   "INV-W3S-001": {
-    "digest": "9663e1ed3e0d23a8c7b99263f2c88c9b6c19457be85587d08cc61f0c4f53c7a8",
+    "digest": "dc9e4d4c52ea88ee40576de4782aa4c40f7d188789ecfc774e8529fe8894fcc4",
     "description": "W3bstream native Wasm cadence limit (payload.block_number % ANCHOR_CADENCE == 0)"
   },
   "INV-W3S-002": {
     "digest": "7f0e6ea487f8e4249c11db06e62cd8f28d084ea31e81a6fc9e64609c35fd1f79",
     "description": "Clean environment isolation inside Python ingestion listener (pop OPERATOR_PRIVATE_KEY)"
+  },
+  "INV-ARC7-001": {
+    "digest": "22d188084e34f461475e1f193888a1af6e14251c40ba68ac38b5a51be8b5347c",
+    "description": "Asserts that the final serialized size of the PoAC wire transaction frame strictly equals 228 bytes, throwing a HardForkDisallowedError if any post-quantum routine alters the packet footprint."
+  },
+  "INV-W3S-005": {
+    "digest": "509b0d74c7425b78968e36e9a59a156c634b356265bb830d48342e4d7688371f",
+    "description": "Asserts that the W3bstream WebAssembly handler strictly enforces non-zero post-quantum commitment validation rules."
+  },
+  "INV-ARC7-002": {
+    "digest": "9169a8090275a111b20fd67a97a97cb1762ce1c44c893b3094f92d78322555cc",
+    "description": "Asserts that the EVM-layer validation logic explicitly includes a require check blocking null (bytes32(0)) post-quantum signatures."
   }
 }

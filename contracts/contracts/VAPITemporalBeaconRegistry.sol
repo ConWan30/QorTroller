@@ -111,9 +111,10 @@ contract VAPITemporalBeaconRegistry is Ownable {
     /// @notice Pure view — confirm a claimed beacon hash matches the anchored
     /// hash for blockNumber. Used by VAPIReplayProofVerifier_v2.verifyWithRecency
     /// at proof-verification time.
-    function verifyBeacon(uint256 blockNumber, bytes32 claimedHash)
+    function verifyBeacon(uint256 blockNumber, bytes32 claimedHash, bytes32 pqCommitment)
         external view returns (bool)
     {
+        require(pqCommitment != bytes32(0), "VAPI: Zero PQ Commitment Disallowed");
         bytes32 stored = anchoredHash[blockNumber];
         return stored != bytes32(0) && stored == claimedHash;
     }
