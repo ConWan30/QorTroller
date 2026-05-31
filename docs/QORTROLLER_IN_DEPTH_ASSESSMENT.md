@@ -86,3 +86,47 @@ Close Commitment = SHA-256( BEACON_DOMAIN_TAG || Close_Block_Number || Close_Blo
 ### Web3 Sybil Defense
 * **Implementation**: Smart contracts gate token distribution, beta access, or item drops on holding a valid `VHP` (Verified Human Proof) credential bound to a certified controller.
 * **Benefit**: Replaces easily circumvented bot challenges (CAPTCHA, SMS verification) with a cryptographic proof of physical gameplay liveness.
+
+---
+
+## 5. Grind Integrity Chain (GIC): Tamper-Proof Session Chaining
+
+During long-term player profiling (e.g., the 100-session grind to establish baseline parameters), QorTroller links consecutive sessions into a **Grind Integrity Chain (GIC)**.
+
+### GIC Chaining Formula
+The chain is constructed as a running hash-chain using SHA-256 over 74-byte serialized blocks:
+```
+GIC_N = SHA-256( prev_gic_hash(32) || commitment_hash(32) || verdict_code(1) || host_state_code(1) || ts_ns_be(8) )
+```
+* **Commitment Hash**: SHA-256 commitment of the session data.
+* **Verdict & Host Codes**: Hardcoded bytes representing the local rule fallback verdict (e.g., `0x00` for CLEAR, `0x01` for CERTIFY) and host transport state (e.g., `0x01` for EXCLUSIVE_USB).
+* **Monotonicity Guard**: To prevent timestamp manipulation or duplication from backward NTP adjustments, the integer timestamp `ts_ns_be` is enforced to be strictly greater than the previous block's timestamp. If a system call returns an equal or smaller nanosecond value, the bridge auto-increments it by 1 nanosecond relative to its predecessor.
+* **Fail-Safe Startup Verification**: On bridge boot, it audits the database GIC chain. If any linkage mismatch or break is detected (`chain_intact == False`), the bridge sets `_gic_chain_broken = True`, stopping any new GIC stamp validation until resolved by operator intervention (`/operator/gic-reset`).
+
+---
+
+## 6. Host Arbitration: Dual-Connection Controller Topology
+
+For competitive games (like NCAA College Football 26 on PS5), validating gameplay requires a **Dual-Connection Setup**:
+1. **Bluetooth Connection**: The controller remains paired directly to the console (PS5) for real-time low-latency gameplay inputs.
+2. **USB-C Data Cable**: The controller is concurrently connected to a local monitoring host (e.g., laptop running the FastAPI bridge). The bridge reads raw polling reports at 1000 Hz.
+
+### Host State Inference
+The `CaptureHealthMonitor` determines whether the controller inputs are contested or cleanly isolated:
+- **Exclusive USB**: A rolling 60-sample window of polling intervals is analyzed. If the polling rate is stable at $\ge 900$ Hz with a Coefficient of Variation ($CV$) $< 0.20$, the host state is classified as `EXCLUSIVE_USB`.
+- **Contested**: If $CV \ge 0.40$, it indicates packet jitter (e.g., software process contention or virtualization), setting the state to `CONTESTED`.
+- **Divergence Guard**: If a contested state or unstable connection occurs, the active session is excluded from the grind chain, preventing script-driven virtual USB injection.
+
+---
+
+## 7. Operational Resilience: Event Loop Safety & LLM Fallback
+
+### Event Loop Safety (Ring-0 Host Concurrency)
+FastAPI bridge operations are optimized to prevent stalls on the single-threaded Python event loop:
+- **Thread Delegation**: CPU-heavy tasks (like SQLite write-locks or numpy Mahalanobis matrix calculations) are executed in separate worker threads using `asyncio.to_thread()`, keeping HTTP `/health` responses responsive in $< 1$s.
+- **Explicit Yielding**: Background coroutines yield control back to the event loop using `await asyncio.sleep(0)` during heavy iterations, preserving network ingestion responsiveness.
+
+### LLM API Fail-Safe Model
+Adjudications use large language models (Claude Opus) via the Anthropic API. To prevent network latency, rate limits, or API outages from disrupting the gameplay validation flow:
+- **Deterministic Fallbacks**: Every API call is wrapped in a fail-safe try-except block. In the event of API timeout or credential failure, the bridge automatically falls back to a deterministic rule-based verdict (`_rule_fallback()`).
+- **No Chain Breaks**: Since the GIC hashes the fallback verdict (not the non-deterministic LLM response), API availability has zero impact on the cryptographic integrity of the session ledger.
