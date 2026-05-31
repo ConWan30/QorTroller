@@ -1404,6 +1404,20 @@ INVARIANTS: list[Invariant] = [
         pattern=r'keccak256\("VAPI-REPLAY-PROOF-v2"\)',
         min_matches=1,
     ),
+    Invariant(
+        id="INV-W3S-001",
+        description="W3bstream native Wasm cadence limit (payload.block_number % ANCHOR_CADENCE == 0)",
+        file="w3bstream/applet/src/lib.rs",
+        pattern=r"payload\.block_number\s*%\s*ANCHOR_CADENCE",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-W3S-002",
+        description="Clean environment isolation inside Python ingestion listener (pop OPERATOR_PRIVATE_KEY)",
+        file="scripts/test_w3bstream_ingestion.py",
+        pattern=r"os\.environ\.pop\(\s*['\"]OPERATOR_PRIVATE_KEY['\"]",
+        min_matches=1,
+    ),
 ]
 
 
