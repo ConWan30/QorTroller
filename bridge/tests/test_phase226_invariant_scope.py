@@ -31,7 +31,7 @@ def _load_gate():
 # T226-1: INVARIANTS list now contains exactly 86 entries
 def test_t226_1_invariants_count():
     gate = _load_gate()
-    assert len(gate.INVARIANTS) == 167
+    assert len(gate.INVARIANTS) == 169
 
 
 # T226-2: INV-019 matches _compute_governance_provenance_hash in gate script
@@ -73,7 +73,7 @@ def test_t226_5_inv022_store_table():
 # T226-6: INVARIANTS_ALLOWLIST.json has 86 entries after regeneration
 def test_t226_6_allowlist_has_86_entries():
     allowlist = json.loads(ALLOWLIST_PATH.read_text(encoding="utf-8"))
-    assert len(allowlist) == 139
+    assert len(allowlist) == 169
     assert "INV-019" in allowlist
     assert "INV-020" in allowlist
     assert "INV-021" in allowlist
@@ -106,4 +106,4 @@ def test_t226_8_allowlist_hash_86_entries():
     assert h != "0" * 64
     # Allowlist file must have 86 entries for this hash to be correct
     allowlist = json.loads(ALLOWLIST_PATH.read_text(encoding="utf-8"))
-    assert len(allowlist) == 139
+    assert len(allowlist) == 169

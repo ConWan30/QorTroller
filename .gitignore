@@ -222,3 +222,6 @@ bcc_l9/
 .design-handoff-staging/
 
 .claude/test-gate/
+
+# W3bstream Rust build outputs
+w3bstream/applet/target/

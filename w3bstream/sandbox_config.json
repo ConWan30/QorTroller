@@ -1,0 +1,12 @@
+{
+  "sandbox_name": "W3bstream-PoAC-Compute-Sandbox",
+  "version": "1.0.0",
+  "wasm_path": "target/wasm32-unknown-unknown/release/w3bstream_applet.wasm",
+  "anchor_cadence": 64,
+  "enforce_temporal_rules": true,
+  "mechanisms": {
+    "frame_grabbing": false,
+    "optical_capture": false,
+    "blockhash_temporal_rules": true
+  }
+}

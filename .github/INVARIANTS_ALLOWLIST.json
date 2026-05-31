@@ -554,5 +554,125 @@
   "INV-QORTROLLER-FAMILIES-001": {
     "digest": "231fe3ca3401f5f61c98d40083581f93dde0e6df460725ab3658b07e67d8e4db",
     "description": "QorTroller-namespace frozen-family frozenset pinned in bridge/vapi_bridge/mythos_variants.py \u2014 _QORTROLLER_FROZEN_FAMILY_TAGS declares exactly the two tag-literals b\"QORTROLLER-IPACT-RENEWAL-v1\" and b\"QORTROLLER-IPACT-RENEWAL-GENESIS-v1\" (2 tag-entries = 1 family = the 1st QorTroller-namespace family, (3) iPACT renewal cadence; qortroller_commitment_family_count=1). Per FC-(a) this is SEPARATE from VAPI Layer-C: frozen_v1_commitment_family_count stays 12 and INV-MYTHOS-FAMILIES-001 is untouched. Pins the frozenset declaration line + both member literals; min_matches=3 catches removal of the declaration or either tag."
+  },
+  "INV-MFG-001": {
+    "digest": "2f7b3dffe88bb64f9699a2daf9151434c3f49aff15ba95f48cdbe8283727ee7b",
+    "description": "VAPIManufacturerDeviceRegistry FROZEN signingPath enum: SIGNING_PATH_A=1, SIGNING_PATH_B=2 (Path A Arc 1; pinned because changing these values silently inverts every Path A eligibility decision \u2014 a Path B device would read as Path A or vice versa)."
+  },
+  "INV-MFG-002": {
+    "digest": "8b644591c89ccd870818969d5af764cd258856ed996b4d802a8f141f39bb586a",
+    "description": "VAPIManufacturerDeviceRegistry FROZEN proofTier enum: PROOF_TIER_FULL=1, PROOF_TIER_STANDARD=2, PROOF_TIER_BASIC=3 (Path A Arc 1; tiers correspond to DualSense Edge CFI-ZCP1 / DualSense CFI-ZCT1 / third-party \u2014 drift would silently reclassify hardware capability)."
+  },
+  "INV-LENS-V2-001": {
+    "digest": "000c4140d4d03db602bd9bfa2f7fd9d56d911d65ca95ea4c27fb04d648e4963c",
+    "description": "VAPIProtocolLensV2 FROZEN function surface: isFullyEligible_PathA(bytes32) + getDeviceTier(bytes32) \u2014 both pinned in the v2 source. Tournament integrators bind against these names; renaming either is a wire-break for every Path A consumer."
+  },
+  "INV-BUY-001": {
+    "digest": "94b3c46e524ad95f4f398eb3e5d3cd73bdf5e83f60011abe13bfab6c31af680f",
+    "description": "VAPIBuyerRegistry FROZEN category enum: CATEGORY_ACADEMIC=1, CATEGORY_GAME_DEV=2, CATEGORY_ESPORTS=3, CATEGORY_BRAND=4. These values are the credential domain \u2014 drift silently reclassifies every issued buyer credential."
+  },
+  "INV-BUY-002": {
+    "digest": "8caf8ed8c546f57e8f1230a2c1d00bd704dda01ff12cdc3724b6da9f6d2a6016",
+    "description": "VAPIBuyerRegistry issueCredential enforces the FROZEN category range (categoryId >= CATEGORY_ACADEMIC && categoryId <= CATEGORY_BRAND) \u2014 the on-chain guard that makes INV-BUY-001 load-bearing. Removing it would let the Curator mint credentials in unallocated category slots (5+)."
+  },
+  "INV-VHR-003": {
+    "digest": "9efd4535764150f373182b11290dc64a3828977f569a17b3f98072f0acc3d460",
+    "description": "VAPIReplayProofVerifier contract PROOF_TYPE FROZEN as keccak256('VAPI-REPLAY-PROOF-v1') \u2014 distinguishes VHR proofs from PitlSessionProof / ZKSepProof on the marketplace; drift here mis-routes listing-type discrimination and breaks Curator orchestration."
+  },
+  "INV-VHR-001": {
+    "digest": "b465d83e1db860b0fd35ab5e62736cf6e717af937d2453e4384015d0e30ed4cb",
+    "description": "VAPIReplayProofPipeline FROZEN quantization params: RADIAL_BITS=4, TRIGGER_BITS=4, IMU_BITS=3. These pin the phi_spatial grid; drift would change every gamer's quantized replay and break verifier compatibility with anchored proofs."
+  },
+  "INV-VHR-002": {
+    "digest": "96cb4f23983cac66c76fbd8e334492c3663572fa6aeff3c4a45a7a702f03f074",
+    "description": "VAPIReplayProofPipeline FROZEN output frequency: OUTPUT_HZ=60. The 60 Hz downsample target defines phi_temporal window size; drift changes the median window and the non-invertibility guarantee."
+  },
+  "INV-VHR-004": {
+    "digest": "5e24229137e360d4696c99ec3d3ac3d0be482f84ad0b72994dac95cf6d30bbe1",
+    "description": "VAPIReplayProofPipeline FORBIDDEN_COLUMNS frozenset includes l4_mahalanobis_distance, l5_cv, e4_spectral_entropy, ait_rms \u2014 the data floor that keeps biometric features out of the replay pipeline (enforced at JSON-key allowlist level; frames_json never persists these)."
+  },
+  "INV-VHR-005": {
+    "digest": "f1caf2c7cbe497bffca14252c7aa2f8521f2f63d7450a744ea470b06c2570d59",
+    "description": "VAPIReplayProofVerifier circuit off-circuit-root design: sanitizedTraceRoot is a PUBLIC input (drift D-9 resolution; the matrix root is computed off-circuit and recomputed by the verifier off-chain, NOT re-hashed in-circuit as a private witness). The comma-terminated form appears only inside `component main {public [...]}` \u2014 private signal declarations end with `;`. Drift here breaks the contract layout (Commit 3) and orchestrator assembly (Commit 4)."
+  },
+  "INV-VHR-006": {
+    "digest": "401f4dd7f8f1212bb0f79120907cdaf8ccc9094bdf976a958ed2a281e71f240c",
+    "description": "VAPIConsentManifestRegistry Dimension 8 (Arc 5) fields: allowReplayProofs, replayHumanityThreshold, replayQuantizationBits, replayRequireVerdict. Dimension 8 is the on-chain consent surface the Arc 5 orchestrator reads to gate VHR packaging; drift in field names breaks the bridge ABI (chain.get_consent_manifest) and the Curator packaging hook."
+  },
+  "INV-VHR-007": {
+    "digest": "9399d446260bc14e4228370ab680fb15731e579a1d9aa7e690459b7fc1a178b6",
+    "description": "REPLAY_QUANTIZATION_BITS_FLOOR = 4 in VAPIConsentManifestRegistry equals Arc 5 INV-VHR-001 RADIAL_BITS = 4. A drift here would let a gamer's consent request a finer or coarser grid than the pre-processor produces \u2014 covert biometric leakage vector or unbuildable matrix. Equality pinned by setManifest revert."
+  },
+  "INV-VHR-008": {
+    "digest": "b4c6077c96fb3599dcef1d7edbdd3d7f4a3e13077d5ddc989b3a4c7199276dc8",
+    "description": "VAPIReplayProofPipeline outcome codes preserve the honest-defer set (deferred_no_consent, deferred_verdict, deferred_humanity, deferred_no_frames, proof_deferred, proof_built_no_verifier). These mirror CuratorPackagingLoop's OUTCOME_* and are the load-bearing audit surface for GET /curator/pending-replay-proofs."
+  },
+  "INV-VHR-009": {
+    "digest": "a9bc1e3a7490c349e97ffa0a8d8fa6cdd3d6cadd9018c23ae747df80524f0d13",
+    "description": "CuratorPackagingLoop.on_session_complete_vhr is the parallel Arc 5 session-boundary entry point \u2014 orthogonal to the existing skill-proof on_session_complete (spec \u00a77 listing-type orthogonality). The hook is dormant by default (replay_proof_pipeline_enabled=False) and lazily constructs VAPIReplayProofPipeline on first call. Drift here breaks the bridge boot wiring + the GET /curator/pending-replay-proofs audit surface."
+  },
+  "INV-VHR-CEREMONY-001": {
+    "digest": "6f2f368f7c080771a09de54a946c370828998a68698cb0e690d7138a30b6909a",
+    "description": "Groth16VerifierVAPIReplayProof.sol is the snarkjs-exported Solidity verifier from the Arc 5 trusted-setup ceremony (2026-05-30; 2 contributors + IoTeX block 44188831 beacon). Renamed from snarkjs default `contract Groth16Verifier` to disambiguate from Phase 237's `Groth16VerifierZKSepProof`. Drift here breaks the wrapper constructor's Groth16 address binding + Hardhat compile (two contracts with the same name)."
+  },
+  "INV-VHR-CEREMONY-002": {
+    "digest": "6c8f8f1debe149c34bb362f93340a187f88f53081a9fc9fc41b5c3bdc3c25de7",
+    "description": "VAPIReplayProofVerifier_verification_key.json is the snarkjs-exported verification key, protocol=groth16 + curve=bn128 (BN254). Auditor-reproducible artifact \u2014 third parties recompute from the published intermediate zkeys per docs/data-economy-arc5-ceremony-transcript.md \u00a77."
+  },
+  "INV-VHR-MATRIX-001": {
+    "digest": "9792aac8721c32b8430ab312134a47b40c2da94e07e7761e10bf713149358daa",
+    "description": "VAPI-VHR-MATRIX-v1 canonical sponge encoding domain tag \u2014 the 18-byte ASCII prefix prepended to every SanitizedReplayMatrix before chunking + Poseidon-2 chaining. Every off-chain verifier MUST use this exact tag; drift = unverifiable proofs."
+  },
+  "INV-VHR-MATRIX-002": {
+    "digest": "7f8be8e239ad577f27ed5bb9d3cf0758c4103c1ff90f23509aa142fe8dcf76ea",
+    "description": "VAPI-VHR-MATRIX-v1 per-tick byte layout: 7 bytes per tick in fixed order (stick_L, stick_R, trigger_L, trigger_R, button_lo, button_hi, imu). Drift changes sanitizedTraceRoot for the same gameplay \u2192 silent verifier mismatch."
+  },
+  "INV-VHR-MATRIX-003": {
+    "digest": "f8d5dd5864159dc9e1b2a9461422076dfd70209bd2ebfb4a63dd246fe4d37453",
+    "description": "VAPI-VHR-MATRIX-v1 chunk size = 30 bytes \u2014 keeps each BN254 field element comfortably under the 254-bit modulus (top 2 bytes implicitly zero). Drift would either overflow the field (>30B chunks) or break the on-chain off-chain root agreement."
+  },
+  "INV-VHR-WIRING-001": {
+    "digest": "56f89da7c31430a50ae000eae05c4b00470c56e022204965053763eff36c2421",
+    "description": "SessionAdjudicatorValidationAgent constructor accepts curator_loop kwarg (Arc 5 Commit 6) so the bridge-boot path in main.py can inject CuratorPackagingLoop. Without this, the VHR hook is unreachable from live session validation \u2014 exactly the gap that left VHR dormant pre-Commit-6."
+  },
+  "INV-VHR-WIRING-002": {
+    "digest": "548a8883e3f6cb9e7678ffafeb8672b667c41e5b1fd406d42dc4655f7669ef20",
+    "description": "SessionAdjudicatorValidationAgent._maybe_fire_vhr_hook is invoked after the GIC stamp inside _validate_ruling. The post-stamp position ensures the VHR proof commits to the same fallback-verdict the chain commits to (INV-GIC-001 honesty rail). Drift moving this call before the GIC stamp would let the proof bind to a different verdict than the chain."
+  },
+  "INV-VHR-WIRING-003": {
+    "digest": "fe41a51d6eae8601996da57a3a700ba2a9fe778d42cfcc7c01ad4f7c838a1131",
+    "description": "Store.get_curator_session_aggregate exists and JOINs agent_rulings with ruling_validation_log on ruling_id (Arc 5 Commit 6). Returns None when the ruling isn't validated yet \u2014 the orchestrator gracefully treats that as vhr_aborted_no_session rather than fabricating a session."
+  },
+  "INV-TBR-001": {
+    "digest": "7a736b5ec1f6cdef544cb53f7b75f143f34c0aee0b8f1b11497675a172ec01e7",
+    "description": "VAPITemporalBeaconRegistry BEACON_DOMAIN FROZEN as keccak256('VAPI-TEMPORAL-BEACON-v1') \u2014 FROZEN-v1 primitive #14. Drift here cascades through every off-chain verifier reproducing the open/close beacon commitment AND VAPIReplayProofVerifier_v2's recency check."
+  },
+  "INV-TBR-002": {
+    "digest": "c0b4b83e70fb48124df286d1ae214926ca1d97a4f3fde53eb499d9fe96b4fb9f",
+    "description": "Beacon anchor cadence FROZEN at ANCHOR_CADENCE=64 blocks. Bridge clients must align session-boundary beacon reads to this cadence so the hash is always retrievable from the registry at verification time. Drift breaks the bind-to-nearest-cadence-block rule the bridge depends on."
+  },
+  "INV-POSR-001": {
+    "digest": "cdf2e6e108dc83f97f45c5622422aa896ba6008bf2c9aa66e299693d10966861",
+    "description": "PoSR bridge-side commitment uses FROZEN-v1 #14 domain tag b'VAPI-TEMPORAL-BEACON-v1' (23 bytes). The same string is keccak256-pinned in VAPITemporalBeaconRegistry's BEACON_DOMAIN (INV-TBR-001). Drift here = silent verifier mismatch \u2014 off-chain recomputation produces different commitment than what the proof bound to."
+  },
+  "INV-POSR-002": {
+    "digest": "fb768b12e3f69d69efe54582c3e417e1a6ece39cb8413f5fa3179af19cd7e7ba",
+    "description": "PoSR close-beacon commitment CHAINS to open-beacon commitment \u2014 close cannot be repaired with a different open (the inseparability claim). The literal `open_beacon_commitment` must appear at minimum 2x in posr.py: once in compute_close_beacon_commitment's parameter list AND once in its update() chaining call. Drift = stale/forward-replay attack opens up."
+  },
+  "INV-POSR-CIRCUIT-001": {
+    "digest": "8c2a68dffd4e2b732520b9b7d52420252bce4124419e978489103cdf62899f8e",
+    "description": "VAPIReplayProofVerifier_v2 circuit declares the 9-element public-input partition in FROZEN order: sanitizedTraceRoot, poacChainRoot, consentPolicyHash, humanityThreshold, vhpCommitment (Arc 5 5 publics, unchanged), then openBeaconBlock, closeBeaconBlock, openBeaconCommitment, closeBeaconCommitment (Arc 6 4 PoSR publics). The on-chain v2 wrapper's INPUT_* index constants must match this order byte-for-byte. The comma-terminated form below only appears inside `component main {public [...]}`."
+  },
+  "INV-VHR-V2-001": {
+    "digest": "62682d9474fd1e66ec378378451c2587dffe538b68f8c20e8622ec18c3519385",
+    "description": "VAPIReplayProofVerifier_v2 contract PROOF_TYPE FROZEN as keccak256('VAPI-REPLAY-PROOF-v2') \u2014 distinct discriminator for PoSR-bound VHR proofs. Does NOT overload Arc 5's INV-VHR-003. Coexists with v1 in the marketplace (recency is opt-in until tournament operator requires)."
+  },
+  "INV-W3S-001": {
+    "digest": "9663e1ed3e0d23a8c7b99263f2c88c9b6c19457be85587d08cc61f0c4f53c7a8",
+    "description": "W3bstream native Wasm cadence limit (payload.block_number % ANCHOR_CADENCE == 0)"
+  },
+  "INV-W3S-002": {
+    "digest": "7f0e6ea487f8e4249c11db06e62cd8f28d084ea31e81a6fc9e64609c35fd1f79",
+    "description": "Clean environment isolation inside Python ingestion listener (pop OPERATOR_PRIVATE_KEY)"
   }
 }
