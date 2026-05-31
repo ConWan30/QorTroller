@@ -8,22 +8,22 @@
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18966169.svg)](https://doi.org/10.5281/zenodo.18966169) (v3 — historical; v4 DOI pending release)
 
-**Author:** Contravious Battle (Independent Researcher) · **Network:** IoTeX testnet (chain ID 4690) · **Phase:** O4-VPM-INTEGRATION CLOSED 2026-05-13 · **Architecture anchor:** `e81e04aa` · **Documentation commit:** `9f8581cd`
+**Author:** Contravious Battle (Independent Researcher) · **Network:** IoTeX testnet (chain ID 4690) · **Phase:** PATH A ARC 1 / ARC 6 PoSR BUILT · **Architecture anchor:** `ecf7967c` · **Date:** 2026-05-31
 
 | Surface | Status |
 |---|---|
-| **Bridge tests** | 3344 passing |
-| **SDK tests** | 562 passing |
-| **Hardhat contract tests** | 528 passing |
-| **Frontend Vitest** | 26 passing (first frontend test infra) |
-| **PV-CI invariant gate** | 77 / 77 pinned (governance-ceremony-locked) |
-| **FSCA contradiction rules** | 26 active |
+| **Bridge tests** | 4330 passing |
+| **SDK tests** | 604 passing |
+| **Hardhat contract tests** | 674 passing |
+| **Frontend Vitest** | 133 passing |
+| **PV-CI invariant gate** | 167 / 167 pinned (139 allowlist entries, governance-ceremony-locked) |
+| **FSCA contradiction rules** | 28 active |
 | **Contracts LIVE on IoTeX** | 49 substantive live testnet contracts (51 registry slots; see `contracts/deployed-addresses.json`) |
 | **Operator Initiative agents** | 3 LIVE at O1_SHADOW (Sentry / Guardian / Curator) |
 | **ZKBA artifact classes** | 7 of 7 shipped (Layer 7 closed) |
 | **VPM compilers active** | 6 (4 internal + 2 consumer-facing) |
-| **Cryptographic chain primitives** | 10 FROZEN-v1 (PATTERN-017) |
-| **Wallet posture** | `CHAIN_SUBMISSION_PAUSED=true` held; 0 IOTX impact across Phase O4 |
+| **Cryptographic chain primitives** | 14 FROZEN-v1 (PATTERN-017) |
+| **Wallet posture** | `CHAIN_SUBMISSION_PAUSED=true` held; zero-trust sandbox compliant |
 
 ---
 
@@ -214,7 +214,7 @@ The following rules are **FROZEN**. Changing any of them requires a `--confirm-g
 - **No token launch before separation_ratio > 1.0 AND all_pairs_above_1=True** — empirically confirmed AND all-pairs above. Currently cleared for the AIT separation gate in the current corpus (1.199, N=37); touchpad_corners (0.728) remains the actual tournament BLOCK enforcement blocker.
 - **Stable EMA track updates on NOMINAL sessions only** — security invariant; never override.
 - **Per-player L4 thresholds tighten, never loosen** — enforced via `min()` operator.
-- **PV-CI invariant gate** runs on every PR — currently 77 invariants. Modifying a frozen region without a `--confirm-governance` ceremony fails CI.
+- **PV-CI invariant gate** runs on every PR — currently 167 invariants. Modifying a frozen region without a `--confirm-governance` ceremony fails CI.
 - **CHAIN_SUBMISSION_PAUSED kill-switch** held in `bridge/.env` — every chain-write path is gated; operator three-factor authorization (env var + env var + `--confirm` CLI flag) required to lift.
 
 Complete invariant list: `scripts/vapi_invariant_gate.py` + `.github/INVARIANTS_ALLOWLIST.json`.
@@ -243,6 +243,36 @@ The **three-layer Anti-Hype Visual Grammar** is the protocol's first structural 
 **QorTroller (as a V.A.P.I.-compliant reference implementation) now holds the frozen-primitive ↔ frozen-compiler ↔ frozen-visual-grammar ↔ frozen-iframe-sandbox quadruple-bind** — every cryptographic claim is independently verifiable by anyone with the canonical-JSON algorithm + SHA-256 + the public source of the four enforcement layers.
 
 See [`wiki/phases/phase_o4_vpm_integration.md`](wiki/phases/phase_o4_vpm_integration.md) for the complete close provenance.
+
+---
+
+## Advanced Security Arcs & Capabilities
+
+Since the completion of Phase O4, the QorTroller protocol has integrated several state-of-the-art security features and cryptographic primitives to protect against hardware virtualization, trace injection, and backdating attacks:
+
+### 1. Proof of Session Recency (PoSR - Arc 6)
+* **Goal**: Defends against replay backdating, pre-computation trace generation, and stale session re-listing attacks.
+* **Mechanism**: Binds the creation and validation of gameplay records directly to recent IoTeX L1 blockhashes. Introduces the [VAPITemporalBeaconRegistry](file:///C:/Users/Contr/vapi-pebble-prototype/contracts/contracts/VAPITemporalBeaconRegistry.sol) that records block hashes at a defined cadence. The [PoSRBeaconBinder](file:///C:/Users/Contr/vapi-pebble-prototype/bridge/vapi_bridge/replay_proof_pipeline/posr.py) binds the session commitments to these beacon blocks.
+* **Verification**: Uses `VAPIReplayProofVerifier_v2.circom` which enforces Groth16 circuit-level temporal ordering of sessions (close block > open block) and re-hashes commitments using in-circuit Poseidon structures.
+
+### 2. Verified Human Replay (VHR - Arc 5)
+* **Goal**: Proves raw gameplay liveness using downsampled, non-invertible replay matrices.
+* **Mechanism**: A multi-stage pre-processor converts 1000 Hz HID reports into a 60 Hz median window containing stick radial sectors (4-bit), trigger thresholds, and IMU gravity-sign octants. Critical biometric features are strictly filtered out (Data Floor enforcement).
+* **On-Chain Verification**: The [VAPIReplayProofVerifier](file:///C:/Users/Contr/vapi-pebble-prototype/contracts/contracts/VAPIReplayProofVerifier.sol) re-hashes the sanitized trace root using off-circuit Poseidon sponge commitments to run Groth16 verify checks. Integrates with the [VAPIConsentManifestRegistry](file:///C:/Users/Contr/vapi-pebble-prototype/contracts/contracts/VAPIConsentManifestRegistry.sol) to ensure players consent to replay tracing.
+
+### 3. Path A: Silicon-Rooted Hardware Identity (Path A Arc 1)
+* **Goal**: Upgrades the security boundary from host-held software keys (Path B) to silicon-rooted secure elements (e.g., ATECC608A) embedded directly in the controller hardware.
+* **Mechanism**: Introduces the [VAPIManufacturerDeviceRegistry](file:///C:/Users/Contr/vapi-pebble-prototype/contracts/contracts/VAPIManufacturerDeviceRegistry.sol) which registers hardware birth certificates signed by the Manufacturer Root CA.
+* **Composability**: Exposes [VAPIProtocolLensV2](file:///C:/Users/Contr/vapi-pebble-prototype/contracts/contracts/VAPIProtocolLensV2.sol) which allows calling contracts to verify eligibility of Path A silicon devices via a single view-call (`isFullyEligible_PathA()`).
+
+### 4. Guardian KMS-HSM & Signature Anchoring
+* **Goal**: Secures the operator actions of the Guardian agent using Cloud HSMs.
+* **Mechanism**: Operator actions and audit logs are signed using an AWS KMS HSM (secp256k1).
+* **On-Chain Commitments**: Guardian's operational signatures are anchored to the [AdjudicationRegistry](file:///C:/Users/Contr/vapi-pebble-prototype/contracts/contracts/AdjudicationRegistry.sol) as immutable cryptographic commitments.
+
+### 5. Embodied Presence & L9 Presence Arc
+* **Goal**: Establishes player presence on the controller through physical force dynamics and challenge-responses rather than biometric fingerprint templates.
+* **Mechanism**: The Proof of Embodied Presence (PoEP) challenge-response requires nonce-bound player reflexes, wrapping feature commitments using post-quantum hybrid signatures (ECDSA + ML-DSA-65/IIP-64).
 
 ---
 
