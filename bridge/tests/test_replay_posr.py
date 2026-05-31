@@ -17,9 +17,51 @@ from bridge.vapi_bridge.replay_proof_pipeline import (
     BEACON_DOMAIN_TAG,
     BeaconReference,
     PoSRBeaconBinder,
+    cadence_aligned_block,
     compute_close_beacon_commitment,
     compute_open_beacon_commitment,
 )
+
+
+# ── cadence_aligned_block helper (Demo Spec) ────────────────────────────────
+
+def test_cadence_aligned_block_aligned_input_returns_self():
+    assert cadence_aligned_block(64) == 64
+    assert cadence_aligned_block(128) == 128
+    assert cadence_aligned_block(64 * 1000) == 64 * 1000
+
+
+def test_cadence_aligned_block_rounds_down_to_nearest():
+    assert cadence_aligned_block(100) == 64
+    assert cadence_aligned_block(63) == 0
+    assert cadence_aligned_block(127) == 64
+    assert cadence_aligned_block(65) == 64
+
+
+def test_cadence_aligned_block_zero_input_returns_zero():
+    assert cadence_aligned_block(0) == 0
+
+
+def test_cadence_aligned_block_large_block_realistic():
+    """44188831 is from the Arc 5 ceremony beacon. The nearest cadence-
+    aligned block ≤ that is 44188800 (= 690450 * 64)."""
+    assert cadence_aligned_block(44188831) == 44188800
+
+
+def test_cadence_aligned_block_rejects_negative():
+    with pytest.raises(ValueError):
+        cadence_aligned_block(-1)
+    with pytest.raises(ValueError):
+        cadence_aligned_block(-64)
+
+
+def test_cadence_aligned_block_rejects_non_int():
+    with pytest.raises(TypeError):
+        cadence_aligned_block("64")
+    with pytest.raises(TypeError):
+        cadence_aligned_block(64.0)
+    with pytest.raises(TypeError):
+        cadence_aligned_block(None)
 
 
 # ── Pinned constants ────────────────────────────────────────────────────────
