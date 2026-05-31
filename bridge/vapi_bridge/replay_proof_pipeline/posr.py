@@ -92,6 +92,24 @@ class PoSRSessionBeacon:
     close_commitment: bytes       # 32 bytes (SHA-256)
 
 
+def cadence_aligned_block(block_number: int) -> int:
+    """Return the largest block number ≤ `block_number` that is a multiple
+    of ANCHOR_CADENCE_BLOCKS (64). Used by the keeper to pick the next
+    cadence-aligned block to anchor, and by off-chain verifiers to
+    determine which cadence block a session's open beacon should bind to.
+
+    Strict typing: rejects non-int (including float and bool-typed sneaky
+    coercions) and negative inputs.
+    """
+    if type(block_number) is not int:   # NOT isinstance — exclude bool
+        raise TypeError(
+            f"block_number must be int, got {type(block_number).__name__}"
+        )
+    if block_number < 0:
+        raise ValueError(f"block_number must be non-negative, got {block_number}")
+    return block_number - (block_number % ANCHOR_CADENCE_BLOCKS)
+
+
 # ── Stateless commitment math (pure-function, testable without RPC) ────────
 
 def _validate_32(name: str, value: bytes) -> bytes:

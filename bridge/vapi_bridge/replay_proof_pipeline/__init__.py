@@ -67,6 +67,7 @@ from .posr import (
     BeaconReference,
     PoSRBeaconBinder,
     PoSRSessionBeacon,
+    cadence_aligned_block,
     compute_close_beacon_commitment,
     compute_open_beacon_commitment,
 )
@@ -116,6 +117,7 @@ __all__ = [
     "BeaconReference",
     "PoSRBeaconBinder",
     "PoSRSessionBeacon",
+    "cadence_aligned_block",
     "compute_close_beacon_commitment",
     "compute_open_beacon_commitment",
 ]
