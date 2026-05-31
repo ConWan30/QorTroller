@@ -131,7 +131,8 @@ describe("Phase O4-VPM-INT-B-PREP — Defensive bridge additions", function () {
         let bridge;
         let recipient;
         let nonBridge;
-        const futureTimestamp = Math.floor(Date.now() / 1000) + 90 * 86400;
+        let futureTimestamp;
+        let currentBlockTimestamp;
         const deviceHash = ethers.keccak256(ethers.toUtf8Bytes("test_device_001"));
         const ceremonyHash = ethers.keccak256(ethers.toUtf8Bytes("test_ceremony"));
 
@@ -141,7 +142,7 @@ describe("Phase O4-VPM-INT-B-PREP — Defensive bridge additions", function () {
                 certificationLevel: 1,
                 consecutiveClean: 100,
                 confidenceScore: 9500,
-                issuedAt: Math.floor(Date.now() / 1000),
+                issuedAt: currentBlockTimestamp,
                 expiresAt: futureTimestamp,
                 mpcCeremonyHash: ceremonyHash,
             };
@@ -152,6 +153,8 @@ describe("Phase O4-VPM-INT-B-PREP — Defensive bridge additions", function () {
             const VHP = await ethers.getContractFactory("VAPIVerifiedHumanProof");
             vhp = await VHP.deploy(owner.address);
             await vhp.waitForDeployment();
+            currentBlockTimestamp = (await ethers.provider.getBlock("latest")).timestamp;
+            futureTimestamp = currentBlockTimestamp + 90 * 86400;
         });
 
         it("8. bridgeAddress is zero on deploy", async function () {
@@ -217,7 +220,7 @@ describe("Phase O4-VPM-INT-B-PREP — Defensive bridge additions", function () {
             await vhp.setBridgeAddress(bridge.address);
 
             const expiredData = _vhpData();
-            expiredData.expiresAt = Math.floor(Date.now() / 1000) - 1;
+            expiredData.expiresAt = currentBlockTimestamp - 1;
 
             await expect(
                 vhp.connect(bridge).bridgeMint(recipient.address, expiredData, 1n)

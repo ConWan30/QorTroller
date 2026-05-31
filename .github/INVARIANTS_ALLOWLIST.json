@@ -686,5 +686,9 @@
   "INV-ARC7-002": {
     "digest": "9169a8090275a111b20fd67a97a97cb1762ce1c44c893b3094f92d78322555cc",
     "description": "Asserts that the EVM-layer validation logic explicitly includes a require check blocking null (bytes32(0)) post-quantum signatures."
+  },
+  "INV-BCC-001": {
+    "digest": "126c014b108381c13c12ada19818a71fa00e1f40c776f9c85e8895d86d8c900f",
+    "description": "Asserts that the active testing calibration corpus contains a device density of structurally unique data paths where N >= 50."
   }
 }

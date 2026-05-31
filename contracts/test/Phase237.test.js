@@ -37,7 +37,8 @@ describe("VAPIConsentRegistry (Phase 237)", function () {
 
   it("T237-HH-2: grantConsent stores record and emits ConsentGranted", async function () {
     const consentHash = ethers.keccak256(ethers.toUtf8Bytes("consent-1"));
-    const expiresAt   = BigInt(Math.floor(Date.now() / 1000)) + 86400n;
+    const blockTs = (await ethers.provider.getBlock("latest")).timestamp;
+    const expiresAt   = BigInt(blockTs) + 86400n;
 
     const tx = await vcr.connect(gamer1).grantConsent(
       TOURNAMENT_GATE, expiresAt, consentHash
@@ -67,7 +68,8 @@ describe("VAPIConsentRegistry (Phase 237)", function () {
 
   it("T237-HH-3: anti-replay — duplicate consentHash reverts (across senders)", async function () {
     const consentHash = ethers.keccak256(ethers.toUtf8Bytes("consent-shared"));
-    const expiresAt   = BigInt(Math.floor(Date.now() / 1000)) + 3600n;
+    const blockTs = (await ethers.provider.getBlock("latest")).timestamp;
+    const expiresAt   = BigInt(blockTs) + 3600n;
 
     await vcr.connect(gamer1).grantConsent(TOURNAMENT_GATE, expiresAt, consentHash);
 
@@ -84,8 +86,8 @@ describe("VAPIConsentRegistry (Phase 237)", function () {
 
   it("T237-HH-4: revokeConsent + expired consent → isConsentValid false", async function () {
     const consentHash = ethers.keccak256(ethers.toUtf8Bytes("consent-rev"));
-    // Far-future expiry so we don't trip the time gate before revoke
-    const farFuture   = BigInt(Math.floor(Date.now() / 1000)) + 365n * 86400n;
+    const blockTs = (await ethers.provider.getBlock("latest")).timestamp;
+    const farFuture   = BigInt(blockTs) + 365n * 86400n;
 
     await vcr.connect(gamer1).grantConsent(MARKETPLACE, farFuture, consentHash);
     expect(await vcr.isConsentValid(gamer1.address, MARKETPLACE)).to.equal(true);
@@ -131,7 +133,8 @@ describe("VAPIConsentRegistry (Phase 237)", function () {
 
   it("T237-HH-6: bad inputs revert (zero hash / bad category / double-revoke)", async function () {
     const validHash = ethers.keccak256(ethers.toUtf8Bytes("v"));
-    const expiresAt = BigInt(Math.floor(Date.now() / 1000)) + 3600n;
+    const blockTs = (await ethers.provider.getBlock("latest")).timestamp;
+    const expiresAt = BigInt(blockTs) + 3600n;
 
     // Zero consentHash
     await expect(

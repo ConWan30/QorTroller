@@ -65,7 +65,8 @@ describe("VHPExpiresAtAdapter (Curator governance ceremony unblock)", function (
 
   // ── T-VHPA-3 ──────────────────────────────────────────────────────────────
   it("T-VHPA-3: expiresAt(tokenId) returns the wrapped VHP's stored value", async function () {
-    const futureTs = Math.floor(Date.now() / 1000) + 90 * 24 * 3600; // +90d
+    const blockTs = (await ethers.provider.getBlock("latest")).timestamp;
+    const futureTs = blockTs + 90 * 24 * 3600; // +90d
     const data = _vhpData(futureTs);
     await vhp.mint(gamer.address, data);
 
@@ -84,7 +85,8 @@ describe("VHPExpiresAtAdapter (Curator governance ceremony unblock)", function (
 
   // ── T-VHPA-5 ──────────────────────────────────────────────────────────────
   it("T-VHPA-5: isValid pass-through matches wrapped VHP", async function () {
-    const futureTs = Math.floor(Date.now() / 1000) + 86400; // +1d
+    const blockTs = (await ethers.provider.getBlock("latest")).timestamp;
+    const futureTs = blockTs + 86400; // +1d
     await vhp.mint(gamer.address, _vhpData(futureTs));
 
     expect(await adapter.isValid(1)).to.equal(true);
@@ -97,7 +99,8 @@ describe("VHPExpiresAtAdapter (Curator governance ceremony unblock)", function (
 
   // ── T-VHPA-6 ──────────────────────────────────────────────────────────────
   it("T-VHPA-6: ownerOf pass-through matches wrapped VHP", async function () {
-    const futureTs = Math.floor(Date.now() / 1000) + 86400;
+    const blockTs = (await ethers.provider.getBlock("latest")).timestamp;
+    const futureTs = blockTs + 86400;
     await vhp.mint(gamer.address, _vhpData(futureTs));
 
     expect(await adapter.ownerOf(1)).to.equal(gamer.address);
@@ -109,7 +112,8 @@ describe("VHPExpiresAtAdapter (Curator governance ceremony unblock)", function (
 
   // ── T-VHPA-7 ──────────────────────────────────────────────────────────────
   it("T-VHPA-7: adapter expiresAt reflects renew() — read-through, not cached", async function () {
-    const initialTs = Math.floor(Date.now() / 1000) + 86400;
+    const blockTs = (await ethers.provider.getBlock("latest")).timestamp;
+    const initialTs = blockTs + 86400;
     await vhp.mint(gamer.address, _vhpData(initialTs));
     const beforeRenew = await adapter.expiresAt(1);
     expect(beforeRenew).to.equal(initialTs);
@@ -128,7 +132,8 @@ describe("VHPExpiresAtAdapter (Curator governance ceremony unblock)", function (
 
   // ── T-VHPA-8 ──────────────────────────────────────────────────────────────
   it("T-VHPA-8: IVHP222 surface complete — all three methods callable + return types correct", async function () {
-    const futureTs = Math.floor(Date.now() / 1000) + 86400;
+    const blockTs = (await ethers.provider.getBlock("latest")).timestamp;
+    const futureTs = blockTs + 86400;
     await vhp.mint(gamer.address, _vhpData(futureTs));
 
     // ownerOf returns address

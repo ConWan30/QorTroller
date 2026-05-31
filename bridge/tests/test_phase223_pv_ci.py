@@ -105,7 +105,7 @@ def test_T223_5_check_invariants_count():
     """vapi_invariant_gate.check_invariants() returns 86 result dicts (current INVARIANTS set)."""
     import vapi_invariant_gate as vig
     results = vig.check_invariants()
-    assert len(results) == 172
+    assert len(results) == 173
     for r in results:
         assert "id" in r
         assert "digest" in r

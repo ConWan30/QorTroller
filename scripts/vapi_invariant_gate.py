@@ -1444,7 +1444,15 @@ INVARIANTS: list[Invariant] = [
         pattern=r"require\s*\(\s*pqCommitment\s*!=\s*bytes32\(\s*0\s*\)\s*,\s*\"VAPI:\s*Zero\s*PQ\s*Commitment\s*Disallowed\"\s*\)",
         min_matches=1,
     ),
+    Invariant(
+        id="INV-BCC-001",
+        description="Asserts that the active testing calibration corpus contains a device density of structurally unique data paths where N >= 50.",
+        file="scripts/generate_bcc_corpus.py",
+        pattern=r"assert\s*n_sessions\s*>=\s*50",
+        min_matches=1,
+    ),
 ]
+
 
 
 # ---------------------------------------------------------------------------
