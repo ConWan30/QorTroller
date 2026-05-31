@@ -278,6 +278,12 @@ Patent claims and academic citation: reference the Zenodo DOI above (v3) plus th
 
 ---
 
+## In-Depth Architectural Assessment
+
+For an in-depth exploration of QorTroller's underlying design, including its zero-trust physics-based anti-cheat paradigm, detailed breakdown of the Physical Input Trust Layer (PITL L0–L9) signals, Proof of Session Recency (PoSR) replay defenses, and player data privacy protection details, see the [QorTroller Architecture Assessment](file:///C:/Users/Contr/vapi-pebble-prototype/docs/QORTROLLER_IN_DEPTH_ASSESSMENT.md).
+
+---
+
 ## Contact
 
 Issues, security disclosures, and partnership inquiries should be filed via GitHub Issues on this repository or directed to the author through Zenodo's contact path on the v3 DOI page.
