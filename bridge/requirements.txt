@@ -8,6 +8,15 @@ eth-hash[pycryptodome]>=0.5.0
 # Cryptography (P256 signature verification)
 cryptography>=42.0.0
 
+# Replay-proof pipeline (Data Economy Arc 5/6/7)
+# numpy: φ pre-processor downsampling/quantization (pre_processor.py imports at module load).
+# quantcrypt: ML-DSA-65 post-quantum sidecar signing (Arc 7 pipeline._run_mldsa_signing).
+#   Previously only in requirements-enforcement.txt, but Arc 7 wired PQ signing into the
+#   core VHRProofPipeline build path + bridge/tests/test_arc7_pq_sidecar.py, so it is now a
+#   base dependency the CI bridge suite needs in order to collect and run those tests.
+numpy>=1.24.0
+quantcrypt==1.0.1
+
 # Transports
 aiomqtt>=2.0.0
 aiocoap>=0.4.7
