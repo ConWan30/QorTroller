@@ -225,3 +225,12 @@ bcc_l9/
 
 # W3bstream Rust build outputs
 w3bstream/applet/target/
+
+# Local biometric capture data + diagnostic tools (untracked but sensitive
+# on the now-public repo; explicit gitignore prevents accidental `git add .`
+# exposure of real player capture data — exactly the data the protocol's
+# whole architecture protects from leaving the local machine).
+.gic_monitor.py
+.phase235_biometric_collector.py
+.phase235_biometric_data_*.jsonl
+.phase235_biometric_summary_*.json
