@@ -234,3 +234,9 @@ w3bstream/applet/target/
 .phase235_biometric_collector.py
 .phase235_biometric_data_*.jsonl
 .phase235_biometric_summary_*.json
+
+# Dependencies — reproduce via package-lock.json + npm install. Previously
+# contracts/node_modules/ was tracked (18,636 files, ~50 MB+); untracked
+# 2026-06-01 to remove public-repo bloat. Bridge zk_artifacts/node_modules/
+# was already covered by an earlier rule.
+node_modules/
