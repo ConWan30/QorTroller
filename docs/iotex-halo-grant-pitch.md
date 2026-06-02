@@ -142,7 +142,7 @@ reference design is the v2 architecture** — not a parallel project,
 but the next certified-manufacturer row in a registry that has been
 waiting for it.
 
-The Sensor Stack v2.1 architectural revision (`docs/methodology/sensor_stack_v2_1_architectural_revision.md`)
+The Sensor Stack v2.1 architectural revision (`wiki/methodology/sensor_stack_v2_1_architectural_revision.md`)
 identifies the **adaptive-trigger force-curve** as the PRIMARY
 DISCRIMINATOR candidate (8-bit per trigger axis at ~1 kHz on Edge over
 USB; inter-subject EER 1–15 % lab-to-field per Saevanee 2009 / Antal
@@ -236,9 +236,9 @@ against.
 
 ## References (artifacts available for review)
 
-- **Whitepaper:** `docs/qortroller-whitepaper-v5.md`
-- **Genesis assessment:** `docs/qortroller-genesis-assessment.md`
-- **Zero-trust security assessment:** `docs/qortroller-zero-trust-security-assessment.md`
+- **Whitepaper:** `docs/qortroller-whitepaper-v5.md` (v6 draft at `docs/qortroller-whitepaper-v6.md`)
+- **Genesis assessment:** `docs/qortroller_genesis_assessment.md`
+- **In-depth architectural + zero-trust security assessment:** `docs/QORTROLLER_IN_DEPTH_ASSESSMENT.md`
 - **Arc 5 spec + ceremony transcript:** `docs/VAPI_REPLAY_PROOF_PIPELINE_SPEC (1).md`, `docs/data-economy-arc5-ceremony-transcript.md`
 - **Arc 6 PoSR keeper runbook:** `docs/posr-keeper-runbook.md`
 - **Deploy-hold + Arc 5 readiness audit:** `docs/data-economy-deploy-hold-and-arc5-readiness.md`
