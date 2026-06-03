@@ -169,9 +169,9 @@ QorTroller publishes a family of cryptographic primitives under FROZEN-v1 discip
 
 ### 4.1 Precise primitive count
 
-The protocol publishes **12 commitment-family FROZEN-v1 cryptographic primitives plus one hash-function capability** (POSEIDON-BN254-AS). The commitment-family primitives produce 32-byte SHA-256 commitments over structured byte-domain preimages; the hash capability is a Poseidon-over-BN254 hash function used inside ZK circuit composition. (Two further byte-tagged *capabilities* — BT-WITNESS-v1 and its reserved BLE variant — are likewise not commitment families.)
+The protocol publishes **13 commitment-family FROZEN-v1 cryptographic primitives plus one hash-function capability** (POSEIDON-BN254-AS) as of 2026-05-30 (Arc 6 PoSR freezing the 13th family `VAPI-TEMPORAL-BEACON-v1`). The commitment-family primitives produce 32-byte SHA-256 commitments over structured byte-domain preimages; the hash capability is a Poseidon-over-BN254 hash function used inside ZK circuit composition. (Two further byte-tagged *capabilities* — BT-WITNESS-v1 and its reserved BLE variant — are likewise not commitment families.)
 
-A flat statement of "13 primitives" would conflate commitment families with the hash capability. A grant evaluator with a cryptographer on staff should read the precise distinction: **12 commitment-family + 1 hash capability**. This follows the operator's R3 refinement of the POSEIDON-AS framing (family vs capability). **v6.1 reconciles the family count from 11 to 12** to match the canonical PATTERN-017 frozenset (§4.2): VAPI-O3-SUPERSEDE-v1 is the 12th family, and AGENT-COMMIT-v1 + PHYSICAL-DATA-ATTESTATION-v1 were already-frozen families omitted from the v6 enumeration. **PoAC is the 228-byte wire-format record (§4.5), the substrate these families commit over — not itself a PATTERN-017 commitment family.**
+A flat statement of "14 primitives" would conflate commitment families with the hash capability. A grant evaluator with a cryptographer on staff should read the precise distinction: **13 commitment-family + 1 hash capability**. This follows the operator's R3 refinement of the POSEIDON-AS framing (family vs capability). **v6.1 reconciles the family count from 11 to 12 to match the canonical PATTERN-017 frozenset; v6.2 (2026-05-30) adds VAPI-TEMPORAL-BEACON-v1 as the 13th family** (§4.2 row 13), enabling Arc 6 Proof of Session Recency without modifying any prior frozen family. **PoAC is the 228-byte wire-format record (§4.5), the substrate these families commit over — not itself a PATTERN-017 commitment family.**
 
 ### 4.2 Commitment-family primitives — detailed
 
@@ -191,6 +191,7 @@ A flat statement of "13 primitives" would conflate commitment families with the 
 | 10 | **AGENT-COMMIT-v1** | `VAPI-AGENT-COMMIT-v1` (20B) | `tag[20] ‖ agent_id[32] ‖ commit_sha[20] ‖ prev_commit_hash[32] ‖ repo_uri_sha[32] ‖ ts_ns_be[8]` (144B; agent_id = bytes32 of ioID DID + TBA binding; commit_sha = git SHA-1; 32 zero bytes for genesis prev) | SHA-256 → 32B |
 | 11 | **VAPI-O3-SUPERSEDE-v1** | `VAPI-O3-SUPERSEDE-v1` | `tag[20] ‖ agent_id[32] ‖ draft_count[8] ‖ disagreement_milli[4] ‖ bundle_drift_30d[4] ‖ scope_drift_30d[4] ‖ dual_key[1] ‖ kms_hsm[1] ‖ github_oauth[1] ‖ marketplace_role[1] ‖ fp_milli[4] ‖ shadow_age_hours[4] ‖ ts_ns_be[8]` (92B) | SHA-256 → 32B |
 | 12 | **PHYSICAL-DATA-ATTESTATION-v1** | `VAPI-PHYSICAL-DATA-ATTESTATION-v1` (33B) | `tag[33] ‖ hardware_data_hash[32] ‖ agent_id[32] ‖ attestation_type_hash[32] (keccak256 of canonical type string) ‖ ts_ns_be[8]` (137B; inner type-hash uses keccak256, outer hash SHA-256 — both part of the v1 freeze) | SHA-256 → 32B |
+| 13 | **TEMPORAL-BEACON-v1** (Arc 6 PoSR, FROZEN 2026-05-30) | `VAPI-TEMPORAL-BEACON-v1` (23B) | **Open commitment:** `tag[23] ‖ open_block_be[8] ‖ open_block_hash[32] ‖ device_id_32[32] ‖ poac_genesis_link[32]` (127B). **Close commitment:** `tag[23] ‖ close_block_be[8] ‖ close_block_hash[32] ‖ open_beacon_commitment[32] ‖ poac_final_link[32]` (127B); close chains to open via `open_beacon_commitment` (INSEPARABILITY claim, INV-POSR-002). On-chain anchor via `VAPITemporalBeaconRegistry` (FROZEN BEACON_DOMAIN = keccak256("VAPI-TEMPORAL-BEACON-v1"), ANCHOR_CADENCE=64 blocks) closes the BLOCKHASH-window gap (~11 min empirical on IoTeX testnet). | SHA-256 → 32B |
 
 ### 4.3 The capability primitive
 
@@ -326,9 +327,9 @@ The separation ratio per probe type — the load-bearing cross-player discrimina
 
 ## 6. Smart contract architecture
 
-### 6.1 49 contracts deployed at IoTeX testnet (chain ID 4690)
+### 6.1 53 contracts deployed at IoTeX testnet (chain ID 4690)
 
-The full address inventory is `contracts/deployed-addresses.json`. Key contracts grouped by function:
+The full address inventory is `contracts/deployed-addresses.json` (53 substantive contracts as of 2026-05-30; +4 from the Arc 5 + Arc 6 deploy day documented in `docs/data-economy-deploy-hold-and-arc5-readiness.md` and the Arc 5 ceremony transcript at `docs/data-economy-arc5-ceremony-transcript.md`). Key contracts grouped by function:
 
 **Core verification + composability:**
 | Contract | Address | Role |
@@ -361,6 +362,16 @@ The full address inventory is `contracts/deployed-addresses.json`. Key contracts
 | Contract | Address | Role |
 |---|---|---|
 | `VAPIDataMarketplaceListings` | `0x78Df84Cc512EdCaC0e58a03e4852627E2F62E3bC` | Curator-suspended marketplace per LISTING-v1 |
+| `VAPIBuyerCategoryVerifier` | `0x7EEc6B7Eb843532227528F63a0bC95D6cc537E53` | **Arc 2 (Data Economy) — deployed 2026-05-30.** ZK buyer-category proof (Groth16); buyer proves "I am authorized in category X" without revealing DID |
+| `VAPIConsentManifestRegistry` | `0x5F7c8068D0e61818FCD613D47e68a9Ea906a2743` | **Arc 4 (Data Economy) — deployed 2026-05-30.** Gamer-self-sovereign structured consent manifest (15 v1 fields + 4 Dimension 8 fields for Arc 5 VHR consent). Solidity invariant: `msg.sender == gamer`; bridge process can never write consent on a gamer's behalf. First gamer-self-sovereign manifest written from a real wallet 2026-05-30 |
+
+**Data Economy Arc 5 + Arc 6 — Verified Human Replay + Proof of Session Recency:**
+| Contract | Address | Role |
+|---|---|---|
+| `Groth16VerifierVAPIReplayProof` | `0xcE56404CB2e49C3D68ABc72d2941A508Cbe75608` | **Arc 5 — deployed 2026-05-30.** snarkjs-exported Groth16 verifier from the 2026-05-30 trusted-setup ceremony (2 contributors + IoTeX block-44188831 beacon; transcript at `docs/data-economy-arc5-ceremony-transcript.md`) |
+| `VAPIReplayProofVerifier` | `0x5182372d1D033db0c9230843DFDE606733D5F91B` | **Arc 5 — deployed 2026-05-30.** PROOF_TYPE = keccak256("VAPI-REPLAY-PROOF-v1"); on-chain anchor for VHR proofs binding sanitized gameplay matrix root + consent policy hash + humanity threshold + VHP commitment |
+| `VAPITemporalBeaconRegistry` (PoSR + Arc 7 PQ sidecar) | Deploy held pending operator GO + multi-contributor mainnet re-ceremony | **Arc 6 — built 2026-05-30, FROZEN-v1 #14.** BEACON_DOMAIN = keccak256("VAPI-TEMPORAL-BEACON-v1"), ANCHOR_CADENCE=64 blocks (~2.8 min empirical on IoTeX testnet). Closes the ~11-min BLOCKHASH window for VHR session-recency binding. Arc 7 PQ sidecar: `verifyBeacon(block, hash, pqCommitment)` requires non-zero PQ commitment, forward-compatible with ML-DSA / SLH-DSA / hybrid composites |
+| `VAPIReplayProofVerifier_v2` (PoSR wrapper) | Deploy held pending Arc 6 inner Groth16 ceremony | **Arc 6 — built 2026-05-30.** PROOF_TYPE = keccak256("VAPI-REPLAY-PROOF-v2"); coexists with v1; recency opt-in for marketplace listings until tournament operator requires |
 
 The remaining contracts cover device registries, threat federations, PHG credentials, identity continuity, progress attestation, skill oracles, and federated threat registration. Full architectural detail at `contracts/`.
 
