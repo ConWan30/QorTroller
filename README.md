@@ -8,22 +8,26 @@
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18966169.svg)](https://doi.org/10.5281/zenodo.18966169) (v3 — historical; v4 DOI pending release)
 
-**Author:** Contravious Battle (Independent Researcher) · **Network:** IoTeX testnet (chain ID 4690) · **Phase:** PATH A ARC 1 / ARC 6 PoSR BUILT · **Architecture anchor:** `ecf7967c` · **Date:** 2026-05-31
+**Author:** Contravious Battle (Independent Researcher) · **Network:** IoTeX testnet (chain ID 4690) · **Phase:** PATH A ARC 1 + ARC 5 (VHR) + ARC 6 (PoSR) + ARC 7 (PQ SIDECAR) BUILT — **public repo, mainnet-ready** · **Architecture anchor:** `c2303781` · **Date:** 2026-06-02
 
 | Surface | Status |
 |---|---|
-| **Bridge tests** | 4330 passing |
+| **Bridge tests** | 4330+ passing |
 | **SDK tests** | 604 passing |
-| **Hardhat contract tests** | 674 passing |
+| **Hardhat contract tests** | **760 passing** (13 pre-existing unrelated failures, see baseline) |
 | **Frontend Vitest** | 133 passing |
-| **PV-CI invariant gate** | 167 / 167 pinned (139 allowlist entries, governance-ceremony-locked) |
+| **PV-CI invariant gate** | **174 / 174 pinned**, governance-ceremony-locked; CI-enforced on every PR |
 | **FSCA contradiction rules** | 28 active |
-| **Contracts LIVE on IoTeX** | 49 substantive live testnet contracts (51 registry slots; see `contracts/deployed-addresses.json`) |
-| **Operator Initiative agents** | 3 LIVE at O1_SHADOW (Sentry / Guardian / Curator) |
+| **Contracts LIVE on IoTeX testnet** | **53 substantive contracts** (chain 4690; see `contracts/deployed-addresses.json`); Arc 5 + Arc 6 deploys added 2026-05-30 (`0xcE56404C…`, `0x5182372d…`, `0x7EEc6B7E…`, `0x5F7c8068…`) |
+| **Operator Initiative agents** | **3 LIVE at O3_ACTING** (Sentry / Guardian / Curator) — first ≥3-agent fleet at full action authority in any DePIN gaming protocol; ceremony fired live 2026-05-17, Fleet Readiness Root `0x54b4b698…` permanently anchored |
 | **ZKBA artifact classes** | 7 of 7 shipped (Layer 7 closed) |
 | **VPM compilers active** | 6 (4 internal + 2 consumer-facing) |
-| **Cryptographic chain primitives** | 14 FROZEN-v1 (PATTERN-017) |
-| **Wallet posture** | `CHAIN_SUBMISSION_PAUSED=true` held; zero-trust sandbox compliant |
+| **Cryptographic chain primitives** | **14 FROZEN-v1 (PATTERN-017)** including #14 `VAPI-TEMPORAL-BEACON-v1` (Arc 6 PoSR, FROZEN 2026-05-30) |
+| **Arc 7 — PQ cryptographic sidecar** | `pqCommitment` parameter threaded through Arc 6 verification path (`verifyWithRecency`, `verifyBeacon`); registry rejects zero commitments; Thread C `asyncio.to_thread` prover offload prevents ingestion-loop jitter |
+| **First gamer-self-sovereign consent manifest on-chain** | Written 2026-05-30 from real wallet to `VAPIConsentManifestRegistry` at `0x5F7c8068…` — gamer-self-sovereignty invariant verified by Solidity `msg.sender == gamer` check |
+| **GIC_100 cognitive chain head** | Permanently anchored 2026-05-06 (block 43348052) |
+| **CI matrix** | GitHub Actions: Python 3.10/3.11/3.12 × Node 18/20 + Rust stable + WASM target enforcing 174-invariant gate on every PR |
+| **Wallet posture** | `CHAIN_SUBMISSION_PAUSED=true` held; zero-trust sandbox compliant; every chain-write path operator-fired |
 
 ---
 
@@ -101,7 +105,7 @@ See `wiki/phases/phase_o4_vpm_integration.md` §9 for the full forward roadmap.
 ### Inspect the deployed contracts
 
 ```bash
-# Open the deployed-addresses.json to see all 49 substantive live testnet contracts (51 registry slots)
+# Open the deployed-addresses.json to see all 53 substantive live testnet contracts
 cat contracts/deployed-addresses.json | python -m json.tool | head -60
 ```
 
@@ -214,14 +218,16 @@ The following rules are **FROZEN**. Changing any of them requires a `--confirm-g
 - **No token launch before separation_ratio > 1.0 AND all_pairs_above_1=True** — empirically confirmed AND all-pairs above. Currently cleared for the AIT separation gate in the current corpus (1.199, N=37); touchpad_corners (0.728) remains the actual tournament BLOCK enforcement blocker.
 - **Stable EMA track updates on NOMINAL sessions only** — security invariant; never override.
 - **Per-player L4 thresholds tighten, never loosen** — enforced via `min()` operator.
-- **PV-CI invariant gate** runs on every PR — currently 167 invariants. Modifying a frozen region without a `--confirm-governance` ceremony fails CI.
+- **PV-CI invariant gate** runs on every PR — currently 174 invariants. Modifying a frozen region without a `--confirm-governance` ceremony fails CI.
 - **CHAIN_SUBMISSION_PAUSED kill-switch** held in `bridge/.env` — every chain-write path is gated; operator three-factor authorization (env var + env var + `--confirm` CLI flag) required to lift.
 
 Complete invariant list: `scripts/vapi_invariant_gate.py` + `.github/INVARIANTS_ALLOWLIST.json`.
 
 ---
 
-## Phase O4-VPM-INTEGRATION (just closed)
+## Phase O4-VPM-INTEGRATION (historical milestone, closed 2026-05-13)
+
+> Marker section preserved — Phase O4 closed the Methodology Layer (Layer 7) delivery stack with three-layer anti-overclaim defense. Arcs 5, 6, and 7 have shipped subsequently (see *Advanced Security Arcs & Capabilities* below); Phase O4 is now historical context for those arcs' production substrate.
 
 Phase O4 elevated the **Methodology Layer (Layer 7) output surface** from a collection of frozen primitives + a deterministic compiler to a complete delivery stack with multi-layer overclaim defense. Shipped across 10 atomic commits, 0 IOTX wallet impact, 0 new Cedar lanes, 0 contract deploys:
 
@@ -273,6 +279,12 @@ Since the completion of Phase O4, the QorTroller protocol has integrated several
 ### 5. Embodied Presence & L9 Presence Arc
 * **Goal**: Establishes player presence on the controller through physical force dynamics and challenge-responses rather than biometric fingerprint templates.
 * **Mechanism**: The Proof of Embodied Presence (PoEP) challenge-response requires nonce-bound player reflexes, wrapping feature commitments using post-quantum hybrid signatures (ECDSA + ML-DSA-65/IIP-64).
+
+### 6. Arc 7 — Post-Quantum Cryptographic Sidecar
+* **Goal**: Forward-secures the Arc 6 PoSR verification path against post-quantum signature threats without modifying any FROZEN-v1 surface (additive integration).
+* **Mechanism**: A `pqCommitment` (bytes32) parameter is threaded through `VAPIReplayProofVerifier_v2.verifyWithRecency` and `verifyWithRecencyView`; the registry's `verifyBeacon(blockNumber, claimedHash, pqCommitment)` enforces non-zero commitment (`require(pqCommitment != bytes32(0), "VAPI: Zero PQ Commitment Disallowed")`). The PQ commitment binds an off-circuit post-quantum proof artifact alongside the beacon hash; the registry remains opaque to the PQ algorithm choice (forward-compatible with ML-DSA, SLH-DSA, or hybrid composites).
+* **Ingestion-loop isolation**: The VHR prover task is offloaded to **Thread C** via `asyncio.to_thread`, preventing PQ-signing overhead (which can be 10–100× ECDSA-P256 cost depending on PQ scheme) from jittering the 1002 Hz HID ingestion ring buffer. Matches Phase 235.x-STABILITY's loop-block discipline.
+* **Test coverage**: T-VHR-V2-8 explicitly asserts the zero-pqCommitment revert; Arc 6 wrapper tests pass all 18 assertions including the additive PQ binding path.
 
 ---
 
