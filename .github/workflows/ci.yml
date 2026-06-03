@@ -53,7 +53,7 @@ jobs:
           cd contracts
           npm ci
 
-      - name: Run 173-Invariant Gate Check
+      - name: Run 174-Invariant Gate Check
         run: |
           python scripts/vapi_invariant_gate.py
 

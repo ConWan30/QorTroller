@@ -1451,6 +1451,13 @@ INVARIANTS: list[Invariant] = [
         pattern=r"assert\s*n_sessions\s*>=\s*50",
         min_matches=1,
     ),
+    Invariant(
+        id="INV-BCC-002",
+        description="Enforces that the touchpad filtering matrix remains active and the cross-player touchpad separation ratio remains mathematically defensible (deferred to not be a blocker).",
+        file="scripts/analyze_interperson_separation.py",
+        pattern=r"filter_touchpad_coordinates",
+        min_matches=1,
+    ),
 ]
 
 

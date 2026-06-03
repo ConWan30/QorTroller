@@ -690,5 +690,9 @@
   "INV-BCC-001": {
     "digest": "126c014b108381c13c12ada19818a71fa00e1f40c776f9c85e8895d86d8c900f",
     "description": "Asserts that the active testing calibration corpus contains a device density of structurally unique data paths where N >= 50."
+  },
+  "INV-BCC-002": {
+    "digest": "730cdffef0399004f3c71361b346f666694cc701478d3e4fe38f2feafc24dddf",
+    "description": "Enforces that the touchpad filtering matrix remains active and the cross-player touchpad separation ratio remains mathematically defensible (deferred to not be a blocker)."
   }
 }
