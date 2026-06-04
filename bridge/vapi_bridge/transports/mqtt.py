@@ -11,6 +11,7 @@ HiveMQ, Mosquitto).
 
 import asyncio
 import logging
+import re
 
 import aiomqtt
 
@@ -18,6 +19,24 @@ from ..codec import PoACRecord, parse_record, POAC_RECORD_SIZE
 from ..config import Config
 
 log = logging.getLogger(__name__)
+
+# Topic must match {prefix}/{vapi-subtopic}/{64-hex-device-id}. Anything else
+# (control chars, broker wildcards, embedded slashes, attacker-shaped payloads)
+# is rejected before it can flow into the `source` string used downstream.
+_TOPIC_SUFFIX_RE = re.compile(r"^(poac|status)/[0-9a-fA-F]{1,64}$")
+_TOPIC_MAX_LEN = 256
+
+
+def _is_valid_topic(topic: str, prefix: str) -> bool:
+    if not isinstance(topic, str) or not topic or len(topic) > _TOPIC_MAX_LEN:
+        return False
+    # No control chars, no NUL, no MQTT broker wildcards in the consumed string.
+    if any(c in topic for c in ("\x00", "\r", "\n", "+", "#")):
+        return False
+    if not topic.startswith(prefix + "/"):
+        return False
+    suffix = topic[len(prefix) + 1:]
+    return bool(_TOPIC_SUFFIX_RE.match(suffix))
 
 
 class MqttTransport:
@@ -83,6 +102,11 @@ class MqttTransport:
         """Process a single MQTT message."""
         payload = message.payload
         topic = str(message.topic)
+
+        if not _is_valid_topic(topic, self._cfg.mqtt_topic_prefix):
+            log.warning("MQTT: rejecting message on malformed topic (len=%d)",
+                        len(topic))
+            return
 
         if len(payload) == POAC_RECORD_SIZE:
             source = f"mqtt:{topic}"

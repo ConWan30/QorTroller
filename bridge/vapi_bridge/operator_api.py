@@ -55,8 +55,12 @@ class _RateLimiter:
         self._windows: collections.defaultdict = collections.defaultdict(collections.deque)
 
     def is_allowed(self, key: str) -> bool:
-        """Return True if key is within rate limit; record this request."""
-        now = time.time()
+        """Return True if key is within rate limit; record this request.
+
+        Uses time.monotonic() so wall-clock rollback (NTP, manual adjustment)
+        cannot bypass the sliding window.
+        """
+        now = time.monotonic()
         cutoff = now - 60.0
         dq = self._windows[key]
         while dq and dq[0] < cutoff:

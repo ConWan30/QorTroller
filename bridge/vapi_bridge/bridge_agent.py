@@ -3250,7 +3250,15 @@ class BridgeAgent:
                 if not recent:
                     return {"error": "No records found for device", "device_id": device_id}
                 last = recent[0]
-                inference_name = last.get("action_name", "UNKNOWN")
+                _raw_name = last.get("action_name", "UNKNOWN")
+                if not isinstance(_raw_name, str):
+                    inference_name = "UNKNOWN"
+                else:
+                    _stripped = "".join(
+                        c for c in _raw_name
+                        if c.isprintable() and c not in "\r\n\t"
+                    )
+                    inference_name = _stripped[:64] if _stripped else "UNKNOWN"
                 humanity_prob  = last.get("pitl_humanity_prob")
                 l4_dist  = last.get("pitl_l4_distance")
                 l5_cv    = last.get("pitl_l5_cv")
