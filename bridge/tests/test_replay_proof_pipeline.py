@@ -271,7 +271,35 @@ def test_built_with_verifier_full_success_and_package_shape():
     assert pkg["is_deferred"] is False
 
 
-# ── pending-proofs query surface ────────────────────────────────────────────
+# ── Arc 7 PQ sidecar commitment (decoupled cryptographic pointer) ───────────
+
+def test_pq_commitment_populated_on_success():
+    """Arc 7: the build path computes a 32-byte ML-DSA sidecar commitment,
+    surfaced on the listing payload as a 0x-prefixed 64-hex pointer."""
+    p = _make_pipeline(prover=_FakeProver(), verifier_addr="0x" + "f" * 40)
+    out = _run(p.package_session("S1"))
+    assert out["outcome"] == VHR_OUTCOME_PROOF_BUILT
+    pq = out["package"]["pq_commitment"]
+    assert pq.startswith("0x")
+    assert len(bytes.fromhex(pq[2:])) == 32
+
+
+def test_pq_signing_failure_degrades_to_empty_commitment(monkeypatch):
+    """Arc 7 fail-open-honest: if PQ signing raises (e.g. quantcrypt absent or a
+    signing fault), the session still packages with an EMPTY pq_commitment rather
+    than crashing the session-boundary flow or fabricating a pointer. An empty
+    commitment is fail-closed downstream by the Wasm applet (INV-W3S-005) and the
+    EVM beacon registry (INV-ARC7-002)."""
+    import bridge.vapi_bridge.replay_proof_pipeline.pipeline as _pl
+
+    def _boom(_matrix):
+        raise ImportError("No module named 'quantcrypt'")
+
+    monkeypatch.setattr(_pl, "_run_mldsa_signing", _boom)
+    p = _make_pipeline(prover=_FakeProver(), verifier_addr="0x" + "f" * 40)
+    out = _run(p.package_session("S1"))
+    assert out["outcome"] == VHR_OUTCOME_PROOF_BUILT
+    assert out["package"]["pq_commitment"] == ""
 
 def test_list_pending_replay_proofs_filters_audit_log():
     p = _make_pipeline(prover=DeferredProver("pending"))
