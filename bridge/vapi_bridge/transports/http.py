@@ -328,13 +328,32 @@ def create_app(cfg: Config, store: Store, on_record) -> FastAPI:
 
     # --- Config PATCH (L6 capture session metadata) ---
 
+    _CONFIG_PATCH_ALLOWED = frozenset({
+        "l6_capture_player_id",
+        "l6_capture_game_title",
+        "l6_capture_hw_session_ref",
+        "l6_capture_notes",
+    })
+
     @app.patch("/config")
     async def patch_config(request: Request):
+        x_api_key = request.headers.get("x-api-key", "")
+        if not cfg.operator_api_key:
+            return JSONResponse({"error": "operator_api_key not configured"}, status_code=503)
+        if x_api_key != cfg.operator_api_key:
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
         body = await request.json()
+        applied, rejected = [], []
         for key, val in body.items():
-            if hasattr(cfg, key):
+            if key in _CONFIG_PATCH_ALLOWED and hasattr(cfg, key):
+                if not isinstance(val, str) or len(val) > 256:
+                    rejected.append(key)
+                    continue
                 object.__setattr__(cfg, key, val)
-        return {"status": "ok"}
+                applied.append(key)
+            else:
+                rejected.append(key)
+        return {"status": "ok", "applied": applied, "rejected": rejected}
 
     # --- L6 capture summary ---
 
@@ -1028,8 +1047,11 @@ def create_app(cfg: Config, store: Store, on_record) -> FastAPI:
         return OPERATOR_HTML
 
     @app.get("/player/{device_id}", response_class=HTMLResponse)
-    async def player_dashboard(device_id: str):
-        return PLAYER_DASHBOARD_HTML.replace("__DEVICE_ID__", device_id)
+    async def player_dashboard(
+        device_id: str = FAPath(..., regex=r"^[0-9a-fA-F]{1,64}$", max_length=64),
+    ):
+        safe_id = _html.escape(device_id, quote=True)
+        return PLAYER_DASHBOARD_HTML.replace("__DEVICE_ID__", safe_id)
 
     return app
 
