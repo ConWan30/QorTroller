@@ -4417,6 +4417,20 @@ class Store:
         if not parts:
             return
 
+        # Defensive: every fragment MUST come from this closed allowlist.
+        # If a future edit appends a user-controlled string to `parts`, this
+        # assertion will trip in tests before the SQL hits the database.
+        _ALLOWED_FRAGMENTS = {
+            "status = ?", "tx_hash = ?", "submitted_at = ?",
+            "last_error = ?", "retries = ?", "confirmed_at = ?",
+        }
+        for p in parts:
+            if p not in _ALLOWED_FRAGMENTS:
+                raise ValueError(
+                    f"update_submission: rejected SQL fragment {p!r} "
+                    f"(not in static allowlist)"
+                )
+
         params.append(sub_id)
         with self._conn() as conn:
             conn.execute(

@@ -343,17 +343,21 @@ def create_public_forensic_app(*, cfg, store) -> FastAPI:
             "endpoints serve unstamped", _vame_exc,
         )
 
-    # CORS — expose VAME headers to the browser fetch() reader.
+    # CORS — public read-only forensic surface. Wildcard ORIGIN is intentional
+    # (public attestation; browsers from any origin must be able to GET), but
+    # ALLOW_HEADERS is tightened from "*" to the minimal set actually needed
+    # so preflight requests cannot probe arbitrary headers.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],   # PUBLIC sub-app — read-only, no creds
         allow_credentials=False,
-        allow_methods=["GET"],
-        allow_headers=["*"],
+        allow_methods=["GET", "OPTIONS"],
+        allow_headers=["Accept", "Accept-Encoding", "Content-Type"],
         expose_headers=[
             "X-VAME-Version", "X-VAME-Commitment", "X-VAME-Chain-Head",
             "X-VAME-TS-NS",   "X-VAME-Endpoint",
         ],
+        max_age=600,
     )
 
     # ---------------- Route #1: /health ----------------
