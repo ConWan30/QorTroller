@@ -42,10 +42,13 @@ SESSIONS_DIR = PROJECT_ROOT / "sessions" / "human"
 DOCS_DIR     = PROJECT_ROOT / "docs"
 SCRIPTS_DIR  = PROJECT_ROOT / "scripts"
 
-# Add controller/ to path so we can import BiometricFeatureExtractor
+# Add controller/ and bridge/ to path so we can import modules
 CONTROLLER_DIR = PROJECT_ROOT / "controller"
+BRIDGE_DIR     = PROJECT_ROOT / "bridge"
 if str(CONTROLLER_DIR) not in sys.path:
     sys.path.insert(0, str(CONTROLLER_DIR))
+if str(BRIDGE_DIR) not in sys.path:
+    sys.path.insert(0, str(BRIDGE_DIR))
 
 try:
     from tinyml_biometric_fusion import BiometricFeatureExtractor
@@ -53,6 +56,8 @@ try:
 except ImportError as e:
     warnings.warn(f"Could not import BiometricFeatureExtractor: {e}. Using inline fallback.")
     _EXTRACTOR_AVAILABLE = False
+
+from vapi_bridge.replay_proof_pipeline.touchpad_filter import filter_touchpad_coordinates
 
 try:
     from tinyml_biometric_fusion import CALIBRATION_WINDOW_FRAMES as WINDOW_SIZE  # type: ignore
@@ -1024,6 +1029,19 @@ def load_session(session_name: str, path: "Path | None" = None) -> dict | None:
             "polling_rate_hz": polling,
         }
 
+    # Filter touchpad coordinates if touch is active (strictly on spatial coordinates)
+    active_indices = [
+        i for i, r in enumerate(reports)
+        if bool(r.get("features", {}).get("touch_active", False))
+    ]
+    if len(active_indices) >= 3:
+        x_coords = np.array([float(reports[i]["features"].get("touch0_x", 0)) for i in active_indices])
+        y_coords = np.array([float(reports[i]["features"].get("touch0_y", 0)) for i in active_indices])
+        x_filt, y_filt = filter_touchpad_coordinates(x_coords, y_coords)
+        for idx, i in enumerate(active_indices):
+            reports[i]["features"]["touch0_x"] = x_filt[idx]
+            reports[i]["features"]["touch0_y"] = y_filt[idx]
+
     # Estimate inter-frame interval for velocity computation
     ift_us = estimate_inter_frame_us(reports)
 
@@ -1218,6 +1236,8 @@ def run_analysis(
             player_sessions[player] = []
         for jpath in sorted(tcal_dir.glob("*.json")):
             sname = f"{tcal_dir.name}/{jpath.stem}"
+            if session_type_filter and _detect_session_type(sname) != session_type_filter:
+                continue
             result = load_session(sname, path=jpath)
             if result is None:
                 continue
@@ -1298,8 +1318,12 @@ def run_analysis(
     # Features with zero variance across ALL sessions contribute no discriminative signal
     # and inflate the condition number of the covariance matrix (Mahalanobis breaks down).
     feature_stds = np.std(mean_vectors, axis=0)
-    zero_var_mask = feature_stds < 1e-9
-    active_mask = ~zero_var_mask
+    if session_type_filter == "touchpad_corners":
+        active_mask = np.array([name in ("touch_position_variance", "touchpad_spatial_entropy") for name in FEATURE_NAMES])
+        zero_var_mask = ~active_mask
+    else:
+        zero_var_mask = feature_stds < 1e-9
+        active_mask = ~zero_var_mask
     n_active = int(np.sum(active_mask))
     excluded_feat_names = [FEATURE_NAMES[i] for i in range(N_FEATURES) if zero_var_mask[i]]
     active_feat_names   = [FEATURE_NAMES[i] for i in range(N_FEATURES) if active_mask[i]]
@@ -1566,6 +1590,8 @@ def run_analysis(
         # Proper LOO: recompute test player centroid without the test session
         _loo_player_means = {}
         for p, sl in player_sessions.items():
+            if not sl:
+                continue
             loo_sl = [x for x in sl if x is not s]
             if loo_sl:
                 _loo_player_means[p] = np.mean(

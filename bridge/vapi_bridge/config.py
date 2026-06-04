@@ -2809,6 +2809,14 @@ class Config:
     data populated by analyze_interperson_separation.py --session-type ait --write-snapshot
     or POST /agent/run-ait-analysis)."""
 
+    # --- Phase 239: Gamer Readiness ---
+    gamer_readiness_enabled: bool = field(
+        default_factory=lambda: _env("GAMER_READINESS_ENABLED", "true").lower() == "true"
+    )
+    """Phase 239 — Enable GamerReadinessAgent (agent #39) and personal readiness status API.
+    When True, GET /agent/gamer-readiness-status returns the latest calculated fatigue and
+    RSI metrics. Default True."""
+
     # --- Phase 154: Capture Stagnation Monitor ---
     capture_stagnation_threshold: float = field(
         default_factory=lambda: float(_env("CAPTURE_STAGNATION_THRESHOLD", "0.5"))

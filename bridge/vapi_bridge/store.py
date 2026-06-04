@@ -4215,6 +4215,35 @@ class Store:
         except Exception:
             pass  # idempotent
 
+        # Phase 239: gamer_readiness_log — GamerReadinessAgent (agent #39)
+        try:
+            with self._conn() as conn:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS gamer_readiness_log (
+                        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                        device_id           TEXT    NOT NULL,
+                        readiness_score     REAL    NOT NULL DEFAULT 1.0,
+                        rsi_risk_score      REAL    NOT NULL DEFAULT 0.0,
+                        fatigue_index       REAL    NOT NULL DEFAULT 0.0,
+                        avg_tremor_hz       REAL    NOT NULL DEFAULT 0.0,
+                        touchpad_entropy    REAL    NOT NULL DEFAULT 0.0,
+                        reaction_latency_ms REAL    NOT NULL DEFAULT 0.0,
+                        recommendation      TEXT    NOT NULL DEFAULT 'NOMINAL',
+                        created_at          REAL    NOT NULL
+                    )
+                """)
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_gamer_readiness_created "
+                    "ON gamer_readiness_log(device_id, created_at DESC)"
+                )
+                conn.execute(
+                    "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                    " VALUES (?, ?, ?)",
+                    (239, "gamer_readiness_log", time.time()),
+                )
+        except Exception:
+            pass  # idempotent
+
     # --- Device operations ---
 
     def upsert_device(self, device_id: str, pubkey_hex: str):
@@ -18518,3 +18547,64 @@ class Store:
                 "error":                   "snapshot_lookup_error",
                 "timestamp":               time.time(),
             }
+
+    # --- Phase 239: Gamer Readiness ---
+
+    def insert_gamer_readiness_log(
+        self,
+        *,
+        device_id: str,
+        readiness_score: float,
+        rsi_risk_score: float,
+        fatigue_index: float,
+        avg_tremor_hz: float,
+        touchpad_entropy: float,
+        reaction_latency_ms: float,
+        recommendation: str,
+    ) -> int:
+        """Insert a gamer readiness log entry (Phase 239)."""
+        with self._conn() as conn:
+            cur = conn.execute(
+                "INSERT INTO gamer_readiness_log "
+                "(device_id, readiness_score, rsi_risk_score, fatigue_index, "
+                " avg_tremor_hz, touchpad_entropy, reaction_latency_ms, "
+                " recommendation, created_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    str(device_id),
+                    float(readiness_score),
+                    float(rsi_risk_score),
+                    float(fatigue_index),
+                    float(avg_tremor_hz),
+                    float(touchpad_entropy),
+                    float(reaction_latency_ms),
+                    str(recommendation),
+                    time.time(),
+                ),
+            )
+            row_id = cur.lastrowid
+        return row_id  # type: ignore[return-value]
+
+    def get_gamer_readiness_status(self, device_id: str) -> dict | None:
+        """Return the latest gamer readiness entry for a device (Phase 239)."""
+        with self._conn() as conn:
+            row = conn.execute(
+                "SELECT * FROM gamer_readiness_log "
+                "WHERE device_id = ? ORDER BY id DESC LIMIT 1",
+                (str(device_id),),
+            ).fetchone()
+        if row:
+            d = dict(row)
+            return {
+                "id":                  d["id"],
+                "device_id":           d["device_id"],
+                "readiness_score":     d["readiness_score"],
+                "rsi_risk_score":      d["rsi_risk_score"],
+                "fatigue_index":       d["fatigue_index"],
+                "avg_tremor_hz":       d["avg_tremor_hz"],
+                "touchpad_entropy":    d["touchpad_entropy"],
+                "reaction_latency_ms": d["reaction_latency_ms"],
+                "recommendation":      d["recommendation"],
+                "created_at":          d["created_at"],
+            }
+        return None

@@ -3877,6 +3877,56 @@ async def vapi_mythos_doc_number_consistency(**kwargs):
         return {"variant": "doc_number_consistency", "error": f"variant raised: {exc}",
                 "total_findings": 0, "findings": [], "timestamp": time.time()}
     return _findings_to_dict("doc_number_consistency", findings)
+@tool(
+    name="vapi_gamer_readiness_status",
+    description=(
+        "Exposes physical/cognitive gamer readiness and RSI risk indicators (Phase 239). "
+        "Reports: fatigue index, touchpad entropy, haptic latency, and RSI risk score. "
+        "Use this tool to audit physical strain trends for a device during calibration and tournaments."
+    ),
+    schema={
+        "type": "object",
+        "properties": {
+            "device_id": {
+                "type": "string",
+                "description": "The device ID to query readiness for (defaults to D1)",
+                "default": "D1",
+            }
+        },
+        "required": [],
+    }
+)
+async def vapi_gamer_readiness_status(device_id: str = "D1", **_):
+    rows = db_query(
+        "SELECT * FROM gamer_readiness_log "
+        "WHERE device_id = ? ORDER BY id DESC LIMIT 1",
+        (device_id,)
+    )
+    if rows:
+        d = rows[0]
+        return {
+            "device_id":           d["device_id"],
+            "readiness_score":     d["readiness_score"],
+            "rsi_risk_score":      d["rsi_risk_score"],
+            "fatigue_index":       d["fatigue_index"],
+            "avg_tremor_hz":       d["avg_tremor_hz"],
+            "touchpad_entropy":    d["touchpad_entropy"],
+            "reaction_latency_ms": d["reaction_latency_ms"],
+            "recommendation":      d["recommendation"],
+            "created_at":          d["created_at"],
+        }
+    return {
+        "device_id":           device_id,
+        "readiness_score":     1.0,
+        "rsi_risk_score":      0.0,
+        "fatigue_index":       0.0,
+        "avg_tremor_hz":       8.0,
+        "touchpad_entropy":    1.5,
+        "reaction_latency_ms": 150.0,
+        "recommendation":      "NOMINAL",
+        "created_at":          0.0,
+        "message":             "No readiness log found in database; returning nominal defaults.",
+    }
 
 
 async def main():

@@ -60,6 +60,12 @@ _RESOURCE_CATALOG = [
         "description": "Weighted readiness score 0.0–1.0 from 6 signals (Phase 128)",
         "mime_type":   "application/json",
     },
+    {
+        "id":          "vapi://gamer/readiness",
+        "name":        "Gamer Readiness & RSI Status",
+        "description": "Fatigue index, touchpad entropy, haptic latency, and RSI risk recommendation (Phase 239)",
+        "mime_type":   "application/json",
+    },
 ]
 
 
@@ -216,5 +222,23 @@ def _fetch_resource_content(resource_id: str, cfg, store) -> dict:
             return {"score": 0.0, "conditions_met": "", "ready": False}
         except Exception as exc:
             return {"score": 0.0, "conditions_met": "", "ready": False, "error": str(exc)}
+
+    if resource_id == "vapi://gamer/readiness":
+        try:
+            status = store.get_gamer_readiness_status("D1")
+            if status:
+                return status
+            return {
+                "device_id":           "D1",
+                "readiness_score":     1.0,
+                "rsi_risk_score":      0.0,
+                "fatigue_index":       0.0,
+                "avg_tremor_hz":       8.0,
+                "touchpad_entropy":    1.5,
+                "reaction_latency_ms": 150.0,
+                "recommendation":      "NOMINAL",
+            }
+        except Exception as exc:
+            return {"error": str(exc)}
 
     return {"error": f"no content handler for {resource_id}"}
