@@ -335,8 +335,23 @@ class VAPIReplayProofPipeline:
         consent_policy_hash = str(manifest.get("manifest_hash", "") or "")
         autonomy = int(manifest.get("autonomy_level", 1))   # default = approval_required
 
-        # Thread C PQ-Signing Engine: execute ML-DSA-65 signing out-of-band via asyncio.to_thread
-        pq_commitment_hex, _ = await asyncio.to_thread(_run_mldsa_signing, matrix)
+        # Thread C PQ-Signing Engine: execute ML-DSA-65 signing out-of-band via
+        # asyncio.to_thread. Fail-open-honest (matches the DeferredProver / no-fake
+        # discipline in this module's honesty rails): if quantcrypt is absent or the
+        # signing raises, emit an EMPTY pq_commitment rather than crashing the
+        # session-boundary flow or fabricating a pointer. An empty/zero commitment is
+        # fail-closed downstream by the Wasm applet (INV-W3S-005) and the EVM beacon
+        # registry (INV-ARC7-002) — so "no PQ commitment" surfaces as a rejected
+        # verification, never a forged one.
+        try:
+            pq_commitment_hex, _ = await asyncio.to_thread(_run_mldsa_signing, matrix)
+        except Exception as exc:  # quantcrypt absent (ImportError) or signing failure
+            log.warning(
+                "Arc 7 PQ sidecar signing unavailable for session %s (%s: %s); "
+                "emitting empty pq_commitment (fail-closed downstream).",
+                session_id, type(exc).__name__, exc,
+            )
+            pq_commitment_hex = ""
 
         package = VHRProofPackage(
             session_id=session_id,
