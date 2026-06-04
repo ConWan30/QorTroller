@@ -7034,6 +7034,55 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "timestamp":                   _t221.time(),
         }
 
+    # Phase 239 — GET /agent/gamer-readiness-status
+    # ------------------------------------------------------------------
+    @app.get("/agent/gamer-readiness-status")
+    async def get_gamer_readiness_status(
+        device_id: str = "D1",
+        x_api_key: str = Header(default=""),
+    ):
+        """Gamer physical/cognitive readiness and RSI risk status (Phase 239).
+
+        Returns the latest calculated fatigue index, touchpad entropy, L6b haptic latency,
+        RSI risk score, and stretch/break recommendation for a device.
+        """
+        _check_read_key(x_api_key)
+        import time as _t239
+        _enabled239 = bool(getattr(cfg, "gamer_readiness_enabled", True))
+        try:
+            _status239 = store.get_gamer_readiness_status(device_id)
+        except Exception:
+            _status239 = None
+
+        if _status239:
+            return {
+                "gamer_readiness_enabled": _enabled239,
+                "device_id":               _status239["device_id"],
+                "readiness_score":         _status239["readiness_score"],
+                "rsi_risk_score":          _status239["rsi_risk_score"],
+                "fatigue_index":           _status239["fatigue_index"],
+                "avg_tremor_hz":           _status239["avg_tremor_hz"],
+                "touchpad_entropy":        _status239["touchpad_entropy"],
+                "reaction_latency_ms":     _status239["reaction_latency_ms"],
+                "recommendation":          _status239["recommendation"],
+                "created_at":              _status239["created_at"],
+                "timestamp":               _t239.time(),
+            }
+        else:
+            return {
+                "gamer_readiness_enabled": _enabled239,
+                "device_id":               device_id,
+                "readiness_score":         1.0,
+                "rsi_risk_score":          0.0,
+                "fatigue_index":           0.0,
+                "avg_tremor_hz":           8.0,
+                "touchpad_entropy":        1.5,
+                "reaction_latency_ms":     150.0,
+                "recommendation":          "NOMINAL",
+                "created_at":              0.0,
+                "timestamp":               _t239.time(),
+            }
+
     # Phase 220 — GET /agent/per-pair-gap-projection
     # ------------------------------------------------------------------
     @app.get("/agent/per-pair-gap-projection")

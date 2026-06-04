@@ -2466,6 +2466,20 @@ class Bridge:
                 log.warning("Phase 221: ProtocolCoherenceAgent unavailable: %s", _pca221_exc)
         # else: silent skip — superseded by Sentry's FRR anchoring at O3_ACTING
 
+        # Phase 239: GamerReadinessAgent — agent #39
+        if getattr(self.cfg, "gamer_readiness_enabled", True):
+            try:
+                from .gamer_readiness_agent import GamerReadinessAgent
+                _gra39 = GamerReadinessAgent(self.cfg, self.store, bus=_bus)
+                _gra39_task = asyncio.ensure_future(_gra39.run_poll_loop())
+                _gra39_task.set_name("GamerReadinessAgent")
+                self._tasks.append(_gra39_task)
+                log.info("Phase 239: GamerReadinessAgent started (agent #39)")
+            except Exception as _gra39_exc:
+                log.warning("Phase 239: GamerReadinessAgent unavailable: %s", _gra39_exc)
+        else:
+            log.info("Phase 239: GamerReadinessAgent skipped (GAMER_READINESS_ENABLED=false)")
+
         # Phase 203: AgentContextRegistry — commit SHA-256 of each LLM agent system
         # prompt to agent_context_log at startup. Enables CONTEXT_HASH_MISMATCH INVERSION
         # rule in FleetSignalCoherenceAgent to detect unregistered or drifted prompts.

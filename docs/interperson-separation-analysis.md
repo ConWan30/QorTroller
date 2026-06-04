@@ -1,7 +1,7 @@
 # VAPI Inter-Person Biometric Separation Analysis
 
 **Date:** 2026-03-08  
-**Sessions:** N=69 captured, 331 included, 5 excluded (polling-rate filter)  
+**Sessions:** N=69 captured, 331 included, 18 excluded (polling-rate filter)  
 **Players:** 3 (Player 1: hw_005–hw_044, Player 2: hw_045–hw_058, Player 3: hw_059–hw_073)  
 **Feature space:** 13-dimensional L4 biometric fingerprint (11 active after zero-variance exclusion)  
 **Window size:** 1025 frames  
@@ -49,10 +49,10 @@ Mahalanobis distance from each session's mean feature vector to its player's cen
   0.824, 0.034, 0.137, 3.034, 0.243, 0.142, 0.716, 0.292, 0.348, 0.223, 0.326, 0.249, 0.068, 0.218, 0.018, 0.349, 0.765, 1.072, 0.137, 0.262, 1.121, 0.306, 0.043, 0.166, 0.292, 0.294, 0.353, 0.302, 1.388, 0.195, 0.063, 0.506, 0.191, 1.081, 0.028, 0.123, 0.167, 0.218, 0.479, 0.624, 0.639, 0.611, 0.602, 0.571, 0.528, 0.561, 0.729, 0.761, 0.732, 0.701, 0.746, 3.073, 0.510, 0.252, 0.363, 0.538, 0.414, 0.576, 0.706, 0.168, 0.504, 0.071, 1.210, 0.583, 1.509, 3.861, 0.191, 1.405, 2.754, 0.161, 0.812, 0.727, 0.434, 0.769, 0.043, 0.642, 0.278, 0.454, 0.095, 0.319, 0.328, 0.942, 0.365, 0.033, 0.126, 0.616, 0.747, 0.232, 0.082, 0.083, 0.156, 0.070, 0.351, 1.182, 1.736, 1.202, 0.469, 0.421, 0.304, 0.195, 0.075, 0.341, 0.409, 0.118, 0.232, 0.136, 0.351, 0.478, 0.477, 0.079, 0.702, 0.728, 0.716, 0.752, 0.520, 0.826, 0.639, 0.681, 0.680, 0.813, 0.823, 0.824, 0.825, 0.457, 0.759, 0.621, 0.698, 0.730, 0.602, 0.654, 0.599, 0.509, 0.474, 0.476, 0.362, 0.583
 
 **Player 2** (N=100 sessions, mean=0.653):
-  0.706, 0.393, 0.212, 0.664, 0.126, 0.491, 0.057, 1.458, 0.156, 0.125, 0.022, 0.248, 0.155, 0.242, 0.454, 0.671, 0.611, 0.673, 0.633, 0.748, 0.726, 0.727, 0.759, 0.748, 0.575, 0.575, 0.061, 0.362, 0.451, 0.261, 9.193, 7.006, 0.268, 1.245, 0.690, 0.615, 0.786, 0.836, 0.779, 0.721, 0.217, 0.168, 0.029, 0.319, 0.243, 0.483, 0.611, 0.063, 0.378, 0.184, 0.569, 0.545, 0.190, 0.349, 0.539, 0.185, 0.769, 0.095, 0.962, 0.088, 0.079, 0.065, 0.671, 0.487, 1.108, 0.128, 0.822, 0.593, 0.045, 0.120, 0.180, 0.115, 0.061, 0.049, 0.084, 0.089, 0.561, 2.233, 0.456, 0.457, 0.642, 0.844, 0.843, 0.760, 0.780, 0.790, 0.782, 0.799, 0.840, 0.823, 0.835, 0.756, 0.694, 0.691, 0.505, 0.445, 0.655, 0.506, 0.465, 0.236
+  0.706, 0.393, 0.212, 0.664, 0.125, 0.491, 0.057, 1.458, 0.156, 0.125, 0.022, 0.248, 0.155, 0.242, 0.454, 0.671, 0.611, 0.673, 0.633, 0.748, 0.726, 0.727, 0.759, 0.748, 0.575, 0.575, 0.061, 0.362, 0.451, 0.261, 9.193, 7.006, 0.268, 1.245, 0.690, 0.615, 0.786, 0.836, 0.779, 0.721, 0.217, 0.168, 0.029, 0.319, 0.243, 0.483, 0.611, 0.063, 0.378, 0.184, 0.569, 0.545, 0.190, 0.349, 0.539, 0.185, 0.769, 0.095, 0.962, 0.088, 0.079, 0.065, 0.671, 0.487, 1.108, 0.128, 0.822, 0.593, 0.045, 0.120, 0.180, 0.115, 0.061, 0.049, 0.084, 0.089, 0.561, 2.233, 0.456, 0.457, 0.642, 0.844, 0.843, 0.760, 0.780, 0.790, 0.782, 0.799, 0.840, 0.823, 0.835, 0.756, 0.694, 0.691, 0.505, 0.445, 0.655, 0.506, 0.465, 0.236
 
 **Player 3** (N=95 sessions, mean=0.638):
-  0.745, 0.315, 0.332, 0.184, 0.551, 0.136, 0.109, 0.089, 0.173, 0.029, 0.537, 0.245, 0.463, 0.466, 0.496, 0.581, 0.541, 0.609, 0.355, 0.593, 0.520, 0.597, 0.614, 0.620, 0.613, 0.625, 0.765, 0.395, 1.028, 0.368, 0.629, 0.517, 5.067, 2.063, 0.316, 0.273, 0.770, 0.770, 0.257, 0.542, 0.276, 0.721, 0.399, 0.133, 0.040, 0.499, 1.257, 0.665, 1.207, 1.575, 0.927, 0.704, 0.375, 0.518, 0.896, 0.556, 0.788, 0.722, 2.347, 1.009, 1.478, 0.282, 0.454, 0.022, 0.442, 0.395, 0.137, 0.299, 0.354, 1.164, 0.262, 0.119, 0.661, 0.612, 0.594, 0.609, 0.679, 0.771, 0.383, 0.769, 0.767, 0.767, 0.590, 0.614, 0.625, 0.705, 0.769, 0.547, 0.655, 0.158, 0.650, 0.552, 0.509, 0.595, 1.130
+  0.745, 0.315, 0.332, 0.184, 0.551, 0.136, 0.109, 0.089, 0.173, 0.029, 0.537, 0.245, 0.463, 0.466, 0.496, 0.581, 0.541, 0.609, 0.355, 0.593, 0.520, 0.597, 0.614, 0.620, 0.613, 0.625, 0.765, 0.395, 1.028, 0.368, 0.629, 0.517, 5.067, 2.063, 0.316, 0.273, 0.770, 0.770, 0.257, 0.542, 0.276, 0.721, 0.399, 0.133, 0.040, 0.499, 1.257, 0.665, 1.207, 1.575, 0.927, 0.704, 0.375, 0.518, 0.896, 0.556, 0.788, 0.722, 2.347, 1.009, 1.478, 0.282, 0.454, 0.022, 0.442, 0.395, 0.137, 0.299, 0.354, 1.164, 0.262, 0.119, 0.661, 0.612, 0.594, 0.609, 0.679, 0.771, 0.383, 0.769, 0.767, 0.767, 0.590, 0.614, 0.625, 0.705, 0.769, 0.547, 0.655, 0.157, 0.650, 0.552, 0.509, 0.595, 1.130
 
 ## Feature Means by Player
 
@@ -61,7 +61,7 @@ Per-feature mean values for each player's session set. Features with high inter-
 | Feature                          | Player 1                 | Player 2                  | Player 3                 | Inter-Range |
 | -------------------------------- | ------------------------ | ------------------------- | ------------------------ | ----------- |
 | micro_tremor_accel_variance      | 6877.8095 (+/-6571.7384) | 7028.0506 (+/-10694.0003) | 6428.5536 (+/-7139.0140) | 599.4971    |
-| touchpad_spatial_entropy         | 0.5389 (+/-0.8638)       | 0.6799 (+/-1.0250)        | 0.6792 (+/-1.0736)       | 0.1410      |
+| touchpad_spatial_entropy         | 0.5345 (+/-0.8594)       | 0.6765 (+/-1.0214)        | 0.6765 (+/-1.0703)       | 0.1420      |
 | tremor_peak_hz                   | 7.0598 (+/-3.5180)       | 6.9778 (+/-1.5490)        | 6.9626 (+/-2.4109)       | 0.0972      |
 | accel_magnitude_spectral_entropy | 4.6071 (+/-0.8872)       | 4.6596 (+/-1.1026)        | 4.6240 (+/-1.1493)       | 0.0525      |
 | stick_autocorr_lag1              | 0.0515 (+/-0.0746)       | 0.0255 (+/-0.0552)        | 0.0197 (+/-0.0472)       | 0.0318      |
@@ -70,7 +70,7 @@ Per-feature mean values for each player's session set. Features with high inter-
 | tremor_band_power                | 0.6285 (+/-0.1714)       | 0.6172 (+/-0.2121)        | 0.6190 (+/-0.2172)       | 0.0114      |
 | trigger_onset_velocity_l2        | 0.0093 (+/-0.0301)       | 0.0120 (+/-0.0386)        | 0.0132 (+/-0.0350)       | 0.0040      |
 | trigger_onset_velocity_r2        | 0.0015 (+/-0.0034)       | 0.0020 (+/-0.0127)        | 0.0008 (+/-0.0019)       | 0.0012      |
-| touch_position_variance          | 0.0102 (+/-0.0154)       | 0.0099 (+/-0.0155)        | 0.0101 (+/-0.0154)       | 0.0003      |
+| touch_position_variance          | 0.0102 (+/-0.0153)       | 0.0099 (+/-0.0154)        | 0.0100 (+/-0.0154)       | 0.0003      |
 | trigger_resistance_change_rate   | 0.0000 (+/-0.0000)       | 0.0000 (+/-0.0000)        | 0.0000 (+/-0.0000)       | 0.0000      |
 | press_timing_jitter_variance     | 0.0000 (+/-0.0000)       | 0.0000 (+/-0.0000)        | 0.0000 (+/-0.0000)       | 0.0000      |
 
@@ -317,13 +317,26 @@ Misclassified sessions:
 
 ## Excluded Sessions
 
-| Session | Reason                                       | Polling Rate Hz |
-| ------- | -------------------------------------------- | --------------- |
-| hw_043  | polling_rate_hz=203.6 outside [800.0,1100.0] | 203.55          |
-| hw_044  | polling_rate_hz=492.7 outside [800.0,1100.0] | 492.67          |
-| hw_067  | polling_rate_hz=72.2 outside [800.0,1100.0]  | 72.16           |
-| hw_069  | polling_rate_hz=307.1 outside [800.0,1100.0] | 307.14          |
-| hw_073  | polling_rate_hz=49.7 outside [800.0,1100.0]  | 49.7            |
+| Session                      | Reason                                       | Polling Rate Hz |
+| ---------------------------- | -------------------------------------------- | --------------- |
+| hw_043                       | polling_rate_hz=203.6 outside [800.0,1100.0] | 203.55          |
+| hw_044                       | polling_rate_hz=492.7 outside [800.0,1100.0] | 492.67          |
+| hw_067                       | polling_rate_hz=72.2 outside [800.0,1100.0]  | 72.16           |
+| hw_069                       | polling_rate_hz=307.1 outside [800.0,1100.0] | 307.14          |
+| hw_073                       | polling_rate_hz=49.7 outside [800.0,1100.0]  | 49.7            |
+| terminal_cal_P10/ait_P10_001 | too_few_reports (1024 < 1025)                | 1002.0          |
+| terminal_cal_P11/ait_P11_001 | too_few_reports (1024 < 1025)                | 1002.0          |
+| terminal_cal_P12/ait_P12_001 | too_few_reports (1024 < 1025)                | 1002.0          |
+| terminal_cal_P13/ait_P13_001 | too_few_reports (1024 < 1025)                | 1002.0          |
+| terminal_cal_P14/ait_P14_001 | too_few_reports (1024 < 1025)                | 1002.0          |
+| terminal_cal_P15/ait_P15_001 | too_few_reports (1024 < 1025)                | 1002.0          |
+| terminal_cal_P16/ait_P16_001 | too_few_reports (1024 < 1025)                | 1002.0          |
+| terminal_cal_P4/ait_P4_001   | too_few_reports (1024 < 1025)                | 1002.0          |
+| terminal_cal_P5/ait_P5_001   | too_few_reports (1024 < 1025)                | 1002.0          |
+| terminal_cal_P6/ait_P6_001   | too_few_reports (1024 < 1025)                | 1002.0          |
+| terminal_cal_P7/ait_P7_001   | too_few_reports (1024 < 1025)                | 1002.0          |
+| terminal_cal_P8/ait_P8_001   | too_few_reports (1024 < 1025)                | 1002.0          |
+| terminal_cal_P9/ait_P9_001   | too_few_reports (1024 < 1025)                | 1002.0          |
 
 ## Recommendations for L4 Multi-Person Calibration
 
@@ -335,7 +348,7 @@ Misclassified sessions:
 
 3. **Micro-tremor variance.** The gyro-based still-frame filter (gyro_mag < 0.01) applies to raw LSB gyro values (range ~-350 to +350). With raw IMU values in the hundreds, most frames fail this threshold — the effective still-frame count is low. Consider calibrating the threshold to `gyro_mag < IMU_NOISE_FLOOR` (empirical: 332.99 LSB, 95th pct) to capture more tremor frames.
 
-4. **Multi-session calibration window.** The live L4 oracle uses EMA over sessions. For inter-player separation in tournament contexts, accumulate ≥10 sessions per player before computing player centroid. The current N=110 sessions/player average is adequate.
+4. **Multi-session calibration window.** The live L4 oracle uses EMA over sessions. For inter-player separation in tournament contexts, accumulate ≥10 sessions per player before computing player centroid. The current N=21 sessions/player average is marginal for Player 2/3.
 
 5. **Full covariance vs. diagonal.** This analysis uses a full Tikhonov-regularized covariance matrix (off-diagonal terms included). The live L4 oracle currently uses a diagonal approximation. Upgrading to full covariance (TODO in the source) would better capture feature correlations and improve both intra-player consistency detection and inter-player separation.
 
