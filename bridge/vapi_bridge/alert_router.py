@@ -13,13 +13,45 @@ Design constraints:
   - No-op when alert_webhook_url is empty string
 """
 import asyncio
+import ipaddress
 import json
 import logging
+import socket
 import time
 import urllib.request
 from urllib.error import URLError
+from urllib.parse import urlparse
 
 log = logging.getLogger(__name__)
+
+
+def _validate_webhook_url(url: str) -> tuple[bool, str]:
+    """SSRF guard. Returns (ok, reason). Rejects non-http(s), loopback, private,
+    link-local, multicast, reserved ranges. Hostnames are resolved and ALL
+    returned addresses must be public."""
+    if not isinstance(url, str) or len(url) > 2048:
+        return False, "invalid_url_type_or_length"
+    try:
+        parsed = urlparse(url)
+    except Exception as exc:
+        return False, f"unparseable: {exc}"
+    if parsed.scheme not in ("http", "https"):
+        return False, f"scheme_not_allowed: {parsed.scheme}"
+    if not parsed.hostname:
+        return False, "no_hostname"
+    try:
+        infos = socket.getaddrinfo(parsed.hostname, None)
+    except socket.gaierror as exc:
+        return False, f"dns_failed: {exc}"
+    for info in infos:
+        try:
+            ip = ipaddress.ip_address(info[4][0])
+        except ValueError:
+            return False, "invalid_resolved_ip"
+        if (ip.is_loopback or ip.is_private or ip.is_link_local
+                or ip.is_multicast or ip.is_reserved or ip.is_unspecified):
+            return False, f"non_public_ip: {ip}"
+    return True, "ok"
 
 # Severity ranking — higher number = more severe
 _SEVERITY_ORDER: dict[str, int] = {
@@ -105,6 +137,11 @@ class AlertRouter:
 
     async def _dispatch(self, webhook_url: str, insight: dict) -> None:
         """Format and POST insight to the configured webhook (non-fatal)."""
+        ok, reason = _validate_webhook_url(webhook_url)
+        if not ok:
+            log.warning("AlertRouter: SSRF guard rejected webhook (%s): %s",
+                        reason, webhook_url)
+            return
         fmt = getattr(self._cfg, "alert_webhook_format", "generic")
         try:
             payload = self._format_payload(insight, fmt)

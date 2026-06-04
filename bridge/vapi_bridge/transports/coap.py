@@ -9,7 +9,9 @@ overhead (4-byte header vs MQTT's variable-length header).
 """
 
 import asyncio
+import collections
 import logging
+import time
 
 import aiocoap
 import aiocoap.resource as resource
@@ -19,6 +21,12 @@ from ..config import Config
 
 log = logging.getLogger(__name__)
 
+# Per-remote-host rate limit. Sliding 60-second window, monotonic clock so
+# wall-clock rollback cannot bypass the gate. Caps unauthenticated UDP DoS.
+_COAP_RATE_RPM = 120
+_COAP_WINDOW_S = 60.0
+_COAP_MAX_HOSTS = 1024  # prevent unbounded memory growth from spoofed sources
+
 
 class PoACResource(resource.Resource):
     """CoAP resource that accepts PoAC record submissions."""
@@ -26,8 +34,36 @@ class PoACResource(resource.Resource):
     def __init__(self, on_record):
         super().__init__()
         self._on_record = on_record
+        self._rate_windows: dict = {}
+
+    def _rate_allow(self, host_key: str) -> bool:
+        now = time.monotonic()
+        cutoff = now - _COAP_WINDOW_S
+        dq = self._rate_windows.get(host_key)
+        if dq is None:
+            if len(self._rate_windows) >= _COAP_MAX_HOSTS:
+                # Evict oldest tracked host (FIFO) before accepting a new one
+                try:
+                    oldest = next(iter(self._rate_windows))
+                    self._rate_windows.pop(oldest, None)
+                except StopIteration:
+                    pass
+            dq = collections.deque()
+            self._rate_windows[host_key] = dq
+        while dq and dq[0] < cutoff:
+            dq.popleft()
+        if len(dq) >= _COAP_RATE_RPM:
+            return False
+        dq.append(now)
+        return True
 
     async def render_post(self, request):
+        host_key = getattr(request.remote, "hostinfo", "unknown")
+        if not self._rate_allow(host_key):
+            return aiocoap.Message(
+                code=aiocoap.TOO_MANY_REQUESTS,
+                payload=b"rate_limited",
+            )
         payload = request.payload
         if len(payload) != POAC_RECORD_SIZE:
             return aiocoap.Message(
