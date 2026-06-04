@@ -1325,7 +1325,10 @@ class ChainClient:
 
     async def wait_for_receipt(self, tx_hash: str, timeout: int = 60) -> dict:
         """Wait for transaction receipt."""
-        tx_bytes = bytes.fromhex(tx_hash.removeprefix("0x"))
+        try:
+            tx_bytes = bytes.fromhex(tx_hash.removeprefix("0x"))
+        except (ValueError, AttributeError) as exc:
+            raise ValueError(f"invalid tx_hash hex: {exc}") from exc
         receipt = await self._w3.eth.wait_for_transaction_receipt(
             tx_bytes, timeout=timeout
         )
@@ -2125,8 +2128,11 @@ class ChainClient:
         if not self._identity_registry:
             log.debug("attest_continuity: IDENTITY_REGISTRY_ADDRESS not configured, skipping")
             return ""
-        old_bytes = bytes.fromhex(old_device_id)
-        new_bytes = bytes.fromhex(new_device_id)
+        try:
+            old_bytes = bytes.fromhex(old_device_id)
+            new_bytes = bytes.fromhex(new_device_id)
+        except (ValueError, AttributeError) as exc:
+            raise ValueError(f"invalid device_id hex (old or new): {exc}") from exc
         proof_bytes32 = biometric_proof_hash[:32].ljust(32, b"\x00")
         tx_hash = await self._send_tx(
             self._identity_registry.functions.attestContinuity,

@@ -148,6 +148,17 @@ except Exception:
         pass
 
 
+_CLUSTER_HASH_RE = __import__("re").compile(r"^[0-9a-f]{16}$")
+
+
+def _is_valid_cluster_hash(h) -> bool:
+    """Cluster hash MUST be exactly 16 lowercase hex chars (see
+    compute_cluster_hash). Peer-supplied values that fail are rejected to
+    prevent malformed data flowing into DB writes, WebSocket broadcasts, or
+    on-chain calls."""
+    return isinstance(h, str) and bool(_CLUSTER_HASH_RE.match(h))
+
+
 def compute_cluster_hash(device_ids: list) -> str:
     """Stable 16-char hex fingerprint of a device cluster (non-reversible).
 
@@ -263,7 +274,7 @@ class FederationBus:
             for row in rows:
                 peer_url = row.get("peer_url", "")
                 h = row.get("cluster_hash", "")
-                if peer_url and h:
+                if peer_url and _is_valid_cluster_hash(h):
                     self._known_peer_hashes.setdefault(peer_url, set()).add(h)
             total = sum(len(s) for s in self._known_peer_hashes.values())
             if total:
@@ -346,7 +357,13 @@ class FederationBus:
         known = self._known_peer_hashes.setdefault(peer_url, set())
         for c in remote_clusters:
             h = c.get("cluster_hash", "")
-            if not h or h in known:
+            if not _is_valid_cluster_hash(h):
+                log.warning(
+                    "FederationBus: rejecting peer cluster with malformed cluster_hash from %s",
+                    peer_url,
+                )
+                continue
+            if h in known:
                 continue
             known.add(h)
             bridge_id = c.get("bridge_id", peer_url[:16])
