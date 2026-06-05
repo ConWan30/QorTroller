@@ -93,16 +93,12 @@ const APOP_AXES = [
   { key: 'physiology_score', label: 'PHYS',  weight: 0.10 },
 ]
 
-// FROZEN consent categories (CLAUDE.md CONSENT FORMULA v1 — bitmask positions
-// MUST match VAPIConsentRegistry.sol position-for-position).
-// key MUST match the bridge consent_ledger category names + ConsentPanel.jsx
-// CATEGORIES (the FROZEN CONSENT v1 bitmask positions).
-const CONSENT_CATEGORIES = [
-  { bit: 0, key: 'TOURNAMENT_GATE',     scope: 'TOURNAMENT · GATE' },
-  { bit: 1, key: 'ANONYMIZED_RESEARCH', scope: 'ANONYMIZED · RESEARCH' },
-  { bit: 2, key: 'MANUFACTURER_CERT',   scope: 'MANUFACTURER · CERT' },
-  { bit: 3, key: 'MARKETPLACE',         scope: 'MARKETPLACE' },
-]
+// CONSENT_CATEGORIES local copy removed 2026-06-05 (F4) — the in-place
+// consent-matrix display lived in ConsentPanelOverlay, which has been
+// stripped entirely. Consent management is now the standalone Consent
+// Cockpit dApp at /consent. The FROZEN bitmask positions still live in
+// frontend/src/components/ConsentMatrix.jsx (CONSENT_CATEGORIES export),
+// which the Cockpit imports.
 
 function tone(map, value, fallback = GAMER.t3) {
   if (value == null) return fallback
@@ -253,83 +249,15 @@ function LatestGicPanel({ grind, bridgeDown, magnitude }) {
 }
 
 // ---------------------------------------------------------------------------
-// Bottom-left: CONSENT MATRIX (real bitmask → frozen categories)
+// Bottom-left: ConsentPanelOverlay REMOVED 2026-06-05 (F4)
 // ---------------------------------------------------------------------------
-
-// Real per-category consent from /agent/gamer-consent-status (keyed by the
-// gamer's wallet-derived device_id). When no wallet is connected we CANNOT
-// know consent state — show an honest "—" rather than fabricating GRANTED
-// (the prior bug read a non-existent curator.consent_bitmask and defaulted to
-// all-GRANTED). The full grant/revoke flow lives in the ConsentPanel drawer.
-function ConsentPanelOverlay({ consentStatus, connected, ribbonMode }) {
-  // 2026-06-04 — drawer replaced by the standalone Consent Cockpit dApp.
-  // This overlay still shows the at-a-glance consent matrix (read-only
-  // display) but its click action now navigates to /consent rather than
-  // opening an in-place editing drawer. The Cockpit IS the editing
-  // surface; everything sovereignty-related lives there.
-  const known = connected && consentStatus && consentStatus.categories
-  const rows = CONSENT_CATEGORIES.map((c) => ({
-    ...c,
-    granted: known ? Boolean(consentStatus.categories?.[c.key]?.granted) : null,
-  }))
-  const grantedCount = rows.filter((r) => r.granted === true).length
-  return (
-    <OverlayPanel style={{
-      bottom: ribbonMode ? 100 : 16, left: 16, width: 264, cursor: 'pointer',
-      maxHeight: ribbonMode ? 'calc(50% - 124px)' : 'calc(50% - 40px)', overflowY: 'auto',
-    }}>
-      <Link
-        to="/consent"
-        title="Open the Consent Cockpit dApp"
-        style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}
-      >
-        <PanelHead eye="CONSENT · MATRIX">
-          <span className="p-head__meta">
-            {known ? `${grantedCount} / ${rows.length}` : 'CONNECT WALLET'}
-          </span>
-        </PanelHead>
-        <div style={{ padding: '4px 14px 12px' }}>
-          {rows.map((row, i) => (
-            <div key={row.bit} style={{
-              display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 10,
-              padding: '6px 0', alignItems: 'center',
-              borderBottom: i < rows.length - 1 ? '1px solid var(--border-soft)' : 0,
-            }}>
-              <span className="mono" style={{
-                fontSize: 10, letterSpacing: '0.04em',
-                color: row.granted ? 'var(--text)' : 'var(--text-faint)',
-              }}>{row.scope}</span>
-              {row.granted === null ? (
-                <StatusChip tone="dormant">—</StatusChip>
-              ) : (
-                <StatusChip tone={row.granted ? 'live' : 'dormant'}>
-                  {row.granted ? 'GRANTED' : 'WITHHELD'}
-                </StatusChip>
-              )}
-            </div>
-          ))}
-          {/* Inline CTA pill — the at-a-glance overlay always nudges the
-              gamer toward the standalone Cockpit for grant/revoke. */}
-          <div style={{
-            marginTop:    8,
-            padding:      '6px 10px',
-            background:   'rgba(0,212,255,0.10)',
-            border:       '1px solid rgba(0,212,255,0.35)',
-            borderRadius: 3,
-            textAlign:    'center',
-            fontFamily:   "'JetBrains Mono', monospace",
-            fontSize:     9,
-            letterSpacing: '0.16em',
-            color:        '#00d4ff',
-            fontWeight:   600,
-          }}>
-            MANAGE CONSENT →
-          </div>
-        </div>
-      </Link>
-    </OverlayPanel>
-  )
-}
+//
+// Per operator directive: "GamerView keeps a one-line CTA linking to the
+// Cockpit; everything else about consent moves there." The bottom-left
+// overlay (drawer-shaped chrome) kept signaling consent as an ancillary
+// surface; F4 strips it entirely. The MANAGE CONSENT pill below in
+// AnalyticsPanel is the only consent affordance remaining in GamerView,
+// and it routes to /consent for grant/revoke + receipt timeline.
 
 // ---------------------------------------------------------------------------
 // Bottom-right: ANALYTICS (real grind pipeline stats)
@@ -362,6 +290,33 @@ function AnalyticsPanel({ analytics, topBlocker, ribbonMode }) {
             blocked: {topBlocker}
           </div>
         )}
+        {/* F4 2026-06-05 — standalone Consent Cockpit dApp CTA pill. Replaces
+            the prior ConsentPanelOverlay (bottom-left drawer chrome). This
+            is the only consent affordance remaining in GamerView — clicking
+            it navigates to /consent. The Cockpit owns grant/revoke,
+            receipt timeline, wallet/device dual-identity, and the
+            sovereignty disclosure. */}
+        <Link
+          to="/consent"
+          aria-label="Open the Consent Cockpit dApp"
+          style={{
+            marginTop:     6,
+            display:       'block',
+            padding:       '8px 10px',
+            background:    'rgba(0,212,255,0.10)',
+            border:        '1px solid rgba(0,212,255,0.45)',
+            borderRadius:  3,
+            textAlign:     'center',
+            fontFamily:    "'JetBrains Mono', monospace",
+            fontSize:      10,
+            letterSpacing: '0.16em',
+            color:         '#00d4ff',
+            fontWeight:    600,
+            textDecoration: 'none',
+          }}
+        >
+          MANAGE CONSENT →
+        </Link>
       </div>
     </OverlayPanel>
   )
@@ -767,7 +722,10 @@ export function GamerView() {
           the clean 4-corner composition; fleet coherence lives in OperatorView.) */}
       <CaptureHealthPanel capture={captureHealth} paused={paused} bridgeDown={bridgeOffline} />
       <LatestGicPanel grind={grindChain} bridgeDown={bridgeOffline} magnitude={magnitude} />
-      <ConsentPanelOverlay consentStatus={consentStatus} connected={Boolean(address)} ribbonMode={ribbonMode} />
+      {/* ConsentPanelOverlay mount removed 2026-06-05 (F4). The
+          MANAGE CONSENT pill inside AnalyticsPanel is the sole
+          GamerView consent affordance; it routes to the standalone
+          Consent Cockpit dApp at /consent. */}
       <AnalyticsPanel analytics={grindAnalytics} topBlocker={topBlocker} ribbonMode={ribbonMode} />
 
       <ApopEvidencePrism apop={apop} />

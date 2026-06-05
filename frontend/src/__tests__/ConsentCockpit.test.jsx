@@ -8,19 +8,31 @@
  *   T-COCKPIT-2  wallet-disconnected IdentityCard shows the CONNECT WALLET
  *                CTA + the sovereignty sub-line. No wallet address is shown.
  *
- *   T-COCKPIT-3  wallet-connected IdentityCard shows the connected address
- *                + derived device_id (lower-cased, no 0x prefix). The
- *                derivation matches what the bridge consent_ledger keys on.
+ *   T-COCKPIT-3  (F3) wallet-connected IdentityCard surfaces wallet (AUTHORITY)
+ *                and device_id (SUBJECT) as DISTINCT fields, sourced from
+ *                useWalletDevices NOT from a wallet-derivation. Authority
+ *                label and subject label both render. The shipped device_id
+ *                comes from the binding, not deviceIdFromAddress.
  *
  *   T-COCKPIT-4  ReceiptTimeline mounts with header "RECEIPT TIMELINE";
  *                wallet-disconnected state shows the "connect your wallet"
  *                empty message rather than fabricated entries (noMock).
  *
+ *   T-COCKPIT-5  (F3) wallet connected but useWalletDevices returns an
+ *                empty bindings array — Cockpit shows the honest
+ *                "No on-chain controller binding found for this wallet"
+ *                empty state. NO fabricated device_id.
+ *
+ *   T-COCKPIT-6  (F3) wallet connected, useWalletDevices returns >1
+ *                bindings — ControllerSelector renders with one button
+ *                per binding; first binding is selected by default.
+ *
  * Mocks: wagmi (useAccount/useConnect/useDisconnect), useConsentSubmit,
- * useConsentStatus (read), useConsentHistory (timeline read). React-router
- * is wrapped via <MemoryRouter> rather than mocked since the Cockpit's
- * <Link> components are pure-display and don't trigger navigation in
- * test render.
+ * useConsentStatus (read), useConsentHistory (timeline read),
+ * useWalletDevices (F2 binding read). React-router is wrapped via
+ * <MemoryRouter> rather than mocked since the Cockpit's <Link>
+ * components are pure-display and don't trigger navigation in test
+ * render.
  */
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
@@ -49,9 +61,11 @@ vi.mock('../hooks/useConsentSubmit', () => ({
 
 const mockUseConsentStatus  = vi.fn()
 const mockUseConsentHistory = vi.fn()
+const mockUseWalletDevices  = vi.fn()
 vi.mock('../api/bridgeApi', () => ({
   useConsentStatus:  (deviceId) => mockUseConsentStatus(deviceId),
   useConsentHistory: (deviceId, limit) => mockUseConsentHistory(deviceId, limit),
+  useWalletDevices:  (wallet, opts) => mockUseWalletDevices(wallet, opts),
 }))
 
 // Minimal heartbeat-store stub so <CockpitChrome> renders without
@@ -76,92 +90,120 @@ function renderCockpit() {
   )
 }
 
+// Per-test helper to set every mock to a sane default before
+// each test then override specifically. Keeps test bodies focused on
+// the assertion of interest.
+function setMocks({
+  account = { address: undefined, isConnected: false },
+  contractAddress = '',
+  consentStatus = undefined,
+  consentHistory = { data: { entries: [] }, isLoading: false, isError: false },
+  walletDevices = { data: { bindings: [] }, isLoading: false, isError: false },
+} = {}) {
+  mockUseAccount.mockReturnValue(account)
+  mockUseConsentSubmit.mockReturnValue({
+    ready: Boolean(account.isConnected && contractAddress),
+    pending: false,
+    error: null,
+    grant: vi.fn(),
+    revoke: vi.fn(),
+    contractAddress,
+  })
+  mockUseConsentStatus.mockReturnValue({ data: consentStatus, refetch: vi.fn() })
+  mockUseConsentHistory.mockReturnValue(consentHistory)
+  mockUseWalletDevices.mockReturnValue(walletDevices)
+}
+
 describe('Consent Cockpit dApp', () => {
   it('T-COCKPIT-1 shows DEPLOY-HOLD banner when registry address is empty', () => {
-    mockUseAccount.mockReturnValue({ address: undefined, isConnected: false })
-    mockUseConsentSubmit.mockReturnValue({
-      ready:    false,
-      pending:  false,
-      error:    null,
-      grant:    vi.fn(),
-      revoke:   vi.fn(),
-      contractAddress: '',
-    })
-    mockUseConsentStatus.mockReturnValue({ data: undefined, refetch: vi.fn() })
-    mockUseConsentHistory.mockReturnValue({ data: { entries: [] }, isLoading: false, isError: false })
-
+    setMocks()
     renderCockpit()
-
-    expect(
-      screen.getByText(/REGISTRY DEPLOY-HOLD/i),
-    ).toBeTruthy()
-    expect(
-      screen.getByText(/only authority over your consent/i),
-    ).toBeTruthy()
+    expect(screen.getByText(/REGISTRY DEPLOY-HOLD/i)).toBeTruthy()
+    expect(screen.getByText(/only authority over your consent/i)).toBeTruthy()
   })
 
   it('T-COCKPIT-2 shows CONNECT WALLET CTA when wallet disconnected', () => {
-    mockUseAccount.mockReturnValue({ address: undefined, isConnected: false })
-    mockUseConsentSubmit.mockReturnValue({
-      ready:    false,
-      pending:  false,
-      error:    null,
-      grant:    vi.fn(),
-      revoke:   vi.fn(),
-      contractAddress: '',
-    })
-    mockUseConsentStatus.mockReturnValue({ data: undefined, refetch: vi.fn() })
-    mockUseConsentHistory.mockReturnValue({ data: { entries: [] }, isLoading: false, isError: false })
-
+    setMocks()
     renderCockpit()
-
-    // CTA button copy: "CONNECT WALLET →"
     const cta = screen.getByRole('button', { name: /connect wallet/i })
     expect(cta).toBeTruthy()
   })
 
-  it('T-COCKPIT-3 shows connected address + derived device_id when wallet connected', () => {
+  it('T-COCKPIT-3 (F3) shows wallet (AUTHORITY) and device_id (SUBJECT) as distinct fields sourced from useWalletDevices', () => {
     const ADDR = '0xAbCdEf0123456789abcdef0123456789AbCdEf01'
-    mockUseAccount.mockReturnValue({ address: ADDR, isConnected: true })
-    mockUseConsentSubmit.mockReturnValue({
-      ready:    false,
-      pending:  false,
-      error:    null,
-      grant:    vi.fn(),
-      revoke:   vi.fn(),
-      contractAddress: '',
+    const REAL_DEVICE_ID = 'deadbeef'.repeat(8)  // 64-char hex, NOT derived from ADDR
+    setMocks({
+      account: { address: ADDR, isConnected: true },
+      consentStatus: { categories: {} },
+      walletDevices: {
+        data: {
+          bindings: [
+            { device_id: REAL_DEVICE_ID, source: 'VAPIPoEPRegistry', valid: true, expires_at: 0 },
+          ],
+        },
+        isLoading: false,
+        isError: false,
+      },
     })
-    mockUseConsentStatus.mockReturnValue({ data: { categories: {} }, refetch: vi.fn() })
-    mockUseConsentHistory.mockReturnValue({ data: { entries: [] }, isLoading: false, isError: false })
-
     renderCockpit()
 
-    // Full address displayed (not truncated)
+    // Wallet (authority) — full address rendered
     expect(screen.getByText(ADDR)).toBeTruthy()
-    // device_id is the lower-cased address with the 0x prefix stripped
-    const expectedDeviceId = ADDR.toLowerCase().replace(/^0x/, '')
-    expect(screen.getByText(expectedDeviceId)).toBeTruthy()
+    // Authority and subject labels both present — proves dual-identity surface
+    expect(screen.getByText(/WALLET · AUTHORITY/i)).toBeTruthy()
+    expect(screen.getByText(/DEVICE · SUBJECT/i)).toBeTruthy()
+    // Subject device_id comes from useWalletDevices binding, NOT from wallet derivation
+    expect(screen.getByText(REAL_DEVICE_ID)).toBeTruthy()
+    // The OLD wallet-derived shim (lowercased address minus 0x prefix) MUST NOT appear
+    const walletDerivedShim = ADDR.toLowerCase().replace(/^0x/, '')
+    expect(screen.queryByText(walletDerivedShim)).toBeNull()
   })
 
   it('T-COCKPIT-4 mounts ReceiptTimeline with header and empty wallet message', () => {
-    mockUseAccount.mockReturnValue({ address: undefined, isConnected: false })
-    mockUseConsentSubmit.mockReturnValue({
-      ready:    false,
-      pending:  false,
-      error:    null,
-      grant:    vi.fn(),
-      revoke:   vi.fn(),
-      contractAddress: '',
-    })
-    mockUseConsentStatus.mockReturnValue({ data: undefined, refetch: vi.fn() })
-    mockUseConsentHistory.mockReturnValue({ data: { entries: [] }, isLoading: false, isError: false })
-
+    setMocks()
     renderCockpit()
-
     expect(screen.getByText(/RECEIPT TIMELINE/)).toBeTruthy()
-    // Wallet-disconnected empty-state message
     expect(
       screen.getByText(/Connect your wallet to view your consent receipt history/i),
     ).toBeTruthy()
+  })
+
+  it('T-COCKPIT-5 (F3) shows honest "no binding" state when wallet has no on-chain controller registration', () => {
+    const ADDR = '0x0000000000000000000000000000000000001234'
+    setMocks({
+      account: { address: ADDR, isConnected: true },
+      consentStatus: { categories: {} },
+      walletDevices: { data: { bindings: [] }, isLoading: false, isError: false },
+    })
+    renderCockpit()
+    expect(screen.getByText(/No on-chain controller binding found for this wallet/i)).toBeTruthy()
+    expect(screen.getByText(/will not fabricate a subject identifier/i)).toBeTruthy()
+  })
+
+  it('T-COCKPIT-6 (F3) renders ControllerSelector when multiple bindings exist', () => {
+    const ADDR = '0xAbCdEf0123456789abcdef0123456789AbCdEf01'
+    const DEV_A = 'a' + 'a'.repeat(63)
+    const DEV_B = 'b' + 'b'.repeat(63)
+    setMocks({
+      account: { address: ADDR, isConnected: true },
+      consentStatus: { categories: {} },
+      walletDevices: {
+        data: {
+          bindings: [
+            { device_id: DEV_A, source: 'VAPIPoEPRegistry', valid: true,  expires_at: 0 },
+            { device_id: DEV_B, source: 'VHPMinted',        valid: true,  expires_at: 0, token_id: 7 },
+          ],
+        },
+        isLoading: false,
+        isError: false,
+      },
+    })
+    renderCockpit()
+    expect(screen.getByText(/SELECT CONTROLLER \(2 REGISTERED\)/i)).toBeTruthy()
+    // Both source labels render — first binding appears twice (selected-summary
+    // label + its own selector row), second binding appears in its selector row.
+    // getAllByText to assert presence without uniqueness.
+    expect(screen.getAllByText(/gamer-signed registration/i).length).toBeGreaterThanOrEqual(1)
+    expect(screen.getAllByText(/bridge-attested binding/i).length).toBeGreaterThanOrEqual(1)
   })
 })

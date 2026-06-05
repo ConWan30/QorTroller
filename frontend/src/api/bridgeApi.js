@@ -751,6 +751,27 @@ export function useConsentStatus(deviceId, category = '') {
   })
 }
 
+// Consent Cockpit F2 — wallet → device_id binding read hook (2026-06-05).
+// Per Decision D1-C: the Cockpit MUST NOT derive device_id from the wallet
+// address. Instead it resolves the gamer wallet's on-chain-registered
+// controller(s) via GET /agent/wallet-devices, which reads
+// VAPIPoEPRegistry.DeviceRegistered (primary) + optional VHP fallback.
+// noMock: a fabricated binding would silently impersonate a controller
+// the gamer didn't actually register — sovereignty violation.
+export function useWalletDevices(walletAddress, { includeVhp = true } = {}) {
+  return useQuery({
+    queryKey: ['walletDevices', walletAddress, includeVhp],
+    queryFn: () => {
+      const path = `/agent/wallet-devices?wallet=${encodeURIComponent(walletAddress)}&include_vhp=${includeVhp ? 'true' : 'false'}`
+      return get(path, 'walletDevices', { noMock: true })
+    },
+    enabled: Boolean(walletAddress),
+    refetchInterval: 30000,
+    staleTime: 20000,
+    retry: 1,
+  })
+}
+
 // Consent Cockpit dApp 2026-06-04 — receipt timeline read hook.
 // Pairs with useConsentStatus (bitmask) and useConsentSubmit (wagmi write).
 // Returns derived GRANT/REVOKE history for one device_id from the bridge
