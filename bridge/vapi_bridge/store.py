@@ -12145,12 +12145,27 @@ class Store:
         # consent_ts persists the grant timestamp; ttl_s is advisory metadata
         # for now (full expiry-at-gate-check is Phase 238 work).
         consent_ts = (ts_ns / 1e9) if ts_ns is not None else None
-        return self.insert_consent_record(
+        row_id = self.insert_consent_record(
             device_id=device_id,
             consent_type=category,
             consent_given=True,
             consent_ts=consent_ts,
         )
+        # F1 2026-06-05 — append-only event log side-effect. consent_ledger
+        # upsert remains authoritative for current-state lookups; the event
+        # log records the IMMUTABLE event stream so a re-grant after revoke
+        # cannot erase intermediate transitions. Fail-open per
+        # insert_consent_event's contract.
+        try:
+            self.insert_consent_event(
+                device_id=device_id,
+                category=category,
+                action="GRANT",
+                ts=consent_ts,
+            )
+        except Exception:
+            pass  # fail-open: ledger upsert succeeded; event log is secondary
+        return row_id
 
     def revoke_category_consent(
         self,
@@ -12161,15 +12176,30 @@ class Store:
         """Revoke per-category consent (Phase 237-CONSENT). Returns True if a row updated.
 
         Wraps Phase 160 revoke_consent() with category enum validation.
+        Also appends a REVOKE row to the F1 consent_event_log so the
+        action appears in regulator-facing receipt timelines (the
+        consent_ledger row is mutated in place and would otherwise lose
+        the historical action on a subsequent re-grant).
         """
         from .consent_categories import NAME_TO_CATEGORY
         if category not in NAME_TO_CATEGORY:
             raise ValueError(f"unknown consent category: {category!r}")
-        return self.revoke_consent(
+        updated = self.revoke_consent(
             device_id=device_id,
             consent_type=category,
             reason=reason,
         )
+        if updated:
+            try:
+                self.insert_consent_event(
+                    device_id=device_id,
+                    category=category,
+                    action="REVOKE",
+                    reason=reason,
+                )
+            except Exception:
+                pass  # fail-open: ledger update succeeded; event log is secondary
+        return updated
 
     def get_category_consent_status(
         self,
@@ -18623,97 +18653,142 @@ class Store:
             }
         return None
 
-    # --- Consent Cockpit dApp 2026-06-04 -----------------------------------
-    # Read-only history derivation over the existing Phase 160 consent_ledger.
-    # The ledger stores ONE row per (device_id, consent_type) with current
-    # state; we synthesize 1-2 history entries per row (GRANT at consent_ts
-    # if consent_given==1; REVOKE at revoked_at if not null). tx_hash column
-    # added for Phase-2 write-back path; v1 leaves it NULL. No new table —
-    # additive column + read helper only.
+    # --- Consent Cockpit dApp F1 — append-only event log 2026-06-05 ---------
+    #
+    # Supersedes the prior `_ensure_consent_ledger_history_columns` /
+    # `get_consent_history` shape that bolted `grant_tx_hash` +
+    # `revoke_tx_hash` onto the *mutable* `consent_ledger` state table.
+    #
+    # The Phase 160 `consent_ledger` schema enforces UNIQUE(device_id,
+    # consent_type) and uses ON CONFLICT UPSERT in `insert_consent_record`,
+    # which means a re-grant after a revoke OVERWRITES `consent_ts` and
+    # any tx-hash column in place. That semantic is correct for
+    # operational current-state lookups (`get_consent_status`) but it
+    # cannot produce an honest GRANT→REVOKE→GRANT receipt timeline —
+    # intermediate transitions vanish on the next upsert.
+    #
+    # F1 separates concerns:
+    #   - consent_ledger   = mutable state table (Phase 160; unchanged)
+    #   - consent_event_log = append-only event stream (Cockpit's source
+    #                         of truth for receipts + regulator-facing
+    #                         sovereignty proofs)
+    #
+    # Honesty rails (per operator F1 confirmation 2026-06-05):
+    #   - consent_event_log is OPERATIONAL STATE, not a commitment family.
+    #     No FROZEN-v1 family. No PV-CI invariant. No domain tag.
+    #   - Each row carries ONLY: ts, category, action, tx_hash, device_id.
+    #     No biometric field. No raw-telemetry field. No PoAC body.
+    #     This stays well inside the existing data-floor allow-list.
+    #   - The `grant_tx_hash` / `revoke_tx_hash` columns added on
+    #     consent_ledger by the prior (e2653fa5) ship are NOT dropped
+    #     (dormant-not-DROP per operator F1 refinement). No code path
+    #     writes them; they exist as inert columns until a future
+    #     cleanup commit. A grep-audit at F1 commit time confirmed
+    #     zero remaining writers.
 
-    def _ensure_consent_ledger_history_columns(self, conn) -> None:
-        """Idempotently add tx_hash columns to consent_ledger. Mirrors the
-        Phase 241 _ensure_operator_agent_chain_spending_table column-add
-        pattern: PRAGMA-guarded ALTER TABLE, fail-open if another process
-        added the column concurrently."""
-        existing_cols = {
-            r[1] for r in conn.execute("PRAGMA table_info(consent_ledger)").fetchall()
-        }
-        if "grant_tx_hash" not in existing_cols:
-            try:
-                conn.execute(
-                    "ALTER TABLE consent_ledger ADD COLUMN grant_tx_hash TEXT DEFAULT ''"
-                )
-            except Exception:
-                pass  # idempotent migration: column already added in prior run
-        if "revoke_tx_hash" not in existing_cols:
-            try:
-                conn.execute(
-                    "ALTER TABLE consent_ledger ADD COLUMN revoke_tx_hash TEXT DEFAULT ''"
-                )
-            except Exception:
-                pass  # idempotent migration: column already added in prior run
+    def _ensure_consent_event_log_table(self, conn) -> None:
+        """Lazily create the append-only consent_event_log table.
+        Idempotent CREATE TABLE IF NOT EXISTS + index. Mirrors the
+        Phase 241 `_ensure_operator_agent_chain_spending_table` lazy-init
+        pattern."""
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS consent_event_log (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                device_id   TEXT    NOT NULL,
+                category    TEXT    NOT NULL,
+                action      TEXT    NOT NULL,
+                ts          REAL    NOT NULL,
+                tx_hash     TEXT    NOT NULL DEFAULT '',
+                reason      TEXT    NOT NULL DEFAULT '',
+                created_at  REAL    NOT NULL DEFAULT (unixepoch('now'))
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_consent_event_log_device_ts "
+            "ON consent_event_log(device_id, ts DESC)"
+        )
         conn.execute(
             "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at) "
             "VALUES (?, ?, ?)",
-            (244, "consent_ledger_history_columns", time.time()),
+            (244, "consent_event_log", time.time()),
         )
 
+    def insert_consent_event(
+        self,
+        *,
+        device_id: str,
+        category: str,
+        action: str,
+        ts: float | None = None,
+        tx_hash: str = "",
+        reason: str = "",
+    ) -> int:
+        """Append one immutable consent event row.
+
+        `action` is constrained to {'GRANT', 'REVOKE'} at the call site
+        (this helper does not validate so the bridge can extend the
+        action vocabulary later without a column migration).
+
+        Called from `grant_category_consent` and `revoke_category_consent`
+        as a SIDE-EFFECT after the corresponding `consent_ledger` upsert
+        succeeds. The event log row carries the action, not the resulting
+        current state — so a GRANT→REVOKE→GRANT produces 3 rows even
+        though `consent_ledger` ends with 1 row.
+
+        Returns the inserted event id.
+        """
+        now = time.time() if ts is None else float(ts)
+        try:
+            with self._conn() as conn:
+                self._ensure_consent_event_log_table(conn)
+                cur = conn.execute(
+                    "INSERT INTO consent_event_log "
+                    "(device_id, category, action, ts, tx_hash, reason) "
+                    "VALUES (?,?,?,?,?,?)",
+                    (device_id, category, action, now, tx_hash, reason),
+                )
+                return cur.lastrowid or 0
+        except Exception:
+            return 0  # fail-open: event log is operational; ledger upsert is authoritative
+
     def get_consent_history(self, device_id: str, limit: int = 50) -> list[dict]:
-        """Return GRANT/REVOKE event history for a device_id, derived from
-        consent_ledger row state. Most recent first. Caller-bounded limit
-        (clamped to [1, 500]).
+        """Return the append-only consent event history for `device_id`,
+        most recent first. Caller-bounded limit (clamped to [1, 500]).
 
-        Each entry: { ts, category, action: 'GRANT'|'REVOKE', tx_hash, source }.
-          - source='local' for grants/revokes recorded via bridge endpoints
-          - tx_hash populated when frontend Phase-2 write-back endpoint
-            posts the on-chain receipt; '' otherwise
+        Each entry: { id, ts, category, action, tx_hash, reason, source }.
 
-        Per BRIDGE NEVER GRANTS invariant, this is a READER over the local
-        consent_ledger. The on-chain VAPIConsentRegistry is the
-        gamer-authoritative source; this helper does not query chain state.
+        Per BRIDGE NEVER GRANTS invariant, this is a READER over the
+        local consent_event_log. The on-chain VAPIConsentRegistry is the
+        gamer-authoritative source; this helper does not query chain
+        state. Receipts shipped here may be cross-referenced against
+        on-chain `grantConsent` / `revokeConsent` events by any third
+        party.
         """
         limit = max(1, min(500, int(limit)))
         if not device_id:
             return []
         try:
             with self._conn() as conn:
-                self._ensure_consent_ledger_history_columns(conn)
+                self._ensure_consent_event_log_table(conn)
                 rows = conn.execute(
-                    "SELECT consent_type, consent_given, consent_ts, revoked_at,"
-                    "       grant_tx_hash, revoke_tx_hash"
-                    "  FROM consent_ledger"
-                    " WHERE device_id=?",
-                    (device_id,),
+                    "SELECT id, ts, category, action, tx_hash, reason "
+                    "FROM consent_event_log "
+                    "WHERE device_id=? "
+                    "ORDER BY ts DESC, id DESC LIMIT ?",
+                    (device_id, limit),
                 ).fetchall()
         except Exception:
             return []
-        events: list[dict] = []
+        out: list[dict] = []
         for r in rows:
             d = dict(r)
-            category = d.get("consent_type") or ""
-            # GRANT entry: derived from consent_ts (set when grant_category_consent
-            # writes the row). Subsequent revocation flips consent_given=0 but
-            # does NOT clear consent_ts — the grant DID happen and stays in the
-            # audit trail. Using consent_given as the gate would erase grants
-            # whenever they were later revoked (regression caught at smoke-test).
-            grant_ts = d.get("consent_ts")
-            if grant_ts is not None:
-                events.append({
-                    "ts":       float(grant_ts),
-                    "category": category,
-                    "action":   "GRANT",
-                    "tx_hash":  d.get("grant_tx_hash") or "",
-                    "source":   "local",
-                })
-            revoked_ts = d.get("revoked_at")
-            if revoked_ts is not None:
-                events.append({
-                    "ts":       float(revoked_ts),
-                    "category": category,
-                    "action":   "REVOKE",
-                    "tx_hash":  d.get("revoke_tx_hash") or "",
-                    "source":   "local",
-                })
-        events.sort(key=lambda e: e["ts"], reverse=True)
-        return events[:limit]
+            out.append({
+                "id":       int(d["id"]),
+                "ts":       float(d["ts"]),
+                "category": d["category"] or "",
+                "action":   d["action"] or "",
+                "tx_hash":  d["tx_hash"] or "",
+                "reason":   d["reason"] or "",
+                "source":   "local",
+            })
+        return out
