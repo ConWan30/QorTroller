@@ -16503,12 +16503,12 @@ class Store:
             try:
                 conn.execute("ALTER TABLE operator_agent_drafts ADD COLUMN refused_at REAL DEFAULT NULL")
             except Exception:
-                pass
+                pass  # idempotent migration: column already added in prior run
         if "refusal_reason" not in existing_cols:
             try:
                 conn.execute("ALTER TABLE operator_agent_drafts ADD COLUMN refusal_reason TEXT DEFAULT ''")
             except Exception:
-                pass
+                pass  # idempotent migration: column already added in prior run
         conn.execute(
             "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at) "
             "VALUES (?, ?, ?)",
