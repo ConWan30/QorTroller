@@ -1,4 +1,16 @@
-// Phase 237-EXTEND — ConsentPanel
+// ============================================================================
+// DEPRECATED 2026-06-04 — superseded by the standalone Consent Cockpit dApp
+// at /consent (frontend/src/dapps/ConsentCockpit/).
+//
+// This component is preserved in the tree for one release cycle so any
+// cross-reference or test that still touches it does not break in the same
+// PR. It is NO LONGER mounted in GamerView. Do NOT import this in new code;
+// link to /consent instead.
+//
+// Removal target: next cleanup commit after the Cockpit ships.
+// ============================================================================
+//
+// Phase 237-EXTEND — ConsentPanel (historical context preserved below)
 //
 // Right-edge slide-in drawer mirroring the PCCDrawer pattern (GamerView.jsx).
 // Surfaces per-category consent state for the connected wallet AND lets the

@@ -751,6 +751,25 @@ export function useConsentStatus(deviceId, category = '') {
   })
 }
 
+// Consent Cockpit dApp 2026-06-04 — receipt timeline read hook.
+// Pairs with useConsentStatus (bitmask) and useConsentSubmit (wagmi write).
+// Returns derived GRANT/REVOKE history for one device_id from the bridge
+// consent_ledger. noMock: receipt history is the gamer's authoritative
+// audit trail — fabricated entries would be a sovereignty violation.
+export function useConsentHistory(deviceId, limit = 50) {
+  return useQuery({
+    queryKey: ['consentHistory', deviceId, limit],
+    queryFn: () => {
+      const path = `/agent/consent-history?device_id=${encodeURIComponent(deviceId)}&limit=${limit}`
+      return get(path, 'consentHistory', { noMock: true })
+    },
+    enabled: Boolean(deviceId),
+    refetchInterval: 20000,
+    staleTime: 15000,
+    retry: 1,
+  })
+}
+
 // Phase O1 C5 — Operator Agents shadow-mode visibility hooks.
 //
 // All three hooks set noMock: true — operator audit data must never be

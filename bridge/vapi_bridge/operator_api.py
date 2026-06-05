@@ -4721,6 +4721,44 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
+    # Consent Cockpit dApp 2026-06-04 — GET /agent/consent-history
+    # ------------------------------------------------------------------
+    # Read-only history feed for the standalone /consent dApp surface
+    # (frontend/src/dapps/ConsentCockpit). Derives GRANT/REVOKE events
+    # from consent_ledger rows; v1 returns local-ledger entries only
+    # (tx_hash empty until the Phase-2 write-back endpoint ships).
+    # Auth: same api_key + rate-limit pattern as consent-gate-status.
+    # Fail-open: returns entries=[] when consent_ledger disabled or
+    # device_id unknown — never raises on the read path.
+    @app.get("/agent/consent-history")
+    async def get_consent_history_endpoint(
+        device_id: str = "",
+        limit: int = 50,
+        api_key: str = "",
+    ):
+        """Consent grant/revoke history for one device_id (Cockpit v1).
+
+        Returns: device_id, consent_ledger_enabled, entries=[
+          { ts, category, action: 'GRANT'|'REVOKE', tx_hash, source }, ...
+        ], timestamp.
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t_cockpit
+        _enabled = bool(getattr(cfg, "consent_ledger_enabled", True))
+        _entries: list[dict] = []
+        if _enabled and device_id:
+            try:
+                _entries = store.get_consent_history(device_id, limit=limit)
+            except Exception:
+                _entries = []  # fail-open: cockpit shows empty timeline
+        return {
+            "device_id":              device_id,
+            "consent_ledger_enabled": _enabled,
+            "entries":                _entries,
+            "timestamp":              _t_cockpit.time(),
+        }
+
     # Phase 161 — GET /agent/consent-gate-status
     # ------------------------------------------------------------------
     @app.get("/agent/consent-gate-status")
