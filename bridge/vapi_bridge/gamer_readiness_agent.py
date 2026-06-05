@@ -64,7 +64,7 @@ class GamerReadinessAgent:
                             try:
                                 recent_records.append(json.loads(features_str))
                             except Exception:
-                                pass
+                                pass  # fail-open: malformed feature row skipped, advisory agent
             except Exception as db_exc:
                 log.debug("GamerReadinessAgent: failed to read recent records: %s", db_exc)
 

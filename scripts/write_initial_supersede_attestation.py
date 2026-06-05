@@ -71,12 +71,12 @@ def _gather_evidence_for_agent(store, agent_canonical: str, agent_q9: str) -> di
         draft_count = int(store.count_operator_agent_drafts(
             agent_id=agent_q9, since_seconds=30 * 86400))
     except Exception:
-        pass
+        pass  # fail-open: evidence-gathering script; missing field defaults to 0
     try:
         disagreement = float(store.compute_operator_agent_disagreement_rate(
             agent_id=agent_q9, since_seconds=30 * 86400))
     except Exception:
-        pass
+        pass  # fail-open: evidence-gathering script; missing field defaults to 0
 
     # Drift counts 30d
     bundle_drift = 0
@@ -87,7 +87,7 @@ def _gather_evidence_for_agent(store, agent_canonical: str, agent_q9: str) -> di
         scope_drift = int(store.count_operator_agent_drift_findings(
             agent_id=agent_q9, drift_type="SCOPE_HASH_GOVERNANCE_DRIFT", since_seconds=30 * 86400))
     except Exception:
-        pass
+        pass  # fail-open: evidence-gathering script; missing field defaults to 0
 
     # Curator-specific false-positive rate
     false_positive_rate = 0.0
@@ -96,7 +96,7 @@ def _gather_evidence_for_agent(store, agent_canonical: str, agent_q9: str) -> di
             false_positive_rate = float(store.compute_operator_agent_false_positive_rate(
                 agent_id=agent_q9, since_seconds=30 * 86400))
         except Exception:
-            pass
+            pass  # fail-open: evidence-gathering script; missing field defaults to 0
 
     # Shadow age (hours since first activation)
     shadow_age_hours = 0.0
@@ -106,7 +106,7 @@ def _gather_evidence_for_agent(store, agent_canonical: str, agent_q9: str) -> di
             anchored_at = float(rows[-1].get("activated_at", 0.0) or 0.0)
             shadow_age_hours = max(0.0, (time.time() - anchored_at) / 3600.0)
     except Exception:
-        pass
+        pass  # fail-open: evidence-gathering script; missing field defaults to 0
 
     return {
         "draft_count":          draft_count,

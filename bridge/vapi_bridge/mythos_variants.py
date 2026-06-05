@@ -831,6 +831,17 @@ _PATTERN_017_FROZEN_TAGS: frozenset[bytes] = frozenset({
                                      # primitive — surfaced as a finding
                                      # against CLAUDE.md's stated count
                                      # of 10, see audit notes below)
+    b"VAPI-TEMPORAL-BEACON-v1",      # replay_proof_pipeline/posr.py — Arc 6
+                                     # PoSR (Proof of Session Recency), built
+                                     # 2026-05-30; FROZEN-v1 #14 per CLAUDE.md
+                                     # NOTE. PATTERN-017 family-counted (NOT a
+                                     # capability tag) — binds session
+                                     # open/close to IoTeX block hashes via
+                                     # VAPITemporalBeaconRegistry, INV-TBR-001
+                                     # pins keccak256(BEACON_DOMAIN). Added to
+                                     # allowlist 2026-06-04 as bookkeeping
+                                     # catch-up after Mythos-Crypto audit
+                                     # surfaced it as UNKNOWN HIGH.
 })
 
 # AUDIT NOTE 2026-05-15: When this audit was first run live, Mythos-Crypto
