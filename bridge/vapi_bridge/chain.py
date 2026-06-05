@@ -1908,6 +1908,143 @@ class ChainClient:
             log.warning("get_registered_composite_pubkey error (fail-open): %s", exc)
             return None
 
+    # --- Consent Cockpit F2 — wallet → devices binding read (2026-06-05) ---
+    #
+    # Inverse of get_registered_composite_pubkey: given a gamer wallet,
+    # return the on-chain-bound device_id(s) so the Cockpit can render
+    # the wallet (authority) ↔ device_id (subject) dual-identity per
+    # Decision D1-C. Two authoritative cryptographic sources, no new
+    # mapping table, no co-presence fallback in v1.
+    #
+    #   PRIMARY  — VAPIPoEPRegistry.DeviceRegistered events, filtered by
+    #              indexed `gamer` topic. Gamer-signed registration tx,
+    #              strongest binding available. msg.sender==gamer at
+    #              register time.
+    #   FALLBACK — VAPIVerifiedHumanProof.tokenOfAddress[wallet] +
+    #              vhpData[tokenId].deviceIdHash. Operator-attested-for-
+    #              gamer (onlyOwner mint) — weaker than self-signed PoEP
+    #              but still chain-canonical. Only consulted when
+    #              include_vhp=True.
+    #
+    # Honesty rails: read-only; sync RPC (matches get_registered_
+    # composite_pubkey precedent); fail-open on missing config / RPC
+    # error so bridge readiness never depends on either deploy.
+
+    def get_wallet_devices(
+        self,
+        wallet_address: str,
+        include_vhp: bool = False,
+    ) -> list[dict]:
+        """Return the list of (device_id, source, ...) bindings for a
+        gamer wallet, sourced from on-chain cryptographic registrations.
+
+        Returns: list of dicts, each:
+          { device_id: hex64 (no 0x), source: 'VAPIPoEPRegistry'|'VHPMinted',
+            valid?: bool, expires_at?: int, block_number?: int,
+            token_id?: int }
+        Empty list when no bindings or both registries are dormant.
+        Never raises — RPC failures and missing configs fail-open.
+        """
+        out: list[dict] = []
+        if not wallet_address:
+            return out
+        if self._sync_w3 is None:
+            return out
+        try:
+            wallet_checksum = self._sync_w3.to_checksum_address(wallet_address)
+        except Exception:
+            return out
+
+        # PRIMARY: VAPIPoEPRegistry.DeviceRegistered filtered by gamer
+        poep_addr = getattr(self._cfg, "poep_registry_address", "") or ""
+        if poep_addr:
+            try:
+                addr = self._sync_w3.to_checksum_address(poep_addr)
+                contract = self._sync_w3.eth.contract(address=addr, abi=_VAPI_POEP_REGISTRY_ABI)
+                _from_block = int(getattr(self._cfg, "poep_registry_deploy_block", 0) or 0)
+                evs = contract.events.DeviceRegistered.get_logs(
+                    from_block=_from_block,
+                    argument_filters={"gamer": wallet_checksum},
+                )
+                seen: set[str] = set()
+                for ev in evs:
+                    try:
+                        dev_id_bytes = bytes(ev["args"]["deviceId"])
+                        dev_id_hex   = dev_id_bytes.hex()
+                        if dev_id_hex in seen:
+                            continue  # latest event wins; iterate in order
+                        seen.add(dev_id_hex)
+                        # View-call validity (fail-open: register-without-valid is honest)
+                        try:
+                            valid = bool(
+                                contract.functions.isRegistrationValid(
+                                    wallet_checksum, dev_id_bytes
+                                ).call()
+                            )
+                        except Exception:
+                            valid = False
+                        expires_at = int(ev["args"].get("expiresAt", 0) or 0)
+                        out.append({
+                            "device_id":    dev_id_hex,
+                            "source":       "VAPIPoEPRegistry",
+                            "valid":        valid,
+                            "expires_at":   expires_at,
+                            "block_number": int(ev.get("blockNumber", 0) or 0),
+                        })
+                    except Exception:
+                        continue
+            except Exception as exc:  # noqa: BLE001 — fail-open RPC error
+                log.warning("get_wallet_devices PoEP scan error (fail-open): %s", exc)
+
+        # FALLBACK: VHP tokenOfAddress + vhpData (operator-attested-for-gamer)
+        if include_vhp:
+            vhp_addr = getattr(self._cfg, "vhp_contract_address", "") or ""
+            if vhp_addr:
+                try:
+                    _ABI = [
+                        {
+                            "inputs": [{"name": "", "type": "address"}],
+                            "name": "tokenOfAddress",
+                            "outputs": [{"name": "", "type": "uint256"}],
+                            "stateMutability": "view", "type": "function",
+                        },
+                        {
+                            "inputs": [{"name": "", "type": "uint256"}],
+                            "name": "vhpData",
+                            "outputs": [
+                                {"name": "deviceIdHash",      "type": "bytes32"},
+                                {"name": "certificationLevel","type": "uint8"},
+                                {"name": "issuedAt",          "type": "uint32"},
+                                {"name": "expiresAt",         "type": "uint32"},
+                                {"name": "biometricCommitment","type":"uint256"},
+                                {"name": "poacChainHead",     "type": "uint256"},
+                                {"name": "mpcCeremonyHash",   "type": "bytes32"},
+                            ],
+                            "stateMutability": "view", "type": "function",
+                        },
+                    ]
+                    addr = self._sync_w3.to_checksum_address(vhp_addr)
+                    contract = self._sync_w3.eth.contract(address=addr, abi=_ABI)
+                    token_id = int(contract.functions.tokenOfAddress(wallet_checksum).call() or 0)
+                    if token_id > 0:
+                        data = contract.functions.vhpData(token_id).call()
+                        dev_id_hex = bytes(data[0]).hex()
+                        # Skip if already surfaced by PoEP scan (PoEP is the
+                        # stronger binding; don't double-count).
+                        existing = {d["device_id"] for d in out}
+                        if dev_id_hex not in existing:
+                            out.append({
+                                "device_id":  dev_id_hex,
+                                "source":     "VHPMinted",
+                                "valid":      int(data[3]) > 0,  # expires_at > 0
+                                "expires_at": int(data[3]),
+                                "token_id":   token_id,
+                            })
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("get_wallet_devices VHP read error (fail-open): %s", exc)
+
+        return out
+
     # --- Path A Arc 1 Commit 2: VAPIManufacturerDeviceRegistry reads ---
     #
     # Four SYNC view-call methods + a 60s TTL cache. Fail-OPEN posture: when

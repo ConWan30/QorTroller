@@ -4721,6 +4721,50 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
+    # Consent Cockpit F2 — GET /agent/wallet-devices (2026-06-05)
+    # ------------------------------------------------------------------
+    # Returns the on-chain bindings between a gamer wallet and its
+    # registered controller device_id(s). Per Decision D1-C, the Cockpit
+    # decouples wallet (authority/signer) from device_id (subject) — the
+    # wallet never derives the device_id; both are surfaced as distinct
+    # cryptographic identities.
+    #
+    # Sources, in resolution order:
+    #   PRIMARY  — VAPIPoEPRegistry.DeviceRegistered (gamer-signed
+    #              registration tx; strongest binding).
+    #   FALLBACK — VAPIVerifiedHumanProof.tokenOfAddress + vhpData
+    #              (operator-attested-for-gamer; only consulted when
+    #              include_vhp=true).
+    #
+    # No new mapping table. No co-presence fallback in v1. Read-only.
+    @app.get("/agent/wallet-devices")
+    async def get_wallet_devices_endpoint(
+        wallet: str = "",
+        include_vhp: bool = False,
+        api_key: str = "",
+    ):
+        """Wallet → device_id bindings sourced from on-chain registrations.
+
+        Returns: { wallet, bindings: [
+          { device_id, source, valid, expires_at, block_number?, token_id? }
+        ], timestamp }
+        """
+        _check_key(api_key)
+        _check_rate(api_key)
+        import time as _t_walletdev
+        bindings: list[dict] = []
+        if wallet:
+            try:
+                bindings = chain.get_wallet_devices(wallet, include_vhp=include_vhp)
+            except Exception:
+                bindings = []  # fail-open: cockpit shows no-binding state
+        return {
+            "wallet":      wallet,
+            "bindings":    bindings,
+            "include_vhp": bool(include_vhp),
+            "timestamp":   _t_walletdev.time(),
+        }
+
     # Consent Cockpit dApp 2026-06-04 — GET /agent/consent-history
     # ------------------------------------------------------------------
     # Read-only history feed for the standalone /consent dApp surface
