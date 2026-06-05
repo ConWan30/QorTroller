@@ -33,6 +33,12 @@ import { markReality } from './design/realityHeartbeat'
 // de-duplicated out of Evidence OS (QRESCE-0001 v0.5 design alignment). The
 // component files are preserved (still unit-tested) but no longer have an /os tab.
 
+// Consent Cockpit dApp (2026-06-04) — standalone, top-level surface at
+// /consent that supersedes the right-edge ConsentPanel drawer formerly
+// embedded inside GamerView. Lazy-loaded so the dashboard bundle doesn't
+// pay for wagmi-write code paths unless the gamer opens the dApp.
+const ConsentCockpitDapp = React.lazy(() => import('./dapps/ConsentCockpit'))
+
 import './index.css'
 
 const queryClient = new QueryClient({
@@ -86,6 +92,18 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               </Route>
               <Route path="protocol" element={<ProtocolStateWorkspace />} />
             </Route>
+
+            {/* Consent Cockpit dApp — standalone, bookmark-able URL.
+                /cockpit aliases /consent for share-link ergonomics. */}
+            <Route
+              path="/consent"
+              element={
+                <React.Suspense fallback={null}>
+                  <ConsentCockpitDapp />
+                </React.Suspense>
+              }
+            />
+            <Route path="/cockpit" element={<Navigate to="/consent" replace />} />
 
             <Route path="/" element={<App />} />
             <Route path="*" element={<App />} />

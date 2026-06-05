@@ -18622,3 +18622,98 @@ class Store:
                 "created_at":          d["created_at"],
             }
         return None
+
+    # --- Consent Cockpit dApp 2026-06-04 -----------------------------------
+    # Read-only history derivation over the existing Phase 160 consent_ledger.
+    # The ledger stores ONE row per (device_id, consent_type) with current
+    # state; we synthesize 1-2 history entries per row (GRANT at consent_ts
+    # if consent_given==1; REVOKE at revoked_at if not null). tx_hash column
+    # added for Phase-2 write-back path; v1 leaves it NULL. No new table —
+    # additive column + read helper only.
+
+    def _ensure_consent_ledger_history_columns(self, conn) -> None:
+        """Idempotently add tx_hash columns to consent_ledger. Mirrors the
+        Phase 241 _ensure_operator_agent_chain_spending_table column-add
+        pattern: PRAGMA-guarded ALTER TABLE, fail-open if another process
+        added the column concurrently."""
+        existing_cols = {
+            r[1] for r in conn.execute("PRAGMA table_info(consent_ledger)").fetchall()
+        }
+        if "grant_tx_hash" not in existing_cols:
+            try:
+                conn.execute(
+                    "ALTER TABLE consent_ledger ADD COLUMN grant_tx_hash TEXT DEFAULT ''"
+                )
+            except Exception:
+                pass  # idempotent migration: column already added in prior run
+        if "revoke_tx_hash" not in existing_cols:
+            try:
+                conn.execute(
+                    "ALTER TABLE consent_ledger ADD COLUMN revoke_tx_hash TEXT DEFAULT ''"
+                )
+            except Exception:
+                pass  # idempotent migration: column already added in prior run
+        conn.execute(
+            "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at) "
+            "VALUES (?, ?, ?)",
+            (244, "consent_ledger_history_columns", time.time()),
+        )
+
+    def get_consent_history(self, device_id: str, limit: int = 50) -> list[dict]:
+        """Return GRANT/REVOKE event history for a device_id, derived from
+        consent_ledger row state. Most recent first. Caller-bounded limit
+        (clamped to [1, 500]).
+
+        Each entry: { ts, category, action: 'GRANT'|'REVOKE', tx_hash, source }.
+          - source='local' for grants/revokes recorded via bridge endpoints
+          - tx_hash populated when frontend Phase-2 write-back endpoint
+            posts the on-chain receipt; '' otherwise
+
+        Per BRIDGE NEVER GRANTS invariant, this is a READER over the local
+        consent_ledger. The on-chain VAPIConsentRegistry is the
+        gamer-authoritative source; this helper does not query chain state.
+        """
+        limit = max(1, min(500, int(limit)))
+        if not device_id:
+            return []
+        try:
+            with self._conn() as conn:
+                self._ensure_consent_ledger_history_columns(conn)
+                rows = conn.execute(
+                    "SELECT consent_type, consent_given, consent_ts, revoked_at,"
+                    "       grant_tx_hash, revoke_tx_hash"
+                    "  FROM consent_ledger"
+                    " WHERE device_id=?",
+                    (device_id,),
+                ).fetchall()
+        except Exception:
+            return []
+        events: list[dict] = []
+        for r in rows:
+            d = dict(r)
+            category = d.get("consent_type") or ""
+            # GRANT entry: derived from consent_ts (set when grant_category_consent
+            # writes the row). Subsequent revocation flips consent_given=0 but
+            # does NOT clear consent_ts — the grant DID happen and stays in the
+            # audit trail. Using consent_given as the gate would erase grants
+            # whenever they were later revoked (regression caught at smoke-test).
+            grant_ts = d.get("consent_ts")
+            if grant_ts is not None:
+                events.append({
+                    "ts":       float(grant_ts),
+                    "category": category,
+                    "action":   "GRANT",
+                    "tx_hash":  d.get("grant_tx_hash") or "",
+                    "source":   "local",
+                })
+            revoked_ts = d.get("revoked_at")
+            if revoked_ts is not None:
+                events.append({
+                    "ts":       float(revoked_ts),
+                    "category": category,
+                    "action":   "REVOKE",
+                    "tx_hash":  d.get("revoke_tx_hash") or "",
+                    "source":   "local",
+                })
+        events.sort(key=lambda e: e["ts"], reverse=True)
+        return events[:limit]

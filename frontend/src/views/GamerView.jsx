@@ -33,7 +33,11 @@ import {
   usePCCIntelligence, useActivePlayOccupancy, useConsentStatus,
   usePlayerSessionStatus,
 } from '../api/bridgeApi'
-import { ConsentPanel } from '../components/ConsentPanel'
+// ConsentPanel drawer SUPERSEDED 2026-06-04 by the standalone Consent
+// Cockpit dApp at /consent. The overlay below now navigates to the dApp
+// instead of opening an in-place drawer. React-router-dom <Link> is the
+// navigation primitive.
+import { Link } from 'react-router-dom'
 import { VerificationBadge } from '../components/VerificationBadge'
 import { FONTS, GAMER } from '../shared/design/tokens'
 import { OverlayPanel, StatusChip, HashSpecimen } from '../design/Primitives'
@@ -257,7 +261,12 @@ function LatestGicPanel({ grind, bridgeDown, magnitude }) {
 // know consent state — show an honest "—" rather than fabricating GRANTED
 // (the prior bug read a non-existent curator.consent_bitmask and defaulted to
 // all-GRANTED). The full grant/revoke flow lives in the ConsentPanel drawer.
-function ConsentPanelOverlay({ consentStatus, connected, onOpen, ribbonMode }) {
+function ConsentPanelOverlay({ consentStatus, connected, ribbonMode }) {
+  // 2026-06-04 — drawer replaced by the standalone Consent Cockpit dApp.
+  // This overlay still shows the at-a-glance consent matrix (read-only
+  // display) but its click action now navigates to /consent rather than
+  // opening an in-place editing drawer. The Cockpit IS the editing
+  // surface; everything sovereignty-related lives there.
   const known = connected && consentStatus && consentStatus.categories
   const rows = CONSENT_CATEGORIES.map((c) => ({
     ...c,
@@ -269,7 +278,11 @@ function ConsentPanelOverlay({ consentStatus, connected, onOpen, ribbonMode }) {
       bottom: ribbonMode ? 100 : 16, left: 16, width: 264, cursor: 'pointer',
       maxHeight: ribbonMode ? 'calc(50% - 124px)' : 'calc(50% - 40px)', overflowY: 'auto',
     }}>
-      <div onClick={onOpen} title="Open per-category consent panel">
+      <Link
+        to="/consent"
+        title="Open the Consent Cockpit dApp"
+        style={{ display: 'block', textDecoration: 'none', color: 'inherit' }}
+      >
         <PanelHead eye="CONSENT · MATRIX">
           <span className="p-head__meta">
             {known ? `${grantedCount} / ${rows.length}` : 'CONNECT WALLET'}
@@ -295,8 +308,25 @@ function ConsentPanelOverlay({ consentStatus, connected, onOpen, ribbonMode }) {
               )}
             </div>
           ))}
+          {/* Inline CTA pill — the at-a-glance overlay always nudges the
+              gamer toward the standalone Cockpit for grant/revoke. */}
+          <div style={{
+            marginTop:    8,
+            padding:      '6px 10px',
+            background:   'rgba(0,212,255,0.10)',
+            border:       '1px solid rgba(0,212,255,0.35)',
+            borderRadius: 3,
+            textAlign:    'center',
+            fontFamily:   "'JetBrains Mono', monospace",
+            fontSize:     9,
+            letterSpacing: '0.16em',
+            color:        '#00d4ff',
+            fontWeight:   600,
+          }}>
+            MANAGE CONSENT →
+          </div>
         </div>
-      </div>
+      </Link>
     </OverlayPanel>
   )
 }
@@ -655,7 +685,9 @@ export function GamerView() {
   }, [grindAnalytics])
 
   const [drawerManual, setDrawerManual] = useState(false)
-  const [consentOpen, setConsentOpen] = useState(false)
+  // consentOpen state removed 2026-06-04 — consent editing moved to the
+  // standalone Consent Cockpit dApp at /consent. The overlay below is now
+  // a navigation surface, not a drawer trigger.
 
   // Real offline signal: the grind-critical hooks are noMock, so when the
   // bridge is unreachable they hold no data (undefined) rather than fabricating.
@@ -735,7 +767,7 @@ export function GamerView() {
           the clean 4-corner composition; fleet coherence lives in OperatorView.) */}
       <CaptureHealthPanel capture={captureHealth} paused={paused} bridgeDown={bridgeOffline} />
       <LatestGicPanel grind={grindChain} bridgeDown={bridgeOffline} magnitude={magnitude} />
-      <ConsentPanelOverlay consentStatus={consentStatus} connected={Boolean(address)} onOpen={() => setConsentOpen(true)} ribbonMode={ribbonMode} />
+      <ConsentPanelOverlay consentStatus={consentStatus} connected={Boolean(address)} ribbonMode={ribbonMode} />
       <AnalyticsPanel analytics={grindAnalytics} topBlocker={topBlocker} ribbonMode={ribbonMode} />
 
       <ApopEvidencePrism apop={apop} />
@@ -755,7 +787,9 @@ export function GamerView() {
         onCloseManual={setDrawerManual}
       />
 
-      <ConsentPanel manualOpen={consentOpen} onCloseManual={setConsentOpen} />
+      {/* ConsentPanel drawer removed 2026-06-04 — superseded by the
+          standalone Consent Cockpit dApp at /consent. The overlay above
+          links there; no in-place editing surface remains in GamerView. */}
 
       {/* GIC milestone flash — fires only on a real chain-length 10x crossing */}
       <LevelUpBadge chainLen={chainLen} />
