@@ -25,7 +25,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useAccount, useConnect, useDisconnect } from 'wagmi'
 import { injected } from 'wagmi/connectors'
 import { useConsentSubmit } from '../../hooks/useConsentSubmit'
-import { useConsentStatus } from '../../api/bridgeApi'
+import { useConsentStatus, useWalletDevices } from '../../api/bridgeApi'
 import { ConsentMatrix, CONSENT_CATEGORIES } from '../../components/ConsentMatrix'
 import { FONTS, GAMER } from '../../shared/design/tokens'
 import { CockpitChrome } from './CockpitChrome'
@@ -33,10 +33,18 @@ import { ReceiptTimeline } from './ReceiptTimeline'
 
 const IOTEX_ADDR_PREFIX = 'https://testnet.iotexscan.io/address/'
 
-function deviceIdFromAddress(address) {
-  if (!address) return ''
-  return address.toLowerCase().replace(/^0x/, '')
-}
+// F3 (2026-06-05) — Decision D1-C: the Cockpit MUST NOT derive device_id
+// from the wallet address. That would conflate the consent AUTHORITY (the
+// gamer's secp256k1 wallet, the signer of grant/revoke txs) with the
+// consent SUBJECT (the controller, identified by keccak256(controller_pubkey)
+// per FROZEN PoAC rule). One wallet can register multiple certified
+// controllers; the prior wallet-derived shim broke for every gamer with a
+// controller registered via the legitimate VAPIPoEPRegistry path.
+//
+// The Cockpit now sources device_id from `useWalletDevices`, which reads
+// VAPIPoEPRegistry.DeviceRegistered (primary, gamer-signed) + VHP
+// fallback. When multiple bindings exist, a selector lets the gamer pick
+// which controller's consent to manage.
 
 function categoryBitmaskFromStatus(consentStatus) {
   // useConsentStatus shape: { categories: { TOURNAMENT_GATE: {granted}, ... } }
@@ -148,15 +156,64 @@ function PostureBanner({ registryAddress, registryDeployed }) {
   )
 }
 
+function ControllerSelector({ bindings, selectedDeviceId, onSelect }) {
+  if (!bindings || bindings.length <= 1) return null
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ fontFamily: FONTS.mono, fontSize: 8, color: GAMER.t3, letterSpacing: '0.16em', marginBottom: 6 }}>
+        SELECT CONTROLLER ({bindings.length} REGISTERED)
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {bindings.map((b) => {
+          const selected = b.device_id === selectedDeviceId
+          const sourceLabel = b.source === 'VAPIPoEPRegistry'
+            ? 'gamer-signed registration'
+            : b.source === 'VHPMinted'
+            ? 'bridge-attested binding'
+            : b.source
+          return (
+            <button
+              key={b.device_id}
+              onClick={() => onSelect(b.device_id)}
+              style={{
+                textAlign:    'left',
+                padding:      '8px 10px',
+                background:   selected ? GAMER.cyan + '22' : 'transparent',
+                border:       `1px solid ${selected ? GAMER.cyan : GAMER.bd2}`,
+                borderRadius: 3,
+                cursor:       'pointer',
+                color:        selected ? GAMER.t1 : GAMER.t2,
+                fontFamily:   FONTS.mono,
+                fontSize:     10,
+              }}
+            >
+              <div style={{ wordBreak: 'break-all' }}>
+                {b.device_id.slice(0, 16)}…{b.device_id.slice(-8)}
+              </div>
+              <div style={{ fontSize: 8, color: GAMER.t3, marginTop: 2, letterSpacing: '0.08em' }}>
+                {sourceLabel}{b.valid === false ? ' · EXPIRED' : ''}
+              </div>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function IdentityCard({
   isConnected,
   address,
-  deviceId,
+  bindings,
+  bindingsLoading,
+  selectedDeviceId,
+  onSelectDevice,
   contractAddress,
   registryDeployed,
   onConnect,
   onDisconnect,
 }) {
+  const selectedBinding = (bindings || []).find((b) => b.device_id === selectedDeviceId) || null
   return (
     <Section>
       <div
@@ -169,27 +226,72 @@ function IdentityCard({
           marginBottom:  12,
         }}
       >
-        IDENTITY
+        IDENTITY · AUTHORITY + SUBJECT
       </div>
 
       {isConnected ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {/* AUTHORITY — the consent signer. Always the connected wallet. */}
           <div>
             <div style={{ fontFamily: FONTS.mono, fontSize: 8, color: GAMER.t3, letterSpacing: '0.16em', marginBottom: 4 }}>
-              WALLET
+              WALLET · AUTHORITY (signs every grant + revoke)
             </div>
             <div style={{ fontFamily: FONTS.mono, fontSize: 12, color: GAMER.t1, wordBreak: 'break-all' }}>
               {address}
             </div>
           </div>
+
+          {/* SUBJECT — the controller. Sourced from on-chain bindings; NOT
+              derived from the wallet (D1-C). When no binding exists, the
+              Cockpit is honest about it rather than fabricating an id. */}
           <div>
             <div style={{ fontFamily: FONTS.mono, fontSize: 8, color: GAMER.t3, letterSpacing: '0.16em', marginBottom: 4 }}>
-              DEVICE ID (derived)
+              DEVICE · SUBJECT (the certified controller)
             </div>
-            <div style={{ fontFamily: FONTS.mono, fontSize: 11, color: GAMER.t2, wordBreak: 'break-all' }}>
-              {deviceId}
-            </div>
+            {bindingsLoading && (
+              <div style={{ fontFamily: FONTS.mono, fontSize: 10, color: GAMER.t3 }}>
+                Resolving on-chain controller bindings…
+              </div>
+            )}
+            {!bindingsLoading && !selectedBinding && (
+              <div style={{
+                padding:      '8px 10px',
+                background:   GAMER.orange + '14',
+                border:       `1px solid ${GAMER.orange}44`,
+                borderRadius: 3,
+                fontFamily:   FONTS.mono,
+                fontSize:     9,
+                color:        GAMER.orange,
+                lineHeight:   1.55,
+              }}>
+                No on-chain controller binding found for this wallet.
+                Register your DualShock Edge with VAPIPoEPRegistry to
+                exercise consent here. The Cockpit will not fabricate a
+                subject identifier from your wallet address.
+              </div>
+            )}
+            {!bindingsLoading && selectedBinding && (
+              <>
+                <div style={{ fontFamily: FONTS.mono, fontSize: 11, color: GAMER.t2, wordBreak: 'break-all' }}>
+                  {selectedBinding.device_id}
+                </div>
+                <div style={{ fontFamily: FONTS.mono, fontSize: 8, color: GAMER.t3, marginTop: 4, letterSpacing: '0.08em' }}>
+                  {selectedBinding.source === 'VAPIPoEPRegistry'
+                    ? '✓ gamer-signed registration · VAPIPoEPRegistry'
+                    : selectedBinding.source === 'VHPMinted'
+                    ? '✓ bridge-attested binding · VAPIVerifiedHumanProof'
+                    : selectedBinding.source}
+                  {selectedBinding.valid === false ? ' · EXPIRED' : ''}
+                </div>
+                <ControllerSelector
+                  bindings={bindings}
+                  selectedDeviceId={selectedDeviceId}
+                  onSelect={onSelectDevice}
+                />
+              </>
+            )}
           </div>
+
           {registryDeployed && contractAddress && (
             <div>
               <div style={{ fontFamily: FONTS.mono, fontSize: 8, color: GAMER.t3, letterSpacing: '0.16em', marginBottom: 4 }}>
@@ -207,6 +309,7 @@ function IdentityCard({
               </div>
             </div>
           )}
+
           <button
             onClick={onDisconnect}
             style={{
@@ -391,8 +494,29 @@ export default function ConsentCockpitDapp() {
   const { disconnect } = useDisconnect()
   const { ready, pending, error, grant, revoke, contractAddress } = useConsentSubmit()
 
-  const deviceId = useMemo(() => deviceIdFromAddress(address), [address])
-  const { data: consentStatus, refetch } = useConsentStatus(deviceId)
+  // F3: resolve the wallet's on-chain-registered controllers via
+  // /agent/wallet-devices (PoEP primary + VHP fallback). Never derive
+  // device_id from the wallet address.
+  const { data: walletDevicesData, isLoading: bindingsLoading } = useWalletDevices(address, { includeVhp: true })
+  const bindings = walletDevicesData?.bindings || []
+
+  // Selected controller defaults to the first binding (typically the
+  // most-recent gamer-signed PoEP registration). Operator can switch
+  // via the ControllerSelector when multiple controllers are bound.
+  const [selectedDeviceId, setSelectedDeviceId] = useState('')
+  useEffect(() => {
+    if (bindings.length === 0) {
+      setSelectedDeviceId('')
+      return
+    }
+    if (!selectedDeviceId || !bindings.find((b) => b.device_id === selectedDeviceId)) {
+      setSelectedDeviceId(bindings[0].device_id)
+    }
+  }, [bindings, selectedDeviceId])
+
+  // Consent state + history queries key on the SUBJECT (controller),
+  // not the AUTHORITY (wallet). This is the D1-C fix made operational.
+  const { data: consentStatus, refetch } = useConsentStatus(selectedDeviceId)
   const bitmask = useMemo(() => categoryBitmaskFromStatus(consentStatus), [consentStatus])
 
   const [pendingCategoryKey, setPendingCategoryKey] = useState(null)
@@ -476,7 +600,10 @@ export default function ConsentCockpitDapp() {
         <IdentityCard
           isConnected={isConnected}
           address={address}
-          deviceId={deviceId}
+          bindings={bindings}
+          bindingsLoading={bindingsLoading}
+          selectedDeviceId={selectedDeviceId}
+          onSelectDevice={setSelectedDeviceId}
           contractAddress={contractAddress}
           registryDeployed={registryDeployed}
           onConnect={() => connect({ connector: injected() })}
@@ -511,7 +638,7 @@ export default function ConsentCockpitDapp() {
         )}
 
         <ReceiptTimeline
-          deviceId={deviceId}
+          deviceId={selectedDeviceId}
           walletConnected={isConnected}
         />
 
