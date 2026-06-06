@@ -477,11 +477,15 @@ section[id]:hover .qt-cite,
   <!-- 08 ON-CHAIN -->
   <section id="chain" data-anim="reveal">
     <div class="sec-head"><span class="sec-num">08</span><h2 class="sec">Anchored on IoTeX</h2></div>
-    <p>QorTroller runs on IoTeX (chain ID <span class="amber">4690</span>, testnet) — <span class="amber">51 contracts</span> live.
+    <p>QorTroller runs on IoTeX (chain ID <span class="amber">4690</span>, testnet) — <span class="amber">55 contracts</span> live as of 2026-06-05.
        Eligibility is a single composable view: <span class="mono amber">isFullyEligible()</span>.</p>
     <div class="grid grid-2" style="margin-top:18px;">
       <div class="panel"><div class="panel__eye">AdjudicationRegistry</div><div class="hash" style="font-size:11px;">0x44CF981f46a52ADE56476Ce894255954a7776fb4</div></div>
       <div class="panel"><div class="panel__eye">VAPIDualPrimitiveGate</div><div class="hash" style="font-size:11px;">0xd7b1465Aad8F815C67b24681c9c022CED24FB876</div></div>
+      <div class="panel"><div class="panel__eye">VAPIConsentManifestRegistry</div><div class="hash" style="font-size:11px;">0x5F7c8068D0e61818FCD613D47e68a9Ea906a2743</div></div>
+      <div class="panel"><div class="panel__eye">VAPIReplayProofVerifier v1</div><div class="hash" style="font-size:11px;">0x5182372d1D033db0c9230843DFDE606733D5F91B</div></div>
+      <div class="panel"><div class="panel__eye">VAPIBuyerCategoryVerifier <span class="chain" style="margin-left:6px;">NEW · 2026-06-05</span></div><div class="hash" style="font-size:11px;">0x5B1D82AAc2FD662f8850C49e40A94573f624440A</div></div>
+      <div class="panel"><div class="panel__eye">VAPITemporalBeaconRegistry <span class="chain" style="margin-left:6px;">NEW · 2026-06-05</span></div><div class="hash" style="font-size:11px;">0x962440312a995b21d4E203bE6d93021CC22bA051</div></div>
     </div>
     <p class="faint" style="margin-top:12px;">Code identifiers stay <span class="mono">VAPI</span> (no periods) under FROZEN-v1 preservation; display copy uses <span class="amber">V.A.P.I.</span></p>
   </section>
@@ -489,7 +493,7 @@ section[id]:hover .qt-cite,
   <!-- 09 FROZEN PRIMITIVES -->
   <section id="primitives" data-anim="reveal">
     <div class="sec-head"><span class="sec-num">09</span><h2 class="sec">The FROZEN-v1 primitive family</h2></div>
-    <p>A family of byte-exact commitment primitives (PATTERN-017). Each binds a domain tag and a
+    <p>A family of byte-exact commitment primitives (PATTERN-017) — <span class="amber">14 entries</span> in the VAPI namespace + 1 in the QorTroller namespace. Each binds a domain tag and a
        fixed byte layout so any third party can recompute and verify it independently — months later,
        without trusting the protocol's servers.</p>
     <div class="grid grid-3" data-anim="primitives" style="margin-top:18px;">
@@ -502,6 +506,36 @@ section[id]:hover .qt-cite,
       <div class="panel panel--soft"><b class="chain">LISTING</b><br><span class="faint">marketplace tier</span></div>
       <div class="panel panel--soft"><b class="chain">FRR</b><br><span class="faint">fleet readiness root</span></div>
       <div class="panel panel--soft"><b class="chain">ZKBA</b><br><span class="faint">zero-knowledge biometric attest</span></div>
+      <div class="panel panel--soft"><b class="chain">AGENT-COMMIT</b><br><span class="faint">on-chain agent action commit</span></div>
+      <div class="panel panel--soft"><b class="chain">O3-SUPERSEDE</b><br><span class="faint">empirical-evidence supersession</span></div>
+      <div class="panel panel--soft"><b class="chain">PHYSICAL-DATA-ATTESTATION</b><br><span class="faint">hardware-rooted data signing</span></div>
+      <div class="panel panel--soft"><b class="chain">TEMPORAL-BEACON</b><br><span class="faint">L1 block-cadence anchoring · PoSR</span></div>
+      <div class="panel panel--soft"><b class="amber">QORTROLLER-IPACT-RENEWAL</b><br><span class="faint">first QorTroller-namespace family</span></div>
+    </div>
+  </section>
+
+  <!-- 09b TECH-STACK PILLARS (new — what the protocol actually does, in tech-stack language) -->
+  <section id="techstack" data-anim="reveal">
+    <div class="sec-head"><span class="sec-num">09b</span><h2 class="sec">Tech-stack pillars · live on testnet</h2></div>
+    <p>What the protocol provides — described as engineering surfaces, not as project phases. Each pillar
+       has an on-chain artifact, a code path, and an in-CI test.</p>
+
+    <div class="grid grid-2" style="margin-top:18px;">
+      <div class="panel"><div class="panel__eye">ZK proofs of human authorship</div><p style="margin:0;">A Groth16 verifier wrapper on IoTeX — <code class="amber">0x5182372d…</code> — accepts per-session zero-knowledge proofs that gameplay came from a real human above a disclosed humanity floor. The public input <code class="mono">sanitizedTraceRoot</code> binds the proof to a sanitized macro-intent matrix (60 Hz, 4-bit quantized) — biometric features are wiped by the <code class="mono">FORBIDDEN_COLUMNS</code> frozenset (INV-VHR-004) before the matrix is hashed.</p></div>
+
+      <div class="panel"><div class="panel__eye">L1 block-hash anchored recency</div><p style="margin:0;">An on-chain registry — <code class="amber">0x96244031…</code>, LIVE 2026-06-05 — binds every session's open + close beacons to real IoTeX L1 block hashes at a FROZEN cadence (<code class="mono">ANCHOR_CADENCE = 64</code>, INV-TBR-002). Stale re-listing, pre-computation drips, and tournament-window backdating are detected at the freshness floor. Honest dormant fallback when keeper unset.</p></div>
+
+      <div class="panel"><div class="panel__eye">W3bstream Wasm compute sandbox</div><p style="margin:0;">A Rust applet under <code class="mono">w3bstream/applet/</code> compiles to <code class="mono">wasm32-unknown-unknown</code>. The sandbox manifest is FROZEN-pinned: <code class="mono">frame_grabbing=false</code>, <code class="mono">optical_capture=false</code>, <code class="mono">blockhash_temporal_rules=true</code>. The applet validates ingestion mechanically (cadence + isolation + non-zero PQ commitment) and pins INV-W3S-001/002/005 enforced fail-closed in CI.</p></div>
+
+      <div class="panel"><div class="panel__eye">Silicon-rooted hardware identity</div><p style="margin:0;">Per-device birth certificates anchored at <code class="amber">VAPIManufacturerDeviceRegistry</code> at manufacture time. <code class="mono">deviceId = keccak256(controller_pubkey)</code> FROZEN across the entire protocol. IoTeX's <code class="mono">P256 precompile at 0x0100</code> verifies the cert in one view-call. <code class="mono">VAPIProtocolLensV2.isFullyEligible_PathA(bytes32)</code> gates tournaments + marketplace + export in a single composable read.</p></div>
+
+      <div class="panel"><div class="panel__eye">Gamer-sovereign consent surface</div><p style="margin:0;">A standalone dApp at <code class="amber">/consent</code> · Wallet signs every grant + revoke · Bridge can READ but NEVER WRITE · contract enforces <code class="mono">msg.sender == gamer</code> · first on-chain manifest write recorded tx <code class="mono">0xd02c051e…20bd</code> block 44354567 with <code class="mono">allowReplayProofs=true</code> · append-only <code class="mono">consent_event_log</code> table records grant → revoke → re-grant as 3 distinct rows · regulator-facing immutable audit trail.</p></div>
+
+      <div class="panel"><div class="panel__eye">Post-quantum sidecar architecture</div><p style="margin:0;">Decoupled Cryptographic Sidecar Pointer pattern · 3,309-byte ML-DSA-65 signature lives off-chain on a DePIN DA node · only a 32-byte commitment hash crosses the wire/on-chain boundary · INV-ARC7-001 enforces the 228-byte PoAC wire format STRICTLY (HardForkDisallowedError if PQ grows the packet) · INV-ARC7-002 + INV-W3S-005 reject null / malformed commitments at EVM + Wasm layers · Thread-C <code class="mono">asyncio.to_thread</code> prevents PQ signing from jittering the 1002 Hz HID loop · forward-compatible with ML-DSA / SLH-DSA / hybrid composites aligned to IoTeX IIP-64.</p></div>
+
+      <div class="panel"><div class="panel__eye">Autonomous operator stewardship</div><p style="margin:0;">Three on-chain agents at O3_ACTING — Sentry · Guardian · Curator — first ≥3-agent fleet at full action authority in any DePIN gaming protocol. Fleet Readiness Root <code class="mono">0x54b4b698…</code> permanently anchored. Cedar v2 lane authority bundles dual-anchored (AgentScope operational + AgentRegistry governance). Guardian fired the first non-human KMS-HSM signature anchored on-chain. Mythos audit fleet (14 variants) continuously monitors protocol integrity — self-auditing.</p></div>
+
+      <div class="panel"><div class="panel__eye">World Model Provenance Lane (WMP)</div><p style="margin:0;">A packaging + export + consumer-verifier layer turning QorTroller's existing proofs into a bundle a world-model research lab can verify cryptographically without trusting QorTroller. Five checks: humanity Groth16 verify · matrix↔root re-hash (canonical home for the Arc 5 off-circuit finding) · L1 beacon recency · consent · scope honesty. Action-channel only · post-φ only · no observation channel · no biometric leakage · grounded in Fei-Fei Li / World Labs <em>A Functional Taxonomy of World Models</em> (June 2026) — QorTroller is a provenance source, not a world model.</p></div>
     </div>
   </section>
 
@@ -559,7 +593,7 @@ section[id]:hover .qt-cite,
 
   <!-- 12 CURRENT FOOTPRINT -->
   <section id="footprint" data-anim="reveal">
-    <div class="sec-head"><span class="sec-num">12</span><h2 class="sec">Current footprint <span class="faint" style="font-size:13px;letter-spacing:0.14em;text-transform:uppercase;margin-left:10px;">· 2026-05-27</span></h2></div>
+    <div class="sec-head"><span class="sec-num">12</span><h2 class="sec">Current footprint <span class="faint" style="font-size:13px;letter-spacing:0.14em;text-transform:uppercase;margin-left:10px;">· 2026-06-06</span></h2></div>
     <p class="lead">
       Operationally honest. Every load-bearing claim has an in-CI test, an on-chain artifact,
       or an explicit pending marker. There is no aspirational technology pretending to be shipped.
@@ -568,17 +602,17 @@ section[id]:hover .qt-cite,
     <div class="grid grid-2" style="margin-top:18px;">
       <div class="panel panel--soft">
         <div class="eyebrow">CONTRACTS · IoTeX 4690</div>
-        <div style="font-family:var(--font-display);font-weight:700;font-size:34px;color:var(--chain);line-height:1;margin:8px 0 4px;">51</div>
-        <div class="faint">deployed · testnet live</div>
+        <div style="font-family:var(--font-display);font-weight:700;font-size:34px;color:var(--chain);line-height:1;margin:8px 0 4px;">55</div>
+        <div class="faint">deployed · testnet live · Arc 2 + Arc 6 added 2026-06-05</div>
       </div>
       <div class="panel panel--soft">
         <div class="eyebrow">FROZEN · PRIMITIVES</div>
-        <div style="font-family:var(--font-display);font-weight:700;font-size:34px;color:var(--chain);line-height:1;margin:8px 0 4px;">13</div>
-        <div class="faint">PATTERN-017 · 12 VAPI · 1 QORTROLLER</div>
+        <div style="font-family:var(--font-display);font-weight:700;font-size:34px;color:var(--chain);line-height:1;margin:8px 0 4px;">14</div>
+        <div class="faint">PATTERN-017 · VAPI namespace + 1 QORTROLLER</div>
       </div>
       <div class="panel panel--soft">
         <div class="eyebrow">CI · INVARIANTS</div>
-        <div style="font-family:var(--font-display);font-weight:700;font-size:34px;color:var(--chain);line-height:1;margin:8px 0 4px;">35</div>
+        <div style="font-family:var(--font-display);font-weight:700;font-size:34px;color:var(--chain);line-height:1;margin:8px 0 4px;">174</div>
         <div class="faint">enforced · vapi_invariant_gate.py</div>
       </div>
       <div class="panel panel--soft">
@@ -594,7 +628,11 @@ section[id]:hover .qt-cite,
       <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--chain);font-size:13px;line-height:1.5;"><span class="chain">●</span>&nbsp; Guardian autonomous KMS-HSM signing · first non-human steward to produce an HSM-rooted signature AND anchor it on IoTeX.</li>
       <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--chain);font-size:13px;line-height:1.5;"><span class="chain">●</span>&nbsp; Path A Arc 1 complete · <code class="amber">VAPIManufacturerDeviceRegistry</code> deployed · <code class="amber">verify_device_cert.py</code> VERDICT VALID against DualShock with <b>637K+</b> PoAC records.</li>
       <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--chain);font-size:13px;line-height:1.5;"><span class="chain">●</span>&nbsp; GamerView <em>Am I Verified?</em> surface live · tri-state · never fabricates green.</li>
-      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--chain);font-size:13px;line-height:1.5;"><span class="chain">●</span>&nbsp; 13th frozen primitive · <code class="amber">QORTROLLER-IPACT-RENEWAL-v1</code> (FC-a ceremony · 2026-05-24) · first QorTroller-namespace family.</li>
+      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--chain);font-size:13px;line-height:1.5;"><span class="chain">●</span>&nbsp; 14th frozen primitive · <code class="amber">VAPI-TEMPORAL-BEACON-v1</code> (Arc 6 PoSR) · registry deployed 2026-06-05 at <code class="amber">0x96244031…</code>.</li>
+      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--chain);font-size:13px;line-height:1.5;"><span class="chain">●</span>&nbsp; Buyer-category ZK gate deployed 2026-06-05 · <code class="amber">VAPIBuyerCategoryVerifier</code> at <code class="amber">0x5B1D82AA…</code> · Groth16 verifier wrapper.</li>
+      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--chain);font-size:13px;line-height:1.5;"><span class="chain">●</span>&nbsp; First gamer-self-sovereign consent manifest on-chain · tx <code class="amber">0xd02c051e…20bd</code> · block 44354567 · <code class="mono">allowReplayProofs=true</code> verified.</li>
+      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--chain);font-size:13px;line-height:1.5;"><span class="chain">●</span>&nbsp; Consent Cockpit dApp at <code class="amber">/consent</code> · first standalone gamer-sovereign surface · five panes (posture · dual-identity · authority matrix · receipt timeline · sovereignty disclosure).</li>
+      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--chain);font-size:13px;line-height:1.5;"><span class="chain">●</span>&nbsp; World Model Provenance Lane (WMP) v1 shipped on fixtures · 29 tests across assembler + exporter + 5-check consumer verifier + flagged greenfield consent registry · closes the Arc 5 off-circuit root finding via canonical matrix↔root re-hash.</li>
     </ul>
 
     <h3 style="font-family:var(--font-display);font-weight:600;font-size:16px;color:var(--text);margin:22px 0 8px;">Pending · honestly named</h3>
@@ -607,7 +645,10 @@ section[id]:hover .qt-cite,
 
     <h3 style="font-family:var(--font-display);font-weight:600;font-size:16px;color:var(--text);margin:22px 0 8px;">Forward · operator-fired</h3>
     <ul style="list-style:none;padding:0;margin:0;display:grid;gap:6px;">
-      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--text-faint);font-size:13px;line-height:1.5;"><span class="amber">▸</span>&nbsp; <b>Arc 2</b> · ATECC608A + CH341A · first silicon-rooted Path A device on-chain · ~0.05–0.10 IOTX.</li>
+      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--text-faint);font-size:13px;line-height:1.5;"><span class="amber">▸</span>&nbsp; <b>Arc 6 keeper</b> · <code class="mono">VAPITemporalBeaconRegistry.setKeeper(...)</code> + first <code class="mono">anchorBeacon(...)</code> · until set, PoSR binder honestly returns <code class="mono">None</code>; VHR proofs land in v1 behavior without recency upgrade.</li>
+      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--text-faint);font-size:13px;line-height:1.5;"><span class="amber">▸</span>&nbsp; <b>Arc 7 v2 wrapper</b> · operator-interactive snarkjs trusted-setup contribute step required before <code class="mono">VAPIReplayProofVerifier_v2</code> can deploy · sidesteps the v1 verifier byte-for-byte.</li>
+      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--text-faint);font-size:13px;line-height:1.5;"><span class="amber">▸</span>&nbsp; <b>WMP Phase-2</b> · deploy greenfield <code class="amber">VAPIWorldModelConsentRegistry</code> (single <code class="mono">gamer => bool</code> mapping; <code class="mono">msg.sender == gamer</code> enforced) when first paying world-model buyer needs real-data export · solidity + tests live in repo · estimate-only deploy script gated.</li>
+      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--text-faint);font-size:13px;line-height:1.5;"><span class="amber">▸</span>&nbsp; <b>Silicon-rooted devices</b> · ATECC608A + CH341A · first silicon-rooted Path A device birth-certificate ceremony · ~0.05–0.10 IOTX.</li>
       <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--text-faint);font-size:13px;line-height:1.5;"><span class="amber">▸</span>&nbsp; <b>IIP-64 design partner</b> · Xinxin Fan's PR #72 engaged · path from self-signed root CA to standardized PQ device identity at L1.</li>
       <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--text-faint);font-size:13px;line-height:1.5;"><span class="amber">▸</span>&nbsp; <b>Partner manufacturer</b> · spec partner-handoff-ready · 12-step ceremony + deployed bytecode + demonstrated POC.</li>
       <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--text-faint);font-size:13px;line-height:1.5;"><span class="amber">▸</span>&nbsp; <b>Tournament integration</b> · <code class="amber">isFullyEligible_PathA(bytes32)</code> · single eth_call · zero off-chain infra.</li>
