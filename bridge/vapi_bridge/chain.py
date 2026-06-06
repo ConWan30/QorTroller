@@ -1014,6 +1014,41 @@ class ChainClient:
             )
             self._sync_w3 = None
 
+        # Stability fix 2026-06-05 — dedicated ThreadPoolExecutor for chain
+        # reads (per docs/2026-06-05-vhr-attempt-stability-findings.md §1).
+        #
+        # Rationale: STAGE-12 sync_w3 + asyncio.to_thread offload prevents
+        # the AsyncWeb3 cancellation gap from blocking the event loop, but
+        # to_thread uses the default executor (~64 workers shared with
+        # store offload, batcher persistence, PCC sampling, etc.). When
+        # IoTeX RPC stalls under load — empirically 2.7s block_number,
+        # 3.0s get_logs, intermittent "range exceeds the limit" forcing
+        # retries — multiple sync_w3 reads queue behind each other AND
+        # behind unrelated to_thread work, multiplying the effective
+        # latency. Confining chain reads to a separate 2-worker pool
+        # isolates the slow-RPC tail risk: at most 2 threads can be
+        # blocked on IoTeX at once, and unrelated to_thread paths
+        # (store scans, batcher persistence, ECDSA verifies) keep their
+        # full share of the default pool.
+        #
+        # max_workers=2: small enough that stalled chain RPCs can't
+        # starve the default pool; large enough that block_number +
+        # get_logs can run concurrently when needed.
+        try:
+            import concurrent.futures as _cf
+            self._chain_read_pool: "_cf.ThreadPoolExecutor | None" = (
+                _cf.ThreadPoolExecutor(
+                    max_workers=2, thread_name_prefix="vapi-chain-read"
+                )
+            )
+        except Exception as _pool_exc:  # noqa: BLE001 — fail-open
+            log.warning(
+                "ChainClient: dedicated chain-read pool unavailable (%s); "
+                "chain reads will use the default asyncio executor",
+                _pool_exc,
+            )
+            self._chain_read_pool = None
+
         # Phase 11: Support encrypted keystore as an alternative to plaintext env key
         source = getattr(cfg, "bridge_private_key_source", "env")
         if source == "keystore":
@@ -1701,6 +1736,29 @@ class ChainClient:
         """
         return manufacturer_addr.lower() in self._revoked_manufacturers
 
+    async def _chain_read(self, fn, *args, **kwargs):
+        """Run a synchronous chain-read callable on the dedicated chain-read
+        pool (Stability fix 2026-06-05). Falls back to asyncio.to_thread
+        (default executor) when the pool is unavailable.
+
+        Routes chain reads to a 2-worker ThreadPoolExecutor so a stalled
+        IoTeX RPC can block at most 2 threads — keeps the default pool
+        free for store scans, batcher persistence, ECDSA verifies, etc.
+        See ChainClient.__init__ for the full rationale.
+        """
+        if self._chain_read_pool is not None:
+            loop = asyncio.get_event_loop()
+            if args or kwargs:
+                # functools.partial keeps the signature off run_in_executor's
+                # positional-only API
+                import functools
+                return await loop.run_in_executor(
+                    self._chain_read_pool, functools.partial(fn, *args, **kwargs),
+                )
+            return await loop.run_in_executor(self._chain_read_pool, fn)
+        # Fallback: default executor (matches pre-fix STAGE-12 behavior)
+        return await asyncio.to_thread(fn, *args, **kwargs)
+
     async def watch_manufacturer_revocations(self, poll_interval: float = 30.0) -> None:
         """Background coroutine: poll ManufacturerKeyRevoked events and cache revocations.
 
@@ -1709,28 +1767,83 @@ class ChainClient:
 
         Updates self._revoked_manufacturers set so is_manufacturer_revoked() reflects
         on-chain revocations without requiring per-call RPC queries.
+
+        Stability fix 2026-06-05 — previously this loop awaited
+        ``self._w3.eth.block_number`` and the async event_filter's
+        ``get_logs()`` directly. On Windows ProactorEventLoop the
+        AsyncHTTPProvider socket reads do not honor asyncio cancellation
+        cleanly; under load this loop accumulated multi-second event-loop
+        blockages every 30s, contributing to the documented STARVATION
+        cascade. Routing through ``self._chain_read`` (sync_w3 +
+        dedicated 2-worker pool) confines the blocking to a chain-only
+        thread and frees the event loop heartbeat.
         """
         if not self._registry:
             log.warning("watch_manufacturer_revocations: registry not configured")
             return
-        try:
-            event_filter = self._registry.events.ManufacturerKeyRevoked
-        except Exception as exc:
-            log.warning("watch_manufacturer_revocations: event unavailable (%s)", exc)
-            return
 
-        last_block = await self._w3.eth.block_number
-        log.info("watch_manufacturer_revocations: polling every %.0fs from block %d", poll_interval, last_block)
+        # Prefer the sync_w3 path; fall back to the async path only when
+        # sync_w3 setup failed at boot (logged in __init__).
+        use_sync = self._sync_w3 is not None
+        sync_registry = None
+        if use_sync:
+            try:
+                sync_registry = self._sync_w3.eth.contract(
+                    address=self._registry.address,
+                    abi=self._registry.abi,
+                )
+            except Exception as exc:
+                log.warning(
+                    "watch_manufacturer_revocations: sync_w3 registry "
+                    "contract setup failed (%s); falling back to AsyncWeb3",
+                    exc,
+                )
+                use_sync = False
+
+        if use_sync:
+            try:
+                last_block = await self._chain_read(
+                    lambda: self._sync_w3.eth.block_number
+                )
+            except Exception as exc:
+                log.warning(
+                    "watch_manufacturer_revocations: initial block_number "
+                    "read failed (%s); deferring start by one poll interval",
+                    exc,
+                )
+                await asyncio.sleep(poll_interval)
+                last_block = 0
+        else:
+            last_block = await self._w3.eth.block_number
+
+        log.info(
+            "watch_manufacturer_revocations: polling every %.0fs from block %d "
+            "(sync_w3=%s)",
+            poll_interval, last_block, use_sync,
+        )
 
         while True:
             await asyncio.sleep(poll_interval)
             try:
-                current_block = await self._w3.eth.block_number
-                if current_block <= last_block:
-                    continue
-                logs = await event_filter().get_logs(
-                    from_block=last_block + 1, to_block=current_block
-                )
+                if use_sync:
+                    current_block = await self._chain_read(
+                        lambda: self._sync_w3.eth.block_number
+                    )
+                    if current_block <= last_block:
+                        continue
+                    logs = await self._chain_read(
+                        lambda: sync_registry.events.ManufacturerKeyRevoked().get_logs(
+                            from_block=last_block + 1, to_block=current_block,
+                        )
+                    )
+                else:
+                    current_block = await self._w3.eth.block_number
+                    if current_block <= last_block:
+                        continue
+                    event_filter = self._registry.events.ManufacturerKeyRevoked
+                    logs = await event_filter().get_logs(
+                        from_block=last_block + 1, to_block=current_block
+                    )
                 for entry in logs:
                     addr = entry["args"]["manufacturer"].lower()
                     self._revoked_manufacturers.add(addr)
