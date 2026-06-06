@@ -39,6 +39,14 @@ import { markReality } from './design/realityHeartbeat'
 // pay for wagmi-write code paths unless the gamer opens the dApp.
 const ConsentCockpitDapp = React.lazy(() => import('./dapps/ConsentCockpit'))
 
+// Verified Replay Card (2026-06-06) — public, share-able cryptographic
+// proof artifact. /replay/:hash renders the card with chrome (back-link,
+// copy-URL strip); /replay/embed/:hash strips chrome + transparent
+// background for streamer OBS overlays. Lazy-loaded for the same bundle
+// hygiene reason as the Cockpit. The card is the viral mechanism — the
+// moment a PROOF_BUILT outcome becomes a Discord / Twitter screenshot.
+const VerifiedReplayCardDapp = React.lazy(() => import('./dapps/VerifiedReplay'))
+
 import './index.css'
 
 const queryClient = new QueryClient({
@@ -104,6 +112,36 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               }
             />
             <Route path="/cockpit" element={<Navigate to="/consent" replace />} />
+
+            {/* Verified Replay Card dApp — public, no auth, no wallet.
+                /replay/:hash is the share-able URL; /replay/embed/:hash
+                is the OBS-overlay variant (transparent + chrome-less).
+                Both routes share the same component; the component
+                inspects window.location.pathname to switch modes. */}
+            <Route
+              path="/replay/embed/:hash"
+              element={
+                <React.Suspense fallback={null}>
+                  <VerifiedReplayCardDapp />
+                </React.Suspense>
+              }
+            />
+            <Route
+              path="/replay/:hash"
+              element={
+                <React.Suspense fallback={null}>
+                  <VerifiedReplayCardDapp />
+                </React.Suspense>
+              }
+            />
+            <Route
+              path="/replay"
+              element={
+                <React.Suspense fallback={null}>
+                  <VerifiedReplayCardDapp />
+                </React.Suspense>
+              }
+            />
 
             <Route path="/" element={<App />} />
             <Route path="*" element={<App />} />
