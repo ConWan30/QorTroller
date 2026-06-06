@@ -202,7 +202,7 @@ export const MOCK = {
     sustained_duration_s: drift(180.0, 0.01),
     grind_mode: true,
     grind_ready: true,
-    grind_target: 100,
+    grind_target: 200,
     consecutive_clean_toward_target: Math.floor(drift(12, 0.1)),
     session_counting_paused: false,
     gameplay_context_enabled: true,

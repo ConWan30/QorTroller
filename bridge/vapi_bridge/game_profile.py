@@ -133,3 +133,53 @@ NCAA_CFB_26 = GameProfile(
 )
 
 register_profile(NCAA_CFB_26)
+
+
+# ---------------------------------------------------------------------------
+# Call of Duty: Warzone (2026-06-05)
+# ---------------------------------------------------------------------------
+#
+# First-person shooter / battle-royale profile. Distinct biometric signature
+# vs. NCAA CFB 26 — the primary L6-Passive observation window shifts from
+# R2 (sprint hold) to L2 (Aim Down Sights hold) because ADS is the dominant
+# sustained-trigger event during firefights. R2 is also held heavily (fire)
+# but fire-pull cadence is too event-driven to baseline cleanly for the
+# resistance-event flag; ADS holds are 1-3 second sustained pulls with a
+# clear onset edge.
+#
+# Button priority for L5 temporal rhythm reflects Warzone meta:
+#   r2  (fire)         — primary, near-constant in active engagements
+#   l2  (ADS)          — secondary, sustained during gunfights
+#   cross (jump)       — moderate, movement / movement-tech
+#   square (reload)    — situational but periodic
+COD_WARZONE = GameProfile(
+    profile_id="cod_warzone",
+    display_name="Call of Duty: Warzone",
+    publisher="Activision",
+    platform="ps5",
+
+    l5_button_priority=["r2", "l2_dig", "cross", "square"],
+
+    l6_passive_enabled=True,
+    l6_passive_button="l2_dig",   # ADS hold — sustained-trigger pull during gunfights
+    l6_passive_ema_alpha=0.18,    # slightly faster EMA than NCAA — ADS durations are
+                                  # more stable per engagement, so baseline converges sooner
+    l6_passive_baseline_n=20,     # same bootstrap as NCAA
+    l6_passive_flag_ratio=1.5,    # same resistance-event threshold
+
+    button_map={
+        "r2":       "Fire / Primary shoot (held during sustained fire; tapped for burst)",
+        "l2":       "Aim Down Sights (sustained 1-3s during engagements)",
+        "cross":    "Jump / Mantle / Tactical movement",
+        "circle":   "Crouch / Prone (toggle/hold) / Slide cancel",
+        "square":   "Reload / Interact / Use field upgrade",
+        "triangle": "Weapon swap / Pickup",
+        "r1":       "Melee / Knife (situational close-quarters)",
+        "l1":       "Throw equipment / Lethal grenade",
+        "r_stick":  "Camera look / R3-click marker ping",
+        "l_stick":  "Player movement / L3-click tactical sprint",
+        "d_pad":    "Loadout cycle / Tactical / Killstreaks / Ping wheel",
+    },
+)
+
+register_profile(COD_WARZONE)
