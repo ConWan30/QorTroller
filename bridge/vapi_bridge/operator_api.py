@@ -7755,7 +7755,17 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             )
             _gad_summary = await asyncio.to_thread(store.get_validation_summary, 1)
             _latest_gctx = _gad_summary.get("latest_gameplay_context")
-            return {**_status, "latest_gameplay_context": _latest_gctx, "timestamp": _t235a.time()}
+            # Surface grind_target so the frontend ribbon / progress widgets
+            # show the live target (not the hardcoded 100 fallback). Bumped
+            # 2026-06-05 to 200 after GIC_100 was reached; SessionBoundary
+            # DetectorAgent needs target > chain_length to stay armed.
+            _grind_target = int(getattr(cfg, "grind_target", 0) or 0)
+            return {
+                **_status,
+                "latest_gameplay_context": _latest_gctx,
+                "grind_target": _grind_target,
+                "timestamp": _t235a.time(),
+            }
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
