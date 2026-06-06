@@ -751,6 +751,24 @@ export function useConsentStatus(deviceId, category = '') {
   })
 }
 
+// Phase Arc 5 — Latest VHR proof outcome for GamerView display (2026-06-05).
+// Reads /curator/pending-replay-proofs (which despite the name returns all
+// outcomes including built proofs — see operator_api.py:768 docstring).
+// noMock: a fabricated VHR outcome would impersonate a cryptographic proof
+// claim that never actually fired — sovereignty + audit-trail violation.
+// 30s poll cadence: SessionAdjudicator runs every 300s so faster polling
+// would be wasted; 30s is responsive enough to surface a fresh outcome
+// within ~half its lifetime.
+export function useLatestVhrProof(limit = 5) {
+  return useQuery({
+    queryKey: ['vhrLatestProof', limit],
+    queryFn: () => get(`/curator/pending-replay-proofs?limit=${limit}`, 'vhrLatestProof', { noMock: true }),
+    refetchInterval: 30000,
+    staleTime: 20000,
+    retry: 1,
+  })
+}
+
 // Consent Cockpit F2 — wallet → device_id binding read hook (2026-06-05).
 // Per Decision D1-C: the Cockpit MUST NOT derive device_id from the wallet
 // address. Instead it resolves the gamer wallet's on-chain-registered

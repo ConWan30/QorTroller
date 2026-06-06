@@ -31,7 +31,7 @@ import { useAccount } from 'wagmi'
 import {
   useCaptureHealth, useGrindChain, useGrindAnalytics,
   usePCCIntelligence, useActivePlayOccupancy, useConsentStatus,
-  usePlayerSessionStatus,
+  usePlayerSessionStatus, useLatestVhrProof,
 } from '../api/bridgeApi'
 // ConsentPanel drawer SUPERSEDED 2026-06-04 by the standalone Consent
 // Cockpit dApp at /consent. The overlay below now navigates to the dApp
@@ -249,15 +249,116 @@ function LatestGicPanel({ grind, bridgeDown, magnitude }) {
 }
 
 // ---------------------------------------------------------------------------
-// Bottom-left: ConsentPanelOverlay REMOVED 2026-06-05 (F4)
+// Bottom-left: VHR PROOF PANEL — Arc 5 Verified Human Replay outcome surface
 // ---------------------------------------------------------------------------
 //
-// Per operator directive: "GamerView keeps a one-line CTA linking to the
-// Cockpit; everything else about consent moves there." The bottom-left
-// overlay (drawer-shaped chrome) kept signaling consent as an ancillary
-// surface; F4 strips it entirely. The MANAGE CONSENT pill below in
-// AnalyticsPanel is the only consent affordance remaining in GamerView,
-// and it routes to /consent for grant/revoke + receipt timeline.
+// History of this slot:
+//   2026-06-05 (F4) — ConsentPanelOverlay removed; consent management
+//                     moved to standalone /consent Cockpit dApp
+//   2026-06-05 (Arc 5 surface) — now occupied by the VHR Proof Panel
+//                     so the gamer sees the headline of the
+//                     on_session_complete_vhr hook: did a real proof land,
+//                     or did the pipeline gate-close honestly.
+//
+// Reads /curator/pending-replay-proofs via useLatestVhrProof. The bridge
+// pipeline writes one row per fire to curator_packaging_log with one of:
+//
+//   vhr_proof_built              — Groth16 proof generated AND consent passed
+//   vhr_proof_built_no_verifier  — proof generated; verifier address empty
+//                                  (Arc 5 wrapper not wired in env)
+//   vhr_proof_deferred           — DeferredProver path; no real prover wired
+//   vhr_deferred_no_consent      — Arc 4 ConsentManifest gate said no
+//
+// Honesty rails: noMock on the underlying hook (a fabricated outcome would
+// impersonate a cryptographic proof claim that never fired); empty state
+// is "no VHR proofs yet" not a fake placeholder; failed-bridge fetch leaves
+// last good value (react-query default).
+function VhrProofPanel({ vhrLatest, ribbonMode, bridgeDown }) {
+  const rows = Array.isArray(vhrLatest?.pending_replay_proofs)
+    ? vhrLatest.pending_replay_proofs
+    : []
+  const latest = rows.length > 0 ? rows[0] : null
+  const count = vhrLatest?.count ?? 0
+
+  // outcome → display tone + label
+  function classifyOutcome(outcome) {
+    if (!outcome) return { tone: 'dormant', label: '—', detail: '' }
+    if (outcome === 'vhr_proof_built') {
+      return { tone: 'live', label: 'PROOF BUILT', detail: 'cryptographic proof generated' }
+    }
+    if (outcome === 'vhr_proof_built_no_verifier') {
+      return { tone: 'live', label: 'PROOF BUILT', detail: 'verifier address not wired' }
+    }
+    if (outcome === 'vhr_proof_deferred') {
+      return { tone: 'pending', label: 'DEFERRED', detail: 'no prover (ceremony pending)' }
+    }
+    if (outcome === 'vhr_deferred_no_consent') {
+      return { tone: 'pending', label: 'NO CONSENT', detail: 'Arc 4 manifest gate closed' }
+    }
+    return { tone: 'pending', label: outcome.toUpperCase(), detail: 'unrecognized outcome' }
+  }
+  const c = classifyOutcome(latest?.outcome)
+
+  // ts_ns → relative age (uses existing fmtAge helper)
+  const ageStr = latest?.ts_ns
+    ? fmtAge(Math.floor(Number(latest.ts_ns) / 1e9))
+    : null
+
+  const sessionShort = latest?.session_id
+    ? String(latest.session_id).slice(0, 14)
+    : null
+
+  return (
+    <OverlayPanel style={{
+      bottom: ribbonMode ? 100 : 16, left: 16, width: 264,
+      maxHeight: ribbonMode ? 'calc(50% - 124px)' : 'calc(50% - 40px)', overflowY: 'auto',
+    }}>
+      <PanelHead eye="VHR · ARC 5 PROOF">
+        <span className="p-head__meta">
+          {count > 0 ? `${count} TOTAL` : 'NONE YET'}
+        </span>
+      </PanelHead>
+      <div className="p-body" style={{ display: 'grid', gap: 9 }}>
+        {bridgeDown ? (
+          <div className="mono" style={{ fontSize: 10, color: 'var(--text-faint)', lineHeight: 1.5 }}>
+            bridge offline — last-known state held
+          </div>
+        ) : !latest ? (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <span className="label">latest · outcome</span>
+              <StatusChip tone="dormant">—</StatusChip>
+            </div>
+            <div className="mono" style={{ fontSize: 9.5, color: 'var(--text-faint)', lineHeight: 1.55 }}>
+              No VHR proofs produced yet. The pipeline fires on session-
+              adjudicator validation (~5 min cycle). With Arc 4 consent
+              manifest active, the next fire produces PROOF BUILT.
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <span className="label">latest · outcome</span>
+              <StatusChip tone={c.tone}>{c.label}</StatusChip>
+            </div>
+            <div className="mono" style={{ fontSize: 9.5, color: 'var(--text-faint)', letterSpacing: '0.04em' }}>
+              {c.detail}
+            </div>
+            {sessionShort && (
+              <Row label="session" value={sessionShort} size={11} />
+            )}
+            {ageStr && (
+              <Row label="when" value={ageStr} size={11} />
+            )}
+            <div style={{ marginTop: 2, fontFamily: 'var(--font-mono)', fontSize: 9, color: 'rgba(91,214,163,0.65)', letterSpacing: '0.05em' }}>
+              source: curator_packaging_log
+            </div>
+          </>
+        )}
+      </div>
+    </OverlayPanel>
+  )
+}
 
 // ---------------------------------------------------------------------------
 // Bottom-right: ANALYTICS (real grind pipeline stats)
@@ -605,6 +706,7 @@ export function GamerView() {
   const { data: grindAnalytics }  = useGrindAnalytics()
   const { data: pccIntelligence } = usePCCIntelligence()
   const { data: apop }            = useActivePlayOccupancy()
+  const { data: vhrLatest }       = useLatestVhrProof()
   // Per-link GIC records (oldest-first → orb i maps to links[i]) for the
   // verdict-coloured constellation. Public, no-auth, PII-safe; polled slowly
   // (links only grow). Degrades to uniform chain-green if unavailable.
@@ -722,10 +824,10 @@ export function GamerView() {
           the clean 4-corner composition; fleet coherence lives in OperatorView.) */}
       <CaptureHealthPanel capture={captureHealth} paused={paused} bridgeDown={bridgeOffline} />
       <LatestGicPanel grind={grindChain} bridgeDown={bridgeOffline} magnitude={magnitude} />
-      {/* ConsentPanelOverlay mount removed 2026-06-05 (F4). The
-          MANAGE CONSENT pill inside AnalyticsPanel is the sole
-          GamerView consent affordance; it routes to the standalone
-          Consent Cockpit dApp at /consent. */}
+      {/* VHR Proof Panel (Arc 5) — bottom-left, replacing the slot that
+          was vacated by the F4 ConsentPanelOverlay removal. Shows the
+          most recent on_session_complete_vhr outcome from curator_packaging_log. */}
+      <VhrProofPanel vhrLatest={vhrLatest} ribbonMode={ribbonMode} bridgeDown={bridgeOffline} />
       <AnalyticsPanel analytics={grindAnalytics} topBlocker={topBlocker} ribbonMode={ribbonMode} />
 
       <ApopEvidencePrism apop={apop} />
