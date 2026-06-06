@@ -47,6 +47,14 @@ const ConsentCockpitDapp = React.lazy(() => import('./dapps/ConsentCockpit'))
 // moment a PROOF_BUILT outcome becomes a Discord / Twitter screenshot.
 const VerifiedReplayCardDapp = React.lazy(() => import('./dapps/VerifiedReplay'))
 
+// Mainstream gamer onboarding (2026-06-06) — /start. Editorial-trailer
+// surface for first-time gamers who heard about the protocol from a
+// streamer and need an entry door that isn't the operator dashboard.
+// Scroll-triggered storytelling in three acts; pulls live GIC chain
+// head so the "this is real right now" moment lands. Lazy-loaded so the
+// dashboard bundle doesn't pay for framer-motion until /start opens.
+const StartDapp = React.lazy(() => import('./dapps/Start'))
+
 import './index.css'
 
 const queryClient = new QueryClient({
@@ -142,6 +150,18 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                 </React.Suspense>
               }
             />
+
+            {/* Mainstream gamer onboarding — /start (alias /play). The
+                editorial-trailer surface; closes by routing to /consent. */}
+            <Route
+              path="/start"
+              element={
+                <React.Suspense fallback={null}>
+                  <StartDapp />
+                </React.Suspense>
+              }
+            />
+            <Route path="/play" element={<Navigate to="/start" replace />} />
 
             <Route path="/" element={<App />} />
             <Route path="*" element={<App />} />
