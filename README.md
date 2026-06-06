@@ -8,24 +8,26 @@
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18966169.svg)](https://doi.org/10.5281/zenodo.18966169) (v3 — historical; v4 DOI pending release)
 
-**Author:** Contravious Battle (Independent Researcher) · **Network:** IoTeX testnet (chain ID 4690) · **Phase:** PATH A ARC 1 + ARC 5 (VHR) + ARC 6 (PoSR) + ARC 7 (PQ SIDECAR) BUILT — **public repo, mainnet-ready** · **Architecture anchor:** `c2303781` · **Date:** 2026-06-02
+**Author:** Contravious Battle (Independent Researcher) · **Network:** IoTeX testnet (chain ID 4690) · **Phase:** PATH A ARC 1 + DATA ECONOMY ARC 2 + ARC 4 + ARC 5 + ARC 6 **DEPLOYED**; ARC 7 PQ SIDECAR BUILT (v2 wrapper ceremony-gated) — **public repo, mainnet-ready** · **Date:** 2026-06-05
 
 | Surface | Status |
 |---|---|
 | **Bridge tests** | 4330+ passing |
 | **SDK tests** | 604 passing |
 | **Hardhat contract tests** | **760 passing** (13 pre-existing unrelated failures, see baseline) |
-| **Frontend Vitest** | 133 passing |
+| **Frontend Vitest** | **155 passing** (Consent Cockpit + VHR Proof Panel additions, 2026-06-04/05) |
 | **PV-CI invariant gate** | **174 / 174 pinned**, governance-ceremony-locked; CI-enforced on every PR |
 | **FSCA contradiction rules** | 28 active |
-| **Contracts LIVE on IoTeX testnet** | **53 substantive contracts** (chain 4690; see `contracts/deployed-addresses.json`); Arc 5 + Arc 6 deploys added 2026-05-30 (`0xcE56404C…`, `0x5182372d…`, `0x7EEc6B7E…`, `0x5F7c8068…`) |
+| **Contracts LIVE on IoTeX testnet** | **55 substantive contracts** (chain 4690; see `contracts/deployed-addresses.json`). Recent deploys: **Arc 2 `VAPIBuyerCategoryVerifier` `0x5B1D82AA…` (block 44355501, 2026-06-05)**; **Arc 6 `VAPITemporalBeaconRegistry` `0x96244031…` (block 44355513, 2026-06-05)**; Arc 5 v1 `VAPIReplayProofVerifier` `0x5182372d…` (block 44053167, 2026-05-30); Arc 4 `VAPIConsentManifestRegistry` `0x5F7c8068…` (block 44053171, 2026-05-30) |
+| **Gamer-facing dApps** | **Consent Cockpit at `/consent`** — first standalone gamer-sovereign consent surface in the protocol (Cockpit F1–F5 shipped 2026-06-05); `BRIDGE NEVER GRANTS OR REVOKES CONSENT` invariant displayed as headline UX, signing always `msg.sender == gamer` |
 | **Operator Initiative agents** | **3 LIVE at O3_ACTING** (Sentry / Guardian / Curator) — first ≥3-agent fleet at full action authority in any DePIN gaming protocol; ceremony fired live 2026-05-17, Fleet Readiness Root `0x54b4b698…` permanently anchored |
 | **ZKBA artifact classes** | 7 of 7 shipped (Layer 7 closed) |
 | **VPM compilers active** | 6 (4 internal + 2 consumer-facing) |
-| **Cryptographic chain primitives** | **14 FROZEN-v1 (PATTERN-017)** including #14 `VAPI-TEMPORAL-BEACON-v1` (Arc 6 PoSR, FROZEN 2026-05-30) |
-| **Arc 7 — PQ cryptographic sidecar** | `pqCommitment` parameter threaded through Arc 6 verification path (`verifyWithRecency`, `verifyBeacon`); registry rejects zero commitments; Thread C `asyncio.to_thread` prover offload prevents ingestion-loop jitter |
-| **First gamer-self-sovereign consent manifest on-chain** | Written 2026-05-30 from real wallet to `VAPIConsentManifestRegistry` at `0x5F7c8068…` — gamer-self-sovereignty invariant verified by Solidity `msg.sender == gamer` check |
+| **Cryptographic chain primitives** | **14 FROZEN-v1 (PATTERN-017)** including #14 `VAPI-TEMPORAL-BEACON-v1` (Arc 6 PoSR, FROZEN 2026-05-30, registry now LIVE 2026-06-05) |
+| **Arc 7 — PQ cryptographic sidecar** | `pqCommitment` parameter threaded through Arc 6 verification path (`verifyWithRecency`, `verifyBeacon`); registry rejects zero commitments; Thread C `asyncio.to_thread` prover offload prevents ingestion-loop jitter. v2 wrapper deploy operator-interactive snarkjs ceremony-gated. |
+| **First gamer-self-sovereign consent manifest on-chain** | Written 2026-06-05 from real wallet (`0x0Cf36dB57…`) to `VAPIConsentManifestRegistry` at `0x5F7c8068…` — tx `0xd02c051e…20bd` block 44354567, `allowReplayProofs=true` verified on-chain. Gamer-self-sovereignty invariant verified by Solidity `msg.sender == gamer` check; bridge structurally incapable of writing this. |
 | **GIC_100 cognitive chain head** | Permanently anchored 2026-05-06 (block 43348052) |
+| **World Model Provenance Lane (WMP)** | **Architectural blueprint published 2026-06-05** — additive packaging + export + consumer-verifier lane over Arc 5 (VHR) + Arc 6 (PoSR) + Arc 4 (Consent). Honest POMDP placement (provenance source, NOT a world model); action-channel-only; post-φ sanitized data only; consumer-side Poseidon matrix↔root re-hash closes the long-open Arc 5 off-circuit finding. W1-D operator decision: fixtures-first ship, deferred-export guard, minimal `VAPIWorldModelConsentRegistry` as flagged Phase-2 promote. |
 | **CI matrix** | GitHub Actions: Python 3.10/3.11/3.12 × Node 18/20 + Rust stable + WASM target enforcing 174-invariant gate on every PR |
 | **Wallet posture** | `CHAIN_SUBMISSION_PAUSED=true` held; zero-trust sandbox compliant; every chain-write path operator-fired |
 
@@ -66,6 +68,32 @@
 See `wiki/methodology/METHODOLOGY_LAYER_INTEGRATION_MAP.md` for the complete cross-layer dependency graph.
 
 ---
+
+## 2026-06-05 milestone block — operator-authorized session deploys
+
+Three first-class on-chain milestones landed in a single operator-authorized session, materially closing the Arc 2 / Arc 4 / Arc 6 deployment surface against the World Model Provenance Lane (WMP) architectural blueprint:
+
+| Milestone | Address / tx | Significance |
+|---|---|---|
+| **First gamer-self-sovereign Arc 4 consent manifest write on IoTeX** | tx `0xd02c051e3ced085bccd148a8501a0e86f9f4956910e6ddfda16ec7919c6b20bd` · block 44354567 | Wallet `0x0Cf36dB57…` wrote a 19-field structured consent manifest to `VAPIConsentManifestRegistry` `0x5F7c8068…` — including `allowReplayProofs=true` opting in to Arc 5 VHR proof production. Verified post-write: `manifestHash` on-chain matches expected; gamer-self-sovereignty invariant (`msg.sender == gamer`) structurally enforced by the contract. The bridge is cryptographically incapable of writing this on behalf of any gamer. |
+| **Arc 2 — `VAPIBuyerCategoryVerifier` LIVE** | `0x5B1D82AAc2FD662f8850C49e40A94573f624440A` · tx `0x578c6e3ee7191d9c1519eb84fee79e377a2f1eefe70d03603169e82894727fa3` · block 44355501 | Buyer-category Groth16 verifier wrapper now on-chain. Buyer-side marketplace ZK gating wired. Closes the long-standing Arc 2 deploy-hold. |
+| **Arc 6 — `VAPITemporalBeaconRegistry` LIVE** | `0x962440312a995b21d4E203bE6d93021CC22bA051` · tx `0x7d87bdef875f0507fca9f3f2b6a99efccc275415a1dcd3a3d080c2b768da0140` · block 44355513 | FROZEN-v1 #14 `VAPI-TEMPORAL-BEACON-v1` registry now on-chain. `INV-TBR-001` (BEACON_DOMAIN keccak256 pin) + `INV-TBR-002` (`ANCHOR_CADENCE=64` pin) byte-equal-checked at deploy. **Keeper not yet set** — until `setKeeper(...)` + first `anchorBeacon(...)`, the bridge's PoSR binder returns `None` honestly (no fabrication), and VHR proofs land in v1 Arc 5 behavior (no recency upgrade). The fail-open contract was preserved exactly; bridge readiness never depended on Arc 6. |
+
+**Total session on-chain spend:** ~1.34 IOTX (consent manifest 0.18 IOTX + Arc 2 0.54 IOTX + Arc 6 0.46 IOTX, plus marginal gas overhead). Wallet `0x0Cf36dB57…` remaining: ~31.96 IOTX. `CHAIN_SUBMISSION_PAUSED=true` in `bridge/.env` held throughout — these were direct hardhat deploys signed by the bridge/deployer wallet, NOT bridge-side transactions.
+
+## Consent Cockpit dApp — first standalone gamer-sovereign surface
+
+Live at `/consent` (alias `/cockpit`) — separate from the operator dashboard and Evidence OS workspaces. Shipped 2026-06-05 across F1–F5:
+
+| Pane | What it does |
+|---|---|
+| **Posture banner** | Displays `✓ REGISTRY LIVE` or `⚠ DEPLOY-HOLD` based on env-wired registry address. Banner headline: *"You are the only authority over your consent."* |
+| **Identity card (dual-identity)** | Renders wallet (AUTHORITY — the signer) AND device_id (SUBJECT — the certified controller) as **distinct fields**. device_id resolved on-chain via `useWalletDevices` against `VAPIPoEPRegistry.DeviceRegistered` (primary, gamer-signed) + `VAPIVerifiedHumanProof.tokenOfAddress` (fallback, operator-attested). Multi-controller selector when >1 binding exists. Honest empty state when no on-chain controller is registered. **Never derives device_id from wallet.** |
+| **Authority matrix** | `ConsentMatrix` in edit mode against the 4-bit FROZEN bitmask (Phase 237 `VAPIConsentRegistry`). Live wagmi `useWriteContract` → `useWaitForTransactionReceipt` propagation status indicator (IDLE → SIGNING → PENDING → MINED). |
+| **Receipt timeline** | Append-only `consent_event_log` table (Phase 244 migration) — every GRANT/REVOKE/re-GRANT recorded as a distinct row. A grant→revoke→regrant cycle produces 3 rows (state-table upsert would erase intermediate transitions; the dedicated append-only log preserves the regulator-facing audit trail). |
+| **Sovereignty disclosure** | Loud restatement of `BRIDGE NEVER GRANTS OR REVOKES CONSENT` with link to the CLAUDE.md hard rule in this public repo. |
+
+**Companion VHR Proof Panel on GamerView** (bottom-left, previously vacated by ConsentPanelOverlay) — shows the most recent `on_session_complete_vhr` outcome from `curator_packaging_log`: `PROOF BUILT` / `DEFERRED` / `NO CONSENT` / `—`. noMock; honest empty state; bridge-offline state holds last-known value.
 
 ## Current state — honest
 
@@ -117,6 +145,12 @@ Headline contracts to inspect on IoTeX testnet explorer (chain ID 4690):
 - **AgentRegistry / AgentScope** — Operator Initiative fleet on-chain governance
 - **ProtocolCoherenceRegistry** `0xfAfe4E8BEE45be22836b90D542045510dDd927Dd` — fleet Merkle anchor
 - **VAPIConsentRegistry** `0xA82dB0eF0bF7D15b6400EDd4A09C0D4338C948dA` — per-category gamer consent
+- **VAPIConsentManifestRegistry** `0x5F7c8068D0e61818FCD613D47e68a9Ea906a2743` — Arc 4 structured 8-dimension consent (DEPLOYED 2026-05-30; first manifest write 2026-06-05)
+- **VAPIReplayProofVerifier v1** `0x5182372d1D033db0c9230843DFDE606733D5F91B` — Arc 5 VHR Groth16 wrapper (DEPLOYED 2026-05-30)
+- **VAPIBuyerCategoryVerifier** `0x5B1D82AAc2FD662f8850C49e40A94573f624440A` — Arc 2 buyer-category ZK gate (DEPLOYED 2026-06-05)
+- **VAPITemporalBeaconRegistry** `0x962440312a995b21d4E203bE6d93021CC22bA051` — Arc 6 PoSR (FROZEN-v1 #14 `VAPI-TEMPORAL-BEACON-v1`, DEPLOYED 2026-06-05; INV-TBR-001/002 byte-checked at deploy; keeper not yet set)
+- **VAPIManufacturerDeviceRegistry** `0x2e5B5FB110890f498e289E3045d0f54Cfb0F91b0` — Path A Arc 1 silicon-rooted hardware identity
+- **VAPIProtocolLensV2** `0x32Bf1A01a0a2629955A3Fd5ce74c0571DAd7C989` — Path A Arc 1 composable lens (`isFullyEligible_PathA`)
 
 ### Run the bridge locally
 
@@ -164,7 +198,7 @@ vapi-pebble-prototype/
 ├── bridge/                  Python asyncio bridge (PITL L0–L6 oracle pipeline + 29 standalone agents + 3 Operator Initiative stewards)
 │   ├── vapi_bridge/         Source — store / chain / agents / endpoint surface
 │   └── tests/               Bridge test bands (Phase O3 ZKBA + Phase O4 VPM + earlier)
-├── contracts/               Solidity 0.8 + Hardhat — 49 substantive live testnet contracts
+├── contracts/               Solidity 0.8 + Hardhat — 55 substantive live testnet contracts
 │   ├── contracts/           Source — PoACVerifier, AdjudicationRegistry, VAPIProtocolLens, AgentRegistry, etc.
 │   ├── test/                528 Hardhat tests
 │   └── deployed-addresses.json   Authoritative on-chain address registry
@@ -256,10 +290,11 @@ See [`wiki/phases/phase_o4_vpm_integration.md`](wiki/phases/phase_o4_vpm_integra
 
 Since the completion of Phase O4, the QorTroller protocol has integrated several state-of-the-art security features and cryptographic primitives to protect against hardware virtualization, trace injection, and backdating attacks:
 
-### 1. Proof of Session Recency (PoSR - Arc 6)
+### 1. Proof of Session Recency (PoSR - Arc 6) **— REGISTRY LIVE 2026-06-05**
 * **Goal**: Defends against replay backdating, pre-computation trace generation, and stale session re-listing attacks.
-* **Mechanism**: Binds the creation and validation of gameplay records directly to recent IoTeX L1 blockhashes. Introduces the [VAPITemporalBeaconRegistry](file:///C:/Users/Contr/vapi-pebble-prototype/contracts/contracts/VAPITemporalBeaconRegistry.sol) that records block hashes at a defined cadence. The [PoSRBeaconBinder](file:///C:/Users/Contr/vapi-pebble-prototype/bridge/vapi_bridge/replay_proof_pipeline/posr.py) binds the session commitments to these beacon blocks.
-* **Verification**: Uses `VAPIReplayProofVerifier_v2.circom` which enforces Groth16 circuit-level temporal ordering of sessions (close block > open block) and re-hashes commitments using in-circuit Poseidon structures.
+* **Mechanism**: Binds the creation and validation of gameplay records directly to recent IoTeX L1 blockhashes. The [VAPITemporalBeaconRegistry](file:///C:/Users/Contr/vapi-pebble-prototype/contracts/contracts/VAPITemporalBeaconRegistry.sol) records block hashes at a defined cadence (`ANCHOR_CADENCE=64` per `INV-TBR-002`). The [PoSRBeaconBinder](file:///C:/Users/Contr/vapi-pebble-prototype/bridge/vapi_bridge/replay_proof_pipeline/posr.py) binds the session commitments to these beacon blocks.
+* **Deploy status**: Registry **LIVE on IoTeX testnet** at `0x962440312a995b21d4E203bE6d93021CC22bA051` (tx `0x7d87bdef…0140`, block 44355513, 2026-06-05). `INV-TBR-001` (BEACON_DOMAIN keccak256 pin) + `INV-TBR-002` (ANCHOR_CADENCE pin) byte-equal-checked at deploy. Next operator-fired ops: `reg.setKeeper(...)` + first `anchorBeacon(...)`.
+* **Verification**: Uses `VAPIReplayProofVerifier_v2.circom` which enforces Groth16 circuit-level temporal ordering of sessions (close block > open block) and re-hashes commitments using in-circuit Poseidon structures. The v2 wrapper deploy remains operator-interactive snarkjs-ceremony-gated; until ceremony fires, VHR proofs land in v1 Arc 5 behavior (no recency upgrade) and the bridge's PoSR binder returns `None` honestly — never fabricates a beacon claim.
 
 ### 2. Verified Human Replay (VHR - Arc 5)
 * **Goal**: Proves raw gameplay liveness using downsampled, non-invertible replay matrices.
@@ -285,6 +320,20 @@ Since the completion of Phase O4, the QorTroller protocol has integrated several
 * **Mechanism**: A `pqCommitment` (bytes32) parameter is threaded through `VAPIReplayProofVerifier_v2.verifyWithRecency` and `verifyWithRecencyView`; the registry's `verifyBeacon(blockNumber, claimedHash, pqCommitment)` enforces non-zero commitment (`require(pqCommitment != bytes32(0), "VAPI: Zero PQ Commitment Disallowed")`). The PQ commitment binds an off-circuit post-quantum proof artifact alongside the beacon hash; the registry remains opaque to the PQ algorithm choice (forward-compatible with ML-DSA, SLH-DSA, or hybrid composites).
 * **Ingestion-loop isolation**: The VHR prover task is offloaded to **Thread C** via `asyncio.to_thread`, preventing PQ-signing overhead (which can be 10–100× ECDSA-P256 cost depending on PQ scheme) from jittering the 1002 Hz HID ingestion ring buffer. Matches Phase 235.x-STABILITY's loop-block discipline.
 * **Test coverage**: T-VHR-V2-8 explicitly asserts the zero-pqCommitment revert; Arc 6 wrapper tests pass all 18 assertions including the additive PQ binding path.
+* **Deploy status**: PQ sidecar code path BUILT + integrated; **v2 wrapper deploy remains operator-interactive snarkjs-ceremony-gated** (Groth16 trusted-setup contribute step requires physical operator input). Arc 7 PQ functionality only activates against a deployed v2 wrapper; current production stays on v1.
+
+### 7. Arc 2 — Buyer-Category ZK Gating **— DEPLOYED 2026-06-05**
+* **Goal**: Cryptographic gating of buyer-side marketplace queries by category eligibility, without exposing the buyer's full identity or query plan.
+* **Mechanism**: A Groth16 verifier wrapper validates buyer-category proofs against an on-chain trusted-setup verifying key. Pairs with Curator's marketplace listing flow to scope which gamer-listed bundles a given buyer is eligible to query.
+* **Deploy status**: `VAPIBuyerCategoryVerifier` **LIVE on IoTeX testnet** at `0x5B1D82AAc2FD662f8850C49e40A94573f624440A` (tx `0x578c6e3e…7fa3`, block 44355501, 2026-06-05).
+
+### 8. World Model Provenance Lane (WMP) — Architectural Blueprint
+* **Goal**: Package + export + consumer-verify provenance-attested human-action traces for world-model researchers and labs who currently lack a cryptographically-verifiable source of real (human, recent, consenting) demonstration data — the bottleneck Fei-Fei Li / World Labs explicitly named in *A Functional Taxonomy of World Models* (June 2026).
+* **Honest placement**: QorTroller is **NOT** a world model. It does not output pixels (renderer), state (simulator), or actions (planner). It instruments the **agent→action edge** of a real human in the loop and stamps that edge with cryptographic provenance. WMP is the lane that packages this provenance for consumers who need trustable demonstration data.
+* **Architecture**: Additive lane built on Arc 5 (VHR humanity proof) + Arc 6 (PoSR recency proof) + Arc 4 (consent reference). Assembles a `ProvenanceBundle v1` per consented session; ships a JSONL exporter; and ships a **consumer-side verifier** with five checks: humanity proof, **Poseidon matrix↔root re-hash** (canonical home — closes the long-open Arc 5 off-circuit finding), recency beacon, consent, scope honesty.
+* **Honesty rails**: Post-φ sanitized data only (60 Hz, 4-bit quantized; FORBIDDEN_COLUMNS-wiped). Action channel only — never the observation channel (no framebuffer capture; permanently forbidden by data floor). Real sessions only — synthetic data would void the falsifiable empirical claim. No generative model. No human-likeness scoring oracle. Action exports carry no liveness-grade biometric signal — the anti-cheat moat lives in the high-frequency micro-tremor variance that φ destroys.
+* **W1-D operator decision (2026-06-05)**: Ship full lane on fixtures (no real-data export tonight); deferred-export guard hard-coded to `False` in v1; minimal greenfield `VAPIWorldModelConsentRegistry` (single `gamer => bool` mapping, `setWorldModelConsent` gated by `msg.sender == gamer`) shipped as Solidity + hardhat test in a flagged Phase-2 commit (no on-chain deploy tonight). Preserves cryptographic verifiability of consent, sidesteps Arc 4 v2 storage-layout-freeze migration, distinct from replay consent.
+* **Status**: Architectural blueprint published; commit plan WMP-1 through WMP-5 written against W1-D; implementation pending operator authorization.
 
 ---
 
