@@ -55,6 +55,13 @@ const VerifiedReplayCardDapp = React.lazy(() => import('./dapps/VerifiedReplay')
 // dashboard bundle doesn't pay for framer-motion until /start opens.
 const StartDapp = React.lazy(() => import('./dapps/Start'))
 
+// Public Hardware Authenticity Verify (2026-06-06) — /verify/:deviceId.
+// No auth, no wallet, no chrome. Reads VAPIManufacturerDeviceRegistry
+// via the public_forensic_api /device/:deviceId endpoint and renders a
+// forensic-certificate verdict. Bookmark-able, share-able, embed-friendly.
+// Lazy-loaded so the dashboard doesn't pay for the certificate styling.
+const HardwareVerifyDapp = React.lazy(() => import('./dapps/HardwareVerify'))
+
 import './index.css'
 
 const queryClient = new QueryClient({
@@ -162,6 +169,25 @@ ReactDOM.createRoot(document.getElementById('root')).render(
               }
             />
             <Route path="/play" element={<Navigate to="/start" replace />} />
+
+            {/* Public Hardware Authenticity Verify. /verify accepts manual
+                input; /verify/:deviceId resolves on-chain. */}
+            <Route
+              path="/verify/:deviceId"
+              element={
+                <React.Suspense fallback={null}>
+                  <HardwareVerifyDapp />
+                </React.Suspense>
+              }
+            />
+            <Route
+              path="/verify"
+              element={
+                <React.Suspense fallback={null}>
+                  <HardwareVerifyDapp />
+                </React.Suspense>
+              }
+            />
 
             <Route path="/" element={<App />} />
             <Route path="*" element={<App />} />

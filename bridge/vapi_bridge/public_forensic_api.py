@@ -446,6 +446,81 @@ def create_public_forensic_app(*, cfg, store) -> FastAPI:
             "timestamp":          time.time(),
         }
 
+    # ---------------- Route /device/{device_id_hex} — Hardware Authenticity Verify ----------------
+    # Public, no auth, no API key. Returns the on-chain manufacturer-registry
+    # state for a controller device_id. Backing surface for the /verify/:deviceId
+    # dApp (Build 4 of the 2026-06-06 operator-directed frontend goal). Reads
+    # VAPIManufacturerDeviceRegistry view methods via chain.is_active_in_mfg_registry
+    # + chain.get_device_signing_path + chain.get_proof_tier. Fail-open honest:
+    # when the manufacturer registry is unconfigured or RPC is down, returns a
+    # dormant state ({registered: false, source: REGISTRY_UNAVAILABLE}) rather
+    # than a fabricated REGISTERED claim.
+    @app.get("/device/{device_id_hex}")
+    async def public_device_cert(
+        device_id_hex: str = FPath(..., min_length=4, max_length=80),
+        request: Request = None,  # type: ignore
+    ):
+        _check_rate(request)
+        # Normalize: accept 0x-prefixed or bare hex; lowercase; reject non-hex.
+        norm = device_id_hex.strip().lower()
+        if norm.startswith("0x"):
+            norm = norm[2:]
+        # Validate hex shape — 64 chars typical (keccak256(pubkey)). Accept
+        # shorter inputs for partial matches but the on-chain call uses 32-byte.
+        try:
+            _ = bytes.fromhex(norm.ljust(64, "0"))  # noqa: F841 — validation only
+        except Exception:
+            return {
+                "device_id":  device_id_hex,
+                "registered": False,
+                "source":     "INVALID_HEX",
+                "discipline": "Provide a 64-char hex device_id (keccak256(controller_pubkey)).",
+                "timestamp":  time.time(),
+            }
+
+        if chain is None or not getattr(cfg, "manufacturer_device_registry_address", ""):
+            return {
+                "device_id":  norm,
+                "registered": False,
+                "source":     "REGISTRY_UNAVAILABLE",
+                "discipline": "VAPIManufacturerDeviceRegistry not configured on this bridge.",
+                "timestamp":  time.time(),
+            }
+
+        try:
+            is_active = await asyncio.to_thread(chain.is_active_in_mfg_registry, norm)
+            signing_path = await asyncio.to_thread(chain.get_device_signing_path, norm)
+            proof_tier = await asyncio.to_thread(chain.get_proof_tier, norm)
+        except Exception as exc:  # noqa: BLE001 — fail-open
+            return {
+                "device_id":     norm,
+                "registered":    False,
+                "source":        "RPC_ERROR",
+                "discipline":    f"On-chain read failed: {type(exc).__name__}",
+                "timestamp":     time.time(),
+            }
+
+        _signing_label = {1: "PATH_A_SILICON_ROOTED", 2: "PATH_B_HOST_HELD"}.get(int(signing_path), "UNREGISTERED")
+        _tier_label = {1: "FULL_DUALSENSE_EDGE_CFI_ZCP1", 2: "STANDARD_CFI_ZCT1", 3: "BASIC_THIRD_PARTY"}.get(int(proof_tier), "UNREGISTERED")
+        return {
+            "device_id":          norm,
+            "registered":         bool(is_active),
+            "signing_path_code":  int(signing_path),
+            "signing_path_label": _signing_label,
+            "proof_tier_code":    int(proof_tier),
+            "proof_tier_label":   _tier_label,
+            "registry_address":   getattr(cfg, "manufacturer_device_registry_address", ""),
+            "source":             "VAPIManufacturerDeviceRegistry",
+            "discipline":         (
+                "Verify on-chain via VAPIManufacturerDeviceRegistry view calls — "
+                "deviceId is keccak256(controller_pubkey). The signing_path code "
+                "(1=silicon-rooted Path A, 2=host-held Path B) and proof_tier "
+                "(1=Edge CFI-ZCP1, 2=Standard, 3=Basic) are also on-chain views."
+            ),
+            "explorer_address":   f"https://testnet.iotexscan.io/address/{getattr(cfg, 'manufacturer_device_registry_address', '')}",
+            "timestamp":          time.time(),
+        }
+
     # ---------------- Route #6: /gic/{grind_session_id} ----------------
     @app.get("/gic/{grind_session_id}")
     async def public_gic_chain(
