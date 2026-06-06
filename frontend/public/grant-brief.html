@@ -1078,21 +1078,304 @@
 </section>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
-<!-- 11 · PROOF OF EXECUTION — already live, re-derivable              -->
+<!-- 11 · ZK PROOFS OF HUMAN AUTHORSHIP                                -->
 <!-- ═══════════════════════════════════════════════════════════════ -->
-<section data-screen-label="11 Proof">
+<section data-screen-label="11 ZK Proofs">
   <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
-  <span class="chrome-meta"><span>11 · PROOF · OF · EXECUTION</span><span class="chain">VERIFIABLE</span></span>
+  <span class="chrome-meta"><span>11 · ZK · HUMAN · AUTHORSHIP</span><span class="chain">GROTH16 · LIVE</span></span>
+
+  <p class="eyebrow"><span class="chain">Per-session Groth16 ZK proof</span> · BN254 · sanitized macro-intent only</p>
+  <h2>The math says: <span class="amber">a real human</span> played this.</h2>
+
+  <p class="lede" style="max-width: 1480px;">
+    Every session can produce a Groth16 zero-knowledge proof — verifiable on IoTeX testnet —
+    that the gameplay trace came from a real human above a disclosed humanity floor.
+    <span class="text">The proof reveals nothing the export already discloses;</span> the biometric
+    signal that makes the proof possible is destroyed by sanitization before anyone sees it.
+  </p>
+
+  <div class="grid-2" style="margin-top: 44px; align-items: start;">
+    <div class="stack-sm">
+      <div class="panel panel--chain"><div class="panel__eye"><span class="lbl">Verifier · IoTeX testnet</span><span class="meta" style="color: var(--chain)">LIVE</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">0x5182372d…F91B · Groth16 wrapper · trusted-setup ceremony fired 2026-05-30 · <span class="chain">553 non-linear constraints</span> · pot15 ceiling 32,768 → 28× headroom</p></div>
+      <div class="panel"><div class="panel__eye"><span class="lbl">Public input</span><span class="meta">CRYPTOGRAPHICALLY BOUND</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">sanitizedTraceRoot = Poseidon root of the post-φ macro-intent matrix · the trace cannot be swapped after the proof is made</p></div>
+      <div class="panel panel--accent"><div class="panel__eye"><span class="lbl">Pre-processor φ</span><span class="meta" style="color: var(--accent-amber)">DATA FLOOR · FROZEN</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">1002 Hz → 60 Hz · 4-bit radial sectors + 4-bit triggers + 3-bit IMU octants · biometric features in FORBIDDEN_COLUMNS frozenset never reach the export · INV-VHR-004 pinned</p></div>
+    </div>
+    <div class="stack-sm">
+      <div class="panel"><div class="panel__eye"><span class="lbl">Consumer-side re-hash</span><span class="meta">CANONICAL CHECK</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">A buyer of a proof can recompute Poseidon(matrix) and assert equality with the sanitizedTraceRoot public input · catches matrix-swap attacks the Groth16 proof alone cannot</p></div>
+      <div class="panel panel--chain"><div class="panel__eye"><span class="lbl">Honest deferred path</span><span class="meta" style="color: var(--chain)">NO FAKE PROOFS</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">When the prover is unavailable, the pipeline emits an honest deferred-prover outcome — never fabricates a Groth16 proof_bytes payload</p></div>
+      <div class="panel panel--accent"><div class="panel__eye"><span class="lbl">Liveness moat preserved</span><span class="meta" style="color: var(--accent-amber)">EXPORT-SAFE</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">The discriminative power lives in micro-tremor variance that φ destroys · exported corpora cannot be used to train a bot past the moat — the moat's signal is not in the export</p></div>
+    </div>
+  </div>
+
+  <span class="chrome-foot">
+    <span class="chain">ZK · VERIFIABLE · HUMAN · AUTHORSHIP</span>
+    <span>THE · GROUND · TRUTH · WORLD · MODELS · NEED</span>
+  </span>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- 12 · BLOCK-CADENCE ANCHORED RECENCY                               -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section data-screen-label="12 Block-Anchored Recency">
+  <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
+  <span class="chrome-meta"><span>12 · L1 · BLOCK-HASH · RECENCY</span><span class="chain">PoSR · LIVE</span></span>
+
+  <p class="eyebrow"><span class="chain">Session open + close bound to real IoTeX L1 block hashes</span> · ANCHOR_CADENCE = 64</p>
+  <h2>Backdating a session would require <span class="amber">backdating IoTeX itself.</span></h2>
+
+  <p class="lede" style="max-width: 1480px;">
+    Every adjudicated session carries an <span class="text">open beacon</span> and a
+    <span class="text">close beacon</span> — both bound to real, on-chain IoTeX block hashes
+    via an on-chain registry. Stale re-listing, pre-computation drips, and tournament-window
+    backdating are all <span class="text">structurally detected</span> at the freshness floor.
+  </p>
+
+  <div class="grid-2" style="margin-top: 44px; align-items: start;">
+    <div class="stack-sm">
+      <div class="panel panel--chain"><div class="panel__eye"><span class="lbl">Registry · IoTeX testnet</span><span class="meta" style="color: var(--chain)">LIVE 2026-06-05</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">0x96244031…A051 · INV-TBR-001 BEACON_DOMAIN keccak256 pinned · INV-TBR-002 ANCHOR_CADENCE = 64 pinned · byte-equal checked at deploy</p></div>
+      <div class="panel"><div class="panel__eye"><span class="lbl">Three attacks closed</span><span class="meta">STRUCTURALLY</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">Stale re-listing · pre-computation trace drip · tournament-window backdating</p></div>
+    </div>
+    <div class="stack-sm">
+      <div class="panel"><div class="panel__eye"><span class="lbl">Why IoTeX-native</span><span class="meta">L1 BLOCKHASHES</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">Same blockhash window the chain itself uses · empirical cadence ≈ 2.8 min per 64-block anchor on testnet · keeper budget honest: ~7.7 IOTX/month</p></div>
+      <div class="panel panel--accent"><div class="panel__eye"><span class="lbl">Honest dormant fallback</span><span class="meta" style="color: var(--accent-amber)">FAIL-OPEN</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">When keeper unset, the recency check returns BEACON_REGISTRY_NOT_DEPLOYED honestly · proofs land in v1 behavior with no recency upgrade — never fabricates a beacon claim</p></div>
+    </div>
+  </div>
+
+  <span class="chrome-foot">
+    <span class="chain">RECENCY · ANCHORED · TO · IoTeX</span>
+    <span>THE · CHAIN · IS · THE · FRESHNESS · FLOOR</span>
+  </span>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- 13 · W3BSTREAM WASM COMPUTE SANDBOX                               -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section data-screen-label="13 Wasm Sandbox">
+  <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
+  <span class="chrome-meta"><span>13 · WASM · COMPUTE · SANDBOX</span><span class="chain">W3BSTREAM · NATIVE</span></span>
+
+  <p class="eyebrow"><span class="chain">Validation runs in a sandboxed Rust applet</span> · target: wasm32-unknown-unknown</p>
+  <h2>Mechanical validation. <span class="amber">In a box that can't reach the camera.</span></h2>
+
+  <p class="lede" style="max-width: 1480px;">
+    The off-chain ingestion validation runs as a <span class="text">Rust → Wasm applet</span>
+    under W3bstream — IoTeX's native off-chain compute platform. The sandbox manifest
+    <span class="text">FROZEN-pins</span> that no biometric capture, no framebuffer access,
+    no optical channel exists inside the box. CI fails closed on every invariant check.
+  </p>
+
+  <div class="grid-2" style="margin-top: 44px; align-items: start;">
+    <div class="stack-sm">
+      <div class="panel panel--chain"><div class="panel__eye"><span class="lbl">Sandbox manifest</span><span class="meta" style="color: var(--chain)">FROZEN</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">mechanisms.frame_grabbing = <span style="color:var(--chain)">false</span> · optical_capture = <span style="color:var(--chain)">false</span> · blockhash_temporal_rules = <span style="color:var(--chain)">true</span></p></div>
+      <div class="panel"><div class="panel__eye"><span class="lbl">What it validates</span><span class="meta">MECHANICAL</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">ANCHOR_CADENCE = 64 block alignment · blockhash temporal rules · clean-environment isolation (pops OPERATOR_PRIVATE_KEY in the ingestion listener) · non-zero post-quantum commitment pointer</p></div>
+    </div>
+    <div class="stack-sm">
+      <div class="panel panel--accent"><div class="panel__eye"><span class="lbl">Invariants enforced in CI</span><span class="meta" style="color: var(--accent-amber)">FAIL-CLOSED</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">INV-W3S-001 cadence · INV-W3S-002 isolation · INV-W3S-005 PQ-commitment non-zero · all three rejected at compile time + run time</p></div>
+      <div class="panel"><div class="panel__eye"><span class="lbl">What's NOT in the box</span><span class="meta">BY DESIGN</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">No biometric capture · no screen frames · no finite-field blinding · the applet only relays + validates input commitments — it never sees raw biometrics</p></div>
+    </div>
+  </div>
+
+  <span class="chrome-foot">
+    <span class="chain">FIRST · RUST · SURFACE · IN · THE · REPO</span>
+    <span>W3BSTREAM · AS · A · VERIFIABLE · SANDBOX</span>
+  </span>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- 14 · SILICON-ROOTED HARDWARE IDENTITY                             -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section data-screen-label="14 Silicon-Rooted Identity">
+  <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
+  <span class="chrome-meta"><span>14 · HARDWARE · IDENTITY</span><span class="amber">SILICON-ROOTED</span></span>
+
+  <p class="eyebrow"><span class="chain">Manufacturer-signed device birth certificates on-chain</span> · IoTeX P256 precompile @ 0x0100</p>
+  <h2>A controller's birth certificate is on-chain. <span class="amber">From manufacture.</span></h2>
+
+  <p class="lede" style="max-width: 1480px;">
+    Hardware authenticity isn't a runtime check; it's a <span class="text">cryptographic
+    artifact issued at provisioning time</span>, anchored on-chain, and verifiable in a
+    single view-call. IoTeX's native <span class="text">P256 precompile at 0x0100</span>
+    runs the ECDSA verify in milliseconds — by design, the chain is where this gate lives.
+  </p>
+
+  <div class="grid-2" style="margin-top: 44px; align-items: start;">
+    <div class="stack-sm">
+      <div class="panel panel--chain"><div class="panel__eye"><span class="lbl">Manufacturer registry</span><span class="meta" style="color: var(--chain)">LIVE</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">VAPIManufacturerDeviceRegistry · 0x2e5B5FB1…F91b0 · per-device birthCertHash anchored at registerDevice() time</p></div>
+      <div class="panel panel--accent"><div class="panel__eye"><span class="lbl">deviceId — FROZEN</span><span class="meta" style="color: var(--accent-amber)">INV-001</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">keccak256(controller_pubkey) · pinned across the entire protocol — same in PoAC body, in the contract, in every consent + tournament gate</p></div>
+    </div>
+    <div class="stack-sm">
+      <div class="panel"><div class="panel__eye"><span class="lbl">Composable eligibility</span><span class="meta">ONE VIEW-CALL</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">VAPIProtocolLensV2 · 0x32Bf1A01…C989 · isFullyEligible_PathA(bytes32) gates tournaments + marketplace + data export in a single composable read · v1 lens preserved byte-for-byte alongside</p></div>
+      <div class="panel"><div class="panel__eye"><span class="lbl">Why silicon-rooted</span><span class="meta">EMULATOR-PROOF</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">A Cronus / XIM / reWASD translator does not synthesize a manufacturer-signed birth cert · the certificate IS the gate</p></div>
+    </div>
+  </div>
+
+  <span class="chrome-foot">
+    <span class="chain">SILICON · → · CERTIFICATE · → · CHAIN</span>
+    <span>HARDWARE · AUTHENTICITY · IS · A · CONTRACT · CALL</span>
+  </span>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- 15 · GAMER-SOVEREIGN CONSENT SURFACE                              -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section data-screen-label="15 Consent Sovereignty">
+  <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
+  <span class="chrome-meta"><span>15 · CONSENT · SOVEREIGNTY</span><span class="chain">DAPP · LIVE</span></span>
+
+  <p class="eyebrow"><span class="chain">Standalone gamer-facing dApp at /consent</span> · msg.sender == gamer · enforced in Solidity</p>
+  <h2>The protocol cannot consent <span class="amber">on a gamer's behalf.</span> Structurally.</h2>
+
+  <p class="lede" style="max-width: 1480px;">
+    A standalone dApp where the gamer's <span class="text">wallet is the only authority</span>
+    over their consent. The bridge can <span class="text">read</span> on-chain consent — it cannot
+    write. The contract enforces this with one Solidity rule: <span class="amber">msg.sender == gamer</span>.
+    A misconfigured bridge or a malicious operator cannot forge a consent write.
+  </p>
+
+  <div class="grid-2" style="margin-top: 44px; align-items: start;">
+    <div class="stack-sm">
+      <div class="panel panel--chain"><div class="panel__eye"><span class="lbl">First on-chain manifest write</span><span class="meta" style="color: var(--chain)">VERIFIED</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">tx 0xd02c051e…20bd · block 44354567 · allowReplayProofs = true confirmed on-chain · 19-field structured consent manifest</p></div>
+      <div class="panel"><div class="panel__eye"><span class="lbl">Append-only audit trail</span><span class="meta">GDPR-READY</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">consent_event_log table · grant → revoke → re-grant produces 3 distinct rows · regulator-facing immutable receipt history (state-table upsert would erase intermediate transitions — append-only preserves)</p></div>
+    </div>
+    <div class="stack-sm">
+      <div class="panel panel--accent"><div class="panel__eye"><span class="lbl">Granular sovereignty</span><span class="meta" style="color: var(--accent-amber)">DISTINCT DIMENSIONS</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">Tournament gate · anonymized research · OEM cert · marketplace listing · replay proofs · world-model export — every dimension distinct, every dimension gamer-toggleable</p></div>
+      <div class="panel"><div class="panel__eye"><span class="lbl">Dual-identity card</span><span class="meta">DAPP UX</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">Wallet (AUTHORITY) + device_id (SUBJECT) shown as distinct fields · device_id sourced on-chain from VAPIPoEPRegistry · never derived from the wallet</p></div>
+    </div>
+  </div>
+
+  <span class="chrome-foot">
+    <span class="chain">GAMER · SIGNS · EVERY · GRANT · AND · REVOKE</span>
+    <span>BRIDGE · NEVER · GRANTS · OR · REVOKES · CONSENT</span>
+  </span>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- 16 · POST-QUANTUM SIDECAR ARCHITECTURE                            -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section data-screen-label="16 PQ Sidecar">
+  <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
+  <span class="chrome-meta"><span>16 · PQ · SIDECAR · POINTER</span><span class="amber">DECOUPLED</span></span>
+
+  <p class="eyebrow"><span class="chain">3,309-byte ML-DSA-65 signature off-chain</span> · 32-byte pointer on-chain</p>
+  <h2>Post-quantum signed. <span class="amber">Without growing the on-chain footprint.</span></h2>
+
+  <p class="lede" style="max-width: 1480px;">
+    The <span class="text">Decoupled Cryptographic Sidecar Pointer</span> pattern: the bulky
+    post-quantum signature lives on a DePIN DA node; only a <span class="text">32-byte
+    commitment hash</span> crosses the wire/on-chain boundary. The 228-byte PoAC record
+    stays FROZEN. The protocol is forward-secure tomorrow without paying for it today.
+  </p>
+
+  <div class="grid-2" style="margin-top: 44px; align-items: start;">
+    <div class="stack-sm">
+      <div class="panel panel--chain"><div class="panel__eye"><span class="lbl">228-byte PoAC frame</span><span class="meta" style="color: var(--chain)">INV-ARC7-001</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">HardForkDisallowedError fires if any PQ routine grows the packet footprint — the wire format is structurally pinned</p></div>
+      <div class="panel"><div class="panel__eye"><span class="lbl">EVM enforcement</span><span class="meta">FAIL-CLOSED</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">INV-ARC7-002 require() blocks null bytes32(0) PQ signatures at the wrapper layer</p></div>
+      <div class="panel panel--accent"><div class="panel__eye"><span class="lbl">Wasm sandbox enforcement</span><span class="meta" style="color: var(--accent-amber)">INV-W3S-005</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">resolve_da_proof() fail-closes on empty / zero-padded / malformed PQ pointers — three layers of agreement</p></div>
+    </div>
+    <div class="stack-sm">
+      <div class="panel"><div class="panel__eye"><span class="lbl">Thread-C offload</span><span class="meta">EVENT-LOOP DISCIPLINE</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">ML-DSA-65 signing runs via asyncio.to_thread so PQ crypto never blocks the 1002 Hz HID ingestion event loop · matches the Arc 5 numpy hot-path rule</p></div>
+      <div class="panel"><div class="panel__eye"><span class="lbl">Forward-compatible</span><span class="meta">ALGORITHM-OPAQUE</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">Registry is opaque to the PQ choice — ML-DSA, SLH-DSA, hybrid composites all valid · aligned to IoTeX IIP-64 (PR #72) device-class tiering</p></div>
+      <div class="panel panel--chain"><div class="panel__eye"><span class="lbl">DePIN-native storage</span><span class="meta" style="color: var(--chain)">DA NODE</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">3,309-byte signature lives on a Data Availability node addressable by the 32-byte commitment hash · cost stays off-chain</p></div>
+    </div>
+  </div>
+
+  <span class="chrome-foot">
+    <span class="amber">PQ · TODAY · WITHOUT · BREAKING · TOMORROW</span>
+    <span>SIDECAR · POINTER · = · LOAD-BEARING · DESIGN · PRIMITIVE</span>
+  </span>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- 17 · AUTONOMOUS OPERATOR STEWARDSHIP                              -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section data-screen-label="17 Steward Fleet">
+  <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
+  <span class="chrome-meta"><span>17 · STEWARD · FLEET</span><span class="chain">O3 · ACTING · LIVE</span></span>
+
+  <p class="eyebrow"><span class="chain">Three on-chain stewards at full action authority</span> · first ≥3-agent fleet in any DePIN gaming protocol</p>
+  <h2>The protocol operates itself. <span class="amber">With three on-chain authorities.</span></h2>
+
+  <p class="lede" style="max-width: 1480px;">
+    Sentry · Guardian · Curator — three on-chain agents with distinct, non-overlapping
+    cryptographic authority. Each one's lane was <span class="text">dual-anchored</span> via a
+    permanently-recorded Cedar v2 bundle. The first non-human steward signed via
+    <span class="text">KMS-HSM</span> and anchored its commitment on IoTeX — operator-fired,
+    verifiable on the explorer.
+  </p>
+
+  <div class="grid-2" style="margin-top: 44px; align-items: start;">
+    <div class="stack-sm">
+      <div class="panel panel--chain"><div class="panel__eye"><span class="lbl">Fleet Readiness Root</span><span class="meta" style="color: var(--chain)">PERMANENT</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">0x54b4b698…ce8bca37 anchored on IoTeX testnet · FRR domain tag FROZEN-v1 · per-agent phase-code commitment</p></div>
+      <div class="panel"><div class="panel__eye"><span class="lbl">Sentry · Provenance</span><span class="meta">AUDIT LANE</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">PoAd attestation anchoring · cross-checks the off-chain corpus against the on-chain provenance chain · ~0.0008 IOTX/op</p></div>
+      <div class="panel"><div class="panel__eye"><span class="lbl">Guardian · Operational</span><span class="meta">HSM-SIGNED</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">First non-human steward to autonomously produce an HSM-rooted signature on IoTeX · AWS KMS ECC_SECG_P256K1 · operator-verified · operationally proven strictly-once</p></div>
+    </div>
+    <div class="stack-sm">
+      <div class="panel panel--accent"><div class="panel__eye"><span class="lbl">Curator · Marketplace</span><span class="meta" style="color: var(--accent-amber)">LIVE WRITES</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">Marketplace listing review + suspension authority · on-chain at VAPIDataMarketplaceListings · ~0.001 IOTX per suspension · reversible</p></div>
+      <div class="panel"><div class="panel__eye"><span class="lbl">Cedar v2 lane authority</span><span class="meta">DUAL-ANCHORED</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">Each agent's authority bundle anchored TWICE — AgentScope (operational) + AgentRegistry (governance) — every authority claim re-derivable</p></div>
+      <div class="panel panel--chain"><div class="panel__eye"><span class="lbl">Mythos · self-auditing</span><span class="meta" style="color: var(--chain)">14 VARIANTS</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">A 14-variant audit fleet continuously monitors protocol integrity · FROZEN crypto drift · stability sweep · methodology · ceremony · brand · spending log · Curator graduation</p></div>
+    </div>
+  </div>
+
+  <span class="chrome-foot">
+    <span class="chain">FIRST · ≥3-AGENT · FLEET · AT · O3_ACTING · IN · DePIN · GAMING</span>
+    <span>NON-HUMAN · CRYPTOGRAPHIC · STEWARDSHIP · PROVEN</span>
+  </span>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- 18 · WORLD-MODEL PROVENANCE LANE                                  -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section data-screen-label="18 World-Model Provenance">
+  <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
+  <span class="chrome-meta"><span>18 · WORLD-MODEL · PROVENANCE</span><span class="amber">NEW · MARKET</span></span>
+
+  <p class="eyebrow"><span class="chain">Per Fei-Fei Li / World Labs (June 2026)</span> · QorTroller as provenance source, NOT a world model</p>
+  <h2>The trust layer under the demonstration data <span class="amber">world models are starved for.</span></h2>
+
+  <p class="lede" style="max-width: 1480px;">
+    AI labs and research teams need <span class="text">real, recent, consenting</span> human
+    demonstration data. Li named it as the field's scarce input. QorTroller — by being a
+    real physical-interaction protocol — already produces it. The
+    <span class="text">World-Model Provenance Lane</span> packages it into a bundle a
+    researcher can verify cryptographically, without trusting QorTroller.
+  </p>
+
+  <div class="grid-2" style="margin-top: 44px; align-items: start;">
+    <div class="stack-sm">
+      <div class="panel panel--chain"><div class="panel__eye"><span class="lbl">Honest placement</span><span class="meta" style="color: var(--chain)">NOT A WORLD MODEL</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">QorTroller does not output pixels (renderer), state (simulator), or actions (planner) · it stamps the agent → action edge of a real human with cryptographic provenance</p></div>
+      <div class="panel"><div class="panel__eye"><span class="lbl">Five consumer-side checks</span><span class="meta">NO TRUST REQUIRED</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">Humanity (Groth16 verify) · matrix↔root re-hash (canonical) · recency (L1 beacons) · consent (on-chain) · scope honesty (machine-readable disclosure)</p></div>
+      <div class="panel panel--accent"><div class="panel__eye"><span class="lbl">Action channel only</span><span class="meta" style="color: var(--accent-amber)">DISCLOSED</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">Every bundle's scope_disclosure carries FROZEN values · no observation channel · no biomechanical fidelity · no full POMDP tuple claim</p></div>
+    </div>
+    <div class="stack-sm">
+      <div class="panel"><div class="panel__eye"><span class="lbl">Sanitization preserves moat</span><span class="meta">EXPORT-SAFE</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">Macro-intent only · post-φ · the discriminative biometric signal that makes the anti-cheat moat is destroyed before any byte leaves · exported corpora cannot train a bot past the moat</p></div>
+      <div class="panel panel--chain"><div class="panel__eye"><span class="lbl">Buyer class</span><span class="meta" style="color: var(--chain)">RESEARCH · LABS</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">A higher-value, harder-to-counterfeit product than "buy a replay" — sold to a different buyer than the marketplace tier</p></div>
+      <div class="panel"><div class="panel__eye"><span class="lbl">v1 fixtures · v2 promote</span><span class="meta">FUTURE-READY</span></div><p class="mono" style="margin:0; font-size:14px; color: var(--text-dim); line-height:1.55;">Ships on fixtures today · cryptographic real-data export gate ships when first buyer needs it (greenfield VAPIWorldModelConsentRegistry, no migration cost)</p></div>
+    </div>
+  </div>
+
+  <span class="chrome-foot">
+    <span class="chain">THE · CANDOR · LI · ASKS · FOR · — · MADE · CRYPTOGRAPHIC</span>
+    <span>PROVENANCE · SOURCE · FOR · THE · DEMONSTRATION-DATA · BOTTLENECK</span>
+  </span>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- 19 · PROOF OF EXECUTION — already live, re-derivable              -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<section data-screen-label="19 Proof">
+  <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
+  <span class="chrome-meta"><span>19 · PROOF · OF · EXECUTION</span><span class="chain">VERIFIABLE</span></span>
 
   <p class="eyebrow">Not a pitch-deck promise <span class="amber">·</span> on-chain reality you can check today</p>
   <h2>Already live <span style="color: var(--chain)">on IoTeX.</span></h2>
 
   <div class="grid-2" style="margin-top: 44px;">
     <div class="stack-sm">
-      <div class="kv"><span class="k">Contracts live · testnet 4690</span><span class="v chain">49 — all deployed</span></div>
+      <div class="kv"><span class="k">Contracts live · testnet 4690</span><span class="v chain">55 — all deployed (Arc 2 + Arc 6 added 2026-06-05)</span></div>
       <div class="kv"><span class="k">Grind integrity chain</span><span class="v chain">GIC_100 reached · anchored</span></div>
       <div class="kv"><span class="k">Autonomous steward</span><span class="v amber">Guardian — first non-human HSM signature, anchored</span></div>
       <div class="kv"><span class="k">Anchor tx</span><span class="v dim" style="font-size:14px;">0x1e868a80…07e4ddc5 · blk 43820170 · isRecorded=true</span></div>
+      <div class="kv"><span class="k">Consent manifest write</span><span class="v amber" style="font-size:13px;">tx 0xd02c051e…20bd · blk 44354567 · allowReplayProofs=true</span></div>
     </div>
     <div class="stack-sm">
       <div class="kv"><span class="k">Automated tests</span><span class="v">~5,766 — bridge · SDK · contracts · PV-CI</span></div>
@@ -1116,9 +1399,9 @@
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <!-- 12 · THE ASK — Halo · DePIN Incubator                             -->
 <!-- ═══════════════════════════════════════════════════════════════ -->
-<section data-screen-label="12 The Ask">
+<section data-screen-label="20 The Ask">
   <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
-  <span class="chrome-meta"><span>12 · THE · ASK</span><span class="amber">HALO · DePIN · INCUBATOR</span></span>
+  <span class="chrome-meta"><span>20 · THE · ASK</span><span class="amber">HALO · DePIN · INCUBATOR</span></span>
 
   <p class="eyebrow"><span class="amber">Halo Project Grant · DePIN Incubator</span> — fund the next inhabitant</p>
   <h2>From <span style="color: var(--chain)">presence</span> to a <span class="amber">hardware standard.</span></h2>
@@ -1145,9 +1428,9 @@
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <!-- 13 · CLOSING — the ask                                            -->
 <!-- ═══════════════════════════════════════════════════════════════ -->
-<section data-screen-label="13 Closing" style="display: grid; place-items: center; padding: 96px;">
+<section data-screen-label="21 Closing" style="display: grid; place-items: center; padding: 96px;">
   <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
-  <span class="chrome-meta"><span>13 · CLOSING</span><span class="amber">IoTeX · L1</span></span>
+  <span class="chrome-meta"><span>21 · CLOSING</span><span class="amber">IoTeX · L1</span></span>
 
   <div style="text-align: center; max-width: 1480px;">
     <p class="eyebrow center" style="margin-bottom: 28px;">

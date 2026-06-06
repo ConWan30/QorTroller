@@ -31,7 +31,7 @@ export function GrantBriefView() {
   // v2 · item A — eyebrow spine (full-bleed .qt-stage iframe view).
   useViewEyebrow({
     num: '05', name: 'GRANT · BRIEF', status: 'IoTeX', statusTone: 'amber',
-    readouts: [{ label: 'SLIDES', value: '13', tone: 'chain' }, { label: 'NAV', value: '? = KEYS', tone: 'dim' }],
+    readouts: [{ label: 'SLIDES', value: '21', tone: 'chain' }, { label: 'NAV', value: '? = KEYS', tone: 'dim' }],
   })
 
   // v2 · item F — keyboard-shortcut overlay (evaluators don't read linearly).
