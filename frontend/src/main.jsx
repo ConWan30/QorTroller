@@ -62,6 +62,12 @@ const StartDapp = React.lazy(() => import('./dapps/Start'))
 // Lazy-loaded so the dashboard doesn't pay for the certificate styling.
 const HardwareVerifyDapp = React.lazy(() => import('./dapps/HardwareVerify'))
 
+// WMP Researcher Landing (2026-06-06) — /research. Editorial-scientific
+// surface for AI / world-model research labs. Side-rail TOC, dense type,
+// runnable in-browser verifier that mirrors sdk/wmp_verify.py byte-
+// identically (structural rehash port). Trust-by-execution. Lazy-loaded.
+const ResearchDapp = React.lazy(() => import('./dapps/Research'))
+
 import './index.css'
 
 const queryClient = new QueryClient({
@@ -188,6 +194,17 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                 </React.Suspense>
               }
             />
+
+            {/* WMP Researcher Landing — /research (alias /wmp). */}
+            <Route
+              path="/research"
+              element={
+                <React.Suspense fallback={null}>
+                  <ResearchDapp />
+                </React.Suspense>
+              }
+            />
+            <Route path="/wmp" element={<Navigate to="/research" replace />} />
 
             <Route path="/" element={<App />} />
             <Route path="*" element={<App />} />
