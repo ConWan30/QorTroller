@@ -809,6 +809,23 @@ export function useConsentHistory(deviceId, limit = 50) {
   })
 }
 
+export function useMythosFindings({ variant = '', severity = '', unresolvedOnly = false, limit = 200 } = {}) {
+  return useQuery({
+    queryKey: ['mythosFindings', variant, severity, unresolvedOnly, limit],
+    queryFn: () => {
+      const params = new URLSearchParams()
+      if (variant) params.set('variant', variant)
+      if (severity) params.set('severity', severity)
+      if (unresolvedOnly) params.set('unresolved_only', 'true')
+      params.set('limit', String(limit))
+      return get(`/operator/mythos-findings?${params}`, 'mythosFindings', { noMock: true })
+    },
+    refetchInterval: 30000,
+    staleTime: 20000,
+    retry: 1,
+  })
+}
+
 // Phase O1 C5 — Operator Agents shadow-mode visibility hooks.
 //
 // All three hooks set noMock: true — operator audit data must never be

@@ -31,6 +31,7 @@ const _WORKSPACES = [
   { to: '/os/evidence', num: '01', label: 'Evidence Graph',  name: 'EVIDENCE GRAPH',  accent: '#5bd6a3' },
   { to: '/os/replay',   num: '02', label: 'Forensic Replay', name: 'FORENSIC REPLAY', accent: '#5bd6a3' },
   { to: '/os/protocol', num: '03', label: 'Protocol State',  name: 'PROTOCOL STATE',  accent: '#f0a868' },
+  { to: '/os/mythos',   num: '04', label: 'Mythos Fleet',    name: 'MYTHOS FLEET',    accent: '#a78bfa' },
 ]
 
 const _LEGACY_LINKS = [

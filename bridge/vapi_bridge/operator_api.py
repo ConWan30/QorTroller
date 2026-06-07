@@ -9398,6 +9398,38 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "timestamp":        time.time(),
         }
 
+    @app.get("/operator/mythos-findings")
+    async def get_mythos_findings_endpoint(
+        x_api_key: str = Header(default=""),
+        variant: str = Query(default=""),
+        severity: str = Query(default=""),
+        unresolved_only: bool = Query(default=False),
+        limit: int = Query(default=100, ge=1, le=500),
+    ):
+        """Phase O5-MYTHOS — current findings from mythos_finding_log.
+
+        Returns all Mythos audit findings with optional filters.
+        Used by the MythosWorkspace (/os/mythos) to render the 15-cell
+        mission-control matrix.
+        """
+        _check_read_key(x_api_key)
+        try:
+            rows = store.get_mythos_findings(
+                variant=variant or None,
+                severity=severity or None,
+                unresolved_only=unresolved_only,
+                limit=limit,
+            )
+            cadence = store.get_mythos_cadence_status()
+            return {
+                "findings": rows,
+                "cadence": cadence,
+                "timestamp": time.time(),
+            }
+        except Exception as exc:
+            log.warning("get_mythos_findings_endpoint: %s", exc)
+            return {"findings": [], "cadence": {}, "timestamp": time.time()}
+
     @app.get("/operator/operator-agent-drift-log")
     async def get_operator_agent_drift_log(
         x_api_key: str = Header(default=""),

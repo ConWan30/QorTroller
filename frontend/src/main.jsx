@@ -26,6 +26,7 @@ import AppShell from './os/AppShell'
 import EvidenceGraphWorkspace from './os/workspaces/EvidenceGraphWorkspace'
 import ForensicReplayWorkspace from './os/workspaces/ForensicReplayWorkspace'
 import ProtocolStateWorkspace from './os/workspaces/ProtocolStateWorkspace'
+import MythosWorkspace from './os/workspaces/MythosWorkspace'
 import { Navigate } from 'react-router-dom'
 import { markReality } from './design/realityHeartbeat'
 // LiveMatchWorkspace + OperatorQueueWorkspace are intentionally NOT routed here:
@@ -120,6 +121,8 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                 <Route path="algorithms"             element={<AlgorithmCatalogView />} />
               </Route>
               <Route path="protocol" element={<ProtocolStateWorkspace />} />
+              {/* Mythos Audit Fleet Workspace — 15-cell mission-control matrix. */}
+              <Route path="mythos" element={<MythosWorkspace />} />
             </Route>
 
             {/* Consent Cockpit dApp — standalone, bookmark-able URL.
