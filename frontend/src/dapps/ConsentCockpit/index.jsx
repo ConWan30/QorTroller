@@ -454,6 +454,96 @@ function AuthorityMatrix({
   )
 }
 
+// Build 5 tone polish — small one-directional flow illustration above
+// the disclosure. Renders the structural property "wallet writes; bridge
+// reads" as a visual rather than only as prose. CSS-only, no asset
+// dependency, scales for mobile.
+function SovereigntyFlow() {
+  return (
+    <div
+      role="img"
+      aria-label="Wallet writes consent on-chain; bridge can only read it back."
+      style={{
+        display:       'flex',
+        alignItems:    'center',
+        gap:           14,
+        flexWrap:      'wrap',
+        padding:       '14px 0 18px',
+      }}
+    >
+      <FlowNode label="YOUR WALLET" sublabel="msg.sender" color={GAMER.cyan} />
+      <FlowArrow color={GAMER.cyan} label="signs · writes" />
+      <FlowNode label="CONSENT CONTRACT" sublabel="on-chain" color={GAMER.green} />
+      <FlowArrow color={GAMER.t2} label="reads only" thin />
+      <FlowNode label="BRIDGE" sublabel="never writes" color={GAMER.t2} />
+    </div>
+  )
+}
+
+function FlowNode({ label, sublabel, color }) {
+  return (
+    <div style={{
+      padding:      '8px 12px',
+      border:       `1px solid ${color}55`,
+      borderRadius: 4,
+      background:   `${color}0a`,
+      minWidth:     78,
+    }}>
+      <div style={{
+        fontFamily:    FONTS.mono,
+        fontSize:      9,
+        letterSpacing: '0.14em',
+        color,
+        fontWeight:    600,
+      }}>
+        {label}
+      </div>
+      <div style={{
+        fontFamily: FONTS.mono,
+        fontSize:   8,
+        color:      GAMER.t3,
+        marginTop:  3,
+      }}>
+        {sublabel}
+      </div>
+    </div>
+  )
+}
+
+function FlowArrow({ color, label, thin }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+      <span style={{
+        display:    'inline-block',
+        width:      36,
+        height:     thin ? 1 : 2,
+        background: color,
+        position:   'relative',
+      }}>
+        <span style={{
+          position:    'absolute',
+          right:       -2,
+          top:         thin ? -3 : -3,
+          width:       0,
+          height:      0,
+          borderTop:   '4px solid transparent',
+          borderBottom: '4px solid transparent',
+          borderLeft:  `6px solid ${color}`,
+        }} />
+      </span>
+      <span style={{
+        fontFamily:    FONTS.mono,
+        fontSize:      7,
+        letterSpacing: '0.16em',
+        color:         GAMER.t3,
+        textTransform: 'uppercase',
+      }}>
+        {label}
+      </span>
+    </div>
+  )
+}
+
 function DisclosureFooter() {
   return (
     <Section style={{ background: 'rgba(8,18,24,0.4)', borderColor: GAMER.bd2 }}>
@@ -469,18 +559,43 @@ function DisclosureFooter() {
       >
         BRIDGE NEVER GRANTS OR REVOKES CONSENT
       </div>
-      <div style={{ fontFamily: FONTS.body, fontSize: 12, color: GAMER.t2, lineHeight: 1.65 }}>
-        Phase 237-CONSENT — your wallet signs every grant and revoke. The
-        bridge can read your on-chain consent state but cannot modify it.
-        You retain ownership of your data and can revoke at any time. The
-        on-chain VAPIConsentRegistry is the gamer-authoritative source of
-        truth; the local bridge consent_ledger mirrors it for operational
-        reads only.
+
+      {/* Build 5 — one-directional flow illustration. The shape OF the
+          property, before the prose ABOUT the property. */}
+      <SovereigntyFlow />
+
+      {/* Build 5 — Syne body copy (was JetBrains Mono "body" alias); the
+          warmer line-height (1.75) lets the explanation breathe for
+          a first-time reader who isn't a forensic cryptographer. */}
+      <div style={{
+        fontFamily: FONTS.body,
+        fontSize:   13,
+        color:      GAMER.t2,
+        lineHeight: 1.75,
+        marginTop:  6,
+      }}>
+        Your wallet signs every grant and revoke. The bridge can read
+        your on-chain consent state but cannot modify it. You retain
+        ownership of your data and can revoke at any time. The on-chain
+        contract is the gamer-authoritative source of truth; the bridge
+        mirrors it for operational reads only.
       </div>
-      <div style={{ marginTop: 10, fontFamily: FONTS.mono, fontSize: 9, color: GAMER.t3, lineHeight: 1.55 }}>
-        This invariant is pinned at the protocol layer (see CLAUDE.md hard
-        rules: <em>BRIDGE NEVER GRANTS OR REVOKES CONSENT ON BEHALF OF GAMER</em>).
-        The Consent Cockpit dApp is a presentation surface; it is
+
+      {/* Build 5 — supporting disclosure: smaller, looser, still Syne
+          (only addresses + reference codes stay mono). */}
+      <div style={{
+        marginTop:  12,
+        fontFamily: FONTS.body,
+        fontSize:   11,
+        color:      GAMER.t3,
+        lineHeight: 1.7,
+      }}>
+        This invariant is pinned at the protocol layer (see the
+        CLAUDE.md hard rule{' '}
+        <em style={{ color: GAMER.t2 }}>
+          BRIDGE NEVER GRANTS OR REVOKES CONSENT ON BEHALF OF GAMER
+        </em>
+        ). The Consent Cockpit is a presentation surface; it is
         cryptographically prevented from impersonating you. Your wallet
         is the only authority.
       </div>
@@ -566,14 +681,29 @@ export default function ConsentCockpitDapp() {
     }
   }
 
+  // Build 5 — tone polish 2026-06-06. When the wallet is connected, the
+  // surface earns a soft amber-on-void radial signaling "you are
+  // authenticated, you are safe here." When disconnected, the surface
+  // stays cool void-black so the CONNECT WALLET CTA reads as the action.
+  // This is the audit's "warmth move" — same data, different room.
+  const connectedRadial = isConnected
+    ? `
+        radial-gradient(ellipse 70% 45% at 80% -5%, ${GAMER.cyan}0a, transparent 60%),
+        radial-gradient(ellipse 50% 50% at -10% 90%, ${GAMER.green}07, transparent 65%)
+      `
+    : 'none'
+
   return (
     <div
       style={{
         minHeight:   '100vh',
         background:  GAMER.bg,
+        backgroundImage: connectedRadial,
+        backgroundAttachment: 'fixed',
         color:       GAMER.t1,
         display:     'flex',
         flexDirection: 'column',
+        transition:  'background-image 0.6s ease',
       }}
     >
       <CockpitChrome />
