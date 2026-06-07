@@ -100,9 +100,9 @@ describe('Evidence OS AppShell', () => {
     // with no dashboard analog. Live Match (≈ Gamer) + Operator Queue
     // (≈ Operator·Evidence) were de-duplicated out of the nav.
     const navLinks = container.querySelectorAll('[data-os-nav-link]')
-    expect(navLinks.length).toBe(3)
+    expect(navLinks.length).toBe(4)
     const navText = Array.from(navLinks).map(n => n.textContent).join(' | ')
-    for (const label of ['Evidence Graph', 'Forensic Replay', 'Protocol State']) {
+    for (const label of ['Evidence Graph', 'Forensic Replay', 'Protocol State', 'Mythos Fleet']) {
       expect(navText, `nav missing: ${label}`).toContain(label)
     }
     // The dropped tabs must NOT appear in the nav.
