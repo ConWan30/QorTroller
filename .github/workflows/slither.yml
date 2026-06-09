@@ -1,0 +1,69 @@
+name: Slither Static Analysis
+
+# DECON-1 Stream 1 — Solidity static analysis as a CI gate.
+# First-pass posture: REPORT-ONLY (continue-on-error: true).
+# Operator triages audits/slither-baseline-<date>.md, then D-DECON-1
+# selects enforcement posture (high-only / medium+ / permanent-report-only).
+
+on:
+  pull_request:
+    paths:
+      - "contracts/**"
+      - ".github/workflows/slither.yml"
+      - "contracts/slither.config.json"
+  push:
+    branches: [main, develop]
+    paths:
+      - "contracts/**"
+      - ".github/workflows/slither.yml"
+      - "contracts/slither.config.json"
+  workflow_dispatch:
+
+jobs:
+  slither:
+    name: Slither (report-only)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: contracts/package-lock.json
+
+      - name: Install Slither + solc-select
+        run: |
+          pip install slither-analyzer==0.10.4 solc-select==1.0.4
+          solc-select install 0.8.20
+          solc-select use 0.8.20
+
+      - name: Install contract dependencies
+        working-directory: contracts
+        run: npm ci
+
+      - name: Run Slither (JSON + Markdown report)
+        working-directory: contracts
+        run: |
+          slither . \
+            --config-file slither.config.json \
+            --json ../audits/slither-latest.json \
+            --checklist > ../audits/slither-latest.md || true
+
+      - name: Upload Slither artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: slither-report-${{ github.sha }}
+          path: |
+            audits/slither-latest.json
+            audits/slither-latest.md
+          retention-days: 90

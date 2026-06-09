@@ -1,0 +1,13 @@
+{
+  "_comment": "DECON-1 Stream 1 — first-pass Slither config. Filters mocks/tests/node_modules so the baseline reflects production contracts only. Detectors-to-skip list intentionally EMPTY for the baseline run; operator triage at D-DECON-1 will populate it.",
+  "filter_paths": "node_modules|Mock|mock|test/|tests/|circuits/",
+  "solc_remaps": [],
+  "solc_disable_warnings": false,
+  "exclude_informational": false,
+  "exclude_low": false,
+  "exclude_medium": false,
+  "exclude_high": false,
+  "exclude_optimization": false,
+  "disable_color": true,
+  "legacy_ast": false
+}
