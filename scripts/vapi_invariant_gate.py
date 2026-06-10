@@ -109,14 +109,14 @@ INVARIANTS: list[Invariant] = [
     Invariant(
         id="INV-003",
         description="L4 anomaly threshold literal 7.009",
-        file="bridge/vapi_bridge/store.py",
+        file="bridge/vapi_bridge/store/_core.py",
         pattern=r"7\.009",
         min_matches=1,
     ),
     Invariant(
         id="INV-004",
         description="L4 continuity threshold literal 5.367",
-        file="bridge/vapi_bridge/store.py",
+        file="bridge/vapi_bridge/store/_core.py",
         pattern=r"5\.367",
         min_matches=1,
     ),
@@ -243,7 +243,7 @@ INVARIANTS: list[Invariant] = [
     Invariant(
         id="INV-022",
         description="governance_provenance_chain table + insert method in store (Phase 226)",
-        file="bridge/vapi_bridge/store.py",
+        file="bridge/vapi_bridge/store/_core.py",
         pattern=r"governance_provenance_chain|insert_governance_provenance",
         min_matches=1,
     ),
@@ -258,14 +258,14 @@ INVARIANTS: list[Invariant] = [
     Invariant(
         id="INV-024",
         description="GIC ts_ns ordering: get_prev_grind_chain_hash orders by gic_ts_ns DESC (INV-GIC-002)",
-        file="bridge/vapi_bridge/store.py",
+        file="bridge/vapi_bridge/store/_core.py",
         pattern=r"gic_ts_ns\s+DESC|ORDER\s+BY\s+gic_ts_ns",
         min_matches=1,
     ),
     Invariant(
         id="INV-025",
         description="GIC chain-broken flag on Store class with set method (INV-GIC-003)",
-        file="bridge/vapi_bridge/store.py",
+        file="bridge/vapi_bridge/store/_core.py",
         pattern=r"_gic_chain_broken|set_gic_chain_broken",
         min_matches=1,
     ),
@@ -395,7 +395,7 @@ INVARIANTS: list[Invariant] = [
     Invariant(
         id="INV-OPERATOR-AGENT-002",
         description="operator_agent_activation_log UNIQUE(agent_id, to_scope_root) anti-replay constraint in store.py — each (agent, scope_root) tuple activated exactly once (Phase O1 C1)",
-        file="bridge/vapi_bridge/store.py",
+        file="bridge/vapi_bridge/store/_core.py",
         pattern=r"UNIQUE\(agent_id, to_scope_root\)",
         min_matches=1,
     ),
@@ -416,7 +416,7 @@ INVARIANTS: list[Invariant] = [
     Invariant(
         id="INV-OPERATOR-AGENT-003",
         description="operator_agent_shadow_log UNIQUE(agent_id, action, resource, evaluated_at_bucket) idempotency at second granularity — protects against retry-storm duplication while permitting distinct evaluations per second (Phase O1 C2)",
-        file="bridge/vapi_bridge/store.py",
+        file="bridge/vapi_bridge/store/_core.py",
         pattern=r"UNIQUE\(agent_id, action, resource, evaluated_at_bucket\)",
         min_matches=1,
     ),
@@ -437,7 +437,7 @@ INVARIANTS: list[Invariant] = [
     Invariant(
         id="INV-OPERATOR-AGENT-006",
         description="operator_agent_drift_log UNIQUE(agent_id, drift_type, detected_at_bucket) sweep idempotency — same drift in same second collapses to one row (Phase O1 C3)",
-        file="bridge/vapi_bridge/store.py",
+        file="bridge/vapi_bridge/store/_core.py",
         pattern=r"UNIQUE\(agent_id, drift_type, detected_at_bucket\)",
         min_matches=1,
     ),
@@ -535,7 +535,7 @@ INVARIANTS: list[Invariant] = [
     Invariant(
         id="INV-O3-SUPERSEDE-003",
         description="Phase O1-D-AUTO-SUPERSEDE operator_initiative_auto_supersede_log table + insert helper preserved — the cryptographic-attestation audit-trail backbone; without persistence the watcher's supersession events become unauditable (Phase O1-D-AUTO-SUPERSEDE 2026-05-17)",
-        file="bridge/vapi_bridge/store.py",
+        file="bridge/vapi_bridge/store/_core.py",
         pattern=r"operator_initiative_auto_supersede_log|insert_operator_initiative_auto_supersede",
         min_matches=2,
     ),
@@ -549,7 +549,7 @@ INVARIANTS: list[Invariant] = [
     Invariant(
         id="INV-PATH-B-002",
         description="Phase O1-D-PATH-B v1 operator_agent_chain_spending_log table + insert_chain_spending_event + get_daily_chain_spending_for_agent helpers — the budget-enforcement audit backbone; without persistence the budget cap can be bypassed (Phase O1-D-PATH-B 2026-05-17)",
-        file="bridge/vapi_bridge/store.py",
+        file="bridge/vapi_bridge/store/_core.py",
         pattern=r"operator_agent_chain_spending_log|insert_chain_spending_event|get_daily_chain_spending_for_agent",
         min_matches=3,
     ),
@@ -805,7 +805,7 @@ INVARIANTS: list[Invariant] = [
     Invariant(
         id="INV-MYTHOS-FROZEN-PROTECTION-001",
         description="Store-layer enforcement of the FROZEN-region read-only invariant: insert_mythos_finding FORCES fix_authority_tier=3 whenever frozen_region=True, regardless of the variant's declared tier. Mythos NEVER auto-fixes FROZEN material — this invariant is the cryptographic safety property the plan named (verified by T-MYTHOS-M1-3). Drift here would let a malicious or buggy variant suggest tier-1 autofix on a FROZEN region and have it take effect.",
-        file="bridge/vapi_bridge/store.py",
+        file="bridge/vapi_bridge/store/_core.py",
         pattern=r"INV-MYTHOS-FROZEN-PROTECTION-001",
         min_matches=1,
     ),
@@ -820,7 +820,7 @@ INVARIANTS: list[Invariant] = [
     Invariant(
         id="INV-SS2-PROBE-TYPE-001",
         description="Phase 243-SS2 Stream 1: trigger_force_curve probe type registered in STRUCTURED_PROBE_TYPES frozenset (the 7th member after touchpad_corners + touchpad_freeform + touchpad_swipes + mixed_biometric_probe + tremor_resting + ait). T-PHASE243-1 verifies; Stage-A captures consume this routing key.",
-        file="bridge/vapi_bridge/store.py",
+        file="bridge/vapi_bridge/store/_core.py",
         pattern=r'"trigger_force_curve"',
         min_matches=1,
     ),
@@ -945,7 +945,7 @@ INVARIANTS: list[Invariant] = [
     Invariant(
         id="INV-MLGA-STORE-TABLE-001",
         description="Phase O5-MLGA: mlga_session_log table migration registered in store.py (Phase 1102 migration; UNIQUE(session_id, dataproof_hex) anti-replay). Schema is the single canonical record for MLGA gameplay sessions; drift here breaks the unblock-harness export consumers (Phase 243-SS2 + 242-BT + 229).",
-        file="bridge/vapi_bridge/store.py",
+        file="bridge/vapi_bridge/store/_core.py",
         pattern=r"CREATE TABLE IF NOT EXISTS mlga_session_log",
         min_matches=1,
     ),
@@ -1363,7 +1363,7 @@ INVARIANTS: list[Invariant] = [
     Invariant(
         id="INV-VHR-WIRING-003",
         description="Store.get_curator_session_aggregate exists and JOINs agent_rulings with ruling_validation_log on ruling_id (Arc 5 Commit 6). Returns None when the ruling isn't validated yet — the orchestrator gracefully treats that as vhr_aborted_no_session rather than fabricating a session.",
-        file="bridge/vapi_bridge/store.py",
+        file="bridge/vapi_bridge/store/_core.py",
         pattern=r"def get_curator_session_aggregate\(self, session_id\)",
         min_matches=1,
     ),
