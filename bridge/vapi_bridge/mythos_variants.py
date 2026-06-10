@@ -3266,3 +3266,276 @@ async def mythos_agent_utility_honesty(
             ))
 
     return findings
+
+
+# ---------------------------------------------------------------------------
+# Variant #16 — Mythos Path A Spec/Impl Parity (HWFL-1 Cycle 1, Sensor A v0.1)
+# ---------------------------------------------------------------------------
+async def mythos_path_a_spec_impl_parity(
+    *,
+    repo_root: Path | None = None,
+) -> list[MythosFindingResult]:
+    """Sensor A v0.1 — parity probe between `docs/path-a-manufacturing-spec.md`
+    and the live implementation surfaces it cites.
+
+    Born 2026-06-10 as Cycle 1 of HWFL-1 (Hardware Futures Loop). Extends the
+    variant #15 chassis pattern: fail-open, structured COVERAGE_BOUNDARY
+    finding, per-surface findings, never raises. Decisions D-HWFL-4 / 5 / 6
+    in this file's git history scope-defined the v0.1 surface to file-existence
+    + comment-level (key marker grep), with byte-level structural diff deferred
+    to v0.2.
+
+    Six in-scope probes (spec-cited surfaces):
+      P1. `contracts/contracts/VAPIManufacturerDeviceRegistry.sol` — must
+          contain `registerDevice` selector text and `nonReentrant` modifier
+          (spec §6.1 ABI).
+      P2. `contracts/deployed-addresses.json` — must reference the VMDR
+          deploy address `0x2e5B5FB1...` (spec §1 + §6.3 table).
+      P3. `bridge/vapi_bridge/device_birth_cert.py` — must declare
+          `DeviceBirthCertificate` and the §4.1 required fields
+          (`device_id_hex`, `signature_hex`, `atecc_chip_id`).
+      P4. `bridge/vapi_bridge/manufacturer_root_ca.py` — must exist (§4.2
+          canonical-bytes derivation site).
+      P5. `scripts/verify_device_cert.py` — must exist (spec §7.1 audit tool).
+      P6. `scripts/vapi_invariant_gate.py` — must contain `INV-MFG-001` and
+          `INV-MFG-002` pin markers (spec §5 FROZEN-v1 tier constants).
+
+    Two scope-boundary findings (D-HWFL-4 honesty rail):
+      B1. `firmware/` tree presence — spec is silent on firmware-resident
+          PoAC; reality is a firmware tree exists but is the legacy
+          `pebble_tracker.overlay` board (predecessor Pebble DePIN device,
+          not the Path A QorTroller controller). Surfaces the spec/firmware
+          scope boundary as a structured finding rather than silently
+          tolerating ambiguity.
+      B2. φ sanitization residency — spec is silent on φ; the canonical
+          implementation site (`bridge/vapi_bridge/replay_proof_pipeline/
+          pre_processor.py`) is host-side. φ residency is a Sensor Stack
+          v2.1 concern, NOT a Path A concern. Documents the boundary so
+          future cycles don't conflate the two.
+
+    Severity LOW per finding. Cadence-watch via the Mythos cadence engine.
+    Rubric source: `audits/sensor-a-cycle-1-2026-06-10.md` (Cycle 1 report).
+
+    NOTE: v0.1 deliberately does NOT diff PoAC wire bytes between
+    `bridge/vapi_bridge/codec.py` and any firmware `poac.c` — that is a
+    byte-level structural diff and is scoped to Sensor A v0.2 per D-HWFL-6.
+    """
+    root = _resolve_repo_root(repo_root)
+    findings: list[MythosFindingResult] = []
+
+    spec_path = root / "docs" / "path-a-manufacturing-spec.md"
+    spec_rel = "docs/path-a-manufacturing-spec.md"
+
+    if not spec_path.exists():
+        findings.append(MythosFindingResult(
+            variant="path_a_spec_impl_parity",
+            severity="HIGH",
+            description=(
+                f"Sensor A v0.1: canonical spec doc {spec_rel} is missing. "
+                f"Without the spec there is nothing to probe parity against. "
+                f"This is a setup-failure finding; cycle aborts."
+            ),
+            recommended_fix=(
+                f"Restore {spec_rel} from git history "
+                f"(originally landed in Path A Arc 1 commit 2026-05-27)."
+            ),
+            coherence_id=_coherence_id("path_a_spec_impl_parity", "spec_missing"),
+            file_path=spec_rel,
+            frozen_region=False,
+            fix_authority_tier=2,
+            evidence_sources=[spec_rel],
+        ))
+        return findings
+
+    # COVERAGE_BOUNDARY finding (variant #14 / #15 pattern).
+    findings.append(MythosFindingResult(
+        variant="path_a_spec_impl_parity",
+        severity="LOW",
+        description=(
+            "COVERAGE_BOUNDARY: Sensor A v0.1 probes six spec-cited "
+            "implementation surfaces (VMDR contract, deployed-addresses, "
+            "device_birth_cert, manufacturer_root_ca, verify_device_cert, "
+            "vapi_invariant_gate INV-MFG pins) at file-existence + "
+            "comment-level only, plus two structured scope-boundary "
+            "findings (firmware/ tree identity, phi sanitization residency). "
+            "Byte-level structural diff (e.g. PoAC wire format byte parity "
+            "between codec.py and any firmware poac.c) is deferred to "
+            "Sensor A v0.2 per D-HWFL-6. 0 in-scope findings means the six "
+            "probes passed marker checks; the two scope-boundary findings "
+            "are EXPECTED on every cycle until the spec or implementations "
+            "evolve to address them. Rubric: "
+            "audits/sensor-a-cycle-1-2026-06-10.md."
+        ),
+        recommended_fix=(
+            "Informational only when this is the lone variant emission. "
+            "Per-probe findings (P1-P6) and boundary findings (B1-B2) carry "
+            "actionable detail."
+        ),
+        coherence_id=_coherence_id("path_a_spec_impl_parity", "coverage_boundary:v0.1"),
+        frozen_region=False,
+        fix_authority_tier=2,
+        evidence_sources=[spec_rel],
+    ))
+
+    def _probe(name: str, rel_path: str, markers: list[str]) -> None:
+        """File-existence + marker-grep probe. Emits a finding on miss; silent on pass."""
+        path = root / rel_path
+        if not path.exists():
+            findings.append(MythosFindingResult(
+                variant="path_a_spec_impl_parity",
+                severity="MEDIUM",
+                description=(
+                    f"Sensor A v0.1 {name}: spec-cited path {rel_path} is missing. "
+                    f"The Path A spec references this surface; its absence is a "
+                    f"parity drift between spec and implementation."
+                ),
+                recommended_fix=(
+                    f"Either restore {rel_path} or amend the spec to remove the "
+                    f"reference. Choose the direction that matches operator intent."
+                ),
+                coherence_id=_coherence_id("path_a_spec_impl_parity", f"missing:{rel_path}"),
+                file_path=rel_path,
+                frozen_region=False,
+                fix_authority_tier=2,
+                evidence_sources=[spec_rel, rel_path],
+            ))
+            return
+        try:
+            text = path.read_text(encoding="utf-8", errors="ignore")
+        except Exception as exc:  # noqa: BLE001
+            log.debug("path_a parity probe %s read failed: %s", rel_path, exc)
+            return
+        missing = [m for m in markers if m not in text]
+        if missing:
+            findings.append(MythosFindingResult(
+                variant="path_a_spec_impl_parity",
+                severity="LOW",
+                description=(
+                    f"Sensor A v0.1 {name}: {rel_path} exists but is missing "
+                    f"expected marker(s) {missing}. The spec assumes these "
+                    f"markers are present; their absence is a low-severity "
+                    f"drift signal — could be a rename, a refactor, or a "
+                    f"genuine implementation gap."
+                ),
+                recommended_fix=(
+                    f"Inspect {rel_path} and reconcile against the spec section "
+                    f"that introduced the marker. v0.1 reports presence only; "
+                    f"v0.2 will add structural diff."
+                ),
+                coherence_id=_coherence_id(
+                    "path_a_spec_impl_parity", f"marker_miss:{rel_path}:{','.join(missing)}"
+                ),
+                file_path=rel_path,
+                frozen_region=False,
+                fix_authority_tier=2,
+                evidence_sources=[spec_rel, rel_path],
+            ))
+
+    _probe(
+        "P1 VMDR contract",
+        "contracts/contracts/VAPIManufacturerDeviceRegistry.sol",
+        ["registerDevice", "nonReentrant"],
+    )
+    _probe(
+        "P2 deployed-addresses",
+        "contracts/deployed-addresses.json",
+        ["VAPIManufacturerDeviceRegistry", "0x2e5B5FB1"],
+    )
+    _probe(
+        "P3 device_birth_cert",
+        "bridge/vapi_bridge/device_birth_cert.py",
+        ["DeviceBirthCertificate", "device_id_hex", "signature_hex"],
+    )
+    _probe(
+        "P4 manufacturer_root_ca",
+        "bridge/vapi_bridge/manufacturer_root_ca.py",
+        [],
+    )
+    _probe(
+        "P5 verify_device_cert tool",
+        "scripts/verify_device_cert.py",
+        [],
+    )
+    _probe(
+        "P6 INV-MFG PV-CI pins",
+        "scripts/vapi_invariant_gate.py",
+        ["INV-MFG-001", "INV-MFG-002"],
+    )
+
+    # B1: firmware/ scope boundary
+    firmware_dir = root / "firmware"
+    pebble_overlay = firmware_dir / "boards" / "pebble_tracker.overlay"
+    if firmware_dir.exists() and pebble_overlay.exists():
+        findings.append(MythosFindingResult(
+            variant="path_a_spec_impl_parity",
+            severity="LOW",
+            description=(
+                "Sensor A v0.1 B1 firmware-tree scope boundary: a firmware/ "
+                "tree exists (Zephyr build harness with poac.c, perception.c, "
+                "tinyml.c, etc.) but its board overlay is "
+                "boards/pebble_tracker.overlay — i.e. the legacy Pebble "
+                "DePIN tracker device, NOT the Path A QorTroller controller. "
+                "The Path A spec (docs/path-a-manufacturing-spec.md) is silent "
+                "on firmware-resident PoAC for the controller; it is a "
+                "host-side / factory-ceremony / on-chain spec. The firmware "
+                "tree is a SIBLING-project surface, not a Path A "
+                "implementation gap. Surfaced here so future cycles do not "
+                "conflate the two."
+            ),
+            recommended_fix=(
+                "No action required for Path A v1. Future Rung 2 work on the "
+                "QorTroller dev kit will introduce a separate "
+                "controller-specific firmware target (probably under "
+                "firmware/boards/qortroller_devkit.overlay or a sibling tree). "
+                "Until then, ensure spec amendments do not assume "
+                "firmware/src/*.c describes the Path A controller."
+            ),
+            coherence_id=_coherence_id(
+                "path_a_spec_impl_parity", "boundary:firmware_pebble_vs_qortroller"
+            ),
+            file_path="firmware/boards/pebble_tracker.overlay",
+            frozen_region=False,
+            fix_authority_tier=2,
+            evidence_sources=[
+                spec_rel,
+                "firmware/boards/pebble_tracker.overlay",
+                "firmware/src/poac.c",
+            ],
+        ))
+
+    # B2: phi sanitization scope boundary
+    pre_processor_path = root / "bridge" / "vapi_bridge" / "replay_proof_pipeline" / "pre_processor.py"
+    if pre_processor_path.exists():
+        findings.append(MythosFindingResult(
+            variant="path_a_spec_impl_parity",
+            severity="LOW",
+            description=(
+                "Sensor A v0.1 B2 phi-sanitization scope boundary: phi "
+                "sanitization (FORBIDDEN_COLUMNS data-floor + downsampling + "
+                "4-bit radial-sector quantization) lives in "
+                "bridge/vapi_bridge/replay_proof_pipeline/pre_processor.py "
+                "(host-side). The Path A manufacturing spec is silent on phi; "
+                "phi residency is a Sensor Stack v2.1 concern (canonical "
+                "anchor: wiki/assessments/DualSense Edge Sensor-Stack "
+                "Characterization). Surfaced here so cycle audits do not "
+                "misclassify host-side phi as a Path A drift."
+            ),
+            recommended_fix=(
+                "No action required for Path A v1. Phi-residency questions "
+                "belong to a Sensor Stack v2 cycle or a future "
+                "controller-firmware track."
+            ),
+            coherence_id=_coherence_id(
+                "path_a_spec_impl_parity", "boundary:phi_sensor_stack_v2_not_path_a"
+            ),
+            file_path="bridge/vapi_bridge/replay_proof_pipeline/pre_processor.py",
+            frozen_region=False,
+            fix_authority_tier=2,
+            evidence_sources=[
+                spec_rel,
+                "bridge/vapi_bridge/replay_proof_pipeline/pre_processor.py",
+                "wiki/assessments/DualSense Edge Sensor-Stack Characterization for VAPI Track-1 Anti-Cheat Feature Architecture.pdf",
+            ],
+        ))
+
+    return findings
