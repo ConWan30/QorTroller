@@ -19,7 +19,7 @@ class CorpusRegressionError(ValueError):
     breakthrough and no authorized override exists for this probe type.
     (Phase 208: WIF-039 W1 — CorpusRatioRegressionGuard)"""
 
-from .codec import PoACRecord
+from ..codec import PoACRecord
 
 log = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ class Store:
         self._gic_chain_broken: bool = False
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self._init_schema()
-        from .migrations.runner import MigrationRunner; MigrationRunner(db_path).run_pending()  # VAPI-EXT
+        from ..migrations.runner import MigrationRunner; MigrationRunner(db_path).run_pending()  # VAPI-EXT
 
     def set_gic_chain_broken(self, value: bool) -> None:
         """Set the GIC chain-broken flag (INV-GIC-003).  Called by main.py at startup
@@ -4773,7 +4773,7 @@ class Store:
             return None
         try:
             import numpy as np
-            from .continuity_prover import FEATURE_KEYS
+            from ..continuity_prover import FEATURE_KEYS
             var_dict = json.loads(row["var_json"])
             # Return values in canonical FEATURE_KEYS order so the vector aligns with
             # the distance computation in ContinuityProver.compute_distance().
@@ -6575,7 +6575,7 @@ class Store:
         gate_passed = (consecutive_clean >= gate_n) AND (divergence_rate <= max_divergence_rate)
         """
         # INV-GIC-003: fail-closed — broken chain blocks the gate regardless of DB state.
-        from .active_play_occupancy import normalize_active_play_gate_mode
+        from ..active_play_occupancy import normalize_active_play_gate_mode
         active_play_gate_mode = normalize_active_play_gate_mode(active_play_gate_mode)
 
         if self._gic_chain_broken:
@@ -6634,7 +6634,7 @@ class Store:
             gameplay_ctx = row["gameplay_context"] if "gameplay_context" in row.keys() else None
             apop_row = apop_by_validation_id.get(int(row["id"]))
             if apop_row:
-                from .active_play_occupancy import active_play_gate_allows
+                from ..active_play_occupancy import active_play_gate_allows
                 gameplay_ok = active_play_gate_allows(
                     apop_row.get("state"),
                     apop_row.get("confidence"),
@@ -12133,7 +12133,7 @@ class Store:
         Returns:
             Row id from the underlying consent_ledger.
         """
-        from .consent_categories import NAME_TO_CATEGORY  # validate category name
+        from ..consent_categories import NAME_TO_CATEGORY  # validate category name
         if category not in NAME_TO_CATEGORY:
             raise ValueError(
                 f"unknown consent category: {category!r}. "
@@ -12181,7 +12181,7 @@ class Store:
         consent_ledger row is mutated in place and would otherwise lose
         the historical action on a subsequent re-grant).
         """
-        from .consent_categories import NAME_TO_CATEGORY
+        from ..consent_categories import NAME_TO_CATEGORY
         if category not in NAME_TO_CATEGORY:
             raise ValueError(f"unknown consent category: {category!r}")
         updated = self.revoke_consent(
@@ -12216,7 +12216,7 @@ class Store:
         Any category with no record reports `granted=False, found=False`
         (fail-closed by absence — operationally safe).
         """
-        from .consent_categories import ALL_CATEGORIES, CATEGORY_NAMES, NAME_TO_CATEGORY
+        from ..consent_categories import ALL_CATEGORIES, CATEGORY_NAMES, NAME_TO_CATEGORY
 
         if category is not None:
             if category not in NAME_TO_CATEGORY:
@@ -16868,7 +16868,7 @@ class Store:
             grind_session_id, chain_length, latest_gic_hash (hex), chain_intact (bool),
             genesis_ts (float), latest_ts (float).
         """
-        from .grind_chain import compute_gic, genesis_gic
+        from ..grind_chain import compute_gic, genesis_gic
 
         rows = self.get_ruling_rows_for_chain(grind_session_id)
         if not rows:
@@ -16971,7 +16971,7 @@ class Store:
         Monotonicity guard: if ts_ns <= prev event ts_ns for this session,
         bump to prev_ts + 1 to preserve chain ordering across NTP backsteps.
         """
-        from .watchdog_chain import compute_wec, genesis_wec
+        from ..watchdog_chain import compute_wec, genesis_wec
 
         # Monotonicity: ensure ts_ns strictly increases within a session
         with self._conn() as conn:
@@ -17018,7 +17018,7 @@ class Store:
             last_event_code (int|None), last_event_name (str), last_event_ts (float),
             restarts_last_hour (int), genesis_ts (float).
         """
-        from .watchdog_chain import compute_wec, genesis_wec, EVENT_CODES
+        from ..watchdog_chain import compute_wec, genesis_wec, EVENT_CODES
 
         with self._conn() as conn:
             if grind_session_id:
