@@ -118,18 +118,29 @@ LOC ranges, modified date, test-file count per agent. Sorted by classification t
 
 ## Per-agent findings
 
-### F-DECON-4.1 — `protocol_intelligence_record_agent.py` (166 LOC, 2026-04-10, 0 test files)
+### F-DECON-4.1 — `protocol_intelligence_record_agent.py` — **CORRIGENDUM (2026-06-10): REVISED**
 
-- No test file imports the module's symbols. Last modified ~60 days ago.
-- CLAUDE.md does NOT name this agent as live OR as dormant. No `_enabled` flag found.
-- Adjacent module `protocol_intelligence_agent.py` (356 LOC, 6 tests, 2026-05-17) is its likely supersession path.
-- **Recommended action (operator-fired, NOT in this stream):** confirm via `git log -- bridge/vapi_bridge/protocol_intelligence_record_agent.py` whether this module was superseded. If yes → retire (delete + CLAUDE.md NOTE). If no → add `_enabled=False` flag + CLAUDE.md DORMANT entry.
+Initial classification said DORMANT-UNDOCUMENTED based on 0 test file imports. Subsequent F-DECON-4.4 cross-check revealed: this agent is referenced as a **string-listed roster entry in `protocol_coherence_agent.py:99`** (a live ACTIVE-VALUABLE agent). It IS integrated into the protocol-coherence sweep.
 
-### F-DECON-4.2 — `age_weight_analysis_agent.py` (193 LOC, 2026-04-10, 0 test files)
+**Revised classification:** ACTIVE-LOW-SIGNAL (integration-tested via protocol_coherence_agent's sweep loop; no dedicated test file). **No retirement.** See F-DECON-4.5.
 
-- Same shape as F-DECON-4.1: no tests, no CLAUDE.md mention, ~60 days stale.
-- The store table `age_weight_analysis_log` exists (line 2423 of `bridge/vapi_bridge/store/_core.py`). Phase 175 references in CLAUDE.md phase summary indicate this was once active.
-- **Recommended action:** same as F-DECON-4.1 — confirm supersession status, then either retire OR document as dormant.
+### F-DECON-4.2 — `age_weight_analysis_agent.py` — **CORRIGENDUM (2026-06-10): REVISED**
+
+Initial classification said DORMANT-UNDOCUMENTED based on 0 test file imports. Subsequent F-DECON-4.4 cross-check revealed: **agent #24** per `operator_api.py:5960` docstring, with a live HTTP endpoint `/agent/age-weight-analysis-status` and config flag `age_weight_analysis_enabled` **defaulting to True** (`getattr(cfg, "age_weight_analysis_enabled", True)`).
+
+**Revised classification:** ACTIVE-VALUABLE (live endpoint, default-enabled, on-roster). **No retirement.** See F-DECON-4.5.
+
+### F-DECON-4.5 — Audit-rubric refinement (NEW, 2026-06-10)
+
+The "0 dedicated test files = DORMANT-UNDOCUMENTED" signal was **insufficient**. Both candidate agents are integration-tested via downstream surfaces (HTTP endpoints + cross-module roster references) that a `grep -lE "\b<stem>\b" bridge/tests/*.py` does not capture.
+
+**Corrected rubric for Mythos #15:**
+1. Direct test imports — `grep -lE "\b<stem>\b" bridge/tests/*.py` (the original signal).
+2. **Operator-api endpoint refs** — `grep -E "\b<stem>\b|\b<ClassName>\b" bridge/vapi_bridge/operator_api.py`.
+3. **Peer-module string-roster refs** — `grep -E '"<stem>"' bridge/vapi_bridge/*.py` (catches the `protocol_coherence_agent.py:99`-style pattern).
+4. **Config flag with non-False default** — `grep -E "<stem>_enabled.*=.*(True|getattr)" bridge/vapi_bridge/config.py`.
+
+An agent is DORMANT-UNDOCUMENTED **only when ALL FOUR signals come back empty AND CLAUDE.md does not name it.** The original audit's 1-of-1 signal was too weak. **Final headline:** 0 (zero) DORMANT-UNDOCUMENTED agents in the fleet as of 2026-06-10.
 
 ### F-DECON-4.3 — Fleet-count discrepancy
 
