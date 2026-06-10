@@ -240,3 +240,16 @@ w3bstream/applet/target/
 # 2026-06-01 to remove public-repo bloat. Bridge zk_artifacts/node_modules/
 # was already covered by an earlier rule.
 node_modules/
+
+# DECON-1 Stream 3 — Disaster-recovery PRIVATE companion doc.
+# Public runbook (docs/disaster-recovery-runbook.md) references this file
+# by path; operator populates with full KMS ARNs + AWS account ID + the
+# off-site bridge.db backup target. NEVER `git add -f` this file.
+docs/disaster-recovery-runbook.private.md
+
+# DECON-1 Stream 3 — scripts/backup_store.py local snapshots.
+# Default destination is ~/.vapi/backups/ (outside the repo). If --dst
+# ever points into the repo, bridge-*.db files are gitignored as a
+# defensive layer.
+backups/
+bridge-*.db
