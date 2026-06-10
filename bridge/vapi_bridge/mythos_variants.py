@@ -3114,3 +3114,155 @@ async def mythos_frontend_brand_drift(
             ))
 
     return findings
+
+
+# ---------------------------------------------------------------------------
+# Variant #15 — Mythos Agent-Utility Honesty (DECON-1 Stream 4)
+# ---------------------------------------------------------------------------
+async def mythos_agent_utility_honesty(
+    *,
+    repo_root: Path | None = None,
+) -> list[MythosFindingResult]:
+    """Audit `bridge/vapi_bridge/*agent*.py` files for the "live": false
+    discipline. An agent is DORMANT-UNDOCUMENTED when ALL FOUR integration
+    signals come back empty AND CLAUDE.md does not name it.
+
+    Born 2026-06-10 after DECON-1 Stream 4's first-pass audit
+    (`audits/agent-utility-audit-2026-06-10.md`) revealed F-DECON-4.5:
+    a single "0 dedicated test files" signal misclassified TWO agents
+    that are actually live (one via HTTP endpoint default-on, one via
+    string-roster in a sibling agent's sweep loop). The corrected
+    rubric uses four signals; ALL must be empty before flagging.
+
+    Integration signals checked per `<stem>` (basename minus `.py`):
+      1. Direct test imports — any `bridge/tests/*.py` containing `\\b<stem>\\b`.
+      2. operator_api endpoint refs — `<stem>` mentioned in `operator_api.py`.
+      3. Peer-module string-roster refs — `\"<stem>\"` mentioned anywhere in
+         `bridge/vapi_bridge/*.py` (catches the protocol_coherence sweep pattern).
+      4. Config flag with non-False default in `config.py`.
+
+    Severity LOW per finding (informational; matches variant #14's
+    severity pattern). Each finding names the agent and explicitly
+    states the four signal results so an evaluator can verify by hand.
+
+    SUPPORT files (`agent_auth.py`, `agent_message_bus.py`,
+    `agent_registration.py`, `mock_agent_registration.py`,
+    `agent_commit.py`, `agent_review_emitter.py`) are excluded — they
+    are agent-adjacent infrastructure, not fleet agents.
+
+    Fail-open: missing files / read errors return [] (informational LOW
+    coverage finding). Never raises.
+
+    See `audits/agent-utility-audit-2026-06-10.md` for the rubric
+    derivation and the F-DECON-4.5 corrigendum.
+    """
+    root = _resolve_repo_root(repo_root)
+    findings: list[MythosFindingResult] = []
+
+    bridge_dir = root / "bridge" / "vapi_bridge"
+    tests_dir = root / "bridge" / "tests"
+    operator_api_path = bridge_dir / "operator_api.py"
+    config_path = bridge_dir / "config.py"
+    claude_md_path = root / "CLAUDE.md"
+
+    _SUPPORT_EXCLUSIONS = frozenset({
+        "agent_auth", "agent_message_bus", "agent_registration",
+        "mock_agent_registration", "agent_commit", "agent_review_emitter",
+    })
+
+    if not bridge_dir.exists():
+        return findings
+
+    try:
+        agent_files = sorted(bridge_dir.glob("*agent*.py"))
+        operator_api_text = operator_api_path.read_text(encoding="utf-8") if operator_api_path.exists() else ""
+        config_text = config_path.read_text(encoding="utf-8") if config_path.exists() else ""
+        claude_md_text = claude_md_path.read_text(encoding="utf-8") if claude_md_path.exists() else ""
+        peer_module_texts = {p.name: p.read_text(encoding="utf-8") for p in bridge_dir.glob("*.py") if p.name != "__init__.py"}
+        test_texts = {p.name: p.read_text(encoding="utf-8") for p in tests_dir.glob("*.py")} if tests_dir.exists() else {}
+    except Exception as exc:  # noqa: BLE001
+        log.debug("mythos_agent_utility_honesty: setup failed: %s", exc)
+        return findings
+
+    candidate_stems = [p.stem for p in agent_files if p.stem not in _SUPPORT_EXCLUSIONS]
+
+    # COVERAGE_BOUNDARY finding per variant #14 pattern.
+    findings.append(MythosFindingResult(
+        variant="agent_utility_honesty",
+        severity="LOW",
+        description=(
+            f"COVERAGE_BOUNDARY: this variant audits {len(candidate_stems)} "
+            f"fleet-candidate agent modules in bridge/vapi_bridge/*agent*.py "
+            f"(SUPPORT files excluded). An agent is flagged DORMANT-UNDOCUMENTED "
+            f"only when ALL FOUR integration signals (test imports, operator_api "
+            f"refs, peer-module string-roster refs, non-False config default) "
+            f"return empty AND CLAUDE.md does not name it. 0 findings means the "
+            f"audited modules are integration-reachable or documented — NOT that "
+            f"every agent is actively emitting value. Cadence-watch via Mythos "
+            f"cadence engine; rubric source `audits/agent-utility-audit-2026-06-10.md`."
+        ),
+        recommended_fix=(
+            "Informational only — no action when this is the only finding. "
+            "Per-agent findings come with the specific empty signals; either "
+            "retire (delete file + remove tests) or add `<stem>_enabled=False` "
+            "to config.py + a CLAUDE.md NOTE documenting dormancy."
+        ),
+        coherence_id=_coherence_id(
+            "agent_utility_honesty", f"coverage_boundary:{len(candidate_stems)}"
+        ),
+        frozen_region=False,
+        fix_authority_tier=2,
+        evidence_sources=["audits/agent-utility-audit-2026-06-10.md"],
+    ))
+
+    import re as _re
+
+    for stem in candidate_stems:
+        stem_pat = _re.compile(r"\b" + _re.escape(stem) + r"\b")
+        quoted_pat = _re.compile(r'"' + _re.escape(stem) + r'"')
+        # Signal 1: direct test imports
+        sig1 = any(stem_pat.search(txt) for txt in test_texts.values())
+        # Signal 2: operator_api refs
+        sig2 = bool(stem_pat.search(operator_api_text))
+        # Signal 3: peer-module string-roster refs (any peer .py contains "<stem>")
+        sig3 = any(
+            quoted_pat.search(txt) for name, txt in peer_module_texts.items()
+            if name != f"{stem}.py"
+        )
+        # Signal 4: non-False config default
+        sig4 = bool(_re.search(
+            r"\b" + _re.escape(stem) + r"_enabled\b.*=\s*(?:True|getattr)", config_text
+        ))
+        # CLAUDE.md mention (text or hard-rule)
+        documented = bool(stem_pat.search(claude_md_text))
+
+        if not (sig1 or sig2 or sig3 or sig4) and not documented:
+            findings.append(MythosFindingResult(
+                variant="agent_utility_honesty",
+                severity="LOW",
+                description=(
+                    f"bridge/vapi_bridge/{stem}.py — DORMANT-UNDOCUMENTED: zero "
+                    f"direct test imports, zero operator_api refs, zero peer-module "
+                    f"string-roster refs, no non-False config-flag default, AND not "
+                    f"named in CLAUDE.md. Violates the \"live\": false discipline. "
+                    f"Either retire (delete file + any sibling tests + add a "
+                    f"CLAUDE.md NOTE) OR add `{stem}_enabled=False` to config.py + "
+                    f"name in CLAUDE.md as documented dormant."
+                ),
+                recommended_fix=(
+                    "Operator decides retirement vs documented-dormant. Before "
+                    "delete, cross-check against `agent_registration.py` for "
+                    "on-chain roster membership — on-chain agentIds are "
+                    "cryptographically irreversible. See F-DECON-4.4 in the audit."
+                ),
+                coherence_id=_coherence_id("agent_utility_honesty", f"dormant_undoc:{stem}"),
+                file_path=f"bridge/vapi_bridge/{stem}.py",
+                frozen_region=False,
+                fix_authority_tier=2,
+                evidence_sources=[
+                    f"bridge/vapi_bridge/{stem}.py",
+                    "audits/agent-utility-audit-2026-06-10.md",
+                ],
+            ))
+
+    return findings
