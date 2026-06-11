@@ -1,0 +1,214 @@
+{
+  "schema_version": "vapi-rung-gate-ledger-v1",
+  "cycle": 2,
+  "cycle_date": "2026-06-10",
+  "generated_at": "2026-06-11T00:01:12+00:00",
+  "gate_count": 22,
+  "state_counts": {
+    "HARDWARE-GATED": 3,
+    "LIVE": 4,
+    "DORMANT": 13,
+    "BLOCKED-ON-SENSOR-B": 1,
+    "BLOCKED-ON-EXTERNAL": 1
+  },
+  "gates": [
+    {
+      "rung": 1,
+      "gate_id": "G1.1",
+      "name": "DualSense Edge physically connected",
+      "state": "HARDWARE-GATED",
+      "evidence": "intrinsic state (HARDWARE-GATED); see spec_ref",
+      "verified_at": "2026-06-11T00:01:12+00:00",
+      "spec_ref": "master prompt RUNG 1; operator ceremony"
+    },
+    {
+      "rung": 1,
+      "gate_id": "G1.2",
+      "name": "ATECC608A breakout physically connected",
+      "state": "HARDWARE-GATED",
+      "evidence": "intrinsic state (HARDWARE-GATED); see spec_ref",
+      "verified_at": "2026-06-11T00:01:12+00:00",
+      "spec_ref": "master prompt RUNG 1; Arc 2 hardware gate"
+    },
+    {
+      "rung": 1,
+      "gate_id": "G1.3",
+      "name": "CH341A USB-I2C bridge present",
+      "state": "HARDWARE-GATED",
+      "evidence": "intrinsic state (HARDWARE-GATED); see spec_ref",
+      "verified_at": "2026-06-11T00:01:12+00:00",
+      "spec_ref": "docs/path-a-manufacturing-spec.md \u00a72 Recommended host adapter"
+    },
+    {
+      "rung": 1,
+      "gate_id": "G1.4",
+      "name": "VAPIManufacturerDeviceRegistry deployed on IoTeX testnet",
+      "state": "LIVE",
+      "evidence": "VMDR @ 0x2e5B5FB110890f498e289E3045d0f54Cfb0F91b0 (IoTeX testnet chainId 4690)",
+      "verified_at": "2026-06-11T00:01:12+00:00",
+      "spec_ref": "docs/path-a-manufacturing-spec.md \u00a71 + \u00a76.3"
+    },
+    {
+      "rung": 1,
+      "gate_id": "G1.5",
+      "name": "First reference device registered on-chain",
+      "state": "LIVE",
+      "evidence": "registration tx 0x68f6cf49\u2026ac9c0 cited in CLAUDE.md (block 44028531)",
+      "verified_at": "2026-06-11T00:01:12+00:00",
+      "spec_ref": "CLAUDE.md Path A Arc 1 \u2014 tx 0x68f6cf49\u2026 block 44028531"
+    },
+    {
+      "rung": 1,
+      "gate_id": "G1.6",
+      "name": "ManufacturerRootCA file present at canonical path",
+      "state": "LIVE",
+      "evidence": "~/.vapi/qortroller_foundation_mfg_ca.json present (SINGLE-COPY per F-DECON-3.2 \u2014 see OA-1 in OPERATOR-ACTION box)",
+      "verified_at": "2026-06-11T00:01:12+00:00",
+      "spec_ref": "docs/path-a-manufacturing-spec.md \u00a71 reference-impl honesty stamp"
+    },
+    {
+      "rung": 1,
+      "gate_id": "G1.7",
+      "name": "SecureElementBackend honesty rail intact",
+      "state": "LIVE",
+      "evidence": "SecureElementBackend raises NotImplementedError (blocks silent host-key fallback; Arc 2 hardware-gated)",
+      "verified_at": "2026-06-11T00:01:12+00:00",
+      "spec_ref": "Path A Arc 1 SecureElementBackend stub (raises NotImplementedError)"
+    },
+    {
+      "rung": 2,
+      "gate_id": "G2.1",
+      "name": "Dev-kit BOM document exists (two suppliers per critical part)",
+      "state": "DORMANT",
+      "evidence": "intrinsic state (DORMANT); see spec_ref",
+      "verified_at": "2026-06-11T00:01:12+00:00",
+      "spec_ref": "master prompt RUNG 2 \u2014 known early-cycle candidate"
+    },
+    {
+      "rung": 2,
+      "gate_id": "G2.2",
+      "name": "Zephyr firmware target for QorTroller controller",
+      "state": "DORMANT",
+      "evidence": "intrinsic state (DORMANT); see spec_ref",
+      "verified_at": "2026-06-11T00:01:12+00:00",
+      "spec_ref": "Sensor A B1: only pebble_tracker.overlay exists today"
+    },
+    {
+      "rung": 2,
+      "gate_id": "G2.3",
+      "name": "Thread-C-equivalent isolation statement in firmware spec",
+      "state": "DORMANT",
+      "evidence": "intrinsic state (DORMANT); see spec_ref",
+      "verified_at": "2026-06-11T00:01:12+00:00",
+      "spec_ref": "master prompt RUNG 2 \u2014 Zephyr work-queue / priority-ceiling thread"
+    },
+    {
+      "rung": 2,
+      "gate_id": "G2.4",
+      "name": "\u03c6 sanitization device-residency design",
+      "state": "DORMANT",
+      "evidence": "intrinsic state (DORMANT); see spec_ref",
+      "verified_at": "2026-06-11T00:01:12+00:00",
+      "spec_ref": "Sensor A B2: \u03c6 host-side; wiki/methodology/sensor_stack_v2_1*"
+    },
+    {
+      "rung": 2,
+      "gate_id": "G2.5",
+      "name": "Hall/TMR stick module selection finalized",
+      "state": "DORMANT",
+      "evidence": "intrinsic state (DORMANT); see spec_ref",
+      "verified_at": "2026-06-11T00:01:12+00:00",
+      "spec_ref": "Sensor Stack v2.1 \u2014 3 candidates (K-Silver JH16, MIDAS 5-pin, Magneto TMR)"
+    },
+    {
+      "rung": 2,
+      "gate_id": "G2.6",
+      "name": "IMU module selection finalized",
+      "state": "DORMANT",
+      "evidence": "intrinsic state (DORMANT); see spec_ref",
+      "verified_at": "2026-06-11T00:01:12+00:00",
+      "spec_ref": "master prompt RUNG 2 \u2014 Sensor Stack v2.1 #1/#4 measurement gates"
+    },
+    {
+      "rung": 2,
+      "gate_id": "G2.7",
+      "name": "ESP32-class module cert status known",
+      "state": "BLOCKED-ON-SENSOR-B",
+      "evidence": "intrinsic state (BLOCKED-ON-SENSOR-B); see spec_ref",
+      "verified_at": "2026-06-11T00:01:12+00:00",
+      "spec_ref": "Sensor B watch surface (not yet built \u2014 Cycle 3 per D-HWFL-1)"
+    },
+    {
+      "rung": 3,
+      "gate_id": "G3.1",
+      "name": "Partner-handoff package assembler",
+      "state": "DORMANT",
+      "evidence": "intrinsic state (DORMANT); see spec_ref",
+      "verified_at": "2026-06-11T00:01:12+00:00",
+      "spec_ref": "master prompt RUNG 3 \u2014 assembles spec + parity evidence + BOM + birth-cert runbook"
+    },
+    {
+      "rung": 3,
+      "gate_id": "G3.2",
+      "name": "TrustFLEX provisioning path amendment to spec",
+      "state": "DORMANT",
+      "evidence": "intrinsic state (DORMANT); see spec_ref",
+      "verified_at": "2026-06-11T00:01:12+00:00",
+      "spec_ref": "docs/path-a-manufacturing-spec.md \u00a73 + \u00a78 partner ceremony"
+    },
+    {
+      "rung": 3,
+      "gate_id": "G3.3",
+      "name": "Manufacturer CA chained to reference root \u2014 design",
+      "state": "DORMANT",
+      "evidence": "intrinsic state (DORMANT); see spec_ref",
+      "verified_at": "2026-06-11T00:01:12+00:00",
+      "spec_ref": "docs/path-a-manufacturing-spec.md \u00a71 partner-redeploy model"
+    },
+    {
+      "rung": 3,
+      "gate_id": "G3.4",
+      "name": "Per-batch slot-config audit checklist",
+      "state": "DORMANT",
+      "evidence": "intrinsic state (DORMANT); see spec_ref",
+      "verified_at": "2026-06-11T00:01:12+00:00",
+      "spec_ref": "docs/path-a-manufacturing-spec.md \u00a78.2"
+    },
+    {
+      "rung": 3,
+      "gate_id": "G3.5",
+      "name": "Two-supplier cost model for critical parts",
+      "state": "DORMANT",
+      "evidence": "intrinsic state (DORMANT); see spec_ref",
+      "verified_at": "2026-06-11T00:01:12+00:00",
+      "spec_ref": "master prompt RUNG 3"
+    },
+    {
+      "rung": 4,
+      "gate_id": "G4.1",
+      "name": "IIP-64 PR #72 movement / merge",
+      "state": "BLOCKED-ON-EXTERNAL",
+      "evidence": "intrinsic state (BLOCKED-ON-EXTERNAL); see spec_ref",
+      "verified_at": "2026-06-11T00:01:12+00:00",
+      "spec_ref": "github.com/iotexproject/iips/pull/72 \u2014 operator-tracked"
+    },
+    {
+      "rung": 4,
+      "gate_id": "G4.2",
+      "name": "Spec-as-compliance-standard formalized",
+      "state": "DORMANT",
+      "evidence": "intrinsic state (DORMANT); see spec_ref",
+      "verified_at": "2026-06-11T00:01:12+00:00",
+      "spec_ref": "master prompt RUNG 4"
+    },
+    {
+      "rung": 4,
+      "gate_id": "G4.3",
+      "name": "Device-identity registry interop spec",
+      "state": "DORMANT",
+      "evidence": "intrinsic state (DORMANT); see spec_ref",
+      "verified_at": "2026-06-11T00:01:12+00:00",
+      "spec_ref": "IIP-64-aligned; gated on G4.1"
+    }
+  ]
+}
