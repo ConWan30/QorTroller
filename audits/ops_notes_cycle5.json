@@ -1,0 +1,21 @@
+{
+  "_meta": {
+    "cycle": 5,
+    "cycle_date": "2026-06-10",
+    "compiled_by": "HWFL-1 Cycle 5 (Claude Code session, operator-supervised)",
+    "schema_version": "vapi-sensor-b-narratives-v1",
+    "discipline_note": "MANUAL_NARRATIVE entries land as UNVERIFIED-EXTERNAL per Sensor B v0.1 taxonomy. Operator's VERIFIED-EXTERNAL annotation in S2 is preserved verbatim in the summary text; Sensor B v0.1 taxonomy lacks a state for operator-verified-external content. Tracked as F-HWFL-5-3 (Sensor B v0.1.1 taxonomy amendment candidate for a future cycle)."
+  },
+
+  "S2.atecc608a-lifecycle": {
+    "summary": "STATUS: VERIFIED-EXTERNAL (operator-proxy fetch). ATECC608A is NRND (Not Recommended for New Designs) since >=2021-03 per Microchip product page ('Recommend using the ATECC608B'); corroborated by nerves-hub/nerves_key issue #60. Successor chain 608A -> 608B -> 608C; at least one 608B variant (ATECC608B-MAH4I-S) is itself NRND with ATECC608C-TFLXTLS (TrustFLEX pre-provisioned) as replacement. Migration cost LOW: AN2237 (DS40002237A) documents 608B as functional drop-in for 608A — same commands/structure, CryptoAuthLib absorbs differences; caveat is hardwired-timing firmware needs review (polling-based timing unaffected). Datasheets: DS40002239A (608B summary), DS40002513 (608C summary).",
+    "raw_excerpt": "Sources enumerated: (1) microchip.com/en-us/product/atecc608a — 'Recommend using the ATECC608B'. (2) github.com/nerves-hub/nerves_key/issues/60 — community corroboration. (3) Microchip datasheets DS40002239A (608B), DS40002513 (608C). (4) Microchip app notes AN2237 (= DS40002237A) and AN3539 — migration guides. Implications operator-derived: F-HWFL-5-2 spec drift (Path A spec hard-names NRND ATECC608A in §1.1; should move to family language 'ATECC608B/608C-class CryptoAuthentication secure element, CryptoAuthLib-compatible, polling-based timing REQUIRED'); Rung 1 unaffected (on-hand 608A breakout remains valid for reference rig — NRND != unavailable, Rung 1 proves ceremony not BOM); Rung 2/3 BOM should specify 608B minimum + evaluate 608C-TFLXTLS (TrustFLEX successor part converges with §3.2 Rung 3 factory provisioning strategy).",
+    "fetched_at": "2026-06-10T23:59:00+00:00"
+  },
+
+  "S6.esp32-cert-status": {
+    "summary": "ESP32 SoC family actively listed by Espressif alongside successor family members (ESP32-S2/S3/C2/C3/C5/C6/H2/H21/H4/P4/E22/S31/C61) as of 2026-06-11. Espressif landing page mentions wireless certs FCC/CE/SRRC/KCC/IC/TELEC/WFA/BQB in support section (not explicitly tied to ESP32 specifically — landing-page boilerplate caveat). ISO 9001 referenced. NO Common Criteria or FIPS cert stated on this page (significant for Path A: ESP32 alone is NOT a substitute for the ATECC608A — secure-element pairing remains required). Production status not stated directly on this page.",
+    "raw_excerpt": "Source: https://www.espressif.com/en/products/socs/esp32 (fetched via Claude Code WebFetch 2026-06-11 UTC). Datasheet: https://www.espressif.com/sites/default/files/documentation/esp32_datasheet_en.pdf. Wireless certs listed in support section (not ESP32-specific): FCC, CE, SRRC, KCC, IC, TELEC, WFA, BQB. Safety certs mentioned: ISO 9001. Family successors listed verbatim: ESP32-S2, ESP32-S3, ESP32-C2, ESP32-C3, ESP32-C5, ESP32-C6, ESP32-H2, ESP32-H21, ESP32-H4, ESP32-P4, ESP32-E22, ESP32-S31, ESP32-C61. Production-status statement: not present on this page.",
+    "fetched_at": "2026-06-11T00:30:00+00:00"
+  }
+}
