@@ -23,22 +23,23 @@ def test_t_sensor_c_1_canonical_gate_count_is_22():
     assert canonical_gate_count() == 22
 
 
-def test_t_sensor_c_2_four_active_verifiers():
-    """G1.4-G1.7 are the only verifier-backed gates in v0.1."""
-    assert len(_VERIFIERS) == 4
+def test_t_sensor_c_2_five_active_verifiers():
+    """G1.4-G1.7 + G2.1 are the verifier-backed gates in v0.1.1
+    (G2.1 promoted from intrinsic-DORMANT in HWFL-1 Cycle 4)."""
+    assert len(_VERIFIERS) == 5
     verifier_names = {g.verifier_name for g in _CANONICAL_GATES if g.verifier_name}
     assert verifier_names == set(_VERIFIERS.keys())
 
 
 def test_t_sensor_c_3_intrinsic_states_distribution():
-    """Static state distribution per D-HWFL-8 design: 3 HARDWARE-GATED, 13 DORMANT,
-    1 BLOCKED-ON-SENSOR-B, 1 BLOCKED-ON-EXTERNAL among intrinsic gates; 4 have None
-    (verifier-backed)."""
+    """Static state distribution after Cycle 4 G2.1 promotion (v0.1.1):
+    3 HARDWARE-GATED, 12 DORMANT, 1 BLOCKED-ON-SENSOR-B, 1 BLOCKED-ON-EXTERNAL
+    among intrinsic gates; 5 have None (verifier-backed: G1.4-G1.7 + G2.1)."""
     intrinsic = [g.intrinsic_state for g in _CANONICAL_GATES if g.intrinsic_state is not None]
     none_count = sum(1 for g in _CANONICAL_GATES if g.intrinsic_state is None)
-    assert none_count == 4  # G1.4-G1.7
+    assert none_count == 5  # G1.4-G1.7 + G2.1
     assert intrinsic.count(GateState.HARDWARE_GATED) == 3
-    assert intrinsic.count(GateState.DORMANT) == 13
+    assert intrinsic.count(GateState.DORMANT) == 12  # was 13, G2.1 promoted out
     assert intrinsic.count(GateState.BLOCKED_ON_SENSOR_B) == 1
     assert intrinsic.count(GateState.BLOCKED_ON_EXTERNAL) == 1
 
@@ -52,11 +53,12 @@ def test_t_sensor_c_4_live_repo_assemble_succeeds():
         assert r.verified_at
 
 
-def test_t_sensor_c_5_live_repo_g1_4_through_g1_7_are_live():
-    """The 4 verifier-backed Rung 1 gates pass on the real repo."""
-    ledger = assemble_ledger(REPO_ROOT, cycle=2)
+def test_t_sensor_c_5_live_repo_verifier_gates_are_live():
+    """The 5 verifier-backed gates (G1.4-G1.7 + G2.1) all pass on the real repo
+    after Cycle 4 BOM scaffold ship."""
+    ledger = assemble_ledger(REPO_ROOT, cycle=4)
     by_id = {r.gate.gate_id: r for r in ledger.results}
-    for gid in ("G1.4", "G1.5", "G1.6", "G1.7"):
+    for gid in ("G1.4", "G1.5", "G1.6", "G1.7", "G2.1"):
         assert by_id[gid].state == GateState.LIVE, (
             f"{gid} expected LIVE on real repo, got {by_id[gid].state.value} "
             f"(evidence: {by_id[gid].evidence})"
@@ -67,11 +69,11 @@ def test_t_sensor_c_6_tmp_path_demotes_verifier_gates_to_unverifiable(tmp_path: 
     """Fail-open: missing files demote LIVE-candidate gates to UNVERIFIABLE, NEVER LIVE."""
     ledger = assemble_ledger(tmp_path, cycle=99)
     by_id = {r.gate.gate_id: r for r in ledger.results}
-    # G1.4, G1.5, G1.7 verify against repo files that don't exist in tmp_path -> UNVERIFIABLE.
+    # G1.4, G1.5, G1.7, G2.1 verify against repo files that don't exist in tmp_path -> UNVERIFIABLE.
     # G1.6 verifies against ~/.vapi/... which DOES exist on the operator's real home dir
     # regardless of repo_root, so it's intentionally not asserted here (test stays
     # robust across operator machines).
-    for gid in ("G1.4", "G1.5", "G1.7"):
+    for gid in ("G1.4", "G1.5", "G1.7", "G2.1"):
         assert by_id[gid].state == GateState.UNVERIFIABLE, (
             f"{gid} should be UNVERIFIABLE on empty tmp repo, got {by_id[gid].state.value}"
         )
@@ -82,7 +84,12 @@ def test_t_sensor_c_7_intrinsic_states_preserved_in_results():
     ledger = assemble_ledger(REPO_ROOT, cycle=2)
     by_id = {r.gate.gate_id: r for r in ledger.results}
     assert by_id["G1.1"].state == GateState.HARDWARE_GATED
-    assert by_id["G2.1"].state == GateState.DORMANT
+    # G2.1 was DORMANT in v0.1; Cycle 4 promoted it to LIVE via verifier
+    # backed by docs/qortroller-devkit-bom-v0_1.md. Test now asserts LIVE
+    # (which exercises the same intrinsic-pass-through contract for the
+    # other intrinsic states sampled here).
+    assert by_id["G2.1"].state == GateState.LIVE
+    assert by_id["G2.2"].state == GateState.DORMANT  # representative DORMANT
     assert by_id["G2.7"].state == GateState.BLOCKED_ON_SENSOR_B
     assert by_id["G4.1"].state == GateState.BLOCKED_ON_EXTERNAL
 

@@ -132,6 +132,37 @@ def _verify_g1_6_mfg_ca_file_present(repo_root: Path) -> tuple[GateState, str]:
     return GateState.UNVERIFIABLE, f"{ca_path} not found"
 
 
+def _verify_g2_1_devkit_bom_exists(repo_root: Path) -> tuple[GateState, str]:
+    """G2.1 — dev-kit BOM document v0.1 exists with structural integrity.
+    Checks file existence + canonical part-IDs C1..C8 present + two-supplier
+    discipline structurally encoded in §3. NOT a procurement check — passing
+    this verifier means the BOM SCAFFOLD is in place, NOT that any supplier
+    is committed. (HWFL-1 Cycle 4 — first DORMANT-to-LIVE conversion.)"""
+    bom_path = repo_root / "docs" / "qortroller-devkit-bom-v0_1.md"
+    if not bom_path.exists():
+        return GateState.UNVERIFIABLE, "docs/qortroller-devkit-bom-v0_1.md missing"
+    text = bom_path.read_text(encoding="utf-8", errors="ignore")
+    # All 8 critical part IDs must be in the document.
+    missing = [pid for pid in ("C1", "C2", "C3", "C4", "C5", "C6", "C7", "C8") if f"`{pid}`" not in text]
+    if missing:
+        return (
+            GateState.UNVERIFIABLE,
+            f"BOM exists but missing critical part IDs: {missing}",
+        )
+    # Two-supplier-slot discipline marker — section header must be present.
+    if "Two-supplier discipline rail" not in text:
+        return (
+            GateState.UNVERIFIABLE,
+            "BOM exists but two-supplier-discipline rail header absent",
+        )
+    return (
+        GateState.LIVE,
+        "docs/qortroller-devkit-bom-v0_1.md present with C1-C8 + two-supplier rail "
+        "(SCAFFOLD only — no supplier committed; LIVE-SUPPLIED gated on Stage A "
+        "measurement + 2 verified suppliers per BOM §7)",
+    )
+
+
 def _verify_g1_7_secure_element_honesty_rail(repo_root: Path) -> tuple[GateState, str]:
     """SecureElementBackend raises NotImplementedError until Arc 2 wires real silicon."""
     se_path = repo_root / "bridge" / "vapi_bridge" / "signing_backends" / "secure_element.py"
@@ -155,6 +186,7 @@ _VERIFIERS: dict[str, Callable[[Path], tuple[GateState, str]]] = {
     "verify_g1_5_reference_device":         _verify_g1_5_reference_device_registered,
     "verify_g1_6_mfg_ca_present":           _verify_g1_6_mfg_ca_file_present,
     "verify_g1_7_secure_element_honesty":   _verify_g1_7_secure_element_honesty_rail,
+    "verify_g2_1_devkit_bom_exists":        _verify_g2_1_devkit_bom_exists,
 }
 
 
@@ -188,8 +220,8 @@ _CANONICAL_GATES: tuple[GateDef, ...] = (
 
     # RUNG 2 — dev kit (software-side work in scope; physical build = operator ceremony)
     GateDef(2, "G2.1", "Dev-kit BOM document exists (two suppliers per critical part)",
-            GateState.DORMANT, None,
-            "master prompt RUNG 2 — known early-cycle candidate"),
+            None, "verify_g2_1_devkit_bom_exists",
+            "docs/qortroller-devkit-bom-v0_1.md (HWFL-1 Cycle 4); master prompt RUNG 2"),
     GateDef(2, "G2.2", "Zephyr firmware target for QorTroller controller",
             GateState.DORMANT, None,
             "Sensor A B1: only pebble_tracker.overlay exists today"),
