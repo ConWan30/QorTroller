@@ -3,7 +3,7 @@ injection — the module is pure-function and no test touches the network."""
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
@@ -124,6 +124,143 @@ def test_t_sensor_b_9_markdown_escapes_external_pipe_and_html_in_summary():
     # HTML escaped — never raw script tag in output
     assert "<script>" not in md
     assert "&lt;script&gt;" in md
+
+
+def test_t_sensor_b_11_verified_external_happy_path_plus_stale_unified_window():
+    """D-HWFL-18/19: all 3 verification preconditions present + fresh => VERIFIED-EXTERNAL.
+    Same fields with aged-out verified_date => STALE, but verified_by/sources/verified_date
+    are RETAINED on the WatchLine for detail rendering (D-HWFL-19 unified window)."""
+    today = datetime.now(timezone.utc).date().isoformat()
+    fetched_fresh = {
+        "S2.atecc608a-lifecycle": FetchResult(
+            topic_id="S2.atecc608a-lifecycle",
+            summary="ATECC608A NRND since 2021-03",
+            verified_by="operator",
+            sources=["https://example.com/microchip", "DS40002239A"],
+            verified_date=today,
+        )
+    }
+    report = assemble_watch_report(cycle=99, fetched=fetched_fresh)
+    s2 = next(l for l in report.lines if l.source.topic_id == "S2.atecc608a-lifecycle")
+    assert s2.state == WatchState.VERIFIED_EXTERNAL
+    assert s2.verified_by == "operator"
+    assert s2.sources == ["https://example.com/microchip", "DS40002239A"]
+    assert s2.verified_date == today
+    assert s2.verification_warning == ""
+
+    # Aged-out verified_date => STALE, fields retained (S2 freshness_days=30).
+    stale_date = (datetime.now(timezone.utc).date() - timedelta(days=120)).isoformat()
+    fetched_stale = {
+        "S2.atecc608a-lifecycle": FetchResult(
+            topic_id="S2.atecc608a-lifecycle",
+            summary="ATECC608A NRND (stale verification)",
+            verified_by="operator",
+            sources=["https://example.com/microchip"],
+            verified_date=stale_date,
+        )
+    }
+    report2 = assemble_watch_report(cycle=99, fetched=fetched_stale)
+    s2_stale = next(l for l in report2.lines if l.source.topic_id == "S2.atecc608a-lifecycle")
+    assert s2_stale.state == WatchState.STALE
+    assert s2_stale.verified_by == "operator"  # retained
+    assert s2_stale.verified_date == stale_date  # retained
+    assert s2_stale.sources == ["https://example.com/microchip"]  # retained
+
+
+def test_t_sensor_b_12_missing_verified_by_downgrades_with_warning():
+    """D-HWFL-20: 2/3 fields present => UNVERIFIED-EXTERNAL + warning."""
+    today = datetime.now(timezone.utc).date().isoformat()
+    fetched = {
+        "S2.atecc608a-lifecycle": FetchResult(
+            topic_id="S2.atecc608a-lifecycle",
+            summary="some narrative",
+            verified_by="",  # missing
+            sources=["url"],
+            verified_date=today,
+        )
+    }
+    report = assemble_watch_report(cycle=99, fetched=fetched)
+    s2 = next(l for l in report.lines if l.source.topic_id == "S2.atecc608a-lifecycle")
+    assert s2.state == WatchState.UNVERIFIED_EXTERNAL
+    assert "verified_by" in s2.verification_warning
+    assert "PARTIAL VERIFICATION" in s2.verification_warning
+
+
+def test_t_sensor_b_13_empty_sources_downgrades_with_warning():
+    """D-HWFL-20: sources=[] is empty => UNVERIFIED-EXTERNAL + warning."""
+    today = datetime.now(timezone.utc).date().isoformat()
+    fetched = {
+        "S2.atecc608a-lifecycle": FetchResult(
+            topic_id="S2.atecc608a-lifecycle",
+            summary="some narrative",
+            verified_by="operator",
+            sources=[],  # empty
+            verified_date=today,
+        )
+    }
+    report = assemble_watch_report(cycle=99, fetched=fetched)
+    s2 = next(l for l in report.lines if l.source.topic_id == "S2.atecc608a-lifecycle")
+    assert s2.state == WatchState.UNVERIFIED_EXTERNAL
+    assert "sources" in s2.verification_warning
+
+
+def test_t_sensor_b_14_missing_verified_date_downgrades_with_warning():
+    """D-HWFL-20: verified_date='' => UNVERIFIED-EXTERNAL + warning."""
+    fetched = {
+        "S2.atecc608a-lifecycle": FetchResult(
+            topic_id="S2.atecc608a-lifecycle",
+            summary="some narrative",
+            verified_by="operator",
+            sources=["url"],
+            verified_date="",  # missing
+        )
+    }
+    report = assemble_watch_report(cycle=99, fetched=fetched)
+    s2 = next(l for l in report.lines if l.source.topic_id == "S2.atecc608a-lifecycle")
+    assert s2.state == WatchState.UNVERIFIED_EXTERNAL
+    assert "verified_date" in s2.verification_warning
+
+
+def test_t_sensor_b_15_malformed_verified_date_downgrades_with_warning():
+    """D-HWFL-20 amendment: 3/3 fields present BUT verified_date not ISO-8601 =>
+    UNVERIFIED-EXTERNAL + warning (catches operator typo)."""
+    fetched = {
+        "S2.atecc608a-lifecycle": FetchResult(
+            topic_id="S2.atecc608a-lifecycle",
+            summary="some narrative",
+            verified_by="operator",
+            sources=["url"],
+            verified_date="not-a-date",  # malformed
+        )
+    }
+    report = assemble_watch_report(cycle=99, fetched=fetched)
+    s2 = next(l for l in report.lines if l.source.topic_id == "S2.atecc608a-lifecycle")
+    assert s2.state == WatchState.UNVERIFIED_EXTERNAL
+    assert "MALFORMED" in s2.verification_warning
+    # Field still retained on the WatchLine so reviewer can see what was attempted.
+    assert s2.verified_date == "not-a-date"
+
+
+def test_t_sensor_b_16_zero_verified_fields_silent_backward_compat():
+    """D-HWFL-20 amendment: 0/3 fields = Cycle 3-style JSON => silent downgrade
+    to UNVERIFIED-EXTERNAL, NO warning rendered (backward compat for narratives
+    shipped before Sensor B v0.1.1)."""
+    today = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    fetched = {
+        "S2.atecc608a-lifecycle": FetchResult(
+            topic_id="S2.atecc608a-lifecycle",
+            summary="Cycle-3-shape narrative without any verified_* fields",
+            fetched_at=today,
+            # No verified_by / sources / verified_date.
+        )
+    }
+    report = assemble_watch_report(cycle=99, fetched=fetched)
+    s2 = next(l for l in report.lines if l.source.topic_id == "S2.atecc608a-lifecycle")
+    assert s2.state == WatchState.UNVERIFIED_EXTERNAL
+    assert s2.verification_warning == ""  # SILENT — backward compat
+    # Confirm no warning bleed into rendered markdown either.
+    md = report.to_markdown()
+    assert "VERIFICATION WARNING" not in md
 
 
 def test_t_sensor_b_10_never_raises_on_malformed_fetched_at(monkeypatch):
