@@ -18,7 +18,7 @@ Some prose.
 
 <!-- SENSOR-A-LIVE:WALLET balance_iotx=32.078372 as_of=2026-06-10 -->
 <!-- SENSOR-A-LIVE:CONTRACTS count=49 as_of=2026-06-10 -->
-<!-- SENSOR-A-LIVE:TESTS bridge=4330 sdk=604 hardhat=674 as_of=2026-06-10 -->
+<!-- SENSOR-A-LIVE:TESTS bridge=4330 sdk=604 hardhat_regex_scan=674 as_of=2026-06-10 -->
 
 More prose.
 """
@@ -28,7 +28,7 @@ def _fetch_happy() -> LiveFetchResult:
     return LiveFetchResult(
         wallet_balance_iotx=32.078372,
         contract_count=49,
-        test_counts={"bridge": 4330, "sdk": 604, "hardhat": 674},
+        test_counts={"bridge": 4330, "sdk": 604, "hardhat_regex_scan": 674},
     )
 
 
@@ -56,7 +56,7 @@ def test_wallet_within_tolerance_aligned():
     fetch = LiveFetchResult(
         wallet_balance_iotx=32.478372,
         contract_count=49,
-        test_counts={"bridge": 4330, "sdk": 604, "hardhat": 674},
+        test_counts={"bridge": 4330, "sdk": 604, "hardhat_regex_scan": 674},
     )
     report = assemble_drift_report(CLAUDE_MD_HAPPY, fetch)
     wallet_line = next(ln for ln in report.lines if ln.probe_id == "P-WALLET")
@@ -69,7 +69,7 @@ def test_wallet_beyond_tolerance_drifted():
     fetch = LiveFetchResult(
         wallet_balance_iotx=27.0,
         contract_count=49,
-        test_counts={"bridge": 4330, "sdk": 604, "hardhat": 674},
+        test_counts={"bridge": 4330, "sdk": 604, "hardhat_regex_scan": 674},
     )
     report = assemble_drift_report(CLAUDE_MD_HAPPY, fetch)
     wallet_line = next(ln for ln in report.lines if ln.probe_id == "P-WALLET")
@@ -82,7 +82,7 @@ def test_contract_off_by_one_drifted():
     fetch = LiveFetchResult(
         wallet_balance_iotx=32.078372,
         contract_count=50,  # +1 contract deployed since CLAUDE.md update
-        test_counts={"bridge": 4330, "sdk": 604, "hardhat": 674},
+        test_counts={"bridge": 4330, "sdk": 604, "hardhat_regex_scan": 674},
     )
     report = assemble_drift_report(CLAUDE_MD_HAPPY, fetch)
     contract_line = next(ln for ln in report.lines if ln.probe_id == "P-CONTRACT")
@@ -95,7 +95,7 @@ def test_tests_any_suite_off_is_drifted():
     fetch = LiveFetchResult(
         wallet_balance_iotx=32.078372,
         contract_count=49,
-        test_counts={"bridge": 4335, "sdk": 604, "hardhat": 674},  # bridge +5
+        test_counts={"bridge": 4335, "sdk": 604, "hardhat_regex_scan": 674},  # bridge +5
     )
     report = assemble_drift_report(CLAUDE_MD_HAPPY, fetch)
     test_line = next(ln for ln in report.lines if ln.probe_id == "P-TESTS")
@@ -133,7 +133,7 @@ def test_malformed_anchor_value_unverifiable():
     md = """
 <!-- SENSOR-A-LIVE:WALLET balance_iotx=not_a_number as_of=2026-06-10 -->
 <!-- SENSOR-A-LIVE:CONTRACTS count=forty-nine as_of=2026-06-10 -->
-<!-- SENSOR-A-LIVE:TESTS bridge=abc sdk=604 hardhat=674 as_of=2026-06-10 -->
+<!-- SENSOR-A-LIVE:TESTS bridge=abc sdk=604 hardhat_regex_scan=674 as_of=2026-06-10 -->
 """
     report = assemble_drift_report(md, _fetch_happy())
     for ln in report.lines:
@@ -149,7 +149,7 @@ def test_adversarial_anchor_html_pipe_escape():
     md = """
 <!-- SENSOR-A-LIVE:WALLET balance_iotx=32.0 as_of=2026|06|10 -->
 <!-- SENSOR-A-LIVE:CONTRACTS count=49 as_of=2026-06-10 -->
-<!-- SENSOR-A-LIVE:TESTS bridge=4330 sdk=604 hardhat=674 as_of=2026-06-10 -->
+<!-- SENSOR-A-LIVE:TESTS bridge=4330 sdk=604 hardhat_regex_scan=674 as_of=2026-06-10 -->
 """
     report = assemble_drift_report(md, _fetch_happy())
     md_out = report.to_markdown()
