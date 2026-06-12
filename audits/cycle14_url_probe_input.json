@@ -1,0 +1,17 @@
+{
+  "_note": "Cycle 14 reproduction of Cycle 5's failed-fetch set + key alternates the operator might consult instead. Demonstrates F-HWFL-5-1 utility on the original driver URLs.",
+  "s2-atecc608a-vendor": [
+    "https://www.microchip.com/en-us/product/atecc608a",
+    "https://www.microchip.com/en-us/product/atecc608b",
+    "https://www.microchip.com/en-us/product/atecc608c",
+    "https://en.wikipedia.org/wiki/Atmel_CryptoAuthentication"
+  ],
+  "s6-esp32-cert-status": [
+    "https://www.espressif.com/en/products/socs/esp32",
+    "https://www.espressif.com/en/support/documents/certificates",
+    "https://en.wikipedia.org/wiki/ESP32"
+  ],
+  "iip64-pr72": [
+    "https://github.com/iotexproject/iips/pull/72"
+  ]
+}
