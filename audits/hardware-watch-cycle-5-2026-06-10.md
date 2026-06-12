@@ -1,6 +1,6 @@
 # Sensor B — Hardware Watch Report (Cycle 5, 2026-06-10)
 
-HWFL-1 Sensor B v0.1 — supply-and-standards watch. Pure-function assembler at `bridge/vapi_bridge/sensor_b_supply_watch.py`; network boundary lives at `scripts/run_sensor_b.py`. Generated `2026-06-11T23:06:35+00:00`.
+HWFL-1 Sensor B v0.1 — supply-and-standards watch. Pure-function assembler at `bridge/vapi_bridge/sensor_b_supply_watch.py`; network boundary lives at `scripts/run_sensor_b.py`. Generated `2026-06-12T09:07:06+00:00`.
 
 
 ## Honesty rail
@@ -20,15 +20,16 @@ Every web-sourced claim in this report carries an **UNVERIFIED-EXTERNAL** postur
 |---|---|
 | FRESH | 1 |
 | PENDING-OPERATOR-NOTE | 4 |
-| UNVERIFIED-EXTERNAL | 2 |
+| UNVERIFIED-EXTERNAL | 1 |
+| VERIFIED-EXTERNAL | 1 |
 | **Total** | **7** |
 
 ## Watch lines
 
 | Topic | Title | State | Summary | Fetched at |
 |---|---|---|---|---|
-| `S1.iip64-pr72` | IIP-64 PR #72 movement | `FRESH` | PR #72 'IIP-64: Post-Quantum Cryptographic Migration for IoTeX' — OPEN; last updated 2026-05-23T15:35:47Z; author=xinxin-crypto; head=iip-64; +701/-0 lines | 2026-06-11T23:06:35+00:00 |
-| `S2.atecc608a-lifecycle` | ATECC608A lifecycle / successor parts | `UNVERIFIED-EXTERNAL` | STATUS: VERIFIED-EXTERNAL (operator-proxy fetch). ATECC608A is NRND (Not Recommended for New Designs) since &gt;=2021-03 per Microchip product page ('Recommend using the ATECC608B'); corroborated by nerves-hub/nerves_key issue #60. Successor chain 608A -&gt; 608B -&gt; 608C; at least one 608B variant (ATECC608B-MAH4I-S) is itself NRND with ATECC608C-TFLXTLS (TrustFLEX pre-provisioned) as replacement. Migration cost LOW: AN2237 (DS40002237A) documents 608B as functional drop-in for 608A — same commands/structure, CryptoAuthLib absorbs differences; caveat is hardwired-timing firmware needs review (polling-based timing unaffected). Datasheets: DS40002239A (608B summary), DS40002513 (608C summary). | 2026-06-10T23:59:00+00:00 |
+| `S1.iip64-pr72` | IIP-64 PR #72 movement | `FRESH` | PR #72 'IIP-64: Post-Quantum Cryptographic Migration for IoTeX' — OPEN; last updated 2026-05-23T15:35:47Z; author=xinxin-crypto; head=iip-64; +701/-0 lines | 2026-06-12T09:07:06+00:00 |
+| `S2.atecc608a-lifecycle` | ATECC608A lifecycle / successor parts | `VERIFIED-EXTERNAL` | ATECC608A is NRND (Not Recommended for New Designs) since &gt;=2021-03 per Microchip product page ('Recommend using the ATECC608B'); corroborated by nerves-hub/nerves_key issue #60. Successor chain 608A -&gt; 608B -&gt; 608C; at least one 608B variant (ATECC608B-MAH4I-S) is itself NRND with ATECC608C-TFLXTLS (TrustFLEX pre-provisioned) as replacement. Migration cost LOW: AN2237 (DS40002237A) documents 608B as functional drop-in for 608A — same commands/structure, CryptoAuthLib absorbs differences; caveat is hardwired-timing firmware needs review (polling-based timing unaffected). Datasheets: DS40002239A (608B summary), DS40002513 (608C summary). | 2026-06-10T23:59:00+00:00 |
 | `S3.k-silver-jh16-he-stick` | K-Silver JH16 Hall-effect stick module availability | `PENDING-OPERATOR-NOTE` |  |  |
 | `S4.midas-5pin-he-stick` | MIDAS 5-pin Hall-effect stick module availability | `PENDING-OPERATOR-NOTE` |  |  |
 | `S5.magneto-tmr-stick` | Magneto TMR stick module availability | `PENDING-OPERATOR-NOTE` |  |  |
@@ -65,20 +66,29 @@ Every web-sourced claim in this report carries an **UNVERIFIED-EXTERNAL** postur
   "updatedAt": "2026-05-23T15:35:47Z"
 }
 ```
-- **fetched at:** `2026-06-11T23:06:35+00:00`
+- **fetched at:** `2026-06-12T09:07:06+00:00`
 
 ### S2.atecc608a-lifecycle — ATECC608A lifecycle / successor parts
-- **state:** `UNVERIFIED-EXTERNAL`
+- **state:** `VERIFIED-EXTERNAL`
 - **fetch kind:** `MANUAL_NARRATIVE`
 - **primary URL:** https://www.microchip.com/en-us/product/atecc608a
 - **spec ref:** docs/path-a-manufacturing-spec.md §2 Hardware Requirement
 - **freshness window:** 30 days
-- **summary:** STATUS: VERIFIED-EXTERNAL (operator-proxy fetch). ATECC608A is NRND (Not Recommended for New Designs) since &gt;=2021-03 per Microchip product page ('Recommend using the ATECC608B'); corroborated by nerves-hub/nerves_key issue #60. Successor chain 608A -&gt; 608B -&gt; 608C; at least one 608B variant (ATECC608B-MAH4I-S) is itself NRND with ATECC608C-TFLXTLS (TrustFLEX pre-provisioned) as replacement. Migration cost LOW: AN2237 (DS40002237A) documents 608B as functional drop-in for 608A — same commands/structure, CryptoAuthLib absorbs differences; caveat is hardwired-timing firmware needs review (polling-based timing unaffected). Datasheets: DS40002239A (608B summary), DS40002513 (608C summary).
+- **summary:** ATECC608A is NRND (Not Recommended for New Designs) since &gt;=2021-03 per Microchip product page ('Recommend using the ATECC608B'); corroborated by nerves-hub/nerves_key issue #60. Successor chain 608A -&gt; 608B -&gt; 608C; at least one 608B variant (ATECC608B-MAH4I-S) is itself NRND with ATECC608C-TFLXTLS (TrustFLEX pre-provisioned) as replacement. Migration cost LOW: AN2237 (DS40002237A) documents 608B as functional drop-in for 608A — same commands/structure, CryptoAuthLib absorbs differences; caveat is hardwired-timing firmware needs review (polling-based timing unaffected). Datasheets: DS40002239A (608B summary), DS40002513 (608C summary).
 - **raw excerpt:**
 ```
-Sources enumerated: (1) microchip.com/en-us/product/atecc608a — 'Recommend using the ATECC608B'. (2) github.com/nerves-hub/nerves_key/issues/60 — community corroboration. (3) Microchip datasheets DS40002239A (608B), DS40002513 (608C). (4) Microchip app notes AN2237 (= DS40002237A) and AN3539 — migration guides. Implications operator-derived: F-HWFL-5-2 spec drift (Path A spec hard-names NRND ATECC608A in §1.1; should move to family language 'ATECC608B/608C-class CryptoAuthentication secure element, CryptoAuthLib-compatible, polling-based timing REQUIRED'); Rung 1 unaffected (on-hand 608A break
+Implications operator-derived: F-HWFL-5-2 spec drift (Path A spec hard-names NRND ATECC608A in §1.1; should move to family language 'ATECC608B/608C-class CryptoAuthentication secure element, CryptoAuthLib-compatible, polling-based timing REQUIRED'); Rung 1 unaffected (on-hand 608A breakout remains valid for reference rig — NRND != unavailable, Rung 1 proves ceremony not BOM); Rung 2/3 BOM should specify 608B minimum + evaluate 608C-TFLXTLS (TrustFLEX successor part converges with §3.2 Rung 3 factory provisioning strategy).
 ```
 - **fetched at:** `2026-06-10T23:59:00+00:00`
+- **verified by:** operator (Con / ConWan30) via Claude.ai session
+- **verified date:** `2026-06-10`
+- **sources:**
+  - https://www.microchip.com/en-us/product/atecc608a
+  - https://github.com/nerves-hub/nerves_key/issues/60
+  - Microchip DS40002239A (ATECC608B summary datasheet)
+  - Microchip DS40002513 (ATECC608C summary datasheet)
+  - Microchip AN2237 / DS40002237A (608A-&gt;608B migration guide)
+  - Microchip AN3539 (additional migration guide)
 
 ### S3.k-silver-jh16-he-stick — K-Silver JH16 Hall-effect stick module availability
 - **state:** `PENDING-OPERATOR-NOTE`

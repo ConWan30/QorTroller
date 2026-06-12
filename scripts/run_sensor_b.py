@@ -104,20 +104,41 @@ def _fetch_iip64_pr72() -> FetchResult:
 
 def _load_narratives(path: Path) -> dict[str, FetchResult]:
     """Load operator-edited MANUAL_NARRATIVE notes. JSON shape:
-        {"S2.atecc608a-lifecycle": {"summary": "...", "fetched_at": "2026-06-10T..."}, ...}
+        {
+          "_meta": { ... optional, ignored by loader ... },
+          "S2.atecc608a-lifecycle": {
+              "summary": "...",
+              "fetched_at": "2026-06-10T...",
+              # Optional VERIFIED-EXTERNAL precondition fields (Sensor B v0.1.1):
+              "verified_by":   "operator (Con / ConWan30)",
+              "sources":       ["url-or-doc-id-1", "url-or-doc-id-2"],
+              "verified_date": "2026-06-10"
+          },
+          ...
+        }
     Missing topics simply land as PENDING-OPERATOR-NOTE in the report.
+    Top-level keys starting with `_` (e.g. `_meta`) are ignored — reserved
+    for narrative-file metadata that doesn't map to a Sensor B topic.
     """
     if not path.exists():
         return {}
     data = json.loads(path.read_text(encoding="utf-8"))
     out: dict[str, FetchResult] = {}
     for topic_id, payload in data.items():
+        if topic_id.startswith("_"):
+            continue  # _meta and other reserved meta-keys
+        sources = payload.get("sources", [])
+        if not isinstance(sources, list):
+            sources = []
         out[topic_id] = FetchResult(
             topic_id=topic_id,
             summary=payload.get("summary"),
             raw_excerpt=payload.get("raw_excerpt", "")[:600],
             fetched_at=payload.get("fetched_at", ""),
             error=payload.get("error", ""),
+            verified_by=payload.get("verified_by", ""),
+            sources=[str(s) for s in sources],
+            verified_date=payload.get("verified_date", ""),
         )
     return out
 

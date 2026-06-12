@@ -30,8 +30,8 @@ from __future__ import annotations
 
 import html
 import json
-from dataclasses import dataclass
-from datetime import datetime, timezone
+from dataclasses import dataclass, field
+from datetime import date, datetime, timezone
 from enum import Enum
 
 
@@ -45,6 +45,7 @@ class WatchState(str, Enum):
     STALE = "STALE"
     PENDING_OPERATOR_NOTE = "PENDING-OPERATOR-NOTE"
     UNVERIFIED_EXTERNAL = "UNVERIFIED-EXTERNAL"
+    VERIFIED_EXTERNAL = "VERIFIED-EXTERNAL"  # Cycle 6 / Sensor B v0.1.1 — MANUAL_NARRATIVE with all 3 structural verification preconditions met
     FETCH_ERROR = "FETCH-ERROR"
 
 
@@ -62,12 +63,43 @@ class WatchSource:
 @dataclass(slots=True)
 class FetchResult:
     """Runner-provided fetch payload for one topic. Pass `summary=None` to
-    explicitly request the PENDING-OPERATOR-NOTE state without an error."""
+    explicitly request the PENDING-OPERATOR-NOTE state without an error.
+
+    VERIFIED-EXTERNAL precondition fields (D-HWFL-18, Cycle 6 / v0.1.1):
+    For a MANUAL_NARRATIVE entry to reach VERIFIED-EXTERNAL state, ALL
+    three structural fields below must be present and non-empty:
+      - verified_by:    non-empty str — who did the verification (operator name,
+                        agent ID, third-party reviewer)
+      - sources:        non-empty list[str] — sources verifier consulted
+                        (URLs, document IDs, codebase paths; URLs NOT
+                        required — any identifier-shaped string accepted)
+      - verified_date:  ISO-8601 date (YYYY-MM-DD) — when verification happened
+
+    Absence/partial-presence behavior (D-HWFL-20):
+      - All 3 fields present, valid, within freshness window => VERIFIED-EXTERNAL
+      - All 3 fields present, valid, outside freshness window => STALE
+        (detail render retains verified_by/sources/verified_date so reviewer
+        sees what WAS verified, just that verification is past freshness)
+      - 0 of 3 fields present (Cycle 3-style JSON)            => silent downgrade
+                                                                 to UNVERIFIED-EXTERNAL
+                                                                 (backward compat)
+      - 1 or 2 of 3 fields present                            => downgrade to
+                                                                 UNVERIFIED-EXTERNAL
+                                                                 + warning marker
+                                                                 surfaced in summary
+                                                                 (catches partial-
+                                                                 verification typos)
+      - 3 present but verified_date unparseable               => downgrade with warning
+    """
     topic_id: str
     summary: str | None              # one-line headline; None => pending
     raw_excerpt: str = ""            # short data extract; rendered with html-escape
     fetched_at: str = ""             # ISO-8601 UTC; "" => never fetched
     error: str = ""                  # non-empty => FETCH-ERROR state
+    # VERIFIED-EXTERNAL preconditions (all 3 required for VERIFIED state):
+    verified_by: str = ""
+    sources: list[str] = field(default_factory=list)
+    verified_date: str = ""          # ISO-8601 date (YYYY-MM-DD)
 
 
 @dataclass(slots=True)
@@ -79,6 +111,13 @@ class WatchLine:
     raw_excerpt: str
     fetched_at: str
     error: str
+    # Verification structural fields surfaced when state is VERIFIED-EXTERNAL
+    # OR when state was downgraded from VERIFIED-EXTERNAL to STALE (D-HWFL-19).
+    verified_by: str = ""
+    sources: list[str] = field(default_factory=list)
+    verified_date: str = ""
+    # Non-empty when partial-structure downgrade fires (D-HWFL-20 amendment).
+    verification_warning: str = ""
 
     def to_markdown_row(self) -> str:
         # Defensive HTML-escape on every external-sourced field. Prevents a
@@ -243,6 +282,22 @@ class WatchReport:
                 lines.append(f"- **error:** `{html.escape(line.error, quote=False)}`")
             if line.fetched_at:
                 lines.append(f"- **fetched at:** `{line.fetched_at}`")
+            # Verification structural fields — rendered whenever ANY are present so
+            # both VERIFIED-EXTERNAL (3/3) AND STALE-from-verified (3/3 aged) AND
+            # partial-structure-warning (1-2/3) surface them.
+            if line.verified_by:
+                lines.append(f"- **verified by:** {html.escape(line.verified_by, quote=False)}")
+            if line.verified_date:
+                lines.append(f"- **verified date:** `{html.escape(line.verified_date, quote=False)}`")
+            if line.sources:
+                lines.append("- **sources:**")
+                for s in line.sources:
+                    lines.append(f"  - {html.escape(s, quote=False)}")
+            if line.verification_warning:
+                # Render warning prominently — caught a partial-structure or malformed-date typo.
+                lines.append(
+                    f"- **VERIFICATION WARNING:** {html.escape(line.verification_warning, quote=False)}"
+                )
             lines.append("")
 
         lines.append("\n## Provenance\n")
@@ -256,41 +311,140 @@ def _resolve_state(
     source: WatchSource,
     fetched: FetchResult | None,
     now_utc: datetime,
-) -> tuple[WatchState, str, str, str, str]:
-    """Returns (state, summary, raw_excerpt, fetched_at, error)."""
+) -> WatchLine:
+    """Single state-decision site. Returns a fully-formed WatchLine.
+
+    State-resolution order:
+      1. fetched is None                 -> PENDING-OPERATOR-NOTE
+      2. fetched.error non-empty         -> FETCH-ERROR
+      3. fetched.summary is None         -> PENDING-OPERATOR-NOTE
+      4. STRUCTURED + within freshness   -> FRESH
+      5. STRUCTURED + outside freshness  -> STALE
+      6. MANUAL_NARRATIVE + 3/3 verified fields + within freshness
+                                         -> VERIFIED-EXTERNAL  (D-HWFL-18)
+      7. MANUAL_NARRATIVE + 3/3 verified fields + outside freshness
+                                         -> STALE  (D-HWFL-19; detail retains fields)
+      8. MANUAL_NARRATIVE + 1-2/3 fields -> UNVERIFIED-EXTERNAL + warning (D-HWFL-20)
+      9. MANUAL_NARRATIVE + 3/3 but verified_date unparseable
+                                         -> UNVERIFIED-EXTERNAL + warning
+     10. MANUAL_NARRATIVE + 0/3 fields   -> UNVERIFIED-EXTERNAL (Cycle 3 backward compat)
+    """
     if fetched is None:
-        return (
-            WatchState.PENDING_OPERATOR_NOTE if source.fetch_kind == FetchKind.MANUAL_NARRATIVE else WatchState.PENDING_OPERATOR_NOTE,
-            "",
-            "",
-            "",
-            "",
+        return WatchLine(
+            source=source, state=WatchState.PENDING_OPERATOR_NOTE,
+            summary="", raw_excerpt="", fetched_at="", error="",
         )
     if fetched.error:
-        return (WatchState.FETCH_ERROR, fetched.summary or "fetch failed", fetched.raw_excerpt, fetched.fetched_at, fetched.error)
+        return WatchLine(
+            source=source, state=WatchState.FETCH_ERROR,
+            summary=fetched.summary or "fetch failed",
+            raw_excerpt=fetched.raw_excerpt,
+            fetched_at=fetched.fetched_at,
+            error=fetched.error,
+        )
     if fetched.summary is None:
-        return (WatchState.PENDING_OPERATOR_NOTE, "", fetched.raw_excerpt, fetched.fetched_at, "")
+        return WatchLine(
+            source=source, state=WatchState.PENDING_OPERATOR_NOTE,
+            summary="", raw_excerpt=fetched.raw_excerpt,
+            fetched_at=fetched.fetched_at, error="",
+        )
 
-    # Freshness check.
-    state = WatchState.FRESH
-    if fetched.fetched_at:
+    # Freshness check shared by FRESH and VERIFIED-EXTERNAL paths.
+    def _is_within_freshness(iso_ts: str) -> tuple[bool, bool]:
+        """Returns (within_window, parseable)."""
+        if not iso_ts:
+            return (True, True)  # No timestamp => don't punish; treat as fresh
         try:
-            ts = datetime.fromisoformat(fetched.fetched_at.replace("Z", "+00:00"))
+            ts = datetime.fromisoformat(iso_ts.replace("Z", "+00:00"))
             age_days = (now_utc - ts).total_seconds() / 86400.0
-            if age_days > source.freshness_days:
-                state = WatchState.STALE
+            return (age_days <= source.freshness_days, True)
         except ValueError:
-            # Malformed timestamp => keep FRESH (don't punish on operator typo);
-            # the rendered cell will still show the literal string.
-            pass
+            return (True, False)  # Malformed => keep FRESH/VERIFIED but flag
 
-    # MANUAL_NARRATIVE always carries UNVERIFIED-EXTERNAL posture even when fresh,
-    # because the summary IS external narrative content. STRUCTURED FRESH stays FRESH
-    # (raw JSON fields aren't narrative).
-    if state == WatchState.FRESH and source.fetch_kind == FetchKind.MANUAL_NARRATIVE:
-        state = WatchState.UNVERIFIED_EXTERNAL
+    fetched_at_within, _ = _is_within_freshness(fetched.fetched_at)
 
-    return (state, fetched.summary, fetched.raw_excerpt, fetched.fetched_at, "")
+    if source.fetch_kind == FetchKind.STRUCTURED:
+        state = WatchState.FRESH if fetched_at_within else WatchState.STALE
+        return WatchLine(
+            source=source, state=state,
+            summary=fetched.summary, raw_excerpt=fetched.raw_excerpt,
+            fetched_at=fetched.fetched_at, error="",
+        )
+
+    # MANUAL_NARRATIVE path — VERIFIED-EXTERNAL preconditions (D-HWFL-18/19/20).
+    has_verified_by = bool(fetched.verified_by.strip())
+    has_sources = bool(fetched.sources) and all(isinstance(s, str) and s.strip() for s in fetched.sources)
+    has_verified_date = bool(fetched.verified_date.strip())
+    present_count = has_verified_by + has_sources + has_verified_date
+
+    if present_count == 0:
+        # Cycle 3 backward compat: no verified_* fields at all => silent
+        # downgrade to UNVERIFIED-EXTERNAL (no warning rendered).
+        return WatchLine(
+            source=source, state=WatchState.UNVERIFIED_EXTERNAL,
+            summary=fetched.summary, raw_excerpt=fetched.raw_excerpt,
+            fetched_at=fetched.fetched_at, error="",
+        )
+
+    if present_count < 3:
+        # Partial structure => downgrade WITH warning (D-HWFL-20 amendment).
+        missing = []
+        if not has_verified_by:   missing.append("verified_by")
+        if not has_sources:       missing.append("sources[non-empty]")
+        if not has_verified_date: missing.append("verified_date")
+        warning = (
+            f"PARTIAL VERIFICATION STRUCTURE: missing {missing}. "
+            f"For VERIFIED-EXTERNAL state, all 3 fields must be present "
+            f"(verified_by + non-empty sources[] + verified_date). "
+            f"Downgraded to UNVERIFIED-EXTERNAL."
+        )
+        return WatchLine(
+            source=source, state=WatchState.UNVERIFIED_EXTERNAL,
+            summary=fetched.summary, raw_excerpt=fetched.raw_excerpt,
+            fetched_at=fetched.fetched_at, error="",
+            verified_by=fetched.verified_by,
+            sources=list(fetched.sources),
+            verified_date=fetched.verified_date,
+            verification_warning=warning,
+        )
+
+    # 3/3 fields present. Validate verified_date is parseable ISO date.
+    try:
+        date.fromisoformat(fetched.verified_date.strip())
+    except ValueError:
+        warning = (
+            f"MALFORMED verified_date {fetched.verified_date!r} — expected "
+            f"ISO-8601 (YYYY-MM-DD). Downgraded to UNVERIFIED-EXTERNAL."
+        )
+        return WatchLine(
+            source=source, state=WatchState.UNVERIFIED_EXTERNAL,
+            summary=fetched.summary, raw_excerpt=fetched.raw_excerpt,
+            fetched_at=fetched.fetched_at, error="",
+            verified_by=fetched.verified_by,
+            sources=list(fetched.sources),
+            verified_date=fetched.verified_date,
+            verification_warning=warning,
+        )
+
+    # All preconditions satisfied. Apply unified freshness window using
+    # verified_date as the anchor (D-HWFL-19): verified-and-aged-out => STALE
+    # but retain all 3 fields in the WatchLine for detail rendering.
+    try:
+        vd = date.fromisoformat(fetched.verified_date.strip())
+        age_days = (now_utc.date() - vd).days
+        verified_within = age_days <= source.freshness_days
+    except ValueError:
+        verified_within = True  # Already guarded above; defensive belt-and-braces.
+
+    state = WatchState.VERIFIED_EXTERNAL if verified_within else WatchState.STALE
+    return WatchLine(
+        source=source, state=state,
+        summary=fetched.summary, raw_excerpt=fetched.raw_excerpt,
+        fetched_at=fetched.fetched_at, error="",
+        verified_by=fetched.verified_by,
+        sources=list(fetched.sources),
+        verified_date=fetched.verified_date,
+    )
 
 
 def assemble_watch_report(
@@ -310,15 +464,7 @@ def assemble_watch_report(
     lines: list[WatchLine] = []
     for source in _CANONICAL_SOURCES:
         payload = fetched.get(source.topic_id)
-        state, summary, raw, ts, error = _resolve_state(source, payload, now_utc)
-        lines.append(WatchLine(
-            source=source,
-            state=state,
-            summary=summary,
-            raw_excerpt=raw,
-            fetched_at=ts,
-            error=error,
-        ))
+        lines.append(_resolve_state(source, payload, now_utc))
 
     return WatchReport(
         cycle=cycle,
