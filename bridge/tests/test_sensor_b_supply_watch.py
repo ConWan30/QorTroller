@@ -101,11 +101,26 @@ def test_t_sensor_b_7_fetch_error_state():
 
 
 def test_t_sensor_b_8_markdown_renders_operator_action_box_and_honesty_rail():
-    """OA-1..OA-4 + honesty rail render into every report."""
-    report = assemble_watch_report(cycle=3)
+    """OA-1..OA-4 + honesty rail render into every report AND
+    (HWFL-1 Cycle 9 / F-CYCLE9-1 sanitization) the rendered markdown MUST
+    NOT contain operator-private filename tokens. Positive content
+    assertions verify the sanitized OA-1 text shape + Sensor B honesty rail."""
+    report = assemble_watch_report(cycle=9)
     md = report.to_markdown()
-    for marker in ("OA-1", "OA-4", "qortroller_foundation_mfg_ca.json", "UNVERIFIED-EXTERNAL", "Honesty rail"):
+    # Required structural markers (filename intentionally absent).
+    for marker in ("OA-1", "OA-4", "UNVERIFIED-EXTERNAL", "Honesty rail"):
         assert marker in md, f"watch report missing marker {marker!r}"
+    # F-CYCLE9-1 sanitization regression — no operator-private filename tokens.
+    forbidden_tokens = ("qortroller_foundation_mfg_ca.json", "qortroller_foundation_mfg_ca")
+    for tok in forbidden_tokens:
+        assert tok not in md, (
+            f"Sensor B watch markdown leaked operator-private token {tok!r} into "
+            f"public artifact — violates F-CYCLE9-1 sanitization rail."
+        )
+    # Positive content for sanitized OA-1 (must match Sensor C exactly per cross-artifact consistency).
+    assert "MFG Root CA canonical file" in md
+    assert "docs/disaster-recovery-runbook.private.md" in md
+    assert "F-DECON-3.2" in md
 
 
 def test_t_sensor_b_9_markdown_escapes_external_pipe_and_html_in_summary():

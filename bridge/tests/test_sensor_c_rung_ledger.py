@@ -110,12 +110,27 @@ def test_t_sensor_c_8_json_serializes_and_validates_schema():
         assert {"rung", "gate_id", "name", "state", "evidence", "verified_at", "spec_ref"} <= g.keys()
 
 
-def test_t_sensor_c_9_markdown_contains_operator_action_box():
-    """OA-1..OA-4 nag-once-per-cycle rail renders into every ledger doc."""
-    ledger = assemble_ledger(REPO_ROOT, cycle=2)
+def test_t_sensor_c_9_markdown_operator_action_box_present_and_sanitized():
+    """OA-1..OA-4 nag-once-per-cycle rail renders into every ledger doc
+    AND (HWFL-1 Cycle 9 / F-CYCLE9-1 sanitization) the rendered markdown
+    MUST NOT contain operator-private filename tokens. Positive content
+    assertions verify the sanitized OA-1 text shape."""
+    ledger = assemble_ledger(REPO_ROOT, cycle=9)
     md = ledger.to_markdown()
-    for marker in ("OA-1", "OA-2", "OA-3", "OA-4", "qortroller_foundation_mfg_ca.json"):
+    # Box presence — required markers (filename intentionally absent).
+    for marker in ("OA-1", "OA-2", "OA-3", "OA-4"):
         assert marker in md, f"OPERATOR-ACTION box missing marker {marker!r}"
+    # F-CYCLE9-1 sanitization regression — no operator-private filename tokens.
+    forbidden_tokens = ("qortroller_foundation_mfg_ca.json", "qortroller_foundation_mfg_ca")
+    for tok in forbidden_tokens:
+        assert tok not in md, (
+            f"Sensor C ledger markdown leaked operator-private token {tok!r} into "
+            f"public artifact — violates F-CYCLE9-1 sanitization rail."
+        )
+    # Positive content for sanitized OA-1.
+    assert "MFG Root CA canonical file" in md
+    assert "docs/disaster-recovery-runbook.private.md" in md
+    assert "F-DECON-3.2" in md
 
 
 def test_t_sensor_c_12_g1_6_live_fragile_plus_evidence_sanitization():
