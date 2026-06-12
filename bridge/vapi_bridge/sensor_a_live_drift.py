@@ -265,7 +265,14 @@ def _verify_contract_count(
     )
 
 
-_TEST_SUITES = ("bridge", "sdk", "hardhat")
+_TEST_SUITES = ("bridge", "sdk", "hardhat_regex_scan")
+# Cycle 13 schema-level honesty (D-HWFL-34): the hardhat count comes
+# from a static `it()|test()` regex scan over contracts/test/*.{js,ts}
+# per Cycle 10 D-HWFL-32, NOT from authoritative `npx hardhat test`
+# output. The anchor key carries this proxy-ness so a future cycle
+# that wants authoritative hardhat count adds a separate
+# `hardhat_authoritative` key alongside, rather than overloading
+# `hardhat` with values from two different sources.
 
 
 def _verify_test_counts(

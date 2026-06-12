@@ -163,7 +163,7 @@ def fetch_test_counts(skip_tests: bool) -> Tuple[Optional[Dict[str, int]], Optio
         hardhat_n = _count_hardhat_tests()
     except Exception as exc:  # noqa: BLE001
         return None, f"hardhat scan error: {exc!r}"
-    return {"bridge": bridge_n, "sdk": sdk_n, "hardhat": hardhat_n}, None
+    return {"bridge": bridge_n, "sdk": sdk_n, "hardhat_regex_scan": hardhat_n}, None
 
 
 def main(argv: Optional[list] = None) -> int:
