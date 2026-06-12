@@ -46,7 +46,8 @@ from typing import Callable
 
 class GateState(str, Enum):
     LIVE = "LIVE"
-    LIVE_PARTIAL = "LIVE-PARTIAL"   # Cycle 7 / v0.1.2 — gate's question has partial evidence; sufficient for operator decision but not exhaustive. Distinct from D-HWFL-9's deferred LIVE-FRAGILE (single-point-of-failure flag).
+    LIVE_PARTIAL = "LIVE-PARTIAL"   # Cycle 7 / v0.1.2 — gate's question has partial evidence; sufficient for operator decision but not exhaustive.
+    LIVE_FRAGILE = "LIVE-FRAGILE"   # Cycle 8 / v0.1.3 — full evidence BUT a known structural single-point-of-failure exists in the underlying pattern. Orthogonal to LIVE-PARTIAL (evidence axis vs fragility axis). Demotes to LIVE only when the structural pattern is eliminated (not when operational mitigations are applied).
     DORMANT = "DORMANT"
     HARDWARE_GATED = "HARDWARE-GATED"
     BLOCKED_ON_SENSOR_B = "BLOCKED-ON-SENSOR-B"
@@ -121,16 +122,32 @@ def _verify_g1_5_reference_device_registered(repo_root: Path) -> tuple[GateState
 
 
 def _verify_g1_6_mfg_ca_file_present(repo_root: Path) -> tuple[GateState, str]:
-    """ManufacturerRootCA file at canonical path (~/.vapi/qortroller_foundation_mfg_ca.json).
-    Checks existence only — does NOT read contents (key material)."""
+    """ManufacturerRootCA file at canonical path (~/.vapi/...). Checks
+    existence only — does NOT read contents (key material).
+
+    Returns LIVE-FRAGILE (not LIVE) per HWFL-1 Cycle 8 / Sensor C v0.1.3
+    because the underlying pattern carries a structural single-point-of-
+    failure per F-DECON-3.2. Demotion to plain LIVE requires the SPOF
+    pattern to be eliminated (not merely operationally mitigated).
+    Per-incident operational detail lives in
+    `docs/disaster-recovery-runbook.private.md` (gitignored).
+
+    Verifier file paths intentionally NOT echoed into the evidence
+    string per F-CYCLE8-1 (sanitization rider) — the public-repo
+    ledger artifacts must not reproduce operator-private filenames.
+    Test T12 regression-asserts the evidence excludes the CA filename.
+    """
     ca_path = Path.home() / ".vapi" / "qortroller_foundation_mfg_ca.json"
     if ca_path.exists():
         return (
-            GateState.LIVE,
-            "~/.vapi/qortroller_foundation_mfg_ca.json present "
-            "(SINGLE-COPY per F-DECON-3.2 — see OA-1 in OPERATOR-ACTION box)",
+            GateState.LIVE_FRAGILE,
+            "MFG Root CA canonical file present (existence-only check; "
+            "contents not read). Structural fragility per F-DECON-3.2; "
+            "operational detail in docs/disaster-recovery-runbook.private.md. "
+            "Demotes to LIVE when F-DECON-3.2 root fix lands (HSM-backed CA, "
+            "OA-4 long-term track).",
         )
-    return GateState.UNVERIFIABLE, f"{ca_path} not found"
+    return GateState.UNVERIFIABLE, "MFG Root CA canonical file not found"
 
 
 def _verify_g2_7_esp32_cert_partial_evidence(repo_root: Path) -> tuple[GateState, str]:
