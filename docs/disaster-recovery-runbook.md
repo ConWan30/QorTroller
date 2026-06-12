@@ -20,7 +20,7 @@ attestations on-chain and triggers per-agent re-anchoring.
 
 | Item | What | Where | Status |
 |---|---|---|---|
-| 1 | Back up `~/.vapi/qortroller_foundation_mfg_ca.json` (517 B) | Password manager (Bitwarden / 1Password / similar) as encrypted note **AND** encrypted USB drive **off-machine** | **CRITICAL — OPERATOR MUST CONFIRM** |
+| 1 | Back up MFG Root CA canonical file (path per `docs/disaster-recovery-runbook.private.md` §1) | Password manager (Bitwarden / 1Password / similar) as encrypted note **AND** encrypted USB drive **off-machine** | **CRITICAL — OPERATOR MUST CONFIRM** |
 | 2 | Back up `bridge/.env` (full file, contains private key + KMS creds + GitHub OAuth secrets) | Same destinations as item 1 | **CRITICAL — OPERATOR MUST CONFIRM** |
 | 3 | Back up `~/.vapi/device_*.json` + `dualshock_device_key.json` (Path A composite identity material) | Same destinations | OPERATOR MUST CONFIRM |
 | 4 | Record IoTeX deployer wallet seed phrase (the one that generated `0x0Cf36dB57f…`) in offline cold storage | Hardware wallet or paper backup in safe | OPERATOR MUST CONFIRM |
@@ -29,13 +29,17 @@ attestations on-chain and triggers per-agent re-anchoring.
 | 7 | Replicate the latest `~/.vapi/backups/bridge-*.db` to off-site target weekly | Per private companion doc | OPERATOR MUST CONFIRM |
 
 **F-DECON-3.2 / D-DECON-7 CRITICAL FINDING:** The Manufacturer Root CA
-(`qortroller_foundation_mfg_ca.json`) is currently a single-copy
-software-backed key on one Windows machine. CLAUDE.md acknowledges this
-as "SoftwareIdentityBackend — INSECURE / DEV ONLY". Per
-`path_a_arc1_complete` memory the long-term fix is rotation to a
-hardware-HSM-backed CA + re-issuance of every device birth cert. That
-project is months out. Item 1 is the **minimum reversible interim
-mitigation**: copy a 517-byte file to two off-machine secure locations.
+is currently a single-copy software-backed key on one operator
+workstation. CLAUDE.md acknowledges this as "SoftwareIdentityBackend —
+INSECURE / DEV ONLY". Per `path_a_arc1_complete` memory the long-term
+fix is rotation to a hardware-HSM-backed CA + re-issuance of every
+device birth cert. That project is months out. Item 1 is the **minimum
+reversible interim mitigation**: copy the small CA file (canonical path
+in the private companion runbook) to two off-machine secure locations.
+Forward-containment context: per HWFL-1 Cycle 9 (F-CYCLE9-1), the
+canonical filename has been removed from this public artifact; the
+historical exposure in prior commits is in scope for a separate
+operator-decision cycle (git-history rewrite considerations).
 
 ---
 

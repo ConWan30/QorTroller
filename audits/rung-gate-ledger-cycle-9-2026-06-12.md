@@ -1,0 +1,78 @@
+# Sensor C — Rung-Gate Readiness Ledger (Cycle 9, 2026-06-12)
+
+HWFL-1 Sensor C v0.1 — machine-checkable snapshot of every gate across Rungs 1-4 of the QorTroller manufacturing staircase. Honest weighting: nothing LIVE that isn't verifiable now. Generated `2026-06-12T10:33:59+00:00` by `scripts/run_sensor_c.py`. Machine-readable companion: `audits/rung-gate-ledger-latest.json`.
+
+
+## Standing OPERATOR-ACTION box (loop never auto-touches)
+
+- [ ] **OA-1** Back up MFG Root CA canonical file (path per `docs/disaster-recovery-runbook.private.md`). F-DECON-3.2 interim mitigation. Highest-leverage 5-min action.
+- [ ] **OA-2** Create `docs/disaster-recovery-runbook.private.md` with full AWS KMS ARNs.
+- [ ] **OA-3** IAM scope-down on bridge/.env AWS keys → `KMS:Sign` + `KMS:GetPublicKey` on the two specific key ARNs.
+- [ ] **OA-4** Long-term: HSM-backed ManufacturerRootCA + device re-issuance.
+
+
+## State summary
+
+| State | Count |
+|---|---|
+| LIVE | 4 |
+| LIVE-PARTIAL | 1 |
+| LIVE-FRAGILE | 1 |
+| DORMANT | 12 |
+| HARDWARE-GATED | 3 |
+| BLOCKED-ON-EXTERNAL | 1 |
+| **Total** | **22** |
+
+
+## Rung 1
+
+| Gate | Name | State | Evidence |
+|---|---|---|---|
+| `G1.1` | DualSense Edge physically connected | `HARDWARE-GATED` | intrinsic state (HARDWARE-GATED); see spec_ref |
+| `G1.2` | ATECC608A breakout physically connected | `HARDWARE-GATED` | intrinsic state (HARDWARE-GATED); see spec_ref |
+| `G1.3` | CH341A USB-I2C bridge present | `HARDWARE-GATED` | intrinsic state (HARDWARE-GATED); see spec_ref |
+| `G1.4` | VAPIManufacturerDeviceRegistry deployed on IoTeX testnet | `LIVE` | VMDR @ 0x2e5B5FB110890f498e289E3045d0f54Cfb0F91b0 (IoTeX testnet chainId 4690) |
+| `G1.5` | First reference device registered on-chain | `LIVE` | registration tx 0x68f6cf49…ac9c0 cited in CLAUDE.md (block 44028531) |
+| `G1.6` | ManufacturerRootCA file present at canonical path | `LIVE-FRAGILE` | MFG Root CA canonical file present (existence-only check; contents not read). Structural fragility per F-DECON-3.2; operational detail in docs/disaster-recovery-runbook.private.md. Demotes to LIVE when F-DECON-3.2 root fix lands (HSM-backed CA, OA-4 long-term track). |
+| `G1.7` | SecureElementBackend honesty rail intact | `LIVE` | SecureElementBackend raises NotImplementedError (blocks silent host-key fallback; Arc 2 hardware-gated) |
+
+
+## Rung 2
+
+| Gate | Name | State | Evidence |
+|---|---|---|---|
+| `G2.1` | Dev-kit BOM document exists (two suppliers per critical part) | `LIVE` | docs/qortroller-devkit-bom-v0_1.md present with C1-C8 + two-supplier rail (SCAFFOLD only — no supplier committed; LIVE-SUPPLIED gated on Stage A measurement + 2 verified suppliers per BOM §7) |
+| `G2.2` | Zephyr firmware target for QorTroller controller | `DORMANT` | intrinsic state (DORMANT); see spec_ref |
+| `G2.3` | Thread-C-equivalent isolation statement in firmware spec | `DORMANT` | intrinsic state (DORMANT); see spec_ref |
+| `G2.4` | φ sanitization device-residency design | `DORMANT` | intrinsic state (DORMANT); see spec_ref |
+| `G2.5` | Hall/TMR stick module selection finalized | `DORMANT` | intrinsic state (DORMANT); see spec_ref |
+| `G2.6` | IMU module selection finalized | `DORMANT` | intrinsic state (DORMANT); see spec_ref |
+| `G2.7` | ESP32-class module cert status known | `LIVE-PARTIAL` | S6 narrative (ops_notes_cycle5.json) + BOM C1 row both reference the 'NO Common Criteria/FIPS on landing page; ESP32 alone NOT a substitute for ATECC608A; secure-element pairing required' finding. PARTIAL because S6 is UNVERIFIED-EXTERNAL (Sensor B v0.1.1 schema; Claude WebFetch draft, not operator-verified with verified_by+sources+verified_date). Promotion to full LIVE requires S6 lifted to VERIFIED-EXTERNAL. |
+
+
+## Rung 3
+
+| Gate | Name | State | Evidence |
+|---|---|---|---|
+| `G3.1` | Partner-handoff package assembler | `DORMANT` | intrinsic state (DORMANT); see spec_ref |
+| `G3.2` | TrustFLEX provisioning path amendment to spec | `DORMANT` | intrinsic state (DORMANT); see spec_ref |
+| `G3.3` | Manufacturer CA chained to reference root — design | `DORMANT` | intrinsic state (DORMANT); see spec_ref |
+| `G3.4` | Per-batch slot-config audit checklist | `DORMANT` | intrinsic state (DORMANT); see spec_ref |
+| `G3.5` | Two-supplier cost model for critical parts | `DORMANT` | intrinsic state (DORMANT); see spec_ref |
+
+
+## Rung 4
+
+| Gate | Name | State | Evidence |
+|---|---|---|---|
+| `G4.1` | IIP-64 PR #72 movement / merge | `BLOCKED-ON-EXTERNAL` | intrinsic state (BLOCKED-ON-EXTERNAL); see spec_ref |
+| `G4.2` | Spec-as-compliance-standard formalized | `DORMANT` | intrinsic state (DORMANT); see spec_ref |
+| `G4.3` | Device-identity registry interop spec | `DORMANT` | intrinsic state (DORMANT); see spec_ref |
+
+
+## Provenance
+
+- Canonical gate registry: `bridge/vapi_bridge/sensor_c_rung_ledger.py::_CANONICAL_GATES` (22 gates, FROZEN per cycle)
+- Verifier functions: `bridge/vapi_bridge/sensor_c_rung_ledger.py::_VERIFIERS` (6 active)
+- Schema: `vapi-rung-gate-ledger-v1` (JSON companion artifact)
+- Rung definitions: HWFL-1 master prompt + `docs/path-a-manufacturing-spec.md`
