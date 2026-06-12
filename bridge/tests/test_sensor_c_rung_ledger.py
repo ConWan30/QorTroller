@@ -54,12 +54,13 @@ def test_t_sensor_c_4_live_repo_assemble_succeeds():
 
 
 def test_t_sensor_c_5_live_repo_verifier_gates_are_live():
-    """The 5 fully-LIVE verifier-backed gates (G1.4-G1.7 + G2.1) all pass on
-    the real repo. G2.7 is verifier-backed too but resolves to LIVE-PARTIAL,
-    NOT LIVE — asserted separately by test_t_sensor_c_11."""
-    ledger = assemble_ledger(REPO_ROOT, cycle=7)
+    """The 4 fully-LIVE verifier-backed gates (G1.4, G1.5, G1.7, G2.1) pass
+    on the real repo. G1.6 is verifier-backed but resolves to LIVE-FRAGILE
+    (Cycle 8 v0.1.3 — F-DECON-3.2 SPOF) — asserted separately by T12.
+    G2.7 is verifier-backed but resolves to LIVE-PARTIAL — asserted by T11."""
+    ledger = assemble_ledger(REPO_ROOT, cycle=8)
     by_id = {r.gate.gate_id: r for r in ledger.results}
-    for gid in ("G1.4", "G1.5", "G1.6", "G1.7", "G2.1"):
+    for gid in ("G1.4", "G1.5", "G1.7", "G2.1"):
         assert by_id[gid].state == GateState.LIVE, (
             f"{gid} expected LIVE on real repo, got {by_id[gid].state.value} "
             f"(evidence: {by_id[gid].evidence})"
@@ -115,6 +116,34 @@ def test_t_sensor_c_9_markdown_contains_operator_action_box():
     md = ledger.to_markdown()
     for marker in ("OA-1", "OA-2", "OA-3", "OA-4", "qortroller_foundation_mfg_ca.json"):
         assert marker in md, f"OPERATOR-ACTION box missing marker {marker!r}"
+
+
+def test_t_sensor_c_12_g1_6_live_fragile_plus_evidence_sanitization():
+    """G1.6 returns LIVE-FRAGILE on the real repo (Cycle 8 v0.1.3) — full
+    evidence (CA file exists) BUT structural F-DECON-3.2 SPOF persists.
+    Plus regression assertion (F-CYCLE8-1 sanitization rider): evidence
+    string MUST NOT contain the CA filename — operator-private filenames
+    do not belong in public-repo ledger artifacts."""
+    ledger = assemble_ledger(REPO_ROOT, cycle=8)
+    by_id = {r.gate.gate_id: r for r in ledger.results}
+    g1_6 = by_id["G1.6"]
+    assert g1_6.state == GateState.LIVE_FRAGILE, (
+        f"G1.6 expected LIVE_FRAGILE on real repo (Cycle 8 v0.1.3), "
+        f"got {g1_6.state.value} (evidence: {g1_6.evidence})"
+    )
+    # F-CYCLE8-1 sanitization rider — evidence MUST NOT echo the CA filename
+    # or other operator-private path tokens into public-repo artifacts.
+    forbidden_tokens = ("qortroller_foundation_mfg_ca.json", "qortroller_foundation_mfg_ca")
+    for tok in forbidden_tokens:
+        assert tok not in g1_6.evidence, (
+            f"G1.6 evidence leaked operator-private token {tok!r} into public "
+            f"ledger artifact — violates F-CYCLE8-1 sanitization rider. "
+            f"Full evidence: {g1_6.evidence!r}"
+        )
+    # Positive content checks — the new evidence should reference F-DECON-3.2
+    # and the private runbook for full operational detail.
+    assert "F-DECON-3.2" in g1_6.evidence
+    assert "disaster-recovery-runbook.private.md" in g1_6.evidence
 
 
 def test_t_sensor_c_11_g2_7_two_part_verifier_honesty_rail(tmp_path: Path):

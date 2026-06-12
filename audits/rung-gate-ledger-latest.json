@@ -1,12 +1,13 @@
 {
   "schema_version": "vapi-rung-gate-ledger-v1",
-  "cycle": 7,
+  "cycle": 8,
   "cycle_date": "2026-06-12",
-  "generated_at": "2026-06-12T09:17:58+00:00",
+  "generated_at": "2026-06-12T10:02:25+00:00",
   "gate_count": 22,
   "state_counts": {
     "HARDWARE-GATED": 3,
-    "LIVE": 5,
+    "LIVE": 4,
+    "LIVE-FRAGILE": 1,
     "DORMANT": 12,
     "LIVE-PARTIAL": 1,
     "BLOCKED-ON-EXTERNAL": 1
@@ -18,7 +19,7 @@
       "name": "DualSense Edge physically connected",
       "state": "HARDWARE-GATED",
       "evidence": "intrinsic state (HARDWARE-GATED); see spec_ref",
-      "verified_at": "2026-06-12T09:17:58+00:00",
+      "verified_at": "2026-06-12T10:02:25+00:00",
       "spec_ref": "master prompt RUNG 1; operator ceremony"
     },
     {
@@ -27,7 +28,7 @@
       "name": "ATECC608A breakout physically connected",
       "state": "HARDWARE-GATED",
       "evidence": "intrinsic state (HARDWARE-GATED); see spec_ref",
-      "verified_at": "2026-06-12T09:17:58+00:00",
+      "verified_at": "2026-06-12T10:02:25+00:00",
       "spec_ref": "master prompt RUNG 1; Arc 2 hardware gate"
     },
     {
@@ -36,7 +37,7 @@
       "name": "CH341A USB-I2C bridge present",
       "state": "HARDWARE-GATED",
       "evidence": "intrinsic state (HARDWARE-GATED); see spec_ref",
-      "verified_at": "2026-06-12T09:17:58+00:00",
+      "verified_at": "2026-06-12T10:02:25+00:00",
       "spec_ref": "docs/path-a-manufacturing-spec.md \u00a72 Recommended host adapter"
     },
     {
@@ -45,7 +46,7 @@
       "name": "VAPIManufacturerDeviceRegistry deployed on IoTeX testnet",
       "state": "LIVE",
       "evidence": "VMDR @ 0x2e5B5FB110890f498e289E3045d0f54Cfb0F91b0 (IoTeX testnet chainId 4690)",
-      "verified_at": "2026-06-12T09:17:58+00:00",
+      "verified_at": "2026-06-12T10:02:25+00:00",
       "spec_ref": "docs/path-a-manufacturing-spec.md \u00a71 + \u00a76.3"
     },
     {
@@ -54,16 +55,16 @@
       "name": "First reference device registered on-chain",
       "state": "LIVE",
       "evidence": "registration tx 0x68f6cf49\u2026ac9c0 cited in CLAUDE.md (block 44028531)",
-      "verified_at": "2026-06-12T09:17:58+00:00",
+      "verified_at": "2026-06-12T10:02:25+00:00",
       "spec_ref": "CLAUDE.md Path A Arc 1 \u2014 tx 0x68f6cf49\u2026 block 44028531"
     },
     {
       "rung": 1,
       "gate_id": "G1.6",
       "name": "ManufacturerRootCA file present at canonical path",
-      "state": "LIVE",
-      "evidence": "~/.vapi/qortroller_foundation_mfg_ca.json present (SINGLE-COPY per F-DECON-3.2 \u2014 see OA-1 in OPERATOR-ACTION box)",
-      "verified_at": "2026-06-12T09:17:58+00:00",
+      "state": "LIVE-FRAGILE",
+      "evidence": "MFG Root CA canonical file present (existence-only check; contents not read). Structural fragility per F-DECON-3.2; operational detail in docs/disaster-recovery-runbook.private.md. Demotes to LIVE when F-DECON-3.2 root fix lands (HSM-backed CA, OA-4 long-term track).",
+      "verified_at": "2026-06-12T10:02:25+00:00",
       "spec_ref": "docs/path-a-manufacturing-spec.md \u00a71 reference-impl honesty stamp"
     },
     {
@@ -72,7 +73,7 @@
       "name": "SecureElementBackend honesty rail intact",
       "state": "LIVE",
       "evidence": "SecureElementBackend raises NotImplementedError (blocks silent host-key fallback; Arc 2 hardware-gated)",
-      "verified_at": "2026-06-12T09:17:58+00:00",
+      "verified_at": "2026-06-12T10:02:25+00:00",
       "spec_ref": "Path A Arc 1 SecureElementBackend stub (raises NotImplementedError)"
     },
     {
@@ -81,7 +82,7 @@
       "name": "Dev-kit BOM document exists (two suppliers per critical part)",
       "state": "LIVE",
       "evidence": "docs/qortroller-devkit-bom-v0_1.md present with C1-C8 + two-supplier rail (SCAFFOLD only \u2014 no supplier committed; LIVE-SUPPLIED gated on Stage A measurement + 2 verified suppliers per BOM \u00a77)",
-      "verified_at": "2026-06-12T09:17:58+00:00",
+      "verified_at": "2026-06-12T10:02:25+00:00",
       "spec_ref": "docs/qortroller-devkit-bom-v0_1.md (HWFL-1 Cycle 4); master prompt RUNG 2"
     },
     {
@@ -90,7 +91,7 @@
       "name": "Zephyr firmware target for QorTroller controller",
       "state": "DORMANT",
       "evidence": "intrinsic state (DORMANT); see spec_ref",
-      "verified_at": "2026-06-12T09:17:58+00:00",
+      "verified_at": "2026-06-12T10:02:25+00:00",
       "spec_ref": "Sensor A B1: only pebble_tracker.overlay exists today"
     },
     {
@@ -99,7 +100,7 @@
       "name": "Thread-C-equivalent isolation statement in firmware spec",
       "state": "DORMANT",
       "evidence": "intrinsic state (DORMANT); see spec_ref",
-      "verified_at": "2026-06-12T09:17:58+00:00",
+      "verified_at": "2026-06-12T10:02:25+00:00",
       "spec_ref": "master prompt RUNG 2 \u2014 Zephyr work-queue / priority-ceiling thread"
     },
     {
@@ -108,7 +109,7 @@
       "name": "\u03c6 sanitization device-residency design",
       "state": "DORMANT",
       "evidence": "intrinsic state (DORMANT); see spec_ref",
-      "verified_at": "2026-06-12T09:17:58+00:00",
+      "verified_at": "2026-06-12T10:02:25+00:00",
       "spec_ref": "Sensor A B2: \u03c6 host-side; wiki/methodology/sensor_stack_v2_1*"
     },
     {
@@ -117,7 +118,7 @@
       "name": "Hall/TMR stick module selection finalized",
       "state": "DORMANT",
       "evidence": "intrinsic state (DORMANT); see spec_ref",
-      "verified_at": "2026-06-12T09:17:58+00:00",
+      "verified_at": "2026-06-12T10:02:25+00:00",
       "spec_ref": "Sensor Stack v2.1 \u2014 3 candidates (K-Silver JH16, MIDAS 5-pin, Magneto TMR)"
     },
     {
@@ -126,7 +127,7 @@
       "name": "IMU module selection finalized",
       "state": "DORMANT",
       "evidence": "intrinsic state (DORMANT); see spec_ref",
-      "verified_at": "2026-06-12T09:17:58+00:00",
+      "verified_at": "2026-06-12T10:02:25+00:00",
       "spec_ref": "master prompt RUNG 2 \u2014 Sensor Stack v2.1 #1/#4 measurement gates"
     },
     {
@@ -135,7 +136,7 @@
       "name": "ESP32-class module cert status known",
       "state": "LIVE-PARTIAL",
       "evidence": "S6 narrative (ops_notes_cycle5.json) + BOM C1 row both reference the 'NO Common Criteria/FIPS on landing page; ESP32 alone NOT a substitute for ATECC608A; secure-element pairing required' finding. PARTIAL because S6 is UNVERIFIED-EXTERNAL (Sensor B v0.1.1 schema; Claude WebFetch draft, not operator-verified with verified_by+sources+verified_date). Promotion to full LIVE requires S6 lifted to VERIFIED-EXTERNAL.",
-      "verified_at": "2026-06-12T09:17:58+00:00",
+      "verified_at": "2026-06-12T10:02:25+00:00",
       "spec_ref": "Sensor B S6 (Cycle 5 narrative) + BOM C1 row absorption; promoted from BLOCKED-ON-SENSOR-B to LIVE-PARTIAL in HWFL-1 Cycle 7 via Sensor C v0.1.2"
     },
     {
@@ -144,7 +145,7 @@
       "name": "Partner-handoff package assembler",
       "state": "DORMANT",
       "evidence": "intrinsic state (DORMANT); see spec_ref",
-      "verified_at": "2026-06-12T09:17:58+00:00",
+      "verified_at": "2026-06-12T10:02:25+00:00",
       "spec_ref": "master prompt RUNG 3 \u2014 assembles spec + parity evidence + BOM + birth-cert runbook"
     },
     {
@@ -153,7 +154,7 @@
       "name": "TrustFLEX provisioning path amendment to spec",
       "state": "DORMANT",
       "evidence": "intrinsic state (DORMANT); see spec_ref",
-      "verified_at": "2026-06-12T09:17:58+00:00",
+      "verified_at": "2026-06-12T10:02:25+00:00",
       "spec_ref": "docs/path-a-manufacturing-spec.md \u00a73 + \u00a78 partner ceremony"
     },
     {
@@ -162,7 +163,7 @@
       "name": "Manufacturer CA chained to reference root \u2014 design",
       "state": "DORMANT",
       "evidence": "intrinsic state (DORMANT); see spec_ref",
-      "verified_at": "2026-06-12T09:17:58+00:00",
+      "verified_at": "2026-06-12T10:02:25+00:00",
       "spec_ref": "docs/path-a-manufacturing-spec.md \u00a71 partner-redeploy model"
     },
     {
@@ -171,7 +172,7 @@
       "name": "Per-batch slot-config audit checklist",
       "state": "DORMANT",
       "evidence": "intrinsic state (DORMANT); see spec_ref",
-      "verified_at": "2026-06-12T09:17:58+00:00",
+      "verified_at": "2026-06-12T10:02:25+00:00",
       "spec_ref": "docs/path-a-manufacturing-spec.md \u00a78.2"
     },
     {
@@ -180,7 +181,7 @@
       "name": "Two-supplier cost model for critical parts",
       "state": "DORMANT",
       "evidence": "intrinsic state (DORMANT); see spec_ref",
-      "verified_at": "2026-06-12T09:17:58+00:00",
+      "verified_at": "2026-06-12T10:02:25+00:00",
       "spec_ref": "master prompt RUNG 3"
     },
     {
@@ -189,7 +190,7 @@
       "name": "IIP-64 PR #72 movement / merge",
       "state": "BLOCKED-ON-EXTERNAL",
       "evidence": "intrinsic state (BLOCKED-ON-EXTERNAL); see spec_ref",
-      "verified_at": "2026-06-12T09:17:58+00:00",
+      "verified_at": "2026-06-12T10:02:25+00:00",
       "spec_ref": "github.com/iotexproject/iips/pull/72 \u2014 operator-tracked"
     },
     {
@@ -198,7 +199,7 @@
       "name": "Spec-as-compliance-standard formalized",
       "state": "DORMANT",
       "evidence": "intrinsic state (DORMANT); see spec_ref",
-      "verified_at": "2026-06-12T09:17:58+00:00",
+      "verified_at": "2026-06-12T10:02:25+00:00",
       "spec_ref": "master prompt RUNG 4"
     },
     {
@@ -207,7 +208,7 @@
       "name": "Device-identity registry interop spec",
       "state": "DORMANT",
       "evidence": "intrinsic state (DORMANT); see spec_ref",
-      "verified_at": "2026-06-12T09:17:58+00:00",
+      "verified_at": "2026-06-12T10:02:25+00:00",
       "spec_ref": "IIP-64-aligned; gated on G4.1"
     }
   ]
