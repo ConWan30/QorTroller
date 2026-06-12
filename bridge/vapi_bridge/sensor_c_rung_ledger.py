@@ -46,6 +46,7 @@ from typing import Callable
 
 class GateState(str, Enum):
     LIVE = "LIVE"
+    LIVE_PARTIAL = "LIVE-PARTIAL"   # Cycle 7 / v0.1.2 — gate's question has partial evidence; sufficient for operator decision but not exhaustive. Distinct from D-HWFL-9's deferred LIVE-FRAGILE (single-point-of-failure flag).
     DORMANT = "DORMANT"
     HARDWARE_GATED = "HARDWARE-GATED"
     BLOCKED_ON_SENSOR_B = "BLOCKED-ON-SENSOR-B"
@@ -132,6 +133,59 @@ def _verify_g1_6_mfg_ca_file_present(repo_root: Path) -> tuple[GateState, str]:
     return GateState.UNVERIFIABLE, f"{ca_path} not found"
 
 
+def _verify_g2_7_esp32_cert_partial_evidence(repo_root: Path) -> tuple[GateState, str]:
+    """G2.7 — ESP32-class module certification status known (PARTIAL evidence).
+    Two-part verifier per D-HWFL-22: BOTH conditions required for LIVE-PARTIAL.
+
+    Part A: audits/ops_notes_cycle5.json contains S6.esp32-cert-status entry
+            with a non-empty summary (the operator-acknowledged narrative).
+    Part B: docs/qortroller-devkit-bom-v0_1.md C1 row text mentions the
+            "secure-element pairing required" finding (the narrative absorbed
+            into the canonical hardware-planning artifact).
+
+    Either part missing => UNVERIFIABLE (never spurious LIVE-PARTIAL). The
+    two-part rule keeps Sensor B narrative state and BOM canon synchronized;
+    if either drifts, G2.7 demotes. (HWFL-1 Cycle 7 — second
+    DORMANT-class-to-LIVE conversion; introduces LIVE-PARTIAL state via
+    Sensor C v0.1.2.)
+    """
+    # Part A — Sensor B narrative for S6 present
+    narratives_path = repo_root / "audits" / "ops_notes_cycle5.json"
+    if not narratives_path.exists():
+        return GateState.UNVERIFIABLE, "audits/ops_notes_cycle5.json missing (Sensor B narrative absent)"
+    try:
+        import json
+        narratives = json.loads(narratives_path.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001
+        return GateState.UNVERIFIABLE, f"ops_notes_cycle5.json parse failed: {exc!r}"
+    s6 = narratives.get("S6.esp32-cert-status", {})
+    s6_summary = s6.get("summary", "") if isinstance(s6, dict) else ""
+    if not (isinstance(s6_summary, str) and s6_summary.strip()):
+        return GateState.UNVERIFIABLE, "S6.esp32-cert-status narrative summary empty/missing"
+
+    # Part B — BOM C1 row absorbed the S6 finding
+    bom_path = repo_root / "docs" / "qortroller-devkit-bom-v0_1.md"
+    if not bom_path.exists():
+        return GateState.UNVERIFIABLE, "docs/qortroller-devkit-bom-v0_1.md missing"
+    bom_text = bom_path.read_text(encoding="utf-8", errors="ignore")
+    if "secure-element pairing required" not in bom_text:
+        return (
+            GateState.UNVERIFIABLE,
+            "BOM C1 row has not absorbed the S6 'secure-element pairing required' finding "
+            "(planning artifact desynced from Sensor B narrative)",
+        )
+
+    return (
+        GateState.LIVE_PARTIAL,
+        "S6 narrative (ops_notes_cycle5.json) + BOM C1 row both reference the "
+        "'NO Common Criteria/FIPS on landing page; ESP32 alone NOT a substitute for "
+        "ATECC608A; secure-element pairing required' finding. PARTIAL because S6 is "
+        "UNVERIFIED-EXTERNAL (Sensor B v0.1.1 schema; Claude WebFetch draft, not "
+        "operator-verified with verified_by+sources+verified_date). Promotion to "
+        "full LIVE requires S6 lifted to VERIFIED-EXTERNAL.",
+    )
+
+
 def _verify_g2_1_devkit_bom_exists(repo_root: Path) -> tuple[GateState, str]:
     """G2.1 — dev-kit BOM document v0.1 exists with structural integrity.
     Checks file existence + canonical part-IDs C1..C8 present + two-supplier
@@ -187,6 +241,7 @@ _VERIFIERS: dict[str, Callable[[Path], tuple[GateState, str]]] = {
     "verify_g1_6_mfg_ca_present":           _verify_g1_6_mfg_ca_file_present,
     "verify_g1_7_secure_element_honesty":   _verify_g1_7_secure_element_honesty_rail,
     "verify_g2_1_devkit_bom_exists":        _verify_g2_1_devkit_bom_exists,
+    "verify_g2_7_esp32_cert_partial":       _verify_g2_7_esp32_cert_partial_evidence,
 }
 
 
@@ -238,8 +293,9 @@ _CANONICAL_GATES: tuple[GateDef, ...] = (
             GateState.DORMANT, None,
             "master prompt RUNG 2 — Sensor Stack v2.1 #1/#4 measurement gates"),
     GateDef(2, "G2.7", "ESP32-class module cert status known",
-            GateState.BLOCKED_ON_SENSOR_B, None,
-            "Sensor B watch surface (not yet built — Cycle 3 per D-HWFL-1)"),
+            None, "verify_g2_7_esp32_cert_partial",
+            "Sensor B S6 (Cycle 5 narrative) + BOM C1 row absorption; promoted from "
+            "BLOCKED-ON-SENSOR-B to LIVE-PARTIAL in HWFL-1 Cycle 7 via Sensor C v0.1.2"),
 
     # RUNG 3 — ODM partner (evidence prep, all DORMANT)
     GateDef(3, "G3.1", "Partner-handoff package assembler",

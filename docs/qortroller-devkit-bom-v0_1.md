@@ -71,7 +71,7 @@ slot by default; two is recommended but not required.
 
 | ID | Description | Spec ref | Supplier 1 | Supplier 2 | Status | Notes |
 |---|---|---|---|---|---|---|
-| `C1` | MCU module (ESP32-class, Wi-Fi/BT, USB-OTG ≥ 1000 Hz) | HWFL-1 master prompt RUNG 2; Sensor C G2.2 | _(slot)_ | _(slot)_ | `UNVERIFIED-EXTERNAL` | Espressif ESP32-S3 is the v0.1 reference candidate; cert status pending Sensor B S6 |
+| `C1` | MCU module (ESP32-class, Wi-Fi/BT, USB-OTG ≥ 1000 Hz) | HWFL-1 master prompt RUNG 2; Sensor C G2.2 | _(slot)_ | _(slot)_ | `UNVERIFIED-EXTERNAL` | Espressif ESP32-S3 is the v0.1 reference candidate. Sensor B S6 (Cycle 5): wireless certs via boilerplate, NO Common Criteria/FIPS on landing page — ESP32 alone NOT a substitute for ATECC608A, secure-element pairing required (BOM C2). Cert status: PARTIAL |
 | `C2` | Secure element (ECDSA-P256, locked private-key extraction) | `docs/path-a-manufacturing-spec.md` §2 Hardware Requirement | _(slot)_ | _(slot)_ | `UNVERIFIED-EXTERNAL` | ATECC608A/B reference; alternatives YubiKey 5 PIV, STSAFE-A110. Sensor B S2 tracks lifecycle. |
 | `C3` | Left analog stick — Hall-effect or TMR | `wiki/methodology/sensor_stack_v2_1_architectural_revision.md` Surface 6 | _(slot)_ | _(slot)_ | `MEASUREMENT-PENDING` | 3 v0.1 candidates: K-Silver JH16 HE, MIDAS 5-pin HE, Magneto TMR. Gated on Empirical Unknown #4 (same-batch separability ≥20%). Sensor B S3/S4/S5 tracks availability. |
 | `C4` | Right analog stick — same family as C3 | (same as C3) | _(slot)_ | _(slot)_ | `MEASUREMENT-PENDING` | Same-family-as-C3 discipline: BOM cannot mix Hall + TMR across L/R, breaks calibration corpus assumption. |
