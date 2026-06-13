@@ -71,9 +71,9 @@ slot by default; two is recommended but not required.
 
 | ID | Description | Spec ref | Supplier 1 | Supplier 2 | Status | Notes |
 |---|---|---|---|---|---|---|
-| `C1` | MCU module (ESP32-class, Wi-Fi/BT, USB-OTG ≥ 1000 Hz) | HWFL-1 master prompt RUNG 2; Sensor C G2.2 | _(slot)_ | _(slot)_ | `UNVERIFIED-EXTERNAL` | Espressif ESP32-S3 is the v0.1 reference candidate. Sensor B S6 (Cycle 5): wireless certs via boilerplate, NO Common Criteria/FIPS on landing page — ESP32 alone NOT a substitute for ATECC608A, secure-element pairing required (BOM C2). Cert status: PARTIAL |
-| `C2` | Secure element (ECDSA-P256, locked private-key extraction) | `docs/path-a-manufacturing-spec.md` §2 Hardware Requirement | _(slot)_ | _(slot)_ | `UNVERIFIED-EXTERNAL` | ATECC608A/B reference; alternatives YubiKey 5 PIV, STSAFE-A110. Sensor B S2 tracks lifecycle. |
-| `C3` | Left analog stick — Hall-effect or TMR | `wiki/methodology/sensor_stack_v2_1_architectural_revision.md` Surface 6 | _(slot)_ | _(slot)_ | `MEASUREMENT-PENDING` | 3 v0.1 candidates: K-Silver JH16 HE, MIDAS 5-pin HE, Magneto TMR. Gated on Empirical Unknown #4 (same-batch separability ≥20%). Sensor B S3/S4/S5 tracks availability. |
+| `C1` | MCU module (ESP32-class, Wi-Fi/BT, USB-OTG ≥ 1000 Hz) | HWFL-1 master prompt RUNG 2; Sensor C G2.2 | _(slot)_ | _(slot)_ | `UNVERIFIED-EXTERNAL` | Espressif ESP32-S3 is the v0.1 reference candidate. Sensor B S6 (Cycle 5): wireless certs via boilerplate, NO Common Criteria/FIPS on landing page — ESP32 alone NOT a substitute for the C2 secure element (ATECC608B/608C-class), secure-element pairing required (BOM C2). Cert status: PARTIAL |
+| `C2` | Secure element (ECDSA-P256, locked private-key extraction) | `docs/path-a-manufacturing-spec.md` §2 Hardware Requirement | _(slot)_ | _(slot)_ | `UNVERIFIED-EXTERNAL` | **ATECC608B/608C-class family** (CryptoAuthLib-compatible, polling-based timing required per Cycle 16 spec amendment). The original ATECC608A is **NRND — do NOT specify for new designs**; it remains valid only as the Arc 1 bring-up reference part. Forward target ATECC608C-TFLXTLS (TrustFLEX). Alternatives YubiKey 5 PIV, STSAFE-A110. Sensor B S2 tracks lifecycle. |
+| `C3` | Left analog stick — Hall-effect or TMR | `wiki/methodology/sensor_stack_v2_1_architectural_revision.md` Surface 6 | _(slot)_ | _(slot)_ | `MEASUREMENT-PENDING` | Candidates (Cycle 17 intel): **K-Silver JH16 (Hall) / JS16 (TMR)** — one vendor, both physics, same form factor (best same-family fit); **GuliKit TMR** — the better-provenanced dominant commercial TMR vendor (use in place of the unsourceable "Magneto" label). **"MIDAS 5-pin HE" is a provenance gap** — no sourceable vendor found; treat as lower-confidence / re-identify before use. Gated on Empirical Unknown #4 (same-batch separability ≥20%, measured PER sensor physics — Hall and TMR not transferable). Sensor B S3/S4/S5 track availability. |
 | `C4` | Right analog stick — same family as C3 | (same as C3) | _(slot)_ | _(slot)_ | `MEASUREMENT-PENDING` | Same-family-as-C3 discipline: BOM cannot mix Hall + TMR across L/R, breaks calibration corpus assumption. |
 | `C5` | IMU (6-axis gyro + accel ≥ 1000 Hz polling) | `docs/path-a-manufacturing-spec.md` §5 PROOF_TIER_FULL requirement | _(slot)_ | _(slot)_ | `MEASUREMENT-PENDING` | Reference candidates ICM-42688-P / BMI270 / LSM6DSO. Stage A measurement Empirical Unknown #1 anchors selection. |
 | `C6` | USB-C connector + cable assembly | `docs/path-a-manufacturing-spec.md` §1 reference DualShock Edge USB-C | _(slot)_ | _(slot)_ | `UNVERIFIED-EXTERNAL` | Spec straightforward; supplier selection low-risk; recommend USB-IF certified. |
@@ -119,6 +119,18 @@ Which Sensor B canonical source unblocks which BOM row when populated:
 
 Future cycles may extend Sensor B's canonical source list to cover the
 three "no source yet" rows; that's a Sensor B v0.2 cycle decision.
+
+**Cycle 17 narrative findings (the topic IDs above are code-frozen canonical
+identifiers and are NOT renamed; the findings update the BOM rows they feed):**
+- `S3.k-silver-jh16-he-stick` — K-Silver ships BOTH a Hall (JH16) and a TMR
+  (JS16) in one form factor; strongest same-family fit for C3/C4.
+- `S4.midas-5pin-he-stick` — **PROVENANCE GAP**: no sourceable vendor exists for
+  the "MIDAS 5-pin HE" candidate. The topic ID is retained, but the C3/C4 row
+  treats MIDAS as lower-confidence pending vendor re-identification.
+- `S5.magneto-tmr-stick` — the dominant commercial TMR vendor is **GuliKit**, not
+  "Magneto"; C3/C4 tracks GuliKit as the better-provenanced TMR reference.
+- `S2.atecc608a-lifecycle` — the topic tracks the 608A→608B→608C **lifecycle**;
+  the C2 row now specifies the active 608B/608C-class family (608A is NRND).
 
 ---
 
