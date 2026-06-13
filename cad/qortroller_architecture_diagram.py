@@ -80,8 +80,8 @@ def build(out_dir: str) -> None:
     ax.text(0.3, 6.05, "1 · PHYSICAL INPUT (sensors)", fontsize=9,
             fontweight="bold", color="#9fd0ff")
     _box(ax, 0.3, 4.5, 2.5, 1.3, "C7 Adaptive Triggers ×2",
-         "programmable 1 kHz force-curve\nPRIMARY anti-cheat discriminator", C_PENDING,
-         "MEASUREMENT-PENDING")
+         "force-curve liveness extraction\nstrongest signal · aspirational-primary", C_PENDING,
+         "FTO + MEASUREMENT-PENDING")
     _box(ax, 3.1, 4.5, 2.3, 1.3, "C3 / C4 Sticks",
          "Hall/TMR · contactless\ndrift-free · L4 fingerprint", C_PENDING,
          "MEASUREMENT-PENDING")
