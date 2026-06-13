@@ -24,6 +24,8 @@ const VIEWS = [
   { id: 'grant',    num: '05', label: 'Grant · Brief',         accent: '#f0a868' },
   // Reference — canonical what/how/forward codex (public, no auth).
   { id: 'reference', num: '06', label: 'Reference',            accent: '#5bd6a3' },
+  // Partner Brief — self-contained manufacturer/partner pitch deck (public, no auth).
+  { id: 'partner',  num: '07', label: 'Partner · Brief',       accent: '#f0a868' },
 ]
 
 export function ViewSelector({ activeView, onViewChange }) {
