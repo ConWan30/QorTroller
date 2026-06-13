@@ -1263,16 +1263,16 @@ Section 12 — supersedes 2026-05-01 amendment in Section 11):
    inconsistent with the DID template), `KeyUsage=SIGN_VERIFY`. Key
    aliases: `alias/vapi-anchor-sentry-signing` and
    `alias/vapi-guardian-signing`.
-2. Configure key policy + IAM credentials: only the bridge IAM role
-   can `kms:Sign` on these 2 specific KMS keys (minimum-privilege
-   scoping); only the operator's IAM user can
+2. Configure key policy + IAM credentials (**design target — verify
+   applied per the private DR runbook; see D3 reconciliation note**):
+   only the bridge IAM role can `kms:Sign` on these 2 specific KMS keys
+   (minimum-privilege scoping); only the operator's IAM user can
    `kms:UpdateKeyDescription`, `kms:DisableKey`, `kms:DeleteKey`,
    etc. (administrative actions). Bridge IAM user credentials
-   delivered as long-lived `AWS_ACCESS_KEY_ID` +
-   `AWS_SECRET_ACCESS_KEY` + `AWS_REGION=us-east-1` env vars in
+   delivered as long-lived AWS IAM env vars in
    `bridge/.env` (gitignored, mode 600 directory; matches existing
-   pattern for `BRIDGE_PRIVATE_KEY` IoTeX wallet, GitHub App PEM
-   paths at `bridge/secrets/`, and `ANTHROPIC_API_KEY` placeholders).
+   pattern for the IoTeX wallet key, GitHub App PEM paths, and
+   API-key placeholders).
 3. Export public key from KMS via `aws kms get-public-key` (one-time,
    post-creation). DER-encoded SubjectPublicKeyInfo; convert to hex
    for the DID document.
@@ -2162,7 +2162,7 @@ findings:
 | Curve | NIST P-256 (`ECC_NIST_P256`) | secp256k1 (Lit-specific) | **secp256k1 (`ECC_SECG_P256K1`)** (preserved) |
 | GitHub App auth | KMS-managed Option B export ceremony | RSA-2048 PEMs retained from Section 6.2 | **RSA-2048 PEMs retained** (preserved) |
 | Backup/DR posture | Not explicitly addressed | Lit MPC TSS resilience + DID rotation | **Single-region (us-east-1) + DID rotation per Section 10 Note 6** |
-| IAM credentials delivery | Not explicitly addressed | N/A (Lit auth model) | **Long-lived AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY in bridge/.env (mode 600 gitignored), kms:Sign minimum-privilege scoping** |
+| IAM credentials delivery | Not explicitly addressed | N/A (Lit auth model) | **Long-lived AWS IAM creds in bridge/.env (mode 600 gitignored); kms:Sign minimum-privilege scoping is the DESIGN TARGET — as-deployed scope verified privately, see D3 reconciliation note** |
 | Architectural risk | Verification gaps in P-256 + GitHub App auth assumptions | Naga V1 sunset risk (unverified at amendment time) | **Stable production infrastructure (12-year AWS KMS API stability)** |
 | First-of-its-kind precedent risk | Yes (Web3 KMS → GitHub App JWT) | None (RSA-2048 standard auth) | **None preserved** |
 | DePIN thesis at operator-agent layer | Compromised (AWS centralization) | Preserved (Lit decentralization) | **Compromised, but bounded — protocol trust root remains hardware-anchored** |
@@ -2297,11 +2297,20 @@ considered and rejected (does not address AWS account loss failure
 mode).
 
 **D3 (IAM credentials delivery)**: Long-lived AWS IAM user access
-keys delivered as `AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` +
-`AWS_REGION=us-east-1` env vars in `bridge/.env` (gitignored, mode
+keys delivered as env vars in `bridge/.env` (gitignored, mode
 600 directory). Bridge IAM user has `kms:Sign` minimum-privilege
 scoping on the 2 specific KMS keys only; operator IAM user retains
 administrative actions.
+
+> **[Reconciliation 2026-06-13 — design target vs as-deployed]** The
+> `kms:Sign` minimum-privilege scoping described above is the **required
+> design target**, NOT a verified as-deployed claim. As-deployed IAM-scope
+> verification status and any remediation gap are tracked in
+> `docs/disaster-recovery-runbook.private.md` (gitignored, operator-local).
+> Until that private verification confirms the scope-down has been applied,
+> treat bridge IAM minimum-privilege as a design target, not an implemented
+> control. (This note resolves the design-vs-reality discrepancy flagged in
+> the F-EXT sweep without restating the private finding.)
 
 **D4 (KMS-vs-import constraint block treatment)**: Preserve MOOT
 callout. Update reasoning from Lit-specific "non-exportable by MPC
