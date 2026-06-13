@@ -25,7 +25,7 @@ download it. The `Annotation` column is the callout text for the exploded view.
 | **Manufacturer site** | Authoritative STEP/IGES | Espressif, Microchip, TDK/InvenSense, Bosch, ST all publish 3D CAD |
 | **SnapEDA** | PCB footprint + 3D STEP | Free; great for ICs/connectors |
 | **Ultra Librarian** | Footprint + 3D | Vendor-backed |
-| **GrabCAD** | Community STEP (incl. DualSense / Edge reference bodies) | Verify dims; community-made |
+| **GrabCAD** | Community STEP (incl. DualSense / Edge bodies — use ONLY as a dimensional sanity-check envelope, NEVER as a surface to reshape or trace into your design; IP hazard) | Verify dims; community-made |
 | **TraceParts / 3DContentCentral** | Connectors, hardware, fasteners | Industrial standard parts |
 
 **Reachability tip:** before manual hunting, HEAD-probe candidate URLs with the
@@ -45,7 +45,7 @@ vendor research; see `audits/url-reachability-cycle-17-2026-06-13.md`).
 | **C4** | Right analog stick — same family as C3 | (same as C3) | (same as C3) | Same as C3; same-family L/R is mandatory (mixing Hall+TMR breaks the calibration corpus) | "C4 — Right stick (same family as C3) · L/R must match sensing physics" |
 | **C5** | IMU — 6-axis gyro+accel ≥1000 Hz | ≈ 3 × 3 × 0.9 mm (ICM-42688-P LGA-14) | TDK InvenSense → "ICM-42688-P" STEP; or Bosch "BMI270"; or ST "LSM6DSO" | Motion + gravity vector; gravity-postural fingerprint (AIT) + anti-spoof IMU/HID discrepancy check | "C5 — 6-axis IMU · gravity-postural biometric (AIT) · injection-detect" |
 | **C6** | USB-C connector + cable | ≈ 9 × 7.5 × 3.2 mm (receptacle) | TraceParts / SnapEDA "USB-C receptacle"; USB-IF | Wired data path (the protocol's exclusive-capture link) + power/charge | "C6 — USB-C · exclusive-capture data link · 1 kHz HID over USB" |
-| **C7** | Adaptive trigger × 2 (L2/R2) | ≈ 30 × 18 × 25 mm per trigger assy (motor + geartrain + lever) | **Custom — model from scratch**; DualSense Edge trigger as ref geometry (GrabCAD) | **The novel IP.** Programmable force-curve; the strongest anti-cheat discriminator (translator HW can't synthesize a biomechanical 1 kHz force curve); doubles as a challenge-response channel | "C7 — Adaptive trigger ×2 · programmable 1 kHz force-curve · PRIMARY anti-cheat discriminator + challenge channel" |
+| **C7** | Adaptive trigger × 2 (L2/R2) | ≈ 30 × 18 × 25 mm per trigger assy (motor + geartrain + lever) | **Custom electromechanical — model from scratch.** Edge trigger = dimensional sanity-check only, never reshaped/traced; FTO-gated. The L6 piezo haptic driver (Boréas) is a SEPARATE part on a different surface — see sourcing sheet. | **Strongest signal surface** — NOT "the IP" (the actuator is patented prior art). The novelty is the **force-curve liveness extraction**: reading a biomechanical 1 kHz curve translator HW can't synthesize and turning it into a humanity signal (L4). Aspirational-primary; gated on FTO + Stage A. | "C7 — Adaptive trigger ×2 · force-curve liveness extraction (the novelty) · aspirational-primary signal surface" |
 | **C8** | Touchpad — capacitive 12-bit X/Y 2-point | ≈ 50 × 30 × 1.5 mm (sensor area) | Microchip/Cypress touch-IC STEP + custom overlay | 2-point capacitive input; co-signal data-volume surface | "C8 — Capacitive touchpad · 12-bit 2-point · co-signal surface" |
 
 ---
@@ -65,7 +65,7 @@ vendor research; see `audits/url-reachability-cycle-17-2026-06-13.md`).
 | BOM | Component | Nominal dims | Real-model source | Function | Annotation |
 |---|---|---|---|---|---|
 | **E1** | PCB substrate (4-layer min, controlled-Z for USB-HS) | ≈ 95 × 55 × 1.6 mm (main board outline) | **Design in KiCad → export STEP** | The board everything mounts to; defines internal real-estate | "E1 — 4-layer mainboard · controlled-impedance USB-HS" |
-| **E2** | Enclosure shell | (the thing you're designing) | **Start from DualSense Edge ref (GrabCAD), reshape in Fusion** | Ergonomic housing; the printable part | (the shell itself) |
+| **E2** | Enclosure shell | (the thing you're designing) | **Model from generic ergonomic primitives in Fusion** (your own sketch → loft → shell). Edge body = dimensional sanity-check overlay ONLY, never reshaped/traced. **FTO read before any shell STEP externalizes.** | Ergonomic housing; the printable part | (the shell itself) |
 | **E3** | Internal cable harness | route-dependent | model as swept pipes in Fusion | Interconnect; gated on PCB layout | "E3 — harness" |
 
 ---

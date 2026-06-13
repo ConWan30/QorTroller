@@ -53,11 +53,35 @@ manufacturer site (authoritative).
 - **STEP model:** SnapEDA or TraceParts "USB-C receptacle 16-pin"
 - **Verify:** USB-IF certified, data-capable (not power-only), through-hole+SMT hybrid mount
 
-### C7 — Adaptive trigger × 2 (the IP)
-- **Candidate:** **CUSTOM mechanism** — no off-shelf model. Use a **DualSense Edge** body from GrabCAD as the size/geometry reference, model the lever+actuator+linkage yourself (Fusion Stage 6).
-- **Haptic driver IC (the piezo path):** **Boréas BOS1901 / BOS1921** (CapDrive piezo driver) — `CANDIDATE` (see Sensor Stack v2.2 design note)
-- **STEP model:** Boréas site for the driver IC; trigger mechanism = your design
-- **Verify:** reproduce a 1 kHz, 8-bit-per-axis force curve; this is the PRIMARY discriminator + the L6 challenge channel
+### C7 — Adaptive trigger × 2 (strongest signal surface) — TWO distinct parts
+
+The novelty is **NOT the actuator hardware** (adaptive triggers are patented prior
+art). The novelty is the **force-curve liveness extraction** — the protocol reading a
+biomechanical 1 kHz force curve that translator hardware can't synthesize and turning
+it into a humanity signal. The two parts below serve **different target surfaces** and
+must not be conflated:
+
+**C7-actuator — the electromechanical trigger mechanism**
+- **Candidate:** **CUSTOM, clean-sheet** — no off-shelf model. Model the lever +
+  actuator + linkage yourself (Fusion Stage 6). A DualSense Edge body is a
+  **dimensional sanity-check ONLY** — never reshaped/traced (IP hazard).
+- **Target surface:** L4 (the force-curve signal source) — the *sensing* of applied
+  force. The actuator provides programmable resistance; the **analysis** is the IP.
+- **Gate:** freedom-to-operate (FTO) read BEFORE any geometry externalizes, AND Stage A
+  separability measurement. `CUSTOM` · `aspirational-primary`.
+- **STEP model:** your design (no external source).
+
+**L6-haptic-driver — the piezo feedback driver (a SEPARATE component)**
+- **Candidate:** **Boréas BOS1901 / BOS1921** (CapDrive piezo driver) — `CANDIDATE`
+  (see Sensor Stack v2.2 design note).
+- **Target surface:** L6 active challenge-response (the *stimulus* the protocol issues
+  to provoke a reflex) — NOT the trigger actuator. Different surface, different part.
+- **STEP model:** Boréas site for the driver IC.
+- **Verify:** sub-ms localized pulse for the 80–280 ms reflex window; gated on the L6B
+  N≥50 corpus.
+
+**Do not merge these into one "trigger" line** — the actuator (force *sensing* source,
+L4) and the haptic driver (reflex *stimulus*, L6) are distinct surfaces.
 
 ### C8 — Touchpad
 - **Candidate part:** Microchip **MTCH6303** or Azoteq **IQS7211** capacitive touch controller + custom overlay — `CANDIDATE`
@@ -93,7 +117,7 @@ manufacturer site (authoritative).
 
 Biggest fit-risk first, so surprises surface early:
 
-1. **C7 reference body** — DualSense Edge from GrabCAD (for trigger geometry + overall size)
+1. **Envelope sanity-check (optional)** — a DualSense Edge body from GrabCAD for **dimensional comparison ONLY** (does my design fit a similar hand-envelope?). Never reshape or trace it — model from primitives. FTO read before any geometry externalizes.
 2. **C3/C4 stick module** — GrabCAD Hall/TMR module
 3. **C1 ESP32-S3-WROOM-1** — Espressif/SnapEDA
 4. **C5 ICM-42688-P** — TDK/SnapEDA

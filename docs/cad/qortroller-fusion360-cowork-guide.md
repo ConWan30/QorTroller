@@ -59,7 +59,7 @@ Swap the nominal blocks for authoritative geometry, one at a time. Priority orde
 
 | Priority | Part | Get the STEP from |
 |---|---|---|
-| 1 | **C7 adaptive trigger** | No off-shelf STEP — model from scratch (Stage 6). Grab a DualSense Edge body from **GrabCAD** as a size reference. |
+| 1 | **C7 adaptive trigger** | No off-shelf STEP — model from scratch (Stage 6). A DualSense Edge body may be imported as a **dimensional sanity-check ONLY** — never reshaped or traced (IP hazard). |
 | 2 | **C3/C4 sticks** | GrabCAD "Hall effect joystick module"; check K-Silver / GuliKit |
 | 3 | **C1 ESP32-S3** | Espressif site → "ESP32-S3-WROOM-1" STEP (or SnapEDA) |
 | 4 | **C5 IMU** | TDK InvenSense "ICM-42688-P" / Bosch "BMI270" |
@@ -89,13 +89,27 @@ can't find a model for — I'll suggest an alternative source or we model it.
 
 ## Stage 5 — Model the ergonomic shell (60–90 min)
 
-Don't model grips from a blank canvas. Two routes — tell me which you prefer:
+**IP guardrail (read first):** model the shell from **generic ergonomic
+primitives** — your own surfaces. A DualSense Edge body may be imported ONLY as a
+**dimensional sanity-check overlay** (a translucent reference to confirm your design
+fits a similar hand-envelope). **Never reshape the Edge body into your design** and
+never trace its surfaces — deriving from Sony's industrial design is an IP hazard.
+And **no shell STEP gets shared externally (partner, publish) before a
+freedom-to-operate read.**
 
-- **Route A (recommended): reshape a reference.** Import a DualSense Edge body from GrabCAD, use it as a sub-D / surface reference, and reshape grips to your design. Fastest path to a credible ergonomic form.
-- **Route B: parametric from scratch.** Sketch the top profile → loft the grips with the **Form** (T-Spline) environment → shell to ~2.5 mm wall.
+**The only route — parametric from primitives:**
+1. Sketch your own top profile (the controller's silhouette) from scratch.
+2. Loft/extrude the body; sculpt the grips in the **Form** (T-Spline) environment
+   using your own curves.
+3. Shell to ~2.5 mm wall.
+4. (Optional) drop a translucent Edge body in the scene purely to eyeball that your
+   envelope is in a sane hand-size range — then delete it. It is a ruler, not a
+   starting surface.
 
-**You:** rough the shell so the internal skeleton fits inside with ≥1.5 mm clearance.
-**Bring back to me:** a screenshot of the shell + skeleton together. → I'll critique fit, wall thickness, and printability (overhangs, split line for printing halves).
+**You:** rough the shell from your own primitives so the internal skeleton fits
+inside with ≥1.5 mm clearance.
+**Bring back to me:** a screenshot of the shell + skeleton together. → I'll critique
+fit, wall thickness, and printability (overhangs, split line for printing halves).
 
 ---
 
