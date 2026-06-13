@@ -14,7 +14,7 @@ QorTroller is the reference implementation of **V.A.P.I.** (Verifiable Autonomou
 
 ## 2. State of development — honest grade
 
-**Engineering maturity: advanced prototype, testnet-only, single-operator.** This is not a toy and not a product. It is a deeply-built research protocol with ~5,766 automated tests, 173 fail-closed CI invariants, and 66 deployed contracts on IoTeX testnet (58 active per the Cycle 15 contract-status audit). But the credibility gaps are real and self-disclosed:
+**Engineering maturity: advanced prototype, testnet-only, single-operator.** This is not a toy and not a product. It is a deeply-built research protocol with ~5,766 automated tests, 174 fail-closed CI invariants, and 66 deployed contracts on IoTeX testnet (58 active per the Cycle 15 contract-status audit). But the credibility gaps are real and self-disclosed:
 
 - **No mainnet. No token. No external Solidity audit. N=3 player corpus.** The protocol states this plainly in its own `ARCHITECTURE.md`.
 - **The separation-ratio story is mixed and disclosed as such:** the AIT probe clears the tournament gate (ratio 1.199, N=37, all inter-player pairs >1.0), but full-corpus free-form gameplay does *not* separate players (ratio ≈ 0.06 — the known WIF-009 plateau). Identity-grade biometric ID has an EER ceiling (~29%); the protocol pivoted from "identity" to "presence" (the L9 arc) precisely because that is the honest claim it can make today.
