@@ -56,11 +56,25 @@ human input → sensors → MCU builds the 228-byte record → secure element si
 
 ## What we need from a partner (by partner type)
 
-| Partner | Best-fit role | Specific asks |
-|---|---|---|
-| **Qorvo** | RF / connectivity / power-management ICs; possibly MEMS | Component alignment for the wireless + power path; design-partner intro. *(Note: Qorvo's acoustic-wave strength is BAW/SAW RF filters — we are NOT asking them for haptic piezo.)* |
-| **Boréas Technologies** | Piezo haptic actuation (CapDrive) | The L6 challenge-response channel — microsecond-accurate, silent, localized trigger-cap haptics. This is the strongest piezo fit (see Sensor Stack v2.2 design note). |
-| **Battle Beaver / mod-house / X-manufacturer** | Assembly, Hall/TMR stick integration, small-run build | Reference dev-kit assembly; stick-module sourcing + integration expertise |
+Ranked by what most determines whether QorTroller can exist as purpose-built
+hardware — the actuation development partner is **first** because the adaptive
+trigger is both the strongest signal surface and the biggest design+IP risk.
+
+| Rank | Partner type | Best-fit role | Specific asks |
+|---|---|---|---|
+| **1** | **Adaptive-trigger / force-feedback actuation development partner** (force-feedback actuator specialist; haptics R&D house) | Co-develop a **novel, freedom-to-operate-clean** programmable-resistance trigger actuator | The load-bearing partnership. A reprogrammable 1 kHz force-curve trigger is the strongest signal surface AND the hardest part to build without infringing existing adaptive-trigger IP. We need an actuation partner to co-design a clean-sheet mechanism, NOT to clone an existing one. |
+| **2** | **Boréas Technologies** | Piezo haptic driver (CapDrive) | The L6 challenge-response *haptic-driver* path — microsecond-accurate, silent, localized pulses. This is the haptic-feedback channel, distinct from the trigger actuator (rank 1). See Sensor Stack v2.2 design note. |
+| **3** | **Qorvo** | RF / connectivity / power-management ICs; possibly MEMS | Component alignment for the wireless + power path; design-partner intro. *(Qorvo's acoustic-wave strength is BAW/SAW RF filters — we are NOT asking them for haptic piezo or the trigger actuator.)* |
+| **4** | **Battle Beaver / mod-house / X-manufacturer** | Assembly, Hall/TMR stick integration, small-run build | Reference dev-kit assembly; stick-module sourcing + integration expertise |
+
+**Freedom-to-operate (FTO) caveat — read before any external send or build.**
+Programmable-resistance "adaptive" triggers are an actively-patented space (Sony
+holds significant adaptive-trigger IP). QorTroller does NOT propose to copy an
+existing trigger. The rank-1 partnership is specifically to **co-develop a
+clean-sheet actuator** under a freedom-to-operate analysis. No trigger geometry
+should be externalized (shared as a CAD/STEP file with a partner, or published)
+before an FTO read. Until that read clears, the adaptive trigger is an
+**aspirational-primary** surface, not a committed design.
 
 ---
 
@@ -68,9 +82,14 @@ human input → sensors → MCU builds the 228-byte record → secure element si
 
 This is the part that earns trust — we are explicit about it:
 
-- **PRIMARY discriminator (C7 adaptive trigger):** the strongest anti-cheat signal;
-  translator hardware (Cronus/XIM) physically cannot synthesize a biomechanical 1 kHz
-  force curve. **Status: candidate — Stage A separability measurement pending.**
+- **Aspirational-primary signal surface (C7 adaptive trigger):** the *strongest signal
+  surface* in the design — but the novelty is NOT the actuator hardware (adaptive
+  triggers are patented prior art). **The novelty is the force-curve liveness
+  extraction**: the protocol reads a biomechanical 1 kHz force curve that translator
+  hardware (Cronus/XIM) cannot synthesize, and turns it into a humanity signal. **Status:
+  aspirational-primary — gated on BOTH (a) a freedom-to-operate-clean actuator
+  co-developed with the rank-1 partner, AND (b) Stage A separability measurement.** Not a
+  committed lead until both clear.
 - **Sticks / IMU (C3/C4/C5):** drift-free contactless sensing as L4 fingerprint
   surfaces. **Status: measurement-pending.**
 - **Secure element (C2):** silicon root of trust; we already run the full cert/registry
