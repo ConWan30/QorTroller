@@ -1,7 +1,7 @@
 # QorTroller — Full Project Assessment
 
 **Date:** 2026-06-13
-**Author:** Claude Code session (HWFL-1 /goal close-out)
+**Author:** Claude Code session (HWFL-1 /goal close-out; updated through Cycle 17)
 **Status of this document:** point-in-time engineering + product assessment. Written to the project's own honesty discipline — claims are graded, not marketed.
 
 ---
@@ -60,7 +60,7 @@ This is the part the HWFL-1 loop exists to enable. The "QorTroller" is currently
 ### The hardware staircase (Sensor C's Rungs 1→4)
 
 - **Rung 1 (largely LIVE):** registry + CA + cert infrastructure proven in software.
-- **Rung 2 (2/7 LIVE — the current frontier):** the dev-kit. ESP32-class MCU + secure element (the ATECC608B/608C-TFLXTLS family the Sensor B narratives tracked — see the Cycle 16 Path A spec amendment) + Hall-effect/TMR sticks + IMU + **adaptive-trigger mechanism** (the single strongest L4 discriminator — Sony-class force-curves at 1 kHz / 8-bit that translator hardware like Cronus/XIM physically cannot synthesize) + capacitive touchpad. Gated on **Stage A measurements** (Empirical Unknown #1: intra-vs-inter-player trigger Mahalanobis > 1.0; Empirical Unknown #4: Hall-effect same-batch stick separability > 20%).
+- **Rung 2 (2/7 LIVE — the current frontier):** the dev-kit. ESP32-class MCU + secure element (the ATECC608B/608C-TFLXTLS family the Sensor B narratives tracked — see the Cycle 16 Path A spec amendment) + Hall-effect/TMR sticks + IMU + **adaptive-trigger mechanism** (the single strongest L4 discriminator — Sony-class force-curves at 1 kHz / 8-bit that translator hardware like Cronus/XIM physically cannot synthesize) + capacitive touchpad. Gated on **Stage A measurements** (Empirical Unknown #1: intra-vs-inter-player trigger Mahalanobis > 1.0; Empirical Unknown #4: Hall-effect same-batch stick separability > 20%). The Cycle 17 Sensor B stick-vendor intel pass added two material qualifications to the BOM stick rows (C3/C4): the "MIDAS 5-pin Hall-effect" candidate has **no sourceable vendor** (provenance gap — should be re-identified or dropped), and the "Magneto TMR" candidate is better represented by **GuliKit**, the dominant commercial TMR vendor. A useful convergence also surfaced: K-Silver ships both a Hall (JH16) and a TMR (JS16) in one form factor, which would let the dev-kit hold L/R same-family discipline while A/B-testing the two sensing physics without a footprint change. A load-bearing measurement caveat is now explicit: per-unit separability must be measured **per sensor technology** (Hall vs TMR), not assumed transferable.
 - **Rung 3:** factory provisioning — TrustFLEX pre-provisioned secure elements, MFG CA chained to a hardware HSM root (which also closes the OA-1 / OA-4 single-copy-CA finding permanently), two-supplier discipline, partner-handoff package.
 - **Rung 4:** the spec *as* a compliance standard, device-identity registry interop, IIP-64 post-quantum precompile dependency (external, IoTeX core).
 
@@ -86,7 +86,12 @@ QorTroller is a **cryptographically rigorous, intellectually honest, exceptional
 
 - **OA-1** — MFG CA backup (5-min action; operational-fragility-only now, since the path leaked to public history per F-CYCLE9-1).
 - **OA-4** — HSM-root migration (closes both the single-point-of-failure pattern *and* the disclosure trail; the only move that does both).
+- **BOM stick rows (C3/C4)** — re-identify or drop the "MIDAS 5-pin HE" candidate (no sourceable vendor), and track GuliKit as the better-provenanced TMR reference in place of "Magneto" (Cycle 17 Sensor B intel; both are UNVERIFIED-EXTERNAL pending operator review).
 - **F-HWFL-5-2** — *CLOSED Cycle 16* (the canonical Path A spec no longer points partners at the NRND ATECC608A; now specifies the active 608B/608C-class family with mandatory polling-based timing).
+
+### HWFL-1 (Hardware Futures Loop) status — agent-buildable surface exhausted as of Cycle 17
+
+The persistent sensor loop that drives this planning work reached a clean plateau at Cycle 17 (2026-06-13). Three sensors are live and stable: **Sensor A** (v0.1 static spec/impl parity + v0.2 live-state-vs-CLAUDE.md drift), **Sensor B** (v0.1.1 supply/standards watch — all 7 sources now populated, PENDING drained to zero), and **Sensor C** (v0.1.3 rung-gate ledger — 22 gates across Rungs 1–4). Every clearly-specified finding the loop surfaced is closed: F-CYCLE10-1 (contract-count drift, both options), F-CYCLE12-1 (test-count drift), F-HWFL-5-1 (vendor-fetch failures → reachability prober), F-HWFL-5-2 (NRND spec amendment). Two companion modules were added — a multi-source URL reachability prober and a contract active-vs-superseded auditor (58 ACTIVE / 3 SUPERSEDED / 5 DEPRECATED-INFERRED). The remaining open items are correctly out of autonomous scope: **F-CYCLE9-1** (git-history rewrite — on the never-without-explicit-request list), **F-CYCLE17-1** (a minor WebFetch-vs-prober reachability caveat), and the **hardware-gated Rung 2–4 gates** (Stage A measurements, dev-kit fabrication, partner handoff). Future loop cycles fire on operator-brought intel or real hardware events, not autonomous build.
 
 ---
 
@@ -97,6 +102,8 @@ QorTroller is a **cryptographically rigorous, intellectually honest, exceptional
 - Hardware staircase ledger: `audits/rung-gate-ledger-latest.json` + `bridge/vapi_bridge/sensor_c_rung_ledger.py`
 - Live-state drift sensor: `bridge/vapi_bridge/sensor_a_live_drift.py` + `audits/live-state-drift-cycle-13-2026-06-12.md`
 - Contract active-vs-superseded audit: `audits/contract-status-cycle-15-2026-06-13.md`
-- Path A manufacturing spec: `docs/path-a-manufacturing-spec.md`
+- URL reachability prober: `bridge/vapi_bridge/multi_source_prober.py` + `audits/url-reachability-cycle-17-2026-06-13.md`
+- Sensor B supply/standards watch (7 sources populated): `audits/hardware-watch-cycle-17-2026-06-13.md`
+- Path A manufacturing spec (Cycle 16 family-language amendment): `docs/path-a-manufacturing-spec.md`
 - Dev-kit BOM: `docs/qortroller-devkit-bom-v0_1.md`
 - Deeper assessments: `docs/QORTROLLER_IN_DEPTH_ASSESSMENT.md`, `docs/qortroller_genesis_assessment.md`
