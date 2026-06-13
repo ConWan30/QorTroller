@@ -422,11 +422,25 @@ class CuratorPackagingLoop:
             return None
         # Lazy import — avoids pulling numpy into bridge boot when VHR is OFF.
         from .replay_proof_pipeline import VAPIReplayProofPipeline
+        from .replay_proof_pipeline.groth16_prover import Groth16Prover
+        # Ceremony gate (b) — wire the real snarkjs-backed Groth16 prover when its
+        # artifacts (.zkey / .wasm / compute_inputs.js) are present next to the
+        # module; otherwise fall back to DeferredProver (honest no-op). is_available()
+        # guards artifact EXISTENCE so a missing ceremony can never fabricate a proof.
+        # If artifacts exist but node/snarkjs can't run, prove() catches the
+        # subprocess error and returns a deferred_reason — still honest, surfaced in
+        # the audit log. prove() runs via asyncio.to_thread in the pipeline, so the
+        # CPU-heavy proof stays off the ingestion event loop.
+        _g16 = Groth16Prover()
+        _prover = _g16 if _g16.is_available() else None
         self._vhr_pipeline = VAPIReplayProofPipeline(
-            chain=self._chain, cfg=self._cfg, store=self._store,
+            chain=self._chain, cfg=self._cfg, store=self._store, prover=_prover,
         )
-        log.info("[CURATOR] VHR pipeline active (Arc 5). Default prover is "
-                 "DeferredProver until ceremony populates zk_artifacts.")
+        log.info(
+            "[CURATOR] VHR pipeline active (Arc 5). Prover=%s (ceremony artifacts %s).",
+            "Groth16Prover" if _prover is not None else "DeferredProver",
+            "present" if _prover is not None else "absent",
+        )
         return self._vhr_pipeline
 
     async def on_session_complete_vhr(
