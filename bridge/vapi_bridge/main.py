@@ -1360,8 +1360,36 @@ class Bridge:
         if getattr(self.cfg, "operator_api_key", ""):
             try:
                 from .session_adjudicator_validator import SessionAdjudicatorValidationAgent
+                # Arc 5 Commit 6 FIX — wire the VHR hook into the ALWAYS-ON validator.
+                # This is the validator that actually starts in the default config;
+                # the earlier BISECT_B5B-gated construction (which passed curator_loop)
+                # does NOT run here, so without this the VHR hook is a permanent
+                # no-op (_maybe_fire_vhr_hook returns early on curator_loop is None)
+                # and curator_packaging_log never gets a row → dashboard "NONE YET".
+                # Construction is cheap; on_session_complete_vhr stays dormant unless
+                # vhr_hook_enabled + replay_proof_pipeline_enabled are set.
+                _vhr_curator_loop = None
+                try:
+                    from .curator_packaging_loop import CuratorPackagingLoop
+                    _vhr_curator_loop = CuratorPackagingLoop(
+                        chain=getattr(self, "chain", None), cfg=self.cfg, store=self.store,
+                    )
+                    log.info(
+                        "Arc 5 Commit 6 — VHR CuratorPackagingLoop wired into "
+                        "SessionAdjudicatorValidationAgent (vhr_hook_enabled=%s, "
+                        "replay_proof_pipeline_enabled=%s, session_gamer_address=%s)",
+                        getattr(self.cfg, "vhr_hook_enabled", False),
+                        getattr(self.cfg, "replay_proof_pipeline_enabled", False),
+                        (getattr(self.cfg, "session_gamer_address", "") or "<unset>")[:18],
+                    )
+                except Exception as _cpl_exc:  # noqa: BLE001 — fail-open
+                    log.warning(
+                        "Arc 5 Commit 6 — VHR CuratorPackagingLoop construction "
+                        "failed (VHR hook will be a no-op): %s", _cpl_exc,
+                    )
                 _validator = SessionAdjudicatorValidationAgent(self.cfg, self.store, bus=_bus,
-                                                               pcc_monitor=getattr(self, "_pcc_monitor", None))
+                                                               pcc_monitor=getattr(self, "_pcc_monitor", None),
+                                                               curator_loop=_vhr_curator_loop)
                 _t = asyncio.create_task(_validator.run_event_consumer())
                 _t.set_name("SessionAdjudicatorValidationAgent")
                 _t.add_done_callback(_task_done_handler)
