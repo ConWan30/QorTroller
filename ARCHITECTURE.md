@@ -59,10 +59,10 @@ Other live families: `VAPI-AGENT-COMMIT-v1`, `VAPI-VAME-v1`, `VAPI-ZKBA-ARTIFACT
 | Surface | Count | Source |
 |---|---|---|
 | Solidity source files in `contracts/contracts/*.sol` | 80 | `ls contracts/contracts/*.sol \| wc -l` |
-| Deployed addresses on IoTeX testnet | 68 | `contracts/deployed-addresses.json` (count of 0x-prefixed string values) |
-| Substantive (excludes mocks + superseded versions) | ~55 | per `README.md` headline; manual roll-up |
+| Deployed contract addresses on IoTeX testnet | 66 | `audits/contract-status-cycle-15-2026-06-13.md` (addr-shaped non-meta keys in `deployed-addresses.json`; excludes 2 deployer-wallet + 1 vk-hash 0x meta-entries) |
+| Currently-active (excludes superseded + deprecated-by-versioning) | 58 | same audit — 58 ACTIVE / 3 explicitly SUPERSEDED / 5 deprecated-by-versioning |
 
-The 80 ↔ 68 gap = mocks / test verifiers / library helpers / undeployed candidates. The 68 ↔ 55 gap = superseded versions (e.g., `VAPIProtocolLens_v1_superseded`) + auxiliary registries.
+The 80 ↔ 66 gap = mocks / test verifiers / library helpers / undeployed candidates. The 66 ↔ 58 gap = 3 explicitly-superseded (e.g., `VAPIProtocolLens_v1_superseded`, `SeparationRatioRegistry_superseded`) + 5 deprecated-by-versioning (bare names with a higher-version sibling, e.g., `TournamentGate` vs `TournamentGateV3`). All 66 remain on-chain and callable — supersession is a classification overlay, not a removal.
 
 ## Honest status (2026-06-10)
 
