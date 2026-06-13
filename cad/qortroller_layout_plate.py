@@ -49,6 +49,7 @@ BOARD_T = 1.6    # NOMINAL 4-layer PCB thickness (Z)
 
 @dataclass(frozen=True)
 class Part:
+    id: str
     label: str
     l: float
     w: float
