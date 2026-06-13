@@ -1,0 +1,13 @@
+{
+  "_note": "Cycle 17 stick-vendor reachability pre-check before WebFetch intel-gathering. Uses the Cycle 14 prober to route around dead pages per F-HWFL-5-1.",
+  "s3-ksilver-jh16": [
+    "http://k-silver.com/en/index.php/product/index/7.html",
+    "http://www.k-silver.com/en/",
+    "https://manuals.plus/ae/1005009222750559"
+  ],
+  "s5-magneto-tmr": [
+    "https://eu.aimcontrollers.com/blog/tmr-technology-tunnel-magnetoresistance-sensors-in-gaming/",
+    "https://www.windowscentral.com/gaming/what-are-tmr-sticks",
+    "https://www.ifixit.com/News/115707/tmi-about-tmr"
+  ]
+}
