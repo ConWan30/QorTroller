@@ -115,8 +115,23 @@ REGISTRY: list[CanonicalFact] = [
     ),
     CanonicalFact(
         name="frozen_v1_commitment_family_count",
-        current_value="12",  # 2026-05-23: VAPI-O3-SUPERSEDE-v1 registered as the 12th PATTERN-017 commitment family (Decision O3-CLASS=A). NOTE: an earlier "12" was an R3-caught flat overclaim; it is now the genuine count.
-        superseded_values=("11", "10"),  # "11" superseded by the O3-SUPERSEDE registration; "10" was the pre-PHYSICAL-DATA-ATTESTATION count
+        # 2026-06-13 (HWFL-1 doc-consistency audit): KNOWN THREE-WAY DISCREPANCY,
+        # intentionally left at "12" and surfaced for the operator — do NOT auto-bump.
+        # Three different numbers are in play and they do NOT agree:
+        #   (a) registry current_value = "12"  (this fact; pinned by test T-FREEZE-5)
+        #   (b) code frozenset mythos_variants._PATTERN_017_FROZEN_TAGS = 13 entries
+        #       (test T-FREEZE-4 asserts 12 and is ALREADY FAILING on a clean tree —
+        #        a pre-existing failure independent of this audit)
+        #   (c) CLAUDE.md/README narrative count = 14 (counts VAPI-CONSENT-v1 #13 +
+        #       VAPI-TEMPORAL-BEACON-v1 #14 as FROZEN primitives)
+        # The frozenset is governance-locked by INV-MYTHOS-FAMILIES-001 (crypto-drift
+        # SCANNER set), so reconciling 12 vs 13 vs 14 is an operator/governance call:
+        # likely (1) fix T-FREEZE-4 to match the real frozenset size, then (2) decide
+        # whether the scanner set should track the documented family count or split
+        # this fact into scanner_set vs documented_families. Surfaced, NOT auto-
+        # resolved — silently editing any of the three would mask a governance gap.
+        current_value="12",
+        superseded_values=("11", "10"),  # "11" pre-O3-SUPERSEDE; "10" pre-PHYSICAL-DATA-ATTESTATION
         verification_command=(
             "Count of PATTERN-017 commitment-family entries — see WP v6 §4.1"
         ),
@@ -144,6 +159,13 @@ REGISTRY: list[CanonicalFact] = [
     ),
     CanonicalFact(
         name="bridge_test_count",
+        # 2026-06-13 (HWFL-1 doc-consistency audit): STALE but NOT auto-corrected.
+        # Sensor A v0.2 measured `pytest --collect-only` = 4712 (Cycle 12), which is
+        # the COLLECTED ceiling, a different metric from this entry's PASSING count
+        # (verification_command below). Refreshing this to the true passing count
+        # needs a full bridge suite run (slow + Windows-flaky); deferred to a session
+        # that runs the suite. "4377" is left as the last-known passing value but is
+        # known-low by ~300+ vs the current collected count.
         current_value="4377",
         superseded_values=("4368", "4356", "4348", "4345", "4337", "4330"),
         verification_command="python -m pytest bridge/tests/ -q 2>&1 | tail -1",
@@ -155,8 +177,8 @@ REGISTRY: list[CanonicalFact] = [
     ),
     CanonicalFact(
         name="mythos_variant_count",
-        current_value="14",  # After this commit ships #14 mythos_doc_number_consistency
-        superseded_values=("13", "12"),  # "11" and "10" removed: "11" collides with
+        current_value="17",  # 2026-06-13 (HWFL-1 doc-consistency audit): grep -c '^async def mythos_' = 17. Variants #15 mythos_agent_utility_honesty + #16 mythos_path_a_spec_impl_parity (Sensor A v0.1) + a 17th landed since the registry last read "14".
+        superseded_values=("16", "15", "14", "13", "12"),  # "11"/"10" omitted: "11" collides with
                                           # commitment-family primitive count name-namespace
                                           # so any line with both "Mythos audit" context AND
                                           # "11" can be a primitive reference, not a variant count
@@ -219,8 +241,8 @@ REGISTRY: list[CanonicalFact] = [
     ),
     CanonicalFact(
         name="mcp_tool_count",
-        current_value="31",  # After this commit ships Tool #31
-        superseded_values=("30", "29", "28", "27"),
+        current_value="40",  # 2026-06-13 (HWFL-1 doc-consistency audit): grep -c '@tool(' vapi-mcp/unified_server.py = 40, up from the registry's stale "31".
+        superseded_values=("31", "30", "29", "28", "27"),
         verification_command=(
             "grep -c '@tool(' vapi-mcp/unified_server.py"
         ),
