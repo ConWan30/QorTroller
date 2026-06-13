@@ -6,8 +6,10 @@ ECDSA-P256 secure-element-bearing device) that is silicon-rooted in
 QorTroller's V.A.P.I. protocol on IoTeX.
 
 **Status:** Path A Arc 1 reference implementation. Arc 2 (`SecureElementBackend`
-+ ATECC608A hardware integration) is the implementation-side companion to this
-spec and ships when the partner-hardware breakout is connected to the rig.
++ ATECC608B/608C-class hardware integration) is the implementation-side
+companion to this spec and ships when the partner-hardware breakout is connected
+to the rig. (Arc 1 bring-up used an ATECC608A breakout; that part is NRND and
+the Arc 2 integration targets the active 608B/608C successors — see §2.)
 
 ---
 
@@ -16,15 +18,16 @@ spec and ships when the partner-hardware breakout is connected to the rig.
 Path A v1 = **silicon-rooted iPACT renewal authenticity.** When a device
 asserts Path A, every Verifiable Humanity Proof (VHP) renewal it produces is
 cryptographically attestable to a specific ECDSA-P256 private key that lives
-in a hardware secure element (ATECC608A or equivalent) and cannot be
+in a hardware secure element (an ATECC608B/608C-class CryptoAuthentication
+device or equivalent — see §2 for the family requirement) and cannot be
 extracted from silicon under any conditions documented in the chip's
 threat model.
 
 **Path A v1 does NOT yet prove** silicon-rooting of every individual PoAC
 record. That is Path A v2 (Arc 3+) — a separate design pass that requires a
-secure-element sign-latency study (~3 ms per sign on ATECC608A vs the 1000 Hz
-PoAC pipeline; needs buffering architecture) OR a faster signing surface
-(e.g. STM32 with onboard ECDSA acceleration).
+secure-element sign-latency study (~3 ms per sign on ATECC608B/608C-class
+parts vs the 1000 Hz PoAC pipeline; needs buffering architecture) OR a faster
+signing surface (e.g. STM32 with onboard ECDSA acceleration).
 
 **Path A v1 reference implementation demonstrated on IoTeX testnet
 (2026-05-27):**
@@ -55,14 +58,21 @@ software root CA to a partner's hardware HSM).
 
 ## 2. Hardware Requirement
 
-Minimum supported secure element:
+**Family requirement (not a single part number).** Path A targets the
+**ATECC608B/608C-class CryptoAuthentication secure element** family —
+CryptoAuthLib-compatible, ECDSA-P256, with **polling-based command timing
+REQUIRED** (see Mandatory chip property 5 below). The reference part used in
+Arc 1 bring-up (ATECC608A) is **NRND** (Not Recommended for New Designs;
+Microchip's own guidance is "use ATECC608B") and MUST NOT be specified for new
+manufacturing runs. New designs select from the active successors below.
 
-| Vendor | Part | ECDSA curve | Locked slots | Notes |
-|---|---|---|---|---|
-| Microchip | **ATECC608A** | P-256 | 16 | Reference Path A v1 target |
-| Microchip | ATECC608B | P-256 | 16 | Drop-in compatible |
-| YubiKey | YubiKey 5 (PIV) | P-256 | up to 4 PIV slots | Workable; partner-decision per slot allocation |
-| ST | STSAFE-A110 | P-256 | 8 zones | Workable; ECDSA over I2C |
+| Vendor | Part | ECDSA curve | Locked slots | Lifecycle | Notes |
+|---|---|---|---|---|---|
+| Microchip | ATECC608A | P-256 | 16 | **NRND** | Arc 1 bring-up reference ONLY; do not specify for new designs |
+| Microchip | **ATECC608B** | P-256 | 16 | Active | Functional drop-in for 608A per Microchip AN2237 (same commands/structure; CryptoAuthLib absorbs differences) |
+| Microchip | **ATECC608C-TFLXTLS** | P-256 | 16 | Active | TrustFLEX pre-provisioned variant; also the Rung 3 factory-provisioning target (successor-and-provisioning convergence per Sensor B S2) |
+| YubiKey | YubiKey 5 (PIV) | P-256 | up to 4 PIV slots | Active | Workable; partner-decision per slot allocation |
+| ST | STSAFE-A110 | P-256 | 8 zones | Active | Workable; ECDSA over I2C |
 
 **Mandatory chip properties:**
 1. Hardware-bound ECDSA-P256 private key, generated on-chip via
@@ -74,6 +84,16 @@ Minimum supported secure element:
 3. I2C or USB-HID host interface usable by Linux/Windows host driver.
 4. Attestation-certificate readback (optional v1, REQUIRED v2): the chip's
    on-chip attestation cert binding the key slot to the chip serial number.
+5. **Polling-based command timing REQUIRED** (not fixed-delay/hardwired
+   timing). The host driver MUST poll the chip's status/response register for
+   command completion rather than assuming a fixed wait. Rationale: the
+   ATECC608B/608C successors are functional drop-ins for the NRND 608A at the
+   command-and-structure level (Microchip AN2237), but parts within and across
+   the family can differ in exact command-execution latency. Polling-based
+   timing is latency-tolerant and forward-compatible across the whole family;
+   fixed-delay firmware that was tuned to one specific part's timing will break
+   silently on a successor and is non-conformant. CryptoAuthLib's polling mode
+   satisfies this requirement by default.
 
 **Recommended host adapter:** CH341A USB-I2C for development; production
 controllers integrate the secure element directly on the controller PCB
