@@ -22,7 +22,7 @@ Boto3 wrapper around AWS KMS `Sign` API. Produces ECDSA secp256k1 signatures ove
 - **`AccessDeniedException`**: bridge IAM role lacks `kms:Sign` on the requested key. Tool surfaces; suggests IAM policy review per Pass 2C Section 12.6 D3.
 - **`KeyUnavailableException`**: KMS key in unusable state (deleted, disabled). Surfaces as critical — agent identity may need DID rotation per Pass 2C Section 10 Note 6.
 - **`ValidationException` (digest length)**: input is not exactly 32 bytes. Tool rejects with explicit error.
-- **AWS region/credential misconfiguration**: surfaces with hint to check `bridge/.env` for `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION=us-east-1`.
+- **AWS region/credential misconfiguration**: surfaces with hint to check the operator's AWS KMS credential configuration (see the private DR runbook for credential locations — not enumerated here per F-EXT-1).
 - **Section 6.3 not yet implemented**: KMS key alias does not resolve. Tool surfaces with explicit reference to the pending Section 6.3 implementation session.
 
 ## Composability
