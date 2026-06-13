@@ -51,7 +51,7 @@ function classifyOutcome(outcome) {
     return { tone: CHAIN, label: 'PROOF BUILT', sub: 'verifier address not wired' }
   }
   if (outcome === 'vhr_proof_deferred') {
-    return { tone: AMBER, label: 'DEFERRED', sub: 'no prover (ceremony pending)' }
+    return { tone: AMBER, label: 'DEFERRED', sub: 'prover deferred — see reason' }
   }
   if (outcome === 'vhr_deferred_no_consent') {
     return { tone: AMBER, label: 'NO CONSENT', sub: 'Arc 4 manifest gate closed' }

@@ -330,9 +330,11 @@ function VhrProofPanel({ vhrLatest, ribbonMode, bridgeDown }) {
               <StatusChip tone="dormant">—</StatusChip>
             </div>
             <div className="mono" style={{ fontSize: 9.5, color: 'var(--text-faint)', lineHeight: 1.55 }}>
-              No VHR proofs produced yet. The pipeline fires on session-
-              adjudicator validation (~5 min cycle). With Arc 4 consent
-              manifest active, the next fire produces PROOF BUILT.
+              No VHR proofs produced yet. On each session-adjudicator
+              validation the pipeline runs the consent → verdict → humanity
+              gates, then the Groth16 prover. A real PROOF BUILT needs
+              allowReplayProofs=true and a runnable prover; otherwise it
+              defers honestly. The actual outcome shows above.
             </div>
           </>
         ) : (
