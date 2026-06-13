@@ -1,0 +1,721 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>QorTroller — Partner Brief</title>
+
+<!-- Brand foundations — same design system as grant-brief.html (EvidenceOS
+     aesthetic). Local Syne + JetBrains Mono variable fonts at /fonts/ so the
+     deck stays self-contained and sharable; no CDN dependency. -->
+<style>
+@font-face {
+  font-family: 'Syne';
+  src: url('/fonts/Syne-VariableFont_wght.ttf') format('truetype-variations'),
+       url('/fonts/Syne-VariableFont_wght.ttf') format('truetype');
+  font-weight: 400 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/JetBrainsMono-VariableFont_wght.ttf') format('truetype-variations'),
+       url('/fonts/JetBrainsMono-VariableFont_wght.ttf') format('truetype');
+  font-weight: 400 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* ─── PALETTE ── void-black forensic, NOT cyber-neon ── */
+  --bg:              #04060a;
+  --panel:           #0a0e14;
+  --panel-soft:      #0d1218;
+  --panel-raised:    #11161f;
+  --border:          #1a2230;
+  --border-soft:     #131a24;
+  --border-strong:   #243044;
+
+  /* ─── TEXT ── */
+  --text:            #d4dde8;
+  --text-dim:        #8a96a5;
+  --text-faint:      #5a6675;
+  --text-ghost:      #3a4452;
+
+  /* ─── ACCENTS ── */
+  --accent-amber:    #f0a868;
+  --accent-amber-soft: #f0a86833;
+  --accent-amber-trace: #f0a86811;
+  --gamer-cyan:      #00d4ff;
+  --gamer-cyan-soft: #00d4ff22;
+  --chain:           #5bd6a3;
+  --chain-soft:      #5bd6a322;
+  --derived:         #8a96a5;
+  --predicate:       #f0a868;
+  --ghost-line:      #5a667555;
+
+  /* ─── STATUS (semantic — ALWAYS paired with text label) ─── */
+  --status-live:        #5bd6a3;
+  --status-verified:    #5bd6a3;
+  --status-pending:     #f0a868;
+  --status-blocked:     #d65b78;
+  --status-mock:        #d65b78;
+  --status-killswitch:  #f0a868;
+  --status-dormant:     #5a6675;
+
+  /* ─── TYPOGRAPHY ── */
+  --font-display: 'Syne', system-ui, sans-serif;
+  --font-body:    'Syne', system-ui, sans-serif;
+  --font-mono:    'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
+
+  --t-min:        11px;
+  --t-base:       12px;
+  --t-label:      13px;
+  --t-body:       14px;
+  --t-h3:         16px;
+  --t-h2:         20px;
+  --t-h1:         28px;
+  --t-display:    44px;
+
+  --lh-tight:     1.15;
+  --lh-snug:      1.3;
+  --lh-base:      1.5;
+
+  --ls-eyebrow:   0.14em;
+  --ls-caps:      0.06em;
+  --ls-hash:      0.02em;
+
+  /* ─── LAYOUT ── */
+  --radius:       4px;
+  --radius-sm:    2px;
+  --radius-pill:  999px;
+  --rail-w:       220px;
+  --strip-h:      56px;
+
+  /* ─── SPACING SCALE ── */
+  --s-0: 0;  --s-1: 4px;  --s-2: 8px;  --s-3: 12px; --s-4: 16px;
+  --s-5: 20px; --s-6: 24px; --s-7: 32px; --s-8: 40px; --s-9: 56px; --s-10: 72px;
+
+  /* ─── ELEVATION ── */
+  --shadow-hairline: inset 0 0 0 1px var(--border);
+  --shadow-edge:     0 0 0 1px var(--border), 0 1px 0 0 #0009;
+  --shadow-glow-amber: 0 0 24px -8px var(--accent-amber-soft);
+  --shadow-glow-chain: 0 0 24px -8px var(--chain-soft);
+  --shadow-deep:     0 8px 24px -12px #000c, 0 0 0 1px var(--border);
+
+  /* ─── MOTION ── */
+  --ease-instrument: cubic-bezier(0.2, 0.6, 0.2, 1);
+  --ease-snap:       cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-tick:        120ms;
+  --dur-settle:      280ms;
+  --dur-breath:      2800ms;
+}
+</style>
+
+<style>
+  :root {
+    --slide-w: 1920px;
+    --slide-h: 1080px;
+  }
+
+  deck-stage:not(:defined) { visibility: hidden; }
+
+  html, body {
+    margin: 0; padding: 0;
+    background: #000;
+    font-family: var(--font-body);
+    color: var(--text);
+  }
+
+  /* Each <section> = a slide, sized at 1920×1080. deck-stage scales. */
+  deck-stage > section {
+    width: var(--slide-w);
+    height: var(--slide-h);
+    background: var(--bg);
+    color: var(--text);
+    position: relative;
+    overflow: hidden;
+    background-image:
+      linear-gradient(to right,  #1a223044 1px, transparent 1px),
+      linear-gradient(to bottom, #1a223044 1px, transparent 1px),
+      linear-gradient(to right,  #1a223018 1px, transparent 1px),
+      linear-gradient(to bottom, #1a223018 1px, transparent 1px);
+    background-size: 96px 96px, 96px 96px, 24px 24px, 24px 24px;
+    padding: 72px 96px;
+    box-sizing: border-box;
+    font-family: var(--font-body);
+  }
+
+  /* Slide chrome */
+  .chrome-mark {
+    position: absolute; top: 36px; left: 96px;
+    font-family: var(--font-display); font-weight: 700; font-size: 22px;
+    letter-spacing: -0.02em; color: var(--text); line-height: 1;
+  }
+  .chrome-mark .t { font-weight: 800; color: var(--accent-amber); }
+
+  .chrome-meta {
+    position: absolute; top: 36px; right: 96px;
+    display: flex; gap: 24px;
+    font-family: var(--font-mono); font-size: 13px; color: var(--text-faint);
+    letter-spacing: 0.14em; text-transform: uppercase; line-height: 1;
+  }
+  .chrome-meta .amber { color: var(--accent-amber); }
+
+  .chrome-foot {
+    position: absolute; bottom: 36px; left: 96px; right: 96px;
+    display: flex; justify-content: space-between;
+    font-family: var(--font-mono); font-size: 12px; color: var(--text-faint);
+    letter-spacing: 0.14em; text-transform: uppercase; line-height: 1;
+  }
+  .chrome-foot .amber { color: var(--accent-amber); }
+  .chrome-foot .chain { color: var(--chain); }
+
+  /* Eyebrows + titles */
+  .eyebrow {
+    font-family: var(--font-mono); font-weight: 500; font-size: 14px;
+    letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-faint);
+    line-height: 1; margin: 0 0 22px;
+  }
+  .eyebrow .chain { color: var(--chain); }
+  .eyebrow .amber { color: var(--accent-amber); }
+
+  h1 {
+    font-family: var(--font-display); font-weight: 700; font-size: 96px;
+    line-height: 0.96; letter-spacing: -0.025em; color: var(--text); margin: 0;
+  }
+  h1.giant { font-size: 132px; }
+  h1 .amber { color: var(--accent-amber); font-weight: 800; }
+  h1 .chain { color: var(--chain); }
+
+  h2 {
+    font-family: var(--font-display); font-weight: 700; font-size: 64px;
+    line-height: 1.02; letter-spacing: -0.02em; color: var(--text); margin: 0 0 26px;
+  }
+  h2 .amber { color: var(--accent-amber); font-weight: 800; }
+  h2 .chain { color: var(--chain); }
+
+  h3 {
+    font-family: var(--font-display); font-weight: 700; font-size: 26px;
+    line-height: 1.1; color: var(--text); margin: 0 0 12px;
+  }
+  h3 .amber { color: var(--accent-amber); }
+
+  .lede {
+    font-family: var(--font-body); font-size: 28px; line-height: 1.45;
+    color: var(--text-dim); max-width: 1280px; margin: 0;
+  }
+  .lede .amber { color: var(--accent-amber); }
+  .lede .chain { color: var(--chain); }
+  .lede .text  { color: var(--text); }
+
+  .mono {
+    font-family: var(--font-mono); font-variant-ligatures: none; letter-spacing: 0.02em;
+  }
+
+  .specimen-hash {
+    font-family: var(--font-mono); font-size: 30px; letter-spacing: 0.04em;
+    color: var(--chain); line-height: 1.5; word-break: break-all; font-variant-ligatures: none;
+  }
+
+  /* PANELS */
+  .panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 4px; padding: 24px 28px;
+  }
+  .panel--soft { background: var(--panel-soft); }
+  .panel--accent { border-color: var(--accent-amber); box-shadow: 0 0 0 1px #f0a86833; }
+  .panel--chain  { border-color: var(--chain); box-shadow: 0 0 0 1px #5bd6a322; }
+  .panel--secure { border-color: #d95ad9; box-shadow: 0 0 0 1px #d95ad933; }
+
+  .panel__eye {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding-bottom: 14px; border-bottom: 1px solid var(--border-soft); margin-bottom: 16px;
+  }
+  .panel__eye .lbl {
+    font-family: var(--font-mono); font-size: 13px; color: var(--text-faint);
+    letter-spacing: 0.16em; text-transform: uppercase; line-height: 1;
+  }
+  .panel__eye .meta {
+    font-family: var(--font-mono); font-size: 13px; color: var(--text-dim);
+    letter-spacing: 0.08em; text-transform: uppercase; line-height: 1;
+  }
+
+  /* CHIP */
+  .chip {
+    display: inline-flex; align-items: center; gap: 9px; padding: 6px 12px;
+    font-family: var(--font-mono); font-size: 14px; font-weight: 500;
+    letter-spacing: 0.08em; text-transform: uppercase; border: 1px solid currentColor;
+    border-radius: 2px; line-height: 1; width: fit-content;
+  }
+  .chip::before {
+    content: ""; width: 8px; height: 8px; border-radius: 50%;
+    background: currentColor; box-shadow: 0 0 10px currentColor;
+  }
+  .chip--live    { color: var(--chain); }
+  .chip--pending { color: var(--accent-amber); }
+  .chip--blocked { color: var(--status-blocked); }
+  .chip--secure  { color: #d95ad9; }
+
+  /* Layout helpers */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; }
+  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; }
+  .stack  { display: grid; gap: 22px; }
+  .stack-sm { display: grid; gap: 12px; }
+
+  .kv {
+    display: grid; grid-template-columns: 300px 1fr; gap: 18px; padding: 13px 0;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .kv:last-child { border-bottom: 0; }
+  .kv .k {
+    font-family: var(--font-mono); font-size: 14px; color: var(--text-faint);
+    letter-spacing: 0.12em; text-transform: uppercase; line-height: 1.3;
+  }
+  .kv .v {
+    font-family: var(--font-mono); font-size: 17px; color: var(--text);
+    letter-spacing: 0.02em; line-height: 1.35;
+  }
+  .kv .v.amber { color: var(--accent-amber); }
+  .kv .v.chain { color: var(--chain); }
+  .kv .v.err   { color: var(--status-blocked); }
+  .kv .v.dim   { color: var(--text-dim); }
+
+  .hr { height: 1px; background: var(--border); margin: 28px 0; border: 0; }
+  .center { text-align: center; }
+  .right { text-align: right; }
+
+  .cover-wm {
+    font-family: var(--font-display); font-weight: 700; font-size: 240px;
+    line-height: 0.9; letter-spacing: -0.04em; color: var(--text); margin: 0;
+  }
+  .cover-wm .t { font-weight: 800; color: var(--accent-amber); }
+
+  /* ── SUPPLEMENT: trust-chain flow + measured/proposed ───────── */
+  .flow { display: grid; grid-template-columns: 1fr 40px 1fr 40px 1fr 40px 1fr; align-items: stretch; gap: 0; margin-top: 44px; }
+  .flow .node { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 22px 22px; }
+  .flow .node.chain  { border-color: var(--chain); box-shadow: 0 0 0 1px #5bd6a322; }
+  .flow .node.secure { border-color: #d95ad9; box-shadow: 0 0 0 1px #d95ad933; }
+  .flow .node .stp { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--text-faint); margin: 0 0 10px; }
+  .flow .node h3 { font-size: 22px; margin: 0 0 10px; }
+  .flow .node p { font-family: var(--font-mono); font-size: 13px; color: var(--text-dim); line-height: 1.5; margin: 0; }
+  .flow .arrow { display: grid; place-items: center; }
+  .flow .arrow::before {
+    content: ""; width: 100%; height: 2px;
+    background: linear-gradient(90deg, var(--chain) 0%, var(--accent-amber) 100%);
+    position: relative; overflow: visible;
+  }
+  .flow .arrow::after {
+    content: ""; width: 8px; height: 8px; border-top: 2px solid var(--accent-amber);
+    border-right: 2px solid var(--accent-amber); transform: rotate(45deg);
+    margin-left: -10px;
+  }
+  .pulse { position: relative; }
+  .pulse::after {
+    content: ""; position: absolute; left: 0; top: 50%; width: 10px; height: 10px;
+    border-radius: 50%; background: var(--chain); box-shadow: 0 0 14px var(--chain);
+    transform: translateY(-50%);
+    animation: flowpulse 3.2s var(--ease-instrument) infinite;
+  }
+  @keyframes flowpulse {
+    0%   { left: 0%;   opacity: 0; }
+    8%   { opacity: 1; }
+    92%  { opacity: 1; }
+    100% { left: 100%; opacity: 0; }
+  }
+
+  .mp { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 36px; }
+  .mp .col { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 26px 30px; }
+  .mp .col.measured { border-color: var(--chain); box-shadow: 0 0 0 1px #5bd6a322; }
+  .mp .col.proposed { border-color: var(--accent-amber); box-shadow: 0 0 0 1px #f0a86833; }
+  .mp .col h3 { font-size: 22px; margin-bottom: 18px; }
+  .mp .row { display: flex; justify-content: space-between; align-items: baseline; padding: 11px 0; border-bottom: 1px solid var(--border-soft); }
+  .mp .row:last-child { border-bottom: 0; }
+  .mp .row .l { font-family: var(--font-mono); font-size: 15px; color: var(--text-dim); letter-spacing: 0.02em; }
+  .mp .row .n { font-family: var(--font-mono); font-size: 17px; letter-spacing: 0.02em; }
+  .mp .measured .n { color: var(--chain); }
+  .mp .proposed .n { color: var(--accent-amber); }
+
+  /* ranked partner list */
+  .rank { display: grid; grid-template-columns: 64px 1fr; gap: 24px; align-items: center; padding: 18px 24px; border: 1px solid var(--border); border-radius: 4px; background: var(--panel); }
+  .rank.lead { border-color: var(--accent-amber); box-shadow: 0 0 0 1px #f0a86833, var(--shadow-glow-amber); }
+  .rank .no { font-family: var(--font-display); font-weight: 800; font-size: 44px; line-height: 1; color: var(--text-ghost); text-align: center; }
+  .rank.lead .no { color: var(--accent-amber); }
+  .rank .who { font-family: var(--font-display); font-weight: 700; font-size: 22px; color: var(--text); margin: 0 0 4px; }
+  .rank .ask { font-family: var(--font-mono); font-size: 14px; color: var(--text-dim); line-height: 1.45; margin: 0; }
+  .rank .ask .amber { color: var(--accent-amber); }
+
+  /* component tiles */
+  .comp { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 18px 20px; border-left: 3px solid var(--text-ghost); }
+  .comp.pending { border-left-color: var(--accent-amber); }
+  .comp.spec    { border-left-color: var(--gamer-cyan); }
+  .comp.secure  { border-left-color: #d95ad9; }
+  .comp .id { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.14em; color: var(--text-faint); text-transform: uppercase; }
+  .comp .nm { font-family: var(--font-display); font-weight: 700; font-size: 18px; color: var(--text); margin: 6px 0 6px; line-height: 1.1; }
+  .comp .ds { font-family: var(--font-mono); font-size: 12px; color: var(--text-dim); line-height: 1.45; }
+</style>
+</head>
+<body>
+
+<deck-stage width="1920" height="1080">
+
+<!-- ═══ 01 · COVER ═══ -->
+<section data-screen-label="01 Cover" style="padding: 0; display: grid; place-items: center;">
+  <div style="position: absolute; top: 72px; left: 96px; right: 96px; display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 16px; color: var(--text-faint); letter-spacing: 0.18em; text-transform: uppercase;">
+    <span>PARTNER BRIEF · v0.1 · 2026-06-13</span>
+    <span style="color: var(--chain)">● IoTeX · INTERNET OF TRUSTED THINGS</span>
+  </div>
+  <div style="text-align: center;">
+    <p class="cover-wm">Qor<span class="t">T</span>roller</p>
+    <p style="font-family: var(--font-mono); font-size: 22px; color: var(--accent-amber); letter-spacing: 0.16em; text-transform: uppercase; margin: 36px 0 0;">
+      Core Controllers · of their gaming data
+    </p>
+  </div>
+  <div style="position: absolute; bottom: 72px; left: 96px; right: 96px;">
+    <p style="font-family: var(--font-body); font-size: 28px; color: var(--text-dim); max-width: 1320px; margin: 0 auto; text-align: center; line-height: 1.45;">
+      A purpose-built controller where the <span style="color: var(--accent-amber)">physical input device is also the cryptographic owner of the data it produces</span>. The reference hardware for V.A.P.I. — built native to IoTeX L1.
+    </p>
+  </div>
+</section>
+
+<!-- ═══ 02 · THESIS ═══ -->
+<section data-screen-label="02 Thesis">
+  <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
+  <span class="chrome-meta"><span>02 · THESIS</span><span class="amber">V.A.P.I.</span></span>
+
+  <p class="eyebrow"><span class="amber">Why this matters</span></p>
+  <h1 class="giant">Prove the human at<br>the <span class="amber">input layer.</span></h1>
+  <p class="lede" style="margin-top: 48px; max-width: 1420px;">
+    Verify humanity where the signal is born — in the hands on the controller — and the gamer
+    <span class="text">keeps cryptographic ownership of the data their physical interactions generate</span>.
+    Cheating can't be asserted; the gamer is honored, not surveilled.
+  </p>
+
+  <span class="chrome-foot">
+    <span class="amber">VERIFIABLE · AUTONOMOUS · PHYSICAL · INTELLIGENCE</span>
+    <span>HONORED · NOT · SURVEILLED</span>
+  </span>
+</section>
+
+<!-- ═══ 03 · WHY A PARTNER / WHY NOW ═══ -->
+<section data-screen-label="03 Why now">
+  <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
+  <span class="chrome-meta"><span>03 · WHY NOW</span><span class="amber">SOFTWARE DONE · SILICON NEXT</span></span>
+
+  <p class="eyebrow">The software runs today — the hardware is the missing piece</p>
+  <h2>We are not asking you to build a product.<br>We are opening a <span class="amber">design-partner conversation.</span></h2>
+
+  <div class="grid-2" style="margin-top: 44px;">
+    <div class="panel panel--chain">
+      <div class="panel__eye"><span class="lbl">WHAT EXISTS</span><span class="meta">TESTNET · RUNNING</span></div>
+      <p class="mono" style="font-size: 16px; color: var(--text-dim); line-height: 1.6;">
+        A complete, tested protocol stack: a frozen 228-byte cryptographic record per cognition cycle,
+        66 deployed contracts, a 174-check fail-closed CI gate, ~5,766 automated tests. Not vaporware.
+      </p>
+    </div>
+    <div class="panel panel--accent">
+      <div class="panel__eye"><span class="lbl">WHAT'S MISSING</span><span class="meta">PURPOSE-BUILT SILICON</span></div>
+      <p class="mono" style="font-size: 16px; color: var(--text-dim); line-height: 1.6;">
+        Today it runs on a certified third-party device (DualSense Edge). The next step is a reference
+        controller where the protocol's strongest signals are native hardware — and that needs a manufacturing partner.
+      </p>
+    </div>
+  </div>
+
+  <span class="chrome-foot"><span class="amber">DEPIN · INTERNET OF TRUSTED THINGS</span><span>IOTEX · L1</span></span>
+</section>
+
+<!-- ═══ 04 · TRUST CHAIN ═══ -->
+<section data-screen-label="04 Trust chain">
+  <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
+  <span class="chrome-meta"><span>04 · TRUST CHAIN</span><span class="amber">228 BYTES</span></span>
+
+  <p class="eyebrow"><span class="chain">The signal flows through the controller</span></p>
+  <h2>Human input <span class="amber">→</span> signed, tamper-proof, gamer-owned data.</h2>
+
+  <div class="flow">
+    <div class="node">
+      <p class="stp">01 · PHYSICAL INPUT</p>
+      <h3>Sensors</h3>
+      <p>Triggers · sticks · IMU · touchpad capture human biomechanical signal at 1 kHz.</p>
+    </div>
+    <div class="arrow pulse"></div>
+    <div class="node">
+      <p class="stp">02 · COGNITION</p>
+      <h3>C1 · MCU</h3>
+      <p>ESP32-S3-class MCU builds the 228-byte Proof-of-Autonomous-Cognition record.</p>
+    </div>
+    <div class="arrow"></div>
+    <div class="node secure">
+      <p class="stp">03 · ROOT OF TRUST</p>
+      <h3>C2 · Secure Element</h3>
+      <p>On-chip, non-extractable P-256 key signs every record in silicon.</p>
+    </div>
+    <div class="arrow"></div>
+    <div class="node chain">
+      <p class="stp">04 · OUTPUT</p>
+      <h3>Owned Data</h3>
+      <p>Tamper-proof signed record, anchored on IoTeX. The gamer holds the key.</p>
+    </div>
+  </div>
+
+  <p class="mono" style="margin-top: 40px; font-size: 15px; color: var(--text-faint); letter-spacing: 0.04em;">
+    The physical source <span style="color: var(--accent-amber)">is</span> the cryptographic agency-holder. That is the V.A.P.I. category claim — and the reason the device must be purpose-built.
+  </p>
+
+  <span class="chrome-foot"><span class="chain">SENSORS → MCU → SECURE ELEMENT → SIGNED</span><span>228-BYTE · FROZEN · WIRE FORMAT</span></span>
+</section>
+
+<!-- ═══ 05 · WHAT WE NEED (PARTNERS) ═══ -->
+<section data-screen-label="05 Partners">
+  <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
+  <span class="chrome-meta"><span>05 · THE PARTNERS</span><span class="amber">RANKED BY LEVERAGE</span></span>
+
+  <p class="eyebrow">What we need from a partner — ranked by what determines whether QorTroller can exist</p>
+  <div class="stack-sm" style="margin-top: 28px;">
+    <div class="rank lead">
+      <div class="no">1</div>
+      <div>
+        <p class="who">Actuation development partner <span style="color: var(--accent-amber); font-weight:500; font-size: 15px; font-family: var(--font-mono);">· force-feedback R&amp;D</span></p>
+        <p class="ask">Co-develop a <span class="amber">novel, freedom-to-operate-clean</span> programmable-resistance trigger actuator. The strongest signal surface AND the hardest part to build without infringing existing adaptive-trigger IP. Clean-sheet, not a clone.</p>
+      </div>
+    </div>
+    <div class="rank">
+      <div class="no">2</div>
+      <div>
+        <p class="who">Boréas Technologies <span style="color: var(--text-faint); font-weight:500; font-size: 15px; font-family: var(--font-mono);">· piezo haptic driver</span></p>
+        <p class="ask">The L6 challenge-response haptic-driver path (CapDrive) — microsecond-accurate, silent, localized pulses. Distinct from the trigger actuator above.</p>
+      </div>
+    </div>
+    <div class="rank">
+      <div class="no">3</div>
+      <div>
+        <p class="who">Qorvo <span style="color: var(--text-faint); font-weight:500; font-size: 15px; font-family: var(--font-mono);">· RF / power / MEMS</span></p>
+        <p class="ask">Wireless + power-path component alignment. (Qorvo's acoustic-wave strength is BAW/SAW RF filters — we are <span class="amber">not</span> asking them for haptic piezo or the trigger.)</p>
+      </div>
+    </div>
+    <div class="rank">
+      <div class="no">4</div>
+      <div>
+        <p class="who">Battle Beaver / mod-house <span style="color: var(--text-faint); font-weight:500; font-size: 15px; font-family: var(--font-mono);">· assembly + sticks</span></p>
+        <p class="ask">Reference dev-kit assembly; Hall/TMR stick-module sourcing + integration expertise.</p>
+      </div>
+    </div>
+  </div>
+
+  <span class="chrome-foot"><span class="amber">FREEDOM-TO-OPERATE READ BEFORE ANY GEOMETRY EXTERNALIZES</span><span>NO TRIGGER STEP SHARED PRE-FTO</span></span>
+</section>
+
+<!-- ═══ 06 · HONEST STATUS — MEASURED VS PROPOSED ═══ -->
+<section data-screen-label="06 Honest status">
+  <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
+  <span class="chrome-meta"><span>06 · HONEST STATUS</span><span class="amber">MEASURED · VS · PROPOSED</span></span>
+
+  <p class="eyebrow">The part that earns trust — we are explicit about what's real</p>
+  <h2>What's <span class="chain">measured</span> · what's <span class="amber">proposed.</span></h2>
+
+  <div class="mp">
+    <div class="col measured">
+      <h3 style="color: var(--chain);">Measured / shipped</h3>
+      <div class="row"><span class="l">Deployed contracts (IoTeX testnet)</span><span class="n">66 · 58 active</span></div>
+      <div class="row"><span class="l">PV-CI invariants (fail-closed)</span><span class="n">174 / 174</span></div>
+      <div class="row"><span class="l">Automated tests</span><span class="n">~5,766</span></div>
+      <div class="row"><span class="l">Grind-integrity chain</span><span class="n">GIC_100 reached</span></div>
+      <div class="row"><span class="l">A.I.T. biometric separation</span><span class="n">ratio 1.199 · N=37</span></div>
+    </div>
+    <div class="col proposed">
+      <h3 style="color: var(--accent-amber);">Proposed / pending</h3>
+      <div class="row"><span class="l">Mainnet / token</span><span class="n">none — testnet only</span></div>
+      <div class="row"><span class="l">External Solidity audit</span><span class="n">not yet</span></div>
+      <div class="row"><span class="l">Player corpus breadth</span><span class="n">N=3 — small, disclosed</span></div>
+      <div class="row"><span class="l">Stick / IMU / trigger silicon</span><span class="n">Stage A pending</span></div>
+      <div class="row"><span class="l">Purpose-built controller</span><span class="n">this conversation</span></div>
+    </div>
+  </div>
+
+  <p class="mono" style="margin-top: 32px; font-size: 15px; color: var(--text-faint);">
+    We never claim "unbeatable." Every signal <span style="color: var(--text-dim)">raises spoof cost</span>; every claim has a measurement that must pass first.
+  </p>
+
+  <span class="chrome-foot"><span class="chain">MEASURED</span><span class="amber">PROPOSED — STAGE A GATES NAMED</span></span>
+</section>
+
+<!-- ═══ 07 · C7 — STRONGEST SIGNAL SURFACE ═══ -->
+<section data-screen-label="07 C7 signal">
+  <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
+  <span class="chrome-meta"><span>07 · C7 · ASPIRATIONAL-PRIMARY</span><span class="amber">FORCE-CURVE LIVENESS</span></span>
+
+  <p class="eyebrow"><span class="amber">The adaptive trigger</span> · strongest signal surface</p>
+  <h2>The novelty is the <span class="amber">signal</span>, not the actuator.</h2>
+
+  <div class="grid-2" style="margin-top: 36px;">
+    <div class="panel">
+      <div class="panel__eye"><span class="lbl">THE SIGNAL — THE NOVELTY</span><span class="meta">L4</span></div>
+      <p class="mono" style="font-size: 16px; color: var(--text-dim); line-height: 1.6;">
+        The protocol reads a <span style="color: var(--text)">biomechanical 1 kHz force curve</span> that translator
+        hardware (Cronus / XIM) physically cannot synthesize, and turns it into a humanity signal.
+        <span style="color: var(--accent-amber)">Force-curve liveness extraction</span> — this is the IP.
+      </p>
+    </div>
+    <div class="panel">
+      <div class="panel__eye"><span class="lbl">THE ACTUATOR — PRIOR ART</span><span class="meta">CUSTOM · CLEAN-SHEET</span></div>
+      <p class="mono" style="font-size: 16px; color: var(--text-dim); line-height: 1.6;">
+        Adaptive triggers are patented prior art. We do <span style="color: var(--text)">not</span> clone one —
+        the rank-1 partner co-develops a clean-sheet actuator under a freedom-to-operate read.
+        No trigger geometry externalizes before FTO clears.
+      </p>
+    </div>
+  </div>
+
+  <div style="display: flex; gap: 18px; margin-top: 32px;">
+    <span class="chip chip--pending">Aspirational-primary</span>
+    <span class="chip chip--pending">FTO gate</span>
+    <span class="chip chip--pending">Stage A measurement</span>
+  </div>
+
+  <span class="chrome-foot"><span class="amber">RAISES SPOOF COST — NOT "IMPOSSIBLE"</span><span>EMPIRICAL UNKNOWN #1 · MAHALANOBIS &gt; 1.0</span></span>
+</section>
+
+<!-- ═══ 08 · COMPONENTS (BOM) ═══ -->
+<section data-screen-label="08 Components">
+  <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
+  <span class="chrome-meta"><span>08 · THE BOM</span><span class="amber">C1 – C8</span></span>
+
+  <p class="eyebrow">Dev-kit bill of materials · honest status coding</p>
+  <h2>Eight critical parts <span class="amber">·</span> one cryptographic spine.</h2>
+
+  <div class="grid-4" style="margin-top: 36px;">
+    <div class="comp spec"><span class="id">C1 · MCU</span><p class="nm">ESP32-S3</p><p class="ds">1 kHz poll · builds the 228-byte record</p></div>
+    <div class="comp secure"><span class="id">C2 · SECURE ELEMENT</span><p class="nm">ATECC608B/C</p><p class="ds">on-chip P-256 · silicon root of trust</p></div>
+    <div class="comp pending"><span class="id">C3 · LEFT STICK</span><p class="nm">Hall / TMR</p><p class="ds">contactless · L4 fingerprint surface</p></div>
+    <div class="comp pending"><span class="id">C4 · RIGHT STICK</span><p class="nm">same family</p><p class="ds">L/R must match sensing physics</p></div>
+    <div class="comp pending"><span class="id">C5 · IMU</span><p class="nm">6-axis</p><p class="ds">gravity-postural biometric · anti-spoof</p></div>
+    <div class="comp spec"><span class="id">C6 · USB-C</span><p class="nm">connector</p><p class="ds">exclusive-capture 1 kHz HID link</p></div>
+    <div class="comp pending"><span class="id">C7 · TRIGGER ×2</span><p class="nm">adaptive</p><p class="ds">force-curve liveness · aspirational-primary</p></div>
+    <div class="comp spec"><span class="id">C8 · TOUCHPAD</span><p class="nm">capacitive</p><p class="ds">12-bit 2-point · co-signal surface</p></div>
+  </div>
+
+  <div style="display: flex; gap: 24px; margin-top: 30px;">
+    <span class="chip chip--pending">Amber · Stage A measurement pending</span>
+    <span class="chip" style="color: var(--gamer-cyan);">Cyan · spec known</span>
+    <span class="chip chip--secure">Magenta · cryptographic root</span>
+  </div>
+
+  <span class="chrome-foot"><span class="amber">608A IS NRND — 608B/608C-CLASS FAMILY</span><span>TWO-SUPPLIER DISCIPLINE BEFORE LIVE-SUPPLIED</span></span>
+</section>
+
+<!-- ═══ 09 · PIEZO SURFACES (Sensor Stack v2.2) ═══ -->
+<section data-screen-label="09 Piezo">
+  <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
+  <span class="chrome-meta"><span>09 · PIEZO · v2.2</span><span class="amber">PROPOSAL</span></span>
+
+  <p class="eyebrow"><span class="amber">Sensor Stack v2.2</span> · design-note proposal — not yet measured</p>
+  <h2>Two piezo surfaces <span class="amber">·</span> each with a named Stage A gate.</h2>
+
+  <div class="grid-2" style="margin-top: 40px;">
+    <div class="panel">
+      <div class="panel__eye"><span class="lbl">SURFACE 7 · PIEZO-ACOUSTIC</span><span class="meta">L0 / L9 · LIVENESS</span></div>
+      <h3>Grip liveness gate</h3>
+      <p class="mono" style="font-size: 15px; color: var(--text-dim); line-height: 1.55;">
+        An ultrasonic wave through the shell; a human grip damps it tissue-characteristically.
+        A fast held-vs-not pre-gate. <span style="color: var(--accent-amber)">Liveness only — not a per-person identity claim.</span>
+        Gate: Empirical Unknown #5 (confound-robust separability).
+      </p>
+    </div>
+    <div class="panel">
+      <div class="panel__eye"><span class="lbl">SURFACE 8 · PIEZO HAPTIC</span><span class="meta">L6 · CHALLENGE</span></div>
+      <h3>Reflex stimulus channel</h3>
+      <p class="mono" style="font-size: 15px; color: var(--text-dim); line-height: 1.55;">
+        Sub-ms localized taps (Boréas CapDrive) provoke an involuntary reflex in the 80–280 ms window.
+        Cleaner than voice-coil. Gate: Empirical Unknown #6 + the L6B N≥50 corpus.
+      </p>
+    </div>
+  </div>
+
+  <p class="mono" style="margin-top: 32px; font-size: 14px; color: var(--text-faint);">
+    Vendor reality check: piezo haptics → <span style="color: var(--text-dim)">Boréas</span> (not Qorvo, whose acoustic-wave is RF BAW/SAW). Verify portfolios before any named commitment.
+  </p>
+
+  <span class="chrome-foot"><span class="amber">DESIGN NOTE — NO LIVE CLAIM</span><span>RAISES SPOOF COST · PENDING STAGE A</span></span>
+</section>
+
+<!-- ═══ 10 · WHAT WE BRING ═══ -->
+<section data-screen-label="10 What we bring">
+  <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
+  <span class="chrome-meta"><span>10 · WHAT WE BRING</span><span class="chain">●</span></span>
+
+  <p class="eyebrow">You bring the silicon and manufacturing reality. We bring —</p>
+  <h2>A protocol, a BOM, and a <span class="amber">measurement plan.</span></h2>
+
+  <div class="stack" style="margin-top: 36px; max-width: 1500px;">
+    <div class="kv"><span class="k">Tested protocol stack</span><span class="v chain">Runs today on testnet — not vaporware</span></div>
+    <div class="kv"><span class="k">Defined dev-kit BOM</span><span class="v">C1–C8 + advisory, two-supplier discipline rail</span></div>
+    <div class="kv"><span class="k">Staged measurement plan</span><span class="v">Stage A empirical unknowns — we know what must be proven</span></div>
+    <div class="kv"><span class="k">Digital prototype</span><span class="v">CAD model + exploded architecture for design alignment</span></div>
+    <div class="kv"><span class="k">Ecosystem fit</span><span class="v amber">Native to IoTeX DePIN — grant co-funding path (Halo)</span></div>
+  </div>
+
+  <span class="chrome-foot"><span class="amber">FORENSIC · INSTRUMENT · PANEL</span><span>MEETS · LIVING · CRYPTOGRAPHIC · SPECIMEN</span></span>
+</section>
+
+<!-- ═══ 11 · THE ASK ═══ -->
+<section data-screen-label="11 The ask">
+  <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
+  <span class="chrome-meta"><span>11 · THE ASK</span><span class="amber">30 MINUTES</span></span>
+
+  <p class="eyebrow"><span class="amber">One conversation</span></p>
+  <h1>Does the BOM align with<br>your <span class="amber">portfolio?</span></h1>
+  <p class="lede" style="margin-top: 44px; max-width: 1380px;">
+    A 30-minute design-partner conversation. We bring the protocol, the BOM, and the measurement plan.
+    You bring the silicon and the manufacturing reality. <span class="text">What would a reference dev-kit build look like?</span>
+  </p>
+
+  <div style="display: flex; gap: 16px; margin-top: 44px; flex-wrap: wrap;">
+    <span class="chip" style="color: var(--text-dim);">architecture diagram</span>
+    <span class="chip" style="color: var(--text-dim);">dev-kit BOM</span>
+    <span class="chip" style="color: var(--text-dim);">Path A silicon spec</span>
+    <span class="chip" style="color: var(--text-dim);">piezo design note</span>
+    <span class="chip" style="color: var(--text-dim);">CAD STEP model</span>
+  </div>
+
+  <span class="chrome-foot"><span class="amber">PACKET ATTACHED</span><span>QORTROLLER · CONWAN30/QORTROLLER</span></span>
+</section>
+
+<!-- ═══ 12 · CLOSING / HONESTY ═══ -->
+<section data-screen-label="12 Closing" style="display: grid; place-items: center; text-align: center;">
+  <div>
+    <p class="eyebrow center" style="margin-bottom: 28px;"><span class="chain">●</span> &nbsp;IoTeX · Internet of Trusted Things</p>
+    <p style="font-family: var(--font-display); font-weight: 800; font-size: 88px; line-height: 1.0; letter-spacing: -0.03em; color: var(--text); margin: 0;">
+      Honored, <span style="color: var(--accent-amber);">not surveilled.</span>
+    </p>
+    <p class="mono" style="margin-top: 40px; font-size: 16px; color: var(--text-faint); letter-spacing: 0.08em; max-width: 1100px;">
+      Testnet only · no token · no external audit yet · N=3 corpus · all claims graded, not marketed.
+      The honesty is the design.
+    </p>
+  </div>
+  <span class="chrome-foot"><span class="amber">QorTroller · V.A.P.I. reference controller</span><span>PARTNER BRIEF · v0.1 · 2026-06-13</span></span>
+</section>
+
+</deck-stage>
+
+<script src="/deck-stage.js"></script>
+
+<script type="application/json" id="speaker-notes">
+[
+  "Cover. QorTroller — the V.A.P.I. reference controller. Open with the one line: the input device is the cryptographic owner of the data it produces.",
+  "Thesis. Verify the human where the signal is born, and let the gamer own the data. Cheating can't be asserted. Honored, not surveilled.",
+  "Why now. The software is real and running on testnet. What's missing is purpose-built silicon. We're opening a design-partner conversation, not asking for a finished product.",
+  "Trust chain. Sensors capture at 1 kHz → MCU builds the 228-byte record → secure element signs it in silicon → tamper-proof gamer-owned data on IoTeX. The physical source IS the cryptographic agency-holder.",
+  "Partners ranked by leverage. Rank 1 is an actuation development partner — the trigger is the strongest signal AND the biggest IP risk. Boréas for haptic piezo. Qorvo for RF/power (NOT piezo). Assembly house for sticks. FTO before any geometry externalizes.",
+  "Honest status — measured vs proposed. This is the trust-builder. Real numbers on the left (66/58 contracts, 174 invariants, ~5,766 tests, GIC_100, AIT 1.199). Honest gaps on the right (testnet only, no audit, N=3, Stage A pending). We never say unbeatable.",
+  "C7. The novelty is the force-curve LIVENESS EXTRACTION — the signal — not the actuator (which is patented prior art). We co-develop a clean-sheet actuator under FTO. Aspirational-primary.",
+  "The BOM. C1–C8 with honest color coding: amber = Stage A pending, cyan = spec known, magenta = the crypto root. 608A is NRND — we spec the 608B/608C family.",
+  "Piezo surfaces (Sensor Stack v2.2). Surface 7 acoustic grip-liveness (gate only, not identity). Surface 8 L6 haptic reflex stimulus (Boréas). Design-note proposal, Stage A gated.",
+  "What we bring: tested stack, defined BOM, measurement plan, digital prototype, IoTeX DePIN fit (grant co-funding).",
+  "The ask: a 30-minute conversation. Does the BOM align with your portfolio? Packet attached: diagram, BOM, spec, piezo note, CAD STEP.",
+  "Close. Honored, not surveilled. All claims graded, not marketed — the honesty is the design."
+]
+</script>
+
+</body>
+</html>
