@@ -25,6 +25,14 @@ RUN (headless export):
 
 The .step opens directly in Fusion 360 (Insert > Insert Derive / Upload), Onshape,
 SolidWorks, FreeCAD. The .stl opens in any slicer.
+
+STL CAVEAT (read before printing): the exported .stl is a MULTI-SHELL
+VISUALIZATION mesh — it is the union of many separate, disconnected block solids
+(one per component), NOT a single watertight printable body. It is intended for
+on-screen layout review, not for slicing into a functional print. A real printable
+part is the ergonomic SHELL (modeled separately in Fusion from primitives, per the
+Fusion cowork guide) — not this skeleton. Slicers will load the multi-shell mesh but
+treating it as a print-ready object is a category error.
 ------------------------------------------------------------------------------
 """
 from __future__ import annotations
@@ -65,7 +73,7 @@ class Part:
 PARTS: list[Part] = [
     # id            label                         L     W     H     x      y     z    status
     Part("C1",  "C1 ESP32-S3 MCU",              25.5, 18.0,  3.1,   0.0,   0.0,  2.0, "UNVERIFIED-EXTERNAL"),
-    Part("C2",  "C2 ATECC608B SecureElem",       5.0,  6.0,  1.0,  18.0,  -8.0,  1.0, "UNVERIFIED-EXTERNAL"),
+    Part("C2",  "C2 ATECC608B SecureElem UDFN-8",  4.0,  3.0,  0.6,  18.0,  -8.0,  0.6, "UNVERIFIED-EXTERNAL"),  # canonical UDFN-8 (4x3x0.6); SOIC-8 is the larger dev-board variant
     Part("C3",  "C3 Left stick (Hall/TMR)",      20.0, 20.0, 22.0, -32.0,  12.0, 11.0, "MEASUREMENT-PENDING"),
     Part("C4",  "C4 Right stick (same fam)",     20.0, 20.0, 22.0,  32.0,  12.0, 11.0, "MEASUREMENT-PENDING"),
     Part("C5",  "C5 6-axis IMU",                  3.0,  3.0,  0.9,  -6.0,  -6.0,  0.9, "MEASUREMENT-PENDING"),
@@ -114,11 +122,12 @@ def export(asm: cq.Assembly, out_dir: str) -> None:
     step_path = os.path.join(out_dir, "qortroller_layout.step")
     stl_path = os.path.join(out_dir, "qortroller_layout.stl")
     asm.save(step_path)                         # STEP: manufacturers / Fusion
-    # STL needs a single solid; compound the assembly shapes.
+    # MULTI-SHELL visualization mesh — union of separate block solids, NOT a
+    # single watertight printable body. For layout review only (see module docstring).
     compound = asm.toCompound()
-    cq.exporters.export(compound, stl_path)     # STL: slicer / quick print
+    cq.exporters.export(compound, stl_path)     # STL: visualization only, NOT print-ready
     print(f"[wrote] {step_path}")
-    print(f"[wrote] {stl_path}")
+    print(f"[wrote] {stl_path}  (MULTI-SHELL visualization mesh — NOT a print-ready single body)")
 
 
 def print_envelope() -> None:

@@ -78,6 +78,8 @@ vendor research; see `audits/url-reachability-cycle-17-2026-06-13.md`).
 4. **Keep C2 (secure element) visually distinct** in the exploded view — it's the cryptographic story that makes QorTroller *QorTroller*, not just another pad. Give it its own callout color.
 5. **Leave the A2 microphone cavity absent** — its absence is a deliberate, presentable privacy decision; note it on the slide.
 6. **Target print envelope:** the assembled controller is ≈ 160 × 105 × 65 mm — confirms you need a printer bed of at least ~180 × 180 mm to print the shell halves flat. (Verify once the shell is modeled.)
+7. **The skeleton STL is a multi-shell VISUALIZATION mesh**, not a print-ready body — it's the union of separate component blocks for on-screen layout review only. The actual printable part is the ergonomic shell (modeled separately from primitives). Do not slice the skeleton expecting a functional print.
+8. **C2 package:** model the secure element as **UDFN-8 (≈4×3×0.6 mm)** — the canonical production package. SOIC-8 is the larger dev-board variant only; don't size the production layout around it.
 
 ---
 
