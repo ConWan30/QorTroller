@@ -42,6 +42,9 @@ const GrantBriefView   = lazy(() => import('./views/GrantBriefView').then((m) =>
 // Tab 06 — Reference codex (brand-locked /qortroller-reference.html): the
 // canonical "what / how / forward" reference for QorTroller. Public; no auth.
 const ReferenceView    = lazy(() => import('./views/ReferenceView').then((m) => ({ default: m.ReferenceView })))
+// Tab 07 — Partner Brief (self-contained /qortroller-partner-pitch.html): the
+// manufacturer/partner pitch deck (Qorvo / Boréas / Battle Beaver). Public; no auth.
+const PartnerPitchView = lazy(() => import('./views/PartnerPitchView').then((m) => ({ default: m.PartnerPitchView })))
 
 const VIEW_MAP = {
   gamer:        GamerView,
@@ -49,6 +52,7 @@ const VIEW_MAP = {
   operator:     OperatorView,
   grant:        GrantBriefView,
   reference:    ReferenceView,
+  partner:      PartnerPitchView,
   developer:    DeveloperView,
   manufacturer: ManufacturerView,
   brp:          BrpView,
