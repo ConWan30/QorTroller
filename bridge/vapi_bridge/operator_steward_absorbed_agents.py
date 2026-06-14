@@ -99,7 +99,14 @@ SENTRY_ABSORBED: List[AbsorbedAgentSpec] = [
         module_path="bridge.vapi_bridge.chain_reconciler",
         class_name="ChainReconciler",
         method_name="_reconcile_cycle",
-        interval_s=30,     # 30s (original)
+        # 2026-06-13 STARVATION FIX: was 30s. On a slow/rate-limited IoTeX testnet
+        # RPC the _reconcile_cycle get_logs can take 7-12s+ (and error "range
+        # exceeds the limit"); at 30s cadence that saturates the executor and
+        # starves the event loop (LOOP STARVATION warnings; HTTP endpoints like
+        # /player/session-status time out). Checkpoint reconciliation is NOT
+        # latency-critical (retry_age_s=300 anyway), so 300s cadence cuts the loop
+        # pressure ~10x while still requeuing unconfirmed checkpoints each window.
+        interval_s=300,    # was 30s — throttled to relieve event-loop starvation
         needs_chain=True,
     ),
     AbsorbedAgentSpec(
