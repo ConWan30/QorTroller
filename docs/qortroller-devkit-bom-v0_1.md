@@ -19,6 +19,35 @@ re-render a curated subset once supplier slots are real.
 
 ---
 
+## §0 v0.2 amendments (2026-06-14)
+
+Operator intelligence pass (C1/C2/C3 decisions). All new entries are
+`UNVERIFIED-EXTERNAL` candidates with Qorvo-public-source-verified specs — NOT
+committed suppliers. (Filename kept as `…-v0_1.md` so the Sensor C G2.1 verifier +
+tests stay green; this §0 block is the v0.2 content version.)
+
+- **C1 (power):** Qorvo **ACT88760** PMIC added to the A3 row as the
+  power-regulation candidate. Specs verified against Qorvo's product page /
+  datasheet brief (`qorvo.com/products/d/da008103`): 2.6–**5.5 V** input
+  (operator-relayed "5.8 V" corrected), **13 rails** (7 switching + 6 LDO/load-
+  switch, 25 A total), deep-sleep I_Q **10 µA all-off / 65 µA with one LDO**
+  (operator-relayed "<15 µA buck / ~20 µA LDO" corrected). **Honest scope:** this
+  is controller power-rail integrity for the eventual hardware — it does NOT
+  address the software event-loop freeze diagnosed 2026-06-14 (Windows
+  Proactor + blocking IoTeX RPC; a different layer). Do not claim it "secures the
+  loop-block discipline."
+- **C3 (sticks):** "MIDAS 5-pin HE" **formally dropped** (Cycle 17 provenance gap
+  — no sourceable vendor). C3/C4 narrowed to two same-family candidates: K-Silver
+  JH16 (Hall) + GuliKit (TMR). **Stays `MEASUREMENT-PENDING`** — the relayed JH16
+  3–5% centering figure is `UNVERIFIED-EXTERNAL` (enthusiast teardown) and is
+  *signal quality*, NOT Empirical Unknown #4. #4 (per-unit same-batch
+  separability ≥20%) remains OPEN; centering does not close it.
+- **C2 (presence, QM35825 UWB):** routed to a separate proposal —
+  `wiki/methodology/sensor_stack_v2_3_uwb_presence_design_note.md` — not a BOM
+  critical/advisory row yet (design-note `MEASUREMENT-PENDING`).
+
+---
+
 ## §1 Honesty stamp
 
 The hardest mistake a BOM can make is implying confidence it doesn't
@@ -73,7 +102,7 @@ slot by default; two is recommended but not required.
 |---|---|---|---|---|---|---|
 | `C1` | MCU module (ESP32-class, Wi-Fi/BT, USB-OTG ≥ 1000 Hz) | HWFL-1 master prompt RUNG 2; Sensor C G2.2 | _(slot)_ | _(slot)_ | `UNVERIFIED-EXTERNAL` | Espressif ESP32-S3 is the v0.1 reference candidate. Sensor B S6 (Cycle 5): wireless certs via boilerplate, NO Common Criteria/FIPS on landing page — ESP32 alone NOT a substitute for the C2 secure element (ATECC608B/608C-class), secure-element pairing required (BOM C2). Cert status: PARTIAL |
 | `C2` | Secure element (ECDSA-P256, locked private-key extraction) | `docs/path-a-manufacturing-spec.md` §2 Hardware Requirement | _(slot)_ | _(slot)_ | `UNVERIFIED-EXTERNAL` | **ATECC608B/608C-class family** (CryptoAuthLib-compatible, polling-based timing required per Cycle 16 spec amendment). The original ATECC608A is **NRND — do NOT specify for new designs**; it remains valid only as the Arc 1 bring-up reference part. Forward target ATECC608C-TFLXTLS (TrustFLEX). Alternatives YubiKey 5 PIV, STSAFE-A110. Sensor B S2 tracks lifecycle. |
-| `C3` | Left analog stick — Hall-effect or TMR | `wiki/methodology/sensor_stack_v2_1_architectural_revision.md` Surface 6 | _(slot)_ | _(slot)_ | `MEASUREMENT-PENDING` | Candidates (Cycle 17 intel): **K-Silver JH16 (Hall) / JS16 (TMR)** — one vendor, both physics, same form factor (best same-family fit); **GuliKit TMR** — the better-provenanced dominant commercial TMR vendor (use in place of the unsourceable "Magneto" label). **"MIDAS 5-pin HE" is a provenance gap** — no sourceable vendor found; treat as lower-confidence / re-identify before use. Gated on Empirical Unknown #4 (same-batch separability ≥20%, measured PER sensor physics — Hall and TMR not transferable). Sensor B S3/S4/S5 track availability. |
+| `C3` | Left analog stick — Hall-effect or TMR | `wiki/methodology/sensor_stack_v2_1_architectural_revision.md` Surface 6 | _(slot)_ | _(slot)_ | `MEASUREMENT-PENDING` | **v0.2: candidates LOCKED to two same-family options** — **K-Silver JH16 (Hall)** and **GuliKit (TMR)**. "MIDAS 5-pin HE" **DROPPED** (Cycle 17 provenance gap — no sourceable vendor). K-Silver also offers a JS16 (TMR) in the same form factor (Hall/TMR A/B without footprint change). UNVERIFIED-EXTERNAL teardown: JH16 tightens center deadzone to ~3–5% (vs older 5–7%) — *signal-quality* improvement, NOT a separability result. **Empirical Unknown #4 (per-unit same-batch separability ≥20%, measured PER physics) remains OPEN** — centering does not close it. Sensor B S3/S5 track availability (S4 deprecated). |
 | `C4` | Right analog stick — same family as C3 | (same as C3) | _(slot)_ | _(slot)_ | `MEASUREMENT-PENDING` | Same-family-as-C3 discipline: BOM cannot mix Hall + TMR across L/R, breaks calibration corpus assumption. |
 | `C5` | IMU (6-axis gyro + accel ≥ 1000 Hz polling) | `docs/path-a-manufacturing-spec.md` §5 PROOF_TIER_FULL requirement | _(slot)_ | _(slot)_ | `MEASUREMENT-PENDING` | Reference candidates ICM-42688-P / BMI270 / LSM6DSO. Stage A measurement Empirical Unknown #1 anchors selection. |
 | `C6` | USB-C connector + cable assembly | `docs/path-a-manufacturing-spec.md` §1 reference DualShock Edge USB-C | _(slot)_ | _(slot)_ | `UNVERIFIED-EXTERNAL` | Spec straightforward; supplier selection low-risk; recommend USB-IF certified. |
@@ -88,7 +117,7 @@ slot by default; two is recommended but not required.
 |---|---|---|---|---|---|---|
 | `A1` | Lightbar LED array (3-color symbol stream channel) | Sensor Stack v2.1 Surface 4 CO-SIGNAL | _(slot)_ | _(optional)_ | `UNVERIFIED-EXTERNAL` | Used as challenge-response witness channel; passive camera on tournament station observes. Privacy-preferred path vs microphone. |
 | `A2` | Microphone array | _(none — DEFERRED)_ | — | — | `DEFERRED` | TRACK1-LESSON-002 (DualSense exposes single mono UAC1 post-DSP, not multi-mic; literature does not transfer) + TRACK1-LESSON-003 (privacy law: BIPA/GDPR/CIPA attach to capture regardless of downstream use). Row preserved so future cycles cannot silently revive it. |
-| `A3` | Battery cell + management IC | HWFL-1 master prompt RUNG 2 | _(slot)_ | _(optional)_ | `UNVERIFIED-EXTERNAL` | Drain rate is L4 ADVISORY signal only (4-bit 11-bucket level, multi-min cadence). Spec straightforward. |
+| `A3` | Battery cell + power-management IC (PMIC) | HWFL-1 master prompt RUNG 2 | _(slot)_ | _(optional)_ | `UNVERIFIED-EXTERNAL` | Battery: 3.7 V LiPo (~350–500 mAh). **v0.2 PMIC candidate: Qorvo ACT88760** (specs verified vs Qorvo product page + datasheet brief da008103): 2.6–5.5 V input (LiPo-compatible), 13 rails (7 switching + 6 LDO/load-switch, 25 A total), deep-sleep I_Q 10 µA all-off / 65 µA w/ one LDO (preserves ESP32-S3 deep-sleep budget). Rationale: clean multi-rail regulation against RF/compute current spikes = controller power-rail integrity for the 1 kHz sense path. **Scope honesty:** addresses HARDWARE power integrity, NOT the software event-loop freeze (Windows Proactor/AsyncWeb3, different layer). Fits the Qorvo RF/power partner lane. Drain rate remains an L4 ADVISORY signal only. |
 
 ---
 
@@ -110,7 +139,7 @@ Which Sensor B canonical source unblocks which BOM row when populated:
 |---|---|---|
 | `S2.atecc608a-lifecycle` | ATECC608A lifecycle / successors | `C2` |
 | `S3.k-silver-jh16-he-stick` | K-Silver JH16 HE | `C3`, `C4` |
-| `S4.midas-5pin-he-stick` | MIDAS 5-pin HE | `C3`, `C4` |
+| `S4.midas-5pin-he-stick` | MIDAS 5-pin HE — **DEPRECATED v0.2** (dropped; no sourceable vendor; topic ID code-frozen so retained) | ~~`C3`, `C4`~~ |
 | `S5.magneto-tmr-stick` | Magneto TMR | `C3`, `C4` |
 | `S6.esp32-cert-status` | ESP32 cert status | `C1` |
 | _(no source yet)_ | IMU vendor landscape | `C5` |
