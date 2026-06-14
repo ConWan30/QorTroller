@@ -27,15 +27,17 @@ committed suppliers. (Filename kept as `…-v0_1.md` so the Sensor C G2.1 verifi
 tests stay green; this §0 block is the v0.2 content version.)
 
 - **C1 (power):** Qorvo **ACT88760** PMIC added to the A3 row as the
-  power-regulation candidate. Specs verified against Qorvo's product page /
-  datasheet brief (`qorvo.com/products/d/da008103`): 2.6–**5.5 V** input
-  (operator-relayed "5.8 V" corrected), **13 rails** (7 switching + 6 LDO/load-
-  switch, 25 A total), deep-sleep I_Q **10 µA all-off / 65 µA with one LDO**
-  (operator-relayed "<15 µA buck / ~20 µA LDO" corrected). **Honest scope:** this
-  is controller power-rail integrity for the eventual hardware — it does NOT
-  address the software event-loop freeze diagnosed 2026-06-14 (Windows
-  Proactor + blocking IoTeX RPC; a different layer). Do not claim it "secures the
-  loop-block discipline."
+  power-regulation candidate. Specs verified against the Qorvo product page
+  (`qorvo.com/products/p/ACT88760`): **2.6–5.8 V** input, 0.5–3.8 V output,
+  **13 rails** (7 bucks + 6 LDOs/load-switches), WLCSP-81 (3.85×3.85 mm), eval
+  kit **ACT88760EVK-102.E2**. (Verify note: the relayed 5.8 V input was CORRECT —
+  an earlier search snippet's "5.5 V" was wrong; the product page confirms 5.8 V.
+  Deep-sleep I_Q is NOT on the product page — Qorvo press materials cite ~10 µA
+  all-off / 65 µA w/ one LDO; the relayed per-rail "<15 µA" figures are unverified,
+  confirm on the full datasheet.) **Honest scope:** controller power-rail integrity
+  for the eventual hardware — it does NOT address the software event-loop freeze
+  diagnosed 2026-06-14 (Windows Proactor + blocking IoTeX RPC; a different layer).
+  Do not claim it "secures the loop-block discipline."
 - **C3 (sticks):** "MIDAS 5-pin HE" **formally dropped** (Cycle 17 provenance gap
   — no sourceable vendor). C3/C4 narrowed to two same-family candidates: K-Silver
   JH16 (Hall) + GuliKit (TMR). **Stays `MEASUREMENT-PENDING`** — the relayed JH16
@@ -117,7 +119,7 @@ slot by default; two is recommended but not required.
 |---|---|---|---|---|---|---|
 | `A1` | Lightbar LED array (3-color symbol stream channel) | Sensor Stack v2.1 Surface 4 CO-SIGNAL | _(slot)_ | _(optional)_ | `UNVERIFIED-EXTERNAL` | Used as challenge-response witness channel; passive camera on tournament station observes. Privacy-preferred path vs microphone. |
 | `A2` | Microphone array | _(none — DEFERRED)_ | — | — | `DEFERRED` | TRACK1-LESSON-002 (DualSense exposes single mono UAC1 post-DSP, not multi-mic; literature does not transfer) + TRACK1-LESSON-003 (privacy law: BIPA/GDPR/CIPA attach to capture regardless of downstream use). Row preserved so future cycles cannot silently revive it. |
-| `A3` | Battery cell + power-management IC (PMIC) | HWFL-1 master prompt RUNG 2 | _(slot)_ | _(optional)_ | `UNVERIFIED-EXTERNAL` | Battery: 3.7 V LiPo (~350–500 mAh). **v0.2 PMIC candidate: Qorvo ACT88760** (specs verified vs Qorvo product page + datasheet brief da008103): 2.6–5.5 V input (LiPo-compatible), 13 rails (7 switching + 6 LDO/load-switch, 25 A total), deep-sleep I_Q 10 µA all-off / 65 µA w/ one LDO (preserves ESP32-S3 deep-sleep budget). Rationale: clean multi-rail regulation against RF/compute current spikes = controller power-rail integrity for the 1 kHz sense path. **Scope honesty:** addresses HARDWARE power integrity, NOT the software event-loop freeze (Windows Proactor/AsyncWeb3, different layer). Fits the Qorvo RF/power partner lane. Drain rate remains an L4 ADVISORY signal only. |
+| `A3` | Battery cell + power-management IC (PMIC) | HWFL-1 master prompt RUNG 2 | _(slot)_ | _(optional)_ | `UNVERIFIED-EXTERNAL` | Battery: 3.7 V LiPo (~350–500 mAh). **v0.2 PMIC candidate: Qorvo ACT88760** (verified vs Qorvo product page): 2.6–5.8 V input (LiPo-compatible), 0.5–3.8 V output, 13 rails (7 bucks + 6 LDOs/load-switches), WLCSP-81 (3.85×3.85 mm), eval kit **ACT88760EVK-102.E2**. Deep-sleep I_Q low (~10 µA all-off / 65 µA w/ one LDO per Qorvo press materials — not on the product page; verify on full datasheet) — preserves the ESP32-S3 deep-sleep budget. Rationale: clean multi-rail regulation against RF/compute current spikes = controller power-rail integrity for the 1 kHz sense path. **Scope honesty:** addresses HARDWARE power integrity, NOT the software event-loop freeze (Windows Proactor/AsyncWeb3, different layer). Fits the Qorvo RF/power partner lane. Drain rate remains an L4 ADVISORY signal only. |
 
 ---
 

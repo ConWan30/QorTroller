@@ -36,14 +36,20 @@ Qorvo claim; do not repeat it.
 A UWB SoC (Qorvo **QM35825**) using radar-based sensing to detect the physical
 presence of a body holding/near the controller — micro-motion, gross mass,
 and (per Qorvo) vital-sign-class signals. On-chip compute reduces it to a binary
-"present/absent" decision exported to the ESP32 over I2C, so the MCU's 1 kHz
-polling loop is never bogged down by raw radar processing.
+"present/absent" decision exported to the ESP32 over **SPI or UART** (the QM35825
+exposes high-speed SPI + UART + GPIO — **NOT I2C**; the relayed "I2C to the ESP32"
+was wrong), so the MCU's 1 kHz polling loop is never bogged down by raw radar
+processing.
 
-**Verified specs (Qorvo product page + brief):** IEEE 802.15.4-2024 compliant;
-ranging ±5 cm; AoA ±2°; up to 104 dB link budget; 4 RF ports + LNAs/PA/switches;
-**Cortex-M33 + Secure Enclave**; radar modes for motion / presence / people-
-counting / vital-sign. First fully-integrated low-power UWB SoC (vendor claim,
-Mar 2025).
+**Verified specs (Qorvo product page, 2026-06-14):** IEEE 802.15.4-2024 + 802.15.4z
+(HRP/BPRF/HPRF), **FiRa 3.0 certified**; ranging ±5 cm; 3D AoA ±2°; supply
+1.14–3.6 V; interfaces **2× hi-speed SPI slave (40 MHz) + SPI master + UART +
+25 GPIO** (no I2C); **Cortex-M33 + Secure Enclave**, Secure Boot/Debug, and
+**hardware RSA / SHA / AES / TRNG**; radar modes for motion / presence /
+people-counting / vital-sign. Dev kit **QM35825DK-05** (Linux). First fully-
+integrated low-power UWB SoC (vendor claim, Mar 2025). (Correction: relayed
+"on-chip AI/ML" is narrowed to the Cortex-M33 + on-chip radar/ranging compute —
+"AI/ML" is not a verified Qorvo claim.)
 
 ### Proposed tier: **ADVISORY — PRESENCE GATE (explicitly NOT an identity surface)**
 - **CLAIMS (defensible):** zero-contact "a body is present at the controller now"
