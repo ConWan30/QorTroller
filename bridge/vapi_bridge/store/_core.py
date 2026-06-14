@@ -156,6 +156,16 @@ class Store(ZkbaVpmMixin):
                     ON records(created_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_records_inference_ts
                     ON records(inference, timestamp_ms DESC);
+                -- 2026-06-13: device-filtered "most recent record" lookup
+                -- (get_recent_records(limit, device_id) — used by
+                -- /player/session-status, polled every 5s by the gamer dashboard).
+                -- Without this, the WHERE device_id=? ... ORDER BY created_at DESC
+                -- query filters by device then SORTS all of that device's ~100k+
+                -- rows (idx_records_device is (device_id, counter) — wrong sort
+                -- key; idx_records_created_at is global). The composite below
+                -- serves both the filter and the sort, making it O(limit).
+                CREATE INDEX IF NOT EXISTS idx_records_device_created
+                    ON records(device_id, created_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_submissions_status
                     ON submissions(status);
 
