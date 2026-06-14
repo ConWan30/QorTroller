@@ -7843,7 +7843,13 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             _onchain, _source = None, "unavailable"
             if chain is not None:
                 try:
-                    _onchain = bool(await chain.is_fully_eligible(_dev_hash))
+                    # Bound the on-chain read: on a slow/rate-limited IoTeX testnet
+                    # RPC this await can hang for the full RPC latency, blocking the
+                    # whole endpoint (gamer dashboard box shows all-dashes instead
+                    # of local data). 2s cap → fail fast to "unavailable" (NO CHAIN)
+                    # while humanity / enforcement / vhp still populate from local.
+                    _onchain = bool(await asyncio.wait_for(
+                        chain.is_fully_eligible(_dev_hash), timeout=2.0))
                     _source = "onchain"
                 except Exception as _exc_elig:
                     log.debug("player_session_status: isFullyEligible unavailable: %s", _exc_elig)
