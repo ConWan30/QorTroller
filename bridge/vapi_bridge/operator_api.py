@@ -7907,25 +7907,39 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         proof_tier   = None
         controller_model = None
         path_a_eligible  = False
+
+        # These are advisory MFG-registry / Path A chain reads. On a slow/rate-
+        # limited IoTeX RPC each can block for the full RPC latency; several
+        # sequential reads hang this 5s-polled endpoint (the dashboard box shows
+        # all-dashes). Bound the WHOLE section to 2s — on timeout the fields stay
+        # at their honest defaults (None / False) while the rest of the payload
+        # (humanity / capture / GIC / VHP / enforcement) returns immediately.
+        async def _read_path_a_fields():
+            nonlocal signing_path, proof_tier, controller_model, path_a_eligible
+            try:
+                _sp = await asyncio.to_thread(chain.get_device_signing_path, dev) if chain else 0
+                signing_path = {1: "A", 2: "B"}.get(int(_sp))
+                _pt = await asyncio.to_thread(chain.get_proof_tier, dev) if chain else 0
+                proof_tier = {1: "FULL", 2: "STANDARD", 3: "BASIC"}.get(int(_pt))
+                if chain:
+                    _cm_bytes = await asyncio.to_thread(chain.get_device_controller_model, dev)
+                    if _cm_bytes is not None:
+                        from .controller_models import name_for_hash as _name_for_hash
+                        controller_model = _name_for_hash(_cm_bytes)
+            except Exception as _exc_mfg:
+                log.debug("player_session_status: MFG registry read unavailable (honest dormant): %s", _exc_mfg)
+            try:
+                if chain is not None:
+                    import hashlib as _hl_pa
+                    _dev_hash = _hl_pa.sha256(dev.encode()).hexdigest()
+                    path_a_eligible = bool(await asyncio.wait_for(
+                        chain.is_fully_eligible_path_a(_dev_hash), timeout=2.0))
+            except Exception as _exc_pa:
+                log.debug("player_session_status: isFullyEligible_PathA unavailable (honest false): %s", _exc_pa)
         try:
-            _sp = await asyncio.to_thread(chain.get_device_signing_path, dev) if chain else 0
-            signing_path = {1: "A", 2: "B"}.get(int(_sp))
-            _pt = await asyncio.to_thread(chain.get_proof_tier, dev) if chain else 0
-            proof_tier = {1: "FULL", 2: "STANDARD", 3: "BASIC"}.get(int(_pt))
-            if chain:
-                _cm_bytes = await asyncio.to_thread(chain.get_device_controller_model, dev)
-                if _cm_bytes is not None:
-                    from .controller_models import name_for_hash as _name_for_hash
-                    controller_model = _name_for_hash(_cm_bytes)
-        except Exception as _exc_mfg:
-            log.debug("player_session_status: MFG registry read unavailable (honest dormant): %s", _exc_mfg)
-        try:
-            if chain is not None:
-                import hashlib as _hl_pa
-                _dev_hash = _hl_pa.sha256(dev.encode()).hexdigest()
-                path_a_eligible = bool(await chain.is_fully_eligible_path_a(_dev_hash))
-        except Exception as _exc_pa:
-            log.debug("player_session_status: isFullyEligible_PathA unavailable (honest false): %s", _exc_pa)
+            await asyncio.wait_for(_read_path_a_fields(), timeout=2.0)
+        except Exception as _exc_pa_to:
+            log.debug("player_session_status: Path A chain reads timed out (honest defaults): %s", _exc_pa_to)
 
         return {
             "controller_connected": controller_connected,
