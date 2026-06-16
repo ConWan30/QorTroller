@@ -1458,6 +1458,20 @@ INVARIANTS: list[Invariant] = [
         pattern=r"filter_touchpad_coordinates",
         min_matches=1,
     ),
+    Invariant(
+        id="INV-FIRMWARE-001",
+        description="Asserts that the QorTroller firmware poac_types.h enforces the FROZEN 228-byte PoAC wire format at compile time via _Static_assert. Any accidental struct change fails the firmware build before reaching a device. Paired with INV-ARC7-001 (bridge-side codec check).",
+        file="bridge/firmware/joypad-os/src/qortroller/poac_types.h",
+        pattern=r"_Static_assert\s*\(\s*sizeof\s*\(\s*poac_record_t\s*\)\s*==\s*POAC_RECORD_SIZE",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-FIRMWARE-002",
+        description="Asserts that the UWB presence reader (uwb_presence.c) enforces the privacy gate: frames with the vital-sign flag set are discarded and the sensor is disabled for the session. Vital-sign capture requires an independent privacy review per TRACK1-LESSON-003.",
+        file="bridge/firmware/joypad-os/src/qortroller/uwb_presence.c",
+        pattern=r"UWB_FLAG_VITALSIGN|vital.sign.*discard|sensor_disabled\s*=\s*true",
+        min_matches=2,
+    ),
 ]
 
 
