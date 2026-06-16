@@ -247,6 +247,10 @@ SYSTEM_PROMPT = (
     "                                                      1=frozen_drift, 5=crypto_drift, 14=doc_numbers\n"
     "  gic_replay(n?: int, session_id?: str)             - Replay last N GIC links from local DB,\n"
     "                                                      verify each hash — detects tamper/corruption\n"
+    "  take_snapshot()                                   - Capture full protocol state snapshot right now\n"
+    "                                                      and store in agent_memory.db snapshots table\n"
+    "  diff_snapshots(n?: int)                           - Compare last N snapshots, surface all deltas\n"
+    "                                                      (GIC links, ratio drift, threshold shift, etc.)\n"
     "  execute_shell(command: str)                       - Run a shell command\n"
     "  current_time()                                    - Get current date and time\n\n"
     "You can call multiple tools sequentially (one per LLM response). The\n"
@@ -552,6 +556,68 @@ class QorTrollerBrain:
                 if result.returncode == 0:
                     return result.stdout
                 return f"Error: git log failed: {result.stderr}"
+
+            elif name == "take_snapshot":
+                # Trigger the protocol watcher to take one snapshot right now
+                # and store it in agent_memory.db (snapshots table).
+                # Returns the formatted snapshot string.
+                import sys as _sys
+                watcher_path = os.path.join(REPO_ROOT, "protocol_watcher.py")
+                if not os.path.exists(watcher_path):
+                    return "Error: protocol_watcher.py not found in repo root"
+                _sys.path.insert(0, REPO_ROOT)
+                try:
+                    import importlib.util as _ilu
+                    spec = _ilu.spec_from_file_location("protocol_watcher", watcher_path)
+                    pw = _ilu.module_from_spec(spec)
+                    spec.loader.exec_module(pw)
+                    conn = pw._init_db(DB_PATH)
+                    snap = pw.collect_snapshot()
+                    pw._save_snapshot(conn, snap)
+                    conn.close()
+                    return pw.format_snapshot(snap)
+                except Exception as e:
+                    return f"Error taking snapshot: {e}"
+
+            elif name == "diff_snapshots":
+                # Compare last N snapshots from agent_memory.db and report deltas.
+                n = max(2, int(args.get("n", 2)))
+                import sys as _sys
+                watcher_path = os.path.join(REPO_ROOT, "protocol_watcher.py")
+                if not os.path.exists(watcher_path):
+                    return "Error: protocol_watcher.py not found"
+                _sys.path.insert(0, REPO_ROOT)
+                try:
+                    import importlib.util as _ilu
+                    spec = _ilu.spec_from_file_location("protocol_watcher", watcher_path)
+                    pw = _ilu.module_from_spec(spec)
+                    spec.loader.exec_module(pw)
+                    conn = pw._init_db(DB_PATH)
+                    snaps = pw._get_last_snapshots(conn, n)
+                    conn.close()
+                    if len(snaps) < 2:
+                        return (f"Only {len(snaps)} snapshot(s) in DB — "
+                                f"run take_snapshot or protocol_watcher.py --once first")
+                    # Diff consecutive pairs
+                    all_alerts = []
+                    for i in range(len(snaps) - 1):
+                        curr = snaps[i]["data"]
+                        prev = snaps[i + 1]["data"]
+                        alerts = pw.diff_snapshots(prev, curr)
+                        for a in alerts:
+                            a["between"] = f"{snaps[i+1]['timestamp'][:19]} → {snaps[i]['timestamp'][:19]}"
+                            all_alerts.append(a)
+                    if not all_alerts:
+                        latest = snaps[0]
+                        snap_fmt = pw.format_snapshot(latest["data"])
+                        return (f"No deltas across last {len(snaps)} snapshots.\n\n"
+                                f"Latest ({latest['timestamp'][:19]}):\n{snap_fmt}")
+                    lines = [f"Deltas across last {len(snaps)} snapshots:"]
+                    for a in all_alerts:
+                        lines.append(f"  [{a['key']}] {a['message']} ({a['between']})")
+                    return "\n".join(lines)
+                except Exception as e:
+                    return f"Error diffing snapshots: {e}"
 
             elif name == "bridge_get":
                 path = args.get("path", "")
@@ -1140,8 +1206,10 @@ class QorTrollerBrain:
                 return "\n".join(lines)
 
             elif name == "calibration_status":
+                """Full calibration snapshot: L4 thresholds, AIT separation,
+                N per player, grind readiness, consecutive clean, tournament gate."""
                 import requests as _req
-                lines = ["═" * 52, "  CALIBRATION & ENROLLMENT STATUS", "═" * 52]
+                lines = ["=" * 60, "  CALIBRATION & ENROLLMENT STATUS", "=" * 60]
 
                 # 1. L4 thresholds from calibration_profile_live.json
                 cal_path = os.path.join(REPO_ROOT, "calibration_profile_live.json")
@@ -1153,22 +1221,21 @@ class QorTrollerBrain:
                         "  L4 Thresholds (live calibration):",
                         f"    anomaly    : {thr.get('l4_anomaly', '?'):.4f}  (baseline 7.009)",
                         f"    continuity : {thr.get('l4_continuity', '?'):.4f}  (baseline 5.367)",
-                        f"    total recs : {cal.get('total_records', '?')}",
-                        f"    confidence : {cal.get('confidence', '?')}",
-                        f"    generated  : {cal.get('generated_at', '?')}",
-                        "─" * 52,
                     ]
+                    # Only show file metadata if present
+                    for md_key in ["total_records", "confidence", "generated_at"]:
+                        md_val = cal.get(md_key)
+                        if md_val:
+                            lines.append(f"    {md_key}: {md_val}")
+                    lines.append("-" * 60)
                 except Exception as e:
                     lines.append(f"  calibration_profile_live.json: {e}")
 
-                # 2. Separation ratio from bridge
-                # separation-ratio-status requires api_key query param
-                # ait-separation-status uses x-api-key header (standard)
-                sep_endpoints = [
-                    (f"/agent/separation-ratio-status?api_key={OPERATOR_API_KEY}", "Separation Ratio"),
-                    ("/agent/ait-separation-status", "AIT Separation"),
-                ]
-                for ep, label in sep_endpoints:
+                # 2. N per player + separation defensibility
+                for ep, label in [
+                    ("/agent/separation-defensibility-status", "Separation Defensibility"),
+                    ("/agent/separation-ratio-status", "Separation Ratio"),
+                ]:
                     try:
                         r = _req.get(f"{BRIDGE_OPERATOR_URL}{ep}", timeout=4,
                                      headers={"x-api-key": OPERATOR_API_KEY} if OPERATOR_API_KEY else {},
@@ -1184,96 +1251,90 @@ class QorTrollerBrain:
                     except Exception:
                         lines.append(f"  {label}: bridge offline")
 
-                lines.append("─" * 52)
-
-                # 3. GIC / grind progress
+                # 3. AIT probe results
                 try:
-                    r = _req.get(f"{BRIDGE_OPERATOR_URL}/bridge/grind-chain-status", timeout=4,
+                    r = _req.get(f"{BRIDGE_OPERATOR_URL}/agent/ait-separation-status", timeout=4,
+                                 headers={"x-api-key": OPERATOR_API_KEY} if OPERATOR_API_KEY else {},
                                  proxies={"http": None, "https": None})
                     if r.status_code == 200:
                         d = r.json()
-                        chain_len = d.get("chain_length", 0)
-                        intact    = d.get("chain_intact", True)
-                        GATE = 100
-                        pct = min(100, round(chain_len / GATE * 100))
-                        bar = "█" * (pct // 5) + "░" * (20 - pct // 5)
+                        lines.append("  AIT Probe Results:")
+                        for k, v in d.items():
+                            if isinstance(v, (int, float, bool, str)):
+                                lines.append(f"    {k}: {v}")
+                            elif isinstance(v, list) and len(v) <= 6:
+                                lines.append(f"    {k}: {v}")
+                    else:
+                        lines.append(f"  AIT Probe: HTTP {r.status_code}")
+                except Exception:
+                    lines.append("  AIT Probe: bridge offline")
+
+                lines.append("-" * 60)
+
+                # 4. GIC / grind progress + grind_ready
+                try:
+                    r = _req.get(f"{BRIDGE_OPERATOR_URL}/bridge/grind-chain-status", timeout=4,
+                                 headers={"x-api-key": OPERATOR_API_KEY} if OPERATOR_API_KEY else {},
+                                 proxies={"http": None, "https": None})
+                    if r.status_code == 200:
+                        d = r.json()
                         lines += [
                             "  Grind Integrity Chain:",
-                            f"    length  : {chain_len} / {GATE}",
-                            f"    intact  : {'YES' if intact else 'BROKEN'}",
-                            f"    progress: [{bar}] {pct}%",
+                            f"    length      : {d.get('chain_length', 0)} / 100",
+                            f"    intact      : {'YES' if d.get('chain_intact', True) else 'BROKEN'}",
+                            f"    grind_ready : {'YES' if d.get('grind_ready', False) else 'no'}",
                         ]
+                    else:
+                        lines.append(f"  GIC: HTTP {r.status_code}")
                 except Exception:
                     lines.append("  GIC: bridge offline")
 
-                lines.append("─" * 52)
+                # 5. Capture health: consecutive_clean, sessions_per_day
+                try:
+                    r = _req.get(f"{BRIDGE_OPERATOR_URL}/bridge/capture-health", timeout=4,
+                                 headers={"x-api-key": OPERATOR_API_KEY} if OPERATOR_API_KEY else {},
+                                 proxies={"http": None, "https": None})
+                    if r.status_code == 200:
+                        d = r.json()
+                        cc = d.get("consecutive_clean_toward_target", 0)
+                        target = d.get("consecutive_clean_target", 100)
+                        lines += [
+                            "  Capture Health:",
+                            f"    consecutive_clean : {cc} / {target}",
+                        ]
+                        for extra_key in ["sessions_per_day", "capture_healthy", "sessions_stagnant"]:
+                            v = d.get(extra_key)
+                            if isinstance(v, (int, float, bool, str)):
+                                lines.append(f"    {extra_key}: {v}")
+                    else:
+                        lines.append(f"  Capture health: HTTP {r.status_code}")
+                except Exception:
+                    lines.append("  Capture health: bridge offline")
 
-                # 4. Tournament preflight gate
+                lines.append("-" * 60)
+
+                # 6. Tournament preflight gate
                 try:
                     r = _req.get(f"{BRIDGE_OPERATOR_URL}/agent/tournament-preflight", timeout=4,
+                                 headers={"x-api-key": OPERATOR_API_KEY} if OPERATOR_API_KEY else {},
                                  proxies={"http": None, "https": None})
                     if r.status_code == 200:
                         d = r.json()
                         overall = d.get("overall_pass", False)
-                        lines.append(f"  Tournament gate: {'PASS ✓' if overall else 'NOT READY'}")
-                        conds = d.get("conditions", {})
-                        for k, v in conds.items():
-                            icon = "✓" if v else "✗"
-                            lines.append(f"    [{icon}] {k}")
+                        lines.append(f"  Tournament gate: {'PASS' if overall else 'NOT READY'}")
+                        for k in ["separation_ok", "l4_ok", "gate_ok", "cert_ok",
+                                   "audit_ok", "dual_gate_warned", "epoch_window_warned",
+                                   "ioswarm_warned", "biometric_ttl_ok", "all_pairs_p0_ok"]:
+                            v = d.get(k)
+                            if isinstance(v, bool):
+                                lines.append(f"    [{'+' if v else '-'}] {k}")
+                    else:
+                        lines.append(f"  Tournament gate: HTTP {r.status_code}")
                 except Exception:
                     lines.append("  Tournament gate: bridge offline")
 
-                lines.append("═" * 52)
+                lines.append("=" * 60)
                 return "\n".join(lines)
-
-            elif name == "write_file":
-                path = args.get("path", "")
-                content = args.get("content", "")
-                if not path:
-                    return "Error: 'path' argument is required"
-                safe = os.path.normpath(os.path.join(REPO_ROOT, path))
-                if not safe.startswith(os.path.normpath(REPO_ROOT)):
-                    return "Error: Access denied (path traversal)"
-                # Block writes to sensitive files
-                blocked = {".env", "bridge/.env", "scripts/vapi_invariant_gate.py",
-                           ".github/INVARIANTS_ALLOWLIST.json"}
-                rel = os.path.relpath(safe, REPO_ROOT).replace("\\", "/")
-                if rel in blocked:
-                    return f"Error: Write to '{rel}' is blocked — use Claude Code for protocol files"
-                os.makedirs(os.path.dirname(safe), exist_ok=True)
-                with open(safe, "w", encoding="utf-8") as f:
-                    f.write(content)
-                return f"OK: wrote {len(content)} chars to {rel}"
-
-            elif name == "search_code":
-                pattern = args.get("pattern", "")
-                file_glob = args.get("glob", "")
-                if not pattern:
-                    return "Error: 'pattern' argument is required"
-                cmd = ["python", "-m", "grep_module"] if False else None
-                # Use ripgrep if available, else fall back to git grep
-                rg_cmd = ["rg", "--no-heading", "-n", "--max-count=5",
-                          "--max-filesize=500K"]
-                if file_glob:
-                    rg_cmd += ["--glob", file_glob]
-                rg_cmd += [pattern, REPO_ROOT]
-                result = subprocess.run(
-                    rg_cmd, capture_output=True, text=True, timeout=TOOL_TIMEOUT
-                )
-                if result.returncode in (0, 1):  # 1 = no matches (not an error)
-                    out = result.stdout[:8000] or "(no matches)"
-                    # Make paths relative
-                    out = out.replace(REPO_ROOT + os.sep, "").replace(REPO_ROOT + "/", "")
-                    return out
-                # Fallback: git grep
-                git_cmd = ["git", "grep", "-n", "--max-count=5", pattern]
-                if file_glob:
-                    git_cmd += ["--", file_glob]
-                result2 = subprocess.run(
-                    git_cmd, cwd=REPO_ROOT, capture_output=True, text=True, timeout=TOOL_TIMEOUT
-                )
-                return result2.stdout[:8000] or "(no matches)"
-
             elif name == "git_log_full":
                 ref = args.get("ref", "HEAD")
                 n = min(int(args.get("n", 5)), 20)
@@ -2451,6 +2512,16 @@ async def app(scope, receive, send):
                         "n": "int (optional, default 20, max 200)",
                         "session_id": "str (optional — defaults to most recent session in DB)",
                     },
+                },
+                {
+                    "name": "take_snapshot",
+                    "description": "Capture a full protocol state snapshot right now (GIC chain, PCC, AIT separation, calibration thresholds, tournament gate, wallet balance, IoTeX block) and store in agent_memory.db. Returns formatted snapshot.",
+                    "arguments": {},
+                },
+                {
+                    "name": "diff_snapshots",
+                    "description": "Compare last N protocol snapshots stored by the watcher or take_snapshot. Surfaces all deltas: new GIC links, ratio drift, threshold shifts, wallet changes, PCC degradation, tournament gate flips.",
+                    "arguments": {"n": "int (optional, default 2, compare last N snapshots)"},
                 },
                 # --- Protocol Domain Tools ---
                 {
