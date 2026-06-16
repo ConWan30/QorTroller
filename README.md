@@ -16,7 +16,7 @@
 | **SDK tests** | 604 passing |
 | **Hardhat contract tests** | **760 passing** (13 pre-existing unrelated failures, see baseline) |
 | **Frontend Vitest** | **155 passing** (Consent Cockpit + VHR Proof Panel additions, 2026-06-04/05) |
-| **PV-CI invariant gate** | **174 / 174 pinned**, governance-ceremony-locked; CI-enforced on every PR |
+| **PV-CI invariant gate** | **176 / 176 pinned**, governance-ceremony-locked; CI-enforced on every PR (+INV-FIRMWARE-001/002 added 2026-06-15) |
 | **FSCA contradiction rules** | 28 active |
 | **Contracts LIVE on IoTeX testnet** | **66 deployed, 58 currently-active** (chain 4690; per the 2026-06-13 contract-status audit `audits/contract-status-cycle-15-2026-06-13.md` — 58 ACTIVE / 3 explicitly SUPERSEDED / 5 deprecated-by-versioning; supersession is a classification overlay, all 66 remain on-chain and callable). See `contracts/deployed-addresses.json`. Recent deploys: **Arc 2 `VAPIBuyerCategoryVerifier` `0x5B1D82AA…` (block 44355501, 2026-06-05)**; **Arc 6 `VAPITemporalBeaconRegistry` `0x96244031…` (block 44355513, 2026-06-05)**; Arc 5 v1 `VAPIReplayProofVerifier` `0x5182372d…` (block 44053167, 2026-05-30); Arc 4 `VAPIConsentManifestRegistry` `0x5F7c8068…` (block 44053171, 2026-05-30) |
 | **Gamer-facing dApps** | **Consent Cockpit at `/consent`** — first standalone gamer-sovereign consent surface in the protocol (Cockpit F1–F5 shipped 2026-06-05); `BRIDGE NEVER GRANTS OR REVOKES CONSENT` invariant displayed as headline UX, signing always `msg.sender == gamer` |
@@ -28,7 +28,8 @@
 | **First gamer-self-sovereign consent manifest on-chain** | Written 2026-06-05 from real wallet (`0x0Cf36dB57…`) to `VAPIConsentManifestRegistry` at `0x5F7c8068…` — tx `0xd02c051e…20bd` block 44354567, `allowReplayProofs=true` verified on-chain. Gamer-self-sovereignty invariant verified by Solidity `msg.sender == gamer` check; bridge structurally incapable of writing this. |
 | **GIC_100 cognitive chain head** | Permanently anchored 2026-05-06 (block 43348052) |
 | **World Model Provenance Lane (WMP)** | **Architectural blueprint published 2026-06-05** — additive packaging + export + consumer-verifier lane over Arc 5 (VHR) + Arc 6 (PoSR) + Arc 4 (Consent). Honest POMDP placement (provenance source, NOT a world model); action-channel-only; post-φ sanitized data only; consumer-side Poseidon matrix↔root re-hash closes the long-open Arc 5 off-circuit finding. W1-D operator decision: fixtures-first ship, deferred-export guard, minimal `VAPIWorldModelConsentRegistry` as flagged Phase-2 promote. |
-| **CI matrix** | GitHub Actions: Python 3.10/3.11/3.12 × Node 18/20 + Rust stable + WASM target enforcing 174-invariant gate on every PR |
+| **Daemon Brain** | **30-tool persistent cognitive layer** (`qortroller_daemon.py`) — live on `localhost:8080`; hive-mind architecture with CLI + TUI rendering clients; QuickSilver API (`deepseek-v4-flash`); SQLite shared memory across sessions; QorTroller-native tools: GIC chain visualizer, live IoTeX on-chain queries, Mythos audit runner, GIC cryptographic replay, calibration status |
+| **CI matrix** | GitHub Actions: Python 3.10/3.11/3.12 × Node 18/20 + Rust stable + WASM target enforcing 176-invariant gate on every PR |
 | **Wallet posture** | `CHAIN_SUBMISSION_PAUSED=true` held; zero-trust sandbox compliant; every chain-write path operator-fired |
 
 ---
@@ -191,6 +192,96 @@ python scripts/vpm_audit.py
 
 ---
 
+## QorTroller Daemon Brain
+
+The **QorTroller Daemon** (`qortroller_daemon.py`) is a persistent, protocol-aware cognitive layer that sits over the entire QorTroller codebase and live on-chain state. It uses a hive-mind architecture: one central AI brain owns the LLM connection, tool execution loop, and SQLite conversation memory; multiple rendering clients (CLI, TUI) connect as dumb frontends that display results without holding any AI state themselves.
+
+```
+┌─────────────────┐    POST /chat     ┌──────────────────────┐
+│  CLI Agent      │ ────────────────→ │                      │  QuickSilver API
+│  (Rich terminal)│ ←── GET /history  │  QorTroller Daemon   │ ─────────────→
+└─────────────────┘                   │  (one brain)         │  deepseek-v4-flash
+┌─────────────────┐    POST /chat     │                      │
+│  TUI Agent      │ ────────────────→ │  agent_memory.db     │
+│  (Textual)      │ ←── GET /history  │  (shared memory)     │
+└─────────────────┘                   └──────────────────────┘
+```
+
+### Start the daemon
+
+```bash
+# Terminal 1 — start the brain
+python qortroller_daemon.py
+
+# Terminal 2 — CLI rendering client (Rich terminal UI)
+python qortroller_cli_agent.py
+
+# Terminal 3 (optional) — TUI rendering client
+pip install textual
+python qortroller_tui.py
+```
+
+Requires `QUICKSILVER_API_KEY` in `bridge/.env`. The daemon listens on `localhost:8080` and persists all conversations in `agent_memory.db` across restarts.
+
+### What the brain can do
+
+The daemon has **30 tools** organized across three tiers:
+
+**Codebase intelligence**
+
+| Tool | What it does |
+|---|---|
+| `read_file(path)` | Read any repo file (max 12KB) |
+| `write_file(path, content)` | Write files (blocked for protocol invariant files) |
+| `list_files()` | List all project files |
+| `search_code(pattern, glob?)` | ripgrep/git grep across the codebase |
+| `git_history()` | Last 10 commits (oneline) |
+| `git_log_full(ref?, n?)` | Full commit detail with stats |
+| `execute_shell(command)` | Run any shell command from repo root |
+
+**Protocol state (QorTroller-native)**
+
+| Tool | What it does |
+|---|---|
+| `gic_chain_status(n?)` | Visual GIC chain progress bar toward GIC_100 — chain length, head hash, consecutive_clean, genesis + latest timestamps. Reads live bridge or falls back to local DB. |
+| `gic_replay(n?, session_id?)` | Cryptographic replay of last N GIC links — recomputes each SHA-256 hash and flags tamper or corruption. Works without the bridge. |
+| `calibration_status()` | Full enrollment readiness: live L4 thresholds from `calibration_profile_live.json`, AIT separation ratio, GIC progress bar, all P0 tournament gate conditions. |
+| `run_mythos(variant)` | Run any of the 17 Mythos audit variants on demand. Findings sorted CRITICAL → HIGH → MEDIUM → LOW. Fast variants (16=`path_a_spec_impl_parity`, 14=`doc_number_consistency`, 5=`crypto_drift`) need no DB. |
+| `run_invariant_gate()` | Full PV-CI gate (176 invariants) from the chat prompt. |
+| `poac_status()` | Single-call protocol status snapshot: GIC, PCC, contract count, git HEAD. |
+
+**On-chain truth (no bridge required)**
+
+| Tool | What it does |
+|---|---|
+| `query_chain(query, device_id?)` | Direct IoTeX testnet RPC. Queries: `wallet_balance`, `is_fully_eligible`, `get_device_tier`, `beacon_registry`, `block_number`, or `all`. Resolves against live deployed contracts from `deployed-addresses.json`. |
+| `list_contracts()` | All 66 deployed contracts with addresses. |
+| `bridge_get(path)` | GET any bridge endpoint. |
+| `bridge_post(path, payload?)` | POST to bridge endpoints — trigger actions, not just read state. |
+
+**Domain analysis (Goose-contributed)**
+
+`protocol_phase`, `tournament_readiness`, `separation_deep_dive`, `biometric_vault`, `governance_audit`, `fleet_coherence`, `corpus_health`, `l4_calibration`, `epoch_windows`, `protocol_maturity`, `chain_overview`, `daemon_diagnose`
+
+### What makes it protocol-native
+
+The system prompt has the PITL stack, the 228-byte FROZEN wire format, the L4 thresholds, the separation ratio history, and the verification-first discipline baked in. When you ask it "should I adjust the L4 threshold?", it knows the answer is no — thresholds can only tighten, enforced by `min()`. When you ask it "is my device eligible?", it calls `query_chain` against the live IoTeX contract instead of guessing.
+
+The brain accumulates conversation history in `agent_memory.db` across sessions. Unlike Claude Code (which starts fresh each session), the daemon remembers every prior conversation about calibration, GIC chain state, Mythos findings, and on-chain queries — building a persistent operational context over time.
+
+### Daemon API endpoints
+
+```
+POST /chat                     — Send message to AI brain (full autonomous tool loop)
+GET  /history                  — Fetch unified chat history from SQLite
+GET  /status                   — Brain status (thinking / idle / running tool: X)
+GET  /health                   — Health check
+GET  /tools                    — List all 30 available tools with schemas
+POST /agent/local-host/execute — Direct tool execution (operator-authenticated)
+```
+
+---
+
 ## Repository navigation
 
 ```
@@ -231,9 +322,13 @@ vapi-pebble-prototype/
 │   ├── vapi-whitepaper-v3.md       Zenodo-published baseline (preserved)
 │   ├── WHITEPAPER_VERSIONING.md    v1→v4 lineage
 │   └── (other technical docs)
+├── qortroller_daemon.py     Hive Mind central brain — 30 tools, SQLite memory, QuickSilver API
+├── qortroller_cli_agent.py  Rich terminal rendering client (connects to daemon)
+├── qortroller_tui.py        Textual TUI rendering client (connects to daemon)
+├── agent_memory.db          Persistent conversation memory (gitignored; created at first run)
 ├── CLAUDE.md                Operator-authoritative state file (single source of truth)
 ├── contracts/deployed-addresses.json   Authoritative on-chain registry
-└── .github/INVARIANTS_ALLOWLIST.json   77-entry PV-CI digest pin file
+└── .github/INVARIANTS_ALLOWLIST.json   176-entry PV-CI digest pin file
 ```
 
 ---
@@ -252,7 +347,7 @@ The following rules are **FROZEN**. Changing any of them requires a `--confirm-g
 - **No token launch before separation_ratio > 1.0 AND all_pairs_above_1=True** — empirically confirmed AND all-pairs above. Currently cleared for the AIT separation gate in the current corpus (1.199, N=37); touchpad_corners (0.728) remains the actual tournament BLOCK enforcement blocker.
 - **Stable EMA track updates on NOMINAL sessions only** — security invariant; never override.
 - **Per-player L4 thresholds tighten, never loosen** — enforced via `min()` operator.
-- **PV-CI invariant gate** runs on every PR — currently 174 invariants. Modifying a frozen region without a `--confirm-governance` ceremony fails CI.
+- **PV-CI invariant gate** runs on every PR — currently 176 invariants. Modifying a frozen region without a `--confirm-governance` ceremony fails CI.
 - **CHAIN_SUBMISSION_PAUSED kill-switch** held in `bridge/.env` — every chain-write path is gated; operator three-factor authorization (env var + env var + `--confirm` CLI flag) required to lift.
 
 Complete invariant list: `scripts/vapi_invariant_gate.py` + `.github/INVARIANTS_ALLOWLIST.json`.
