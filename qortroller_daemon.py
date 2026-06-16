@@ -187,19 +187,25 @@ SYSTEM_PROMPT = (
     "Each response must contain EITHER a <tool_call> block OR a text\n"
     "answer. Never both in the same response.\n\n"
     "Available tools:\n"
-    "  read_file(path: str)                    - Read a file from the codebase (max 12KB)\n"
-    "  write_file(path: str, content: str)     - Write/create a file (blocked for protocol files)\n"
-    "  list_files()                            - List all project files (max 300)\n"
-    "  search_code(pattern: str, glob?: str)   - Search codebase with ripgrep/git grep\n"
-    "  git_history()                           - Show recent git log (10 commits, oneline)\n"
-    "  git_log_full(ref?: str, n?: int)        - Full git log with stats for a ref/commit\n"
-    "  bridge_get(path: str)                   - GET a bridge API endpoint\n"
-    "  bridge_post(path: str, payload?: dict)  - POST to a bridge API endpoint\n"
-    "  run_invariant_gate()                    - Run PV-CI invariant gate and return results\n"
-    "  poac_status()                           - QorTroller protocol status summary (GIC/PCC/contracts/HEAD)\n"
-    "  list_contracts()                        - List all deployed contracts from deployed-addresses.json\n"
-    "  execute_shell(command: str)             - Run a shell command in the repo root\n"
-    "  current_time()                          - Get the current date and time\n\n"
+    "  read_file(path: str)                              - Read a file from the codebase (max 12KB)\n"
+    "  write_file(path: str, content: str)               - Write/create a file (blocked for protocol files)\n"
+    "  list_files()                                      - List all project files (max 300)\n"
+    "  search_code(pattern: str, glob?: str)             - Search codebase with ripgrep/git grep\n"
+    "  git_history()                                     - Show recent git log (10 commits, oneline)\n"
+    "  git_log_full(ref?: str, n?: int)                  - Full git log with stats for a ref/commit\n"
+    "  bridge_get(path: str)                             - GET a bridge API endpoint\n"
+    "  bridge_post(path: str, payload?: dict)            - POST to a bridge API endpoint\n"
+    "  run_invariant_gate()                              - Run PV-CI invariant gate (176 invariants)\n"
+    "  poac_status()                                     - Quick protocol status (GIC/PCC/contracts/HEAD)\n"
+    "  list_contracts()                                  - List all 66 deployed contracts\n"
+    "  gic_chain_status(n?: int)                         - GIC chain visual: links, head, progress to GIC_100\n"
+    "  query_chain(query: str, device_id?: str)          - Query IoTeX testnet directly: wallet_balance,\n"
+    "                                                      is_fully_eligible, get_device_tier,\n"
+    "                                                      beacon_registry, block_number, all\n"
+    "  calibration_status()                              - Full enrollment status: L4 thresholds, AIT\n"
+    "                                                      separation ratio, GIC progress, tournament gate\n"
+    "  execute_shell(command: str)                       - Run a shell command in the repo root\n"
+    "  current_time()                                    - Get the current date and time\n\n"
     "You can call multiple tools sequentially (one per LLM response). The\n"
     "system feeds each result back to you as a <tool_result> block. Keep\n"
     "calling tools until you have enough information to answer the user,\n"
@@ -510,6 +516,285 @@ class QorTrollerBrain:
 
             elif name == "current_time":
                 return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            # ── #1 GIC Chain Visualizer ───────────────────────────────────
+            elif name == "gic_chain_status":
+                # Pull GIC chain from bridge if up, else read DB directly.
+                # Returns a visual ASCII chain + structured data.
+                import requests as _req
+                n = min(int(args.get("n", 20)), 100)  # last N links to render
+
+                # Try bridge first (authoritative, live)
+                try:
+                    r = _req.get(f"{BRIDGE_BASE_URL}/bridge/grind-chain-status",
+                                 timeout=4, proxies={"http": None, "https": None})
+                    if r.status_code == 200:
+                        d = r.json()
+                        chain_len   = d.get("chain_length", 0)
+                        intact      = d.get("chain_intact", True)
+                        head        = d.get("latest_gic_hash", "")[:16]
+                        session_id  = d.get("grind_session_id", "?")
+                        genesis_ts  = d.get("genesis_ts", 0)
+                        latest_ts   = d.get("latest_ts", 0)
+                        # Also pull consecutive_clean from capture-health
+                        cc = 0
+                        try:
+                            ch = _req.get(f"{BRIDGE_BASE_URL}/bridge/capture-health",
+                                          timeout=3, proxies={"http": None, "https": None})
+                            if ch.status_code == 200:
+                                cc = ch.json().get("consecutive_clean_toward_target", 0)
+                        except Exception:
+                            pass
+
+                        # ASCII chain visual
+                        GATE = 100
+                        filled = min(chain_len, n)
+                        bar = ""
+                        for i in range(filled):
+                            bar += "[green]█[/green]"
+                        for i in range(max(0, min(n, GATE) - filled)):
+                            bar += "[dim]░[/dim]"
+
+                        lines = [
+                            "═" * 52,
+                            f"  GIC CHAIN STATUS",
+                            "═" * 52,
+                            f"  Session   : {session_id}",
+                            f"  Length    : {chain_len} links",
+                            f"  Intact    : {'YES ✓' if intact else 'BROKEN ✗'}",
+                            f"  Chain head: {head}{'...' if head else '(empty)'}",
+                            f"  Consec.   : {cc} / {GATE}",
+                            f"  Progress  : [{bar}] {chain_len}/{GATE}",
+                            "─" * 52,
+                            f"  Genesis   : {datetime.datetime.fromtimestamp(genesis_ts).isoformat() if genesis_ts else 'n/a'}",
+                            f"  Latest    : {datetime.datetime.fromtimestamp(latest_ts).isoformat() if latest_ts else 'n/a'}",
+                            "═" * 52,
+                        ]
+                        return "\n".join(lines)
+                except Exception:
+                    pass
+
+                # Bridge down — try reading DB directly
+                db_path = os.path.join(REPO_ROOT, "bridge", "vapi_store.db")
+                alt_db  = os.path.join(os.path.expanduser("~"), ".vapi", "bridge.db")
+                db = db_path if os.path.exists(db_path) else (alt_db if os.path.exists(alt_db) else None)
+                if not db:
+                    return "Bridge offline and no local DB found at bridge/vapi_store.db or ~/.vapi/bridge.db"
+
+                import sqlite3 as _sq
+                try:
+                    conn = _sq.connect(db)
+                    row = conn.execute(
+                        "SELECT COUNT(*), MAX(gic_ts_ns), MIN(gic_ts_ns), "
+                        "MAX(grind_chain_hash), grind_session_id "
+                        "FROM ruling_validation_log "
+                        "WHERE grind_chain_hash IS NOT NULL AND grind_chain_hash != ''"
+                    ).fetchone()
+                    conn.close()
+                    if not row or not row[0]:
+                        return "DB: no GIC-stamped rows found (grind not started)"
+                    count, max_ts, min_ts, head, sid = row
+                    GATE = 100
+                    bar = "█" * min(count, n) + "░" * max(0, min(n, GATE) - min(count, n))
+                    genesis_dt = datetime.datetime.fromtimestamp(int(min_ts)/1e9).isoformat() if min_ts else "n/a"
+                    latest_dt  = datetime.datetime.fromtimestamp(int(max_ts)/1e9).isoformat() if max_ts else "n/a"
+                    return (
+                        f"GIC CHAIN (from local DB)\n"
+                        f"Session   : {sid}\n"
+                        f"Length    : {count} links\n"
+                        f"Chain head: {(head or '')[:16]}...\n"
+                        f"Progress  : [{bar}] {count}/{GATE}\n"
+                        f"Genesis   : {genesis_dt}\n"
+                        f"Latest    : {latest_dt}\n"
+                        f"(chain_intact not recomputed — bridge required for full verification)"
+                    )
+                except Exception as e:
+                    return f"DB read failed: {e}"
+
+            # ── #6 query_chain ────────────────────────────────────────────
+            elif name == "query_chain":
+                # Call IoTeX testnet directly via urllib (no web3 dep in daemon).
+                # Supports: wallet_balance, is_fully_eligible, get_device_tier,
+                #           beacon_registry, raw_eth_call.
+                import urllib.request as _ur
+                import struct
+
+                RPC = "https://babel-api.testnet.iotex.io"
+                WALLET = "0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692"
+
+                # Load deployed addresses once
+                addr_path = os.path.join(REPO_ROOT, "contracts", "deployed-addresses.json")
+                try:
+                    with open(addr_path) as f:
+                        addrs = json.load(f)
+                except Exception as e:
+                    return f"Error: cannot read deployed-addresses.json: {e}"
+
+                def _rpc(method, params):
+                    payload = json.dumps({
+                        "jsonrpc": "2.0", "id": 1,
+                        "method": method, "params": params,
+                    }).encode()
+                    # babel-api.testnet.iotex.io requires User-Agent header
+                    # (returns 403 without it — documented in F-HWFL-4-1)
+                    req = _ur.Request(RPC, data=payload, headers={
+                        "Content-Type": "application/json",
+                        "User-Agent": "QorTroller-Daemon/2.0",
+                    })
+                    with _ur.urlopen(req, timeout=10) as resp:
+                        return json.loads(resp.read())
+
+                query = args.get("query", "wallet_balance").lower()
+                lines = []
+
+                if query in ("wallet_balance", "all", ""):
+                    res = _rpc("eth_getBalance", [WALLET, "latest"])
+                    wei = int(res["result"], 16)
+                    iotx = wei / 1e18
+                    lines.append(f"Wallet ({WALLET[:10]}...): {iotx:.6f} IOTX")
+
+                if query in ("is_fully_eligible", "all"):
+                    device_id = args.get("device_id", "")
+                    lens_addr = addrs.get("VAPIProtocolLensV2", addrs.get("VAPIProtocolLens", ""))
+                    if not lens_addr:
+                        lines.append("isFullyEligible: VAPIProtocolLens address not found")
+                    elif not device_id:
+                        lines.append("isFullyEligible: provide device_id argument (32-byte hex)")
+                    else:
+                        # keccak4("isFullyEligible(bytes32)") = 0x...
+                        # selector hardcoded from ABI
+                        selector = "0x5f04e8a4"
+                        padded = device_id.replace("0x","").zfill(64)
+                        data = selector + padded
+                        res = _rpc("eth_call", [{"to": lens_addr, "data": data}, "latest"])
+                        result_hex = res.get("result", "0x")
+                        eligible = result_hex.endswith("1")
+                        lines.append(f"isFullyEligible({device_id[:10]}...): {eligible}")
+
+                if query in ("get_device_tier", "all"):
+                    device_id = args.get("device_id", "")
+                    lens_addr = addrs.get("VAPIProtocolLensV2", addrs.get("VAPIProtocolLens", ""))
+                    if lens_addr and device_id:
+                        selector = "0x7f87d5c3"  # getDeviceTier(bytes32)
+                        padded = device_id.replace("0x","").zfill(64)
+                        data = selector + padded
+                        res = _rpc("eth_call", [{"to": lens_addr, "data": data}, "latest"])
+                        result_hex = res.get("result", "0x0")
+                        tier = int(result_hex, 16) if result_hex and result_hex != "0x" else 0
+                        tier_name = {1: "FULL (CFI-ZCP1)", 2: "STANDARD (CFI-ZCT1)", 3: "BASIC"}.get(tier, f"UNKNOWN ({tier})")
+                        lines.append(f"getDeviceTier({device_id[:10]}...): {tier_name}")
+
+                if query in ("beacon_registry", "all"):
+                    tbr_addr = addrs.get("VAPITemporalBeaconRegistry", "")
+                    if tbr_addr:
+                        # latestBeacon() selector
+                        selector = "0x5a2e3b93"
+                        res = _rpc("eth_call", [{"to": tbr_addr, "data": selector}, "latest"])
+                        raw = res.get("result", "0x")
+                        if raw and raw != "0x" and len(raw) > 2:
+                            block_num = int(raw[2:66], 16) if len(raw) >= 66 else 0
+                            lines.append(f"TemporalBeaconRegistry: latest anchor block={block_num}")
+                        else:
+                            lines.append("TemporalBeaconRegistry: no beacon anchored yet")
+                    else:
+                        lines.append("TemporalBeaconRegistry: address not found in deployed-addresses.json")
+
+                if query in ("block_number", "all"):
+                    res = _rpc("eth_blockNumber", [])
+                    block = int(res["result"], 16)
+                    lines.append(f"IoTeX testnet block: {block:,}")
+
+                if not lines:
+                    lines.append(
+                        f"Unknown query '{query}'. Valid: wallet_balance, is_fully_eligible, "
+                        f"get_device_tier, beacon_registry, block_number, all"
+                    )
+
+                return "\n".join(lines)
+
+            # ── #9 calibration_status ─────────────────────────────────────
+            elif name == "calibration_status":
+                import requests as _req
+                lines = ["═" * 52, "  CALIBRATION & ENROLLMENT STATUS", "═" * 52]
+
+                # 1. L4 thresholds from calibration_profile_live.json
+                cal_path = os.path.join(REPO_ROOT, "calibration_profile_live.json")
+                try:
+                    with open(cal_path) as f:
+                        cal = json.load(f)
+                    thr = cal.get("thresholds", {})
+                    lines += [
+                        "  L4 Thresholds (live calibration):",
+                        f"    anomaly    : {thr.get('l4_anomaly', '?'):.4f}  (baseline 7.009)",
+                        f"    continuity : {thr.get('l4_continuity', '?'):.4f}  (baseline 5.367)",
+                        f"    total recs : {cal.get('total_records', '?')}",
+                        f"    confidence : {cal.get('confidence', '?')}",
+                        f"    generated  : {cal.get('generated_at', '?')}",
+                        "─" * 52,
+                    ]
+                except Exception as e:
+                    lines.append(f"  calibration_profile_live.json: {e}")
+
+                # 2. Separation ratio from bridge
+                for ep, label in [
+                    ("/agent/separation-ratio-status", "Separation Ratio"),
+                    ("/agent/separation-defensibility-status", "AIT Defensibility"),
+                ]:
+                    try:
+                        r = _req.get(f"{BRIDGE_BASE_URL}{ep}", timeout=4,
+                                     proxies={"http": None, "https": None})
+                        if r.status_code == 200:
+                            d = r.json()
+                            lines.append(f"  {label}:")
+                            for k, v in d.items():
+                                if isinstance(v, (int, float, bool, str)):
+                                    lines.append(f"    {k}: {v}")
+                        else:
+                            lines.append(f"  {label}: HTTP {r.status_code} (bridge may be down)")
+                    except Exception:
+                        lines.append(f"  {label}: bridge offline")
+
+                lines.append("─" * 52)
+
+                # 3. GIC / grind progress
+                try:
+                    r = _req.get(f"{BRIDGE_BASE_URL}/bridge/grind-chain-status", timeout=4,
+                                 proxies={"http": None, "https": None})
+                    if r.status_code == 200:
+                        d = r.json()
+                        chain_len = d.get("chain_length", 0)
+                        intact    = d.get("chain_intact", True)
+                        GATE = 100
+                        pct = min(100, round(chain_len / GATE * 100))
+                        bar = "█" * (pct // 5) + "░" * (20 - pct // 5)
+                        lines += [
+                            "  Grind Integrity Chain:",
+                            f"    length  : {chain_len} / {GATE}",
+                            f"    intact  : {'YES' if intact else 'BROKEN'}",
+                            f"    progress: [{bar}] {pct}%",
+                        ]
+                except Exception:
+                    lines.append("  GIC: bridge offline")
+
+                lines.append("─" * 52)
+
+                # 4. Tournament preflight gate
+                try:
+                    r = _req.get(f"{BRIDGE_BASE_URL}/agent/tournament-preflight", timeout=4,
+                                 proxies={"http": None, "https": None})
+                    if r.status_code == 200:
+                        d = r.json()
+                        overall = d.get("overall_pass", False)
+                        lines.append(f"  Tournament gate: {'PASS ✓' if overall else 'NOT READY'}")
+                        conds = d.get("conditions", {})
+                        for k, v in conds.items():
+                            icon = "✓" if v else "✗"
+                            lines.append(f"    [{icon}] {k}")
+                except Exception:
+                    lines.append("  Tournament gate: bridge offline")
+
+                lines.append("═" * 52)
+                return "\n".join(lines)
 
             elif name == "write_file":
                 path = args.get("path", "")
@@ -1071,6 +1356,24 @@ async def app(scope, receive, send):
                 {
                     "name": "list_contracts",
                     "description": "List all deployed contracts from contracts/deployed-addresses.json",
+                    "arguments": {},
+                },
+                {
+                    "name": "gic_chain_status",
+                    "description": "GIC chain visualizer: colored link progress bar, chain length, head hash, consecutive_clean toward GIC_100. Reads from live bridge or local DB.",
+                    "arguments": {"n": "int (optional, default 20 — number of links to render in bar)"},
+                },
+                {
+                    "name": "query_chain",
+                    "description": "Query IoTeX testnet directly (no bridge needed): wallet_balance, is_fully_eligible, get_device_tier, beacon_registry, block_number, or 'all'",
+                    "arguments": {
+                        "query": "str (required): wallet_balance | is_fully_eligible | get_device_tier | beacon_registry | block_number | all",
+                        "device_id": "str (optional): 32-byte hex device identity for is_fully_eligible / get_device_tier queries",
+                    },
+                },
+                {
+                    "name": "calibration_status",
+                    "description": "Full enrollment and calibration status: L4 thresholds from calibration_profile_live.json, AIT separation ratio, GIC chain progress, tournament preflight gate conditions",
                     "arguments": {},
                 },
                 {
