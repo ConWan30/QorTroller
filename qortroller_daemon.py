@@ -187,25 +187,48 @@ SYSTEM_PROMPT = (
     "Each response must contain EITHER a <tool_call> block OR a text\n"
     "answer. Never both in the same response.\n\n"
     "Available tools:\n"
+    "  [Codebase / Files]\n"
     "  read_file(path: str)                              - Read a file from the codebase (max 12KB)\n"
     "  write_file(path: str, content: str)               - Write/create a file (blocked for protocol files)\n"
     "  list_files()                                      - List all project files (max 300)\n"
     "  search_code(pattern: str, glob?: str)             - Search codebase with ripgrep/git grep\n"
+    "  [Version Control]\n"
     "  git_history()                                     - Show recent git log (10 commits, oneline)\n"
     "  git_log_full(ref?: str, n?: int)                  - Full git log with stats for a ref/commit\n"
+    "  [Bridge / Chain]\n"
     "  bridge_get(path: str)                             - GET a bridge API endpoint\n"
     "  bridge_post(path: str, payload?: dict)            - POST to a bridge API endpoint\n"
-    "  run_invariant_gate()                              - Run PV-CI invariant gate (176 invariants)\n"
-    "  poac_status()                                     - Quick protocol status (GIC/PCC/contracts/HEAD)\n"
-    "  list_contracts()                                  - List all 66 deployed contracts\n"
-    "  gic_chain_status(n?: int)                         - GIC chain visual: links, head, progress to GIC_100\n"
-    "  query_chain(query: str, device_id?: str)          - Query IoTeX testnet directly: wallet_balance,\n"
-    "                                                      is_fully_eligible, get_device_tier,\n"
-    "                                                      beacon_registry, block_number, all\n"
-    "  calibration_status()                              - Full enrollment status: L4 thresholds, AIT\n"
-    "                                                      separation ratio, GIC progress, tournament gate\n"
-    "  execute_shell(command: str)                       - Run a shell command in the repo root\n"
-    "  current_time()                                    - Get the current date and time\n\n"
+    "  gic_chain_status(n?: int)                         - GIC chain visual: links, head, progress\n"
+    "  query_chain(query: str, device_id?: str)          - Query IoTeX testnet directly\n"
+    "  chain_overview()                                  - On-chain wallet, block, deployed contracts\n"
+    "  [Protocol Domain Tools]\n"
+    "  protocol_phase()                                  - Phase context: phase, bridge state,\n"
+    "                                                      agents, contracts, git HEAD\n"
+    "  tournament_readiness()                            - Tournament gate: preflight pass/fail,\n"
+    "                                                      P0 conditions, all blockers\n"
+    "  separation_deep_dive(session_type?: str)          - Separation analysis: ratio, per-pair\n"
+    "                                                      gaps, LOO accuracy, trends, projections\n"
+    "  biometric_vault()                                 - Biometric credentials: VHP status, TTL,\n"
+    "                                                      renewal chain, dual primitive\n"
+    "  governance_audit(run_invariant?: bool)            - Governance & invariants: PV-CI gate,\n"
+    "                                                      allowlist chain, BBG, PMI\n"
+    "  fleet_coherence()                                 - Fleet coherence: contradictions, orphans,\n"
+    "                                                      inversions, fingerprint registry\n"
+    "  corpus_health()                                   - Corpus health: capture velocity,\n"
+    "                                                      data readiness, regression guard\n"
+    "  l4_calibration()                                  - L4 thresholds: staleness, per-battery\n"
+    "                                                      tracks, router, dim sync, FFT\n"
+    "  epoch_windows()                                   - Epoch windows: analytics, auto-tune,\n"
+    "                                                      device heatmap, overrides\n"
+    "  protocol_maturity()                               - Maturity score with all 9 components\n"
+    "  [Legacy / Utility]\n"
+    "  run_invariant_gate()                              - Run PV-CI invariant gate\n"
+    "  poac_status()                                     - Quick protocol status summary\n"
+    "  list_contracts()                                  - List deployed contracts\n"
+    "  calibration_status()                              - Full enrollment/calibration status\n"
+    "  daemon_diagnose()                                 - Daemon self-diagnostic\n"
+    "  execute_shell(command: str)                       - Run a shell command\n"
+    "  current_time()                                    - Get current date and time\n\n"
     "You can call multiple tools sequentially (one per LLM response). The\n"
     "system feeds each result back to you as a <tool_result> block. Keep\n"
     "calling tools until you have enough information to answer the user,\n"
@@ -392,19 +415,27 @@ class QorTrollerBrain:
         """Parse <tool_call> blocks from AI response text.
 
         Uses brace-counting to correctly extract nested JSON.
+        Accepts both </tool_call> and </tool_calls> — LLMs output both variants.
         """
         calls = []
         start_tag = "<tool_call>"
-        end_tag = "</tool_call>"
         pos = 0
         while True:
             start = text.find(start_tag, pos)
             if start == -1:
                 break
             content_start = start + len(start_tag)
-            end = text.find(end_tag, content_start)
-            if end == -1:
+            # Find whichever closing tag appears first
+            end_s = text.find("</tool_call>", content_start)
+            end_p = text.find("</tool_calls>", content_start)
+            if end_s == -1 and end_p == -1:
                 break
+            if end_s == -1:
+                end, end_tag = end_p, "</tool_calls>"
+            elif end_p == -1:
+                end, end_tag = end_s, "</tool_call>"
+            else:
+                end, end_tag = (end_s, "</tool_call>") if end_s < end_p else (end_p, "</tool_calls>")
             raw = text[content_start:end].strip()
             pos = end + len(end_tag)
 
@@ -945,6 +976,639 @@ class QorTrollerBrain:
                 except Exception as e:
                     return f"Error: {e}"
 
+            # ════════════════════════════════════════════════════════════════
+            #  PROTOCOL-NATIVE TOOLS — Domain-level wrappers for the VAPI
+            #  protocol layers. These aggregate multiple bridge /agent/*
+            #  endpoints into single semantic queries the brain can reason
+            #  about without raw HTTP calls.
+            # ════════════════════════════════════════════════════════════════
+
+            # ── #1 protocol_phase ────────────────────────────────────────
+            elif name == "protocol_phase":
+                """Live phase context: phase number, bridge/SDK/Hardhat counts,
+                agent count, contract count, git HEAD."""
+                import requests as _req
+                lines = ["─" * 52, "  PROTOCOL PHASE CONTEXT", "─" * 52]
+
+                # Git HEAD
+                try:
+                    r2 = subprocess.run(["git", "log", "-1", "--oneline"],
+                                        cwd=REPO_ROOT, capture_output=True, text=True, timeout=5)
+                    lines.append(f"  Git HEAD : {r2.stdout.strip()}")
+                except Exception:
+                    lines.append("  Git HEAD : (unknown)")
+
+                # Phase from bridge health/status or config
+                try:
+                    r = _req.get(f"{BRIDGE_BASE_URL}/health", timeout=4,
+                                 proxies={"http": None, "https": None})
+                    if r.status_code == 200:
+                        d = r.json()
+                        lines.append(f"  Bridge   : {'UP' if d.get('status') == 'ok' else 'DEGRADED'}")
+                        lines.append(f"  Phase    : {d.get('phase', '?')}")
+                        lines.append(f"  Agents   : {d.get('agents', '?')}")
+                        lines.append(f"  Contracts: {d.get('contracts', '?')}")
+                    else:
+                        lines.append("  Bridge   : DOWN (HTTP {r.status_code})")
+                except Exception:
+                    lines.append("  Bridge   : OFFLINE — cannot query live phase")
+
+                # Try reading bridge config for phase
+                try:
+                    cfg_path = os.path.join(REPO_ROOT, "bridge", "vapi_bridge", "config.py")
+                    if os.path.exists(cfg_path):
+                        with open(cfg_path) as f:
+                            cfg_text = f.read(8000)
+                        for line in cfg_text.splitlines():
+                            if "PHASE" in line and "=" in line and not line.strip().startswith("#"):
+                                lines.append(f"  Config   : {line.strip()}")
+                except Exception:
+                    pass
+
+                # Contract count from deployed-addresses.json
+                try:
+                    addr_path = os.path.join(REPO_ROOT, "contracts", "deployed-addresses.json")
+                    with open(addr_path) as f:
+                        addrs = json.load(f)
+                    contract_keys = [k for k in addrs if not k.startswith("_") and
+                                     k.endswith(("Registry", "Gate", "Token", "Verifier",
+                                                 "Manager", "Lens", "Badge", "Oracle",
+                                                 "Credential", "Bus", "Notary", "Anchor",
+                                                 "Beacon", "Manifest", "Wallet"))]
+                    lines.append(f"  Contracts : {len(contract_keys)} deployed")
+                except Exception:
+                    pass
+
+                # Try reading last-known phase from VAPI_AGENTS.md if available
+                try:
+                    va_path = os.path.join(REPO_ROOT, "VAPI_AGENTS.md")
+                    if os.path.exists(va_path):
+                        with open(va_path) as f:
+                            for line in f:
+                                line = line.strip()
+                                if line.startswith("Phase ") and line[6:9].isdigit():
+                                    lines.append(f"  Last phase: {line.split('—')[0].strip()}")
+                                    break
+                except Exception:
+                    pass
+
+                lines.append("─" * 52)
+                return "\n".join(lines)
+
+            # ── #2 tournament_readiness ──────────────────────────────────
+            elif name == "tournament_readiness":
+                """Tournament eligibility gate: preflight pass/fail,
+                all P0 conditions, blockers, separation defensibility."""
+                import requests as _req
+                lines = ["─" * 52, "  TOURNAMENT READINESS", "─" * 52]
+
+                endpoints = {
+                    "/agent/tournament-preflight": "Preflight Gate",
+                    "/agent/tournament-blocker-summary": "Blocker Summary",
+                    "/agent/tournament-readiness-score": "Readiness Score",
+                    "/agent/separation-defensibility-status": "Separation Defensibility",
+                    "/agent/per-pair-gap-status": "Per-Pair Gap Status",
+                }
+                for ep, label in endpoints.items():
+                    try:
+                        r = _req.get(f"{BRIDGE_BASE_URL}{ep}", timeout=4,
+                                     proxies={"http": None, "https": None})
+                        if r.status_code == 200:
+                            d = r.json()
+                            lines.append(f"\n  [{label}]")
+                            for k, v in d.items():
+                                if isinstance(v, (int, float, bool, str)):
+                                    icon = "✓" if v is True else ("✗" if v is False else "")
+                                    lines.append(f"    {k}: {icon} {v}")
+                                elif isinstance(v, dict):
+                                    lines.append(f"    {k}: (nested)")
+                                elif isinstance(v, list) and len(v) <= 5:
+                                    lines.append(f"    {k}: {v}")
+                                elif isinstance(v, list):
+                                    lines.append(f"    {k}: [{len(v)} entries]")
+                        else:
+                            lines.append(f"\n  [{label}] HTTP {r.status_code}")
+                    except Exception:
+                        lines.append(f"\n  [{label}] offline")
+
+                lines.append("\n" + "─" * 52)
+                return "\n".join(lines)
+
+            # ── #3 separation_deep_dive ──────────────────────────────────
+            elif name == "separation_deep_dive":
+                """Deep inter-player separation analysis: ratio, per-pair gaps,
+                LOO accuracy, trends, projections, blocker pairs.
+                Optional session_type filter: 'ait', 'touchpad_corners', etc."""
+                import requests as _req
+                session_type = args.get("session_type", "")
+                lines = ["─" * 52, "  SEPARATION DEEP DIVE", "─" * 52]
+
+                if session_type:
+                    lines.append(f"  Session type filter: {session_type}")
+
+                endpoints = [
+                    "/agent/separation-ratio-status",
+                    "/agent/per-pair-gap-status",
+                    "/agent/per-pair-gap-trend",
+                    "/agent/per-pair-gap-projection",
+                ]
+                for ep in endpoints:
+                    url = f"{BRIDGE_BASE_URL}{ep}"
+                    if session_type:
+                        url += f"?session_type={session_type}"
+                    try:
+                        r = _req.get(url, timeout=4,
+                                     proxies={"http": None, "https": None})
+                        if r.status_code == 200:
+                            d = r.json()
+                            label = ep.split("/")[-1].replace("-", " ").title()
+                            lines.append(f"\n  [{label}]")
+                            for k, v in d.items():
+                                if isinstance(v, (int, float, bool, str)):
+                                    lines.append(f"    {k}: {v}")
+                                elif isinstance(v, list) and len(v) <= 5:
+                                    lines.append(f"    {k}: {v}")
+                                elif isinstance(v, list):
+                                    lines.append(f"    {k}: [{len(v)} entries]")
+                                elif isinstance(v, dict):
+                                    lines.append(f"    {k}: (nested)")
+                        else:
+                            lines.append(f"\n  [{ep}] HTTP {r.status_code}")
+                    except Exception:
+                        lines.append(f"\n  [{ep}] offline")
+
+                # Add AIT-specific status if relevant
+                if session_type in ("", "ait"):
+                    try:
+                        r = _req.get(f"{BRIDGE_BASE_URL}/agent/ait-separation-status", timeout=4,
+                                     proxies={"http": None, "https": None})
+                        if r.status_code == 200:
+                            d = r.json()
+                            lines.append(f"\n  [AIT Separation Status]")
+                            for k, v in d.items():
+                                if isinstance(v, (int, float, bool, str)):
+                                    lines.append(f"    {k}: {v}")
+                    except Exception:
+                        pass
+
+                lines.append("\n" + "─" * 52)
+                return "\n".join(lines)
+
+            # ── #4 biometric_vault ───────────────────────────────────────
+            elif name == "biometric_vault":
+                """Biometric credential lifecycle: VHP status, TTL,
+                renewal chain, dual primitive gate, confidence multiplier."""
+                import requests as _req
+                lines = ["─" * 52, "  BIOMETRIC VAULT STATUS", "─" * 52]
+
+                endpoints = {
+                    "/agent/biometric-credential-age": "Credential Age/TTL",
+                    "/agent/biometric-ttl-scaling-status": "TTL Decay Scaling",
+                    "/agent/renewal-chain-status": "Renewal Chain",
+                    "/agent/vhp-dual-gate-log": "Dual Primitive Gate",
+                    "/agent/confidence-score-multiplier-status": "Confidence Multiplier",
+                }
+                for ep, label in endpoints.items():
+                    try:
+                        r = _req.get(f"{BRIDGE_BASE_URL}{ep}", timeout=4,
+                                     proxies={"http": None, "https": None})
+                        if r.status_code == 200:
+                            d = r.json()
+                            lines.append(f"\n  [{label}]")
+                            for k, v in d.items():
+                                if isinstance(v, (int, float, bool, str)):
+                                    lines.append(f"    {k}: {v}")
+                                elif isinstance(v, dict):
+                                    lines.append(f"    {k}: (nested)")
+                                elif isinstance(v, list) and len(v) <= 3:
+                                    lines.append(f"    {k}: {v}")
+                                elif isinstance(v, list):
+                                    lines.append(f"    {k}: [{len(v)} entries]")
+                        else:
+                            lines.append(f"\n  [{label}] HTTP {r.status_code}")
+                    except Exception:
+                        lines.append(f"\n  [{label}] offline")
+
+                lines.append("\n" + "─" * 52)
+                return "\n".join(lines)
+
+            # ── #5 governance_audit ──────────────────────────────────────
+            elif name == "governance_audit":
+                """Governance & invariants: invariant gate pass/fail,
+                allowlist chain integrity, governance history, BBG status,
+                protocol metabolism index."""
+                import requests as _req
+                lines = ["─" * 52, "  GOVERNANCE & INVARIANTS", "─" * 52]
+
+                endpoints = {
+                    "/agent/invariant-gate-status": "PV-CI Invariant Gate",
+                    "/agent/allowlist-governance-history": "Allowlist Governance",
+                    "/agent/bbg-status": "Biometric Governance (BBG)",
+                    "/agent/protocol-metabolism-index": "Protocol Metabolism",
+                }
+                for ep, label in endpoints.items():
+                    try:
+                        r = _req.get(f"{BRIDGE_BASE_URL}{ep}", timeout=4,
+                                     proxies={"http": None, "https": None})
+                        if r.status_code == 200:
+                            d = r.json()
+                            lines.append(f"\n  [{label}]")
+                            for k, v in d.items():
+                                if isinstance(v, (int, float, bool, str)):
+                                    lines.append(f"    {k}: {v}")
+                                elif k == "entries" and isinstance(v, list):
+                                    lines.append(f"    entries: [{len(v)} records]")
+                                elif isinstance(v, dict):
+                                    lines.append(f"    {k}: (nested)")
+                        else:
+                            lines.append(f"\n  [{label}] HTTP {r.status_code}")
+                    except Exception:
+                        lines.append(f"\n  [{label}] offline")
+
+                # Also run invariant gate if requested
+                if args.get("run_invariant", False):
+                    lines.append("\n  Running PV-CI invariant gate...")
+                    try:
+                        result = subprocess.run(
+                            ["python", "scripts/vapi_invariant_gate.py"],
+                            cwd=REPO_ROOT, capture_output=True, text=True, timeout=60,
+                        )
+                        output = (result.stdout + result.stderr)[:2000]
+                        lines.append(f"  Result:\n{output}")
+                    except Exception as e:
+                        lines.append(f"  Error: {e}")
+
+                lines.append("\n" + "─" * 52)
+                return "\n".join(lines)
+
+            # ── #6 fleet_coherence ───────────────────────────────────────
+            elif name == "fleet_coherence":
+                """Fleet signal coherence: contradictions, orphans, inversions,
+                persistent entries, coherence fingerprint summary."""
+                import requests as _req
+                lines = ["─" * 52, "  FLEET SIGNAL COHERENCE", "─" * 52]
+
+                endpoints = {
+                    "/agent/coherence-fingerprint-status": "Fingerprint Registry",
+                    "/agent/context-integrity-status": "Agent Context Integrity",
+                }
+                for ep, label in endpoints.items():
+                    try:
+                        r = _req.get(f"{BRIDGE_BASE_URL}{ep}", timeout=4,
+                                     proxies={"http": None, "https": None})
+                        if r.status_code == 200:
+                            d = r.json()
+                            lines.append(f"\n  [{label}]")
+                            for k, v in d.items():
+                                if isinstance(v, (int, float, bool, str)):
+                                    lines.append(f"    {k}: {v}")
+                                elif isinstance(v, list) and len(v) <= 5:
+                                    lines.append(f"    {k}: {v}")
+                                elif isinstance(v, list):
+                                    lines.append(f"    {k}: [{len(v)} entries]")
+                        else:
+                            lines.append(f"\n  [{label}] HTTP {r.status_code}")
+                    except Exception:
+                        lines.append(f"\n  [{label}] offline")
+
+                # Try fleet coherence summary via dedicated tool endpoint
+                try:
+                    r = _req.get(
+                        f"{BRIDGE_BASE_URL}/agent/fleet-coherence-summary", timeout=4,
+                        proxies={"http": None, "https": None})
+                    if r.status_code == 200:
+                        d = r.json()
+                        lines.append(f"\n  [Fleet Coherence Summary]")
+                        for k, v in d.items():
+                            if isinstance(v, (int, float, bool, str)):
+                                lines.append(f"    {k}: {v}")
+                except Exception:
+                    pass
+
+                # Check fleet coherence agent coh_ entries if available
+                try:
+                    r = _req.get(
+                        f"{BRIDGE_BASE_URL}/agent/fleet-coherence-entries?limit=5", timeout=4,
+                        proxies={"http": None, "https": None})
+                    if r.status_code == 200:
+                        d = r.json()
+                        entries = d if isinstance(d, list) else d.get("entries", [])
+                        if entries:
+                            lines.append(f"\n  [Recent Coherence Entries ({len(entries)})]")
+                            for entry in entries[:5]:
+                                rule = entry.get("rule_name", entry.get("rule", "?"))
+                                sev = entry.get("severity", "?")
+                                lines.append(f"    • {rule} ({sev})")
+                except Exception:
+                    pass
+
+                lines.append("\n" + "─" * 52)
+                return "\n".join(lines)
+
+            # ── #7 corpus_health ─────────────────────────────────────────
+            elif name == "corpus_health":
+                """Calibration corpus health: capture velocity, stagnation,
+                data readiness, regression guard, AIT/tremor probe status."""
+                import requests as _req
+                lines = ["─" * 52, "  CORPUS DATA HEALTH", "─" * 52]
+
+                endpoints = {
+                    "/agent/capture-velocity-oracle": "Capture Velocity Oracle",
+                    "/agent/tremor-convergence-status": "Tremor Convergence",
+                    "/agent/tremor-resting-probe-status": "Tremor Resting Probe",
+                    "/agent/corpus-regression-guard-status": "Regression Guard",
+                    "/agent/data-readiness-certificate-status": "Data Readiness",
+                    "/agent/l4-dim-sync-status": "L4 Dim Sync",
+                }
+                for ep, label in endpoints.items():
+                    try:
+                        r = _req.get(f"{BRIDGE_BASE_URL}{ep}", timeout=4,
+                                     proxies={"http": None, "https": None})
+                        if r.status_code == 200:
+                            d = r.json()
+                            lines.append(f"\n  [{label}]")
+                            for k, v in d.items():
+                                if isinstance(v, (int, float, bool, str)):
+                                    lines.append(f"    {k}: {v}")
+                                elif isinstance(v, dict):
+                                    lines.append(f"    {k}: (nested)")
+                                elif isinstance(v, list) and len(v) <= 3:
+                                    lines.append(f"    {k}: {v}")
+                        else:
+                            lines.append(f"\n  [{label}] HTTP {r.status_code}")
+                    except Exception:
+                        lines.append(f"\n  [{label}] offline")
+
+                lines.append("\n" + "─" * 52)
+                return "\n".join(lines)
+
+            # ── #8 l4_calibration ────────────────────────────────────────
+            elif name == "l4_calibration":
+                """L4 threshold system: calibration staleness, per-battery
+                tracks, router status, dim sync confirmation."""
+                import requests as _req
+                lines = ["─" * 52, "  L4 CALIBRATION SYSTEM", "─" * 52]
+
+                # From calibration_profile_live.json
+                cal_path = os.path.join(REPO_ROOT, "calibration_profile_live.json")
+                try:
+                    with open(cal_path) as f:
+                        cal = json.load(f)
+                    thr = cal.get("thresholds", {})
+                    lines.extend([
+                        "  Live calibration file:",
+                        f"    Anomaly    : {thr.get('l4_anomaly', '?'):.4f}  (baseline 7.009)",
+                        f"    Continuity : {thr.get('l4_continuity', '?'):.4f}  (baseline 5.367)",
+                        f"    Records    : {cal.get('total_records', '?')}",
+                        f"    Confidence : {cal.get('confidence', '?')}",
+                        f"    Generated  : {cal.get('generated_at', '?')}",
+                    ])
+                except Exception as e:
+                    lines.append(f"  calibration_profile_live.json: error reading ({e})")
+
+                # Bridge endpoints
+                for ep, label in [
+                    ("/agent/l4-calibration-status", "Calibration Staleness"),
+                    ("/agent/l4-router-status", "L4 Router"),
+                    ("/agent/l4-threshold-tracks", "Per-Battery Tracks"),
+                    ("/agent/l4-dim-sync-status", "Dim Sync"),
+                    ("/agent/accel-tremor-fft-status", "Accel Tremor FFT"),
+                ]:
+                    try:
+                        r = _req.get(f"{BRIDGE_BASE_URL}{ep}", timeout=4,
+                                     proxies={"http": None, "https": None})
+                        if r.status_code == 200:
+                            d = r.json()
+                            lines.append(f"\n  [{label}]")
+                            for k, v in d.items():
+                                if isinstance(v, (int, float, bool, str)):
+                                    lines.append(f"    {k}: {v}")
+                        else:
+                            lines.append(f"\n  [{label}] HTTP {r.status_code}")
+                    except Exception:
+                        lines.append(f"\n  [{label}] offline")
+
+                lines.append("\n" + "─" * 52)
+                return "\n".join(lines)
+
+            # ── #9 epoch_windows ─────────────────────────────────────────
+            elif name == "epoch_windows":
+                """Epoch window: analytics, auto-tune recommendation,
+                device heatmap, override status."""
+                import requests as _req
+                lines = ["─" * 52, "  EPOCH WINDOW SYSTEM", "─" * 52]
+
+                endpoints = {
+                    "/agent/epoch-window-analytics": "Analytics",
+                    "/agent/epoch-window-auto-tune": "Auto-Tune Advisor",
+                    "/agent/epoch-window-device-heatmap": "Device Heatmap",
+                    "/agent/epoch-window-override-status": "Override Status",
+                }
+                for ep, label in endpoints.items():
+                    try:
+                        r = _req.get(f"{BRIDGE_BASE_URL}{ep}", timeout=4,
+                                     proxies={"http": None, "https": None})
+                        if r.status_code == 200:
+                            d = r.json()
+                            lines.append(f"\n  [{label}]")
+                            for k, v in d.items():
+                                if isinstance(v, (int, float, bool, str)):
+                                    lines.append(f"    {k}: {v}")
+                                elif isinstance(v, list) and len(v) <= 5:
+                                    lines.append(f"    {k}: {v}")
+                                elif isinstance(v, list):
+                                    lines.append(f"    {k}: [{len(v)} entries]")
+                        else:
+                            lines.append(f"\n  [{label}] HTTP {r.status_code}")
+                    except Exception:
+                        lines.append(f"\n  [{label}] offline")
+
+                lines.append("\n" + "─" * 52)
+                return "\n".join(lines)
+
+            # ── #10 protocol_maturity ────────────────────────────────────
+            elif name == "protocol_maturity":
+                """Protocol maturity score with all components:
+                separation, freshness, calibration, PITL, ioSwarm,
+                dry-run, threat forecast, biometric stationarity, PMI."""
+                import requests as _req
+                lines = ["─" * 52, "  PROTOCOL MATURITY", "─" * 52]
+
+                endpoints = {
+                    "/agent/protocol-maturity-score": "Maturity Score",
+                    "/agent/protocol-coherence-status": "Protocol Coherence (PoPC)",
+                    "/agent/protocol-metabolism-index": "Metabolism Index (PMI)",
+                }
+                for ep, label in endpoints.items():
+                    try:
+                        r = _req.get(f"{BRIDGE_BASE_URL}{ep}", timeout=4,
+                                     proxies={"http": None, "https": None})
+                        if r.status_code == 200:
+                            d = r.json()
+                            lines.append(f"\n  [{label}]")
+                            for k, v in d.items():
+                                if isinstance(v, (int, float, bool, str)):
+                                    lines.append(f"    {k}: {v}")
+                                elif isinstance(v, dict):
+                                    lines.append(f"    {k}: (nested)")
+                        else:
+                            lines.append(f"\n  [{label}] HTTP {r.status_code}")
+                    except Exception:
+                        lines.append(f"\n  [{label}] offline")
+
+                lines.append("\n" + "─" * 52)
+                return "\n".join(lines)
+
+            # ── #11 chain_overview ───────────────────────────────────────
+            elif name == "chain_overview":
+                """Live on-chain overview: wallet balance, block number,
+                last beacon anchor, all contract addresses grouped by role."""
+                import requests as _req
+                lines = ["─" * 52, "  ON-CHAIN OVERVIEW", "─" * 52]
+
+                # Load deployed addresses
+                addr_path = os.path.join(REPO_ROOT, "contracts", "deployed-addresses.json")
+                try:
+                    with open(addr_path) as f:
+                        addrs = json.load(f)
+                except Exception as e:
+                    return f"Error: cannot read deployed-addresses.json: {e}"
+
+                WALLET = "0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692"
+                RPC = "https://babel-api.testnet.iotex.io"
+
+                # Call IoTeX RPC directly
+                import urllib.request as _ur
+                def _rpc(method, params):
+                    payload = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).encode()
+                    req = _ur.Request(RPC, data=payload, headers={
+                        "Content-Type": "application/json", "User-Agent": "QorTroller-Daemon/2.0"})
+                    with _ur.urlopen(req, timeout=10) as resp:
+                        return json.loads(resp.read())
+
+                try:
+                    res = _rpc("eth_getBalance", [WALLET, "latest"])
+                    wei = int(res["result"], 16)
+                    lines.append(f"  Wallet {WALLET[:10]}...: {wei/1e18:.4f} IOTX")
+                except Exception as e:
+                    lines.append(f"  Wallet: RPC error ({e})")
+
+                try:
+                    res = _rpc("eth_blockNumber", [])
+                    block = int(res["result"], 16)
+                    lines.append(f"  IoTeX block: {block:,}")
+                except Exception:
+                    lines.append("  IoTeX block: RPC error")
+
+                # Deployed address summary by category
+                categories = {
+                    "Gate/Verifier": [],
+                    "Registry": [],
+                    "Token/Credential": [],
+                    "Oracle/Agent": [],
+                    "Governance": [],
+                    "Infrastructure": [],
+                    "Badge/Anchor": [],
+                }
+                for k, v in addrs.items():
+                    if k.startswith("_"):
+                        continue
+                    if any(g in k for g in ("Gate", "Verifier", "Filter")):
+                        categories["Gate/Verifier"].append((k, v))
+                    elif any(r in k for r in ("Registry", "Bus", "Notary")):
+                        categories["Registry"].append((k, v))
+                    elif any(t in k for t in ("Token", "Credential", "VHP")):
+                        categories["Token/Credential"].append((k, v))
+                    elif any(o in k for o in ("Oracle", "Lens", "Agent")):
+                        categories["Oracle/Agent"].append((k, v))
+                    elif any(g in k for g in ("Governance", "Timelock", "Proposal")):
+                        categories["Governance"].append((k, v))
+                    elif any(b in k for b in ("Beacon", "Anchor", "Manifest")):
+                        categories["Infrastructure"].append((k, v))
+                    else:
+                        categories["Badge/Anchor"].append((k, v))
+
+                for cat, entries in categories.items():
+                    if entries:
+                        lines.append(f"\n  {cat} ({len(entries)}):")
+                        for name, addr in entries[:8]:
+                            lines.append(f"    {name}: {addr[:10]}...{addr[-4:]}")
+                        if len(entries) > 8:
+                            lines.append(f"    ... and {len(entries) - 8} more")
+
+                total = len([k for k in addrs if not k.startswith("_")])
+                lines.append(f"\n  Total deployed: {total} contracts")
+
+                lines.append("\n" + "─" * 52)
+                return "\n".join(lines)
+
+            # ── #12 daemon_diagnose ──────────────────────────────────────
+            elif name == "daemon_diagnose":
+                """Daemon self-diagnostic: bridge connectivity, LLM status,
+                DB size, tools count, memory store health, system uptime."""
+                import requests as _req
+                lines = ["─" * 52, "  DAEMON SELF-DIAGNOSE", "─" * 52]
+
+                # Memory store status
+                try:
+                    status = self.memory.get_status()
+                    mc = status.get("message_count", 0)
+                    bs = status.get("brain_status", "?")
+                    lines.append(f"  Brain        : {bs}")
+                    lines.append(f"  Messages     : {mc}")
+                except Exception as e:
+                    lines.append(f"  Memory store : ERROR ({e})")
+
+                # LLM status
+                lines.append(f"  LLM model    : {QUICKSILVER_MODEL}")
+                lines.append(f"  LLM key      : {'CONFIGURED' if QUICKSILVER_API_KEY else 'MISSING'}")
+                if QUICKSILVER_API_KEY:
+                    try:
+                        r = _req.post(QUICKSILVER_API_URL,
+                                      json={"model": QUICKSILVER_MODEL, "messages": [{"role": "user", "content": "ping"}]},
+                                      headers={"Authorization": f"Bearer {QUICKSILVER_API_KEY}", "Content-Type": "application/json"},
+                                      timeout=10, proxies={"http": None, "https": None})
+                        lines.append(f"  LLM ping     : {'OK' if r.status_code == 200 else f'HTTP {r.status_code}'}")
+                    except Exception as e:
+                        lines.append(f"  LLM ping     : FAILED ({e})")
+
+                # Bridge connectivity
+                try:
+                    r = _req.get(f"{BRIDGE_BASE_URL}/health", timeout=4,
+                                 proxies={"http": None, "https": None})
+                    lines.append(f"  Bridge       : {'UP' if r.status_code == 200 else f'HTTP {r.status_code}'}")
+                except Exception:
+                    lines.append(f"  Bridge       : OFFLINE")
+
+                # Daemon self
+                lines.append(f"  Daemon port  : {PORT}")
+                lines.append(f"  Version      : {APP_VERSION} ({DAEMON_VERSION})")
+                lines.append(f"  DB path      : {SQLITE_DB_PATH}")
+
+                # DB file size
+                try:
+                    if os.path.exists(SQLITE_DB_PATH):
+                        size = os.path.getsize(SQLITE_DB_PATH)
+                        lines.append(f"  DB size      : {size:,} bytes ({size/1024:.0f} KB)")
+                except Exception:
+                    pass
+
+                # Tool count
+                tool_count = len([m for m in dir(self) if m.startswith("_execute")]) + 16
+                lines.append(f"  Tools        : {tool_count} available")
+
+                # Git HEAD
+                try:
+                    r2 = subprocess.run(["git", "log", "-1", "--oneline"],
+                                        cwd=REPO_ROOT, capture_output=True, text=True, timeout=5)
+                    lines.append(f"  Git HEAD     : {r2.stdout.strip()}")
+                except Exception:
+                    pass
+
+                lines.append("\n" + "─" * 52)
+                return "\n".join(lines)
+
+            # ── Unknown tool fallback ────────────────────────────────────
             else:
                 return f"Error: Unknown tool '{name}'"
 
@@ -1373,7 +2037,68 @@ async def app(scope, receive, send):
                 },
                 {
                     "name": "calibration_status",
-                    "description": "Full enrollment and calibration status: L4 thresholds from calibration_profile_live.json, AIT separation ratio, GIC chain progress, tournament preflight gate conditions",
+                    "description": "Full enrollment and calibration status: L4 thresholds, AIT separation ratio, GIC progress, tournament preflight gate",
+                    "arguments": {},
+                },
+                # --- Protocol Domain Tools ---
+                {
+                    "name": "protocol_phase",
+                    "description": "Live protocol phase context: phase number, bridge health, agent count, contract count, git HEAD",
+                    "arguments": {},
+                },
+                {
+                    "name": "tournament_readiness",
+                    "description": "Full tournament eligibility gate: preflight pass/fail, all P0 conditions, separation defensibility, per-pair gaps, blocker summary, readiness score",
+                    "arguments": {},
+                },
+                {
+                    "name": "separation_deep_dive",
+                    "description": "Deep inter-player separation analysis: ratio, per-pair gaps, LOO accuracy, trends, projections, AIT status",
+                    "arguments": {"session_type": "str (optional)"},
+                },
+                {
+                    "name": "biometric_vault",
+                    "description": "Full biometric credential lifecycle: credential age/TTL, TTL decay scaling, renewal chain, dual primitive gate, confidence multiplier",
+                    "arguments": {},
+                },
+                {
+                    "name": "governance_audit",
+                    "description": "Governance and invariants: PV-CI invariant gate, allowlist governance history, BBG status, protocol metabolism index",
+                    "arguments": {"run_invariant": "bool (optional)"},
+                },
+                {
+                    "name": "fleet_coherence",
+                    "description": "Fleet signal coherence: coherence fingerprint registry, agent context integrity, fleet coherence summary and recent entries",
+                    "arguments": {},
+                },
+                {
+                    "name": "corpus_health",
+                    "description": "Calibration corpus data health: capture velocity oracle, tremor convergence, probe status, regression guard, data readiness, L4 dim sync",
+                    "arguments": {},
+                },
+                {
+                    "name": "l4_calibration",
+                    "description": "L4 threshold calibration system: live calibration profile, staleness, per-battery tracks, router, dim sync, accel FFT config",
+                    "arguments": {},
+                },
+                {
+                    "name": "epoch_windows",
+                    "description": "Epoch window system: analytics p50/p95, auto-tune recommendation, device heatmap, override lifecycle status",
+                    "arguments": {},
+                },
+                {
+                    "name": "protocol_maturity",
+                    "description": "Protocol maturity score with all 9 components: separation, freshness, calibration, PITL, ioSwarm, dry-run, threat forecast, biometric stationarity, PMI",
+                    "arguments": {},
+                },
+                {
+                    "name": "chain_overview",
+                    "description": "Live on-chain overview: wallet balance, block number, all deployed contracts grouped by role",
+                    "arguments": {},
+                },
+                {
+                    "name": "daemon_diagnose",
+                    "description": "Daemon self-diagnostic: bridge connectivity, LLM status, DB size, tool count, memory store, git HEAD",
                     "arguments": {},
                 },
                 {
