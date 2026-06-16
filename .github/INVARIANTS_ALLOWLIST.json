@@ -694,5 +694,13 @@
   "INV-BCC-002": {
     "digest": "730cdffef0399004f3c71361b346f666694cc701478d3e4fe38f2feafc24dddf",
     "description": "Enforces that the touchpad filtering matrix remains active and the cross-player touchpad separation ratio remains mathematically defensible (deferred to not be a blocker)."
+  },
+  "INV-FIRMWARE-001": {
+    "digest": "37f0aa7495eecc9a1dedf89cf2243aa3e3f9076d69b03e85a5d4a9ee5dc06e22",
+    "description": "Asserts that the QorTroller firmware poac_types.h enforces the FROZEN 228-byte PoAC wire format at compile time via _Static_assert. Any accidental struct change fails the firmware build before reaching a device. Paired with INV-ARC7-001 (bridge-side codec check)."
+  },
+  "INV-FIRMWARE-002": {
+    "digest": "5f05645995d5c24e86282ab26ee83d1cdd453ae46d5ac3915d236099a89e26ec",
+    "description": "Asserts that the UWB presence reader (uwb_presence.c) enforces the privacy gate: frames with the vital-sign flag set are discarded and the sensor is disabled for the session. Vital-sign capture requires an independent privacy review per TRACK1-LESSON-003."
   }
 }
