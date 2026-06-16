@@ -226,7 +226,10 @@ SYSTEM_PROMPT = (
     "  poac_status()                                     - Quick protocol status summary\n"
     "  list_contracts()                                  - List deployed contracts\n"
     "  calibration_status()                              - Full enrollment/calibration status\n"
-    "  daemon_diagnose()                                 - Daemon self-diagnostic\n"
+    "  run_mythos(variant: int)                          - Run Mythos variant 1-17; 16=path_a (fast),\n"
+    "                                                      1=frozen_drift, 5=crypto_drift, 14=doc_numbers\n"
+    "  gic_replay(n?: int, session_id?: str)             - Replay last N GIC links from local DB,\n"
+    "                                                      verify each hash — detects tamper/corruption\n"
     "  execute_shell(command: str)                       - Run a shell command\n"
     "  current_time()                                    - Get current date and time\n\n"
     "You can call multiple tools sequentially (one per LLM response). The\n"
@@ -548,6 +551,248 @@ class QorTrollerBrain:
             elif name == "current_time":
                 return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+            # ── #7 run_mythos ─────────────────────────────────────────────
+            elif name == "run_mythos":
+                # Run a specific Mythos variant (1-16) and return findings.
+                # Variants are async functions in bridge/vapi_bridge/mythos_variants.py.
+                variant_num = int(args.get("variant", 16))
+                import asyncio as _aio
+                import pathlib as _pl
+                import sys as _sys
+
+                bridge_path = os.path.join(REPO_ROOT, "bridge")
+                if bridge_path not in _sys.path:
+                    _sys.path.insert(0, bridge_path)
+
+                # Canonical variant map (name → async function)
+                MYTHOS_MAP = {
+                    1:  ("frozen_drift",              "mythos_frozen_drift"),
+                    2:  ("stability_sweep",           "mythos_stability_sweep"),
+                    3:  ("operator_initiative_audit", "mythos_operator_initiative_audit"),
+                    4:  ("live_gameplay_audit",       "mythos_live_gameplay_audit"),
+                    5:  ("crypto_drift",              "mythos_crypto_drift"),
+                    6:  ("qortroller_crypto_drift",   "mythos_qortroller_crypto_drift"),
+                    7:  ("methodology_drift",         "mythos_methodology_drift"),
+                    8:  ("ceremony_drift",            "mythos_ceremony_drift"),
+                    9:  ("post_o3_ceremony_audit",    "mythos_post_o3_ceremony_audit"),
+                    10: ("corpus_drift",              "mythos_corpus_drift"),
+                    11: ("claude_md_curation",        "mythos_claude_md_curation"),
+                    12: ("spending_log_drift",        "mythos_spending_log_drift"),
+                    13: ("curator_graduation_audit",  "mythos_curator_graduation_audit"),
+                    14: ("doc_number_consistency",    "mythos_doc_number_consistency"),
+                    15: ("frontend_brand_drift",      "mythos_frontend_brand_drift"),
+                    16: ("path_a_spec_impl_parity",   "mythos_path_a_spec_impl_parity"),
+                    17: ("agent_utility_honesty",     "mythos_agent_utility_honesty"),
+                }
+
+                if variant_num not in MYTHOS_MAP:
+                    valid = ", ".join(f"{k}={v[0]}" for k, v in MYTHOS_MAP.items())
+                    return f"Error: unknown variant {variant_num}. Valid: {valid}"
+
+                variant_label, fn_name = MYTHOS_MAP[variant_num]
+                try:
+                    from vapi_bridge import mythos_variants as _mv
+                    fn = getattr(_mv, fn_name, None)
+                    if fn is None:
+                        return f"Error: {fn_name} not found in mythos_variants.py"
+
+                    repo = _pl.Path(REPO_ROOT)
+
+                    # Run in a fresh thread with its own event loop so we don't
+                    # conflict with the daemon's running uvicorn event loop.
+                    import concurrent.futures as _cf
+                    def _run_in_thread():
+                        loop = _aio.new_event_loop()
+                        try:
+                            return loop.run_until_complete(fn(repo_root=repo))
+                        finally:
+                            loop.close()
+
+                    with _cf.ThreadPoolExecutor(max_workers=1) as pool:
+                        findings = pool.submit(_run_in_thread).result(timeout=60)
+                except Exception as e:
+                    return f"Error running variant {variant_num} ({variant_label}): {e}"
+
+                if not findings:
+                    return (
+                        f"Mythos #{variant_num} ({variant_label}): "
+                        f"0 findings — all checks passed."
+                    )
+
+                lines = [
+                    f"Mythos #{variant_num} ({variant_label}): {len(findings)} finding(s)",
+                    "─" * 52,
+                ]
+                # Sort by severity (CRITICAL > HIGH > MEDIUM > LOW)
+                sev_order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
+                findings = sorted(findings, key=lambda f: sev_order.get(f.severity, 9))
+
+                for f in findings[:15]:  # cap at 15 to stay within response limits
+                    frozen_tag = " [FROZEN]" if f.frozen_region else ""
+                    lines.append(
+                        f"[{f.severity}{frozen_tag}] {f.description[:120]}"
+                    )
+                    if f.file_path:
+                        lines.append(f"  file: {f.file_path}" +
+                                     (f":{f.line_number}" if f.line_number else ""))
+                    if f.recommended_fix:
+                        lines.append(f"  fix:  {f.recommended_fix[:100]}")
+                    lines.append("")
+
+                if len(findings) > 15:
+                    lines.append(f"... and {len(findings) - 15} more findings (run with variant for full output)")
+
+                return "\n".join(lines)
+
+            # ── #8 gic_replay ─────────────────────────────────────────────
+            elif name == "gic_replay":
+                # Replay the last N GIC links from the local DB and verify
+                # chain integrity — same logic as bridge startup check but
+                # callable from chat without starting the bridge.
+                import sqlite3 as _sq
+                import hashlib as _hl
+                import struct as _st
+
+                n = min(int(args.get("n", 20)), 200)
+                session_id = args.get("session_id", "")
+
+                db_path = os.path.join(REPO_ROOT, "bridge", "vapi_store.db")
+                alt_db  = os.path.join(os.path.expanduser("~"), ".vapi", "bridge.db")
+                db = db_path if os.path.exists(db_path) else (
+                    alt_db if os.path.exists(alt_db) else None)
+
+                if not db:
+                    return ("No DB found at bridge/vapi_store.db or ~/.vapi/bridge.db. "
+                            "Start the bridge at least once to create it.")
+
+                try:
+                    conn = _sq.connect(db)
+                    conn.row_factory = _sq.Row
+
+                    # Get session_id if not specified — use the most recent one
+                    if not session_id:
+                        row = conn.execute(
+                            "SELECT grind_session_id FROM ruling_validation_log "
+                            "WHERE grind_chain_hash IS NOT NULL AND grind_chain_hash != '' "
+                            "ORDER BY id DESC LIMIT 1"
+                        ).fetchone()
+                        session_id = row["grind_session_id"] if row else ""
+
+                    if not session_id:
+                        conn.close()
+                        return "No GIC-stamped rows found — grind has not started."
+
+                    # Fetch last N GIC rows for this session
+                    rows = conn.execute(
+                        "SELECT id, grind_chain_hash, gic_ts_ns, "
+                        "commitment_hash, pcc_host_state, fallback_verdict "
+                        "FROM ruling_validation_log "
+                        "WHERE grind_session_id = ? "
+                        "AND grind_chain_hash IS NOT NULL AND grind_chain_hash != '' "
+                        "ORDER BY id ASC",
+                        (session_id,)
+                    ).fetchall()
+                    total_links = len(rows)
+                    rows = rows[-n:]  # take last N
+                    conn.close()
+
+                    if not rows:
+                        return f"Session '{session_id}': no GIC-stamped rows found."
+
+                    # GIC formula v1 (INV-GIC-001 FROZEN):
+                    # GIC_N = SHA-256(prev_32B || commitment_32B || verdict_1B || host_1B || ts_ns_8B)
+                    VERDICT_CODES = {
+                        "CLEAR": 0x00, "CERTIFY": 0x01,
+                        "FLAG":  0x10, "HOLD":   0x11, "BLOCK": 0x20,
+                    }
+                    HOST_CODES = {
+                        "EXCLUSIVE_USB": 0x01, "UNKNOWN":      0x02,
+                        "EXCLUSIVE_BT":  0x10, "CONTESTED":    0x20,
+                        "DEGRADED":      0x30, "DISCONNECTED": 0xFF,
+                    }
+                    GENESIS_TAG = b"VAPI-GIC-GENESIS-v1"
+
+                    def _genesis(sid: str, ts_ns: int) -> bytes:
+                        pre = GENESIS_TAG + sid.encode("utf-8")
+                        pre += ts_ns.to_bytes(8, "big")
+                        return _hl.sha256(pre).digest()
+
+                    def _compute(prev: bytes, commit_hex: str,
+                                 host: str, verdict: str, ts_ns: int) -> bytes:
+                        commit = bytes.fromhex(commit_hex.zfill(64)) if commit_hex else b"\x00" * 32
+                        v_code = VERDICT_CODES.get(verdict, 0x10)
+                        h_code = HOST_CODES.get(host, 0x02)
+                        payload = (prev + commit +
+                                   bytes([v_code, h_code]) +
+                                   ts_ns.to_bytes(8, "big"))
+                        return _hl.sha256(payload).digest()
+
+                    # Replay
+                    intact = True
+                    broken_at = None
+                    first_row = rows[0]
+                    ts0 = int(first_row["gic_ts_ns"] or 0)
+
+                    # If this is the very first row globally, seed with genesis
+                    if total_links <= n:
+                        prev = _genesis(session_id, ts0)
+                    else:
+                        # We're replaying a tail — can't fully verify without full history
+                        prev = None
+
+                    lines = [
+                        "═" * 56,
+                        f"  GIC REPLAY — session: {session_id}",
+                        f"  Total links : {total_links}  |  Replaying last {len(rows)}",
+                        "─" * 56,
+                    ]
+
+                    for i, row in enumerate(rows):
+                        ts_ns   = int(row["gic_ts_ns"] or 0)
+                        commit  = row["commitment_hash"] or ""
+                        host    = row["pcc_host_state"] or "DISCONNECTED"
+                        verdict = row["fallback_verdict"] or "FLAG"
+                        stored  = row["grind_chain_hash"] or ""
+
+                        if prev is None:
+                            # Can't verify first row of a tail replay
+                            status = "?"
+                            lines.append(f"  [{i+1:4d}] {stored[:12]}... "
+                                         f"verdict={verdict} host={host[:12]} [UNVERIFIABLE — tail]")
+                            prev = bytes.fromhex(stored) if stored else b"\x00" * 32
+                            continue
+
+                        expected = _compute(prev, commit, host, verdict, ts_ns)
+                        expected_hex = expected.hex()
+
+                        if expected_hex == stored:
+                            status = "OK"
+                        else:
+                            status = "BROKEN"
+                            intact = False
+                            if broken_at is None:
+                                broken_at = i + 1
+
+                        dt = datetime.datetime.fromtimestamp(ts_ns / 1e9).strftime("%H:%M:%S")
+                        lines.append(
+                            f"  [{i+1:4d}] {stored[:12]}... "
+                            f"{dt} verdict={verdict} [{status}]"
+                        )
+                        prev = expected  # use computed for next link (catches drift early)
+
+                    lines.append("─" * 56)
+                    if prev is None:
+                        lines.append("  Result: UNVERIFIABLE (tail replay, genesis not in window)")
+                    elif intact:
+                        lines.append(f"  Result: INTACT — all {len(rows)} replayed links verified ✓")
+                    else:
+                        lines.append(f"  Result: BROKEN at link {broken_at} — tamper or DB corruption")
+                    lines.append("═" * 56)
+                    return "\n".join(lines)
+
+                except Exception as e:
+                    return f"Error during GIC replay: {e}"
+
             # ── #1 GIC Chain Visualizer ───────────────────────────────────
             elif name == "gic_chain_status":
                 # Pull GIC chain from bridge if up, else read DB directly.
@@ -644,14 +889,26 @@ class QorTrollerBrain:
 
             # ── #6 query_chain ────────────────────────────────────────────
             elif name == "query_chain":
-                # Call IoTeX testnet directly via urllib (no web3 dep in daemon).
-                # Supports: wallet_balance, is_fully_eligible, get_device_tier,
-                #           beacon_registry, raw_eth_call.
+                """Query IoTeX testnet directly. Supports:
+                  wallet_balance           — balance of active deployer wallet
+                  eth_getBalance [address] — balance of any address
+                  eth_call [to] [data]     — generic eth_call to any contract
+                  eth_call [contract] [fn_selector] [args...] — lookup by contract name
+                  is_fully_eligible [device_id] — VAPIProtocolLens check
+                  get_device_tier [device_id]  — device tier classification
+                  beacon_registry          — TemporalBeacon anchor block
+                  block_number             — current IoTeX testnet block
+                  all [device_id]          — all of the above
+                Uses urllib directly, no web3.py dependency."""
                 import urllib.request as _ur
-                import struct
 
                 RPC = "https://babel-api.testnet.iotex.io"
                 WALLET = "0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692"
+
+                # --- helpers ---
+                def _eth_call(to_addr: str, call_data: str) -> str:
+                    res = _rpc("eth_call", [{"to": to_addr, "data": call_data}, "latest"])
+                    return res.get("result", "0x")
 
                 # Load deployed addresses once
                 addr_path = os.path.join(REPO_ROOT, "contracts", "deployed-addresses.json")
@@ -666,8 +923,6 @@ class QorTrollerBrain:
                         "jsonrpc": "2.0", "id": 1,
                         "method": method, "params": params,
                     }).encode()
-                    # babel-api.testnet.iotex.io requires User-Agent header
-                    # (returns 403 without it — documented in F-HWFL-4-1)
                     req = _ur.Request(RPC, data=payload, headers={
                         "Content-Type": "application/json",
                         "User-Agent": "QorTroller-Daemon/2.0",
@@ -678,12 +933,65 @@ class QorTrollerBrain:
                 query = args.get("query", "wallet_balance").lower()
                 lines = []
 
+                # ── wallet_balance ─────────────────────────────────────────
                 if query in ("wallet_balance", "all", ""):
                     res = _rpc("eth_getBalance", [WALLET, "latest"])
                     wei = int(res["result"], 16)
-                    iotx = wei / 1e18
-                    lines.append(f"Wallet ({WALLET[:10]}...): {iotx:.6f} IOTX")
+                    lines.append(f"Active wallet ({WALLET[:10]}...): {wei/1e18:.6f} IOTX")
 
+                # ── eth_getBalance (generic, any address) ──────────────────
+                if query == "eth_getBalance":
+                    address = args.get("address", WALLET)
+                    if not address.startswith("0x"):
+                        address = WALLET
+                    try:
+                        res = _rpc("eth_getBalance", [address, "latest"])
+                        wei = int(res["result"], 16)
+                        lines.append(f"Balance({address[:10]}...): {wei/1e18:.6f} IOTX ({wei:,} wei)")
+                    except Exception as e:
+                        lines.append(f"eth_getBalance failed: {e}")
+
+                # ── eth_call (generic, any contract, any function) ─────────
+                if query == "eth_call":
+                    to_addr = args.get("to", "")
+                    call_data = args.get("data", "0x")
+                    contract_name = args.get("contract", "")
+
+                    # Resolve contract name to address
+                    if contract_name and not to_addr:
+                        for k, v in addrs.items():
+                            if k.lower() == contract_name.lower() or contract_name.lower() in k.lower():
+                                to_addr = v
+                                break
+                        if not to_addr:
+                            lines.append(f"No contract matching '{contract_name}' in deployed-addresses.json")
+                            to_addr = ""
+
+                    # Resolve function selector
+                    fn_selector = args.get("fn_selector", "")
+                    if fn_selector and not call_data.startswith("0x"):
+                        call_data = fn_selector
+
+                    if not to_addr:
+                        lines.append("Provide 'to' (address) or 'contract' (name from deployed-addresses.json)")
+                    elif not call_data or not call_data.startswith("0x"):
+                        lines.append("Provide 'data' (0x4-byte-selector + args) or 'fn_selector' (0x4-byte)")
+                    else:
+                        try:
+                            res_str = _eth_call(to_addr, call_data)
+                            label = contract_name or to_addr[:10]
+                            if res_str and res_str != "0x":
+                                try:
+                                    val = int(res_str, 16)
+                                    lines.append(f"eth_call({label}): {res_str[:66]} (int: {val:,})")
+                                except ValueError:
+                                    lines.append(f"eth_call({label}): 0x{res_str[:200]}")
+                            else:
+                                lines.append(f"eth_call({label}): empty/zero result")
+                        except Exception as e:
+                            lines.append(f"eth_call failed: {e}")
+
+                # ── is_fully_eligible (via VAPIProtocolLens) ───────────────
                 if query in ("is_fully_eligible", "all"):
                     device_id = args.get("device_id", "")
                     lens_addr = addrs.get("VAPIProtocolLensV2", addrs.get("VAPIProtocolLens", ""))
@@ -692,44 +1000,39 @@ class QorTrollerBrain:
                     elif not device_id:
                         lines.append("isFullyEligible: provide device_id argument (32-byte hex)")
                     else:
-                        # keccak4("isFullyEligible(bytes32)") = 0x...
-                        # selector hardcoded from ABI
-                        selector = "0x5f04e8a4"
-                        padded = device_id.replace("0x","").zfill(64)
-                        data = selector + padded
-                        res = _rpc("eth_call", [{"to": lens_addr, "data": data}, "latest"])
-                        result_hex = res.get("result", "0x")
-                        eligible = result_hex.endswith("1")
+                        selector = "0x5f04e8a4"  # keccak4("isFullyEligible(bytes32)")
+                        padded = device_id.replace("0x", "").zfill(64)
+                        res_str = _eth_call(lens_addr, selector + padded)
+                        eligible = res_str.endswith("1")
                         lines.append(f"isFullyEligible({device_id[:10]}...): {eligible}")
 
+                # ── get_device_tier ────────────────────────────────────────
                 if query in ("get_device_tier", "all"):
                     device_id = args.get("device_id", "")
                     lens_addr = addrs.get("VAPIProtocolLensV2", addrs.get("VAPIProtocolLens", ""))
                     if lens_addr and device_id:
-                        selector = "0x7f87d5c3"  # getDeviceTier(bytes32)
-                        padded = device_id.replace("0x","").zfill(64)
-                        data = selector + padded
-                        res = _rpc("eth_call", [{"to": lens_addr, "data": data}, "latest"])
-                        result_hex = res.get("result", "0x0")
-                        tier = int(result_hex, 16) if result_hex and result_hex != "0x" else 0
+                        selector = "0x7f87d5c3"  # keccak4("getDeviceTier(bytes32)")
+                        padded = device_id.replace("0x", "").zfill(64)
+                        res_str = _eth_call(lens_addr, selector + padded)
+                        tier = int(res_str, 16) if res_str and res_str != "0x" else 0
                         tier_name = {1: "FULL (CFI-ZCP1)", 2: "STANDARD (CFI-ZCT1)", 3: "BASIC"}.get(tier, f"UNKNOWN ({tier})")
                         lines.append(f"getDeviceTier({device_id[:10]}...): {tier_name}")
 
+                # ── beacon_registry ────────────────────────────────────────
                 if query in ("beacon_registry", "all"):
                     tbr_addr = addrs.get("VAPITemporalBeaconRegistry", "")
                     if tbr_addr:
-                        # latestBeacon() selector
-                        selector = "0x5a2e3b93"
-                        res = _rpc("eth_call", [{"to": tbr_addr, "data": selector}, "latest"])
-                        raw = res.get("result", "0x")
-                        if raw and raw != "0x" and len(raw) > 2:
-                            block_num = int(raw[2:66], 16) if len(raw) >= 66 else 0
+                        selector = "0x5a2e3b93"  # keccak4("latestBeacon()")
+                        res_str = _eth_call(tbr_addr, selector)
+                        if res_str and res_str != "0x" and len(res_str) > 2:
+                            block_num = int(res_str[2:66], 16) if len(res_str) >= 66 else 0
                             lines.append(f"TemporalBeaconRegistry: latest anchor block={block_num}")
                         else:
                             lines.append("TemporalBeaconRegistry: no beacon anchored yet")
                     else:
-                        lines.append("TemporalBeaconRegistry: address not found in deployed-addresses.json")
+                        lines.append("TemporalBeaconRegistry: address not found")
 
+                # ── block_number ───────────────────────────────────────────
                 if query in ("block_number", "all"):
                     res = _rpc("eth_blockNumber", [])
                     block = int(res["result"], 16)
@@ -737,13 +1040,13 @@ class QorTrollerBrain:
 
                 if not lines:
                     lines.append(
-                        f"Unknown query '{query}'. Valid: wallet_balance, is_fully_eligible, "
-                        f"get_device_tier, beacon_registry, block_number, all"
+                        f"Unknown query '{query}'. Valid: wallet_balance, eth_getBalance, "
+                        f"eth_call, is_fully_eligible, get_device_tier, beacon_registry, "
+                        f"block_number, all"
                     )
 
                 return "\n".join(lines)
 
-            # ── #9 calibration_status ─────────────────────────────────────
             elif name == "calibration_status":
                 import requests as _req
                 lines = ["═" * 52, "  CALIBRATION & ENROLLMENT STATUS", "═" * 52]
@@ -2039,6 +2342,19 @@ async def app(scope, receive, send):
                     "name": "calibration_status",
                     "description": "Full enrollment and calibration status: L4 thresholds, AIT separation ratio, GIC progress, tournament preflight gate",
                     "arguments": {},
+                },
+                {
+                    "name": "run_mythos",
+                    "description": "Run a specific Mythos audit variant (1-17) and return findings sorted by severity. Fast variants: 16=path_a_spec_impl_parity, 14=doc_number_consistency, 5=crypto_drift, 1=frozen_drift. DB-bound variants need bridge running.",
+                    "arguments": {"variant": "int (required, 1-17)"},
+                },
+                {
+                    "name": "gic_replay",
+                    "description": "Replay last N GIC chain links from local DB (~/.vapi/bridge.db) and cryptographically verify each SHA-256 link hash. Detects tamper or DB corruption without the bridge running.",
+                    "arguments": {
+                        "n": "int (optional, default 20, max 200)",
+                        "session_id": "str (optional — defaults to most recent session in DB)",
+                    },
                 },
                 # --- Protocol Domain Tools ---
                 {
