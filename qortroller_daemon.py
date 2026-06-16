@@ -72,7 +72,9 @@ APP_VERSION = "2.0.0"
 DAEMON_VERSION = "hive-mind-v1"
 
 REPO_ROOT = os.path.abspath(os.path.dirname(__file__))
-PORT = int(os.environ.get("HTTP_PORT", 8080))
+# DAEMON_PORT takes precedence so bridge/.env HTTP_PORT (for the bridge process)
+# doesn't collide with the daemon when both run simultaneously.
+PORT = int(os.environ.get("DAEMON_PORT", os.environ.get("HTTP_PORT", 8080)))
 MAX_TOOL_ITERATIONS = 10
 TOOL_TIMEOUT = 15
 
@@ -81,7 +83,10 @@ QUICKSILVER_API_URL = "https://api.quicksilverpro.io/v1/chat/completions"
 QUICKSILVER_MODEL = os.environ.get("QUICKSILVER_MODEL", "deepseek-v4-flash")
 
 OPERATOR_API_KEY = os.environ.get("OPERATOR_API_KEY", "")
+# Bridge public API (26 endpoints, no auth) — used for public-facing queries
 BRIDGE_BASE_URL = os.environ.get("VAPI_BRIDGE_URL", "http://localhost:8000")
+# Bridge operator API (241 endpoints, x-api-key required) — all rich protocol state
+BRIDGE_OPERATOR_URL = os.environ.get("VAPI_BRIDGE_OPERATOR_URL", "http://localhost:8000/operator")
 TOOL_SERVER_URL = os.environ.get("TOOL_SERVER_URL", "http://localhost:8080")
 
 SQLITE_DB_PATH = os.path.join(REPO_ROOT, "agent_memory.db")
@@ -195,6 +200,18 @@ SYSTEM_PROMPT = (
     "  [Version Control]\n"
     "  git_history()                                     - Show recent git log (10 commits, oneline)\n"
     "  git_log_full(ref?: str, n?: int)                  - Full git log with stats for a ref/commit\n"
+    "  [Audit / Drift Detection]\n"
+    "  run_mythos(variant: int)                          - Run a Mythos audit variant (1-17) and\n"
+    "                                                      return findings sorted by severity.\n"
+    "                                                      Variants: 1=frozen_drift, 2=stability_sweep,\n"
+    "                                                      3=operator_initiative, 4=live_gameplay,\n"
+    "                                                      5=crypto_drift, 6=qortroller_crypto,\n"
+    "                                                      7=methodology_drift, 8=ceremony_drift,\n"
+    "                                                      9=post_o3_ceremony, 10=corpus_drift,\n"
+    "                                                      11=claude_md, 12=spending_log,\n"
+    "                                                      13=curator_graduation, 14=doc_consistency,\n"
+    "                                                      15=frontend_brand, 16=path_a_parity,\n"
+    "                                                      17=agent_utility_honesty\n"
     "  [Bridge / Chain]\n"
     "  bridge_get(path: str)                             - GET a bridge API endpoint\n"
     "  bridge_post(path: str, payload?: dict)            - POST to a bridge API endpoint\n"
@@ -473,6 +490,28 @@ class QorTrollerBrain:
                 continue
         return calls
 
+    # ── Bridge HTTP helper ────────────────────────────────────────────────
+
+    @staticmethod
+    def _bridge_get(path: str, timeout: float = 5.0):
+        """Route a bridge GET to the correct sub-app with auth.
+
+        Paths starting with /agent/, /bridge/, or /operator/ go to the
+        operator sub-app (BRIDGE_OPERATOR_URL, x-api-key required).
+        All other paths go to the public API (BRIDGE_BASE_URL, no auth).
+        Returns the parsed JSON dict, or None on error.
+        """
+        import requests as _rq
+        is_op = any(path.startswith(p) for p in ("/agent/", "/bridge/", "/operator/"))
+        base = BRIDGE_OPERATOR_URL if is_op else BRIDGE_BASE_URL
+        hdrs = {"x-api-key": OPERATOR_API_KEY} if (is_op and OPERATOR_API_KEY) else {}
+        try:
+            r = _rq.get(f"{base}{path}", headers=hdrs, timeout=timeout,
+                        proxies={"http": None, "https": None})
+            return r.json() if r.status_code == 200 else None
+        except Exception:
+            return None
+
     # ── Tool Execution ────────────────────────────────────────────────────
 
     def _execute_tool(self, name: str, args: dict) -> str:
@@ -519,15 +558,25 @@ class QorTrollerBrain:
                 if not path:
                     return "Error: 'path' argument is required"
                 import requests
+                # Auto-route: paths starting with /agent/ or /bridge/ go to
+                # the operator sub-app (241 routes, auth required).
+                # Everything else goes to the public API.
+                is_operator = any(path.startswith(p) for p in
+                                  ("/agent/", "/bridge/", "/operator/"))
+                base = BRIDGE_OPERATOR_URL if is_operator else BRIDGE_BASE_URL
+                # Strip leading /operator/ if already in path to avoid double-prefix
+                url_path = path.lstrip("/operator") if (is_operator and path.startswith("/operator/")) else path
+                headers = {"x-api-key": OPERATOR_API_KEY} if OPERATOR_API_KEY else {}
                 try:
                     r = requests.get(
-                        f"{BRIDGE_BASE_URL}{path}",
+                        f"{base}{url_path}",
+                        headers=headers,
                         timeout=5,
                         proxies={"http": None, "https": None},
                     )
                     if r.status_code == 200:
                         return json.dumps(r.json(), indent=2, default=str)
-                    return f"Error: Bridge returned status {r.status_code}"
+                    return f"Error: Bridge returned {r.status_code} for {base}{url_path}"
                 except Exception as e:
                     return f"Error: Bridge request failed: {e}"
 
@@ -647,14 +696,14 @@ class QorTrollerBrain:
             # ── #8 gic_replay ─────────────────────────────────────────────
             elif name == "gic_replay":
                 # Replay the last N GIC links from the local DB and verify
-                # chain integrity — same logic as bridge startup check but
-                # callable from chat without starting the bridge.
+                # chain integrity. Optionally cross-check locally replayed
+                # head against a known-good head_hash (from bridge or chain).
                 import sqlite3 as _sq
                 import hashlib as _hl
-                import struct as _st
 
                 n = min(int(args.get("n", 20)), 200)
                 session_id = args.get("session_id", "")
+                head_hash = args.get("head_hash", "").lower().replace("0x", "")
 
                 db_path = os.path.join(REPO_ROOT, "bridge", "vapi_store.db")
                 alt_db  = os.path.join(os.path.expanduser("~"), ".vapi", "bridge.db")
@@ -669,7 +718,7 @@ class QorTrollerBrain:
                     conn = _sq.connect(db)
                     conn.row_factory = _sq.Row
 
-                    # Get session_id if not specified — use the most recent one
+                    # Get session_id if not specified -> use the most recent one
                     if not session_id:
                         row = conn.execute(
                             "SELECT grind_session_id FROM ruling_validation_log "
@@ -680,9 +729,9 @@ class QorTrollerBrain:
 
                     if not session_id:
                         conn.close()
-                        return "No GIC-stamped rows found — grind has not started."
+                        return "No GIC-stamped rows found - grind has not started."
 
-                    # Fetch last N GIC rows for this session
+                    # Fetch ALL GIC rows for this session (need full chain for head_hash verify)
                     rows = conn.execute(
                         "SELECT id, grind_chain_hash, gic_ts_ns, "
                         "commitment_hash, pcc_host_state, fallback_verdict "
@@ -693,7 +742,6 @@ class QorTrollerBrain:
                         (session_id,)
                     ).fetchall()
                     total_links = len(rows)
-                    rows = rows[-n:]  # take last N
                     conn.close()
 
                     if not rows:
@@ -727,42 +775,68 @@ class QorTrollerBrain:
                                    ts_ns.to_bytes(8, "big"))
                         return _hl.sha256(payload).digest()
 
-                    # Replay
-                    intact = True
-                    broken_at = None
+                    # ---- Full chain replay from genesis ----
                     first_row = rows[0]
                     ts0 = int(first_row["gic_ts_ns"] or 0)
-
-                    # If this is the very first row globally, seed with genesis
-                    if total_links <= n:
-                        prev = _genesis(session_id, ts0)
-                    else:
-                        # We're replaying a tail — can't fully verify without full history
-                        prev = None
+                    genesis = _genesis(session_id, ts0)
+                    prev = genesis
+                    intact = True
+                    broken_at = None
+                    head_computed = None
 
                     lines = [
-                        "═" * 56,
-                        f"  GIC REPLAY — session: {session_id}",
-                        f"  Total links : {total_links}  |  Replaying last {len(rows)}",
-                        "─" * 56,
+                        "=" * 56,
+                        f"  GIC REPLAY - session: {session_id}",
+                        f"  Total links : {total_links}  |  Replay window: last {min(n, total_links)}",
                     ]
+                    if head_hash:
+                        lines.append(f"  Head check  : verifying against provided 0x{head_hash[:16]}...")
+                    lines.append("=" * 56)
 
-                    for i, row in enumerate(rows):
+                    # Replay only the last N rows for display, but compute over all
+                    display_rows = rows[-n:]
+                    head_computed_rows = rows[:]  # full chain
+
+                    # Full-chain computation for head hash
+                    for row in head_computed_rows:
                         ts_ns   = int(row["gic_ts_ns"] or 0)
                         commit  = row["commitment_hash"] or ""
                         host    = row["pcc_host_state"] or "DISCONNECTED"
                         verdict = row["fallback_verdict"] or "FLAG"
                         stored  = row["grind_chain_hash"] or ""
 
-                        if prev is None:
-                            # Can't verify first row of a tail replay
-                            status = "?"
-                            lines.append(f"  [{i+1:4d}] {stored[:12]}... "
-                                         f"verdict={verdict} host={host[:12]} [UNVERIFIABLE — tail]")
-                            prev = bytes.fromhex(stored) if stored else b"\x00" * 32
-                            continue
-
                         expected = _compute(prev, commit, host, verdict, ts_ns)
+                        expected_hex = expected.hex()
+
+                        # Verify stored hash matches computed
+                        if expected_hex != stored:
+                            intact = False
+                            if broken_at is None:
+                                broken_at = rows.index(row) + 1
+
+                        prev = expected  # chain forward
+
+                    head_computed = prev.hex()
+
+                    # ---- Display window (last N) ----
+                    # Recompute display window from full-chain state
+                    # First, get the prev hash for the first display row
+                    display_prev = genesis
+                    for row in rows[:-n]:
+                        ts_ns_d = int(row["gic_ts_ns"] or 0)
+                        commit_d = row["commitment_hash"] or ""
+                        host_d   = row["pcc_host_state"] or "DISCONNECTED"
+                        verdict_d = row["fallback_verdict"] or "FLAG"
+                        display_prev = _compute(display_prev, commit_d, host_d, verdict_d, ts_ns_d)
+
+                    for i, row in enumerate(display_rows):
+                        ts_ns   = int(row["gic_ts_ns"] or 0)
+                        commit  = row["commitment_hash"] or ""
+                        host    = row["pcc_host_state"] or "DISCONNECTED"
+                        verdict = row["fallback_verdict"] or "FLAG"
+                        stored  = row["grind_chain_hash"] or ""
+
+                        expected = _compute(display_prev, commit, host, verdict, ts_ns)
                         expected_hex = expected.hex()
 
                         if expected_hex == stored:
@@ -771,29 +845,47 @@ class QorTrollerBrain:
                             status = "BROKEN"
                             intact = False
                             if broken_at is None:
-                                broken_at = i + 1
+                                broken_at = total_links - len(display_rows) + i + 1
 
                         dt = datetime.datetime.fromtimestamp(ts_ns / 1e9).strftime("%H:%M:%S")
                         lines.append(
-                            f"  [{i+1:4d}] {stored[:12]}... "
+                            f"  [{total_links - len(display_rows) + i + 1:4d}] "
+                            f"{stored[:12]}... "
                             f"{dt} verdict={verdict} [{status}]"
                         )
-                        prev = expected  # use computed for next link (catches drift early)
+                        display_prev = expected
 
-                    lines.append("─" * 56)
-                    if prev is None:
-                        lines.append("  Result: UNVERIFIABLE (tail replay, genesis not in window)")
-                    elif intact:
-                        lines.append(f"  Result: INTACT — all {len(rows)} replayed links verified ✓")
+                    lines.append("=" * 56)
+
+                    # ---- Results ----
+                    if not intact:
+                        lines.append(f"  CHAIN INTEGRITY: BROKEN at link {broken_at}")
                     else:
-                        lines.append(f"  Result: BROKEN at link {broken_at} — tamper or DB corruption")
-                    lines.append("═" * 56)
+                        lines.append(f"  CHAIN INTEGRITY: INTACT - all {total_links} links verified")
+
+                    lines.append(f"  Computed head: 0x{head_computed[:16]}...{head_computed[-4:]}")
+
+                    if head_hash:
+                        if head_computed == head_hash:
+                            lines.append(
+                                f"  HEAD MATCH   : YES - local chain head matches "
+                                f"provided 0x{head_hash[:16]}..."
+                            )
+                        else:
+                            lines.append(
+                                f"  HEAD MATCH   : NO - local head "
+                                f"(0x{head_computed[:16]}...) != "
+                                f"provided (0x{head_hash[:16]}...) - "
+                                f"DB tamper or session mismatch"
+                            )
+                    else:
+                        lines.append("  (no head_hash provided - internal consistency only)")
+
+                    lines.append("=" * 56)
                     return "\n".join(lines)
 
                 except Exception as e:
                     return f"Error during GIC replay: {e}"
-
-            # ── #1 GIC Chain Visualizer ───────────────────────────────────
             elif name == "gic_chain_status":
                 # Pull GIC chain from bridge if up, else read DB directly.
                 # Returns a visual ASCII chain + structured data.
@@ -802,8 +894,8 @@ class QorTrollerBrain:
 
                 # Try bridge first (authoritative, live)
                 try:
-                    r = _req.get(f"{BRIDGE_BASE_URL}/bridge/grind-chain-status",
-                                 timeout=4, proxies={"http": None, "https": None})
+                    r = _req.get(f"{BRIDGE_OPERATOR_URL}/bridge/grind-chain-status",
+                                 headers={"x-api-key": OPERATOR_API_KEY} if OPERATOR_API_KEY else {}, timeout=4, proxies={"http": None, "https": None})
                     if r.status_code == 200:
                         d = r.json()
                         chain_len   = d.get("chain_length", 0)
@@ -816,7 +908,7 @@ class QorTrollerBrain:
                         cc = 0
                         try:
                             ch = _req.get(f"{BRIDGE_BASE_URL}/bridge/capture-health",
-                                          timeout=3, proxies={"http": None, "https": None})
+                                          headers={"x-api-key": OPERATOR_API_KEY} if OPERATOR_API_KEY else {}, timeout=3, proxies={"http": None, "https": None})
                             if ch.status_code == 200:
                                 cc = ch.json().get("consecutive_clean_toward_target", 0)
                         except Exception:
@@ -1070,12 +1162,16 @@ class QorTrollerBrain:
                     lines.append(f"  calibration_profile_live.json: {e}")
 
                 # 2. Separation ratio from bridge
-                for ep, label in [
-                    ("/agent/separation-ratio-status", "Separation Ratio"),
-                    ("/agent/separation-defensibility-status", "AIT Defensibility"),
-                ]:
+                # separation-ratio-status requires api_key query param
+                # ait-separation-status uses x-api-key header (standard)
+                sep_endpoints = [
+                    (f"/agent/separation-ratio-status?api_key={OPERATOR_API_KEY}", "Separation Ratio"),
+                    ("/agent/ait-separation-status", "AIT Separation"),
+                ]
+                for ep, label in sep_endpoints:
                     try:
-                        r = _req.get(f"{BRIDGE_BASE_URL}{ep}", timeout=4,
+                        r = _req.get(f"{BRIDGE_OPERATOR_URL}{ep}", timeout=4,
+                                     headers={"x-api-key": OPERATOR_API_KEY} if OPERATOR_API_KEY else {},
                                      proxies={"http": None, "https": None})
                         if r.status_code == 200:
                             d = r.json()
@@ -1084,7 +1180,7 @@ class QorTrollerBrain:
                                 if isinstance(v, (int, float, bool, str)):
                                     lines.append(f"    {k}: {v}")
                         else:
-                            lines.append(f"  {label}: HTTP {r.status_code} (bridge may be down)")
+                            lines.append(f"  {label}: HTTP {r.status_code}")
                     except Exception:
                         lines.append(f"  {label}: bridge offline")
 
@@ -1092,7 +1188,7 @@ class QorTrollerBrain:
 
                 # 3. GIC / grind progress
                 try:
-                    r = _req.get(f"{BRIDGE_BASE_URL}/bridge/grind-chain-status", timeout=4,
+                    r = _req.get(f"{BRIDGE_OPERATOR_URL}/bridge/grind-chain-status", timeout=4,
                                  proxies={"http": None, "https": None})
                     if r.status_code == 200:
                         d = r.json()
@@ -1114,7 +1210,7 @@ class QorTrollerBrain:
 
                 # 4. Tournament preflight gate
                 try:
-                    r = _req.get(f"{BRIDGE_BASE_URL}/agent/tournament-preflight", timeout=4,
+                    r = _req.get(f"{BRIDGE_OPERATOR_URL}/agent/tournament-preflight", timeout=4,
                                  proxies={"http": None, "https": None})
                     if r.status_code == 200:
                         d = r.json()
@@ -1303,7 +1399,7 @@ class QorTrollerBrain:
 
                 # Phase from bridge health/status or config
                 try:
-                    r = _req.get(f"{BRIDGE_BASE_URL}/health", timeout=4,
+                    r = _req.get(f"{BRIDGE_OPERATOR_URL}/health", timeout=4,
                                  proxies={"http": None, "https": None})
                     if r.status_code == 200:
                         d = r.json()
@@ -1374,7 +1470,7 @@ class QorTrollerBrain:
                 }
                 for ep, label in endpoints.items():
                     try:
-                        r = _req.get(f"{BRIDGE_BASE_URL}{ep}", timeout=4,
+                        r = _req.get(f"{BRIDGE_OPERATOR_URL}{ep}", timeout=4,
                                      proxies={"http": None, "https": None})
                         if r.status_code == 200:
                             d = r.json()
@@ -1443,7 +1539,7 @@ class QorTrollerBrain:
                 # Add AIT-specific status if relevant
                 if session_type in ("", "ait"):
                     try:
-                        r = _req.get(f"{BRIDGE_BASE_URL}/agent/ait-separation-status", timeout=4,
+                        r = _req.get(f"{BRIDGE_OPERATOR_URL}/agent/ait-separation-status", timeout=4,
                                      proxies={"http": None, "https": None})
                         if r.status_code == 200:
                             d = r.json()
@@ -1473,7 +1569,7 @@ class QorTrollerBrain:
                 }
                 for ep, label in endpoints.items():
                     try:
-                        r = _req.get(f"{BRIDGE_BASE_URL}{ep}", timeout=4,
+                        r = _req.get(f"{BRIDGE_OPERATOR_URL}{ep}", timeout=4,
                                      proxies={"http": None, "https": None})
                         if r.status_code == 200:
                             d = r.json()
@@ -1511,7 +1607,7 @@ class QorTrollerBrain:
                 }
                 for ep, label in endpoints.items():
                     try:
-                        r = _req.get(f"{BRIDGE_BASE_URL}{ep}", timeout=4,
+                        r = _req.get(f"{BRIDGE_OPERATOR_URL}{ep}", timeout=4,
                                      proxies={"http": None, "https": None})
                         if r.status_code == 200:
                             d = r.json()
@@ -1557,7 +1653,7 @@ class QorTrollerBrain:
                 }
                 for ep, label in endpoints.items():
                     try:
-                        r = _req.get(f"{BRIDGE_BASE_URL}{ep}", timeout=4,
+                        r = _req.get(f"{BRIDGE_OPERATOR_URL}{ep}", timeout=4,
                                      proxies={"http": None, "https": None})
                         if r.status_code == 200:
                             d = r.json()
@@ -1625,7 +1721,7 @@ class QorTrollerBrain:
                 }
                 for ep, label in endpoints.items():
                     try:
-                        r = _req.get(f"{BRIDGE_BASE_URL}{ep}", timeout=4,
+                        r = _req.get(f"{BRIDGE_OPERATOR_URL}{ep}", timeout=4,
                                      proxies={"http": None, "https": None})
                         if r.status_code == 200:
                             d = r.json()
@@ -1678,7 +1774,7 @@ class QorTrollerBrain:
                     ("/agent/accel-tremor-fft-status", "Accel Tremor FFT"),
                 ]:
                     try:
-                        r = _req.get(f"{BRIDGE_BASE_URL}{ep}", timeout=4,
+                        r = _req.get(f"{BRIDGE_OPERATOR_URL}{ep}", timeout=4,
                                      proxies={"http": None, "https": None})
                         if r.status_code == 200:
                             d = r.json()
@@ -1709,7 +1805,7 @@ class QorTrollerBrain:
                 }
                 for ep, label in endpoints.items():
                     try:
-                        r = _req.get(f"{BRIDGE_BASE_URL}{ep}", timeout=4,
+                        r = _req.get(f"{BRIDGE_OPERATOR_URL}{ep}", timeout=4,
                                      proxies={"http": None, "https": None})
                         if r.status_code == 200:
                             d = r.json()
@@ -1744,7 +1840,7 @@ class QorTrollerBrain:
                 }
                 for ep, label in endpoints.items():
                     try:
-                        r = _req.get(f"{BRIDGE_BASE_URL}{ep}", timeout=4,
+                        r = _req.get(f"{BRIDGE_OPERATOR_URL}{ep}", timeout=4,
                                      proxies={"http": None, "https": None})
                         if r.status_code == 200:
                             d = r.json()
@@ -1877,7 +1973,7 @@ class QorTrollerBrain:
 
                 # Bridge connectivity
                 try:
-                    r = _req.get(f"{BRIDGE_BASE_URL}/health", timeout=4,
+                    r = _req.get(f"{BRIDGE_OPERATOR_URL}/health", timeout=4,
                                  proxies={"http": None, "https": None})
                     lines.append(f"  Bridge       : {'UP' if r.status_code == 200 else f'HTTP {r.status_code}'}")
                 except Exception:
