@@ -461,13 +461,18 @@ class QorTrollerCLIAgent:
                     "  /export            Export conversation to file\n"
                     "  /daemon            Show daemon status\n"
                     "  /history           Show recent message history\n\n"
+                    "Multi-line / Long Task Input:\n"
+                    "  /task              Enter block input mode — type your\n"
+                    "  <<<                full task across multiple lines, then\n"
+                    "                     type  >>>  alone to send as ONE message.\n"
+                    "  /task <text>       Seed with first line, continue in block mode.\n"
+                    "  Use this for engineering tasks to avoid the CLI\n"
+                    "  splitting pasted text into separate messages.\n\n"
                     "All other commands (/status, /read, /ls, /git,\n"
                     "/agents, /phase, /separation, /context, /tools)\n"
                     "are forwarded to the daemon AI brain.\n\n"
                     "Navigation:\n"
                     "  Type your message and press Enter.\n"
-                    "  The message is sent to the daemon's AI brain,\n"
-                    "  which runs tools and returns the response.\n"
                     "  Press Ctrl+C to exit.",
                     style=C_BRIGHT,
                 ),
@@ -667,6 +672,35 @@ class QorTrollerCLIAgent:
 
                 if not user_input:
                     continue
+
+                # ── Block input mode (/task or <<< trigger) ──────────────
+                # Typing  /task  or  <<<  enters multi-line mode.
+                # All subsequent lines are collected until a line containing
+                # only  >>>  (or an empty line after /task) is entered.
+                # The full block is sent as ONE message — no splits.
+                if user_input in ("/task", "<<<") or user_input.startswith("/task "):
+                    # If /task already has content after it, use that as first line
+                    seed = user_input[6:].strip() if user_input.startswith("/task ") else ""
+                    lines = [seed] if seed else []
+                    self.console.print(
+                        "  [dim]Multi-line mode — type your full task, "
+                        "then enter [/dim][green]>>>[/][dim] on its own line to send.[/dim]"
+                    )
+                    while True:
+                        try:
+                            line = await asyncio.get_event_loop().run_in_executor(
+                                None, lambda: input("  … ")
+                            )
+                        except (EOFError, KeyboardInterrupt):
+                            break
+                        if line.strip() == ">>>":
+                            break
+                        lines.append(line)
+                    user_input = " ".join(lines).strip()
+                    if not user_input:
+                        self.console.print("  [dim](empty task — cancelled)[/dim]")
+                        continue
+                    self.console.print()
 
                 # Check for slash commands
                 if user_input.startswith("/"):
