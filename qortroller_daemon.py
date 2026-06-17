@@ -80,7 +80,10 @@ TOOL_TIMEOUT = 15
 
 QUICKSILVER_API_KEY = os.environ.get("QUICKSILVER_API_KEY", "")
 QUICKSILVER_API_URL = "https://api.quicksilverpro.io/v1/chat/completions"
-QUICKSILVER_MODEL = os.environ.get("QUICKSILVER_MODEL", "deepseek-v4-flash")
+# Using Claude Sonnet 4.6 via QuickSilver proxy — same API key, better code generation.
+# If QuickSilver uses provider-prefixed naming try: "anthropic/claude-sonnet-4-6"
+# For maximum intelligence on engineering tasks: "claude-opus-4-7"
+QUICKSILVER_MODEL = os.environ.get("QUICKSILVER_MODEL", "claude-sonnet-4-6")
 
 OPERATOR_API_KEY = os.environ.get("OPERATOR_API_KEY", "")
 # Bridge public API (26 endpoints, no auth) — used for public-facing queries
