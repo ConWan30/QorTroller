@@ -194,9 +194,26 @@ SYSTEM_PROMPT = (
     "Available tools:\n"
     "  [Codebase / Files]\n"
     "  read_file(path: str)                              - Read a file from the codebase (max 12KB)\n"
+    "  read_file_range(path, offset?, limit?)            - Paginated read of large files (default 500\n"
+    "                                                      lines starting from line 1). Use this for\n"
+    "                                                      files > 12KB. Returns numbered lines.\n"
     "  write_file(path: str, content: str)               - Write/create a file (blocked for protocol files)\n"
+    "  edit_file(path, old_string, new_string,           - Surgical string replacement. old_string must\n"
+    "            replace_all?)                              be unique unless replace_all=true. PREFER this\n"
+    "                                                      over write_file when modifying existing files.\n"
+    "                                                      Blocked for protocol invariant files.\n"
     "  list_files()                                      - List all project files (max 300)\n"
     "  search_code(pattern: str, glob?: str)             - Search codebase with ripgrep/git grep\n"
+    "  [Engineering / Testing]\n"
+    "  run_pytest(test_path?, timeout?, extra_args?)     - Run pytest with 120s default timeout, returns\n"
+    "                                                      summary + first 5 failure tracebacks + tail.\n"
+    "                                                      Default test_path=bridge/tests/.\n"
+    "  task_track(steps: list[str], plan_name?)          - Create a multi-step plan. Persistent across\n"
+    "                                                      chat turns in agent_memory.db. Use this for\n"
+    "                                                      any multi-step work (refactor, build feature).\n"
+    "  task_update(plan_name?, step_index?, status?,     - Update step status (pending/in_progress/\n"
+    "              action?)                                 completed/blocked) OR action='list' to view\n"
+    "                                                      current plan OR action='clear' to clear it.\n"
     "  [Version Control]\n"
     "  git_history()                                     - Show recent git log (10 commits, oneline)\n"
     "  git_log_full(ref?: str, n?: int)                  - Full git log with stats for a ref/commit\n"
@@ -665,6 +682,301 @@ class QorTrollerBrain:
 
             elif name == "current_time":
                 return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            # ─────────────────────────────────────────────────────────────
+            # TIER 1 ENGINEERING TOOLS — surgical editing, paginated reads,
+            # pytest runner, multi-step plan tracking. Designed to let the
+            # brain attempt real code engineering work autonomously.
+            # ─────────────────────────────────────────────────────────────
+
+            elif name == "edit_file":
+                # Targeted string replacement in repo files.
+                # Mirrors Claude Code's Edit tool semantics.
+                path = args.get("path", "")
+                old_string = args.get("old_string", "")
+                new_string = args.get("new_string", "")
+                replace_all = bool(args.get("replace_all", False))
+
+                if not path:
+                    return "Error: 'path' argument is required"
+                if not old_string:
+                    return "Error: 'old_string' argument is required"
+                if old_string == new_string:
+                    return "Error: old_string and new_string must differ"
+
+                safe = os.path.normpath(os.path.join(REPO_ROOT, path))
+                if not safe.startswith(os.path.normpath(REPO_ROOT)):
+                    return "Error: Access denied (path traversal)"
+                if not os.path.exists(safe) or os.path.isdir(safe):
+                    return f"Error: File not found: {path}"
+
+                # Block edits to protocol invariant files
+                blocked = {".env", "bridge/.env",
+                           "scripts/vapi_invariant_gate.py",
+                           ".github/INVARIANTS_ALLOWLIST.json"}
+                rel = os.path.relpath(safe, REPO_ROOT).replace("\\", "/")
+                if rel in blocked:
+                    return (f"Error: Edit to '{rel}' is blocked — protocol "
+                            f"invariant file. Use Claude Code for these changes.")
+
+                try:
+                    with open(safe, "r", encoding="utf-8", errors="replace") as f:
+                        content = f.read()
+                except Exception as e:
+                    return f"Error reading file: {e}"
+
+                count = content.count(old_string)
+                if count == 0:
+                    return (f"Error: old_string not found in {rel}. "
+                            f"Verify the exact characters including whitespace.")
+                if count > 1 and not replace_all:
+                    return (f"Error: old_string matches {count} occurrences in {rel}. "
+                            f"Either provide more surrounding context to make it unique, "
+                            f"or set replace_all=true.")
+
+                if replace_all:
+                    new_content = content.replace(old_string, new_string)
+                    n_replaced = count
+                else:
+                    new_content = content.replace(old_string, new_string, 1)
+                    n_replaced = 1
+
+                try:
+                    with open(safe, "w", encoding="utf-8") as f:
+                        f.write(new_content)
+                except Exception as e:
+                    return f"Error writing file: {e}"
+
+                return (f"OK: {n_replaced} replacement(s) in {rel} "
+                        f"(old: {len(old_string)} chars → new: {len(new_string)} chars)")
+
+            elif name == "read_file_range":
+                # Paginated read of large files. offset is 0-indexed line number.
+                path = args.get("path", "")
+                offset = max(0, int(args.get("offset", 0)))
+                limit = min(2000, max(1, int(args.get("limit", 500))))
+
+                if not path:
+                    return "Error: 'path' argument is required"
+                safe = os.path.normpath(os.path.join(REPO_ROOT, path))
+                if not safe.startswith(os.path.normpath(REPO_ROOT)):
+                    return "Error: Access denied (path traversal)"
+                if not os.path.exists(safe) or os.path.isdir(safe):
+                    return f"Error: File not found: {path}"
+
+                try:
+                    with open(safe, "r", encoding="utf-8", errors="replace") as f:
+                        lines = f.readlines()
+                except Exception as e:
+                    return f"Error reading file: {e}"
+
+                total = len(lines)
+                if offset >= total:
+                    return (f"Error: offset {offset} beyond file length "
+                            f"({total} lines)")
+
+                end = min(offset + limit, total)
+                segment = lines[offset:end]
+                # Number lines with 1-indexed line numbers (matching cat -n)
+                numbered = []
+                for i, line in enumerate(segment, start=offset + 1):
+                    # Strip the trailing newline for clean display
+                    line_content = line.rstrip("\n")
+                    numbered.append(f"{i:6d}\t{line_content}")
+
+                header = (f"=== {os.path.relpath(safe, REPO_ROOT)} "
+                          f"lines {offset+1}-{end} of {total} ===")
+                footer = ""
+                if end < total:
+                    footer = (f"\n... {total - end} more lines. "
+                              f"Continue with offset={end}.")
+                return header + "\n" + "\n".join(numbered) + footer
+
+            elif name == "run_pytest":
+                # Pytest runner with extended timeout + structured output.
+                test_path = args.get("test_path", "bridge/tests/")
+                timeout_s = min(300, max(10, int(args.get("timeout", 120))))
+                extra_args = args.get("extra_args", "")
+
+                # Path safety
+                safe = os.path.normpath(os.path.join(REPO_ROOT, test_path))
+                if not safe.startswith(os.path.normpath(REPO_ROOT)):
+                    return "Error: Access denied (path traversal)"
+                if not os.path.exists(safe):
+                    return f"Error: test path not found: {test_path}"
+
+                cmd = [
+                    sys.executable, "-m", "pytest", test_path, "-q",
+                    "--tb=short", "--no-header", "-p", "no:cacheprovider",
+                ]
+                if extra_args:
+                    # Whitelist of safe pytest flags
+                    for arg in extra_args.split():
+                        if arg.startswith("-") or arg.startswith("::") or arg in ("-v", "-x", "-s"):
+                            cmd.append(arg)
+
+                try:
+                    result = subprocess.run(
+                        cmd, cwd=REPO_ROOT,
+                        capture_output=True, text=True,
+                        timeout=timeout_s, encoding="utf-8", errors="replace",
+                    )
+                except subprocess.TimeoutExpired:
+                    return f"Error: pytest exceeded {timeout_s}s timeout"
+                except Exception as e:
+                    return f"Error running pytest: {e}"
+
+                out = (result.stdout or "") + (result.stderr or "")
+                # Parse summary line (e.g., "5 passed, 2 failed in 3.42s")
+                lines = out.splitlines()
+                summary = ""
+                for line in reversed(lines[-30:]):
+                    if " passed" in line or " failed" in line or " error" in line:
+                        summary = line.strip()
+                        break
+
+                # Extract failure traces (limit to first 5)
+                failures = []
+                in_failure = False
+                current = []
+                for line in lines:
+                    if line.startswith("FAILED ") or line.startswith("ERROR "):
+                        if current:
+                            failures.append("\n".join(current))
+                            current = []
+                        current.append(line)
+                        in_failure = True
+                    elif in_failure and (line.startswith("=") or line.startswith("_")):
+                        if current:
+                            failures.append("\n".join(current))
+                            current = []
+                        in_failure = False
+                    elif in_failure:
+                        current.append(line)
+                if current:
+                    failures.append("\n".join(current))
+
+                report = [
+                    f"pytest exit code: {result.returncode}",
+                    f"summary: {summary or '(no summary line found)'}",
+                ]
+                if failures:
+                    report.append(f"\nFirst {min(5, len(failures))} failure(s):")
+                    for f in failures[:5]:
+                        report.append("-" * 50)
+                        report.append(f[:1500])
+                # Always include the tail for context
+                report.append("\n--- output tail (last 30 lines) ---")
+                report.append("\n".join(lines[-30:]))
+
+                return "\n".join(report)[:10000]
+
+            elif name == "task_track":
+                # Create or replace a multi-step plan in agent_memory.db.
+                # Persistent across chat turns.
+                steps = args.get("steps", [])
+                plan_name = args.get("plan_name", "default")
+                if not isinstance(steps, list) or not steps:
+                    return "Error: 'steps' must be a non-empty list of strings"
+
+                import sqlite3 as _sq
+                conn = _sq.connect(SQLITE_DB_PATH)
+                try:
+                    conn.executescript("""
+                        CREATE TABLE IF NOT EXISTS brain_tasks (
+                            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                            plan_name   TEXT NOT NULL,
+                            step_index  INTEGER NOT NULL,
+                            description TEXT NOT NULL,
+                            status      TEXT NOT NULL DEFAULT 'pending',
+                            created_at  TEXT NOT NULL,
+                            updated_at  TEXT NOT NULL
+                        );
+                        CREATE INDEX IF NOT EXISTS idx_brain_tasks_plan
+                            ON brain_tasks(plan_name, step_index);
+                    """)
+                    # Clear any existing plan with the same name
+                    conn.execute("DELETE FROM brain_tasks WHERE plan_name = ?",
+                                 (plan_name,))
+                    ts = datetime.datetime.utcnow().isoformat() + "Z"
+                    for i, step in enumerate(steps):
+                        conn.execute(
+                            "INSERT INTO brain_tasks (plan_name, step_index, "
+                            "description, status, created_at, updated_at) "
+                            "VALUES (?, ?, ?, 'pending', ?, ?)",
+                            (plan_name, i, str(step), ts, ts)
+                        )
+                    conn.commit()
+                finally:
+                    conn.close()
+
+                return (f"Plan '{plan_name}' created with {len(steps)} step(s). "
+                        f"Use task_update(plan_name, step_index, status) to mark progress. "
+                        f"Statuses: pending, in_progress, completed, blocked.")
+
+            elif name == "task_update":
+                # Update status of a specific step in a plan, OR query current state.
+                plan_name = args.get("plan_name", "default")
+                step_index = args.get("step_index")
+                new_status = args.get("status", "")
+                action = args.get("action", "update")  # update | list | clear
+
+                import sqlite3 as _sq
+                conn = _sq.connect(SQLITE_DB_PATH)
+                conn.row_factory = _sq.Row
+                try:
+                    if action == "list":
+                        rows = conn.execute(
+                            "SELECT step_index, description, status, updated_at "
+                            "FROM brain_tasks WHERE plan_name = ? "
+                            "ORDER BY step_index ASC",
+                            (plan_name,)
+                        ).fetchall()
+                        if not rows:
+                            return f"Plan '{plan_name}' has no steps."
+                        lines = [f"=== Plan: {plan_name} ==="]
+                        status_icons = {
+                            "pending":     "[ ]",
+                            "in_progress": "[~]",
+                            "completed":   "[x]",
+                            "blocked":     "[!]",
+                        }
+                        for r in rows:
+                            icon = status_icons.get(r["status"], "[?]")
+                            lines.append(
+                                f"  {icon} {r['step_index']}. {r['description']}"
+                            )
+                        return "\n".join(lines)
+
+                    if action == "clear":
+                        deleted = conn.execute(
+                            "DELETE FROM brain_tasks WHERE plan_name = ?",
+                            (plan_name,)
+                        ).rowcount
+                        conn.commit()
+                        return f"Plan '{plan_name}' cleared ({deleted} step(s) removed)."
+
+                    # action == "update"
+                    if step_index is None:
+                        return "Error: 'step_index' is required for update"
+                    if new_status not in ("pending", "in_progress", "completed", "blocked"):
+                        return ("Error: status must be one of: pending, "
+                                "in_progress, completed, blocked")
+
+                    step_index = int(step_index)
+                    ts = datetime.datetime.utcnow().isoformat() + "Z"
+                    cur = conn.execute(
+                        "UPDATE brain_tasks SET status = ?, updated_at = ? "
+                        "WHERE plan_name = ? AND step_index = ?",
+                        (new_status, ts, plan_name, step_index)
+                    )
+                    conn.commit()
+                    if cur.rowcount == 0:
+                        return (f"Error: step {step_index} not found in plan "
+                                f"'{plan_name}'. Use action='list' to view.")
+                    return f"OK: step {step_index} of '{plan_name}' → {new_status}"
+                finally:
+                    conn.close()
 
             # ── #7 run_mythos ─────────────────────────────────────────────
             elif name == "run_mythos":
@@ -1206,8 +1518,9 @@ class QorTrollerBrain:
                 return "\n".join(lines)
 
             elif name == "calibration_status":
-                """Full calibration snapshot: L4 thresholds, AIT separation,
-                N per player, grind readiness, consecutive clean, tournament gate."""
+                """Full calibration snapshot: is the system ready to graduate?
+                Pulls N per player, AIT probe results, L4 thresholds, grind readiness,
+                consecutive clean sessions, and tournament preflight gate in one call."""
                 import requests as _req
                 lines = ["=" * 60, "  CALIBRATION & ENROLLMENT STATUS", "=" * 60]
 
@@ -2436,6 +2749,52 @@ async def app(scope, receive, send):
                     "name": "write_file",
                     "description": "Write/create a file in the repo (blocked for protocol invariant files)",
                     "arguments": {"path": "str (required)", "content": "str (required)"},
+                },
+                {
+                    "name": "edit_file",
+                    "description": "Surgical string replacement in repo files. old_string must be unique unless replace_all=true. PREFER this over write_file when modifying existing files. Blocked for protocol invariant files (vapi_invariant_gate.py, INVARIANTS_ALLOWLIST.json, .env).",
+                    "arguments": {
+                        "path": "str (required)",
+                        "old_string": "str (required, exact text to find)",
+                        "new_string": "str (required, replacement text)",
+                        "replace_all": "bool (optional, default false)",
+                    },
+                },
+                {
+                    "name": "read_file_range",
+                    "description": "Paginated read of large files. Returns numbered lines (1-indexed). Use this when read_file truncates at 12KB. Default reads first 500 lines.",
+                    "arguments": {
+                        "path": "str (required)",
+                        "offset": "int (optional, default 0 — 0-indexed line number to start)",
+                        "limit": "int (optional, default 500, max 2000)",
+                    },
+                },
+                {
+                    "name": "run_pytest",
+                    "description": "Run pytest on a test path with extended timeout (default 120s, max 300s). Returns exit code, summary line, first 5 failure tracebacks, and tail of output. Default test_path=bridge/tests/.",
+                    "arguments": {
+                        "test_path": "str (optional, default bridge/tests/)",
+                        "timeout": "int (optional, default 120, max 300)",
+                        "extra_args": "str (optional, space-separated pytest flags like '-x -v')",
+                    },
+                },
+                {
+                    "name": "task_track",
+                    "description": "Create a multi-step plan in agent_memory.db (brain_tasks table). Persistent across chat turns. Use this for ANY multi-step engineering work. Returns confirmation with step count.",
+                    "arguments": {
+                        "steps": "list[str] (required, ordered plan steps)",
+                        "plan_name": "str (optional, default 'default')",
+                    },
+                },
+                {
+                    "name": "task_update",
+                    "description": "Update a step's status, list current plan, or clear plan. Statuses: pending, in_progress, completed, blocked. Actions: update (default), list, clear.",
+                    "arguments": {
+                        "plan_name": "str (optional, default 'default')",
+                        "step_index": "int (required for action=update)",
+                        "status": "str (required for action=update)",
+                        "action": "str (optional, default 'update'; 'list' or 'clear')",
+                    },
                 },
                 {
                     "name": "list_files",
