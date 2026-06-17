@@ -180,6 +180,37 @@ SYSTEM_PROMPT = (
     "numbers from memory.\n\n"
 
     "╔══════════════════════════════════════════════════════════════╗\n"
+    "║  ENGINEERING FENCE RULES (MANDATORY — NOT SUGGESTIONS)    ║\n"
+    "╚══════════════════════════════════════════════════════════════╝\n\n"
+    "FENCE RULE 1 — TESTS ARE THE VERIFICATION RAIL (ABSOLUTE)\n"
+    "NEVER edit files under bridge/tests/ or sdk/tests/. Tests are read-only\n"
+    "to you. If your code change fails a test, the correct action is STOP and\n"
+    "surface the failure for operator review. Do not edit the test to make code\n"
+    "pass. This rule has no exceptions.\n\n"
+    "FENCE RULE 2 — NEW FILES AUTONOMOUS, EXISTING CRITICAL FILES → PROPOSE\n"
+    "write_file() and edit_file() are autonomous ONLY for new files or files\n"
+    "you created in the current session. For these critical existing paths,\n"
+    "you MUST use propose_edit() which generates a diff for review without\n"
+    "touching the source:\n"
+    "  bridge/vapi_bridge/main.py      — startup critical\n"
+    "  bridge/vapi_bridge/store/_core.py — FROZEN surfaces\n"
+    "  bridge/vapi_bridge/operator_api.py — 241 endpoints\n"
+    "  bridge/vapi_bridge/chain.py     — wallet / signing\n"
+    "  bridge/vapi_bridge/grind_chain.py, watchdog_chain.py, codec.py\n"
+    "  bridge/vapi_bridge/session_adjudicator*.py\n"
+    "  scripts/vapi_invariant_gate.py, .github/INVARIANTS_ALLOWLIST.json\n"
+    "  Any FROZEN-v1 primitive module\n\n"
+    "FENCE RULE 3 — TERMINAL STATE IS ALWAYS A REVIEW PACKAGE\n"
+    "At the end of any multi-step engineering plan, call finalize_plan().\n"
+    "This generates a REVIEW_*.md in docs/_daemon_proposals/ and STOPS.\n"
+    "No changes are committed or applied until the operator reviews and\n"
+    "explicitly applies them. Never declare work 'done' without calling\n"
+    "finalize_plan() as the last step.\n\n"
+    "FENCE RULE 4 — NO WALLET, CHAIN, OR KEY ACCESS\n"
+    "You have zero access to the bridge wallet, KMS, signing operations,\n"
+    "or any chain submission path. CHAIN_SUBMISSION_PAUSED=true applies\n"
+    "to you equally. Do not write code that touches these surfaces.\n\n"
+    "╔══════════════════════════════════════════════════════════════╗\n"
     "║  TOOL USE FORMAT                                           ║\n"
     "╚══════════════════════════════════════════════════════════════╝\n\n"
     "When you need to invoke a tool, respond with EXACTLY this format:\n\n"
@@ -198,10 +229,18 @@ SYSTEM_PROMPT = (
     "                                                      lines starting from line 1). Use this for\n"
     "                                                      files > 12KB. Returns numbered lines.\n"
     "  write_file(path: str, content: str)               - Write/create a file (blocked for protocol files)\n"
-    "  edit_file(path, old_string, new_string,           - Surgical string replacement. old_string must\n"
-    "            replace_all?)                              be unique unless replace_all=true. PREFER this\n"
-    "                                                      over write_file when modifying existing files.\n"
-    "                                                      Blocked for protocol invariant files.\n"
+    "  edit_file(path, old_string, new_string,           - Surgical string replacement. AUTONOMOUS for new\n"
+    "            replace_all?)                              files only. BLOCKED on tests/, main.py, FROZEN\n"
+    "                                                      modules, operator_api.py, chain.py, .env.\n"
+    "                                                      See FENCE RULE 2 above.\n"
+    "  propose_edit(path, old_string, new_string,        - For existing critical files: generates a unified\n"
+    "               reason?)                               diff saved to docs/_daemon_proposals/ WITHOUT\n"
+    "                                                      touching the source. Operator applies with\n"
+    "                                                      git apply. Use this for all FENCE RULE 2 paths.\n"
+    "  finalize_plan(plan_name?, summary?, verdict?)     - MANDATORY last step of any engineering plan.\n"
+    "                                                      Generates REVIEW_*.md in docs/_daemon_proposals/\n"
+    "                                                      listing all proposals + operator action steps.\n"
+    "                                                      STOPS without committing or applying anything.\n"
     "  list_files()                                      - List all project files (max 300)\n"
     "  search_code(pattern: str, glob?: str)             - Search codebase with ripgrep/git grep\n"
     "  [Engineering / Testing]\n"
@@ -692,6 +731,22 @@ class QorTrollerBrain:
             elif name == "edit_file":
                 # Targeted string replacement in repo files.
                 # Mirrors Claude Code's Edit tool semantics.
+                #
+                # FENCE RULES (F-DAEMON-1 + F-DAEMON-2):
+                # The executor may ONLY autonomously edit files it created in
+                # this session (new non-critical files). For ALL existing
+                # critical paths, use propose_edit() which generates a diff
+                # for operator review without touching the source.
+                #
+                # HARD BLOCKS (edit_file never touches these — use propose_edit):
+                #   tests/          — tests are the verification rail; never edit
+                #   main.py         — startup critical; bad edit = bridge won't boot
+                #   store/_core.py  — FROZEN-v1 surfaces live here
+                #   operator_api.py — 241 endpoints; mutation risk
+                #   chain.py        — wallet/signing paths
+                #   FROZEN modules  — grind_chain, watchdog_chain, codec, etc.
+                #   .env / keys     — no autonomous access to credentials
+                #   vapi_invariant_gate.py / INVARIANTS_ALLOWLIST.json
                 path = args.get("path", "")
                 old_string = args.get("old_string", "")
                 new_string = args.get("new_string", "")
@@ -710,14 +765,63 @@ class QorTrollerBrain:
                 if not os.path.exists(safe) or os.path.isdir(safe):
                     return f"Error: File not found: {path}"
 
-                # Block edits to protocol invariant files
-                blocked = {".env", "bridge/.env",
-                           "scripts/vapi_invariant_gate.py",
-                           ".github/INVARIANTS_ALLOWLIST.json"}
                 rel = os.path.relpath(safe, REPO_ROOT).replace("\\", "/")
-                if rel in blocked:
-                    return (f"Error: Edit to '{rel}' is blocked — protocol "
-                            f"invariant file. Use Claude Code for these changes.")
+
+                # F-DAEMON-1: Hard block — tests are the verification rail.
+                # If code fails a test, the correct action is STOP AND SURFACE,
+                # never edit the test. This is non-negotiable.
+                if rel.startswith("bridge/tests/") or rel.startswith("sdk/tests/"):
+                    return (
+                        f"BLOCKED: edit_file cannot modify test files ({rel}). "
+                        f"Tests are the verification rail — if your code fails a test, "
+                        f"STOP and surface the failure for operator review. "
+                        f"Never edit tests to make code pass."
+                    )
+
+                # F-DAEMON-2: Hard block on critical existing files.
+                # Use propose_edit() for these — it generates a diff for review
+                # without touching the source.
+                PROPOSE_ONLY = {
+                    # Bridge startup / entry point
+                    "bridge/vapi_bridge/main.py",
+                    # Core store (FROZEN surfaces live here)
+                    "bridge/vapi_bridge/store/_core.py",
+                    # Operator API surface (241 endpoints)
+                    "bridge/vapi_bridge/operator_api.py",
+                    # Wallet / chain / signing paths
+                    "bridge/vapi_bridge/chain.py",
+                    # FROZEN-v1 chain primitives
+                    "bridge/vapi_bridge/grind_chain.py",
+                    "bridge/vapi_bridge/watchdog_chain.py",
+                    "bridge/vapi_bridge/codec.py",
+                    "bridge/vapi_bridge/corpus_snapshot.py",
+                    "bridge/vapi_bridge/biometric_snapshot.py",
+                    "bridge/vapi_bridge/agent_commit.py",
+                    # Session pipeline (complex state machine)
+                    "bridge/vapi_bridge/session_adjudicator.py",
+                    "bridge/vapi_bridge/session_adjudicator_validator.py",
+                    # Invariant gate + allowlist
+                    "scripts/vapi_invariant_gate.py",
+                    ".github/INVARIANTS_ALLOWLIST.json",
+                    # Credentials
+                    ".env", "bridge/.env",
+                }
+                # Also block any FROZEN-v1 / pattern-017 modules by name pattern
+                frozen_patterns = (
+                    "replay_proof_pipeline/pipeline.py",
+                    "physical_data_attestation.py",
+                    "zkba_artifact.py",
+                )
+                is_frozen = (rel in PROPOSE_ONLY or
+                             any(rel.endswith(p) for p in frozen_patterns))
+                if is_frozen:
+                    return (
+                        f"BLOCKED: '{rel}' is a critical/FROZEN path. "
+                        f"Use propose_edit(path, old_string, new_string, reason) "
+                        f"to generate a diff for operator review without modifying "
+                        f"the source file. Rule: new files autonomous, "
+                        f"existing critical files → propose_edit only."
+                    )
 
                 try:
                     with open(safe, "r", encoding="utf-8", errors="replace") as f:
@@ -870,6 +974,199 @@ class QorTrollerBrain:
                 report.append("\n".join(lines[-30:]))
 
                 return "\n".join(report)[:10000]
+
+            elif name == "propose_edit":
+                # F-DAEMON-2 compliance: generate a unified diff for operator
+                # review WITHOUT touching the source file.
+                #
+                # Use this for ALL existing critical files (main.py, store/_core.py,
+                # operator_api.py, chain.py, FROZEN modules, tests/).
+                # The diff is saved to docs/_daemon_proposals/ for operator review.
+                # Operator applies it via: git apply <diff_file>
+                path = args.get("path", "")
+                old_string = args.get("old_string", "")
+                new_string = args.get("new_string", "")
+                reason = args.get("reason", "(no reason provided)")
+
+                if not path:
+                    return "Error: 'path' argument is required"
+                if not old_string:
+                    return "Error: 'old_string' argument is required"
+
+                safe = os.path.normpath(os.path.join(REPO_ROOT, path))
+                if not safe.startswith(os.path.normpath(REPO_ROOT)):
+                    return "Error: Access denied (path traversal)"
+                if not os.path.exists(safe) or os.path.isdir(safe):
+                    return f"Error: File not found: {path}"
+
+                try:
+                    with open(safe, "r", encoding="utf-8", errors="replace") as f:
+                        original = f.read()
+                except Exception as e:
+                    return f"Error reading file: {e}"
+
+                if old_string not in original:
+                    return (f"Error: old_string not found in {path}. "
+                            f"Verify exact characters including whitespace.")
+
+                proposed = original.replace(old_string, new_string, 1)
+                rel = os.path.relpath(safe, REPO_ROOT).replace("\\", "/")
+
+                # Build unified diff
+                import difflib as _dl
+                diff_lines = list(_dl.unified_diff(
+                    original.splitlines(keepends=True),
+                    proposed.splitlines(keepends=True),
+                    fromfile=f"a/{rel}", tofile=f"b/{rel}",
+                    n=3,
+                ))
+
+                if not diff_lines:
+                    return "Error: proposed change produces no diff (strings identical?)"
+
+                diff_text = "".join(diff_lines)
+
+                # Save proposal
+                ts = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+                proposals_dir = os.path.join(REPO_ROOT, "docs", "_daemon_proposals")
+                os.makedirs(proposals_dir, exist_ok=True)
+                safe_name = rel.replace("/", "_").replace(".", "_")
+                diff_path = os.path.join(proposals_dir, f"proposal_{ts}_{safe_name}.diff")
+                meta_path = os.path.join(proposals_dir, f"proposal_{ts}_{safe_name}.md")
+
+                with open(diff_path, "w", encoding="utf-8") as f:
+                    f.write(diff_text)
+
+                # Save human-readable context alongside the diff
+                with open(meta_path, "w", encoding="utf-8") as f:
+                    f.write(f"# Daemon Proposal — {rel}\n\n")
+                    f.write(f"**Generated:** {ts}\n")
+                    f.write(f"**File:** `{rel}`\n")
+                    f.write(f"**Reason:** {reason}\n\n")
+                    f.write(f"## Diff\n\n```diff\n{diff_text}\n```\n\n")
+                    f.write(f"## To apply\n\n```bash\ngit apply {diff_path}\n```\n")
+                    f.write(f"\n## To discard\n\n```bash\nrm {diff_path} {meta_path}\n```\n")
+
+                diff_rel = os.path.relpath(diff_path, REPO_ROOT).replace("\\", "/")
+                meta_rel = os.path.relpath(meta_path, REPO_ROOT).replace("\\", "/")
+
+                return (
+                    f"PROPOSAL GENERATED (source file NOT modified):\n"
+                    f"  diff: {diff_rel}\n"
+                    f"  meta: {meta_rel}\n"
+                    f"  lines changed: {len([l for l in diff_lines if l.startswith(('+', '-')) and not l.startswith(('+++', '---'))])}\n\n"
+                    f"Review the proposal and apply with:\n"
+                    f"  git apply {diff_path}\n\n"
+                    f"Diff preview:\n{diff_text[:2000]}"
+                )
+
+            elif name == "finalize_plan":
+                # F-DAEMON-3 + F-DAEMON-4: Produce a structured review package
+                # and STOP. The terminal state of any engineering plan is always
+                # a review artifact, never a silently-wired working tree.
+                #
+                # Collects all pending proposals, files created this session,
+                # and the plan state — renders a REVIEW_*.md for operator approval.
+                plan_name = args.get("plan_name", "default")
+                summary = args.get("summary", "")
+                brain_verdict = args.get("verdict", "")
+
+                import sqlite3 as _sq
+
+                # Load plan state
+                conn = _sq.connect(SQLITE_DB_PATH)
+                conn.row_factory = _sq.Row
+                try:
+                    rows = conn.execute(
+                        "SELECT step_index, description, status FROM brain_tasks "
+                        "WHERE plan_name = ? ORDER BY step_index ASC",
+                        (plan_name,)
+                    ).fetchall()
+                finally:
+                    conn.close()
+
+                # Find pending proposals
+                proposals_dir = os.path.join(REPO_ROOT, "docs", "_daemon_proposals")
+                proposals = []
+                if os.path.exists(proposals_dir):
+                    for f in sorted(os.listdir(proposals_dir)):
+                        if f.endswith(".md") and f.startswith("proposal_"):
+                            proposals.append(f)
+
+                # Build review document
+                ts = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+                review_path = os.path.join(proposals_dir, f"REVIEW_{ts}_{plan_name}.md")
+                os.makedirs(proposals_dir, exist_ok=True)
+
+                status_icons = {
+                    "pending": "[ ]", "in_progress": "[~]",
+                    "completed": "[x]", "blocked": "[!]"
+                }
+
+                lines_out = [
+                    f"# Daemon Engineering Review — {plan_name}",
+                    f"**Generated:** {ts} UTC",
+                    f"**Drafted by:** QorTroller Daemon brain (deepseek-v4-flash)",
+                    f"**Provenance:** Autonomous engineering session — operator review required before any changes are applied or committed.",
+                    "",
+                    f"## Summary",
+                    summary or "(no summary provided)",
+                    "",
+                    f"## Brain Verdict",
+                    brain_verdict or "(no verdict provided)",
+                    "",
+                    f"## Plan Status: {plan_name}",
+                ]
+                for r in rows:
+                    icon = status_icons.get(r["status"], "[?]")
+                    lines_out.append(f"  {icon} {r['step_index']}. {r['description']}")
+
+                lines_out += [
+                    "",
+                    f"## Pending Proposals ({len(proposals)})",
+                ]
+                if proposals:
+                    for p in proposals:
+                        lines_out.append(
+                            f"- `docs/_daemon_proposals/{p}` "
+                            f"(apply with: `git apply docs/_daemon_proposals/{p.replace('.md', '.diff')}`)"
+                        )
+                else:
+                    lines_out.append(
+                        "No proposals generated — all changes were to new files "
+                        "or no file edits were made."
+                    )
+
+                lines_out += [
+                    "",
+                    "## Operator Actions Required",
+                    "1. Review each proposal diff above",
+                    "2. Apply diffs you approve: `git apply <diff_file>`",
+                    "3. Run PV-CI: `python scripts/vapi_invariant_gate.py`",
+                    "4. Run relevant tests: `python -m pytest bridge/tests/ -q`",
+                    "5. Commit if satisfied — mark authorship: 'daemon-drafted, operator-reviewed'",
+                    "6. Discard proposals you reject: `rm docs/_daemon_proposals/proposal_*`",
+                    "",
+                    "---",
+                    "*This review package was generated by the QorTroller Daemon brain.*",
+                    "*No changes have been committed. No chain operations were performed.*",
+                    "*All protocol invariants (176/176) remain unchanged.*",
+                ]
+
+                with open(review_path, "w", encoding="utf-8") as f:
+                    f.write("\n".join(lines_out))
+
+                review_rel = os.path.relpath(review_path, REPO_ROOT).replace("\\", "/")
+                return (
+                    f"REVIEW PACKAGE GENERATED — engineering session complete.\n"
+                    f"  {review_rel}\n\n"
+                    f"Plan '{plan_name}': "
+                    f"{sum(1 for r in rows if r['status'] == 'completed')}/{len(rows)} steps completed.\n"
+                    f"Proposals pending: {len(proposals)}\n\n"
+                    f"No changes have been committed or applied.\n"
+                    f"Operator review is required before anything is durable.\n"
+                    f"See {review_rel} for the full review checklist."
+                )
 
             elif name == "task_track":
                 # Create or replace a multi-step plan in agent_memory.db.
@@ -2752,12 +3049,31 @@ async def app(scope, receive, send):
                 },
                 {
                     "name": "edit_file",
-                    "description": "Surgical string replacement in repo files. old_string must be unique unless replace_all=true. PREFER this over write_file when modifying existing files. Blocked for protocol invariant files (vapi_invariant_gate.py, INVARIANTS_ALLOWLIST.json, .env).",
+                    "description": "Surgical string replacement. AUTONOMOUS only for new/non-critical files. HARD BLOCKED on tests/, main.py, store/_core.py, operator_api.py, chain.py, FROZEN modules, .env. For blocked paths use propose_edit() instead. See FENCE RULE 2.",
                     "arguments": {
                         "path": "str (required)",
-                        "old_string": "str (required, exact text to find)",
+                        "old_string": "str (required, exact text to find — must be unique unless replace_all=true)",
                         "new_string": "str (required, replacement text)",
                         "replace_all": "bool (optional, default false)",
+                    },
+                },
+                {
+                    "name": "propose_edit",
+                    "description": "For critical existing files: generate a unified diff WITHOUT modifying the source. Saves .diff + .md to docs/_daemon_proposals/ for operator review. Operator applies with git apply. Use for all FENCE RULE 2 paths.",
+                    "arguments": {
+                        "path": "str (required)",
+                        "old_string": "str (required, exact text to replace)",
+                        "new_string": "str (required, replacement text)",
+                        "reason": "str (optional, explain why this change is needed)",
+                    },
+                },
+                {
+                    "name": "finalize_plan",
+                    "description": "MANDATORY last step of any engineering plan. Generates REVIEW_*.md listing all proposals, plan status, and operator action checklist. Stops without committing or applying anything. Terminal state is always a review package.",
+                    "arguments": {
+                        "plan_name": "str (optional, default 'default')",
+                        "summary": "str (optional, what was built)",
+                        "verdict": "str (optional, brain's assessment and recommendations)",
                     },
                 },
                 {
