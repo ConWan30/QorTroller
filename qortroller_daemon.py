@@ -75,7 +75,7 @@ REPO_ROOT = os.path.abspath(os.path.dirname(__file__))
 # DAEMON_PORT takes precedence so bridge/.env HTTP_PORT (for the bridge process)
 # doesn't collide with the daemon when both run simultaneously.
 PORT = int(os.environ.get("DAEMON_PORT", os.environ.get("HTTP_PORT", 8080)))
-MAX_TOOL_ITERATIONS = 10
+MAX_TOOL_ITERATIONS = 20  # raised from 10 — engineering tasks (read→plan→write→test) need more iterations
 TOOL_TIMEOUT = 15
 
 QUICKSILVER_API_KEY = os.environ.get("QUICKSILVER_API_KEY", "")
@@ -468,8 +468,8 @@ class QorTrollerBrain:
     # ── LLM Call ──────────────────────────────────────────────────────────
 
     def _call_llm(self, messages: list[dict]) -> Optional[str]:
-        """Call QuickSilver API and return the text response."""
-        import requests
+        """Call QuickSilver API with retry on timeout and 429 rate-limit."""
+        import requests, time as _t
         payload = {
             "model": QUICKSILVER_MODEL,
             "messages": messages,
@@ -478,16 +478,37 @@ class QorTrollerBrain:
             "Authorization": f"Bearer {QUICKSILVER_API_KEY}",
             "Content-Type": "application/json",
         }
-        response = requests.post(
-            QUICKSILVER_API_URL,
-            headers=headers,
-            json=payload,
-            timeout=30,
-            proxies={"http": None, "https": None},
+        # Retry up to 3 times: immediate, 5s, 15s backoff
+        last_err = None
+        for attempt, wait in enumerate([0, 5, 15]):
+            if wait:
+                _t.sleep(wait)
+            try:
+                response = requests.post(
+                    QUICKSILVER_API_URL,
+                    headers=headers,
+                    json=payload,
+                    timeout=60,  # increased from 30s — engineering tasks need longer
+                    proxies={"http": None, "https": None},
+                )
+                if response.status_code == 429:
+                    # Rate limited — back off and retry
+                    last_err = f"429 rate limited (attempt {attempt+1})"
+                    continue
+                response.raise_for_status()
+                result = response.json()
+                return result["choices"][0]["message"]["content"]
+            except requests.exceptions.Timeout:
+                last_err = f"timeout (attempt {attempt+1})"
+                continue
+            except Exception as e:
+                last_err = str(e)
+                if attempt < 2:
+                    continue
+                raise
+        raise RuntimeError(
+            f"QuickSilver API failed after 3 attempts. Last error: {last_err}"
         )
-        response.raise_for_status()
-        result = response.json()
-        return result["choices"][0]["message"]["content"]
 
     # ── Tool Call Parsing ─────────────────────────────────────────────────
 
