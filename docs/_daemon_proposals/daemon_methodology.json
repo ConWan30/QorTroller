@@ -22,5 +22,11 @@
     "correct_pattern": "Use propose_edit (existing files) or the .proposed new-file path (new files). Operator applies via git apply.",
     "agent_commit": "05e237c6798519626ba011f2bd0fbe527621056d836bd6d11d889a89a55274f3",
     "discovered": "2026-06-18 store assessment"
+  },
+  "MIXIN_MISSING_IMPORTS": {
+    "anti_pattern": "Extract methods into a mixin module without carrying the source module's top-level imports. Methods that used module-globals (time, json, hashlib...) NameError at runtime \u2014 and import-only integration tests miss it because the error only fires when the method executes.",
+    "correct_pattern": "build_mixin_module auto-detects which of _core.py's imports the moved block references (detect_needed_imports) and injects them. Integration test must EXECUTE a method (run the domain's pytest), not just import the class.",
+    "agent_commit": "(consent extraction 2026-06-18)",
+    "discovered": "2026-06-18 consent extraction \u2014 test_phase237_consent caught NameError 'time'"
   }
 }
