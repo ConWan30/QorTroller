@@ -7,6 +7,8 @@ Daemon-drafted, operator-reviewed (AGENT-COMMIT chain link #2).
 """
 from __future__ import annotations
 
+import time
+
 
 class MarketplaceMixin:
     """marketplace_listing_log / curator_listing_review_log / pending_listings access."""

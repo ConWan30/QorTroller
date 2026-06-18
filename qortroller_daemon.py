@@ -3178,7 +3178,13 @@ class QorTrollerBrain:
                     removed = reconstruct_from_removal_diff(diff_text)
                     if not removed:
                         return "Error: removal diff contained no '-' lines to reconstruct from"
-                    module = build_mixin_module(class_name, removed)
+                    # Pass the source module so needed imports are auto-injected
+                    # (MIXIN_MISSING_IMPORTS lesson — moved methods lose import scope).
+                    src_text = ""
+                    core_path = os.path.join(REPO_ROOT, "bridge", "vapi_bridge", "store", "_core.py")
+                    if os.path.isfile(core_path):
+                        src_text = open(core_path, encoding="utf-8", errors="replace").read()
+                    module = build_mixin_module(class_name, removed, source_module_text=src_text)
                     # AST-validate before emitting
                     import ast as _ast
                     try:

@@ -1035,6 +1035,12 @@ _SEED_METHODOLOGY = {
         "agent_commit": "05e237c6798519626ba011f2bd0fbe527621056d836bd6d11d889a89a55274f3",
         "discovered": "2026-06-18 store assessment",
     },
+    "MIXIN_MISSING_IMPORTS": {
+        "anti_pattern": "Extract methods into a mixin module without carrying the source module's top-level imports. Methods that used module-globals (time, json, hashlib...) NameError at runtime — and import-only integration tests miss it because the error only fires when the method executes.",
+        "correct_pattern": "build_mixin_module auto-detects which of _core.py's imports the moved block references (detect_needed_imports) and injects them. Integration test must EXECUTE a method (run the domain's pytest), not just import the class.",
+        "agent_commit": "(consent extraction 2026-06-18)",
+        "discovered": "2026-06-18 consent extraction — test_phase237_consent caught NameError 'time'",
+    },
 }
 
 
@@ -1100,17 +1106,74 @@ def reconstruct_from_removal_diff(diff_text: str) -> list:
     return removed
 
 
-def build_mixin_module(class_name: str, removed_lines: list, docstring: str = "") -> str:
-    """Wrap removed (4-space-indented) Store methods as a standalone Mixin module."""
+def detect_needed_imports(method_block: str, source_module_text: str) -> list:
+    """
+    Determine which of source_module's top-level imports the moved method block
+    actually references. Moved methods lose the source module's import scope, so
+    these must be carried into the mixin (the MIXIN_MISSING_IMPORTS lesson).
+    Returns a list of import-statement strings.
+    """
+    import ast as _ast
+    # Map: name -> import statement, from the source module's top-level imports
+    src_imports = {}
+    try:
+        for node in _ast.parse(source_module_text).body:
+            if isinstance(node, _ast.Import):
+                for a in node.names:
+                    nm = a.asname or a.name.split(".")[0]
+                    src_imports[nm] = f"import {a.name}" + (f" as {a.asname}" if a.asname else "")
+            elif isinstance(node, _ast.ImportFrom):
+                mod = node.module or ""
+                for a in node.names:
+                    nm = a.asname or a.name
+                    src_imports[nm] = f"from {mod} import {a.name}" + (f" as {a.asname}" if a.asname else "")
+    except SyntaxError:
+        return []
+    # Names referenced in the block (wrapped in a throwaway class to parse)
+    try:
+        btree = _ast.parse("class _X:\n" + method_block)
+    except SyntaxError:
+        try:
+            btree = _ast.parse(method_block)
+        except SyntaxError:
+            return []
+    used, defined = set(), set()
+    for n in _ast.walk(btree):
+        if isinstance(n, _ast.Name):
+            (defined if isinstance(n.ctx, _ast.Store) else used).add(n.id)
+        elif isinstance(n, _ast.Attribute) and isinstance(n.value, _ast.Name):
+            used.add(n.value.id)
+        if isinstance(n, _ast.FunctionDef):
+            defined.add(n.name)
+            for a in n.args.args:
+                defined.add(a.arg)
+            if n.args.vararg: defined.add(n.args.vararg.arg)
+            if n.args.kwarg: defined.add(n.args.kwarg.arg)
+    needed = sorted({src_imports[u] for u in used if u in src_imports and u not in defined})
+    return needed
+
+
+def build_mixin_module(class_name: str, removed_lines: list, docstring: str = "",
+                       source_module_text: str = "") -> str:
+    """Wrap removed (4-space-indented) Store methods as a standalone Mixin module.
+
+    If source_module_text is provided, auto-detects and injects the top-level
+    imports the moved methods reference (MIXIN_MISSING_IMPORTS lesson — moved
+    methods lose the source module's import scope and NameError at runtime).
+    """
     ds = docstring or f"{class_name} — D-DECON-2 domain extraction (diff-oracle reconstructed)."
+    body = "\n".join(removed_lines)
+    imports = detect_needed_imports(body, source_module_text) if source_module_text else []
+    import_block = ("\n" + "\n".join(imports) + "\n") if imports else ""
     header = (
         f'"""{ds}\n\n'
         f'Extracted verbatim from store/_core.py via the diff-oracle pattern\n'
         f'(removal diff is the canonical source). CREATE TABLE statements stay\n'
         f'centralized in _core.py._init_schema per D-DECON-2.\n'
         f'"""\n'
-        f'from __future__ import annotations\n\n\n'
+        f'from __future__ import annotations\n'
+        f'{import_block}\n\n'
         f'class {class_name}:\n'
         f'    """Domain methods extracted from Store; resolved via MRO."""\n'
     )
-    return header + "\n".join(removed_lines) + "\n"
+    return header + body + "\n"
