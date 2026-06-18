@@ -1,0 +1,221 @@
+{
+  "version": 1,
+  "description": "DECON-1 residue drain queue — smallest-first store domains, then operator_api splits.",
+  "updated": "2026-06-18",
+  "items": [
+    {
+      "id": "store_zkba_vpm",
+      "domain": "zkba_vpm_witness",
+      "target_file": "bridge/vapi_bridge/store/zkba_vpm.py",
+      "status": "applied",
+      "agent_commit": null,
+      "notes": "Phase 2.1 — pre-daemon"
+    },
+    {
+      "id": "store_marketplace",
+      "domain": "marketplace",
+      "target_file": "bridge/vapi_bridge/store/marketplace.py",
+      "status": "applied",
+      "agent_commit": "ec94cbddbca457b993f4f9860cf252bfbf5b4fb353e6f0deafcb89e8c85ca057",
+      "notes": "2026-06-18 marketplace extraction cycle"
+    },
+    {
+      "id": "store_consent",
+      "domain": "consent",
+      "target_file": "bridge/vapi_bridge/store/consent_mixin.py",
+      "status": "applied",
+      "agent_commit": null,
+      "notes": "2026-06-18 consent extraction cycle"
+    },
+    {
+      "id": "store_snapshots_grind",
+      "domain": "snapshots_grind",
+      "target_file": "bridge/vapi_bridge/store/snapshots.py",
+      "status": "applied",
+      "agent_commit": null,
+      "method_count_est": 30,
+      "order": 1,
+      "notes": "2026-06-18 autonomous extraction — 18 methods, diff-oracle script"
+    },
+    {
+      "id": "store_ioswarm",
+      "domain": "ioswarm",
+      "target_file": "bridge/vapi_bridge/store/ioswarm.py",
+      "status": "pending",
+      "agent_commit": null,
+      "method_count_est": 30,
+      "order": 2
+    },
+    {
+      "id": "store_chain_anchors",
+      "domain": "chain_anchors",
+      "target_file": "bridge/vapi_bridge/store/chain_log.py",
+      "status": "pending",
+      "agent_commit": null,
+      "method_count_est": 40,
+      "order": 3
+    },
+    {
+      "id": "store_tournament_activation",
+      "domain": "tournament_activation",
+      "target_file": "bridge/vapi_bridge/store/tournament.py",
+      "status": "pending",
+      "agent_commit": null,
+      "method_count_est": 40,
+      "order": 4
+    },
+    {
+      "id": "store_operator_initiative",
+      "domain": "operator_initiative",
+      "target_file": "bridge/vapi_bridge/store/operator_initiative.py",
+      "status": "pending",
+      "agent_commit": null,
+      "method_count_est": 40,
+      "order": 5
+    },
+    {
+      "id": "store_vhp_credentials",
+      "domain": "vhp_credentials",
+      "target_file": "bridge/vapi_bridge/store/vhp.py",
+      "status": "pending",
+      "agent_commit": null,
+      "method_count_est": 50,
+      "order": 6
+    },
+    {
+      "id": "store_agents_rulings",
+      "domain": "agents_rulings",
+      "target_file": "bridge/vapi_bridge/store/agents.py",
+      "status": "pending",
+      "agent_commit": null,
+      "method_count_est": 70,
+      "order": 7
+    },
+    {
+      "id": "store_biometric",
+      "domain": "biometric",
+      "target_file": "bridge/vapi_bridge/store/biometric.py",
+      "status": "pending",
+      "agent_commit": null,
+      "method_count_est": 70,
+      "order": 8
+    },
+    {
+      "id": "store_calibration",
+      "domain": "calibration",
+      "target_file": "bridge/vapi_bridge/store/calibration.py",
+      "status": "pending",
+      "agent_commit": null,
+      "method_count_est": 120,
+      "order": 9
+    },
+    {
+      "id": "api_health_gate",
+      "domain": "health_gate",
+      "target_file": "bridge/vapi_bridge/operator_api/health_gate.py",
+      "status": "pending",
+      "agent_commit": null,
+      "route_count_est": 3,
+      "order": 10
+    },
+    {
+      "id": "api_agent_consent",
+      "domain": "agent_consent",
+      "target_file": "bridge/vapi_bridge/operator_api/agent_consent.py",
+      "status": "pending",
+      "agent_commit": null,
+      "route_count_est": 12,
+      "order": 11
+    },
+    {
+      "id": "api_agent_zkba_vpm",
+      "domain": "agent_zkba_vpm",
+      "target_file": "bridge/vapi_bridge/operator_api/agent_zkba_vpm.py",
+      "status": "pending",
+      "agent_commit": null,
+      "route_count_est": 12,
+      "order": 12
+    },
+    {
+      "id": "api_agent_ioswarm",
+      "domain": "agent_ioswarm",
+      "target_file": "bridge/vapi_bridge/operator_api/agent_ioswarm.py",
+      "status": "pending",
+      "agent_commit": null,
+      "route_count_est": 15,
+      "order": 13
+    },
+    {
+      "id": "api_agent_calibration",
+      "domain": "agent_calibration",
+      "target_file": "bridge/vapi_bridge/operator_api/agent_calibration.py",
+      "status": "pending",
+      "agent_commit": null,
+      "route_count_est": 50,
+      "order": 14
+    },
+    {
+      "id": "api_agent_biometric",
+      "domain": "agent_biometric",
+      "target_file": "bridge/vapi_bridge/operator_api/agent_biometric.py",
+      "status": "pending",
+      "agent_commit": null,
+      "route_count_est": 35,
+      "order": 15
+    },
+    {
+      "id": "api_agent_marketplace",
+      "domain": "agent_marketplace_curator",
+      "target_file": "bridge/vapi_bridge/operator_api/agent_marketplace.py",
+      "status": "pending",
+      "agent_commit": null,
+      "route_count_est": 25,
+      "order": 16
+    },
+    {
+      "id": "api_agent_tournament",
+      "domain": "agent_tournament",
+      "target_file": "bridge/vapi_bridge/operator_api/agent_tournament.py",
+      "status": "pending",
+      "agent_commit": null,
+      "route_count_est": 25,
+      "order": 17
+    },
+    {
+      "id": "api_agent_operator_initiative",
+      "domain": "agent_operator_initiative",
+      "target_file": "bridge/vapi_bridge/operator_api/agent_operator_initiative.py",
+      "status": "pending",
+      "agent_commit": null,
+      "route_count_est": 15,
+      "order": 18
+    },
+    {
+      "id": "api_agent_grind",
+      "domain": "agent_grind",
+      "target_file": "bridge/vapi_bridge/operator_api/agent_grind.py",
+      "status": "pending",
+      "agent_commit": null,
+      "route_count_est": 20,
+      "order": 19
+    },
+    {
+      "id": "api_agent_supervisor",
+      "domain": "agent_supervisor",
+      "target_file": "bridge/vapi_bridge/operator_api/agent_supervisor.py",
+      "status": "pending",
+      "agent_commit": null,
+      "route_count_est": 40,
+      "order": 20
+    },
+    {
+      "id": "api_agent_misc",
+      "domain": "agent_misc",
+      "target_file": "bridge/vapi_bridge/operator_api/agent_misc.py",
+      "status": "pending",
+      "agent_commit": null,
+      "route_count_est": 80,
+      "order": 21
+    }
+  ]
+}
