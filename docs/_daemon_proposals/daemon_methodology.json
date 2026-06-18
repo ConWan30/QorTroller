@@ -1,0 +1,26 @@
+{
+  "VERBATIM_RELOCATION": {
+    "anti_pattern": "Ask the LLM to re-emit large code blocks verbatim in a write_file/tool_call. Causes 524 timeouts upstream and risks transcription drift; the LLM may then hallucinate completion.",
+    "correct_pattern": "LLM proposes the structural CUT as a removal diff (small response). A deterministic tool (extract_with_diff) reconstructs the moved code from the diff's '-' lines. LLM never relocates verbatim.",
+    "agent_commit": "ec94cbddbca457b993f4f9860cf252bfbf5b4fb353e6f0deafcb89e8c85ca057",
+    "discovered": "2026-06-18 marketplace extraction"
+  },
+  "LARGE_FILE_WRITE": {
+    "anti_pattern": "write_file with thousands of lines in one LLM turn \u2014 exceeds upstream generation timeout.",
+    "correct_pattern": "Reconstruct large new-file bodies deterministically from an authoritative source; write_file on propose-only paths emits a .proposed artifact rather than discarding content.",
+    "agent_commit": "ec94cbddbca457b993f4f9860cf252bfbf5b4fb353e6f0deafcb89e8c85ca057",
+    "discovered": "2026-06-18"
+  },
+  "HALLUCINATED_COMPLETION": {
+    "anti_pattern": "Declare a plan READY / claim a file was written without verifying the artifact exists with the expected shape.",
+    "correct_pattern": "Call verify_artifact(path, expected_shape) after every output-producing tool, before finalize_plan. Fail closed if missing or malformed.",
+    "agent_commit": "ec94cbddbca457b993f4f9860cf252bfbf5b4fb353e6f0deafcb89e8c85ca057",
+    "discovered": "2026-06-18"
+  },
+  "FROZEN_SURFACE_TOUCH": {
+    "anti_pattern": "edit_file / write_file directly against main.py, store/_core.py, chain.py, or any PROPOSE_ONLY path.",
+    "correct_pattern": "Use propose_edit (existing files) or the .proposed new-file path (new files). Operator applies via git apply.",
+    "agent_commit": "05e237c6798519626ba011f2bd0fbe527621056d836bd6d11d889a89a55274f3",
+    "discovered": "2026-06-18 store assessment"
+  }
+}
