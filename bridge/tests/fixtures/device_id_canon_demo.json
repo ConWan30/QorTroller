@@ -1,0 +1,10 @@
+{
+  "schema": "vapi-device-id-canon-demo-v1",
+  "description": "Golden vector for Path B reference DualShock Edge (MFG-registered demo device). Public SEC1 point only — no private key material.",
+  "device_label": "demo-dualshock-edge-path-b",
+  "pubkey_hex": "042adcdb3663a318c9ea385df654fdb09b479366ec9046cc5e02115f3202f7ec1b56d5db4d01a0d341782df9843aa03c700c19d0d4c546299c4eea77b62b000f5e",
+  "device_id_hex": "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8",
+  "preimage_bytes": 65,
+  "canon_doc": "wiki/methodology/DEVICE_ID_CANON_v1.md",
+  "negative_control_stripped_device_id_hex": "c8fa05a310f1037c244c9578b6a5a9aa739fe903be8a0a9fcd0cbca0b8f61387"
+}
