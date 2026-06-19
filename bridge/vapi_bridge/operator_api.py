@@ -27,6 +27,7 @@ import hashlib
 import hmac
 import json as _json
 import logging
+import os
 import time
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
@@ -76,6 +77,21 @@ class AgentRequest(BaseModel):
 
     session_id: str
     message: str
+
+
+class LLMChatMessage(BaseModel):
+    role: str
+    content: str
+
+
+class LLMChatRequest(BaseModel):
+    messages: list[LLMChatMessage]
+    model: str = "deepseek-v4-flash"
+
+
+class LocalToolExecuteRequest(BaseModel):
+    tool: str
+    arguments: dict
 
 
 class FederationSignalRequest(BaseModel):
@@ -405,6 +421,97 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         except Exception as exc:
             log.error("BridgeAgent error: %s", exc)
             raise HTTPException(500, f"Agent error: {exc}")
+
+    @app.post("/agent/llm-chat")
+    def agent_llm_chat(
+        req: LLMChatRequest,
+        api_key: str = Query(..., description="Shared operator API key"),
+    ):
+        """Conversational QuickSilver Pro AI agent chat."""
+        _check_key(api_key)
+        _check_rate(api_key)
+        try:
+            msgs = [{"role": m.role, "content": m.content} for m in req.messages]
+            
+            # If no system prompt is present, insert one
+            has_system = any(m.get("role") == "system" for m in msgs)
+            if not has_system:
+                system_prompt = (
+                    "You are a helpful assistant for the QorTroller V.A.P.I. (Verifiable Autonomous Physical Intelligence) protocol. "
+                    "Here is the context of the project to prevent hallucinations:\n"
+                    "QorTroller is the reference implementation of V.A.P.I., a DePIN (Decentralized Physical Infrastructure) sub-category "
+                    "for competitive gaming. In QorTroller's case, gamers and their controllers (specifically the Sony DualShock Edge CFI-ZCP1) "
+                    "produce physical telemetry data and own that data. It generates a 228-byte Proof of Autonomous Cognition (PoAC) record "
+                    "per cognition cycle, anchored on IoTeX L1, to cryptographically prove liveness and prevent botting/cheating. "
+                    "It is NOT a DeFi lending protocol or risk management Comptroller. Answer questions concisely using this context."
+                )
+                msgs.insert(0, {"role": "system", "content": system_prompt})
+
+            from .vapi_llm_client import QorTrollerAI
+            ai = QorTrollerAI()
+            resp = ai.chat(msgs, model=req.model)
+            return {"response": resp}
+        except Exception as exc:
+            log.error("LLM Chat error: %s", exc)
+            raise HTTPException(500, f"LLM Chat error: {exc}")
+
+    @app.post("/agent/local-host/execute")
+    def agent_local_host_execute(
+        req: LocalToolExecuteRequest,
+        api_key: str = Query(..., description="Shared operator API key"),
+    ):
+        """Execute local repository operations to support the frontend autonomous LLM agent."""
+        _check_key(api_key)
+        _check_rate(api_key)
+        
+        # Get absolute repository root directory path
+        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        tool_name = req.tool
+        args = req.arguments
+        
+        try:
+            if tool_name == "list_files":
+                file_list = []
+                for root, dirs, files in os.walk(repo_root):
+                    # Prune ignore patterns
+                    dirs[:] = [d for d in dirs if d not in (".git", "node_modules", "dist", "__pycache__", ".venv", "build")]
+                    for file in files:
+                        rel_path = os.path.relpath(os.path.join(root, file), repo_root)
+                        file_list.append(rel_path.replace("\\", "/"))
+                # Return list capped at 300 files
+                return {"result": file_list[:300]}
+                
+            elif tool_name == "read_file":
+                path = args.get("path", "")
+                if not path:
+                    return {"result": "Error: path parameter is required"}
+                safe_path = os.path.normpath(os.path.join(repo_root, path))
+                if not safe_path.startswith(os.path.normpath(repo_root)):
+                    return {"result": "Error: Access denied (path traversal outside workspace)"}
+                if not os.path.exists(safe_path) or os.path.isdir(safe_path):
+                    return {"result": "Error: File not found or is a directory"}
+                    
+                with open(safe_path, "r", encoding="utf-8", errors="ignore") as f:
+                    content = f.read()
+                return {"result": content[:12000]}
+                
+            elif tool_name == "git_history":
+                import subprocess
+                res = subprocess.run(
+                    ["git", "log", "-n", "10", "--oneline"],
+                    cwd=repo_root,
+                    capture_output=True,
+                    text=True
+                )
+                if res.returncode == 0:
+                    return {"result": res.stdout}
+                else:
+                    return {"result": f"Error running git log: {res.stderr}"}
+            else:
+                return {"result": f"Error: Unknown tool {tool_name}"}
+        except Exception as e:
+            log.error("Local tool execution error: %s", e)
+            return {"result": f"Error executing local tool: {str(e)}"}
 
     @app.get("/agent/stream")
     async def agent_stream(
