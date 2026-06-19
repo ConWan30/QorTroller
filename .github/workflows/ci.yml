@@ -23,7 +23,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Initialize joypad-os firmware submodule
-        run: git submodule update --init --depth=1 bridge/firmware/joypad-os
+        run: git submodule update --init bridge/firmware/joypad-os
 
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
