@@ -46,6 +46,37 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
+# Governance schema — single source of truth for all fence rules.
+# Import fails loudly if the module is missing or corrupt.
+from _daemon_tools_schema import (
+    DaemonCommitChain,
+    GovernanceHardStop,
+    GovernanceLog,
+    GovernanceMode,
+    RateLimiter,
+    SigningError,
+    OUTPUT_PRODUCING_TOOLS,
+    adversarial_verify,
+    check_bridge_post_gate,
+    classify_path,
+    get_sealed_env,
+    governance_self_test,
+    is_new_test_file_path,
+    is_read_blocked,
+    load_daemon_agent_id,
+    resolve_output_artifact_path,
+    run_post_output_verification,
+    validate_shell_command,
+    verify_artifact,
+    reconstruct_from_removal_diff,
+    build_mixin_module,
+    MethodologyRegistry,
+    BANNED_METACHARACTERS,
+    PROPOSE_ONLY_PATHS,
+    FROZEN_PATTERNS,
+    TEST_DIRECTORIES,
+)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 #  Bootstrap: Load .env BEFORE any other imports
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -75,7 +106,7 @@ REPO_ROOT = os.path.abspath(os.path.dirname(__file__))
 # DAEMON_PORT takes precedence so bridge/.env HTTP_PORT (for the bridge process)
 # doesn't collide with the daemon when both run simultaneously.
 PORT = int(os.environ.get("DAEMON_PORT", os.environ.get("HTTP_PORT", 8080)))
-MAX_TOOL_ITERATIONS = 20  # raised from 10 — engineering tasks (read→plan→write→test) need more iterations
+MAX_TOOL_ITERATIONS = 80  # raised from 20 — large-file tasks (paginate 18K-line _core.py + analyze + propose + test) need many read calls. Kimi K2.7 256K context tolerates the deeper loop.
 TOOL_TIMEOUT = 15
 
 QUICKSILVER_API_KEY = os.environ.get("QUICKSILVER_API_KEY", "")
@@ -93,6 +124,32 @@ BRIDGE_OPERATOR_URL = os.environ.get("VAPI_BRIDGE_OPERATOR_URL", "http://localho
 TOOL_SERVER_URL = os.environ.get("TOOL_SERVER_URL", "http://localhost:8080")
 
 SQLITE_DB_PATH = os.path.join(REPO_ROOT, "agent_memory.db")
+
+# ── Governance singletons (wired from _daemon_tools_schema) ──────────────────
+# Rate limiter: persisted to its own DB to survive restarts (L5 fix).
+_RATE_LIMITER_DB = os.path.join(REPO_ROOT, "agent_rate_limiter.db")
+_RATE_LIMITER = RateLimiter(_RATE_LIMITER_DB)
+
+# Governance log: append-only audit trail outside the daemon's commit scope.
+# Path is outside REPO_ROOT so the daemon cannot git-add it accidentally.
+_GOV_LOG_PATH = os.path.join(
+    os.path.expanduser("~"), ".vapi", "daemon_governance.log"
+)
+_GOV_LOG = GovernanceLog(_GOV_LOG_PATH)
+
+# Daemon identity: ED25519 key lives outside REPO_ROOT (outside writable scope).
+# Sign-fail raises SigningError → proposal BLOCKED (L6 fix).
+_DAEMON_KEY_PATH = os.path.join(
+    os.path.expanduser("~"), ".vapi", "daemon_identity.key"
+)
+_DAEMON_IDENTITY = None  # Lazy-init in _get_brain() after self-test passes
+
+# AGENT-COMMIT chain: SQLite-persisted so prev_commit_hash survives restarts.
+# Same DB as rate limiter — one governance store. (F-AGC-4)
+_DAEMON_COMMIT_CHAIN = DaemonCommitChain(_RATE_LIMITER_DB)
+
+# Methodology registry: lessons keyed by failure class, compound across sessions.
+_METHODOLOGY = MethodologyRegistry(os.path.join(REPO_ROOT, "docs", "_daemon_proposals", "daemon_methodology.json"))
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  THE ONE SYSTEM PROMPT — lives only here, in the daemon
@@ -240,11 +297,30 @@ SYSTEM_PROMPT = (
     "               reason?)                               diff saved to docs/_daemon_proposals/ WITHOUT\n"
     "                                                      touching the source. Operator applies with\n"
     "                                                      git apply. Use this for all FENCE RULE 2 paths.\n"
+    "  extract_with_diff(diff_path, class_name,          - DIFF-ORACLE: reconstruct a moved code block\n"
+    "                    target_path)                      deterministically from a removal diff and emit\n"
+    "                                                      it as a .proposed mixin (AST-validated). USE THIS\n"
+    "                                                      for domain extraction instead of re-emitting code\n"
+    "                                                      verbatim — verbatim copies 524-timeout + risk\n"
+    "                                                      transcription drift. LLM proposes the cut (diff),\n"
+    "                                                      this tool builds the moved file.\n"
+    "  verify_artifact(path, expected_shape)             - FABRICATION DETECTOR: prove an output exists with\n"
+    "                                                      the expected shape (exists/lines/python_valid/\n"
+    "                                                      class_name/must_contain). Also runs automatically\n"
+    "                                                      after write_file/propose_edit/extract_with_diff.\n"
+    "  adversarial_verify(artifact_path, diff_path?,      - ADVERSARIAL SELF-TEST: reconstruct artifact from\n"
+    "                    class_name?)                      diff and compare hashes. Mandatory before READY.\n"
+    "  methodology(action?, keywords?)                   - Query accumulated daemon methodology by failure\n"
+    "                                                      class (VERBATIM_RELOCATION, HALLUCINATED_COMPLETION,\n"
+    "                                                      etc). Query at task_track time, apply known patterns.\n"
     "  finalize_plan(plan_name?, summary?, verdict?)     - MANDATORY last step of any engineering plan.\n"
     "                                                      Generates REVIEW_*.md in docs/_daemon_proposals/\n"
     "                                                      listing all proposals + operator action steps.\n"
-    "                                                      STOPS without committing or applying anything.\n"
-    "  list_files()                                      - List all project files (max 300)\n"
+    "                                                      verdict=READY requires passing fabrication +\n"
+    "                                                      adversarial gates. STOPS without applying changes.\n"
+    "  list_files(path?: str)                            - List project files (max 300). Pass an optional\n"
+    "                                                      subdirectory path (e.g. 'bridge/vapi_bridge/store')\n"
+    "                                                      to scope the listing and avoid truncation.\n"
     "  search_code(pattern: str, glob?: str)             - Search codebase with ripgrep/git grep\n"
     "  [Engineering / Testing]\n"
     "  run_pytest(test_path?, timeout?, extra_args?)     - Run pytest with 120s default timeout, returns\n"
@@ -262,6 +338,9 @@ SYSTEM_PROMPT = (
     "  [Audit / Drift Detection]\n"
     "  run_mythos(variant: int)                          - Run a Mythos audit variant (1-17) and\n"
     "                                                      return findings sorted by severity.\n"
+    "  health_monitor()                                  - Standing protocol health probes (GIC stall,\n"
+    "                                                      invariant drift, F-FW-2 device_id conflict).\n"
+    "                                                      Findings are proposal-only.\n"
     "                                                      Variants: 1=frozen_drift, 2=stability_sweep,\n"
     "                                                      3=operator_initiative, 4=live_gameplay,\n"
     "                                                      5=crypto_drift, 6=qortroller_crypto,\n"
@@ -271,6 +350,10 @@ SYSTEM_PROMPT = (
     "                                                      13=curator_graduation, 14=doc_consistency,\n"
     "                                                      15=frontend_brand, 16=path_a_parity,\n"
     "                                                      17=agent_utility_honesty\n"
+    "  health_monitor()                                  - Standing protocol health probes (GIC stall,\n"
+    "                                                      invariant drift, F-FW-2 device_id conflict).\n"
+    "                                                      Findings are proposal-only.\n"
+    "  residue_status()                                  - DECON-1 residue queue: pending/applied counts.\n"
     "  [Bridge / Chain]\n"
     "  bridge_get(path: str)                             - GET a bridge API endpoint\n"
     "  bridge_post(path: str, payload?: dict)            - POST to a bridge API endpoint\n"
@@ -310,7 +393,12 @@ SYSTEM_PROMPT = (
     "                                                      and store in agent_memory.db snapshots table\n"
     "  diff_snapshots(n?: int)                           - Compare last N snapshots, surface all deltas\n"
     "                                                      (GIC links, ratio drift, threshold shift, etc.)\n"
-    "  execute_shell(command: str)                       - Run a shell command\n"
+    "  execute_shell(command: str)                       - Run a whitelisted shell command (git log/status/\n"
+    "                                                      diff/show, python -m pytest, npm/cargo test, pwd,\n"
+    "                                                      echo). File-read commands (ls/dir/type/cat/grep/\n"
+    "                                                      find) are NOT available here — use list_files,\n"
+    "                                                      read_file, read_file_range, or search_code instead.\n"
+    "                                                      No shell metacharacters allowed.\n"
     "  current_time()                                    - Get current date and time\n\n"
     "You can call multiple tools sequentially (one per LLM response). The\n"
     "system feeds each result back to you as a <tool_result> block. Keep\n"
@@ -467,6 +555,10 @@ class QorTrollerBrain:
         self.memory = memory
         self._lock = asyncio.Lock()
         self._conversation: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
+        # Tier 1 session state — fabrication + adversarial gates
+        self._fabrication_detected = False
+        self._session_artifacts: list[dict] = []
+        self._session_started_at = time.time()
 
     # ── LLM Call ──────────────────────────────────────────────────────────
 
@@ -480,6 +572,7 @@ class QorTrollerBrain:
         headers = {
             "Authorization": f"Bearer {QUICKSILVER_API_KEY}",
             "Content-Type": "application/json",
+            "User-Agent": "QorTroller-Daemon/2.0",  # Cloudflare blocks Python default UA with 1010
         }
         # Retry up to 3 times: immediate, 5s, 15s backoff
         last_err = None
@@ -491,7 +584,7 @@ class QorTrollerBrain:
                     QUICKSILVER_API_URL,
                     headers=headers,
                     json=payload,
-                    timeout=60,  # increased from 30s — engineering tasks need longer
+                    timeout=180,  # 3 min — Claude with 37 tools + large system prompt
                     proxies={"http": None, "https": None},
                 )
                 if response.status_code == 429:
@@ -500,7 +593,29 @@ class QorTrollerBrain:
                     continue
                 response.raise_for_status()
                 result = response.json()
-                return result["choices"][0]["message"]["content"]
+                message = result["choices"][0]["message"]
+                content = message.get("content") or ""
+
+                # Handle OpenAI native tool_calls format (Kimi K2.7, GPT-4o, etc.)
+                # These models put tool calls in message["tool_calls"] with content=""
+                # Serialize them back to the XML format the daemon's parser expects.
+                native_calls = message.get("tool_calls") or []
+                if native_calls and not content.strip():
+                    xml_blocks = []
+                    for tc in native_calls:
+                        fn = tc.get("function", {})
+                        name = fn.get("name", "")
+                        raw_args = fn.get("arguments", "{}")
+                        try:
+                            args = json.loads(raw_args) if isinstance(raw_args, str) else raw_args
+                        except Exception:
+                            args = {}
+                        xml_blocks.append(
+                            f'<tool_call>\n{{"name": "{name}", "arguments": {json.dumps(args)}}}\n</tool_call>'
+                        )
+                    content = "\n".join(xml_blocks)
+
+                return content
             except requests.exceptions.Timeout:
                 last_err = f"timeout (attempt {attempt+1})"
                 continue
@@ -600,11 +715,73 @@ class QorTrollerBrain:
 
     def _execute_tool(self, name: str, args: dict) -> str:
         """Execute a tool and return its result as a string."""
+        # ── Rate-limit check (L5) ────────────────────────────────────────────
+        # Persisted across restarts; includes global cross-tool budget.
+        allowed, limit_reason = _RATE_LIMITER.can_call(name)
+        if not allowed:
+            _GOV_LOG.rate_limited(name, limit_reason)
+            return f"RATE_LIMITED: {limit_reason}"
+
+        try:
+            result = self._execute_tool_inner(name, args)
+            # Only count against rate limit if the tool actually executed —
+            # BLOCKED/OPERATOR_HOLD responses don't consume real resources.
+            if not (isinstance(result, str) and (
+                result.startswith("BLOCKED:") or
+                result.startswith("OPERATOR_HOLD") or
+                result.startswith("RATE_LIMITED")
+            )):
+                _RATE_LIMITER.record_call(name)
+                # Tier 1.1 — auto verify_artifact after output-producing tools
+                if name in OUTPUT_PRODUCING_TOOLS and isinstance(result, str):
+                    pv = run_post_output_verification(name, args, result, REPO_ROOT)
+                    if pv["ran"]:
+                        artifact_rel, diff_rel = resolve_output_artifact_path(
+                            name, args, result, REPO_ROOT,
+                        )
+                        self._session_artifacts.append({
+                            "tool": name,
+                            "artifact": artifact_rel,
+                            "diff_path": diff_rel,
+                            "class_name": args.get("class_name"),
+                            "ts": time.time(),
+                        })
+                        vr = pv.get("verify_result") or {}
+                        if pv["ok"]:
+                            result += (
+                                f"\n\n--- AUTO verify_artifact (Tier 1.1) ---\n"
+                                f"VERIFIED: {artifact_rel}\n"
+                            )
+                        else:
+                            self._fabrication_detected = True
+                            fails = vr.get("failures", ["shape check failed"])
+                            _GOV_LOG.fabrication_detected(name, artifact_rel, fails)
+                            result += (
+                                f"\n\n--- AUTO verify_artifact (Tier 1.1) ---\n"
+                                f"FABRICATION_DETECTED: {artifact_rel}\n"
+                                + "\n".join(f"  FAIL: {fl}" for fl in fails)
+                                + "\nDo NOT claim this artifact is complete."
+                            )
+            return result
+        except GovernanceHardStop:
+            # L7: hard stop propagates upward — no catch here
+            raise
+        except Exception as e:
+            _RATE_LIMITER.record_error(name)
+            raise
+
+    def _execute_tool_inner(self, name: str, args: dict) -> str:
+        """Inner tool execution — called only after rate-limit check passes."""
         try:
             if name == "read_file":
                 path = args.get("path", "")
                 if not path:
                     return "Error: 'path' argument is required"
+                # SEC-1: block reads of secret files through the governed tool
+                read_block = is_read_blocked(path)
+                if read_block:
+                    _GOV_LOG.blocked("read_file", path, read_block)
+                    return f"BLOCKED: {read_block}"
                 safe = os.path.normpath(os.path.join(REPO_ROOT, path))
                 if not safe.startswith(os.path.normpath(REPO_ROOT)):
                     return "Error: Access denied (path traversal)"
@@ -615,15 +792,31 @@ class QorTrollerBrain:
                 return content
 
             elif name == "list_files":
+                # Optional 'path' scopes the walk to a subdirectory so large
+                # repos don't truncate the area of interest at 300 entries.
+                # Listing reveals filenames only (not contents) — no SEC-1 risk.
+                subpath = args.get("path", "")
+                walk_root = REPO_ROOT
+                if subpath:
+                    cand = os.path.normpath(os.path.join(REPO_ROOT, subpath))
+                    if not cand.startswith(os.path.normpath(REPO_ROOT)):
+                        return "Error: Access denied (path traversal)"
+                    if not os.path.isdir(cand):
+                        return f"Error: not a directory: {subpath}"
+                    walk_root = cand
                 file_list = []
-                for root, dirs, files in os.walk(REPO_ROOT):
+                for root, dirs, files in os.walk(walk_root):
                     dirs[:] = [d for d in dirs if d not in _IGNORE_DIRS]
                     for f in files:
                         if f in _IGNORE_FILES:
                             continue
                         rel = os.path.relpath(os.path.join(root, f), REPO_ROOT)
                         file_list.append(rel.replace("\\", "/"))
-                return json.dumps(file_list[:300], indent=2)
+                total = len(file_list)
+                out = json.dumps(sorted(file_list)[:300], indent=2)
+                if total > 300:
+                    out += f"\n... ({total - 300} more; narrow with path=)"
+                return out
 
             elif name == "git_history":
                 result = subprocess.run(
@@ -730,6 +923,14 @@ class QorTrollerBrain:
                 command = args.get("command", "")
                 if not command:
                     return "Error: 'command' argument is required"
+
+                # L3: validate against schema rules (metacharacter ban + whitelist)
+                shell_err = validate_shell_command(command)
+                if shell_err:
+                    _GOV_LOG.shell_blocked(command, shell_err)
+                    return f"BLOCKED: {shell_err}"
+
+                # L3: sealed execution environment — no arbitrary env injection
                 result = subprocess.run(
                     command,
                     cwd=REPO_ROOT,
@@ -737,6 +938,7 @@ class QorTrollerBrain:
                     text=True,
                     timeout=TOOL_TIMEOUT,
                     shell=True,
+                    env=get_sealed_env(),
                 )
                 output = result.stdout
                 if result.stderr:
@@ -791,10 +993,13 @@ class QorTrollerBrain:
 
                 rel = os.path.relpath(safe, REPO_ROOT).replace("\\", "/")
 
-                # F-DAEMON-1: Hard block — tests are the verification rail.
-                # If code fails a test, the correct action is STOP AND SURFACE,
-                # never edit the test. This is non-negotiable.
-                if rel.startswith("bridge/tests/") or rel.startswith("sdk/tests/"):
+                # F-DAEMON-1 + F-DAEMON-2: governance rules sourced from
+                # _daemon_tools_schema — single source of truth, not inline sets.
+                # classify_path() default for unlisted paths: PROPOSE_ONLY (L1 fix).
+                path_mode = classify_path(rel)
+
+                if path_mode == GovernanceMode.READ_ONLY:
+                    _GOV_LOG.blocked("edit_file", rel, "READ_ONLY (test directory)")
                     return (
                         f"BLOCKED: edit_file cannot modify test files ({rel}). "
                         f"Tests are the verification rail — if your code fails a test, "
@@ -802,49 +1007,14 @@ class QorTrollerBrain:
                         f"Never edit tests to make code pass."
                     )
 
-                # F-DAEMON-2: Hard block on critical existing files.
-                # Use propose_edit() for these — it generates a diff for review
-                # without touching the source.
-                PROPOSE_ONLY = {
-                    # Bridge startup / entry point
-                    "bridge/vapi_bridge/main.py",
-                    # Core store (FROZEN surfaces live here)
-                    "bridge/vapi_bridge/store/_core.py",
-                    # Operator API surface (241 endpoints)
-                    "bridge/vapi_bridge/operator_api.py",
-                    # Wallet / chain / signing paths
-                    "bridge/vapi_bridge/chain.py",
-                    # FROZEN-v1 chain primitives
-                    "bridge/vapi_bridge/grind_chain.py",
-                    "bridge/vapi_bridge/watchdog_chain.py",
-                    "bridge/vapi_bridge/codec.py",
-                    "bridge/vapi_bridge/corpus_snapshot.py",
-                    "bridge/vapi_bridge/biometric_snapshot.py",
-                    "bridge/vapi_bridge/agent_commit.py",
-                    # Session pipeline (complex state machine)
-                    "bridge/vapi_bridge/session_adjudicator.py",
-                    "bridge/vapi_bridge/session_adjudicator_validator.py",
-                    # Invariant gate + allowlist
-                    "scripts/vapi_invariant_gate.py",
-                    ".github/INVARIANTS_ALLOWLIST.json",
-                    # Credentials
-                    ".env", "bridge/.env",
-                }
-                # Also block any FROZEN-v1 / pattern-017 modules by name pattern
-                frozen_patterns = (
-                    "replay_proof_pipeline/pipeline.py",
-                    "physical_data_attestation.py",
-                    "zkba_artifact.py",
-                )
-                is_frozen = (rel in PROPOSE_ONLY or
-                             any(rel.endswith(p) for p in frozen_patterns))
+                is_frozen = (path_mode == GovernanceMode.PROPOSE_ONLY)
                 if is_frozen:
+                    _GOV_LOG.blocked("edit_file", rel, "PROPOSE_ONLY path — use propose_edit()")
                     return (
-                        f"BLOCKED: '{rel}' is a critical/FROZEN path. "
+                        f"OPERATOR_HOLD: '{rel}' is a critical/FROZEN path. "
                         f"Use propose_edit(path, old_string, new_string, reason) "
                         f"to generate a diff for operator review without modifying "
-                        f"the source file. Rule: new files autonomous, "
-                        f"existing critical files → propose_edit only."
+                        f"the source file. Rule: unlisted paths default to propose_only."
                     )
 
                 try:
@@ -878,14 +1048,110 @@ class QorTrollerBrain:
                 return (f"OK: {n_replaced} replacement(s) in {rel} "
                         f"(old: {len(old_string)} chars → new: {len(new_string)} chars)")
 
+            elif name == "write_file":
+                # F-GOV-2: new file creation under bridge/tests/ → PROPOSE_ONLY.
+                # Tests are the verification surface even when new.
+                # All other critical paths also route through classify_path().
+                path = args.get("path", "")
+                content = args.get("content", "")
+                if not path:
+                    return "Error: 'path' argument is required"
+
+                safe = os.path.normpath(os.path.join(REPO_ROOT, path))
+                if not safe.startswith(os.path.normpath(REPO_ROOT)):
+                    return "Error: Access denied (path traversal)"
+
+                rel = os.path.relpath(safe, REPO_ROOT).replace("\\", "/")
+
+                # Test directory: new files → PROPOSE_ONLY (F-GOV-2)
+                if is_new_test_file_path(rel):
+                    _GOV_LOG.blocked("write_file", rel, "F-GOV-2: new test files are PROPOSE_ONLY")
+                    return (
+                        f"OPERATOR_HOLD (F-GOV-2): '{rel}' is under a test directory. "
+                        f"New test files are PROPOSE_ONLY — they are part of the verification "
+                        f"surface even before they exist. Use propose_edit() to draft the file "
+                        f"for operator review before it joins the test suite."
+                    )
+
+                # All other critical/frozen paths → PROPOSE_ONLY
+                path_mode = classify_path(rel)
+                if path_mode in (GovernanceMode.PROPOSE_ONLY, GovernanceMode.READ_ONLY):
+                    # SEC/F-NEWFILE: if the target is a GENUINELY NEW file (does not
+                    # exist on disk), the content must not be silently discarded —
+                    # otherwise the brain has no way to deliver a new-file body for
+                    # review and will hallucinate that it was "embedded". Materialize
+                    # the content as a reviewable .proposed artifact (the new-file
+                    # analog of propose_edit). The operator creates the real file from it.
+                    # An EXISTING frozen file still routes to propose_edit (use a diff).
+                    if not os.path.exists(safe):
+                        ts = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+                        proposals_dir = os.path.join(REPO_ROOT, "docs", "_daemon_proposals")
+                        os.makedirs(proposals_dir, exist_ok=True)
+                        safe_name = rel.replace("/", "_").replace("\\", "_")
+                        proposed_path = os.path.join(
+                            proposals_dir, f"newfile_{ts}_{safe_name}.proposed"
+                        )
+                        meta_path = os.path.join(
+                            proposals_dir, f"newfile_{ts}_{safe_name}.md"
+                        )
+                        with open(proposed_path, "w", encoding="utf-8") as f:
+                            f.write(content)
+                        with open(meta_path, "w", encoding="utf-8") as f:
+                            f.write(f"# Daemon New-File Proposal — {rel}\n\n")
+                            f.write(f"**Generated:** {ts}\n")
+                            f.write(f"**Target path:** `{rel}`\n")
+                            f.write(f"**Size:** {len(content)} chars\n\n")
+                            f.write(f"## To create the file\n\n```bash\n")
+                            f.write(f"cp \"{proposed_path}\" \"{safe}\"\n```\n\n")
+                            f.write(f"## Content preview (first 2000 chars)\n\n")
+                            f.write(f"```python\n{content[:2000]}\n```\n")
+                        _GOV_LOG.proposed(rel, proposed_path,
+                                          _DAEMON_IDENTITY.public_key if _DAEMON_IDENTITY else "(unsigned)")
+                        pr = os.path.relpath(proposed_path, REPO_ROOT).replace("\\", "/")
+                        mr = os.path.relpath(meta_path, REPO_ROOT).replace("\\", "/")
+                        return (
+                            f"NEW-FILE PROPOSAL WRITTEN (source tree NOT modified):\n"
+                            f"  content: {pr} ({len(content)} chars)\n"
+                            f"  meta:    {mr}\n"
+                            f"'{rel}' is classified {path_mode.value}, so it was NOT created "
+                            f"directly. The operator creates it from the .proposed artifact:\n"
+                            f"  cp {pr} {rel}\n"
+                            f"The full content IS captured in the artifact above — do not claim "
+                            f"it is embedded anywhere else."
+                        )
+                    # Existing frozen file → must use propose_edit (a diff), not write_file
+                    _GOV_LOG.blocked("write_file", rel, f"write_file blocked: {path_mode.value} (existing)")
+                    return (
+                        f"OPERATOR_HOLD: '{rel}' already exists and is classified "
+                        f"{path_mode.value}. Use propose_edit() to generate a diff."
+                    )
+
+                # Safe to write (new non-critical file — currently unreachable given
+                # the propose_only default, but kept for forward-compat if a path is
+                # ever explicitly classified AUTONOMOUS).
+                try:
+                    os.makedirs(os.path.dirname(safe), exist_ok=True)
+                    with open(safe, "w", encoding="utf-8") as f:
+                        f.write(content)
+                    return f"OK: wrote {len(content)} chars to {rel}"
+                except Exception as e:
+                    return f"Error writing file: {e}"
+
             elif name == "read_file_range":
                 # Paginated read of large files. offset is 0-indexed line number.
                 path = args.get("path", "")
                 offset = max(0, int(args.get("offset", 0)))
-                limit = min(2000, max(1, int(args.get("limit", 500))))
+                # Default 1500/call, max 4000 — pages an 18K-line file in ~5 calls
+                # instead of 36, conserving the iteration budget.
+                limit = min(4000, max(1, int(args.get("limit", 1500))))
 
                 if not path:
                     return "Error: 'path' argument is required"
+                # SEC-1: block reads of secret files through the governed tool
+                read_block = is_read_blocked(path)
+                if read_block:
+                    _GOV_LOG.blocked("read_file_range", path, read_block)
+                    return f"BLOCKED: {read_block}"
                 safe = os.path.normpath(os.path.join(REPO_ROOT, path))
                 if not safe.startswith(os.path.normpath(REPO_ROOT)):
                     return "Error: Access denied (path traversal)"
@@ -1062,14 +1328,44 @@ class QorTrollerBrain:
                     f.write(diff_text)
 
                 # Save human-readable context alongside the diff
+                # L6: Sign the proposal BEFORE writing it.
+                # sign_fail → BLOCKED; unsigned proposals are not accepted.
+                # Explicit SigningError catch — not broad except Exception.
+                pub_key = "(unsigned)"
+                signature_block = ""
+                if _DAEMON_IDENTITY is not None:
+                    try:
+                        # Sign the diff content itself
+                        sig_data = _DAEMON_IDENTITY.sign(diff_text.encode("utf-8"))
+                        pub_key = _DAEMON_IDENTITY.public_key
+                        signature_block = (
+                            f"\n## Daemon Signature\n\n"
+                            f"- **Public key:** `{pub_key}`\n"
+                            f"- **Signature (ed25519):** `{sig_data}`\n"
+                            f"- **Algorithm:** ed25519\n"
+                        )
+                    except SigningError as e:
+                        # L6 fix: sign-fail BLOCKS the proposal entirely.
+                        # Do NOT write unsigned proposals — they are indistinguishable from forged.
+                        _GOV_LOG.sign_failed(rel, str(e))
+                        return (
+                            f"BLOCKED: Proposal for '{rel}' could not be signed. "
+                            f"No proposal written — unsigned artifacts are indistinguishable "
+                            f"from forged ones. Error: {e}"
+                        )
+
                 with open(meta_path, "w", encoding="utf-8") as f:
                     f.write(f"# Daemon Proposal — {rel}\n\n")
                     f.write(f"**Generated:** {ts}\n")
                     f.write(f"**File:** `{rel}`\n")
-                    f.write(f"**Reason:** {reason}\n\n")
+                    f.write(f"**Reason:** {reason}\n")
+                    f.write(f"**Daemon public key:** `{pub_key}`\n\n")
                     f.write(f"## Diff\n\n```diff\n{diff_text}\n```\n\n")
                     f.write(f"## To apply\n\n```bash\ngit apply {diff_path}\n```\n")
                     f.write(f"\n## To discard\n\n```bash\nrm {diff_path} {meta_path}\n```\n")
+                    f.write(signature_block)
+
+                _GOV_LOG.proposed(rel, diff_path, pub_key)
 
                 diff_rel = os.path.relpath(diff_path, REPO_ROOT).replace("\\", "/")
                 meta_rel = os.path.relpath(meta_path, REPO_ROOT).replace("\\", "/")
@@ -1078,6 +1374,7 @@ class QorTrollerBrain:
                     f"PROPOSAL GENERATED (source file NOT modified):\n"
                     f"  diff: {diff_rel}\n"
                     f"  meta: {meta_rel}\n"
+                    f"  signer: {pub_key[:16]}...\n"
                     f"  lines changed: {len([l for l in diff_lines if l.startswith(('+', '-')) and not l.startswith(('+++', '---'))])}\n\n"
                     f"Review the proposal and apply with:\n"
                     f"  git apply {diff_path}\n\n"
@@ -1094,6 +1391,51 @@ class QorTrollerBrain:
                 plan_name = args.get("plan_name", "default")
                 summary = args.get("summary", "")
                 brain_verdict = args.get("verdict", "")
+
+                # Tier 1.1 / 1.3 — gate READY on fabrication + adversarial proof
+                gate_notes: list[str] = []
+                verdict_upper = (brain_verdict or "").strip().upper()
+                if verdict_upper == "READY":
+                    if self._fabrication_detected:
+                        brain_verdict = "BLOCKED_FABRICATION"
+                        gate_notes.append(
+                            "READY rejected: auto verify_artifact detected fabrication "
+                            "in this session. Fix artifacts before claiming READY."
+                        )
+                    else:
+                        adv_failures = []
+                        for art in self._session_artifacts:
+                            arel = art.get("artifact", "")
+                            if not arel:
+                                continue
+                            asafe = os.path.normpath(os.path.join(REPO_ROOT, arel))
+                            if not asafe.startswith(os.path.normpath(REPO_ROOT)):
+                                continue
+                            drel = art.get("diff_path")
+                            dsafe = None
+                            if drel:
+                                dsafe = os.path.normpath(os.path.join(REPO_ROOT, drel))
+                                if not dsafe.startswith(os.path.normpath(REPO_ROOT)):
+                                    dsafe = None
+                            av = adversarial_verify(
+                                asafe,
+                                diff_path=dsafe,
+                                class_name=art.get("class_name"),
+                                repo_root=REPO_ROOT,
+                            )
+                            if not av["ok"]:
+                                adv_failures.append(
+                                    f"{arel}: {av.get('failures', ['failed'])}"
+                                )
+                                _GOV_LOG.adversarial_failed(
+                                    arel, av.get("method", "?"), av.get("failures", []),
+                                )
+                        if adv_failures:
+                            brain_verdict = "BLOCKED_ADVERSARIAL"
+                            gate_notes.append(
+                                "READY rejected: adversarial self-test failed:\n"
+                                + "\n".join(f"  - {f}" for f in adv_failures)
+                            )
 
                 import sqlite3 as _sq
 
@@ -1139,6 +1481,13 @@ class QorTrollerBrain:
                     f"## Brain Verdict",
                     brain_verdict or "(no verdict provided)",
                     "",
+                ]
+                if gate_notes:
+                    lines_out += ["## Verification Gates", ""]
+                    for gn in gate_notes:
+                        lines_out.append(gn)
+                    lines_out.append("")
+                lines_out += [
                     f"## Plan Status: {plan_name}",
                 ]
                 for r in rows:
@@ -1181,16 +1530,132 @@ class QorTrollerBrain:
                     f.write("\n".join(lines_out))
 
                 review_rel = os.path.relpath(review_path, REPO_ROOT).replace("\\", "/")
-                return (
-                    f"REVIEW PACKAGE GENERATED — engineering session complete.\n"
-                    f"  {review_rel}\n\n"
-                    f"Plan '{plan_name}': "
-                    f"{sum(1 for r in rows if r['status'] == 'completed')}/{len(rows)} steps completed.\n"
-                    f"Proposals pending: {len(proposals)}\n\n"
-                    f"No changes have been committed or applied.\n"
-                    f"Operator review is required before anything is durable.\n"
-                    f"See {review_rel} for the full review checklist."
-                )
+
+                # ── AGENT-COMMIT v1 wiring (D-DAEMON-1 Path A) ───────────────
+                # The review package becomes a first-class protocol artifact:
+                # SHA-256 committed, ED25519 signed, chained, on-chain-anchorable.
+                #
+                # Provisional identity: agentId = SHA-256(ed25519_pubkey_bytes).
+                # This is honest and documented. At D-DAEMON-1 resolution a NEW
+                # chain starts with the canonical on-chain agentId; a junction
+                # entry in that chain references this chain's last commitment as
+                # prev_commit_hash. This chain is NOT retroactively modified.
+                # "Genesis re-anchored" is wrong and would corrupt every link. (F-AGC-2)
+                commitment_hex = None
+                try:
+                    import hashlib as _hlib
+                    import time as _t
+                    import sys as _sys
+
+                    # Bridge path for FROZEN primitive import
+                    _bridge = os.path.join(REPO_ROOT, "bridge")
+                    if _bridge not in _sys.path:
+                        _sys.path.insert(0, _bridge)
+                    from vapi_bridge.agent_commit import compute_agent_commit_hash
+
+                    # F-AGC-3: agent_id from provisional or canonical config (D-DAEMON-1)
+                    pub_bytes = bytes.fromhex(_DAEMON_IDENTITY.public_key)
+                    agent_id, identity_mode, junction_note = load_daemon_agent_id(
+                        _DAEMON_IDENTITY.public_key,
+                    )
+                    assert len(agent_id) == 32, f"agent_id must be 32 bytes, got {len(agent_id)}"
+
+                    # F-AGC-1 verified: FROZEN formula commit_sha = 20 bytes (git SHA-1 length).
+                    # SHA-256(review_content)[:20] — truncate to match FROZEN field width.
+                    review_bytes = Path(review_path).read_bytes()
+                    commit_sha = _hlib.sha256(review_bytes).digest()[:20]
+
+                    # F-AGC-4: prev_commit_hash from SQLite-persisted chain (survives restarts)
+                    prev_commit_hash = _DAEMON_COMMIT_CHAIN.get_last_commitment()
+                    repo_uri_sha = _hlib.sha256(
+                        b"https://github.com/ConWan30/qortroller"
+                    ).digest()
+                    ts_ns = _t.time_ns()
+
+                    commitment = compute_agent_commit_hash(
+                        agent_id=agent_id,
+                        commit_sha=commit_sha,
+                        prev_commit_hash=prev_commit_hash,
+                        repo_uri_sha=repo_uri_sha,
+                        ts_ns=ts_ns,
+                    )
+                    commitment_hex = commitment.hex()
+
+                    # Sign the 32-byte commitment with daemon ED25519 key
+                    # SigningError → proposal still written, but commitment is unsigned
+                    try:
+                        commitment_sig = _DAEMON_IDENTITY.sign(commitment)
+                    except SigningError as e:
+                        commitment_sig = f"SIGNING_FAILED: {e}"
+
+                    # Persist to chain BEFORE appending to REVIEW (atomic write)
+                    is_genesis = (prev_commit_hash == b"\x00" * 32)
+                    _DAEMON_COMMIT_CHAIN.record_commitment(
+                        commitment_hex=commitment_hex,
+                        ts_ns=ts_ns,
+                        plan_name=plan_name,
+                        review_path=review_path,
+                    )
+
+                    # Genesis capture: write to a dedicated file so it cannot
+                    # be buried. The genesis commitment is the chain anchor —
+                    # every subsequent link traces back to it.
+                    if is_genesis:
+                        genesis_path = os.path.join(
+                            os.path.expanduser("~"), ".vapi", "daemon_genesis_commit.txt"
+                        )
+                        with open(genesis_path, "w", encoding="utf-8") as _gf:
+                            _gf.write(
+                                f"DAEMON AGENT-COMMIT GENESIS\n"
+                                f"commitment : {commitment_hex}\n"
+                                f"plan_name  : {plan_name}\n"
+                                f"review_path: {review_path}\n"
+                                f"ts_ns      : {ts_ns}\n"
+                                f"daemon_key : {_DAEMON_IDENTITY.public_key}\n"
+                                f"\n"
+                                f"Record 'commitment' in CLAUDE.md as:\n"
+                                f"<!-- DAEMON-GENESIS-COMMIT: {commitment_hex} -->\n"
+                            )
+                        print(
+                            f"\n[daemon] *** GENESIS COMMITMENT WRITTEN ***\n"
+                            f"[daemon] {genesis_path}\n"
+                            f"[daemon] commitment: {commitment_hex}\n"
+                            f"[daemon] ADD THIS TO CLAUDE.md NOW.",
+                            flush=True,
+                        )
+
+                    # Append AGENT-COMMIT block to review package
+                    chain_len = _DAEMON_COMMIT_CHAIN.chain_length()
+                    with open(review_path, "a", encoding="utf-8") as f:
+                        f.write(f"\n\n## AGENT-COMMIT v1 (D-DAEMON-1 Path A)\n\n")
+                        f.write(f"- **Commitment:** `{commitment_hex}`\n")
+                        f.write(f"- **Chain link:** #{chain_len}\n")
+                        f.write(f"- **prev_commitment:** `{prev_commit_hash.hex()}`\n")
+                        f.write(f"- **Daemon public key:** `{_DAEMON_IDENTITY.public_key}`\n")
+                        f.write(f"- **Identity mode:** `{identity_mode}`\n")
+                        if junction_note:
+                            f.write(f"- **Junction note:** {junction_note}\n")
+                        f.write(f"- **Signature (ed25519):** `{commitment_sig}`\n")
+                        f.write(f"- **ts_ns:** `{ts_ns}`\n")
+                        f.write(
+                            f"\n*Provisional agentId = SHA-256(ed25519_pubkey). "
+                            f"At D-DAEMON-1 resolution a new chain starts with canonical "
+                            f"on-chain agentId; a junction entry references this chain's "
+                            f"last commitment as prev_commit_hash. This chain is not "
+                            f"retroactively modified — it retains its own verifiable history.*\n"
+                        )
+
+                    _GOV_LOG.agent_commit(commitment_hex, plan_name, _DAEMON_IDENTITY.public_key)
+
+                except Exception as e:
+                    # AGENT-COMMIT failure does not block the hard stop —
+                    # the review package is still valid; commitment is just absent.
+                    with open(review_path, "a", encoding="utf-8") as f:
+                        f.write(f"\n\n## AGENT-COMMIT v1 — FAILED\n\nError: {e}\n")
+
+                # L7: Hard stop — raise GovernanceHardStop (Exception), not return.
+                _GOV_LOG.hard_stop(plan_name, review_path)
+                raise GovernanceHardStop(review_path, plan_name)
 
             elif name == "task_track":
                 # Create or replace a multi-step plan in agent_memory.db.
@@ -1231,9 +1696,19 @@ class QorTrollerBrain:
                 finally:
                     conn.close()
 
-                return (f"Plan '{plan_name}' created with {len(steps)} step(s). "
-                        f"Use task_update(plan_name, step_index, status) to mark progress. "
-                        f"Statuses: pending, in_progress, completed, blocked.")
+                # Tier 1.2 — inject methodology at plan creation
+                meth_entries = _METHODOLOGY.query_for_task(steps)
+                meth_block = MethodologyRegistry.format_for_prompt(meth_entries)
+                _GOV_LOG.methodology_injected(
+                    plan_name, len(meth_entries), list(meth_entries.keys()),
+                )
+
+                return (
+                    f"Plan '{plan_name}' created with {len(steps)} step(s). "
+                    f"Use task_update(plan_name, step_index, status) to mark progress. "
+                    f"Statuses: pending, in_progress, completed, blocked.\n\n"
+                    f"## Applicable Methodology\n{meth_block}"
+                )
 
             elif name == "task_update":
                 # Update status of a specific step in a plan, OR query current state.
@@ -1981,6 +2456,13 @@ class QorTrollerBrain:
                 return f"Error: {result.stderr}"
 
             elif name == "bridge_post":
+                # F-GOV-1: explicit approval gate — both approved=True arg AND
+                # BRIDGE_POST_GATE_ENABLED=1 env var required.
+                gate_err = check_bridge_post_gate(args)
+                if gate_err:
+                    _GOV_LOG.blocked("bridge_post", args.get("path", "?"), gate_err[:120])
+                    return gate_err
+
                 path = args.get("path", "")
                 payload = args.get("payload", {})
                 api_key = args.get("api_key", OPERATOR_API_KEY)
@@ -2702,10 +3184,284 @@ class QorTrollerBrain:
                 lines.append("\n" + "─" * 52)
                 return "\n".join(lines)
 
+            elif name == "search_code":
+                # Sandboxed code search — documented in system prompt but was missing.
+                # Uses git grep (fast, repo-scoped, no shell injection risk).
+                # Falls back to Python os.walk scan if git grep unavailable.
+                pattern = args.get("pattern", "")
+                glob_filter = args.get("glob", "")
+                if not pattern:
+                    return "Error: 'pattern' argument is required"
+
+                # SEC-2: reject patterns with banned metacharacters (fixed the
+                # AND→OR short-circuit; previously the check never fired).
+                if any(c in pattern for c in BANNED_METACHARACTERS):
+                    return "Error: pattern contains disallowed characters"
+
+                # Helper: drop any match line that points at a secret file so
+                # search_code can't be used to read .env/.key contents indirectly.
+                def _filter_secret_hits(text: str) -> str:
+                    kept = []
+                    for ln in text.splitlines():
+                        fpath = ln.split(":", 1)[0] if ":" in ln else ln
+                        if is_read_blocked(fpath) is None:
+                            kept.append(ln)
+                    return "\n".join(kept)
+
+                try:
+                    # "-e pattern --" terminates git-grep option parsing so a
+                    # pattern starting with "-" can't be read as a git flag (SEC-2).
+                    cmd = ["git", "grep", "-n", "--no-color", "-e", pattern, "--"]
+                    if glob_filter:
+                        cmd += [glob_filter]
+                    result = subprocess.run(
+                        cmd, cwd=REPO_ROOT,
+                        capture_output=True, text=True,
+                        timeout=30, encoding="utf-8", errors="replace",
+                    )
+                    out = _filter_secret_hits(result.stdout)
+                    if not out and result.returncode == 1:
+                        return f"No matches for '{pattern}'" + (f" in {glob_filter}" if glob_filter else "")
+                    if result.returncode not in (0, 1):
+                        raise subprocess.SubprocessError(result.stderr)
+                    lines = out.splitlines()
+                    if len(lines) > 200:
+                        return "\n".join(lines[:200]) + f"\n... ({len(lines)-200} more lines)"
+                    return out or f"No matches for '{pattern}'"
+                except Exception as e:
+                    # Pure-Python fallback: walk repo, grep lines
+                    matches = []
+                    import fnmatch as _fn
+                    for root, dirs, files in os.walk(REPO_ROOT):
+                        dirs[:] = [d for d in dirs if d not in _IGNORE_DIRS]
+                        for fname in files:
+                            if glob_filter and not _fn.fnmatch(fname, glob_filter.lstrip("*/")):
+                                continue
+                            fpath = os.path.join(root, fname)
+                            rel_check = os.path.relpath(fpath, REPO_ROOT).replace("\\", "/")
+                            # SEC-1: never scan secret files in the fallback path
+                            if is_read_blocked(rel_check) is not None:
+                                continue
+                            try:
+                                with open(fpath, "r", encoding="utf-8", errors="ignore") as f:
+                                    for i, line in enumerate(f, 1):
+                                        if pattern in line:
+                                            rel = os.path.relpath(fpath, REPO_ROOT).replace("\\", "/")
+                                            matches.append(f"{rel}:{i}:{line.rstrip()}")
+                                            if len(matches) >= 200:
+                                                break
+                            except Exception:
+                                continue
+                            if len(matches) >= 200:
+                                break
+                    if not matches:
+                        return f"No matches for '{pattern}'"
+                    return "\n".join(matches[:200])
+
+            elif name == "verify_artifact":
+                # TIER 1 fabrication detector: prove an output exists with the
+                # expected shape before any downstream step trusts it.
+                path = args.get("path", "")
+                shape = args.get("expected_shape", {}) or {}
+                if not path:
+                    return "Error: 'path' argument is required"
+                safe = os.path.normpath(os.path.join(REPO_ROOT, path))
+                if not safe.startswith(os.path.normpath(REPO_ROOT)):
+                    return "Error: Access denied (path traversal)"
+                result = verify_artifact(safe, shape)
+                status = "VERIFIED" if result["ok"] else "FABRICATION_DETECTED"
+                lines = [f"{status}: {path}"]
+                lines += [f"  check: {c}" for c in result["checks"]]
+                if result["failures"]:
+                    lines += [f"  FAIL: {fl}" for fl in result["failures"]]
+                    lines.append("Do NOT claim this artifact is complete. The shape check failed.")
+                return "\n".join(lines)
+
+            elif name == "extract_with_diff":
+                # TIER 1 diff-oracle: reconstruct a moved code block deterministically
+                # from a removal diff and emit it as a .proposed mixin artifact.
+                # LLM never relocates verbatim (avoids 524 + transcription drift).
+                diff_path = args.get("diff_path", "")
+                class_name = args.get("class_name", "")
+                target_rel = args.get("target_path", "")
+                if not (diff_path and class_name and target_rel):
+                    return "Error: 'diff_path', 'class_name', and 'target_path' are all required"
+                dsafe = os.path.normpath(os.path.join(REPO_ROOT, diff_path))
+                if not dsafe.startswith(os.path.normpath(REPO_ROOT)) or not os.path.isfile(dsafe):
+                    return f"Error: diff not found: {diff_path}"
+                try:
+                    diff_text = open(dsafe, encoding="utf-8", errors="replace").read()
+                    removed = reconstruct_from_removal_diff(diff_text)
+                    if not removed:
+                        return "Error: removal diff contained no '-' lines to reconstruct from"
+                    # Pass the source module so needed imports are auto-injected
+                    # (MIXIN_MISSING_IMPORTS lesson — moved methods lose import scope).
+                    src_text = ""
+                    core_path = os.path.join(REPO_ROOT, "bridge", "vapi_bridge", "store", "_core.py")
+                    if os.path.isfile(core_path):
+                        src_text = open(core_path, encoding="utf-8", errors="replace").read()
+                    module = build_mixin_module(class_name, removed, source_module_text=src_text)
+                    # AST-validate before emitting
+                    import ast as _ast
+                    try:
+                        tree = _ast.parse(module)
+                    except SyntaxError as e:
+                        return f"Error: reconstructed module is not valid Python: {e}"
+                    methods = []
+                    for node in tree.body:
+                        if isinstance(node, _ast.ClassDef) and node.name == class_name:
+                            methods = [m.name for m in node.body if isinstance(m, _ast.FunctionDef)]
+                    # Emit as .proposed artifact (operator creates the real file)
+                    ts = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+                    pdir = os.path.join(REPO_ROOT, "docs", "_daemon_proposals")
+                    os.makedirs(pdir, exist_ok=True)
+                    sn = target_rel.replace("/", "_").replace("\\", "_").replace(".", "_")
+                    proposed = os.path.join(pdir, f"newfile_{ts}_{sn}.proposed")
+                    with open(proposed, "w", encoding="utf-8") as f:
+                        f.write(module)
+                    pr = os.path.relpath(proposed, REPO_ROOT).replace("\\", "/")
+                    _GOV_LOG.proposed(target_rel, proposed,
+                                      _DAEMON_IDENTITY.public_key if _DAEMON_IDENTITY else "(unsigned)")
+                    return (
+                        f"EXTRACTED (diff-oracle, deterministic):\n"
+                        f"  class {class_name} with {len(methods)} methods\n"
+                        f"  reconstructed {len(removed)} lines from {diff_path}\n"
+                        f"  AST-valid: yes\n"
+                        f"  artifact: {pr}\n"
+                        f"  create with: cp {pr} {target_rel}\n"
+                        f"Methods: {', '.join(methods)}"
+                    )
+                except Exception as e:
+                    return f"Error during extract_with_diff: {e}"
+
+            elif name == "adversarial_verify":
+                artifact_path = args.get("artifact_path", "") or args.get("path", "")
+                diff_path = args.get("diff_path", "")
+                class_name = args.get("class_name", "") or None
+                if not artifact_path:
+                    return "Error: 'artifact_path' (or 'path') is required"
+                asafe = os.path.normpath(os.path.join(REPO_ROOT, artifact_path))
+                if not asafe.startswith(os.path.normpath(REPO_ROOT)):
+                    return "Error: Access denied (path traversal)"
+                dsafe = None
+                if diff_path:
+                    dsafe = os.path.normpath(os.path.join(REPO_ROOT, diff_path))
+                    if not dsafe.startswith(os.path.normpath(REPO_ROOT)):
+                        return "Error: Access denied (diff path traversal)"
+                av = adversarial_verify(
+                    asafe, diff_path=dsafe, class_name=class_name, repo_root=REPO_ROOT,
+                )
+                status = "ADVERSARIAL_VERIFIED" if av["ok"] else "ADVERSARIAL_FAILED"
+                lines = [
+                    f"{status}: {artifact_path}",
+                    f"  method: {av.get('method', '?')}",
+                    f"  artifact_hash: {av.get('artifact_hash', '?')}",
+                ]
+                if av.get("reconstructed_hash"):
+                    lines.append(f"  reconstructed_hash: {av['reconstructed_hash']}")
+                for fl in av.get("failures", []):
+                    lines.append(f"  FAIL: {fl}")
+                return "\n".join(lines)
+
+            elif name == "residue_status":
+                queue_path = os.path.join(
+                    REPO_ROOT, "docs", "_daemon_proposals", "decon_residue_queue.json",
+                )
+                if not os.path.isfile(queue_path):
+                    return "Error: decon_residue_queue.json not found"
+                try:
+                    data = json.load(open(queue_path, encoding="utf-8"))
+                except Exception as e:
+                    return f"Error reading queue: {e}"
+                items = data.get("items", [])
+                pending = [i for i in items if i.get("status") == "pending"]
+                done = [i for i in items if i.get("status") in ("applied", "proposed")]
+                lines = [
+                    f"DECON-1 residue queue ({len(items)} total)",
+                    f"  pending: {len(pending)}  done/proposed: {len(done)}",
+                    "",
+                ]
+                for it in items:
+                    st = it.get("status", "?")
+                    lines.append(
+                        f"  [{st}] {it.get('id', '?')} → {it.get('target_file', '?')}"
+                    )
+                    if it.get("agent_commit"):
+                        lines.append(f"         commit: {it['agent_commit']}")
+                return "\n".join(lines)
+
+            elif name == "health_monitor":
+                # Tier 2.1 — on-demand health probes (D-DAEMON-2; propose-only findings)
+                import re as _re
+                import sys as _sys
+                _bridge = os.path.join(REPO_ROOT, "bridge")
+                if _bridge not in _sys.path:
+                    _sys.path.insert(0, _bridge)
+                from vapi_bridge.daemon_health_monitor import (
+                    HealthMonitorInput,
+                    detect_device_id_firmware_drift,
+                    detect_device_id_formula_conflict,
+                    format_findings_markdown,
+                    run_health_monitor,
+                )
+                inv_live = None
+                try:
+                    r = subprocess.run(
+                        [sys.executable, "scripts/vapi_invariant_gate.py", "--report"],
+                        cwd=REPO_ROOT, capture_output=True, text=True, timeout=120,
+                    )
+                    m = _re.search(r"(\d+)\s+invariants?", r.stdout + r.stderr, re.I)
+                    if m:
+                        inv_live = int(m.group(1))
+                except Exception:
+                    pass
+                device_conflict = detect_device_id_formula_conflict(REPO_ROOT)
+                firmware_drift = detect_device_id_firmware_drift(REPO_ROOT)
+                gic_data = self._bridge_get("/bridge/grind-chain-status")
+                gic_hours = None
+                if isinstance(gic_data, dict):
+                    # Best-effort: use hours_since_last if bridge exposes it
+                    gic_hours = gic_data.get("hours_since_last_link")
+                inp = HealthMonitorInput(
+                    gic_hours_since_last_link=gic_hours,
+                    invariant_count_live=inv_live,
+                    device_id_formula_conflict=device_conflict,
+                    device_id_firmware_drift=firmware_drift,
+                )
+                findings = run_health_monitor(inp)
+                return format_findings_markdown(findings)
+
+            elif name == "methodology":
+                # TIER 1 methodology registry: query/add lessons by failure class.
+                action = args.get("action", "query")
+                if action == "add":
+                    fc = args.get("failure_class", "")
+                    if not fc:
+                        return "Error: 'failure_class' required for add"
+                    _METHODOLOGY.add(
+                        fc, args.get("anti_pattern", ""), args.get("correct_pattern", ""),
+                        args.get("agent_commit", ""), args.get("discovered", ""),
+                    )
+                    return f"Methodology entry '{fc}' recorded."
+                entries = _METHODOLOGY.query(args.get("keywords", ""))
+                if not entries:
+                    return "No methodology entries match."
+                lines = [f"Methodology ({len(entries)} entr{'y' if len(entries)==1 else 'ies'}):"]
+                for cls, e in entries.items():
+                    lines.append(f"\n[{cls}] (discovered {e.get('discovered','?')})")
+                    lines.append(f"  AVOID: {e.get('anti_pattern','')[:200]}")
+                    lines.append(f"  DO:    {e.get('correct_pattern','')[:200]}")
+                return "\n".join(lines)
+
             # ── Unknown tool fallback ────────────────────────────────────
             else:
                 return f"Error: Unknown tool '{name}'"
 
+        except GovernanceHardStop:
+            # L7: a hard stop must NOT be stringified into an ordinary error
+            # the LLM loop can read past. Re-raise so _execute_tool (766) and
+            # process_message (3569) terminate the session. F-DAEMON-GATE-1.
+            raise
         except subprocess.TimeoutExpired:
             return f"Error: Tool '{name}' timed out"
         except Exception as e:
@@ -2815,6 +3571,25 @@ class QorTrollerBrain:
                     "type": "partial",
                 }
 
+            except GovernanceHardStop as e:
+                # L7: finalize_plan() raised a hard stop.
+                # Surface the review path to the operator and halt cleanly.
+                # No further tool calls — this is the terminal state.
+                msg = (
+                    f"ENGINEERING SESSION COMPLETE — operator review required.\n\n"
+                    f"Review package: {e.review_path}\n"
+                    f"Plan: {e.plan_name}\n\n"
+                    f"No changes have been committed or applied.\n"
+                    f"Apply proposals you approve with: git apply <diff_file>"
+                )
+                msg_id = self.memory.add_message("assistant", msg)
+                self.memory.set_status("idle")
+                return {
+                    "response": msg,
+                    "message_id": msg_id,
+                    "tool_iterations": iteration,
+                    "type": "final",
+                }
             except Exception as e:
                 error_msg = f"Error processing message: {e}"
                 self.memory.set_status("idle")
@@ -2836,10 +3611,43 @@ _brain: Optional[QorTrollerBrain] = None
 
 def _get_brain() -> QorTrollerBrain:
     """Lazy-init the global brain singleton."""
-    global _memory, _brain
+    global _memory, _brain, _DAEMON_IDENTITY
     if _brain is None:
+        # Governance self-test runs BEFORE any tool can be invoked.
+        # Raises AssertionError and aborts boot if any invariant is violated.
+        result = governance_self_test()
+        print(f"[daemon] {result}", flush=True)
+
+        # Lazy-init daemon identity (key outside writable scope).
+        from _daemon_tools_schema import DaemonIdentity
+        try:
+            _DAEMON_IDENTITY = DaemonIdentity(_DAEMON_KEY_PATH)
+            print(f"[daemon] identity public key: {_DAEMON_IDENTITY.public_key[:16]}...", flush=True)
+        except SigningError as e:
+            # Boot fails if identity cannot be established — proposals would
+            # be unsigned and indistinguishable from forged (L6 fix).
+            raise RuntimeError(f"Daemon identity init failed — cannot boot: {e}") from e
+
         _memory = MemoryStore()
         _brain = QorTrollerBrain(_memory)
+
+        # Print chain status so genesis is immediately visible when it fires.
+        chain_len = _DAEMON_COMMIT_CHAIN.chain_length()
+        if chain_len == 0:
+            print(
+                "[daemon] AGENT-COMMIT chain: GENESIS PENDING — "
+                "first finalize_plan() will produce link #1. "
+                "Record that commitment hash in CLAUDE.md immediately.",
+                flush=True,
+            )
+        else:
+            last = _DAEMON_COMMIT_CHAIN.get_last_commitment()
+            print(
+                f"[daemon] AGENT-COMMIT chain: {chain_len} link(s), "
+                f"head={last.hex()[:16]}...",
+                flush=True,
+            )
+
     return _brain
 
 

@@ -50,6 +50,7 @@ load_dotenv(ROOT / "contracts" / ".env")
 
 from vapi_bridge.device_birth_cert import (
     CERT_VERSION, DeviceBirthCertificate, sign_cert, compute_cert_hash, cert_to_json,
+    resolve_device_id_hex,
 )
 from vapi_bridge.manufacturer_root_ca import (
     DEFAULT_ROOT_CA_KEY_PATH, ManufacturerRootCA, QORTROLLER_FOUNDATION_MFG_ID,
@@ -138,8 +139,11 @@ def _controller_model_keccak(model: str) -> bytes:
 def main():
     ap = argparse.ArgumentParser(description="Provision a DeviceBirthCertificate "
                                              "and register on VAPIManufacturerDeviceRegistry.")
-    ap.add_argument("--device-id", required=True,
-                    help="32-byte device id (hex, optionally 0x-prefixed)")
+    ap.add_argument("--device-id", default=None,
+                    help="32-byte device id (hex, optionally 0x-prefixed). "
+                         "Omitted: derived as keccak256(65B uncompressed SEC1 "
+                         "pubkey) per DEVICE_ID_CANON_v1. If set, must match "
+                         "the derived value or the ceremony aborts.")
     ap.add_argument("--controller-model", required=True, choices=list(KNOWN_MODELS) + ["BASIC"],
                     help="Controller model (e.g. CFI-ZCP1). BASIC = generic / third-party.")
     ap.add_argument("--device-source", choices=["host", "atecc"], default="host",
@@ -172,13 +176,6 @@ def main():
         sys.exit(2)
 
     proof_tier = args.proof_tier or KNOWN_MODELS.get(args.controller_model, "BASIC")
-    device_id_bytes = _to_bytes32(args.device_id)
-    print(f"[CEREMONY] Path A Arc 1 — DeviceBirthCertificate provisioning")
-    print(f"  device_id        : 0x{device_id_bytes.hex()}")
-    print(f"  controller_model : {args.controller_model}")
-    print(f"  signing_path     : {args.signing_path}")
-    print(f"  proof_tier       : {proof_tier}")
-    print(f"  device_source    : {args.device_source}")
 
     # 1. Pull device pubkey (compressed 33B)
     if args.device_source == "host":
@@ -188,6 +185,20 @@ def main():
     pubkey_hash = hashlib.sha256(device_pubkey).digest()
     print(f"  device_pubkey    : {device_pubkey.hex()}")
     print(f"  pubkeyHash       : 0x{pubkey_hash.hex()}")
+
+    try:
+        device_id_hex = resolve_device_id_hex(args.device_id, device_pubkey.hex())
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        sys.exit(2)
+    device_id_bytes = _to_bytes32(device_id_hex)
+    print(f"[CEREMONY] Path A Arc 1 — DeviceBirthCertificate provisioning")
+    print(f"  device_id        : 0x{device_id_bytes.hex()} "
+          f"({'derived' if args.device_id is None else 'CLI verified'})")
+    print(f"  controller_model : {args.controller_model}")
+    print(f"  signing_path     : {args.signing_path}")
+    print(f"  proof_tier       : {proof_tier}")
+    print(f"  device_source    : {args.device_source}")
 
     # 2. Load / generate the ManufacturerRootCA
     root_ca = ManufacturerRootCA(key_path=args.root_ca_key_path,

@@ -21,6 +21,16 @@ All of that is complete and waiting.
 
 Arc 2 wires the stub to real hardware. One session. Four commits.
 
+**Identity formula (F-KEY-1 + DEVICE_ID_CANON_v1):** device identity is
+`keccak256(65-byte uncompressed SEC1 P-256 pubkey)` (0x04 prefix included).
+The ATECC608 signs only; the 32-byte device_id is computed by the
+provisioning host/ESP32 from the exported pubkey and written to a data slot
+(ATCA_SLOT_PRECOMPUTED_DEVICE_ID) at manufacturing time. Firmware reads the
+slot at init. See `wiki/methodology/DEVICE_ID_CANON_v1.md` and the
+F-KEY-1 rule. The legacy serial-mixed identity formula has been removed from
+atca_signer.c (see F-KEY-1 and the canon doc). Provisioning now writes the
+keccak-derived value to the designated data slot.
+
 ## Honest framing (locked before implementation starts)
 
 Path A v1 composite signature structure:
@@ -141,14 +151,30 @@ class SecureElementBackend:
         if status != ATCA_SUCCESS:
             raise RuntimeError(f"ATECC608A init failed: status {status:#04x}")
         self._key_slot = key_slot
-        self._device_id = self._read_serial()
+        # F-KEY-1 + DEVICE_ID_CANON_v1: device_id is keccak256(65B uncompressed pubkey).
+        # Option A (preferred): read the pre-stored value from the data slot written
+        # at provisioning. Option B (verification): export pubkey, compute here using
+        # the same pure function as bridge (keccak of uncompressed).
+        self._device_id = self._load_precomputed_device_id_or_derive()
         self._pubkey_compressed = self._load_or_generate_pubkey()
         self._mldsa_keypair = self._load_mldsa_keypair()  # ~/.vapi/device_mldsa44_arc2.json
 
-    def _read_serial(self) -> str:
-        serial = bytearray(9)
-        atcab_read_serial_number(serial)
-        return "atecc-" + serial.hex()
+    def _load_precomputed_device_id_or_derive(self) -> str:
+        # Try slot first (production path after provisioning wrote it).
+        # Fall back to export+derive for bring-up / cross-check.
+        # Must match bridge/vapi_bridge/signing_backends/secure_element.derive_device_id_from_p256_pubkey
+        # and codec.compute_device_id exactly.
+        buf = bytearray(32)
+        if atcab_read_bytes_zone(0x02, 8, 0, buf, 32) == ATCA_SUCCESS:  # DATA zone, slot 8
+            return buf.hex()
+        # derive path (export pubkey, feed to canon keccak)
+        pub = bytearray(64)
+        atcab_get_pubkey(self._key_slot, pub)
+        # Build 65B uncompressed SEC1 (0x04 || X || Y) from the 64B XY returned by atcab
+        sec1 = b'\x04' + bytes(pub)
+        from hashlib import sha3_256  # placeholder; real uses the ethereum-keccak used by codec
+        # In real impl call the same keccak as bridge (eth_hash or equivalent)
+        return sha3_256(sec1).hexdigest()  # NOTE: replace with canonical keccak256(65B)
 
     def _load_or_generate_pubkey(self) -> bytes:
         locked = AtcaReference(False)
@@ -213,7 +239,7 @@ class SecureElementBackend:
   ML-DSA half
 - `get_pubkey()` returns `CompositePubkey` with 33-byte compressed ECDSA-P256
   key
-- `get_device_id()` returns string starting with `"atecc-"`
+- `get_device_id()` returns the 64-hex canon device_id (keccak256 of the 65B pubkey per DEVICE_ID_CANON_v1); no "atecc-" prefix, no serial embedding
 
 **These tests run against real hardware.** Mark with `@pytest.mark.hardware`
 and document in `pytest.ini` that `--hardware` flag is required:
@@ -291,7 +317,7 @@ Execute in sequence:
 Confirm log shows `[Path A] SecureElementBackend active`.
 
 **Step 2**: Run `provision_device_mfg.py --dry-run` against the live
-`SecureElementBackend`. Confirm: device_id reads from chip serial, pubkey reads
+`SecureElementBackend`. Confirm: device_id is the precomputed canon value (keccak256 of exported pubkey) read from the provisioned data slot (or re-derived from exported pubkey for verification); pubkey reads
 from slot 0, `DeviceBirthCertificate` generates correctly with
 `signing_path: "A"`.
 
@@ -317,7 +343,7 @@ aren't met — that's the honest state. `signing_path: "A"` is what matters here
 
 **Step 6**: Update `docs/path-a-manufacturing-spec.md` §1 to add: "Path A v1
 reference implementation demonstrated: ATECC608A + CH341A USB-I2C + QorTroller
-bridge. Device `atecc-<serial>` registered on IoTeX testnet at `<tx_hash>`."
+bridge. Device (canon device_id from pubkey per DEVICE_ID_CANON_v1) registered on IoTeX testnet at `<tx_hash>`."
 
 Commit message captures: device serial, registration tx hash, block number. The
 on-chain anchor is the receipt that Path A v1 works end-to-end.
@@ -337,7 +363,7 @@ confirmed. **Hold for operator review before Commit 4.**
 **MEMORY.md updates:**
 
 - Arc 2 complete. `SecureElementBackend` live, hardware-tested.
-- ATECC608A device serial: `atecc-<serial>` registered in
+- ATECC608A: canon device_id (keccak256(pubkey)) registered in
   `VAPIManufacturerDeviceRegistry` at `<addr>`.
 - Registration tx: `<hash>`, block `<N>`, cost `<X>` IOTX.
 - `signing_path: "A"` confirmed in session-status.

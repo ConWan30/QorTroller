@@ -243,7 +243,7 @@ INVARIANTS: list[Invariant] = [
     Invariant(
         id="INV-022",
         description="governance_provenance_chain table + insert method in store (Phase 226)",
-        file="bridge/vapi_bridge/store/_core.py",
+        file="bridge/vapi_bridge/store/_core.py|bridge/vapi_bridge/store/chain_log.py",
         pattern=r"governance_provenance_chain|insert_governance_provenance",
         min_matches=1,
     ),
@@ -676,7 +676,7 @@ INVARIANTS: list[Invariant] = [
     Invariant(
         id="INV-VPM-CSP-001",
         description="VPM HTML response FROZEN security headers pinned in bridge/vapi_bridge/operator_api.py — _VPM_HTML_RESPONSE_HEADERS dict carries the Phase O4 plan section 3 Stream B.2 CSP set: default-src 'none' / style-src 'unsafe-inline' / script-src 'unsafe-inline' / img-src data: / base-uri 'none' / frame-ancestors 'self' / form-action 'none'. The 'unsafe-inline' flags are INTENTIONAL — VPMs are self-contained single-file artifacts pre-validated by compile_vpm_artifact static guards; default-src 'none' + no connect-src makes runtime network impossible regardless of inline JS behavior.",
-        file="bridge/vapi_bridge/operator_api.py",
+        file="bridge/vapi_bridge/operator_api/_app.py",
         pattern=r"_VPM_HTML_RESPONSE_HEADERS = \{",
         min_matches=1,
     ),
@@ -690,7 +690,7 @@ INVARIANTS: list[Invariant] = [
     Invariant(
         id="INV-VPM-COMPILE-ENDPOINT-001",
         description="POST /operator/vpm-compile bridge endpoint route pinned in bridge/vapi_bridge/operator_api.py — Phase O4 Stream B.4 write endpoint that dispatches compile requests to one of 6 active VPM compilers per _VPM_COMPILER_REGISTRY and records the result row in vpm_artifact_log. Full operator key required (api_key query param matches cfg.operator_api_key). Worker-thread compile dispatch via asyncio.to_thread keeps the event loop responsive.",
-        file="bridge/vapi_bridge/operator_api.py",
+        file="bridge/vapi_bridge/operator_api/_app.py",
         pattern=r'@app\.post\("/operator/vpm-compile"\)',
         min_matches=1,
     ),
@@ -1566,6 +1566,24 @@ def _hash_file_region(path: Path, pattern: str) -> tuple[str, int]:
     return (digest, len(matches))
 
 
+def _hash_invariant_region(inv: Invariant) -> tuple[str, int]:
+    """Hash matching lines for one invariant (single file or pipe-separated store mixins)."""
+    if "|" not in inv.file:
+        return _hash_file_region(REPO_ROOT / inv.file, inv.pattern)
+    matches: list[str] = []
+    for rel in inv.file.split("|"):
+        path = REPO_ROOT / rel.strip()
+        if not path.exists():
+            return ("FILE_NOT_FOUND", 0)
+        text = path.read_text(encoding="utf-8", errors="replace")
+        matches.extend(
+            line for line in text.splitlines()
+            if re.search(inv.pattern, line, re.IGNORECASE)
+        )
+    digest = hashlib.sha256("\n".join(matches).encode()).hexdigest()
+    return (digest, len(matches))
+
+
 def check_invariants(proposal_type: str = "protocol") -> list[dict]:
     """Run invariant checks for the given proposal-type. Returns list of result dicts.
 
@@ -1589,15 +1607,15 @@ def check_invariants(proposal_type: str = "protocol") -> list[dict]:
     invariants = _select_invariants_for_proposal_type(proposal_type)
     results = []
     for inv in invariants:
-        path = REPO_ROOT / inv.file
-        digest, count = _hash_file_region(path, inv.pattern)
+        paths = [REPO_ROOT / p.strip() for p in inv.file.split("|")]
+        digest, count = _hash_invariant_region(inv)
         result = {
             "id": inv.id,
             "description": inv.description,
             "file": inv.file,
             "digest": digest,
             "match_count": count,
-            "file_found": path.exists(),
+            "file_found": all(p.exists() for p in paths),
             "pattern_matched": count >= inv.min_matches,
         }
         results.append(result)

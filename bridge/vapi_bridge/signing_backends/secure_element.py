@@ -18,6 +18,28 @@ from typing import Literal
 from .base import CompositePubkey, CompositeSignature
 
 
+def derive_device_id_from_p256_pubkey(pubkey_bytes: bytes) -> str:
+    """keccak256(65B uncompressed SEC1) per DEVICE_ID_CANON_v1.
+
+    F-KEY-1 (Phase 1A/1B): provisioning ceremony (or ESP32 at provision time)
+    exports the P-256 pubkey from the silicon (or host composite), computes
+    device_id = keccak256(uncompressed), and for Arc 2 stores the precomputed
+    32B value into an ATECC data slot.
+
+    This helper is the bridge-side reference implementation of that computation.
+    It is used by tests, provision_device_mfg derive, and will be called by
+    the real SecureElementBackend.get_device_id() once hardware is wired
+    (it will read the slot value or re-derive from exported pubkey for
+    verification; never SHA-256(pubkey||serial), never claim "in-silicon"
+    derivation for identity).
+
+    Pure function; no hardware required.
+    """
+    from ..device_birth_cert import compute_device_id_from_pubkey_hex
+
+    return compute_device_id_from_pubkey_hex(pubkey_bytes.hex())
+
+
 class SecureElementBackend:
     """Path A silicon-rooted SigningBackend — NOT YET IMPLEMENTED."""
 
@@ -40,6 +62,10 @@ class SecureElementBackend:
         raise NotImplementedError
 
     def get_device_id(self) -> str:  # pragma: no cover
+        # Phase 1B will implement: read precomputed device_id from ATECC data slot
+        # (written by provisioning using derive_device_id_from_p256_pubkey on
+        # exported pubkey) or return the canon keccak of the exported pubkey.
+        # Never fall back to serial-based or SHA-256 formula.
         raise NotImplementedError
 
     def signing_path(self) -> Literal["A", "B"]:  # pragma: no cover

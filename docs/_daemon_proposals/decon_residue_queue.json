@@ -1,0 +1,258 @@
+{
+  "version": 1,
+  "description": "DECON-1 residue drain queue \u2014 smallest-first store domains, then operator_api splits.",
+  "updated": "2026-06-19",
+  "items": [
+    {
+      "id": "store_zkba_vpm",
+      "domain": "zkba_vpm_witness",
+      "target_file": "bridge/vapi_bridge/store/zkba_vpm.py",
+      "status": "applied",
+      "agent_commit": null,
+      "notes": "Phase 2.1 \u2014 pre-daemon"
+    },
+    {
+      "id": "store_marketplace",
+      "domain": "marketplace",
+      "target_file": "bridge/vapi_bridge/store/marketplace.py",
+      "status": "applied",
+      "agent_commit": "ec94cbddbca457b993f4f9860cf252bfbf5b4fb353e6f0deafcb89e8c85ca057",
+      "notes": "2026-06-18 marketplace extraction cycle"
+    },
+    {
+      "id": "store_consent",
+      "domain": "consent",
+      "target_file": "bridge/vapi_bridge/store/consent_mixin.py",
+      "status": "applied",
+      "agent_commit": null,
+      "notes": "2026-06-18 consent extraction cycle"
+    },
+    {
+      "id": "store_snapshots_grind",
+      "domain": "snapshots_grind",
+      "target_file": "bridge/vapi_bridge/store/snapshots.py",
+      "status": "applied",
+      "agent_commit": null,
+      "method_count_est": 30,
+      "order": 1,
+      "notes": "2026-06-18 autonomous extraction \u2014 18 methods, diff-oracle script"
+    },
+    {
+      "id": "store_ioswarm",
+      "domain": "ioswarm",
+      "target_file": "bridge/vapi_bridge/store/ioswarm.py",
+      "status": "applied",
+      "agent_commit": null,
+      "method_count_est": 30,
+      "order": 2,
+      "notes": "2026-06-18 autonomous extraction \u2014 26 methods"
+    },
+    {
+      "id": "store_chain_anchors",
+      "domain": "chain_anchors",
+      "target_file": "bridge/vapi_bridge/store/chain_log.py",
+      "status": "applied",
+      "agent_commit": null,
+      "method_count_est": 40,
+      "order": 3,
+      "notes": "2026-06-18 autonomous extraction \u2014 31 methods"
+    },
+    {
+      "id": "store_tournament_activation",
+      "domain": "tournament_activation",
+      "target_file": "bridge/vapi_bridge/store/tournament.py",
+      "status": "applied",
+      "agent_commit": "93d18030",
+      "method_count_est": 40,
+      "order": 4,
+      "notes": "2026-06-18 TournamentMixin extraction"
+    },
+    {
+      "id": "store_operator_initiative",
+      "domain": "operator_initiative",
+      "target_file": "bridge/vapi_bridge/store/operator_initiative.py",
+      "status": "applied",
+      "agent_commit": "1204f69f",
+      "method_count_est": 40,
+      "order": 5,
+      "notes": "2026-06-18 OperatorInitiativeMixin extraction"
+    },
+    {
+      "id": "store_vhp_credentials",
+      "domain": "vhp_credentials",
+      "target_file": "bridge/vapi_bridge/store/vhp.py",
+      "status": "applied",
+      "agent_commit": "68eb3b18",
+      "method_count_est": 50,
+      "order": 6,
+      "notes": "2026-06-18 VhpMixin extraction"
+    },
+    {
+      "id": "store_agents_rulings",
+      "domain": "agents_rulings",
+      "target_file": "bridge/vapi_bridge/store/agents.py",
+      "status": "applied",
+      "agent_commit": "ee8fd36b",
+      "method_count_est": 70,
+      "order": 7,
+      "notes": "2026-06-19 AgentsRulingsMixin extraction (85 methods)"
+    },
+    {
+      "id": "store_biometric",
+      "domain": "biometric",
+      "target_file": "bridge/vapi_bridge/store/biometric.py",
+      "status": "applied",
+      "agent_commit": "e81a0a62",
+      "method_count_est": 70,
+      "order": 8,
+      "notes": "2026-06-19 BiometricMixin extraction"
+    },
+    {
+      "id": "store_calibration",
+      "domain": "calibration",
+      "target_file": "bridge/vapi_bridge/store/calibration.py",
+      "status": "applied",
+      "agent_commit": "ed286220",
+      "method_count_est": 120,
+      "order": 9,
+      "notes": "2026-06-19 CalibrationMixin extraction (85 methods)"
+    },
+    {
+      "id": "api_health_gate",
+      "domain": "health_gate",
+      "target_file": "bridge/vapi_bridge/operator_api/health_gate.py",
+      "status": "applied",
+      "agent_commit": "f8c4c4ac",
+      "route_count_est": 3,
+      "order": 10,
+      "notes": "2026-06-19 register-function split; operator_api.py -> package _app.py"
+    },
+    {
+      "id": "api_agent_consent",
+      "domain": "agent_consent",
+      "target_file": "bridge/vapi_bridge/operator_api/agent_consent.py",
+      "status": "pending",
+      "agent_commit": null,
+      "route_count_est": 12,
+      "order": 11
+    },
+    {
+      "id": "api_agent_zkba_vpm",
+      "domain": "agent_zkba_vpm",
+      "target_file": "bridge/vapi_bridge/operator_api/agent_zkba_vpm.py",
+      "status": "pending",
+      "agent_commit": null,
+      "route_count_est": 12,
+      "order": 12
+    },
+    {
+      "id": "api_agent_ioswarm",
+      "domain": "agent_ioswarm",
+      "target_file": "bridge/vapi_bridge/operator_api/agent_ioswarm.py",
+      "status": "pending",
+      "agent_commit": null,
+      "route_count_est": 15,
+      "order": 13
+    },
+    {
+      "id": "api_agent_calibration",
+      "domain": "agent_calibration",
+      "target_file": "bridge/vapi_bridge/operator_api/agent_calibration.py",
+      "status": "pending",
+      "agent_commit": null,
+      "route_count_est": 50,
+      "order": 14
+    },
+    {
+      "id": "api_agent_biometric",
+      "domain": "agent_biometric",
+      "target_file": "bridge/vapi_bridge/operator_api/agent_biometric.py",
+      "status": "pending",
+      "agent_commit": null,
+      "route_count_est": 35,
+      "order": 15
+    },
+    {
+      "id": "api_agent_marketplace",
+      "domain": "agent_marketplace_curator",
+      "target_file": "bridge/vapi_bridge/operator_api/agent_marketplace.py",
+      "status": "pending",
+      "agent_commit": null,
+      "route_count_est": 25,
+      "order": 16
+    },
+    {
+      "id": "api_agent_tournament",
+      "domain": "agent_tournament",
+      "target_file": "bridge/vapi_bridge/operator_api/agent_tournament.py",
+      "status": "pending",
+      "agent_commit": null,
+      "route_count_est": 25,
+      "order": 17
+    },
+    {
+      "id": "api_agent_operator_initiative",
+      "domain": "agent_operator_initiative",
+      "target_file": "bridge/vapi_bridge/operator_api/agent_operator_initiative.py",
+      "status": "pending",
+      "agent_commit": null,
+      "route_count_est": 15,
+      "order": 18
+    },
+    {
+      "id": "api_agent_grind",
+      "domain": "agent_grind",
+      "target_file": "bridge/vapi_bridge/operator_api/agent_grind.py",
+      "status": "pending",
+      "agent_commit": null,
+      "route_count_est": 20,
+      "order": 19
+    },
+    {
+      "id": "api_agent_supervisor",
+      "domain": "agent_supervisor",
+      "target_file": "bridge/vapi_bridge/operator_api/agent_supervisor.py",
+      "status": "pending",
+      "agent_commit": null,
+      "route_count_est": 40,
+      "order": 20
+    },
+    {
+      "id": "api_agent_misc",
+      "domain": "agent_misc",
+      "target_file": "bridge/vapi_bridge/operator_api/agent_misc.py",
+      "status": "pending",
+      "agent_commit": null,
+      "route_count_est": 80,
+      "order": 21
+    }
+  ],
+  "findings": [
+    {
+      "id": "F-DECON2-5",
+      "severity": "flake-debt",
+      "status": "open",
+      "title": "Order-dependent import-state pollution surfaces test_mcp_audit_tool_wrappers failures in multi-file batches",
+      "symptom": "12 test_mcp_audit_tool_wrappers tests fail in batch with AttributeError: module 'knowledge_server'/'unified_server' has no attribute 'vapi_audit_*' (+ AssertionError 'Missing audit tools'). Pass when the file is run in isolation.",
+      "decoupled_from_extractions": true,
+      "evidence": "Four-axis proof. (1) ISOLATION-PASS: the 12 mcp_audit tests pass 12/12 when test_mcp_audit_tool_wrappers.py is run alone on HEAD (162s) -> not a logic bug, batch-only. (2) BYTE-IDENTICAL TRACKED SURFACE: git diff --stat main HEAD -- knowledge_server.py unified_server.py bridge/tests/test_mcp_audit_tool_wrappers.py is EMPTY, and git log main..HEAD for the test file is EMPTY -> no tracked HEAD change (incl. store extractions) can be the cause. (3) EQUALIZED MAIN-MATCH: with HEAD's untracked root MCP modules copied into the merge-base worktree, the failing node-id set is identical 22 main<->HEAD (logs/decon2_head_10batch.txt vs logs/decon2_main_10batch.txt). (4) CLEAN-BASELINE RECONCILIATION: a clean main worktree WITHOUT the untracked MCP modules shows only the 10 non-mcp failures (logs/decon2_baseline_main.txt); the 12 mcp_audit deltas appear only when the untracked working-tree MCP modules are present. The causal variable is untracked-module presence + batch import order, NOT tracked code. Zero Store/MRO failures; the mcp_audit victim does not import bridge.vapi_bridge.store.",
+      "exoneration_basis": "main-match (NOT WAL). Typed breakdown of the 22 (logs/decon2_head_typed.txt, --tb=line): 10 AttributeError + 10 assertion-family (9 AssertionError + 1 bare assert) + 2 TypeError; 0/22 lock/timeout. Node-set diff HEAD vs merge-base main: identical 22-node failing set, byte-identical, only-on-HEAD=[] only-on-MAIN=[]. The earlier 'WAL artifact' framing was incorrect for these; the correct (and shown) basis is SDK-21-style pre-existing main-match.",
+      "fix_when_convenient": "Add module-import isolation (reset knowledge_server/unified_server module globals or use importlib.reload fixture) in test_mcp_audit_tool_wrappers.py so it does not depend on which sibling imported the MCP servers first.",
+      "blocking": false,
+      "logged": "2026-06-19"
+    },
+    {
+      "id": "F-DAEMON-HEALTH-1",
+      "severity": "stale-guard-test",
+      "status": "closed",
+      "title": "test_detect_firmware_drift_on_live_repo asserted drift==True but the branch's own DEVICE_ID_CANON_v1 work closed the firmware seam",
+      "symptom": "bridge/tests/test_daemon_health_monitor.py::test_detect_firmware_drift_on_live_repo failed (assert False is True). detect_device_id_firmware_drift(REPO_ROOT) now returns False.",
+      "decoupled_from_extractions": true,
+      "evidence": "atca_signer.c rewritten to keccak256(65B SEC1 pubkey) per DEVICE_ID_CANON_v1 / F-KEY-1 (source comments: 'no on-chip serial concat, no legacy hash formula', 'never recomputes identity'). Zero superseded-pattern hits (SHA-256(pubkey||serial) / 'atecc-'+serial) in either FIRMWARE_OUTLIER_RELPATHS file, so the detector correctly returns False. Both daemon_health_monitor.py and its test are NEW ON BRANCH (not on main) -> not main-matchable; branch-internal inconsistency between Sprint 5 (added guard expecting drift) and the device_id-canon work (closed the seam).",
+      "exoneration_basis": "not a detection bug: detector is correct, the F-FW-2-DRIFT seam is provably closed in firmware source. Stale guard test left red by the very fix it guarded.",
+      "resolution": "Converted the assertion to a closed-seam regression guard (assert ... is False) with a comment: flips back to True/red if the superseded formula is ever reintroduced into a firmware outlier. 19/19 daemon suite green post-fix.",
+      "blocking": false,
+      "logged": "2026-06-19"
+    }
+  ]
+}

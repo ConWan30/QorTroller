@@ -26,6 +26,8 @@ const VIEWS = [
   { id: 'reference', num: '06', label: 'Reference',            accent: '#5bd6a3' },
   // Partner Brief — self-contained manufacturer/partner pitch deck (public, no auth).
   { id: 'partner',  num: '07', label: 'Partner · Brief',       accent: '#f0a868' },
+  // AI Cognitive Workbench - Conversational DeepSeek LLM assistant.
+  { id: 'chat',     num: '08', label: 'AI · Chat',             accent: GAMER.cyan },
 ]
 
 export function ViewSelector({ activeView, onViewChange }) {

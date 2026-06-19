@@ -30,6 +30,9 @@ from bridge.vapi_bridge.signing_backends import (
     CompositeSignature,
     CompositePubkey,
 )
+from bridge.vapi_bridge.signing_backends.secure_element import (
+    derive_device_id_from_p256_pubkey,
+)
 from bridge.vapi_bridge import composite_device_identity as cdi
 
 
@@ -131,3 +134,20 @@ def test_T_SB_6_shim_make_reattest_signer_still_verifies(tmp_key_path):
     # via the shim too so we exercise the full back-compat surface.
     kp = cdi.load_or_generate(tmp_key_path)
     assert c.verify(kp.public(), CHALLENGE_TAG, nonce, blob) is True
+
+
+# ── T-SB-7 ────────────────────────────────────────────────────────────────────
+
+def test_T_SB_7_derive_device_id_from_p256_pubkey_matches_canon_fixture():
+    """Arc 2 stub derives 581a836c from golden-vector uncompressed SEC1."""
+    import json
+    from pathlib import Path
+
+    fixture = json.loads(
+        (Path(__file__).resolve().parent / "fixtures" / "device_id_canon_demo.json")
+        .read_text(encoding="utf-8")
+    )
+    pubkey = bytes.fromhex(fixture["pubkey_hex"])
+    derived = derive_device_id_from_p256_pubkey(pubkey)
+    assert derived == fixture["device_id_hex"]
+    assert derived == "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8"

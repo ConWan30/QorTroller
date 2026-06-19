@@ -57,7 +57,9 @@ class DeviceBirthCertificate:
     before the cert is hashed for on-chain anchoring or persisted to disk.
     """
     version: str                              # cert format version (CERT_VERSION)
-    device_id_hex: str                        # bytes32 as 64 hex chars (no "0x")
+    device_id_hex: str                        # bytes32 as 64 hex chars (no "0x");
+                                              # MUST equal keccak256(65B uncompressed
+                                              # SEC1 pubkey) per DEVICE_ID_CANON_v1
     ecdsa_p256_pubkey_hex: str                # compressed SEC1, 66 hex chars (33 B)
     controller_model: str                     # "CFI-ZCP1" | "CFI-ZCT1" | ...
     manufacturer_id: str                      # "QorTrollerFoundation" | partner id
@@ -101,6 +103,97 @@ class DeviceBirthCertificate:
         d = {k: v for k, v in d.items() if v is not None}
         return json.dumps(d, sort_keys=True, separators=(",", ":"),
                           ensure_ascii=True).encode("utf-8")
+
+
+def compress_sec1_p256_pubkey(uncompressed: bytes) -> bytes:
+    """65-byte SEC1 0x04||X||Y -> 33-byte compressed 0x02/0x03||X."""
+    if len(uncompressed) != 65 or uncompressed[0] != 0x04:
+        raise ValueError(
+            f"expected 65-byte uncompressed SEC1 (0x04||X||Y), "
+            f"got len={len(uncompressed)} prefix=0x{uncompressed[0]:02x}"
+        )
+    x = uncompressed[1:33]
+    y = uncompressed[33:65]
+    prefix = b"\x02" if (y[-1] & 1) == 0 else b"\x03"
+    return prefix + x
+
+
+def decompress_sec1_p256_pubkey(pubkey_bytes: bytes) -> bytes:
+    """33-byte compressed or 65-byte uncompressed SEC1 P-256 -> 65-byte uncompressed."""
+    if len(pubkey_bytes) == 65 and pubkey_bytes[0] == 0x04:
+        return pubkey_bytes
+    if len(pubkey_bytes) != 33 or pubkey_bytes[0] not in (0x02, 0x03):
+        raise ValueError(
+            f"expected 33-byte compressed (0x02/0x03||X) or 65-byte uncompressed "
+            f"(0x04||X||Y), got len={len(pubkey_bytes)} prefix=0x{pubkey_bytes[0]:02x}"
+        )
+    from cryptography.hazmat.primitives.asymmetric.ec import (
+        EllipticCurvePublicKey,
+        SECP256R1,
+    )
+    from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+
+    pub = EllipticCurvePublicKey.from_encoded_point(SECP256R1(), pubkey_bytes)
+    return pub.public_bytes(Encoding.X962, PublicFormat.UncompressedPoint)
+
+
+def compute_device_id_from_pubkey_hex(ecdsa_p256_pubkey_hex: str) -> str:
+    """keccak256(65B uncompressed SEC1) per DEVICE_ID_CANON_v1; returns 64 hex chars."""
+    from .codec import compute_device_id
+
+    pubkey = bytes.fromhex(ecdsa_p256_pubkey_hex)
+    uncompressed = decompress_sec1_p256_pubkey(pubkey)
+    return compute_device_id(uncompressed).hex()
+
+
+def verify_device_id_matches_pubkey(
+    device_id_hex: str,
+    ecdsa_p256_pubkey_hex: str,
+) -> tuple[bool, str]:
+    """Verify device_id_hex == keccak256(uncompressed SEC1 ecdsa_p256_pubkey_hex).
+
+    Pure-local check against DEVICE_ID_CANON_v1. The cert stores compressed
+    device pubkey (33 B); canon hashes the 65-byte uncompressed form.
+    """
+    try:
+        expected = compute_device_id_from_pubkey_hex(ecdsa_p256_pubkey_hex)
+    except (ValueError, TypeError) as exc:
+        return False, f"device_id pubkey decode failed: {exc}"
+    claimed = device_id_hex.lower().removeprefix("0x")
+    if len(claimed) != 64:
+        return False, f"device_id_hex wrong length: {len(claimed)} != 64"
+    if claimed != expected:
+        return (
+            False,
+            f"device_id_hex mismatch: cert claims 0x{claimed} but "
+            f"keccak256(pubkey)=0x{expected} per DEVICE_ID_CANON_v1",
+        )
+    return True, ""
+
+
+def resolve_device_id_hex(
+    cli_device_id_hex: Optional[str],
+    ecdsa_p256_pubkey_hex: str,
+) -> str:
+    """Derive device_id from pubkey; if CLI value given, fail closed on mismatch.
+
+    Used by provision_device_mfg.py so Arc 1 ceremonies cannot anchor a cert
+    whose device_id_hex disagrees with DEVICE_ID_CANON_v1.
+    """
+    derived = compute_device_id_from_pubkey_hex(ecdsa_p256_pubkey_hex)
+    if cli_device_id_hex is None:
+        return derived
+    claimed = cli_device_id_hex.lower().removeprefix("0x")
+    if len(claimed) != 64:
+        raise ValueError(
+            f"--device-id must be 32 bytes (64 hex chars), got {len(claimed)}"
+        )
+    if claimed != derived:
+        raise ValueError(
+            f"--device-id mismatch: CLI claims 0x{claimed} but "
+            f"keccak256(pubkey)=0x{derived} per DEVICE_ID_CANON_v1"
+        )
+    return derived
 
 
 def compute_cert_hash(cert: DeviceBirthCertificate) -> bytes:
@@ -171,6 +264,12 @@ def verify_cert(cert: DeviceBirthCertificate) -> tuple[bool, str]:
     ok = verify_cert_signature(issuer_pub, body, sig_raw)
     if not ok:
         return False, "ECDSA-P256 signature verification failed"
+
+    ok_id, reason_id = verify_device_id_matches_pubkey(
+        cert.device_id_hex, cert.ecdsa_p256_pubkey_hex,
+    )
+    if not ok_id:
+        return False, reason_id
     return True, ""
 
 
