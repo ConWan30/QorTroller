@@ -114,3 +114,19 @@ def test_persistent_identity_keccak_matches_fixture(canon_vector: dict) -> None:
     expected = bytes.fromhex(canon_vector["device_id_hex"])
     assert _keccak256(pubkey) == expected
     assert _keccak256(pubkey) == _ethereum_keccak_pycryptodome(pubkey)
+
+
+def test_path_b_581a836c_still_valid_no_migration(canon_vector: dict) -> None:
+    """Existing MFG-registered Path B device_id unchanged under canon enforcement."""
+    from vapi_bridge.device_birth_cert import (
+        compress_sec1_p256_pubkey,
+        verify_device_id_matches_pubkey,
+    )
+
+    uncompressed = bytes.fromhex(canon_vector["pubkey_hex"])
+    compressed_hex = compress_sec1_p256_pubkey(uncompressed).hex()
+    ok, reason = verify_device_id_matches_pubkey(
+        canon_vector["device_id_hex"], compressed_hex,
+    )
+    assert ok, reason
+    assert canon_vector["device_id_hex"] == "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8"

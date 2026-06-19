@@ -33,6 +33,8 @@ import pytest
 from bridge.vapi_bridge.device_birth_cert import (
     CERT_VERSION, DeviceBirthCertificate,
     cert_from_json, cert_to_json, compute_cert_hash, sign_cert, verify_cert,
+    compress_sec1_p256_pubkey, verify_device_id_matches_pubkey,
+    resolve_device_id_hex,
 )
 from bridge.vapi_bridge.manufacturer_root_ca import ManufacturerRootCA
 
@@ -57,12 +59,21 @@ def root_ca(tmp_ca_key_path):
     return ManufacturerRootCA(key_path=tmp_ca_key_path)
 
 
+def _golden_compressed_pubkey_hex() -> str:
+    """Path B reference device — compressed form of device_id_canon_demo fixture."""
+    uncompressed = bytes.fromhex(
+        "042adcdb3663a318c9ea385df654fdb09b479366ec9046cc5e02115f3202f7ec"
+        "1b56d5db4d01a0d341782df9843aa03c700c19d0d4c546299c4eea77b62b000f5e"
+    )
+    return compress_sec1_p256_pubkey(uncompressed).hex()
+
+
 def _make_unsigned_cert(issuer_pubkey_hex: str) -> DeviceBirthCertificate:
-    """Helper — minimal Path B FULL DualSense Edge cert (no atecc_chip_id)."""
+    """Helper — Path B FULL DualSense Edge cert aligned to DEVICE_ID_CANON_v1."""
     return DeviceBirthCertificate(
         version=CERT_VERSION,
         device_id_hex="581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8",
-        ecdsa_p256_pubkey_hex="02" + "ab" * 32,  # compressed dummy (33 B = 66 hex)
+        ecdsa_p256_pubkey_hex=_golden_compressed_pubkey_hex(),
         controller_model="CFI-ZCP1",
         manufacturer_id="QorTrollerFoundation",
         manufacturing_date="2026-05-26T03:11:00Z",
@@ -217,3 +228,29 @@ def test_T_DBC_6_corrupted_signature_specifically_fails_crypto_path(root_ca):
     assert reason == "ECDSA-P256 signature verification failed", (
         f"expected crypto path failure, got: {reason!r}"
     )
+
+
+# ── T-DBC-7 ───────────────────────────────────────────────────────────────────
+
+def test_T_DBC_7_device_id_mismatch_fails_verify(root_ca):
+    """device_id_hex must bind to ecdsa_p256_pubkey_hex per DEVICE_ID_CANON_v1."""
+    cert = _make_unsigned_cert(root_ca.issuer_pubkey_hex())
+    cert.device_id_hex = (
+        "c8fa05a310f1037c244c9578b6a5a9aa739fe903be8a0a9fcd0cbca0b8f61387"
+    )
+    sign_cert(cert, root_ca)
+    ok, reason = verify_cert(cert)
+    assert not ok
+    assert "device_id_hex mismatch" in reason
+
+
+def test_T_DBC_8_resolve_device_id_derives_and_rejects_mismatch():
+    pubkey_hex = _golden_compressed_pubkey_hex()
+    derived = resolve_device_id_hex(None, pubkey_hex)
+    assert derived == "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8"
+    assert resolve_device_id_hex(derived, pubkey_hex) == derived
+    with pytest.raises(ValueError, match="device-id mismatch"):
+        resolve_device_id_hex(
+            "c8fa05a310f1037c244c9578b6a5a9aa739fe903be8a0a9fcd0cbca0b8f61387",
+            pubkey_hex,
+        )
