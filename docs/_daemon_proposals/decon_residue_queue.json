@@ -219,5 +219,33 @@
       "route_count_est": 80,
       "order": 21
     }
+  ],
+  "findings": [
+    {
+      "id": "F-DECON2-5",
+      "severity": "flake-debt",
+      "status": "open",
+      "title": "Order-dependent import-state pollution surfaces test_mcp_audit_tool_wrappers failures in multi-file batches",
+      "symptom": "12 test_mcp_audit_tool_wrappers tests fail in batch with AttributeError: module 'knowledge_server'/'unified_server' has no attribute 'vapi_audit_*' (+ AssertionError 'Missing audit tools'). Pass when the file is run in isolation.",
+      "decoupled_from_extractions": true,
+      "evidence": "Four-axis proof. (1) ISOLATION-PASS: the 12 mcp_audit tests pass 12/12 when test_mcp_audit_tool_wrappers.py is run alone on HEAD (162s) -> not a logic bug, batch-only. (2) BYTE-IDENTICAL TRACKED SURFACE: git diff --stat main HEAD -- knowledge_server.py unified_server.py bridge/tests/test_mcp_audit_tool_wrappers.py is EMPTY, and git log main..HEAD for the test file is EMPTY -> no tracked HEAD change (incl. store extractions) can be the cause. (3) EQUALIZED MAIN-MATCH: with HEAD's untracked root MCP modules copied into the merge-base worktree, the failing node-id set is identical 22 main<->HEAD (logs/decon2_head_10batch.txt vs logs/decon2_main_10batch.txt). (4) CLEAN-BASELINE RECONCILIATION: a clean main worktree WITHOUT the untracked MCP modules shows only the 10 non-mcp failures (logs/decon2_baseline_main.txt); the 12 mcp_audit deltas appear only when the untracked working-tree MCP modules are present. The causal variable is untracked-module presence + batch import order, NOT tracked code. Zero Store/MRO failures; the mcp_audit victim does not import bridge.vapi_bridge.store.",
+      "exoneration_basis": "main-match (NOT WAL). Typed breakdown of the 22 (logs/decon2_head_typed.txt, --tb=line): 10 AttributeError + 10 assertion-family (9 AssertionError + 1 bare assert) + 2 TypeError; 0/22 lock/timeout. Node-set diff HEAD vs merge-base main: identical 22-node failing set, byte-identical, only-on-HEAD=[] only-on-MAIN=[]. The earlier 'WAL artifact' framing was incorrect for these; the correct (and shown) basis is SDK-21-style pre-existing main-match.",
+      "fix_when_convenient": "Add module-import isolation (reset knowledge_server/unified_server module globals or use importlib.reload fixture) in test_mcp_audit_tool_wrappers.py so it does not depend on which sibling imported the MCP servers first.",
+      "blocking": false,
+      "logged": "2026-06-19"
+    },
+    {
+      "id": "F-DAEMON-HEALTH-1",
+      "severity": "stale-guard-test",
+      "status": "closed",
+      "title": "test_detect_firmware_drift_on_live_repo asserted drift==True but the branch's own DEVICE_ID_CANON_v1 work closed the firmware seam",
+      "symptom": "bridge/tests/test_daemon_health_monitor.py::test_detect_firmware_drift_on_live_repo failed (assert False is True). detect_device_id_firmware_drift(REPO_ROOT) now returns False.",
+      "decoupled_from_extractions": true,
+      "evidence": "atca_signer.c rewritten to keccak256(65B SEC1 pubkey) per DEVICE_ID_CANON_v1 / F-KEY-1 (source comments: 'no on-chip serial concat, no legacy hash formula', 'never recomputes identity'). Zero superseded-pattern hits (SHA-256(pubkey||serial) / 'atecc-'+serial) in either FIRMWARE_OUTLIER_RELPATHS file, so the detector correctly returns False. Both daemon_health_monitor.py and its test are NEW ON BRANCH (not on main) -> not main-matchable; branch-internal inconsistency between Sprint 5 (added guard expecting drift) and the device_id-canon work (closed the seam).",
+      "exoneration_basis": "not a detection bug: detector is correct, the F-FW-2-DRIFT seam is provably closed in firmware source. Stale guard test left red by the very fix it guarded.",
+      "resolution": "Converted the assertion to a closed-seam regression guard (assert ... is False) with a comment: flips back to True/red if the superseded formula is ever reintroduced into a firmware outlier. 19/19 daemon suite green post-fix.",
+      "blocking": false,
+      "logged": "2026-06-19"
+    }
   ]
 }
