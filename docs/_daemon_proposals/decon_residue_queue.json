@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "DECON-1 residue drain queue — smallest-first store domains, then operator_api splits.",
+  "description": "DECON-1 residue drain queue \u2014 smallest-first store domains, then operator_api splits.",
   "updated": "2026-06-18",
   "items": [
     {
@@ -9,7 +9,7 @@
       "target_file": "bridge/vapi_bridge/store/zkba_vpm.py",
       "status": "applied",
       "agent_commit": null,
-      "notes": "Phase 2.1 — pre-daemon"
+      "notes": "Phase 2.1 \u2014 pre-daemon"
     },
     {
       "id": "store_marketplace",
@@ -35,7 +35,7 @@
       "agent_commit": null,
       "method_count_est": 30,
       "order": 1,
-      "notes": "2026-06-18 autonomous extraction — 18 methods, diff-oracle script"
+      "notes": "2026-06-18 autonomous extraction \u2014 18 methods, diff-oracle script"
     },
     {
       "id": "store_ioswarm",
@@ -45,16 +45,17 @@
       "agent_commit": null,
       "method_count_est": 30,
       "order": 2,
-      "notes": "2026-06-18 autonomous extraction — 26 methods"
+      "notes": "2026-06-18 autonomous extraction \u2014 26 methods"
     },
     {
       "id": "store_chain_anchors",
       "domain": "chain_anchors",
       "target_file": "bridge/vapi_bridge/store/chain_log.py",
-      "status": "pending",
+      "status": "applied",
       "agent_commit": null,
       "method_count_est": 40,
-      "order": 3
+      "order": 3,
+      "notes": "2026-06-18 autonomous extraction \u2014 31 methods"
     },
     {
       "id": "store_tournament_activation",

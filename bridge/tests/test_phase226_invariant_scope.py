@@ -31,7 +31,7 @@ def _load_gate():
 # T226-1: INVARIANTS list now contains exactly 86 entries
 def test_t226_1_invariants_count():
     gate = _load_gate()
-    assert len(gate.INVARIANTS) == 174
+    assert len(gate.INVARIANTS) == 176
 
 
 # T226-2: INV-019 matches _compute_governance_provenance_hash in gate script
@@ -61,19 +61,23 @@ def test_t226_4_inv021_fetch_fn():
     assert len(matches) >= inv021.min_matches, f"INV-021 found {len(matches)} matches (expected >= {inv021.min_matches})"
 
 
-# T226-5: INV-022 matches governance_provenance_chain in store.py
+# T226-5: INV-022 matches governance_provenance_chain in _core + insert in chain_log
 def test_t226_5_inv022_store_table():
     gate = _load_gate()
     inv022 = next(i for i in gate.INVARIANTS if i.id == "INV-022")
-    text = STORE_PATH.read_text(encoding="utf-8")
-    matches = [l for l in text.splitlines() if re.search(inv022.pattern, l, re.IGNORECASE)]
+    matches = []
+    for rel in inv022.file.split("|"):
+        text = (REPO_ROOT / rel.strip()).read_text(encoding="utf-8")
+        matches.extend(
+            l for l in text.splitlines() if re.search(inv022.pattern, l, re.IGNORECASE)
+        )
     assert len(matches) >= inv022.min_matches, f"INV-022 found {len(matches)} matches (expected >= {inv022.min_matches})"
 
 
 # T226-6: INVARIANTS_ALLOWLIST.json has 86 entries after regeneration
 def test_t226_6_allowlist_has_86_entries():
     allowlist = json.loads(ALLOWLIST_PATH.read_text(encoding="utf-8"))
-    assert len(allowlist) == 174
+    assert len(allowlist) == 176
     assert "INV-019" in allowlist
     assert "INV-020" in allowlist
     assert "INV-021" in allowlist
@@ -106,4 +110,4 @@ def test_t226_8_allowlist_hash_86_entries():
     assert h != "0" * 64
     # Allowlist file must have 86 entries for this hash to be correct
     allowlist = json.loads(ALLOWLIST_PATH.read_text(encoding="utf-8"))
-    assert len(allowlist) == 174
+    assert len(allowlist) == 176
