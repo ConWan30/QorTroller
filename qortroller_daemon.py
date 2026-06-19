@@ -55,12 +55,17 @@ from _daemon_tools_schema import (
     GovernanceMode,
     RateLimiter,
     SigningError,
+    OUTPUT_PRODUCING_TOOLS,
+    adversarial_verify,
     check_bridge_post_gate,
     classify_path,
     get_sealed_env,
     governance_self_test,
     is_new_test_file_path,
     is_read_blocked,
+    load_daemon_agent_id,
+    resolve_output_artifact_path,
+    run_post_output_verification,
     validate_shell_command,
     verify_artifact,
     reconstruct_from_removal_diff,
@@ -301,15 +306,18 @@ SYSTEM_PROMPT = (
     "                                                      this tool builds the moved file.\n"
     "  verify_artifact(path, expected_shape)             - FABRICATION DETECTOR: prove an output exists with\n"
     "                                                      the expected shape (exists/lines/python_valid/\n"
-    "                                                      class_name/must_contain). Call after every\n"
-    "                                                      output-producing tool, BEFORE finalize_plan.\n"
+    "                                                      class_name/must_contain). Also runs automatically\n"
+    "                                                      after write_file/propose_edit/extract_with_diff.\n"
+    "  adversarial_verify(artifact_path, diff_path?,      - ADVERSARIAL SELF-TEST: reconstruct artifact from\n"
+    "                    class_name?)                      diff and compare hashes. Mandatory before READY.\n"
     "  methodology(action?, keywords?)                   - Query accumulated daemon methodology by failure\n"
     "                                                      class (VERBATIM_RELOCATION, HALLUCINATED_COMPLETION,\n"
     "                                                      etc). Query at task_track time, apply known patterns.\n"
     "  finalize_plan(plan_name?, summary?, verdict?)     - MANDATORY last step of any engineering plan.\n"
     "                                                      Generates REVIEW_*.md in docs/_daemon_proposals/\n"
     "                                                      listing all proposals + operator action steps.\n"
-    "                                                      STOPS without committing or applying anything.\n"
+    "                                                      verdict=READY requires passing fabrication +\n"
+    "                                                      adversarial gates. STOPS without applying changes.\n"
     "  list_files(path?: str)                            - List project files (max 300). Pass an optional\n"
     "                                                      subdirectory path (e.g. 'bridge/vapi_bridge/store')\n"
     "                                                      to scope the listing and avoid truncation.\n"
@@ -330,6 +338,9 @@ SYSTEM_PROMPT = (
     "  [Audit / Drift Detection]\n"
     "  run_mythos(variant: int)                          - Run a Mythos audit variant (1-17) and\n"
     "                                                      return findings sorted by severity.\n"
+    "  health_monitor()                                  - Standing protocol health probes (GIC stall,\n"
+    "                                                      invariant drift, F-FW-2 device_id conflict).\n"
+    "                                                      Findings are proposal-only.\n"
     "                                                      Variants: 1=frozen_drift, 2=stability_sweep,\n"
     "                                                      3=operator_initiative, 4=live_gameplay,\n"
     "                                                      5=crypto_drift, 6=qortroller_crypto,\n"
@@ -339,6 +350,10 @@ SYSTEM_PROMPT = (
     "                                                      13=curator_graduation, 14=doc_consistency,\n"
     "                                                      15=frontend_brand, 16=path_a_parity,\n"
     "                                                      17=agent_utility_honesty\n"
+    "  health_monitor()                                  - Standing protocol health probes (GIC stall,\n"
+    "                                                      invariant drift, F-FW-2 device_id conflict).\n"
+    "                                                      Findings are proposal-only.\n"
+    "  residue_status()                                  - DECON-1 residue queue: pending/applied counts.\n"
     "  [Bridge / Chain]\n"
     "  bridge_get(path: str)                             - GET a bridge API endpoint\n"
     "  bridge_post(path: str, payload?: dict)            - POST to a bridge API endpoint\n"
@@ -540,6 +555,10 @@ class QorTrollerBrain:
         self.memory = memory
         self._lock = asyncio.Lock()
         self._conversation: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
+        # Tier 1 session state — fabrication + adversarial gates
+        self._fabrication_detected = False
+        self._session_artifacts: list[dict] = []
+        self._session_started_at = time.time()
 
     # ── LLM Call ──────────────────────────────────────────────────────────
 
@@ -713,6 +732,36 @@ class QorTrollerBrain:
                 result.startswith("RATE_LIMITED")
             )):
                 _RATE_LIMITER.record_call(name)
+                # Tier 1.1 — auto verify_artifact after output-producing tools
+                if name in OUTPUT_PRODUCING_TOOLS and isinstance(result, str):
+                    pv = run_post_output_verification(name, args, result, REPO_ROOT)
+                    if pv["ran"]:
+                        artifact_rel, diff_rel = resolve_output_artifact_path(
+                            name, args, result, REPO_ROOT,
+                        )
+                        self._session_artifacts.append({
+                            "tool": name,
+                            "artifact": artifact_rel,
+                            "diff_path": diff_rel,
+                            "class_name": args.get("class_name"),
+                            "ts": time.time(),
+                        })
+                        vr = pv.get("verify_result") or {}
+                        if pv["ok"]:
+                            result += (
+                                f"\n\n--- AUTO verify_artifact (Tier 1.1) ---\n"
+                                f"VERIFIED: {artifact_rel}\n"
+                            )
+                        else:
+                            self._fabrication_detected = True
+                            fails = vr.get("failures", ["shape check failed"])
+                            _GOV_LOG.fabrication_detected(name, artifact_rel, fails)
+                            result += (
+                                f"\n\n--- AUTO verify_artifact (Tier 1.1) ---\n"
+                                f"FABRICATION_DETECTED: {artifact_rel}\n"
+                                + "\n".join(f"  FAIL: {fl}" for fl in fails)
+                                + "\nDo NOT claim this artifact is complete."
+                            )
             return result
         except GovernanceHardStop:
             # L7: hard stop propagates upward — no catch here
@@ -1343,6 +1392,51 @@ class QorTrollerBrain:
                 summary = args.get("summary", "")
                 brain_verdict = args.get("verdict", "")
 
+                # Tier 1.1 / 1.3 — gate READY on fabrication + adversarial proof
+                gate_notes: list[str] = []
+                verdict_upper = (brain_verdict or "").strip().upper()
+                if verdict_upper == "READY":
+                    if self._fabrication_detected:
+                        brain_verdict = "BLOCKED_FABRICATION"
+                        gate_notes.append(
+                            "READY rejected: auto verify_artifact detected fabrication "
+                            "in this session. Fix artifacts before claiming READY."
+                        )
+                    else:
+                        adv_failures = []
+                        for art in self._session_artifacts:
+                            arel = art.get("artifact", "")
+                            if not arel:
+                                continue
+                            asafe = os.path.normpath(os.path.join(REPO_ROOT, arel))
+                            if not asafe.startswith(os.path.normpath(REPO_ROOT)):
+                                continue
+                            drel = art.get("diff_path")
+                            dsafe = None
+                            if drel:
+                                dsafe = os.path.normpath(os.path.join(REPO_ROOT, drel))
+                                if not dsafe.startswith(os.path.normpath(REPO_ROOT)):
+                                    dsafe = None
+                            av = adversarial_verify(
+                                asafe,
+                                diff_path=dsafe,
+                                class_name=art.get("class_name"),
+                                repo_root=REPO_ROOT,
+                            )
+                            if not av["ok"]:
+                                adv_failures.append(
+                                    f"{arel}: {av.get('failures', ['failed'])}"
+                                )
+                                _GOV_LOG.adversarial_failed(
+                                    arel, av.get("method", "?"), av.get("failures", []),
+                                )
+                        if adv_failures:
+                            brain_verdict = "BLOCKED_ADVERSARIAL"
+                            gate_notes.append(
+                                "READY rejected: adversarial self-test failed:\n"
+                                + "\n".join(f"  - {f}" for f in adv_failures)
+                            )
+
                 import sqlite3 as _sq
 
                 # Load plan state
@@ -1387,6 +1481,13 @@ class QorTrollerBrain:
                     f"## Brain Verdict",
                     brain_verdict or "(no verdict provided)",
                     "",
+                ]
+                if gate_notes:
+                    lines_out += ["## Verification Gates", ""]
+                    for gn in gate_notes:
+                        lines_out.append(gn)
+                    lines_out.append("")
+                lines_out += [
                     f"## Plan Status: {plan_name}",
                 ]
                 for r in rows:
@@ -1452,9 +1553,11 @@ class QorTrollerBrain:
                         _sys.path.insert(0, _bridge)
                     from vapi_bridge.agent_commit import compute_agent_commit_hash
 
-                    # F-AGC-3: assert, not ljust — SHA-256 is always 32 bytes
+                    # F-AGC-3: agent_id from provisional or canonical config (D-DAEMON-1)
                     pub_bytes = bytes.fromhex(_DAEMON_IDENTITY.public_key)
-                    agent_id = _hlib.sha256(pub_bytes).digest()
+                    agent_id, identity_mode, junction_note = load_daemon_agent_id(
+                        _DAEMON_IDENTITY.public_key,
+                    )
                     assert len(agent_id) == 32, f"agent_id must be 32 bytes, got {len(agent_id)}"
 
                     # F-AGC-1 verified: FROZEN formula commit_sha = 20 bytes (git SHA-1 length).
@@ -1529,6 +1632,9 @@ class QorTrollerBrain:
                         f.write(f"- **Chain link:** #{chain_len}\n")
                         f.write(f"- **prev_commitment:** `{prev_commit_hash.hex()}`\n")
                         f.write(f"- **Daemon public key:** `{_DAEMON_IDENTITY.public_key}`\n")
+                        f.write(f"- **Identity mode:** `{identity_mode}`\n")
+                        if junction_note:
+                            f.write(f"- **Junction note:** {junction_note}\n")
                         f.write(f"- **Signature (ed25519):** `{commitment_sig}`\n")
                         f.write(f"- **ts_ns:** `{ts_ns}`\n")
                         f.write(
@@ -1590,9 +1696,19 @@ class QorTrollerBrain:
                 finally:
                     conn.close()
 
-                return (f"Plan '{plan_name}' created with {len(steps)} step(s). "
-                        f"Use task_update(plan_name, step_index, status) to mark progress. "
-                        f"Statuses: pending, in_progress, completed, blocked.")
+                # Tier 1.2 — inject methodology at plan creation
+                meth_entries = _METHODOLOGY.query_for_task(steps)
+                meth_block = MethodologyRegistry.format_for_prompt(meth_entries)
+                _GOV_LOG.methodology_injected(
+                    plan_name, len(meth_entries), list(meth_entries.keys()),
+                )
+
+                return (
+                    f"Plan '{plan_name}' created with {len(steps)} step(s). "
+                    f"Use task_update(plan_name, step_index, status) to mark progress. "
+                    f"Statuses: pending, in_progress, completed, blocked.\n\n"
+                    f"## Applicable Methodology\n{meth_block}"
+                )
 
             elif name == "task_update":
                 # Update status of a specific step in a plan, OR query current state.
@@ -3217,6 +3333,120 @@ class QorTrollerBrain:
                     )
                 except Exception as e:
                     return f"Error during extract_with_diff: {e}"
+
+            elif name == "adversarial_verify":
+                artifact_path = args.get("artifact_path", "") or args.get("path", "")
+                diff_path = args.get("diff_path", "")
+                class_name = args.get("class_name", "") or None
+                if not artifact_path:
+                    return "Error: 'artifact_path' (or 'path') is required"
+                asafe = os.path.normpath(os.path.join(REPO_ROOT, artifact_path))
+                if not asafe.startswith(os.path.normpath(REPO_ROOT)):
+                    return "Error: Access denied (path traversal)"
+                dsafe = None
+                if diff_path:
+                    dsafe = os.path.normpath(os.path.join(REPO_ROOT, diff_path))
+                    if not dsafe.startswith(os.path.normpath(REPO_ROOT)):
+                        return "Error: Access denied (diff path traversal)"
+                av = adversarial_verify(
+                    asafe, diff_path=dsafe, class_name=class_name, repo_root=REPO_ROOT,
+                )
+                status = "ADVERSARIAL_VERIFIED" if av["ok"] else "ADVERSARIAL_FAILED"
+                lines = [
+                    f"{status}: {artifact_path}",
+                    f"  method: {av.get('method', '?')}",
+                    f"  artifact_hash: {av.get('artifact_hash', '?')}",
+                ]
+                if av.get("reconstructed_hash"):
+                    lines.append(f"  reconstructed_hash: {av['reconstructed_hash']}")
+                for fl in av.get("failures", []):
+                    lines.append(f"  FAIL: {fl}")
+                return "\n".join(lines)
+
+            elif name == "residue_status":
+                queue_path = os.path.join(
+                    REPO_ROOT, "docs", "_daemon_proposals", "decon_residue_queue.json",
+                )
+                if not os.path.isfile(queue_path):
+                    return "Error: decon_residue_queue.json not found"
+                try:
+                    data = json.load(open(queue_path, encoding="utf-8"))
+                except Exception as e:
+                    return f"Error reading queue: {e}"
+                items = data.get("items", [])
+                pending = [i for i in items if i.get("status") == "pending"]
+                done = [i for i in items if i.get("status") in ("applied", "proposed")]
+                lines = [
+                    f"DECON-1 residue queue ({len(items)} total)",
+                    f"  pending: {len(pending)}  done/proposed: {len(done)}",
+                    "",
+                ]
+                for it in items:
+                    st = it.get("status", "?")
+                    lines.append(
+                        f"  [{st}] {it.get('id', '?')} → {it.get('target_file', '?')}"
+                    )
+                    if it.get("agent_commit"):
+                        lines.append(f"         commit: {it['agent_commit']}")
+                return "\n".join(lines)
+
+            elif name == "health_monitor":
+                # Tier 2.1 — on-demand health probes (D-DAEMON-2; propose-only findings)
+                import re as _re
+                import sys as _sys
+                _bridge = os.path.join(REPO_ROOT, "bridge")
+                if _bridge not in _sys.path:
+                    _sys.path.insert(0, _bridge)
+                from vapi_bridge.daemon_health_monitor import (
+                    HealthMonitorInput,
+                    format_findings_markdown,
+                    run_health_monitor,
+                )
+                inv_live = None
+                try:
+                    r = subprocess.run(
+                        [sys.executable, "scripts/vapi_invariant_gate.py", "--report"],
+                        cwd=REPO_ROOT, capture_output=True, text=True, timeout=120,
+                    )
+                    m = _re.search(r"(\d+)\s+invariants?", r.stdout + r.stderr, re.I)
+                    if m:
+                        inv_live = int(m.group(1))
+                except Exception:
+                    pass
+                device_conflict = False
+                try:
+                    sha_pat = _re.compile(r"SHA-256\s*\(\s*pubkey\s*\|\|\s*serial", _re.I)
+                    keccak_pat = _re.compile(r"keccak256\s*\(\s*pubkey", _re.I)
+                    hits_sha = hits_keccak = 0
+                    for root, dirs, files in os.walk(REPO_ROOT):
+                        dirs[:] = [d for d in dirs if d not in _IGNORE_DIRS]
+                        for fn in files:
+                            if not fn.endswith((".md", ".py", ".sol")):
+                                continue
+                            fp = os.path.join(root, fn)
+                            try:
+                                text = open(fp, encoding="utf-8", errors="replace").read()
+                            except Exception:
+                                continue
+                            if sha_pat.search(text):
+                                hits_sha += 1
+                            if keccak_pat.search(text):
+                                hits_keccak += 1
+                    device_conflict = hits_sha > 0 and hits_keccak > 0
+                except Exception:
+                    pass
+                gic_data = self._bridge_get("/bridge/grind-chain-status")
+                gic_hours = None
+                if isinstance(gic_data, dict):
+                    # Best-effort: use hours_since_last if bridge exposes it
+                    gic_hours = gic_data.get("hours_since_last_link")
+                inp = HealthMonitorInput(
+                    gic_hours_since_last_link=gic_hours,
+                    invariant_count_live=inv_live,
+                    device_id_formula_conflict=device_conflict,
+                )
+                findings = run_health_monitor(inp)
+                return format_findings_markdown(findings)
 
             elif name == "methodology":
                 # TIER 1 methodology registry: query/add lessons by failure class.
