@@ -176,6 +176,7 @@ SAFE_SHELL_PREFIXES: frozenset = frozenset({
     "npm test",
     "cargo test",
     "python scripts/",
+    "idf.py build",
     "pwd",
     "echo",
     # NOTE: file-read commands (type, dir, find, grep, ls, cat) are DELIBERATELY
@@ -725,6 +726,23 @@ class GovernanceLog:
             "daemon_public_key": daemon_public_key,
         })
 
+    def methodology_injected(self, plan_name: str, entry_count: int, classes: list):
+        self._write("INFO", "methodology_injected", {
+            "plan_name": plan_name,
+            "entry_count": entry_count,
+            "classes": classes,
+        })
+
+    def fabrication_detected(self, tool: str, artifact: str, failures: list):
+        self._write("BLOCKED", "fabrication_detected", {
+            "tool": tool, "artifact": artifact, "failures": failures,
+        })
+
+    def adversarial_failed(self, artifact: str, method: str, failures: list):
+        self._write("BLOCKED", "adversarial_verify_failed", {
+            "artifact": artifact, "method": method, "failures": failures,
+        })
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  DAEMON COMMIT CHAIN (F-AGC-4) — SQLite-persisted AGENT-COMMIT v1 chain
@@ -1041,6 +1059,18 @@ _SEED_METHODOLOGY = {
         "agent_commit": "(consent extraction 2026-06-18)",
         "discovered": "2026-06-18 consent extraction — test_phase237_consent caught NameError 'time'",
     },
+    "CHAIN_JUNCTION": {
+        "anti_pattern": "Retroactively rewrite the provisional AGENT-COMMIT genesis when upgrading to canonical on-chain agentId.",
+        "correct_pattern": "Start a NEW chain with canonical agentId; junction entry records provisional last commitment as prev_commit_hash. Provisional chain retains its own verifiable history (F-AGC-2).",
+        "agent_commit": "(D-DAEMON-1 pending)",
+        "discovered": "2026-06-18 synergistic evolution assessment",
+    },
+    "HARDWARE_GROUND_TRUTH": {
+        "anti_pattern": "Treat pytest pass as sufficient proof for firmware/biometric changes without measuring separation ratio on real silicon.",
+        "correct_pattern": "Propose-only idf.py build + operator flash; feed separation_ratio from bridge as ground truth on next cycle. Flash is irreversible — operator commits.",
+        "agent_commit": "(Rung 1 silicon pending)",
+        "discovered": "2026-06-18 synergistic evolution assessment",
+    },
 }
 
 
@@ -1074,6 +1104,63 @@ class MethodologyRegistry:
             if any(k in hay for k in kws):
                 out[cls] = entry
         return out
+
+    _TASK_KEYWORD_MAP = {
+        "VERBATIM_RELOCATION": (
+            "extract", "mixin", "relocate", "verbatim", "diff-oracle", "removal diff",
+            "extract_with_diff", "decon", "decomposition",
+        ),
+        "FROZEN_SURFACE_TOUCH": (
+            "propose_edit", "frozen", "propose", "_core.py", "operator_api",
+            "governed", "git apply",
+        ),
+        "MIXIN_MISSING_IMPORTS": (
+            "mixin", "import", "nameerror", "pytest", "execute method",
+        ),
+        "HALLUCINATED_COMPLETION": (
+            "ready", "finalize", "verify", "complete", "done",
+        ),
+        "LARGE_FILE_WRITE": (
+            "write_file", "large", "timeout", "524",
+        ),
+        "CHAIN_JUNCTION": (
+            "roster", "agent_id", "junction", "canonical", "on-chain",
+        ),
+        "HARDWARE_GROUND_TRUTH": (
+            "firmware", "flash", "idf", "silicon", "separation ratio", "hardware",
+        ),
+    }
+
+    def query_for_task(self, steps: list) -> dict:
+        """Match methodology entries to plan step text by failure-class keywords."""
+        data = self.all()
+        if not steps:
+            return data
+        hay = " ".join(str(s) for s in steps).lower()
+        out = {}
+        for cls, keywords in self._TASK_KEYWORD_MAP.items():
+            if cls not in data:
+                continue
+            if any(kw in hay for kw in keywords):
+                out[cls] = data[cls]
+        if not out:
+            # Always include core extraction + honesty entries for engineering tasks
+            for fallback in ("VERBATIM_RELOCATION", "HALLUCINATED_COMPLETION", "FROZEN_SURFACE_TOUCH"):
+                if fallback in data:
+                    out[fallback] = data[fallback]
+        return out
+
+    @staticmethod
+    def format_for_prompt(entries: dict) -> str:
+        if not entries:
+            return "(no matching methodology entries)"
+        lines = []
+        for cls, e in entries.items():
+            ac = e.get("agent_commit", "?")
+            lines.append(f"- **[{cls}]** (discovered {e.get('discovered', '?')}; commit `{ac}`)")
+            lines.append(f"  - AVOID: {e.get('anti_pattern', '')[:240]}")
+            lines.append(f"  - DO: {e.get('correct_pattern', '')[:240]}")
+        return "\n".join(lines)
 
     def add(self, failure_class: str, anti_pattern: str, correct_pattern: str,
             agent_commit: str = "", discovered: str = "") -> bool:
@@ -1177,3 +1264,259 @@ def build_mixin_module(class_name: str, removed_lines: list, docstring: str = ""
         f'    """Domain methods extracted from Store; resolved via MRO."""\n'
     )
     return header + body + "\n"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  TIER 1 — OUTPUT-PRODUCING TOOL AUTO-VERIFICATION (2.1)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+OUTPUT_PRODUCING_TOOLS: frozenset = frozenset({
+    "write_file", "propose_edit", "extract_with_diff",
+})
+
+_OUTPUT_FAILURE_PREFIXES = (
+    "Error:", "BLOCKED:", "OPERATOR_HOLD", "RATE_LIMITED", "Error during",
+)
+
+
+def _is_output_tool_failure(result: str) -> bool:
+    if not result:
+        return True
+    return any(result.startswith(p) for p in _OUTPUT_FAILURE_PREFIXES)
+
+
+def resolve_output_artifact_path(
+    tool_name: str, args: dict, result: str, repo_root: str,
+) -> tuple:
+    """
+    Resolve (artifact_rel_path, diff_rel_path | None) from tool output.
+    Returns ("", None) when no verifiable artifact was produced.
+    """
+    import re as _re
+
+    if tool_name == "extract_with_diff":
+        m = _re.search(r"artifact:\s*(\S+\.proposed)", result)
+        if m:
+            return m.group(1).strip(), args.get("diff_path") or None
+        target = args.get("target_path", "")
+        if target:
+            return target, args.get("diff_path") or None
+        return "", None
+
+    if tool_name == "propose_edit":
+        m = _re.search(r"diff:\s*(\S+\.diff)", result)
+        if m:
+            return m.group(1).strip(), m.group(1).strip()
+        return "", None
+
+    if tool_name == "write_file":
+        if result.startswith("OK: wrote"):
+            path = args.get("path", "")
+            return path.replace("\\", "/"), None
+        m = _re.search(r"content:\s*(\S+\.proposed)", result)
+        if m:
+            return m.group(1).strip(), None
+        return "", None
+
+    return "", None
+
+
+def expected_shape_for_output_tool(
+    tool_name: str, args: dict, artifact_rel: str, repo_root: str,
+) -> dict:
+    """Lightweight shape hints for post-tool verify_artifact."""
+    if tool_name == "extract_with_diff":
+        shape = {"python_valid": True, "min_lines": 5}
+        cn = args.get("class_name")
+        if cn:
+            shape["class_name"] = cn
+        return shape
+
+    if tool_name == "propose_edit":
+        return {"exists": True, "min_bytes": 10}
+
+    if tool_name == "write_file":
+        rel = args.get("path", artifact_rel)
+        if rel.endswith(".py"):
+            return {"python_valid": True, "min_lines": 1}
+        return {"exists": True, "min_bytes": 1}
+
+    return {"exists": True}
+
+
+def run_post_output_verification(
+    tool_name: str, args: dict, result: str, repo_root: str,
+) -> dict:
+    """
+    Auto-verify after output-producing tools. Returns:
+      {"ran": bool, "ok": bool, "artifact": str, "verify_result": dict|None}
+    """
+    if tool_name not in OUTPUT_PRODUCING_TOOLS:
+        return {"ran": False, "ok": True, "artifact": "", "verify_result": None}
+    if _is_output_tool_failure(result):
+        return {"ran": False, "ok": True, "artifact": "", "verify_result": None}
+
+    artifact_rel, _diff = resolve_output_artifact_path(tool_name, args, result, repo_root)
+    if not artifact_rel:
+        return {"ran": False, "ok": True, "artifact": "", "verify_result": None}
+
+    safe = os.path.normpath(os.path.join(repo_root, artifact_rel))
+    if not safe.startswith(os.path.normpath(repo_root)):
+        return {
+            "ran": True, "ok": False, "artifact": artifact_rel,
+            "verify_result": {"ok": False, "failures": ["path traversal blocked"]},
+        }
+
+    shape = expected_shape_for_output_tool(tool_name, args, artifact_rel, repo_root)
+    vr = verify_artifact(safe, shape)
+    return {"ran": True, "ok": vr["ok"], "artifact": artifact_rel, "verify_result": vr}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  TIER 1 — ADVERSARIAL SELF-TEST (2.3)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def adversarial_verify(
+    artifact_path: str,
+    diff_path: Optional[str] = None,
+    class_name: Optional[str] = None,
+    source_module_path: Optional[str] = None,
+    repo_root: str = "",
+) -> dict:
+    """
+    Independently reconstruct or attest an artifact and compare hashes.
+    Path A (.proposed mixin): diff-oracle reconstruction must match file hash.
+    Path B (.diff proposal): diff must exist and reference a valid path.
+    """
+    if not os.path.isfile(artifact_path):
+        return {
+            "ok": False, "artifact_hash": None, "reconstructed_hash": None,
+            "method": "missing_artifact", "failures": [f"artifact missing: {artifact_path}"],
+        }
+
+    content = open(artifact_path, encoding="utf-8", errors="replace").read()
+    artifact_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+    if artifact_path.endswith(".proposed") and diff_path and os.path.isfile(diff_path):
+        try:
+            diff_text = open(diff_path, encoding="utf-8", errors="replace").read()
+            removed = reconstruct_from_removal_diff(diff_text)
+            if not removed:
+                return {
+                    "ok": False, "artifact_hash": artifact_hash,
+                    "reconstructed_hash": None, "method": "diff_oracle",
+                    "failures": ["removal diff contained no '-' lines"],
+                }
+            src_text = ""
+            if source_module_path and os.path.isfile(source_module_path):
+                src_text = open(source_module_path, encoding="utf-8", errors="replace").read()
+            elif repo_root:
+                core = os.path.join(repo_root, "bridge", "vapi_bridge", "store", "_core.py")
+                if os.path.isfile(core):
+                    src_text = open(core, encoding="utf-8", errors="replace").read()
+            cn = class_name or "ExtractedMixin"
+            import ast as _ast
+            tree = _ast.parse(content)
+            for node in tree.body:
+                if isinstance(node, _ast.ClassDef):
+                    cn = node.name
+                    break
+            reconstructed = build_mixin_module(cn, removed, source_module_text=src_text)
+            recon_hash = hashlib.sha256(reconstructed.encode("utf-8")).hexdigest()
+            ok = recon_hash == artifact_hash
+            return {
+                "ok": ok, "artifact_hash": artifact_hash,
+                "reconstructed_hash": recon_hash, "method": "diff_oracle",
+                "failures": [] if ok else ["reconstructed hash != artifact hash"],
+            }
+        except Exception as e:
+            return {
+                "ok": False, "artifact_hash": artifact_hash,
+                "reconstructed_hash": None, "method": "diff_oracle",
+                "failures": [str(e)],
+            }
+
+    if artifact_path.endswith(".diff"):
+        if not content.strip().startswith("---"):
+            return {
+                "ok": False, "artifact_hash": artifact_hash,
+                "reconstructed_hash": None, "method": "diff_attest",
+                "failures": ["not a unified diff"],
+            }
+        return {
+            "ok": True, "artifact_hash": artifact_hash,
+            "reconstructed_hash": None, "method": "diff_attest",
+            "failures": [],
+        }
+
+    # Generic: artifact exists and has content
+    if len(content.strip()) < 1:
+        return {
+            "ok": False, "artifact_hash": artifact_hash,
+            "reconstructed_hash": None, "method": "existence",
+            "failures": ["artifact empty"],
+        }
+    return {
+        "ok": True, "artifact_hash": artifact_hash,
+        "reconstructed_hash": None, "method": "existence",
+        "failures": [],
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  TIER 2 — DAEMON AGENT IDENTITY (D-DAEMON-1 chain junction)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def daemon_identity_config_path() -> str:
+    return os.path.join(os.path.expanduser("~"), ".vapi", "daemon_agent_identity.json")
+
+
+def load_daemon_agent_id(ed25519_pubkey_hex: str) -> tuple:
+    """
+    Return (agent_id_bytes_32, identity_mode, junction_note).
+    identity_mode: 'provisional' | 'canonical'
+    """
+    cfg_path = daemon_identity_config_path()
+    if os.path.isfile(cfg_path):
+        try:
+            cfg = json.load(open(cfg_path, encoding="utf-8"))
+            if cfg.get("identity_mode") == "canonical":
+                aid_hex = cfg.get("canonical_agent_id_hex", "")
+                if len(aid_hex) == 64:
+                    return bytes.fromhex(aid_hex), "canonical", cfg.get("junction_note", "")
+        except Exception:
+            pass
+    pub_bytes = bytes.fromhex(ed25519_pubkey_hex)
+    return hashlib.sha256(pub_bytes).digest(), "provisional", ""
+
+
+def write_chain_junction_config(
+    canonical_agent_id_hex: str,
+    provisional_last_commitment_hex: str,
+    io_id_did: str = "",
+    tba_address: str = "",
+) -> str:
+    """
+    Record D-DAEMON-1 chain junction (F-AGC-2). Does NOT rewrite genesis.
+    Operator ceremony only — daemon proposes, operator writes via this helper.
+    """
+    cfg_path = daemon_identity_config_path()
+    os.makedirs(os.path.dirname(cfg_path), exist_ok=True)
+    note = (
+        f"Chain junction at D-DAEMON-1 resolution. Provisional chain last "
+        f"commitment {provisional_last_commitment_hex} referenced as "
+        f"prev_commit_hash for canonical chain genesis. Provisional chain "
+        f"history is NOT retroactively modified (F-AGC-2)."
+    )
+    cfg = {
+        "identity_mode": "canonical",
+        "canonical_agent_id_hex": canonical_agent_id_hex,
+        "provisional_last_commitment_hex": provisional_last_commitment_hex,
+        "io_id_did": io_id_did,
+        "tba_address": tba_address,
+        "junction_note": note,
+        "recorded_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+    with open(cfg_path, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, indent=2)
+    return cfg_path
