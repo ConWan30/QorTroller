@@ -41,8 +41,9 @@ jobs:
       pull-requests: write
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+
+      - name: Initialize joypad-os firmware submodule
+        run: git submodule update --init --depth=1 bridge/firmware/joypad-os
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -96,8 +97,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+
+      - name: Initialize joypad-os firmware submodule
+        run: git submodule update --init --depth=1 bridge/firmware/joypad-os
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
