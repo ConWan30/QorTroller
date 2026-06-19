@@ -1,7 +1,7 @@
 {
   "version": 1,
   "description": "DECON-1 residue drain queue \u2014 smallest-first store domains, then operator_api splits.",
-  "updated": "2026-06-18",
+  "updated": "2026-06-19",
   "items": [
     {
       "id": "store_zkba_vpm",
@@ -61,64 +61,71 @@
       "id": "store_tournament_activation",
       "domain": "tournament_activation",
       "target_file": "bridge/vapi_bridge/store/tournament.py",
-      "status": "pending",
-      "agent_commit": null,
+      "status": "applied",
+      "agent_commit": "93d18030",
       "method_count_est": 40,
-      "order": 4
+      "order": 4,
+      "notes": "2026-06-18 TournamentMixin extraction"
     },
     {
       "id": "store_operator_initiative",
       "domain": "operator_initiative",
       "target_file": "bridge/vapi_bridge/store/operator_initiative.py",
-      "status": "pending",
-      "agent_commit": null,
+      "status": "applied",
+      "agent_commit": "1204f69f",
       "method_count_est": 40,
-      "order": 5
+      "order": 5,
+      "notes": "2026-06-18 OperatorInitiativeMixin extraction"
     },
     {
       "id": "store_vhp_credentials",
       "domain": "vhp_credentials",
       "target_file": "bridge/vapi_bridge/store/vhp.py",
-      "status": "pending",
-      "agent_commit": null,
+      "status": "applied",
+      "agent_commit": "68eb3b18",
       "method_count_est": 50,
-      "order": 6
+      "order": 6,
+      "notes": "2026-06-18 VhpMixin extraction"
     },
     {
       "id": "store_agents_rulings",
       "domain": "agents_rulings",
       "target_file": "bridge/vapi_bridge/store/agents.py",
-      "status": "pending",
-      "agent_commit": null,
+      "status": "applied",
+      "agent_commit": "ee8fd36b",
       "method_count_est": 70,
-      "order": 7
+      "order": 7,
+      "notes": "2026-06-19 AgentsRulingsMixin extraction (85 methods)"
     },
     {
       "id": "store_biometric",
       "domain": "biometric",
       "target_file": "bridge/vapi_bridge/store/biometric.py",
-      "status": "pending",
-      "agent_commit": null,
+      "status": "applied",
+      "agent_commit": "e81a0a62",
       "method_count_est": 70,
-      "order": 8
+      "order": 8,
+      "notes": "2026-06-19 BiometricMixin extraction"
     },
     {
       "id": "store_calibration",
       "domain": "calibration",
       "target_file": "bridge/vapi_bridge/store/calibration.py",
-      "status": "pending",
-      "agent_commit": null,
+      "status": "applied",
+      "agent_commit": "ed286220",
       "method_count_est": 120,
-      "order": 9
+      "order": 9,
+      "notes": "2026-06-19 CalibrationMixin extraction (85 methods)"
     },
     {
       "id": "api_health_gate",
       "domain": "health_gate",
       "target_file": "bridge/vapi_bridge/operator_api/health_gate.py",
-      "status": "pending",
+      "status": "applied",
       "agent_commit": null,
       "route_count_est": 3,
-      "order": 10
+      "order": 10,
+      "notes": "2026-06-19 register-function split; operator_api.py -> package _app.py"
     },
     {
       "id": "api_agent_consent",
