@@ -11,6 +11,7 @@ from vapi_bridge.daemon_health_monitor import (  # noqa: E402
     HealthMonitorInput,
     HealthSeverity,
     HealthState,
+    detect_device_id_firmware_drift,
     run_health_monitor,
 )
 
@@ -38,6 +39,21 @@ def test_device_id_conflict_critical():
     inp = HealthMonitorInput(device_id_formula_conflict=True)
     findings = run_health_monitor(inp)
     assert any(f.probe_id == "F-FW-2" and f.severity == HealthSeverity.CRITICAL for f in findings)
+
+
+def test_device_id_firmware_drift_medium():
+    inp = HealthMonitorInput(device_id_firmware_drift=True)
+    findings = run_health_monitor(inp)
+    drift = [f for f in findings if f.probe_id == "F-FW-2-DRIFT"]
+    assert len(drift) == 1
+    assert drift[0].severity == HealthSeverity.MEDIUM
+    assert drift[0].state == HealthState.DRIFTED
+    assert "atca_signer.c" in drift[0].evidence
+    assert "Phase 1B" in drift[0].proposed_action
+
+
+def test_detect_firmware_drift_on_live_repo():
+    assert detect_device_id_firmware_drift(REPO_ROOT) is True
 
 
 def test_invariant_drift():
