@@ -39,6 +39,12 @@ boto3>=1.34.0
 httpx>=0.25.0
 tenacity>=8.0.0
 
+# OAuth issuer + agent auth tests (oauth_issuer.py; not reliably transitive in CI)
+PyJWT>=2.8.0
+
+# iPACT handshake tests import l9_presence/composite_sig (SLH-DSA-SHA2-128s)
+slh-dsa==0.2.2
+
 # Test framework (pytest already implicit via dev tooling; pytest-asyncio
 # explicit-add for manifest reproducibility — used by Phase O0 Section 6.3
 # and 6.4 tests; pytest.ini line 8 already configures asyncio_mode = strict)
