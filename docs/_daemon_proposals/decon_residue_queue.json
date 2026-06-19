@@ -131,10 +131,11 @@
       "id": "api_agent_consent",
       "domain": "agent_consent",
       "target_file": "bridge/vapi_bridge/operator_api/agent_consent.py",
-      "status": "pending",
+      "status": "applied",
       "agent_commit": null,
       "route_count_est": 12,
-      "order": 11
+      "order": 11,
+      "notes": "2026-06-19 register-function split; 12 consent/erasure/category routes"
     },
     {
       "id": "api_agent_zkba_vpm",
