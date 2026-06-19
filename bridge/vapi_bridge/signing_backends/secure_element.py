@@ -18,6 +18,18 @@ from typing import Literal
 from .base import CompositePubkey, CompositeSignature
 
 
+def derive_device_id_from_p256_pubkey(pubkey_bytes: bytes) -> str:
+    """keccak256(65B uncompressed SEC1) per DEVICE_ID_CANON_v1.
+
+    Pure function for Arc 2 SecureElementBackend.get_device_id() once ATECC608A
+    exports the device P-256 pubkey. Callable without hardware — tests and
+    provision paths use the same canon as codec.py / DeviceRegistry.sol.
+    """
+    from ..device_birth_cert import compute_device_id_from_pubkey_hex
+
+    return compute_device_id_from_pubkey_hex(pubkey_bytes.hex())
+
+
 class SecureElementBackend:
     """Path A silicon-rooted SigningBackend — NOT YET IMPLEMENTED."""
 
