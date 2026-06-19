@@ -3399,6 +3399,8 @@ class QorTrollerBrain:
                     _sys.path.insert(0, _bridge)
                 from vapi_bridge.daemon_health_monitor import (
                     HealthMonitorInput,
+                    detect_device_id_firmware_drift,
+                    detect_device_id_formula_conflict,
                     format_findings_markdown,
                     run_health_monitor,
                 )
@@ -3413,28 +3415,8 @@ class QorTrollerBrain:
                         inv_live = int(m.group(1))
                 except Exception:
                     pass
-                device_conflict = False
-                try:
-                    sha_pat = _re.compile(r"SHA-256\s*\(\s*pubkey\s*\|\|\s*serial", _re.I)
-                    keccak_pat = _re.compile(r"keccak256\s*\(\s*pubkey", _re.I)
-                    hits_sha = hits_keccak = 0
-                    for root, dirs, files in os.walk(REPO_ROOT):
-                        dirs[:] = [d for d in dirs if d not in _IGNORE_DIRS]
-                        for fn in files:
-                            if not fn.endswith((".md", ".py", ".sol")):
-                                continue
-                            fp = os.path.join(root, fn)
-                            try:
-                                text = open(fp, encoding="utf-8", errors="replace").read()
-                            except Exception:
-                                continue
-                            if sha_pat.search(text):
-                                hits_sha += 1
-                            if keccak_pat.search(text):
-                                hits_keccak += 1
-                    device_conflict = hits_sha > 0 and hits_keccak > 0
-                except Exception:
-                    pass
+                device_conflict = detect_device_id_formula_conflict(REPO_ROOT)
+                firmware_drift = detect_device_id_firmware_drift(REPO_ROOT)
                 gic_data = self._bridge_get("/bridge/grind-chain-status")
                 gic_hours = None
                 if isinstance(gic_data, dict):
@@ -3444,6 +3426,7 @@ class QorTrollerBrain:
                     gic_hours_since_last_link=gic_hours,
                     invariant_count_live=inv_live,
                     device_id_formula_conflict=device_conflict,
+                    device_id_firmware_drift=firmware_drift,
                 )
                 findings = run_health_monitor(inp)
                 return format_findings_markdown(findings)

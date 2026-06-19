@@ -23,34 +23,16 @@ sys.path.insert(0, str(REPO_ROOT / "bridge"))
 
 from vapi_bridge.daemon_health_monitor import (  # noqa: E402
     HealthMonitorInput,
+    detect_device_id_firmware_drift,
+    detect_device_id_formula_conflict,
     format_findings_markdown,
     run_health_monitor,
 )
 
 
-def _grep_device_id_conflict(repo: Path) -> bool:
-    """F-FW-2 class: conflicting device_id formulas in docs vs artifacts."""
-    sha_pat = re.compile(r"SHA-256\s*\(\s*pubkey\s*\|\|\s*serial", re.I)
-    keccak_pat = re.compile(r"keccak256\s*\(\s*pubkey", re.I)
-    hits_sha, hits_keccak = 0, 0
-    for root, dirs, files in os.walk(repo):
-        dirs[:] = [d for d in dirs if d not in (".git", "node_modules", "__pycache__")]
-        for fn in files:
-            if not fn.endswith((".md", ".py", ".sol")):
-                continue
-            try:
-                text = (Path(root) / fn).read_text(encoding="utf-8", errors="replace")
-            except Exception:
-                continue
-            if sha_pat.search(text):
-                hits_sha += 1
-            if keccak_pat.search(text):
-                hits_keccak += 1
-    return hits_sha > 0 and hits_keccak > 0
-
-
 def build_input() -> HealthMonitorInput:
-    device_conflict = _grep_device_id_conflict(REPO_ROOT)
+    device_conflict = detect_device_id_formula_conflict(REPO_ROOT)
+    firmware_drift = detect_device_id_firmware_drift(REPO_ROOT)
     inv_live = None
     gate_script = REPO_ROOT / "scripts" / "vapi_invariant_gate.py"
     if gate_script.is_file():
@@ -75,6 +57,7 @@ def build_input() -> HealthMonitorInput:
         invariant_count_live=inv_live,
         invariant_count_baseline=176,
         device_id_formula_conflict=device_conflict,
+        device_id_firmware_drift=firmware_drift,
         ca_backup_disclosure_missing=False,
     )
 
