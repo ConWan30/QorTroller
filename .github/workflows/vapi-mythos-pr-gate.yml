@@ -42,6 +42,8 @@ jobs:
       pull-requests: write   # for the comment-on-failure step
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
