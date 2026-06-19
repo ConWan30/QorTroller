@@ -123,6 +123,9 @@
       "target_file": "bridge/vapi_bridge/operator_api/health_gate.py",
       "status": "applied",
       "agent_commit": "f8c4c4ac",
+      "route_count_est": 3,
+      "order": 10,
+      "notes": "2026-06-19 register-function split; operator_api.py -> package _app.py"
     },
     {
       "id": "api_agent_consent",
