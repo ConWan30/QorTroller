@@ -35,11 +35,19 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 # Phase O0 Stream 4-prep Session 2 — agent token authentication.
-from .agent_auth import AgentIdentity, make_check_agent_token
-from .hmac_middleware import NonceDedupTracker
-from .oauth_issuer import OAuthIssuer
+from ..agent_auth import AgentIdentity, make_check_agent_token
+from ..hmac_middleware import NonceDedupTracker
+from ..oauth_issuer import OAuthIssuer
 
 log = logging.getLogger(__name__)
+
+from pathlib import Path as _PathLayout
+
+# Package layout anchors (D-DECON-2: operator_api.py → operator_api/_app.py).
+_OPERATOR_API_PKG_DIR = _PathLayout(__file__).resolve().parent
+_VAPI_BRIDGE_DIR = _OPERATOR_API_PKG_DIR.parent
+_BRIDGE_DIR = _VAPI_BRIDGE_DIR.parent
+_REPO_ROOT = _BRIDGE_DIR.parent
 
 _BATCH_CAP = 50
 
@@ -123,7 +131,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
     # Headers: X-VAME-Commitment / -Chain-Head / -TS-NS / -Version / -Endpoint.
     # Skips: non-JSON responses, /health (cheap liveness), websocket upgrades.
     # Cached chain-head with short TTL keeps middleware off the SQLite hot path.
-    from .vame import stamp_response_headers as _vame_stamp_headers
+    from ..vame import stamp_response_headers as _vame_stamp_headers
     from starlette.middleware.base import BaseHTTPMiddleware
     from starlette.responses import Response as _StarletteResponse
 
@@ -217,7 +225,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         """Return the BridgeAgent instance, creating it on first call."""
         if _agent_instance[0] is None:
             try:
-                from .bridge_agent import BridgeAgent
+                from ..bridge_agent import BridgeAgent
                 _agent_instance[0] = BridgeAgent(cfg, store)
             except ImportError:
                 raise HTTPException(
@@ -229,7 +237,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         """Return the CalibrationIntelligenceAgent instance (Phase 50)."""
         if _calib_agent_instance[0] is None:
             try:
-                from .calibration_intelligence_agent import CalibrationIntelligenceAgent
+                from ..calibration_intelligence_agent import CalibrationIntelligenceAgent
                 _calib_agent_instance[0] = CalibrationIntelligenceAgent(cfg, store)
             except ImportError:
                 raise HTTPException(
@@ -348,6 +356,17 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "sig":             sig,
         }
 
+    from .health_gate import register_health_gate_routes
+
+    register_health_gate_routes(
+        app,
+        cfg=cfg,
+        check_key=_check_key,
+        check_rate=_check_rate,
+        gate_response=_gate_response,
+        batch_cap=_BATCH_CAP,
+    )
+
     # ------------------------------------------------------------------
     # Phase 3 Path B — Gameplay Workflow Layer (player-facing session status)
     # ------------------------------------------------------------------
@@ -370,33 +389,8 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             return False
 
     # ------------------------------------------------------------------
-    # Routes
+    # Routes (domain register-functions; health/gate in health_gate.py)
     # ------------------------------------------------------------------
-
-    @app.get("/health")
-    def health():
-        """API liveness check — does NOT require api_key."""
-        return {
-            "status": "ok",
-            "operator_key_configured": bool(cfg.operator_api_key),
-        }
-
-    @app.get("/gate/{device_id}")
-    def gate(device_id: str, api_key: str = Query(..., description="Shared operator API key")):
-        """Single-device eligibility check with HMAC-signed response."""
-        _check_key(api_key)
-        _check_rate(api_key)
-        return _gate_response(device_id)
-
-    @app.post("/gate/batch")
-    def gate_batch(
-        device_ids: list[str],
-        api_key: str = Query(..., description="Shared operator API key"),
-    ):
-        """Batch eligibility check for up to 50 device IDs."""
-        _check_key(api_key)
-        _check_rate(api_key)
-        return [_gate_response(d) for d in device_ids[:_BATCH_CAP]]
 
     @app.post("/agent")
     def agent_chat(
@@ -447,7 +441,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                 )
                 msgs.insert(0, {"role": "system", "content": system_prompt})
 
-            from .vapi_llm_client import QorTrollerAI
+            from ..vapi_llm_client import QorTrollerAI
             ai = QorTrollerAI()
             resp = ai.chat(msgs, model=req.model)
             return {"response": resp}
@@ -465,7 +459,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         _check_rate(api_key)
         
         # Get absolute repository root directory path
-        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+        repo_root = str(_REPO_ROOT)
         tool_name = req.tool
         args = req.arguments
         
@@ -762,7 +756,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         # ZK proof stats
         proof_stats = {"enabled": False}
         try:
-            from .chain import ChainClient
+            from ..chain import ChainClient
             _ch = ChainClient.__new__(ChainClient)
             _ch._zk_verifier = getattr(cfg, "_zk_verifier_instance", None)
             if hasattr(_ch, "get_zk_verifier_stats"):
@@ -835,7 +829,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         """
         _check_key(api_key)
         _check_rate(api_key)
-        from .data_curator_agent import DataCuratorAgent
+        from ..data_curator_agent import DataCuratorAgent
         curator = DataCuratorAgent(cfg, store, chain=None)  # no live publish via REST
         oracle_type = oracle_type.upper().strip()
         result = {"device_id": device_id, "oracle_type": oracle_type, "status": "queued"}
@@ -1121,7 +1115,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         _check_key(api_key)
         _check_rate(api_key)
         try:
-            from .live_mode_activation_agent import LiveModeActivationAgent
+            from ..live_mode_activation_agent import LiveModeActivationAgent
             _lma = LiveModeActivationAgent(cfg, store, bus=None)
             return _lma.get_live_mode_status()
         except Exception as exc:
@@ -1208,7 +1202,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         _check_key(api_key)
         _check_rate(api_key)
         try:
-            from .agent_supervisor import AgentSupervisor
+            from ..agent_supervisor import AgentSupervisor
             supervisor = AgentSupervisor(cfg, store)
             snapshot = supervisor.check_fleet_health()
             return snapshot
@@ -1233,7 +1227,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         _check_key(api_key)
         _check_rate(api_key)
         import asyncio as _asyncio
-        from .adjudication_warm_up import AdjudicationWarmUpRunner
+        from ..adjudication_warm_up import AdjudicationWarmUpRunner
         runner = AdjudicationWarmUpRunner(cfg, store)
         if batch_size is not None:
             runner._batch_size = int(batch_size)
@@ -1295,7 +1289,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
 
         # Fleet health
         try:
-            from .agent_supervisor import AgentSupervisor
+            from ..agent_supervisor import AgentSupervisor
             supervisor = AgentSupervisor(cfg, store)
             fleet = supervisor.check_fleet_health()
         except Exception as exc:
@@ -1341,7 +1335,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         _check_key(api_key)
         _check_rate(api_key)
         import asyncio as _asyncio
-        from .validation_corpus_runner import ValidationCorpusRunner
+        from ..validation_corpus_runner import ValidationCorpusRunner
         runner = ValidationCorpusRunner(cfg, store)
         try:
             loop = _asyncio.new_event_loop()
@@ -1451,7 +1445,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             if report is not None:
                 return report
             # No stored report — compute live
-            from .protocol_intelligence_agent import ProtocolIntelligenceAgent
+            from ..protocol_intelligence_agent import ProtocolIntelligenceAgent
             agent = ProtocolIntelligenceAgent(cfg, store)
             return agent.compute_report()
         except Exception as exc:
@@ -1524,7 +1518,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             body = {}
         notes = body.get("notes") if isinstance(body, dict) else None
         try:
-            from .live_mode_activation_pipeline import LiveModeActivationPipeline
+            from ..live_mode_activation_pipeline import LiveModeActivationPipeline
             pipeline = LiveModeActivationPipeline(cfg, store)
             result = await pipeline._check_and_record("operator_request", operator_notes=notes)
             result["timestamp"] = time.time()
@@ -2076,8 +2070,8 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
 
             from fastapi import HTTPException as _HTTPException
             try:
-                from .ioswarm_vhp_mint_coordinator import IoSwarmVHPMintCoordinator
-                from .ioswarm_live_node_client import IoSwarmLiveNodeClient as _ILNC131m
+                from ..ioswarm_vhp_mint_coordinator import IoSwarmVHPMintCoordinator
+                from ..ioswarm_live_node_client import IoSwarmLiveNodeClient as _ILNC131m
                 _live_client_m = _ILNC131m(cfg=cfg, store=store)
                 _mint_auth = IoSwarmVHPMintCoordinator(cfg=cfg, store=store, live_client=_live_client_m).authorize(
                     device_id=device_id,
@@ -2560,7 +2554,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         _check_key(api_key)
         _check_rate(api_key)
         try:
-            from .edge_ai_profile import get_edge_ai_profile
+            from ..edge_ai_profile import get_edge_ai_profile
             return get_edge_ai_profile(cfg=cfg, store=store)
         except Exception as exc:
             log.warning("edge_ai_profile_endpoint: %s", exc)
@@ -2576,7 +2570,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         """
         _check_key(api_key)
         _check_rate(api_key)
-        from .activation_runner import ActivationRunner
+        from ..activation_runner import ActivationRunner
         _bus = getattr(cfg, "_bus", None)
         runner = ActivationRunner(cfg, store, bus=_bus)
         result = await runner.run(n_sessions=n_sessions)
@@ -2619,7 +2613,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         try:
             # Step 1: simulate if no VHP exists
             if store.get_total_vhp_count() == 0:
-                from .activation_runner import ActivationRunner
+                from ..activation_runner import ActivationRunner
                 runner = ActivationRunner(cfg, store, bus=getattr(cfg, "_bus", None))
                 sim = await runner.run(n_sessions=n_sessions)
                 if sim.get("error"):
@@ -2754,7 +2748,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         """Phase 107 — Run live mode readiness validation corpus (N nominal sessions)."""
         _check_key(api_key)
         _check_rate(api_key)
-        from .live_mode_readiness_validator import LiveModeReadinessValidator
+        from ..live_mode_readiness_validator import LiveModeReadinessValidator
         validator = LiveModeReadinessValidator(cfg, store)
         result = await validator.run_validation(n=n)
         result["timestamp"] = time.time()
@@ -3608,7 +3602,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                         ),
                     },
                 )
-            from .ioswarm_adjudication_coordinator import IoSwarmAdjudicationCoordinator
+            from ..ioswarm_adjudication_coordinator import IoSwarmAdjudicationCoordinator
             coord   = IoSwarmAdjudicationCoordinator(cfg=cfg, store=store)
             n_prime = 5
             results = []
@@ -3646,7 +3640,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         _check_key(api_key)
         _check_rate(api_key)
         try:
-            from .ioswarm_renewal_spec import VHPRenewalSwarmTaskSpec
+            from ..ioswarm_renewal_spec import VHPRenewalSwarmTaskSpec
             _spec = VHPRenewalSwarmTaskSpec()
             enabled   = bool(getattr(cfg, "ioswarm_renewal_enabled", False))
             min_q     = int(getattr(cfg, "ioswarm_renewal_min_quorum", 3))
@@ -3673,7 +3667,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         _check_key(api_key)
         _check_rate(api_key)
         try:
-            from .ioswarm_task_spec import VAPISwarmTaskSpec
+            from ..ioswarm_task_spec import VAPISwarmTaskSpec
             spec = VAPISwarmTaskSpec()
             enabled   = bool(getattr(cfg, "ioswarm_enabled", False))
             q_thresh  = float(getattr(cfg, "ioswarm_quorum_threshold", 0.60))
@@ -4138,7 +4132,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         _check_rate(api_key)
         import time as _t132
         try:
-            from .ioswarm_live_node_client import IoSwarmLiveNodeClient
+            from ..ioswarm_live_node_client import IoSwarmLiveNodeClient
             _client132 = IoSwarmLiveNodeClient(cfg=cfg, store=store)
             _emulator_mode = _client132.is_emulator_mode()
             _node_urls_raw = getattr(cfg, "ioswarm_node_urls", "") or ""
@@ -4204,10 +4198,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             import os as _os134
             async def _run_bg():
                 try:
-                    _script = _os134.path.join(
-                        _os134.path.dirname(__file__), "..", "..", "scripts",
-                        "recalibrate_l4_pipeline.py"
-                    )
+                    _script = str(_REPO_ROOT / "scripts" / "recalibrate_l4_pipeline.py")
                     _db = getattr(cfg, "db_path", _os134.path.expanduser("~/.vapi/bridge.db"))
                     _proc = await _aio134.create_subprocess_exec(
                         _sys134.executable, _script, "--db", _db,
@@ -4329,7 +4320,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         _check_rate(api_key)
         import time as _t131
         try:
-            from .ioswarm_live_node_client import IoSwarmLiveNodeClient
+            from ..ioswarm_live_node_client import IoSwarmLiveNodeClient
             client = IoSwarmLiveNodeClient(cfg=cfg, store=store)
             node_urls_raw = getattr(cfg, "ioswarm_node_urls", "") or ""
             node_urls_list = [u.strip() for u in node_urls_raw.split(",") if u.strip()]
@@ -5589,7 +5580,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             # Chain call only when renewal_enabled=True AND dry_run=False
             if _renewal_enabled and not dry_run and _prev_hash:
                 try:
-                    from .chain import ChainClient as _CC180
+                    from ..chain import ChainClient as _CC180
                     _chain180 = _CC180(cfg)
                     _ratio_millis = int(float(ratio) * 1000)
                     _on_chain_tx = await _chain180.renew_separation_ratio_commitment(
@@ -5783,7 +5774,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         _check_key(api_key)
         _check_rate(api_key)
         try:
-            from .tournament_activation_chain_agent import TournamentActivationChainAgent as _TACA
+            from ..tournament_activation_chain_agent import TournamentActivationChainAgent as _TACA
             _taca178 = _TACA(cfg=cfg, store=store, bus=None)
             _result178 = _taca178.check_biometric_credential_ttl()
             return _result178
@@ -6142,7 +6133,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         _check_rate(api_key)
         import time as _t148b
         try:
-            from .agent_calibration_monitor import AgentCalibrationMonitor
+            from ..agent_calibration_monitor import AgentCalibrationMonitor
             _acim = AgentCalibrationMonitor(cfg, store, bus=None)
             await _acim._run_all_tests()
             rows = store.get_agent_calibration_health(limit=32)
@@ -6700,7 +6691,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         if not _agent_id207:
             raise HTTPException(status_code=422, detail="agent_id required")
 
-        from .staged_dry_run_graduation_agent import StagedDryRunGraduationAgent as _SDRGA
+        from ..staged_dry_run_graduation_agent import StagedDryRunGraduationAgent as _SDRGA
         _graduation_agent207 = _SDRGA(cfg=cfg, store=store, bus=None)
         _result207 = _graduation_agent207.activate_stage(
             agent_id=_agent_id207,
@@ -6915,7 +6906,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         _check_read_key(x_api_key)
         import time as _t222p
         try:
-            from .biometric_governance_agent import BiometricGovernanceAgent as _BGA222
+            from ..biometric_governance_agent import BiometricGovernanceAgent as _BGA222
             _bga = _BGA222(store, cfg, chain=None)
             _result222 = await _bga.submit_proposal(
                 proposal_hash=str(proposal_hash),
@@ -6980,14 +6971,14 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         import time as _t223p
         from pathlib import Path as _Path223
 
-        _gate_mod_path = str(_Path223(__file__).parent.parent.parent / "scripts")
+        _gate_mod_path = str(_REPO_ROOT / "scripts")
         if _gate_mod_path not in _sys223.path:
             _sys223.path.insert(0, _gate_mod_path)
         try:
             import importlib, importlib.util
             _spec = importlib.util.spec_from_file_location(
                 "vapi_invariant_gate",
-                str(_Path223(__file__).parent.parent.parent / "scripts" / "vapi_invariant_gate.py"),
+                str(_REPO_ROOT / "scripts" / "vapi_invariant_gate.py"),
             )
             _gate_mod = importlib.util.module_from_spec(_spec)
             _spec.loader.exec_module(_gate_mod)
@@ -7594,7 +7585,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         # at store.py:5480 inside _conn().
         _val_summary: dict = {}
         try:
-            from .active_play_occupancy import normalize_active_play_gate_mode
+            from ..active_play_occupancy import normalize_active_play_gate_mode
             _apop_mode = normalize_active_play_gate_mode(
                 getattr(cfg, "active_play_occupancy_gate_mode", "shadow")
             ) if bool(getattr(cfg, "active_play_occupancy_enabled", True)) else "shadow"
@@ -7709,7 +7700,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         """
         _check_read_key(x_api_key)
         import time as _t241
-        from .active_play_occupancy import normalize_active_play_gate_mode
+        from ..active_play_occupancy import normalize_active_play_gate_mode
 
         _enabled = bool(getattr(cfg, "active_play_occupancy_enabled", True))
         _mode = normalize_active_play_gate_mode(
@@ -7770,7 +7761,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         # emission failure logs internally + does NOT affect the
         # override response. Worker-thread to keep the event loop free.
         try:
-            from .dispute_packet_emitter import emit_dispute_packet
+            from ..dispute_packet_emitter import emit_dispute_packet
             await asyncio.to_thread(
                 emit_dispute_packet,
                 store=store, cfg=cfg,
@@ -8031,7 +8022,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                 if chain:
                     _cm_bytes = await asyncio.to_thread(chain.get_device_controller_model, dev)
                     if _cm_bytes is not None:
-                        from .controller_models import name_for_hash as _name_for_hash
+                        from ..controller_models import name_for_hash as _name_for_hash
                         controller_model = _name_for_hash(_cm_bytes)
             except Exception as _exc_mfg:
                 log.debug("player_session_status: MFG registry read unavailable (honest dormant): %s", _exc_mfg)
@@ -8124,7 +8115,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         """
         _check_key(api_key)
         _check_rate(api_key)
-        from .ipact_challenge import SHARED_CHALLENGE_STORE, CHALLENGE_TAG
+        from ..ipact_challenge import SHARED_CHALLENGE_STORE, CHALLENGE_TAG
         ch = SHARED_CHALLENGE_STORE.issue(device_id)
         return {
             "challenge_id": ch.challenge_id,
@@ -8371,7 +8362,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             )
 
         import time as _t236snap
-        from .corpus_snapshot import (
+        from ..corpus_snapshot import (
             agent_root_from_hex,
             compute_corpus_commitment,
             compute_wiki_snapshot_hash,
@@ -8472,7 +8463,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
 
         import json as _j237ep
         import time as _t237ep
-        from .biometric_snapshot import compute_biometric_commitment
+        from ..biometric_snapshot import compute_biometric_commitment
 
         try:
             # Pull the latest AIT row directly so we can read the new
@@ -8628,7 +8619,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             )
 
         import json as _j238fl
-        from .data_marketplace import DataMarketplace
+        from ..data_marketplace import DataMarketplace
 
         # Parse listing_metadata_json
         try:
@@ -8714,7 +8705,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         (tier, tier_name, multiplier_bps).  Returns 404 if not found.
         """
         _check_read_key(x_api_key)
-        from .data_marketplace import DataMarketplace
+        from ..data_marketplace import DataMarketplace
         marketplace = DataMarketplace(store=store, chain=chain, cfg=cfg)
 
         # Sanitise commitment hex (strip 0x, lowercase)
@@ -8740,7 +8731,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         Returns list of listing dicts with tier preview.
         """
         _check_read_key(x_api_key)
-        from .data_marketplace import DataMarketplace
+        from ..data_marketplace import DataMarketplace
         marketplace = DataMarketplace(store=store, chain=chain, cfg=cfg)
         rows = await asyncio.to_thread(
             marketplace.get_listings_by_seller, seller_address, int(limit)
@@ -8772,7 +8763,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         events to SSE subscribers — frontend animates regardless of
         whether the verdict came from the autonomous loop or operator.
         """
-        from .curator_agent import compute_verdict_for_listing
+        from ..curator_agent import compute_verdict_for_listing
         cache = getattr(app, "_protocol_state_cache", None)
         verdict_result = await compute_verdict_for_listing(
             store, chain, cfg,
@@ -8787,7 +8778,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         # failure logs internally + does NOT affect the verdict
         # response. Worker thread to keep the event loop free.
         try:
-            from .market_listing_emitter import emit_market_listing
+            from ..market_listing_emitter import emit_market_listing
             verdict_label = str(verdict_result.get("verdict") or "APPROVED")
             await asyncio.to_thread(
                 emit_market_listing,
@@ -8830,7 +8821,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         if len(h) != 64:
             raise HTTPException(422, "commitment_hex must be 64 hex characters")
 
-        from .data_marketplace import DataMarketplace
+        from ..data_marketplace import DataMarketplace
         marketplace = DataMarketplace(store=store, chain=chain, cfg=cfg)
         listing = await asyncio.to_thread(marketplace.get_listing, h)
         if not listing:
@@ -8936,7 +8927,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                 store.get_marketplace_listings_by_seller, seller_address, clamped_limit
             )
             # Re-fetch full listing fields for each (helper above only returns subset)
-            from .data_marketplace import DataMarketplace
+            from ..data_marketplace import DataMarketplace
             marketplace = DataMarketplace(store=store, chain=chain, cfg=cfg)
             full_listings = []
             for short_listing in listings:
@@ -9021,7 +9012,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         cache = getattr(app, "_protocol_state_cache", None)
         if cache is None:
             # Bridge booted without cache wired (shouldn't happen post-Step I-AUTOLOOP-3)
-            from .protocol_state_cache import ProtocolStateCache
+            from ..protocol_state_cache import ProtocolStateCache
             cache = ProtocolStateCache()
             app._protocol_state_cache = cache
 
@@ -9030,7 +9021,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             try:
                 # Optional backfill of most-recent events before live stream
                 if backfill > 0:
-                    from .protocol_state_cache import (
+                    from ..protocol_state_cache import (
                         EVENT_POAC_CHAIN_LINK, EVENT_GIC_VERDICT,
                         EVENT_PCC_STATE_CHANGE, EVENT_CURATOR_VERDICT,
                         EVENT_ANCHOR_CONFIRMED,
@@ -9416,7 +9407,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         if len(_reason) < 10:
             raise HTTPException(422, "reason must be at least 10 characters (operator audit field)")
 
-        from .cedar_bundle_anchor import CedarBundleAnchor, CedarBundleAnchorError
+        from ..cedar_bundle_anchor import CedarBundleAnchor, CedarBundleAnchorError
         from pathlib import Path as _Path
         anchor = CedarBundleAnchor(
             chain=chain,
@@ -9778,7 +9769,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         # a worker thread so we don't block the asyncio loop on the
         # compile + sqlite write.
         try:
-            from .agent_review_emitter import emit_agent_review_for_draft
+            from ..agent_review_emitter import emit_agent_review_for_draft
             await asyncio.to_thread(
                 emit_agent_review_for_draft,
                 store=store, cfg=cfg, draft_id=int(draft_id),
@@ -9828,7 +9819,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             x_api_key: Read-key auth (match cfg.operator_api_key).
         """
         _check_read_key(x_api_key)
-        from .operator_initiative_advancement import evaluate_frr_sync
+        from ..operator_initiative_advancement import evaluate_frr_sync
         summary, frr = await asyncio.to_thread(
             evaluate_frr_sync, cfg=cfg, store=store,
         )
@@ -9929,7 +9920,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                 status_code=422,
                 detail="reason must be ≥10 chars (audit gate)",
             )
-        from .cedar_shadow_runtime import evaluate_agent_action
+        from ..cedar_shadow_runtime import evaluate_agent_action
         result = await evaluate_agent_action(
             agent_id=agent_id,
             action=action,
@@ -10160,7 +10151,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         # generalize across the codebase.
         import sys as _sys
         from pathlib import Path as _Path
-        _scripts_dir = str(_Path(__file__).resolve().parent.parent.parent / "scripts")
+        _scripts_dir = str(_REPO_ROOT / "scripts")
         if _scripts_dir not in _sys.path:
             _sys.path.insert(0, _scripts_dir)
         try:
@@ -10544,16 +10535,16 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         output_dir_str = body.get("output_dir")
         if output_dir_str is None:
             output_dir_str = str(
-                _Path(__file__).resolve().parent.parent.parent
+                _REPO_ROOT
                 / "frontend" / "src" / "artifacts"
                 / vpm_id.lower().replace("-v1", "").replace("-", "_")
             )
 
-        _scripts_dir = str(_Path(__file__).resolve().parent.parent.parent / "scripts")
+        _scripts_dir = str(_REPO_ROOT / "scripts")
         if _scripts_dir not in _sys.path:
             _sys.path.insert(0, _scripts_dir)
         # bridge/ must also be on path for compiler imports of vapi_bridge.*
-        _bridge_dir = str(_Path(__file__).resolve().parent.parent)
+        _bridge_dir = str(_BRIDGE_DIR)
         if _bridge_dir not in _sys.path:
             _sys.path.insert(0, _bridge_dir)
 
@@ -10777,7 +10768,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         # Lazy import of audit script
         import sys as _sys
         from pathlib import Path as _Path
-        _scripts_dir = str(_Path(__file__).resolve().parent.parent.parent / "scripts")
+        _scripts_dir = str(_REPO_ROOT / "scripts")
         if _scripts_dir not in _sys.path:
             _sys.path.insert(0, _scripts_dir)
         try:
@@ -10788,7 +10779,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                 detail=f"vpm_audit import failed: {exc}",
             )
 
-        repo_root = _Path(__file__).resolve().parent.parent.parent
+        repo_root = _REPO_ROOT
         # Audit walks filesystem; offload to worker thread to keep loop responsive
         report = await asyncio.to_thread(run_audit, repo_root)
         report["timestamp"] = time.time()
@@ -10822,7 +10813,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             import importlib.util
             import sys as _sys
             from pathlib import Path as _Path
-            _proj = _Path(__file__).resolve().parent.parent.parent
+            _proj = _REPO_ROOT
             if str(_proj / "scripts") not in _sys.path:
                 _sys.path.insert(0, str(_proj / "scripts"))
             _spec = importlib.util.spec_from_file_location(
@@ -10860,7 +10851,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             import importlib.util
             import sys as _sys
             from pathlib import Path as _Path
-            _proj = _Path(__file__).resolve().parent.parent.parent
+            _proj = _REPO_ROOT
             if str(_proj / "scripts") not in _sys.path:
                 _sys.path.insert(0, str(_proj / "scripts"))
             _spec = importlib.util.spec_from_file_location(
@@ -10875,7 +10866,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                 status_code=500,
                 detail=f"cfss_audit import failed: {exc}",
             )
-        bundle_dir = _Path(__file__).resolve().parent / "cedar_bundles"
+        bundle_dir = _VAPI_BRIDGE_DIR / "cedar_bundles"
         report = await asyncio.to_thread(_mod.sweep_once, bundle_dir)
         report["timestamp"] = time.time()
         return report
@@ -10898,7 +10889,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             import importlib.util
             import sys as _sys
             from pathlib import Path as _Path
-            _proj = _Path(__file__).resolve().parent.parent.parent
+            _proj = _REPO_ROOT
             if str(_proj / "scripts") not in _sys.path:
                 _sys.path.insert(0, str(_proj / "scripts"))
             _spec = importlib.util.spec_from_file_location(
@@ -10914,7 +10905,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                 detail=f"curator_grad_audit import failed: {exc}",
             )
         db_path = _Path(getattr(cfg, "db_path", "bridge/vapi_store.db"))
-        bundle_dir = _Path(__file__).resolve().parent / "cedar_bundles"
+        bundle_dir = _VAPI_BRIDGE_DIR / "cedar_bundles"
         report, exit_code = await asyncio.to_thread(
             _mod.run_audit, db_path, bundle_dir,
         )
