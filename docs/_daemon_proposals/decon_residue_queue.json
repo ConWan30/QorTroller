@@ -41,10 +41,11 @@
       "id": "store_ioswarm",
       "domain": "ioswarm",
       "target_file": "bridge/vapi_bridge/store/ioswarm.py",
-      "status": "pending",
+      "status": "applied",
       "agent_commit": null,
       "method_count_est": 30,
-      "order": 2
+      "order": 2,
+      "notes": "2026-06-18 autonomous extraction — 26 methods"
     },
     {
       "id": "store_chain_anchors",
