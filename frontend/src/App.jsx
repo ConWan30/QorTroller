@@ -45,6 +45,8 @@ const ReferenceView    = lazy(() => import('./views/ReferenceView').then((m) => 
 // Tab 07 — Partner Brief (self-contained /qortroller-partner-pitch.html): the
 // manufacturer/partner pitch deck (Qorvo / Boréas / Battle Beaver). Public; no auth.
 const PartnerPitchView = lazy(() => import('./views/PartnerPitchView').then((m) => ({ default: m.PartnerPitchView })))
+// Tab 08 — AI Chat cognitive assistant.
+const LlmChatView      = lazy(() => import('./views/LlmChatView').then((m) => ({ default: m.LlmChatView })))
 
 const VIEW_MAP = {
   gamer:        GamerView,
@@ -58,6 +60,7 @@ const VIEW_MAP = {
   brp:          BrpView,
   marketplace:  MarketplaceView,
   vpm:          VpmProofView,
+  chat:         LlmChatView,
 }
 
 function ViewLoader() {
