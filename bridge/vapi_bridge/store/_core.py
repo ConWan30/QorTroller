@@ -452,6 +452,20 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                 "CREATE INDEX IF NOT EXISTS idx_ioid_devices_did "
                 "ON ioid_devices(did)"
             )
+            # Phase 2 Controller Identity Keystone: extend for gamer-owned TBA + canon ioID
+            # Add columns if missing (idempotent)
+            try:
+                conn.execute("ALTER TABLE ioid_devices ADD COLUMN tba_address TEXT")
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE ioid_devices ADD COLUMN ioid_token_id INTEGER DEFAULT 0")
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE ioid_devices ADD COLUMN canonical INTEGER DEFAULT 0")
+            except Exception:
+                pass
             # Phase 56: tournament passport registry
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS tournament_passports (
@@ -6054,16 +6068,21 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
         device_address: str,
         did: str,
         tx_hash: str = "",
+        tba_address: str = "",
+        ioid_token_id: int = 0,
+        canonical: bool = False,
     ) -> None:
-        """Persist an ioID device registration record (Phase 55)."""
+        """Persist an ioID device registration record (Phase 55 + Phase 2 controller TBA)."""
         with self._conn() as conn:
             conn.execute(
                 """
                 INSERT OR REPLACE INTO ioid_devices
-                    (device_id, device_address, did, tx_hash, registered_at)
-                VALUES (?, ?, ?, ?, ?)
+                    (device_id, device_address, did, tx_hash, registered_at,
+                     tba_address, ioid_token_id, canonical)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (device_id, device_address, did, tx_hash, time.time()),
+                (device_id, device_address, did, tx_hash, time.time(),
+                 tba_address or "", int(ioid_token_id), 1 if canonical else 0),
             )
 
     def get_ioid_device(self, device_id: str) -> dict | None:
