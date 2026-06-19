@@ -3457,6 +3457,11 @@ class QorTrollerBrain:
             else:
                 return f"Error: Unknown tool '{name}'"
 
+        except GovernanceHardStop:
+            # L7: a hard stop must NOT be stringified into an ordinary error
+            # the LLM loop can read past. Re-raise so _execute_tool (766) and
+            # process_message (3569) terminate the session. F-DAEMON-GATE-1.
+            raise
         except subprocess.TimeoutExpired:
             return f"Error: Tool '{name}' timed out"
         except Exception as e:

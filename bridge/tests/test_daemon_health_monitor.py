@@ -53,7 +53,13 @@ def test_device_id_firmware_drift_medium():
 
 
 def test_detect_firmware_drift_on_live_repo():
-    assert detect_device_id_firmware_drift(REPO_ROOT) is True
+    # F-FW-2-DRIFT seam CLOSED: atca_signer.c was rewritten to keccak256(65B SEC1
+    # pubkey) per DEVICE_ID_CANON_v1 / F-KEY-1 (no on-chip serial concat, no legacy
+    # SHA-256(pubkey||serial) formula), so live-repo drift detection now reports
+    # False. This is a closed-seam regression guard: if the superseded
+    # SHA-256(pubkey||serial) or "atecc-"+serial formula is ever reintroduced into a
+    # firmware outlier (FIRMWARE_OUTLIER_RELPATHS), this flips back to True and fails.
+    assert detect_device_id_firmware_drift(REPO_ROOT) is False
 
 
 def test_invariant_drift():
