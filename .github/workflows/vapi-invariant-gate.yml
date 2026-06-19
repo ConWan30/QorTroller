@@ -6,7 +6,7 @@ on:
     paths:
       - "bridge/vapi_bridge/codec.py"
       - "bridge/vapi_bridge/config.py"
-      - "bridge/vapi_bridge/store.py"
+      - "bridge/vapi_bridge/store/**"
       - "bridge/vapi_bridge/chain.py"
       - "bridge/vapi_bridge/dualshock_integration.py"
       - "bridge/vapi_bridge/session_adjudicator.py"
@@ -20,7 +20,7 @@ on:
     paths:
       - "bridge/vapi_bridge/codec.py"
       - "bridge/vapi_bridge/config.py"
-      - "bridge/vapi_bridge/store.py"
+      - "bridge/vapi_bridge/store/**"
       - "bridge/vapi_bridge/chain.py"
       - "bridge/vapi_bridge/dualshock_integration.py"
       - "bridge/vapi_bridge/session_adjudicator.py"
