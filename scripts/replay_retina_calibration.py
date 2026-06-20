@@ -11,6 +11,8 @@ Usage:
   python scripts/replay_retina_calibration.py --session sessions/hw_005.json
   python scripts/replay_retina_calibration.py --synthetic --aimbot-snap-at 100
   python scripts/replay_retina_calibration.py --write-audit
+  python scripts/replay_retina_calibration.py --sessions-dir sessions/human \
+      --max-frames 3000 --write-audit   # real 30k-frame captures, bounded
 """
 from __future__ import annotations
 
@@ -199,21 +201,53 @@ def _write_audit_artifact(audit_root: Path, sessions: list[dict]) -> Path:
     total_agree = sum(s.get("cross_oracle", {}).get("agreement_windows", 0) for s in sessions)
     agg_rate = round(total_agree / total_windows, 4) if total_windows else 0.0
 
+    real = [s for s in sessions if s.get("session") != "synthetic"]
+    is_real = bool(real)
+    capped = [s for s in real if s.get("max_frames") and s.get("frames_available", 0) > s.get("frames", 0)]
+    l4_all_zero = all((s.get("l4_mean_distance") or 0.0) == 0.0 for s in sessions)
+    if is_real:
+        provenance = (
+            f"Real `hw_*.json` replay: {len(real)} session(s), "
+            f"{sessions[0].get('frames', 0)} frames/session"
+            + (f" (capped from up to {max(s.get('frames_available', 0) for s in real)} available)" if capped else "")
+            + ". Advisory dry-run — not a substitute for live tournament adjudication."
+        )
+    else:
+        provenance = "Synthetic replay — not a substitute for live tournament adjudication."
+
     lines = [
         f"# Retina cross-oracle calibration audit ({today})",
         "",
         "Dry-run FSCA classifier vs L4 Mahalanobis on replay windows.",
-        "Synthetic replay — not a substitute for live tournament adjudication.",
+        provenance,
         "",
         "## Aggregate",
         "",
         f"| Metric | Value |",
         f"|--------|-------|",
+        f"| Data provenance | {'real hw_*.json' if is_real else 'synthetic'} |",
         f"| Sessions | {len(sessions)} |",
         f"| Windows | {total_windows} |",
         f"| RETINA_TRAJECTORY_WITHOUT_L4_ANOMALY | {total_r1} |",
         f"| L4_ANOMALY_WITHOUT_RETINA_SIGNAL | {total_r2} |",
         f"| Agreement rate | {agg_rate} |",
+        "",
+        "## Caveats",
+        "",
+        "- Agreement rate reflects mutual quiescence: both oracles stayed quiet on this data,",
+        "  which is the expected/clean outcome for genuine human captures (no adversarial input).",
+        "  It is NOT validation against spoofed/aimbot trajectories — use `--synthetic --aimbot-snap-at`",
+        "  or `--macro-flat` for adversarial cross-oracle checks.",
+    ]
+    if l4_all_zero:
+        lines += [
+            "- L4 mahalanobis is ~0 across all windows. Two contributing effects: (1) calibration",
+            "  captures here are still-hold/neutral-stick probes, so L5/trajectory signal is naturally",
+            "  near zero; (2) the replay L4 proxy updates the fingerprint with the same window it then",
+            "  measures (self-referential), so distance trends to ~0 on smooth sequential windows.",
+            "  Treat the L4 arm as a structural sanity check, not a live Mahalanobis verdict.",
+        ]
+    lines += [
         "",
         "## Per session",
         "",
@@ -232,12 +266,15 @@ def _write_audit_artifact(audit_root: Path, sessions: list[dict]) -> Path:
     md_path.write_text("\n".join(lines), encoding="utf-8")
     payload = {
         "as_of": today,
+        "data_provenance": "real_hw_json" if is_real else "synthetic",
         "sessions": sessions,
         "aggregate": {
             "windows": total_windows,
             "rule1": total_r1,
             "rule2": total_r2,
             "agreement_rate": agg_rate,
+            "l4_all_zero": l4_all_zero,
+            "agreement_is_mutual_quiescence": True,
         },
     }
     json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
@@ -279,6 +316,16 @@ def main() -> int:
         type=float,
         default=DEFAULT_L4_CONTINUITY,
     )
+    parser.add_argument(
+        "--max-frames",
+        type=int,
+        default=0,
+        help=(
+            "Cap frames per session before embed/L4 passes (0 = all). "
+            "embed_controller_window dynamics check is O(n^2); real hw_*.json "
+            "captures are ~30k frames, so cap to keep replay tractable."
+        ),
+    )
     args = parser.parse_args()
 
     paths: list[Path] = []
@@ -299,6 +346,9 @@ def main() -> int:
     for path in paths:
         label = path.stem if path != Path("synthetic") else "synthetic"
         snaps = _load_snaps(None if path == Path("synthetic") else path, args.synthetic, args.aimbot_snap_at, args.macro_flat)
+        frames_available = len(snaps)
+        if args.max_frames and len(snaps) > args.max_frames:
+            snaps = snaps[: args.max_frames]
         if len(snaps) < args.window:
             print(f"SKIP {label}: only {len(snaps)} frames (need {args.window})")
             continue
@@ -331,6 +381,8 @@ def main() -> int:
         row = {
             "session": label,
             "frames": len(snaps),
+            "frames_available": frames_available,
+            "max_frames": args.max_frames,
             "jsonl": str(out_path),
             "retina_windows": retina["windows"],
             "retina_events": retina["total_events"],
