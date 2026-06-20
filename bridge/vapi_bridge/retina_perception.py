@@ -168,8 +168,9 @@ def persist_retina_result(
     try:
         from .retina_w3bstream import maybe_validate_after_persist
 
+        w3s_result: dict[str, Any] = {}
         if cfg is not None:
-            maybe_validate_after_persist(
+            w3s_result = maybe_validate_after_persist(
                 store,
                 cfg,
                 device_id=device_id,
@@ -178,6 +179,24 @@ def persist_retina_result(
             )
     except Exception as exc:
         log.debug("retina w3bstream post-persist skipped: %s", exc)
+        w3s_result = {}
+    try:
+        from .retina_da_upload import maybe_upload_retina_to_da
+
+        if cfg is not None:
+            maybe_upload_retina_to_da(
+                store,
+                cfg,
+                device_id=device_id,
+                record_hash_hex=result.record_hash_hex,
+                state_commitment_hex=result.state_commitment_hex,
+                events=result.events,
+                world_state_json=result.world_state_json,
+                ts_ns=result.ts_ns,
+                w3bstream_exit_code=int(w3s_result.get("exit_code", 0)),
+            )
+    except Exception as exc:
+        log.debug("retina DA upload post-persist skipped: %s", exc)
     if result.trajectory_anomalies > 0 and hasattr(store, "write_agent_event"):
         try:
             store.write_agent_event(
