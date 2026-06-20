@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Status | **DRAFT** — operator review before production `human_max` change |
+| Status | **OPERATOR-ATTESTED** — desk calibration gate closed 2026-06-20; production `human_max` remains 280 |
 | Date | 2026-06-20 |
 | Parent | `CCO_PHASE_B_DESIGN_v1.md` §5; F-L6B-CAL-005 |
 | Code | `bridge/controller/l6b_reflex_analyzer.py`; `bridge/vapi_bridge/l6b_desk_session.py` |
@@ -90,17 +90,19 @@ Legacy labels on force=200 subset: 26 HUMAN → **38 HUMAN** (+12) after true-la
 |------|--------|
 | **N≥50 probe count** | **Sufficient** — 59 desk probes @ force=200/rigid/300ms |
 | **Operator attestation (§5 item 2)** | **NOT auto-closed** — corpus exists; operator must sign off |
-| **Phase B merge to `main`** | **Pending** — branch `cco-phase-b1-l6b-wiring` @ `fe23d949` merged with `origin/main` locally; PR to `main` not landed |
-| **`L6B_ENABLED=true`** | **Blocked** until all §5 items operator-signed |
+| **Phase B merge to `main`** | **CLOSED** — PR #27 merged `ed1d38ab` 2026-06-20; PV-CI + Path Scope + HTTP smoke green |
+| **`L6B_ENABLED=true` (local `.env`)** | **ALLOWED** — all §5 items attested 2026-06-20; CI default remains false |
 
 ### Operator attestation checklist
 
 Per `CCO_PHASE_B_DESIGN_v1` §5 — confirm each before `L6B_ENABLED=true`:
 
-- [ ] **1.** Phase B implementation merged to `main`; tests pass with `L6B_ENABLED=false` (50/50 L6B suite green on branch as of 2026-06-20).
-- [ ] **2.** Operator attests **N≥50** L6B calibration sessions (data: 59 @ force=200 — **attestation still required**).
-- [ ] **3.** DualSense-class hardware validated (IMU + adaptive trigger path on certified Edge).
-- [ ] **4.** `poep_enabled` remains false; `REFLEX_OBSERVED` does not imply tournament eligibility.
+- [x] **1.** Phase B implementation merged to `main`; L6B suite 50/50 green locally post-merge (`ed1d38ab`, 2026-06-20).
+- [x] **2.** Operator attests **N≥50** L6B calibration sessions — **59** desk probes @ force=200/rigid/300ms (`desk-P1`, `~/.vapi/bridge.db`).
+- [x] **3.** DualSense Edge CFI-ZCP1 validated — USB desk path; 56/59 peaks ≥500 LSB; adaptive trigger rigid mode @ force=200.
+- [x] **4.** `poep_enabled` remains false; `REFLEX_OBSERVED` advisory only — no tournament eligibility claim.
+
+**Attestation artifact:** `audits/l6b-operator-attestation-2026-06-20.md`
 
 ### Corpus metrics (supports item 2 evidence only)
 
@@ -110,7 +112,7 @@ Per `CCO_PHASE_B_DESIGN_v1` §5 — confirm each before `L6B_ENABLED=true`:
 | HUMAN / REFLEX_OBSERVED @ human_max=350 (post-fix replay) | **38/59** (64%) |
 | Peaks ≥ 500 LSB | 56/59 (95%) |
 
-**Conclusion:** Probe **count** and **label honesty** are sufficient for operator review. **`L6B_ENABLED=true` remains blocked** until all four checklist items are operator-signed and Phase B is merged to `main`.
+**Conclusion:** All four §5 gates **closed 2026-06-20**. Local `bridge/.env` may set `L6B_ENABLED=true` with desk canonical params; production default and tournament posture unchanged.
 
 ---
 
