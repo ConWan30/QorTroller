@@ -388,6 +388,8 @@ Each phase requires **V-checks** before implementation and **P-checks** after. N
 
 **Extend (DESIGN):** `presence_ceiling_candidate` read-only field.
 
+**COMPLETE (2026-06-20):** `bridge/vapi_bridge/cco_identity_grid.py` — `assemble_identity_grid()`; GET `/player/session-status` top-level `identity_grid` block (`schema=qortroller-identity-grid-v1`); Path B honesty note (F-V4-003); top-level Path A fields retained for backward compatibility.
+
 ### Phase F — On-chain composability (deploy-hold)
 
 **Goal:** Minimal composition before full Lens v3.
@@ -435,3 +437,4 @@ QorTroller's **Controller Capability Oracle** (partially **BUILT** via `controll
 | 2026-06-19 | F-V3-002 closed Option C; Phase B complete; Phase A oracle contract scoped; code hold documented |
 | 2026-06-19 | Phase A.1 shipped; F-CCO-001 CHIA enrich no-op logged |
 | 2026-06-20 | Phase D — `cco_poep_bridge.py` wires CapabilityReport → PoEP runner; `presence.poep` enriched; `POEP_ENABLED=false` default |
+| 2026-06-20 | Phase E — `cco_identity_grid.py`; session-status `identity_grid` block (identity×presence grid + F-V4-003 Path B note) |

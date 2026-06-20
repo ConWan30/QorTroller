@@ -688,9 +688,11 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         _enf = bool(getattr(cfg, "ipact_renewal_enforcement_enabled", False))
         _hs  = bool(getattr(cfg, "ipact_host_signer_enabled", False))
         from ..cco_poep_bridge import assemble_poep_presence_status
+        from ..cco_identity_grid import assemble_identity_grid
 
         _poep_enabled = bool(getattr(cfg, "poep_enabled", False))
         _poep_corpus = getattr(cfg, "poep_corpus_dir", "poep_l9") or "poep_l9"
+        _identity_grid_empty = assemble_identity_grid()
         _presence = {
             "poep": assemble_poep_presence_status(
                 poep_enabled=_poep_enabled,
@@ -735,7 +737,13 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                                   "total": await asyncio.to_thread(store.count_records, None)},
                 "enforcement_active": _enf, "host_signer_active": _hs,
                 "last_adjudication": None, "presence": _presence,
-                "cco": _cco_empty, "timestamp": _now,
+                "cco": _cco_empty,
+                "signing_path": None,
+                "proof_tier": None,
+                "controller_model": None,
+                "path_a_eligible": False,
+                "identity_grid": _identity_grid_empty,
+                "timestamp": _now,
             }
 
         # --- capture health → connection + activity ---
@@ -903,6 +911,12 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             l6b_gate_reached=_l6b_gate,
             corpus_dir=_poep_corpus,
         )
+        _identity_grid = assemble_identity_grid(
+            capability_report=_cco_report,
+            signing_path=signing_path,
+            path_a_eligible=path_a_eligible,
+            device_id=dev or None,
+        )
 
         return {
             "controller_connected": controller_connected,
@@ -931,6 +945,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "proof_tier":       proof_tier,
             "controller_model": controller_model,
             "path_a_eligible":  path_a_eligible,
+            "identity_grid": _identity_grid,
             "cco": _cco,
             "timestamp": _now,
         }
