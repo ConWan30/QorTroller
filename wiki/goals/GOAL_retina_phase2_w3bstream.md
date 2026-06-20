@@ -1,6 +1,6 @@
 # /goal — Retina Phase 2: W3bstream mechanical validation + ingestion wire-up
 
-**Status:** COMPLETE — merged via PR (Phase 2 W3bstream; operator GO 2026-06-20 for PV-CI ceremony INV-W3S-006 + INV-RETINA-001/002)  
+**Status:** COMPLETE — [PR #37](https://github.com/ConWan30/QorTroller/pull/37) merged 2026-06-20 (PV-CI 179/179; operator GO for invariant_change ceremony)  
 **Prerequisite shipped:** PR #35 — Retina DePIN Policy Governor (`feat/retina-depin-policy-governor`, merged 2026-06-20)  
 **Architecture anchor:** `docs/retina-w3bstream-integration.md` (Phase D note)  
 **Policy anchor:** `docs/retina-depin-policy-governor-v1.md` (Phase 1 complete)
