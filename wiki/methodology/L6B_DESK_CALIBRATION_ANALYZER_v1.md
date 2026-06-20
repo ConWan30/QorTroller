@@ -84,16 +84,23 @@ Legacy labels on force=200 subset: 26 HUMAN → **38 HUMAN** (+12) after true-la
 
 ## 5. Operator gate (`CCO_PHASE_B_DESIGN_v1` §5) — assessment
 
-**Data ≠ attestation.** N≥50 probes in `l6b_probe_log` is evidence; only the operator closes §5.
+**Data ≠ attestation.** N≥50 probes in `l6b_probe_log` is evidence only; the operator closes §5. **`L6B_ENABLED=true` is a separate flip** — blocked until the full checklist below is signed.
 
-### Operator attestation checklist (§5 items 1–4)
+| Gate | Status |
+|------|--------|
+| **N≥50 probe count** | **Sufficient** — 59 desk probes @ force=200/rigid/300ms |
+| **Operator attestation (§5 item 2)** | **NOT auto-closed** — corpus exists; operator must sign off |
+| **Phase B merge to `main`** | **Pending** — branch `cco-phase-b1-l6b-wiring` @ `fe23d949` merged with `origin/main` locally; PR to `main` not landed |
+| **`L6B_ENABLED=true`** | **Blocked** until all §5 items operator-signed |
 
-| # | Requirement | Data / code state | Operator sign-off |
-|---|-------------|-------------------|-------------------|
-| 1 | Phase B implementation merged; tests green with `L6B_ENABLED=false` | **Branch** `cco-phase-b1-l6b-wiring` @ `fe23d949` (merged `origin/main`); **50/50** L6B tests pass | [ ] merge to `main` + CI green |
-| 2 | Operator attests **N≥50** L6B calibration sessions | **59** desk probes @ force=200/rigid/300ms (`desk-P1`) | [ ] operator attestation |
-| 3 | DualSense-class hardware validated (IMU + adaptive trigger) | USB DualSense Edge desk sessions; actuator force=200 validated | [ ] operator attestation |
-| 4 | `poep_enabled` false; REFLEX_OBSERVED non-gating | Unchanged by this arc | [ ] acknowledged |
+### Operator attestation checklist
+
+Per `CCO_PHASE_B_DESIGN_v1` §5 — confirm each before `L6B_ENABLED=true`:
+
+- [ ] **1.** Phase B implementation merged to `main`; tests pass with `L6B_ENABLED=false` (50/50 L6B suite green on branch as of 2026-06-20).
+- [ ] **2.** Operator attests **N≥50** L6B calibration sessions (data: 59 @ force=200 — **attestation still required**).
+- [ ] **3.** DualSense-class hardware validated (IMU + adaptive trigger path on certified Edge).
+- [ ] **4.** `poep_enabled` remains false; `REFLEX_OBSERVED` does not imply tournament eligibility.
 
 ### Corpus metrics (supports item 2 evidence only)
 
@@ -103,7 +110,7 @@ Legacy labels on force=200 subset: 26 HUMAN → **38 HUMAN** (+12) after true-la
 | HUMAN / REFLEX_OBSERVED @ human_max=350 (post-fix replay) | **38/59** (64%) |
 | Peaks ≥ 500 LSB | 56/59 (95%) |
 
-**Conclusion:** Probe **count** and **label honesty** are sufficient for operator review. **`L6B_ENABLED=true` remains blocked** until all four §5 checkboxes are operator-signed and Phase B is merged to `main`.
+**Conclusion:** Probe **count** and **label honesty** are sufficient for operator review. **`L6B_ENABLED=true` remains blocked** until all four checklist items are operator-signed and Phase B is merged to `main`.
 
 ---
 
