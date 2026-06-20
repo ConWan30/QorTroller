@@ -228,10 +228,11 @@
       "id": "api_agent_misc",
       "domain": "agent_misc",
       "target_file": "bridge/vapi_bridge/operator_api/agent_misc.py",
-      "status": "pending",
+      "status": "applied",
       "agent_commit": null,
-      "route_count_est": 80,
-      "order": 21
+      "route_count_est": 40,
+      "order": 21,
+      "notes": "2026-06-19 register-function split; 40 misc routes (3 blocks); _app.py retains retina/player/poep only"
     }
   ],
   "findings": [
