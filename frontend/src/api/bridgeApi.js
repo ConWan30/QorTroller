@@ -275,6 +275,32 @@ export function useWatchdogStatus() {
   })
 }
 
+// Trio-Retina advisory perception (default OFF on bridge; noMock for honesty)
+export function useRetinaStatus(deviceId = '') {
+  const q = deviceId ? `?device_id=${encodeURIComponent(deviceId)}` : ''
+  return useQuery({
+    queryKey: ['retinaStatus', deviceId],
+    queryFn: () => get(`/bridge/retina-status${q}`, 'retinaStatus', { noMock: true }),
+    refetchInterval: 5000,
+    staleTime: 3000,
+    retry: 1,
+  })
+}
+
+export function useRetinaAlerts(sinceTs = 0) {
+  return useQuery({
+    queryKey: ['retinaAlerts', sinceTs],
+    queryFn: () => get(
+      `/bridge/retina-alerts?since=${sinceTs}`,
+      'retinaAlerts',
+      { noMock: true },
+    ),
+    refetchInterval: 4000,
+    staleTime: 2000,
+    retry: 1,
+  })
+}
+
 // UI-side mock-active indicator for the dashboard.
 // Returns true when bridge is unreachable AND we're showing fakes.
 // GamerView/DeveloperView should render a banner so operators don't mistake

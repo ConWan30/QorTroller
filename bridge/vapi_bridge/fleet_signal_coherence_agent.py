@@ -44,7 +44,7 @@ if TYPE_CHECKING:
     from vapi_bridge.config import Config
 
 # ---------------------------------------------------------------------------
-# CONTRADICTION_RULES — 29 rules (Phase O5-MYTHOS-MINIMAL M.3 added MYTHOS_FROZEN_REGION_DRIFT + MYTHOS_ASYNC_HAZARD, 27→29; prior: Phase 238 Step I-AUTOLOOP-2 added LISTING_TIER_DRIFT + CONSENT_REVOKED_LISTING_ACTIVE; Phase O1 C6 added BUNDLE_HASH_DRIFT_DETECTED + SCOPE_HASH_GOVERNANCE_DRIFT_DETECTED; Phase O4 27th CFSS_LANE_AUTHORITY_DRIFT)
+# CONTRADICTION_RULES — 30 rules (Retina cross-oracle +2: RETINA_TRAJECTORY_WITHOUT_L4_ANOMALY, L4_ANOMALY_WITHOUT_RETINA_SIGNAL; prior 28 at 2026-05-16 head)
 # ---------------------------------------------------------------------------
 
 CONTRADICTION_RULES: dict = {
@@ -523,6 +523,80 @@ CONTRADICTION_RULES: dict = {
             "hotfix to ensure record-ingestion paths call _check_consent_gate. "
             "If clock skew is suspected, verify session_adjudicator_validator "
             "monotonicity guard."
+        ),
+    },
+
+    # Retina × L4 cross-oracle — advisory CONTRADICTION when trajectory perception
+    # and Mahalanobis L4 distance disagree on the same PoAC record_hash binding.
+    # Guard: dormant unless retina_perception_enabled (no false positives when off).
+    "RETINA_TRAJECTORY_WITHOUT_L4_ANOMALY": {
+        "query": """
+            SELECT rel.record_hash_hex,
+                   rel.anomaly_count,
+                   rel.state_commitment_hex,
+                   r.pitl_l4_distance
+            FROM retina_event_log rel
+            INNER JOIN records r ON r.record_hash = rel.record_hash_hex
+            WHERE rel.anomaly_count > 0
+              AND (r.pitl_l4_distance IS NULL OR r.pitl_l4_distance < ?)
+            ORDER BY rel.created_at DESC LIMIT 5
+        """,
+        "params": lambda cfg: (cfg.l4_continuity_threshold,),
+        "guard": lambda cfg: bool(getattr(cfg, "retina_perception_enabled", False)),
+        "agents_involved": [
+            "SessionAdjudicator",
+            "retina_perception",
+            "BiometricFeatureExtractor",
+        ],
+        "severity": "MEDIUM",
+        "explanation": (
+            "Trio-Retina reports trajectory anomalies (retina_event_log.anomaly_count > 0) "
+            "for a PoAC record whose persisted L4 Mahalanobis distance is below the "
+            "continuity threshold (nominal band). The two oracles disagree on the same "
+            "record_hash binding — advisory only, not a tournament P0 gate."
+        ),
+        "resolution": (
+            "Review retina_event_log + records.pitl_l4_distance for the listed "
+            "record_hash_hex values. Confirm calibration thresholds (l4_continuity_threshold) "
+            "and retina_perception_window are appropriate. Cross-check adjudicator "
+            "evidence_json.retina bindings on the next ruling for the device."
+        ),
+    },
+
+    "L4_ANOMALY_WITHOUT_RETINA_SIGNAL": {
+        "query": """
+            SELECT r.record_hash,
+                   r.pitl_l4_distance,
+                   r.device_id,
+                   r.created_at
+            FROM records r
+            LEFT JOIN retina_event_log rel
+              ON rel.record_hash_hex = r.record_hash
+             AND rel.anomaly_count > 0
+            WHERE r.pitl_l4_distance > ?
+              AND r.created_at > ?
+              AND rel.id IS NULL
+            ORDER BY r.created_at DESC LIMIT 5
+        """,
+        "params": lambda cfg: (cfg.l4_anomaly_threshold, time.time() - 86400),
+        "guard": lambda cfg: bool(getattr(cfg, "retina_perception_enabled", False)),
+        "agents_involved": [
+            "SessionAdjudicator",
+            "retina_perception",
+            "BiometricFeatureExtractor",
+        ],
+        "severity": "MEDIUM",
+        "explanation": (
+            "Persisted L4 Mahalanobis distance exceeds the anomaly threshold on a recent "
+            "PoAC record, but no matching retina_event_log row with anomaly_count > 0 "
+            "exists for that record_hash. Retina perception may have been disabled, "
+            "buffer-short, or failed to bind at ingest — cross-oracle coverage gap."
+        ),
+        "resolution": (
+            "Confirm RETINA_PERCEPTION_ENABLED=true and sufficient HID window depth "
+            "(retina_perception_window). Re-run replay on the session corpus if needed. "
+            "If L4 spike is genuine, expect retina_trajectory_anomaly on subsequent "
+            "records once perception is active and bound."
         ),
     },
 

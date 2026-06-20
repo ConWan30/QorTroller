@@ -269,6 +269,8 @@ class SessionAdjudicator:
                 evidence_summary["gsr_correlation_absent"] = True
                 # Advisory inference code 0x33 — LLM sees this, never hard gate
 
+        self._enrich_retina_evidence(evidence_summary, device_id, evidence_hashes)
+
         # LLM ruling
         verdict, confidence, reasoning = await self._llm_ruling(evidence_summary)
 
@@ -402,6 +404,23 @@ class SessionAdjudicator:
         except Exception as exc:
             log.warning("SessionAdjudicator: _assess_gsr_risk failed: %s — returning empty", exc)
             return {}
+
+    def _enrich_retina_evidence(
+        self,
+        evidence_summary: dict,
+        device_id: str,
+        record_hashes: list[str],
+    ) -> None:
+        """Advisory Trio-Retina cross-links for evidence_json (read-only)."""
+        from .retina_perception import build_retina_evidence_slice
+
+        retina_enabled = bool(getattr(self._cfg, "retina_perception_enabled", False))
+        evidence_summary["retina"] = build_retina_evidence_slice(
+            self._store,
+            device_id,
+            record_hashes=record_hashes,
+            enabled=retina_enabled,
+        )
 
     async def _epistemic_consensus(
         self, device_id: str, proposed_verdict: str, ruling_id: int | None = None
@@ -858,6 +877,8 @@ class SessionAdjudicator:
                       ceremony_data["error"])
         elif not ceremony_data.get("on_chain_match"):
             evidence_summary["ceremony_integrity_failed"] = True
+
+        self._enrich_retina_evidence(evidence_summary, device_id, evidence_hashes)
 
         verdict, confidence, reasoning = await self._llm_ruling(evidence_summary)
 
