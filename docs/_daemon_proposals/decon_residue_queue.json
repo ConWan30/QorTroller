@@ -188,10 +188,11 @@
       "id": "api_agent_tournament",
       "domain": "agent_tournament",
       "target_file": "bridge/vapi_bridge/operator_api/agent_tournament.py",
-      "status": "pending",
+      "status": "applied",
       "agent_commit": null,
-      "route_count_est": 25,
-      "order": 17
+      "route_count_est": 15,
+      "order": 17,
+      "notes": "2026-06-19 register-function split; 15 live-mode/activation/tournament-readiness routes (7 non-contiguous blocks)"
     },
     {
       "id": "api_agent_operator_initiative",
