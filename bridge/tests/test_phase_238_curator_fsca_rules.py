@@ -159,8 +159,8 @@ def test_t_238_cur_fsca_4_rule_count_invariant():
     assert "LISTING_TIER_DRIFT" in CONTRADICTION_RULES
     assert "CONSENT_REVOKED_LISTING_ACTIVE" in CONTRADICTION_RULES
     # Total rule count — locks the structural invariant
-    assert len(CONTRADICTION_RULES) == 28, (
-        f"Expected 28 CONTRADICTION_RULES; got {len(CONTRADICTION_RULES)}. "
+    assert len(CONTRADICTION_RULES) == 30, (
+        f"Expected 30 CONTRADICTION_RULES; got {len(CONTRADICTION_RULES)}. "
         "If this test fails, either a new rule was added (update count + "
         "this test's expected) or an existing rule was removed (which "
         "requires architectural justification — see VPM_MANIFEST_HASH_DRIFT "

@@ -189,6 +189,13 @@ def _record_to_ws_msg(record, pitl_meta=None) -> str:
         # Phase 55: ioID device DID
         "ioid_did":         _m.get("ioid_did"),
         "ibi_snapshot":     _m.get("ibi_snapshot"),   # Phase 59
+        # Trio-Retina advisory (Phase B/E — not in 228B wire format)
+        "retina_enabled":              _m.get("retina_enabled", False),
+        "retina_event_count":          _m.get("retina_event_count", 0),
+        "retina_trajectory_anomalies": _m.get("retina_trajectory_anomalies", 0),
+        "retina_record_hash":          _m.get("retina_record_hash", ""),
+        "retina_state_commitment":     _m.get("retina_state_commitment", ""),
+        "retina_alert":                bool(_m.get("retina_alert", False)),
     })
 
 

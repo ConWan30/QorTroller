@@ -52,6 +52,9 @@ from typing import Optional
 log = logging.getLogger(__name__)
 
 
+from .provenance_nodes import poac_record_node_id as _poac_record_node_id
+
+
 # ---------------------------------------------------------------------------
 # Phase 235.x-STABILITY-9 stage 6 (2026-05-17): instrumentation helpers.
 #
@@ -357,6 +360,67 @@ class CorpusDataCuratorAgent:
                     "phase_produced": 192,
                     "player_id":      None,
                     "on_chain_ref":   r[1],
+                })
+                nodes_created += 1
+        except Exception:
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
+
+        # Register recent PoAC records (parent anchors for per-record perception)
+        try:
+            with self._store._conn() as conn:
+                rows = conn.execute(
+                    "SELECT record_hash, device_id, created_at "
+                    "FROM records ORDER BY created_at DESC LIMIT 20"
+                ).fetchall()
+            for r in rows:
+                record_hash = r[0]
+                node_id = _poac_record_node_id(record_hash)
+                self._store.insert_provenance_node({
+                    "node_id":        node_id,
+                    "node_type":      "POAC_RECORD",
+                    "source_table":   "records",
+                    "source_row_id":  record_hash,
+                    "source_hash":    record_hash,
+                    "parent_node_id": None,
+                    "edge_type":      "POAC_INGEST",
+                    "phase_produced": 192,
+                    "player_id":      None,
+                    "on_chain_ref":   None,
+                })
+                nodes_created += 1
+        except Exception:
+            pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
+
+        # Register retina_event_log rows (RETINA_STATE_COMMITMENT children)
+        try:
+            with self._store._conn() as conn:
+                rows = conn.execute(
+                    "SELECT id, device_id, record_hash_hex, state_commitment_hex "
+                    "FROM retina_event_log "
+                    "WHERE state_commitment_hex != '' "
+                    "ORDER BY id DESC LIMIT 20"
+                ).fetchall()
+            for r in rows:
+                row_id, _device_id, record_hash_hex, commitment = r[0], r[1], r[2], r[3]
+                node_id = "sha256:" + hashlib.sha256(
+                    f"retina_event_log:{row_id}".encode()
+                ).hexdigest()
+                parent_id = (
+                    _poac_record_node_id(record_hash_hex)
+                    if record_hash_hex
+                    else None
+                )
+                self._store.insert_provenance_node({
+                    "node_id":        node_id,
+                    "node_type":      "RETINA_STATE_COMMITMENT",
+                    "source_table":   "retina_event_log",
+                    "source_row_id":  row_id,
+                    "source_hash":    commitment,
+                    "parent_node_id": parent_id,
+                    "edge_type":      "PERCEPTION_BINDING",
+                    "phase_produced": 192,
+                    "player_id":      None,
+                    "on_chain_ref":   commitment,
                 })
                 nodes_created += 1
         except Exception:
