@@ -3,7 +3,7 @@
 **Document ID:** CCO-PHASE-B-DESIGN-v1  
 **Version:** 1.0  
 **Date:** 2026-06-20  
-**Status:** Operator-approved design — **no implementation** (plan mode)  
+**Status:** B.1 **COMPLETE** (merged main @ ed1d38ab); B.2 session-status surface + B.3 runbook **COMPLETE** (2026-06-20)  
 **Parent:** [`CCO_POEP_FUSION_v4.md`](CCO_POEP_FUSION_v4.md); [`CCO_T0_POLICY_v1.md`](CCO_T0_POLICY_v1.md); [`CCO_PHASE_A_ORACLE_CONTRACT_v1.md`](CCO_PHASE_A_ORACLE_CONTRACT_v1.md)  
 **Hold:** B.1 implementation blocked until operator GO on this doc; **do not push** until operator moves to B.1.
 
@@ -183,7 +183,9 @@ Pure-module pattern mirrors [`sensor_b_supply_watch.py`](../../bridge/vapi_bridg
 | [`bridge/tests/test_cco_l6b_wiring.py`](../../bridge/tests/test_cco_l6b_wiring.py) | **NEW** — mapping, applicability, skip reasons |
 | [`bridge/tests/test_l6b_bridge_integration.py`](../../bridge/tests/test_l6b_bridge_integration.py) | Store round-trip for new columns |
 
-**B.2 (deferred):** [`bridge/vapi_bridge/operator_api/_app.py`](../../bridge/vapi_bridge/operator_api/_app.py) session-status fields.
+**B.2 (COMPLETE 2026-06-20):** `assemble_cco_session_status()` in `cco_l6b_wiring.py`; GET `/player/session-status` top-level `cco` block; `presence.poep.status` from global L6B probe count.
+
+**B.3 (COMPLETE 2026-06-20):** [`docs/l6b-operator-activation-runbook.md`](../../docs/l6b-operator-activation-runbook.md).
 
 **Not modified:** `capability_oracle.py`, PoEP, contracts, F-CCO-001 site.
 
@@ -232,4 +234,5 @@ Pure-module pattern mirrors [`sensor_b_supply_watch.py`](../../bridge/vapi_bridg
 
 | Date | Change |
 |------|--------|
+| 2026-06-20 | B.2 session-status `cco` block + B.3 operator runbook complete; Phase C starter (`l9_presence/challenge_verifier.py`) |
 | 2026-06-20 | Initial design — operator-approved; DECON-2 store V-check closed; F-PHASE-B-004 contract addendum cross-ref |

@@ -353,9 +353,9 @@ annotation when used in synthesis composition.
 | Field | Value |
 |---|---|
 | Path | `wiki/methodology/CCO_PHASE_B_DESIGN_v1.md` |
-| Status | Operator-approved design — **no implementation** until B.1 GO |
+| Status | B.1 merged main; B.2 session-status + B.3 runbook complete (2026-06-20) |
 | Date | 2026-06-20 |
-| Captures | CCO→L6B wiring; applicability predicate (IMU + DualSense haptic); `REFLEX_OBSERVED` telemetry path; DECON-2 store split (`_core.py` schema, `calibration.py` insert); findings F-PHASE-B-001..005; B.1–B.3 sub-phases |
+| Captures | CCO→L6B wiring; applicability predicate (IMU + DualSense haptic); `REFLEX_OBSERVED` telemetry path; DECON-2 store split (`_core.py` schema, `calibration.py` insert); findings F-PHASE-B-001..005; B.1–B.3 sub-phases (B.2 `cco` session-status; B.3 activation runbook) |
 | Parent | `CCO_POEP_FUSION_v4.md`; `CCO_T0_POLICY_v1.md`; `CCO_PHASE_A_ORACLE_CONTRACT_v1.md` |
 | Citation convention | `CCO_PHASE_B_DESIGN_v1 §X [Tier 3 DRAFT; Phase B design 2026-06-20]` |
 
