@@ -266,6 +266,19 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
         )
         """,
         "CREATE INDEX IF NOT EXISTS idx_retina_w3bstream_created ON retina_w3bstream_log(created_at DESC)",
+        """
+        CREATE TABLE IF NOT EXISTS retina_da_upload_log (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            device_id               TEXT NOT NULL DEFAULT '',
+            record_hash_hex         TEXT NOT NULL DEFAULT '',
+            state_commitment_hex    TEXT NOT NULL DEFAULT '',
+            payload_bytes           INTEGER NOT NULL DEFAULT 0,
+            uploaded                INTEGER NOT NULL DEFAULT 0,
+            error                   TEXT NOT NULL DEFAULT '',
+            created_at              REAL NOT NULL
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_retina_da_upload_created ON retina_da_upload_log(created_at DESC)",
     ]
 
     def _init_schema(self):
