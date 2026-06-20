@@ -195,6 +195,7 @@ class CalibrationMixin:
             ).fetchall()
 
         total_probe_count = 0
+        untagged_probe_count = 0
         for row in rows:
             raw_profile = row["cco_profile_id"]
             profile_key = (
@@ -205,9 +206,10 @@ class CalibrationMixin:
             count = int(row["n"])
             total_probe_count += count
             by_profile_id[profile_key] = by_profile_id.get(profile_key, 0) + count
-            tier = resolve_controller_class_tier(
-                None if profile_key == "untagged" else profile_key,
-            )
+            if profile_key == "untagged":
+                untagged_probe_count += count
+                continue
+            tier = resolve_controller_class_tier(profile_key)
             tier_block = by_tier[tier]
             tier_block["probe_count"] += count
             tier_block["profiles"][profile_key] = (
@@ -220,6 +222,7 @@ class CalibrationMixin:
         return {
             "target_n": target_n,
             "total_probe_count": total_probe_count,
+            "untagged_probe_count": untagged_probe_count,
             "by_tier": by_tier,
             "by_profile_id": by_profile_id,
         }
