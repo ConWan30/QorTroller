@@ -502,6 +502,42 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
 
     # Trio-Retina advisory perception — GET /bridge/retina-status
     # ------------------------------------------------------------------
+    @app.get("/bridge/retina-policy-status")
+    async def get_retina_policy_status(
+        x_api_key: str = Header(default=""),
+    ):
+        """Retina DePIN policy governor — qualifiers and effective flags."""
+        _check_read_key(x_api_key)
+        import time as _t_rpol
+        from ..retina_depin_policy import (
+            get_runtime_policy_state,
+            qualifiers_summary,
+        )
+
+        _state = getattr(app, "_retina_policy_state", None) or get_runtime_policy_state()
+        _snap = _state.to_dict() if _state else {}
+        _log = await asyncio.to_thread(store.get_retina_policy_status, 5)
+        return {
+            "retina_policy_auto_arm": bool(
+                getattr(cfg, "retina_policy_auto_arm", True)
+            ),
+            "retina_perception_enabled": bool(
+                getattr(cfg, "retina_perception_enabled", False)
+            ),
+            "retina_external_ingest_enabled": bool(
+                getattr(cfg, "retina_external_ingest_enabled", False)
+            ),
+            "armed": bool(_snap.get("armed", False)),
+            "arm_source": _snap.get("arm_source", "unarmed"),
+            "qualifiers": _snap.get("qualifiers", {}),
+            "qualifiers_summary": qualifiers_summary(_state),
+            "effective_perception": bool(_snap.get("effective_perception", False)),
+            "effective_fsca": bool(_snap.get("effective_fsca", False)),
+            "effective_adjudicator": bool(_snap.get("effective_adjudicator", False)),
+            "policy_log": _log,
+            "timestamp": _t_rpol.time(),
+        }
+
     @app.get("/bridge/retina-status")
     async def get_retina_status(
         device_id: str = Query(default=""),
@@ -522,6 +558,10 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                 "retina_perception_enabled": bool(
                     getattr(cfg, "retina_perception_enabled", False)
                 ),
+                "retina_perception_effective": __import__(
+                    "bridge.vapi_bridge.retina_depin_policy",
+                    fromlist=["is_effective_perception"],
+                ).is_effective_perception(cfg),
                 "retina_perception_window": int(
                     getattr(cfg, "retina_perception_window", 120)
                 ),
@@ -561,6 +601,11 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
     ):
         """Ingest external trio-retina WebhookSink payloads (Phase C)."""
         _check_key(api_key)
+        if not bool(getattr(cfg, "retina_external_ingest_enabled", False)):
+            raise HTTPException(
+                status_code=403,
+                detail="RETINA_EXTERNAL_INGEST_ENABLED=false — webhook ingest disabled",
+            )
         import time as _t_ret_ev
         try:
             body = await request.json()
@@ -590,6 +635,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             anomaly_count=_anomaly_count,
             state_commitment_hex=_commitment,
             ts_ns=int(body.get("ts_ns") or _t_ret_ev.time_ns()),
+            source="webhook",
         )
         return {
             "accepted": True,
@@ -640,7 +686,10 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         _hash_list: list[str] = []
         if record_hashes.strip():
             _hash_list = [h.strip() for h in record_hashes.split(",") if h.strip()]
-        _enabled = bool(getattr(cfg, "retina_perception_enabled", False))
+        _enabled = __import__(
+            "bridge.vapi_bridge.retina_depin_policy",
+            fromlist=["is_effective_adjudicator"],
+        ).is_effective_adjudicator(cfg)
         try:
             _slice = await asyncio.to_thread(
                 build_retina_evidence_slice,
@@ -1020,6 +1069,30 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "path_a_eligible":  path_a_eligible,
             "identity_grid": _identity_grid,
             "cco": _cco,
+            "retina_policy_armed": bool(
+                getattr(
+                    getattr(app, "_retina_policy_state", None),
+                    "armed",
+                    False,
+                )
+            ),
+            "retina_policy_arm_source": (
+                getattr(
+                    getattr(app, "_retina_policy_state", None),
+                    "arm_source",
+                    "unarmed",
+                )
+            ),
+            "retina_qualifiers_summary": __import__(
+                "bridge.vapi_bridge.retina_depin_policy",
+                fromlist=["get_runtime_policy_state", "qualifiers_summary"],
+            ).qualifiers_summary(
+                getattr(app, "_retina_policy_state", None)
+                or __import__(
+                    "bridge.vapi_bridge.retina_depin_policy",
+                    fromlist=["get_runtime_policy_state"],
+                ).get_runtime_policy_state()
+            ),
             "timestamp": _now,
         }
 

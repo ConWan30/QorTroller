@@ -1140,6 +1140,24 @@ class Bridge:
             from .dualshock_integration import DualShockTransport
             from .continuity_prover import ContinuityProver
             from .pitl_prover import PITLProver, PITL_ZK_ARTIFACTS_AVAILABLE
+            from .retina_depin_policy import (
+                TransportSnapshot,
+                evaluate_prerequisites,
+                set_runtime_policy_state,
+                trio_retina_importable,
+            )
+            _preflight_snap = TransportSnapshot(
+                dualshock_enabled=True,
+                transport_running=False,
+                trio_retina_importable=trio_retina_importable(),
+            )
+            _preflight = evaluate_prerequisites(self.cfg, _preflight_snap)
+            set_runtime_policy_state(_preflight)
+            if self.cfg.http_enabled:
+                try:
+                    _op_app._retina_policy_state = _preflight
+                except NameError:
+                    pass
             ds = DualShockTransport(self.cfg, self.store, self.on_record, self.chain)
             # Phase 23: inject continuity prover when Identity Registry is configured
             if getattr(self.cfg, "identity_registry_address", ""):
@@ -1159,6 +1177,11 @@ class Bridge:
             # by /operator/bridge/capture-health.
             ds.set_pcc_monitor(self._pcc_monitor)
             log.info("Phase 234.7: CaptureHealthMonitor wired to DualShock transport")
+            if self.cfg.http_enabled:
+                try:
+                    ds._operator_app = _op_app
+                except NameError:
+                    pass
             self._ds_transport = ds
             # Phase 235-CONTENTION: expose transport to operator app for hid_counter_restarts
             if self.cfg.http_enabled:

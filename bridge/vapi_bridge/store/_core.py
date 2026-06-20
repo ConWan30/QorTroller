@@ -241,6 +241,19 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
 
     _RETINA_MIGRATIONS = [
         "ALTER TABLE retina_event_log ADD COLUMN state_commitment_hex TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE retina_event_log ADD COLUMN source TEXT NOT NULL DEFAULT 'hid'",
+        """
+        CREATE TABLE IF NOT EXISTS retina_policy_log (
+            id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_type           TEXT NOT NULL,
+            arm_source           TEXT NOT NULL DEFAULT '',
+            device_id            TEXT NOT NULL DEFAULT '',
+            qualifiers_json      TEXT NOT NULL DEFAULT '{}',
+            effective_perception INTEGER NOT NULL DEFAULT 0,
+            created_at           REAL NOT NULL
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_retina_policy_created ON retina_policy_log(created_at DESC)",
     ]
 
     def _init_schema(self):

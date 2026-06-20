@@ -516,6 +516,15 @@ _TOOLS = [
         },
     },
     {
+        "name": "get_retina_policy_status",
+        "description": (
+            "Get Retina DePIN policy governor status: prerequisite qualifiers, "
+            "armed state, arm_source (manual|auto_edge_connect|unarmed), and "
+            "effective_perception/fsca/adjudicator flags. Advisory only."
+        ),
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
         "name": "get_retina_perception_status",
         "description": (
             "Get Trio-Retina advisory perception status: whether retina_perception_enabled, "
@@ -3502,6 +3511,31 @@ class BridgeAgent:
                     }
                 return result
 
+            elif name == "get_retina_policy_status":
+                from .retina_depin_policy import (
+                    get_runtime_policy_state,
+                    qualifiers_summary,
+                )
+
+                _state = get_runtime_policy_state()
+                _snap = _state.to_dict() if _state else {}
+                _log = self._store.get_retina_policy_status(5)
+                return {
+                    "retina_policy_auto_arm": bool(
+                        getattr(self._cfg, "retina_policy_auto_arm", True)
+                    ),
+                    "armed": bool(_snap.get("armed", False)),
+                    "arm_source": _snap.get("arm_source", "unarmed"),
+                    "qualifiers": _snap.get("qualifiers", {}),
+                    "qualifiers_summary": qualifiers_summary(_state),
+                    "effective_perception": bool(_snap.get("effective_perception", False)),
+                    "effective_fsca": bool(_snap.get("effective_fsca", False)),
+                    "effective_adjudicator": bool(
+                        _snap.get("effective_adjudicator", False)
+                    ),
+                    "policy_log": _log,
+                }
+
             elif name == "get_retina_perception_status":
                 device_id = (inputs.get("device_id") or "").strip() or None
                 limit = int(inputs.get("limit") or 20)
@@ -3511,6 +3545,10 @@ class BridgeAgent:
                     "retina_perception_enabled": bool(
                         getattr(self._cfg, "retina_perception_enabled", False)
                     ),
+                    "retina_perception_effective": __import__(
+                        "bridge.vapi_bridge.retina_depin_policy",
+                        fromlist=["is_effective_perception"],
+                    ).is_effective_perception(self._cfg),
                 }
 
             elif name == "get_retina_evidence_slice":
@@ -3525,7 +3563,10 @@ class BridgeAgent:
                 else:
                     _rh_list = [str(h).strip() for h in _rh_raw if str(h).strip()]
                 _limit = min(int(inputs.get("limit") or 10), 50)
-                _enabled = bool(getattr(self._cfg, "retina_perception_enabled", False))
+                _enabled = __import__(
+                    "bridge.vapi_bridge.retina_depin_policy",
+                    fromlist=["is_effective_adjudicator"],
+                ).is_effective_adjudicator(self._cfg)
                 _slice = build_retina_evidence_slice(
                     self._store,
                     device_id,
