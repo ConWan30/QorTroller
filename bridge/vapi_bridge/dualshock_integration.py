@@ -1888,7 +1888,9 @@ class DualShockTransport:
                                 _pol.arm_source if _pol else "unarmed"
                             )
                             self._pending_pitl_meta["retina_source"] = "hid"
-                        persist_retina_result(self._store, _src, _rp, source="hid")
+                        persist_retina_result(
+                            self._store, _src, _rp, source="hid", cfg=self._cfg
+                        )
                     except Exception as _ret_exc:
                         log.debug("retina perception hook fail-open: %s", _ret_exc)
 

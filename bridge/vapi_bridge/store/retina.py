@@ -155,6 +155,58 @@ class RetinaMixin:
             out.append(d)
         return out
 
+    def insert_retina_w3bstream_log(
+        self,
+        *,
+        device_id: str,
+        record_hash_hex: str,
+        state_commitment_hex: str,
+        exit_code: int,
+        enforce_retina: bool = False,
+        ts: float | None = None,
+    ) -> int:
+        created = float(ts if ts is not None else time.time())
+        with self._conn() as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO retina_w3bstream_log (
+                    device_id, record_hash_hex, state_commitment_hex,
+                    exit_code, enforce_retina, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    device_id,
+                    record_hash_hex or "",
+                    state_commitment_hex or "",
+                    int(exit_code),
+                    1 if enforce_retina else 0,
+                    created,
+                ),
+            )
+            return int(cur.lastrowid)
+
+    def get_retina_w3bstream_status(self, limit: int = 10) -> dict[str, Any]:
+        limit = max(1, min(int(limit), 50))
+        with self._conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM retina_w3bstream_log
+                ORDER BY id DESC LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        latest = dict(rows[0]) if rows else {}
+        return {
+            "total_log_rows": len(rows),
+            "latest_exit_code": int(latest.get("exit_code") or 0),
+            "latest_enforce_retina": bool(latest.get("enforce_retina")),
+            "latest_record_hash": latest.get("record_hash_hex", ""),
+            "latest_state_commitment": latest.get("state_commitment_hex", ""),
+            "latest_device_id": latest.get("device_id", ""),
+            "latest_created_at": latest.get("created_at", 0.0),
+            "entries": [dict(r) for r in rows],
+        }
+
     def get_retina_by_record_hash(self, record_hash_hex: str) -> dict[str, Any] | None:
         """Latest retina_event_log row for a PoAC record hash (adjudicator / FSCA join)."""
         if not record_hash_hex:

@@ -538,6 +538,27 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "timestamp": _t_rpol.time(),
         }
 
+    @app.get("/bridge/retina-w3bstream-status")
+    async def get_retina_w3bstream_status(
+        x_api_key: str = Header(default=""),
+    ):
+        """W3bstream mechanical validation status for Retina sidecar pointers."""
+        _check_read_key(x_api_key)
+        import time as _t_w3s
+
+        _log = await asyncio.to_thread(store.get_retina_w3bstream_status, 5)
+        return {
+            "retina_w3bstream_validation_enabled": bool(
+                getattr(cfg, "retina_w3bstream_validation_enabled", False)
+            ),
+            "retina_w3bstream_enforce_on_ingest": bool(
+                getattr(cfg, "retina_w3bstream_enforce_on_ingest", False)
+            ),
+            "latest_exit_code": int(_log.get("latest_exit_code") or 0),
+            "validation_log": _log,
+            "timestamp": _t_w3s.time(),
+        }
+
     @app.get("/bridge/retina-status")
     async def get_retina_status(
         device_id: str = Query(default=""),

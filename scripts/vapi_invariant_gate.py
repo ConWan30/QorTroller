@@ -1438,6 +1438,27 @@ INVARIANTS: list[Invariant] = [
         min_matches=3,
     ),
     Invariant(
+        id="INV-W3S-006",
+        description="W3bstream Wasm rejects null/malformed retina_state_commitment when retina_w3bstream_enforce is set (Retina Phase 2 mechanical validation).",
+        file="w3bstream/applet/src/lib.rs",
+        pattern=r"retina_state_commitment|retina_w3bstream_enforce|resolve_sidecar_commitment",
+        min_matches=3,
+    ),
+    Invariant(
+        id="INV-RETINA-001",
+        description="PoAC wire frame remains 228 bytes when Retina W3bstream validation is enabled — regression rail in test_retina_w3bstream (paired with INV-ARC7-001 codec pin).",
+        file="bridge/tests/test_retina_w3bstream.py",
+        pattern=r"POAC_RECORD_SIZE\s*==\s*228",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-RETINA-002",
+        description="retina_perception_enabled defaults to False in bridge config (fleet-wide manual override OFF; policy auto-arm is separate).",
+        file="bridge/vapi_bridge/config.py",
+        pattern=r'RETINA_PERCEPTION_ENABLED",\s*False\)',
+        min_matches=1,
+    ),
+    Invariant(
         id="INV-ARC7-002",
         description="Asserts that the EVM-layer validation logic explicitly includes a require check blocking null (bytes32(0)) post-quantum signatures.",
         file="contracts/contracts/VAPITemporalBeaconRegistry.sol",

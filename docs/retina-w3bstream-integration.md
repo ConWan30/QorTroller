@@ -1,6 +1,6 @@
 # Retina State Commitment — W3bstream Integration Architecture (Phase D)
 
-**Status:** Architecture note only. **No PV-CI invariant edits** until operator GO.
+**Status:** Architecture note — **Phase 2 implemented** (see `wiki/goals/GOAL_retina_phase2_w3bstream.md`). PV-CI: INV-W3S-006 + INV-RETINA-001/002 (ceremony 2026-06-20).
 
 ## Purpose
 
