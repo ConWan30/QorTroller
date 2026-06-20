@@ -68,6 +68,15 @@ def test_device_auth_passes_genuine_fails_emulator():
     assert device_auth_score(_EMULATOR_DA, m, "Edge")["device_auth_pass"] is False  # ON==OFF, no adaptive trigger
 
 
+def test_device_auth_uncharacterized_non_adaptive_force():
+    m = population_reflex_model([_session(k=60)], min_n=50)
+    for ctype in ("rumble_imu", "generic_input_timing", "button_timing"):
+        out = device_auth_score(_GENUINE_DA, m, "Edge", challenge_type=ctype)
+        assert out["device_auth_pass"] is False
+        assert out["reason"] == "UNCHARACTERIZED"
+        assert out["score"] == 0.0
+
+
 def test_poep_verify_present_and_reject():
     m = population_reflex_model([_session(k=60)], min_n=50)
     assert poep_verify(_REACTION, _GENUINE_DA, m, "Edge")["verdict"] == "PRESENT"
