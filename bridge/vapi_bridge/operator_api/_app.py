@@ -578,6 +578,35 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "timestamp": _t_da.time(),
         }
 
+    @app.get("/bridge/retina-pda-status")
+    async def get_retina_pda_status(
+        x_api_key: str = Header(default=""),
+    ):
+        """PHYSICAL_DATA_ATTESTATION status for Retina perception sidecar pointers."""
+        _check_read_key(x_api_key)
+        import time as _t_pda
+
+        _status = await asyncio.to_thread(
+            store.get_physical_data_attestation_status,
+        )
+        _history = await asyncio.to_thread(
+            lambda: store.get_physical_data_attestation_history(
+                attestation_type="RETINA_PERCEPTION_OBSERVATION",
+                limit=5,
+            ),
+        )
+        return {
+            "retina_pda_attestation_enabled": bool(
+                getattr(cfg, "retina_pda_attestation_enabled", False)
+            ),
+            "retina_pda_attestation_agent_id": str(
+                getattr(cfg, "retina_pda_attestation_agent_id", "bridge_agent")
+            ),
+            "pda_status": _status,
+            "retina_attestation_history": _history,
+            "timestamp": _t_pda.time(),
+        }
+
     @app.get("/bridge/retina-status")
     async def get_retina_status(
         device_id: str = Query(default=""),

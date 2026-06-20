@@ -188,31 +188,31 @@ def test_t_pda_4_attestation_type_keccak256():
 # ---------------------------------------------------------------------------
 
 def test_t_pda_5_recognized_strings_distinct_hashes():
-    """Each of the five RECOGNIZED_ATTESTATION_TYPES strings produces a
-    distinct attestation_type_hash, and consequently a distinct PDA
-    commitment when used in the FROZEN formula with otherwise-identical
-    inputs.
+    """Each RECOGNIZED_ATTESTATION_TYPES string produces a distinct
+    attestation_type_hash, and consequently a distinct PDA commitment
+    when used in the FROZEN formula with otherwise-identical inputs.
     """
-    assert len(RECOGNIZED_ATTESTATION_TYPES) == 5
+    assert len(RECOGNIZED_ATTESTATION_TYPES) == 6
     expected = (
         "BIOMETRIC_CORPUS_SNAPSHOT",
         "POAC_CHAIN_INTEGRITY",
         "TREMOR_FFT_FEATURE_VECTOR",
         "FLEET_COHERENCE_OBSERVATION",
         "HARDWARE_CERTIFICATION",
+        "RETINA_PERCEPTION_OBSERVATION",
     )
     assert set(RECOGNIZED_ATTESTATION_TYPES) == set(expected)
 
     type_hashes = [attestation_type_from_string(s)
                    for s in RECOGNIZED_ATTESTATION_TYPES]
-    assert len(set(type_hashes)) == 5  # all distinct
+    assert len(set(type_hashes)) == 6  # all distinct
 
     # PDA commitments distinct as a consequence
     pda_hashes = [
         compute_pda_hash(_HW_HASH_A, _AGENT_ID_A, ath, _TS_NS)
         for ath in type_hashes
     ]
-    assert len(set(pda_hashes)) == 5
+    assert len(set(pda_hashes)) == 6
 
 
 # ---------------------------------------------------------------------------
