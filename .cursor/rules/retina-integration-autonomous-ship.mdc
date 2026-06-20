@@ -1,0 +1,34 @@
+---
+description: Autonomous commit/push/merge discipline for Retina × QorTroller integration phases
+globs: bridge/vapi_bridge/retina*.py,bridge/vapi_bridge/store/retina.py,bridge/tests/test_retina*.py,docs/retina*.md,w3bstream/**,wiki/goals/GOAL_retina*.md
+alwaysApply: false
+---
+
+# Retina integration — autonomous ship discipline
+
+When the user completes or requests ship for a **Retina integration phase** (policy governor, W3bstream, DA, PDA, etc.):
+
+## Ship loop (default — no extra confirmation)
+
+1. Branch from `origin/main`: `feat/retina-<phase>-<short-slug>`.
+2. Stage **only** Retina/W3bstream-scoped files — never bulk-add unrelated untracked repo artifacts.
+3. Run targeted tests before push:
+   - `pytest bridge/tests/test_retina*.py` (and any new phase tests)
+   - `python scripts/test_w3bstream_ingestion.py` when W3bstream touched
+4. Commit with `feat(retina):` or `docs(retina):` prefix; body cites blueprint/goal path.
+5. `git push -u origin HEAD` → `gh pr create --base main` → `gh pr merge --merge --delete-branch`.
+6. Update the active `/goal` file in `wiki/goals/GOAL_retina_*.md` with PR link + status.
+
+## Hard stops (require explicit operator GO)
+
+- PV-CI `invariant_change` (`--confirm-governance`) — never bump allowlist without ceremony.
+- PoAC 228-byte wire format edits — NEVER.
+- Tournament P0 / humanity formula changes — NEVER without separate operator arc.
+- On-chain deploys or lifting `CHAIN_SUBMISSION_PAUSED` — NEVER autonomous.
+- Solidity / firmware / FROZEN-v1 primitive edits — out of scope unless goal explicitly says so.
+
+## Architecture invariants to preserve
+
+- Retina = **DePIN policy-governed sidecar**; dynamics in trio-retina, enablement in `retina_depin_policy.py`.
+- Three commitment axes stay distinct: `world_model_hash` | `pq_commitment` | `retina_state_commitment`.
+- W3bstream Wasm = mechanical validation only (no Mahalanobis, no frame-grabbing).
