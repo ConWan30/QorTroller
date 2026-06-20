@@ -1,7 +1,9 @@
 {
   "version": 1,
-  "description": "DECON-1 residue drain queue \u2014 smallest-first store domains, then operator_api splits.",
-  "updated": "2026-06-19",
+  "description": "DECON-1 residue drain queue — smallest-first store domains, then operator_api splits.",
+  "updated": "2026-06-20",
+  "status": "complete",
+  "summary": "21/21 items applied — store 12 mixins + operator_api 12 register modules (2026-06-20)",
   "items": [
     {
       "id": "store_zkba_vpm",

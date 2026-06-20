@@ -29,6 +29,10 @@ TRIGGER_OFF   = 0x00
 TRIGGER_RIGID = 0x01
 TRIGGER_PULSE = 0x02
 
+L6B_PROBE_MODE_PULSE = "pulse"
+L6B_PROBE_MODE_RIGID = "rigid"
+L6B_PROBE_MODES = frozenset({L6B_PROBE_MODE_PULSE, L6B_PROBE_MODE_RIGID})
+
 
 @dataclass(frozen=True)
 class TriggerChallengeProfile:
@@ -139,6 +143,50 @@ CHALLENGE_PROFILES: dict[int, TriggerChallengeProfile] = {
         ),
     ),
 }
+
+
+def l6b_probe_profile(
+    r2_force: int = 60,
+    *,
+    mode: str = L6B_PROBE_MODE_PULSE,
+) -> TriggerChallengeProfile:
+    """L6B_PROBE (id=8) with configurable R2 amplitude and actuator mode.
+
+    ``pulse`` (default): alternating PULSE pattern — single-slot (f,0,0,…) is often
+    imperceptible on DualSense Edge; we mirror PULSE_SLOW shape scaled to *force*.
+
+    ``rigid``: sustained RIGID resistance (same family as ``l6_hardware_check`` step 5).
+    Use for desk plumbing validation via ``L6B_PROBE_MODE=rigid`` + longer hold ms.
+    """
+    force = max(1, min(255, int(r2_force)))
+    key = (mode or L6B_PROBE_MODE_PULSE).strip().lower()
+    if key not in L6B_PROBE_MODES:
+        key = L6B_PROBE_MODE_PULSE
+    base = CHALLENGE_PROFILES[8]
+    if key == L6B_PROBE_MODE_RIGID:
+        return TriggerChallengeProfile(
+            profile_id=base.profile_id,
+            name=base.name,
+            r2_mode=TRIGGER_RIGID,
+            r2_forces=(force, force),
+            l2_mode=base.l2_mode,
+            l2_forces=base.l2_forces,
+            onset_threshold_ms=base.onset_threshold_ms,
+            settle_threshold_ms=base.settle_threshold_ms,
+            description=base.description,
+        )
+    half = max(1, force // 2)
+    return TriggerChallengeProfile(
+        profile_id=base.profile_id,
+        name=base.name,
+        r2_mode=TRIGGER_PULSE,
+        r2_forces=(force, half, force, half, 0, 0, 0),
+        l2_mode=base.l2_mode,
+        l2_forces=base.l2_forces,
+        onset_threshold_ms=base.onset_threshold_ms,
+        settle_threshold_ms=base.settle_threshold_ms,
+        description=base.description,
+    )
 
 
 def get_profile_hash(profile_id: int) -> int:

@@ -8,7 +8,12 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parents[1]))
 
-from controller.l6b_reflex_analyzer import L6bReflexAnalyzer, L6bReflexResult
+from controller.l6b_reflex_analyzer import (
+    L6bReflexAnalyzer,
+    L6bReflexResult,
+    MECHANICAL_REFLEX_GAP_MAX_MS,
+    MS_PER_REPORT,
+)
 
 
 def _make_reports(n: int, ax: float = 0.0, ay: float = 0.0, az: float = 0.0) -> list[dict]:
@@ -21,15 +26,27 @@ def _make_impulse_reports(
     impulse_mag: float,
     total_frames: int = 350,
     baseline_mag: float = 100.0,
+    *,
+    probe_ts: float = 0.0,
+    dt_s: float = 0.008,
+    with_t_mono: bool = False,
 ) -> tuple[list[dict], list[dict]]:
-    """Build pre + post report lists for a probe with impulse at quiet_frames ms."""
+    """Build pre + post lists; impulse first appears at frame index quiet_frames."""
     pre = _make_reports(30, az=baseline_mag)
+    if with_t_mono:
+        pre = [{**r, "t_mono": probe_ts - (len(pre) - i) * dt_s} for i, r in enumerate(pre)]
     post_quiet = _make_reports(quiet_frames, az=baseline_mag)
     post_impulse = _make_reports(
         total_frames - quiet_frames,
         az=baseline_mag + impulse_mag,
     )
-    return pre, post_quiet + post_impulse
+    post = post_quiet + post_impulse
+    if with_t_mono:
+        post = [
+            {**r, "t_mono": probe_ts + (i + 1) * dt_s}
+            for i, r in enumerate(post)
+        ]
+    return pre, post
 
 
 class TestL6bReflexAnalyzer:
@@ -40,37 +57,40 @@ class TestL6bReflexAnalyzer:
             accel_delta_threshold_lsb=500.0,
         )
 
+    def test_ms_per_report_matches_poll_cadence(self):
+        assert MS_PER_REPORT == pytest.approx(8.0)
+
     def test_human_latency_classified_correctly(self):
-        """Latency 140ms → HUMAN, p_human = 0.90."""
-        pre, post = _make_impulse_reports(quiet_frames=140, impulse_mag=600.0)
+        """Frame 18 → 144 ms → HUMAN, p_human = 0.90."""
+        pre, post = _make_impulse_reports(quiet_frames=18, impulse_mag=600.0)
         result = self.analyzer.analyze(pre, post, probe_ts=0.0)
         assert result.valid is True
-        assert result.latency_ms == pytest.approx(140.0, abs=1.0)
+        assert result.latency_ms == pytest.approx(18 * MS_PER_REPORT, abs=MS_PER_REPORT)
         assert result.classification == "HUMAN"
         p = self.analyzer.classify(result)
         assert p == pytest.approx(0.90)
 
     def test_bot_latency_classified_correctly(self):
-        """Latency 3ms → BOT, p_human = 0.05."""
-        pre, post = _make_impulse_reports(quiet_frames=3, impulse_mag=600.0)
+        """Frame 1 → 8 ms → BOT, p_human = 0.05."""
+        pre, post = _make_impulse_reports(quiet_frames=1, impulse_mag=600.0)
         result = self.analyzer.analyze(pre, post, probe_ts=0.0)
         assert result.valid is True
-        assert result.latency_ms == pytest.approx(3.0, abs=1.0)
+        assert result.latency_ms == pytest.approx(1 * MS_PER_REPORT, abs=0.1)
         assert result.classification == "BOT"
         p = self.analyzer.classify(result)
         assert p == pytest.approx(0.05)
 
     def test_inconclusive_latency_lower_bound(self):
-        """Latency 50ms (between BOT_MAX=15 and HUMAN_MIN=80) → INCONCLUSIVE, p=0.5."""
-        pre, post = _make_impulse_reports(quiet_frames=50, impulse_mag=600.0)
+        """Frame 6 → 48 ms (between BOT_MAX=15 and HUMAN_MIN=80) → INCONCLUSIVE."""
+        pre, post = _make_impulse_reports(quiet_frames=6, impulse_mag=600.0)
         result = self.analyzer.analyze(pre, post, probe_ts=0.0)
         assert result.valid is True
         assert result.classification == "INCONCLUSIVE"
         assert self.analyzer.classify(result) == pytest.approx(0.5)
 
     def test_inconclusive_latency_upper_bound(self):
-        """Latency 310ms (above HUMAN_MAX=280) → INCONCLUSIVE, p=0.5."""
-        pre, post = _make_impulse_reports(quiet_frames=310, impulse_mag=600.0, total_frames=350)
+        """Frame 39 → 312 ms (above HUMAN_MAX=280) → INCONCLUSIVE."""
+        pre, post = _make_impulse_reports(quiet_frames=39, impulse_mag=600.0, total_frames=350)
         result = self.analyzer.analyze(pre, post, probe_ts=0.0)
         assert result.classification == "INCONCLUSIVE"
         assert self.analyzer.classify(result) == pytest.approx(0.5)
@@ -87,14 +107,74 @@ class TestL6bReflexAnalyzer:
 
     def test_pre_mean_baseline_subtracted(self):
         """Delta is computed against pre_mean, not zero — baseline shift handled correctly."""
-        # pre baseline at high mag, post impulse only slightly above
         baseline = 5000.0
         impulse_extra = 600.0
         pre = _make_reports(30, az=baseline)
-        # post frames at baseline (no impulse) + one frame at baseline+impulse_extra
         post = _make_reports(99, az=baseline) + [{"ax": 0.0, "ay": 0.0, "az": baseline + impulse_extra}]
         result = self.analyzer.analyze(pre, post, probe_ts=0.0)
         assert result.valid is True
-        assert result.latency_ms == pytest.approx(99.0, abs=1.0)
-        # delta_peak should be approximately impulse_extra
+        assert result.latency_ms == pytest.approx(99 * MS_PER_REPORT, abs=MS_PER_REPORT)
         assert result.accel_delta_peak == pytest.approx(impulse_extra, rel=0.05)
+
+    def test_human_at_frame_15_120ms(self):
+        """Frame 15, LSB delta 600 → ~120 ms HUMAN band."""
+        pre = _make_reports(30, az=8192.0)
+        post = _make_reports(15, az=8192.0) + _make_reports(335, az=8192.0 + 600.0)
+        result = self.analyzer.analyze(pre, post, probe_ts=0.0)
+        assert result.valid is True
+        assert result.latency_ms == pytest.approx(120.0, abs=MS_PER_REPORT)
+        assert result.classification == "HUMAN"
+
+    def test_bot_at_frame_1_8ms(self):
+        """Frame 1, LSB delta 600 → 8 ms BOT band."""
+        pre = _make_reports(30, az=8192.0)
+        post = _make_reports(1, az=8192.0) + _make_reports(349, az=8192.0 + 600.0)
+        result = self.analyzer.analyze(pre, post, probe_ts=0.0)
+        assert result.valid is True
+        assert result.classification == "BOT"
+
+    def test_true_latency_overrides_legacy_index(self):
+        """Legacy index says 312ms but t_mono says 230ms → HUMAN at 280ms max."""
+        pre, post = _make_impulse_reports(
+            quiet_frames=39,
+            impulse_mag=600.0,
+            probe_ts=10.0,
+            with_t_mono=True,
+        )
+        post[39] = {**post[39], "t_mono": 10.0 + 0.230}
+        result = self.analyzer.analyze(pre, post, probe_ts=10.0)
+        assert result.legacy_latency_ms == pytest.approx(39 * MS_PER_REPORT, abs=0.1)
+        assert result.true_latency_ms == pytest.approx(230.0, abs=1.0)
+        assert result.latency_ms == pytest.approx(230.0, abs=1.0)
+        assert result.classification == "HUMAN"
+
+    def test_desk_human_max_350_classifies_slow_true_latency(self):
+        """296ms true latency is INCONCLUSIVE at 280ms max but HUMAN at desk 350ms."""
+        prod = L6bReflexAnalyzer(human_min_ms=80.0, human_max_ms=280.0)
+        desk = L6bReflexAnalyzer(human_min_ms=80.0, human_max_ms=350.0)
+        pre, post = _make_impulse_reports(
+            quiet_frames=30,
+            impulse_mag=600.0,
+            probe_ts=5.0,
+            with_t_mono=True,
+        )
+        post[30] = {**post[30], "t_mono": 5.0 + 0.296}
+        prod_result = prod.analyze(pre, post, probe_ts=5.0)
+        desk_result = desk.analyze(pre, post, probe_ts=5.0)
+        assert prod_result.true_latency_ms == pytest.approx(296.0, abs=1.0)
+        assert prod_result.classification == "INCONCLUSIVE"
+        assert desk_result.classification == "HUMAN"
+
+    def test_mechanical_coupling_inconclusive_not_human(self):
+        """Sub-80ms true with reflex_gap < 50ms → INCONCLUSIVE (motor coupling)."""
+        pre, post = _make_impulse_reports(
+            quiet_frames=4,
+            impulse_mag=600.0,
+            probe_ts=1.0,
+            with_t_mono=True,
+        )
+        result = self.analyzer.analyze(pre, post, probe_ts=1.0)
+        assert result.true_latency_ms == pytest.approx(40.0, abs=2.0)
+        assert result.reflex_gap_ms is not None
+        assert result.reflex_gap_ms < MECHANICAL_REFLEX_GAP_MAX_MS
+        assert result.classification == "INCONCLUSIVE"

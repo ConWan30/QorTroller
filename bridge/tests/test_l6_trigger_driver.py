@@ -144,6 +144,28 @@ class TestL6TriggerDriver(unittest.TestCase):
         fresh_ts = time.monotonic()
         self.assertTrue(seq.is_response_window_open(fresh_ts, timeout_s=3.0))
 
+    def test_9_send_l6b_probe_uses_custom_force(self):
+        """send_l6b_probe() must write the requested R2 force slot."""
+        _patch_trigger_modes()
+        driver = L6TriggerDriver()
+        ds = _make_mock_ds()
+        written: list = []
+
+        async def _fake_thread(fn, *args, **kwargs):
+            written.append(args)
+            fn(*args, **kwargs)
+
+        async def _run():
+            with patch("bridge.controller.l6_trigger_driver.asyncio.to_thread",
+                       side_effect=_fake_thread):
+                return await driver.send_l6b_probe(ds, r2_force=120, mode="rigid")
+
+        asyncio.run(_run())
+        self.assertEqual(len(written), 1)
+        profile = written[0][1]
+        self.assertEqual(profile.r2_forces[0], 120)
+        self.assertEqual(profile.r2_mode, 0x01)
+
 
 if __name__ == "__main__":
     unittest.main()

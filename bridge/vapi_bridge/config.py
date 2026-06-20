@@ -15,7 +15,12 @@ from pathlib import Path
 # crash with ModuleNotFoundError. Degrade gracefully instead.
 try:
     from dotenv import load_dotenv
-    load_dotenv()
+    _env_path = Path(__file__).resolve().parents[1] / ".env"
+    try:
+        load_dotenv(_env_path, encoding="utf-8")
+    except UnicodeDecodeError:
+        # Windows editors sometimes save bridge/.env as cp1252; fail-open re-read.
+        load_dotenv(_env_path, encoding="cp1252")
 except ImportError:  # pragma: no cover — env without python-dotenv
     pass
 
@@ -777,6 +782,30 @@ class Config:
         default_factory=lambda: float(_env("L6B_HUMAN_MAX_MS", "280.0"))
     )
     """Maximum latency (ms) to classify as HUMAN reflex (cortical loop upper bound)."""
+    l6b_r2_quiet_threshold: int = field(
+        default_factory=lambda: int(_env("L6B_R2_QUIET_THRESHOLD", "15"))
+    )
+    """R2 ADC (0–255) must stay below this on all trailing frames to allow L6B probe dispatch."""
+    l6b_probe_r2_force: int = field(
+        default_factory=lambda: max(
+            1, min(255, int(_env("L6B_PROBE_R2_FORCE", "60")))
+        )
+    )
+    """R2 adaptive-trigger pulse amplitude for L6B_PROBE (0–255). Default 60 (~24%)."""
+    l6b_probe_mode: str = field(
+        default_factory=lambda: (
+            _env("L6B_PROBE_MODE", "pulse").strip().lower()
+            if _env("L6B_PROBE_MODE", "pulse").strip().lower() in ("pulse", "rigid")
+            else "pulse"
+        )
+    )
+    """L6B actuator mode: ``pulse`` (default) or ``rigid`` (desk plumbing validation)."""
+    l6b_probe_hold_ms: int = field(
+        default_factory=lambda: max(
+            15, min(500, int(_env("L6B_PROBE_HOLD_MS", "15")))
+        )
+    )
+    """How long R2 effect stays active before BASELINE_OFF clear (default 15ms)."""
 
     # --- Phase 62: Player Enrollment Ceremony ---
     enrollment_min_sessions: int = field(

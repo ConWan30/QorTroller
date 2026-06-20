@@ -54,6 +54,15 @@ from pathlib import Path
 from typing import Awaitable, Callable, Optional
 
 from .codec import compute_device_id, parse_record
+from .cco_l6b_wiring import (
+    append_l6b_probe_diagnostic_jsonl,
+    check_l6b_applicability,
+    compute_l6b_probe_diagnostic,
+    evaluate_l6b_r2_quiet_gate,
+    format_l6b_skip_log,
+    l6b_probe_diagnostic_to_json,
+    map_l6b_classification_to_reflex_verdict,
+)
 from .config import Config
 from .continuity_prover import FEATURE_KEYS
 from .store import Store
@@ -461,19 +470,28 @@ class DualShockTransport:
         self._l6_pending: dict | None = None  # {profile_id, sent_ts, nonce_bytes} or None
         self._l6_p_human: float = 0.5         # last L6 score (null default)
         self._l6_loop_count: int = 0          # incremented every loop iteration
-        if getattr(self._cfg, "l6_challenges_enabled", False):
+        _need_l6_driver = (
+            getattr(self._cfg, "l6_challenges_enabled", False)
+            or getattr(self._cfg, "l6b_enabled", False)
+        )
+        if _need_l6_driver:
             try:
                 _proj_root = str(Path(__file__).parents[2])
                 if _proj_root not in sys.path:
                     sys.path.insert(0, _proj_root)
                 from bridge.controller.l6_trigger_driver import L6TriggerDriver, L6_CAPTURE_MODE
-                from .l6_response_analyzer import L6ResponseAnalyzer
                 _capture_store = self._store if L6_CAPTURE_MODE else None
                 self._l6_driver = L6TriggerDriver(store=_capture_store)
-                self._l6_analyzer = L6ResponseAnalyzer()
-                log.info("Phase C: L6 Active Challenge-Response enabled")
+                if getattr(self._cfg, "l6_challenges_enabled", False):
+                    from .l6_response_analyzer import L6ResponseAnalyzer
+                    self._l6_analyzer = L6ResponseAnalyzer()
+                    log.info("Phase C: L6 Active Challenge-Response enabled")
+                else:
+                    log.info(
+                        "CCO Phase B: L6TriggerDriver enabled for L6b haptic delivery only",
+                    )
             except Exception as _l6_exc:
-                log.warning("Phase C: L6 init failed (non-fatal): %s", _l6_exc)
+                log.warning("Phase C/L6b: L6TriggerDriver init failed (non-fatal): %s", _l6_exc)
 
         # Phase 63: L6b Neuromuscular Reflex Layer
         self._l6b_enabled: bool = getattr(self._cfg, "l6b_enabled", False)
@@ -484,6 +502,10 @@ class DualShockTransport:
         self._l6b_probe_count: int = 0
         self._l6b_p_human: float = 0.5          # neutral prior until first probe completes
         self._l6b_loop_count: int = 0
+        # CCO Phase B: cached CapabilityReport + latest reflex telemetry
+        self._cco_capability_report = None
+        self._cco_reflex_verdict: str | None = None
+        self._cco_l6b_skip_reason = None
         if self._l6b_enabled:
             try:
                 _proj_root_l6b = str(Path(__file__).parents[2])
@@ -1031,6 +1053,33 @@ class DualShockTransport:
                 "DeviceProfileRegistry unavailable (%s) — defaulting to DualSense Edge",
                 exc,
             )
+
+        # CCO Phase B: resolve CapabilityReport once per session (read-only oracle).
+        try:
+            from .capability_oracle import CapabilityOracle
+            _dp = self._device_profile
+            if _dp is not None:
+                _vid = _dp.hid_vendor_id
+                _pid = _dp.hid_product_ids[0] if _dp.hid_product_ids else 0x0DF2
+                _profile_id = _dp.profile_id
+            else:
+                _vid, _pid = 0x054C, 0x0DF2
+                _profile_id = getattr(self._cfg, "device_profile_id", None) or None
+            _did_hex = self._device_id.hex() if self._device_id else None
+            self._cco_capability_report = CapabilityOracle.resolve(
+                _vid,
+                _pid,
+                profile_id=_profile_id,
+                device_id_hex=_did_hex,
+            )
+            log.info(
+                "CCO Phase B: capability report profile=%s ceiling=%s",
+                self._cco_capability_report.profile_id,
+                self._cco_capability_report.presence_ceiling_candidate,
+            )
+        except Exception as _cco_exc:
+            log.warning("CCO Phase B: CapabilityOracle resolve failed (non-fatal): %s", _cco_exc)
+            self._cco_capability_report = None
 
         return True
 
@@ -1589,6 +1638,19 @@ class DualShockTransport:
                 except Exception as _bt_exc:
                     log.debug("L0 BT presence check error (non-fatal): %s", _bt_exc)
 
+            # CCO Phase B: L6b applicability gate (telemetry-only; does not enable L6B).
+            _l6b_applicable = False
+            if self._l6b_enabled:
+                _cco_app = check_l6b_applicability(
+                    self._cco_capability_report,
+                    l6_driver_present=self._l6_driver is not None,
+                    dualsense_handle_present=bool(self._reader and self._reader.ds),
+                )
+                _l6b_applicable = _cco_app.applicable
+                self._cco_l6b_skip_reason = _cco_app.skip_reason
+            else:
+                self._cco_l6b_skip_reason = None
+
             # Phase 21: store PITL metadata sidecar — read by Bridge.on_record() for persistence
             # Phase 55: ioID DID lookup from local store (non-blocking)
             _ioid_did = None
@@ -1638,6 +1700,20 @@ class DualShockTransport:
                 "l6b_enabled":          self._l6b_enabled,
                 "l6b_probe_count":      self._l6b_probe_count,
                 "l6b_p_human":          self._l6b_p_human if self._l6b_probe_count > 0 else None,
+                # CCO Phase B: T0 telemetry (read-only; non-gating)
+                "cco_t0_engine": (
+                    self._cco_capability_report.t0_engine
+                    if self._cco_capability_report is not None else None
+                ),
+                "cco_presence_ceiling_candidate": (
+                    self._cco_capability_report.presence_ceiling_candidate
+                    if self._cco_capability_report is not None else None
+                ),
+                "cco_reflex_verdict": self._cco_reflex_verdict,
+                "cco_l6b_skip": (
+                    format_l6b_skip_log(self._cco_l6b_skip_reason)
+                    if self._cco_l6b_skip_reason is not None else None
+                ),
             }
 
             # Phase 59: IBI snapshot for Biometric Heartbeat visualization
@@ -1836,13 +1912,17 @@ class DualShockTransport:
                                     pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
             # --- Phase 63: L6b Neuromuscular Reflex pre-buffer + probe window ---
-            if self._l6b_enabled and frames:
-                # Feed frames into pre-buffer (flat ax/ay/az format for L6bReflexAnalyzer)
+            if self._l6b_enabled and _l6b_applicable and frames:
+                # L6bReflexAnalyzer expects raw accel LSB; InputSnapshot stores g only.
+                _l6b_accel_scale = float(
+                    getattr(self._reader, "_accel_scale", None) or 8192.0
+                )
                 for _f in frames:
                     _l6b_entry = {
-                        "ax": getattr(_f, "accel_x", 0),
-                        "ay": getattr(_f, "accel_y", 0),
-                        "az": getattr(_f, "accel_z", 0),
+                        "ax": getattr(_f, "accel_x", 0) * _l6b_accel_scale,
+                        "ay": getattr(_f, "accel_y", 0) * _l6b_accel_scale,
+                        "az": getattr(_f, "accel_z", 0) * _l6b_accel_scale,
+                        "t_mono": time.monotonic(),
                     }
                     if self._l6b_pending is None:
                         self._l6b_pre_buffer.append(_l6b_entry)
@@ -1860,21 +1940,87 @@ class DualShockTransport:
                             )
                             self._l6b_p_human = self._l6b_analyzer.classify(_l6b_result)
                             self._l6b_probe_count += 1
+                            _reflex_verdict = map_l6b_classification_to_reflex_verdict(
+                                _l6b_result.classification,
+                            )
+                            self._cco_reflex_verdict = _reflex_verdict
                             log.debug(
-                                "Phase 63: L6b result latency=%.1fms class=%s p_human=%.3f",
+                                "Phase 63: L6b result latency=%.1fms class=%s p_human=%.3f reflex=%s",
                                 _l6b_result.latency_ms,
                                 _l6b_result.classification,
                                 self._l6b_p_human,
+                                _reflex_verdict,
                             )
                             if self._store and self._device_id is not None:
                                 try:
-                                    self._store.insert_l6b_probe(
+                                    _cco_rep = self._cco_capability_report
+                                    _probe_log_id = self._store.insert_l6b_probe(
                                         device_id=self._device_id.hex(),
                                         probe_ts_ms=int(self._l6b_pending["probe_ts"] * 1000),
                                         latency_ms=_l6b_result.latency_ms,
                                         classification=_l6b_result.classification,
                                         accel_delta_peak=_l6b_result.accel_delta_peak,
+                                        reflex_verdict=_reflex_verdict,
+                                        cco_profile_id=(
+                                            _cco_rep.profile_id if _cco_rep is not None else None
+                                        ),
+                                        policy_ref=(
+                                            _cco_rep.policy_ref if _cco_rep is not None else None
+                                        ),
+                                        trigger_r2_at_probe=self._l6b_pending.get(
+                                            "trigger_r2_at_probe"
+                                        ),
                                     )
+                                    try:
+                                        _diag = compute_l6b_probe_diagnostic(
+                                            self._l6b_pending["pre_reports"],
+                                            self._l6b_post_buffer,
+                                            self._l6b_pending["probe_ts"],
+                                            legacy_latency_ms=_l6b_result.legacy_latency_ms,
+                                            response_threshold_lsb=float(
+                                                getattr(
+                                                    self._cfg,
+                                                    "l6b_accel_delta_threshold_lsb",
+                                                    500.0,
+                                                )
+                                            ),
+                                            probe_r2_force=self._l6b_pending.get(
+                                                "probe_r2_force"
+                                            ),
+                                            probe_mode=self._l6b_pending.get("probe_mode"),
+                                            probe_hold_ms=self._l6b_pending.get(
+                                                "probe_hold_ms"
+                                            ),
+                                        )
+                                        _diag_json = l6b_probe_diagnostic_to_json(_diag)
+                                        self._store.insert_l6b_probe_diagnostic(
+                                            device_id=self._device_id.hex(),
+                                            probe_ts_mono=_diag.probe_ts,
+                                            probe_log_id=_probe_log_id,
+                                            legacy_latency_ms=_diag.legacy_index_latency_ms,
+                                            true_latency_ms=_diag.true_latency_ms,
+                                            precursor_gap_ms=_diag.precursor_gap_ms,
+                                            reflex_gap_ms=_diag.reflex_gap_ms,
+                                            diagnostic_json=_diag_json,
+                                        )
+                                        append_l6b_probe_diagnostic_jsonl(
+                                            _probe_log_id,
+                                            self._device_id.hex(),
+                                            _diag_json,
+                                        )
+                                        log.debug(
+                                            "L6B diag: true_latency_ms=%s precursor_gap_ms=%s "
+                                            "reflex_gap_ms=%s legacy_ms=%s",
+                                            _diag.true_latency_ms,
+                                            _diag.precursor_gap_ms,
+                                            _diag.reflex_gap_ms,
+                                            _diag.legacy_index_latency_ms,
+                                        )
+                                    except Exception as _diag_exc:
+                                        log.debug(
+                                            "Phase 63: L6b diagnostic failed (non-fatal): %s",
+                                            _diag_exc,
+                                        )
                                 except Exception as _store_exc:
                                     log.debug("Phase 63: L6b store insert failed (non-fatal): %s", _store_exc)
                         except Exception as _exc:
@@ -1970,20 +2116,46 @@ class DualShockTransport:
             # --- Phase 63: L6b probe dispatch ---
             self._l6b_loop_count += 1
             _l6b_interval = getattr(self._cfg, "l6b_probe_interval_ticks", 6750)
+            _l6b_r2_quiet_threshold = int(
+                getattr(self._cfg, "l6b_r2_quiet_threshold", 15)
+            )
+            _l6b_r2_quiet_ok, _l6b_r2_at_probe = evaluate_l6b_r2_quiet_gate(
+                frames,
+                quiet_threshold=_l6b_r2_quiet_threshold,
+            )
             if (
-                self._l6b_analyzer is not None
+                self._l6b_enabled
+                and _l6b_applicable
+                and self._l6b_analyzer is not None
                 and self._l6b_pending is None
                 and self._l6b_loop_count % _l6b_interval == 0
                 and self._l6b_loop_count > 0
                 and self._reader and self._reader.ds
                 and self._l6_driver is not None  # reuse L6TriggerDriver for haptic delivery
+                and _l6b_r2_quiet_ok
             ):
                 try:
-                    _probe_ts = await self._l6_driver.send_challenge(8, self._reader.ds)
-                    # Schedule trigger restore — 15ms after pulse to ensure BASELINE_OFF
+                    _l6b_r2_force = int(
+                        getattr(self._cfg, "l6b_probe_r2_force", 60)
+                    )
+                    _l6b_mode = str(
+                        getattr(self._cfg, "l6b_probe_mode", "pulse")
+                    ).strip().lower()
+                    if _l6b_mode not in ("pulse", "rigid"):
+                        _l6b_mode = "pulse"
+                    _l6b_hold_ms = int(
+                        getattr(self._cfg, "l6b_probe_hold_ms", 15)
+                    )
+                    _probe_ts = await self._l6_driver.send_l6b_probe(
+                        self._reader.ds,
+                        r2_force=_l6b_r2_force,
+                        mode=_l6b_mode,
+                    )
+                    # Schedule trigger restore after hold window (15ms prod; longer for rigid desk)
                     import asyncio as _al6b
+                    _hold_s = max(0.015, _l6b_hold_ms / 1000.0)
                     _al6b.get_event_loop().call_later(
-                        0.015,
+                        _hold_s,
                         lambda: _al6b.ensure_future(
                             self._l6_driver.clear_triggers(self._reader.ds)
                         ) if self._reader and self._reader.ds else None,
@@ -1992,11 +2164,36 @@ class DualShockTransport:
                         "probe_ts": _probe_ts,
                         "pre_reports": list(self._l6b_pre_buffer),
                         "frames_remaining": int(350),  # 350ms capture window at ~1 report/ms
+                        "trigger_r2_at_probe": _l6b_r2_at_probe,
+                        "probe_r2_force": _l6b_r2_force,
+                        "probe_mode": _l6b_mode,
+                        "probe_hold_ms": _l6b_hold_ms,
                     }
                     self._l6b_post_buffer = []
-                    log.debug("Phase 63: L6b probe dispatched ts=%.3f", _probe_ts)
+                    log.info(
+                        "L6B: probe dispatched mode=%s r2_force=%d hold_ms=%d "
+                        "r2_at_probe=%s quiet_threshold=%d",
+                        _l6b_mode,
+                        _l6b_r2_force,
+                        _l6b_hold_ms,
+                        _l6b_r2_at_probe,
+                        _l6b_r2_quiet_threshold,
+                    )
                 except Exception as _exc:
                     log.warning("Phase 63: L6b probe dispatch failed (non-fatal): %s", _exc)
+            elif (
+                self._l6b_enabled
+                and _l6b_applicable
+                and self._l6b_pending is None
+                and self._l6b_loop_count % _l6b_interval == 0
+                and self._l6b_loop_count > 0
+                and not _l6b_r2_quiet_ok
+            ):
+                log.debug(
+                    "L6B: probe skipped — R2 not quiet (r2_at_probe=%s threshold=%d)",
+                    _l6b_r2_at_probe,
+                    _l6b_r2_quiet_threshold,
+                )
 
             # --- Pace to interval ---
             elapsed = time.monotonic() - t_start
