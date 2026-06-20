@@ -141,10 +141,8 @@
       "id": "api_agent_zkba_vpm",
       "domain": "agent_zkba_vpm",
       "target_file": "bridge/vapi_bridge/operator_api/agent_zkba_vpm.py",
-      "status": "pending",
-      "agent_commit": null,
-      "route_count_est": 12,
-      "order": 12
+      "status": "applied",
+      "agent_commit": "aa8e518d",
     },
     {
       "id": "api_agent_ioswarm",
