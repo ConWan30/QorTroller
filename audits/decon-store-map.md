@@ -1,10 +1,11 @@
 # DECON-1 Stream 2 — Store / Operator-API Partition Map
 
-**Date:** 2026-06-09  
-**Status:** VERIFICATION PASS (read-only) — HOLD for operator decisions D-DECON-2/3/4.  
-**Scope:** `bridge/vapi_bridge/store.py` (18,794 lines) + `bridge/vapi_bridge/operator_api.py` (10,798 lines).
+**Date:** 2026-06-09 (partition map) — **completion:** 2026-06-20  
+**Status:** **COMPLETE** — D-DECON-2/3/4/5 approved; store + operator_api mechanical extractions finished (queue 21/21 `applied`).  
+**Scope (original):** `bridge/vapi_bridge/store.py` (18,794 lines) + `bridge/vapi_bridge/operator_api.py` (10,798 lines).  
+**Scope (current):** `bridge/vapi_bridge/store/_core.py` (~8,200 lines, schema centralized) + 13 store mixins; `bridge/vapi_bridge/operator_api/_app.py` (~800 lines, thin shell) + 12 `register_*` domain modules.
 
-This document is the Phase 2.0 deliverable. Phase 2.1+ (mechanical extraction, one commit per domain) does NOT begin until decisions land.
+Phase 2.0 was the read-only map; Phase 2.1+ extractions ran 2026-06-10 through 2026-06-20 per `docs/_daemon_proposals/decon_residue_queue.json`.
 
 ---
 
@@ -191,3 +192,13 @@ Approve **register-function pattern** (§F-DECON-2.2 strategy (A)) over APIRoute
 - CLAUDE.md: NOT updated this phase (NOTE drafted at Phase 2.1 first extraction commit)
 
 **Awaiting D-DECON-2 / D-DECON-3 / D-DECON-4 / D-DECON-5 decisions before any code write.**
+
+---
+
+## Phase 2 completion summary (2026-06-20)
+
+- **Store:** 12 domain mixins extracted (`zkba_vpm` through `calibration`) + `RetinaMixin`; `_init_schema()` remains in `_core.py` per D-DECON-2(4).
+- **Operator API:** 12 register-function modules extracted (PRs #22–#25 for the final four: operator_initiative, grind, supervisor, misc); `_app.py` retains retina (5), `/player/session-status`, and `/operator/poep-registry/{device_id}` only.
+- **Queue:** `docs/_daemon_proposals/decon_residue_queue.json` — all 21 items `applied`, zero pending.
+- **Call surface:** zero import churn (`from vapi_bridge.operator_api import create_operator_app` unchanged).
+- **Open flake (non-blocking):** F-DECON2-5 — `test_mcp_audit_tool_wrappers` batch import-order pollution.
