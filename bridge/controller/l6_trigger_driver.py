@@ -89,6 +89,20 @@ class L6TriggerDriver:
         await asyncio.to_thread(self._sync_write, ds, profile)
         return time.monotonic()
 
+    async def send_l6b_probe(
+        self,
+        ds: object,
+        *,
+        r2_force: int = 60,
+        mode: str = "pulse",
+    ) -> float:
+        """Send L6B_PROBE with configurable R2 force and mode. Returns monotonic timestamp."""
+        from bridge.controller.l6_challenge_profiles import l6b_probe_profile
+
+        profile = l6b_probe_profile(r2_force, mode=mode)
+        await asyncio.to_thread(self._sync_write, ds, profile)
+        return time.monotonic()
+
     async def clear_triggers(self, ds: object) -> None:
         """Restore both triggers to BASELINE_OFF (no resistance)."""
         baseline = CHALLENGE_PROFILES[0]

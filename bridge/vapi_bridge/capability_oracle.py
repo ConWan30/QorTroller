@@ -78,6 +78,7 @@ def _identity_class(
         return "I1_SILICON"
     device_id = _normalize_device_id(device_id_hex)
     if device_id is None:
+        # signing_path=="B" without device_id_hex also lands here → I0_SOFTWARE.
         return "I0_SOFTWARE"
     if device_id == PATH_B_DEMO_DEVICE_ID:
         return "PATH_B_HOST_KEY"

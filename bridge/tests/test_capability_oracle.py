@@ -200,6 +200,11 @@ def test_identity_class_path_b_signing_path_b_with_device():
     assert report.identity_class == "PATH_B_HOST_KEY"
 
 
+def test_identity_class_signing_path_b_without_device_id_is_i0_software():
+    report = CapabilityOracle.resolve(0x054C, 0x0DF2, signing_path="B")
+    assert report.identity_class == "I0_SOFTWARE"
+
+
 def test_invalid_profile_id_falls_back_generic():
     report = CapabilityOracle.resolve(
         0x054C, 0x0DF2, profile_id="nonexistent_profile_v99",

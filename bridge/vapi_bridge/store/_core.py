@@ -692,6 +692,36 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                 CREATE INDEX IF NOT EXISTS idx_l6b_device
                 ON l6b_probe_log(device_id)
             """)
+            # CCO Phase B: optional telemetry columns on l6b_probe_log
+            for _col, _typ in (
+                ("reflex_verdict", "TEXT"),
+                ("cco_profile_id", "TEXT"),
+                ("policy_ref", "TEXT"),
+                ("trigger_r2_at_probe", "INTEGER"),
+            ):
+                try:
+                    conn.execute(f"ALTER TABLE l6b_probe_log ADD COLUMN {_col} {_typ}")
+                except Exception:
+                    pass
+            # F-L6B-CAL-005: read-only latency instrumentation (no classification impact)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS l6b_probe_diagnostic (
+                    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+                    probe_log_id          INTEGER,
+                    device_id             TEXT    NOT NULL,
+                    probe_ts_mono         REAL    NOT NULL,
+                    legacy_latency_ms     REAL,
+                    true_latency_ms       REAL,
+                    precursor_gap_ms      REAL,
+                    reflex_gap_ms         REAL,
+                    diagnostic_json       TEXT    NOT NULL,
+                    created_at            TEXT    NOT NULL DEFAULT (datetime('now'))
+                )
+            """)
+            conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_l6b_diag_probe_log
+                ON l6b_probe_diagnostic(probe_log_id)
+            """)
             # Phase 65: Autonomous agent rulings table
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS agent_rulings (
