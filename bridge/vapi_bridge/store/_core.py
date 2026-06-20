@@ -692,6 +692,16 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                 CREATE INDEX IF NOT EXISTS idx_l6b_device
                 ON l6b_probe_log(device_id)
             """)
+            # CCO Phase B: optional telemetry columns on l6b_probe_log
+            for _col, _typ in (
+                ("reflex_verdict", "TEXT"),
+                ("cco_profile_id", "TEXT"),
+                ("policy_ref", "TEXT"),
+            ):
+                try:
+                    conn.execute(f"ALTER TABLE l6b_probe_log ADD COLUMN {_col} {_typ}")
+                except Exception:
+                    pass
             # Phase 65: Autonomous agent rulings table
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS agent_rulings (

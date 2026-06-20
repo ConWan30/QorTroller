@@ -119,3 +119,31 @@ class TestL6bStoreIntegration:
         baseline = store.get_l6b_baseline("bb" * 32)
         assert baseline["probe_count"] == 0
         assert baseline["mean_latency_ms"] is None
+
+    def test_insert_l6b_probe_cco_telemetry_columns(self, tmp_path):
+        """CCO Phase B: reflex_verdict + profile + policy_ref round-trip."""
+        import tempfile
+        tf = tempfile.NamedTemporaryFile(suffix=".db", delete=False, dir=str(tmp_path))
+        tf.close()
+        from vapi_bridge.store import Store
+        store = Store(tf.name)
+        store.insert_l6b_probe(
+            device_id="cc" * 32,
+            probe_ts_ms=2000000,
+            latency_ms=150.0,
+            classification="HUMAN",
+            accel_delta_peak=900.0,
+            reflex_verdict="REFLEX_OBSERVED",
+            cco_profile_id="sony_dualshock_edge_v1",
+            policy_ref="CCO_T0_POLICY_v1_OPTION_C",
+        )
+        with store._conn() as conn:
+            row = conn.execute(
+                "SELECT reflex_verdict, cco_profile_id, policy_ref "
+                "FROM l6b_probe_log WHERE device_id=?",
+                ("cc" * 32,),
+            ).fetchone()
+        assert row is not None
+        assert row["reflex_verdict"] == "REFLEX_OBSERVED"
+        assert row["cco_profile_id"] == "sony_dualshock_edge_v1"
+        assert row["policy_ref"] == "CCO_T0_POLICY_v1_OPTION_C"
