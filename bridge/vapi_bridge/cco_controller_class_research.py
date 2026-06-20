@@ -12,6 +12,7 @@ from typing import Any, Literal
 
 _SCHEMA = "qortroller-controller-class-research-v1"
 _POLICY_REF = "CCO_POEP_FUSION_v4_PHASE_G"
+PHASE_G_TARGET_N = 50
 
 ControllerClassTier = Literal["MINIMAL_PAD", "MID_TIER", "PREMIUM_EDGE"]
 MeasurementGrade = Literal["UNVALIDATED", "PARTIAL", "VALIDATED"]
@@ -63,11 +64,28 @@ def resolve_controller_class_tier(profile_id: str | None) -> ControllerClassTier
     return _PROFILE_TIER.get(profile_id, "MINIMAL_PAD")
 
 
+def resolve_corpus_measurement_grade(
+    tier: ControllerClassTier,
+    tier_probe_count: int,
+) -> MeasurementGrade:
+    """Dynamic grade from tier baseline + per-tier L6B corpus count.
+
+    UNVALIDATED tiers promote to PARTIAL at N>=PHASE_G_TARGET_N.
+    PREMIUM_EDGE baseline stays PARTIAL regardless of count.
+    VALIDATED is never assigned automatically — operator-fired only.
+    """
+    baseline = _TIER_MEASUREMENT_GRADE[tier]
+    if tier_probe_count >= PHASE_G_TARGET_N and baseline == "UNVALIDATED":
+        return "PARTIAL"
+    return baseline
+
+
 def assemble_controller_class_research(
     *,
     enabled: bool,
     profile_id: str | None = None,
     characterization_status: str | None = None,
+    tier_probe_count: int | None = None,
 ) -> dict[str, Any]:
     """Build Phase G research block for session-status (default-OFF activation gate)."""
     if not enabled:
@@ -78,7 +96,15 @@ def assemble_controller_class_research(
         }
 
     tier = resolve_controller_class_tier(profile_id)
-    measurement_grade = _TIER_MEASUREMENT_GRADE[tier]
+    if tier_probe_count is not None:
+        measurement_grade = resolve_corpus_measurement_grade(tier, tier_probe_count)
+        corpus_n = tier_probe_count
+        corpus_gate_reached = tier_probe_count >= PHASE_G_TARGET_N
+    else:
+        measurement_grade = _TIER_MEASUREMENT_GRADE[tier]
+        corpus_n = None
+        corpus_gate_reached = None
+
     return {
         "schema": _SCHEMA,
         "enabled": True,
@@ -89,6 +115,9 @@ def assemble_controller_class_research(
         "partner_claim_ceiling": _TIER_PARTNER_CEILING[tier],
         "measurement_gates_pending": list(_TIER_EMPIRICAL_GATES[tier]),
         "policy_ref": _POLICY_REF,
+        "corpus_n": corpus_n,
+        "corpus_target_n": PHASE_G_TARGET_N,
+        "corpus_gate_reached": corpus_gate_reached,
         "honesty_rail": (
             "UNVALIDATED tiers MUST NOT claim tournament-grade presence; "
             "PARTIAL applies to Edge-only partial corpus, not universal partner language."

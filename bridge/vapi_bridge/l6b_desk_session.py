@@ -206,6 +206,7 @@ def persist_desk_probe(
     protocol: str,
     player: str,
     r2_at_probe: int,
+    cco_profile_id: str | None = None,
 ) -> tuple[int | None, str]:
     """Write l6b_probe_log + l6b_probe_diagnostic. Returns (row_id, enriched_json)."""
     reflex_verdict = map_l6b_classification_to_reflex_verdict(result.classification)
@@ -229,7 +230,7 @@ def persist_desk_probe(
             classification=result.classification,
             accel_delta_peak=result.accel_delta_peak,
             reflex_verdict=reflex_verdict,
-            cco_profile_id=None,
+            cco_profile_id=cco_profile_id,
             policy_ref=policy_ref,
             trigger_r2_at_probe=r2_at_probe,
         )

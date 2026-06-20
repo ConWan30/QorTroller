@@ -163,6 +163,7 @@ def run_session(args: argparse.Namespace) -> int:
     print(f"  Device ID: {device_id}")
     print(f"  Protocol:  {args.protocol}")
     print(f"  Probes:    {args.count}")
+    print(f"  CCO profile: {args.cco_profile_id}")
     print(f"  Actuator:  mode={cfg.mode} force={cfg.r2_force} hold_ms={cfg.hold_ms}")
     print(f"  IMU:       pre={cfg.pre_samples} post~{expected_post_frames(cfg.capture_window_ms, cfg.poll_interval_s)} @ {cfg.poll_interval_s * 1000:.0f}ms")
     if store:
@@ -217,6 +218,7 @@ def run_session(args: argparse.Namespace) -> int:
                     protocol=args.protocol,
                     player=args.player,
                     r2_at_probe=r2_at_probe,
+                    cco_profile_id=args.cco_profile_id,
                 )
 
             outcome = DeskProbeOutcome(
@@ -270,6 +272,11 @@ def main() -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--player", "-p", default="P1", help="Player label")
+    parser.add_argument(
+        "--cco-profile-id",
+        default="sony_dualshock_edge_v1",
+        help="CCO profile_id tag for l6b_probe_log.cco_profile_id (Phase G tier bucketing)",
+    )
     parser.add_argument(
         "--protocol",
         choices=("still", "squeeze"),
