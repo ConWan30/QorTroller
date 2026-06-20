@@ -434,3 +434,4 @@ QorTroller's **Controller Capability Oracle** (partially **BUILT** via `controll
 | 2026-06-19 | Initial draft from v3 + v4 verification passes; F-V3-001, F-V3-002, maturity matrix; Phase A–G path; T0 fork documented as open |
 | 2026-06-19 | F-V3-002 closed Option C; Phase B complete; Phase A oracle contract scoped; code hold documented |
 | 2026-06-19 | Phase A.1 shipped; F-CCO-001 CHIA enrich no-op logged |
+| 2026-06-20 | Phase D — `cco_poep_bridge.py` wires CapabilityReport → PoEP runner; `presence.poep` enriched; `POEP_ENABLED=false` default |

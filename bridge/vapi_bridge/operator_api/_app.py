@@ -687,9 +687,16 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         _now = _t_pss.time()
         _enf = bool(getattr(cfg, "ipact_renewal_enforcement_enabled", False))
         _hs  = bool(getattr(cfg, "ipact_host_signer_enabled", False))
+        from ..cco_poep_bridge import assemble_poep_presence_status
+
+        _poep_enabled = bool(getattr(cfg, "poep_enabled", False))
+        _poep_corpus = getattr(cfg, "poep_corpus_dir", "poep_l9") or "poep_l9"
         _presence = {
-            "poep": {"enabled": bool(getattr(cfg, "poep_enabled", False)),
-                     "status": "pending calibration (N=0/50)"},
+            "poep": assemble_poep_presence_status(
+                poep_enabled=_poep_enabled,
+                capability_report=None,
+                corpus_dir=_poep_corpus,
+            ),
             "bcc":  {"enabled": False, "status": "dormant"},
         }
         _cco_empty = {
@@ -868,11 +875,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
 
         _l6b_prog = await asyncio.to_thread(store.get_l6b_calibration_progress, dev)
         _global_n = int(_l6b_prog.get("probe_count", 0))
-        _presence["poep"]["status"] = (
-            "calibration gate reached (PoEP still operator-gated)"
-            if _global_n >= 50
-            else f"pending calibration (N={_global_n}/50)"
-        )
+        _l6b_gate = bool(_l6b_prog.get("gate_reached", False))
         _profile_override = getattr(cfg, "device_profile_id", None) or None
         _cco_report = None
         try:
@@ -891,6 +894,14 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             l6b_calibration_progress=_l6b_prog,
             l6b_enabled=bool(getattr(cfg, "l6b_enabled", False)),
             controller_connected=controller_connected,
+        )
+        _presence["poep"] = assemble_poep_presence_status(
+            poep_enabled=_poep_enabled,
+            capability_report=_cco_report,
+            device_id=dev or None,
+            l6b_probe_count=_global_n,
+            l6b_gate_reached=_l6b_gate,
+            corpus_dir=_poep_corpus,
         )
 
         return {

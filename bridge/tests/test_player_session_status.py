@@ -75,13 +75,15 @@ class TestPlayerSessionStatus(unittest.TestCase):
                   "enforcement_active", "host_signer_active", "last_adjudication",
                   "presence", "cco", "timestamp"):
             self.assertIn(k, j)
+        self.assertIn("dormant", j["presence"]["poep"])
         self.assertFalse(j["controller_connected"])
         self.assertTrue(j["enforcement_active"])
         self.assertTrue(j["host_signer_active"])
         self.assertEqual(j["is_fully_eligible"]["source"], "no_device")
         # PoEP/BCC default-OFF surfaced as pending, NOT as an error
         self.assertFalse(j["presence"]["poep"]["enabled"])
-        self.assertIn("pending calibration", j["presence"]["poep"]["status"])
+        self.assertTrue(j["presence"]["poep"]["dormant"])
+        self.assertIn("pending L6B calibration", j["presence"]["poep"]["status"])
 
     def test_2_humanity_and_connection(self):
         """T-PSS-2: latest record drives humanity_prob + connection + PITL snapshot."""
@@ -180,7 +182,12 @@ class TestPlayerSessionStatus(unittest.TestCase):
         self.assertEqual(cco["t0_engine"], "L6B")
         self.assertEqual(cco["reflex_verdict"], "REFLEX_OBSERVED")
         self.assertTrue(cco["calibration"]["gate_reached"])
-        self.assertIn("calibration gate reached", r.json()["presence"]["poep"]["status"])
+        poep = r.json()["presence"]["poep"]
+        self.assertFalse(poep["enabled"])
+        self.assertTrue(poep["dormant"])
+        self.assertIsNone(poep["verdict"])
+        self.assertEqual(poep["challenge_type"], "adaptive_force")
+        self.assertTrue(poep["l6b_gate_reached"])
 
 
 if __name__ == "__main__":

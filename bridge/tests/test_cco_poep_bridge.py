@@ -1,0 +1,80 @@
+"""CCO Phase D — dormant CCO → PoEP bridge tests."""
+
+from __future__ import annotations
+
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).parents[1]))
+
+from vapi_bridge.cco_poep_bridge import (
+    PoepRunnerInputs,
+    assemble_poep_presence_status,
+    build_poep_runner_inputs,
+)
+
+
+@dataclass(frozen=True)
+class _FakeReport:
+    challenge_type_candidate: str = "adaptive_force"
+    presence_ceiling_candidate: str = "P-T3"
+    characterization_status: str = "PARTIAL_EDGE_ONLY"
+    profile_id: str = "sony_dualshock_edge_v1"
+    t2_t3_engine: str = "POEP"
+    policy_ref: str = "CCO_T0_POLICY_v1_OPTION_C"
+
+
+class TestBuildPoepRunnerInputs:
+    def test_maps_capability_report(self):
+        inp = build_poep_runner_inputs(
+            _FakeReport(), device_id="abc123",
+        )
+        assert inp.challenge_type == "adaptive_force"
+        assert inp.presence_ceiling_candidate == "P-T3"
+        assert inp.device_id == "abc123"
+
+    def test_none_report_fail_open(self):
+        inp = build_poep_runner_inputs(None)
+        assert inp.challenge_type is None
+        assert inp.t2_t3_engine == "POEP"
+
+
+class TestAssemblePoepPresenceStatus:
+    def test_dormant_never_emits_present(self):
+        poep = assemble_poep_presence_status(
+            poep_enabled=False,
+            capability_report=_FakeReport(),
+            l6b_probe_count=59,
+            l6b_gate_reached=True,
+        )
+        assert poep["dormant"] is True
+        assert poep["enabled"] is False
+        assert poep["verdict"] is None
+        assert poep["challenge_type"] == "adaptive_force"
+        assert poep["runner"]["profile_id"] == "sony_dualshock_edge_v1"
+
+    def test_uncharacterized_challenge_type_in_runner(self):
+        rep = _FakeReport(
+            challenge_type_candidate="button_timing",
+            characterization_status="UNCHARACTERIZED",
+            presence_ceiling_candidate="P-T0",
+        )
+        poep = assemble_poep_presence_status(
+            poep_enabled=False,
+            capability_report=rep,
+        )
+        assert poep["challenge_type"] == "button_timing"
+        assert poep["characterization_status"] == "UNCHARACTERIZED"
+
+    def test_l6b_pending_status_string(self):
+        poep = assemble_poep_presence_status(
+            poep_enabled=False,
+            capability_report=None,
+            l6b_probe_count=12,
+            l6b_gate_reached=False,
+        )
+        assert "pending L6B calibration" in poep["status"]
+        assert poep["l6b_probe_count"] == 12
