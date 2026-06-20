@@ -178,10 +178,11 @@
       "id": "api_agent_marketplace",
       "domain": "agent_marketplace_curator",
       "target_file": "bridge/vapi_bridge/operator_api/agent_marketplace.py",
-      "status": "pending",
+      "status": "applied",
       "agent_commit": null,
-      "route_count_est": 25,
-      "order": 16
+      "route_count_est": 20,
+      "order": 16,
+      "notes": "2026-06-19 register-function split; 20 marketplace/curator/twin-stream routes (5 non-contiguous blocks)"
     },
     {
       "id": "api_agent_tournament",
