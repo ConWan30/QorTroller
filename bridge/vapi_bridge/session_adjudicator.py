@@ -414,7 +414,9 @@ class SessionAdjudicator:
         """Advisory Trio-Retina cross-links for evidence_json (read-only)."""
         from .retina_perception import build_retina_evidence_slice
 
-        retina_enabled = bool(getattr(self._cfg, "retina_perception_enabled", False))
+        from .retina_depin_policy import is_effective_adjudicator
+
+        retina_enabled = is_effective_adjudicator(self._cfg)
         evidence_summary["retina"] = build_retina_evidence_slice(
             self._store,
             device_id,

@@ -276,6 +276,16 @@ export function useWatchdogStatus() {
 }
 
 // Trio-Retina advisory perception (default OFF on bridge; noMock for honesty)
+export function useRetinaPolicyStatus() {
+  return useQuery({
+    queryKey: ['retinaPolicyStatus'],
+    queryFn: () => get('/bridge/retina-policy-status', 'retinaPolicyStatus', { noMock: true }),
+    refetchInterval: 5000,
+    staleTime: 3000,
+    retry: 1,
+  })
+}
+
 export function useRetinaStatus(deviceId = '') {
   const q = deviceId ? `?device_id=${encodeURIComponent(deviceId)}` : ''
   return useQuery({

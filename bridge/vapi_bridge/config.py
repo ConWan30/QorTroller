@@ -1892,6 +1892,21 @@ class Config:
     retina_webhook_port: int = field(
         default_factory=lambda: _env_int("RETINA_WEBHOOK_PORT", 8091)
     )
+    retina_policy_auto_arm: bool = field(
+        default_factory=lambda: _env_bool("RETINA_POLICY_AUTO_ARM", True)
+    )
+    retina_adjudicator_context_enabled: bool = field(
+        default_factory=lambda: _env_bool("RETINA_ADJUDICATOR_CONTEXT_ENABLED", True)
+    )
+    retina_fsca_cross_oracle_enabled: bool = field(
+        default_factory=lambda: _env_bool("RETINA_FSCA_CROSS_ORACLE_ENABLED", True)
+    )
+    retina_external_ingest_enabled: bool = field(
+        default_factory=lambda: _env_bool("RETINA_EXTERNAL_INGEST_ENABLED", False)
+    )
+    retina_certified_edge_only: bool = field(
+        default_factory=lambda: _env_bool("RETINA_CERTIFIED_EDGE_ONLY", True)
+    )
 
     # --- Data Economy Arc 5: VAPIReplayProofPipeline (VHR proofs) ---
     replay_proof_pipeline_enabled: bool = field(

@@ -143,6 +143,7 @@ export const MOCK = {
 
   retinaStatus: () => ({
     retina_perception_enabled: false,
+    retina_perception_effective: false,
     total_rows: 0,
     anomaly_count_recent: 0,
     latest_record_hash: '',
@@ -150,6 +151,21 @@ export const MOCK = {
     latest_device_id: '',
     latest_created_at: 0,
     entries: [],
+    timestamp: now(),
+  }),
+
+  retinaPolicyStatus: () => ({
+    retina_policy_auto_arm: true,
+    retina_perception_enabled: false,
+    retina_external_ingest_enabled: false,
+    armed: false,
+    arm_source: 'unarmed',
+    qualifiers: {},
+    qualifiers_summary: 'uninitialized',
+    effective_perception: false,
+    effective_fsca: false,
+    effective_adjudicator: false,
+    policy_log: { total_log_rows: 0, entries: [] },
     timestamp: now(),
   }),
 

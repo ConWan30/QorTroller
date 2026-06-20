@@ -20,15 +20,18 @@ class RetinaMixin:
         anomaly_count: int = 0,
         state_commitment_hex: str = "",
         ts_ns: int | None = None,
+        source: str = "hid",
     ) -> int:
         ts = float((ts_ns or time.time_ns()) / 1e9)
+        _src = str(source or "hid")[:32]
         with self._conn() as conn:
             cur = conn.execute(
                 """
                 INSERT INTO retina_event_log (
                     device_id, events_json, world_state_json,
-                    record_hash_hex, state_commitment_hex, anomaly_count, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    record_hash_hex, state_commitment_hex, anomaly_count,
+                    created_at, source
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     device_id,
@@ -38,9 +41,61 @@ class RetinaMixin:
                     state_commitment_hex or "",
                     int(anomaly_count),
                     ts,
+                    _src,
                 ),
             )
             return int(cur.lastrowid)
+
+    def insert_retina_policy_log(
+        self,
+        *,
+        event_type: str,
+        arm_source: str = "",
+        device_id: str = "",
+        qualifiers_json: str = "{}",
+        effective_perception: bool = False,
+        ts: float | None = None,
+    ) -> int:
+        created = float(ts if ts is not None else time.time())
+        with self._conn() as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO retina_policy_log (
+                    event_type, arm_source, device_id, qualifiers_json,
+                    effective_perception, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    event_type,
+                    arm_source,
+                    device_id,
+                    qualifiers_json,
+                    1 if effective_perception else 0,
+                    created,
+                ),
+            )
+            return int(cur.lastrowid)
+
+    def get_retina_policy_status(self, limit: int = 10) -> dict[str, Any]:
+        limit = max(1, min(int(limit), 50))
+        with self._conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM retina_policy_log
+                ORDER BY id DESC LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        latest = dict(rows[0]) if rows else {}
+        return {
+            "total_log_rows": len(rows),
+            "latest_event_type": latest.get("event_type", ""),
+            "latest_arm_source": latest.get("arm_source", ""),
+            "latest_device_id": latest.get("device_id", ""),
+            "latest_effective_perception": bool(latest.get("effective_perception")),
+            "latest_created_at": latest.get("created_at", 0.0),
+            "entries": [dict(r) for r in rows],
+        }
 
     def get_retina_event_status(self, device_id: str | None = None, limit: int = 20) -> dict[str, Any]:
         limit = max(1, min(int(limit), 100))

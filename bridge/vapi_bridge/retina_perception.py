@@ -126,13 +126,20 @@ def run_controller_perception(
         )
 
 
-def persist_retina_result(store: Any, device_id: str, result: RetinaPerceptionResult) -> None:
+def persist_retina_result(
+    store: Any,
+    device_id: str,
+    result: RetinaPerceptionResult,
+    *,
+    source: str = "hid",
+) -> None:
     """Write events to retina_event_log + agent_events bus (fail-open)."""
     if not result.enabled or result.error or not result.events:
         return
+    row_id = 0
     try:
         if hasattr(store, "insert_retina_event_batch"):
-            store.insert_retina_event_batch(
+            row_id = store.insert_retina_event_batch(
                 device_id=device_id,
                 events_json=json.dumps(result.events),
                 world_state_json=result.world_state_json,
@@ -140,9 +147,23 @@ def persist_retina_result(store: Any, device_id: str, result: RetinaPerceptionRe
                 anomaly_count=result.anomaly_count,
                 state_commitment_hex=result.state_commitment_hex,
                 ts_ns=result.ts_ns,
+                source=source,
             )
     except Exception as exc:
         log.warning("retina_event_log insert failed: %s", exc)
+        return
+    if row_id and result.state_commitment_hex:
+        try:
+            from .provenance_nodes import register_retina_provenance_node
+
+            register_retina_provenance_node(
+                store,
+                row_id,
+                result.record_hash_hex,
+                result.state_commitment_hex,
+            )
+        except Exception as exc:
+            log.debug("retina provenance sync skipped: %s", exc)
     if result.trajectory_anomalies > 0 and hasattr(store, "write_agent_event"):
         try:
             store.write_agent_event(

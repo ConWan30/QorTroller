@@ -345,6 +345,52 @@ def register_agent_grind_routes(
             "timestamp":  _tgic.time(),
         }
 
+    # Retina DePIN policy — POST /operator/disarm-retina-policy
+    # ------------------------------------------------------------------
+    @app.post("/operator/disarm-retina-policy")
+    async def operator_disarm_retina_policy(
+        reason: str = Query(default=""),
+        api_key: str = Query(default=""),
+    ):
+        """Operator disarm of runtime Retina auto-arm (audit reason required)."""
+        check_key(api_key)
+        import time as _t_rdis
+        if len(reason.strip()) < 10:
+            raise HTTPException(
+                status_code=422,
+                detail="reason must be at least 10 characters",
+            )
+        _transport = getattr(app, "_transport", None)
+        if _transport is not None:
+            _transport._retina_operator_disarmed = True
+            if hasattr(_transport, "_refresh_retina_policy"):
+                _transport._refresh_retina_policy()
+        try:
+            store.insert_retina_policy_log(
+                event_type="operator_disarm",
+                arm_source="operator_disarm",
+                qualifiers_json=_json.dumps({"reason": reason}),
+                effective_perception=False,
+            )
+        except Exception:
+            pass
+        try:
+            store.write_agent_event(
+                event_type="retina_policy_disarm",
+                payload=_json.dumps({"reason": reason}),
+                source="operator",
+                target="bridge_agent",
+                device_id="",
+            )
+        except Exception:
+            pass
+        log.warning("Retina policy disarmed by operator — reason='%s'", reason)
+        return {
+            "accepted": True,
+            "reason": reason,
+            "timestamp": _t_rdis.time(),
+        }
+
     # Phase 235-A — GET /bridge/grind-chain-status
     # ------------------------------------------------------------------
     @app.get("/bridge/grind-chain-status")
