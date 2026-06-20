@@ -21,8 +21,12 @@ class CalibrationMixin:
         latency_ms: float,
         classification: str,
         accel_delta_peak: float,
+        *,
+        reflex_verdict: str | None = None,
+        cco_profile_id: str | None = None,
+        policy_ref: str | None = None,
     ) -> None:
-        """Persist one L6b reflex probe result (Phase 63).
+        """Persist one L6b reflex probe result (Phase 63; CCO Phase B telemetry).
 
         latency_ms=-1.0 indicates NO_RESPONSE (stored as NULL in DB).
         Never raises — caller wraps in try/except.
@@ -31,9 +35,19 @@ class CalibrationMixin:
         with self._conn() as conn:
             conn.execute(
                 "INSERT INTO l6b_probe_log "
-                "(device_id, probe_ts_ms, latency_ms, classification, accel_delta_peak) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (device_id, probe_ts_ms, _lat, classification, accel_delta_peak),
+                "(device_id, probe_ts_ms, latency_ms, classification, accel_delta_peak, "
+                "reflex_verdict, cco_profile_id, policy_ref) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    device_id,
+                    probe_ts_ms,
+                    _lat,
+                    classification,
+                    accel_delta_peak,
+                    reflex_verdict,
+                    cco_profile_id,
+                    policy_ref,
+                ),
             )
 
     def get_l6b_baseline(self, device_id: str) -> dict:

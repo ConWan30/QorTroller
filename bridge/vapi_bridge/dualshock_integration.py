@@ -54,6 +54,11 @@ from pathlib import Path
 from typing import Awaitable, Callable, Optional
 
 from .codec import compute_device_id, parse_record
+from .cco_l6b_wiring import (
+    check_l6b_applicability,
+    format_l6b_skip_log,
+    map_l6b_classification_to_reflex_verdict,
+)
 from .config import Config
 from .continuity_prover import FEATURE_KEYS
 from .store import Store
@@ -484,6 +489,10 @@ class DualShockTransport:
         self._l6b_probe_count: int = 0
         self._l6b_p_human: float = 0.5          # neutral prior until first probe completes
         self._l6b_loop_count: int = 0
+        # CCO Phase B: cached CapabilityReport + latest reflex telemetry
+        self._cco_capability_report = None
+        self._cco_reflex_verdict: str | None = None
+        self._cco_l6b_skip_reason = None
         if self._l6b_enabled:
             try:
                 _proj_root_l6b = str(Path(__file__).parents[2])
@@ -1031,6 +1040,33 @@ class DualShockTransport:
                 "DeviceProfileRegistry unavailable (%s) — defaulting to DualSense Edge",
                 exc,
             )
+
+        # CCO Phase B: resolve CapabilityReport once per session (read-only oracle).
+        try:
+            from .capability_oracle import CapabilityOracle
+            _dp = self._device_profile
+            if _dp is not None:
+                _vid = _dp.hid_vendor_id
+                _pid = _dp.hid_product_ids[0] if _dp.hid_product_ids else 0x0DF2
+                _profile_id = _dp.profile_id
+            else:
+                _vid, _pid = 0x054C, 0x0DF2
+                _profile_id = getattr(self._cfg, "device_profile_id", None) or None
+            _did_hex = self._device_id.hex() if self._device_id else None
+            self._cco_capability_report = CapabilityOracle.resolve(
+                _vid,
+                _pid,
+                profile_id=_profile_id,
+                device_id_hex=_did_hex,
+            )
+            log.info(
+                "CCO Phase B: capability report profile=%s ceiling=%s",
+                self._cco_capability_report.profile_id,
+                self._cco_capability_report.presence_ceiling_candidate,
+            )
+        except Exception as _cco_exc:
+            log.warning("CCO Phase B: CapabilityOracle resolve failed (non-fatal): %s", _cco_exc)
+            self._cco_capability_report = None
 
         return True
 
@@ -1589,6 +1625,19 @@ class DualShockTransport:
                 except Exception as _bt_exc:
                     log.debug("L0 BT presence check error (non-fatal): %s", _bt_exc)
 
+            # CCO Phase B: L6b applicability gate (telemetry-only; does not enable L6B).
+            _l6b_applicable = False
+            if self._l6b_enabled:
+                _cco_app = check_l6b_applicability(
+                    self._cco_capability_report,
+                    l6_driver_present=self._l6_driver is not None,
+                    dualsense_handle_present=bool(self._reader and self._reader.ds),
+                )
+                _l6b_applicable = _cco_app.applicable
+                self._cco_l6b_skip_reason = _cco_app.skip_reason
+            else:
+                self._cco_l6b_skip_reason = None
+
             # Phase 21: store PITL metadata sidecar — read by Bridge.on_record() for persistence
             # Phase 55: ioID DID lookup from local store (non-blocking)
             _ioid_did = None
@@ -1638,6 +1687,20 @@ class DualShockTransport:
                 "l6b_enabled":          self._l6b_enabled,
                 "l6b_probe_count":      self._l6b_probe_count,
                 "l6b_p_human":          self._l6b_p_human if self._l6b_probe_count > 0 else None,
+                # CCO Phase B: T0 telemetry (read-only; non-gating)
+                "cco_t0_engine": (
+                    self._cco_capability_report.t0_engine
+                    if self._cco_capability_report is not None else None
+                ),
+                "cco_presence_ceiling_candidate": (
+                    self._cco_capability_report.presence_ceiling_candidate
+                    if self._cco_capability_report is not None else None
+                ),
+                "cco_reflex_verdict": self._cco_reflex_verdict,
+                "cco_l6b_skip": (
+                    format_l6b_skip_log(self._cco_l6b_skip_reason)
+                    if self._cco_l6b_skip_reason is not None else None
+                ),
             }
 
             # Phase 59: IBI snapshot for Biometric Heartbeat visualization
@@ -1836,7 +1899,7 @@ class DualShockTransport:
                                     pass  # fail-open: M-1 cleanup 2026-05-16 — intentional silent skip
 
             # --- Phase 63: L6b Neuromuscular Reflex pre-buffer + probe window ---
-            if self._l6b_enabled and frames:
+            if self._l6b_enabled and _l6b_applicable and frames:
                 # Feed frames into pre-buffer (flat ax/ay/az format for L6bReflexAnalyzer)
                 for _f in frames:
                     _l6b_entry = {
@@ -1860,20 +1923,33 @@ class DualShockTransport:
                             )
                             self._l6b_p_human = self._l6b_analyzer.classify(_l6b_result)
                             self._l6b_probe_count += 1
+                            _reflex_verdict = map_l6b_classification_to_reflex_verdict(
+                                _l6b_result.classification,
+                            )
+                            self._cco_reflex_verdict = _reflex_verdict
                             log.debug(
-                                "Phase 63: L6b result latency=%.1fms class=%s p_human=%.3f",
+                                "Phase 63: L6b result latency=%.1fms class=%s p_human=%.3f reflex=%s",
                                 _l6b_result.latency_ms,
                                 _l6b_result.classification,
                                 self._l6b_p_human,
+                                _reflex_verdict,
                             )
                             if self._store and self._device_id is not None:
                                 try:
+                                    _cco_rep = self._cco_capability_report
                                     self._store.insert_l6b_probe(
                                         device_id=self._device_id.hex(),
                                         probe_ts_ms=int(self._l6b_pending["probe_ts"] * 1000),
                                         latency_ms=_l6b_result.latency_ms,
                                         classification=_l6b_result.classification,
                                         accel_delta_peak=_l6b_result.accel_delta_peak,
+                                        reflex_verdict=_reflex_verdict,
+                                        cco_profile_id=(
+                                            _cco_rep.profile_id if _cco_rep is not None else None
+                                        ),
+                                        policy_ref=(
+                                            _cco_rep.policy_ref if _cco_rep is not None else None
+                                        ),
                                     )
                                 except Exception as _store_exc:
                                     log.debug("Phase 63: L6b store insert failed (non-fatal): %s", _store_exc)
@@ -1971,7 +2047,9 @@ class DualShockTransport:
             self._l6b_loop_count += 1
             _l6b_interval = getattr(self._cfg, "l6b_probe_interval_ticks", 6750)
             if (
-                self._l6b_analyzer is not None
+                self._l6b_enabled
+                and _l6b_applicable
+                and self._l6b_analyzer is not None
                 and self._l6b_pending is None
                 and self._l6b_loop_count % _l6b_interval == 0
                 and self._l6b_loop_count > 0
