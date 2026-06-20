@@ -39,16 +39,16 @@ class TestCcoPhaseGCorpus(unittest.TestCase):
             self.assertEqual(block["target_n"], 50)
             self.assertEqual(block["profiles"], {})
 
-    def test_t2_untagged_bucket(self):
+    def test_t2_untagged_excluded_from_tier_gates(self):
         store, _ = self._store()
         self._insert_probe(store, cco_profile_id=None)
         self._insert_probe(store, cco_profile_id="")
         progress = store.get_cco_phase_g_corpus_progress()
         self.assertEqual(progress["by_profile_id"]["untagged"], 2)
-        self.assertEqual(
-            progress["by_tier"]["MINIMAL_PAD"]["profiles"]["untagged"],
-            2,
-        )
+        self.assertEqual(progress["untagged_probe_count"], 2)
+        for tier in ("MINIMAL_PAD", "MID_TIER", "PREMIUM_EDGE"):
+            self.assertEqual(progress["by_tier"][tier]["probe_count"], 0)
+            self.assertFalse(progress["by_tier"][tier]["gate_reached"])
 
     def test_t3_tier_aggregation_and_gate(self):
         store, _ = self._store()
