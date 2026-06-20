@@ -133,6 +133,31 @@ class TestAssembleComposabilityStatus:
         )
         assert status["readiness"] == "tournament_blocked_path_b"
 
+    def test_prep_only_on_scan_complete_empty(self):
+        status = assemble_composability_status(
+            enabled=True,
+            registry_deployed=True,
+            device_id="devX",
+            identity_class="I1_SILICON",
+            presence_tier="P-T2",
+            poep_scan_outcome="SCAN_COMPLETE_EMPTY",
+        )
+        assert status["readiness"] == "prep_only"
+        assert status["poep_scan_outcome"] == "SCAN_COMPLETE_EMPTY"
+
+    def test_registry_unreachable_on_scan_failed(self):
+        status = assemble_composability_status(
+            enabled=True,
+            registry_deployed=True,
+            device_id="devX",
+            identity_class="I1_SILICON",
+            presence_tier="P-T2",
+            poep_scan_outcome="SCAN_FAILED",
+            poep_scan_error="range exceeds the limit",
+        )
+        assert status["readiness"] == "registry_unreachable"
+        assert status["readiness"] != "prep_only"
+
 
 class TestApplyComposabilityToGrid:
     def test_merges_phase_f_fields(self):
