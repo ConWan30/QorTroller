@@ -1926,6 +1926,12 @@ class Config:
     retina_pda_attestation_agent_id: str = field(
         default_factory=lambda: _env("RETINA_PDA_ATTESTATION_AGENT_ID", "bridge_agent")
     )
+    retina_events_root_poseidon_enabled: bool = field(
+        default_factory=lambda: _env_bool("RETINA_EVENTS_ROOT_POSEIDON_ENABLED", False)
+    )
+    retina_events_root_verify_on_ingest: bool = field(
+        default_factory=lambda: _env_bool("RETINA_EVENTS_ROOT_VERIFY_ON_INGEST", False)
+    )
 
     # --- Data Economy Arc 5: VAPIReplayProofPipeline (VHR proofs) ---
     replay_proof_pipeline_enabled: bool = field(

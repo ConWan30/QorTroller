@@ -22,6 +22,10 @@ _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
+from bridge.vapi_bridge.retina_events_root import (  # noqa: E402
+    compute_events_root_poseidon,
+    set_poseidon_chain_fn,
+)
 from bridge.vapi_bridge.retina_state_commitment import compute_retina_state_commitment  # noqa: E402
 from bridge.vapi_bridge.retina_w3bstream import (  # noqa: E402
     EXIT_OK,
@@ -69,6 +73,17 @@ def run_ingestion_test():
 
     # INV-W3S-006 — Retina sidecar mechanical validation
     events = [{"type": "trajectory_anomalous", "residual": 0.5}]
+
+    def _mock_chain(elems):
+        import hashlib
+        import json as _json
+
+        return hashlib.sha256(
+            b"mock-poseidon-v1" + _json.dumps(elems, separators=(",", ":")).encode()
+        ).digest()
+
+    set_poseidon_chain_fn(_mock_chain)
+    events_root = compute_events_root_poseidon(events).hex()
     retina_hex = compute_retina_state_commitment("device_edge", 42, events)
     ok_payload = build_evm_log_payload(
         device_id="device_edge",
@@ -111,6 +126,21 @@ def run_ingestion_test():
         print("[!] FAILURE: Zero retina under enforce did not return EXIT_RETINA.")
         return False
     print("[+] INV-W3S-006 zero-retina fail-closed passed.")
+
+    verify_payload = build_evm_log_payload(
+        device_id="device_edge",
+        block_number=64,
+        payload_hash="aa" * 32,
+        signature="sig",
+        pq_commitment=_VALID_PQ_PLACEHOLDER,
+        events_root=events_root,
+        retina_events=events,
+        retina_events_root_verify=True,
+    )
+    if validate_evm_log_payload(verify_payload) != EXIT_OK:
+        print("[!] FAILURE: events_root verify payload rejected.")
+        return False
+    print("[+] Phase 3 events_root mechanical verify passed.")
 
     print("[SUCCESS] All W3bstream ingestion test conditions satisfied.")
     return True

@@ -1,0 +1,12 @@
+{
+  "name": "vapi-retina-zk-artifacts",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Retina Phase 3 — circomlibjs Poseidon-2 chain helper for off-chain events_root (ZK-prep; no Groth16 ceremony in this phase).",
+  "scripts": {
+    "events-root": "node compute_retina_events_root.js"
+  },
+  "dependencies": {
+    "circomlibjs": "^0.1.7"
+  }
+}
