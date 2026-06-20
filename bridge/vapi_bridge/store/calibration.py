@@ -166,6 +166,64 @@ class CalibrationMixin:
             "gate_reached": total >= 50,
         }
 
+    def get_cco_phase_g_corpus_progress(self, target_n: int = 50) -> dict:
+        """CCO Phase G: per-tier L6B probe corpus grouped by cco_profile_id.
+
+        NULL/empty cco_profile_id rows are bucketed as ``untagged``.
+        Tier assignment uses ``resolve_controller_class_tier`` from the
+        controller-class research module.
+        """
+        from ..cco_controller_class_research import resolve_controller_class_tier
+
+        _tiers = ("MINIMAL_PAD", "MID_TIER", "PREMIUM_EDGE")
+        by_tier: dict[str, dict] = {
+            tier: {
+                "probe_count": 0,
+                "profiles": {},
+                "gate_reached": False,
+                "target_n": target_n,
+            }
+            for tier in _tiers
+        }
+        by_profile_id: dict[str, int] = {}
+
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT cco_profile_id, COUNT(*) AS n "
+                "FROM l6b_probe_log "
+                "GROUP BY cco_profile_id",
+            ).fetchall()
+
+        total_probe_count = 0
+        for row in rows:
+            raw_profile = row["cco_profile_id"]
+            profile_key = (
+                "untagged"
+                if raw_profile is None or str(raw_profile).strip() == ""
+                else str(raw_profile)
+            )
+            count = int(row["n"])
+            total_probe_count += count
+            by_profile_id[profile_key] = by_profile_id.get(profile_key, 0) + count
+            tier = resolve_controller_class_tier(
+                None if profile_key == "untagged" else profile_key,
+            )
+            tier_block = by_tier[tier]
+            tier_block["probe_count"] += count
+            tier_block["profiles"][profile_key] = (
+                tier_block["profiles"].get(profile_key, 0) + count
+            )
+
+        for tier_block in by_tier.values():
+            tier_block["gate_reached"] = tier_block["probe_count"] >= target_n
+
+        return {
+            "target_n": target_n,
+            "total_probe_count": total_probe_count,
+            "by_tier": by_tier,
+            "by_profile_id": by_profile_id,
+        }
+
     def get_nominal_records_for_calibration(self, limit: int = 200) -> list[dict]:
         """Fetch warmed NOMINAL records for living calibration (Phase 38).
 

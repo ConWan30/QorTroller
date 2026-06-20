@@ -694,7 +694,10 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             assemble_composability_status,
             resolve_poep_commitment,
         )
-        from ..cco_controller_class_research import assemble_controller_class_research
+        from ..cco_controller_class_research import (
+            assemble_controller_class_research,
+            resolve_controller_class_tier,
+        )
 
         _poep_enabled = bool(getattr(cfg, "poep_enabled", False))
         _poep_corpus = getattr(cfg, "poep_corpus_dir", "poep_l9") or "poep_l9"
@@ -702,6 +705,18 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         _lens_subcheck = bool(getattr(cfg, "cco_composability_lens_subcheck", False))
         _registry_deployed = bool(getattr(cfg, "poep_registry_address", "") or "")
         _research_enabled = bool(getattr(cfg, "cco_research_surface_enabled", False))
+        _phase_g_progress = None
+        if _research_enabled:
+            _phase_g_progress = await asyncio.to_thread(
+                store.get_cco_phase_g_corpus_progress,
+            )
+
+        def _tier_probe_count_for(profile_id: str | None) -> int | None:
+            if _phase_g_progress is None:
+                return None
+            tier = resolve_controller_class_tier(profile_id)
+            return _phase_g_progress["by_tier"][tier]["probe_count"]
+
         _identity_grid_empty = apply_composability_to_grid(
             assemble_identity_grid(),
             assemble_composability_status(
@@ -711,6 +726,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         )
         _identity_grid_empty["controller_class_research"] = assemble_controller_class_research(
             enabled=_research_enabled,
+            tier_probe_count=_tier_probe_count_for(None),
         )
         _presence = {
             "poep": assemble_poep_presence_status(
@@ -970,6 +986,9 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             enabled=_research_enabled,
             profile_id=_cco_report.profile_id if _cco_report else None,
             characterization_status=_cco_report.characterization_status if _cco_report else None,
+            tier_probe_count=_tier_probe_count_for(
+                _cco_report.profile_id if _cco_report else None,
+            ),
         )
 
         return {
