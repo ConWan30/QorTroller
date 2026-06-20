@@ -774,6 +774,14 @@ class Config:
         default_factory=lambda: _env("POEP_CORPUS_DIR", "poep_l9")
     )
     """Directory for l9_presence PoEP enrollment JSON corpus (read-only in bridge)."""
+    cco_composability_enabled: bool = field(
+        default_factory=lambda: _env("CCO_COMPOSABILITY_ENABLED", "false").lower() == "true"
+    )
+    """CCO Phase F — off-chain composable claim surfacing. False by default (deploy-hold)."""
+    cco_composability_lens_subcheck: bool = field(
+        default_factory=lambda: _env("CCO_COMPOSABILITY_LENS_SUBCHECK", "false").lower() == "true"
+    )
+    """CCO Phase F — include isFullyEligible bit in composable claim hash (optional F1 sub-check)."""
     l6b_probe_interval_ticks: int = field(
         default_factory=lambda: int(_env("L6B_PROBE_INTERVAL_TICKS", "6750"))
     )

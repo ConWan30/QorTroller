@@ -598,6 +598,25 @@ _VAPI_POEP_REGISTRY_ABI = [
         "outputs": [{"type": "bool"}],
     },
     {
+        "name": "getRecord", "type": "function", "stateMutability": "view",
+        "inputs": [{"name": "gamer", "type": "address"}, {"name": "deviceId", "type": "bytes32"}],
+        "outputs": [{
+            "type": "tuple",
+            "components": [
+                {"name": "compositePubkeyHash", "type": "bytes32"},
+                {"name": "poepCommitment", "type": "bytes32"},
+                {"name": "registeredAt", "type": "uint64"},
+                {"name": "expiresAt", "type": "uint64"},
+                {"name": "revoked", "type": "bool"},
+            ],
+        }],
+    },
+    {
+        "name": "isRecorded", "type": "function", "stateMutability": "view",
+        "inputs": [{"name": "poepCommitment", "type": "bytes32"}],
+        "outputs": [{"type": "bool"}],
+    },
+    {
         "name": "DeviceRegistered", "type": "event", "anonymous": False,
         "inputs": [
             {"name": "gamer", "type": "address", "indexed": True},
@@ -2019,6 +2038,78 @@ class ChainClient:
             return resolve_composite_pubkey(_ChainReader(), gamer, b32)
         except Exception as exc:  # noqa: BLE001 — fail-open on RPC/contract error
             log.warning("get_registered_composite_pubkey error (fail-open): %s", exc)
+            return None
+
+    def get_poep_commitment_for_device(self, device_id):
+        """CCO Phase F — SYNC, fail-open read of a device's PoEP commitment from VAPIPoEPRegistry.
+
+        Returns 32-byte poepCommitment from the latest DeviceRegistered event for device_id,
+        or None when registry undeployed / no registration / RPC error. Bridge never writes.
+        """
+        from .consent_categories import device_id_to_bytes32
+        from .cco_composability import PoEPComposabilityReader
+
+        addr_str = getattr(self._cfg, "poep_registry_address", "") or ""
+        if not addr_str or self._sync_w3 is None:
+            return None
+        try:
+            b32 = device_id_to_bytes32(device_id)
+            addr = self._sync_w3.to_checksum_address(addr_str)
+            contract = self._sync_w3.eth.contract(address=addr, abi=_VAPI_POEP_REGISTRY_ABI)
+            _from_block = int(getattr(self._cfg, "poep_registry_deploy_block", 0) or 0)
+            evs = contract.events.DeviceRegistered.get_logs(
+                from_block=_from_block, argument_filters={"deviceId": b32}
+            )
+            if not evs:
+                return None
+            ev = evs[-1]
+            gamer = ev["args"]["gamer"]
+            commitment = bytes(ev["args"]["poepCommitment"])
+            if not commitment or commitment == b"\x00" * 32:
+                return None
+            if not contract.functions.isRegistrationValid(gamer, b32).call():
+                return None
+
+            class _PoEPReader:
+                def get_poep_commitment(self, _device_id):
+                    return commitment
+
+                def is_poep_commitment_recorded(self, c):
+                    return bool(contract.functions.isRecorded(c).call())
+
+            reader: PoEPComposabilityReader = _PoEPReader()
+            from .cco_composability import resolve_poep_commitment
+            cmt, _rec = resolve_poep_commitment(reader, b32)
+            return cmt
+        except Exception as exc:  # noqa: BLE001 — fail-open
+            log.warning("get_poep_commitment_for_device error (fail-open): %s", exc)
+            return None
+
+    def get_poep_composability_reader(self, device_id):
+        """Return a PoEPComposabilityReader for device_id, or None when unavailable."""
+        from .consent_categories import device_id_to_bytes32
+
+        addr_str = getattr(self._cfg, "poep_registry_address", "") or ""
+        if not addr_str or self._sync_w3 is None:
+            return None
+        commitment = self.get_poep_commitment_for_device(device_id)
+        if commitment is None:
+            return None
+        try:
+            b32 = device_id_to_bytes32(device_id)
+            addr = self._sync_w3.to_checksum_address(addr_str)
+            contract = self._sync_w3.eth.contract(address=addr, abi=_VAPI_POEP_REGISTRY_ABI)
+
+            class _PoEPReader:
+                def get_poep_commitment(self, _device_id):
+                    return commitment
+
+                def is_poep_commitment_recorded(self, c):
+                    return bool(contract.functions.isRecorded(c).call())
+
+            return _PoEPReader()
+        except Exception as exc:  # noqa: BLE001
+            log.debug("get_poep_composability_reader error (fail-open): %s", exc)
             return None
 
     # --- Consent Cockpit F2 — wallet → devices binding read (2026-06-05) ---

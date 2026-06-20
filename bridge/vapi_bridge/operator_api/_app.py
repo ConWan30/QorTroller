@@ -689,10 +689,24 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         _hs  = bool(getattr(cfg, "ipact_host_signer_enabled", False))
         from ..cco_poep_bridge import assemble_poep_presence_status
         from ..cco_identity_grid import assemble_identity_grid
+        from ..cco_composability import (
+            apply_composability_to_grid,
+            assemble_composability_status,
+            resolve_poep_commitment,
+        )
 
         _poep_enabled = bool(getattr(cfg, "poep_enabled", False))
         _poep_corpus = getattr(cfg, "poep_corpus_dir", "poep_l9") or "poep_l9"
-        _identity_grid_empty = assemble_identity_grid()
+        _comp_enabled = bool(getattr(cfg, "cco_composability_enabled", False))
+        _lens_subcheck = bool(getattr(cfg, "cco_composability_lens_subcheck", False))
+        _registry_deployed = bool(getattr(cfg, "poep_registry_address", "") or "")
+        _identity_grid_empty = apply_composability_to_grid(
+            assemble_identity_grid(),
+            assemble_composability_status(
+                enabled=_comp_enabled,
+                registry_deployed=_registry_deployed,
+            ),
+        )
         _presence = {
             "poep": assemble_poep_presence_status(
                 poep_enabled=_poep_enabled,
@@ -917,6 +931,28 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             path_a_eligible=path_a_eligible,
             device_id=dev or None,
         )
+        _poep_commitment = None
+        _poep_recorded = None
+        if chain is not None and _registry_deployed:
+            try:
+                _reader = await asyncio.to_thread(chain.get_poep_composability_reader, dev)
+                if _reader is not None:
+                    _poep_commitment, _poep_recorded = resolve_poep_commitment(_reader, dev)
+            except Exception as _exc_poep_c:
+                log.debug("player_session_status: PoEP composability read failed: %s", _exc_poep_c)
+        _composability = assemble_composability_status(
+            enabled=_comp_enabled,
+            registry_deployed=_registry_deployed,
+            device_id=dev or None,
+            identity_class=_identity_grid.get("identity_class"),
+            presence_tier=_identity_grid.get("presence_ceiling_candidate"),
+            poep_commitment=_poep_commitment,
+            poep_commitment_recorded=_poep_recorded,
+            is_fully_eligible_onchain=_elig.get("onchain") if _lens_subcheck else None,
+            lens_subcheck_enabled=_lens_subcheck,
+            ts_ns=int(_now * 1e9),
+        )
+        _identity_grid = apply_composability_to_grid(_identity_grid, _composability)
 
         return {
             "controller_connected": controller_connected,
