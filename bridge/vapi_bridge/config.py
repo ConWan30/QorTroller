@@ -782,6 +782,10 @@ class Config:
         default_factory=lambda: _env("CCO_COMPOSABILITY_LENS_SUBCHECK", "false").lower() == "true"
     )
     """CCO Phase F — include isFullyEligible bit in composable claim hash (optional F1 sub-check)."""
+    cco_research_surface_enabled: bool = field(
+        default_factory=lambda: _env("CCO_RESEARCH_SURFACE_ENABLED", "false").lower() == "true"
+    )
+    """CCO Phase G — expose controller-class research block on session-status. False by default."""
     l6b_probe_interval_ticks: int = field(
         default_factory=lambda: int(_env("L6B_PROBE_INTERVAL_TICKS", "6750"))
     )
