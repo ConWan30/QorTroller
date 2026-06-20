@@ -1,0 +1,44 @@
+{
+  "pilot": "RETINA_PERCEPTION_ENABLED=true",
+  "as_of": "2026-06-20",
+  "device_id": "pilot_dev_01",
+  "config_enabled": true,
+  "bridge_retina_status": {
+    "total_rows": 1,
+    "anomaly_count_recent": 1,
+    "latest_record_hash": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+    "latest_state_commitment": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+    "latest_device_id": "pilot_dev_01",
+    "latest_created_at": 1781976631.4994206,
+    "entries": [
+      {
+        "id": 1,
+        "device_id": "pilot_dev_01",
+        "events_json": "[{\"type\": \"controller.trajectory.anomalous\", \"window\": 0}]",
+        "world_state_json": "",
+        "record_hash_hex": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+        "state_commitment_hex": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+        "anomaly_count": 1,
+        "created_at": 1781976631.4994206
+      }
+    ],
+    "retina_perception_enabled": true,
+    "retina_perception_window": 120,
+    "timestamp": 1781976633.7851415
+  },
+  "evidence_slice_enabled": true,
+  "evidence_slice_aggregate": {
+    "total_trajectory_anomalies": 1,
+    "latest_state_commitment": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+    "rows_matched": 1
+  },
+  "evidence_slice_bindings": [
+    {
+      "record_hash": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+      "state_commitment": "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2",
+      "anomaly_count": 1,
+      "event_count": 1,
+      "created_at": 1781976631.4994206
+    }
+  ]
+}

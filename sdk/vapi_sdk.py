@@ -6085,11 +6085,15 @@ class ProvenanceChainResult:
 
     Provenance DAG chain walk from leaf_node_id to root calibration session.
     The full causal chain from a 228-byte PoAC session to an on-chain VHP badge.
+    When record_hash is supplied, resolved_from_record_hash and retina_commitments
+    are populated from POAC_RECORD → RETINA_STATE_COMMITMENT DAG edges.
     """
     leaf_node_id:    str   = ""
     chain_length:    int   = 0
     chain:           str   = "[]"     # JSON list of provenance nodes
     forensic_summary: str  = ""
+    resolved_from_record_hash: str = ""
+    retina_commitments: str = "[]"   # JSON list of PERCEPTION_BINDING children
     error:           str   = ""
 
 
@@ -6107,13 +6111,27 @@ class VAPIProvenanceChain:
         self._base = base_url.rstrip("/")
         self._key  = api_key
 
-    def get_chain(self, leaf_node_id: str = "") -> ProvenanceChainResult:
-        """Return provenance chain for the given leaf node. On error: empty chain."""
+    def get_chain(
+        self,
+        leaf_node_id: str = "",
+        record_hash: str = "",
+    ) -> ProvenanceChainResult:
+        """Return provenance chain for the given leaf node or PoAC record hash."""
         import urllib.request as _ur, json as _j, urllib.parse as _up
         try:
-            params = f"leaf_node_id={_up.quote(leaf_node_id)}"
-            url = f"{self._base}/agent/data-provenance-chain?{params}"
-            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+            params: list[str] = []
+            if record_hash:
+                params.append(f"record_hash={_up.quote(record_hash)}")
+            if leaf_node_id:
+                params.append(f"leaf_node_id={_up.quote(leaf_node_id)}")
+            qs = "&".join(params)
+            url = f"{self._base}/agent/data-provenance-chain"
+            if qs:
+                url = f"{url}?{qs}"
+            req = _ur.Request(url)
+            if self._key:
+                req.add_header("x-api-key", self._key)
+            with _ur.urlopen(req, timeout=10) as resp:  # noqa: S310
                 body = _j.loads(resp.read())
             import json as _json
             return ProvenanceChainResult(
@@ -6121,6 +6139,12 @@ class VAPIProvenanceChain:
                 chain_length    = int(body.get("chain_length",    0)),
                 chain           = _json.dumps(body.get("chain",   [])),
                 forensic_summary = str(body.get("forensic_summary", "")),
+                resolved_from_record_hash = str(
+                    body.get("resolved_from_record_hash", "")
+                ),
+                retina_commitments = _json.dumps(
+                    body.get("retina_commitments", [])
+                ),
             )
         except Exception as exc:
             return ProvenanceChainResult(error=str(exc))
@@ -8084,6 +8108,73 @@ class VAPIAITSeparation:
             )
         except Exception as exc:
             return AITSeparationResult(error=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Trio-Retina — evidence slice (adjudicator cross-oracle)
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class RetinaEvidenceSliceResult:
+    """Result from VAPIRetinaEvidenceSlice.status() (Retina observability goal)."""
+    schema: str = "vapi-retina-event-v1"
+    enabled: bool = False
+    bindings: str = "[]"   # JSON list of per-record bindings
+    aggregate: str = "{}"  # JSON aggregate block
+    device_id: str = ""
+    timestamp: float = 0.0
+    error: str = ""
+
+
+class VAPIRetinaEvidenceSlice:
+    """Client for GET /agent/retina-evidence-slice.
+
+  Example::
+
+        retina = VAPIRetinaEvidenceSlice("http://localhost:8080", api_key)
+        result = retina.status("dev_hex_id", record_hashes=["ab" * 32])
+    """
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key = api_key
+
+    def status(
+        self,
+        device_id: str,
+        record_hashes: list[str] | None = None,
+        limit: int = 10,
+    ) -> RetinaEvidenceSliceResult:
+        """GET /agent/retina-evidence-slice — per-record Retina bindings."""
+        import json as _json
+        import urllib.parse as _up
+        import urllib.request as _ur
+
+        try:
+            params = [
+                f"device_id={_up.quote(device_id)}",
+                f"limit={int(limit)}",
+            ]
+            if record_hashes:
+                params.append(
+                    f"record_hashes={_up.quote(','.join(record_hashes))}"
+                )
+            url = f"{self._base}/agent/retina-evidence-slice?{'&'.join(params)}"
+            req = _ur.Request(url)
+            if self._key:
+                req.add_header("x-api-key", self._key)
+            with _ur.urlopen(req, timeout=10) as resp:  # noqa: S310
+                body = _json.loads(resp.read())
+            return RetinaEvidenceSliceResult(
+                schema=str(body.get("schema", "vapi-retina-event-v1")),
+                enabled=bool(body.get("enabled", False)),
+                bindings=_json.dumps(body.get("bindings", [])),
+                aggregate=_json.dumps(body.get("aggregate", {})),
+                device_id=str(body.get("device_id", device_id)),
+                timestamp=float(body.get("timestamp", 0.0)),
+            )
+        except Exception as exc:
+            return RetinaEvidenceSliceResult(device_id=device_id, error=str(exc))
 
 
 # ---------------------------------------------------------------------------

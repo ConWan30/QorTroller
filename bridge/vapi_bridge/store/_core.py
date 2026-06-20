@@ -32,6 +32,7 @@ from .vhp import VhpMixin
 from .biometric import BiometricMixin
 from .agents import AgentsRulingsMixin
 from .calibration import CalibrationMixin
+from .retina import RetinaMixin
 
 log = logging.getLogger(__name__)
 
@@ -44,7 +45,7 @@ STATUS_FAILED = "failed"
 STATUS_DEAD_LETTER = "dead_letter"
 
 
-class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, IoswarmMixin, ChainLogMixin, TournamentMixin, OperatorInitiativeMixin, VhpMixin, BiometricMixin, AgentsRulingsMixin, CalibrationMixin):
+class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, IoswarmMixin, ChainLogMixin, TournamentMixin, OperatorInitiativeMixin, VhpMixin, BiometricMixin, AgentsRulingsMixin, CalibrationMixin, RetinaMixin):
     """SQLite-backed persistence for the bridge service."""
 
     def __init__(self, db_path: str, consent_ledger_enabled: bool = False) -> None:
@@ -236,6 +237,10 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
     # Phase 26: idempotent schema migrations
     _PHASE26_MIGRATIONS = [
         "ALTER TABLE records ADD COLUMN pitl_proof_nullifier TEXT DEFAULT NULL",
+    ]
+
+    _RETINA_MIGRATIONS = [
+        "ALTER TABLE retina_event_log ADD COLUMN state_commitment_hex TEXT NOT NULL DEFAULT ''",
     ]
 
     def _init_schema(self):
@@ -545,6 +550,31 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                 "CREATE INDEX IF NOT EXISTS idx_agent_events_target "
                 "ON agent_events(target_agent, consumed_at, created_at)"
             )
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS retina_event_log (
+                    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+                    device_id            TEXT NOT NULL,
+                    events_json          TEXT NOT NULL,
+                    world_state_json     TEXT NOT NULL DEFAULT '',
+                    record_hash_hex      TEXT NOT NULL DEFAULT '',
+                    state_commitment_hex TEXT NOT NULL DEFAULT '',
+                    anomaly_count        INTEGER NOT NULL DEFAULT 0,
+                    created_at           REAL NOT NULL
+                )
+            """)
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_retina_event_device "
+                "ON retina_event_log(device_id, created_at DESC)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_retina_event_record "
+                "ON retina_event_log(record_hash_hex, created_at DESC)"
+            )
+            for sql in self._RETINA_MIGRATIONS:
+                try:
+                    conn.execute(sql)
+                except sqlite3.OperationalError:
+                    log.debug("schema migration already applied: %.80s", sql)
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS threshold_history (
                     id              INTEGER PRIMARY KEY AUTOINCREMENT,

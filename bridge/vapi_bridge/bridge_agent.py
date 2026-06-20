@@ -515,6 +515,56 @@ _TOOLS = [
             "required": ["device_id"],
         },
     },
+    {
+        "name": "get_retina_perception_status",
+        "description": (
+            "Get Trio-Retina advisory perception status: whether retina_perception_enabled, "
+            "recent anomaly counts, latest state commitment (VAPI-RETINA-STATE-v1), and "
+            "PoAC record-hash cross-links from retina_event_log. Advisory only — does not "
+            "modify the 228-byte PoAC wire format."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "device_id": {
+                    "type": "string",
+                    "description": "Optional 64-character hex device ID filter",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max log rows to return (default 20)",
+                },
+            },
+        },
+    },
+    {
+        "name": "get_retina_evidence_slice",
+        "description": (
+            "Get Trio-Retina per-record evidence bindings for SessionAdjudicator "
+            "cross-oracle review: record_hash, state_commitment (VAPI-RETINA-STATE-v1), "
+            "anomaly_count, event_count. Distinct from get_retina_perception_status "
+            "(aggregate log status). Advisory only — does not modify verdict math."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "device_id": {
+                    "type": "string",
+                    "description": "64-character hex device ID (required)",
+                },
+                "record_hashes": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional list of PoAC record hashes to filter",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Max bindings (default 10, cap 50)",
+                },
+            },
+            "required": ["device_id"],
+        },
+    },
     # Tools #24–27 — Phase 58
     {
         "name": "analyze_threshold_impact",
@@ -1270,6 +1320,10 @@ _TOOLS = [
             "type": "object",
             "properties": {
                 "leaf_node_id": {"type": "string", "description": "Node ID to trace from (SHA-256 hex)"},
+                "record_hash": {
+                    "type": "string",
+                    "description": "Optional PoAC record hash — resolves leaf_node_id and retina children",
+                },
             },
             "required": [],
         },
@@ -3448,6 +3502,39 @@ class BridgeAgent:
                     }
                 return result
 
+            elif name == "get_retina_perception_status":
+                device_id = (inputs.get("device_id") or "").strip() or None
+                limit = int(inputs.get("limit") or 20)
+                status = self._store.get_retina_event_status(device_id, limit)
+                return {
+                    **status,
+                    "retina_perception_enabled": bool(
+                        getattr(self._cfg, "retina_perception_enabled", False)
+                    ),
+                }
+
+            elif name == "get_retina_evidence_slice":
+                from .retina_perception import build_retina_evidence_slice
+
+                device_id = (inputs.get("device_id") or "").strip()
+                if not device_id:
+                    return {"error": "device_id required"}
+                _rh_raw = inputs.get("record_hashes") or []
+                if isinstance(_rh_raw, str):
+                    _rh_list = [h.strip() for h in _rh_raw.split(",") if h.strip()]
+                else:
+                    _rh_list = [str(h).strip() for h in _rh_raw if str(h).strip()]
+                _limit = min(int(inputs.get("limit") or 10), 50)
+                _enabled = bool(getattr(self._cfg, "retina_perception_enabled", False))
+                _slice = build_retina_evidence_slice(
+                    self._store,
+                    device_id,
+                    record_hashes=_rh_list or None,
+                    limit=_limit,
+                    enabled=_enabled,
+                )
+                return {**_slice, "device_id": device_id}
+
             elif name == "generate_tournament_passport":
                 device_id  = inputs.get("device_id", "")
                 min_humanity = float(inputs.get("min_humanity", 0.60))
@@ -4081,9 +4168,26 @@ class BridgeAgent:
                 import time as _t192, math as _m192
                 try:
                     if name == "get_data_provenance_chain":
+                        from .provenance_nodes import poac_record_node_id
+
                         leaf_id = str(tool_input.get("leaf_node_id", ""))
+                        record_hash = str(tool_input.get("record_hash", "")).strip()
+                        resolved_from = ""
+                        retina_commitments: list = []
                         max_depth = getattr(self._cfg, "provenance_max_chain_depth", 20)
-                        if not leaf_id:
+                        if record_hash:
+                            resolved_from = record_hash
+                            leaf_id = poac_record_node_id(record_hash)
+                            try:
+                                _children = self._store.get_provenance_subtree(leaf_id)
+                                retina_commitments = [
+                                    c for c in _children
+                                    if c.get("edge_type") == "PERCEPTION_BINDING"
+                                    or c.get("node_type") == "RETINA_STATE_COMMITMENT"
+                                ]
+                            except Exception:
+                                retina_commitments = []
+                        elif not leaf_id:
                             try:
                                 with self._store._conn() as _conn192:
                                     _row192 = _conn192.execute(
@@ -4100,9 +4204,15 @@ class BridgeAgent:
                             f"{_chain[-1].get('node_type', '?')}"
                             if _chain else "No chain found"
                         )
-                        return {"leaf_node_id": leaf_id, "chain_length": len(_chain),
-                                "chain": _chain, "forensic_summary": _summary,
-                                "timestamp": _t192.time()}
+                        return {
+                            "leaf_node_id": leaf_id,
+                            "chain_length": len(_chain),
+                            "chain": _chain,
+                            "forensic_summary": _summary,
+                            "resolved_from_record_hash": resolved_from,
+                            "retina_commitments": retina_commitments,
+                            "timestamp": _t192.time(),
+                        }
 
                     if name == "get_corpus_entropy_status":
                         _row = self._store.get_latest_corpus_entropy()
