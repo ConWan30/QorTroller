@@ -198,10 +198,11 @@
       "id": "api_agent_operator_initiative",
       "domain": "agent_operator_initiative",
       "target_file": "bridge/vapi_bridge/operator_api/agent_operator_initiative.py",
-      "status": "pending",
+      "status": "applied",
       "agent_commit": null,
-      "route_count_est": 15,
-      "order": 18
+      "route_count_est": 12,
+      "order": 18,
+      "notes": "2026-06-19 register-function split; 12 Operator Initiative routes (1 contiguous block)"
     },
     {
       "id": "api_agent_grind",
