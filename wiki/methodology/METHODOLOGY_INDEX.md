@@ -370,6 +370,17 @@ annotation when used in synthesis composition.
 | Parent | `CCO_PHASE_B_DESIGN_v1.md` §5; F-L6B-CAL-005 |
 | Citation convention | `L6B_DESK_CALIBRATION_ANALYZER_v1 §X [Tier 3 DRAFT; desk calibration 2026-06-20]` |
 
+### 4.14 CCO Phase E — Identity Grid Session Surfacing v1
+
+| Field | Value |
+|---|---|
+| Path | `wiki/methodology/CCO_POEP_FUSION_v4.md` §Phase E; `bridge/vapi_bridge/cco_identity_grid.py` |
+| Status | COMPLETE (2026-06-20) |
+| Date | 2026-06-20 |
+| Captures | Two-axis grid `{identity_class, presence_ceiling_candidate, signing_path, path_a_eligible}` on GET `/player/session-status`; F-V4-003 Path B honesty note; `composable_on_chain=false` (Phase F deploy-hold) |
+| Parent | `CCO_POEP_FUSION_v4.md`; `CCO_PHASE_A_ORACLE_CONTRACT_v1.md` |
+| Citation convention | `CCO_POEP_FUSION_v4 §Phase E [Tier 3; identity grid 2026-06-20]` |
+
 ---
 
 ## §5 Supersession Chain Documentation

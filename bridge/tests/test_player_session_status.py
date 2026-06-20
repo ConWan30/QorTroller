@@ -73,9 +73,11 @@ class TestPlayerSessionStatus(unittest.TestCase):
         for k in ("controller_connected", "session_active", "is_fully_eligible",
                   "dual_eligible", "vhp_status", "gic_chain", "records_count",
                   "enforcement_active", "host_signer_active", "last_adjudication",
-                  "presence", "cco", "timestamp"):
+                  "presence", "cco", "identity_grid", "signing_path", "path_a_eligible",
+                  "timestamp"):
             self.assertIn(k, j)
         self.assertIn("dormant", j["presence"]["poep"])
+        self.assertIsNone(j["identity_grid"]["presence_ceiling_candidate"])
         self.assertFalse(j["controller_connected"])
         self.assertTrue(j["enforcement_active"])
         self.assertTrue(j["host_signer_active"])
@@ -188,6 +190,29 @@ class TestPlayerSessionStatus(unittest.TestCase):
         self.assertIsNone(poep["verdict"])
         self.assertEqual(poep["challenge_type"], "adaptive_force")
         self.assertTrue(poep["l6b_gate_reached"])
+
+    def test_8_identity_grid_phase_e(self):
+        """T-PSS-8: CCO Phase E — identity_grid four-field composable surface."""
+        cfg, store = _make_cfg(l6b_enabled=True), _make_store()
+        store.get_recent_records = lambda limit, device_id=None: [
+            {"device_id": "devX", "pitl_humanity_prob": 0.9, "inference": 32, "created_at": time.time()}]
+        store.get_capture_health_status = lambda limit=10: {
+            "capture_state": "NOMINAL", "host_state": "EXCLUSIVE_USB", "poll_rate_hz": 1000.0}
+        store.get_l6b_calibration_progress = lambda device_id=None: {"probe_count": 0, "target_n": 50}
+        store.count_records = lambda device_id=None: 1
+        r = _client(cfg, store).get("/player/session-status", headers=_H)
+        self.assertEqual(r.status_code, 200)
+        j = r.json()
+        grid = j["identity_grid"]
+        cco = j["cco"]
+        self.assertEqual(grid["schema"], "qortroller-identity-grid-v1")
+        self.assertEqual(grid["presence_ceiling_candidate"], cco["presence_ceiling_candidate"])
+        self.assertEqual(grid["identity_class"], cco["identity_class"])
+        self.assertIn("signing_path", grid)
+        self.assertIn("path_a_eligible", grid)
+        self.assertFalse(grid["composable_on_chain"])
+        self.assertEqual(j["signing_path"], grid["signing_path"])
+        self.assertEqual(j["path_a_eligible"], grid["path_a_eligible"])
 
 
 if __name__ == "__main__":
