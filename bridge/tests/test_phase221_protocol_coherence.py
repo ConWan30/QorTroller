@@ -147,7 +147,8 @@ def test_T221_7_endpoint_returns_correct_keys():
     body = resp.json()
     expected_keys = {
         "protocol_coherence_enabled", "total_anchors", "latest_merkle_root",
-        "agent_count", "on_chain_confirmed", "last_anchor_ts", "timestamp",
+        "agent_count", "on_chain_confirmed", "last_anchor_ts",
+        "governance_provenance_hash", "timestamp",
     }
     assert set(body.keys()) == expected_keys
 
