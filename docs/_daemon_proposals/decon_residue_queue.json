@@ -208,10 +208,11 @@
       "id": "api_agent_grind",
       "domain": "agent_grind",
       "target_file": "bridge/vapi_bridge/operator_api/agent_grind.py",
-      "status": "pending",
+      "status": "applied",
       "agent_commit": null,
       "route_count_est": 20,
-      "order": 19
+      "order": 19,
+      "notes": "2026-06-19 register-function split; 20 grind/GIC/WEC/snapshot/agent-commit routes (5 blocks)"
     },
     {
       "id": "api_agent_supervisor",
