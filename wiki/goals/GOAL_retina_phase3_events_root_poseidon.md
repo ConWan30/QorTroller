@@ -1,6 +1,6 @@
 # /goal — Retina Phase 3: Poseidon `events_root` (off-chain ZK-prep)
 
-**Status:** IN PROGRESS  
+**Status:** COMPLETE ([PR #41](https://github.com/ConWan30/QorTroller/pull/41), `29ce63a9`)  
 **Prerequisite:** Phase 2c PDA attestation COMPLETE ([PR #40](https://github.com/ConWan30/QorTroller/pull/40), `0ffa70f8`)  
 **Architecture anchor:** `bridge/vapi_bridge/retina_events_root.py` + `retina_zk_artifacts/compute_retina_events_root.js`  
 **Sidecar discipline:** `events_root` stays off-chain; only 32-byte roots cross W3bstream / `retina_state_commitment` (PoAC 228B unchanged)
