@@ -158,10 +158,11 @@
       "id": "api_agent_calibration",
       "domain": "agent_calibration",
       "target_file": "bridge/vapi_bridge/operator_api/agent_calibration.py",
-      "status": "pending",
+      "status": "applied",
       "agent_commit": null,
-      "route_count_est": 50,
-      "order": 14
+      "route_count_est": 34,
+      "order": 14,
+      "notes": "2026-06-19 register-function split; 34 L4/separation/capture/graduation routes (10 non-contiguous blocks)"
     },
     {
       "id": "api_agent_biometric",
