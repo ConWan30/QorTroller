@@ -51,14 +51,8 @@ L6B_PROBE_INTERVAL_TICKS=60
 # R2 ADC 0-255 must be below this on all trailing frames to fire probe (default 15).
 # L6B_R2_QUIET_THRESHOLD=15
 
-# Desk / F-L6B-CAL-005: feel + measure the adaptive-trigger path (NOT rumble).
-L6B_PROBE_R2_FORCE=128
+# Desk / F-L6B-CAL-005: validated corpus params (2026-06-20, 59 probes)
+L6B_PROBE_R2_FORCE=200
 L6B_PROBE_MODE=rigid
-L6B_PROBE_HOLD_MS=200
-
-# Full L6 challenge rotation is NOT required for L6B reflex probes.
-# L6_CHALLENGES_ENABLED=false
-
-# Optional: tighten reflex band (defaults 80–280 ms human window)
-# L6B_HUMAN_MIN_MS=80
-# L6B_HUMAN_MAX_MS=280
+L6B_PROBE_HOLD_MS=300
+L6B_HUMAN_MAX_MS=350
