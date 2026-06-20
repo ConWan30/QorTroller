@@ -4763,6 +4763,23 @@ paths:
         "422":
           description: Missing device_id
 
+  /bridge/retina-policy-status:
+    get:
+      summary: Retina DePIN policy governor qualifiers and effective flags
+      tags: [Bridge]
+      parameters:
+        - name: x-api-key
+          in: header
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Policy status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RetinaPolicyStatus"
+
   /bridge/retina-status:
     get:
       summary: Trio-Retina perception log status (advisory)
@@ -10043,11 +10060,34 @@ webhooks:
         timestamp:
           type: number
 
+    RetinaPolicyStatus:
+      type: object
+      description: "Retina DePIN policy governor runtime state"
+      properties:
+        armed:
+          type: boolean
+        arm_source:
+          type: string
+        qualifiers:
+          type: object
+        qualifiers_summary:
+          type: string
+        effective_perception:
+          type: boolean
+        effective_fsca:
+          type: boolean
+        effective_adjudicator:
+          type: boolean
+        timestamp:
+          type: number
+
     RetinaStatus:
       type: object
       description: "Trio-Retina advisory perception log status"
       properties:
         retina_perception_enabled:
+          type: boolean
+        retina_perception_effective:
           type: boolean
         retina_perception_window:
           type: integer

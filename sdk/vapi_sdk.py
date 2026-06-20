@@ -8126,6 +8126,48 @@ class RetinaEvidenceSliceResult:
     error: str = ""
 
 
+@dataclass(slots=True)
+class RetinaPolicyStatusResult:
+  armed: bool = False
+  arm_source: str = "unarmed"
+  qualifiers_summary: str = ""
+  effective_perception: bool = False
+  effective_fsca: bool = False
+  effective_adjudicator: bool = False
+  timestamp: float = 0.0
+  error: str = ""
+
+
+class VAPIRetinaPolicy:
+    """Client for GET /bridge/retina-policy-status."""
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key = api_key
+
+    def status(self) -> RetinaPolicyStatusResult:
+        import json as _json
+        import urllib.request as _ur
+
+        try:
+            req = _ur.Request(f"{self._base}/bridge/retina-policy-status")
+            if self._key:
+                req.add_header("x-api-key", self._key)
+            with _ur.urlopen(req, timeout=10) as resp:  # noqa: S310
+                body = _json.loads(resp.read())
+            return RetinaPolicyStatusResult(
+                armed=bool(body.get("armed", False)),
+                arm_source=str(body.get("arm_source", "unarmed")),
+                qualifiers_summary=str(body.get("qualifiers_summary", "")),
+                effective_perception=bool(body.get("effective_perception", False)),
+                effective_fsca=bool(body.get("effective_fsca", False)),
+                effective_adjudicator=bool(body.get("effective_adjudicator", False)),
+                timestamp=float(body.get("timestamp", 0.0)),
+            )
+        except Exception as exc:
+            return RetinaPolicyStatusResult(error=str(exc)[:200])
+
+
 class VAPIRetinaEvidenceSlice:
     """Client for GET /agent/retina-evidence-slice.
 

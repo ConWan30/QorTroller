@@ -39,6 +39,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+log = logging.getLogger(__name__)
+
+
+def _retina_fsca_policy_guard(cfg) -> bool:
+    from .retina_depin_policy import is_effective_fsca
+    return is_effective_fsca(cfg)
+
 if TYPE_CHECKING:
     from vapi_bridge.store import Store
     from vapi_bridge.config import Config
@@ -542,7 +549,7 @@ CONTRADICTION_RULES: dict = {
             ORDER BY rel.created_at DESC LIMIT 5
         """,
         "params": lambda cfg: (cfg.l4_continuity_threshold,),
-        "guard": lambda cfg: bool(getattr(cfg, "retina_perception_enabled", False)),
+        "guard": _retina_fsca_policy_guard,
         "agents_involved": [
             "SessionAdjudicator",
             "retina_perception",
@@ -579,7 +586,7 @@ CONTRADICTION_RULES: dict = {
             ORDER BY r.created_at DESC LIMIT 5
         """,
         "params": lambda cfg: (cfg.l4_anomaly_threshold, time.time() - 86400),
-        "guard": lambda cfg: bool(getattr(cfg, "retina_perception_enabled", False)),
+        "guard": _retina_fsca_policy_guard,
         "agents_involved": [
             "SessionAdjudicator",
             "retina_perception",

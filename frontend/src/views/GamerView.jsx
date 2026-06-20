@@ -31,7 +31,7 @@ import { useAccount } from 'wagmi'
 import {
   useCaptureHealth, useGrindChain, useGrindAnalytics,
   usePCCIntelligence, useActivePlayOccupancy, useConsentStatus,
-  usePlayerSessionStatus, useLatestVhrProof, useRetinaStatus,
+  usePlayerSessionStatus, useLatestVhrProof, useRetinaStatus, useRetinaPolicyStatus,
 } from '../api/bridgeApi'
 // ConsentPanel drawer SUPERSEDED 2026-06-04 by the standalone Consent
 // Cockpit dApp at /consent. The overlay below now navigates to the dApp
@@ -186,22 +186,28 @@ function CaptureHealthPanel({ capture, paused, bridgeDown }) {
   )
 }
 
-// Bottom-left: Trio-Retina advisory (OFF unless RETINA_PERCEPTION_ENABLED on bridge)
-function RetinaAdvisoryPanel({ retina, bridgeDown }) {
-  const enabled = retina?.retina_perception_enabled
+// Bottom-left: Trio-Retina advisory (policy governor + event log)
+function RetinaAdvisoryPanel({ retina, policy, bridgeDown }) {
+  const manual = retina?.retina_perception_enabled
+  const effective = policy?.effective_perception ?? retina?.retina_perception_effective
+  const armed = policy?.armed
+  const enabled = manual || effective
   const anomalies = retina?.anomaly_count_recent ?? 0
   const tone = !enabled ? 'pending' : anomalies > 0 ? 'blocked' : 'live'
   const label = bridgeDown ? 'BRIDGE UNREACHABLE'
-    : !enabled ? 'ADVISORY OFF'
+    : !enabled ? (armed === false && policy ? 'POLICY UNARMED' : 'ADVISORY OFF')
       : anomalies > 0 ? `${anomalies} ANOMALIES`
         : 'NOMINAL'
   const commitment = retina?.latest_state_commitment || ''
+  const qualSummary = policy?.qualifiers_summary || '—'
   return (
     <OverlayPanel style={{ bottom: 88, left: 16, width: 264 }}>
       <PanelHead eye="RETINA · ADVISORY">
         <StatusChip tone={tone}>{label}</StatusChip>
       </PanelHead>
       <div className="p-body" style={{ display: 'grid', gap: 9 }}>
+        <Row label="policy" value={bridgeDown ? '—' : (policy?.arm_source || '—')} />
+        <Row label="qualifiers" value={bridgeDown ? '—' : qualSummary} />
         <Row label="rows" value={bridgeDown ? '—' : String(retina?.total_rows ?? 0)} />
         {commitment ? (
           <HashSpecimen value={commitment} truncate ends={8} size="sm" />
@@ -750,6 +756,7 @@ export function GamerView() {
   // badge renders DORMANT (not fabricated VERIFIED) on transient bridge loss.
   const { data: playerSession }   = usePlayerSessionStatus('')
   const { data: retinaStatus }    = useRetinaStatus('')
+  const { data: retinaPolicy }    = useRetinaPolicyStatus()
 
   // chain_length = cumulative GIC stamps (fills the ribbon; matches check_grind.py)
   // consecutive_clean = leading streak; diverges when a session breaks the streak.
@@ -853,7 +860,7 @@ export function GamerView() {
           (FleetPanel + the top-center ChipStrip were removed — they overcrowded
           the clean 4-corner composition; fleet coherence lives in OperatorView.) */}
       <CaptureHealthPanel capture={captureHealth} paused={paused} bridgeDown={bridgeOffline} />
-      <RetinaAdvisoryPanel retina={retinaStatus} bridgeDown={bridgeOffline} />
+      <RetinaAdvisoryPanel retina={retinaStatus} policy={retinaPolicy} bridgeDown={bridgeOffline} />
       <LatestGicPanel grind={grindChain} bridgeDown={bridgeOffline} magnitude={magnitude} />
       {/* VHR Proof Panel (Arc 5) — bottom-left, replacing the slot that
           was vacated by the F4 ConsentPanelOverlay removal. Shows the

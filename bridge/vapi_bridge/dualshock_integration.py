@@ -416,6 +416,7 @@ class DualShockTransport:
         self._replay_ring: _col.deque = _col.deque(maxlen=60)   # Phase 61 replay buffer
         _retina_win = max(60, int(getattr(self._cfg, "retina_perception_window", 120)))
         self._retina_snap_ring: _col.deque = _col.deque(maxlen=_retina_win * 2)
+        self._retina_operator_disarmed: bool = False
         self._session_count: int   = 0      # Loop-iteration counter for EWC scheduling
         self._consecutive_fb_timeouts: int = 0   # Phase 130A: backoff guard
         self._recent_session_vecs: list = []  # Last N session vectors for Fisher
@@ -1111,17 +1112,65 @@ class DualShockTransport:
             from .transports.http import ws_broadcast as _ws_bcast
             import asyncio as _asyncio
             import json as _json
+            from .retina_depin_policy import get_runtime_policy_state
+
+            _pol = get_runtime_policy_state()
             _asyncio.get_running_loop().call_soon_threadsafe(
                 lambda: _asyncio.create_task(
                     _ws_bcast(_json.dumps({
                         "type": "controller_registered",
                         "device_id": did_hex[:16],
                         "pubkey_prefix": self._pubkey_hex[:16] if self._pubkey_hex else "",
+                        "retina_policy_armed": bool(_pol.armed if _pol else False),
+                        "retina_policy_arm_source": (
+                            _pol.arm_source if _pol else "unarmed"
+                        ),
                     }))
                 )
             )
         except Exception as _reg_bcast_exc:
             log.debug("controller_registered broadcast skipped: %s", _reg_bcast_exc)
+
+        self._refresh_retina_policy()
+
+    def _refresh_retina_policy(self) -> None:
+        """Evaluate DePIN policy qualifiers and sync runtime arm state."""
+        try:
+            from .retina_depin_policy import (
+                get_runtime_policy_state,
+                refresh_policy_from_transport,
+            )
+
+            state = refresh_policy_from_transport(
+                self, self._cfg, store=self._store
+            )
+            _app = getattr(self, "_operator_app", None)
+            if _app is not None:
+                _app._retina_policy_state = state
+            if state.armed:
+                log.info(
+                    "Retina policy armed (source=%s effective_perception=%s)",
+                    state.arm_source,
+                    state.effective_perception,
+                )
+            elif get_runtime_policy_state() is not None:
+                from .retina_depin_policy import qualifiers_summary
+
+                log.debug(
+                    "Retina policy unarmed (source=%s summary=%s)",
+                    state.arm_source,
+                    qualifiers_summary(state),
+                )
+        except Exception as exc:
+            log.debug("retina policy refresh skipped: %s", exc)
+
+    def _retina_perception_active(self) -> bool:
+        try:
+            from .retina_depin_policy import is_effective_perception
+
+            return is_effective_perception(self._cfg)
+        except Exception:
+            return bool(getattr(self._cfg, "retina_perception_enabled", False))
 
     # ------------------------------------------------------------------
     # Main session loop
@@ -1140,6 +1189,8 @@ class DualShockTransport:
         _loop_iter = 0
         while True:
             _loop_iter += 1
+            if _loop_iter == 1 or _loop_iter % 10 == 0:
+                self._refresh_retina_policy()
             t_start = time.monotonic()
             log.info(
                 "_session_loop: iter=%d starting (sim_mode=%s)",
@@ -1170,12 +1221,14 @@ class DualShockTransport:
                 )
                 if self._pcc_monitor is not None:  # Phase 234.7 Layer 2
                     self._pcc_monitor.signal_disconnect("hid_timeout")
+                self._refresh_retina_policy()
                 await asyncio.sleep(self._interval)
                 continue
             except Exception as _poll_exc:
                 log.warning("_poll_frames error (non-fatal, session continues): %s", _poll_exc)
                 if self._pcc_monitor is not None:  # Phase 234.7 Layer 2
                     self._pcc_monitor.signal_disconnect("poll_error")
+                self._refresh_retina_policy()
                 await asyncio.sleep(self._interval)
                 continue
 
@@ -1268,7 +1321,7 @@ class DualShockTransport:
                 # Phase 61: accumulate downsampled frames for session replay
                 self._replay_ring.extend(_out)
                 # Trio-Retina: full-rate HID snaps for advisory perception window
-                if getattr(self._cfg, "retina_perception_enabled", False):
+                if self._retina_perception_active():
                     for _rs in frames:
                         self._retina_snap_ring.append({
                             "right_stick_x": int(_rs.right_stick_x),
@@ -1794,8 +1847,9 @@ class DualShockTransport:
                 except Exception:
                     pass
 
-                if getattr(self._cfg, "retina_perception_enabled", False):
+                if self._retina_perception_active():
                     try:
+                        from .retina_depin_policy import get_runtime_policy_state
                         from .retina_perception import (
                             persist_retina_result,
                             run_controller_perception,
@@ -1814,6 +1868,7 @@ class DualShockTransport:
                             record_hash_hex=_record_hash_hex,
                         )
                         if self._pending_pitl_meta is not None:
+                            _pol = get_runtime_policy_state()
                             self._pending_pitl_meta["retina_enabled"] = _rp.enabled
                             self._pending_pitl_meta["retina_event_count"] = _rp.event_count
                             self._pending_pitl_meta["retina_trajectory_anomalies"] = (
@@ -1826,7 +1881,14 @@ class DualShockTransport:
                             self._pending_pitl_meta["retina_alert"] = (
                                 _rp.trajectory_anomalies > 0
                             )
-                        persist_retina_result(self._store, _src, _rp)
+                            self._pending_pitl_meta["retina_policy_armed"] = bool(
+                                _pol.armed if _pol else False
+                            )
+                            self._pending_pitl_meta["retina_policy_arm_source"] = (
+                                _pol.arm_source if _pol else "unarmed"
+                            )
+                            self._pending_pitl_meta["retina_source"] = "hid"
+                        persist_retina_result(self._store, _src, _rp, source="hid")
                     except Exception as _ret_exc:
                         log.debug("retina perception hook fail-open: %s", _ret_exc)
 
