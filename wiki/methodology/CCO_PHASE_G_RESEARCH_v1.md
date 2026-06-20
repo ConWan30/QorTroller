@@ -65,3 +65,17 @@ Demo device `581a836c…` is **PREMIUM_EDGE** class with **both** MFG identity (
 | PARTIAL → VALIDATED | Operator attestation + separation/defensibility gate for that class's primary challenge type |
 
 No automatic promotion — operator-fired only.
+
+---
+
+## 5. Measurement execution
+
+Per-tier corpus progress is aggregated from `l6b_probe_log.cco_profile_id` via:
+
+```bash
+python scripts/cco_phase_g_measurement_status.py
+```
+
+Desk capture tags probes with `--cco-profile-id` on `scripts/l6b_desk_reaction_session.py`. Full operator procedure: **`docs/cco-phase-g-measurement-runbook.md`**.
+
+When `CCO_RESEARCH_SURFACE_ENABLED=true`, `GET /player/session-status` includes dynamic `corpus_n` / `corpus_gate_reached` on the research block (grade promotes UNVALIDATED→PARTIAL at N≥50 per tier; VALIDATED never auto-assigned).
