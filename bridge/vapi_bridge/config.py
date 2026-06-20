@@ -1913,6 +1913,9 @@ class Config:
     retina_w3bstream_enforce_on_ingest: bool = field(
         default_factory=lambda: _env_bool("RETINA_W3BSTREAM_ENFORCE_ON_INGEST", False)
     )
+    retina_da_upload_enabled: bool = field(
+        default_factory=lambda: _env_bool("RETINA_DA_UPLOAD_ENABLED", False)
+    )
 
     # --- Data Economy Arc 5: VAPIReplayProofPipeline (VHR proofs) ---
     replay_proof_pipeline_enabled: bool = field(

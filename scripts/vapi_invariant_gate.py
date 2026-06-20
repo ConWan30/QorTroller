@@ -1650,12 +1650,21 @@ def load_allowlist() -> dict:
     return json.loads(ALLOWLIST_PATH.read_text(encoding="utf-8"))
 
 
+def _bridge_operator_url(path: str) -> str:
+    """Operator sub-app is mounted at /operator on the bridge HTTP port."""
+    import os
+
+    port = int(os.environ.get("HTTP_PORT", "8080"))
+    base = f"http://127.0.0.1:{port}/operator"
+    return f"{base}{path}"
+
+
 def _fetch_latest_provenance_hash() -> str:
     """GET latest governance_provenance_hash from bridge. Returns '0'*64 if unreachable."""
     import urllib.request as _urlreq
     try:
         req = _urlreq.Request(
-            "http://localhost:8080/agent/allowlist-governance-history?limit=1",
+            _bridge_operator_url("/agent/allowlist-governance-history?limit=1"),
             headers={"Content-Type": "application/json"},
         )
         with _urlreq.urlopen(req, timeout=5) as resp:
@@ -1704,7 +1713,7 @@ def _post_governance_event(prev: str, new: str, category: str, text: str) -> Non
     }).encode()
     try:
         req = _urlreq.Request(
-            "http://localhost:8080/agent/allowlist-governance-event",
+            _bridge_operator_url("/agent/allowlist-governance-event"),
             data=payload,
             headers={"Content-Type": "application/json"},
             method="POST",
