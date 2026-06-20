@@ -148,10 +148,11 @@
       "id": "api_agent_ioswarm",
       "domain": "agent_ioswarm",
       "target_file": "bridge/vapi_bridge/operator_api/agent_ioswarm.py",
-      "status": "pending",
+      "status": "applied",
       "agent_commit": null,
-      "route_count_est": 15,
-      "order": 13
+      "route_count_est": 14,
+      "order": 13,
+      "notes": "2026-06-19 register-function split; 14 ioSwarm/PoAd/dual-primitive/swarm-gate routes (4 non-contiguous blocks)"
     },
     {
       "id": "api_agent_calibration",
