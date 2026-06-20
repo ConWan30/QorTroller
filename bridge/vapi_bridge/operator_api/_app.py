@@ -933,13 +933,19 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         )
         _poep_commitment = None
         _poep_recorded = None
+        _poep_scan_outcome = None
+        _poep_scan_error = None
         if chain is not None and _registry_deployed:
             try:
-                _reader = await asyncio.to_thread(chain.get_poep_composability_reader, dev)
+                _reader, _poep_scan_outcome, _poep_scan_error = await asyncio.to_thread(
+                    chain.lookup_poep_device_for_composability, dev
+                )
                 if _reader is not None:
                     _poep_commitment, _poep_recorded = resolve_poep_commitment(_reader, dev)
             except Exception as _exc_poep_c:
                 log.debug("player_session_status: PoEP composability read failed: %s", _exc_poep_c)
+                _poep_scan_outcome = "SCAN_FAILED"
+                _poep_scan_error = str(_exc_poep_c)
         _composability = assemble_composability_status(
             enabled=_comp_enabled,
             registry_deployed=_registry_deployed,
@@ -948,6 +954,8 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             presence_tier=_identity_grid.get("presence_ceiling_candidate"),
             poep_commitment=_poep_commitment,
             poep_commitment_recorded=_poep_recorded,
+            poep_scan_outcome=_poep_scan_outcome,
+            poep_scan_error=_poep_scan_error,
             is_fully_eligible_onchain=_elig.get("onchain") if _lens_subcheck else None,
             lens_subcheck_enabled=_lens_subcheck,
             ts_ns=int(_now * 1e9),

@@ -3,6 +3,21 @@
 Pure-function composable-claim hash + PoEP registry view helper surface.
 Lens bool sub-check is optional and fail-open. Does NOT deploy Lens v3 (Option F2).
 Design: ``wiki/methodology/CCO_POEP_FUSION_v4.md`` §Phase F, §4.1; F-V3-001.
+
+F-COMPOSE-1 — MFG registration (identity) and PoEP registration (presence) are
+distinct attestations on separate registries; a device can hold either independently.
+``off_chain_verifiable`` requires a gamer-signed PoEP ``DeviceRegistered`` event whose
+commitment passes the registry's *current-state* checks (``isRegistrationValid`` on the
+event's gamer + ``isRecorded`` on the commitment) — not MFG registration and not mere
+log presence. ``prep_only`` is honest only when the scan completed with zero PoEP events
+(``SCAN_COMPLETE_EMPTY``). RPC scan failure surfaces as ``registry_unreachable``, never
+masquerade as ``prep_only``.
+
+Reference example (live scan 2026-06-20): demo device ``581a836c…`` holds *both* —
+MFG-registered for I1 identity and PoEP-registered with commitment ``72ad94ff…`` at block
+43955767 (gamer ``0x0Cf36dB57…``) — making it the worked example of I1 ×
+``off_chain_verifiable``. The prior inference that this device lacked PoEP registration
+was wrong; measured chain state superseded the prediction.
 """
 from __future__ import annotations
 
@@ -33,6 +48,7 @@ _PRESENCE_CODES: dict[str, int] = {
 Readiness = Literal[
     "disabled",
     "registry_undeployed",
+    "registry_unreachable",
     "missing_device_id",
     "missing_grid_axes",
     "tournament_blocked_path_b",
@@ -96,6 +112,7 @@ def _resolve_readiness(
     presence_tier: str | None,
     poep_commitment: bytes | None,
     poep_recorded: bool | None,
+    poep_scan_outcome: str | None = None,
 ) -> Readiness:
     if not enabled:
         return "disabled"
@@ -107,8 +124,14 @@ def _resolve_readiness(
         return "tournament_blocked_path_b"
     if not registry_deployed:
         return "registry_undeployed"
+    if poep_scan_outcome == "SCAN_FAILED":
+        return "registry_unreachable"
     if poep_commitment and poep_recorded is True:
         return "off_chain_verifiable"
+    if poep_scan_outcome == "SCAN_COMPLETE_EMPTY":
+        return "prep_only"
+    if poep_scan_outcome == "SCAN_COMPLETE_FOUND":
+        return "prep_only"
     return "prep_only"
 
 
@@ -121,6 +144,8 @@ def assemble_composability_status(
     presence_tier: str | None = None,
     poep_commitment: bytes | None = None,
     poep_commitment_recorded: bool | None = None,
+    poep_scan_outcome: str | None = None,
+    poep_scan_error: str | None = None,
     is_fully_eligible_onchain: bool | None = None,
     lens_subcheck_enabled: bool = False,
     ts_ns: int | None = None,
@@ -134,6 +159,7 @@ def assemble_composability_status(
         presence_tier=presence_tier,
         poep_commitment=poep_commitment,
         poep_recorded=poep_commitment_recorded,
+        poep_scan_outcome=poep_scan_outcome,
     )
 
     claim_hash: str | None = None
@@ -154,6 +180,8 @@ def assemble_composability_status(
         "option": "F1",
         "registry_deployed": registry_deployed,
         "readiness": readiness,
+        "poep_scan_outcome": poep_scan_outcome,
+        "poep_scan_error": poep_scan_error,
         "composable_claim_hash": claim_hash,
         "poep_commitment_hex": (
             "0x" + poep_commitment.hex() if poep_commitment else None
