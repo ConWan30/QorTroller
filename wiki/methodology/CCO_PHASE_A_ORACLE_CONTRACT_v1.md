@@ -50,6 +50,8 @@ Frozen field set for Phase A v1. JSON-serializable dict mirror for HTTP endpoint
 | `policy_ref` | `str` | yes | `"CCO_T0_POLICY_v1_OPTION_C"` |
 | `as_of` | `str` | yes | ISO-8601 date of oracle ruleset |
 
+**Contract addendum (F-PHASE-B-004, 2026-06-20):** `verdict_types_available` names verdict types the CCO *would* deliver on the **P-T0 / L6B policy path** given appropriate hardware — not a guarantee of live delivery on every profile. Actual `REFLEX_OBSERVED` emission is gated at runtime by the applicability predicate in [`CCO_PHASE_B_DESIGN_v1.md`](CCO_PHASE_B_DESIGN_v1.md) (`cco_l6b_wiring.py`: IMU + DualSense haptic path). IMU-less profiles (e.g. Xbox Elite S2) may list `REFLEX_OBSERVED` here while wiring logs `L6B_SKIPPED` / `NO_IMU` — consistent, not contradictory.
+
 ### `capabilities` object
 
 | Key | Type | Source |
@@ -142,4 +144,5 @@ No `CapabilityOracle` Python module until hold lifts.
 
 | Date | Change |
 |------|--------|
+| 2026-06-20 | F-PHASE-B-004 addendum: `verdict_types_available` vs runtime applicability predicate |
 | 2026-06-19 | Initial contract + V-check table; Phase A code explicitly held |
