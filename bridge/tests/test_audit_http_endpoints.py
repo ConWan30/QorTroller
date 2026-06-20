@@ -163,14 +163,25 @@ def test_t_audit_ep_8_endpoint_paths_pinned():
     """Catch accidental rename of any audit endpoint at PR time.
     Frontend code targets these specific paths; renames break the
     Operator Console dashboards without test failure if not pinned."""
-    src = Path(__file__).resolve().parents[1] / "vapi_bridge" / "operator_api.py"
-    text = src.read_text(encoding="utf-8")
-    for path in (
-        '"/operator/g7-curator-readiness"',
-        '"/operator/cfss-lane-drift-status"',
-        '"/operator/curator-graduation-readiness"',
-    ):
+    oi_src = (
+        Path(__file__).resolve().parents[1]
+        / "vapi_bridge"
+        / "operator_api"
+        / "agent_operator_initiative.py"
+    ).read_text(encoding="utf-8")
+    mp_src = (
+        Path(__file__).resolve().parents[1]
+        / "vapi_bridge"
+        / "operator_api"
+        / "agent_marketplace.py"
+    ).read_text(encoding="utf-8")
+    pinned = {
+        '"/operator/g7-curator-readiness"': oi_src,
+        '"/operator/cfss-lane-drift-status"': oi_src,
+        '"/operator/curator-graduation-readiness"': mp_src,
+    }
+    for path, text in pinned.items():
         assert path in text, (
-            f"Endpoint path {path} not pinned in operator_api.py — "
+            f"Endpoint path {path} not pinned in operator_api split modules — "
             f"frontend Operator Console dashboards will break silently"
         )
