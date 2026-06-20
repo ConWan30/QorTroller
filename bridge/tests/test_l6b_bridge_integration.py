@@ -31,6 +31,15 @@ def _make_config(**overrides) -> Config:
     os.environ.setdefault("POAC_VERIFIER_ADDRESS", "0x" + "a" * 40)
     os.environ.setdefault("BRIDGE_PRIVATE_KEY", "0x" + "b" * 64)
     os.environ.setdefault("HTTP_ENABLED", "true")
+    # Isolate from operator bridge/.env (T199-8 pattern).
+    for key in (
+        "L6B_ENABLED",
+        "L6B_PROBE_INTERVAL_TICKS",
+        "L6B_PROBE_R2_FORCE",
+        "L6B_PROBE_MODE",
+        "L6B_PROBE_HOLD_MS",
+    ):
+        os.environ.pop(key, None)
     for k, v in overrides.items():
         os.environ[k.upper()] = str(v)
     cfg = Config()
@@ -56,6 +65,14 @@ class TestL6bConfigFields:
         cfg = _make_config()
         assert cfg.l6b_human_min_ms == pytest.approx(80.0)
         assert cfg.l6b_human_max_ms == pytest.approx(280.0)
+
+    def test_l6b_probe_r2_force_default(self):
+        cfg = _make_config()
+        assert cfg.l6b_probe_r2_force == 60
+
+    def test_l6b_probe_r2_force_env_override(self):
+        cfg = _make_config(L6B_PROBE_R2_FORCE=120)
+        assert cfg.l6b_probe_r2_force == 120
 
 
 class TestHumanityFormulaL6b:
@@ -147,3 +164,72 @@ class TestL6bStoreIntegration:
         assert row["reflex_verdict"] == "REFLEX_OBSERVED"
         assert row["cco_profile_id"] == "sony_dualshock_edge_v1"
         assert row["policy_ref"] == "CCO_T0_POLICY_v1_OPTION_C"
+
+    def test_insert_l6b_probe_trigger_r2_at_probe_column(self, tmp_path):
+        """F-L6B-CAL-003: nullable trigger_r2_at_probe audit column."""
+        import tempfile
+        tf = tempfile.NamedTemporaryFile(suffix=".db", delete=False, dir=str(tmp_path))
+        tf.close()
+        from vapi_bridge.store import Store
+        store = Store(tf.name)
+        store.insert_l6b_probe(
+            device_id="dd" * 32,
+            probe_ts_ms=3000000,
+            latency_ms=120.0,
+            classification="HUMAN",
+            accel_delta_peak=650.0,
+            reflex_verdict="REFLEX_OBSERVED",
+            trigger_r2_at_probe=8,
+        )
+        with store._conn() as conn:
+            row = conn.execute(
+                "SELECT trigger_r2_at_probe FROM l6b_probe_log WHERE device_id=?",
+                ("dd" * 32,),
+            ).fetchone()
+        assert row is not None
+        assert row["trigger_r2_at_probe"] == 8
+
+    def test_insert_l6b_probe_diagnostic_round_trip(self, tmp_path):
+        import tempfile
+
+        tf = tempfile.NamedTemporaryFile(suffix=".db", delete=False, dir=str(tmp_path))
+        tf.close()
+        from vapi_bridge.store import Store
+        from vapi_bridge.cco_l6b_wiring import (
+            compute_l6b_probe_diagnostic,
+            l6b_probe_diagnostic_to_json,
+        )
+
+        store = Store(tf.name)
+        probe_id = store.insert_l6b_probe(
+            device_id="ee" * 32,
+            probe_ts_ms=3000000,
+            latency_ms=352.0,
+            classification="INCONCLUSIVE",
+            accel_delta_peak=1200.0,
+        )
+        diag = compute_l6b_probe_diagnostic(
+            [{"ax": 100.0, "ay": 0.0, "az": 0.0}],
+            [{"ax": 700.0, "ay": 0.0, "az": 0.0, "t_mono": 1001.25}],
+            1000.0,
+            legacy_latency_ms=352.0,
+        )
+        store.insert_l6b_probe_diagnostic(
+            device_id="ee" * 32,
+            probe_ts_mono=diag.probe_ts,
+            probe_log_id=probe_id,
+            legacy_latency_ms=diag.legacy_index_latency_ms,
+            true_latency_ms=diag.true_latency_ms,
+            precursor_gap_ms=diag.precursor_gap_ms,
+            reflex_gap_ms=diag.reflex_gap_ms,
+            diagnostic_json=l6b_probe_diagnostic_to_json(diag),
+        )
+        with store._conn() as conn:
+            row = conn.execute(
+                "SELECT probe_log_id, true_latency_ms, reflex_gap_ms "
+                "FROM l6b_probe_diagnostic WHERE device_id=?",
+                ("ee" * 32,),
+            ).fetchone()
+        assert row is not None
+        assert row["probe_log_id"] == probe_id
+        assert row["true_latency_ms"] == pytest.approx(1250.0)
