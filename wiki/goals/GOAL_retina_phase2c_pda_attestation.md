@@ -1,6 +1,6 @@
 # /goal — Retina Phase 2c: `RETINA_PERCEPTION_OBSERVATION` PDA attestation
 
-**Status:** IN PROGRESS  
+**Status:** COMPLETE ([PR #40](https://github.com/ConWan30/QorTroller/pull/40), `0ffa70f8`)  
 **Prerequisite:** Phase 2b DA upload COMPLETE ([PR #38](https://github.com/ConWan30/QorTroller/pull/38))  
 **Architecture anchor:** `bridge/vapi_bridge/physical_data_attestation.py` (FROZEN PDA v1)  
 **Sidecar discipline:** `retina_state_commitment` is the 32-byte hardware_data_hash input to PDA
