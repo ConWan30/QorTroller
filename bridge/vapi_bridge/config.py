@@ -1920,6 +1920,12 @@ class Config:
     retina_da_upload_enabled: bool = field(
         default_factory=lambda: _env_bool("RETINA_DA_UPLOAD_ENABLED", False)
     )
+    retina_pda_attestation_enabled: bool = field(
+        default_factory=lambda: _env_bool("RETINA_PDA_ATTESTATION_ENABLED", False)
+    )
+    retina_pda_attestation_agent_id: str = field(
+        default_factory=lambda: _env("RETINA_PDA_ATTESTATION_AGENT_ID", "bridge_agent")
+    )
 
     # --- Data Economy Arc 5: VAPIReplayProofPipeline (VHR proofs) ---
     replay_proof_pipeline_enabled: bool = field(
