@@ -17,6 +17,9 @@ import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 BRIDGE_DIR = Path(__file__).parents[1]
+MARKETPLACE_SOURCE = (
+    BRIDGE_DIR / "vapi_bridge" / "operator_api" / "agent_marketplace.py"
+)
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 if str(BRIDGE_DIR) not in sys.path:
@@ -108,7 +111,7 @@ async def test_t_238_twin_3_slow_subscriber_drops_counted():
 # T-238-TWIN-4 ───────────────────────────────────────────────────────────────
 def test_t_238_twin_4_sse_endpoint_registered_with_frozen_event_types():
     """Static check: SSE endpoint declared with FROZEN event types in operator_api.py."""
-    api_src = (BRIDGE_DIR / "vapi_bridge" / "operator_api.py").read_text()
+    api_src = MARKETPLACE_SOURCE.read_text()
     # Endpoint route registered
     assert '@app.get("/agent/twin-stream")' in api_src
     # Stats endpoint

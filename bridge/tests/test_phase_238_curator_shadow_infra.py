@@ -20,6 +20,9 @@ import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 BRIDGE_DIR = Path(__file__).parents[1]
+MARKETPLACE_SOURCE = (
+    BRIDGE_DIR / "vapi_bridge" / "operator_api" / "agent_marketplace.py"
+)
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 if str(BRIDGE_DIR) not in sys.path:
@@ -285,7 +288,7 @@ def test_t_238_cur_si_9_operator_api_endpoint_surface_locked():
     the FROZEN paths from the plan.  Locks the wire contract for upcoming
     frontend dashboard revamp.
     """
-    api_src = (BRIDGE_DIR / "vapi_bridge" / "operator_api.py").read_text()
+    api_src = MARKETPLACE_SOURCE.read_text()
     # POST endpoints
     assert '@app.post("/operator/curator-review-listing")' in api_src
     assert '@app.post("/operator/curator-bulk-review")' in api_src
