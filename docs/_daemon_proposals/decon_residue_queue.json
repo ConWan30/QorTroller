@@ -168,10 +168,11 @@
       "id": "api_agent_biometric",
       "domain": "agent_biometric",
       "target_file": "bridge/vapi_bridge/operator_api/agent_biometric.py",
-      "status": "pending",
+      "status": "applied",
       "agent_commit": null,
-      "route_count_est": 35,
-      "order": 15
+      "route_count_est": 17,
+      "order": 15,
+      "notes": "2026-06-19 register-function split; 17 VHP/biometric/attestation/renewal routes (8 non-contiguous blocks)"
     },
     {
       "id": "api_agent_marketplace",

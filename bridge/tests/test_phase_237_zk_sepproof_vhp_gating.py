@@ -24,6 +24,9 @@ import pytest
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 BRIDGE_DIR = Path(__file__).parents[1]
+MINT_VHP_SOURCE = (
+    PROJECT_ROOT / "bridge" / "vapi_bridge" / "operator_api" / "agent_biometric.py"
+)
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 if str(BRIDGE_DIR) not in sys.path:
@@ -73,7 +76,7 @@ def test_t_237_sep_vhp_3_endpoint_signature():
     """Static check: the mint_vhp endpoint signature includes sepproof_commitment
     Query param. Without this, the gate logic would never receive a commitment
     value to validate."""
-    src = (PROJECT_ROOT / "bridge" / "vapi_bridge" / "operator_api.py").read_text(
+    src = MINT_VHP_SOURCE.read_text(
         encoding="utf-8"
     )
     # Find the mint_vhp signature
@@ -100,7 +103,7 @@ def test_t_237_sep_vhp_4_gate_structural_shape():
       - 422 raise when supplied + not in biometric_snapshot_log
       - 422 raise when supplied + on_chain_confirmed=false
     """
-    src = (PROJECT_ROOT / "bridge" / "vapi_bridge" / "operator_api.py").read_text(
+    src = MINT_VHP_SOURCE.read_text(
         encoding="utf-8"
     )
     mint_idx = src.find("async def mint_vhp(")
@@ -132,7 +135,7 @@ def test_t_237_sep_vhp_4_gate_structural_shape():
 def test_t_237_sep_vhp_5_response_metadata():
     """Static check: mint_vhp response dict includes the four sepproof
     binding fields so callers can audit which VHPs are SEPPROOF-attested."""
-    src = (PROJECT_ROOT / "bridge" / "vapi_bridge" / "operator_api.py").read_text(
+    src = MINT_VHP_SOURCE.read_text(
         encoding="utf-8"
     )
     mint_idx = src.find("async def mint_vhp(")
