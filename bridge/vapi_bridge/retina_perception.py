@@ -197,6 +197,21 @@ def persist_retina_result(
             )
     except Exception as exc:
         log.debug("retina DA upload post-persist skipped: %s", exc)
+    try:
+        from .retina_pda_attestation import maybe_record_retina_pda_attestation
+        from .retina_w3bstream import EXIT_OK as _EXIT_OK
+
+        if cfg is not None:
+            maybe_record_retina_pda_attestation(
+                store,
+                cfg,
+                device_id=device_id,
+                state_commitment_hex=result.state_commitment_hex,
+                ts_ns=result.ts_ns,
+                w3bstream_exit_code=int(w3s_result.get("exit_code", _EXIT_OK)),
+            )
+    except Exception as exc:
+        log.debug("retina PDA attestation post-persist skipped: %s", exc)
     if result.trajectory_anomalies > 0 and hasattr(store, "write_agent_event"):
         try:
             store.write_agent_event(
