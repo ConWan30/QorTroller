@@ -15,9 +15,12 @@ from vapi_bridge.cco_l6b_wiring import (
     L6bSkipReason,
     REFLEX_OBSERVED,
     check_l6b_applicability,
+    compute_l6b_probe_diagnostic,
+    evaluate_l6b_r2_quiet_gate,
     format_l6b_skip_log,
     map_l6b_classification_to_reflex_verdict,
 )
+from controller.l6b_reflex_analyzer import L6bReflexAnalyzer
 
 
 @dataclass(frozen=True)
@@ -116,6 +119,61 @@ class TestReflexVerdictMapping:
         assert map_l6b_classification_to_reflex_verdict(classification) is None
 
 
+@dataclass(frozen=True)
+class _FakeFrame:
+    r2_trigger: int = 0
+
+
+class TestL6bR2QuietGate:
+    def test_dispatch_allowed_when_r2_below_threshold(self):
+        frames = [_FakeFrame(0), _FakeFrame(8), _FakeFrame(14)]
+        quiet_ok, r2_at_probe = evaluate_l6b_r2_quiet_gate(frames, quiet_threshold=15)
+        assert quiet_ok is True
+        assert r2_at_probe == 14
+
+    def test_dispatch_blocked_when_r2_at_or_above_threshold(self):
+        frames = [_FakeFrame(0), _FakeFrame(90), _FakeFrame(14)]
+        quiet_ok, r2_at_probe = evaluate_l6b_r2_quiet_gate(frames, quiet_threshold=15)
+        assert quiet_ok is False
+        assert r2_at_probe == 90
+
+    def test_empty_frames_not_quiet(self):
+        quiet_ok, r2_at_probe = evaluate_l6b_r2_quiet_gate([], quiet_threshold=15)
+        assert quiet_ok is False
+        assert r2_at_probe is None
+
+
 class TestSkipLogFormat:
     def test_format_skip_log(self):
         assert format_l6b_skip_log(L6bSkipReason.NO_IMU) == "L6B_SKIPPED/NO_IMU"
+
+
+class TestL6bProbeDiagnostic:
+    def test_true_and_reflex_latency_from_t_mono(self):
+        probe_ts = 1000.0
+        pre = [{"ax": 100.0, "ay": 0.0, "az": 0.0}]
+        post = [
+            {"ax": 110.0, "ay": 0.0, "az": 0.0, "t_mono": 1000.05},
+            {"ax": 160.0, "ay": 0.0, "az": 0.0, "t_mono": 1000.20},
+            {"ax": 700.0, "ay": 0.0, "az": 0.0, "t_mono": 1000.25},
+        ]
+        diag = compute_l6b_probe_diagnostic(pre, post, probe_ts, legacy_latency_ms=16.0)
+        assert diag.precursor_gap_ms == pytest.approx(200.0)
+        assert diag.true_latency_ms == pytest.approx(250.0)
+        assert diag.reflex_gap_ms == pytest.approx(50.0)
+        assert diag.crossing_index == 2
+        assert diag.precursor_index == 1
+
+    def test_t_mono_keys_do_not_change_legacy_classification(self):
+        probe_ts = 1000.0
+        pre = [{"ax": 0.0, "ay": 0.0, "az": 0.0}]
+        post_plain = [{"ax": 600.0, "ay": 0.0, "az": 0.0}] * 11
+        post_mono = [
+            {"ax": 600.0, "ay": 0.0, "az": 0.0, "t_mono": 1000.0 + i * 0.008}
+            for i in range(11)
+        ]
+        analyzer = L6bReflexAnalyzer()
+        r_plain = analyzer.analyze(pre, post_plain, probe_ts)
+        r_mono = analyzer.analyze(pre, post_mono, probe_ts)
+        assert r_plain.classification == r_mono.classification
+        assert r_plain.latency_ms == r_mono.latency_ms

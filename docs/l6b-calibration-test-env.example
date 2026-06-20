@@ -19,12 +19,42 @@
 #
 # Quick corpus status (any time):
 #   python scripts/l6b_probe_status.py
+#
+# F-L6B-CAL-005 latency diagnostics (read-only; does not change classification):
+# After probes, report true_latency_ms / precursor_gap_ms / reflex_gap_ms:
+#   python scripts/l6b_probe_diagnostic_report.py
+# Raw JSONL mirror: logs/l6b_probe_diagnostic.jsonl
+# SQLite table: l6b_probe_diagnostic (joined to l6b_probe_log by probe_log_id)
+#
+# Calibration: play in 6-7 minute bursts (Ctrl-C between bursts is fine).
+# Interval 60 ticks ~= 1 min between probe *opportunities* (~6-7 per burst).
+# R2-quiet gate skips sprint; only between-play rest windows actually fire.
+#
+# RECOMMENDED: USB-only desk calibration
+# PS5 off or BT unpaired. No game running.
+# Hold controller in natural gaming posture.
+# Removes PS5 dual-host haptic conflict.
+# Use for plumbing validation before in-game sessions.
+# L6B_PROBE_INTERVAL_TICKS=60 acceptable here;
+# use 300-400 for in-game sessions to reduce anticipation effect.
+#
+#   python scripts/unified_session_monitor.py --player P1 --game "desk-calibration"
 
 L6B_ENABLED=true
 
-# Default 6750 ticks ~= 112 min between probes at 1s session loop - too slow for calibration.
-# 60 ticks ~= 1 probe/minute; 30 ~= 1 probe/30s (operator discretion for dedicated capture).
+# Production default 6750 ticks ~= 112 min between probes at 1s session loop.
+# Desk / USB-only: 60 ticks ~= 1 min between opportunities.
+# In-game (NCAA): 300-400 ticks ~= 5-7 min — less anticipation + less PS5 contention.
+# R2-quiet gate (default threshold 15) blocks probes during sprint hold.
 L6B_PROBE_INTERVAL_TICKS=60
+
+# R2 ADC 0-255 must be below this on all trailing frames to fire probe (default 15).
+# L6B_R2_QUIET_THRESHOLD=15
+
+# Desk / F-L6B-CAL-005: feel + measure the adaptive-trigger path (NOT rumble).
+L6B_PROBE_R2_FORCE=128
+L6B_PROBE_MODE=rigid
+L6B_PROBE_HOLD_MS=200
 
 # Full L6 challenge rotation is NOT required for L6B reflex probes.
 # L6_CHALLENGES_ENABLED=false

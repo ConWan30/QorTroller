@@ -25,19 +25,21 @@ class CalibrationMixin:
         reflex_verdict: str | None = None,
         cco_profile_id: str | None = None,
         policy_ref: str | None = None,
-    ) -> None:
+        trigger_r2_at_probe: int | None = None,
+    ) -> int:
         """Persist one L6b reflex probe result (Phase 63; CCO Phase B telemetry).
 
         latency_ms=-1.0 indicates NO_RESPONSE (stored as NULL in DB).
         Never raises — caller wraps in try/except.
+        Returns the new ``l6b_probe_log`` row id.
         """
         _lat = None if latency_ms < 0 else latency_ms
         with self._conn() as conn:
-            conn.execute(
+            cur = conn.execute(
                 "INSERT INTO l6b_probe_log "
                 "(device_id, probe_ts_ms, latency_ms, classification, accel_delta_peak, "
-                "reflex_verdict, cco_profile_id, policy_ref) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "reflex_verdict, cco_profile_id, policy_ref, trigger_r2_at_probe) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     device_id,
                     probe_ts_ms,
@@ -47,6 +49,39 @@ class CalibrationMixin:
                     reflex_verdict,
                     cco_profile_id,
                     policy_ref,
+                    trigger_r2_at_probe,
+                ),
+            )
+            return int(cur.lastrowid)
+
+    def insert_l6b_probe_diagnostic(
+        self,
+        device_id: str,
+        probe_ts_mono: float,
+        *,
+        probe_log_id: int | None = None,
+        legacy_latency_ms: float | None = None,
+        true_latency_ms: float | None = None,
+        precursor_gap_ms: float | None = None,
+        reflex_gap_ms: float | None = None,
+        diagnostic_json: str,
+    ) -> None:
+        """F-L6B-CAL-005 read-only latency diagnostic. Never raises."""
+        with self._conn() as conn:
+            conn.execute(
+                "INSERT INTO l6b_probe_diagnostic "
+                "(probe_log_id, device_id, probe_ts_mono, legacy_latency_ms, "
+                "true_latency_ms, precursor_gap_ms, reflex_gap_ms, diagnostic_json) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    probe_log_id,
+                    device_id,
+                    probe_ts_mono,
+                    legacy_latency_ms,
+                    true_latency_ms,
+                    precursor_gap_ms,
+                    reflex_gap_ms,
+                    diagnostic_json,
                 ),
             )
 
@@ -90,6 +125,45 @@ class CalibrationMixin:
             "std_latency_ms": round(std_lat, 2) if std_lat is not None else None,
             "classification_distribution": dist,
             "bot_events": dist.get("BOT", 0),
+        }
+
+    def get_l6b_calibration_progress(self, device_id: str | None = None) -> dict:
+        """CCO Phase B: corpus progress toward operator N>=50 gate.
+
+        Counts all rows in l6b_probe_log (optionally filtered by device_id).
+        """
+        _where = "WHERE device_id=?" if device_id else ""
+        _params: tuple = (device_id,) if device_id else ()
+        with self._conn() as conn:
+            total = int(
+                conn.execute(
+                    f"SELECT COUNT(*) AS n FROM l6b_probe_log {_where}",
+                    _params,
+                ).fetchone()["n"],
+            )
+            reflex_rows = conn.execute(
+                f"SELECT reflex_verdict, COUNT(*) AS n FROM l6b_probe_log {_where} "
+                "GROUP BY reflex_verdict",
+                _params,
+            ).fetchall()
+            latest = conn.execute(
+                f"SELECT device_id, probe_ts_ms, classification, reflex_verdict, "
+                f"latency_ms, accel_delta_peak FROM l6b_probe_log {_where} "
+                f"ORDER BY id DESC LIMIT 1",
+                _params,
+            ).fetchone()
+        reflex_dist: dict[str, int] = {}
+        for row in reflex_rows:
+            key = row["reflex_verdict"] if row["reflex_verdict"] is not None else "(null)"
+            reflex_dist[key] = int(row["n"])
+        latest_dict = dict(latest) if latest else None
+        return {
+            "device_id": device_id,
+            "probe_count": total,
+            "reflex_verdict_distribution": reflex_dist,
+            "latest_probe": latest_dict,
+            "target_n": 50,
+            "gate_reached": total >= 50,
         }
 
     def get_nominal_records_for_calibration(self, limit: int = 200) -> list[dict]:

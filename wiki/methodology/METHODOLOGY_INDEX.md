@@ -359,6 +359,17 @@ annotation when used in synthesis composition.
 | Parent | `CCO_POEP_FUSION_v4.md`; `CCO_T0_POLICY_v1.md`; `CCO_PHASE_A_ORACLE_CONTRACT_v1.md` |
 | Citation convention | `CCO_PHASE_B_DESIGN_v1 §X [Tier 3 DRAFT; Phase B design 2026-06-20]` |
 
+### 4.13 L6B Desk Calibration — True-Latency Classifier v1
+
+| Field | Value |
+|---|---|
+| Path | `wiki/methodology/L6B_DESK_CALIBRATION_ANALYZER_v1.md` |
+| Status | DRAFT — analyzer fix shipped; desk `human_max=350` recommendation |
+| Date | 2026-06-20 |
+| Captures | Candidate A (classify on `true_latency_ms`); Candidate B (desk `human_max_ms=350`); N≥50 gate assessment (59 probes @ force=200); mechanical `reflex_gap` guard |
+| Parent | `CCO_PHASE_B_DESIGN_v1.md` §5; F-L6B-CAL-005 |
+| Citation convention | `L6B_DESK_CALIBRATION_ANALYZER_v1 §X [Tier 3 DRAFT; desk calibration 2026-06-20]` |
+
 ---
 
 ## §5 Supersession Chain Documentation

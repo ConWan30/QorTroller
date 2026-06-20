@@ -25,6 +25,7 @@ from bridge.controller.l6_challenge_profiles import (
     PROFILE_VERSION,
     TriggerChallengeProfile,
     get_profile_hash,
+    l6b_probe_profile,
 )
 
 
@@ -81,6 +82,20 @@ class TestL6ChallengeProfiles(unittest.TestCase):
         profile = CHALLENGE_PROFILES[1]
         with self.assertRaises(FrozenInstanceError):
             profile.name = "HACKED"
+
+    def test_9_l6b_probe_profile_custom_force(self):
+        p = l6b_probe_profile(120)
+        self.assertEqual(p.profile_id, 8)
+        self.assertEqual(p.r2_mode, 0x02)
+        self.assertEqual(p.r2_forces[0], 120)
+        self.assertEqual(p.r2_forces[1], 60)
+        self.assertEqual(l6b_probe_profile(999).r2_forces[0], 255)
+        self.assertEqual(l6b_probe_profile(0).r2_forces[0], 1)
+
+    def test_10_l6b_probe_profile_rigid_mode(self):
+        p = l6b_probe_profile(128, mode="rigid")
+        self.assertEqual(p.r2_mode, 0x01)
+        self.assertEqual(p.r2_forces, (128, 128))
 
 
 if __name__ == "__main__":
