@@ -12,7 +12,7 @@ The player does not need to consciously press anything.
 Detection logic:
   - Compute pre_accel_mean from pre_reports (baseline grip stillness)
   - Scan post_reports for first frame where |accel_mag - pre_accel_mean| > threshold
-  - latency_ms = frame_index * REPORTS_PER_MS (1000 Hz → 1 report ≈ 1 ms)
+  - latency_ms = frame_index * MS_PER_REPORT (~125 Hz bridge poll → 8 ms per frame)
   - Classify by latency bucket: BOT [0, 15ms), INCONCLUSIVE [15, 80ms), HUMAN [80, 280ms],
     INCONCLUSIVE (280, 350ms], NO_RESPONSE if no impulse detected in window
 
@@ -29,8 +29,8 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
-# At 1000 Hz polling, 1 HID report ≈ 1 ms elapsed time.
-REPORTS_PER_MS: float = 1.0
+# Bridge _poll_frames uses dt_ms=8 (~125 Hz); each buffered frame ≈ 8 ms wall time.
+MS_PER_REPORT: float = 8.0
 # Capture window after probe delivery — 350ms captures full human reflex range + margin.
 CAPTURE_WINDOW_MS: float = 350.0
 
@@ -114,7 +114,7 @@ class L6bReflexAnalyzer:
             if delta > peak:
                 peak = delta
             if delta >= self.accel_delta_threshold_lsb and latency_ms < 0:
-                latency_ms = float(i) * REPORTS_PER_MS
+                latency_ms = float(i) * MS_PER_REPORT
 
         valid = latency_ms >= 0.0
         classification = self._classify_latency(latency_ms) if valid else "NO_RESPONSE"

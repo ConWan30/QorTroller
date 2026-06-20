@@ -466,19 +466,28 @@ class DualShockTransport:
         self._l6_pending: dict | None = None  # {profile_id, sent_ts, nonce_bytes} or None
         self._l6_p_human: float = 0.5         # last L6 score (null default)
         self._l6_loop_count: int = 0          # incremented every loop iteration
-        if getattr(self._cfg, "l6_challenges_enabled", False):
+        _need_l6_driver = (
+            getattr(self._cfg, "l6_challenges_enabled", False)
+            or getattr(self._cfg, "l6b_enabled", False)
+        )
+        if _need_l6_driver:
             try:
                 _proj_root = str(Path(__file__).parents[2])
                 if _proj_root not in sys.path:
                     sys.path.insert(0, _proj_root)
                 from bridge.controller.l6_trigger_driver import L6TriggerDriver, L6_CAPTURE_MODE
-                from .l6_response_analyzer import L6ResponseAnalyzer
                 _capture_store = self._store if L6_CAPTURE_MODE else None
                 self._l6_driver = L6TriggerDriver(store=_capture_store)
-                self._l6_analyzer = L6ResponseAnalyzer()
-                log.info("Phase C: L6 Active Challenge-Response enabled")
+                if getattr(self._cfg, "l6_challenges_enabled", False):
+                    from .l6_response_analyzer import L6ResponseAnalyzer
+                    self._l6_analyzer = L6ResponseAnalyzer()
+                    log.info("Phase C: L6 Active Challenge-Response enabled")
+                else:
+                    log.info(
+                        "CCO Phase B: L6TriggerDriver enabled for L6b haptic delivery only",
+                    )
             except Exception as _l6_exc:
-                log.warning("Phase C: L6 init failed (non-fatal): %s", _l6_exc)
+                log.warning("Phase C/L6b: L6TriggerDriver init failed (non-fatal): %s", _l6_exc)
 
         # Phase 63: L6b Neuromuscular Reflex Layer
         self._l6b_enabled: bool = getattr(self._cfg, "l6b_enabled", False)
@@ -1900,12 +1909,15 @@ class DualShockTransport:
 
             # --- Phase 63: L6b Neuromuscular Reflex pre-buffer + probe window ---
             if self._l6b_enabled and _l6b_applicable and frames:
-                # Feed frames into pre-buffer (flat ax/ay/az format for L6bReflexAnalyzer)
+                # L6bReflexAnalyzer expects raw accel LSB; InputSnapshot stores g only.
+                _l6b_accel_scale = float(
+                    getattr(self._reader, "_accel_scale", None) or 8192.0
+                )
                 for _f in frames:
                     _l6b_entry = {
-                        "ax": getattr(_f, "accel_x", 0),
-                        "ay": getattr(_f, "accel_y", 0),
-                        "az": getattr(_f, "accel_z", 0),
+                        "ax": getattr(_f, "accel_x", 0) * _l6b_accel_scale,
+                        "ay": getattr(_f, "accel_y", 0) * _l6b_accel_scale,
+                        "az": getattr(_f, "accel_z", 0) * _l6b_accel_scale,
                     }
                     if self._l6b_pending is None:
                         self._l6b_pre_buffer.append(_l6b_entry)
@@ -2072,7 +2084,10 @@ class DualShockTransport:
                         "frames_remaining": int(350),  # 350ms capture window at ~1 report/ms
                     }
                     self._l6b_post_buffer = []
-                    log.debug("Phase 63: L6b probe dispatched ts=%.3f", _probe_ts)
+                    log.debug(
+                        "L6B: probe dispatched; r2 effect written (profile 8) ts=%.3f",
+                        _probe_ts,
+                    )
                 except Exception as _exc:
                     log.warning("Phase 63: L6b probe dispatch failed (non-fatal): %s", _exc)
 
