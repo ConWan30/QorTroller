@@ -18,7 +18,8 @@ from .retina_controller_embedder import (
     EmbedResult,
     embed_controller_window,
 )
-from .retina_state_commitment import compute_retina_state_commitment
+from .retina_events_root import EVENTS_ROOT_SCHEME_POSEIDON_V1, EVENTS_ROOT_SCHEME_SHA256_V1
+from .retina_state_commitment import EventsRootScheme, compute_retina_state_commitment
 
 log = logging.getLogger(__name__)
 
@@ -76,6 +77,7 @@ def run_controller_perception(
     window: int = DEFAULT_WINDOW,
     dynamics_horizon: int = DEFAULT_DYNAMICS_HORIZON,
     record_hash_hex: str = "",
+    events_root_scheme: EventsRootScheme = EVENTS_ROOT_SCHEME_SHA256_V1,
 ) -> RetinaPerceptionResult:
     """Encode the trailing HID window; fail-open when disabled or buffer short."""
     ts_ns = time.time_ns()
@@ -103,6 +105,7 @@ def run_controller_perception(
             dev_for_commit if len(dev_for_commit) >= 32 else source_id,
             ts_ns,
             events,
+            events_root_scheme=events_root_scheme,
         )
         return RetinaPerceptionResult(
             enabled=True,
@@ -176,6 +179,7 @@ def persist_retina_result(
                 device_id=device_id,
                 record_hash_hex=result.record_hash_hex,
                 state_commitment_hex=result.state_commitment_hex,
+                events=result.events,
             )
     except Exception as exc:
         log.debug("retina w3bstream post-persist skipped: %s", exc)

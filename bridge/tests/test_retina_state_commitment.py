@@ -9,10 +9,12 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from vapi_bridge.retina_state_commitment import (
+from bridge.vapi_bridge.retina_state_commitment import (
     DOMAIN_TAG,
+    DOMAIN_TAG_V2,
     compute_events_root,
     compute_retina_state_commitment,
+    compute_retina_state_commitment_v2,
 )
 
 
@@ -40,3 +42,13 @@ def test_commitment_changes_with_ts():
 
 def test_domain_tag_frozen():
     assert DOMAIN_TAG == b"VAPI-RETINA-STATE-v1"
+    assert DOMAIN_TAG_V2 == b"VAPI-RETINA-STATE-v2"
+
+
+def test_v2_commitment_differs_from_v1():
+    events = [{"type": "controller.trigger.onset", "t": 1.0, "src": "d"}]
+    dev = "ab" * 32
+    ts = 123456789
+    assert compute_retina_state_commitment(dev, ts, events) != compute_retina_state_commitment_v2(
+        dev, ts, events
+    )

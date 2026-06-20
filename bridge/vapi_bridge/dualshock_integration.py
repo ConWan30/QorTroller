@@ -1857,6 +1857,21 @@ class DualShockTransport:
                         _src = getattr(self, "_device_id_hex", None) or (
                             self._device_id.hex() if self._device_id is not None else "unknown"
                         )
+                        from .retina_events_root import (
+                            EVENTS_ROOT_SCHEME_POSEIDON_V1,
+                            EVENTS_ROOT_SCHEME_SHA256_V1,
+                        )
+                        _scheme = (
+                            EVENTS_ROOT_SCHEME_POSEIDON_V1
+                            if bool(
+                                getattr(
+                                    self._cfg,
+                                    "retina_events_root_poseidon_enabled",
+                                    False,
+                                )
+                            )
+                            else EVENTS_ROOT_SCHEME_SHA256_V1
+                        )
                         _rp = run_controller_perception(
                             list(self._retina_snap_ring),
                             enabled=True,
@@ -1866,6 +1881,7 @@ class DualShockTransport:
                                 getattr(self._cfg, "retina_dynamics_horizon", 5)
                             ),
                             record_hash_hex=_record_hash_hex,
+                            events_root_scheme=_scheme,
                         )
                         if self._pending_pitl_meta is not None:
                             _pol = get_runtime_policy_state()
