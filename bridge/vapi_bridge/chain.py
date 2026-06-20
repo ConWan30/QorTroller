@@ -1989,6 +1989,37 @@ class ChainClient:
 
     # --- Phase B item ② P4b: VAPIPoEPRegistry read (resolves #8 W-1) ---
 
+    def _scan_poep_device_registered_events(self, device_id_b32):
+        """Chunked DeviceRegistered scan (F-COMPOSE-2). Returns ChunkedLogScanResult."""
+        from .consent_categories import device_id_to_bytes32
+        from .eth_logs_chunked import ChunkedLogScanResult, LogScanOutcome, scan_event_logs_chunked
+
+        addr_str = getattr(self._cfg, "poep_registry_address", "") or ""
+        if not addr_str or self._sync_w3 is None:
+            return ChunkedLogScanResult(LogScanOutcome.SCAN_FAILED, (), error="registry unavailable")
+
+        if not isinstance(device_id_b32, (bytes, bytearray)):
+            device_id_b32 = device_id_to_bytes32(device_id_b32)
+
+        addr = self._sync_w3.to_checksum_address(addr_str)
+        contract = self._sync_w3.eth.contract(address=addr, abi=_VAPI_POEP_REGISTRY_ABI)
+        from_block = int(getattr(self._cfg, "poep_registry_deploy_block", 0) or 0)
+        to_block = int(self._sync_w3.eth.block_number)
+
+        def _fetch_chunk(start: int, end: int) -> list:
+            return contract.events.DeviceRegistered.get_logs(
+                from_block=start,
+                to_block=end,
+                argument_filters={"deviceId": device_id_b32},
+            )
+
+        return scan_event_logs_chunked(
+            _fetch_chunk,
+            from_block=from_block,
+            to_block=to_block,
+            chunk_size=1000,
+        )
+
     def get_registered_composite_pubkey(self, device_id):
         """② P4b — SYNC, fail-open read of a device's registered composite pubkey blob.
 
@@ -2000,6 +2031,7 @@ class ChainClient:
         deployed read path is validated at the wallet-gated E2E.
         """
         from .consent_categories import device_id_to_bytes32
+        from .eth_logs_chunked import LogScanOutcome
         from .poep_registry_handler import resolve_composite_pubkey
 
         addr_str = getattr(self._cfg, "poep_registry_address", "") or ""
@@ -2011,18 +2043,16 @@ class ChainClient:
             b32 = device_id_to_bytes32(device_id)
             addr = self._sync_w3.to_checksum_address(addr_str)
             contract = self._sync_w3.eth.contract(address=addr, abi=_VAPI_POEP_REGISTRY_ABI)
-            # latest DeviceRegistered for this (indexed) deviceId → registering gamer + event blob.
-            # from_block = registry deploy block (NOT 0): IoTeX's eth_getLogs caps wide ranges and
-            # returns EMPTY for 0→~44M blocks, which would silently make this provider return None
-            # (the dormant-blind closure would skip renewals for correctly-registered devices). The
-            # deploy-block floor keeps the scan inside the RPC's range. Phase 3 (Path B) fix.
-            _from_block = int(getattr(self._cfg, "poep_registry_deploy_block", 0) or 0)
-            evs = contract.events.DeviceRegistered.get_logs(
-                from_block=_from_block, argument_filters={"deviceId": b32}
-            )
-            if not evs:
+            scan = self._scan_poep_device_registered_events(b32)
+            if scan.outcome == LogScanOutcome.SCAN_FAILED:
+                log.warning(
+                    "get_registered_composite_pubkey scan failed (fail-open): %s",
+                    scan.error,
+                )
                 return None
-            ev = evs[-1]
+            if scan.outcome == LogScanOutcome.SCAN_COMPLETE_EMPTY:
+                return None
+            ev = scan.logs[-1]
             gamer = ev["args"]["gamer"]
             event_blob = bytes(ev["args"]["compositePubkeyBlob"])
 
@@ -2040,35 +2070,42 @@ class ChainClient:
             log.warning("get_registered_composite_pubkey error (fail-open): %s", exc)
             return None
 
-    def get_poep_commitment_for_device(self, device_id):
-        """CCO Phase F — SYNC, fail-open read of a device's PoEP commitment from VAPIPoEPRegistry.
+    def lookup_poep_device_for_composability(self, device_id):
+        """CCO Phase F — chunked PoEP registry read with explicit scan outcome.
 
-        Returns 32-byte poepCommitment from the latest DeviceRegistered event for device_id,
-        or None when registry undeployed / no registration / RPC error. Bridge never writes.
+        Returns ``(reader, scan_outcome, scan_error)`` where *reader* is a
+        PoEPComposabilityReader when a valid commitment exists, else None.
+        *scan_outcome* is a LogScanOutcome value string, or None when registry unset.
         """
         from .consent_categories import device_id_to_bytes32
         from .cco_composability import PoEPComposabilityReader
+        from .eth_logs_chunked import LogScanOutcome
 
         addr_str = getattr(self._cfg, "poep_registry_address", "") or ""
         if not addr_str or self._sync_w3 is None:
-            return None
+            return None, None, None
         try:
             b32 = device_id_to_bytes32(device_id)
             addr = self._sync_w3.to_checksum_address(addr_str)
             contract = self._sync_w3.eth.contract(address=addr, abi=_VAPI_POEP_REGISTRY_ABI)
-            _from_block = int(getattr(self._cfg, "poep_registry_deploy_block", 0) or 0)
-            evs = contract.events.DeviceRegistered.get_logs(
-                from_block=_from_block, argument_filters={"deviceId": b32}
-            )
-            if not evs:
-                return None
-            ev = evs[-1]
+            scan = self._scan_poep_device_registered_events(b32)
+            outcome = scan.outcome.value
+            if scan.outcome == LogScanOutcome.SCAN_FAILED:
+                log.warning(
+                    "lookup_poep_device_for_composability scan failed: %s",
+                    scan.error,
+                )
+                return None, outcome, scan.error
+            if scan.outcome == LogScanOutcome.SCAN_COMPLETE_EMPTY:
+                return None, outcome, None
+
+            ev = scan.logs[-1]
             gamer = ev["args"]["gamer"]
             commitment = bytes(ev["args"]["poepCommitment"])
             if not commitment or commitment == b"\x00" * 32:
-                return None
+                return None, outcome, None
             if not contract.functions.isRegistrationValid(gamer, b32).call():
-                return None
+                return None, outcome, None
 
             class _PoEPReader:
                 def get_poep_commitment(self, _device_id):
@@ -2078,39 +2115,29 @@ class ChainClient:
                     return bool(contract.functions.isRecorded(c).call())
 
             reader: PoEPComposabilityReader = _PoEPReader()
-            from .cco_composability import resolve_poep_commitment
-            cmt, _rec = resolve_poep_commitment(reader, b32)
-            return cmt
+            return reader, outcome, None
         except Exception as exc:  # noqa: BLE001 — fail-open
-            log.warning("get_poep_commitment_for_device error (fail-open): %s", exc)
+            log.warning("lookup_poep_device_for_composability error (fail-open): %s", exc)
+            return None, LogScanOutcome.SCAN_FAILED.value, str(exc)
+
+    def get_poep_commitment_for_device(self, device_id):
+        """CCO Phase F — SYNC, fail-open read of a device's PoEP commitment from VAPIPoEPRegistry.
+
+        Returns 32-byte poepCommitment from the latest DeviceRegistered event for device_id,
+        or None when registry undeployed / no registration / RPC error. Bridge never writes.
+        """
+        from .cco_composability import resolve_poep_commitment
+
+        reader, outcome, _err = self.lookup_poep_device_for_composability(device_id)
+        if reader is None:
             return None
+        cmt, _rec = resolve_poep_commitment(reader, device_id)
+        return cmt
 
     def get_poep_composability_reader(self, device_id):
         """Return a PoEPComposabilityReader for device_id, or None when unavailable."""
-        from .consent_categories import device_id_to_bytes32
-
-        addr_str = getattr(self._cfg, "poep_registry_address", "") or ""
-        if not addr_str or self._sync_w3 is None:
-            return None
-        commitment = self.get_poep_commitment_for_device(device_id)
-        if commitment is None:
-            return None
-        try:
-            b32 = device_id_to_bytes32(device_id)
-            addr = self._sync_w3.to_checksum_address(addr_str)
-            contract = self._sync_w3.eth.contract(address=addr, abi=_VAPI_POEP_REGISTRY_ABI)
-
-            class _PoEPReader:
-                def get_poep_commitment(self, _device_id):
-                    return commitment
-
-                def is_poep_commitment_recorded(self, c):
-                    return bool(contract.functions.isRecorded(c).call())
-
-            return _PoEPReader()
-        except Exception as exc:  # noqa: BLE001
-            log.debug("get_poep_composability_reader error (fail-open): %s", exc)
-            return None
+        reader, _outcome, _err = self.lookup_poep_device_for_composability(device_id)
+        return reader
 
     # --- Consent Cockpit F2 — wallet → devices binding read (2026-06-05) ---
     #

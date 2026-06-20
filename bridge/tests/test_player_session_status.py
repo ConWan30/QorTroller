@@ -216,7 +216,7 @@ class TestPlayerSessionStatus(unittest.TestCase):
 
     def test_9_composability_phase_f(self):
         """T-PSS-9: CCO Phase F — composability prep on identity_grid (deploy-hold)."""
-        cfg, store = _make_cfg(), _make_store()
+        cfg, store = _make_cfg(cco_composability_enabled=False), _make_store()
         store.get_recent_records = lambda limit, device_id=None: [
             {"device_id": "devX", "pitl_humanity_prob": 0.9, "inference": 32, "created_at": time.time()}]
         store.get_capture_health_status = lambda limit=10: {
