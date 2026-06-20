@@ -381,6 +381,17 @@ annotation when used in synthesis composition.
 | Parent | `CCO_POEP_FUSION_v4.md`; `CCO_PHASE_A_ORACLE_CONTRACT_v1.md` |
 | Citation convention | `CCO_POEP_FUSION_v4 §Phase E [Tier 3; identity grid 2026-06-20]` |
 
+### 4.15 CCO Phase F — On-Chain Composability Prep v1
+
+| Field | Value |
+|---|---|
+| Path | `wiki/methodology/CCO_POEP_FUSION_v4.md` §Phase F; `bridge/vapi_bridge/cco_composability.py` |
+| Status | COMPLETE (2026-06-20) |
+| Date | 2026-06-20 |
+| Captures | Option F1 off-chain `VAPI-COMPOSABLE-CLAIM-v1` candidate hash; PoEP registry commitment view helper; optional Lens `isFullyEligible` sub-check; session-status `identity_grid.composability`; `composable_on_chain=false` deploy-hold |
+| Parent | `CCO_POEP_FUSION_v4.md` §4.1; `cco_identity_grid.py` Phase E |
+| Citation convention | `CCO_POEP_FUSION_v4 §Phase F [Tier 3; composability prep 2026-06-20]` |
+
 ---
 
 ## §5 Supersession Chain Documentation

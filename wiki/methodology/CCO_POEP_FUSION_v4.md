@@ -400,6 +400,8 @@ Each phase requires **V-checks** before implementation and **P-checks** after. N
 
 **Gates:** Operator GO; deploy-hold; governance if new FROZEN family.
 
+**COMPLETE (2026-06-20):** `bridge/vapi_bridge/cco_composability.py` — `compute_composable_claim_hash()` (candidate `VAPI-COMPOSABLE-CLAIM-v1`, NOT FROZEN-v1); `assemble_composability_status()` + `apply_composability_to_grid()`; `PoEPComposabilityReader` protocol + `InMemoryPoEPComposabilityReader`; chain `get_poep_commitment_for_device()` / `get_poep_composability_reader()` (fail-open); config `cco_composability_enabled=False` + `cco_composability_lens_subcheck=False`; GET `/player/session-status` `identity_grid.composability` block + `composable_claim_hash` / `composability_readiness`; `composable_on_chain=false` (deploy-hold); 10 bridge tests (T-COMP-1..10 + T-PSS-9).
+
 ### Phase G — Empirical research program (v3 §7)
 
 **Goal:** Characterize **three** controller classes (minimal pad / mid-tier / Edge) before "universal" partner language.
@@ -438,3 +440,4 @@ QorTroller's **Controller Capability Oracle** (partially **BUILT** via `controll
 | 2026-06-19 | Phase A.1 shipped; F-CCO-001 CHIA enrich no-op logged |
 | 2026-06-20 | Phase D — `cco_poep_bridge.py` wires CapabilityReport → PoEP runner; `presence.poep` enriched; `POEP_ENABLED=false` default |
 | 2026-06-20 | Phase E — `cco_identity_grid.py`; session-status `identity_grid` block (identity×presence grid + F-V4-003 Path B note) |
+| 2026-06-20 | Phase F — `cco_composability.py`; off-chain composable claim hash + PoEP registry view helper; session-status `identity_grid.composability` (Option F1 deploy-hold) |

@@ -214,6 +214,26 @@ class TestPlayerSessionStatus(unittest.TestCase):
         self.assertEqual(j["signing_path"], grid["signing_path"])
         self.assertEqual(j["path_a_eligible"], grid["path_a_eligible"])
 
+    def test_9_composability_phase_f(self):
+        """T-PSS-9: CCO Phase F — composability prep on identity_grid (deploy-hold)."""
+        cfg, store = _make_cfg(), _make_store()
+        store.get_recent_records = lambda limit, device_id=None: [
+            {"device_id": "devX", "pitl_humanity_prob": 0.9, "inference": 32, "created_at": time.time()}]
+        store.get_capture_health_status = lambda limit=10: {
+            "capture_state": "NOMINAL", "host_state": "EXCLUSIVE_USB", "poll_rate_hz": 1000.0}
+        store.get_l6b_calibration_progress = lambda device_id=None: {"probe_count": 0, "target_n": 50}
+        store.count_records = lambda device_id=None: 1
+        r = _client(cfg, store).get("/player/session-status", headers=_H)
+        self.assertEqual(r.status_code, 200)
+        grid = r.json()["identity_grid"]
+        self.assertIn("composability", grid)
+        comp = grid["composability"]
+        self.assertEqual(comp["schema"], "qortroller-composability-v1")
+        self.assertFalse(comp["enabled"])
+        self.assertEqual(comp["readiness"], "disabled")
+        self.assertFalse(grid["composable_on_chain"])
+        self.assertEqual(comp["option"], "F1")
+
 
 if __name__ == "__main__":
     unittest.main()
