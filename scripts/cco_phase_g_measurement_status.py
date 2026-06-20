@@ -58,15 +58,8 @@ def _next_action(tier: str, block: dict) -> str:
             "(never auto VALIDATED). Operator attestation required for VALIDATED."
         )
     remaining = max(0, target - n)
-    profiles = block.get("profiles") or {}
-    untagged = profiles.get("untagged", 0)
-    hint = ""
-    if untagged:
-        hint = (
-            f" ({untagged} untagged probes — re-run desk session with --cco-profile-id)"
-        )
     return (
-        f"Need {remaining} more structured L6B probes for this tier.{hint} "
+        f"Need {remaining} more structured L6B probes for this tier. "
         f"Hardware: {_TIER_HARDWARE[tier]}. {_TIER_CAPTURE[tier]}"
     )
 
@@ -76,6 +69,12 @@ def _print_human(progress: dict) -> None:
     total = progress["total_probe_count"]
     print(f"CCO Phase G measurement corpus (target N={target} per tier)")
     print(f"  Total l6b_probe_log rows: {total}")
+    untagged = progress.get("untagged_probe_count", 0)
+    if untagged:
+        print(
+            f"  Untagged rows (excluded from tier gates): {untagged}"
+            " — legacy probes; tag future captures with --cco-profile-id"
+        )
     print()
 
     for tier in _TIER_ORDER:
