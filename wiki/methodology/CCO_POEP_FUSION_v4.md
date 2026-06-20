@@ -412,6 +412,8 @@ Each phase requires **V-checks** before implementation and **P-checks** after. N
 
 **Grade:** **[UNVALIDATED]** until complete. T0 may scale without per-class corpus **only if** Phase B selects per-session T0 and operator lifts activation gates.
 
+**SCAFFOLD (2026-06-20):** `bridge/vapi_bridge/cco_controller_class_research.py` — profile → `{MINIMAL_PAD, MID_TIER, PREMIUM_EDGE}` tier map; measurement grade (`UNVALIDATED` / `PARTIAL` for Edge-only); `assemble_controller_class_research()` for session-status; config `cco_research_surface_enabled=False`; GET `/player/session-status` → `identity_grid.controller_class_research` when enabled. Design: [`CCO_PHASE_G_RESEARCH_v1.md`](CCO_PHASE_G_RESEARCH_v1.md). 7 bridge tests (T-CCR-1..7).
+
 ---
 
 ## 11. Verification checklist (pre-implementation)
@@ -446,3 +448,4 @@ QorTroller's **Controller Capability Oracle** (partially **BUILT** via `controll
 | 2026-06-20 | Phase E — `cco_identity_grid.py`; session-status `identity_grid` block (identity×presence grid + F-V4-003 Path B note) |
 | 2026-06-20 | Phase F — `cco_composability.py`; off-chain composable claim hash + PoEP registry view helper; session-status `identity_grid.composability` (Option F1 deploy-hold) |
 | 2026-06-20 | F-COMPOSE-2 — chunked eth_getLogs + three-outcome readiness (`registry_unreachable`); F-COMPOSE-1 demo device corrected (MFG + PoEP both present → `off_chain_verifiable`) |
+| 2026-06-20 | Phase G scaffold — `cco_controller_class_research.py`; three-tier research surface on session-status (default-OFF) |
