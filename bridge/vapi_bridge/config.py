@@ -786,6 +786,10 @@ class Config:
         default_factory=lambda: _env("CCO_RESEARCH_SURFACE_ENABLED", "false").lower() == "true"
     )
     """CCO Phase G — expose controller-class research block on session-status. False by default."""
+    cco_phase_g_deferred_tiers: str = field(
+        default_factory=lambda: _env("CCO_PHASE_G_DEFERRED_TIERS", "")
+    )
+    """Comma-separated Phase G tiers operator-deferred without reference hardware (e.g. MINIMAL_PAD)."""
     l6b_probe_interval_ticks: int = field(
         default_factory=lambda: int(_env("L6B_PROBE_INTERVAL_TICKS", "6750"))
     )

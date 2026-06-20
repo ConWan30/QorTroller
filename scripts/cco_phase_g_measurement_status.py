@@ -22,6 +22,10 @@ _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+from bridge.vapi_bridge.cco_controller_class_research import (
+    enrich_phase_g_progress_deferred,
+    parse_phase_g_deferred_tiers,
+)
 from bridge.vapi_bridge.config import Config
 from bridge.vapi_bridge.store import Store
 
@@ -50,6 +54,10 @@ _TIER_CAPTURE = {
 
 
 def _next_action(tier: str, block: dict) -> str:
+    if block.get("measurement_status") == "deferred":
+        return block.get("deferred_reason") or (
+            "Operator-deferred — no reference hardware for this tier."
+        )
     n = block["probe_count"]
     target = block["target_n"]
     if block["gate_reached"]:
@@ -80,7 +88,10 @@ def _print_human(progress: dict) -> None:
     for tier in _TIER_ORDER:
         block = progress["by_tier"][tier]
         n = block["probe_count"]
-        gate = "REACHED" if block["gate_reached"] else "pending"
+        if block.get("measurement_status") == "deferred":
+            gate = "DEFERRED"
+        else:
+            gate = "REACHED" if block["gate_reached"] else "pending"
         print(f"  [{tier}] N={n}/{target} gate={gate}")
         profiles = block.get("profiles") or {}
         if profiles:
@@ -119,6 +130,9 @@ def main() -> int:
     db_path = args.db or cfg.db_path
     store = Store(db_path)
     progress = store.get_cco_phase_g_corpus_progress(target_n=args.target_n)
+    deferred = parse_phase_g_deferred_tiers(cfg.cco_phase_g_deferred_tiers)
+    if deferred:
+        progress = enrich_phase_g_progress_deferred(progress, deferred)
 
     if args.json:
         print(json.dumps(progress, indent=2))
@@ -127,9 +141,10 @@ def main() -> int:
         print()
         _print_human(progress)
 
-    all_gates = all(
-        progress["by_tier"][t]["gate_reached"] for t in _TIER_ORDER
-    )
+    def _tier_satisfied(block: dict) -> bool:
+        return bool(block["gate_reached"] or block.get("measurement_status") == "deferred")
+
+    all_gates = all(_tier_satisfied(progress["by_tier"][t]) for t in _TIER_ORDER)
     return 0 if not all_gates else 2
 
 

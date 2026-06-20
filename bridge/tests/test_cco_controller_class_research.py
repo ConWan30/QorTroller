@@ -92,5 +92,27 @@ class TestControllerClassResearch(unittest.TestCase):
         self.assertNotEqual(out["grade"], "VALIDATED")
 
 
+    def test_t11_parse_deferred_tiers(self):
+        from vapi_bridge.cco_controller_class_research import (
+            enrich_phase_g_progress_deferred,
+            parse_phase_g_deferred_tiers,
+        )
+
+        self.assertEqual(
+            parse_phase_g_deferred_tiers("MINIMAL_PAD, mid_tier "),
+            frozenset({"MINIMAL_PAD", "MID_TIER"}),
+        )
+        progress = {
+            "by_tier": {
+                "MINIMAL_PAD": {"probe_count": 0, "gate_reached": False, "profiles": {}},
+                "MID_TIER": {"probe_count": 50, "gate_reached": True, "profiles": {}},
+                "PREMIUM_EDGE": {"probe_count": 0, "gate_reached": False, "profiles": {}},
+            }
+        }
+        out = enrich_phase_g_progress_deferred(progress, frozenset({"MINIMAL_PAD"}))
+        self.assertEqual(out["by_tier"]["MINIMAL_PAD"]["measurement_status"], "deferred")
+        self.assertEqual(out["by_tier"]["MID_TIER"]["measurement_status"], "reached")
+
+
 if __name__ == "__main__":
     unittest.main()

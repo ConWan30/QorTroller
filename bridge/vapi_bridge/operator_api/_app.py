@@ -785,6 +785,8 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         )
         from ..cco_controller_class_research import (
             assemble_controller_class_research,
+            enrich_phase_g_progress_deferred,
+            parse_phase_g_deferred_tiers,
             resolve_controller_class_tier,
         )
 
@@ -794,17 +796,42 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         _lens_subcheck = bool(getattr(cfg, "cco_composability_lens_subcheck", False))
         _registry_deployed = bool(getattr(cfg, "poep_registry_address", "") or "")
         _research_enabled = bool(getattr(cfg, "cco_research_surface_enabled", False))
+        _deferred_tiers = parse_phase_g_deferred_tiers(
+            getattr(cfg, "cco_phase_g_deferred_tiers", "") or "",
+        )
         _phase_g_progress = None
         if _research_enabled:
             _phase_g_progress = await asyncio.to_thread(
                 store.get_cco_phase_g_corpus_progress,
             )
+            if _phase_g_progress is not None and _deferred_tiers:
+                _phase_g_progress = enrich_phase_g_progress_deferred(
+                    _phase_g_progress,
+                    _deferred_tiers,
+                )
 
         def _tier_probe_count_for(profile_id: str | None) -> int | None:
             if _phase_g_progress is None:
                 return None
             tier = resolve_controller_class_tier(profile_id)
             return _phase_g_progress["by_tier"][tier]["probe_count"]
+
+        def _controller_class_research(
+            *,
+            profile_id: str | None = None,
+            characterization_status: str | None = None,
+        ) -> dict:
+            block = assemble_controller_class_research(
+                enabled=_research_enabled,
+                profile_id=profile_id,
+                characterization_status=characterization_status,
+                tier_probe_count=_tier_probe_count_for(profile_id),
+            )
+            if _research_enabled and _phase_g_progress is not None:
+                block["phase_g_by_tier"] = _phase_g_progress["by_tier"]
+                if _phase_g_progress.get("deferred_tiers"):
+                    block["deferred_tiers"] = _phase_g_progress["deferred_tiers"]
+            return block
 
         _identity_grid_empty = apply_composability_to_grid(
             assemble_identity_grid(),
@@ -813,10 +840,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                 registry_deployed=_registry_deployed,
             ),
         )
-        _identity_grid_empty["controller_class_research"] = assemble_controller_class_research(
-            enabled=_research_enabled,
-            tier_probe_count=_tier_probe_count_for(None),
-        )
+        _identity_grid_empty["controller_class_research"] = _controller_class_research()
         _presence = {
             "poep": assemble_poep_presence_status(
                 poep_enabled=_poep_enabled,
@@ -1071,13 +1095,9 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             ts_ns=int(_now * 1e9),
         )
         _identity_grid = apply_composability_to_grid(_identity_grid, _composability)
-        _identity_grid["controller_class_research"] = assemble_controller_class_research(
-            enabled=_research_enabled,
+        _identity_grid["controller_class_research"] = _controller_class_research(
             profile_id=_cco_report.profile_id if _cco_report else None,
             characterization_status=_cco_report.characterization_status if _cco_report else None,
-            tier_probe_count=_tier_probe_count_for(
-                _cco_report.profile_id if _cco_report else None,
-            ),
         )
 
         return {

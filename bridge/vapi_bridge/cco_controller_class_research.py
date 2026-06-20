@@ -16,6 +16,14 @@ PHASE_G_TARGET_N = 50
 
 ControllerClassTier = Literal["MINIMAL_PAD", "MID_TIER", "PREMIUM_EDGE"]
 MeasurementGrade = Literal["UNVALIDATED", "PARTIAL", "VALIDATED"]
+MeasurementStatus = Literal["pending", "reached", "deferred"]
+
+_TIER_VALUES: frozenset[str] = frozenset({"MINIMAL_PAD", "MID_TIER", "PREMIUM_EDGE"})
+
+_DEFERRED_REASON = (
+    "Operator-deferred: no reference hardware available for this tier. "
+    "P-T0 minimal-pad claims remain blocked."
+)
 
 _PROFILE_TIER: dict[str, ControllerClassTier] = {
     "hori_fighting_commander_ps5_v1": "MINIMAL_PAD",
@@ -55,6 +63,44 @@ _TIER_EMPIRICAL_GATES: dict[ControllerClassTier, tuple[str, ...]] = {
         "L6B Gate 1 closed; class-wide FAR/FRR still UNVALIDATED",
     ),
 }
+
+
+def parse_phase_g_deferred_tiers(raw: str | None) -> frozenset[ControllerClassTier]:
+    """Parse comma-separated tier names from ``CCO_PHASE_G_DEFERRED_TIERS`` env."""
+    if not raw:
+        return frozenset()
+    out: set[ControllerClassTier] = set()
+    for part in str(raw).split(","):
+        token = part.strip().upper()
+        if token in _TIER_VALUES:
+            out.add(token)  # type: ignore[arg-type]
+    return frozenset(out)
+
+
+def enrich_phase_g_progress_deferred(
+    progress: dict[str, Any],
+    deferred_tiers: frozenset[ControllerClassTier],
+) -> dict[str, Any]:
+    """Mark operator-deferred tiers on a ``get_cco_phase_g_corpus_progress`` payload."""
+    if not deferred_tiers:
+        return progress
+    by_tier = progress.get("by_tier") or {}
+    for tier in _TIER_VALUES:
+        block = by_tier.get(tier)
+        if block is None:
+            continue
+        if tier in deferred_tiers:
+            block["measurement_status"] = "deferred"
+            block["deferred"] = True
+            block["deferred_reason"] = _DEFERRED_REASON
+        elif block.get("gate_reached"):
+            block["measurement_status"] = "reached"
+            block["deferred"] = False
+        else:
+            block["measurement_status"] = "pending"
+            block["deferred"] = False
+    progress["deferred_tiers"] = sorted(deferred_tiers)
+    return progress
 
 
 def resolve_controller_class_tier(profile_id: str | None) -> ControllerClassTier:
