@@ -246,6 +246,18 @@ Phase A oracle contract scoped in [`CCO_PHASE_A_ORACLE_CONTRACT_v1.md`](CCO_PHAS
 
 Path B devices have `keccak256(pubkey)` identity (**BUILT**) but are not silicon-sovereign (**I-1 GATED**). Grid and partner language must not collapse them.
 
+### F-CCO-001 — CHIA `_enrich_profile` VID/PID lookup no-op (pre-existing drift)
+
+**Severity:** Integration — **OPEN** (out of Phase A scope; do not fix silently)  
+**Status:** VERIFIED Phase A V-check (2026-06-19)  
+**Surfaced:** Phase A.1 `CapabilityOracle` implementation  
+
+[`bridge/vapi_bridge/device_registry.py`](../../bridge/vapi_bridge/device_registry.py) `_enrich_profile()` matches CHIA `ControllerProfile.usb_vid` / `usb_pid` against `base_profile.vid` / `base_profile.pid`, but [`controller/device_profile.py`](../../controller/device_profile.py) `DeviceProfile` exposes **`hid_vendor_id`** and **`hid_product_ids`** — not `vid`/`pid`. The comparison almost always fails, so Phase 136 capability-matrix enrichment no-ops in practice.
+
+**Phase A posture:** `CapabilityOracle` uses `get_canonical_profiles().get(profile_id)` read-only; contract output fields remain sourced from `DeviceProfile`. Only `sony_dualshock_edge_v1` overlaps CHIA `CANONICAL_PROFILES` among the six registered profiles.
+
+**Resolution (deferred):** Fix attribute names in `_enrich_profile` or key CHIA lookup by `profile_id` — separate cycle, not bundled with oracle wrapper.
+
 ---
 
 ## 6. CCO maturity matrix (repo-verified)
@@ -256,7 +268,7 @@ Path B devices have `keccak256(pubkey)` identity (**BUILT**) but are not silicon
 | Capability database | BUILDABLE NOW | **BUILT** | Six profiles + CHIA `CANONICAL_PROFILES` |
 | Runtime HID descriptor enumeration | BUILDABLE NOW | **DESIGN** | Curated manifests only |
 | Agentic long-tail classifier | BUILDABLE NOW | **DESIGN** | Zero production code |
-| CCO unified oracle API | — | **DESIGN** | Phase A deliverable |
+| CCO unified oracle API | — | **BUILT** (Phase A.1 read-only) | `capability_oracle.py`; HTTP endpoint still DESIGN |
 | P-T0 reflex floor, day one | BUILDABLE (L6B) | **BUILT infra, GATED activation** | F-V3-002 **CLOSED** Option C |
 | P-T1–P-T3 per controller class | RESEARCH | **[UNVALIDATED]** | Edge partial only |
 | PoEP three-layer engine | — | **BUILT** | Edge device-auth only |
@@ -421,3 +433,4 @@ QorTroller's **Controller Capability Oracle** (partially **BUILT** via `controll
 |------|--------|
 | 2026-06-19 | Initial draft from v3 + v4 verification passes; F-V3-001, F-V3-002, maturity matrix; Phase A–G path; T0 fork documented as open |
 | 2026-06-19 | F-V3-002 closed Option C; Phase B complete; Phase A oracle contract scoped; code hold documented |
+| 2026-06-19 | Phase A.1 shipped; F-CCO-001 CHIA enrich no-op logged |
