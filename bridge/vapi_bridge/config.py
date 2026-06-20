@@ -766,6 +766,14 @@ class Config:
         default_factory=lambda: _env("L6B_ENABLED", "false").lower() == "true"
     )
     """False by default — L6b disabled unless L6B_ENABLED=true env var set."""
+    poep_enabled: bool = field(
+        default_factory=lambda: _env("POEP_ENABLED", "false").lower() == "true"
+    )
+    """CCO Phase D — PoEP live verdict path. False by default (P4 operator gate)."""
+    poep_corpus_dir: str = field(
+        default_factory=lambda: _env("POEP_CORPUS_DIR", "poep_l9")
+    )
+    """Directory for l9_presence PoEP enrollment JSON corpus (read-only in bridge)."""
     l6b_probe_interval_ticks: int = field(
         default_factory=lambda: int(_env("L6B_PROBE_INTERVAL_TICKS", "6750"))
     )

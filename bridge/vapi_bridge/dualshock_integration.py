@@ -506,6 +506,8 @@ class DualShockTransport:
         self._cco_capability_report = None
         self._cco_reflex_verdict: str | None = None
         self._cco_l6b_skip_reason = None
+        # CCO Phase D: PoEP runner inputs (dormant until poep_enabled)
+        self._poep_runner_inputs = None
         if self._l6b_enabled:
             try:
                 _proj_root_l6b = str(Path(__file__).parents[2])
@@ -1080,6 +1082,18 @@ class DualShockTransport:
         except Exception as _cco_exc:
             log.warning("CCO Phase B: CapabilityOracle resolve failed (non-fatal): %s", _cco_exc)
             self._cco_capability_report = None
+
+        # CCO Phase D: wire oracle → PoEP runner inputs (read-only; poep_enabled gates verdicts).
+        try:
+            from .cco_poep_bridge import build_poep_runner_inputs
+
+            self._poep_runner_inputs = build_poep_runner_inputs(
+                self._cco_capability_report,
+                device_id=_did_hex,
+            )
+        except Exception as _poep_exc:
+            log.debug("CCO Phase D: PoEP runner input build failed (non-fatal): %s", _poep_exc)
+            self._poep_runner_inputs = None
 
         return True
 
@@ -1713,6 +1727,10 @@ class DualShockTransport:
                 "cco_l6b_skip": (
                     format_l6b_skip_log(self._cco_l6b_skip_reason)
                     if self._cco_l6b_skip_reason is not None else None
+                ),
+                "cco_poep_challenge_type": (
+                    self._poep_runner_inputs.challenge_type
+                    if self._poep_runner_inputs is not None else None
                 ),
             }
 
