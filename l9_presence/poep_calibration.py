@@ -106,12 +106,21 @@ def liveness_score(features: dict, model: dict, device_id: str = None) -> dict:
             "latency_ms": lat, "band": [model["band_lo_ms"], model["band_hi_ms"]]}
 
 
-def device_auth_score(device_auth: dict, model: dict, device_id: str) -> dict:
-    """Device-auth via the adaptive-trigger force-challenge (P4a). `device_auth` is the
-    session's {slope_on, slope_off, delta, adaptive_response_detected}. A real Edge reshapes
-    the press under resistance (~4× slope drop -> high delta); an emulator/translator
-    (Cronus/XIM) has no adaptive-trigger hardware so ON==OFF (delta~0) -> not detected ->
-    fails. Pass iff the device is registered AND the adaptive response was detected."""
+def device_auth_score(
+    device_auth: dict,
+    model: dict,
+    device_id: str,
+    *,
+    challenge_type: str = "adaptive_force",
+) -> dict:
+    """Device-auth via CCO-parameterized challenge type (Phase A.3).
+
+    ``adaptive_force`` — adaptive-trigger force-challenge (P4a, Edge today).
+    All other challenge types return UNCHARACTERIZED until per-class verifiers
+    land (no PoEP activation in Phase A).
+    """
+    if challenge_type != "adaptive_force":
+        return {"device_auth_pass": False, "reason": "UNCHARACTERIZED", "score": 0.0}
     sig = model.get("device_signatures", {}).get(device_id)
     if not sig:
         return {"device_auth_pass": False, "reason": "device_not_registered", "score": 0.0}
@@ -127,7 +136,9 @@ def poep_verify(reaction_features: dict, device_auth: dict, model: dict, device_
     live = liveness_score(reaction_features, model, device_id)
     if live.get("status") == "calibration_incomplete":
         return live
-    dev = (device_auth_score(device_auth, model, device_id) if device_id
+    dev = (device_auth_score(
+        device_auth, model, device_id, challenge_type="adaptive_force",
+    ) if device_id
            else {"device_auth_pass": True, "score": 1.0})
     present = bool(live.get("liveness_pass") and dev.get("device_auth_pass"))
     return {
