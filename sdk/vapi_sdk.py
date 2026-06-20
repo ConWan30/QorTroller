@@ -8168,6 +8168,46 @@ class VAPIRetinaPolicy:
             return RetinaPolicyStatusResult(error=str(exc)[:200])
 
 
+@dataclass(slots=True)
+class RetinaW3bstreamStatusResult:
+    validation_enabled: bool = False
+    enforce_on_ingest: bool = False
+    latest_exit_code: int = 0
+    timestamp: float = 0.0
+    error: str = ""
+
+
+class VAPIRetinaW3bstream:
+    """Client for GET /bridge/retina-w3bstream-status."""
+
+    def __init__(self, base_url: str, api_key: str = "") -> None:
+        self._base = base_url.rstrip("/")
+        self._key = api_key
+
+    def status(self) -> RetinaW3bstreamStatusResult:
+        import json as _json
+        import urllib.request as _ur
+
+        try:
+            req = _ur.Request(f"{self._base}/bridge/retina-w3bstream-status")
+            if self._key:
+                req.add_header("x-api-key", self._key)
+            with _ur.urlopen(req, timeout=10) as resp:  # noqa: S310
+                body = _json.loads(resp.read())
+            return RetinaW3bstreamStatusResult(
+                validation_enabled=bool(
+                    body.get("retina_w3bstream_validation_enabled", False)
+                ),
+                enforce_on_ingest=bool(
+                    body.get("retina_w3bstream_enforce_on_ingest", False)
+                ),
+                latest_exit_code=int(body.get("latest_exit_code") or 0),
+                timestamp=float(body.get("timestamp", 0.0)),
+            )
+        except Exception as exc:
+            return RetinaW3bstreamStatusResult(error=str(exc)[:200])
+
+
 class VAPIRetinaEvidenceSlice:
     """Client for GET /agent/retina-evidence-slice.
 

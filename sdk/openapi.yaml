@@ -4780,6 +4780,23 @@ paths:
               schema:
                 $ref: "#/components/schemas/RetinaPolicyStatus"
 
+  /bridge/retina-w3bstream-status:
+    get:
+      summary: W3bstream mechanical validation status for Retina sidecar pointers
+      tags: [Bridge]
+      parameters:
+        - name: x-api-key
+          in: header
+          schema:
+            type: string
+      responses:
+        "200":
+          description: W3bstream validation status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RetinaW3bstreamStatus"
+
   /bridge/retina-status:
     get:
       summary: Trio-Retina perception log status (advisory)
@@ -10078,6 +10095,21 @@ webhooks:
           type: boolean
         effective_adjudicator:
           type: boolean
+        timestamp:
+          type: number
+
+    RetinaW3bstreamStatus:
+      type: object
+      description: "W3bstream mechanical validation for retina_state_commitment sidecar"
+      properties:
+        retina_w3bstream_validation_enabled:
+          type: boolean
+        retina_w3bstream_enforce_on_ingest:
+          type: boolean
+        latest_exit_code:
+          type: integer
+        validation_log:
+          type: object
         timestamp:
           type: number
 

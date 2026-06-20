@@ -1907,6 +1907,12 @@ class Config:
     retina_certified_edge_only: bool = field(
         default_factory=lambda: _env_bool("RETINA_CERTIFIED_EDGE_ONLY", True)
     )
+    retina_w3bstream_validation_enabled: bool = field(
+        default_factory=lambda: _env_bool("RETINA_W3BSTREAM_VALIDATION_ENABLED", False)
+    )
+    retina_w3bstream_enforce_on_ingest: bool = field(
+        default_factory=lambda: _env_bool("RETINA_W3BSTREAM_ENFORCE_ON_INGEST", False)
+    )
 
     # --- Data Economy Arc 5: VAPIReplayProofPipeline (VHR proofs) ---
     replay_proof_pipeline_enabled: bool = field(

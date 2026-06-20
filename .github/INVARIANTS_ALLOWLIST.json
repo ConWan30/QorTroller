@@ -317,7 +317,7 @@
   },
   "INV-VPM-CSP-001": {
     "digest": "65af268bcc44654be8296a0a16337760a6daf5e9c50c8f1e2be2342479ff147a",
-    "description": "VPM HTML response FROZEN security headers pinned in bridge/vapi_bridge/operator_api.py \u2014 _VPM_HTML_RESPONSE_HEADERS dict carries the Phase O4 plan section 3 Stream B.2 CSP set: default-src 'none' / style-src 'unsafe-inline' / script-src 'unsafe-inline' / img-src data: / base-uri 'none' / frame-ancestors 'self' / form-action 'none'. The 'unsafe-inline' flags are INTENTIONAL \u2014 VPMs are self-contained single-file artifacts pre-validated by compile_vpm_artifact static guards; default-src 'none' + no connect-src makes runtime network impossible regardless of inline JS behavior."
+    "description": "VPM HTML response FROZEN security headers pinned in bridge/vapi_bridge/operator_api/agent_zkba_vpm.py \u2014 _VPM_HTML_RESPONSE_HEADERS dict carries the Phase O4 plan section 3 Stream B.2 CSP set: default-src 'none' / style-src 'unsafe-inline' / script-src 'unsafe-inline' / img-src data: / base-uri 'none' / frame-ancestors 'self' / form-action 'none'. The 'unsafe-inline' flags are INTENTIONAL \u2014 VPMs are self-contained single-file artifacts pre-validated by compile_vpm_artifact static guards; default-src 'none' + no connect-src makes runtime network impossible regardless of inline JS behavior."
   },
   "INV-VPM-SANDBOX-001": {
     "digest": "3bc268df1c5186138540d96e66815cb2de71a4f0cc9434903a68d0e34da22d08",
@@ -325,7 +325,7 @@
   },
   "INV-VPM-COMPILE-ENDPOINT-001": {
     "digest": "35630ebe5cc2149a2dfe5b117881a0197c6c1d6b580e5389cff224352de80fb4",
-    "description": "POST /operator/vpm-compile bridge endpoint route pinned in bridge/vapi_bridge/operator_api.py \u2014 Phase O4 Stream B.4 write endpoint that dispatches compile requests to one of 6 active VPM compilers per _VPM_COMPILER_REGISTRY and records the result row in vpm_artifact_log. Full operator key required (api_key query param matches cfg.operator_api_key). Worker-thread compile dispatch via asyncio.to_thread keeps the event loop responsive."
+    "description": "POST /operator/vpm-compile bridge endpoint route pinned in bridge/vapi_bridge/operator_api/agent_zkba_vpm.py \u2014 Phase O4 Stream B.4 write endpoint that dispatches compile requests to one of 6 active VPM compilers per _VPM_COMPILER_REGISTRY and records the result row in vpm_artifact_log. Full operator key required (api_key query param matches cfg.operator_api_key). Worker-thread compile dispatch via asyncio.to_thread keeps the event loop responsive."
   },
   "INV-VPM-AUDIT-SECTION-1-001": {
     "digest": "e4d938fabbbf0ebcd2dd751a97d7187762b7f62d18fdf53856cb4f50a2322916",
@@ -668,7 +668,7 @@
     "description": "VAPIReplayProofVerifier_v2 contract PROOF_TYPE FROZEN as keccak256('VAPI-REPLAY-PROOF-v2') \u2014 distinct discriminator for PoSR-bound VHR proofs. Does NOT overload Arc 5's INV-VHR-003. Coexists with v1 in the marketplace (recency is opt-in until tournament operator requires)."
   },
   "INV-W3S-001": {
-    "digest": "dc9e4d4c52ea88ee40576de4782aa4c40f7d188789ecfc774e8529fe8894fcc4",
+    "digest": "3583ad636d0e094144db897ab6d701d85148c376f3b5c69053d13a5eb6f5e23b",
     "description": "W3bstream native Wasm cadence limit (payload.block_number % ANCHOR_CADENCE == 0)"
   },
   "INV-W3S-002": {
@@ -680,8 +680,20 @@
     "description": "Asserts that the final serialized size of the PoAC wire transaction frame strictly equals 228 bytes, throwing a HardForkDisallowedError if any post-quantum routine alters the packet footprint."
   },
   "INV-W3S-005": {
-    "digest": "509b0d74c7425b78968e36e9a59a156c634b356265bb830d48342e4d7688371f",
+    "digest": "ea53b64ae0608b81bc6c12981b605bf5eb1b74d779ff6cd6c394ff0220399a57",
     "description": "Asserts that the W3bstream WebAssembly handler strictly enforces non-zero post-quantum commitment validation rules."
+  },
+  "INV-W3S-006": {
+    "digest": "99f2cdf267088a202ff0a2a9878746592a016087406ef80c400d00cc48749a40",
+    "description": "W3bstream Wasm rejects null/malformed retina_state_commitment when retina_w3bstream_enforce is set (Retina Phase 2 mechanical validation)."
+  },
+  "INV-RETINA-001": {
+    "digest": "791d26099aebd858528d798ff2381670c9af04396ccf21539e47c80d2da394af",
+    "description": "PoAC wire frame remains 228 bytes when Retina W3bstream validation is enabled \u2014 regression rail in test_retina_w3bstream (paired with INV-ARC7-001 codec pin)."
+  },
+  "INV-RETINA-002": {
+    "digest": "c6ef0b7dce8a7c603c30da363ff252bc9dfde22f1e4f64010824163e7eff6a23",
+    "description": "retina_perception_enabled defaults to False in bridge config (fleet-wide manual override OFF; policy auto-arm is separate)."
   },
   "INV-ARC7-002": {
     "digest": "9169a8090275a111b20fd67a97a97cb1762ce1c44c893b3094f92d78322555cc",

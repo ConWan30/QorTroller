@@ -132,6 +132,7 @@ def persist_retina_result(
     result: RetinaPerceptionResult,
     *,
     source: str = "hid",
+    cfg: Any = None,
 ) -> None:
     """Write events to retina_event_log + agent_events bus (fail-open)."""
     if not result.enabled or result.error or not result.events:
@@ -164,6 +165,19 @@ def persist_retina_result(
             )
         except Exception as exc:
             log.debug("retina provenance sync skipped: %s", exc)
+    try:
+        from .retina_w3bstream import maybe_validate_after_persist
+
+        if cfg is not None:
+            maybe_validate_after_persist(
+                store,
+                cfg,
+                device_id=device_id,
+                record_hash_hex=result.record_hash_hex,
+                state_commitment_hex=result.state_commitment_hex,
+            )
+    except Exception as exc:
+        log.debug("retina w3bstream post-persist skipped: %s", exc)
     if result.trajectory_anomalies > 0 and hasattr(store, "write_agent_event"):
         try:
             store.write_agent_event(
