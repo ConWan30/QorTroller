@@ -1,0 +1,34 @@
+# L6B calibration - LOCAL TEST ENV ONLY
+# ---------------------------------------------------------------
+# Copy the lines below into bridge/.env (gitignored). Do NOT commit
+# bridge/.env and do NOT set L6B_ENABLED=true in CI or default config.
+#
+# Restart the bridge after editing bridge/.env:
+#   python -m bridge.vapi_bridge.main
+#
+# Then run hardware preflight + unified capture monitor (GIC + L6B together):
+#   python scripts/l6_hardware_check.py
+#   python scripts/unified_session_monitor.py --player P1 --game "NCAA Football 26"
+#
+# Run unified_session_monitor.py instead of l6b_calibration_capture.py to track GIC
+# and L6B simultaneously. Both advance from the same bridge session. No separate GIC
+# capture is needed — the bridge session loop writes GIC chain entries automatically.
+#
+# Legacy L6B-only monitor (still supported):
+#   python scripts/l6b_calibration_capture.py --player P1 --game "NCAA Football 26"
+#
+# Quick corpus status (any time):
+#   python scripts/l6b_probe_status.py
+
+L6B_ENABLED=true
+
+# Default 6750 ticks ~= 112 min between probes at 1s session loop - too slow for calibration.
+# 60 ticks ~= 1 probe/minute; 30 ~= 1 probe/30s (operator discretion for dedicated capture).
+L6B_PROBE_INTERVAL_TICKS=60
+
+# Full L6 challenge rotation is NOT required for L6B reflex probes.
+# L6_CHALLENGES_ENABLED=false
+
+# Optional: tighten reflex band (defaults 80–280 ms human window)
+# L6B_HUMAN_MIN_MS=80
+# L6B_HUMAN_MAX_MS=280
