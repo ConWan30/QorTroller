@@ -113,20 +113,15 @@ def device_auth_score(
     *,
     challenge_type: str = "adaptive_force",
 ) -> dict:
-    """Device-auth via CCO-parameterized challenge type (Phase A.3).
+    """Device-auth via CCO-parameterized challenge type (Phase C).
 
     ``adaptive_force`` — adaptive-trigger force-challenge (P4a, Edge today).
     All other challenge types return UNCHARACTERIZED until per-class verifiers
-    land (no PoEP activation in Phase A).
+    land (no PoEP activation in Phase C).
     """
-    if challenge_type != "adaptive_force":
-        return {"device_auth_pass": False, "reason": "UNCHARACTERIZED", "score": 0.0}
-    sig = model.get("device_signatures", {}).get(device_id)
-    if not sig:
-        return {"device_auth_pass": False, "reason": "device_not_registered", "score": 0.0}
-    detected = bool((device_auth or {}).get("adaptive_response_detected"))
-    delta = float((device_auth or {}).get("delta", 0.0))
-    return {"device_auth_pass": detected, "score": round(min(1.0, delta), 3), "delta": round(delta, 3)}
+    from .challenge_verifier import get_challenge_verifier
+
+    return get_challenge_verifier(challenge_type).verify(device_auth, model, device_id)
 
 
 def poep_verify(reaction_features: dict, device_auth: dict, model: dict, device_id: str = None) -> dict:

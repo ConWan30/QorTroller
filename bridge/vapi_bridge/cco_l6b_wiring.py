@@ -225,6 +225,81 @@ def l6b_probe_diagnostic_to_json(diag: L6bProbeDiagnostic) -> str:
     )
 
 
+def assemble_cco_session_status(
+    *,
+    capability_report: Any | None,
+    l6b_calibration_progress: dict[str, Any] | None,
+    l6b_enabled: bool,
+    controller_connected: bool,
+) -> dict[str, Any]:
+    """Build read-only CCO block for GET /player/session-status (Phase B.2).
+
+    Oracle fields come from ``CapabilityReport`` when resolve succeeds.
+    Applicability uses the same predicate as ``dualshock_integration`` with
+    HTTP-safe proxies: L6 driver assumed present when ``l6b_enabled``,
+    DualSense handle inferred from ``controller_connected``.
+    """
+    prog = l6b_calibration_progress or {}
+    calibration = {
+        "probe_count": int(prog.get("probe_count", 0)),
+        "target_n": int(prog.get("target_n", 50)),
+        "gate_reached": bool(prog.get("gate_reached", False)),
+        "reflex_verdict_distribution": dict(
+            prog.get("reflex_verdict_distribution") or {},
+        ),
+    }
+
+    reflex_verdict: str | None = None
+    latest = prog.get("latest_probe") or {}
+    if isinstance(latest, dict):
+        rv = latest.get("reflex_verdict")
+        if rv:
+            reflex_verdict = str(rv)
+        else:
+            reflex_verdict = map_l6b_classification_to_reflex_verdict(
+                str(latest.get("classification", "")),
+            )
+
+    out: dict[str, Any] = {
+        "t0_engine": None,
+        "presence_ceiling_candidate": None,
+        "identity_class": None,
+        "profile_id": None,
+        "challenge_type_candidate": None,
+        "policy_ref": None,
+        "reflex_verdict": reflex_verdict,
+        "l6b_enabled": l6b_enabled,
+        "l6b_applicable": False,
+        "l6b_skip": None,
+        "calibration": calibration,
+    }
+
+    if capability_report is None:
+        return out
+
+    out["t0_engine"] = getattr(capability_report, "t0_engine", None)
+    out["presence_ceiling_candidate"] = getattr(
+        capability_report, "presence_ceiling_candidate", None,
+    )
+    out["identity_class"] = getattr(capability_report, "identity_class", None)
+    out["profile_id"] = getattr(capability_report, "profile_id", None)
+    out["challenge_type_candidate"] = getattr(
+        capability_report, "challenge_type_candidate", None,
+    )
+    out["policy_ref"] = getattr(capability_report, "policy_ref", None)
+
+    if l6b_enabled:
+        app = check_l6b_applicability(
+            capability_report,
+            l6_driver_present=True,
+            dualsense_handle_present=controller_connected,
+        )
+        out["l6b_applicable"] = app.applicable
+        out["l6b_skip"] = app.skip_reason.value if app.skip_reason else None
+
+    return out
+
+
 def append_l6b_probe_diagnostic_jsonl(
     probe_log_id: int,
     device_id: str,

@@ -73,7 +73,7 @@ class TestPlayerSessionStatus(unittest.TestCase):
         for k in ("controller_connected", "session_active", "is_fully_eligible",
                   "dual_eligible", "vhp_status", "gic_chain", "records_count",
                   "enforcement_active", "host_signer_active", "last_adjudication",
-                  "presence", "timestamp"):
+                  "presence", "cco", "timestamp"):
             self.assertIn(k, j)
         self.assertFalse(j["controller_connected"])
         self.assertTrue(j["enforcement_active"])
@@ -157,6 +157,30 @@ class TestPlayerSessionStatus(unittest.TestCase):
         cfg, store = _make_cfg(), _make_store()
         r = _client(cfg, store).get("/player/session-status", headers={"x-api-key": "wrong"})
         self.assertEqual(r.status_code, 403)
+
+    def test_7_cco_surface_present(self):
+        """T-PSS-7: CCO Phase B.2 — cco block with L6B calibration + oracle fields."""
+        cfg, store = _make_cfg(l6b_enabled=True), _make_store()
+        store.get_recent_records = lambda limit, device_id=None: [
+            {"device_id": "devX", "pitl_humanity_prob": 0.9, "inference": 32, "created_at": time.time()}]
+        store.get_capture_health_status = lambda limit=10: {
+            "capture_state": "NOMINAL", "host_state": "EXCLUSIVE_USB", "poll_rate_hz": 1000.0}
+        store.get_l6b_calibration_progress = lambda device_id=None: {
+            "probe_count": 59,
+            "target_n": 50,
+            "gate_reached": True,
+            "reflex_verdict_distribution": {"REFLEX_OBSERVED": 38},
+            "latest_probe": {"reflex_verdict": "REFLEX_OBSERVED", "classification": "HUMAN"},
+        }
+        store.count_records = lambda device_id=None: 1
+        r = _client(cfg, store).get("/player/session-status", headers=_H)
+        self.assertEqual(r.status_code, 200)
+        cco = r.json()["cco"]
+        self.assertTrue(cco["l6b_enabled"])
+        self.assertEqual(cco["t0_engine"], "L6B")
+        self.assertEqual(cco["reflex_verdict"], "REFLEX_OBSERVED")
+        self.assertTrue(cco["calibration"]["gate_reached"])
+        self.assertIn("calibration gate reached", r.json()["presence"]["poep"]["status"])
 
 
 if __name__ == "__main__":

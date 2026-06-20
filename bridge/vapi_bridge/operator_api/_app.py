@@ -692,6 +692,24 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                      "status": "pending calibration (N=0/50)"},
             "bcc":  {"enabled": False, "status": "dormant"},
         }
+        _cco_empty = {
+            "t0_engine": None,
+            "presence_ceiling_candidate": None,
+            "identity_class": None,
+            "profile_id": None,
+            "challenge_type_candidate": None,
+            "policy_ref": None,
+            "reflex_verdict": None,
+            "l6b_enabled": bool(getattr(cfg, "l6b_enabled", False)),
+            "l6b_applicable": False,
+            "l6b_skip": None,
+            "calibration": {
+                "probe_count": 0,
+                "target_n": 50,
+                "gate_reached": False,
+                "reflex_verdict_distribution": {},
+            },
+        }
 
         # --- device resolution: explicit ?device_id=, else most-recent record ---
         dev = device_id
@@ -709,7 +727,8 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                 "records_count": {"device": 0,
                                   "total": await asyncio.to_thread(store.count_records, None)},
                 "enforcement_active": _enf, "host_signer_active": _hs,
-                "last_adjudication": None, "presence": _presence, "timestamp": _now,
+                "last_adjudication": None, "presence": _presence,
+                "cco": _cco_empty, "timestamp": _now,
             }
 
         # --- capture health → connection + activity ---
@@ -843,6 +862,37 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         except Exception as _exc_pa_to:
             log.debug("player_session_status: Path A chain reads timed out (honest defaults): %s", _exc_pa_to)
 
+        # --- CCO Phase B.2 — read-only T0 / L6B telemetry surface ---
+        from ..capability_oracle import CapabilityOracle
+        from ..cco_l6b_wiring import assemble_cco_session_status
+
+        _l6b_prog = await asyncio.to_thread(store.get_l6b_calibration_progress, dev)
+        _global_n = int(_l6b_prog.get("probe_count", 0))
+        _presence["poep"]["status"] = (
+            "calibration gate reached (PoEP still operator-gated)"
+            if _global_n >= 50
+            else f"pending calibration (N={_global_n}/50)"
+        )
+        _profile_override = getattr(cfg, "device_profile_id", None) or None
+        _cco_report = None
+        try:
+            _cco_report = await asyncio.to_thread(
+                CapabilityOracle.resolve,
+                0x054C,
+                0x0DF2,
+                device_id_hex=dev,
+                profile_id=_profile_override,
+                signing_path=signing_path,
+            )
+        except Exception as _exc_cco:
+            log.debug("player_session_status: CapabilityOracle resolve failed: %s", _exc_cco)
+        _cco = assemble_cco_session_status(
+            capability_report=_cco_report,
+            l6b_calibration_progress=_l6b_prog,
+            l6b_enabled=bool(getattr(cfg, "l6b_enabled", False)),
+            controller_connected=controller_connected,
+        )
+
         return {
             "controller_connected": controller_connected,
             "session_active": session_active,
@@ -870,6 +920,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "proof_tier":       proof_tier,
             "controller_model": controller_model,
             "path_a_eligible":  path_a_eligible,
+            "cco": _cco,
             "timestamp": _now,
         }
 

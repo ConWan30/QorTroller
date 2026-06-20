@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).parents[1]))
 from vapi_bridge.cco_l6b_wiring import (
     L6bSkipReason,
     REFLEX_OBSERVED,
+    assemble_cco_session_status,
     check_l6b_applicability,
     compute_l6b_probe_diagnostic,
     evaluate_l6b_r2_quiet_gate,
@@ -29,6 +30,9 @@ class _FakeReport:
     capabilities: dict[str, Any] | None = None
     profile_id: str = "sony_dualshock_edge_v1"
     policy_ref: str = "CCO_T0_POLICY_v1_OPTION_C"
+    presence_ceiling_candidate: str = "P-T3"
+    identity_class: str = "UNKNOWN"
+    challenge_type_candidate: str = "adaptive_force"
 
 
 def _edge_caps() -> dict[str, Any]:
@@ -146,6 +150,44 @@ class TestL6bR2QuietGate:
 class TestSkipLogFormat:
     def test_format_skip_log(self):
         assert format_l6b_skip_log(L6bSkipReason.NO_IMU) == "L6B_SKIPPED/NO_IMU"
+
+
+class TestAssembleCcoSessionStatus:
+    def test_edge_connected_populates_oracle_and_applicability(self):
+        cco = assemble_cco_session_status(
+            capability_report=_FakeReport(capabilities=_edge_caps()),
+            l6b_calibration_progress={
+                "probe_count": 59,
+                "target_n": 50,
+                "gate_reached": True,
+                "reflex_verdict_distribution": {"REFLEX_OBSERVED": 38},
+                "latest_probe": {
+                    "reflex_verdict": "REFLEX_OBSERVED",
+                    "classification": "HUMAN",
+                },
+            },
+            l6b_enabled=True,
+            controller_connected=True,
+        )
+        assert cco["t0_engine"] == "L6B"
+        assert cco["presence_ceiling_candidate"] == "P-T3"
+        assert cco["profile_id"] == "sony_dualshock_edge_v1"
+        assert cco["l6b_applicable"] is True
+        assert cco["l6b_skip"] is None
+        assert cco["reflex_verdict"] == REFLEX_OBSERVED
+        assert cco["calibration"]["gate_reached"] is True
+
+    def test_no_capability_report_honest_empty_oracle(self):
+        cco = assemble_cco_session_status(
+            capability_report=None,
+            l6b_calibration_progress={"probe_count": 0, "target_n": 50, "gate_reached": False},
+            l6b_enabled=False,
+            controller_connected=False,
+        )
+        assert cco["t0_engine"] is None
+        assert cco["presence_ceiling_candidate"] is None
+        assert cco["l6b_applicable"] is False
+        assert cco["calibration"]["probe_count"] == 0
 
 
 class TestL6bProbeDiagnostic:
