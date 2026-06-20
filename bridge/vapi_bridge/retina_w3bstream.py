@@ -9,6 +9,8 @@ import logging
 import time
 from typing import Any, Mapping
 
+from .retina_events_root import compute_events_root_poseidon, events_root_hex
+
 log = logging.getLogger(__name__)
 
 ANCHOR_CADENCE = 64
@@ -17,6 +19,7 @@ EXIT_OK = 0
 EXIT_CADENCE = 4
 EXIT_PQ = 5
 EXIT_RETINA = 6
+EXIT_EVENTS_ROOT = 7
 
 _VALID_PQ_PLACEHOLDER = "ab" * 32
 
@@ -34,12 +37,41 @@ def resolve_sidecar_commitment(commitment_hex: str) -> tuple[bool, str]:
     return True, ""
 
 
+def _normalize_hex64(value: str) -> str:
+    raw = (value or "").strip()
+    return raw[2:] if raw.lower().startswith("0x") else raw
+
+
+def verify_events_root_recompute(
+    events: Any,
+    events_root_hex_value: str,
+) -> tuple[bool, str]:
+    """Mechanical recompute check when payload carries inline event witness."""
+    if events is None:
+        return True, ""
+    if not isinstance(events, list):
+        return False, "retina_events must be a list"
+    expected = _normalize_hex64(events_root_hex_value)
+    if not expected:
+        return False, "events_root required when retina_events present"
+    ok, err = resolve_sidecar_commitment(expected)
+    if not ok:
+        return False, f"events_root format: {err}"
+    try:
+        computed = events_root_hex(compute_events_root_poseidon(events))
+    except Exception as exc:
+        return False, f"events_root recompute failed: {exc}"
+    if computed.lower() != expected.lower():
+        return False, "events_root mismatch"
+    return True, ""
+
+
 def validate_evm_log_payload(
     payload: Mapping[str, Any],
     *,
     enforce_retina: bool | None = None,
 ) -> int:
-    """Mirror ``handle_poac_payload`` exit codes (cadence / PQ / retina only)."""
+    """Mirror ``handle_poac_payload`` exit codes (cadence / PQ / retina / events_root)."""
     block_number = int(payload.get("block_number") or 0)
     if block_number % ANCHOR_CADENCE != 0:
         return EXIT_CADENCE
@@ -63,6 +95,14 @@ def validate_evm_log_payload(
         if enforce and not retina_nonempty:
             return EXIT_RETINA
 
+    if bool(payload.get("retina_events_root_verify")):
+        events = payload.get("retina_events")
+        root_hex = str(payload.get("events_root") or "")
+        if events is not None or root_hex.strip():
+            ok, _ = verify_events_root_recompute(events, root_hex)
+            if not ok:
+                return EXIT_EVENTS_ROOT
+
     return EXIT_OK
 
 
@@ -75,9 +115,12 @@ def build_evm_log_payload(
     pq_commitment: str,
     retina_state_commitment: str = "",
     retina_w3bstream_enforce: bool = False,
+    events_root: str = "",
+    retina_events: list[dict[str, Any]] | None = None,
+    retina_events_root_verify: bool = False,
 ) -> dict[str, Any]:
     """JSON-serializable payload aligned with ``EvmLogPayload`` in lib.rs."""
-    return {
+    out: dict[str, Any] = {
         "device_id": device_id,
         "block_number": int(block_number),
         "payload_hash": payload_hash,
@@ -85,7 +128,12 @@ def build_evm_log_payload(
         "pq_commitment": pq_commitment,
         "retina_state_commitment": retina_state_commitment or "",
         "retina_w3bstream_enforce": bool(retina_w3bstream_enforce),
+        "events_root": events_root or "",
+        "retina_events_root_verify": bool(retina_events_root_verify),
     }
+    if retina_events is not None:
+        out["retina_events"] = retina_events
+    return out
 
 
 def build_evm_log_payload_from_retina_row(
@@ -115,19 +163,29 @@ def maybe_validate_after_persist(
     device_id: str,
     record_hash_hex: str,
     state_commitment_hex: str,
+    events: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Post-persist hook: format-validate retina commitment when flags enabled."""
     enabled = bool(getattr(cfg, "retina_w3bstream_validation_enabled", False))
     enforce = bool(getattr(cfg, "retina_w3bstream_enforce_on_ingest", False))
+    verify_root = bool(getattr(cfg, "retina_events_root_verify_on_ingest", False))
     result = {
         "validation_enabled": enabled,
         "enforce_on_ingest": enforce,
+        "events_root_verify": verify_root,
         "exit_code": EXIT_OK,
         "validated": False,
         "timestamp": time.time(),
     }
     if not enabled or not state_commitment_hex:
         return result
+
+    events_root = ""
+    if verify_root and events:
+        try:
+            events_root = events_root_hex(compute_events_root_poseidon(events))
+        except Exception as exc:
+            log.debug("events_root compute skipped: %s", exc)
 
     payload = build_evm_log_payload(
         device_id=device_id,
@@ -137,6 +195,9 @@ def maybe_validate_after_persist(
         pq_commitment=_VALID_PQ_PLACEHOLDER,
         retina_state_commitment=state_commitment_hex,
         retina_w3bstream_enforce=enforce,
+        events_root=events_root,
+        retina_events=events if verify_root else None,
+        retina_events_root_verify=verify_root,
     )
     exit_code = validate_evm_log_payload(payload, enforce_retina=enforce)
     result["exit_code"] = exit_code

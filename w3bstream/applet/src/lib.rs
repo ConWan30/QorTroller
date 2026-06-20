@@ -22,6 +22,10 @@ pub struct EvmLogPayload {
     pub retina_state_commitment: String,
     #[serde(default)]
     pub retina_w3bstream_enforce: bool,
+    #[serde(default)]
+    pub events_root: String,
+    #[serde(default)]
+    pub retina_events_root_verify: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -78,7 +82,7 @@ fn resolve_da_proof(pq_commitment: &str) -> Result<bool, &'static str> {
 }
 
 /// W3bstream message handler entrypoint.
-/// Exit codes: 0=ok, 1=bad ptr, 2=utf8, 3=json, 4=cadence, 5=pq, 6=retina
+/// Exit codes: 0=ok, 1=bad ptr, 2=utf8, 3=json, 4=cadence, 5=pq, 6=retina, 7=events_root
 ///
 /// Strictly mechanical input validation — no frame-grabbing, optical capture,
 /// or Mahalanobis enrollment inside Wasm.
@@ -121,6 +125,12 @@ pub extern "C" fn handle_poac_payload(ptr: *const u8, size: usize) -> i32 {
     } else {
         true
     };
+
+    if payload.retina_events_root_verify || !payload.events_root.is_empty() {
+        if resolve_sidecar_commitment(&payload.events_root).is_err() {
+            return 7;
+        }
+    }
 
     let _resolution = RecencyResolution {
         block_cadence_valid,
