@@ -869,6 +869,17 @@ _KNOWN_CAPABILITY_TAGS: frozenset[bytes] = frozenset({
                                       # dataproof capability; NOT a PATTERN-017
                                       # commitment family per the POSEIDON-BN254-AS
                                       # reframe precedent
+    b"VAPI-COMPOSABLE-CLAIM-v1",      # CCO Phase F — cco_composability.py off-chain
+                                      # composable identity×presence claim hash;
+                                      # candidate, explicitly NOT FROZEN-v1
+                                      # (deploy-hold, default-OFF) per
+                                      # CCO_POEP_FUSION_v4.md §10 Phase F
+    b"VAPI-RETINA-STATE-v1",          # Trio-Retina (PR #29) — retina_state_commitment.py
+                                      # advisory WorldState event-slice commitment;
+                                      # candidate, NOT FROZEN-v1; advisory/default-OFF
+                                      # (retina_perception_enabled=False), does NOT
+                                      # alter the 228B PoAC wire per
+                                      # docs/retina-w3bstream-integration.md
 })
 
 
