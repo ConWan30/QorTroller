@@ -82,18 +82,28 @@ Legacy labels on force=200 subset: 26 HUMAN → **38 HUMAN** (+12) after true-la
 
 ---
 
-## 5. Operator gate item 2 (N≥50) — assessment
+## 5. Operator gate (`CCO_PHASE_B_DESIGN_v1` §5) — assessment
 
-`CCO_PHASE_B_DESIGN_v1` §5 item 2: *Operator attests **N≥50** L6B calibration sessions.*
+**Data ≠ attestation.** N≥50 probes in `l6b_probe_log` is evidence; only the operator closes §5.
 
-| Criterion | Verdict |
-|-----------|---------|
-| **Probe count N≥50** | **YES** — 59 desk probes logged @ force=200 |
-| **DualSense-class hardware path** | **YES** — USB DualSense Edge, IMU + adaptive trigger |
-| **Meaningful REFLEX_OBSERVED density** | **YES after fix** — 38/59 (64%) on force=200 corpus @ human_max=350 |
-| **`L6B_ENABLED=true` production flip** | **NOT YET** — still requires operator attestation + Phase B merge per §5 |
+### Operator attestation checklist (§5 items 1–4)
 
-**Conclusion:** Data volume **closes the N≥50 count gate**. Analyzer fix + desk `human_max=350` **closes the label-honesty gap** for slow human reflexes; operator may attest item 2 on probe count while treating REFLEX_OBSERVED rate as calibration quality (not a hard gate threshold in §5).
+| # | Requirement | Data / code state | Operator sign-off |
+|---|-------------|-------------------|-------------------|
+| 1 | Phase B implementation merged; tests green with `L6B_ENABLED=false` | **Branch** `cco-phase-b1-l6b-wiring` @ `fe23d949` (merged `origin/main`); **50/50** L6B tests pass | [ ] merge to `main` + CI green |
+| 2 | Operator attests **N≥50** L6B calibration sessions | **59** desk probes @ force=200/rigid/300ms (`desk-P1`) | [ ] operator attestation |
+| 3 | DualSense-class hardware validated (IMU + adaptive trigger) | USB DualSense Edge desk sessions; actuator force=200 validated | [ ] operator attestation |
+| 4 | `poep_enabled` false; REFLEX_OBSERVED non-gating | Unchanged by this arc | [ ] acknowledged |
+
+### Corpus metrics (supports item 2 evidence only)
+
+| Metric | Value |
+|--------|------:|
+| force=200 probe count | **59** (≥50) |
+| HUMAN / REFLEX_OBSERVED @ human_max=350 (post-fix replay) | **38/59** (64%) |
+| Peaks ≥ 500 LSB | 56/59 (95%) |
+
+**Conclusion:** Probe **count** and **label honesty** are sufficient for operator review. **`L6B_ENABLED=true` remains blocked** until all four §5 checkboxes are operator-signed and Phase B is merged to `main`.
 
 ---
 
