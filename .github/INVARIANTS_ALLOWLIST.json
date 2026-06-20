@@ -316,7 +316,7 @@
     "description": "VPM artifact manifest references the wrapper schema literally in scripts/vsd_ui_compiler.py \u2014 _VPM_WRAPPER_SCHEMA_REF = \"vapi-vpm-manifest-v1\" is the FROZEN reference (not replacement) link between the VPM artifact's manifest sidecar and the wrapper schema. Every compile_vpm_artifact-emitted manifest carries this string as its wrapper_schema field. Mirrors INV-VPM-WRAPPER-001 from the wrapper-module side; this invariant pins the consumer-module side of the same string."
   },
   "INV-VPM-CSP-001": {
-    "digest": "dda4224f303f48c0922db6a52f57d5e12cd30ea4b5de8d05e74101b2414f0759",
+    "digest": "65af268bcc44654be8296a0a16337760a6daf5e9c50c8f1e2be2342479ff147a",
     "description": "VPM HTML response FROZEN security headers pinned in bridge/vapi_bridge/operator_api.py \u2014 _VPM_HTML_RESPONSE_HEADERS dict carries the Phase O4 plan section 3 Stream B.2 CSP set: default-src 'none' / style-src 'unsafe-inline' / script-src 'unsafe-inline' / img-src data: / base-uri 'none' / frame-ancestors 'self' / form-action 'none'. The 'unsafe-inline' flags are INTENTIONAL \u2014 VPMs are self-contained single-file artifacts pre-validated by compile_vpm_artifact static guards; default-src 'none' + no connect-src makes runtime network impossible regardless of inline JS behavior."
   },
   "INV-VPM-SANDBOX-001": {

@@ -675,8 +675,8 @@ INVARIANTS: list[Invariant] = [
     ),
     Invariant(
         id="INV-VPM-CSP-001",
-        description="VPM HTML response FROZEN security headers pinned in bridge/vapi_bridge/operator_api.py — _VPM_HTML_RESPONSE_HEADERS dict carries the Phase O4 plan section 3 Stream B.2 CSP set: default-src 'none' / style-src 'unsafe-inline' / script-src 'unsafe-inline' / img-src data: / base-uri 'none' / frame-ancestors 'self' / form-action 'none'. The 'unsafe-inline' flags are INTENTIONAL — VPMs are self-contained single-file artifacts pre-validated by compile_vpm_artifact static guards; default-src 'none' + no connect-src makes runtime network impossible regardless of inline JS behavior.",
-        file="bridge/vapi_bridge/operator_api/_app.py",
+        description="VPM HTML response FROZEN security headers pinned in bridge/vapi_bridge/operator_api/agent_zkba_vpm.py — _VPM_HTML_RESPONSE_HEADERS dict carries the Phase O4 plan section 3 Stream B.2 CSP set: default-src 'none' / style-src 'unsafe-inline' / script-src 'unsafe-inline' / img-src data: / base-uri 'none' / frame-ancestors 'self' / form-action 'none'. The 'unsafe-inline' flags are INTENTIONAL — VPMs are self-contained single-file artifacts pre-validated by compile_vpm_artifact static guards; default-src 'none' + no connect-src makes runtime network impossible regardless of inline JS behavior.",
+        file="bridge/vapi_bridge/operator_api/agent_zkba_vpm.py",
         pattern=r"_VPM_HTML_RESPONSE_HEADERS = \{",
         min_matches=1,
     ),
@@ -689,8 +689,8 @@ INVARIANTS: list[Invariant] = [
     ),
     Invariant(
         id="INV-VPM-COMPILE-ENDPOINT-001",
-        description="POST /operator/vpm-compile bridge endpoint route pinned in bridge/vapi_bridge/operator_api.py — Phase O4 Stream B.4 write endpoint that dispatches compile requests to one of 6 active VPM compilers per _VPM_COMPILER_REGISTRY and records the result row in vpm_artifact_log. Full operator key required (api_key query param matches cfg.operator_api_key). Worker-thread compile dispatch via asyncio.to_thread keeps the event loop responsive.",
-        file="bridge/vapi_bridge/operator_api/_app.py",
+        description="POST /operator/vpm-compile bridge endpoint route pinned in bridge/vapi_bridge/operator_api/agent_zkba_vpm.py — Phase O4 Stream B.4 write endpoint that dispatches compile requests to one of 6 active VPM compilers per _VPM_COMPILER_REGISTRY and records the result row in vpm_artifact_log. Full operator key required (api_key query param matches cfg.operator_api_key). Worker-thread compile dispatch via asyncio.to_thread keeps the event loop responsive.",
+        file="bridge/vapi_bridge/operator_api/agent_zkba_vpm.py",
         pattern=r'@app\.post\("/operator/vpm-compile"\)',
         min_matches=1,
     ),
