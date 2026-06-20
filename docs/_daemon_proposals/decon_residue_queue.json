@@ -218,10 +218,11 @@
       "id": "api_agent_supervisor",
       "domain": "agent_supervisor",
       "target_file": "bridge/vapi_bridge/operator_api/agent_supervisor.py",
-      "status": "pending",
+      "status": "applied",
       "agent_commit": null,
-      "route_count_est": 40,
-      "order": 20
+      "route_count_est": 39,
+      "order": 20,
+      "notes": "2026-06-19 register-function split; 39 supervisor/maturity/coherence/governance routes (3 blocks)"
     },
     {
       "id": "api_agent_misc",
