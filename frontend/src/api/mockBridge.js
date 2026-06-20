@@ -141,6 +141,25 @@ export const MOCK = {
     timestamp: now(),
   }),
 
+  retinaStatus: () => ({
+    retina_perception_enabled: false,
+    total_rows: 0,
+    anomaly_count_recent: 0,
+    latest_record_hash: '',
+    latest_state_commitment: '',
+    latest_device_id: '',
+    latest_created_at: 0,
+    entries: [],
+    timestamp: now(),
+  }),
+
+  retinaAlerts: () => ({
+    alerts: [],
+    count: 0,
+    retina_perception_enabled: false,
+    timestamp: now(),
+  }),
+
   // Phase 235-DASH-UPGRADE — auto-trigger telemetry mock (off by default
   // so dev-mode renders an OFF chip without triggering false ARMED state)
   autoTriggerStatus: () => ({

@@ -60,8 +60,8 @@ class TestT204_1_RuleCount(unittest.TestCase):
         # — count value is bookkeeping only.
         self.assertEqual(
             len(CONTRADICTION_RULES),
-            28,
-            f"Expected 28 CONTRADICTION_RULES, got {len(CONTRADICTION_RULES)}: "
+            30,
+            f"Expected 30 CONTRADICTION_RULES, got {len(CONTRADICTION_RULES)}: "
             f"{list(CONTRADICTION_RULES)}",
         )
 

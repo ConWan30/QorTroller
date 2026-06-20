@@ -1,0 +1,67 @@
+{
+  "as_of": "2026-06-19",
+  "sessions": [
+    {
+      "session": "synthetic",
+      "frames": 400,
+      "jsonl": "C:\\Users\\Contr\\vapi-pebble-prototype\\logs\\retina_replay_synthetic.jsonl",
+      "retina_windows": 5,
+      "retina_events": 14,
+      "retina_trajectory_anomalies": 2,
+      "l4_windows": 5,
+      "l4_mean_distance": 0.0,
+      "l5_mean_cv": 2.2666,
+      "cross_oracle": {
+        "windows_analyzed": 5,
+        "rule1_retina_without_l4": 2,
+        "rule2_l4_without_retina": 0,
+        "agreement_windows": 3,
+        "agreement_rate": 0.6,
+        "l4_anomaly_threshold": 7.009,
+        "l4_continuity_threshold": 5.367,
+        "per_window": [
+          {
+            "window_index": 0,
+            "l4_mahalanobis": 0.0,
+            "retina_anomaly_count": 1,
+            "fsca_would_fire": [
+              "RETINA_TRAJECTORY_WITHOUT_L4_ANOMALY"
+            ]
+          },
+          {
+            "window_index": 1,
+            "l4_mahalanobis": 0.0,
+            "retina_anomaly_count": 1,
+            "fsca_would_fire": [
+              "RETINA_TRAJECTORY_WITHOUT_L4_ANOMALY"
+            ]
+          },
+          {
+            "window_index": 2,
+            "l4_mahalanobis": 0.0,
+            "retina_anomaly_count": 0,
+            "fsca_would_fire": []
+          },
+          {
+            "window_index": 3,
+            "l4_mahalanobis": 0.0,
+            "retina_anomaly_count": 0,
+            "fsca_would_fire": []
+          },
+          {
+            "window_index": 4,
+            "l4_mahalanobis": 0.0,
+            "retina_anomaly_count": 0,
+            "fsca_would_fire": []
+          }
+        ]
+      }
+    }
+  ],
+  "aggregate": {
+    "windows": 5,
+    "rule1": 2,
+    "rule2": 0,
+    "agreement_rate": 0.6
+  }
+}

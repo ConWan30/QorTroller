@@ -405,6 +405,8 @@ class DualShockTransport:
         self._frame_buffer: list   = []     # Accumulated frames for EWC session update
         import collections as _col
         self._replay_ring: _col.deque = _col.deque(maxlen=60)   # Phase 61 replay buffer
+        _retina_win = max(60, int(getattr(self._cfg, "retina_perception_window", 120)))
+        self._retina_snap_ring: _col.deque = _col.deque(maxlen=_retina_win * 2)
         self._session_count: int   = 0      # Loop-iteration counter for EWC scheduling
         self._consecutive_fb_timeouts: int = 0   # Phase 130A: backoff guard
         self._recent_session_vecs: list = []  # Last N session vectors for Fisher
@@ -1202,6 +1204,23 @@ class DualShockTransport:
                     })
                 # Phase 61: accumulate downsampled frames for session replay
                 self._replay_ring.extend(_out)
+                # Trio-Retina: full-rate HID snaps for advisory perception window
+                if getattr(self._cfg, "retina_perception_enabled", False):
+                    for _rs in frames:
+                        self._retina_snap_ring.append({
+                            "right_stick_x": int(_rs.right_stick_x),
+                            "right_stick_y": int(_rs.right_stick_y),
+                            "left_stick_x": int(_rs.left_stick_x),
+                            "left_stick_y": int(_rs.left_stick_y),
+                            "l2_trigger": int(_rs.l2_trigger),
+                            "r2_trigger": int(_rs.r2_trigger),
+                            "gyro_x": float(_rs.gyro_x),
+                            "gyro_y": float(_rs.gyro_y),
+                            "gyro_z": float(_rs.gyro_z),
+                            "accel_x": float(_rs.accel_x),
+                            "accel_y": float(_rs.accel_y),
+                            "accel_z": float(_rs.accel_z),
+                        })
                 _frame_msg = _json.dumps({"type": "frames", "frames": _out})
                 asyncio.create_task(_fbc(_frame_msg))
                 # Phase 59: also send to per-device twin clients
@@ -1674,6 +1693,49 @@ class DualShockTransport:
                     _loop_iter, inference, confidence,
                 )
             if raw:
+                _record_hash_hex = ""
+                try:
+                    parsed = parse_record(raw)
+                    _record_hash_hex = parsed.record_hash.hex()
+                except Exception:
+                    pass
+
+                if getattr(self._cfg, "retina_perception_enabled", False):
+                    try:
+                        from .retina_perception import (
+                            persist_retina_result,
+                            run_controller_perception,
+                        )
+                        _src = getattr(self, "_device_id_hex", None) or (
+                            self._device_id.hex() if self._device_id is not None else "unknown"
+                        )
+                        _rp = run_controller_perception(
+                            list(self._retina_snap_ring),
+                            enabled=True,
+                            source_id=_src,
+                            window=int(getattr(self._cfg, "retina_perception_window", 120)),
+                            dynamics_horizon=int(
+                                getattr(self._cfg, "retina_dynamics_horizon", 5)
+                            ),
+                            record_hash_hex=_record_hash_hex,
+                        )
+                        if self._pending_pitl_meta is not None:
+                            self._pending_pitl_meta["retina_enabled"] = _rp.enabled
+                            self._pending_pitl_meta["retina_event_count"] = _rp.event_count
+                            self._pending_pitl_meta["retina_trajectory_anomalies"] = (
+                                _rp.trajectory_anomalies
+                            )
+                            self._pending_pitl_meta["retina_record_hash"] = _rp.record_hash_hex
+                            self._pending_pitl_meta["retina_state_commitment"] = (
+                                _rp.state_commitment_hex
+                            )
+                            self._pending_pitl_meta["retina_alert"] = (
+                                _rp.trajectory_anomalies > 0
+                            )
+                        persist_retina_result(self._store, _src, _rp)
+                    except Exception as _ret_exc:
+                        log.debug("retina perception hook fail-open: %s", _ret_exc)
+
                 await self._dispatch(raw)
                 self._last_raw = raw
 

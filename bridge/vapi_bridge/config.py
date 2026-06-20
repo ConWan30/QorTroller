@@ -1830,6 +1830,20 @@ class Config:
     treats an absent manifest as fail-closed (no listing). Set after the Arc 4
     deploy runs (operator-fired)."""
 
+    # --- Trio-Retina advisory perception (default OFF; does not alter 228B PoAC) ---
+    retina_perception_enabled: bool = field(
+        default_factory=lambda: _env_bool("RETINA_PERCEPTION_ENABLED", False)
+    )
+    retina_perception_window: int = field(
+        default_factory=lambda: _env_int("RETINA_PERCEPTION_WINDOW", 120)
+    )
+    retina_dynamics_horizon: int = field(
+        default_factory=lambda: _env_int("RETINA_DYNAMICS_HORIZON", 5)
+    )
+    retina_webhook_port: int = field(
+        default_factory=lambda: _env_int("RETINA_WEBHOOK_PORT", 8091)
+    )
+
     # --- Data Economy Arc 5: VAPIReplayProofPipeline (VHR proofs) ---
     replay_proof_pipeline_enabled: bool = field(
         default_factory=lambda: _env_bool("REPLAY_PROOF_PIPELINE_ENABLED", False)
