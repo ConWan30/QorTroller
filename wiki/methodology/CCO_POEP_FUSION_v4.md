@@ -402,6 +402,10 @@ Each phase requires **V-checks** before implementation and **P-checks** after. N
 
 **COMPLETE (2026-06-20):** `bridge/vapi_bridge/cco_composability.py` — `compute_composable_claim_hash()` (candidate `VAPI-COMPOSABLE-CLAIM-v1`, NOT FROZEN-v1); `assemble_composability_status()` + `apply_composability_to_grid()`; `PoEPComposabilityReader` protocol + `InMemoryPoEPComposabilityReader`; chain `get_poep_commitment_for_device()` / `get_poep_composability_reader()` (fail-open); config `cco_composability_enabled=False` + `cco_composability_lens_subcheck=False`; GET `/player/session-status` `identity_grid.composability` block + `composable_claim_hash` / `composability_readiness`; `composable_on_chain=false` (deploy-hold); 10 bridge tests (T-COMP-1..10 + T-PSS-9).
 
+**F-COMPOSE-2 (2026-06-20):** Chunked `eth_getLogs` via `eth_logs_chunked.py` (1000-block hops, per-chunk retry) — IoTeX testnet rejects wide ranges (~892k blocks deploy→head). Three-outcome scan: `SCAN_COMPLETE_FOUND` / `SCAN_COMPLETE_EMPTY` / `SCAN_FAILED` → readiness `off_chain_verifiable` / honest `prep_only` / `registry_unreachable` (never mask scan failure as missing registration). Validity gate: latest `DeviceRegistered` log + `isRegistrationValid(gamer, deviceId)` + `isRecorded(commitment)` before `off_chain_verifiable`.
+
+**F-COMPOSE-1 correction (measured, not inferred):** MFG identity and PoEP presence remain independent attestations — a device can hold either alone. Demo device `581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8` holds **both**: MFG-registered (I1) and PoEP-registered with commitment `72ad94ffb1967dc8284ebfd5a664987bacb69f797447fc40b7790360ade0f8ce` (block 43955767, gamer `0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692`) — reference example of a fully-composable device (`off_chain_verifiable`). Prior prediction of `prep_only` for this device was incorrect; live chunked scan superseded the assertion.
+
 ### Phase G — Empirical research program (v3 §7)
 
 **Goal:** Characterize **three** controller classes (minimal pad / mid-tier / Edge) before "universal" partner language.
@@ -441,3 +445,4 @@ QorTroller's **Controller Capability Oracle** (partially **BUILT** via `controll
 | 2026-06-20 | Phase D — `cco_poep_bridge.py` wires CapabilityReport → PoEP runner; `presence.poep` enriched; `POEP_ENABLED=false` default |
 | 2026-06-20 | Phase E — `cco_identity_grid.py`; session-status `identity_grid` block (identity×presence grid + F-V4-003 Path B note) |
 | 2026-06-20 | Phase F — `cco_composability.py`; off-chain composable claim hash + PoEP registry view helper; session-status `identity_grid.composability` (Option F1 deploy-hold) |
+| 2026-06-20 | F-COMPOSE-2 — chunked eth_getLogs + three-outcome readiness (`registry_unreachable`); F-COMPOSE-1 demo device corrected (MFG + PoEP both present → `off_chain_verifiable`) |
