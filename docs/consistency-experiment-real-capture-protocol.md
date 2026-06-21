@@ -50,14 +50,16 @@ the fusion handles; Phase 2 confirms them on real data but they are not the deci
 
 ## 2. Pre-registered estimands, decision rule, and KILL criterion
 
-Freeze these values in this file (edit the RECOMMENDED defaults to your chosen numbers)
-and commit **before capture**:
+**FROZEN 2026-06-21 — pre-registration.** These values are committed to git BEFORE any
+capture exists. They MUST NOT be edited after data is collected — changing any of them
+invalidates the pre-registration, and any run against changed thresholds must be declared
+a new, separately-named experiment. The git history of this file is the immutability proof.
 
-| Pre-registered quantity | RECOMMENDED default | Rationale |
+| Pre-registered quantity | FROZEN value | Rationale |
 |---|---|---|
 | TPR target (catch) | **≥ 0.80** | a gate that misses >20% of aim-assist windows is weak but arguable |
 | FPR ceiling (elite false-accuse) | **≤ 0.02** | accusing >2% of elite-play windows is tournament-fatal |
-| Players per class | **≥ 10** | minimum for cross-subject generalisation |
+| Players per class (multi-subject PASS run) | **≥ 10** | minimum for cross-subject generalisation; NOT required for the N=1 kill-test |
 | Elite-play windows (PRO_SKILL) | **≥ 300** | Rule of Three: 0 FPs in 300 windows ⇒ 95% CI upper bound ≈ 1% |
 | Game / controller | **NCAA CFB 26 / certified Edge (CFI-ZCP1)** | matches the validated Phase-G tier; transfer to other titles is out of scope |
 
