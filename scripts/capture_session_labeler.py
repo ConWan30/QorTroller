@@ -34,7 +34,7 @@ import os
 import time
 
 _VALID_CLASSES = {
-    "HUMAN_CLEAN", "BOT_FULL", "HUMAN_AIM_ASSIST", "HUMAN_RELAY", "PRO_SKILL",
+    "HUMAN_CLEAN", "BOT_FULL", "HUMAN_INPUT_MACRO", "HUMAN_RELAY", "PRO_SKILL",
 }
 _PENDING = "PENDING"
 DEFAULT_MANIFEST = "audits/consistency-sessions.json"

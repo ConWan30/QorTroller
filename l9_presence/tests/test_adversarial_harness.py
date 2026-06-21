@@ -43,8 +43,8 @@ def test_human_clean_is_consistent_human():
 
 
 def test_aim_assist_catch_at_full_tpr():
-    p = SynthParams(human_presence_pass=1.0, retina_tpr_aimassist=1.0)
-    vs = _verdicts(_gen(SessionClass.HUMAN_AIM_ASSIST, p))
+    p = SynthParams(human_presence_pass=1.0, retina_tpr_cheat=1.0)
+    vs = _verdicts(_gen(SessionClass.HUMAN_INPUT_MACRO, p))
     assert all(v is ConsistencyVerdict.INCONSISTENT_PRESENCE_WITHOUT_AUTHENTIC_TRAJECTORY for v in vs)
 
 
@@ -81,7 +81,7 @@ def test_proskill_false_accusation_equals_retina_fp_param():
 
 
 def test_machine_assist_catch_rate_full_tpr():
-    p = SynthParams(human_presence_pass=1.0, retina_tpr_aimassist=1.0)
+    p = SynthParams(human_presence_pass=1.0, retina_tpr_cheat=1.0)
     sessions = generate_labeled_sessions(seed=2, n_per_class=10, windows_per_session=6, params=p)
     assert run_experiment(sessions, p)["metrics"]["machine_assist_catch_rate"] == 1.0
 

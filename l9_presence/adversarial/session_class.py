@@ -15,7 +15,7 @@ from typing import Optional
 class SessionClass(str, Enum):
     HUMAN_CLEAN = "HUMAN_CLEAN"            # genuine play -> expect CONSISTENT_HUMAN
     BOT_FULL = "BOT_FULL"                  # scripted, no human -> no presence
-    HUMAN_AIM_ASSIST = "HUMAN_AIM_ASSIST"  # live human + machine-corrected trajectory (the catch)
+    HUMAN_INPUT_MACRO = "HUMAN_INPUT_MACRO"  # live human + machine-automated input (NCAA CFB: scripted timing / macros) — the catch
     HUMAN_RELAY = "HUMAN_RELAY"            # human passes challenges, bot plays between
     PRO_SKILL = "PRO_SKILL"               # elite human, fast-but-genuine (the false-positive risk)
 

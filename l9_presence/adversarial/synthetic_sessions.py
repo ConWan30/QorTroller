@@ -4,7 +4,7 @@ This is NOT real capture. It models the EXPECTED per-class oracle behaviour with
 explicit, tunable parameters -- crucially the two retina-axis unknowns that the
 whole fusion hinges on:
 
-  - ``retina_tpr_aimassist``  P(retina flags IMPLAUSIBLE | aim-assist)  [true positive]
+  - ``retina_tpr_cheat``      P(retina flags IMPLAUSIBLE | machine-automated input)  [true positive]
   - ``retina_fpr_proskill``   P(retina flags IMPLAUSIBLE | elite genuine play) [the killer FP]
 
 Because these are parameters, the experiment is a SENSITIVITY ANALYSIS: it shows
@@ -32,7 +32,7 @@ L4_ANOMALY = 7.009
 @dataclass(frozen=True)
 class SynthParams:
     # --- the two load-bearing retina-axis unknowns (Phase-2 measures the truth) ---
-    retina_tpr_aimassist: float = 0.85   # catch rate on aim-assist windows
+    retina_tpr_cheat: float = 0.85       # catch rate on machine-automated-input windows
     retina_fpr_proskill: float = 0.15    # FALSE flag rate on genuine elite play
     # --- supporting modelled rates ---
     retina_fpr_clean: float = 0.03       # false flag on ordinary clean play
@@ -83,10 +83,10 @@ def _gen_session(rng: random.Random, klass: SessionClass, sid: str,
             wins.append(_window(rng, sid, i, klass, challenged=True, reacted=False, in_band=False,
                                 dev_auth=False, anomaly=anomaly, l4=l4, provisional=False))
 
-        elif klass is SessionClass.HUMAN_AIM_ASSIST:
-            # REAL human (presence passes) + machine-corrected trajectory (implausible @ TPR)
+        elif klass is SessionClass.HUMAN_INPUT_MACRO:
+            # REAL human (presence passes) + machine-automated input (implausible @ TPR)
             ok = rng.random() < p.human_presence_pass
-            anomaly = 1 if rng.random() < p.retina_tpr_aimassist else 0
+            anomaly = 1 if rng.random() < p.retina_tpr_cheat else 0
             wins.append(_window(rng, sid, i, klass, challenged=True, reacted=ok, in_band=ok,
                                 dev_auth=ok, anomaly=anomaly, l4=_l4_nominal(rng), provisional=False))
 
