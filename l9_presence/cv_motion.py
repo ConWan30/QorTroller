@@ -42,16 +42,20 @@ class FrameMotion:
     flow_energy: float       # mean |flow| — overall on-screen motion magnitude
 
 
-def to_gray_small(frame_bgr: "np.ndarray") -> "np.ndarray":
-    """BGR/RGB frame -> downscaled grayscale (the CV working image)."""
+def to_gray_small(frame_bgr: "np.ndarray", downscale: int = DOWNSCALE) -> "np.ndarray":
+    """BGR/RGB frame -> downscaled grayscale (the CV working image).
+
+    `downscale` is overridable so the Adaptive Capture Governor can trade flow resolution
+    for frame rate in real time (higher downscale = cheaper frames = steadier fps)."""
     if not _CV2:
         raise RuntimeError("opencv-python not installed (pip install opencv-python)")
     if frame_bgr.ndim == 3:
         gray = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2GRAY)
     else:
         gray = frame_bgr
-    if DOWNSCALE > 1:
-        gray = cv2.resize(gray, (gray.shape[1] // DOWNSCALE, gray.shape[0] // DOWNSCALE),
+    d = max(1, int(downscale))
+    if d > 1:
+        gray = cv2.resize(gray, (gray.shape[1] // d, gray.shape[0] // d),
                           interpolation=cv2.INTER_AREA)
     return gray
 
@@ -73,13 +77,22 @@ class MotionExtractor:
     """Stateful per-frame motion extractor. Feed frames in order with timestamps;
     get a FrameMotion once a previous frame exists."""
 
-    def __init__(self) -> None:
+    def __init__(self, downscale: Optional[int] = None) -> None:
         self._prev: Optional["np.ndarray"] = None
         self._prev_ts_ms: Optional[float] = None
+        self._downscale: int = int(downscale) if downscale else DOWNSCALE
+
+    def set_downscale(self, downscale: int) -> None:
+        """Retune flow resolution live (Adaptive Capture Governor). Resets the prev frame so
+        the next flow is computed at the new scale (mismatched-size frames can't be flowed)."""
+        d = max(1, int(downscale))
+        if d != self._downscale:
+            self._downscale = d
+            self._prev = None  # force re-seed at the new resolution
 
     def push_frame(self, frame_bgr: "np.ndarray", ts_ms: float) -> Optional[Tuple[float, FrameMotion]]:
         """Return (ts_ms, FrameMotion) for this frame, or None for the first frame."""
-        gray = to_gray_small(frame_bgr)
+        gray = to_gray_small(frame_bgr, self._downscale)
         if self._prev is None:
             self._prev, self._prev_ts_ms = gray, ts_ms
             return None
