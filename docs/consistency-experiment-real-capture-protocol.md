@@ -126,6 +126,17 @@ This deliberately does **not** require the production `record_hash` binding (the
 `l6b_probe_log`-has-no-`record_hash` gap from the agent audit). That binding is a separate
 §6 production-integration concern, gated on this experiment coming back viable.
 
+**Presence co-capture during play (forcefulness).** For windows to bind, a presence
+challenge must fire *during* gameplay and be **consciously felt + unmistakable vs NCAA CFB
+haptics** — otherwise the operator can't react and the window is UNKNOWN-presence. The
+default L6B probe is sub-perceptual (~60/255) and unsuitable here. The forceful signature
+stimulus (`bridge/controller/presence_challenge.py` — high-force dual-trigger triple-pulse,
+`forceful_signature_profile`, default 230/255) is **certified by the operator feel-test
+first** (`scripts/presence_challenge_feeltest.py`, bridge stopped) to find the lowest force
+that is felt AND distinguishable; that confirmed force is then wired into the in-session
+challenger (idle-gated, jittered cadence via `ChallengeScheduler`). The cockpit's
+binding-coverage % is the live check that challenges are actually landing.
+
 ## 6. Pipeline (reuses the Phase 1 harness)
 
 Only the data source changes; the evaluator and engine are unchanged.
