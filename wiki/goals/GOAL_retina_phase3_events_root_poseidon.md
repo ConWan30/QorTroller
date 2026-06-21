@@ -67,7 +67,7 @@ Full in-circuit Groth16 (`VAPIRetinaEventsRoot.circom`) remains **deferred** pen
 | Phase | Deliverable |
 |-------|-------------|
 | **3b ZK** | circom circuit proving Poseidon chain matches public `events_root` |
-| **3c DA** | DA witness bundle `{events, events_root}` keyed by commitment |
+| **3c DA** | DA witness bundle `{events, events_root}` keyed by `events_root` — IN PROGRESS ([`GOAL_retina_phase3c_da_witness_bundle.md`](GOAL_retina_phase3c_da_witness_bundle.md)) |
 
 ---
 

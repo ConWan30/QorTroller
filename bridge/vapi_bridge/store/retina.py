@@ -276,3 +276,65 @@ class RetinaMixin:
             "latest_created_at": latest.get("created_at", 0.0),
             "entries": [dict(r) for r in rows],
         }
+
+    def insert_retina_da_witness_log(
+        self,
+        *,
+        device_id: str,
+        record_hash_hex: str,
+        state_commitment_hex: str,
+        events_root_hex: str,
+        events_root_scheme: str,
+        payload_bytes: int,
+        uploaded: bool,
+        error: str = "",
+        ts: float | None = None,
+    ) -> int:
+        created = float(ts if ts is not None else time.time())
+        with self._conn() as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO retina_da_witness_log (
+                    device_id, record_hash_hex, state_commitment_hex,
+                    events_root_hex, events_root_scheme,
+                    payload_bytes, uploaded, error, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    device_id,
+                    record_hash_hex or "",
+                    state_commitment_hex or "",
+                    events_root_hex or "",
+                    events_root_scheme or "",
+                    int(payload_bytes),
+                    1 if uploaded else 0,
+                    error or "",
+                    created,
+                ),
+            )
+            return int(cur.lastrowid)
+
+    def get_retina_da_witness_status(self, limit: int = 10) -> dict[str, Any]:
+        limit = max(1, min(int(limit), 50))
+        with self._conn() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM retina_da_witness_log
+                ORDER BY id DESC LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+        latest = dict(rows[0]) if rows else {}
+        return {
+            "total_log_rows": len(rows),
+            "latest_uploaded": bool(latest.get("uploaded")),
+            "latest_payload_bytes": int(latest.get("payload_bytes") or 0),
+            "latest_events_root": latest.get("events_root_hex", ""),
+            "latest_events_root_scheme": latest.get("events_root_scheme", ""),
+            "latest_record_hash": latest.get("record_hash_hex", ""),
+            "latest_state_commitment": latest.get("state_commitment_hex", ""),
+            "latest_device_id": latest.get("device_id", ""),
+            "latest_error": latest.get("error", ""),
+            "latest_created_at": latest.get("created_at", 0.0),
+            "entries": [dict(r) for r in rows],
+        }

@@ -1924,6 +1924,9 @@ class Config:
     retina_da_upload_enabled: bool = field(
         default_factory=lambda: _env_bool("RETINA_DA_UPLOAD_ENABLED", False)
     )
+    retina_da_witness_enabled: bool = field(
+        default_factory=lambda: _env_bool("RETINA_DA_WITNESS_ENABLED", False)
+    )
     retina_pda_attestation_enabled: bool = field(
         default_factory=lambda: _env_bool("RETINA_PDA_ATTESTATION_ENABLED", False)
     )
