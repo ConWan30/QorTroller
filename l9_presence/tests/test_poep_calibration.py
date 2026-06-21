@@ -70,11 +70,18 @@ def test_device_auth_passes_genuine_fails_emulator():
 
 def test_device_auth_uncharacterized_non_adaptive_force():
     m = population_reflex_model([_session(k=60)], min_n=50)
-    for ctype in ("rumble_imu", "generic_input_timing", "button_timing"):
+    for ctype in ("generic_input_timing", "button_timing"):
         out = device_auth_score(_GENUINE_DA, m, "Edge", challenge_type=ctype)
         assert out["device_auth_pass"] is False
         assert out["reason"] == "UNCHARACTERIZED"
         assert out["score"] == 0.0
+
+
+def test_rumble_imu_requires_imu_features_not_edge_force_dict():
+    m = population_reflex_model([_session(k=60)], min_n=50)
+    out = device_auth_score(_GENUINE_DA, m, "Edge", challenge_type="rumble_imu")
+    assert out["device_auth_pass"] is False
+    assert out["reason"] == "missing_rumble_imu_features"
 
 
 def test_poep_verify_present_and_reject():

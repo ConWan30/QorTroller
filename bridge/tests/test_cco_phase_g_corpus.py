@@ -71,13 +71,14 @@ class TestCcoPhaseGCorpus(unittest.TestCase):
         self.assertEqual(progress2["by_tier"]["PREMIUM_EDGE"]["probe_count"], 50)
 
     def test_t4_deferred_minimal_pad(self):
-        from vapi_bridge.cco_controller_class_research import (
-            enrich_phase_g_progress_deferred,
-        )
+        from vapi_bridge.cco_controller_class_research import enrich_phase_g_progress
 
         store, _ = self._store()
         progress = store.get_cco_phase_g_corpus_progress()
-        enriched = enrich_phase_g_progress_deferred(progress, frozenset({"MINIMAL_PAD"}))
+        enriched = enrich_phase_g_progress(
+            progress,
+            deferred_tiers=frozenset({"MINIMAL_PAD"}),
+        )
         minimal = enriched["by_tier"]["MINIMAL_PAD"]
         self.assertEqual(minimal["measurement_status"], "deferred")
         self.assertTrue(minimal["deferred"])

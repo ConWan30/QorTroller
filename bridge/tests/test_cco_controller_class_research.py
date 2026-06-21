@@ -94,7 +94,7 @@ class TestControllerClassResearch(unittest.TestCase):
 
     def test_t11_parse_deferred_tiers(self):
         from vapi_bridge.cco_controller_class_research import (
-            enrich_phase_g_progress_deferred,
+            enrich_phase_g_progress,
             parse_phase_g_deferred_tiers,
         )
 
@@ -109,9 +109,48 @@ class TestControllerClassResearch(unittest.TestCase):
                 "PREMIUM_EDGE": {"probe_count": 0, "gate_reached": False, "profiles": {}},
             }
         }
-        out = enrich_phase_g_progress_deferred(progress, frozenset({"MINIMAL_PAD"}))
+        out = enrich_phase_g_progress(
+            progress,
+            deferred_tiers=frozenset({"MINIMAL_PAD"}),
+        )
         self.assertEqual(out["by_tier"]["MINIMAL_PAD"]["measurement_status"], "deferred")
         self.assertEqual(out["by_tier"]["MID_TIER"]["measurement_status"], "reached")
+        self.assertEqual(out["by_tier"]["MID_TIER"]["measurement_grade"], "PARTIAL")
+
+    def test_t12_validated_tiers_operator_attestation(self):
+        from vapi_bridge.cco_controller_class_research import (
+            enrich_phase_g_progress,
+            parse_phase_g_validated_tiers,
+            resolve_tier_measurement_grade,
+        )
+
+        self.assertEqual(
+            parse_phase_g_validated_tiers("MID_TIER, premium_edge"),
+            frozenset({"MID_TIER", "PREMIUM_EDGE"}),
+        )
+        self.assertEqual(
+            resolve_tier_measurement_grade(
+                "MID_TIER",
+                130,
+                validated_tiers=frozenset({"MID_TIER"}),
+            ),
+            "VALIDATED",
+        )
+        progress = {
+            "by_tier": {
+                "MINIMAL_PAD": {"probe_count": 0, "gate_reached": False, "profiles": {}},
+                "MID_TIER": {"probe_count": 130, "gate_reached": True, "profiles": {}},
+                "PREMIUM_EDGE": {"probe_count": 210, "gate_reached": True, "profiles": {}},
+            }
+        }
+        out = enrich_phase_g_progress(
+            progress,
+            deferred_tiers=frozenset({"MINIMAL_PAD"}),
+            validated_tiers=frozenset({"MID_TIER", "PREMIUM_EDGE"}),
+        )
+        self.assertEqual(out["by_tier"]["MID_TIER"]["measurement_grade"], "VALIDATED")
+        self.assertTrue(out["by_tier"]["MID_TIER"]["operator_validated"])
+        self.assertEqual(out["validated_tiers"], ["MID_TIER", "PREMIUM_EDGE"])
 
 
 if __name__ == "__main__":

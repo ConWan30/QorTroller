@@ -23,8 +23,9 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from bridge.vapi_bridge.cco_controller_class_research import (
-    enrich_phase_g_progress_deferred,
+    enrich_phase_g_progress,
     parse_phase_g_deferred_tiers,
+    parse_phase_g_validated_tiers,
 )
 from bridge.vapi_bridge.config import Config
 from bridge.vapi_bridge.store import Store
@@ -92,7 +93,10 @@ def _print_human(progress: dict) -> None:
             gate = "DEFERRED"
         else:
             gate = "REACHED" if block["gate_reached"] else "pending"
-        print(f"  [{tier}] N={n}/{target} gate={gate}")
+        grade = block.get("measurement_grade", "?")
+        validated = block.get("operator_validated", False)
+        attestation = " operator_validated" if validated else ""
+        print(f"  [{tier}] N={n}/{target} gate={gate} grade={grade}{attestation}")
         profiles = block.get("profiles") or {}
         if profiles:
             for pid in sorted(profiles.keys()):
@@ -131,8 +135,13 @@ def main() -> int:
     store = Store(db_path)
     progress = store.get_cco_phase_g_corpus_progress(target_n=args.target_n)
     deferred = parse_phase_g_deferred_tiers(cfg.cco_phase_g_deferred_tiers)
-    if deferred:
-        progress = enrich_phase_g_progress_deferred(progress, deferred)
+    validated = parse_phase_g_validated_tiers(cfg.cco_phase_g_validated_tiers)
+    if deferred or validated:
+        progress = enrich_phase_g_progress(
+            progress,
+            deferred_tiers=deferred,
+            validated_tiers=validated,
+        )
 
     if args.json:
         print(json.dumps(progress, indent=2))
