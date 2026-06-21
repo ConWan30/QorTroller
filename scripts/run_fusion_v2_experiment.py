@@ -45,10 +45,17 @@ def artifact_from_npz(path: str, class_label: str = "HUMAN_CLEAN") -> SessionArt
             telemetry = json.loads(str(d["capture_governor"]))
         except Exception:
             telemetry = {}
+    hud_texts = []
+    if "hud_json" in d.files:
+        try:
+            from l9_presence.hud_ocr import loads_hud_texts
+            hud_texts = loads_hud_texts(str(d["hud_json"]))
+        except Exception:
+            hud_texts = []
     return SessionArtifact(
         in_ts=col("in_ts"), in_sx=col("in_sx"), in_sy=col("in_sy"),
         mo_ts=col("mo_ts"), mo_yaw=col("mo_yaw"), mo_pitch=col("mo_pitch"),
-        in_fire=col("in_fire"), hud_texts=[], class_label=class_label,
+        in_fire=col("in_fire"), hud_texts=hud_texts, class_label=class_label,
         provenance="real", capture_telemetry=telemetry,
     )
 

@@ -59,6 +59,11 @@ class WitnessConfig:
     # post-hoc telemetry collection into the manifest. ON by default (advisory; never anchors).
     adaptive_capture_enabled: bool = True
     collect_telemetry: bool = True
+    # HUD OCR pass (discrete-coherence channel): (x, y, w, h) region to OCR for down/distance/
+    # play-clock/score. Off (None) by default; needs pytesseract + the game visible. Setting it
+    # makes recorded sessions carry hud_texts so the oracle panel reads LIVE_COHERENT not just COUPLED.
+    hud_region: Optional[Tuple[int, int, int, int]] = None
+    hud_every: int = 30
     # governed seams — ALL default OFF (dry-run). Flip only after gate-2 + governance.
     sentry_anchor_enabled: bool = False
     guardian_sign_enabled: bool = False
@@ -369,7 +374,7 @@ class WitnessAgent:
         record_session(out, duration_s=self.cfg.duration_s, label=self.cfg.label,
                        region=self.cfg.region, stick_parser=make_stick_parser(self.cfg.rx, self.cfg.ry),
                        backend=self.cfg.backend, fire_offset=self.cfg.fire_offset, player=self.cfg.player,
-                       governor=governor)
+                       governor=governor, hud_region=self.cfg.hud_region, hud_every=self.cfg.hud_every)
         return process_session(out, self.cfg)
 
     def run(self, max_sessions: int = 0) -> None:
