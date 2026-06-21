@@ -30,7 +30,7 @@ from .retina_causal_coherence import (
     from_screen_events,
 )
 from .retina_screen_lobe import HudState, diff_hud, parse_hud
-from .screen_retina_fusion import L9FusionVerdict, fuse_screen_retina
+from .screen_retina_fusion import ContinuousConfig, L9FusionVerdict, fuse_screen_retina
 
 # input-event derivation thresholds (HID-derived, no trio-retina dependency)
 _TRIGGER_ONSET = 10.0       # in_fire rising past this = a trigger action
@@ -121,8 +121,14 @@ def derive_screen_events(a: SessionArtifact) -> list:
     return out
 
 
-def evaluate_artifact(a: SessionArtifact) -> PanelReport:
-    """Run every screen-bound oracle on one bound session. Pure + hardware-free."""
+def evaluate_artifact(a: SessionArtifact,
+                      cont_cfg: Optional[ContinuousConfig] = None) -> PanelReport:
+    """Run every screen-bound oracle on one bound session. Pure + hardware-free.
+
+    cont_cfg selects the continuous-axis profile (default FPS). Pass
+    screen_retina_fusion.NCAA_CONTINUOUS_CONFIG to drop the injection/residual axis for
+    auto-camera games."""
+    cont_cfg = cont_cfg or ContinuousConfig()
     # ---- continuous coupling ----
     osc = InputOutputCouplingOracle()
     for t, x, y in zip(a.in_ts, a.in_sx, a.in_sy):
@@ -141,7 +147,7 @@ def evaluate_artifact(a: SessionArtifact) -> PanelReport:
     coh = assess_coherence(input_events + from_screen_events(screen_events))
 
     # ---- tri-channel fusion ----
-    fusion = fuse_screen_retina(cs, nc, dec, coh.verdict, coh.coherence_ratio())
+    fusion = fuse_screen_retina(cs, nc, dec, coh.verdict, coh.coherence_ratio(), cfg=cont_cfg)
 
     return PanelReport(
         class_label=a.class_label, provenance=a.provenance,

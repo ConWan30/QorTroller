@@ -41,5 +41,6 @@
     }
   },
   "n_per_class": 10,
-  "seed": 0
+  "seed": 0,
+  "game": "ncaa"
 }
