@@ -46,6 +46,8 @@ from bridge.controller.probe_gate import (  # noqa: E402
     echo_confirmed,
     update_baseline,
 )
+from bridge.controller.probe_context import clear_to_fire_context  # noqa: E402
+from bridge.controller.probe_screen import clear_to_fire_screen, read_screen_region  # noqa: E402
 
 _DEFAULT_DEVICE = "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8"
 _DEFAULT_DB = os.path.expanduser("~/.vapi/bridge.db")
@@ -172,6 +174,29 @@ def _var(xs: list[float]) -> float:
         return 0.0
     m = sum(xs) / n
     return sum((x - m) ** 2 for x in xs) / n
+
+
+def fetch_bridge_context(base_url: str, api_key: str = "", timeout: float = 1.5) -> dict | None:
+    """Fetch the bridge's live gameplay context (APOP richest, GAD fallback). Returns the
+    status dict, or None on ANY failure (bridge down / endpoint missing) so the caller
+    treats the context gate as inert rather than blocking the probe loop."""
+    import json as _json
+    import urllib.request
+
+    for path in ("/agent/active-play-occupancy-status", "/bridge/capture-health"):
+        try:
+            req = urllib.request.Request(base_url.rstrip("/") + path)
+            if api_key:
+                req.add_header("x-api-key", api_key)
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                data = _json.loads(resp.read().decode("utf-8"))
+            if isinstance(data, dict) and (
+                data.get("latest_state") or data.get("latest_gameplay_context")
+            ):
+                return data
+        except Exception:
+            continue
+    return None
 
 
 def _is_active_player(ds) -> bool:
@@ -323,6 +348,23 @@ def main() -> int:
                     help="pre-fire IMU sniff window in ms used by the lull gate (default 300)")
     ap.add_argument("--haptic-ratio", type=float, default=3.0,
                     help="defer if pre-fire accel variance > baseline*ratio (default 3.0)")
+    # context gate (opt-in): reuse the bridge's APOP/GAD classifier as a semantic lull source
+    ap.add_argument("--context-gate", action="store_true", default=False,
+                    help="ALSO require the bridge to report a between-plays lull (APOP "
+                         "MATCH_TRANSITION); inert if the bridge is unreachable")
+    ap.add_argument("--bridge-url", default="http://127.0.0.1:8000",
+                    help="bridge base URL for the context gate (default http://127.0.0.1:8000)")
+    ap.add_argument("--bridge-api-key", default="",
+                    help="x-api-key for the bridge context endpoints, if required")
+    ap.add_argument("--context-allow-menu", action="store_true", default=False,
+                    help="context gate also accepts NON_COMPETITIVE_MENU as a quiet window")
+    # screen gate (opt-in, heaviest): OCR the play-clock / stoppage banner
+    ap.add_argument("--screen-gate", action="store_true", default=False,
+                    help="ALSO require an on-screen pre-snap/stoppage window (needs pytesseract "
+                         "+ the game visible); inert if OCR/capture unavailable")
+    ap.add_argument("--screen-region", nargs=4, type=int, default=[0, 0, 400, 120],
+                    metavar=("X", "Y", "W", "H"),
+                    help="screen region (x y w h) to OCR for the play clock / banner")
     ap.add_argument("--once", action="store_true", help="fire one REAL challenge + report, then exit")
     args = ap.parse_args()
 
@@ -339,9 +381,14 @@ def main() -> int:
     alt_tag = "alternate-L/R" if args.alternate else "bilateral"
     gate_cfg = GateConfig(haptic_ratio=args.haptic_ratio)
     baseline_var: float | None = None
+    gates = ["IMU"] if args.lull_gate else []
+    if args.context_gate:
+        gates.append("CTX")
+    if args.screen_gate:
+        gates.append("SCR")
     print(f"[challenger] response={'+'.join(accepted)} amp={args.amp} pulses={args.pulses} "
           f"sig={alt_tag} on={args.on_ms}ms/off={args.off_ms}ms "
-          f"band=[120,{args.band_max_ms:.0f}]ms lull_gate={args.lull_gate} db={args.db}")
+          f"band=[120,{args.band_max_ms:.0f}]ms gates={'+'.join(gates) or 'none'} db={args.db}")
     rng = random.Random()
     tallies = {"real": 0, "real_hit": 0, "sham": 0, "sham_hit": 0}
 
@@ -361,7 +408,7 @@ def main() -> int:
         while True:
             now = time.monotonic()
             if sched.should_fire(now, _is_active_player(ds), rng):
-                # LULL GATE: sniff a pre-fire window; fire only in a quiet between-plays lull.
+                # IMU LULL GATE: sniff a pre-fire window; fire only in a quiet between-plays lull.
                 if args.lull_gate:
                     win = _sample_window(ds, args.prefire_ms / 1000.0)
                     wv = accel_variance(win)
@@ -371,10 +418,35 @@ def main() -> int:
                     if state is GateState.LULL:
                         baseline_var = update_baseline(baseline_var, wv)
                     if not clear:
-                        print(f"[challenger] defer ({state.value}) — waiting for a lull")
+                        print(f"[challenger] defer (IMU:{state.value}) — waiting for a lull")
                         sched.schedule_next(now, rng)
                         time.sleep(0.1)
                         continue
+
+                # CONTEXT GATE (opt-in): require the bridge to agree we're between plays.
+                # Inert when the bridge is unreachable (health=None) so it never blocks.
+                if args.context_gate:
+                    health = fetch_bridge_context(args.bridge_url, args.bridge_api_key)
+                    if health is not None:
+                        cclear, cverdict = clear_to_fire_context(
+                            health, allow_menu=args.context_allow_menu)
+                        if not cclear:
+                            print(f"[challenger] defer (CTX:{cverdict.value}) — bridge not in a lull")
+                            sched.schedule_next(now, rng)
+                            time.sleep(0.1)
+                            continue
+
+                # SCREEN GATE (opt-in, heaviest): require an on-screen pre-snap/stoppage.
+                # Inert when OCR/capture unavailable (text=None) so it never blocks.
+                if args.screen_gate:
+                    text = read_screen_region(tuple(args.screen_region))
+                    if text is not None:
+                        sclear, sverdict = clear_to_fire_screen(text)
+                        if not sclear:
+                            print(f"[challenger] defer (SCR:{sverdict.value}) — no on-screen lull")
+                            sched.schedule_next(now, rng)
+                            time.sleep(0.1)
+                            continue
                 is_sham = rng.random() < args.sham_rate
                 res = run_challenge(ds, sig, accepted, args.window_ms, real=not is_sham,
                                     band_max_ms=args.band_max_ms, baseline_var=baseline_var)
