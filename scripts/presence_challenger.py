@@ -5,8 +5,9 @@ motors + read inputs WHILE the bridge captures via hidapi (coexistence verified
 2026-06-21). So this runs alongside the bridge during NCAA CFB capture:
 
   on a JITTERED, unpredictable cadence (idle-gated):
-    - REAL challenge: fire the felt MOTOR SIGNATURE, then watch for the response
-      gesture (default R5 back paddle) within the human band [120,450] ms.
+    - REAL challenge: fire the felt MOTOR SIGNATURE + orange LED, then watch for ANY
+      accepted response gesture (default L5 paddle OR a touchpad touch) within the
+      human band. --response is '+'-joined (e.g. l5+touch); any one counts.
     - SHAM trial (no buzz): open the same window; a response here is a false alarm.
   -> log each presence proof to l6b_probe_log; report the in-band response RATE to
      real buzzes vs shams. The buzz-vs-sham GAP is the determination that a live
@@ -85,11 +86,39 @@ def _challenge_off(ds) -> None:
         pass
 
 
-def _gesture_active(ds, response: str) -> bool:
-    st = ds.state
-    if response == "swipe":
-        return bool(getattr(getattr(st, "trackPadTouch0", None), "isActive", False))
-    return bool(getattr(st, response.upper(), False))  # r5 -> R5, l5 -> L5
+_KNOWN_GESTURES = ("l5", "r5", "l4", "r4", "touch")
+
+
+def parse_accepted(response: str) -> list[str]:
+    """'l5+touch' -> ['l5','touch'] (any one of them counts as a response).
+
+    Tokens split on '+' or ','; 'swipe'/'touchpad' alias to 'touch'. Raises ValueError
+    on an unknown token. Empty -> ['l5'] (back-compat default)."""
+    toks = [t.strip().lower() for t in response.replace(",", "+").split("+") if t.strip()]
+    out: list[str] = []
+    for t in toks:
+        if t in ("touch", "swipe", "touchpad"):
+            t = "touch"
+        if t not in _KNOWN_GESTURES:
+            raise ValueError(f"unknown gesture '{t}' (known: {'+'.join(_KNOWN_GESTURES)})")
+        if t not in out:
+            out.append(t)
+    return out or ["l5"]
+
+
+def gesture_active_from_state(state, accepted: list[str]) -> bool:
+    """True if ANY accepted gesture is active on this controller state (pure; testable)."""
+    for g in accepted:
+        if g == "touch":
+            if bool(getattr(getattr(state, "trackPadTouch0", None), "isActive", False)):
+                return True
+        elif bool(getattr(state, g.upper(), False)):  # l5 -> L5, r5 -> R5, ...
+            return True
+    return False
+
+
+def _gesture_active(ds, accepted: list[str]) -> bool:
+    return gesture_active_from_state(ds.state, accepted)
 
 
 def _is_active_player(ds) -> bool:
@@ -103,9 +132,10 @@ def _is_active_player(ds) -> bool:
     return any(getattr(st, b, False) for b in ("cross", "circle", "square", "triangle"))
 
 
-def run_challenge(ds, sig, response: str, window_ms: float, real: bool,
+def run_challenge(ds, sig, accepted: list[str], window_ms: float, real: bool,
                   band_max_ms: float = 800.0) -> dict:
-    """Fire (or sham) + sample the gesture for the reaction window. Returns the classify dict."""
+    """Fire (or sham) + sample the gesture(s) for the reaction window. ANY accepted
+    gesture (e.g. L5 paddle OR touchpad) counts. Returns the classify dict."""
     steps = sig.steps() if real else []
     sched, t = [], 0.0
     for left, right, dur in steps:
@@ -126,7 +156,7 @@ def run_challenge(ds, sig, response: str, window_ms: float, real: bool,
                     ds.setLeftMotor(seg[0]); ds.setRightMotor(seg[1]); cur = seg
             el_ms = el * 1000.0
             if el_ms <= window_ms:
-                samples.append((el_ms, _gesture_active(ds, response)))
+                samples.append((el_ms, _gesture_active(ds, accepted)))
             time.sleep(0.005)
     finally:
         if real:
@@ -199,7 +229,10 @@ def main() -> int:
     ap.add_argument("--device", default=_DEFAULT_DEVICE)
     ap.add_argument("--db", default=_DEFAULT_DB)
     ap.add_argument("--cco-profile-id", default="sony_dualshock_edge_v1")
-    ap.add_argument("--response", default="r5", choices=["r5", "l5", "swipe"])
+    ap.add_argument("--response", default="l5+touch",
+                    help="accepted response gesture(s), '+'-joined; ANY one counts. "
+                         "Tokens: l5 r5 l4 r4 touch (swipe/touchpad alias touch). "
+                         "Default 'l5+touch' = L5 paddle OR a touchpad touch while the LED is orange.")
     ap.add_argument("--amp", type=int, default=255)
     ap.add_argument("--pulses", type=int, default=6)
     ap.add_argument("--on-ms", type=int, default=300,
@@ -220,13 +253,18 @@ def main() -> int:
     ap.add_argument("--once", action="store_true", help="fire one REAL challenge + report, then exit")
     args = ap.parse_args()
 
+    try:
+        accepted = parse_accepted(args.response)
+    except ValueError as exc:
+        print(f"[challenger] {exc}"); return 2
+
     sig = MotorSignature(amp=max(0, min(255, args.amp)), pulses=max(1, args.pulses),
                          on_ms=args.on_ms, off_ms=args.off_ms, alternate=args.alternate)
     ds = _connect()
     if ds is None:
         return 2
     alt_tag = "alternate-L/R" if args.alternate else "bilateral"
-    print(f"[challenger] response={args.response} amp={args.amp} pulses={args.pulses} "
+    print(f"[challenger] response={'+'.join(accepted)} amp={args.amp} pulses={args.pulses} "
           f"sig={alt_tag} on={args.on_ms}ms/off={args.off_ms}ms "
           f"band=[120,{args.band_max_ms:.0f}]ms db={args.db}")
     rng = random.Random()
@@ -234,10 +272,10 @@ def main() -> int:
 
     try:
         if args.once:
-            print("[challenger] ONE real challenge in 3s — feel the buzz, then press your "
-                  f"{args.response.upper()} gesture...")
+            print("[challenger] ONE real challenge in 3s — feel the buzz, then respond with "
+                  f"{' OR '.join(g.upper() for g in accepted)}...")
             time.sleep(3)
-            res = run_challenge(ds, sig, args.response, args.window_ms, real=True,
+            res = run_challenge(ds, sig, accepted, args.window_ms, real=True,
                                 band_max_ms=args.band_max_ms)
             log_probe(args.db, args.device, res, args.cco_profile_id)
             print(f"[challenger] result: {res}  (logged to l6b_probe_log)")
@@ -249,7 +287,7 @@ def main() -> int:
             now = time.monotonic()
             if sched.should_fire(now, _is_active_player(ds), rng):
                 is_sham = rng.random() < args.sham_rate
-                res = run_challenge(ds, sig, args.response, args.window_ms, real=not is_sham,
+                res = run_challenge(ds, sig, accepted, args.window_ms, real=not is_sham,
                                     band_max_ms=args.band_max_ms)
                 hit = res["classification"] == "HUMAN"
                 if is_sham:
