@@ -73,6 +73,129 @@ def _poep_corpus_readiness(
         }
 
 
+def resolve_capability_report_for_session(
+    *,
+    cfg,
+    transport=None,
+    device_id_hex: str | None = None,
+    signing_path: str | None = None,
+) -> Any | None:
+    """Resolve CCO CapabilityReport for session-status (transport → profile → Edge default).
+
+    Priority: live transport ``_cco_capability_report`` (session oracle), then
+    ``DEVICE_PROFILE_ID`` override (DualSense desk: ``sony_dualsense_v1`` → ``rumble_imu``),
+    then transport ``_device_profile`` VID/PID, else legacy Edge default.
+    """
+    from .capability_oracle import CapabilityOracle
+
+    if transport is not None:
+        live = getattr(transport, "_cco_capability_report", None)
+        if live is not None:
+            return live
+
+    profile_id = getattr(cfg, "device_profile_id", None) or None
+    if profile_id:
+        try:
+            from profiles import get_profile
+
+            dp = get_profile(profile_id)
+            vid = dp.hid_vendor_id
+            pid = dp.hid_product_ids[0] if dp.hid_product_ids else 0
+            return CapabilityOracle.resolve(
+                vid,
+                pid,
+                profile_id=profile_id,
+                device_id_hex=device_id_hex,
+                signing_path=signing_path,
+            )
+        except Exception:
+            pass
+
+    if transport is not None:
+        dp = getattr(transport, "_device_profile", None)
+        if dp is not None:
+            vid = dp.hid_vendor_id
+            pid = dp.hid_product_ids[0] if dp.hid_product_ids else 0x0DF2
+            return CapabilityOracle.resolve(
+                vid,
+                pid,
+                profile_id=dp.profile_id,
+                device_id_hex=device_id_hex,
+                signing_path=signing_path,
+            )
+
+    return CapabilityOracle.resolve(
+        0x054C,
+        0x0DF2,
+        device_id_hex=device_id_hex,
+        signing_path=signing_path,
+    )
+
+
+def describe_poep_telemetry_readiness(
+    challenge_type: str | None,
+    latest_probe: dict[str, Any] | None,
+    *,
+    device_auth: dict[str, Any] | None = None,
+    reaction_features: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Honest readiness for Phase D PoEP telemetry (never fabricates device-auth)."""
+    rf_present = reaction_features is not None
+    da_present = device_auth is not None
+    if not challenge_type:
+        return {
+            "ready": False,
+            "gap": "no_challenge_type",
+            "device_auth_present": da_present,
+            "reaction_features_present": rf_present,
+        }
+    if da_present and rf_present:
+        return {
+            "ready": True,
+            "gap": None,
+            "device_auth_present": True,
+            "reaction_features_present": True,
+        }
+    if challenge_type == "rumble_imu":
+        missing: list[str] = []
+        if not latest_probe:
+            missing.append("no_probe_row")
+        else:
+            if latest_probe.get("latency_ms") is None:
+                missing.append("latency_ms")
+            if latest_probe.get("accel_delta_peak") is None:
+                missing.append("accel_delta_peak")
+        gap = (
+            "rumble_imu_incomplete_probe:" + ",".join(missing)
+            if missing
+            else "rumble_imu_device_auth_unavailable"
+        )
+        return {
+            "ready": False,
+            "gap": gap,
+            "device_auth_present": da_present,
+            "reaction_features_present": rf_present,
+        }
+    if challenge_type == "adaptive_force":
+        gap = (
+            "adaptive_force_requires_live_trigger_signature"
+            if latest_probe or rf_present
+            else "adaptive_force_no_probe"
+        )
+        return {
+            "ready": False,
+            "gap": gap,
+            "device_auth_present": da_present,
+            "reaction_features_present": rf_present,
+        }
+    return {
+        "ready": False,
+        "gap": f"uncharacterized:{challenge_type}",
+        "device_auth_present": da_present,
+        "reaction_features_present": rf_present,
+    }
+
+
 def build_poep_telemetry_from_probe(
     challenge_type: str | None,
     latest_probe: dict[str, Any] | None,
@@ -163,6 +286,7 @@ def assemble_poep_presence_status(
     min_n: int = _POEP_MIN_N,
     device_auth: dict[str, Any] | None = None,
     reaction_features: dict[str, Any] | None = None,
+    latest_probe: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build ``presence.poep`` block for GET /player/session-status (Phase D).
 
@@ -175,7 +299,18 @@ def assemble_poep_presence_status(
     corpus_complete = bool(corpus.get("calibration_complete", False))
 
     if poep_enabled:
-        status = "active (PoEP_ENABLED=true)"
+        _tel = describe_poep_telemetry_readiness(
+            runner.challenge_type,
+            latest_probe,
+            device_auth=device_auth,
+            reaction_features=reaction_features,
+        )
+        if _tel["ready"]:
+            status = "active (PoEP_ENABLED=true)"
+        else:
+            status = (
+                f"active (PoEP_ENABLED=true); telemetry gap: {_tel['gap']}"
+            )
     elif l6b_gate_reached and not corpus_complete:
         status = (
             f"L6B gate reached (N={l6b_probe_count}); "
@@ -193,6 +328,13 @@ def assemble_poep_presence_status(
         reaction_features=reaction_features,
         corpus_dir=corpus_dir,
         min_n=min_n,
+    )
+
+    telemetry_readiness = describe_poep_telemetry_readiness(
+        runner.challenge_type,
+        latest_probe,
+        device_auth=device_auth,
+        reaction_features=reaction_features,
     )
 
     return {
@@ -219,4 +361,5 @@ def assemble_poep_presence_status(
         "verdict": (
             verdict_payload.get("verdict") if verdict_payload else None
         ),
+        "telemetry": telemetry_readiness,
     }

@@ -191,6 +191,35 @@ class TestPlayerSessionStatus(unittest.TestCase):
         self.assertEqual(poep["challenge_type"], "adaptive_force")
         self.assertTrue(poep["l6b_gate_reached"])
 
+    def test_11_dualsense_profile_rumble_imu_poep(self):
+        """T-PSS-11: DEVICE_PROFILE_ID=sony_dualsense_v1 → rumble_imu + telemetry from probe."""
+        cfg, store = _make_cfg(
+            l6b_enabled=True,
+            device_profile_id="sony_dualsense_v1",
+        ), _make_store()
+        store.get_recent_records = lambda limit, device_id=None: [
+            {"device_id": "devX", "pitl_humanity_prob": 0.9, "inference": 32, "created_at": time.time()}]
+        store.get_capture_health_status = lambda limit=10: {
+            "capture_state": "NOMINAL", "host_state": "EXCLUSIVE_USB", "poll_rate_hz": 1000.0}
+        store.get_l6b_calibration_progress = lambda device_id=None: {
+            "probe_count": 52,
+            "target_n": 50,
+            "gate_reached": True,
+            "latest_probe": {
+                "latency_ms": 185.0,
+                "accel_delta_peak": 1100.0,
+                "classification": "HUMAN",
+            },
+        }
+        store.count_records = lambda device_id=None: 1
+        r = _client(cfg, store).get("/player/session-status", headers=_H)
+        self.assertEqual(r.status_code, 200)
+        poep = r.json()["presence"]["poep"]
+        self.assertEqual(poep["challenge_type"], "rumble_imu")
+        self.assertEqual(poep["runner"]["profile_id"], "sony_dualsense_v1")
+        self.assertTrue(poep["telemetry"]["ready"])
+        self.assertIsNone(poep["telemetry"]["gap"])
+
     def test_8_identity_grid_phase_e(self):
         """T-PSS-8: CCO Phase E — identity_grid four-field composable surface."""
         cfg, store = _make_cfg(l6b_enabled=True), _make_store()
