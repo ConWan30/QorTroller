@@ -71,6 +71,64 @@ def is_signature(sig: MotorSignature, min_pulses: int = 3) -> bool:
     return sig.pulses >= min_pulses
 
 
+def accel_magnitude(x: float, y: float, z: float) -> float:
+    return (x * x + y * y + z * z) ** 0.5
+
+
+def classify_reflex(baseline_mag: float, post_samples: list[tuple[float, float]], *,
+                    human_min_ms: float = 120.0, human_max_ms: float = 450.0,
+                    dev_threshold: float = 2.0) -> dict:
+    """Classify the IMU reflex to a challenge. `post_samples` = [(t_ms_since_stim, mag)].
+
+    HUMAN/REFLEX_OBSERVED iff a deviation >= dev_threshold from baseline occurs within the
+    VOLUNTARY reaction band [human_min_ms, human_max_ms]. Otherwise NO_RESPONSE. Pure +
+    testable; the dev_threshold is tuned by the operator (accel units are device-specific)."""
+    peak = 0.0
+    latency = None
+    for t_ms, mag in post_samples:
+        dev = abs(mag - baseline_mag)
+        if dev > peak:
+            peak = dev
+        if latency is None and dev >= dev_threshold and human_min_ms <= t_ms <= human_max_ms:
+            latency = t_ms
+    if latency is not None:
+        return {"classification": "HUMAN", "reflex_verdict": "REFLEX_OBSERVED",
+                "latency_ms": round(latency, 1), "accel_delta_peak": round(peak, 4)}
+    return {"classification": "NO_RESPONSE", "reflex_verdict": None,
+            "latency_ms": None, "accel_delta_peak": round(peak, 4)}
+
+
+def classify_gesture_response(samples: list[tuple[float, bool]], *,
+                              human_min_ms: float = 120.0,
+                              human_max_ms: float = 450.0) -> dict:
+    """Classify a designated-gesture response to a felt challenge.
+
+    `samples` = [(t_ms_since_stimulus, gesture_active)]. The discriminator is a
+    response TIME-LOCKED to the (unpredictable) stimulus within human reaction
+    physiology:
+      - in [human_min, human_max]      -> HUMAN / REFLEX_OBSERVED (valid presence)
+      - faster than human_min          -> TOO_FAST (anticipation/precompute; not human-verified)
+      - none / later than human_max     -> NO_RESPONSE
+    A single result is weak; presence is the in-band RATE over many jittered
+    challenges vs the sham baseline (see scripts/presence_challenger.py)."""
+    first_t = None
+    for t_ms, active in samples:
+        if active:
+            first_t = t_ms
+            break
+    if first_t is None:
+        return {"classification": "NO_RESPONSE", "reflex_verdict": None,
+                "latency_ms": None, "anticipation": False}
+    if first_t < human_min_ms:
+        return {"classification": "TOO_FAST", "reflex_verdict": None,
+                "latency_ms": round(first_t, 1), "anticipation": True}
+    if first_t <= human_max_ms:
+        return {"classification": "HUMAN", "reflex_verdict": "REFLEX_OBSERVED",
+                "latency_ms": round(first_t, 1), "anticipation": False}
+    return {"classification": "NO_RESPONSE", "reflex_verdict": None,
+            "latency_ms": round(first_t, 1), "anticipation": False}
+
+
 @dataclass
 class ChallengeScheduler:
     """Jittered periodic firing with an idle-gate (never challenge an idle player,

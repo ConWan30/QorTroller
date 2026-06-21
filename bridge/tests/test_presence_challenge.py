@@ -13,10 +13,37 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from bridge.controller.presence_challenge import (  # noqa: E402
     PERCEPTIBLE_FLOOR,
     ChallengeScheduler,
+    classify_gesture_response,
     forceful_motor_signature,
     is_forceful,
     is_signature,
 )
+
+
+def test_gesture_in_band_is_human():
+    # gesture first active at 200ms -> within [120,450] -> HUMAN/REFLEX_OBSERVED
+    samples = [(50, False), (200, True), (260, True)]
+    r = classify_gesture_response(samples)
+    assert r["classification"] == "HUMAN" and r["reflex_verdict"] == "REFLEX_OBSERVED"
+    assert r["latency_ms"] == 200
+
+
+def test_gesture_too_fast_is_flagged():
+    # active at 60ms -> faster than human floor -> TOO_FAST / anticipation, NOT human
+    r = classify_gesture_response([(60, True), (200, True)])
+    assert r["classification"] == "TOO_FAST" and r["anticipation"] is True
+    assert r["reflex_verdict"] is None
+
+
+def test_no_gesture_is_no_response():
+    r = classify_gesture_response([(t, False) for t in (50, 150, 300, 440)])
+    assert r["classification"] == "NO_RESPONSE" and r["reflex_verdict"] is None
+
+
+def test_gesture_too_late_is_no_response():
+    # first active only at 600ms -> outside band -> NO_RESPONSE (records latency)
+    r = classify_gesture_response([(600, True)])
+    assert r["classification"] == "NO_RESPONSE" and r["latency_ms"] == 600
 
 
 class _Rng:
