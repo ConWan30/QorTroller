@@ -94,3 +94,25 @@ def test_poep_verify_present_and_reject():
 def test_poep_verify_gated_until_calibrated():
     incomplete = population_reflex_model([_session(k=10)], min_n=50)
     assert poep_verify(_REACTION, _GENUINE_DA, incomplete, "Edge")["status"] == "calibration_incomplete"
+
+
+def test_poep_verify_routes_challenge_type():
+    m = population_reflex_model([_session(k=60)], min_n=50)
+    rumble_da = {
+        "classification": "HUMAN",
+        "latency_ms": 290.0,
+        "accel_delta_peak": 1000.0,
+    }
+    out = poep_verify(
+        _REACTION,
+        rumble_da,
+        m,
+        "Edge",
+        challenge_type="rumble_imu",
+    )
+    assert out["challenge_type"] == "rumble_imu"
+    assert out["verdict"] == "PRESENT"
+    # Edge force dict must not pass rumble_imu device-auth
+    assert poep_verify(
+        _REACTION, _GENUINE_DA, m, "Edge", challenge_type="rumble_imu",
+    )["verdict"] == "REJECT"

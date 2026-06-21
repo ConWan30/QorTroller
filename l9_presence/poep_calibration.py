@@ -125,15 +125,25 @@ def device_auth_score(
     return get_challenge_verifier(challenge_type).verify(device_auth, model, device_id)
 
 
-def poep_verify(reaction_features: dict, device_auth: dict, model: dict, device_id: str = None) -> dict:
-    """Full PoEP verdict = liveness (population reflex band) AND device-auth (adaptive-trigger
-    force-challenge). Honors the L6B gate (calibration_incomplete until N>=50). PRESENT only if
-    both pass; the nonce (capture-time) is the third, anti-replay layer."""
+def poep_verify(
+    reaction_features: dict,
+    device_auth: dict,
+    model: dict,
+    device_id: str = None,
+    *,
+    challenge_type: str = "adaptive_force",
+) -> dict:
+    """Full PoEP verdict = liveness (population reflex band) AND device-auth (CCO challenge type).
+
+    Honors the L6B gate (calibration_incomplete until N>=50). PRESENT only if both pass; the
+    nonce (capture-time) is the third, anti-replay layer. ``challenge_type`` routes device-auth
+    through Phase C verifiers (``adaptive_force`` Edge, ``rumble_imu`` DualSense desk corpus).
+    """
     live = liveness_score(reaction_features, model, device_id)
     if live.get("status") == "calibration_incomplete":
         return live
     dev = (device_auth_score(
-        device_auth, model, device_id, challenge_type="adaptive_force",
+        device_auth, model, device_id, challenge_type=challenge_type,
     ) if device_id
            else {"device_auth_pass": True, "score": 1.0})
     present = bool(live.get("liveness_pass") and dev.get("device_auth_pass"))
@@ -144,6 +154,7 @@ def poep_verify(reaction_features: dict, device_auth: dict, model: dict, device_
         "device_auth_score": dev.get("score"),
         "latency_ms": reaction_features.get("reaction_latency_ms"),
         "band": live.get("band"),
+        "challenge_type": challenge_type,
     }
 
 
