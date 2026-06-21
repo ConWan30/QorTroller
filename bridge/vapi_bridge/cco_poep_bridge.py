@@ -207,11 +207,19 @@ def build_poep_telemetry_from_probe(
     requires live adaptive-trigger capture (probe log has no slope/delta fields).
     """
     if not latest_probe or not challenge_type:
-        return {"device_auth": None, "reaction_features": None}
+        return {
+            "device_auth": None,
+            "reaction_features": None,
+            "device_auth_note": None,
+        }
 
     lat = latest_probe.get("latency_ms")
     if lat is None:
-        return {"device_auth": None, "reaction_features": None}
+        return {
+            "device_auth": None,
+            "reaction_features": None,
+            "device_auth_note": None,
+        }
 
     reaction_features: dict[str, Any] = {
         "reaction_latency_ms": float(lat),
@@ -222,7 +230,11 @@ def build_poep_telemetry_from_probe(
     if challenge_type == "rumble_imu":
         peak = latest_probe.get("accel_delta_peak")
         if peak is None:
-            return {"device_auth": None, "reaction_features": None}
+            return {
+                "device_auth": None,
+                "reaction_features": None,
+                "device_auth_note": None,
+            }
         classification = latest_probe.get("classification") or latest_probe.get(
             "reflex_verdict",
         )
@@ -231,13 +243,24 @@ def build_poep_telemetry_from_probe(
             "latency_ms": float(lat),
             "accel_delta_peak": float(peak),
         }
-        return {"device_auth": device_auth, "reaction_features": reaction_features}
+        return {
+            "device_auth": device_auth,
+            "reaction_features": reaction_features,
+            "device_auth_note": None,
+        }
 
     if challenge_type == "adaptive_force":
         # Probe log lacks adaptive-trigger force signature; liveness-only partial.
-        return {"device_auth": None, "reaction_features": reaction_features}
+        return {
+            "device_auth": None,
+            "reaction_features": reaction_features,
+            "device_auth_note": (
+                "probe_log provides liveness latency only; adaptive-trigger "
+                "force signature requires live adaptive_force capture"
+            ),
+        }
 
-    return {"device_auth": None, "reaction_features": None}
+    return {"device_auth": None, "reaction_features": None, "device_auth_note": None}
 
 
 def _evaluate_poep_verdict(
@@ -287,6 +310,7 @@ def assemble_poep_presence_status(
     device_auth: dict[str, Any] | None = None,
     reaction_features: dict[str, Any] | None = None,
     latest_probe: dict[str, Any] | None = None,
+    device_auth_note: str | None = None,
 ) -> dict[str, Any]:
     """Build ``presence.poep`` block for GET /player/session-status (Phase D).
 
@@ -362,4 +386,7 @@ def assemble_poep_presence_status(
             verdict_payload.get("verdict") if verdict_payload else None
         ),
         "telemetry": telemetry_readiness,
+        "device_auth_available": device_auth is not None,
+        "reaction_features_available": reaction_features is not None,
+        "device_auth_note": device_auth_note,
     }

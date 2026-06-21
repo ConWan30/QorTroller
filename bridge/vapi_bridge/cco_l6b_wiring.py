@@ -52,6 +52,18 @@ def check_l6b_applicability(
     caps = getattr(report, "capabilities", None) or {}
     if not caps.get("has_accelerometer", False):
         return L6bApplicability(False, L6bSkipReason.NO_IMU)
+
+    challenge_type = getattr(report, "challenge_type_candidate", None)
+
+    # Mid-tier rumble+IMU path (DualSense / SCUF): IMU reflex only — no adaptive triggers.
+    if challenge_type == "rumble_imu":
+        if not l6_driver_present:
+            return L6bApplicability(False, L6bSkipReason.NO_L6_DRIVER)
+        if not dualsense_handle_present:
+            return L6bApplicability(False, L6bSkipReason.NO_DUALSENSE_HANDLE)
+        return L6bApplicability(True)
+
+    # Premium Edge adaptive-force path (and legacy default when challenge unset).
     if not caps.get("has_adaptive_triggers", False):
         return L6bApplicability(False, L6bSkipReason.NO_ADAPTIVE_TRIGGER_PATH)
     if not l6_driver_present:
