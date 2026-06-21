@@ -15,6 +15,7 @@ from bridge.controller.probe_gate import (  # noqa: E402
     classify,
     clear_to_fire,
     echo_confirmed,
+    is_input_quiet,
     stick_span,
     update_baseline,
 )
@@ -101,6 +102,37 @@ def test_echo_handles_zero_baseline():
 
 
 # ---- baseline EMA ----
+
+# ---- is_input_quiet + baseline-deadlock recovery (surfaced by --selftest on real hw) ----
+
+def test_is_input_quiet():
+    assert is_input_quiet(_still(), CFG) is True
+    win = _still(); win[3] = GateSample(r2=200)            # trigger engaged
+    assert is_input_quiet(win, CFG) is False
+    moving = [GateSample(lx=128 + (40 if i % 2 else -40)) for i in range(8)]  # sticks moving
+    assert is_input_quiet(moving, CFG) is False
+    assert is_input_quiet(_still(n=2), CFG) is False        # too few samples
+
+
+def test_under_seeded_baseline_recovers_to_lull():
+    # the live bug: baseline seeded too low (0.43) vs resting accel noise (~2). If the
+    # baseline only updated on LULL, the gate would defer forever. Feeding input-quiet
+    # windows must let the baseline climb so LULL becomes reachable.
+    def resting_window():  # input-quiet, deterministic accel-noise variance = 1.96
+        return [GateSample(lx=128, ly=128, accel_mag=(1.4 if i % 2 else -1.4)) for i in range(12)]
+
+    assert abs(accel_variance(resting_window()) - 1.96) < 1e-9
+    baseline = 0.43
+    # before recovery: var (1.96) > base*ratio (0.43*3=1.29) -> not LULL
+    assert clear_to_fire(resting_window(), baseline, CFG)[1] is not GateState.LULL
+    # feed input-quiet windows into the baseline (the fix)
+    for _ in range(40):
+        win = resting_window()
+        if is_input_quiet(win, CFG):
+            baseline = update_baseline(baseline, accel_variance(win))
+    # now the baseline tracks the resting floor (~1.96) -> a resting window classifies LULL
+    assert clear_to_fire(resting_window(), baseline, CFG)[1] is GateState.LULL
+
 
 def test_update_baseline_seeds_then_smooths():
     b = update_baseline(None, 10.0)
