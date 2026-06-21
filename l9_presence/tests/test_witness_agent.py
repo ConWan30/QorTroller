@@ -8,8 +8,10 @@ from l9_presence.pocp import compute_pocp_commitment, preimage_len
 from l9_presence.poep_menu_harvest import HandoffMachine
 from l9_presence.verification_card import render_card
 from l9_presence.witness_agent import (
-    WitnessAgent, WitnessConfig, _should_harvest_l9, make_hardware_callbacks, process_session,
+    WitnessAgent, WitnessConfig, _should_harvest_l9, capture_telemetry_from_session,
+    make_hardware_callbacks, process_session,
 )
+from l9_presence.session_recorder import load_session
 
 
 def _write_coupled(path, n=500, rate_hz=100.0, lag_ms=40.0, seed=0, player="P1"):
@@ -169,6 +171,39 @@ def test_menu_harvest_disabled_by_default(tmp_path):
     agent = WitnessAgent(WitnessConfig(out_dir=str(tmp_path)))     # sub-lane B off
     out = agent.harvest_menu_sample(_machine({"reflex_latency_ms": 290, "sham_reaction": False}))
     assert out["reason"] == "sublane_b_disabled"
+
+
+# ---- Adaptive Capture Governor: telemetry collection (Fusion v2 Phase 2) ----
+
+def test_process_session_collects_capture_telemetry(tmp_path):
+    p = _write_coupled(tmp_path / "P1_01.npz")
+    m = process_session(p, WitnessConfig(out_dir=str(tmp_path)))   # collect_telemetry True by default
+    tel = m["capture_telemetry"]
+    assert tel["source"] == "post_hoc_replay"
+    assert tel["observations"] >= 1
+    assert "ema_fps" in tel and "final_controls" in tel
+
+
+def test_capture_telemetry_can_be_disabled(tmp_path):
+    p = _write_coupled(tmp_path / "P1_01.npz")
+    m = process_session(p, WitnessConfig(out_dir=str(tmp_path), collect_telemetry=False))
+    assert "capture_telemetry" not in m
+
+
+def test_capture_telemetry_post_hoc_replay_shape(tmp_path):
+    s = load_session(_write_coupled(tmp_path / "P1_01.npz", n=300, rate_hz=60.0))
+    tel = capture_telemetry_from_session(s, lag_ms=40.0, window=30)
+    assert tel["source"] == "post_hoc_replay"
+    # ~60fps steady stream -> NO fps-recovery thrash (early grid-short resample nudges are fine)
+    assert tel["ema_fps"] > 40.0
+    assert not any("recover_fps" in r for r in tel["reasons"])
+
+
+def test_capture_telemetry_prefers_live_summary(tmp_path):
+    s = load_session(_write_coupled(tmp_path / "P1_01.npz"))
+    live = '{"source": "live", "observations": 7, "changes": 2}'
+    tel = capture_telemetry_from_session(s, lag_ms=40.0, live_summary=live)
+    assert tel["source"] == "live" and tel["observations"] == 7
 
 
 def test_hardware_callbacks_factory_shape():
