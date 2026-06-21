@@ -37,6 +37,15 @@ from bridge.controller.presence_challenge import (  # noqa: E402
     forceful_motor_signature,
     MotorSignature,
 )
+from bridge.controller.probe_gate import (  # noqa: E402
+    GateConfig,
+    GateSample,
+    GateState,
+    accel_variance,
+    clear_to_fire,
+    echo_confirmed,
+    update_baseline,
+)
 
 _DEFAULT_DEVICE = "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8"
 _DEFAULT_DB = os.path.expanduser("~/.vapi/bridge.db")
@@ -121,6 +130,50 @@ def _gesture_active(ds, accepted: list[str]) -> bool:
     return gesture_active_from_state(ds.state, accepted)
 
 
+def _accel_mag(st) -> float:
+    """|accel| from the controller IMU; 0.0 if the field isn't exposed (tolerant)."""
+    acc = getattr(st, "accelerometer", None)
+    if acc is None:
+        return 0.0
+    try:
+        x = float(getattr(acc, "X", 0) or 0)
+        y = float(getattr(acc, "Y", 0) or 0)
+        z = float(getattr(acc, "Z", 0) or 0)
+    except Exception:
+        return 0.0
+    return (x * x + y * y + z * z) ** 0.5
+
+
+def _gate_sample(ds) -> GateSample:
+    st = ds.state
+    return GateSample(
+        lx=int(getattr(st, "LX", 128)),
+        ly=int(getattr(st, "LY", 128)),
+        l2=int(getattr(st, "L2_value", 0)),
+        r2=int(getattr(st, "R2_value", 0)),
+        accel_mag=_accel_mag(st),
+    )
+
+
+def _sample_window(ds, dur_s: float, hz: float = 250.0) -> list[GateSample]:
+    """Read controller input for dur_s into GateSamples (for the pre-fire lull check)."""
+    out: list[GateSample] = []
+    t0 = time.monotonic()
+    dt = 1.0 / hz
+    while time.monotonic() - t0 < dur_s:
+        out.append(_gate_sample(ds))
+        time.sleep(dt)
+    return out
+
+
+def _var(xs: list[float]) -> float:
+    n = len(xs)
+    if n < 2:
+        return 0.0
+    m = sum(xs) / n
+    return sum((x - m) ** 2 for x in xs) / n
+
+
 def _is_active_player(ds) -> bool:
     """Light idle-gate: stick off-center or a face button / trigger engaged."""
     st = ds.state
@@ -133,18 +186,21 @@ def _is_active_player(ds) -> bool:
 
 
 def run_challenge(ds, sig, accepted: list[str], window_ms: float, real: bool,
-                  band_max_ms: float = 800.0) -> dict:
+                  band_max_ms: float = 800.0, baseline_var: float | None = None) -> dict:
     """Fire (or sham) + sample the gesture(s) for the reaction window. ANY accepted
-    gesture (e.g. L5 paddle OR touchpad) counts. Returns the classify dict."""
+    gesture (e.g. L5 paddle OR touchpad) counts. While firing, also sample the IMU during
+    our own pulses for the HAPTIC SELF-ECHO check. Returns the classify dict, augmented
+    (on real challenges) with during_accel_var and, if baseline_var given, echo_confirmed."""
     steps = sig.steps() if real else []
     sched, t = [], 0.0
     for left, right, dur in steps:
         sched.append((t, t + dur, left, right)); t += dur
+    sig_dur_s = t
     total_s = max(window_ms / 1000.0, t)
     if real:
         _challenge_on(ds)  # trigger vibration + orange lightbar
     t0 = time.monotonic()
-    samples, cur = [], None
+    samples, cur, accel_during = [], None, []
     try:
         while True:
             el = time.monotonic() - t0
@@ -154,6 +210,8 @@ def run_challenge(ds, sig, accepted: list[str], window_ms: float, real: bool,
                 seg = next(((l, r) for (s, e, l, r) in sched if s <= el < e), (0, 0))
                 if seg != cur:
                     ds.setLeftMotor(seg[0]); ds.setRightMotor(seg[1]); cur = seg
+                if el <= sig_dur_s:                       # IMU echo only while our motors run
+                    accel_during.append(_accel_mag(ds.state))
             el_ms = el * 1000.0
             if el_ms <= window_ms:
                 samples.append((el_ms, _gesture_active(ds, accepted)))
@@ -162,7 +220,13 @@ def run_challenge(ds, sig, accepted: list[str], window_ms: float, real: bool,
         if real:
             ds.setLeftMotor(0); ds.setRightMotor(0)
             _challenge_off(ds)  # stop trigger vibration + restore lightbar
-    return classify_gesture_response(samples, human_max_ms=band_max_ms)
+    res = classify_gesture_response(samples, human_max_ms=band_max_ms)
+    if real:
+        dv = _var(accel_during)
+        res["during_accel_var"] = round(dv, 4)
+        if baseline_var is not None:
+            res["echo_confirmed"] = echo_confirmed(dv, baseline_var)
+    return res
 
 
 def _ensure_record_hash_column(conn: sqlite3.Connection) -> bool:
@@ -250,6 +314,15 @@ def main() -> int:
     ap.add_argument("--interval", type=float, default=30.0)
     ap.add_argument("--jitter", type=float, default=10.0)
     ap.add_argument("--sham-rate", type=float, default=0.3)
+    ap.add_argument("--lull-gate", action="store_true", default=True,
+                    help="fire ONLY in a quiet between-plays lull (still sticks + no trigger + "
+                         "quiet IMU); defer otherwise (default ON — avoids in-game haptic collision)")
+    ap.add_argument("--no-lull-gate", dest="lull_gate", action="store_false",
+                    help="disable the lull gate (fire on the jittered schedule regardless)")
+    ap.add_argument("--prefire-ms", type=float, default=300.0,
+                    help="pre-fire IMU sniff window in ms used by the lull gate (default 300)")
+    ap.add_argument("--haptic-ratio", type=float, default=3.0,
+                    help="defer if pre-fire accel variance > baseline*ratio (default 3.0)")
     ap.add_argument("--once", action="store_true", help="fire one REAL challenge + report, then exit")
     args = ap.parse_args()
 
@@ -264,9 +337,11 @@ def main() -> int:
     if ds is None:
         return 2
     alt_tag = "alternate-L/R" if args.alternate else "bilateral"
+    gate_cfg = GateConfig(haptic_ratio=args.haptic_ratio)
+    baseline_var: float | None = None
     print(f"[challenger] response={'+'.join(accepted)} amp={args.amp} pulses={args.pulses} "
           f"sig={alt_tag} on={args.on_ms}ms/off={args.off_ms}ms "
-          f"band=[120,{args.band_max_ms:.0f}]ms db={args.db}")
+          f"band=[120,{args.band_max_ms:.0f}]ms lull_gate={args.lull_gate} db={args.db}")
     rng = random.Random()
     tallies = {"real": 0, "real_hit": 0, "sham": 0, "sham_hit": 0}
 
@@ -276,7 +351,7 @@ def main() -> int:
                   f"{' OR '.join(g.upper() for g in accepted)}...")
             time.sleep(3)
             res = run_challenge(ds, sig, accepted, args.window_ms, real=True,
-                                band_max_ms=args.band_max_ms)
+                                band_max_ms=args.band_max_ms, baseline_var=baseline_var)
             log_probe(args.db, args.device, res, args.cco_profile_id)
             print(f"[challenger] result: {res}  (logged to l6b_probe_log)")
             return 0
@@ -286,9 +361,23 @@ def main() -> int:
         while True:
             now = time.monotonic()
             if sched.should_fire(now, _is_active_player(ds), rng):
+                # LULL GATE: sniff a pre-fire window; fire only in a quiet between-plays lull.
+                if args.lull_gate:
+                    win = _sample_window(ds, args.prefire_ms / 1000.0)
+                    wv = accel_variance(win)
+                    if baseline_var is None:
+                        baseline_var = wv  # establish the quiet reference on first read
+                    clear, state = clear_to_fire(win, baseline_var, gate_cfg)
+                    if state is GateState.LULL:
+                        baseline_var = update_baseline(baseline_var, wv)
+                    if not clear:
+                        print(f"[challenger] defer ({state.value}) — waiting for a lull")
+                        sched.schedule_next(now, rng)
+                        time.sleep(0.1)
+                        continue
                 is_sham = rng.random() < args.sham_rate
                 res = run_challenge(ds, sig, accepted, args.window_ms, real=not is_sham,
-                                    band_max_ms=args.band_max_ms)
+                                    band_max_ms=args.band_max_ms, baseline_var=baseline_var)
                 hit = res["classification"] == "HUMAN"
                 if is_sham:
                     tallies["sham"] += 1; tallies["sham_hit"] += int(hit)
@@ -298,7 +387,10 @@ def main() -> int:
                 rr = tallies["real_hit"] / tallies["real"] if tallies["real"] else 0.0
                 sr = tallies["sham_hit"] / tallies["sham"] if tallies["sham"] else 0.0
                 tag = "SHAM " if is_sham else "REAL "
-                print(f"[challenger] {tag} {res['classification']:<11} lat={res.get('latency_ms')}  "
+                echo = res.get("echo_confirmed")
+                echo_tag = "" if echo is None else f" echo={'OK' if echo else 'MISS'}"
+                print(f"[challenger] {tag} {res['classification']:<11} lat={res.get('latency_ms')}"
+                      f"{echo_tag}  "
                       f"| real-in-band={rr:.2f} ({tallies['real_hit']}/{tallies['real']})  "
                       f"sham-false={sr:.2f} ({tallies['sham_hit']}/{tallies['sham']})  "
                       f"GAP={rr - sr:+.2f}")
