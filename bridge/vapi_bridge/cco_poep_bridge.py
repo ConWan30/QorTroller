@@ -73,6 +73,50 @@ def _poep_corpus_readiness(
         }
 
 
+def build_poep_telemetry_from_probe(
+    challenge_type: str | None,
+    latest_probe: dict[str, Any] | None,
+) -> dict[str, Any | None]:
+    """Map ``l6b_probe_log`` latest row → PoEP runner telemetry (pure, no I/O).
+
+    ``rumble_imu`` — latency + accel peak + classification from L6B desk path.
+    ``adaptive_force`` — liveness latency only from probe; force signature still
+    requires live adaptive-trigger capture (probe log has no slope/delta fields).
+    """
+    if not latest_probe or not challenge_type:
+        return {"device_auth": None, "reaction_features": None}
+
+    lat = latest_probe.get("latency_ms")
+    if lat is None:
+        return {"device_auth": None, "reaction_features": None}
+
+    reaction_features: dict[str, Any] = {
+        "reaction_latency_ms": float(lat),
+        "reacted": True,
+        "in_band": True,
+    }
+
+    if challenge_type == "rumble_imu":
+        peak = latest_probe.get("accel_delta_peak")
+        if peak is None:
+            return {"device_auth": None, "reaction_features": None}
+        classification = latest_probe.get("classification") or latest_probe.get(
+            "reflex_verdict",
+        )
+        device_auth: dict[str, Any] = {
+            "classification": classification,
+            "latency_ms": float(lat),
+            "accel_delta_peak": float(peak),
+        }
+        return {"device_auth": device_auth, "reaction_features": reaction_features}
+
+    if challenge_type == "adaptive_force":
+        # Probe log lacks adaptive-trigger force signature; liveness-only partial.
+        return {"device_auth": None, "reaction_features": reaction_features}
+
+    return {"device_auth": None, "reaction_features": None}
+
+
 def _evaluate_poep_verdict(
     *,
     poep_enabled: bool,
@@ -86,6 +130,7 @@ def _evaluate_poep_verdict(
         return None
     if device_auth is None or reaction_features is None:
         return None
+    challenge_type = runner.challenge_type or "adaptive_force"
     try:
         from l9_presence.poep_calibration import (
             load_enrollment_sessions,
@@ -101,6 +146,7 @@ def _evaluate_poep_verdict(
             device_auth,
             model,
             device_id=runner.device_id,
+            challenge_type=challenge_type,
         )
     except Exception:
         return None

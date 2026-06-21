@@ -805,7 +805,10 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         _now = _t_pss.time()
         _enf = bool(getattr(cfg, "ipact_renewal_enforcement_enabled", False))
         _hs  = bool(getattr(cfg, "ipact_host_signer_enabled", False))
-        from ..cco_poep_bridge import assemble_poep_presence_status
+        from ..cco_poep_bridge import (
+            assemble_poep_presence_status,
+            build_poep_telemetry_from_probe,
+        )
         from ..cco_identity_grid import assemble_identity_grid
         from ..cco_composability import (
             apply_composability_to_grid,
@@ -1089,6 +1092,15 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             l6b_enabled=bool(getattr(cfg, "l6b_enabled", False)),
             controller_connected=controller_connected,
         )
+        _poep_ct = (
+            getattr(_cco_report, "challenge_type_candidate", None)
+            if _cco_report is not None
+            else None
+        )
+        _poep_telemetry = build_poep_telemetry_from_probe(
+            _poep_ct,
+            _l6b_prog.get("latest_probe"),
+        )
         _presence["poep"] = assemble_poep_presence_status(
             poep_enabled=_poep_enabled,
             capability_report=_cco_report,
@@ -1096,6 +1108,8 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             l6b_probe_count=_global_n,
             l6b_gate_reached=_l6b_gate,
             corpus_dir=_poep_corpus,
+            device_auth=_poep_telemetry.get("device_auth"),
+            reaction_features=_poep_telemetry.get("reaction_features"),
         )
         _identity_grid = assemble_identity_grid(
             capability_report=_cco_report,
