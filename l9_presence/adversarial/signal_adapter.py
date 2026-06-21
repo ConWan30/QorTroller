@@ -84,6 +84,6 @@ def retina_alone_security(w: LabeledWindow) -> bool:
 
 def presence_alone_security(w: LabeledWindow) -> bool:
     """What presence-alone would accuse: any non-PRESENT window. Catches no-human,
-    but MISSES aim-assist and pro-skill (both PRESENT)."""
+    but MISSES the cheat and pro-skill (both PRESENT)."""
     presence, _, _ = window_to_signals(w)
     return presence.state is not PresenceState.PRESENT

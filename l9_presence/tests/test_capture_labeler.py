@@ -25,9 +25,9 @@ def _mf():
 
 def test_start_stop_appends_entry():
     mf = _mf()
-    lab.start_session(mf, _DEV, "HUMAN_AIM_ASSIST", now=1000.0)
+    lab.start_session(mf, _DEV, "HUMAN_INPUT_MACRO", now=1000.0)
     entry = lab.stop_session(mf, now=1120.0)
-    assert entry["class_label"] == "HUMAN_AIM_ASSIST"
+    assert entry["class_label"] == "HUMAN_INPUT_MACRO"
     assert entry["t_start"] == 1000.0 and entry["t_end"] == 1120.0
     assert entry["device_id"] == _DEV
     # marker cleared
@@ -73,9 +73,9 @@ def test_validate_catches_bad_duration():
 def test_manifest_is_consumable_by_real_loader():
     """The labeler's output must parse as SessionLabels for the --real runner."""
     mf = _mf()
-    lab.start_session(mf, _DEV, "HUMAN_AIM_ASSIST", now=1000.0)
+    lab.start_session(mf, _DEV, "HUMAN_INPUT_MACRO", now=1000.0)
     lab.stop_session(mf, now=1100.0)
     labels = load_labels_from_json(mf)
     assert len(labels) == 1
     assert labels[0].device_id == _DEV
-    assert labels[0].class_label.value == "HUMAN_AIM_ASSIST"
+    assert labels[0].class_label.value == "HUMAN_INPUT_MACRO"

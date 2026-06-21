@@ -43,7 +43,7 @@ def main() -> int:
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--n-per-class", type=int, default=50)
     ap.add_argument("--windows", type=int, default=8)
-    ap.add_argument("--retina-tpr-aimassist", type=float, default=0.85)
+    ap.add_argument("--retina-tpr-cheat", type=float, default=0.85)
     ap.add_argument("--retina-fpr-proskill", type=float, default=0.15)
     ap.add_argument("--out-dir", default=str(_ROOT / "audits"))
     args = ap.parse_args()
@@ -72,7 +72,7 @@ def main() -> int:
         return 0
 
     params = SynthParams(
-        retina_tpr_aimassist=args.retina_tpr_aimassist,
+        retina_tpr_cheat=args.retina_tpr_cheat,
         retina_fpr_proskill=args.retina_fpr_proskill,
     )
     sessions = generate_labeled_sessions(

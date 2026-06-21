@@ -3,7 +3,7 @@
   "provenance": "synthetic",
   "provisional": true,
   "params": {
-    "retina_tpr_aimassist": 0.85,
+    "retina_tpr_cheat": 0.85,
     "retina_fpr_proskill": 0.15,
     "retina_fpr_clean": 0.03,
     "bot_implausible_rate": 0.9,
@@ -13,7 +13,7 @@
   "n_windows": {
     "HUMAN_CLEAN": 400,
     "BOT_FULL": 400,
-    "HUMAN_AIM_ASSIST": 400,
+    "HUMAN_INPUT_MACRO": 400,
     "HUMAN_RELAY": 400,
     "PRO_SKILL": 400
   },
@@ -34,7 +34,7 @@
       "INDETERMINATE": 0,
       "UNVERIFIABLE": 0
     },
-    "HUMAN_AIM_ASSIST": {
+    "HUMAN_INPUT_MACRO": {
       "CONSISTENT_HUMAN": 60,
       "CONSISTENT_INACTIVE": 8,
       "INCONSISTENT_PRESENCE_WITHOUT_AUTHENTIC_TRAJECTORY": 331,
@@ -76,7 +76,7 @@
         "retina_alone": 0.9075,
         "presence_alone": 1.0
       },
-      "HUMAN_AIM_ASSIST": {
+      "HUMAN_INPUT_MACRO": {
         "fusion": 0.83,
         "retina_alone": 0.8475,
         "presence_alone": 0.0225

@@ -35,6 +35,12 @@ legitimate single-subject pilot, but it carries a hard asymmetry that governs ev
 
 ## 1. The single decision question
 
+> **Game reconciliation (NCAA CFB 26).** The machine-assist class is `HUMAN_INPUT_MACRO` —
+> input automation / scripted timing / macros, the football-native cheat. NCAA CFB has no FPS
+> aiming, so read every "aim-assist" below as that input-automation cheat. The fusion mechanism
+> (presence × input-trajectory authenticity) is identical; only the cheat instantiation differs.
+> The true-positive estimand is `retina_tpr_cheat`.
+
 Phase 1 proved (and a test pins) that the fusion's behaviour on the hard boundary is
 fully determined by retina's trajectory ROC:
 
@@ -42,7 +48,7 @@ fully determined by retina's trajectory ROC:
 - **pro-skill false-accusation rate == `retina_fpr_proskill`** (by construction — presence is PRESENT for both aim-assist and elite play, so it adds zero discrimination there).
 
 So Phase 2 measures exactly those two numbers **on real data**:
-1. **`retina_tpr_aimassist`** — P(retina judges trajectory IMPLAUSIBLE | real aim-assist active).
+1. **`retina_tpr_cheat`** — P(retina judges trajectory IMPLAUSIBLE | real input-automation/macro active).
 2. **`retina_fpr_proskill`** — P(retina judges trajectory IMPLAUSIBLE | real elite genuine play). **This is the killer.**
 
 Everything else (the contextual classes — BOT / relay / replay) Phase 1 already showed
@@ -83,7 +89,7 @@ L6B/PoEP capture active, on the certified Edge, one labelled class per session.
 |---|---|---|---|
 | `HUMAN_CLEAN` | ≥10 ordinary players | normal play, no assist | presence (PoEP challenge) + retina anomaly + L4 distance |
 | `PRO_SKILL` | **≥10 elite players** (the hard recruit) | normal play, genuinely fast/aggressive | same — this is the false-positive measurement |
-| `HUMAN_AIM_ASSIST` | ≥10 players | real, documented aim-assist active downstream of the controller, in an isolated research sandbox (§4) | same — the true-positive measurement |
+| `HUMAN_INPUT_MACRO` | ≥10 players (N=1 first run) | real input-automation / macro tooling active downstream of the controller, in an isolated research sandbox (§4) | same — the true-positive measurement |
 | `HUMAN_RELAY` | ≥10 player+bot rigs | human passes the PoEP challenge; a bot drives play between challenges | same — confirms relay framing on real data |
 | `BOT_FULL` | scripted rig | no human; scripted input | same — confirms no-human contextualisation |
 
