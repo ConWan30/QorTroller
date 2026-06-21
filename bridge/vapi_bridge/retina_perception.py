@@ -202,6 +202,32 @@ def persist_retina_result(
     except Exception as exc:
         log.debug("retina DA upload post-persist skipped: %s", exc)
     try:
+        from .retina_da_witness import maybe_upload_retina_witness_to_da
+        from .retina_events_root import (
+            EVENTS_ROOT_SCHEME_POSEIDON_V1,
+            EVENTS_ROOT_SCHEME_SHA256_V1,
+        )
+
+        if cfg is not None:
+            _root_scheme = (
+                EVENTS_ROOT_SCHEME_POSEIDON_V1
+                if bool(getattr(cfg, "retina_events_root_poseidon_enabled", False))
+                else EVENTS_ROOT_SCHEME_SHA256_V1
+            )
+            maybe_upload_retina_witness_to_da(
+                store,
+                cfg,
+                device_id=device_id,
+                record_hash_hex=result.record_hash_hex,
+                state_commitment_hex=result.state_commitment_hex,
+                events=result.events,
+                ts_ns=result.ts_ns,
+                w3bstream_exit_code=int(w3s_result.get("exit_code", 0)),
+                events_root_scheme=_root_scheme,
+            )
+    except Exception as exc:
+        log.debug("retina DA witness post-persist skipped: %s", exc)
+    try:
         from .retina_pda_attestation import maybe_record_retina_pda_attestation
         from .retina_w3bstream import EXIT_OK as _EXIT_OK
 
