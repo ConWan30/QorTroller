@@ -563,18 +563,23 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
     async def get_retina_da_status(
         x_api_key: str = Header(default=""),
     ):
-        """DePIN DA bulk upload status for retina_event_log sidecar blobs."""
+        """DePIN DA bulk + witness upload status for retina_event_log sidecar blobs."""
         _check_read_key(x_api_key)
         import time as _t_da
 
-        _log = await asyncio.to_thread(store.get_retina_da_upload_status, 5)
+        _upload_log = await asyncio.to_thread(store.get_retina_da_upload_status, 5)
+        _witness_log = await asyncio.to_thread(store.get_retina_da_witness_status, 5)
         return {
             "retina_da_upload_enabled": bool(
                 getattr(cfg, "retina_da_upload_enabled", False)
             ),
-            "latest_uploaded": bool(_log.get("latest_uploaded")),
-            "latest_payload_bytes": int(_log.get("latest_payload_bytes") or 0),
-            "upload_log": _log,
+            "retina_da_witness_enabled": bool(
+                getattr(cfg, "retina_da_witness_enabled", False)
+            ),
+            "latest_uploaded": bool(_upload_log.get("latest_uploaded")),
+            "latest_payload_bytes": int(_upload_log.get("latest_payload_bytes") or 0),
+            "upload_log": _upload_log,
+            "witness_log": _witness_log,
             "timestamp": _t_da.time(),
         }
 
