@@ -1940,6 +1940,23 @@ class Config:
         default_factory=lambda: _env_bool("RETINA_EVENTS_ROOT_VERIFY_ON_INGEST", False)
     )
 
+    # --- L9 x Retina Fusion v2 (oracle panel + Adaptive Capture Governor) ---
+    l9_fusion_v2_enabled: bool = field(
+        default_factory=lambda: _env_bool("L9_FUSION_V2_ENABLED", False)
+    )
+    """Fusion v2 — gate the read-only /bridge/l9-fusion endpoints. Advisory only; does NOT
+    touch the 228-byte PoAC, chain, or FROZEN-v1. UNCALIBRATED until real co-capture."""
+    l9_fusion_coherence_threshold: float = field(
+        default_factory=lambda: _env_float("L9_FUSION_COHERENCE_THRESHOLD", 0.70)
+    )
+    l9_fusion_neg_control_gap: float = field(
+        default_factory=lambda: _env_float("L9_FUSION_NEG_CONTROL_GAP", 0.15)
+    )
+    adaptive_capture_enabled: bool = field(
+        default_factory=lambda: _env_bool("ADAPTIVE_CAPTURE_ENABLED", True)
+    )
+    """Real-time lag/FPS self-tuning during witness capture. Advisory; default ON."""
+
     # --- Data Economy Arc 5: VAPIReplayProofPipeline (VHR proofs) ---
     replay_proof_pipeline_enabled: bool = field(
         default_factory=lambda: _env_bool("REPLAY_PROOF_PIPELINE_ENABLED", False)
