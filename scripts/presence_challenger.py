@@ -135,16 +135,60 @@ def run_challenge(ds, sig, response: str, window_ms: float, real: bool,
     return classify_gesture_response(samples, human_max_ms=band_max_ms)
 
 
+def _ensure_record_hash_column(conn: sqlite3.Connection) -> bool:
+    """Additive, idempotent migration: give l6b_probe_log a record_hash column so a
+    presence proof can carry the PoAC anchor of the gameplay record it was bound to.
+    ADD COLUMN is metadata-only in SQLite (fast, non-destructive); existing inserts
+    that don't name the column are unaffected. Returns True if the column is present."""
+    cols = [c[1] for c in conn.execute("PRAGMA table_info(l6b_probe_log)").fetchall()]
+    if "record_hash" in cols:
+        return True
+    try:
+        conn.execute("ALTER TABLE l6b_probe_log ADD COLUMN record_hash TEXT")
+        conn.commit()
+        return True
+    except sqlite3.OperationalError:
+        return False  # racing add or locked — fall back to no-hash insert
+
+
+def _live_record_hash(conn: sqlite3.Connection, device_id: str) -> str | None:
+    """The most recent gameplay PoAC record_hash for this device = the cryptographic
+    anchor co-temporal with this probe. None if the bridge has written no records yet
+    (e.g. menu-only / no active gameplay), in which case the probe logs unbound."""
+    try:
+        row = conn.execute(
+            "SELECT record_hash FROM records WHERE device_id=? ORDER BY rowid DESC LIMIT 1",
+            (device_id,),
+        ).fetchone()
+        return row[0] if row else None
+    except sqlite3.OperationalError:
+        return None
+
+
 def log_probe(db: str, device_id: str, result: dict, cco_profile_id: str) -> None:
     conn = sqlite3.connect(db, timeout=5.0)
     try:
         conn.execute("PRAGMA busy_timeout=5000")
-        conn.execute(
-            "INSERT INTO l6b_probe_log (device_id, probe_ts_ms, latency_ms, classification, "
-            "accel_delta_peak, reflex_verdict, cco_profile_id) VALUES (?,?,?,?,?,?,?)",
-            (device_id, int(time.time() * 1000), result.get("latency_ms"),
-             result["classification"], 0.0, result.get("reflex_verdict"), cco_profile_id),
-        )
+        has_rh = _ensure_record_hash_column(conn)
+        if has_rh:
+            # PRODUCTION BINDING: stamp the live PoAC record_hash so the presence proof
+            # and the gameplay record share one verifiable anchor (not just a timestamp).
+            record_hash = _live_record_hash(conn, device_id)
+            conn.execute(
+                "INSERT INTO l6b_probe_log (device_id, probe_ts_ms, latency_ms, classification, "
+                "accel_delta_peak, reflex_verdict, cco_profile_id, record_hash) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (device_id, int(time.time() * 1000), result.get("latency_ms"),
+                 result["classification"], 0.0, result.get("reflex_verdict"),
+                 cco_profile_id, record_hash),
+            )
+        else:
+            conn.execute(
+                "INSERT INTO l6b_probe_log (device_id, probe_ts_ms, latency_ms, classification, "
+                "accel_delta_peak, reflex_verdict, cco_profile_id) VALUES (?,?,?,?,?,?,?)",
+                (device_id, int(time.time() * 1000), result.get("latency_ms"),
+                 result["classification"], 0.0, result.get("reflex_verdict"), cco_profile_id),
+            )
         conn.commit()
     finally:
         conn.close()

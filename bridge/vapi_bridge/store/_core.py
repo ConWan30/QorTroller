@@ -781,6 +781,9 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                 ("cco_profile_id", "TEXT"),
                 ("policy_ref", "TEXT"),
                 ("trigger_r2_at_probe", "INTEGER"),
+                # L9 binding: PoAC anchor of the gameplay record this presence proof was
+                # bound to, so a proof ties to a record cryptographically (not by timestamp).
+                ("record_hash", "TEXT"),
             ):
                 try:
                     conn.execute(f"ALTER TABLE l6b_probe_log ADD COLUMN {_col} {_typ}")
