@@ -248,15 +248,15 @@ Path B devices have `keccak256(pubkey)` identity (**BUILT**) but are not silicon
 
 ### F-CCO-001 — CHIA `_enrich_profile` VID/PID lookup no-op (pre-existing drift)
 
-**Severity:** Integration — **OPEN** (out of Phase A scope; do not fix silently)  
-**Status:** VERIFIED Phase A V-check (2026-06-19)  
+**Severity:** Integration — **RESOLVED 2026-06-21**  
+**Status:** VERIFIED Phase A V-check (2026-06-19); FIXED 2026-06-21  
 **Surfaced:** Phase A.1 `CapabilityOracle` implementation  
 
 [`bridge/vapi_bridge/device_registry.py`](../../bridge/vapi_bridge/device_registry.py) `_enrich_profile()` matches CHIA `ControllerProfile.usb_vid` / `usb_pid` against `base_profile.vid` / `base_profile.pid`, but [`controller/device_profile.py`](../../controller/device_profile.py) `DeviceProfile` exposes **`hid_vendor_id`** and **`hid_product_ids`** — not `vid`/`pid`. The comparison almost always fails, so Phase 136 capability-matrix enrichment no-ops in practice.
 
 **Phase A posture:** `CapabilityOracle` uses `get_canonical_profiles().get(profile_id)` read-only; contract output fields remain sourced from `DeviceProfile`. Only `sony_dualshock_edge_v1` overlaps CHIA `CANONICAL_PROFILES` among the six registered profiles.
 
-**Resolution (deferred):** Fix attribute names in `_enrich_profile` or key CHIA lookup by `profile_id` — separate cycle, not bundled with oracle wrapper.
+**Resolution (2026-06-21):** Fixed in `device_registry.py` — both `_enrich_profile()` and `get_tier_eligibility()` now match `cp.usb_vid == base_profile.hid_vendor_id` AND `cp.usb_pid in base_profile.hid_product_ids` (the real `DeviceProfile` attributes: `hid_vendor_id:int` + `hid_product_ids:tuple[int,...]`). Enrichment of `sony_dualshock_edge_v1` (VID 0x054C / PID 0x0DF2) now populates `_vapi_capability_matrix` instead of silently no-opping. Validated: 52 CCO/capability/CHIA tests pass, no regressions.
 
 ---
 
@@ -272,7 +272,7 @@ Path B devices have `keccak256(pubkey)` identity (**BUILT**) but are not silicon
 | P-T0 reflex floor, day one | BUILDABLE (L6B) | **BUILT infra, GATED activation** | F-V3-002 **CLOSED** Option C |
 | P-T1–P-T3 per controller class | RESEARCH | **[UNVALIDATED]** | Edge partial only |
 | PoEP three-layer engine | — | **BUILT** | Edge device-auth only |
-| PoEP device-auth generalization | — | **DESIGN** | CCO-parameterized verifiers |
+| PoEP device-auth generalization | — | **BUILT** (Phase C) | `ChallengeVerifier` — Edge `adaptive_force` + measured DualSense `rumble_imu` (`l9_presence/challenge_verifier.py`, PR #42); non-Edge classes still `UNCHARACTERIZED` until Stage A |
 | Identity canon `keccak256(pubkey)` | — | **VERIFIED** | `DEVICE_ID_CANON_v1.md`, `codec.py` |
 | Silicon Path A identity | — | **GATED** | `SecureElementBackend` stub |
 | On-chain presence tier expression | VERIFIED repurpose | **DESIGN** | F-V3-001 |
