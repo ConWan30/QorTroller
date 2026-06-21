@@ -22,9 +22,14 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from bridge.vapi_bridge.oracle_panel import SessionArtifact, evaluate_artifact  # noqa: E402
+from bridge.vapi_bridge.screen_retina_fusion import (  # noqa: E402
+    NCAA_CONTINUOUS_CONFIG, ContinuousConfig,
+)
 from bridge.vapi_bridge.self_adversary import (  # noqa: E402
     make_headless, make_injection, make_relay, make_replay,
 )
+
+_GAME_CFG = {"ncaa": NCAA_CONTINUOUS_CONFIG, "fps": ContinuousConfig()}
 
 
 def artifact_from_npz(path: str, class_label: str = "HUMAN_CLEAN") -> SessionArtifact:
@@ -134,17 +139,20 @@ def _build_result(rows: list[dict], provenance: str, **meta) -> dict:
     }
 
 
-def run_synthetic(seed: int, n_per_class: int) -> dict:
+def run_synthetic(seed: int, n_per_class: int, game: str = "ncaa") -> dict:
+    cfg = _GAME_CFG[game]
     rows = []
     for k in range(n_per_class):
         for a in _labelled_artifacts(seed + k):
-            rows.append(evaluate_artifact(a).to_dict())
-    return _build_result(rows, "synthetic", n_per_class=n_per_class, seed=seed)
+            rows.append(evaluate_artifact(a, cfg).to_dict())
+    return _build_result(rows, "synthetic", n_per_class=n_per_class, seed=seed, game=game)
 
 
-def run_from_session(path: str, *, injection_strength: float = 2.0) -> dict:
+def run_from_session(path: str, *, injection_strength: float = 2.0, game: str = "ncaa") -> dict:
     """Real-session path (the N=1 unlock): load one recorded .npz, derive the four
-    self-adversarial classes from it, and tabulate the per-oracle confusion."""
+    self-adversarial classes from it, and tabulate the per-oracle confusion. game='ncaa'
+    drops the FPS injection/residual axis (auto-camera false-positives)."""
+    cfg = _GAME_CFG[game]
     base = artifact_from_npz(path, "HUMAN_CLEAN")
     arts = [
         base,
@@ -153,9 +161,9 @@ def run_from_session(path: str, *, injection_strength: float = 2.0) -> dict:
         make_headless(base),
         make_injection(base, strength=injection_strength),
     ]
-    rows = [evaluate_artifact(a).to_dict() for a in arts]
+    rows = [evaluate_artifact(a, cfg).to_dict() for a in arts]
     return _build_result(rows, "real_derived", source_session=os.path.basename(path),
-                         capture_telemetry=base.capture_telemetry)
+                         game=game, capture_telemetry=base.capture_telemetry)
 
 
 def to_markdown(d: dict) -> str:
@@ -196,6 +204,9 @@ def main() -> int:
                     help="path to a recorded witness/cocapture .npz; derive the 4 adversary "
                          "classes from this real session and tabulate the confusion (N=1 unlock)")
     ap.add_argument("--injection-strength", type=float, default=2.0)
+    ap.add_argument("--game", choices=("ncaa", "fps"), default="ncaa",
+                    help="continuous-axis profile; 'ncaa' drops the FPS injection/residual axis "
+                         "(auto-camera false-positives). Default ncaa.")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--n-per-class", type=int, default=10)
     ap.add_argument("--out-dir", default="audits")
@@ -205,9 +216,10 @@ def main() -> int:
         if not os.path.exists(args.from_session):
             print(f"[fusion-v2] session not found: {args.from_session}")
             return 2
-        d = run_from_session(args.from_session, injection_strength=args.injection_strength)
+        d = run_from_session(args.from_session, injection_strength=args.injection_strength,
+                             game=args.game)
     else:
-        d = run_synthetic(args.seed, args.n_per_class)
+        d = run_synthetic(args.seed, args.n_per_class, game=args.game)
     os.makedirs(args.out_dir, exist_ok=True)
     date = time.strftime("%Y-%m-%d")
     md_path = os.path.join(args.out_dir, f"fusion-v2-calibration-{date}.md")

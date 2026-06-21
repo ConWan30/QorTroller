@@ -57,6 +57,17 @@ class ContinuousConfig:
     coupling_threshold: float = DEFAULT_COUPLING_THRESHOLD
     neg_control_gap: float = DEFAULT_NEG_CONTROL_GAP
     residual_threshold: float = DEFAULT_RESIDUAL_THRESHOLD
+    injection_axis_enabled: bool = True
+    """The decoupled-energy/injection axis is FPS-tuned (aim-stick fully drives the camera, so
+    high residual = aimbot). It does NOT transfer to games with an AUTO-CAMERA: NCAA CFB's
+    camera follows the play, replays, and transitions independently of the stick, so clean human
+    play sits at ~0.85 residual (measured on P1_25). Disable for such games so genuine coupling
+    is not mislabeled COUPLED_INJECTION."""
+
+
+# NCAA CFB profile: auto-camera game -> DROP the FPS injection/residual axis (it false-positives
+# on clean human play). Coupling + negative-control rails are kept; only the residual flag is off.
+NCAA_CONTINUOUS_CONFIG = ContinuousConfig(injection_axis_enabled=False)
 
 
 @dataclass(frozen=True)
@@ -97,9 +108,10 @@ def classify_continuous(coupling_score: Optional[float],
     neg = negative_control if negative_control is not None else 0.0
     collapsed = (coupling_score - neg) >= cfg.neg_control_gap
     if coupling_score >= cfg.coupling_threshold and collapsed:
-        if decoupled_energy is not None and decoupled_energy >= cfg.residual_threshold:
+        if (cfg.injection_axis_enabled and decoupled_energy is not None
+                and decoupled_energy >= cfg.residual_threshold):
             return ContinuousAxis.COUPLED_INJECTION
-        return ContinuousAxis.COUPLED_CLEAN
+        return ContinuousAxis.COUPLED_CLEAN  # NCAA: auto-camera residual ignored (axis dropped)
     return ContinuousAxis.DECOUPLED  # activity but no clean causal tracking
 
 
