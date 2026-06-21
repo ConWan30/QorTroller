@@ -129,13 +129,16 @@ This deliberately does **not** require the production `record_hash` binding (the
 **Presence co-capture during play (forcefulness).** For windows to bind, a presence
 challenge must fire *during* gameplay and be **consciously felt + unmistakable vs NCAA CFB
 haptics** — otherwise the operator can't react and the window is UNKNOWN-presence. The
-default L6B probe is sub-perceptual (~60/255) and unsuitable here. The forceful signature
-stimulus (`bridge/controller/presence_challenge.py` — high-force dual-trigger triple-pulse,
-`forceful_signature_profile`, default 230/255) is **certified by the operator feel-test
-first** (`scripts/presence_challenge_feeltest.py`, bridge stopped) to find the lowest force
-that is felt AND distinguishable; that confirmed force is then wired into the in-session
-challenger (idle-gated, jittered cadence via `ChallengeScheduler`). The cockpit's
-binding-coverage % is the live check that challenges are actually landing.
+default L6B probe is sub-perceptual (~60/255) and unsuitable here. **Correction (validated on
+a real Edge 2026-06-21):** adaptive-trigger resistance is only felt when the trigger is
+*pulled*, so it is useless as a passive challenge — the **main rumble motors** are felt
+strongly in the palms regardless. The challenge is therefore a **main-motor signature
+cadence** (`bridge/controller/presence_challenge.py` — `forceful_motor_signature`, default
+**amp 255, 3-pulse "bzz-bzz-bzz"** on both motors; `--alternate` L/R sweep available),
+**certified by the operator feel-test** (`scripts/presence_challenge_feeltest.py`, bridge
+stopped) as felt AND distinguishable from tackle rumble. The confirmed config is wired into
+the in-session challenger (idle-gated, jittered cadence via `ChallengeScheduler`). The
+cockpit's binding-coverage % is the live check that challenges are actually landing.
 
 ## 6. Pipeline (reuses the Phase 1 harness)
 
