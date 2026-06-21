@@ -176,6 +176,56 @@ def _var(xs: list[float]) -> float:
     return sum((x - m) ** 2 for x in xs) / n
 
 
+def format_selftest_line(sample: GateSample, window: list[GateSample],
+                         baseline_var: float, gate_cfg: GateConfig) -> str:
+    """One human-readable diagnostic line for --selftest: live IMU + sticks + gate verdict.
+    Pure (no controller); the live loop builds the window and feeds it here."""
+    wv = accel_variance(window)
+    clear, state = clear_to_fire(window, baseline_var, gate_cfg)
+    return (f"accel|mag|={sample.accel_mag:8.1f}  var={wv:9.2f}  base={baseline_var:9.2f}  "
+            f"lx={sample.lx:3d} ly={sample.ly:3d} l2={sample.l2:3d} r2={sample.r2:3d}  "
+            f"-> {state.value:<9} {'CLEAR-to-fire' if clear else 'defer'}")
+
+
+def run_selftest(ds, secs: float, gate_cfg: GateConfig, *, hz: float = 50.0,
+                 print_hz: float = 5.0) -> int:
+    """Read-only diagnostic: print live IMU + gate state for `secs`, then verdict whether the
+    IMU is actually exposed (so the veto/echo have a real signal). Fires NO buzz."""
+    print(f"[selftest] reading IMU + gate state for {secs:.0f}s (no buzz). Move sticks / press "
+          "triggers to watch the gate flip ACTIVE; hold still to see LULL.")
+    window: list[GateSample] = []
+    baseline_var: float | None = None
+    t0 = time.monotonic()
+    last_print = 0.0
+    max_accel = 0.0
+    dt = 1.0 / hz
+    while time.monotonic() - t0 < secs:
+        s = _gate_sample(ds)
+        window.append(s)
+        if len(window) > 60:
+            window.pop(0)
+        max_accel = max(max_accel, s.accel_mag)
+        now = time.monotonic()
+        if now - last_print >= 1.0 / print_hz and len(window) >= gate_cfg.min_samples:
+            wv = accel_variance(window)
+            if baseline_var is None:
+                baseline_var = wv
+            print("[selftest] " + format_selftest_line(s, window, baseline_var, gate_cfg))
+            _clear, state = clear_to_fire(window, baseline_var, gate_cfg)
+            if state is GateState.LULL:
+                baseline_var = update_baseline(baseline_var, wv)
+            last_print = now
+        time.sleep(dt)
+    if max_accel <= 0.0:
+        print("[selftest] WARNING: accel magnitude stayed 0 — pydualsense did not expose the IMU "
+              "(check the accelerometer attr names in _accel_mag). The pre-fire veto and haptic "
+              "self-echo will silently no-op until this reads non-zero.")
+        return 1
+    print(f"[selftest] IMU OK — peak |accel|={max_accel:.1f} (non-zero); the veto + echo have a "
+          "real signal. Gate transitions LULL<->ACTIVE above are live.")
+    return 0
+
+
 def fetch_bridge_context(base_url: str, api_key: str = "", timeout: float = 1.5) -> dict | None:
     """Fetch the bridge's live gameplay context (APOP richest, GAD fallback). Returns the
     status dict, or None on ANY failure (bridge down / endpoint missing) so the caller
@@ -366,6 +416,11 @@ def main() -> int:
                     metavar=("X", "Y", "W", "H"),
                     help="screen region (x y w h) to OCR for the play clock / banner")
     ap.add_argument("--once", action="store_true", help="fire one REAL challenge + report, then exit")
+    ap.add_argument("--selftest", action="store_true",
+                    help="read-only: print live IMU + gate state (no buzz), then verify the IMU "
+                         "is actually exposed. Use to validate the rig before a real run.")
+    ap.add_argument("--selftest-secs", type=float, default=10.0,
+                    help="duration of --selftest in seconds (default 10)")
     args = ap.parse_args()
 
     try:
@@ -393,6 +448,9 @@ def main() -> int:
     tallies = {"real": 0, "real_hit": 0, "sham": 0, "sham_hit": 0}
 
     try:
+        if args.selftest:
+            return run_selftest(ds, args.selftest_secs, gate_cfg)
+
         if args.once:
             print("[challenger] ONE real challenge in 3s — feel the buzz, then respond with "
                   f"{' OR '.join(g.upper() for g in accepted)}...")

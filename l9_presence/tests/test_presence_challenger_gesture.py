@@ -10,9 +10,12 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from scripts.presence_challenger import (  # noqa: E402
+    format_selftest_line,
     gesture_active_from_state,
     parse_accepted,
+    run_selftest,
 )
+from bridge.controller.probe_gate import GateConfig, GateSample  # noqa: E402
 
 
 def _state(*, l5=False, r5=False, l4=False, r4=False, touch=False):
@@ -75,3 +78,45 @@ def test_dual_does_not_accept_unlisted_button():
 def test_missing_touch_attr_is_safe():
     bare = SimpleNamespace(L5=False)  # no trackPadTouch0 attribute at all
     assert gesture_active_from_state(bare, ["l5", "touch"]) is False
+
+
+# ---- --selftest diagnostic ----
+
+CFG = GateConfig()
+
+
+def test_selftest_line_lull_when_still():
+    still = [GateSample(lx=128, ly=128, l2=0, r2=0, accel_mag=1.0) for _ in range(8)]
+    line = format_selftest_line(still[-1], still, baseline_var=1.0, gate_cfg=CFG)
+    assert "LULL" in line and "CLEAR-to-fire" in line
+
+
+def test_selftest_line_active_when_trigger():
+    win = [GateSample(lx=128, ly=128, l2=0, r2=0, accel_mag=1.0) for _ in range(8)]
+    win[4] = GateSample(lx=128, ly=128, r2=200, accel_mag=1.0)
+    line = format_selftest_line(win[-1], win, baseline_var=1.0, gate_cfg=CFG)
+    assert "ACTIVE" in line and "defer" in line
+
+
+class _FakeDS:
+    """Minimal pydualsense-shaped controller for the read-only selftest loop."""
+    def __init__(self, accel=(0.1, 0.0, 0.98)):
+        self._a = accel
+
+    @property
+    def state(self):
+        return SimpleNamespace(
+            LX=128, LY=128, L2_value=0, R2_value=0,
+            accelerometer=SimpleNamespace(X=self._a[0], Y=self._a[1], Z=self._a[2]),
+            trackPadTouch0=SimpleNamespace(isActive=False),
+        )
+
+
+def test_run_selftest_imu_ok_returns_zero():
+    rc = run_selftest(_FakeDS(accel=(0.1, 0.0, 0.98)), 0.3, CFG, hz=200.0, print_hz=20.0)
+    assert rc == 0  # non-zero accel exposed
+
+
+def test_run_selftest_imu_absent_returns_one():
+    rc = run_selftest(_FakeDS(accel=(0.0, 0.0, 0.0)), 0.3, CFG, hz=200.0, print_hz=20.0)
+    assert rc == 1  # IMU not exposed -> warning + nonzero exit
