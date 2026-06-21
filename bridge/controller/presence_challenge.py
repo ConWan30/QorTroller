@@ -1,79 +1,74 @@
-"""Forceful, DISTINGUISHABLE presence-challenge stimulus + scheduler.
+"""Forceful, DISTINGUISHABLE presence-challenge stimulus (MAIN-MOTOR signature) + scheduler.
 
-Phase 2 capture needs a presence challenge the operator can FEEL and unmistakably
-tell apart from NCAA CFB 26's ambient haptics while playing. The default L6B probe
-is deliberately sub-perceptual (force ~60/255) — the OPPOSITE of what we need here.
-This builds a VOLUNTARY, high-amplitude, signature-cadence challenge:
+Design history / honest correction: the first version used adaptive-TRIGGER resistance.
+On real hardware that is only felt when you PULL the trigger — useless as a stimulus you
+must passively react to mid-play. Confirmed 2026-06-21 on a real Edge: the MAIN RUMBLE
+MOTORS are felt strongly in the palms regardless of trigger/finger position. So the
+challenge is a main-motor SIGNATURE CADENCE:
 
-  - HIGH force on BOTH adaptive triggers (default 230/255) — well above the
-    sub-perceptual floor, so it is consciously felt.
-  - A SIGNATURE TRIPLE-PULSE cadence (full-force kick / off / kick / off / kick)
-    on BOTH triggers simultaneously. NCAA CFB drives mostly the main rumble motors
-    (tackles) and a steady R2 sprint resistance — it does NOT produce a synchronized
-    full-amplitude triple-kick on both triggers, so the pattern is recognisable.
+  - HIGH amplitude (default 255/255) — unmistakably felt.
+  - A SIGNATURE multi-pulse cadence (default 3 sharp equal pulses with crisp gaps), so it
+    reads as "that specific bzz-bzz-bzz challenge," distinct from NCAA CFB's irregular,
+    contextual tackle rumble. Optional `alternate` does a left/right sweep for an even more
+    distinct, non-gameplay pattern.
 
-HONESTY: "forceful enough" and "distinguishable" are PERCEPTUAL — they can only be
-certified by the operator feeling it on the controller (scripts/presence_challenge_feeltest.py).
-The invariants here (`is_forceful`, `is_signature`) are PROXIES that encode the
-design intent in a testable way; the floor is a tunable guess, the feel-test is
-authoritative. Reuses the real driver profile type (l6_challenge_profiles).
+HONESTY: "forceful enough" and "distinguishable" are PERCEPTUAL — certified only by the
+operator feeling it (scripts/presence_challenge_feeltest.py). `is_forceful`/`is_signature`
+are testable proxies for the design intent; the operator's feel-test is authoritative.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .l6_challenge_profiles import TRIGGER_PULSE, TriggerChallengeProfile
-
-# Tunable proxy for "consciously felt." The feel-test, not this number, is the
-# real arbiter. 230/255 ~ 90%; sub-perceptual L6B is 60/255 ~ 24%.
+# Tunable proxy for "consciously felt." The feel-test, not this number, is the arbiter.
 PERCEPTIBLE_FLOOR = 160
-DEFAULT_FORCE = 230
+DEFAULT_AMP = 255
 DEFAULT_PULSES = 3
-PRESENCE_CHALLENGE_PROFILE_ID = 901  # sentinel, outside the 0-7 calibrated set
+DEFAULT_ON_MS = 200
+DEFAULT_OFF_MS = 180
 
 
-def _pulse_pattern(force: int, pulses: int) -> tuple[int, ...]:
-    """[force, 0, force, 0, ...] with `pulses` nonzero kicks, padded to 7 slots."""
-    seq: list[int] = []
-    for _ in range(pulses):
-        seq.extend((force, 0))
-    seq = seq[:7]
-    seq += [0] * (7 - len(seq))
-    return tuple(seq)
+@dataclass(frozen=True)
+class MotorSignature:
+    """A main-motor rumble challenge cadence. amp 0-255 on left/right motors."""
+    amp: int = DEFAULT_AMP
+    pulses: int = DEFAULT_PULSES
+    on_ms: int = DEFAULT_ON_MS
+    off_ms: int = DEFAULT_OFF_MS
+    alternate: bool = False  # left/right sweep instead of both-motors-together
+
+    def steps(self) -> list[tuple[int, int, float]]:
+        """Expand to [(left_amp, right_amp, duration_s), ...] for delivery."""
+        out: list[tuple[int, int, float]] = []
+        for i in range(self.pulses):
+            if self.alternate:
+                left = self.amp if i % 2 == 0 else 0
+                right = self.amp if i % 2 == 1 else 0
+            else:
+                left = right = self.amp
+            out.append((left, right, self.on_ms / 1000.0))
+            out.append((0, 0, self.off_ms / 1000.0))
+        return out
+
+    def duration_s(self) -> float:
+        return self.pulses * (self.on_ms + self.off_ms) / 1000.0
 
 
-def forceful_signature_profile(force: int = DEFAULT_FORCE,
-                               pulses: int = DEFAULT_PULSES) -> TriggerChallengeProfile:
-    """A high-force triple-pulse on BOTH triggers — felt + recognisable in-game."""
-    force = max(0, min(255, int(force)))
-    pulses = max(1, min(3, int(pulses)))  # <=3 kicks fit in 7 slots as kick/off pairs
-    pat = _pulse_pattern(force, pulses)
-    return TriggerChallengeProfile(
-        profile_id=PRESENCE_CHALLENGE_PROFILE_ID,
-        name="PRESENCE_CHALLENGE_FORCEFUL",
-        r2_mode=TRIGGER_PULSE, r2_forces=pat,
-        l2_mode=TRIGGER_PULSE, l2_forces=pat,
-        onset_threshold_ms=450.0,    # VOLUNTARY reaction band (conscious, not reflex)
-        settle_threshold_ms=1200.0,
-        description=f"Forceful presence challenge — {pulses}x{force}/255 dual-trigger signature pulse",
-    )
+def forceful_motor_signature(amp: int = DEFAULT_AMP, pulses: int = DEFAULT_PULSES,
+                             alternate: bool = False) -> MotorSignature:
+    amp = max(0, min(255, int(amp)))
+    pulses = max(1, int(pulses))
+    return MotorSignature(amp=amp, pulses=pulses, alternate=alternate)
 
 
-def is_forceful(profile: TriggerChallengeProfile, floor: int = PERCEPTIBLE_FLOOR) -> bool:
-    """Proxy: both triggers active AND peak force >= floor (consciously-felt design)."""
-    r2_peak = max(profile.r2_forces) if profile.r2_forces else 0
-    l2_peak = max(profile.l2_forces) if profile.l2_forces else 0
-    return r2_peak >= floor and l2_peak >= floor
+def is_forceful(sig: MotorSignature, floor: int = PERCEPTIBLE_FLOOR) -> bool:
+    """Proxy: amplitude at/above the consciously-felt floor."""
+    return sig.amp >= floor
 
 
-def is_signature(profile: TriggerChallengeProfile, min_pulses: int = 3) -> bool:
-    """Proxy: a multi-kick PULSE cadence on both triggers (not a steady resistance
-    the game could mimic)."""
-    if profile.r2_mode != TRIGGER_PULSE or profile.l2_mode != TRIGGER_PULSE:
-        return False
-    r2_kicks = sum(1 for f in profile.r2_forces if f > 0)
-    l2_kicks = sum(1 for f in profile.l2_forces if f > 0)
-    return r2_kicks >= min_pulses and l2_kicks >= min_pulses
+def is_signature(sig: MotorSignature, min_pulses: int = 3) -> bool:
+    """Proxy: a multi-pulse cadence (not a single rumble the game could mimic)."""
+    return sig.pulses >= min_pulses
 
 
 @dataclass
@@ -96,7 +91,6 @@ class ChallengeScheduler:
         if not recent_active:
             return False                      # idle-gate: never challenge an idle player
         if self._next_fire_at is None:
-            # arm relative to now so the first challenge isn't instantaneous
             if rng is not None:
                 self.schedule_next(now, rng)
             return False
