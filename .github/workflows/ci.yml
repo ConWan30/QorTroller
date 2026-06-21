@@ -53,8 +53,11 @@ jobs:
       - name: Install Node.js dependencies
         run: |
           npm install circomlib
-          cd contracts
-          npm ci
+          (cd contracts && npm ci)
+          # AssemblyScript toolchain for the W3bstream Poseidon(BN254) verification
+          # test (bridge/tests/test_w3bstream_poseidon_as.py). Without these deps
+          # `npx asc` cannot resolve and the test fails instead of verifying.
+          (cd scripts/w3bstream && npm ci)
 
       - name: Run 174-Invariant Gate Check
         run: |
