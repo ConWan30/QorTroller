@@ -1,0 +1,45 @@
+{
+  "schema": "vapi-fusion-v2-calibration-v1",
+  "calibration": "UNCALIBRATED",
+  "provenance": "synthetic",
+  "n_per_class": 10,
+  "seed": 0,
+  "classes": [
+    "BOT_FULL",
+    "HUMAN_CLEAN",
+    "HUMAN_INPUT_MACRO",
+    "HUMAN_RELAY"
+  ],
+  "verdicts": [
+    "DECOUPLED_REVIEW",
+    "INSUFFICIENT",
+    "LIVE_COHERENT",
+    "REPLAY_OR_RELAY"
+  ],
+  "confusion_fusion_verdict": {
+    "BOT_FULL": {
+      "DECOUPLED_REVIEW": 0,
+      "INSUFFICIENT": 10,
+      "LIVE_COHERENT": 0,
+      "REPLAY_OR_RELAY": 0
+    },
+    "HUMAN_CLEAN": {
+      "DECOUPLED_REVIEW": 0,
+      "INSUFFICIENT": 0,
+      "LIVE_COHERENT": 10,
+      "REPLAY_OR_RELAY": 0
+    },
+    "HUMAN_INPUT_MACRO": {
+      "DECOUPLED_REVIEW": 0,
+      "INSUFFICIENT": 0,
+      "LIVE_COHERENT": 10,
+      "REPLAY_OR_RELAY": 0
+    },
+    "HUMAN_RELAY": {
+      "DECOUPLED_REVIEW": 10,
+      "INSUFFICIENT": 0,
+      "LIVE_COHERENT": 0,
+      "REPLAY_OR_RELAY": 10
+    }
+  }
+}
