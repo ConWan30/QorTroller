@@ -382,6 +382,8 @@ Each phase requires **V-checks** before implementation and **P-checks** after. N
 
 **Gates:** `poep_enabled=False` unchanged; no FROZEN-v1 edit without ceremony.
 
+**COMPLETE (2026-06-20):** `bridge/vapi_bridge/cco_poep_bridge.py` — `build_poep_runner_inputs()`, `build_poep_telemetry_from_probe()` (L6B `latest_probe` → reaction/device-auth), `assemble_poep_presence_status()` with CCO `challenge_type` routing into `poep_verify()`; `l9_presence/poep_calibration.py` — `poep_verify(..., challenge_type=)` delegates to Phase C verifiers; GET `/player/session-status` `presence.poep` pulls telemetry from `store.get_l6b_calibration_progress()` when `POEP_ENABLED=true`; default-OFF — `verdict` stays `None` until operator flips env + corpus N≥50 + complete telemetry.
+
 ### Phase E — Identity grid documentation and session surfacing
 
 **Goal:** Expose `{identity_class, presence_ceiling_candidate, signing_path, path_a_eligible}` on session status alongside existing Path A fields (`operator_api` already surfaces `signing_path`, `path_a_eligible` — **BUILT** partial).

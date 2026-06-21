@@ -14,6 +14,7 @@ from vapi_bridge.cco_poep_bridge import (
     PoepRunnerInputs,
     assemble_poep_presence_status,
     build_poep_runner_inputs,
+    build_poep_telemetry_from_probe,
 )
 
 
@@ -78,3 +79,32 @@ class TestAssemblePoepPresenceStatus:
         )
         assert "pending L6B calibration" in poep["status"]
         assert poep["l6b_probe_count"] == 12
+
+
+class TestBuildPoepTelemetryFromProbe:
+    def test_rumble_imu_maps_probe_row(self):
+        tel = build_poep_telemetry_from_probe(
+            "rumble_imu",
+            {
+                "latency_ms": 185.5,
+                "accel_delta_peak": 1200.0,
+                "classification": "HUMAN",
+            },
+        )
+        assert tel["reaction_features"]["reaction_latency_ms"] == 185.5
+        assert tel["device_auth"]["classification"] == "HUMAN"
+        assert tel["device_auth"]["accel_delta_peak"] == 1200.0
+
+    def test_adaptive_force_liveness_only_no_device_auth(self):
+        tel = build_poep_telemetry_from_probe(
+            "adaptive_force",
+            {"latency_ms": 290.0},
+        )
+        assert tel["reaction_features"]["reaction_latency_ms"] == 290.0
+        assert tel["device_auth"] is None
+
+    def test_missing_latency_returns_none(self):
+        assert build_poep_telemetry_from_probe("rumble_imu", {}) == {
+            "device_auth": None,
+            "reaction_features": None,
+        }
