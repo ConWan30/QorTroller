@@ -372,9 +372,9 @@ Each phase requires **V-checks** before implementation and **P-checks** after. N
 
 **Goal:** `ChallengeVerifier` protocol; Edge verifier = regression parity with current `adaptive_response_detected`.
 
-**Deliverable:** Stubs for non-Edge verifiers returning `UNCHARACTERIZED` (never `PRESENT` at T1+).
+**Deliverable:** Mid-tier `RumbleImuVerifier` measured from DualSense L6B corpus (`sony_dualsense_v1`, N=50 HUMAN); stubs remain for stick/button/generic timing.
 
-**V-check:** All `test_poep_calibration.py` pass unchanged for Edge fixtures.
+**V-check:** All `test_poep_calibration.py` pass unchanged for Edge fixtures; `test_challenge_verifier.py` covers rumble_imu measured path.
 
 ### Phase D — Wire CCO → PoEP (dormant)
 

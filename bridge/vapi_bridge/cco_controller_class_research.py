@@ -65,8 +65,8 @@ _TIER_EMPIRICAL_GATES: dict[ControllerClassTier, tuple[str, ...]] = {
 }
 
 
-def parse_phase_g_deferred_tiers(raw: str | None) -> frozenset[ControllerClassTier]:
-    """Parse comma-separated tier names from ``CCO_PHASE_G_DEFERRED_TIERS`` env."""
+def _parse_phase_g_tier_set(raw: str | None) -> frozenset[ControllerClassTier]:
+    """Parse comma-separated tier names from a Phase G env var."""
     if not raw:
         return frozenset()
     out: set[ControllerClassTier] = set()
@@ -77,18 +77,57 @@ def parse_phase_g_deferred_tiers(raw: str | None) -> frozenset[ControllerClassTi
     return frozenset(out)
 
 
-def enrich_phase_g_progress_deferred(
+def parse_phase_g_deferred_tiers(raw: str | None) -> frozenset[ControllerClassTier]:
+    """Parse comma-separated tier names from ``CCO_PHASE_G_DEFERRED_TIERS`` env."""
+    return _parse_phase_g_tier_set(raw)
+
+
+def parse_phase_g_validated_tiers(raw: str | None) -> frozenset[ControllerClassTier]:
+    """Parse operator-attested VALIDATED tiers from ``CCO_PHASE_G_VALIDATED_TIERS`` env."""
+    return _parse_phase_g_tier_set(raw)
+
+
+def resolve_tier_measurement_grade(
+    tier: ControllerClassTier,
+    tier_probe_count: int,
+    *,
+    deferred_tiers: frozenset[ControllerClassTier] | None = None,
+    validated_tiers: frozenset[ControllerClassTier] | None = None,
+) -> MeasurementGrade:
+    """Tier grade with operator deferral + attestation overlays.
+
+    VALIDATED is never inferred from corpus count alone — only when the tier
+    appears in ``validated_tiers`` (``CCO_PHASE_G_VALIDATED_TIERS``).
+    """
+    if validated_tiers and tier in validated_tiers:
+        return "VALIDATED"
+    if deferred_tiers and tier in deferred_tiers:
+        return "UNVALIDATED"
+    return resolve_corpus_measurement_grade(tier, tier_probe_count)
+
+
+def enrich_phase_g_progress(
     progress: dict[str, Any],
-    deferred_tiers: frozenset[ControllerClassTier],
+    *,
+    deferred_tiers: frozenset[ControllerClassTier] | None = None,
+    validated_tiers: frozenset[ControllerClassTier] | None = None,
 ) -> dict[str, Any]:
-    """Mark operator-deferred tiers on a ``get_cco_phase_g_corpus_progress`` payload."""
-    if not deferred_tiers:
-        return progress
+    """Annotate ``get_cco_phase_g_corpus_progress`` with status + measurement grade."""
+    deferred_tiers = deferred_tiers or frozenset()
+    validated_tiers = validated_tiers or frozenset()
     by_tier = progress.get("by_tier") or {}
     for tier in _TIER_VALUES:
         block = by_tier.get(tier)
         if block is None:
             continue
+        probe_count = int(block.get("probe_count") or 0)
+        block["measurement_grade"] = resolve_tier_measurement_grade(
+            tier,  # type: ignore[arg-type]
+            probe_count,
+            deferred_tiers=deferred_tiers,
+            validated_tiers=validated_tiers,
+        )
+        block["operator_validated"] = tier in validated_tiers
         if tier in deferred_tiers:
             block["measurement_status"] = "deferred"
             block["deferred"] = True
@@ -99,8 +138,19 @@ def enrich_phase_g_progress_deferred(
         else:
             block["measurement_status"] = "pending"
             block["deferred"] = False
-    progress["deferred_tiers"] = sorted(deferred_tiers)
+    if deferred_tiers:
+        progress["deferred_tiers"] = sorted(deferred_tiers)
+    if validated_tiers:
+        progress["validated_tiers"] = sorted(validated_tiers)
     return progress
+
+
+def enrich_phase_g_progress_deferred(
+    progress: dict[str, Any],
+    deferred_tiers: frozenset[ControllerClassTier],
+) -> dict[str, Any]:
+    """Mark operator-deferred tiers on a ``get_cco_phase_g_corpus_progress`` payload."""
+    return enrich_phase_g_progress(progress, deferred_tiers=deferred_tiers)
 
 
 def resolve_controller_class_tier(profile_id: str | None) -> ControllerClassTier:
@@ -132,6 +182,8 @@ def assemble_controller_class_research(
     profile_id: str | None = None,
     characterization_status: str | None = None,
     tier_probe_count: int | None = None,
+    validated_tiers: frozenset[ControllerClassTier] | None = None,
+    deferred_tiers: frozenset[ControllerClassTier] | None = None,
 ) -> dict[str, Any]:
     """Build Phase G research block for session-status (default-OFF activation gate)."""
     if not enabled:
@@ -142,12 +194,26 @@ def assemble_controller_class_research(
         }
 
     tier = resolve_controller_class_tier(profile_id)
+    validated_tiers = validated_tiers or frozenset()
+    deferred_tiers = deferred_tiers or frozenset()
     if tier_probe_count is not None:
-        measurement_grade = resolve_corpus_measurement_grade(tier, tier_probe_count)
+        measurement_grade = resolve_tier_measurement_grade(
+            tier,
+            tier_probe_count,
+            deferred_tiers=deferred_tiers,
+            validated_tiers=validated_tiers,
+        )
         corpus_n = tier_probe_count
         corpus_gate_reached = tier_probe_count >= PHASE_G_TARGET_N
     else:
-        measurement_grade = _TIER_MEASUREMENT_GRADE[tier]
+        measurement_grade = resolve_tier_measurement_grade(
+            tier,
+            0,
+            deferred_tiers=deferred_tiers,
+            validated_tiers=validated_tiers,
+        )
+        if measurement_grade == "UNVALIDATED" and tier not in deferred_tiers:
+            measurement_grade = _TIER_MEASUREMENT_GRADE[tier]
         corpus_n = None
         corpus_gate_reached = None
 

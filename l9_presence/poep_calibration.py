@@ -116,6 +116,7 @@ def device_auth_score(
     """Device-auth via CCO-parameterized challenge type (Phase C).
 
     ``adaptive_force`` — adaptive-trigger force-challenge (P4a, Edge today).
+    ``rumble_imu`` — measured DualSense L6B desk corpus (mid-tier, Phase C).
     All other challenge types return UNCHARACTERIZED until per-class verifiers
     land (no PoEP activation in Phase C).
     """
