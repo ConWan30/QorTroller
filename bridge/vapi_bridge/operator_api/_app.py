@@ -350,6 +350,15 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         check_read_key=_check_read_key,
     )
 
+    from .agent_l9_fusion import register_agent_l9_fusion_routes
+
+    register_agent_l9_fusion_routes(
+        app,
+        cfg=cfg,
+        store=store,
+        check_read_key=_check_read_key,
+    )
+
     from .agent_zkba_vpm import register_agent_zkba_vpm_routes
 
     register_agent_zkba_vpm_routes(
