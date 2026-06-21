@@ -34,6 +34,7 @@ from bridge.controller.presence_challenge import (  # noqa: E402
     ChallengeScheduler,
     classify_gesture_response,
     forceful_motor_signature,
+    MotorSignature,
 )
 
 _DEFAULT_DEVICE = "581a836c98b3a1b6c0f598bfca88e6a3cc3bd7c34591b506692cb40ddf66a9f8"
@@ -50,6 +51,38 @@ def _connect():
     except Exception as exc:
         print(f"[challenger] could not open controller ({exc})."); return None
     return ds
+
+
+def _challenge_on(ds) -> None:
+    """Arm all challenge channels: max trigger vibration on both sides + lightbar orange."""
+    try:
+        from pydualsense import TriggerModes
+        for trigger in (ds.triggerL, ds.triggerR):
+            trigger.setMode(TriggerModes(0x02))  # PULSE/vibration mode
+            for i in range(7):                   # all 7 force slots maxed
+                trigger.setForce(i, 255)
+    except Exception:
+        pass
+    try:
+        ds.light.setColorI(255, 80, 0)  # bright orange — never a game lightbar color
+    except Exception:
+        pass
+
+
+def _challenge_off(ds) -> None:
+    """Reset all challenge channels: stop trigger vibration + restore lightbar."""
+    try:
+        from pydualsense import TriggerModes
+        for trigger in (ds.triggerL, ds.triggerR):
+            trigger.setMode(TriggerModes(0x00))
+            for i in range(7):
+                trigger.setForce(i, 0)
+    except Exception:
+        pass
+    try:
+        ds.light.setColorI(0, 0, 4)  # dim blue — resting state
+    except Exception:
+        pass
 
 
 def _gesture_active(ds, response: str) -> bool:
@@ -70,30 +103,36 @@ def _is_active_player(ds) -> bool:
     return any(getattr(st, b, False) for b in ("cross", "circle", "square", "triangle"))
 
 
-def run_challenge(ds, sig, response: str, window_ms: float, real: bool) -> dict:
+def run_challenge(ds, sig, response: str, window_ms: float, real: bool,
+                  band_max_ms: float = 800.0) -> dict:
     """Fire (or sham) + sample the gesture for the reaction window. Returns the classify dict."""
     steps = sig.steps() if real else []
     sched, t = [], 0.0
     for left, right, dur in steps:
         sched.append((t, t + dur, left, right)); t += dur
     total_s = max(window_ms / 1000.0, t)
+    if real:
+        _challenge_on(ds)  # trigger vibration + orange lightbar
     t0 = time.monotonic()
     samples, cur = [], None
-    while True:
-        el = time.monotonic() - t0
-        if el > total_s:
-            break
+    try:
+        while True:
+            el = time.monotonic() - t0
+            if el > total_s:
+                break
+            if real:
+                seg = next(((l, r) for (s, e, l, r) in sched if s <= el < e), (0, 0))
+                if seg != cur:
+                    ds.setLeftMotor(seg[0]); ds.setRightMotor(seg[1]); cur = seg
+            el_ms = el * 1000.0
+            if el_ms <= window_ms:
+                samples.append((el_ms, _gesture_active(ds, response)))
+            time.sleep(0.005)
+    finally:
         if real:
-            seg = next(((l, r) for (s, e, l, r) in sched if s <= el < e), (0, 0))
-            if seg != cur:
-                ds.setLeftMotor(seg[0]); ds.setRightMotor(seg[1]); cur = seg
-        el_ms = el * 1000.0
-        if el_ms <= window_ms:
-            samples.append((el_ms, _gesture_active(ds, response)))
-        time.sleep(0.005)
-    if real:
-        ds.setLeftMotor(0); ds.setRightMotor(0)
-    return classify_gesture_response(samples)
+            ds.setLeftMotor(0); ds.setRightMotor(0)
+            _challenge_off(ds)  # stop trigger vibration + restore lightbar
+    return classify_gesture_response(samples, human_max_ms=band_max_ms)
 
 
 def log_probe(db: str, device_id: str, result: dict, cco_profile_id: str) -> None:
@@ -118,20 +157,34 @@ def main() -> int:
     ap.add_argument("--cco-profile-id", default="sony_dualshock_edge_v1")
     ap.add_argument("--response", default="r5", choices=["r5", "l5", "swipe"])
     ap.add_argument("--amp", type=int, default=255)
-    ap.add_argument("--pulses", type=int, default=3)
-    ap.add_argument("--window-ms", type=float, default=450.0)
+    ap.add_argument("--pulses", type=int, default=6)
+    ap.add_argument("--on-ms", type=int, default=300,
+                    help="motor-on duration per pulse ms (default 300)")
+    ap.add_argument("--off-ms", type=int, default=20,
+                    help="gap between pulses ms (default 20 — near-continuous, side-switch only)")
+    ap.add_argument("--alternate", action="store_true", default=True,
+                    help="alternate left/right motors (default ON — games fire both simultaneously; "
+                         "alternating is perceptually distinct from any in-game haptic)")
+    ap.add_argument("--no-alternate", dest="alternate", action="store_false",
+                    help="disable alternating (both motors simultaneously)")
+    ap.add_argument("--window-ms", type=float, default=800.0)
+    ap.add_argument("--band-max-ms", type=float, default=800.0,
+                    help="upper edge of human reaction band in ms (default 800 for gameplay)")
     ap.add_argument("--interval", type=float, default=30.0)
     ap.add_argument("--jitter", type=float, default=10.0)
     ap.add_argument("--sham-rate", type=float, default=0.3)
     ap.add_argument("--once", action="store_true", help="fire one REAL challenge + report, then exit")
     args = ap.parse_args()
 
-    sig = forceful_motor_signature(args.amp, args.pulses)
+    sig = MotorSignature(amp=max(0, min(255, args.amp)), pulses=max(1, args.pulses),
+                         on_ms=args.on_ms, off_ms=args.off_ms, alternate=args.alternate)
     ds = _connect()
     if ds is None:
         return 2
-    print(f"[challenger] response={args.response} amp={args.amp} band=[120,{args.window_ms:.0f}]ms "
-          f"db={args.db}")
+    alt_tag = "alternate-L/R" if args.alternate else "bilateral"
+    print(f"[challenger] response={args.response} amp={args.amp} pulses={args.pulses} "
+          f"sig={alt_tag} on={args.on_ms}ms/off={args.off_ms}ms "
+          f"band=[120,{args.band_max_ms:.0f}]ms db={args.db}")
     rng = random.Random()
     tallies = {"real": 0, "real_hit": 0, "sham": 0, "sham_hit": 0}
 
@@ -140,7 +193,8 @@ def main() -> int:
             print("[challenger] ONE real challenge in 3s — feel the buzz, then press your "
                   f"{args.response.upper()} gesture...")
             time.sleep(3)
-            res = run_challenge(ds, sig, args.response, args.window_ms, real=True)
+            res = run_challenge(ds, sig, args.response, args.window_ms, real=True,
+                                band_max_ms=args.band_max_ms)
             log_probe(args.db, args.device, res, args.cco_profile_id)
             print(f"[challenger] result: {res}  (logged to l6b_probe_log)")
             return 0
@@ -151,7 +205,8 @@ def main() -> int:
             now = time.monotonic()
             if sched.should_fire(now, _is_active_player(ds), rng):
                 is_sham = rng.random() < args.sham_rate
-                res = run_challenge(ds, sig, args.response, args.window_ms, real=not is_sham)
+                res = run_challenge(ds, sig, args.response, args.window_ms, real=not is_sham,
+                                    band_max_ms=args.band_max_ms)
                 hit = res["classification"] == "HUMAN"
                 if is_sham:
                     tallies["sham"] += 1; tallies["sham_hit"] += int(hit)
