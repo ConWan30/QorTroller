@@ -413,6 +413,9 @@ def _cli() -> int:
     pr.add_argument("--duration", type=float, default=60.0)
     pr.add_argument("--region", nargs=4, type=int, metavar=("L", "T", "R", "B"),
                     default=[640, 360, 1280, 720])
+    pr.add_argument("--hud-region", nargs=4, type=int, metavar=("X", "Y", "W", "H"),
+                    default=None, help="screen region to OCR for down/distance/clock (needs "
+                                       "tesseract); enables the discrete-coherence channel")
     pr.add_argument("--once", action="store_true", help="capture a single session and exit")
 
     hm = sub.add_parser("harvest-menu",
@@ -434,7 +437,8 @@ def _cli() -> int:
                          indent=2, default=str))
         return 0
     if a.cmd == "run":
-        cfg = WitnessConfig(player=a.player, duration_s=a.duration, region=tuple(a.region))
+        cfg = WitnessConfig(player=a.player, duration_s=a.duration, region=tuple(a.region),
+                            hud_region=(tuple(a.hud_region) if a.hud_region else None))
         agent = WitnessAgent(cfg)
         if a.once:
             print(json.dumps({k: v for k, v in agent.run_once().items()

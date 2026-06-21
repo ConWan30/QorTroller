@@ -12,6 +12,7 @@ INSUFFICIENT and the continuous coupling channel carries the verdict, exactly as
 from __future__ import annotations
 
 import json
+import os
 from typing import Optional
 
 try:
@@ -21,8 +22,41 @@ except Exception:  # pragma: no cover - env without pytesseract
     _TESS = False
 
 
+def _locate_tesseract() -> Optional[str]:
+    """Find tesseract.exe when it isn't on PATH (the UB-Mannheim Windows installer doesn't add
+    it). Returns the path to set on pytesseract, or None if PATH already resolves it."""
+    import shutil
+    if shutil.which("tesseract"):
+        return None
+    for c in (
+        r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+        r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+        os.path.expanduser(r"~\AppData\Local\Programs\Tesseract-OCR\tesseract.exe"),
+        os.path.expanduser(r"~\AppData\Local\Tesseract-OCR\tesseract.exe"),
+    ):
+        if os.path.exists(c):
+            return c
+    return None
+
+
+if _TESS:  # point pytesseract at the binary so fresh processes work without a PATH edit
+    try:
+        _cmd = _locate_tesseract()
+        if _cmd:
+            pytesseract.pytesseract.tesseract_cmd = _cmd
+    except Exception:  # pragma: no cover
+        pass
+
+
 def ocr_available() -> bool:
-    return _TESS
+    """True only if pytesseract is importable AND the Tesseract engine binary resolves."""
+    if not _TESS:
+        return False
+    try:
+        pytesseract.get_tesseract_version()
+        return True
+    except Exception:
+        return False
 
 
 def ocr_frame(frame_bgr, region: Optional[tuple[int, int, int, int]] = None) -> Optional[str]:
