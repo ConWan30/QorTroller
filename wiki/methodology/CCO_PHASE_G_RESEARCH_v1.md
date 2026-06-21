@@ -62,7 +62,7 @@ Demo device `581a836c…` is **PREMIUM_EDGE** class with **both** MFG identity (
 | Grade | Requires |
 |-------|----------|
 | UNVALIDATED → PARTIAL | Per-class N≥50 structured probe corpus + verifier stub replaced with measured FAR/FRR |
-| PARTIAL → VALIDATED | Operator attestation + separation/defensibility gate for that class's primary challenge type |
+| PARTIAL → VALIDATED | Operator attestation via `CCO_PHASE_G_VALIDATED_TIERS` after FAR/FRR review + separation/defensibility gate for that class's primary challenge type |
 
 No automatic promotion — operator-fired only.
 

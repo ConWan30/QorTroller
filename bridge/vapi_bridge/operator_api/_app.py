@@ -814,8 +814,9 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         )
         from ..cco_controller_class_research import (
             assemble_controller_class_research,
-            enrich_phase_g_progress_deferred,
+            enrich_phase_g_progress,
             parse_phase_g_deferred_tiers,
+            parse_phase_g_validated_tiers,
             resolve_controller_class_tier,
         )
 
@@ -828,15 +829,19 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
         _deferred_tiers = parse_phase_g_deferred_tiers(
             getattr(cfg, "cco_phase_g_deferred_tiers", "") or "",
         )
+        _validated_tiers = parse_phase_g_validated_tiers(
+            getattr(cfg, "cco_phase_g_validated_tiers", "") or "",
+        )
         _phase_g_progress = None
         if _research_enabled:
             _phase_g_progress = await asyncio.to_thread(
                 store.get_cco_phase_g_corpus_progress,
             )
-            if _phase_g_progress is not None and _deferred_tiers:
-                _phase_g_progress = enrich_phase_g_progress_deferred(
+            if _phase_g_progress is not None:
+                _phase_g_progress = enrich_phase_g_progress(
                     _phase_g_progress,
-                    _deferred_tiers,
+                    deferred_tiers=_deferred_tiers,
+                    validated_tiers=_validated_tiers,
                 )
 
         def _tier_probe_count_for(profile_id: str | None) -> int | None:
@@ -855,11 +860,15 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                 profile_id=profile_id,
                 characterization_status=characterization_status,
                 tier_probe_count=_tier_probe_count_for(profile_id),
+                validated_tiers=_validated_tiers,
+                deferred_tiers=_deferred_tiers,
             )
             if _research_enabled and _phase_g_progress is not None:
                 block["phase_g_by_tier"] = _phase_g_progress["by_tier"]
                 if _phase_g_progress.get("deferred_tiers"):
                     block["deferred_tiers"] = _phase_g_progress["deferred_tiers"]
+                if _phase_g_progress.get("validated_tiers"):
+                    block["validated_tiers"] = _phase_g_progress["validated_tiers"]
             return block
 
         _identity_grid_empty = apply_composability_to_grid(
