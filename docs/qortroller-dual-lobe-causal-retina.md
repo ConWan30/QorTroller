@@ -76,6 +76,38 @@ replay — exactly the worth-thesis of the consistency engine.
   `assess_coherence` → `CoherenceReport` (`UNCALIBRATED`).
 - `bridge/tests/test_retina_causal_coherence.py` — 22 pure tests (parse, diff, fusion).
 
+## Tri-channel revival: WGC screen-capture as the shared L9 sensor
+
+`l9_presence/screen_capture.py` (WGC / DXGI / mss) + `cv_motion.py` (optical flow) +
+`coupling.py` (`InputOutputCouplingOracle`) were built as the L9/PoCP causal-presence probe
+— validated (P4 2026-05-21: coupling 0.955, neg-control 0.09 at ~400-500 ms cloud lag) but
+left as a design-only scaffold, never woven into the live retina. The dual-lobe fusion is
+what revives it: the SAME WGC frame stream now feeds TWO screen channels at two timescales,
+both bound to the certified controller input lobe.
+
+| Channel | Rate | Path | Causal claim |
+|---|---|---|---|
+| Continuous coupling (L9/PoCP) | ~60 Hz | `screen_capture` → `cv_motion` → `coupling` | camera moves *because* the aim-stick moved, at human lag (+ decoupled_energy = injection proxy; neg-control = honesty rail) |
+| Discrete outcome coherence | event-rate | `screen_capture` → OCR → `retina_screen_lobe` → `retina_causal_coherence` | HUD advances *because* the player acted |
+| Controller input lobe | ~1 kHz | certified HID retina | the shared cryptographic anchor both bind to |
+
+`screen_retina_fusion.fuse_screen_retina` joins the two **orthogonal** axes into one verdict:
+`LIVE_COHERENT` / `LIVE_COUPLED` / `INJECTION_SUSPECT` / `REPLAY_OR_RELAY` /
+`DECOUPLED_REVIEW` / `INSUFFICIENT`. The continuous axis carries the negative-control rail
+(coupling minus shuffled-control must exceed a gap, else it's a latency-search artifact ->
+`DECOUPLED`). NEUTRAL continuous (player not aiming) rests the verdict on the discrete axis.
+
+**Why the tri-channel bind is exclusive + strong:** an attacker must satisfy THREE
+independent causal bindings to the SAME certified controller, at three timescales. A video
+replay fakes discrete OCR outcomes but the continuous coupling to the live stick collapses
+(neg-control catches it) -> `REPLAY_OR_RELAY`. An aimbot keeps coupling but spikes
+decoupled_energy -> `INJECTION_SUSPECT`. Only QorTroller has the certified input anchor to
+bind all three to. This is the L9-aligning role `screen_capture` was built for.
+
+Files: `bridge/vapi_bridge/screen_retina_fusion.py` (pure; imports only `CoherenceVerdict`,
+takes coupling as primitives so it stays decoupled from `l9_presence`),
+`bridge/tests/test_screen_retina_fusion.py` (15 tests).
+
 ## Next (gated, not built)
 
 1. Real co-capture experiment to calibrate the causal map + window and measure
