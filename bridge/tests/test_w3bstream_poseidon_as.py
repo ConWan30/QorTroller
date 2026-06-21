@@ -96,6 +96,16 @@ def v1_result():
             f"{DIST_WASM.exists()=} {DIST_LOADER.exists()=}"
         )
 
+    # asc emits an ESM loader (`export async function instantiate`). Node treats
+    # dist/*.js as CommonJS absent a type marker -> "SyntaxError: Unexpected
+    # token 'export'" on node 18/20 (node >=22 auto-detects ESM syntax, which is
+    # why this passes on a node-24 dev box but fails in the CI matrix). Mark the
+    # dist dir as ESM so poseidon_runtime.js's dynamic import() resolves the
+    # loader uniformly across node 18/20/24. Scoped to compiled output only.
+    (W3B_DIR / "dist" / "package.json").write_text(
+        '{"type": "module"}\n', encoding="utf-8"
+    )
+
     # Run the V.1 verification band. stdout carries the JSON result; stderr
     # may carry a harmless MODULE_TYPELESS_PACKAGE_JSON warning -- parse
     # stdout ONLY.
