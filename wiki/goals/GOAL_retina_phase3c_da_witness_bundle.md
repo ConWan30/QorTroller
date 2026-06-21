@@ -1,6 +1,6 @@
 # /goal — Retina Phase 3c: DA witness bundle keyed by `events_root`
 
-**Status:** IN PROGRESS  
+**Status:** COMPLETE ([PR #45](https://github.com/ConWan30/QorTroller/pull/45), `e1cca900`)  
 **Prerequisite:** Phase 3 COMPLETE ([PR #41](https://github.com/ConWan30/QorTroller/pull/41), `29ce63a9`)  
 **Architecture anchor:** `bridge/vapi_bridge/retina_da_witness.py`  
 **Sidecar discipline:** witness JSON lives off-chain on `da_router`; DA key is **`events_root` only** (32B); `state_commitment_hex` is metadata for auditors
