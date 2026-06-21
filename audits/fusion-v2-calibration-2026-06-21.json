@@ -2,8 +2,6 @@
   "schema": "vapi-fusion-v2-calibration-v1",
   "calibration": "UNCALIBRATED",
   "provenance": "synthetic",
-  "n_per_class": 10,
-  "seed": 0,
   "classes": [
     "BOT_FULL",
     "HUMAN_CLEAN",
@@ -41,5 +39,7 @@
       "LIVE_COHERENT": 0,
       "REPLAY_OR_RELAY": 10
     }
-  }
+  },
+  "n_per_class": 10,
+  "seed": 0
 }

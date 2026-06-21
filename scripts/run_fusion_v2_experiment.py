@@ -26,6 +26,43 @@ from bridge.vapi_bridge.self_adversary import (  # noqa: E402
     make_headless, make_injection, make_relay, make_replay,
 )
 
+
+def artifact_from_npz(path: str, class_label: str = "HUMAN_CLEAN") -> SessionArtifact:
+    """Load a recorded witness/cocapture .npz into a SessionArtifact (provenance=real).
+
+    Recorded sessions carry the HID + camera streams but no per-frame OCR (hud_texts=[]),
+    so the discrete-coherence channel reads INSUFFICIENT until an OCR pass is added — the
+    continuous coupling channel still scores. capture_governor telemetry is carried through."""
+    import numpy as np
+    d = np.load(path, allow_pickle=True)
+
+    def col(k: str) -> list[float]:
+        return [float(x) for x in d[k].tolist()] if k in d.files else []
+
+    telemetry = {}
+    if "capture_governor" in d.files:
+        try:
+            telemetry = json.loads(str(d["capture_governor"]))
+        except Exception:
+            telemetry = {}
+    return SessionArtifact(
+        in_ts=col("in_ts"), in_sx=col("in_sx"), in_sy=col("in_sy"),
+        mo_ts=col("mo_ts"), mo_yaw=col("mo_yaw"), mo_pitch=col("mo_pitch"),
+        in_fire=col("in_fire"), hud_texts=[], class_label=class_label,
+        provenance="real", capture_telemetry=telemetry,
+    )
+
+
+def _foreign_from(a: SessionArtifact, seed: int = 1729) -> SessionArtifact:
+    """Decoupled 'foreign' camera for make_replay: the session's own camera time-SHUFFLED, so
+    it no longer tracks the real stick at any causal lag (this is the negative-control op, and
+    unlike a time-roll it decouples robustly even for periodic stick signals)."""
+    rng = random.Random(seed)
+    yaw = list(a.mo_yaw); rng.shuffle(yaw)
+    pitch = list(a.mo_pitch); rng.shuffle(pitch)
+    return SessionArtifact(in_ts=a.in_ts, in_sx=a.in_sx, in_sy=a.in_sy,
+                           mo_ts=a.mo_ts, mo_yaw=yaw, mo_pitch=pitch)
+
 _HUD = [
     (2000.0, "1ST & 10"), (3000.0, "2ND & 6"),
     (5000.0, "2ND & 6"), (6000.0, "3RD & 2"),
@@ -71,12 +108,8 @@ def _labelled_artifacts(seed: int):
     ]
 
 
-def run_synthetic(seed: int, n_per_class: int) -> dict:
-    rows = []
-    for k in range(n_per_class):
-        for a in _labelled_artifacts(seed + k):
-            rows.append(evaluate_artifact(a).to_dict())
-    # 5-class x fusion_verdict confusion
+def _build_result(rows: list[dict], provenance: str, **meta) -> dict:
+    """5-class x fusion_verdict confusion over evaluated rows."""
     classes = sorted({r["class_label"] for r in rows})
     verdicts = sorted({r["fusion_verdict"] for r in rows})
     confusion = {c: {v: 0 for v in verdicts} for c in classes}
@@ -85,14 +118,37 @@ def run_synthetic(seed: int, n_per_class: int) -> dict:
     return {
         "schema": "vapi-fusion-v2-calibration-v1",
         "calibration": "UNCALIBRATED",
-        "provenance": "synthetic",
-        "n_per_class": n_per_class,
-        "seed": seed,
+        "provenance": provenance,
         "classes": classes,
         "verdicts": verdicts,
         "confusion_fusion_verdict": confusion,
         "rows": rows,
+        **meta,
     }
+
+
+def run_synthetic(seed: int, n_per_class: int) -> dict:
+    rows = []
+    for k in range(n_per_class):
+        for a in _labelled_artifacts(seed + k):
+            rows.append(evaluate_artifact(a).to_dict())
+    return _build_result(rows, "synthetic", n_per_class=n_per_class, seed=seed)
+
+
+def run_from_session(path: str, *, injection_strength: float = 2.0) -> dict:
+    """Real-session path (the N=1 unlock): load one recorded .npz, derive the four
+    self-adversarial classes from it, and tabulate the per-oracle confusion."""
+    base = artifact_from_npz(path, "HUMAN_CLEAN")
+    arts = [
+        base,
+        make_replay(base, _foreign_from(base)),
+        make_relay(base),
+        make_headless(base),
+        make_injection(base, strength=injection_strength),
+    ]
+    rows = [evaluate_artifact(a).to_dict() for a in arts]
+    return _build_result(rows, "real_derived", source_session=os.path.basename(path),
+                         capture_telemetry=base.capture_telemetry)
 
 
 def to_markdown(d: dict) -> str:
@@ -102,7 +158,9 @@ def to_markdown(d: dict) -> str:
         "**UNCALIBRATED — provisional read on synthetic + real-derived data.** N=1 falsifies, "
         "does not validate. Thresholds proposed here require real labelled co-capture before promotion.",
         "",
-        f"- provenance: {d['provenance']}  seed: {d['seed']}  n_per_class: {d['n_per_class']}",
+        f"- provenance: {d['provenance']}" + (
+            f"  seed: {d['seed']}  n_per_class: {d['n_per_class']}"
+            if d.get("seed") is not None else f"  source_session: {d.get('source_session', '?')}"),
         "",
         "## Confusion — class_label x fusion_verdict",
         "",
@@ -127,12 +185,22 @@ def to_markdown(d: dict) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser(description="Fusion v2 calibration runner")
     ap.add_argument("--synthetic", action="store_true", default=True)
+    ap.add_argument("--from-session", default="",
+                    help="path to a recorded witness/cocapture .npz; derive the 4 adversary "
+                         "classes from this real session and tabulate the confusion (N=1 unlock)")
+    ap.add_argument("--injection-strength", type=float, default=2.0)
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--n-per-class", type=int, default=10)
     ap.add_argument("--out-dir", default="audits")
     args = ap.parse_args()
 
-    d = run_synthetic(args.seed, args.n_per_class)
+    if args.from_session:
+        if not os.path.exists(args.from_session):
+            print(f"[fusion-v2] session not found: {args.from_session}")
+            return 2
+        d = run_from_session(args.from_session, injection_strength=args.injection_strength)
+    else:
+        d = run_synthetic(args.seed, args.n_per_class)
     os.makedirs(args.out_dir, exist_ok=True)
     date = time.strftime("%Y-%m-%d")
     md_path = os.path.join(args.out_dir, f"fusion-v2-calibration-{date}.md")
