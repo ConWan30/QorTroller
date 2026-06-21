@@ -187,8 +187,11 @@ class DeviceProfileRegistry:
             # Look up canonical profile by VID/PID
             canonical = None
             for cp in self._controller_intelligence.get_all_profiles().values():
-                if cp.usb_vid == getattr(base_profile, 'vid', None) and \
-                   cp.usb_pid == getattr(base_profile, 'pid', None):
+                # F-CCO-001 fix: DeviceProfile exposes hid_vendor_id:int +
+                # hid_product_ids:tuple[int,...] (NOT vid/pid). Match vendor id
+                # AND canonical usb_pid membership in the device's product tuple.
+                if cp.usb_vid == getattr(base_profile, 'hid_vendor_id', None) and \
+                   cp.usb_pid in (getattr(base_profile, 'hid_product_ids', ()) or ()):
                     canonical = cp
                     break
             
@@ -258,10 +261,10 @@ class DeviceProfileRegistry:
                 "available_layers": ["L0", "L1", "L2", "L3", "L5"],
             }
         
-        # Find canonical profile
+        # Find canonical profile (F-CCO-001 fix: hid_vendor_id / hid_product_ids)
         for cp in self._controller_intelligence.get_all_profiles().values():
-            if cp.usb_vid == getattr(base_profile, 'vid', None) and \
-               cp.usb_pid == getattr(base_profile, 'pid', None):
+            if cp.usb_vid == getattr(base_profile, 'hid_vendor_id', None) and \
+               cp.usb_pid in (getattr(base_profile, 'hid_product_ids', ()) or ()):
                 return self._controller_intelligence._compute_tier_eligibility(cp)
         
         # Unknown profile, assume Standard tier
