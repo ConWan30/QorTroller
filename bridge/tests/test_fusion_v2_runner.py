@@ -70,3 +70,32 @@ def test_artifact_from_npz_carries_streams(tmp_path):
     a = R.artifact_from_npz(p, "HUMAN_CLEAN")
     assert len(a.in_ts) == 120 and len(a.mo_yaw) == 120
     assert a.provenance == "real" and a.hud_texts == []
+
+
+def _write_recorded_session_with_hud(path, seed=0):
+    """Recorded session + a hud_json sidecar (3 down/first-down outcomes after fire onsets)."""
+    import json
+    import numpy as np
+    from l9_presence.hud_ocr import dumps_hud_texts
+    base = _write_recorded_session(path, n=600, rate_hz=60.0, seed=seed)
+    d = dict(np.load(base, allow_pickle=True))
+    # fire onsets at 1s/4s already present; HUD outcomes at 3s/6s/9s (all within the 10s window)
+    d["hud_json"] = dumps_hud_texts([
+        (2000.0, "1ST & 10"), (3000.0, "2ND & 6"),
+        (5000.0, "2ND & 6"), (6000.0, "3RD & 2"),
+        (8000.0, "3RD & 2"), (9000.0, "1ST & 10"),
+    ])
+    np.savez(base, **d)
+    return base
+
+
+def test_from_session_with_hud_reads_live_coherent(tmp_path):
+    # the HUD OCR pass upgrades the recorded HUMAN_CLEAN base from LIVE_COUPLED to LIVE_COHERENT
+    p = _write_recorded_session_with_hud(tmp_path / "P1_03.npz")
+    a = R.artifact_from_npz(p, "HUMAN_CLEAN")
+    assert len(a.hud_texts) == 6
+    d = R.run_from_session(p)
+    base = d["rows"][0]
+    assert base["class_label"] == "HUMAN_CLEAN"
+    assert base["fusion_verdict"] == "LIVE_COHERENT"  # discrete channel now active
+    assert base["coherence"] == "COHERENT"
