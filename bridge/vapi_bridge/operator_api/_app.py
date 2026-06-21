@@ -1111,6 +1111,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             device_auth=_poep_telemetry.get("device_auth"),
             reaction_features=_poep_telemetry.get("reaction_features"),
             latest_probe=_latest_probe,
+            device_auth_note=_poep_telemetry.get("device_auth_note"),
         )
         _identity_grid = assemble_identity_grid(
             capability_report=_cco_report,
