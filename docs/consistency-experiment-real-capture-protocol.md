@@ -13,6 +13,26 @@ harness `l9_presence/adversarial/`, and the synthetic result
 > run already showed the answer reduces to two numbers; this protocol measures them
 > honestly or it is worthless.
 
+## 0. Single-subject scope (N=1 elite) — CRITICAL, overrides the population framing below
+
+For the first run the only elite player is the operator themselves (**N=1**). This is a
+legitimate single-subject pilot, but it carries a hard asymmetry that governs every claim:
+
+- **One subject can FALSIFY the gate, not VALIDATE it.** If retina falsely flags *this
+  operator's* genuine elite play at a high rate, that is strong evidence the gate fails — if
+  it cannot survive one elite player it will not survive the diverse tail → **KILL / strong
+  negative**. If retina's FPR on this operator is *low*, that is **ENCOURAGING but cannot
+  PASS** the gate; a population false-positive bound needs many elite players.
+- All measured rates are **within-subject** (this operator, this controller, this game). They
+  estimate *this operator's* retina FPR/TPR, not the population's.
+- Therefore the first run's best-case outcome is **"not killed — proceed to multi-subject
+  capture,"** never "gate validated." The ≥10-player / population thresholds in §2 and §7 are
+  retained as the PASS bar for a *future* multi-subject run, not this one.
+- **Single-subject confound to control:** with one person producing all five classes, the
+  operator must not let knowledge of the class bias play (e.g. unconsciously playing
+  "twitchier" when labelled PRO_SKILL). Capture PRO_SKILL and HUMAN_CLEAN as ordinary ranked
+  sessions labelled *after* the fact by performance, not as performances *for* the camera.
+
 ## 1. The single decision question
 
 Phase 1 proved (and a test pins) that the fusion's behaviour on the hard boundary is
@@ -121,9 +141,11 @@ Only the data source changes; the evaluator and engine are unchanged.
   windows** (Rule of Three gives ~1% upper bound at 0 FPs in 300). Capture more if early FPs
   appear.
 - For `retina_tpr_aimassist` ≥ 0.80, a few hundred aim-assist windows give a tight enough CI.
-- Spread windows across **≥10 distinct players per human class** so the rates are
-  cross-subject, not one person's idiosyncrasy (the N=37/3-player thinness this whole arc
-  has criticised).
+- **Single-subject (N=1) first run:** spread the ≥300 elite windows across **many distinct
+  sessions / days** for this one operator, so the within-subject rate is not a single sitting's
+  idiosyncrasy. This bounds *this operator's* retina FPR only. The **≥10-distinct-players** bar
+  is retained for the future multi-subject PASS run; until then no cross-subject (population)
+  claim may be made (the N=37/3-player thinness this whole arc has criticised applies here too).
 
 ## 8. Analysis discipline
 
@@ -154,9 +176,16 @@ Only the data source changes; the evaluator and engine are unchanged.
 
 ## 11. Decision tree (what each outcome means)
 
-- **PASS** (operating point meets TPR-target AND FPR-ceiling-at-CI-upper-bound): the
-  disagreement gate is real on this tier — proceed to the production `record_hash` binding
-  and FSCA-lattice integration (§6), still default-OFF behind operator activation.
+**N=1 first run can only land in the first two boxes — PASS is reserved for a future
+multi-subject run (per §0).**
+
+- **ENCOURAGE — not killed** (N=1 first run, this operator's elite FPR is low and catch is
+  high): the gate is *not falsified*. Proceed to recruit ≥10 elite players for a real PASS
+  attempt. This is the best outcome available to the single-subject run; it is NOT validation.
+- **PASS** (multi-subject only: operating point meets TPR-target AND FPR-ceiling-at-CI-upper-bound
+  across ≥10 elite players): the disagreement gate is real on this tier — proceed to the
+  production `record_hash` binding and FSCA-lattice integration (§6), still default-OFF behind
+  operator activation.
 - **KILL** (no such operating point): the gate thesis is dead on the evidence. The fusion's
   honest, retained value is **forensic / adjudication + contextual disambiguation** (Phase 1
   confirmed). Document KILL, do not deploy as a gate, do not move the threshold.

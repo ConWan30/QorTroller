@@ -29,7 +29,13 @@ def _rate(num: int, den: int) -> float:
     return round(num / den, 4) if den else 0.0
 
 
-def run_experiment(sessions: list, params) -> dict:
+def _params_block(params) -> dict:
+    keys = ("retina_tpr_aimassist", "retina_fpr_proskill", "retina_fpr_clean",
+            "bot_implausible_rate", "relay_presence_rate", "human_presence_pass")
+    return {k: getattr(params, k, None) for k in keys}
+
+
+def run_experiment(sessions: list, params=None, *, provenance: str = "synthetic") -> dict:
     confusion = {c.value: {v: 0 for v in _VERDICTS} for c in SessionClass}
     n_windows = {c.value: 0 for c in SessionClass}
     sec = {"fusion": {}, "retina_alone": {}, "presence_alone": {}}
@@ -67,16 +73,9 @@ def run_experiment(sessions: list, params) -> dict:
 
     return {
         "schema": "vapi-consistency-experiment-v1",
-        "provenance": "synthetic",
-        "provisional": True,
-        "params": {
-            "retina_tpr_aimassist": params.retina_tpr_aimassist,
-            "retina_fpr_proskill": params.retina_fpr_proskill,
-            "retina_fpr_clean": params.retina_fpr_clean,
-            "bot_implausible_rate": params.bot_implausible_rate,
-            "relay_presence_rate": params.relay_presence_rate,
-            "human_presence_pass": params.human_presence_pass,
-        },
+        "provenance": provenance,
+        "provisional": provenance != "real",
+        "params": _params_block(params),
         "n_windows": n_windows,
         "confusion": confusion,
         "metrics": {
@@ -91,11 +90,20 @@ def to_markdown(result: dict, date: str) -> str:
     p = result["params"]
     m = result["metrics"]
     lines = []
-    lines.append(f"# Consistency Experiment — SYNTHETIC (provisional) — {date}")
-    lines.append("")
-    lines.append("**Provenance:** synthetic, parameterised model of per-class oracle behaviour. "
-                 "This is a SENSITIVITY ANALYSIS over the retina-axis unknowns, NOT real capture. "
-                 "Real values (esp. `retina_fpr_proskill`) require Phase 2.")
+    real = result.get("provenance") == "real"
+    if real:
+        lines.append(f"# Consistency Experiment — REAL CAPTURE — {date}")
+        lines.append("")
+        lines.append("**Provenance:** real co-captured sessions. **N=1 single-subject** scope per the "
+                     "protocol §0: this measures THIS operator's retina FPR/TPR only. A single subject "
+                     "can FALSIFY the gate (KILL) but CANNOT VALIDATE it (no population claim). Best "
+                     "outcome here is 'not killed — proceed to multi-subject capture.'")
+    else:
+        lines.append(f"# Consistency Experiment — SYNTHETIC (provisional) — {date}")
+        lines.append("")
+        lines.append("**Provenance:** synthetic, parameterised model of per-class oracle behaviour. "
+                     "This is a SENSITIVITY ANALYSIS over the retina-axis unknowns, NOT real capture. "
+                     "Real values (esp. `retina_fpr_proskill`) require Phase 2.")
     lines.append("")
     lines.append("## Parameters (the load-bearing unknowns are the first two)")
     lines.append("")
