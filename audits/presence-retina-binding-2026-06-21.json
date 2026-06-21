@@ -1,0 +1,19 @@
+{
+  "schema": "vapi-presence-retina-binding-v1",
+  "window_ms": 2000.0,
+  "n_probes": 90,
+  "n_bound": 56,
+  "n_crypto_bound": 0,
+  "coverage": 0.6222,
+  "human_coverage": 0.58,
+  "crypto_coverage": 0.0,
+  "n_human": 50,
+  "n_human_bound": 29,
+  "offset_stats_ms": {
+    "n": 56,
+    "min_ms": 6.6,
+    "median_ms": 434.7,
+    "max_ms": 1989.6
+  },
+  "binding_is_cryptographic": false
+}
