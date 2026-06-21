@@ -880,6 +880,14 @@ _KNOWN_CAPABILITY_TAGS: frozenset[bytes] = frozenset({
                                       # (retina_perception_enabled=False), does NOT
                                       # alter the 228B PoAC wire per
                                       # docs/retina-w3bstream-integration.md
+    b"VAPI-RETINA-STATE-v2",          # Trio-Retina Phase 3 (PR #41) — retina_state_commitment.py
+                                      # v2 commitment carrying the Poseidon events_root;
+                                      # same advisory family as v1, candidate / NOT
+                                      # FROZEN-v1, default-OFF, 228B PoAC wire unchanged
+    b"VAPI-RETINA-EVENT-LINE-v1",     # Trio-Retina Phase 3 (PR #41) — retina_events_root.py
+                                      # per-event-line domain tag for off-chain Poseidon
+                                      # events_root (ZK-prep); advisory capability,
+                                      # candidate / NOT FROZEN-v1, off-chain only
 })
 
 
