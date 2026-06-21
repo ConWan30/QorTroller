@@ -36,7 +36,9 @@ Unknown profiles map to MINIMAL_PAD (conservative).
 
 | Flag | Default | Purpose |
 |------|---------|---------|
-| `CCO_RESEARCH_SURFACE_ENABLED` | `false` | When `true`, `/player/session-status` includes `identity_grid.controller_class_research` with dynamic corpus grade |
+| `CCO_RESEARCH_SURFACE_ENABLED` | `false` | When `true`, `/operator/player/session-status` includes `identity_grid.controller_class_research` with dynamic corpus grade |
+| `CCO_PHASE_G_DEFERRED_TIERS` | `` | Comma-separated tiers without hardware (e.g. `MINIMAL_PAD`) |
+| `CCO_PHASE_G_VALIDATED_TIERS` | `` | Operator attestation after FAR/FRR review (e.g. `MID_TIER,PREMIUM_EDGE`) — never auto-set |
 | `L6B_ENABLED` | `false` | Production L6B — do **not** enable until operator checklist after N≥50 gate |
 
 ---
@@ -72,7 +74,26 @@ python scripts/l6b_desk_reaction_session.py \
 CCO_RESEARCH_SURFACE_ENABLED=true
 ```
 
-Then `GET /player/session-status` should show `corpus_n`, `corpus_target_n`, `corpus_gate_reached` on the research block.
+Then `GET /operator/player/session-status` (header `x-api-key`) should show `corpus_n`, `corpus_target_n`, `corpus_gate_reached`, and per-tier `phase_g_by_tier` with `measurement_grade`.
+
+---
+
+## Post-G closure checklist
+
+1. Run FAR/FRR review: `python scripts/cco_phase_g_far_frr_report.py`
+2. Optional replay: `python scripts/l6b_corpus_reclassify_report.py`
+3. Record attestation: `audits/cco-phase-g-*-attestation-2026-06-20.md`
+4. Set env:
+
+```bash
+# bridge/.env
+CCO_PHASE_G_DEFERRED_TIERS=MINIMAL_PAD
+CCO_PHASE_G_VALIDATED_TIERS=MID_TIER,PREMIUM_EDGE
+CCO_RESEARCH_SURFACE_ENABLED=true
+```
+
+5. Phase C: mid-tier `RumbleImuVerifier` measured — verify with `pytest l9_presence/tests/test_challenge_verifier.py`
+6. Restart bridge; confirm session-status shows `validated_tiers` and `grade=VALIDATED` on attested tiers.
 
 ---
 
