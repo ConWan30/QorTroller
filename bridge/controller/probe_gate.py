@@ -74,6 +74,17 @@ def any_trigger(window: list[GateSample], floor: int) -> bool:
     return any(s.l2 > floor or s.r2 > floor for s in window)
 
 
+def is_input_quiet(window: list[GateSample], cfg: GateConfig = GateConfig()) -> bool:
+    """True when the controller is not being actively USED (no trigger + sticks still),
+    regardless of the IMU. Consumers feed the accel baseline from input-quiet windows so it
+    tracks the resting accel-noise FLOOR — independent of whether a haptic is firing right
+    now. This avoids the deadlock where the baseline only updates on LULL but an under-seeded
+    baseline makes LULL unreachable, so the gate would defer forever."""
+    if len(window) < cfg.min_samples:
+        return False
+    return not any_trigger(window, cfg.trigger_floor) and stick_span(window) <= cfg.lull_stick_span
+
+
 def classify(window: list[GateSample], baseline_var: float,
              cfg: GateConfig = GateConfig()) -> GateState:
     """LULL / ACTIVE / UNSETTLED for a pre-fire window. Fail-safe: too little data or a

@@ -44,6 +44,7 @@ from bridge.controller.probe_gate import (  # noqa: E402
     accel_variance,
     clear_to_fire,
     echo_confirmed,
+    is_input_quiet,
     update_baseline,
 )
 from bridge.controller.probe_context import clear_to_fire_context  # noqa: E402
@@ -211,8 +212,9 @@ def run_selftest(ds, secs: float, gate_cfg: GateConfig, *, hz: float = 50.0,
             if baseline_var is None:
                 baseline_var = wv
             print("[selftest] " + format_selftest_line(s, window, baseline_var, gate_cfg))
-            _clear, state = clear_to_fire(window, baseline_var, gate_cfg)
-            if state is GateState.LULL:
+            # track the resting accel-noise FLOOR from input-quiet windows (no trigger + sticks
+            # still), not from LULL — an under-seeded baseline must be able to recover.
+            if is_input_quiet(window, gate_cfg):
                 baseline_var = update_baseline(baseline_var, wv)
             last_print = now
         time.sleep(dt)
@@ -473,7 +475,7 @@ def main() -> int:
                     if baseline_var is None:
                         baseline_var = wv  # establish the quiet reference on first read
                     clear, state = clear_to_fire(win, baseline_var, gate_cfg)
-                    if state is GateState.LULL:
+                    if is_input_quiet(win, gate_cfg):
                         baseline_var = update_baseline(baseline_var, wv)
                     if not clear:
                         print(f"[challenger] defer (IMU:{state.value}) — waiting for a lull")
