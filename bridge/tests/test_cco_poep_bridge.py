@@ -104,11 +104,13 @@ class TestBuildPoepTelemetryFromProbe:
         )
         assert tel["reaction_features"]["reaction_latency_ms"] == 290.0
         assert tel["device_auth"] is None
+        assert "adaptive-trigger" in (tel["device_auth_note"] or "")
 
     def test_missing_latency_returns_none(self):
         assert build_poep_telemetry_from_probe("rumble_imu", {}) == {
             "device_auth": None,
             "reaction_features": None,
+            "device_auth_note": None,
         }
 
 
