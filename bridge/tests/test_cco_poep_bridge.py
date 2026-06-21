@@ -15,6 +15,8 @@ from vapi_bridge.cco_poep_bridge import (
     assemble_poep_presence_status,
     build_poep_runner_inputs,
     build_poep_telemetry_from_probe,
+    describe_poep_telemetry_readiness,
+    resolve_capability_report_for_session,
 )
 
 
@@ -108,3 +110,51 @@ class TestBuildPoepTelemetryFromProbe:
             "device_auth": None,
             "reaction_features": None,
         }
+
+
+class TestResolveCapabilityReportForSession:
+    def test_device_profile_id_dualsense_rumble_imu(self):
+        from vapi_bridge.config import Config
+
+        cfg = Config(device_profile_id="sony_dualsense_v1")
+        rep = resolve_capability_report_for_session(cfg=cfg)
+        assert rep.profile_id == "sony_dualsense_v1"
+        assert rep.challenge_type_candidate == "rumble_imu"
+
+    def test_default_edge_adaptive_force(self):
+        from vapi_bridge.config import Config
+
+        rep = resolve_capability_report_for_session(cfg=Config())
+        assert rep.challenge_type_candidate == "adaptive_force"
+
+
+class TestDescribePoepTelemetryReadiness:
+    def test_rumble_imu_ready(self):
+        tel = describe_poep_telemetry_readiness(
+            "rumble_imu",
+            {"latency_ms": 180.0, "accel_delta_peak": 900.0},
+            device_auth={"classification": "HUMAN"},
+            reaction_features={"reaction_latency_ms": 180.0},
+        )
+        assert tel["ready"] is True
+        assert tel["gap"] is None
+
+    def test_adaptive_force_honest_gap(self):
+        tel = describe_poep_telemetry_readiness(
+            "adaptive_force",
+            {"latency_ms": 290.0},
+            reaction_features={"reaction_latency_ms": 290.0},
+        )
+        assert tel["ready"] is False
+        assert tel["gap"] == "adaptive_force_requires_live_trigger_signature"
+
+    def test_assemble_poep_includes_telemetry_block(self):
+        poep = assemble_poep_presence_status(
+            poep_enabled=True,
+            capability_report=_FakeReport(challenge_type_candidate="adaptive_force"),
+            device_auth=None,
+            reaction_features={"reaction_latency_ms": 290.0},
+            latest_probe={"latency_ms": 290.0},
+        )
+        assert poep["telemetry"]["ready"] is False
+        assert "adaptive_force_requires_live_trigger_signature" in poep["status"]
