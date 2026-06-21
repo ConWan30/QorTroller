@@ -17,6 +17,7 @@ from bridge.vapi_bridge.capability_oracle import (
     VERDICT_TYPES_AVAILABLE,
     CapabilityOracle,
     CapabilityReport,
+    resolve_capability_hardware_ids,
 )
 
 _CONTRACT_FIELDS = frozenset({
@@ -217,3 +218,20 @@ def test_edge_vid_pid_beats_battle_beaver_without_override():
     """054C:0DF2 without profile_id must resolve to Edge, not Battle Beaver."""
     report = CapabilityOracle.resolve(0x054C, 0x0DF2)
     assert report.profile_id == "sony_dualshock_edge_v1"
+
+
+def test_resolve_hardware_ids_from_cco_profile_id():
+    class _Cfg:
+        device_profile_id = ""
+        auto_detect_device = False
+
+    vid, pid, hint = resolve_capability_hardware_ids(
+        _Cfg(),
+        cco_profile_id="sony_dualsense_v1",
+        controller_connected=False,
+    )
+    assert vid == 0x054C
+    assert pid == 0x0CE6
+    assert hint == "sony_dualsense_v1"
+    report = CapabilityOracle.resolve(vid, pid, profile_id=hint)
+    assert report.challenge_type_candidate == "rumble_imu"

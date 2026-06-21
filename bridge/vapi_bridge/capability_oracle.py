@@ -245,6 +245,54 @@ class CapabilityOracle:
         )
 
 
+def resolve_capability_hardware_ids(
+    cfg: Any,
+    *,
+    cco_profile_id: str | None = None,
+    controller_connected: bool = False,
+) -> tuple[int, int, str | None]:
+    """Resolve (vendor_id, product_id, profile_id_hint) for HTTP session surfaces.
+
+    Priority mirrors ``DeviceProfileRegistry.resolve`` without requiring an
+    active ``DualShockIntegration`` session: explicit ``DEVICE_PROFILE_ID``,
+    then ``cco_profile_id`` from the latest L6B probe row, then HID
+    auto-detect when the controller is connected, then Edge default.
+    """
+    profile_id_override = getattr(cfg, "device_profile_id", None) or None
+    if profile_id_override:
+        try:
+            profile = get_profile(profile_id_override)
+            pid = profile.hid_product_ids[0] if profile.hid_product_ids else 0
+            return profile.hid_vendor_id, pid, profile_id_override
+        except KeyError:
+            pass
+
+    if cco_profile_id:
+        try:
+            profile = get_profile(cco_profile_id)
+            pid = profile.hid_product_ids[0] if profile.hid_product_ids else 0
+            return profile.hid_vendor_id, pid, cco_profile_id
+        except KeyError:
+            pass
+
+    if controller_connected and getattr(cfg, "auto_detect_device", True):
+        try:
+            import hid  # type: ignore
+
+            for device_info in hid.enumerate():
+                vid = int(device_info.get("vendor_id", 0))
+                pid = int(device_info.get("product_id", 0))
+                detected = detect_profile(vid, pid)
+                if detected is not None:
+                    return vid, pid, detected.profile_id
+        except Exception:
+            pass
+
+    default = get_profile("sony_dualshock_edge_v1")
+    default_pid = default.hid_product_ids[0] if default.hid_product_ids else 0x0DF2
+    return default.hid_vendor_id, default_pid, None
+
+
 def _placeholder_generic() -> DeviceProfile:
     """Minimal profile for generic-fallback derivation helpers."""
     return DeviceProfile(

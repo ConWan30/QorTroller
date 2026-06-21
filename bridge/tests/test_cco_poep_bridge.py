@@ -70,6 +70,21 @@ class TestAssemblePoepPresenceStatus:
         assert poep["challenge_type"] == "button_timing"
         assert poep["characterization_status"] == "UNCHARACTERIZED"
 
+    def test_adaptive_force_partial_telemetry_note(self):
+        poep = assemble_poep_presence_status(
+            poep_enabled=False,
+            capability_report=_FakeReport(),
+            device_auth_note=(
+                "probe_log provides liveness latency only; adaptive-trigger "
+                "force signature requires live adaptive_force capture"
+            ),
+            reaction_features={"reaction_latency_ms": 290.0, "reacted": True},
+        )
+        assert poep["device_auth_available"] is False
+        assert poep["reaction_features_available"] is True
+        assert poep["device_auth_note"] is not None
+        assert "force signature" in poep["device_auth_note"]
+
     def test_l6b_pending_status_string(self):
         poep = assemble_poep_presence_status(
             poep_enabled=False,
@@ -102,9 +117,11 @@ class TestBuildPoepTelemetryFromProbe:
         )
         assert tel["reaction_features"]["reaction_latency_ms"] == 290.0
         assert tel["device_auth"] is None
+        assert "force signature" in (tel["device_auth_note"] or "")
 
     def test_missing_latency_returns_none(self):
         assert build_poep_telemetry_from_probe("rumble_imu", {}) == {
             "device_auth": None,
             "reaction_features": None,
+            "device_auth_note": None,
         }

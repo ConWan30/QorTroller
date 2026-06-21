@@ -563,18 +563,23 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
     async def get_retina_da_status(
         x_api_key: str = Header(default=""),
     ):
-        """DePIN DA bulk upload status for retina_event_log sidecar blobs."""
+        """DePIN DA bulk + witness upload status for retina_event_log sidecar blobs."""
         _check_read_key(x_api_key)
         import time as _t_da
 
-        _log = await asyncio.to_thread(store.get_retina_da_upload_status, 5)
+        _upload_log = await asyncio.to_thread(store.get_retina_da_upload_status, 5)
+        _witness_log = await asyncio.to_thread(store.get_retina_da_witness_status, 5)
         return {
             "retina_da_upload_enabled": bool(
                 getattr(cfg, "retina_da_upload_enabled", False)
             ),
-            "latest_uploaded": bool(_log.get("latest_uploaded")),
-            "latest_payload_bytes": int(_log.get("latest_payload_bytes") or 0),
-            "upload_log": _log,
+            "retina_da_witness_enabled": bool(
+                getattr(cfg, "retina_da_witness_enabled", False)
+            ),
+            "latest_uploaded": bool(_upload_log.get("latest_uploaded")),
+            "latest_payload_bytes": int(_upload_log.get("latest_payload_bytes") or 0),
+            "upload_log": _upload_log,
+            "witness_log": _witness_log,
             "timestamp": _t_da.time(),
         }
 
@@ -1067,21 +1072,33 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             log.debug("player_session_status: Path A chain reads timed out (honest defaults): %s", _exc_pa_to)
 
         # --- CCO Phase B.2 — read-only T0 / L6B telemetry surface ---
-        from ..capability_oracle import CapabilityOracle
+        from ..capability_oracle import CapabilityOracle, resolve_capability_hardware_ids
         from ..cco_l6b_wiring import assemble_cco_session_status
 
         _l6b_prog = await asyncio.to_thread(store.get_l6b_calibration_progress, dev)
         _global_n = int(_l6b_prog.get("probe_count", 0))
         _l6b_gate = bool(_l6b_prog.get("gate_reached", False))
         _profile_override = getattr(cfg, "device_profile_id", None) or None
+        _latest_probe = _l6b_prog.get("latest_probe") or {}
+        _probe_profile_id = (
+            _latest_probe.get("cco_profile_id")
+            if isinstance(_latest_probe, dict)
+            else None
+        )
         _cco_report = None
         try:
+            _vid, _pid, _profile_hint = await asyncio.to_thread(
+                resolve_capability_hardware_ids,
+                cfg,
+                cco_profile_id=_probe_profile_id,
+                controller_connected=controller_connected,
+            )
             _cco_report = await asyncio.to_thread(
                 CapabilityOracle.resolve,
-                0x054C,
-                0x0DF2,
+                _vid,
+                _pid,
                 device_id_hex=dev,
-                profile_id=_profile_override,
+                profile_id=_profile_override or _profile_hint,
                 signing_path=signing_path,
             )
         except Exception as _exc_cco:
@@ -1110,6 +1127,7 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             corpus_dir=_poep_corpus,
             device_auth=_poep_telemetry.get("device_auth"),
             reaction_features=_poep_telemetry.get("reaction_features"),
+            device_auth_note=_poep_telemetry.get("device_auth_note"),
         )
         _identity_grid = assemble_identity_grid(
             capability_report=_cco_report,

@@ -191,6 +191,39 @@ class TestPlayerSessionStatus(unittest.TestCase):
         self.assertEqual(poep["challenge_type"], "adaptive_force")
         self.assertTrue(poep["l6b_gate_reached"])
 
+    def test_7b_dualsense_rumble_imu_from_probe_profile(self):
+        """T-PSS-7b: DualSense cco_profile_id on latest probe → rumble_imu PoEP routing."""
+        cfg, store = _make_cfg(
+            l6b_enabled=True,
+            device_profile_id="sony_dualsense_v1",
+        ), _make_store()
+        store.get_recent_records = lambda limit, device_id=None: [
+            {"device_id": "devX", "pitl_humanity_prob": 0.9, "inference": 32, "created_at": time.time()}]
+        store.get_capture_health_status = lambda limit=10: {
+            "capture_state": "NOMINAL", "host_state": "EXCLUSIVE_USB", "poll_rate_hz": 1000.0}
+        store.get_l6b_calibration_progress = lambda device_id=None: {
+            "probe_count": 12,
+            "target_n": 50,
+            "gate_reached": False,
+            "latest_probe": {
+                "cco_profile_id": "sony_dualsense_v1",
+                "latency_ms": 185.0,
+                "accel_delta_peak": 900.0,
+                "classification": "HUMAN",
+            },
+        }
+        store.count_records = lambda device_id=None: 1
+        r = _client(cfg, store).get("/player/session-status", headers=_H)
+        self.assertEqual(r.status_code, 200)
+        cco = r.json()["cco"]
+        poep = r.json()["presence"]["poep"]
+        self.assertEqual(cco["profile_id"], "sony_dualsense_v1")
+        self.assertEqual(cco["challenge_type_candidate"], "rumble_imu")
+        self.assertTrue(cco["l6b_applicable"])
+        self.assertEqual(poep["challenge_type"], "rumble_imu")
+        self.assertTrue(poep["reaction_features_available"])
+        self.assertTrue(poep["device_auth_available"])
+
     def test_8_identity_grid_phase_e(self):
         """T-PSS-8: CCO Phase E — identity_grid four-field composable surface."""
         cfg, store = _make_cfg(l6b_enabled=True), _make_store()

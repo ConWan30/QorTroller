@@ -74,12 +74,31 @@ class TestL6bApplicability:
                     "has_accelerometer": True,
                     "has_adaptive_triggers": False,
                 },
+                challenge_type_candidate="adaptive_force",
             ),
             l6_driver_present=True,
             dualsense_handle_present=True,
         )
         assert app.applicable is False
         assert app.skip_reason == L6bSkipReason.NO_ADAPTIVE_TRIGGER_PATH
+
+    def test_dualsense_rumble_imu_applicable_without_adaptive(self):
+        app = check_l6b_applicability(
+            _FakeReport(
+                capabilities={
+                    "has_accelerometer": True,
+                    "has_adaptive_triggers": False,
+                    "has_gyroscope": True,
+                },
+                profile_id="sony_dualsense_v1",
+                challenge_type_candidate="rumble_imu",
+                presence_ceiling_candidate="P-T1",
+            ),
+            l6_driver_present=True,
+            dualsense_handle_present=True,
+        )
+        assert app.applicable is True
+        assert app.skip_reason is None
 
     def test_no_l6_driver(self):
         app = check_l6b_applicability(
