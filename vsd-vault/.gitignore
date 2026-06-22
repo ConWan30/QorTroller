@@ -15,3 +15,7 @@ architect_key.pem
 
 # Any private-key-shaped artifact must never enter git history
 **/.*private*.pem
+
+# Corpus snapshots are DERIVED state (regenerated from harness-passing notes); never committed
+corpus/snapshot-*/
+corpus/current
