@@ -400,7 +400,7 @@ The six surface-tier assignments the Track 1 research established are: **Surface
 - ARC 7 PQ COMMITMENT MUST BE NON-ZERO AND WELL-FORMED EVERYWHERE — INV-ARC7-002 (EVM `require` blocks null `bytes32(0)` PQ signatures) + INV-W3S-005 (Wasm `resolve_da_proof()` fail-closes on empty/zero-padded/malformed commitments). A zero or malformed `pq_commitment` is a fail-closed reject at both the contract and the Wasm sandbox layer — do not loosen either to "skip if empty"
 - ARC 7 ML-DSA SIGNING RUNS ON THREAD C ONLY — `_run_mldsa_signing(matrix)` MUST be invoked via `await asyncio.to_thread(...)` from `pipeline.py`; the `quantcrypt` ML-DSA-65 keygen/sign is CPU-heavy and will stall the ingestion event loop if run inline (same discipline as the Arc 5 numpy hot-path rule and the Phase 235-EVENTLOOP invariants)
 - W3BSTREAM WASM SANDBOX IS MECHANICAL-VALIDATION-ONLY — `w3bstream/sandbox_config.json` pins `mechanisms.frame_grabbing=false` / `optical_capture=false` / `blockhash_temporal_rules=true`. The Rust applet (`w3bstream/applet/src/lib.rs`, target `wasm32-unknown-unknown`) enforces ANCHOR_CADENCE=64 cadence (INV-W3S-001) + clean-env isolation popping `OPERATOR_PRIVATE_KEY` (INV-W3S-002) + non-zero PQ commitment (INV-W3S-005). No biometric capture, frame-grabbing, or finite-field blinding belongs inside the sandbox; keep it to input validation
-- PV-CI INVARIANT BASELINE IS 174, ENFORCED FAIL-CLOSED IN CI (count reconciled to the live gate per F-EXT-3 2026-06-13 — the gate + `.github/INVARIANTS_ALLOWLIST.json` are the single source of truth; prior "173" doc references were stale) — `.github/workflows/ci.yml` runs `scripts/vapi_invariant_gate.py` BEFORE any test job; the gate checks the 174 entries in `.github/INVARIANTS_ALLOWLIST.json` (each pinned by SHA-256 digest). Adding/editing an invariant requires updating both the gate logic and the allowlist digest in the same commit, or CI fails closed. Do not bump the baseline count without a corresponding allowlist + gate change
+- PV-CI INVARIANT BASELINE IS 179, ENFORCED FAIL-CLOSED IN CI (174→179 across w3bstream Rust sandbox + Arc 7 PQ + Trio-Retina Phase 2/3 — INV-W3S-005/006, INV-ARC7-001/002, INV-RETINA-001/002; live gate verified `PASS — 179` 2026-06-21; the gate + `.github/INVARIANTS_ALLOWLIST.json` are the single source of truth; prior "173"/"174" doc references were stale) — `.github/workflows/ci.yml` runs `scripts/vapi_invariant_gate.py` BEFORE any test job; the gate checks the 179 entries in `.github/INVARIANTS_ALLOWLIST.json` (each pinned by SHA-256 digest). Adding/editing an invariant requires updating both the gate logic and the allowlist digest in the same commit, or CI fails closed. Do not bump the baseline count without a corresponding allowlist + gate change
 - PUBLIC REPO — `conwan30/qortroller` is public. Never commit `.env`, wallet private keys, `~/.vapi/*` CA material, or raw `sessions/`/biometric capture data (the latter is `.gitignore`'d as of `638a561d`). `contracts/node_modules` is untracked (`f9e4cb8e`); run `npm install` in `contracts/` to restore it locally — do not re-add it to git
 - BRIDGE NEVER GRANTS OR REVOKES CONSENT ON BEHALF OF GAMER — gamer-self-sovereignty invariant. POST /operator/record-category-consent and /operator/revoke-category-consent write ONLY to the local `consent_ledger` (operational truth until on-chain deploy). On-chain `VAPIConsentRegistry.grantConsent / revokeConsent` MUST be called by the gamer's own wallet (msg.sender). The bridge's `chain.is_consent_valid` / `chain.get_consent_record` are READ-ONLY view calls; a malicious or compromised bridge cannot modify consent state, only observe it
 - Phase 237 chain.is_consent_valid / get_consent_record FAIL-OPEN (return False / empty dict) when `consent_registry_address == ""`. This is INTENTIONAL — bridge readiness must not depend on contract deploy. The deliberate divergence from `bbg_check_proposal` / `is_dual_eligible` (which raise RuntimeError) reflects: bridge is reader of consent state, not writer; missing on-chain registry must not block local consent_ledger operation
@@ -416,7 +416,7 @@ The six surface-tier assignments the Track 1 research established are: **Surface
 ## Build & Test Commands
 
 ```bash
-# Invariant gate — runs FIRST in CI; fail-closed on any of the 174 pinned invariants:
+# Invariant gate — runs FIRST in CI; fail-closed on any of the 179 pinned invariants:
 python scripts/vapi_invariant_gate.py                                            # exit 0 = clean baseline
 python -m pytest bridge/tests/ --ignore=bridge/tests/test_e2e_simulation.py -q  # bridge suite (4330+ w/ Arc 5/6/7 deltas)
 python -m pytest sdk/tests/ -v                                                   # 604
@@ -436,6 +436,21 @@ python scripts/l6_hardware_check.py
 python scripts/l6_capture_session.py --player P1 --game "NCAA Football 26" --target 50
 python scripts/l6_threshold_calibrator.py --from-db
 ```
+
+## QorTroller Daemon Brain (`qortroller_daemon.py`)
+
+Persistent, protocol-aware cognitive layer over the whole codebase + live on-chain state. **Hive-mind architecture:** one central brain owns the LLM connection, the 30-tool execution loop, and SQLite conversation memory (`agent_memory.db`, shared across sessions); thin rendering clients (`qortroller_cli_agent.py` Rich CLI, `qortroller_tui.py` Textual TUI) connect as dumb frontends holding no AI state. Brain listens on `localhost:8080` (`POST /chat`, `GET /history`).
+
+```bash
+python qortroller_daemon.py        # Terminal 1 — the brain (needs QUICKSILVER_API_KEY in bridge/.env)
+python qortroller_cli_agent.py     # Terminal 2 — Rich CLI rendering client
+python qortroller_tui.py           # Terminal 3 (optional) — Textual TUI (pip install textual)
+```
+
+- **LLM:** QuickSilver API, model `claude-sonnet-4-6` (switched from deepseek-v4-flash 2026-06-16). Note: the README ASCII diagram still shows the old `deepseek-v4-flash` label.
+- **30 tools** across codebase intelligence (`read_file` max 12 KB, `write_file` — blocked on protocol-invariant files, `list_files`, `search_code`, `git_history`), QorTroller-native surfaces (GIC chain visualizer, live IoTeX on-chain queries, Mythos audit runner, GIC cryptographic replay, calibration status), and Tier 1–3 governance fences.
+- **Governance fences (anti-fabrication):** `verify_artifact`, `extract_with_diff` (deterministic reconstruction), `propose_edit`/`finalize_plan` (propose-only), plus a health monitor. The daemon drove the DECON-2 monolith decomposition under these fences.
+- Full reference: README §"QorTroller Daemon Brain".
 
 ## Phase 71 Candidate Roadmap (2026-03-19) — ARCHIVED
 
