@@ -4035,15 +4035,21 @@ async def vsd_verify_chain(**_):
     schema={"type": "object", "properties": {}, "required": []}
 )
 async def vsd_session_attestation(**_):
+    # Dependency-free (no cryptography): witnesses the LAST RECORDED cycle's verdicts at the
+    # current SIC head, read from the ledger. vsd_verify_chain independently confirms the SIC
+    # binds those same harness/pv_ci bytes, so this stays a trustworthy, recomputable witness.
     _ensure_vsd_on_path()
     try:
-        import vsd_eval_harness as H
         import vsd_session_attest as attest
         ledger = _read_vsd_ledger()
-        sic_head = ledger[-1]["sic_hex"] if ledger else ""
-        harness_pass = H.run_harness().passed
-        rec = attest.compute_session_attestation(sic_head, harness_pass, None, time.time_ns())
+        if not ledger:
+            return {"error": "no cycles to attest (run /vsd-loop)"}
+        last = ledger[-1]
+        rec = attest.compute_session_attestation(
+            last.get("sic_hex", ""), bool(last.get("harness_pass")),
+            last.get("pv_ci_pass"), time.time_ns())
         rec["verified"] = attest.verify_session_attestation(rec)
+        rec["witnessed_cycle"] = last.get("cycle")
         return rec
     except Exception as exc:
         return {"error": f"vsd_session_attestation failed: {exc}"}
