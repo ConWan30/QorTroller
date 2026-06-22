@@ -31,6 +31,7 @@ _VAULT = Path(__file__).resolve().parent.parent           # vsd-vault/
 _KEY_PEM = _VAULT / "architect_key.pem"
 _PUBKEY_PEM = _VAULT / "architect_pubkey.pem"
 _ATTESTATION_REF = "vsd-vault/eval/architect_key_attestation.json"
+_ATTESTATION_PATH = _VAULT / "eval" / "architect_key_attestation.json"
 _MANIFEST_ROOT = _VAULT / "manifests" / "notes"
 SCHEMA = "vsd-note-manifest-v1"
 # note types the loop may sign autonomously; everything else is operator-pending
@@ -51,6 +52,23 @@ def _load_private_key() -> Ed25519PrivateKey:
     if not isinstance(key, Ed25519PrivateKey):
         raise TypeError("architect_key.pem is not an Ed25519 private key")
     return key
+
+
+def attested_pubkey_hex() -> str | None:
+    """The CANONICAL architect Ed25519 pubkey (hex), from the wallet-attested anchor
+    (eval/architect_key_attestation.json). Falls back to architect_pubkey.pem (also committed).
+    Returns None only if no anchor is resolvable -> a signed note then cannot verify (fail-closed)."""
+    try:
+        env = json.loads(_ATTESTATION_PATH.read_text(encoding="utf-8")).get("envelope", {})
+        pk = env.get("architect_pubkey_ed25519")
+        if pk:
+            return pk.lower()
+    except Exception:
+        pass
+    try:
+        return architect_pubkey_hex().lower()  # PEM fallback (committed public key)
+    except Exception:
+        return None
 
 
 def architect_pubkey_hex() -> str:
@@ -116,9 +134,19 @@ def verify_note(note_path: str | Path, manifest_path: str | Path) -> tuple[bool,
         return False, "note bytes changed since signing (canonical hash mismatch)"
     if not m.get("signed"):
         return True, "content-bound; UNSIGNED (pending operator)"
+    # PIN the manifest's pubkey to the wallet-attested architect key BEFORE trusting the
+    # signature — otherwise a self-consistent forged manifest (attacker keypair + its own pubkey)
+    # would verify. Mirrors the vsd-proposal-manifest-v1 procedure step 6. Fail-closed.
+    import hmac as _hmac
+    attested = attested_pubkey_hex()
+    claimed = str(m.get("architect_pubkey_ed25519", "")).lower()
+    if attested is None:
+        return False, "no attested architect key anchor; refusing to trust signature"
+    if not _hmac.compare_digest(claimed, attested):
+        return False, "pubkey not the attested architect key (provenance pin failed)"
     try:
         pub = Ed25519PublicKey.from_public_bytes(bytes.fromhex(m["architect_pubkey_ed25519"]))
         pub.verify(bytes.fromhex(m["signature"]), bytes.fromhex(m["note_canonical_hash"]))
-        return True, "Ed25519 signature verified"
+        return True, "Ed25519 signature verified (pinned to attested architect key)"
     except Exception as exc:
         return False, f"Ed25519 verify failed: {exc}"
