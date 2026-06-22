@@ -50,6 +50,16 @@ def test_tamper_detected():
     assert A.verify_session_attestation(r2) is False
 
 
+def test_attest_module_is_dependency_free():
+    """Regression (live MCP env lacks cryptography): the witness primitive must stay pure
+    stdlib so vsd_session_attestation works ambiently without the crypto dep."""
+    import inspect
+    src = inspect.getsource(A)
+    assert "cryptography" not in src and "import " in src
+    # only hashlib/struct expected
+    assert "hashlib" in src and "struct" in src
+
+
 def test_mcp_tools_registered():
     """The 4 read-only VSD tools register on the unified server."""
     import importlib
