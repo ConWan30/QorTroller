@@ -33,7 +33,6 @@ from .biometric import BiometricMixin
 from .agents import AgentsRulingsMixin
 from .calibration import CalibrationMixin
 from .retina import RetinaMixin
-from .l9_fusion import L9FusionMixin
 
 log = logging.getLogger(__name__)
 
@@ -46,7 +45,7 @@ STATUS_FAILED = "failed"
 STATUS_DEAD_LETTER = "dead_letter"
 
 
-class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, IoswarmMixin, ChainLogMixin, TournamentMixin, OperatorInitiativeMixin, VhpMixin, BiometricMixin, AgentsRulingsMixin, CalibrationMixin, RetinaMixin, L9FusionMixin):
+class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, IoswarmMixin, ChainLogMixin, TournamentMixin, OperatorInitiativeMixin, VhpMixin, BiometricMixin, AgentsRulingsMixin, CalibrationMixin, RetinaMixin):
     """SQLite-backed persistence for the bridge service."""
 
     def __init__(self, db_path: str, consent_ledger_enabled: bool = False) -> None:
@@ -629,32 +628,6 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     conn.execute(sql)
                 except sqlite3.OperationalError:
                     log.debug("schema migration already applied: %.80s", sql)
-            # L9 x Retina Fusion v2 — oracle-panel verdict log (advisory; no PoAC/chain)
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS l9_fusion_event_log (
-                    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
-                    device_id            TEXT NOT NULL,
-                    record_hash_hex      TEXT NOT NULL DEFAULT '',
-                    coupling_score       REAL,
-                    negative_control     REAL,
-                    decoupled_energy     REAL,
-                    coherence_verdict    TEXT,
-                    coherence_ratio      REAL,
-                    fusion_verdict       TEXT NOT NULL,
-                    continuous_axis      TEXT NOT NULL DEFAULT '',
-                    capture_telemetry_json TEXT NOT NULL DEFAULT '{}',
-                    report_json          TEXT NOT NULL DEFAULT '{}',
-                    created_at           REAL NOT NULL
-                )
-            """)
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_l9_fusion_device "
-                "ON l9_fusion_event_log(device_id, created_at DESC)"
-            )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_l9_fusion_verdict "
-                "ON l9_fusion_event_log(fusion_verdict, created_at DESC)"
-            )
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS threshold_history (
                     id              INTEGER PRIMARY KEY AUTOINCREMENT,
