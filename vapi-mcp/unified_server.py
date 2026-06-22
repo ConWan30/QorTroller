@@ -3929,6 +3929,132 @@ async def vapi_gamer_readiness_status(device_id: str = "D1", **_):
     }
 
 
+# ── VSD self-verifying loop — READ-ONLY ambient tools (Tools 32-35) ───────────
+# Make the VSD methodology loop verifiable in EVERY chat session. Strictly read-only:
+# no signing, no ledger writes, no cycle-run, no commit (mutation lives in /vsd-loop).
+_VSD_DIR = PROJECT_ROOT / "vsd-vault" / ".vsd"
+_VSD_LEDGER = PROJECT_ROOT / "vsd-vault" / "eval" / "synthesis_ledger.jsonl"
+_VSD_VAULT_ID = "vsd-vault-v1"
+
+
+def _ensure_vsd_on_path():
+    p = str(_VSD_DIR)
+    if p not in sys.path:
+        sys.path.insert(0, p)
+
+
+def _read_vsd_ledger() -> list[dict]:
+    if not _VSD_LEDGER.exists():
+        return []
+    return [json.loads(x) for x in _VSD_LEDGER.read_text(encoding="utf-8").splitlines() if x.strip()]
+
+
+@tool(
+    name="vsd_state",
+    description=(
+        "VSD self-verifying methodology loop — current vault head (READ-ONLY). Returns the "
+        "Synthesis Integrity Chain (SIC) head, ledger length, and the latest cycle's harness/"
+        "pv_ci/mythos-drift verdicts. The single ambient call to see whether the methodology "
+        "vault is intact + harness-clean this session. Cannot mutate (no sign/write/run)."
+    ),
+    schema={"type": "object", "properties": {}, "required": []}
+)
+async def vsd_state(**_):
+    try:
+        ledger = _read_vsd_ledger()
+        if not ledger:
+            return {"vault": "vsd-vault", "cycles": 0, "sic_head": None,
+                    "message": "no cycles yet (run /vsd-loop)"}
+        last = ledger[-1]
+        return {
+            "vault": "vsd-vault", "cycles": len(ledger), "latest_cycle": last.get("cycle"),
+            "sic_head": last.get("sic_hex"), "harness_pass": last.get("harness_pass"),
+            "pv_ci_pass": last.get("pv_ci_pass"), "mythos_drift": last.get("mythos_drift"),
+            "latest_pbsa": last.get("pbsa_id"), "ts": last.get("ts"),
+        }
+    except Exception as exc:
+        return {"error": f"vsd_state failed: {exc}"}
+
+
+@tool(
+    name="vsd_harness_report",
+    description=(
+        "Run the IMMUTABLE VSD eval harness over the notes tree (READ-ONLY checker). Returns "
+        "pass/fail, note count, passing note ids, and any findings (VSD-2 provenance / VSD-3 "
+        "honesty fields / VSD-4 PBSA). This is the deterministic synthesis checker, callable "
+        "from any session; it never edits the frozen PV-CI gate."
+    ),
+    schema={"type": "object", "properties": {}, "required": []}
+)
+async def vsd_harness_report(**_):
+    _ensure_vsd_on_path()
+    try:
+        import vsd_eval_harness as H
+        rep = H.run_harness()
+        return {
+            "passed": rep.passed, "n_notes": rep.n_notes,
+            "passing_note_ids": rep.passing_note_ids,
+            "findings": [{"severity": f.severity, "invariant": f.invariant,
+                          "note": f.note, "message": f.message} for f in rep.findings],
+        }
+    except Exception as exc:
+        return {"error": f"vsd_harness_report failed: {exc}", "passed": False}
+
+
+@tool(
+    name="vsd_verify_chain",
+    description=(
+        "Recompute the Synthesis Integrity Chain (SIC) over the ledger and confirm every stored "
+        "link matches (tamper-evident, READ-ONLY). Returns chain_intact + link count + head. Any "
+        "session can independently verify the methodology loop's provenance was not tampered."
+    ),
+    schema={"type": "object", "properties": {}, "required": []}
+)
+async def vsd_verify_chain(**_):
+    _ensure_vsd_on_path()
+    try:
+        import synthesis_integrity_chain as sic
+        ledger = _read_vsd_ledger()
+        if not ledger:
+            return {"chain_intact": True, "n_links": 0, "head": None, "message": "empty ledger"}
+        intact = sic.verify_chain(_VSD_VAULT_ID, int(ledger[0]["ts_ns"]), ledger)
+        return {"chain_intact": bool(intact), "n_links": len(ledger), "head": ledger[-1]["sic_hex"]}
+    except Exception as exc:
+        return {"error": f"vsd_verify_chain failed: {exc}", "chain_intact": False}
+
+
+@tool(
+    name="vsd_session_attestation",
+    description=(
+        "NOVEL witness primitive: emit a recomputable stamp that THIS session observed a "
+        "verified, harness-clean VSD vault at its current SIC head (READ-ONLY, no key/signature). "
+        "stamp = SHA-256(tag || sic_head || harness_pass || pv_ci_pass || ts_ns). The dev-loop "
+        "analog of the protocol's witness primitives — any party recomputes it to confirm what "
+        "this session attested. Forge-proof; binds an ephemeral chat to the durable chain."
+    ),
+    schema={"type": "object", "properties": {}, "required": []}
+)
+async def vsd_session_attestation(**_):
+    # Dependency-free (no cryptography): witnesses the LAST RECORDED cycle's verdicts at the
+    # current SIC head, read from the ledger. vsd_verify_chain independently confirms the SIC
+    # binds those same harness/pv_ci bytes, so this stays a trustworthy, recomputable witness.
+    _ensure_vsd_on_path()
+    try:
+        import vsd_session_attest as attest
+        ledger = _read_vsd_ledger()
+        if not ledger:
+            return {"error": "no cycles to attest (run /vsd-loop)"}
+        last = ledger[-1]
+        rec = attest.compute_session_attestation(
+            last.get("sic_hex", ""), bool(last.get("harness_pass")),
+            last.get("pv_ci_pass"), time.time_ns())
+        rec["verified"] = attest.verify_session_attestation(rec)
+        rec["witnessed_cycle"] = last.get("cycle")
+        return rec
+    except Exception as exc:
+        return {"error": f"vsd_session_attestation failed: {exc}"}
+
+
 async def main():
     # Preload workflow corpus files into mtime cache
     for key in WORKFLOW_FILES:
