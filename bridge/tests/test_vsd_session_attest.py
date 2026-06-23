@@ -71,4 +71,4 @@ def test_mcp_tools_registered():
         pytest.skip(f"unified_server import unavailable: {exc}")
     vsd_tools = sorted(k for k in u.TOOLS if k.startswith("vsd_"))
     assert vsd_tools == ["vsd_harness_report", "vsd_session_attestation",
-                         "vsd_state", "vsd_verify_chain"]
+                         "vsd_state", "vsd_verify_chain", "vsd_vpm_label"]

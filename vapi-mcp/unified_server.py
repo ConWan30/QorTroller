@@ -4055,6 +4055,43 @@ async def vsd_session_attestation(**_):
         return {"error": f"vsd_session_attestation failed: {exc}"}
 
 
+@tool(
+    name="vsd_vpm_label",
+    description=(
+        "NOVEL: read + verify the VSD-emits-VPM Integrity Label for the latest cycle (READ-ONLY, "
+        "dependency-free). VSD wears the protocol's OWN visual-honesty grammar — a closed-enum VPM "
+        "label (live / dry-run / emulated / frozen-disabled / revoked / unverified) so no UI/session "
+        "can render the synthesis state as `live` when the harness or PV-CI gate failed. Re-checks "
+        "the anti-overclaim invariant (visual_state == honesty-derived) + canonical hash, and "
+        "surfaces the self-predictive drift forecast (linear SIC-ledger trend; advisory). Cannot "
+        "mutate — emission happens in /vsd-loop."
+    ),
+    schema={"type": "object", "properties": {}, "required": []}
+)
+async def vsd_vpm_label(**_):
+    _ensure_vsd_on_path()
+    try:
+        import vsd_vpm_label as VL
+        latest = PROJECT_ROOT / "vsd-vault" / "eval" / "vsd_vpm_label_latest.json"
+        if not latest.exists():
+            return {"error": "no VPM label yet (run /vsd-loop to emit one)"}
+        label = json.loads(latest.read_text(encoding="utf-8"))
+        ok, reason = VL.verify_vsd_vpm_label(label)
+        return {
+            "verified": ok, "reason": reason,
+            "visual_state": label.get("visual_state"),
+            "capture_mode": label.get("capture_mode"),
+            "sic_head_hex": label.get("sic_head_hex"),
+            "proof_weight": label.get("proof_weight"),
+            "zk_verified": label.get("integrity_label", {}).get("zk_verified"),
+            "on_chain_anchor": label.get("integrity_label", {}).get("on_chain_anchor"),
+            "drift_forecast": label.get("drift_forecast"),
+            "label_hash": label.get("label_hash"),
+        }
+    except Exception as exc:
+        return {"error": f"vsd_vpm_label failed: {exc}", "verified": False}
+
+
 async def main():
     # Preload workflow corpus files into mtime cache
     for key in WORKFLOW_FILES:
