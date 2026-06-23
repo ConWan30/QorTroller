@@ -1,0 +1,45 @@
+{
+  "schema": "vsd-vpm-label-v1",
+  "label_version": "0.1.0",
+  "vpm_id": "QR-VSD-SIC-v1",
+  "audience": "methodology auditors",
+  "sic_head_hex": "c1aadcd29a906889f2884eac8cffab94841eff7cacd21612d2c293d861cb92b6",
+  "inputs": {
+    "harness_pass": true,
+    "pv_ci_pass": true,
+    "dry_run": false
+  },
+  "visual_state": "live",
+  "capture_mode": "live",
+  "proof_weight": 3,
+  "anchor_status": "none",
+  "revocation_status": "active",
+  "integrity_label": {
+    "proof_type": "VSD-SIC",
+    "capture_mode": "live",
+    "raw_biometrics_exposed": false,
+    "consent_active": true,
+    "zk_verified": false,
+    "on_chain_anchor": false,
+    "proof_weight": 3,
+    "revocation_status": "active",
+    "limitations": [
+      "synthesis-domain provenance only; not a ZKBA biometric artifact",
+      "local SIC head; not on-chain anchored"
+    ]
+  },
+  "drift_forecast": {
+    "window": 3,
+    "recent_mythos_drift": [
+      0,
+      0,
+      0
+    ],
+    "recent_verification_fails": 0,
+    "trend": "clean",
+    "forecast": "clean-projected",
+    "basis": "linear trend over SIC ledger; advisory only, not a predictive model"
+  },
+  "ts_ns": 1782254559353475400,
+  "label_hash": "f654ba92516edcce22aa2ec06c69ae44bf317a157641c1e6afa48196a3876fe7"
+}

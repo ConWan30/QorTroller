@@ -34,6 +34,32 @@ sys.path.insert(0, str(_VSD))
 import synthesis_integrity_chain as sic  # noqa: E402
 import vsd_eval_harness as harness  # noqa: E402
 import vsd_provenance as prov  # noqa: E402
+import vsd_vpm_label as vpm  # noqa: E402
+
+_VPM_LABEL_LATEST = _VAULT / "eval" / "vsd_vpm_label_latest.json"
+
+
+def _ledger_rows() -> list[dict]:
+    if not _LEDGER.exists():
+        return []
+    return [json.loads(x) for x in _LEDGER.read_text(encoding="utf-8").splitlines() if x.strip()]
+
+
+def _vpm_vocab_drift_guard() -> str | None:
+    """Best-effort (full repo env only): assert our mirrored VPM visual-state vocabulary is a
+    subset of the FROZEN VPMVisualState enum. Returns a drift message or None. The wrapper uses
+    underscores (dry_run); the artifact layer + our label use hyphens (dry-run) — compare the
+    normalized token set so a genuine enum change is caught without flagging that known skew."""
+    try:
+        sys.path.insert(0, str(_REPO / "scripts"))
+        from vsd_vpm_wrapper import VPMVisualState  # type: ignore
+        frozen = {v.value.replace("_", "-") for v in VPMVisualState}
+        ours = {s for s in vpm.VPM_VISUAL_STATES}
+        if not ours.issubset(frozen):
+            return f"VSD VPM vocab {sorted(ours - frozen)} not in FROZEN VPMVisualState {sorted(frozen)}"
+        return None
+    except Exception:
+        return None  # wrapper not importable (e.g. no bridge) — harness + PV-CI remain hard gates
 
 
 def _iso() -> str:
@@ -151,26 +177,47 @@ def run_cycle(cycle: int, dry_run: bool = False) -> dict:
     rep = harness.run_harness()
     pv_ci = _pv_ci_pass()
     drift = _mythos_drift()
+    forecast = vpm.forecast_drift(_ledger_rows())          # self-predictive trend (advisory)
+    vocab_drift = _vpm_vocab_drift_guard()
     result = {
         "cycle": cycle, "ts": _iso(), "ts_ns": ts,
         "harness_pass": rep.passed, "pv_ci_pass": pv_ci,
         "mythos_drift": drift, "n_findings": len(rep.findings),
         "passing_note_ids": rep.passing_note_ids, "pbsa_id": pbsa_id,
         "pbsa_manifest_hash": pbsa_manifest_hash,
+        "drift_forecast": forecast,
     }
+    if vocab_drift:
+        result["vpm_vocab_drift"] = vocab_drift            # surfaced if the FROZEN enum ever moves
     if dry_run:
+        # honest preview: a dry-run label binds visual_state=dry-run (or unverified on fail),
+        # computed over the SAME SIC the real cycle would stamp, but nothing is written.
+        prev = _prev_sic(ts)
+        preview_sic = sic.compute_sic(prev, pbsa_manifest_hash, rep.passed, pv_ci,
+                                      drift if drift is not None else 0, ts).hex()
+        result["vpm_label"] = vpm.build_vsd_vpm_label(
+            sic_head_hex=preview_sic, harness_pass=rep.passed, pv_ci_pass=pv_ci,
+            dry_run=True, ts_ns=ts, drift_forecast=forecast)
         result["dry_run"] = True
         return result
     sic_hex = sic.compute_sic(_prev_sic(ts), pbsa_manifest_hash, rep.passed, pv_ci,
                               drift if drift is not None else 0, ts).hex()
     result["sic_hex"] = sic_hex
     result["signed"] = True
+    # VSD-emits-VPM: bind the cycle's integrity head to the protocol's visual-honesty grammar.
+    label = vpm.build_vsd_vpm_label(
+        sic_head_hex=sic_hex, harness_pass=rep.passed, pv_ci_pass=pv_ci,
+        dry_run=False, ts_ns=ts, drift_forecast=forecast)
+    _VPM_LABEL_LATEST.write_text(json.dumps(label, indent=2), encoding="utf-8")
+    result["vpm_label"] = label
     with open(_LEDGER, "a", encoding="utf-8") as fh:
         fh.write(json.dumps({
             "ts": result["ts"], "ts_ns": ts, "cycle": cycle, "pbsa_id": pbsa_id,
             "pbsa_manifest_hash": pbsa_manifest_hash, "harness_pass": rep.passed,
             "pv_ci_pass": pv_ci, "mythos_drift": drift, "sic_hex": sic_hex,
             "note_ids": rep.passing_note_ids,
+            "vpm_visual_state": label["visual_state"], "vpm_label_hash": label["label_hash"],
+            "drift_forecast": forecast,
         }) + "\n")
     result["corpus_snapshot"] = str(_regen_corpus(rep.passing_note_ids).relative_to(_VAULT).as_posix())
     return result
