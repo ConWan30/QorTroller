@@ -109,12 +109,15 @@ def classify_chain(st: Optional[dict]) -> LaneResult:
         return LaneResult(LaneState.UNKNOWN.value, "chain status absent")
     reachable = _b(st.get("rpc_reachable"))
     paused = _b(st.get("submission_paused"))
-    if reachable is None:
-        return LaneResult(LaneState.UNKNOWN.value, "rpc_reachable missing")
-    if not reachable:
+    # Precedence: RPC down (worst) > kill-switch paused (authoritative local fact, known even when
+    # reachability can't be probed) > reachability unknown > fully connected.
+    if reachable is False:
         return LaneResult(LaneState.DISCONNECTED.value, "RPC unreachable")
     if paused:
-        return LaneResult(LaneState.DEGRADED.value, "RPC reachable; CHAIN_SUBMISSION_PAUSED (kill-switch on)")
+        rp = "RPC reachable" if reachable else "RPC reachability unprobed"
+        return LaneResult(LaneState.DEGRADED.value, f"{rp}; CHAIN_SUBMISSION_PAUSED (kill-switch on)")
+    if reachable is None:
+        return LaneResult(LaneState.UNKNOWN.value, "rpc_reachable missing")
     return LaneResult(LaneState.CONNECTED.value, "RPC reachable; submissions enabled")
 
 
