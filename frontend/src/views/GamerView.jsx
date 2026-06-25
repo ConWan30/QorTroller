@@ -504,7 +504,7 @@ class Cockpit extends React.Component {
                 <>
                   <div style={{ position: 'absolute', top: -22, left: 2, ...mono(10, PAL.ash, '0.12em'), textTransform: 'uppercase', pointerEvents: 'none' }}>RESERVED RECTANGLE</div>
                   <div style={{ position: 'absolute', top: -22, right: 2, ...mono(10, frameColor, '0.1em'), textTransform: 'uppercase', pointerEvents: 'none' }}>{twinConn}</div>
-                  <div style={{ position: 'absolute', bottom: -22, left: 2, ...mono(10, 'rgba(154,164,178,.7)', '0.12em'), textTransform: 'uppercase', pointerEvents: 'none' }}>3D CONTROLLER TWIN · LIVE</div>
+                  <div style={{ position: 'absolute', bottom: -22, left: 2, ...mono(10, 'rgba(154,164,178,.7)', '0.12em'), textTransform: 'uppercase', pointerEvents: 'none' }}>SPECIMEN · 3D CONTROLLER TWIN</div>
                   <div style={{ position: 'absolute', bottom: -22, right: 2, ...mono(10, PAL.ash, '0.1em'), textTransform: 'uppercase', pointerEvents: 'none' }}>HALO-BEHIND · LIVE IFRAME</div>
                 </>
               )}
@@ -512,33 +512,36 @@ class Cockpit extends React.Component {
 
             {/* honesty banner when not live */}
             {showBanner && (
-              <div style={{ position: 'absolute', zIndex: 4, top: 18, left: '50%', transform: 'translateX(-50%)', maxWidth: '84%', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', background: 'rgba(8,12,20,.92)', border: `1px solid ${bannerColor}`, borderRadius: 4 }}>
+              <div style={{ position: 'absolute', zIndex: 4, top: 104, left: '50%', transform: 'translateX(-50%)', maxWidth: '84%', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', background: 'rgba(8,12,20,.92)', border: `1px solid ${bannerColor}`, borderRadius: 4 }}>
                 <span style={{ width: 7, height: 7, borderRadius: '50%', background: bannerColor, boxShadow: `0 0 8px ${bannerColor}`, flex: '0 0 auto' }} />
                 <span style={{ ...mono(11.5, bannerColor, '0.02em'), lineHeight: 1.45 }}>{bannerText}</span>
               </div>
             )}
 
-            {/* bottom-left: live capture telemetry deck — trigger force · tremor · live input */}
-            <div style={{ position: 'absolute', zIndex: 3, left: 18, bottom: 54, display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-              <div style={{ background: 'rgba(8,12,20,.66)', border: `1px solid ${PAL.void2}`, borderRadius: 4, padding: '7px 9px' }}>
-                <div style={{ ...mono(10, PAL.ash, '0.12em'), textTransform: 'uppercase', marginBottom: 5 }}>TRIGGER · FORCE</div>
-                <canvas ref={this.forceRef} style={{ display: 'block', width: 140, height: 54 }} />
+            {/* telemetry in the FOUR corners — center stays clear for the twin + seal (design round 5) */}
+            {/* top-left: trigger force */}
+            <div style={{ position: 'absolute', zIndex: 3, top: 16, left: 18, background: 'rgba(8,12,20,.66)', border: `1px solid ${PAL.void2}`, borderRadius: 4, padding: '7px 9px' }}>
+              <div style={{ ...mono(10, PAL.ash, '0.12em'), textTransform: 'uppercase', marginBottom: 5 }}>TRIGGER · FORCE</div>
+              <canvas ref={this.forceRef} style={{ display: 'block', width: 140, height: 54 }} />
+            </div>
+
+            {/* top-right: tremor */}
+            <div style={{ position: 'absolute', zIndex: 3, top: 16, right: 18, background: 'rgba(8,12,20,.66)', border: `1px solid ${PAL.void2}`, borderRadius: 4, padding: '7px 9px' }}>
+              <div style={{ ...mono(10, PAL.ash, '0.12em'), textTransform: 'uppercase', marginBottom: 5 }}>TREMOR · 1&nbsp;kHz</div>
+              <canvas ref={this.tremorRef} style={{ display: 'block', width: 140, height: 54 }} />
+            </div>
+
+            {/* bottom-left: live input lanes */}
+            <div style={{ position: 'absolute', zIndex: 3, bottom: 16, left: 18, background: 'rgba(8,12,20,.66)', border: `1px solid ${PAL.void2}`, borderRadius: 4, padding: '7px 9px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 5 }}>
+                <span style={{ ...mono(10, PAL.ash, '0.12em'), textTransform: 'uppercase' }}>LIVE INPUT</span>
+                <span style={{ ...mono(9, playColor, '0.06em'), textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 5, height: 5, borderRadius: '50%', background: playColor, boxShadow: `0 0 6px ${playColor}` }} />{playState}</span>
               </div>
-              <div style={{ background: 'rgba(8,12,20,.66)', border: `1px solid ${PAL.void2}`, borderRadius: 4, padding: '7px 9px' }}>
-                <div style={{ ...mono(10, PAL.ash, '0.12em'), textTransform: 'uppercase', marginBottom: 5 }}>TREMOR · 1&nbsp;kHz</div>
-                <canvas ref={this.tremorRef} style={{ display: 'block', width: 140, height: 54 }} />
-              </div>
-              <div style={{ background: 'rgba(8,12,20,.66)', border: `1px solid ${PAL.void2}`, borderRadius: 4, padding: '7px 9px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 5 }}>
-                  <span style={{ ...mono(10, PAL.ash, '0.12em'), textTransform: 'uppercase' }}>LIVE INPUT</span>
-                  <span style={{ ...mono(9, playColor, '0.06em'), textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 5, height: 5, borderRadius: '50%', background: playColor, boxShadow: `0 0 6px ${playColor}` }} />{playState}</span>
-                </div>
-                <canvas ref={this.inputLanesRef} style={{ display: 'block', width: 172, height: 54 }} />
-              </div>
+              <canvas ref={this.inputLanesRef} style={{ display: 'block', width: 172, height: 54 }} />
             </div>
 
             {/* bottom-right: seed identity */}
-            <div style={{ position: 'absolute', zIndex: 3, right: 18, bottom: 54, maxWidth: 320, background: 'rgba(8,12,20,.66)', border: `1px solid ${PAL.void2}`, borderRadius: 4, padding: '9px 12px', textAlign: 'right' }}>
+            <div style={{ position: 'absolute', zIndex: 3, right: 18, bottom: 16, maxWidth: 320, background: 'rgba(8,12,20,.66)', border: `1px solid ${PAL.void2}`, borderRadius: 4, padding: '9px 12px', textAlign: 'right' }}>
               <div style={{ ...mono(10, PAL.ash, '0.1em'), textTransform: 'uppercase' }}>seed · device_id = keccak256(pubkey)</div>
               <div style={{ ...mono(13, seedColor, '0.02em'), fontWeight: 500, marginTop: 3, wordBreak: 'break-all' }}>{seedLine}</div>
               <div style={{ ...mono(10, PAL.ash, '0.02em'), marginTop: 3 }}>{seedSub}</div>
