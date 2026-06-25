@@ -35,7 +35,6 @@ const VpmProofView     = lazy(() => import('./views/VpmProofView').then((m) => (
 // QRESCE-0001 v0.5 grant-evaluator remodel — two design-language views wired
 // to the real bridge hooks + real in-browser verifiers (named exports).
 const ForensicView     = lazy(() => import('./views/ForensicView').then((m) => ({ default: m.ForensicView })))
-const OperatorView     = lazy(() => import('./views/OperatorView').then((m) => ({ default: m.OperatorView })))
 // Tab 05 — IoTeX grant-evaluator deck (brand-locked Claude-Design export served
 // from /grant-brief.html). Public; no auth gate (sharable with evaluators).
 const GrantBriefView   = lazy(() => import('./views/GrantBriefView').then((m) => ({ default: m.GrantBriefView })))
@@ -45,13 +44,15 @@ const ReferenceView    = lazy(() => import('./views/ReferenceView').then((m) => 
 // Tab 07 — Partner Brief (self-contained /qortroller-partner-pitch.html): the
 // manufacturer/partner pitch deck (Qorvo / Boréas / Battle Beaver). Public; no auth.
 const PartnerPitchView = lazy(() => import('./views/PartnerPitchView').then((m) => ({ default: m.PartnerPitchView })))
-// Tab 08 — AI Chat cognitive assistant.
-const LlmChatView      = lazy(() => import('./views/LlmChatView').then((m) => ({ default: m.LlmChatView })))
 
+// Tab bar curated 2026-06-24 to the 4 external-facing surfaces (Gamer + IoTeX·Grant +
+// Partner·Pitch + Reference — see ViewSelector). Operator + AI-Chat removed from the app.
+// Forensic + VPM are NOT on the bar but stay URL-reachable (`/?view=forensic`, `/?view=vpm`) so
+// the "verify it yourself" cryptographic-proof surfaces remain linkable from the decks. The
+// remaining entries (developer/manufacturer/brp/marketplace) were already off the bar.
 const VIEW_MAP = {
   gamer:        GamerView,
-  forensic:     ForensicView,
-  operator:     OperatorView,
+  forensic:     ForensicView,   // URL-reachable only (/?view=forensic)
   grant:        GrantBriefView,
   reference:    ReferenceView,
   partner:      PartnerPitchView,
@@ -59,8 +60,7 @@ const VIEW_MAP = {
   manufacturer: ManufacturerView,
   brp:          BrpView,
   marketplace:  MarketplaceView,
-  vpm:          VpmProofView,
-  chat:         LlmChatView,
+  vpm:          VpmProofView,    // URL-reachable only (/?view=vpm)
 }
 
 function ViewLoader() {
@@ -81,8 +81,13 @@ function ViewLoader() {
 }
 
 export function App() {
-  const [activeView, setActiveView] = useState('gamer')
-  const ActiveComponent = VIEW_MAP[activeView]
+  // Initial view honors `?view=<id>` (so de-listed-but-URL-reachable views like forensic/vpm
+  // open directly), falling back to the gamer front door.
+  const [activeView, setActiveView] = useState(() => {
+    const v = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('view') : null
+    return v && VIEW_MAP[v] ? v : 'gamer'
+  })
+  const ActiveComponent = VIEW_MAP[activeView] || GamerView
 
   return (
     <HeartbeatProvider>

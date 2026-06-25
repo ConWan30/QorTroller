@@ -18,24 +18,24 @@ import { useViewEyebrow } from '../design/Eyebrow'
 export function ReferenceView() {
   // v2 · item A — eyebrow spine (full-bleed .qt-stage iframe view).
   useViewEyebrow({
-    num: '06', name: 'REFERENCE · CODEX', status: 'CANON', statusTone: 'chain',
-    readouts: [{ label: 'SECTIONS', value: '11', tone: 'chain' }, { label: 'SCOPE', value: 'WHAT·HOW·FORWARD', tone: 'amber' }],
+    num: '04', name: 'ABOUT · QORTROLLER', status: 'CANON', statusTone: 'chain',
+    readouts: [{ label: 'SCOPE', value: 'WHY·WHAT·HOW·STATUS·FORWARD', tone: 'amber' }],
   })
   return (
-    <div style={{ position: 'relative', flex: 1, minHeight: 0, width: '100%', background: '#04060a' }}>
+    <div style={{ position: 'relative', flex: 1, minHeight: 0, width: '100%', background: '#060910' }}>
       <iframe
         src="/qortroller-reference.html"
-        title="QorTroller — Reference"
+        title="About QorTroller"
         style={{
           position: 'absolute',
           inset: 0,
           width: '100%',
           height: '100%',
           border: 'none',
-          background: '#04060a',
+          background: '#060910',
         }}
-        // Self-contained page with inline <style>; scripts allowed for the
-        // Claude-Design motion pass (scroll-reveals, byte assembly, etc.).
+        // Self-contained PROVING GROUND deck (forge palette + Archivo/Hanken/Martian + /pg-seal.js).
+        // The deck carries its own "Verify the proofs →" stamp + footer, so no React overlay here.
         sandbox="allow-scripts allow-same-origin"
       />
     </div>
