@@ -25,6 +25,23 @@ function drift(base, range = 0.05) {
 const now = () => new Date().toISOString()
 
 export const MOCK = {
+  // First-load discovery only. The live hook is noMock:true, so this never competes with
+  // real data mid-session. Honest shape: degraded (kill-switch posture), never a fake `live`.
+  connectivity: () => ({
+    schema: 'vapi-bridge-connectivity-v1',
+    verdict: 'degraded',
+    visual_state: 'unverified',
+    lanes: {
+      controller:  { state: 'unknown', evidence: 'bridge offline — controller status unavailable' },
+      agents:      { state: 'unknown', evidence: 'bridge offline — fleet status unavailable' },
+      chain:       { state: 'unknown', evidence: 'bridge offline — chain status unavailable' },
+      operational: { state: 'unknown', evidence: 'bridge offline — operational status unavailable' },
+    },
+    vpm_label: { visual_state: 'unverified', integrity_label: { zk_verified: false, on_chain_anchor: false } },
+    ts_ns: 0,
+    timestamp: Date.now() / 1000,
+  }),
+
   protocolCoherenceStatus: () => ({
     protocol_coherence_enabled: true,
     total_anchors: 12,
