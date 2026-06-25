@@ -1,896 +1,462 @@
-// QorTroller Gamer Dashboard — QRESCE-0001 v0.5 grant-evaluator remodel.
+// QorTroller Gamer View — the player-passport cockpit.
 //
-// Composition ported from the Claude-design export (bundle 5): a full-bleed
-// 3D Controller Twin (the emotional hero — humanity made visible) on a
-// forensic-instrument graticule stage, with capture-health, latest-GIC,
-// fleet-coherence, consent and analytics floating as translucent overlay
-// panels around it, and the grind-integrity chain growing along the bottom.
+// Ported from the Claude Design artifact "Gamer View.dc.html"
+//   (claude.ai/design project a007e7f0-727a-4f51-a823-c4009a1af000 — canonical source,
+//    re-fetchable via the DesignSync MCP). The .dc.html runs on the design runtime; this is
+//    the faithful React port wired to the LIVE bridge.
 //
-// HONESTY-PRESERVING ADAPTATIONS over the design export:
-//   - The twin is the REAL iframe (/controller-twin.html?minimal=1), never a
-//     placeholder — the design's ControllerTwinSlot was a prototype stand-in.
-//   - The chain ribbon advances ONLY on the real polled chain_length (via
-//     useChainPulse); the export's useChainAdvance simulated growth.
-//   - The latest-GIC panel shows the REAL grindChain.latest_gic_hash; the
-//     "settle" motion fires when that real hash actually changes. (In-browser
-//     re-derivation lives in ForensicView where the real preimage exists — we
-//     do NOT fake a re-derive here.)
-//   - All telemetry comes from the real bridge hooks (noMock:true); a bridge
-//     outage surfaces the explicit MOCK banner, never fabricated values.
+// Hero: a deterministic Humanity Sigil (inline mulberry32 crest) as an AURA behind a
+// translucent Controller-Twin rectangle; five HUD zones (Grind / Tournament / Your Data /
+// Sovereignty) ring it. Honesty-as-aesthetic: every color is driven by the server's
+// visual_state + BCRA lane states — green is earned, degraded/unverified render amber, revoked/
+// disconnected render rose. Nothing fakes a verdict.
 //
-// Load-bearing surfaces from the prior GamerView are preserved verbatim:
-//   - ApopEvidencePrism (mirrors FROZEN INV-APOP-002 weights)
-//   - PCCDrawer (contention episode history)
-//   - the chain_length vs consecutive_clean two-metric distinction
-//   - the per-category consent surface + ConsentPanel drawer
+// HONESTY PORT NOTES (where this diverges from the demo artifact, on purpose):
+//   - State is the LIVE bridge only. The artifact's manual "Signal Override" dock (which could
+//     fake `live`) is REMOVED; the dock keeps presentation-only controls (glow + vibe layers).
+//   - The Sigil seeds from the REAL device_id = keccak256(pubkey) (session-status); label shows
+//     the exact seed + "device-derived, not biometric" per the non-negotiable.
+//   - Consent is read-only here: grant/revoke is wallet-signed in the Consent Cockpit (/consent),
+//     never click-faked (the sovereignty invariant — the bridge never sets consent).
+//   - All hooks are noMock where grind-critical; a bridge outage shows the honest banner.
 
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { useHeartbeatStore } from '../heartbeat/useHeartbeat'
-import { useAccount } from 'wagmi'
+import React from 'react'
 import {
-  useCaptureHealth, useGrindChain, useGrindAnalytics,
-  usePCCIntelligence, useActivePlayOccupancy, useConsentStatus,
-  usePlayerSessionStatus, useLatestVhrProof, useRetinaStatus, useRetinaPolicyStatus,
+  useBridgeConnectivity, usePlayerSessionStatus, useGrindChain, useConsentStatus,
 } from '../api/bridgeApi'
-// ConsentPanel drawer SUPERSEDED 2026-06-04 by the standalone Consent
-// Cockpit dApp at /consent. The overlay below now navigates to the dApp
-// instead of opening an in-place drawer. React-router-dom <Link> is the
-// navigation primitive.
-import { Link } from 'react-router-dom'
-import { VerificationBadge } from '../components/VerificationBadge'
-import { FONTS, GAMER } from '../shared/design/tokens'
-import { OverlayPanel, StatusChip, HashSpecimen } from '../design/Primitives'
-import { useChainPulse, useRelativeTime } from '../design/motion'
-import { useQtTweaks, LevelUpBadge } from '../design/Tweaks'
-import { useViewEyebrow } from '../design/Eyebrow'
-import { usePublicGicLinks } from '../api/publicForensic'
-import { GicChainConstellation } from '../design/GicChainConstellation'
-import '../design/qortroller-kit.css'
+import { isMockActive } from '../api/mockBridge'
 
-// ---------------------------------------------------------------------------
-// Tone maps (preserved from prior GamerView — GAMER palette for telemetry
-// instruments; the new chrome uses the design palette via qortroller-kit.css)
-// ---------------------------------------------------------------------------
-
-const HOST_TONE = {
-  EXCLUSIVE_USB: GAMER.green,
-  UNKNOWN:       GAMER.t2,
-  EXCLUSIVE_BT:  GAMER.orange,
-  CONTESTED:     GAMER.red,
-  DEGRADED:      GAMER.orange,
-  DISCONNECTED:  GAMER.red,
-}
-const STATE_TONE = {
-  NOMINAL:      GAMER.green,
-  DEGRADED:     GAMER.orange,
-  DISCONNECTED: GAMER.red,
-}
-const GCTX_TONE = {
-  ACTIVE_GAMEPLAY: GAMER.green,
-  MENU_DETECTED:   GAMER.red,
-}
-// Phase 241-APOP — 5-state taxonomy color mapping (mirror INV-APOP-001).
-const APOP_TONE = {
-  ACTIVE_MATCH_PLAY:    GAMER.cyan,
-  COMPETITIVE_CONTROL:  GAMER.green,
-  MATCH_TRANSITION:     GAMER.t2,
-  NON_COMPETITIVE_MENU: GAMER.red,
-  UNKNOWN_LOW_EVIDENCE: GAMER.t3,
-}
-const APOP_GATE_TONE = {
-  shadow: GAMER.t3,
-  hybrid: GAMER.cyan,
-  strict: GAMER.orange,
-}
-// Frozen weights mirror INV-APOP-002 — keep prism segment widths in sync
-// with the bridge classifier's scoring formula.
-const APOP_AXES = [
-  { key: 'stick_score',      label: 'STICK', weight: 0.35 },
-  { key: 'button_score',     label: 'BTN',   weight: 0.20 },
-  { key: 'trigger_score',    label: 'TRIG',  weight: 0.20 },
-  { key: 'imu_score',        label: 'IMU',   weight: 0.15 },
-  { key: 'physiology_score', label: 'PHYS',  weight: 0.10 },
-]
-
-// CONSENT_CATEGORIES local copy removed 2026-06-05 (F4) — the in-place
-// consent-matrix display lived in ConsentPanelOverlay, which has been
-// stripped entirely. Consent management is now the standalone Consent
-// Cockpit dApp at /consent. The FROZEN bitmask positions still live in
-// frontend/src/components/ConsentMatrix.jsx (CONSENT_CATEGORIES export),
-// which the Cockpit imports.
-
-function tone(map, value, fallback = GAMER.t3) {
-  if (value == null) return fallback
-  return map[value] ?? fallback
+// ── palette (the design's amber-action / chain-green-earned / rose-blocked language) ──
+const C = {
+  bg: '#04060a', chain: '#5bd6a3', amber: '#f0a868', rose: '#d65b78',
+  dormant: '#5a6675', faint: '#5a6675', dim: '#8a96a5', text: '#d4dde8',
+  panel: '#0a0e14', line: '#1a2230', line2: '#243044',
 }
 
-function fmtAge(ts) {
-  if (!ts || ts === 0) return null
-  const s = Math.floor(Date.now() / 1000 - ts)
-  if (s < 0)    return 'just now'
-  if (s < 60)   return `${s}s ago`
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`
-  return `${Math.floor(s / 3600)}h ago`
+// ── hashing + PRNG (inline mulberry32; same math as the artifact + brp/hash) ──
+function fnv1a(str) { let h = 0x811c9dc5; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193) } return h >>> 0 }
+function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296 } }
+function lerpHex(a, b, t) {
+  const pa = [parseInt(a.slice(1, 3), 16), parseInt(a.slice(3, 5), 16), parseInt(a.slice(5, 7), 16)]
+  const pb = [parseInt(b.slice(1, 3), 16), parseInt(b.slice(3, 5), 16), parseInt(b.slice(5, 7), 16)]
+  const c = pa.map((v, i) => Math.round(v + (pb[i] - v) * t))
+  return `rgb(${c[0]},${c[1]},${c[2]})`
+}
+function initGeom(seed) {
+  const rng = mulberry32(seed)
+  const k = 5 + Math.floor(rng() * 4)
+  const ringCount = 4 + Math.floor(rng() * 2)
+  const rings = []
+  for (let r = 0; r < ringCount; r++) rings.push({ rad: 0.30 + r * (0.60 / ringCount) + rng() * 0.03, type: Math.floor(rng() * 5), amp: 0.035 + rng() * 0.085 })
+  return { k, rings, coreSides: 3 + Math.floor(rng() * 5), spin: rng() < 0.5 ? -1 : 1, tickN: k * (2 + Math.floor(rng() * 2)), forceSeed: rng() * 1000, tremor: Array.from({ length: 22 }, () => 0.25 + rng() * 0.75) }
 }
 
-// ---------------------------------------------------------------------------
-// Glass — preserved translucent instrument surface (APOP prism + PCC drawer)
-// ---------------------------------------------------------------------------
-
-function Glass({ children, style, accent = GAMER.cyan, intensity = 1 }) {
-  return (
-    <div style={{
-      background:           `linear-gradient(180deg, rgba(8,18,24,${0.55 * intensity}) 0%, rgba(5,10,15,${0.72 * intensity}) 100%)`,
-      backdropFilter:       'blur(14px) saturate(140%)',
-      WebkitBackdropFilter: 'blur(14px) saturate(140%)',
-      border:               `1px solid ${accent}26`,
-      borderRadius:         8,
-      boxShadow:            `0 0 24px ${accent}1a, inset 0 1px 0 rgba(255,255,255,0.04)`,
-      ...style,
-    }}>
-      {children}
-    </div>
-  )
+// ── honesty grammar ──
+const VS_META = {
+  'live': { word: 'LIVE', tone: 'live' }, 'dry-run': { word: 'DRY-RUN', tone: 'pending' },
+  'emulated': { word: 'EMULATED', tone: 'pending' }, 'frozen-disabled': { word: 'FROZEN', tone: 'dormant' },
+  'revoked': { word: 'REVOKED', tone: 'blocked' }, 'unverified': { word: 'UNVERIFIED', tone: 'pending' },
 }
-
-// ---------------------------------------------------------------------------
-// Overlay panel header (design forensic-instrument eyebrow + meta)
-// ---------------------------------------------------------------------------
-
-function PanelHead({ eye, children }) {
-  return (
-    <header className="p-head">
-      <span className="p-head__eye">{eye}</span>
-      {children}
-    </header>
-  )
+const LANE_META = {
+  connected: { word: 'CONNECTED', tone: 'live' }, degraded: { word: 'DEGRADED', tone: 'pending' },
+  disconnected: { word: 'DISCONNECTED', tone: 'blocked' }, unknown: { word: 'UNKNOWN', tone: 'dormant' },
 }
+const vsMeta = (vs) => VS_META[vs] || { word: String(vs || 'UNKNOWN').toUpperCase(), tone: 'pending' }
+const laneMeta = (s) => LANE_META[s] || { word: 'UNKNOWN', tone: 'dormant' }
+const toneColor = (t) => ({ live: C.chain, verified: C.chain, pending: C.amber, blocked: C.rose, mock: C.rose, dormant: C.dormant }[t] || C.dormant)
+const mid = (h) => (h && h.length > 18 ? h.slice(0, 10) + '…' + h.slice(-8) : (h || '—'))
 
-function Row({ label, value, color = 'var(--text-dim)', size = 12 }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-      <span className="label">{label}</span>
-      <span className="mono" style={{ fontSize: size, color }}>{value}</span>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Top-left: CAPTURE HEALTH
-// ---------------------------------------------------------------------------
-
-function CaptureHealthPanel({ capture, paused, bridgeDown }) {
-  const stateTone = bridgeDown ? 'blocked' : paused ? 'pending' : 'live'
-  const stateText = bridgeDown ? 'BRIDGE UNREACHABLE'
-    : paused ? 'COUNTING PAUSED'
-      : (capture?.capture_state ?? '—')
-  const sustained = capture?.sustained_duration_s ?? 0
-  return (
-    <OverlayPanel style={{ top: 16, left: 16, width: 264, maxHeight: 'calc(50% - 28px)', overflowY: 'auto' }}>
-      <PanelHead eye="CAPTURE · HEALTH">
-        <StatusChip tone={stateTone}>{stateText}</StatusChip>
-      </PanelHead>
-      <div className="p-body" style={{ display: 'grid', gap: 9 }}>
-        <Row label="host" value={capture?.host_state ?? '—'}
-          color={tone(HOST_TONE, capture?.host_state, 'var(--text)')} />
-        <Row label="poll" size={14}
-          value={bridgeDown ? '—' : `${capture?.poll_rate_hz ?? 0} HZ`}
-          color="var(--accent-amber)" />
-        <Row label="sustained"
-          value={bridgeDown ? '—' : `${Math.floor(sustained / 60)}m ${Math.round(sustained % 60)}s`} />
-        <Row label="ready" value={capture?.grind_ready ? 'YES' : 'NO'}
-          color={capture?.grind_ready ? 'var(--chain)' : 'var(--accent-amber)'} />
-      </div>
-    </OverlayPanel>
-  )
-}
-
-// Bottom-left: Trio-Retina advisory (policy governor + event log)
-function RetinaAdvisoryPanel({ retina, policy, bridgeDown }) {
-  const manual = retina?.retina_perception_enabled
-  const effective = policy?.effective_perception ?? retina?.retina_perception_effective
-  const armed = policy?.armed
-  const enabled = manual || effective
-  const anomalies = retina?.anomaly_count_recent ?? 0
-  const tone = !enabled ? 'pending' : anomalies > 0 ? 'blocked' : 'live'
-  const label = bridgeDown ? 'BRIDGE UNREACHABLE'
-    : !enabled ? (armed === false && policy ? 'POLICY UNARMED' : 'ADVISORY OFF')
-      : anomalies > 0 ? `${anomalies} ANOMALIES`
-        : 'NOMINAL'
-  const commitment = retina?.latest_state_commitment || ''
-  const qualSummary = policy?.qualifiers_summary || '—'
-  return (
-    <OverlayPanel style={{ bottom: 88, left: 16, width: 264 }}>
-      <PanelHead eye="RETINA · ADVISORY">
-        <StatusChip tone={tone}>{label}</StatusChip>
-      </PanelHead>
-      <div className="p-body" style={{ display: 'grid', gap: 9 }}>
-        <Row label="policy" value={bridgeDown ? '—' : (policy?.arm_source || '—')} />
-        <Row label="qualifiers" value={bridgeDown ? '—' : qualSummary} />
-        <Row label="rows" value={bridgeDown ? '—' : String(retina?.total_rows ?? 0)} />
-        {commitment ? (
-          <HashSpecimen value={commitment} truncate ends={8} size="sm" />
-        ) : (
-          <Row label="commitment" value="—" color="var(--text-muted)" />
-        )}
-      </div>
-    </OverlayPanel>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Top-right: LATEST GIC HASH + chain status (real hash, motion on real change)
-// ---------------------------------------------------------------------------
-
-function useHashChangedAt(hash) {
-  const [settledAt, setSettledAt] = useState(0)
-  const [prev, setPrev] = useState(hash)
-  useEffect(() => {
-    if (hash && hash !== prev) {
-      setSettledAt(Date.now())
-      setPrev(hash)
-    }
-  }, [hash, prev])
-  return settledAt
-}
-
-function LatestGicPanel({ grind, bridgeDown, magnitude }) {
-  const hash = grind?.latest_gic_hash || ''
-  const settledAt = useHashChangedAt(hash)
-  const changedAgo = useRelativeTime(settledAt)
-  const sessionId = grind?.grind_session_id ?? '—'
-  const glow = 4 + (magnitude ?? 0) * 8
-  return (
-    <OverlayPanel accent style={{ top: 16, right: 16, width: 332, maxHeight: 'calc(50% - 28px)', overflowY: 'auto' }}>
-      <PanelHead eye="LATEST · GIC · HASH">
-        <span className="p-head__meta motion--pulse" style={{ color: bridgeDown ? 'var(--status-blocked)' : 'var(--chain)' }}>
-          {bridgeDown ? '● STALE' : '● LIVE · SHA-256'}
-        </span>
-      </PanelHead>
-      <div className="p-body">
-        <div
-          key={hash}
-          className={hash ? 'motion--settle' : ''}
-          style={{
-            minHeight: 38,
-            textShadow: hash ? `0 0 ${glow}px #5bd6a355` : 'none',
-          }}
-        >
-          {hash
-            ? <HashSpecimen value={hash} size="md" group={4} tone="chain" />
-            : <span className="mono" style={{ fontSize: 13, color: 'var(--text-faint)' }}>— awaiting first GIC stamp —</span>}
-        </div>
-        <div style={{ marginTop: 10, paddingTop: 8, borderTop: '1px solid var(--border-soft)', display: 'grid', gap: 5 }}>
-          <Row label="chain"
-            value={
-              <span>
-                <span style={{ color: 'var(--accent-amber)', fontSize: 14, fontWeight: 600 }}>{grind?.chain_length ?? 0}</span>
-                <span className="faint"> / {grind?.grind_target ?? 100}</span>
-              </span>
-            } />
-          <Row label="integrity"
-            value={grind?.chain_intact === false ? '⚠ BROKEN' : '● INTACT'}
-            size={11}
-            color={grind?.chain_intact === false ? 'var(--status-blocked)' : 'var(--chain)'} />
-          <Row label="last stamp" value={hash ? changedAgo : '—'} size={11} color="var(--accent-amber)" />
-          <Row label="session" value={sessionId} size={11} />
-        </div>
-      </div>
-    </OverlayPanel>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Bottom-left: VHR PROOF PANEL — Arc 5 Verified Human Replay outcome surface
-// ---------------------------------------------------------------------------
-//
-// History of this slot:
-//   2026-06-05 (F4) — ConsentPanelOverlay removed; consent management
-//                     moved to standalone /consent Cockpit dApp
-//   2026-06-05 (Arc 5 surface) — now occupied by the VHR Proof Panel
-//                     so the gamer sees the headline of the
-//                     on_session_complete_vhr hook: did a real proof land,
-//                     or did the pipeline gate-close honestly.
-//
-// Reads /curator/pending-replay-proofs via useLatestVhrProof. The bridge
-// pipeline writes one row per fire to curator_packaging_log with one of:
-//
-//   vhr_proof_built              — Groth16 proof generated AND consent passed
-//   vhr_proof_built_no_verifier  — proof generated; verifier address empty
-//                                  (Arc 5 wrapper not wired in env)
-//   vhr_proof_deferred           — DeferredProver path; no real prover wired
-//   vhr_deferred_no_consent      — Arc 4 ConsentManifest gate said no
-//
-// Honesty rails: noMock on the underlying hook (a fabricated outcome would
-// impersonate a cryptographic proof claim that never fired); empty state
-// is "no VHR proofs yet" not a fake placeholder; failed-bridge fetch leaves
-// last good value (react-query default).
-function VhrProofPanel({ vhrLatest, ribbonMode, bridgeDown }) {
-  const rows = Array.isArray(vhrLatest?.pending_replay_proofs)
-    ? vhrLatest.pending_replay_proofs
-    : []
-  const latest = rows.length > 0 ? rows[0] : null
-  const count = vhrLatest?.count ?? 0
-
-  // outcome → display tone + label
-  function classifyOutcome(outcome) {
-    if (!outcome) return { tone: 'dormant', label: '—', detail: '' }
-    if (outcome === 'vhr_proof_built') {
-      return { tone: 'live', label: 'PROOF BUILT', detail: 'cryptographic proof generated' }
-    }
-    if (outcome === 'vhr_proof_built_no_verifier') {
-      return { tone: 'live', label: 'PROOF BUILT', detail: 'verifier address not wired' }
-    }
-    if (outcome === 'vhr_proof_deferred') {
-      return { tone: 'pending', label: 'DEFERRED', detail: 'no prover (ceremony pending)' }
-    }
-    if (outcome === 'vhr_deferred_no_consent') {
-      return { tone: 'pending', label: 'NO CONSENT', detail: 'Arc 4 manifest gate closed' }
-    }
-    return { tone: 'pending', label: outcome.toUpperCase(), detail: 'unrecognized outcome' }
+// ── canvas drawing (verbatim logic from the artifact) ──
+function drawMotif(ctx, type, rr, a) {
+  const y = -rr
+  switch (type) {
+    case 0: ctx.beginPath(); ctx.moveTo(0, y - a); ctx.lineTo(0, y + a); ctx.stroke(); break
+    case 1: ctx.beginPath(); ctx.arc(0, 0, rr, -Math.PI / 2 - 0.16, -Math.PI / 2 + 0.16); ctx.stroke(); break
+    case 2: for (let d = -1; d <= 1; d++) { ctx.beginPath(); ctx.arc(d * a * 0.85, y, 1.4, 0, Math.PI * 2); ctx.fill() } break
+    case 3: ctx.beginPath(); ctx.moveTo(-a, y + a); ctx.lineTo(0, y - a); ctx.lineTo(a, y + a); ctx.stroke(); break
+    case 4: ctx.beginPath(); ctx.moveTo(-a * 0.75, y); ctx.lineTo(0, y - a * 1.25); ctx.lineTo(a * 0.75, y); ctx.closePath(); ctx.stroke(); break
+    default: break
   }
-  const c = classifyOutcome(latest?.outcome)
-
-  // ts_ns → relative age (uses existing fmtAge helper)
-  const ageStr = latest?.ts_ns
-    ? fmtAge(Math.floor(Number(latest.ts_ns) / 1e9))
-    : null
-
-  const sessionShort = latest?.session_id
-    ? String(latest.session_id).slice(0, 14)
-    : null
-
-  return (
-    <OverlayPanel style={{
-      bottom: ribbonMode ? 100 : 16, left: 16, width: 264,
-      maxHeight: ribbonMode ? 'calc(50% - 124px)' : 'calc(50% - 40px)', overflowY: 'auto',
-    }}>
-      <PanelHead eye="VHR · ARC 5 PROOF">
-        <span className="p-head__meta">
-          {count > 0 ? `${count} TOTAL` : 'NONE YET'}
-        </span>
-      </PanelHead>
-      <div className="p-body" style={{ display: 'grid', gap: 9 }}>
-        {bridgeDown ? (
-          <div className="mono" style={{ fontSize: 10, color: 'var(--text-faint)', lineHeight: 1.5 }}>
-            bridge offline — last-known state held
-          </div>
-        ) : !latest ? (
-          <>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-              <span className="label">latest · outcome</span>
-              <StatusChip tone="dormant">—</StatusChip>
-            </div>
-            <div className="mono" style={{ fontSize: 9.5, color: 'var(--text-faint)', lineHeight: 1.55 }}>
-              No VHR proofs produced yet. On each session-adjudicator
-              validation the pipeline runs the consent → verdict → humanity
-              gates, then the Groth16 prover. A real PROOF BUILT needs
-              allowReplayProofs=true and a runnable prover; otherwise it
-              defers honestly. The actual outcome shows above.
-            </div>
-          </>
-        ) : (
-          <>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-              <span className="label">latest · outcome</span>
-              <StatusChip tone={c.tone}>{c.label}</StatusChip>
-            </div>
-            <div className="mono" style={{ fontSize: 9.5, color: 'var(--text-faint)', letterSpacing: '0.04em' }}>
-              {c.detail}
-            </div>
-            {sessionShort && (
-              <Row label="session" value={sessionShort} size={11} />
-            )}
-            {ageStr && (
-              <Row label="when" value={ageStr} size={11} />
-            )}
-            <div style={{ marginTop: 2, fontFamily: 'var(--font-mono)', fontSize: 9, color: 'rgba(91,214,163,0.65)', letterSpacing: '0.05em' }}>
-              source: curator_packaging_log
-            </div>
-          </>
-        )}
-      </div>
-    </OverlayPanel>
-  )
+}
+function drawSigil(cv, geom, col, proven, glow, t, reduced) {
+  if (!cv) return
+  const dpr = window.devicePixelRatio || 1
+  const cw = cv.clientWidth || 320, ch = cv.clientHeight || 320
+  if (cv.width !== Math.round(cw * dpr)) { cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr) }
+  const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, cw, ch)
+  const cx = cw / 2, cy = ch / 2, R = Math.min(cw, ch) * 0.44, g = geom
+  ctx.save(); ctx.translate(cx, cy); ctx.lineCap = 'round'; ctx.lineJoin = 'round'
+  ctx.strokeStyle = col; ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = (proven ? 24 : 11) * glow
+  ctx.lineWidth = 1.5; ctx.globalAlpha = 0.92; ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.stroke()
+  ctx.lineWidth = 1; ctx.globalAlpha = 0.4; ctx.beginPath(); ctx.arc(0, 0, R * 0.92, 0, Math.PI * 2); ctx.stroke()
+  ctx.globalAlpha = 0.55
+  for (let i = 0; i < g.tickN; i++) { const a = (i / g.tickN) * Math.PI * 2, r0 = R * 0.93, r1 = R; ctx.beginPath(); ctx.moveTo(Math.cos(a) * r0, Math.sin(a) * r0); ctx.lineTo(Math.cos(a) * r1, Math.sin(a) * r1); ctx.stroke() }
+  const spin = reduced ? 0 : (t * 0.00004 * g.spin); ctx.rotate(spin); ctx.lineWidth = 1.4
+  for (const ring of g.rings) for (let i = 0; i < g.k; i++) { ctx.save(); ctx.rotate((i / g.k) * Math.PI * 2); ctx.globalAlpha = 0.85; drawMotif(ctx, ring.type, ring.rad * R, ring.amp * R); ctx.restore() }
+  ctx.rotate(-spin * 1.6); ctx.globalAlpha = 0.95; ctx.lineWidth = 1.5
+  const cr = R * 0.17, sides = g.coreSides; ctx.beginPath()
+  for (let i = 0; i < sides; i++) { const a = -Math.PI / 2 + (i / sides) * Math.PI * 2, x = Math.cos(a) * cr, y = Math.sin(a) * cr; i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y) }
+  ctx.closePath(); ctx.stroke(); ctx.beginPath(); ctx.arc(0, 0, R * 0.045, 0, Math.PI * 2); ctx.fill(); ctx.restore()
+}
+function drawSignals(forceCv, tremorCv, geom, active, col, t, reduced) {
+  const ph = (reduced || !active) ? 0 : t * 0.0022
+  if (forceCv) {
+    const dpr = window.devicePixelRatio || 1, w = forceCv.clientWidth || 148, h = forceCv.clientHeight || 40
+    if (forceCv.width !== Math.round(w * dpr)) { forceCv.width = Math.round(w * dpr); forceCv.height = Math.round(h * dpr) }
+    const ctx = forceCv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h)
+    ctx.strokeStyle = C.line; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, h - 1.5); ctx.lineTo(w, h - 1.5); ctx.stroke()
+    ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.globalAlpha = active ? 0.95 : 0.5; ctx.beginPath()
+    const fs = geom.forceSeed
+    for (let x = 0; x <= w; x += 2) { const u = x / w, env = Math.pow(Math.sin(Math.min(Math.PI, u * Math.PI * 1.08)), 0.7), rip = 0.16 * Math.sin(u * 22 + fs + ph) * Math.sin(u * 7 + fs), v = Math.max(0, Math.min(1, env * 0.82 + rip)), yy = h - 2 - v * (h - 6); x === 0 ? ctx.moveTo(x, yy) : ctx.lineTo(x, yy) }
+    ctx.stroke(); ctx.globalAlpha = 1
+  }
+  if (tremorCv) {
+    const dpr = window.devicePixelRatio || 1, w = tremorCv.clientWidth || 120, h = tremorCv.clientHeight || 40
+    if (tremorCv.width !== Math.round(w * dpr)) { tremorCv.width = Math.round(w * dpr); tremorCv.height = Math.round(h * dpr) }
+    const ctx = tremorCv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h)
+    const bars = geom.tremor, n = bars.length, bw = w / n; ctx.fillStyle = col; ctx.globalAlpha = active ? 0.9 : 0.45
+    for (let i = 0; i < n; i++) { const jit = active && !reduced ? 0.18 * Math.sin(t * 0.004 + i * 1.7) : 0, v = Math.max(0.06, Math.min(1, bars[i] + jit)), bh = v * (h - 3); ctx.fillRect(i * bw + 0.6, h - bh, bw - 1.4, bh) }
+    ctx.globalAlpha = 1
+  }
 }
 
-// ---------------------------------------------------------------------------
-// Bottom-right: ANALYTICS (real grind pipeline stats)
-// ---------------------------------------------------------------------------
-
-function AnalyticsPanel({ analytics, topBlocker, ribbonMode }) {
-  const total = analytics?.total_validated
-  return (
-    <OverlayPanel style={{
-      bottom: ribbonMode ? 100 : 16, right: 16, width: 264,
-      maxHeight: ribbonMode ? 'calc(50% - 124px)' : 'calc(50% - 40px)', overflowY: 'auto',
-    }}>
-      <PanelHead eye="ANALYTICS · GRIND">
-        <span className="p-head__meta">{total != null ? total.toLocaleString() : '—'} TOTAL</span>
-      </PanelHead>
-      <div className="p-body" style={{ display: 'grid', gap: 9 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-          <span className="label">success · rate</span>
-          <span className="mono" style={{ fontSize: 22, color: 'var(--chain)' }}>
-            {analytics?.success_rate != null ? `${(analytics.success_rate * 100).toFixed(1)}%` : '—'}
-          </span>
-        </div>
-        <Row label="stamped" value={analytics?.stamped_count ?? '—'} />
-        <Row label="~ / day"
-          value={analytics?.sessions_per_day != null ? analytics.sessions_per_day.toFixed(1) : '—'} size={11} />
-        <Row label="proj · gic-100" value={analytics?.projected_gic100_date ?? '—'}
-          size={11} color="var(--accent-amber)" />
-        {topBlocker && (
-          <div style={{ marginTop: 2, fontFamily: 'var(--font-mono)', fontSize: 9.5, color: 'var(--accent-amber)', letterSpacing: '0.05em' }}>
-            blocked: {topBlocker}
-          </div>
-        )}
-        {/* F4 2026-06-05 — standalone Consent Cockpit dApp CTA pill. Replaces
-            the prior ConsentPanelOverlay (bottom-left drawer chrome). This
-            is the only consent affordance remaining in GamerView — clicking
-            it navigates to /consent. The Cockpit owns grant/revoke,
-            receipt timeline, wallet/device dual-identity, and the
-            sovereignty disclosure. */}
-        <Link
-          to="/consent"
-          aria-label="Open the Consent Cockpit dApp"
-          style={{
-            marginTop:     6,
-            display:       'block',
-            padding:       '8px 10px',
-            background:    'rgba(0,212,255,0.10)',
-            border:        '1px solid rgba(0,212,255,0.45)',
-            borderRadius:  3,
-            textAlign:     'center',
-            fontFamily:    "'JetBrains Mono', monospace",
-            fontSize:      10,
-            letterSpacing: '0.16em',
-            color:         '#00d4ff',
-            fontWeight:    600,
-            textDecoration: 'none',
-          }}
-        >
-          MANAGE CONSENT →
-        </Link>
-      </div>
-    </OverlayPanel>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Bottom-center: GRIND CHAIN RIBBON (real chain_length; pulse on real landing)
-// ---------------------------------------------------------------------------
-
-function GrindRibbon({ chainLen, target, intact, paused, bridgeDown, consecutiveClean, changedAgo }) {
-  const { landingAt } = useChainPulse(chainLen)
-  // GIC landing FX is gamer-selectable via Tweaks (pulse / bloom / shockwave /
-  // off). It only ever fires on a REAL chain advance (useChainPulse observes the
-  // polled chain_length; it never simulates growth) — the vibe layer never
-  // fabricates an advancing chain.
-  const { landingFx } = useQtTweaks()
-  const showStreak = consecutiveClean != null && consecutiveClean !== chainLen
-  // Cap the rendered cell count so very large targets stay performant.
-  const cells = Math.min(target ?? 100, 100)
-  const scale = (target ?? 100) / cells
-  return (
-    <div style={{
-      position: 'absolute', left: 16, right: 16, bottom: 16,
-      // Fixed-height container (v2 · item F) so the ribbon never grows into the
-      // bottom corner panels as the chain advances; cells scale-X within it.
-      height: 72, boxSizing: 'border-box', overflow: 'hidden',
-      background: 'rgba(10, 14, 20, 0.92)',
-      border: `1px solid ${paused ? 'var(--status-pending)' : 'var(--border)'}`,
-      borderRadius: 'var(--radius)', padding: '10px 16px', zIndex: 4,
-      backdropFilter: 'blur(6px)',
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, alignItems: 'baseline' }}>
-        <span className="eye">
-          GRIND · INTEGRITY · CHAIN
-          {showStreak && (
-            <span style={{ color: 'var(--accent-amber)', marginLeft: 10 }}>STREAK {consecutiveClean}</span>
-          )}
-        </span>
-        <span className="mono" style={{ fontSize: 12 }}>
-          <span style={{ color: 'var(--accent-amber)', fontSize: 15, fontWeight: 600 }}>{chainLen ?? 0}</span>
-          <span className="faint"> / {target ?? 100} · </span>
-          {paused ? (
-            <span style={{ color: 'var(--status-pending)' }}>● COUNTING PAUSED</span>
-          ) : bridgeDown ? (
-            <span style={{ color: 'var(--status-blocked)' }}>● BRIDGE UNREACHABLE</span>
-          ) : intact === false ? (
-            <span style={{ color: 'var(--status-blocked)' }}>⚠ CHAIN BROKEN</span>
-          ) : (
-            <span style={{ color: 'var(--chain)' }}>● INTACT · {changedAgo}</span>
-          )}
-        </span>
-      </div>
-      <div className="ribbon">
-        {Array.from({ length: cells }).map((_, i) => {
-          const cellThreshold = (i + 1) * scale
-          const filled = (chainLen ?? 0) >= cellThreshold
-          const isLatest = filled && (i + 1) * scale > (chainLen ?? 0) - scale
-          const justLanded = isLatest && landingAt && (Date.now() - landingAt) < 800
-          const fxClass = justLanded && landingFx && landingFx !== 'off'
-            ? `ribbon__cell--fx-${landingFx}`
-            : ''
-          return (
-            <div
-              key={i}
-              className={`ribbon__cell ${filled ? 'ribbon__cell--filled' : ''} ${isLatest ? 'ribbon__cell--latest' : ''} ${fxClass}`}
-              title={filled ? `≈ GIC #${Math.round(cellThreshold)}` : undefined}
-            />
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Phase 241-APOP — Evidence Prism (PRESERVED novel weighted-evidence viz)
-// ---------------------------------------------------------------------------
-
-function ApopEvidencePrism({ apop }) {
-  if (!apop || !apop.latest_state) return null
-  const evidence = apop.latest_evidence || {}
-  const stateColor = APOP_TONE[apop.latest_state] ?? GAMER.t2
-  const isCompetitive = apop.latest_state === 'ACTIVE_MATCH_PLAY' || apop.latest_state === 'COMPETITIVE_CONTROL'
-  const segments = APOP_AXES.map((axis) => ({
-    ...axis,
-    score: Math.max(0, Math.min(1, Number(evidence[axis.key] ?? 0))),
-  }))
-  return (
-    <div style={{
-      position: 'absolute', bottom: 20, left: '50%', transform: 'translateX(-50%)',
-      zIndex: 4, width: 'min(520px, calc(100vw - 600px))', minWidth: 300, pointerEvents: 'none',
-    }}>
-      <Glass accent={stateColor} intensity={0.7} style={{ padding: '12px 16px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 9 }}>
-          <span style={{ fontFamily: FONTS.mono, fontSize: 11, letterSpacing: '0.14em', textTransform: 'uppercase', color: GAMER.t3 }}>
-            EVIDENCE PRISM · APOP
-          </span>
-          <span style={{
-            fontFamily: FONTS.mono, fontSize: 13, color: stateColor, letterSpacing: '0.04em', fontWeight: 600,
-            textShadow: isCompetitive ? `0 0 6px ${stateColor}66` : 'none',
-          }}>
-            {(apop.latest_score ?? 0).toFixed(3)} · h{(evidence.history_score ?? 0).toFixed(2)}
-          </span>
-        </div>
-        <div style={{ display: 'flex', gap: 3, height: 16, alignItems: 'stretch' }}>
-          {segments.map((seg) => (
-            <div key={seg.key} style={{
-              flex: seg.weight, background: '#0a1620', borderRadius: 2,
-              border: `1px solid ${stateColor}26`, position: 'relative', overflow: 'hidden',
-            }}>
-              <div style={{
-                position: 'absolute', left: 0, top: 0, bottom: 0, width: `${seg.score * 100}%`,
-                background: `linear-gradient(90deg, ${stateColor}55 0%, ${stateColor}cc 100%)`,
-                boxShadow: seg.score > 0.5 ? `inset 0 0 4px ${stateColor}88` : 'none',
-                transition: 'width 0.6s ease, background 0.4s ease',
-              }} />
-            </div>
-          ))}
-        </div>
-        <div style={{ display: 'flex', gap: 3, marginTop: 6 }}>
-          {segments.map((seg) => (
-            <div key={seg.key} style={{
-              flex: seg.weight, fontFamily: FONTS.mono, fontSize: 11, letterSpacing: '0.06em',
-              color: seg.score > 0.4 ? GAMER.t1 : GAMER.t3, textAlign: 'center', transition: 'color 0.4s ease',
-            }}>
-              {seg.label}
-            </div>
-          ))}
-        </div>
-      </Glass>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Right-edge PCC drawer (PRESERVED — contention episode history)
-// ---------------------------------------------------------------------------
-
-function pccIsConcerning(captureHealth) {
-  if (!captureHealth) return false
-  if (captureHealth.capture_state && captureHealth.capture_state !== 'NOMINAL') return true
-  if (captureHealth.host_state && !['EXCLUSIVE_USB', 'UNKNOWN'].includes(captureHealth.host_state)) return true
-  if (captureHealth.session_counting_paused) return true
-  return false
-}
-
-function DrawerStat({ label, value, color }) {
-  return (
-    <div style={{
-      display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
-      padding: '6px 0', borderBottom: `1px solid ${GAMER.bd2}`,
-    }}>
-      <span style={{ fontFamily: FONTS.mono, fontSize: 8, color: GAMER.t3, letterSpacing: '0.06em' }}>{label}</span>
-      <span style={{ fontFamily: FONTS.mono, fontSize: 10, color, fontWeight: 500 }}>{value}</span>
-    </div>
-  )
-}
-
-function PCCDrawer({ captureHealth, pccIntelligence, manualOpen, onCloseManual }) {
-  const concerning = pccIsConcerning(captureHealth)
-  // Auto-open ONCE when a PCC alert begins, then the drawer is purely manual
-  // so the × button (and the handle) can always dismiss it. Previously
-  // open = concerning || manualOpen, which force-held the drawer open while
-  // concerning and made × a no-op. The handle stays red while `concerning`
-  // so the alert indicator persists even after the drawer is dismissed.
-  const open = manualOpen
-  const prevConcerning = useRef(false)
-  useEffect(() => {
-    if (concerning && !prevConcerning.current) onCloseManual(true)
-    prevConcerning.current = concerning
-  }, [concerning, onCloseManual])
-  const state = captureHealth?.capture_state ?? '—'
-  const host = captureHealth?.host_state ?? '—'
-  const rate = captureHealth?.poll_rate_hz ?? 0
-  const sustained = captureHealth?.sustained_duration_s ?? 0
-  const ready = captureHealth?.grind_ready ?? false
-  const paused = captureHealth?.session_counting_paused ?? false
-  const episodes = pccIntelligence?.total_episodes ?? 0
-  const meanRecov = pccIntelligence?.mean_recovery_s
-  const longestEp = pccIntelligence?.longest_episode_s
-  const hidRestarts = pccIntelligence?.hid_counter_restarts ?? 0
-  const hasHistory = pccIntelligence != null
-
-  return (
-    <>
-      <div
-        onClick={() => onCloseManual(!manualOpen)}
-        style={{
-          position: 'absolute', top: '50%', right: open ? 320 : 0, transform: 'translateY(-50%)',
-          width: 28, height: 96,
-          background: concerning ? GAMER.red + 'cc' : GAMER.cyan + '26',
-          border: `1px solid ${concerning ? GAMER.red : GAMER.cyan}66`, borderRight: 'none',
-          borderRadius: '6px 0 0 6px', cursor: 'pointer', zIndex: 11,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          transition: 'right 0.32s ease, background 0.4s ease',
-          boxShadow: concerning ? `0 0 16px ${GAMER.red}88` : 'none',
-        }}
-        title={concerning ? 'PCC alert — click to inspect' : 'PCC details'}
-      >
-        <span style={{
-          fontFamily: FONTS.mono, fontSize: 8, color: concerning ? '#fff' : GAMER.cyan,
-          letterSpacing: '0.16em', writingMode: 'vertical-rl', transform: 'rotate(180deg)',
-        }}>
-          {concerning ? '⚠ PCC' : 'PCC ▶'}
-        </span>
-      </div>
-
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ x: 320 }} animate={{ x: 0 }} exit={{ x: 320 }}
-            transition={{ duration: 0.32, ease: 'easeInOut' }}
-            style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: 320, zIndex: 12 }}
-          >
-            <Glass accent={concerning ? GAMER.red : GAMER.cyan} style={{
-              height: '100%', borderRadius: 0,
-              borderLeft: `1px solid ${concerning ? GAMER.red : GAMER.cyan}33`,
-              padding: '16px 16px', overflow: 'auto',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                <span style={{ fontFamily: FONTS.mono, fontSize: 9, letterSpacing: '0.16em', color: concerning ? GAMER.red : GAMER.cyan, fontWeight: 600 }}>
-                  PHYSICAL CAPTURE CONTINUITY
-                </span>
-                <button onClick={() => onCloseManual(false)} style={{ background: 'transparent', border: 'none', color: GAMER.t2, cursor: 'pointer', fontFamily: FONTS.mono, fontSize: 14 }}>×</button>
-              </div>
-
-              {concerning && (
-                <div style={{
-                  background: GAMER.red + '14', border: `1px solid ${GAMER.red}44`, borderRadius: 4,
-                  padding: '10px 12px', marginBottom: 16, fontFamily: FONTS.mono, fontSize: 9, color: GAMER.red, lineHeight: 1.5,
-                }}>
-                  ⚠ {paused
-                    ? 'Session counting paused. Sessions will not advance toward GIC_N until protocol returns to NOMINAL + EXCLUSIVE_USB.'
-                    : 'Protocol fail-closed. Verify USB cable, check Bluetooth pairing state, ensure controller is not in PS5 menu.'}
-                </div>
-              )}
-
-              <DrawerStat label="capture_state" value={state} color={tone(STATE_TONE, state)} />
-              <DrawerStat label="host_state" value={host} color={tone(HOST_TONE, host)} />
-              <DrawerStat label="poll_rate_hz" value={rate.toFixed(1) + ' Hz'} color={GAMER.t1} />
-              <DrawerStat label="sustained_duration_s" value={sustained.toFixed(1) + 's'} color={GAMER.t1} />
-              <DrawerStat label="grind_ready" value={ready ? 'true' : 'false'} color={ready ? GAMER.green : GAMER.orange} />
-              <DrawerStat label="session_counting_paused" value={paused ? 'true' : 'false'} color={paused ? GAMER.orange : GAMER.t2} />
-
-              {hasHistory && (
-                <>
-                  <div style={{ marginTop: 20, paddingTop: 14, borderTop: `1px solid ${GAMER.bd}`, marginBottom: 10, fontFamily: FONTS.mono, fontSize: 8, color: GAMER.t2, letterSpacing: '0.12em' }}>
-                    CONTENTION HISTORY
-                  </div>
-                  <DrawerStat label="episodes this session" value={episodes} color={episodes === 0 ? GAMER.green : episodes < 3 ? GAMER.orange : GAMER.red} />
-                  {meanRecov != null && <DrawerStat label="mean recovery" value={meanRecov.toFixed(1) + 's'} color={GAMER.t1} />}
-                  {longestEp != null && <DrawerStat label="longest episode" value={longestEp.toFixed(1) + 's'} color={GAMER.t1} />}
-                  <DrawerStat label="hid counter restarts" value={hidRestarts} color={hidRestarts === 0 ? GAMER.green : GAMER.orange} />
-                  {episodes === 0 && hidRestarts === 0 && (
-                    <div style={{ marginTop: 8, fontFamily: FONTS.mono, fontSize: 7.5, color: GAMER.green }}>
-                      No contention episodes — USB environment is clean
-                    </div>
-                  )}
-                </>
-              )}
-
-              <div style={{ marginTop: 20, paddingTop: 14, borderTop: `1px solid ${GAMER.bd}`, fontFamily: FONTS.mono, fontSize: 8, color: GAMER.t3, lineHeight: 1.6 }}>
-                <div style={{ marginBottom: 4, color: GAMER.t2 }}>HOST STATE LEGEND</div>
-                <div><span style={{ color: GAMER.green }}>EXCLUSIVE_USB</span> — USB poll ≥900 Hz, CV &lt;0.20</div>
-                <div><span style={{ color: GAMER.t2 }}>UNKNOWN</span> — bootstrap window or sample-starved</div>
-                <div><span style={{ color: GAMER.orange }}>EXCLUSIVE_BT</span> — BT host (200–350 Hz)</div>
-                <div><span style={{ color: GAMER.red }}>CONTESTED</span> — CV ≥0.40, host arbitration race</div>
-              </div>
-            </Glass>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Main view
-// ---------------------------------------------------------------------------
+const FONT_MONO = "'JetBrains Mono', monospace"
+const FONT_DISP = "'Syne', system-ui, sans-serif"
 
 export function GamerView() {
-  const magnitude = useHeartbeatStore((s) => s.magnitude)
+  const conn = useBridgeConnectivity()
+  const sess = usePlayerSessionStatus()
+  const grindQ = useGrindChain()
+  const consentQ = useConsentStatus()
+  const mockActive = isMockActive()
 
-  const { data: captureHealth }   = useCaptureHealth()
-  const { data: grindChain }      = useGrindChain()
-  const { data: grindAnalytics }  = useGrindAnalytics()
-  const { data: pccIntelligence } = usePCCIntelligence()
-  const { data: apop }            = useActivePlayOccupancy()
-  const { data: vhrLatest }       = useLatestVhrProof()
-  // Per-link GIC records (oldest-first → orb i maps to links[i]) for the
-  // verdict-coloured constellation. Public, no-auth, PII-safe; polled slowly
-  // (links only grow). Degrades to uniform chain-green if unavailable.
-  const { data: gicLinks }        = usePublicGicLinks(grindChain?.grind_session_id)
-  // Real per-category consent: device_id is the gamer's wallet (lower-cased,
-  // no 0x), matching ConsentPanel.jsx + the bridge consent_ledger row key.
-  const { address }               = useAccount()
-  const consentDeviceId           = address ? address.toLowerCase().replace(/^0x/, '') : ''
-  const { data: consentStatus }   = useConsentStatus(consentDeviceId)
-  // Player-facing "am I verified?" composite. deviceId='' → bridge resolves
-  // the most recent active device server-side. noMock contract guarantees the
-  // badge renders DORMANT (not fabricated VERIFIED) on transient bridge loss.
-  const { data: playerSession }   = usePlayerSessionStatus('')
-  const { data: retinaStatus }    = useRetinaStatus('')
-  const { data: retinaPolicy }    = useRetinaPolicyStatus()
-
-  // chain_length = cumulative GIC stamps (fills the ribbon; matches check_grind.py)
-  // consecutive_clean = leading streak; diverges when a session breaks the streak.
-  const consecutiveClean = captureHealth?.consecutive_clean_toward_target ?? null
-  const chainLen = grindChain?.chain_length ?? 0
-  const target   = captureHealth?.grind_target ?? grindChain?.grind_target ?? 100
-  const intact   = grindChain?.chain_intact
-  const paused   = captureHealth?.session_counting_paused ?? false
-
-  const latestHash = grindChain?.latest_gic_hash || ''
-  const hashSettledAt = useHashChangedAt(latestHash)
-  const changedAgo = useRelativeTime(hashSettledAt)
-
-  const topBlocker = useMemo(() => {
-    const counts = grindAnalytics?.blocking_reason_counts
-    if (!counts || Object.keys(counts).length === 0) return null
-    const [reason, n] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]
-    const label = reason.replace('PCC_NOT_NOMINAL:', '').replace(/_/g, ' ')
-    return `${label} ×${n}`
-  }, [grindAnalytics])
-
-  const [drawerManual, setDrawerManual] = useState(false)
-  // consentOpen state removed 2026-06-04 — consent editing moved to the
-  // standalone Consent Cockpit dApp at /consent. The overlay below is now
-  // a navigation surface, not a drawer trigger.
-
-  // Real offline signal: the grind-critical hooks are noMock, so when the
-  // bridge is unreachable they hold no data (undefined) rather than fabricating.
-  // This reflects actual bridge reachability — not a mock flag — and drives the
-  // panels' honest "—" / STALE states.
-  const bridgeOffline = !captureHealth && !grindChain
-
-  // Constellation v2 inputs — all REAL polled state (never fabricated):
-  //  • links      → per-orb verdict colour + contested-host rim
-  //  • present    → web breathes when a human is actually on the controller
-  //                 (capture NOMINAL and not navigating a menu); stills on AFK
-  //  • chainBroken→ fracture the chain at the head when chain_intact is false
-  const gicChainLinks = gicLinks?.links ?? null
-  const present = !bridgeOffline
-    && captureHealth?.capture_state === 'NOMINAL'
-    && captureHealth?.latest_gameplay_context !== 'MENU_DETECTED'
-  const chainBroken = intact === false && chainLen > 0
-
-  // GIC chain display mode — orb-web constellation (default) vs classic ribbon,
-  // gamer-selectable via Tweaks. Constellation frees the bottom strip, so the
-  // bottom corner panels drop to the corner; ribbon mode keeps them raised.
-  const { gicView } = useQtTweaks()
-  const ribbonMode = gicView === 'ribbon'
-
-  // v2 · item A — name this view + its live readouts in the persistent eyebrow.
-  useViewEyebrow({
-    num: '01',
-    name: 'GAMER',
-    status: bridgeOffline ? 'BRIDGE UNREACHABLE' : paused ? 'COUNTING PAUSED' : 'LIVE',
-    statusTone: bridgeOffline ? 'blocked' : paused ? 'pending' : 'live',
-    readouts: [
-      { label: 'CHAIN', value: `${chainLen}/${target}`, tone: 'chain' },
-      { label: 'HOST', value: captureHealth?.host_state || '—', tone: bridgeOffline ? 'blocked' : 'amber' },
-      { label: 'POLL', value: bridgeOffline ? '—' : `${captureHealth?.poll_rate_hz ?? 0}HZ`, tone: 'amber' },
-    ],
-  })
+  const visualState = conn.data?.visual_state || 'unverified'
+  const L = conn.data?.lanes || {}
+  const lanes = {
+    controller: L.controller?.state || 'unknown', agents: L.agents?.state || 'unknown',
+    chain: L.chain?.state || 'unknown', operational: L.operational?.state || 'unknown',
+  }
+  const humanity = typeof sess.data?.humanity_prob === 'number' ? sess.data.humanity_prob : null
+  const deviceId = sess.data?.device_id || ''
+  const latestGic = grindQ.data?.latest_gic_hash || ''
+  const grind = {
+    chain_length: grindQ.data?.chain_length ?? 0,
+    grind_target: grindQ.data?.grind_target ?? 100,
+    chain_intact: grindQ.data?.chain_intact,
+  }
+  const rawConsent = consentQ.data?.categories || consentQ.data?.granted || consentQ.data || {}
 
   return (
-    <div className="qt-design-root" style={{ overflow: 'hidden' }}>
-      {/* z0 — forensic-instrument graticule (shows through the transparent twin) */}
-      <div className="twin-stage" style={{ position: 'absolute', inset: 0, zIndex: 0, border: 'none', borderRadius: 0 }} />
-
-      {/* z1 — REAL 3D controller twin (full-bleed hero) */}
-      <iframe
-        src="/controller-twin.html?minimal=1"
-        title="QorTroller 3D Controller Twin"
-        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none', background: 'transparent', zIndex: 1 }}
-      />
-
-      {/* z2 — edge vignette; center stays sharp on the controller. The vignette
-          respires at the Tweaks "twin breath" rate (--qt-breath) — the "alive"
-          signal: a real human is on the controller. */}
-      <div className="qt-twin-breath" style={{
-        position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2,
-        background: 'radial-gradient(ellipse at center, transparent 52%, rgba(2,4,8,0.55) 100%)',
-      }} />
-
-      {/* z2 — GIC chain as an orb-web constellation around the controller
-          (default). The lit-orb count is the REAL chain_length; the chain line
-          wraps the controller as it grows. Toggle to the ribbon via Tweaks. */}
-      {!ribbonMode && (
-        <GicChainConstellation
-          chainLen={chainLen} target={target}
-          paused={paused} bridgeDown={bridgeOffline}
-          links={gicChainLinks} present={present} broken={chainBroken}
-        />
-      )}
-
-      {/* z4 — top-center "am I verified?" badge. Single compact pill (NOT a
-          5th corner — see comment below) hanging just under the eyebrow.
-          Click-expands a small tray with the four sub-signals. Dormant when
-          the bridge is offline or no device data is available. */}
-      <VerificationBadge data={playerSession} bridgeDown={bridgeOffline} />
-
-      {/* z3+ — the design's four floating forensic-instrument corner panels.
-          (FleetPanel + the top-center ChipStrip were removed — they overcrowded
-          the clean 4-corner composition; fleet coherence lives in OperatorView.) */}
-      <CaptureHealthPanel capture={captureHealth} paused={paused} bridgeDown={bridgeOffline} />
-      <RetinaAdvisoryPanel retina={retinaStatus} policy={retinaPolicy} bridgeDown={bridgeOffline} />
-      <LatestGicPanel grind={grindChain} bridgeDown={bridgeOffline} magnitude={magnitude} />
-      {/* VHR Proof Panel (Arc 5) — bottom-left, replacing the slot that
-          was vacated by the F4 ConsentPanelOverlay removal. Shows the
-          most recent on_session_complete_vhr outcome from curator_packaging_log. */}
-      <VhrProofPanel vhrLatest={vhrLatest} ribbonMode={ribbonMode} bridgeDown={bridgeOffline} />
-      <AnalyticsPanel analytics={grindAnalytics} topBlocker={topBlocker} ribbonMode={ribbonMode} />
-
-      <ApopEvidencePrism apop={apop} />
-
-      {ribbonMode && (
-        <GrindRibbon
-          chainLen={chainLen} target={target} intact={intact}
-          paused={paused} bridgeDown={bridgeOffline}
-          consecutiveClean={consecutiveClean} changedAgo={changedAgo}
-        />
-      )}
-
-      <PCCDrawer
-        captureHealth={captureHealth}
-        pccIntelligence={pccIntelligence}
-        manualOpen={drawerManual}
-        onCloseManual={setDrawerManual}
-      />
-
-      {/* ConsentPanel drawer removed 2026-06-04 — superseded by the
-          standalone Consent Cockpit dApp at /consent. The overlay above
-          links there; no in-place editing surface remains in GamerView. */}
-
-      {/* GIC milestone flash — fires only on a real chain-length 10x crossing */}
-      <LevelUpBadge chainLen={chainLen} />
-    </div>
+    <Cockpit
+      visualState={visualState} lanes={lanes} humanity={humanity}
+      deviceId={deviceId} latestGic={latestGic} grind={grind}
+      consent={rawConsent} mockActive={mockActive}
+    />
   )
+}
+
+class Cockpit extends React.Component {
+  constructor(props) {
+    super(props)
+    this._reduced = (typeof window !== 'undefined' && window.matchMedia) ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : false
+    this.state = { glow: 0.5, scanOn: false, crtOn: false, grainOn: false, dockOpen: false }
+    this.sigilRef = React.createRef(); this.forceRef = React.createRef(); this.tremorRef = React.createRef(); this.ribbonRef = React.createRef()
+    this._t = (typeof performance !== 'undefined') ? performance.now() : 0
+    this._settleStart = props.visualState === 'live' ? this._t : -1e9
+    this._seedFrom(props.deviceId)
+    this._loop = this._loop.bind(this)
+  }
+  _seedFrom(id) { this._seedSrc = id || 'QORTROLLER-AWAITING-CONTROLLER'; this._seed = fnv1a(this._seedSrc); this._geom = initGeom(this._seed) }
+  componentDidMount() { this._buildRibbon(); if (this._reduced) this._drawAll(); else this._raf = requestAnimationFrame(this._loop) }
+  componentDidUpdate(prev) {
+    if (prev.deviceId !== this.props.deviceId) this._seedFrom(this.props.deviceId)
+    if (prev.visualState !== 'live' && this.props.visualState === 'live') this._settleStart = (typeof performance !== 'undefined') ? performance.now() : 0
+    this._buildRibbon(); if (this._reduced) this._drawAll()
+  }
+  componentWillUnmount() { if (this._raf) cancelAnimationFrame(this._raf) }
+  _loop(ts) { this._t = ts; this._drawAll(); this._raf = requestAnimationFrame(this._loop) }
+  _drawAll() {
+    drawSigil(this.sigilRef.current, this._geom, this._sigilColor(), this.props.visualState === 'live', this.state.glow, this._t, this._reduced)
+    const sig = this._signalState(); drawSignals(this.forceRef.current, this.tremorRef.current, this._geom, sig.active, sig.col, this._t, this._reduced)
+  }
+  _sigilColor() {
+    const vs = this.props.visualState
+    if (vs === 'revoked') return C.rose
+    if (vs === 'live') { const p = this._reduced ? 1 : Math.min(1, Math.max(0, (this._t - this._settleStart) / 280)); return lerpHex(C.amber, C.chain, p) }
+    return C.amber
+  }
+  _signalState() {
+    const vs = this.props.visualState, ln = this.props.lanes.controller
+    const active = ln === 'connected' && vs !== 'frozen-disabled' && vs !== 'revoked'
+    return { active, col: !active ? C.faint : (vs === 'live' ? C.chain : C.amber) }
+  }
+  _grindTone() {
+    const ci = this.props.grind.chain_intact, ln = this.props.lanes.chain, vs = this.props.visualState
+    if (ci === false) return 'blocked'
+    if (vs === 'revoked') return 'blocked'
+    if (ln === 'disconnected') return 'blocked'
+    if (ln === 'unknown' || vs === 'frozen-disabled') return 'dormant'
+    if (ln === 'degraded' || vs !== 'live') return 'pending'
+    return 'live'
+  }
+  _buildRibbon() {
+    const host = this.ribbonRef.current; if (!host) return
+    const col = toneColor(this._grindTone()), len = this.props.grind.chain_length, target = this.props.grind.grind_target || 100
+    if (host.childNodes.length !== target) { host.textContent = ''; for (let i = 0; i < target; i++) host.appendChild(document.createElement('div')) }
+    const cells = host.childNodes
+    for (let i = 0; i < target; i++) {
+      const cell = cells[i], filled = i < len, latest = filled && i === len - 1
+      cell.style.flex = '1'; cell.style.minWidth = '3px'; cell.style.borderRadius = '1px'
+      if (filled) { cell.style.background = col; cell.style.opacity = latest ? '1' : '0.7'; cell.style.boxShadow = latest ? `0 0 ${12 * this.state.glow}px ${col}, inset 0 0 ${8 * this.state.glow}px ${col}` : 'none'; cell.style.borderTop = cell.style.borderBottom = 'none' }
+      else { cell.style.background = 'transparent'; cell.style.borderTop = `1px solid ${C.line2}`; cell.style.borderBottom = `1px solid ${C.line2}`; cell.style.opacity = '0.4'; cell.style.boxShadow = 'none' }
+    }
+  }
+
+  render() {
+    const { visualState: vs, lanes, humanity, deviceId, latestGic, grind, consent, mockActive } = this.props
+    const s = this.state
+    const vm = vsMeta(vs), proven = vs === 'live'
+
+    // passport humanity
+    let humanityWord, humanityColor
+    if (proven) { humanityWord = 'PROVEN'; humanityColor = C.chain }
+    else if (vs === 'revoked') { humanityWord = 'REVOKED'; humanityColor = C.rose }
+    else if (vs === 'frozen-disabled') { humanityWord = 'FROZEN'; humanityColor = C.dormant }
+    else { humanityWord = vm.word; humanityColor = C.amber }
+    const humanityStr = humanity != null ? humanity.toFixed(2) : '—'
+    const humanityPct = humanity != null ? Math.round(humanity * 100) + '%' : '0%'
+
+    // on-chain (chain lane)
+    const cm = laneMeta(lanes.chain)
+    const onchainWord = lanes.chain === 'connected' ? 'ON-CHAIN' : lanes.chain === 'degraded' ? 'CHAIN DEGRADED' : lanes.chain === 'disconnected' ? 'CHAIN OFFLINE' : 'CHAIN UNKNOWN'
+    const onchainColor = toneColor(cm.tone)
+    const realActive = lanes.controller === 'connected' && proven
+    const realityColor = realActive ? C.chain : (lanes.controller === 'disconnected' || vs === 'revoked') ? C.rose : (vs === 'frozen-disabled') ? C.dormant : C.amber
+
+    // twin (controller lane)
+    const ctrl = laneMeta(lanes.controller)
+    const twinWord = lanes.controller === 'connected' ? 'CONNECTED · 1 kHz' : ctrl.word
+    const twinColor = toneColor(ctrl.tone)
+
+    // sigil verdict
+    let sigilWord, sigilColor
+    if (proven) { sigilWord = 'PROVEN'; sigilColor = C.chain }
+    else if (vs === 'revoked') { sigilWord = 'REVOKED'; sigilColor = C.rose }
+    else if (vs === 'frozen-disabled') { sigilWord = 'FROZEN'; sigilColor = C.dormant }
+    else { sigilWord = vm.word; sigilColor = C.amber }
+
+    // flag banner
+    const notLive = vs !== 'live'
+    const flagDesc = ({ 'dry-run': 'Inputs replayed — not anchored on-chain.', 'emulated': 'Synthetic controller input — humanity not proven.', 'frozen-disabled': 'Session frozen — counting suspended.', 'revoked': 'Attestation revoked — sovereignty controls only.', 'unverified': 'Humanity not yet proven this session.' }[vs] || '')
+
+    // grind
+    const grindTone = this._grindTone(), grindColor = toneColor(grindTone)
+    const chainLen = grind.chain_length, grindTarget = grind.grind_target || 100, grindLevel = Math.floor(chainLen / 10)
+    const grindWord = grindTone === 'live' ? 'INTACT' : grindTone === 'pending' ? (lanes.chain === 'degraded' ? 'CHAIN DEGRADED' : vm.word) : grindTone === 'blocked' ? (lanes.chain === 'disconnected' ? 'BRIDGE UNREACHABLE' : 'CHAIN BROKEN') : 'STALE'
+    const grindSub = grindTone === 'live' ? `next milestone in ${10 - (chainLen % 10)} · ${grindTarget - chainLen} to GIC-100`
+      : grindTone === 'pending' && lanes.chain === 'degraded' ? `Links beyond ${chainLen} pending re-anchor — not counted green until they chain.`
+        : grindTone === 'blocked' ? 'Chain unverifiable — links shown rose, none counted as earned.'
+          : 'Counting suspended — links held, not advancing.'
+
+    // tournament
+    const consGet = (k, alt) => !!(consent?.[k] ?? consent?.[alt])
+    const consTournament = consGet('tournament', 'TOURNAMENT_GATE')
+    const eligible = proven && lanes.chain === 'connected' && lanes.operational === 'connected' && consTournament
+    let tournWord, tournColor = C.amber, tournSub, tournCode = 'isFullyEligible() = false'
+    if (eligible) { tournWord = 'ELIGIBLE'; tournColor = C.chain; tournCode = 'isFullyEligible() ✓ on-chain'; tournSub = 'All gates passed — entry verified against chain.' }
+    else if (!consTournament) { tournWord = 'CONSENT WITHHELD'; tournSub = 'You have not granted tournament consent — grant it in Sovereignty.' }
+    else if (vs === 'revoked') { tournWord = 'REVOKED'; tournColor = C.rose; tournSub = 'Attestation revoked — eligibility cannot be asserted.' }
+    else if (!proven) { tournWord = 'NOT ELIGIBLE'; tournSub = `Humanity ${vm.word.toLowerCase()} — prove a live session to qualify.` }
+    else if (lanes.chain !== 'connected') { tournWord = 'NOT ELIGIBLE'; tournSub = `Chain ${laneMeta(lanes.chain).word.toLowerCase()} — gate cannot read eligibility.`; if (lanes.chain === 'disconnected') tournColor = C.rose }
+    else { tournWord = 'NOT ELIGIBLE'; tournSub = `Operational lane ${laneMeta(lanes.operational).word.toLowerCase()}.` }
+
+    // your data — tier multiplier ONLY, never fiat; muted until attested (no fabricated number)
+    const attested = proven && lanes.chain === 'connected'
+    let dataWord, dataColor, dataSub
+    if (attested) { dataWord = 'ATTESTED'; dataColor = C.chain; dataSub = 'Marketplace dormant (testnet) · value not asserted.' }
+    else if (vs === 'revoked') { dataWord = 'REVOKED'; dataColor = C.rose; dataSub = 'Attestation revoked · tier not assertable.' }
+    else { dataWord = 'UNVERIFIED'; dataColor = C.amber; dataSub = 'Tier reads from the marketplace once a session is attested · no fiat value (testnet).' }
+
+    const labels = { tournament: 'TOURNAMENT', research: 'RESEARCH', marketplace: 'MARKETPLACE', manufacturer_cert: 'MFR · CERT' }
+    const aliases = { tournament: 'TOURNAMENT_GATE', research: 'ANONYMIZED_RESEARCH', marketplace: 'MARKETPLACE', manufacturer_cert: 'MANUFACTURER_CERT' }
+
+    const mono = (size, color, ls = '.04em') => ({ fontFamily: FONT_MONO, fontSize: size, color, letterSpacing: ls })
+    const chip = (color) => ({ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '4px 9px', border: `1px solid ${color}`, borderRadius: 2, ...mono(11, color, '.06em'), fontWeight: 500, textTransform: 'uppercase', whiteSpace: 'nowrap', lineHeight: 1 })
+    const dot = (color, sz = 6) => ({ width: sz, height: sz, borderRadius: '50%', background: color, boxShadow: `0 0 8px ${color}` })
+    const panel = { background: C.panel, border: `1px solid ${C.line}`, borderRadius: 4 }
+    const panelHead = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px 11px', borderBottom: `1px solid ${C.line}` }
+    const eyebrow = mono(10.5, C.faint, '.14em')
+
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'auto', background: C.bg, fontFamily: FONT_DISP, color: C.text }}>
+
+        {/* PASSPORT STRIP */}
+        <header style={{ display: 'flex', alignItems: 'center', gap: 22, minHeight: 62, flexShrink: 0, padding: '0 18px', borderBottom: `1px solid ${C.line}`, background: 'rgba(4,6,10,.94)', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 14 }}>
+            <span style={{ fontFamily: FONT_DISP, fontWeight: 700, fontSize: 22, letterSpacing: '-.02em' }}>Qor<span style={{ fontWeight: 800, color: C.amber }}>T</span>roller</span>
+            <span style={{ ...mono(10, C.faint, '.16em'), textTransform: 'uppercase', padding: '3px 7px', border: `1px solid ${C.line2}`, borderRadius: 2 }}>V.A.P.I.</span>
+          </div>
+          <div style={{ flex: 1, minWidth: 170, display: 'flex', flexDirection: 'column', gap: 5 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 10 }}>
+              <span style={{ ...mono(10, C.faint, '.14em'), textTransform: 'uppercase' }}>Humanity</span>
+              <span style={mono(13, humanityColor)}>{humanityStr} · {humanityWord}</span>
+            </div>
+            <div style={{ height: 3, background: '#131a24', borderRadius: 2, overflow: 'hidden' }}>
+              <div style={{ height: '100%', width: humanityPct, background: humanityColor, borderRadius: 2, transition: 'width .28s, background .28s' }} />
+            </div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <span style={{ ...mono(11, onchainColor, '.12em'), textTransform: 'uppercase', display: 'inline-flex', alignItems: 'center', gap: 7 }}><span style={dot(onchainColor, 7)} />{onchainWord}</span>
+            <span style={{ ...mono(11, C.faint, '.04em'), textTransform: 'uppercase' }}>merkle <span style={{ color: C.dim }}>{mid(latestGic)}</span></span>
+            <span title="reality heartbeat" style={{ ...dot(realityColor, 8) }} />
+          </div>
+        </header>
+
+        {/* MAIN COCKPIT */}
+        <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: 'minmax(0,1.62fr) minmax(0,1fr)', gap: 14, padding: '14px' }} className="qt-cockpit-main">
+
+          {/* CENTER STAGE */}
+          <section style={{ position: 'relative', minHeight: 420, border: `1px solid ${C.line}`, borderRadius: 4, overflow: 'hidden', backgroundColor: C.bg, backgroundImage: 'linear-gradient(to right,#1a223044 1px,transparent 1px),linear-gradient(to bottom,#1a223044 1px,transparent 1px)', backgroundSize: '96px 96px,96px 96px' }}>
+            {/* Sigil aura (z1, behind) */}
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', zIndex: 1 }}>
+              <canvas ref={this.sigilRef} style={{ width: 'min(54vh,448px)', height: 'min(54vh,448px)', maxWidth: '94%' }} />
+            </div>
+            {/* Twin rect (z2, translucent so aura glows through) */}
+            <div style={{ position: 'absolute', inset: 18, zIndex: 2, border: `1px dashed ${C.line2}`, borderRadius: 4, background: 'radial-gradient(ellipse 58% 58% at center, rgba(4,6,10,.86) 0%, rgba(4,6,10,.58) 50%, rgba(4,6,10,.10) 100%)', boxShadow: 'inset 0 0 64px 12px rgba(4,6,10,.55)' }}>
+              <span style={{ position: 'absolute', top: 16, left: 34, ...mono(10, C.faint, '.16em'), textTransform: 'uppercase' }}>3D Controller Twin</span>
+              <span style={{ position: 'absolute', top: 16, right: 34, ...mono(10, twinColor, '.12em'), textTransform: 'uppercase' }}>● {twinWord}</span>
+            </div>
+            {/* honesty flag banner */}
+            {notLive && (
+              <div style={{ position: 'absolute', top: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 6, display: 'flex', alignItems: 'center', gap: 10, padding: '7px 14px', background: 'rgba(10,14,20,.95)', border: `1px solid ${sigilColor}`, borderRadius: 3, maxWidth: '80%' }}>
+                <span style={dot(sigilColor, 7)} />
+                <span style={{ ...mono(11, sigilColor, '.1em'), fontWeight: 600, textTransform: 'uppercase' }}>{vm.word}</span>
+                <span style={mono(10.5, C.dim, '.02em')}>{flagDesc}</span>
+              </div>
+            )}
+            {/* stage vignette (z3) */}
+            <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 3, background: 'radial-gradient(ellipse 76% 76% at center, transparent 46%, rgba(4,6,10,.5) 100%)' }} />
+            {/* sigil verdict */}
+            <div style={{ position: 'absolute', left: 0, right: 0, top: '50%', transform: 'translateY(28px)', zIndex: 4, textAlign: 'center', pointerEvents: 'none' }}>
+              <span style={{ ...mono(11, sigilColor, '.18em'), fontWeight: 600, textTransform: 'uppercase' }}>Humanity Sigil · {sigilWord}</span>
+            </div>
+            {/* signals + identity */}
+            <div style={{ position: 'absolute', left: 16, right: 16, bottom: 78, zIndex: 5, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 14, pointerEvents: 'none', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 14 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                  <span style={{ ...mono(9.5, C.faint, '.12em'), textTransform: 'uppercase' }}>trigger force-curve</span>
+                  <canvas ref={this.forceRef} style={{ width: 140, height: 38 }} />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                  <span style={{ ...mono(9.5, C.faint, '.12em'), textTransform: 'uppercase' }}>tremor spectrum</span>
+                  <canvas ref={this.tremorRef} style={{ width: 112, height: 38 }} />
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-end', textAlign: 'right' }}>
+                <span style={{ ...mono(9, C.faint, '.1em'), textTransform: 'uppercase' }}>seed · device_id = keccak256(pubkey)</span>
+                <span style={mono(11, C.dim, '.02em')}>{deviceId ? mid(deviceId) : 'awaiting controller'}</span>
+                <span style={{ ...mono(9, C.line2, '.06em'), textTransform: 'uppercase' }}>mulberry32 0x{this._seed.toString(16).padStart(8, '0')} · device-derived, not biometric</span>
+              </div>
+            </div>
+            {/* grind ribbon */}
+            <div style={{ position: 'absolute', left: 14, right: 14, bottom: 14, zIndex: 5, background: 'rgba(10,14,20,.93)', border: `1px solid ${grindColor}`, borderRadius: 4, padding: '11px 14px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                <span style={{ ...eyebrow, textTransform: 'uppercase' }}>Grind · Integrity · Chain</span>
+                <span style={mono(11, C.dim)}><span style={{ color: C.amber, fontSize: 14, fontWeight: 600 }}>{chainLen}</span><span style={{ color: C.faint }}> / {grindTarget} · </span><span style={{ color: grindColor }}>● {grindWord}</span></span>
+              </div>
+              <div ref={this.ribbonRef} style={{ display: 'flex', gap: 1, height: 16, background: '#131a24', padding: 1, borderRadius: 2 }} />
+            </div>
+          </section>
+
+          {/* HUD COLUMN */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minHeight: 0 }}>
+            {/* GRIND meta */}
+            <article style={{ ...panel, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+              <header style={panelHead}><span style={{ ...eyebrow, textTransform: 'uppercase' }}>Grind</span><span style={chip(grindColor)}><span style={dot(grindColor)} />{grindWord}</span></header>
+              <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14, flex: 1, justifyContent: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                  <span style={{ fontFamily: FONT_DISP, fontWeight: 800, fontSize: 46, lineHeight: 1, color: C.amber }}>{chainLen}</span>
+                  <span style={mono(14, C.faint)}>/ {grindTarget}</span>
+                  <span style={{ ...mono(11, C.dim, '.06em'), textTransform: 'uppercase', marginLeft: 'auto' }}>lv.{grindLevel}</span>
+                </div>
+                <div style={{ ...mono(11.5, C.dim, '.02em'), lineHeight: 1.5 }}>{grindSub}</div>
+              </div>
+            </article>
+            {/* TOURNAMENT */}
+            <article style={panel}>
+              <header style={panelHead}><span style={{ ...eyebrow, textTransform: 'uppercase' }}>Tournament</span><span style={chip(tournColor)}><span style={dot(tournColor)} />{tournWord}</span></header>
+              <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 7 }}>
+                <span style={mono(11.5, tournColor, '.02em')}>{tournCode}</span>
+                <span style={{ ...mono(11, C.dim, '.02em'), lineHeight: 1.5 }}>{tournSub}</span>
+              </div>
+            </article>
+            {/* YOUR DATA */}
+            <article style={panel}>
+              <header style={panelHead}><span style={{ ...eyebrow, textTransform: 'uppercase' }}>Your Data</span><span style={chip(dataColor)}><span style={dot(dataColor)} />{dataWord}</span></header>
+              <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 3 }}>
+                  <span style={{ fontFamily: FONT_DISP, fontWeight: 800, fontSize: 34, lineHeight: 1, color: attested ? dataColor : C.dormant }}>{attested ? '—' : '—'}</span>
+                  <span style={mono(18, attested ? dataColor : C.dormant)}>×</span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  <span style={{ ...mono(11, C.dim, '.04em'), textTransform: 'uppercase' }}>tier multiplier</span>
+                  <span style={{ ...mono(10.5, C.faint, '.02em'), lineHeight: 1.45 }}>{dataSub}</span>
+                </div>
+              </div>
+            </article>
+          </div>
+        </div>
+
+        {/* SOVEREIGNTY STRIP — read-only; granting is wallet-signed in /consent */}
+        <footer style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 18, padding: '0 18px', minHeight: 58, borderTop: `1px solid ${C.line}`, background: 'rgba(4,6,10,.94)', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <span style={{ ...eyebrow, textTransform: 'uppercase' }}>Sovereignty</span>
+            <a href="/consent" style={{ ...mono(9.5, C.amber, '.06em'), textTransform: 'uppercase', textDecoration: 'none' }}>you grant · you revoke →</a>
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {Object.keys(labels).map((key) => {
+              const granted = consGet(key, aliases[key]), color = granted ? C.chain : C.dormant
+              return (
+                <a key={key} href="/consent" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '7px 11px', border: `1px solid ${granted ? C.line2 : C.line}`, background: granted ? '#0d1218' : 'transparent', borderRadius: 2, ...mono(10.5, granted ? C.text : C.faint, '.06em'), fontWeight: 500, textTransform: 'uppercase', textDecoration: 'none' }}>
+                  <span style={dot(color, 6)} /><span>{labels[key]}</span><span style={{ opacity: 0.7 }}>{granted ? 'GRANTED' : 'WITHHELD'}</span>
+                </a>
+              )
+            })}
+          </div>
+        </footer>
+
+        {mockActive && (
+          <div style={{ position: 'fixed', top: 70, left: '50%', transform: 'translateX(-50%)', zIndex: 130, ...mono(11, C.amber, '.08em'), border: `1px solid ${C.amber}55`, background: 'rgba(240,168,104,.1)', borderRadius: 6, padding: '6px 12px' }}>
+            ● BRIDGE OFFLINE — placeholder, no live proof
+          </div>
+        )}
+
+        {/* vibe overlays (opt-in, presentation only) */}
+        {s.scanOn && <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 100, mixBlendMode: 'multiply', background: 'repeating-linear-gradient(to bottom,transparent 0,transparent 2px,rgba(0,0,0,.5) 2px,rgba(0,0,0,.5) 3px)' }} />}
+        {s.crtOn && <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 101, background: 'radial-gradient(ellipse 110% 90% at center,transparent 55%,rgba(0,0,0,.55) 100%)' }} />}
+
+        {/* DISPLAY dock — presentation only (NO state override; the bridge is the only truth source) */}
+        <aside style={{ position: 'fixed', right: 14, bottom: 14, zIndex: 120, width: 230, background: 'rgba(10,14,20,.97)', border: `1px solid ${C.line2}`, borderRadius: 4, boxShadow: '0 10px 30px -10px #000d' }}>
+          <button type="button" onClick={() => this.setState({ dockOpen: !s.dockOpen })} style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 13px', background: 'transparent', border: 0, borderBottom: s.dockOpen ? `1px solid ${C.line}` : 0, cursor: 'pointer' }}>
+            <span style={{ ...mono(10, C.amber, '.16em'), textTransform: 'uppercase' }}>◢ Display</span>
+            <span style={mono(11, C.faint)}>{s.dockOpen ? '▾' : '▸'}</span>
+          </button>
+          {s.dockOpen && (
+            <div style={{ padding: '12px 13px', display: 'flex', flexDirection: 'column', gap: 11 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ ...mono(9.5, C.faint, '.12em'), textTransform: 'uppercase' }}>glow</span>
+                <span style={mono(10, C.amber)}>{Math.round(s.glow * 100)}%</span>
+              </div>
+              <input type="range" min="0" max="1" step="0.05" value={s.glow} onChange={(e) => this.setState({ glow: parseFloat(e.target.value) })} style={{ width: '100%', accentColor: C.amber, cursor: 'pointer' }} />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+                {[['Scan', 'scanOn'], ['CRT', 'crtOn']].map(([lbl, key]) => (
+                  <button key={key} type="button" onClick={() => this.setState({ [key]: !s[key] })} style={{ padding: '6px 4px', border: `1px solid ${s[key] ? C.amber : C.line}`, background: s[key] ? 'rgba(240,168,104,.06)' : C.panel, borderRadius: 2, ...mono(9.5, s[key] ? C.amber : C.dim, '.04em'), textTransform: 'uppercase', cursor: 'pointer' }}>{lbl}</button>
+                ))}
+              </div>
+            </div>
+          )}
+        </aside>
+      </div>
+    )
+  }
 }
