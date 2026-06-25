@@ -176,6 +176,14 @@ class VHRProofPackage:
     deferred_reason: Optional[str] = None    # set when the prover was deferred
     created_at_ns: int = field(default_factory=time.time_ns)
     pq_commitment: str = ""                  # hex string for 32B post-quantum signature hash (Arc 7)
+    # Arc 6/7 Phase 1 — PoSR recency metadata. recency_bound is True ONLY when a
+    # genuine open<close beacon pair was validated; the proof itself stays v1 in
+    # Phase 1 (real v2 Groth16 proof is Phase 2). All-default = no recency.
+    recency_bound: bool = False
+    open_beacon_block: int = 0
+    close_beacon_block: int = 0
+    open_beacon_commitment: str = ""         # hex SHA-256 open commitment
+    close_beacon_commitment: str = ""        # hex SHA-256 close commitment (chains to open)
 
     def to_listing_payload(self) -> dict:
         """Marketplace listing payload. consent_policy_hash MANDATORY —
@@ -196,6 +204,11 @@ class VHRProofPackage:
             "deferred_reason":       self.deferred_reason or "",
             "created_at_ns":         self.created_at_ns,
             "pq_commitment":         self.pq_commitment,
+            "recency_bound":         self.recency_bound,
+            "open_beacon_block":     self.open_beacon_block,
+            "close_beacon_block":    self.close_beacon_block,
+            "open_beacon_commitment":  self.open_beacon_commitment,
+            "close_beacon_commitment": self.close_beacon_commitment,
         }
 
 
@@ -338,6 +351,11 @@ class VAPIReplayProofPipeline:
         # Thread C PQ-Signing Engine: execute ML-DSA-65 signing out-of-band via asyncio.to_thread
         pq_commitment_hex, _ = await asyncio.to_thread(_run_mldsa_signing, matrix)
 
+        # Step 5.5 — PoSR recency binding (Arc 6/7 Phase 1, default-OFF). Validates
+        # the grind session's open<close beacon pair + chains the close commitment.
+        # recency_bound=False on any miss — never fabricated (INV-POSR-WIRING-001).
+        recency = await self._compute_recency(session_id, device_id)
+
         package = VHRProofPackage(
             session_id=session_id,
             proof_type="VAPI-REPLAY-PROOF-v1",
@@ -353,6 +371,11 @@ class VAPIReplayProofPipeline:
             autonomy_level=autonomy,
             deferred_reason=proof.deferred_reason,
             pq_commitment=pq_commitment_hex,
+            recency_bound=recency["recency_bound"],
+            open_beacon_block=recency["open_beacon_block"],
+            close_beacon_block=recency["close_beacon_block"],
+            open_beacon_commitment=recency["open_beacon_commitment"],
+            close_beacon_commitment=recency["close_beacon_commitment"],
         )
 
         if proof.deferred_reason is not None:
@@ -365,9 +388,74 @@ class VAPIReplayProofPipeline:
             outcome = VHR_OUTCOME_PROOF_BUILT
             extra = {"verifier": self._verifier_address}
 
+        extra["recency_bound"] = recency["recency_bound"]
+        if recency["recency_bound"]:
+            extra["open_beacon_block"] = recency["open_beacon_block"]
+            extra["close_beacon_block"] = recency["close_beacon_block"]
         result = self._audit_and_return(outcome, session_id, extra)
         result["package"] = package.to_listing_payload()
         return result
+
+    async def _compute_recency(self, session_id: str, device_id: str) -> dict:
+        """Arc 6/7 Phase 1 — validate the grind session's open<close beacon pair
+        and compute the chained close commitment. Returns recency_bound + beacon
+        metadata. recency_bound is True ONLY when (a) posr_recency_enabled,
+        (b) an open beacon was captured for the grind session, (c) a current
+        close beacon exists, AND (d) close.block strictly > open.block
+        (INV-POSR-WIRING-002). Any miss → recency_bound=False, all-zero metadata
+        — never fabricated (INV-POSR-WIRING-001). The proof itself stays v1 in
+        Phase 1; the real v2 Groth16 proof is Phase 2 (operator-checkpointed)."""
+        blank = {
+            "recency_bound": False, "open_beacon_block": 0, "close_beacon_block": 0,
+            "open_beacon_commitment": "", "close_beacon_commitment": "",
+        }
+        if not getattr(self._cfg, "posr_recency_enabled", False):
+            return blank
+        session_key = str(getattr(self._cfg, "grind_session_id", "") or "")
+        getter = getattr(self._store, "get_posr_session_open", None) if self._store else None
+        if not session_key or getter is None:
+            return blank
+        try:
+            open_row = getter(session_key)
+        except Exception:
+            return blank
+        if not open_row:
+            return blank
+        try:
+            import hashlib
+            from .posr import PoSRBeaconBinder, compute_close_beacon_commitment
+        except Exception:
+            return blank
+        binder = PoSRBeaconBinder(self._chain)
+        try:
+            close_ref = await binder.fetch_latest_beacon()
+        except Exception:
+            return blank
+        if close_ref is None:
+            return blank
+        open_block = int(open_row["open_block"])
+        if int(close_ref.block_number) <= open_block:
+            return blank  # INV-POSR-WIRING-002: close must be strictly after open
+        try:
+            oc = str(open_row["open_commitment"])
+            open_commitment_b = bytes.fromhex(oc[2:] if oc.startswith(("0x", "0X")) else oc)
+            poac_final_link = hashlib.sha256(
+                b"VAPI-POSR-FINAL:" + str(session_id).encode("utf-8")).digest()
+            close_commitment_b = compute_close_beacon_commitment(
+                close_block_number=int(close_ref.block_number),
+                close_block_hash=close_ref.block_hash,
+                open_beacon_commitment=open_commitment_b,
+                poac_final_link=poac_final_link,
+            )
+        except Exception:
+            return blank
+        return {
+            "recency_bound": True,
+            "open_beacon_block": open_block,
+            "close_beacon_block": int(close_ref.block_number),
+            "open_beacon_commitment": open_row["open_commitment"],
+            "close_beacon_commitment": "0x" + close_commitment_b.hex(),
+        }
 
     # ── helpers ────────────────────────────────────────────────────────────
 

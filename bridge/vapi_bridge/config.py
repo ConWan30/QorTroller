@@ -1960,6 +1960,29 @@ class Config:
     PROOF_BUILT_NO_VERIFIER on otherwise-successful packaging. Set after the
     Arc 5 deploy ceremony (operator-fired)."""
 
+    # --- Data Economy Arc 6/7: PoSR session-recency wiring (Phase 1) ---
+    replay_proof_verifier_v2_address: str = field(
+        default_factory=lambda: _env("REPLAY_PROOF_VERIFIER_V2_ADDRESS", "")
+    )
+    """Data Economy Arc 7 — deployed VAPIReplayProofVerifier_v2 (PoSR recency)
+    wrapper address. Empty string = no on-chain v2 verifier wired. Read-only at
+    the bridge layer in Phase 1 (the v2 prover is Phase 2, operator-checkpointed);
+    deployed 2026-06-25 at 0xf41067368f52078df9E004111Da4f3525bba3Be5."""
+
+    posr_recency_enabled: bool = field(
+        default_factory=lambda: _env_bool("POSR_RECENCY_ENABLED", False)
+    )
+    """Data Economy Arc 6/7 — PoSR (Proof of Session Recency) binding in the live
+    VHR path. Default False — the binder is wired but dormant until the operator
+    opts in via POSR_RECENCY_ENABLED=true. When False, on_session_open_vhr and the
+    package_session recency step are no-ops and behavior is byte-identical to the
+    Arc 5 v1 path. When True, the open beacon is captured at session start and the
+    open->close beacon pair (close.block strictly > open.block) is validated +
+    chained to the session's PoAC links at close. A missing/stale beacon, or
+    open==close, falls back to v1 with recency_bound=False — never fabricated
+    (INV-POSR-WIRING-001). Phase 1 attaches recency metadata to a still-v1 proof;
+    real v2 Groth16 proof generation is Phase 2 (operator-checkpointed)."""
+
     # --- Arc 5 live-session VHR hook (Commit 6 wiring) ---
     vhr_hook_enabled: bool = field(
         default_factory=lambda: _env_bool("VHR_HOOK_ENABLED", False)
