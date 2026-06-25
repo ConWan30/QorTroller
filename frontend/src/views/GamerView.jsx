@@ -499,13 +499,11 @@ class Cockpit extends React.Component {
               <span style={{ position: 'absolute', top: -8, right: -8, width: 16, height: 16, border: `1.5px solid ${frameColor}`, borderLeft: 0, borderBottom: 0, pointerEvents: 'none' }} />
               <span style={{ position: 'absolute', bottom: -8, left: -8, width: 16, height: 16, border: `1.5px solid ${frameColor}`, borderRight: 0, borderTop: 0, pointerEvents: 'none' }} />
               <span style={{ position: 'absolute', bottom: -8, right: -8, width: 16, height: 16, border: `1.5px solid ${frameColor}`, borderLeft: 0, borderTop: 0, pointerEvents: 'none' }} />
-              {/* labels in the four OUTER corners — center stays clear for the live twin + seal */}
+              {/* labels in the TOP corners only — bottom corners cleared (design round 6); center stays clear for the live twin + seal */}
               {s.cornerLabels && (
                 <>
                   <div style={{ position: 'absolute', top: -22, left: 2, ...mono(10, PAL.ash, '0.12em'), textTransform: 'uppercase', pointerEvents: 'none' }}>RESERVED RECTANGLE</div>
                   <div style={{ position: 'absolute', top: -22, right: 2, ...mono(10, frameColor, '0.1em'), textTransform: 'uppercase', pointerEvents: 'none' }}>{twinConn}</div>
-                  <div style={{ position: 'absolute', bottom: -22, left: 2, ...mono(10, 'rgba(154,164,178,.7)', '0.12em'), textTransform: 'uppercase', pointerEvents: 'none' }}>SPECIMEN · 3D CONTROLLER TWIN</div>
-                  <div style={{ position: 'absolute', bottom: -22, right: 2, ...mono(10, PAL.ash, '0.1em'), textTransform: 'uppercase', pointerEvents: 'none' }}>HALO-BEHIND · LIVE IFRAME</div>
                 </>
               )}
             </div>
