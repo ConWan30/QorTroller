@@ -1410,6 +1410,27 @@ INVARIANTS: list[Invariant] = [
         min_matches=1,
     ),
     Invariant(
+        id="INV-POSR-WIRING-001",
+        description="PoSR live-path recency binding FAILS CLOSED to Arc 5 v1 — VAPIReplayProofPipeline._compute_recency returns recency_bound=False on any miss (posr_recency_enabled off, no captured open beacon, no current close beacon, or the registry read errors). A recency claim is NEVER fabricated; the proof falls back to the v1 path. Phase 1 wiring honesty rail.",
+        file="bridge/vapi_bridge/replay_proof_pipeline/pipeline.py",
+        pattern=r"async def _compute_recency",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-POSR-WIRING-002",
+        description="PoSR wiring enforces close-beacon STRICTLY AFTER open at the bridge layer (not only in-circuit) — _compute_recency rejects close.block <= open.block before binding recency. Defense in depth: the same forward-ordering guard the v2 circuit enforces (build_inputs_v2 close>open) is surfaced before any prover runs.",
+        file="bridge/vapi_bridge/replay_proof_pipeline/pipeline.py",
+        pattern=r"int\(close_ref\.block_number\) <= open_block",
+        min_matches=1,
+    ),
+    Invariant(
+        id="INV-POSR-WIRING-003",
+        description="PoSR recency wiring is DEFAULT-OFF — config.posr_recency_enabled reads POSR_RECENCY_ENABLED with default False. With the flag off, on_session_open_vhr and the package_session recency step are no-ops and behavior is byte-identical to the Arc 5 v1 path. Operator-fired opt-in only.",
+        file="bridge/vapi_bridge/config.py",
+        pattern=r'_env_bool\("POSR_RECENCY_ENABLED", False\)',
+        min_matches=1,
+    ),
+    Invariant(
         id="INV-W3S-001",
         description="W3bstream native Wasm cadence limit (payload.block_number % ANCHOR_CADENCE == 0)",
         file="w3bstream/applet/src/lib.rs",
