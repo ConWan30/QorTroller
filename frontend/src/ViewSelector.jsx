@@ -1,20 +1,33 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { Link } from 'react-router-dom'
 import { useHeartbeatStore } from './heartbeat/useHeartbeat'
 import { FONTS, GAMER } from './shared/design/tokens'
 import { RealityDot } from './design/realityHeartbeat'
 import { Wordmark } from './design/Primitives'
 
-// Gamer-first full replacement (2026-06-24): six tabs aligned to a gamer's necessity, in the
-// order of the gamer journey — connect → prove presence → own your data → see receipts → trade →
-// learn. Pro/outreach surfaces are off the gamer app (outreach decks remain static HTML).
+// QRESCE-0001 v0.5 grant-evaluator remodel — slimmed 4-tab bar. Only the
+// design-language, grant-facing surfaces are shown: Gamer (hero) · Forensic
+// (cryptographic depth) · Operator (self-monitoring honesty) · VPM (autonomous
+// HTML snapshot proofs). Developer / Manufacturer / Marketplace / BRP are
+// intentionally OFF the bar (deferred — dense tooling / zero partners / zero
+// listings / BRP abstract-mesh pending a legibility pass). All remain in
+// App.jsx VIEW_MAP (preserved in code); Developer is still reachable via the
+// drift-alert badge for operator-agent drill-down.
 const VIEWS = [
-  { id: 'live',     num: '01', label: 'Live',     accent: GAMER.cyan },
-  { id: 'presence', num: '02', label: 'Presence', accent: GAMER.green },
-  { id: 'vault',    num: '03', label: 'Vault',    accent: GAMER.cyan },
-  { id: 'receipts', num: '04', label: 'Receipts', accent: GAMER.green },
-  { id: 'market',   num: '05', label: 'Market',   accent: GAMER.orange },
-  { id: 'codex',    num: '06', label: 'Codex',    accent: GAMER.t2 },
+  { id: 'gamer',    num: '01', label: 'Gamer',                 accent: GAMER.cyan },
+  { id: 'forensic', num: '02', label: 'Forensic · Explorer',   accent: '#5bd6a3' },
+  { id: 'operator', num: '03', label: 'Operator · Evidence',   accent: '#f0a868' },
+  // VPM Registry — autonomous Verified Projection Media (HTML snapshot proofs).
+  { id: 'vpm',      num: '04', label: 'VPM · Proofs',          accent: '#f0a868' },
+  // Grant Brief — brand-locked IoTeX grant-evaluator deck (public, no auth).
+  { id: 'grant',    num: '05', label: 'Grant · Brief',         accent: '#f0a868' },
+  // Reference — canonical what/how/forward codex (public, no auth).
+  { id: 'reference', num: '06', label: 'Reference',            accent: '#5bd6a3' },
+  // Partner Brief — self-contained manufacturer/partner pitch deck (public, no auth).
+  { id: 'partner',  num: '07', label: 'Partner · Brief',       accent: '#f0a868' },
+  // AI Cognitive Workbench - Conversational DeepSeek LLM assistant.
+  { id: 'chat',     num: '08', label: 'AI · Chat',             accent: GAMER.cyan },
 ]
 
 export function ViewSelector({ activeView, onViewChange }) {
@@ -65,6 +78,26 @@ export function ViewSelector({ activeView, onViewChange }) {
         }}>
           <span style={{ color: 'rgba(240,168,104,0.65)' }}>V.A.P.I.</span>
         </span>
+        {/* Phase O5-EVIDENCE-OS Stage 1 — entry point to the new IA.
+            Preserves existing 6 tabs; this is an additive cross-link. */}
+        <Link
+          to="/os/evidence"
+          aria-label="Evidence OS — new proof-native IA"
+          style={{
+            fontFamily:    FONTS.mono,
+            fontSize:      11,
+            fontWeight:    700,
+            color:         '#f0a868',
+            background:    'rgba(240,168,104,0.10)',
+            border:        '1px solid rgba(240,168,104,0.45)',
+            borderRadius:  3,
+            padding:       '2px 7px',
+            letterSpacing: '0.08em',
+            textDecoration: 'none',
+            marginLeft:    4,
+            textTransform: 'uppercase',
+          }}
+        >Evidence OS →</Link>
       </div>
 
       {/* Center: view tabs — priority element; never shrinks (the 01–04
