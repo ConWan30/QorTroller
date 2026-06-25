@@ -29,6 +29,7 @@ import {
   useBridgeConnectivity, usePlayerSessionStatus, useGrindChain, useConsentStatus, useCaptureHealth,
 } from '../api/bridgeApi'
 import { isMockActive } from '../api/mockBridge'
+import { useViewEyebrow } from '../design/Eyebrow'
 
 // ── forge palette ──
 const PAL = {
@@ -46,6 +47,9 @@ const mid = (h) => (h && h.length > 14 ? h.slice(0, 8) + '…' + h.slice(-6) : (
 const mono = (size, color, ls = '0.04em') => ({ fontFamily: MONO, fontSize: size, ...(color ? { color } : {}), letterSpacing: ls })
 
 export function GamerView() {
+  // Minimal eyebrow — the cockpit keeps its own passport spine for live state, so the
+  // eyebrow just names the surface (num + name; no status/readouts).
+  useViewEyebrow({ num: '01', name: 'GAMER · COCKPIT' })
   const conn = useBridgeConnectivity()
   const sess = usePlayerSessionStatus()
   const grindQ = useGrindChain()
