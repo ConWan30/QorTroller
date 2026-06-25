@@ -4359,6 +4359,36 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
         except Exception:
             pass  # idempotent
 
+        # Data Economy Arc 6/7 — PoSR session-recency open-beacon capture.
+        # One row per session key (grind_session_id) recording the OPEN beacon
+        # captured at session start via PoSRBeaconBinder.open_session.
+        # package_session reads it at close to validate close.block > open.block
+        # before binding recency. Phase 1 wiring; dormant unless posr_recency_enabled.
+        try:
+            with self._conn() as conn:
+                conn.execute("""
+                    CREATE TABLE IF NOT EXISTS posr_session_beacon (
+                        id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                        session_key         TEXT    NOT NULL UNIQUE,
+                        open_block          INTEGER NOT NULL,
+                        open_block_hash     TEXT    NOT NULL,
+                        open_commitment     TEXT    NOT NULL,
+                        device_id           TEXT    NOT NULL DEFAULT '',
+                        created_at          REAL    NOT NULL
+                    )
+                """)
+                conn.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_posr_session_beacon_key "
+                    "ON posr_session_beacon(session_key)"
+                )
+                conn.execute(
+                    "INSERT OR IGNORE INTO schema_versions (phase, migration_name, applied_at)"
+                    " VALUES (?, ?, ?)",
+                    (2625, "posr_session_beacon", time.time()),
+                )
+        except Exception:
+            pass  # idempotent
+
         # Phase O0 Stream 3-prep Session 1 — AGENT_COMMIT v1 store table.
         # Sixth FROZEN-v1 primitive in the family. Each row records a git
         # commit attestation produced by an Operator Agent, with the computed
@@ -6651,6 +6681,52 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
             "ended_at":             float(d.get("created_at") or 0.0),
             # gamer_address intentionally omitted — the hook supplies it from
             # cfg.session_gamer_address at the call site (single-tenant v1).
+        }
+
+    def insert_posr_session_open(
+        self, session_key: str, open_block: int, open_block_hash: str,
+        open_commitment: str, device_id: str = "",
+    ) -> None:
+        """Persist the PoSR open beacon captured at session start (Arc 6/7
+        Phase 1). Idempotent per session_key via the UNIQUE constraint — the
+        FIRST capture wins (INSERT OR IGNORE), so a re-fire never overwrites the
+        original open beacon. Non-fatal on any error: the close-side read treats
+        a missing row as 'no recency' and falls back to v1."""
+        try:
+            with self._conn() as conn:
+                conn.execute(
+                    "INSERT OR IGNORE INTO posr_session_beacon "
+                    "(session_key, open_block, open_block_hash, open_commitment, device_id, created_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (str(session_key), int(open_block), str(open_block_hash),
+                     str(open_commitment), str(device_id or ""), time.time()),
+                )
+        except Exception:
+            log.exception("insert_posr_session_open failed (non-fatal)")
+
+    def get_posr_session_open(self, session_key: str) -> dict | None:
+        """Read the PoSR open beacon for session_key, or None if not captured.
+        None is the honest 'no recency available' answer — package_session falls
+        back to the v1 path (INV-POSR-WIRING-001)."""
+        try:
+            with self._conn() as con:
+                row = con.execute(
+                    "SELECT session_key, open_block, open_block_hash, open_commitment, device_id "
+                    "FROM posr_session_beacon WHERE session_key = ? LIMIT 1",
+                    (str(session_key),),
+                ).fetchone()
+        except Exception:
+            log.exception("get_posr_session_open failed (non-fatal)")
+            return None
+        if not row:
+            return None
+        d = dict(row)
+        return {
+            "session_key":     d["session_key"],
+            "open_block":      int(d["open_block"]),
+            "open_block_hash": d["open_block_hash"],
+            "open_commitment": d["open_commitment"],
+            "device_id":       d.get("device_id", ""),
         }
 
     def get_pending_replay_proofs(self, limit: int = 100) -> list[dict]:

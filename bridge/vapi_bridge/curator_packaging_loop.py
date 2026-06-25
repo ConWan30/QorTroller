@@ -477,6 +477,80 @@ class CuratorPackagingLoop:
             )
         return result
 
+    @staticmethod
+    def _coerce_device_id_32(device_id: str) -> bytes:
+        """Best-effort 32-byte device id for the PoSR open commitment. A 64-hex
+        device_id is decoded directly; anything else is SHA-256-folded to 32B."""
+        import hashlib
+        s = str(device_id or "")
+        h = s[2:] if s.startswith(("0x", "0X")) else s
+        try:
+            b = bytes.fromhex(h)
+            if len(b) == 32:
+                return b
+        except Exception:
+            pass
+        return hashlib.sha256(s.encode("utf-8")).digest()
+
+    async def on_session_open_vhr(self, session_key: str, *, device_id: str = "") -> dict:
+        """Arc 6/7 Phase 1 — capture the PoSR OPEN beacon at session start and
+        persist it keyed by session_key (the grind_session_id). Called once per
+        grind session; idempotent (first capture wins via the store UNIQUE
+        constraint). Dormant unless cfg.posr_recency_enabled.
+
+        Honesty rail: if the binder returns None (no anchored beacon, registry
+        unset, chain unavailable) NOTHING is persisted — the close side
+        (package_session) reads no open row and falls back to the Arc 5 v1 path
+        with recency_bound=False. Never fabricates a beacon (INV-POSR-WIRING-001).
+        """
+        if not getattr(self._cfg, "posr_recency_enabled", False):
+            return {"outcome": "posr_disabled", "session_key": session_key}
+        if self._store is None:
+            return {"outcome": "posr_no_store", "session_key": session_key}
+        try:
+            if self._store.get_posr_session_open(session_key) is not None:
+                return {"outcome": "posr_open_already_captured", "session_key": session_key}
+        except Exception:
+            pass
+        # Lazy import keeps posr/numpy off the skill-proof hot path.
+        try:
+            import hashlib
+            from .replay_proof_pipeline.posr import PoSRBeaconBinder
+        except Exception as exc:
+            log.warning("PoSR open-capture import failed (non-fatal): %s", exc)
+            return {"outcome": "posr_import_error", "session_key": session_key}
+
+        device_id_32 = self._coerce_device_id_32(device_id)
+        poac_genesis_link = hashlib.sha256(
+            b"VAPI-POSR-GENESIS:" + str(session_key).encode("utf-8")
+        ).digest()
+        binder = PoSRBeaconBinder(self._chain)
+        try:
+            opened = await binder.open_session(
+                device_id_32=device_id_32, poac_genesis_link=poac_genesis_link,
+            )
+        except Exception as exc:
+            log.warning("PoSR open_session failed (non-fatal): %s", exc)
+            return {"outcome": "posr_open_error", "session_key": session_key}
+        if opened is None:
+            return {"outcome": "posr_open_no_beacon", "session_key": session_key}
+
+        open_ref, open_commitment = opened
+        self._store.insert_posr_session_open(
+            session_key=str(session_key),
+            open_block=int(open_ref.block_number),
+            open_block_hash="0x" + open_ref.block_hash.hex(),
+            open_commitment="0x" + open_commitment.hex(),
+            device_id=str(device_id or ""),
+        )
+        self._audit("posr_open_capture", str(session_key), "posr_open_captured",
+                    {"open_block": int(open_ref.block_number)})
+        return {
+            "outcome": "posr_open_captured",
+            "session_key": session_key,
+            "open_block": int(open_ref.block_number),
+        }
+
     def list_pending_replay_proofs(self) -> list[dict]:
         """Pass-through to the orchestrator's pending surface. Returns [] when
         the pipeline is dormant — empty is the honest answer; no fabrication."""
