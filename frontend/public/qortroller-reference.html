@@ -1,852 +1,403 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>QorTroller — Reference</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-<!-- ============================================================
-     QorTroller — Reference (the "what / how / forward" codex tab)
-     Brand-lock: QRESCE-0001 v0.5. Self-contained, no CDN.
-     Void-black forensic instrument · Syne display + JetBrains Mono data ·
-     medial-T amber wordmark · honesty discipline · graticule.
-
-     This file is the brand-locked SOURCE OF TRUTH for the Reference tab.
-     A Claude-Design pass enhances it with motion (see
-     docs/qortroller-reference-claude-design-prompt.md); the enhanced
-     file drops back in at this exact path. Facts here are FROZEN — see
-     CLAUDE.md (PoAC 228-byte wire format, PITL stack, formulas).
-     ============================================================ -->
-
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>About QorTroller</title>
+<!--
+  PROVING GROUND — "About QorTroller" deck (surface 4 / About).
+  Self-contained production port of the Claude Design artifact "About QorTroller.dc.html"
+  (round 1). Reproduced faithfully: the design-runtime <x-dc>/dc-import wrapper is stripped, the
+  PG Tab Strip is dropped (the React ViewSelector provides the tab bar above this iframe), the
+  PG Footer + PG Stamp are inlined, and the data-driven lists are built from the exact design data.
+  Served at /qortroller-reference.html (filename unchanged so the ReferenceView iframe needs no rewire).
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@125,700;125,800;125,900&family=Hanken+Grotesk:wght@400;500;600;700&family=Martian+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="/pg-seal.js"></script>
 <style>
-@font-face {
-  font-family: 'Syne';
-  src: url('/fonts/Syne-VariableFont_wght.ttf') format('truetype-variations'),
-       url('/fonts/Syne-VariableFont_wght.ttf') format('truetype');
-  font-weight: 400 800; font-style: normal; font-display: swap;
-}
-@font-face {
-  font-family: 'JetBrains Mono';
-  src: url('/fonts/JetBrainsMono-VariableFont_wght.ttf') format('truetype-variations'),
-       url('/fonts/JetBrainsMono-VariableFont_wght.ttf') format('truetype');
-  font-weight: 400 800; font-style: normal; font-display: swap;
-}
-
-:root {
-  --bg:#04060a; --panel:#0a0e14; --panel-soft:#0d1218; --panel-raised:#11161f;
-  --border:#1a2230; --border-soft:#131a24; --border-strong:#243044;
-  --text:#d4dde8; --text-dim:#8a96a5; --text-faint:#5a6675; --text-ghost:#3a4452;
-  --accent-amber:#f0a868; --accent-amber-soft:#f0a86833; --accent-amber-trace:#f0a86811;
-  --gamer-cyan:#00d4ff; --chain:#5bd6a3; --chain-soft:#5bd6a322;
-  --status-live:#5bd6a3; --status-pending:#f0a868; --status-blocked:#d65b78; --status-dormant:#5a6675;
-  --font-display:'Syne',system-ui,sans-serif;
-  --font-mono:'JetBrains Mono',ui-monospace,'SFMono-Regular',monospace;
-  --radius:4px; --radius-sm:2px;
-}
-
-* { box-sizing:border-box; }
-html,body { margin:0; padding:0; background:var(--bg); color:var(--text); }
-body {
-  font-family:var(--font-mono);
-  font-size:13px; line-height:1.6;
-  -webkit-font-smoothing:antialiased;
-  background-image:
-    linear-gradient(to right,  #1a223022 1px, transparent 1px),
-    linear-gradient(to bottom, #1a223022 1px, transparent 1px),
-    linear-gradient(to right,  #1a223011 1px, transparent 1px),
-    linear-gradient(to bottom, #1a223011 1px, transparent 1px);
-  background-size:96px 96px, 96px 96px, 24px 24px, 24px 24px;
-}
-::-webkit-scrollbar { width:8px; height:8px; }
-::-webkit-scrollbar-track { background:transparent; }
-::-webkit-scrollbar-thumb { background:var(--border-strong); border-radius:4px; }
-
-a { color:var(--accent-amber); text-decoration:none; }
-
-/* ── top strip ───────────────────────────────────────────── */
-.strip {
-  position:sticky; top:0; z-index:10;
-  display:flex; align-items:center; justify-content:space-between; gap:16px;
-  height:56px; padding:0 28px;
-  background:rgba(4,6,10,0.92); backdrop-filter:blur(8px);
-  border-bottom:1px solid var(--border);
-}
-.wordmark { font-family:var(--font-display); font-weight:700; font-size:20px; letter-spacing:-0.02em; color:var(--text); display:inline-flex; align-items:baseline; }
-.wordmark .t { font-weight:800; color:var(--accent-amber); }
-.strip__tag { font-size:10px; letter-spacing:0.14em; text-transform:uppercase; color:var(--text-faint); }
-.strip__tag .vapi { color:var(--accent-amber); }
-.strip__eye { font-size:10px; letter-spacing:0.14em; text-transform:uppercase; color:var(--text-faint); }
-
-/* ── layout ──────────────────────────────────────────────── */
-.wrap { max-width:1120px; margin:0 auto; padding:0 28px 96px; }
-
-.eyebrow { font-size:10.5px; letter-spacing:0.14em; text-transform:uppercase; color:var(--text-faint); margin:0 0 10px; }
-h1.display { font-family:var(--font-display); font-weight:800; letter-spacing:-0.02em; line-height:1.04; font-size:clamp(40px,7vw,76px); margin:0; color:var(--text); }
-h2.sec { font-family:var(--font-display); font-weight:700; letter-spacing:-0.01em; font-size:clamp(22px,3vw,30px); margin:0 0 6px; color:var(--text); }
-h3 { font-family:var(--font-display); font-weight:600; font-size:16px; letter-spacing:0; margin:0 0 6px; color:var(--text); }
-p { margin:0 0 12px; color:var(--text-dim); max-width:68ch; }
-.lead { font-size:16px; line-height:1.7; color:var(--text); max-width:64ch; }
-.amber { color:var(--accent-amber); } .chain { color:var(--chain); } .dim { color:var(--text-dim); } .faint { color:var(--text-faint); }
-.mono { font-family:var(--font-mono); }
-.hash { font-family:var(--font-mono); color:var(--chain); letter-spacing:0.02em; font-variant-ligatures:none; word-break:break-all; }
-
-section { padding:64px 0; border-top:1px solid var(--border-soft); scroll-margin-top:72px; }
-section:first-of-type { border-top:none; }
-.sec-head { display:flex; align-items:baseline; gap:14px; margin-bottom:28px; }
-.sec-num { font-size:11px; letter-spacing:0.14em; color:var(--accent-amber); }
-/* v2 · item C — specimen frame (chain-green corner brackets) for bytes-as-evidence */
-.qt-specimen { position:relative; }
-.qt-specimen::before, .qt-specimen::after { content:""; position:absolute; width:16px; height:16px; border:1px solid var(--chain); pointer-events:none; }
-.qt-specimen::before { top:0; left:0; border-right:0; border-bottom:0; }
-.qt-specimen::after  { bottom:0; right:0; border-left:0; border-top:0; }
-
-/* ── hero ────────────────────────────────────────────────── */
-.hero { padding:88px 0 56px; border-top:none; }
-.hero .tagline { font-family:var(--font-display); font-weight:600; font-size:clamp(16px,2.2vw,22px); color:var(--accent-amber); margin:20px 0 8px; letter-spacing:-0.01em; }
-.hero .cat { color:var(--text-dim); max-width:62ch; font-size:15px; line-height:1.7; }
-.hero .cat .vapi { color:var(--text); }
-
-/* ── panels / cards ──────────────────────────────────────── */
-.panel { background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); padding:20px 22px; position:relative; }
-.panel--soft { background:var(--panel-soft); }
-.panel__eye { font-size:10px; letter-spacing:0.14em; text-transform:uppercase; color:var(--text-faint); margin-bottom:12px; }
-.grid { display:grid; gap:16px; }
-.grid-2 { grid-template-columns:repeat(2,minmax(0,1fr)); }
-.grid-3 { grid-template-columns:repeat(3,minmax(0,1fr)); }
-@media (max-width:760px){ .grid-2,.grid-3{ grid-template-columns:1fr; } }
-
-.chip { display:inline-flex; align-items:center; gap:7px; padding:3px 9px; border:1px solid currentColor; border-radius:var(--radius-sm); font-size:10.5px; letter-spacing:0.06em; text-transform:uppercase; line-height:1; }
-.chip::before { content:""; width:6px; height:6px; border-radius:50%; background:currentColor; box-shadow:0 0 8px currentColor; }
-.chip--live{ color:var(--status-live);} .chip--pending{ color:var(--status-pending);} .chip--dormant{ color:var(--status-dormant);} .chip--amber{ color:var(--accent-amber);}
-
-/* ── tables ──────────────────────────────────────────────── */
-table { width:100%; border-collapse:separate; border-spacing:0; background:var(--panel-soft); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; }
-th,td { padding:9px 14px; text-align:left; font-size:12px; letter-spacing:0.02em; vertical-align:baseline; }
-th { font-size:10px; letter-spacing:0.12em; text-transform:uppercase; color:var(--text-faint); border-bottom:1px solid var(--border); }
-tr + tr td { border-top:1px solid var(--border-soft); }
-td.code { color:var(--accent-amber); }
-td.hard { color:var(--status-blocked); }
-td.adv  { color:var(--text-dim); }
-
-/* ── PoAC byte-band ──────────────────────────────────────── */
-.byteband { display:flex; height:54px; border:1px solid var(--border-strong); border-radius:var(--radius); overflow:hidden; margin:14px 0; }
-.byteband__seg { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; }
-.byteband__body { flex:164; background:linear-gradient(180deg, #0d1a18, #0a1512); border-right:1px solid var(--chain); }
-.byteband__sig  { flex:64; background:linear-gradient(180deg, #1a1410, #15100a); }
-.byteband__n { font-family:var(--font-display); font-weight:800; font-size:20px; }
-.byteband__l { font-size:9.5px; letter-spacing:0.12em; text-transform:uppercase; color:var(--text-faint); }
-
-/* ── chain ribbon ────────────────────────────────────────── */
-.ribbon { display:flex; gap:2px; height:16px; margin:10px 0; }
-.ribbon i { flex:1; background:var(--chain); opacity:0.55; border-radius:1px; }
-.ribbon i:last-child { opacity:1; box-shadow:0 0 12px var(--chain); }
-
-/* ── ladder ──────────────────────────────────────────────── */
-.ladder { display:flex; gap:0; flex-wrap:wrap; }
-.ladder__step { flex:1; min-width:130px; padding:14px 16px; border:1px solid var(--border); border-right:none; position:relative; }
-.ladder__step:last-child { border-right:1px solid var(--border); }
-.ladder__step b { font-family:var(--font-display); display:block; font-size:14px; }
-.ladder__step span { font-size:10.5px; color:var(--text-faint); }
-.ladder__step--done b { color:var(--chain); }
-.ladder__step--now  b { color:var(--accent-amber); }
-
-/* ── formula ─────────────────────────────────────────────── */
-.formula { font-family:var(--font-mono); font-size:14px; line-height:1.9; color:var(--text); background:var(--panel-soft); border:1px solid var(--border); border-radius:var(--radius); padding:16px 18px; word-break:break-word; }
-.formula .w { color:var(--accent-amber); }
-.formula .s { color:var(--chain); }
-
-.callout { border-left:2px solid var(--accent-amber); padding:4px 0 4px 16px; color:var(--text); font-size:14px; line-height:1.7; max-width:64ch; }
-
-footer { padding:48px 0 0; border-top:1px solid var(--border); color:var(--text-faint); font-size:11px; letter-spacing:0.04em; display:flex; flex-wrap:wrap; gap:8px 24px; justify-content:space-between; align-items:center; }
-
-/* ── baseline motion (Claude-Design will deepen these) ───── */
-@media (prefers-reduced-motion: no-preference) {
-  .ribbon i:last-child { animation: pulse 1.8s ease-in-out infinite; }
-  @keyframes pulse { 50% { opacity:0.5; } }
-}
-[data-anim] { /* animation target hooks for the Claude-Design pass */ }
-
-/* ── v2 · item F — scroll-wired motion. All gated under .qt-anim-on, which the
-   script adds ONLY when motion is allowed; so reduced-motion / no-JS readers
-   see the final state with nothing hidden. Three treatments, nothing else. ── */
-.qt-anim-on [data-anim="reveal"] { opacity:0; transform:translateY(14px); }
-.qt-anim-on [data-anim="reveal"].in { opacity:1; transform:none; transition:opacity .55s ease, transform .55s ease; }
-
-/* byteband assembles: 164 body fills L→R, then the 64 sig is appended */
-.qt-anim-on .byteband__body { clip-path:inset(0 100% 0 0); }
-.qt-anim-on .byteband__sig  { clip-path:inset(0 0 0 100%); }
-.qt-anim-on .bb-go .byteband__body { animation:bb-body .6s ease forwards; }
-.qt-anim-on .bb-go .byteband__sig  { animation:bb-sig .4s ease .5s forwards; }
-@keyframes bb-body { to { clip-path:inset(0 0 0 0); } }
-@keyframes bb-sig  { to { clip-path:inset(0 0 0 0); } }
-
-/* GIC formula operands settle in left→right, amber→inherit */
-.qt-anim-on [data-anim="gic-formula"] .op { opacity:0; }
-@keyframes op-settle { from { opacity:0; color:var(--accent-amber); } to { opacity:1; color:inherit; } }
-
-/* ── Claude-Design pass: living-codex motion layer.
-   Reduced-motion safe — everything gates on .qt-anim-on. */
-
-.qt-progress {
-  position:fixed; top:0; left:0; right:0; height:2px;
-  background:linear-gradient(to right, var(--accent-amber) 0%, var(--accent-amber) var(--p,0%), transparent var(--p,0%));
-  z-index:50; pointer-events:none; opacity:0.85;
-}
-
-.qt-hash-storm {
-  position:absolute; inset:0; width:100%; height:100%;
-  pointer-events:none; opacity:0.5; mix-blend-mode:screen;
-}
-.hero { position:relative; overflow:hidden; }
-.hero > *:not(.qt-hash-storm) { position:relative; z-index:1; }
-.qt-anim-on .hero .wordmark .t { animation:t-settle 1.2s ease-out 0.2s both; }
-@keyframes t-settle {
-  0%   { color:var(--text-faint); text-shadow:0 0 0 transparent; }
-  60%  { color:var(--accent-amber); text-shadow:0 0 24px var(--accent-amber-soft); }
-  100% { color:var(--accent-amber); text-shadow:0 0 8px var(--accent-amber-soft); }
-}
-
-.qt-rail {
-  position:fixed; top:50%; right:18px; transform:translateY(-50%);
-  display:flex; flex-direction:column; gap:6px; z-index:9;
-  font-family:var(--font-mono); font-size:11px;
-  letter-spacing:0.12em; text-transform:uppercase;
-}
-.qt-rail a {
-  display:inline-flex; align-items:center; gap:8px;
-  color:var(--text-faint); text-decoration:none; padding:2px 0;
-  border-right:1px solid transparent; padding-right:8px;
-  transition:color 200ms ease, border-color 200ms ease;
-}
-.qt-rail a::before {
-  content:""; display:inline-block; width:14px; height:1px;
-  background:currentColor; opacity:0.4;
-}
-.qt-rail a.is-active { color:var(--accent-amber); border-right-color:var(--accent-amber); }
-.qt-rail a.is-active::before { opacity:1; width:22px; }
-@media (max-width:1180px) { .qt-rail { display:none; } }
-
-.qt-anim-on [data-anim="poac-bytes"] .byteband__body { transform-origin:left center; transform:scaleX(0); opacity:0.6; }
-.qt-anim-on [data-anim="poac-bytes"] .byteband__sig  { opacity:0; transform:translateX(8px); }
-.qt-anim-on [data-anim="poac-bytes"].bb-go .byteband__body { transform:scaleX(1); opacity:1; transition:transform 480ms cubic-bezier(0.2,0.6,0.2,1), opacity 280ms ease; }
-.qt-anim-on [data-anim="poac-bytes"].bb-go .byteband__sig  { opacity:1; transform:none; transition:transform 220ms ease 480ms, opacity 220ms ease 480ms; }
-
-.qt-anim-on [data-anim="gic-chain"] i { opacity:0; transform:translateY(-3px); }
-.qt-anim-on [data-anim="gic-chain"].rb-go i { opacity:0.55; transform:none; transition:opacity 180ms ease, transform 180ms ease; }
-.qt-anim-on [data-anim="gic-chain"].rb-go i:last-child { opacity:1; animation:link-breathe 2.6s ease-in-out 1.2s infinite; }
-@keyframes link-breathe {
-  0%, 100% { box-shadow:0 0 12px var(--chain); opacity:0.9; }
-  50%      { box-shadow:0 0 22px var(--chain), 0 0 4px var(--chain); opacity:1; }
-}
-
-.qt-gauge {
-  margin:14px 0 4px; padding:14px 16px;
-  background:var(--panel-soft); border:1px solid var(--border); border-radius:var(--radius);
-  display:flex; flex-direction:column; gap:8px;
-}
-.qt-gauge__head { display:flex; justify-content:space-between; align-items:baseline; }
-.qt-gauge__lbl { font-size:10.5px; letter-spacing:0.14em; text-transform:uppercase; color:var(--text-faint); }
-.qt-gauge__val { font-family:var(--font-mono); font-size:18px; color:var(--chain); letter-spacing:0.04em; font-variant-ligatures:none; }
-.qt-gauge__track { height:6px; background:var(--bg); border:1px solid var(--border-soft); border-radius:2px; overflow:hidden; }
-.qt-gauge__fill { height:100%; width:0; background:linear-gradient(to right, var(--accent-amber), var(--chain)); transition:width 900ms cubic-bezier(0.2,0.6,0.2,1); }
-.qt-anim-on .qt-gauge.in .qt-gauge__fill { width:var(--p,0%); }
-.qt-gauge__legend { font-size:10px; color:var(--text-faint); letter-spacing:0.06em; display:flex; gap:14px; flex-wrap:wrap; }
-.qt-gauge__legend b { color:var(--accent-amber); font-weight:500; }
-
-.qt-anim-on .ladder__step { opacity:0.45; transition:opacity 280ms ease, border-color 280ms ease; }
-.qt-anim-on .ladder.in .ladder__step { opacity:1; }
-.qt-anim-on .ladder.in .ladder__step--now { animation:step-breathe 2.6s ease-in-out infinite; }
-@keyframes step-breathe {
-  0%, 100% { box-shadow:inset 0 0 0 1px var(--accent-amber); }
-  50%      { box-shadow:inset 0 0 0 1px var(--accent-amber), 0 0 14px -2px var(--accent-amber-soft); }
-}
-
-.qt-anim-on table[data-anim="stack-table"] tbody tr { opacity:0.55; transition:opacity 260ms ease; }
-.qt-anim-on table[data-anim="stack-table"].in tbody tr { opacity:1; }
-.qt-anim-on table[data-anim="stack-table"].in tbody tr.hard-row { animation:hard-flash 900ms ease-out 200ms 1; }
-@keyframes hard-flash {
-  0%   { box-shadow:inset 3px 0 0 var(--status-blocked); }
-  100% { box-shadow:inset 3px 0 0 transparent; }
-}
-
-.qt-anim-on [data-anim="primitives"].in .panel { animation:primitive-glint 6.2s ease-in-out infinite; }
-.qt-anim-on [data-anim="primitives"].in .panel:nth-child(1) { animation-delay:0s; }
-.qt-anim-on [data-anim="primitives"].in .panel:nth-child(2) { animation-delay:0.7s; }
-.qt-anim-on [data-anim="primitives"].in .panel:nth-child(3) { animation-delay:1.4s; }
-.qt-anim-on [data-anim="primitives"].in .panel:nth-child(4) { animation-delay:2.1s; }
-.qt-anim-on [data-anim="primitives"].in .panel:nth-child(5) { animation-delay:2.8s; }
-.qt-anim-on [data-anim="primitives"].in .panel:nth-child(6) { animation-delay:3.5s; }
-@keyframes primitive-glint {
-  0%, 92%, 100% { box-shadow:none; border-color:var(--border); }
-  95%           { box-shadow:0 0 12px -2px var(--chain-soft); border-color:var(--chain); }
-}
-
-.qt-anim-on .qt-hash-live { color:var(--accent-amber); }
-.qt-anim-on .qt-hash-live.settled { color:var(--chain); transition:color 280ms cubic-bezier(0.2,0.6,0.2,1); }
-
-@media (prefers-reduced-motion: reduce) {
-  .qt-progress, .qt-hash-storm { display:none !important; }
-}
-
-.qt-cite {
-  opacity: 0; transition: opacity 200ms ease;
-  display: inline-block; margin-left: 10px;
-  font-family: var(--font-mono); font-size: 12px;
-  color: var(--accent-amber);
-  cursor: pointer; user-select: none;
-  border: 1px solid transparent; padding: 0 6px;
-  border-radius: 2px; line-height: 1.4;
-  vertical-align: middle;
-}
-section[id]:hover .qt-cite,
-.qt-cite:focus-visible { opacity: 0.7; border-color: var(--border); }
-.qt-cite:hover { opacity: 1; border-color: var(--accent-amber); color: var(--accent-amber); }
-.qt-cite.is-copied { color: var(--chain); border-color: var(--chain); opacity: 1; }
-.qt-cite.is-copied::after { content: " · COPIED"; font-size: 10px; letter-spacing: 0.14em; }
-
+  :root{ --void-0:#060910; --void-1:#0A1120; --void-2:#111B2E; --steel:#6E8CA8; --ember:#E0743A; --struck:#F0C667; --oxblood:#B23A4C; --ash:#4A5260; --bone:#E9E2D2; --bone-dim:#9AA4B2; --disp:'Archivo',sans-serif; --body:'Hanken Grotesk',sans-serif; --mono:'Martian Mono',ui-monospace,monospace; }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:#060910;}
+  :focus-visible{outline:1px solid var(--ember);outline-offset:2px;}
+  ::selection{background:rgba(224,116,58,.3);}
+  a.pg-stamp:hover{border-color:var(--ember)!important;}
+  @keyframes pg-breath{0%,100%{opacity:.82;}50%{opacity:1;}}
+  @media (prefers-reduced-motion: reduce){*{animation:none!important;}}
 </style>
 </head>
+<body>
+<div style="position:relative;min-height:100vh;background:var(--void-0);background-image:linear-gradient(to right,rgba(110,140,168,.045) 1px,transparent 1px),linear-gradient(to bottom,rgba(110,140,168,.045) 1px,transparent 1px),linear-gradient(to right,rgba(110,140,168,.022) 1px,transparent 1px),linear-gradient(to bottom,rgba(110,140,168,.022) 1px,transparent 1px);background-size:96px 96px,96px 96px,24px 24px,24px 24px;color:var(--bone);font-family:var(--body);">
 
-<body data-page="qortroller-reference">
+  <!-- scroll progress -->
+  <div style="position:fixed;top:0;left:0;right:0;height:2px;z-index:60;background:transparent;pointer-events:none;"><div id="pg-prog" style="height:100%;width:0;background:var(--ember);opacity:.85;"></div></div>
 
-<div class="strip">
-  <span class="wordmark" data-anim="wordmark">Qor<span class="t">T</span>roller</span>
-  <span class="strip__tag"><span class="vapi">V.A.P.I.</span> · REFERENCE IMPLEMENTATION · IoTeX L1</span>
-  <span class="strip__eye">REFERENCE</span>
+  <div style="max-width:1140px;margin:0 auto;padding:0 28px 80px;">
+
+    <!-- WHY · HERO -->
+    <header style="position:relative;padding:60px 0 46px;display:flex;gap:44px;align-items:center;flex-wrap:wrap;">
+      <div style="flex:1 1 440px;min-width:0;">
+        <p style="font-family:var(--mono);font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:var(--steel);margin:0 0 16px;">About QorTroller · the why before the mechanism</p>
+        <h1 style="font-family:var(--disp);font-stretch:125%;font-weight:900;font-size:clamp(34px,6vw,62px);line-height:1.02;letter-spacing:0.004em;color:var(--bone);margin:0;">Core Controllers<br>of their gaming data.</h1>
+        <p style="font-family:var(--disp);font-stretch:125%;font-weight:700;font-size:clamp(15px,2vw,19px);color:var(--ember);margin:18px 0 16px;letter-spacing:0.01em;">QorTroller — Core Controllers of their gaming data.</p>
+        <p style="font-family:var(--body);font-size:16px;line-height:1.7;color:var(--bone-dim);max-width:60ch;margin:0 0 14px;"><span style="color:var(--bone);">V.A.P.I.</span> — Verifiable Autonomous Physical Intelligence — is a coined Decentralized Physical Infrastructure (DePIN) sub-category for protocols where the physical-input source is <em>also</em> the cryptographic agency-holder over the data those interactions generate. Here, that source is the gamer and their controller: they produce the data, and they own it.</p>
+        <p style="font-family:var(--body);font-size:16px;line-height:1.7;color:var(--bone-dim);max-width:60ch;margin:0 0 22px;">The promise — cheating doesn't need to be punished; it <span style="color:var(--ember);font-weight:600;">can't exist</span> when humanity is cryptographically proven and the gamer keeps sovereignty. Built native to IoTeX's Internet of Trusted Things; anchored on IoTeX&nbsp;L1.</p>
+        <div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:22px;">
+          <span style="display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:10.5px;letter-spacing:0.06em;text-transform:uppercase;color:var(--steel);border:1px solid var(--void-2);border-radius:2px;padding:4px 10px;"><span style="width:6px;height:6px;border-radius:50%;background:var(--steel);"></span>Proven by physics</span>
+          <span style="display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:10.5px;letter-spacing:0.06em;text-transform:uppercase;color:var(--steel);border:1px solid var(--void-2);border-radius:2px;padding:4px 10px;"><span style="width:6px;height:6px;border-radius:50%;background:var(--steel);"></span>Gamer-sovereign</span>
+          <span style="display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:10.5px;letter-spacing:0.06em;text-transform:uppercase;color:var(--steel);border:1px solid var(--void-2);border-radius:2px;padding:4px 10px;"><span style="width:6px;height:6px;border-radius:50%;background:var(--steel);"></span>Anchored on IoTeX</span>
+        </div>
+        <a class="pg-stamp" href="https://github.com/ConWan30/QorTroller" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:11px;text-decoration:none;background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:11px 15px;">
+          <span style="width:7px;height:7px;border-radius:1px;transform:rotate(45deg);background:var(--steel);flex:0 0 auto;"></span>
+          <span style="display:flex;flex-direction:column;gap:2px;">
+            <span style="font-family:var(--mono);font-size:12px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--bone);">Verify the proofs&nbsp;&rarr;</span>
+            <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.04em;color:var(--ash);">testnet · re-derive every claim from source</span>
+          </span>
+        </a>
+      </div>
+      <div style="flex:0 0 240px;display:flex;flex-direction:column;align-items:center;gap:11px;margin:0 auto;">
+        <canvas id="pg-seal" style="width:240px;height:240px;display:block;"></canvas>
+        <div style="font-family:var(--mono);font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--ash);text-align:center;">THE STRUCK SEAL · <span style="color:var(--steel);">RESTING</span></div>
+        <div style="font-family:var(--mono);font-size:10px;line-height:1.55;letter-spacing:0.02em;color:var(--ash);text-align:center;max-width:230px;">seed · keccak256(pubkey) · device-derived, not biometric. Steel here — only a live bridge strikes it gold.</div>
+      </div>
+    </header>
+
+    <!-- 01 · WHAT -->
+    <section style="padding:54px 0;border-top:1px solid var(--void-2);">
+      <div style="display:flex;align-items:baseline;gap:14px;margin-bottom:22px;"><span style="font-family:var(--mono);font-size:11px;letter-spacing:0.14em;color:var(--ash);">01</span><h2 style="font-family:var(--disp);font-stretch:125%;font-weight:800;font-size:clamp(22px,3.2vw,32px);letter-spacing:0.01em;color:var(--bone);line-height:1.05;margin:0;">What QorTroller is</h2></div>
+      <p style="font-family:var(--body);font-size:17px;line-height:1.65;color:var(--bone);max-width:68ch;margin:0 0 18px;">A cryptographic anti-cheat protocol for competitive console gaming. Instead of policing players after the fact, QorTroller cryptographically proves a real human is on a real, attested controller — and gives that gamer sovereignty over the data those physical interactions generate.</p>
+      <div style="border-left:2px solid var(--ember);padding:6px 0 6px 18px;max-width:64ch;font-family:var(--body);font-size:15.5px;line-height:1.7;color:var(--bone);">Cheating doesn't need to be punished — it <span style="color:var(--ember);font-weight:600;">can't exist</span> when humanity is cryptographically proven and the gamer retains sovereignty.</div>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-top:26px;">
+        <div style="background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:18px 20px;"><div style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--steel);margin-bottom:9px;">Proven, not surveilled</div><p style="font-family:var(--body);font-size:14px;line-height:1.6;color:var(--bone-dim);margin:0;">The gamer's humanity is honored and proven by physics + math — not by spyware. No keystroke harvesting, no kernel anti-cheat.</p></div>
+        <div style="background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:18px 20px;"><div style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--steel);margin-bottom:9px;">Sovereign by design</div><p style="font-family:var(--body);font-size:14px;line-height:1.6;color:var(--bone-dim);margin:0;">The physical-input source holds the keys. Consent is granted and revoked by the gamer's own wallet — the bridge can only observe.</p></div>
+        <div style="background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:18px 20px;"><div style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--steel);margin-bottom:9px;">Composable proof</div><p style="font-family:var(--body);font-size:14px;line-height:1.6;color:var(--bone-dim);margin:0;">Eligibility resolves to a single on-chain view call. Other protocols can gate on QorTroller without trusting QorTroller's servers.</p></div>
+      </div>
+    </section>
+
+    <!-- HOW · band label -->
+    <div style="padding:38px 0 0;display:flex;align-items:center;gap:14px;"><span style="font-family:var(--disp);font-stretch:125%;font-weight:900;font-size:13px;letter-spacing:0.18em;text-transform:uppercase;color:var(--ember);">HOW IT WORKS</span><span style="flex:1;height:1px;background:var(--void-2);"></span></div>
+
+    <!-- 02 · PITL STACK -->
+    <section style="padding:40px 0 54px;">
+      <div style="display:flex;align-items:baseline;gap:14px;margin-bottom:18px;"><span style="font-family:var(--mono);font-size:11px;letter-spacing:0.14em;color:var(--ash);">02</span><h2 style="font-family:var(--disp);font-stretch:125%;font-weight:800;font-size:clamp(22px,3.2vw,32px);color:var(--bone);margin:0;">How it functions · the PITL stack</h2></div>
+      <p style="font-family:var(--body);font-size:15px;line-height:1.65;color:var(--bone-dim);max-width:70ch;margin:0 0 18px;">Player-In-The-Loop verification runs nine layers of evidence over the controller's physical signal. Structural layers gate integrity; hard-cheat codes block tournament eligibility; advisory layers fingerprint the human without ever blocking on a single signal.</p>
+      <div style="overflow-x:auto;border:1px solid var(--void-2);border-radius:4px;background:var(--void-1);">
+        <table style="width:100%;border-collapse:separate;border-spacing:0;font-family:var(--mono);">
+          <thead><tr>
+            <th style="text-align:left;padding:9px 14px;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--ash);border-bottom:1px solid var(--void-2);">Layer</th>
+            <th style="text-align:left;padding:9px 14px;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--ash);border-bottom:1px solid var(--void-2);">Code</th>
+            <th style="text-align:left;padding:9px 14px;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--ash);border-bottom:1px solid var(--void-2);">Type</th>
+            <th style="text-align:left;padding:9px 14px;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--ash);border-bottom:1px solid var(--void-2);">Signal</th>
+          </tr></thead>
+          <tbody>
+            <tr><td style="padding:9px 14px;font-size:12px;color:var(--ember);border-top:1px solid var(--void-2);">L0</td><td style="padding:9px 14px;font-size:12px;color:var(--ash);border-top:1px solid var(--void-2);font-variant-ligatures:none;">—</td><td style="padding:9px 14px;font-size:12px;color:var(--steel);border-top:1px solid var(--void-2);">Structural</td><td style="padding:9px 14px;font-size:12px;color:var(--bone-dim);border-top:1px solid var(--void-2);">HID presence</td></tr>
+            <tr><td style="padding:9px 14px;font-size:12px;color:var(--ember);border-top:1px solid var(--void-2);">L1</td><td style="padding:9px 14px;font-size:12px;color:var(--ash);border-top:1px solid var(--void-2);font-variant-ligatures:none;">—</td><td style="padding:9px 14px;font-size:12px;color:var(--steel);border-top:1px solid var(--void-2);">Structural</td><td style="padding:9px 14px;font-size:12px;color:var(--bone-dim);border-top:1px solid var(--void-2);">PoAC chain integrity</td></tr>
+            <tr><td style="padding:9px 14px;font-size:12px;color:var(--ember);border-top:1px solid var(--void-2);">L2</td><td style="padding:9px 14px;font-size:12px;color:var(--struck);border-top:1px solid var(--void-2);font-variant-ligatures:none;">0x28</td><td style="padding:9px 14px;font-size:12px;color:var(--oxblood);border-top:1px solid var(--void-2);">Hard cheat</td><td style="padding:9px 14px;font-size:12px;color:var(--bone-dim);border-top:1px solid var(--void-2);">IMU gravity + HID/XInput discrepancy</td></tr>
+            <tr><td style="padding:9px 14px;font-size:12px;color:var(--ember);border-top:1px solid var(--void-2);">L3</td><td style="padding:9px 14px;font-size:12px;color:var(--struck);border-top:1px solid var(--void-2);font-variant-ligatures:none;">0x29 / 0x2A</td><td style="padding:9px 14px;font-size:12px;color:var(--oxblood);border-top:1px solid var(--void-2);">Hard cheat</td><td style="padding:9px 14px;font-size:12px;color:var(--bone-dim);border-top:1px solid var(--void-2);">TinyML behavioral classifier</td></tr>
+            <tr><td style="padding:9px 14px;font-size:12px;color:var(--ember);border-top:1px solid var(--void-2);">L2B</td><td style="padding:9px 14px;font-size:12px;color:var(--struck);border-top:1px solid var(--void-2);font-variant-ligatures:none;">0x31</td><td style="padding:9px 14px;font-size:12px;color:var(--bone-dim);border-top:1px solid var(--void-2);">Advisory</td><td style="padding:9px 14px;font-size:12px;color:var(--bone-dim);border-top:1px solid var(--void-2);">IMU-button causal latency</td></tr>
+            <tr><td style="padding:9px 14px;font-size:12px;color:var(--ember);border-top:1px solid var(--void-2);">L2C</td><td style="padding:9px 14px;font-size:12px;color:var(--struck);border-top:1px solid var(--void-2);font-variant-ligatures:none;">0x32</td><td style="padding:9px 14px;font-size:12px;color:var(--bone-dim);border-top:1px solid var(--void-2);">Advisory</td><td style="padding:9px 14px;font-size:12px;color:var(--bone-dim);border-top:1px solid var(--void-2);">Stick-IMU cross-correlation</td></tr>
+            <tr><td style="padding:9px 14px;font-size:12px;color:var(--ember);border-top:1px solid var(--void-2);">L4</td><td style="padding:9px 14px;font-size:12px;color:var(--struck);border-top:1px solid var(--void-2);font-variant-ligatures:none;">0x30</td><td style="padding:9px 14px;font-size:12px;color:var(--bone-dim);border-top:1px solid var(--void-2);">Advisory</td><td style="padding:9px 14px;font-size:12px;color:var(--bone-dim);border-top:1px solid var(--void-2);">12-feature Mahalanobis biometric fingerprint</td></tr>
+            <tr><td style="padding:9px 14px;font-size:12px;color:var(--ember);border-top:1px solid var(--void-2);">L5</td><td style="padding:9px 14px;font-size:12px;color:var(--struck);border-top:1px solid var(--void-2);font-variant-ligatures:none;">0x2B</td><td style="padding:9px 14px;font-size:12px;color:var(--bone-dim);border-top:1px solid var(--void-2);">Advisory</td><td style="padding:9px 14px;font-size:12px;color:var(--bone-dim);border-top:1px solid var(--void-2);">Temporal rhythm (CV, entropy, quantization)</td></tr>
+            <tr><td style="padding:9px 14px;font-size:12px;color:var(--ember);border-top:1px solid var(--void-2);">L6</td><td style="padding:9px 14px;font-size:12px;color:var(--ash);border-top:1px solid var(--void-2);font-variant-ligatures:none;">—</td><td style="padding:9px 14px;font-size:12px;color:var(--bone-dim);border-top:1px solid var(--void-2);">Advisory</td><td style="padding:9px 14px;font-size:12px;color:var(--bone-dim);border-top:1px solid var(--void-2);">Active haptic challenge-response (off by default)</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p style="font-family:var(--mono);font-size:11.5px;line-height:1.6;color:var(--ash);margin:12px 0 0;">Hard codes <span style="color:var(--struck);">{0x28, 0x29, 0x2A}</span> block tournament eligibility. Advisory layers compose into a humanity probability — never a single point of failure.</p>
+    </section>
+
+    <!-- 03 · PoAC -->
+    <section style="padding:40px 0 54px;border-top:1px solid var(--void-2);">
+      <div style="display:flex;align-items:baseline;gap:14px;margin-bottom:18px;"><span style="font-family:var(--mono);font-size:11px;letter-spacing:0.14em;color:var(--ash);">03</span><h2 style="font-family:var(--disp);font-stretch:125%;font-weight:800;font-size:clamp(22px,3.2vw,32px);color:var(--bone);margin:0;">Proof of Autonomous Cognition</h2></div>
+      <p style="font-family:var(--body);font-size:15px;line-height:1.65;color:var(--bone-dim);max-width:70ch;margin:0 0 16px;">Every cognition cycle emits a <span style="color:var(--struck);font-weight:600;">228-byte PoAC record</span> — a 164-byte signed body plus a 64-byte ECDSA-P256 signature. Records chain by hashing the body only.</p>
+      <div style="display:flex;height:56px;border:1px solid var(--struck);border-radius:4px;overflow:hidden;margin:12px 0;">
+        <div style="flex:164;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;background:linear-gradient(180deg,#1a160c,#120e08);border-right:1px solid var(--struck);"><span style="font-family:var(--disp);font-stretch:125%;font-weight:900;font-size:20px;color:var(--struck);">164</span><span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ash);">signed body</span></div>
+        <div style="flex:64;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;background:linear-gradient(180deg,#141414,#0e0e0e);"><span style="font-family:var(--disp);font-stretch:125%;font-weight:900;font-size:20px;color:var(--bone);">64</span><span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ash);">ECDSA-P256 sig</span></div>
+      </div>
+      <div style="font-family:var(--mono);font-size:13.5px;line-height:1.8;color:var(--bone);background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:15px 18px;word-break:break-word;">
+        chain_link_hash = <span style="color:var(--ember);">SHA-256</span>( raw[<span style="color:var(--struck);">0:164</span>] )
+        <span style="display:block;font-size:11px;color:var(--ash);margin-top:7px;">— the 164-byte body only, never the full 228 bytes. Wire format is <span style="color:var(--struck);">FROZEN</span> (INV-ARC7-001).</span>
+      </div>
+    </section>
+
+    <!-- 04 · HUMANITY -->
+    <section style="padding:40px 0 54px;border-top:1px solid var(--void-2);">
+      <div style="display:flex;align-items:baseline;gap:14px;margin-bottom:18px;"><span style="font-family:var(--mono);font-size:11px;letter-spacing:0.14em;color:var(--ash);">04</span><h2 style="font-family:var(--disp);font-stretch:125%;font-weight:800;font-size:clamp(22px,3.2vw,32px);color:var(--bone);margin:0;">Humanity probability</h2></div>
+      <p style="font-family:var(--body);font-size:15px;line-height:1.65;color:var(--bone-dim);max-width:70ch;margin:0 0 16px;">Advisory layers fuse into a single probability that a human — not a macro, bot, or translator device — produced the cycle. In the NCAA CFB 26 corpus (dead-zone sticks), L2C resolves to a neutral 0.5 prior.</p>
+      <div style="font-family:var(--mono);font-size:14px;line-height:1.9;color:var(--bone);background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:16px 18px;">
+        p<sub>human</sub> = <span style="color:var(--ember);">0.28</span>·p<sub>L4</sub> + <span style="color:var(--ember);">0.27</span>·p<sub>L5</sub> + <span style="color:var(--ember);">0.20</span>·p<sub>E4</sub> + <span style="color:var(--ember);">0.15</span>·p<sub>L2B</sub> + <span style="color:var(--ember);">0.10</span>·p<sub>L2C</sub>
+      </div>
+    </section>
+
+    <!-- 05 · GIC -->
+    <section style="padding:40px 0 54px;border-top:1px solid var(--void-2);">
+      <div style="display:flex;align-items:baseline;gap:14px;margin-bottom:18px;"><span style="font-family:var(--mono);font-size:11px;letter-spacing:0.14em;color:var(--ash);">05</span><h2 style="font-family:var(--disp);font-stretch:125%;font-weight:800;font-size:clamp(22px,3.2vw,32px);color:var(--bone);margin:0;">Grind Integrity Chain</h2></div>
+      <p style="font-family:var(--body);font-size:15px;line-height:1.65;color:var(--bone-dim);max-width:70ch;margin:0 0 14px;">A FROZEN SHA-256 chain over grind sessions makes the calibration corpus tamper-evident. Each link binds the previous hash, the deterministic verdict, the capture-host state, and a monotonic nanosecond timestamp. The headline artifact, <span style="color:var(--struck);">GIC_100</span>, is the final hash after 100 consecutive clean sessions.</p>
+      <div id="pg-ribbon" style="display:flex;gap:2px;height:16px;margin:12px 0;"></div>
+      <div style="font-family:var(--mono);font-size:13px;line-height:1.7;color:var(--bone);background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:15px 18px;word-break:break-word;">
+        GIC<sub>N</sub> = <span style="color:var(--ember);">SHA-256</span>( <span style="color:var(--struck);">prev(32)</span> ‖ <span style="color:var(--struck);">commitment(32)</span> ‖ <span style="color:var(--struck);">verdict(1)</span> ‖ <span style="color:var(--struck);">host(1)</span> ‖ <span style="color:var(--struck);">ts_ns_be(8)</span> )
+      </div>
+    </section>
+
+    <!-- 06 · FLEET -->
+    <section style="padding:40px 0 54px;border-top:1px solid var(--void-2);">
+      <div style="display:flex;align-items:baseline;gap:14px;margin-bottom:18px;"><span style="font-family:var(--mono);font-size:11px;letter-spacing:0.14em;color:var(--ash);">06</span><h2 style="font-family:var(--disp);font-stretch:125%;font-weight:800;font-size:clamp(22px,3.2vw,32px);color:var(--bone);margin:0;">The autonomous operator fleet</h2></div>
+      <p style="font-family:var(--body);font-size:15px;line-height:1.65;color:var(--bone-dim);max-width:70ch;margin:0 0 18px;">Three on-chain agents steward the protocol under an Operator Initiative — the first ≥3-agent fleet in any DePIN gaming protocol. They enforce a cross-agent skill-separation invariant: no single agent holds all authority.</p>
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:20px;">
+        <div style="background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:18px 20px;"><div style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--steel);margin-bottom:9px;">Anchor-Sentry</div><p style="font-family:var(--body);font-size:14px;line-height:1.6;color:var(--bone-dim);margin:0;">Provenance attestation — anchors PoAd commitments on-chain.</p></div>
+        <div style="background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:18px 20px;"><div style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--steel);margin-bottom:9px;">Guardian</div><p style="font-family:var(--body);font-size:14px;line-height:1.6;color:var(--bone-dim);margin:0;">Operational stewardship + autonomous KMS-HSM signing (off-chain, 0 IOTX). The only autonomous agent by design.</p></div>
+        <div style="background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:18px 20px;"><div style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--steel);margin-bottom:9px;">Curator</div><p style="font-family:var(--body);font-size:14px;line-height:1.6;color:var(--bone-dim);margin:0;">Marketplace + data-coherence review. Direct on-chain authority is two-key gated.</p></div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;">
+        <div style="flex:1;min-width:130px;padding:14px 16px;border:1px solid var(--void-2);border-right:none;"><b style="font-family:var(--disp);font-stretch:125%;font-weight:800;display:block;font-size:14px;color:var(--steel);">O0</b><span style="font-family:var(--mono);font-size:10.5px;color:var(--ash);">Registration</span></div>
+        <div style="flex:1;min-width:130px;padding:14px 16px;border:1px solid var(--void-2);border-right:none;"><b style="font-family:var(--disp);font-stretch:125%;font-weight:800;display:block;font-size:14px;color:var(--steel);">O1 · Shadow</b><span style="font-family:var(--mono);font-size:10.5px;color:var(--ash);">Cedar bundle anchored</span></div>
+        <div style="flex:1;min-width:130px;padding:14px 16px;border:1px solid var(--void-2);border-right:none;"><b style="font-family:var(--disp);font-stretch:125%;font-weight:800;display:block;font-size:14px;color:var(--steel);">O2 · Suggest</b><span style="font-family:var(--mono);font-size:10.5px;color:var(--ash);">Advisory drafts</span></div>
+        <div style="flex:1;min-width:130px;padding:14px 16px;border:1px solid var(--struck);box-shadow:inset 0 0 0 1px var(--struck);"><b style="font-family:var(--disp);font-stretch:125%;font-weight:800;display:block;font-size:14px;color:var(--struck);">O3 · Acting</b><span style="font-family:var(--mono);font-size:10.5px;color:var(--ash);">Live authority (gated)</span></div>
+      </div>
+    </section>
+
+    <!-- 07 · SOVEREIGNTY -->
+    <section style="padding:40px 0 54px;border-top:1px solid var(--void-2);">
+      <div style="display:flex;align-items:baseline;gap:14px;margin-bottom:18px;"><span style="font-family:var(--mono);font-size:11px;letter-spacing:0.14em;color:var(--ash);">07</span><h2 style="font-family:var(--disp);font-stretch:125%;font-weight:800;font-size:clamp(22px,3.2vw,32px);color:var(--bone);margin:0;">Gamer sovereignty</h2></div>
+      <p style="font-family:var(--body);font-size:15px;line-height:1.65;color:var(--bone-dim);max-width:70ch;margin:0 0 18px;">The bridge <span style="color:var(--ember);">never</span> grants or revokes consent on behalf of the gamer. On-chain consent is written only by the gamer's own wallet (<span style="font-family:var(--mono);color:var(--bone);">msg.sender</span>); the protocol's view calls are read-only. Consent is per-category and time-bound, enforcing GDPR Art. 17 erasure at the cryptographic layer.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div style="overflow:hidden;border:1px solid var(--void-2);border-radius:4px;background:var(--void-1);">
+          <table style="width:100%;border-collapse:separate;border-spacing:0;font-family:var(--mono);">
+            <thead><tr><th style="text-align:left;padding:9px 14px;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--ash);border-bottom:1px solid var(--void-2);">Consent category</th><th style="text-align:left;padding:9px 14px;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--ash);border-bottom:1px solid var(--void-2);">Bit</th></tr></thead>
+            <tbody>
+              <tr><td style="padding:9px 14px;font-size:12px;color:var(--bone-dim);">TOURNAMENT_GATE</td><td style="padding:9px 14px;font-size:12px;color:var(--struck);">0</td></tr>
+              <tr><td style="padding:9px 14px;font-size:12px;color:var(--bone-dim);border-top:1px solid var(--void-2);">ANONYMIZED_RESEARCH</td><td style="padding:9px 14px;font-size:12px;color:var(--struck);border-top:1px solid var(--void-2);">1</td></tr>
+              <tr><td style="padding:9px 14px;font-size:12px;color:var(--bone-dim);border-top:1px solid var(--void-2);">MANUFACTURER_CERT</td><td style="padding:9px 14px;font-size:12px;color:var(--struck);border-top:1px solid var(--void-2);">2</td></tr>
+              <tr><td style="padding:9px 14px;font-size:12px;color:var(--bone-dim);border-top:1px solid var(--void-2);">MARKETPLACE</td><td style="padding:9px 14px;font-size:12px;color:var(--struck);border-top:1px solid var(--void-2);">3</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:18px 20px;">
+          <div style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--steel);margin-bottom:10px;">Consent commitment · FROZEN v1</div>
+          <div style="font-family:var(--mono);font-size:11.5px;line-height:1.6;color:var(--struck);font-variant-ligatures:none;word-break:break-all;">SHA-256( "VAPI-CONSENT-v1" ‖ device_id ‖ category_bitmask ‖ expires_at ‖ ts_ns )</div>
+          <p style="font-family:var(--body);font-size:12px;line-height:1.55;color:var(--ash);margin:12px 0 0;">Category enum positions are FROZEN and match the on-chain registry bit-for-bit.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 08 · IoTeX -->
+    <section style="padding:40px 0 54px;border-top:1px solid var(--void-2);">
+      <div style="display:flex;align-items:baseline;gap:14px;margin-bottom:18px;"><span style="font-family:var(--mono);font-size:11px;letter-spacing:0.14em;color:var(--ash);">08</span><h2 style="font-family:var(--disp);font-stretch:125%;font-weight:800;font-size:clamp(22px,3.2vw,32px);color:var(--bone);margin:0;">Anchored on IoTeX</h2></div>
+      <p style="font-family:var(--body);font-size:15px;line-height:1.65;color:var(--bone-dim);max-width:70ch;margin:0 0 18px;">QorTroller runs on IoTeX (chain ID <span style="color:var(--struck);">4690</span>, <span style="color:var(--steel);">testnet</span>) — <span style="color:var(--struck);">55 contracts</span> live as of 2026-06-05. Eligibility is a single composable view: <span style="font-family:var(--mono);color:var(--ember);">isFullyEligible()</span>.</p>
+      <div id="pg-addresses" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;"></div>
+      <p style="font-family:var(--mono);font-size:11px;line-height:1.6;color:var(--ash);margin:12px 0 0;">Code identifiers stay <span style="color:var(--bone-dim);">VAPI</span> (no periods) under FROZEN-v1 preservation; display copy uses <span style="color:var(--bone-dim);">V.A.P.I.</span></p>
+    </section>
+
+    <!-- 09 · FROZEN PRIMITIVES -->
+    <section style="padding:40px 0 54px;border-top:1px solid var(--void-2);">
+      <div style="display:flex;align-items:baseline;gap:14px;margin-bottom:18px;"><span style="font-family:var(--mono);font-size:11px;letter-spacing:0.14em;color:var(--ash);">09</span><h2 style="font-family:var(--disp);font-stretch:125%;font-weight:800;font-size:clamp(22px,3.2vw,32px);color:var(--bone);margin:0;">The FROZEN-v1 primitive family</h2></div>
+      <p style="font-family:var(--body);font-size:15px;line-height:1.65;color:var(--bone-dim);max-width:70ch;margin:0 0 18px;">A family of byte-exact commitment primitives (PATTERN-017) — <span style="color:var(--struck);">14 entries</span> in the VAPI namespace + 1 in the QorTroller namespace. Each binds a domain tag and a fixed byte layout so any third party can recompute and verify it independently — months later, without trusting the protocol's servers.</p>
+      <div id="pg-primitives" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;"></div>
+    </section>
+
+    <!-- 09b · TECH-STACK -->
+    <section style="padding:40px 0 54px;border-top:1px solid var(--void-2);">
+      <div style="display:flex;align-items:baseline;gap:14px;margin-bottom:18px;"><span style="font-family:var(--mono);font-size:11px;letter-spacing:0.14em;color:var(--ash);">09b</span><h2 style="font-family:var(--disp);font-stretch:125%;font-weight:800;font-size:clamp(22px,3.2vw,32px);color:var(--bone);margin:0;">Tech-stack pillars · <span style="color:var(--struck);">live on testnet</span></h2></div>
+      <p style="font-family:var(--body);font-size:15px;line-height:1.65;color:var(--bone-dim);max-width:70ch;margin:0 0 18px;">What the protocol provides — described as engineering surfaces, not project phases. Each pillar has an on-chain artifact, a code path, and an in-CI test.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+        <div style="background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:16px 18px;"><div style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--steel);margin-bottom:8px;">ZK proofs of human authorship</div><p style="font-family:var(--body);font-size:13px;line-height:1.6;color:var(--bone-dim);margin:0;">A Groth16 verifier wrapper on IoTeX — <span style="font-family:var(--mono);color:var(--struck);">0x5182372d…</span> — accepts per-session zero-knowledge proofs that gameplay came from a real human above a disclosed humanity floor. The public input <span style="font-family:var(--mono);color:var(--bone);">sanitizedTraceRoot</span> binds the proof to a sanitized macro-intent matrix (60 Hz, 4-bit quantized) — biometric features are wiped by the <span style="font-family:var(--mono);color:var(--bone);">FORBIDDEN_COLUMNS</span> frozenset (INV-VHR-004) before the matrix is hashed.</p></div>
+        <div style="background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:16px 18px;"><div style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--steel);margin-bottom:8px;">L1 block-hash anchored recency</div><p style="font-family:var(--body);font-size:13px;line-height:1.6;color:var(--bone-dim);margin:0;">An on-chain registry — <span style="font-family:var(--mono);color:var(--struck);">0x96244031…</span>, <span style="color:var(--ember);">LIVE 2026-06-05</span> — binds every session's open + close beacons to real IoTeX L1 block hashes at a FROZEN cadence (<span style="font-family:var(--mono);color:var(--bone);">ANCHOR_CADENCE = 64</span>, INV-TBR-002). Stale re-listing, pre-computation drips, and tournament-window backdating are detected at the freshness floor. <span style="color:var(--steel);">Honest dormant fallback when keeper unset.</span></p></div>
+        <div style="background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:16px 18px;"><div style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--steel);margin-bottom:8px;">W3bstream Wasm compute sandbox</div><p style="font-family:var(--body);font-size:13px;line-height:1.6;color:var(--bone-dim);margin:0;">A Rust applet under <span style="font-family:var(--mono);color:var(--bone);">w3bstream/applet/</span> compiles to <span style="font-family:var(--mono);color:var(--bone);">wasm32-unknown-unknown</span>. The sandbox manifest is FROZEN-pinned: <span style="font-family:var(--mono);color:var(--bone);">frame_grabbing=false</span>, <span style="font-family:var(--mono);color:var(--bone);">optical_capture=false</span>, <span style="font-family:var(--mono);color:var(--bone);">blockhash_temporal_rules=true</span>. Validates ingestion mechanically (cadence + isolation + non-zero PQ commitment); INV-W3S-001/002/005 enforced fail-closed in CI.</p></div>
+        <div style="background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:16px 18px;"><div style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--steel);margin-bottom:8px;">Silicon-rooted hardware identity</div><p style="font-family:var(--body);font-size:13px;line-height:1.6;color:var(--bone-dim);margin:0;">Per-device birth certificates anchored at <span style="font-family:var(--mono);color:var(--struck);">VAPIManufacturerDeviceRegistry</span> at manufacture time. <span style="font-family:var(--mono);color:var(--bone);">deviceId = keccak256(controller_pubkey)</span> FROZEN across the entire protocol. IoTeX's <span style="font-family:var(--mono);color:var(--bone);">P256 precompile at 0x0100</span> verifies the cert in one view-call. <span style="font-family:var(--mono);color:var(--bone);">VAPIProtocolLensV2.isFullyEligible_PathA(bytes32)</span> gates tournaments + marketplace + export in a single composable read.</p></div>
+        <div style="background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:16px 18px;"><div style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--steel);margin-bottom:8px;">Gamer-sovereign consent surface</div><p style="font-family:var(--body);font-size:13px;line-height:1.6;color:var(--bone-dim);margin:0;">A standalone dApp at <span style="font-family:var(--mono);color:var(--struck);">/consent</span> · wallet signs every grant + revoke · bridge can READ but NEVER WRITE · contract enforces <span style="font-family:var(--mono);color:var(--bone);">msg.sender == gamer</span> · first on-chain manifest write recorded tx <span style="font-family:var(--mono);color:var(--struck);">0xd02c051e…20bd</span> block 44354567 with <span style="font-family:var(--mono);color:var(--bone);">allowReplayProofs=true</span> · append-only <span style="font-family:var(--mono);color:var(--bone);">consent_event_log</span> records grant → revoke → re-grant as 3 distinct rows.</p></div>
+        <div style="background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:16px 18px;"><div style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--steel);margin-bottom:8px;">Post-quantum sidecar architecture</div><p style="font-family:var(--body);font-size:13px;line-height:1.6;color:var(--bone-dim);margin:0;">Decoupled Cryptographic Sidecar Pointer pattern · 3,309-byte ML-DSA-65 signature lives off-chain on a DePIN DA node · only a 32-byte commitment hash crosses the boundary · INV-ARC7-001 enforces the 228-byte PoAC wire format STRICTLY (HardForkDisallowedError if PQ grows the packet) · Thread-C <span style="font-family:var(--mono);color:var(--bone);">asyncio.to_thread</span> prevents PQ signing from jittering the 1002 Hz HID loop · forward-compatible with ML-DSA / SLH-DSA / hybrid composites aligned to IoTeX IIP-64.</p></div>
+        <div style="background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:16px 18px;"><div style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--steel);margin-bottom:8px;">Autonomous operator stewardship</div><p style="font-family:var(--body);font-size:13px;line-height:1.6;color:var(--bone-dim);margin:0;">Three on-chain agents at O3_ACTING — Sentry · Guardian · Curator — first ≥3-agent fleet at full action authority in any DePIN gaming protocol. Fleet Readiness Root <span style="font-family:var(--mono);color:var(--struck);">0x54b4b698…</span> permanently anchored. Cedar v2 lane authority dual-anchored. Guardian fired the first non-human KMS-HSM signature anchored on-chain. Mythos audit fleet (14 variants) continuously monitors protocol integrity.</p></div>
+        <div style="background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:16px 18px;"><div style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--steel);margin-bottom:8px;">World Model Provenance Lane (WMP)</div><p style="font-family:var(--body);font-size:13px;line-height:1.6;color:var(--bone-dim);margin:0;">A packaging + export + consumer-verifier layer turning QorTroller's proofs into a bundle a world-model lab can verify cryptographically without trusting QorTroller. Five checks: humanity Groth16 verify · matrix↔root re-hash · L1 beacon recency · consent · scope honesty. Action-channel only · post-φ only · no observation channel · no biometric leakage. <span style="color:var(--steel);">QorTroller is a provenance source, not a world model.</span></p></div>
+      </div>
+    </section>
+
+    <!-- 10 · HARDWARE -->
+    <section style="padding:40px 0 54px;border-top:1px solid var(--void-2);">
+      <div style="display:flex;align-items:baseline;gap:14px;margin-bottom:18px;"><span style="font-family:var(--mono);font-size:11px;letter-spacing:0.14em;color:var(--ash);">10</span><h2 style="font-family:var(--disp);font-stretch:125%;font-weight:800;font-size:clamp(22px,3.2vw,32px);color:var(--bone);margin:0;">Hardware &amp; corpus</h2></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div style="background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:18px 20px;"><div style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--steel);margin-bottom:9px;">Certified device</div><p style="font-family:var(--body);font-size:14px;line-height:1.6;color:var(--bone-dim);margin:0;">Sony <span style="color:var(--ember);">DualShock Edge (CFI-ZCP1)</span> over USB-C at ~1002 Hz polling — the 1 kHz capture floor that makes spectral biometrics possible. Injection margin ≈ 14,000× on accel.</p></div>
+        <div style="background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:18px 20px;"><div style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--steel);margin-bottom:9px;">Primary game corpus</div><p style="font-family:var(--body);font-size:14px;line-height:1.6;color:var(--bone-dim);margin:0;"><span style="color:var(--ember);">NCAA College Football 26</span> (PS5). Dead-zone analog sticks; the certified grind configuration is dual-connection (USB to laptop + Bluetooth to PS5).</p></div>
+      </div>
+    </section>
+
+    <!-- HONEST STATUS · band -->
+    <div style="padding:38px 0 0;display:flex;align-items:center;gap:14px;"><span style="font-family:var(--disp);font-stretch:125%;font-weight:900;font-size:13px;letter-spacing:0.18em;text-transform:uppercase;color:var(--ember);">HONEST STATUS</span><span style="flex:1;height:1px;background:var(--void-2);"></span></div>
+
+    <section style="padding:34px 0 54px;">
+      <div style="display:flex;align-items:baseline;gap:14px;margin-bottom:14px;"><span style="font-family:var(--mono);font-size:11px;letter-spacing:0.14em;color:var(--ash);">11</span><h2 style="font-family:var(--disp);font-stretch:125%;font-weight:800;font-size:clamp(22px,3.2vw,32px);color:var(--bone);margin:0;">Current footprint <span style="font-family:var(--mono);font-size:13px;font-weight:400;letter-spacing:0.12em;text-transform:uppercase;color:var(--ash);margin-left:8px;">· 2026-06-06</span></h2></div>
+      <p style="font-family:var(--body);font-size:17px;line-height:1.65;color:var(--bone);max-width:68ch;margin:0 0 22px;">Operationally honest. Every load-bearing claim has an in-CI test, an on-chain artifact, or an explicit pending marker. There is no aspirational technology pretending to be shipped.</p>
+
+      <div id="pg-stats" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:8px;"></div>
+
+      <h3 style="font-family:var(--disp);font-stretch:125%;font-weight:700;font-size:15px;color:var(--bone);margin:26px 0 10px;">Proven · live · demonstrable today</h3>
+      <div id="pg-proven" style="display:grid;gap:6px;"></div>
+
+      <h3 style="font-family:var(--disp);font-stretch:125%;font-weight:700;font-size:15px;color:var(--bone);margin:26px 0 10px;">Pending · honestly named</h3>
+      <div id="pg-pending" style="display:grid;gap:6px;"></div>
+
+      <h3 style="font-family:var(--disp);font-stretch:125%;font-weight:700;font-size:15px;color:var(--bone);margin:26px 0 10px;">What QorTroller does <span style="color:var(--oxblood);">not</span> claim</h3>
+      <div id="pg-notclaim" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;"></div>
+    </section>
+
+    <!-- FORWARD · band -->
+    <div style="padding:38px 0 0;display:flex;align-items:center;gap:14px;"><span style="font-family:var(--disp);font-stretch:125%;font-weight:900;font-size:13px;letter-spacing:0.18em;text-transform:uppercase;color:var(--ember);">FORWARD</span><span style="flex:1;height:1px;background:var(--void-2);"></span></div>
+
+    <section style="padding:34px 0 40px;">
+      <div style="display:flex;align-items:baseline;gap:14px;margin-bottom:14px;"><span style="font-family:var(--mono);font-size:11px;letter-spacing:0.14em;color:var(--ash);">12</span><h2 style="font-family:var(--disp);font-stretch:125%;font-weight:800;font-size:clamp(22px,3.2vw,32px);color:var(--bone);margin:0;">How it functions going forward</h2></div>
+      <p style="font-family:var(--body);font-size:15px;line-height:1.65;color:var(--bone-dim);max-width:70ch;margin:0 0 18px;">The roadmap deepens the physical-evidence surface and widens composability — every step gated on empirical evidence, never shipped on a calendar. The newest layer — <span style="color:var(--ember);">presence</span> — touches no FROZEN-v1 primitive, no PoAC wire format, no chain, no contract.</p>
+
+      <p style="font-family:var(--mono);font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--steel);margin:14px 0 8px;">Validated on the foundation · 2026-05 · on-rig, negative-controlled, Mythos-gated</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+        <div style="background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:16px 18px;"><div style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--steel);margin-bottom:8px;">PoEP · Proof of Embodied Presence <span style="color:var(--struck);">· VALIDATED</span></div><p style="font-family:var(--body);font-size:13px;line-height:1.6;color:var(--bone-dim);margin:0;">Proves a live human on the certified Edge <em>now</em> — distinct from sub-grade identity. Liveness reflex band + adaptive-trigger device-auth + nonce freshness, folded into one born-PQ commitment. Reflex band validated across 5 players; activates only at N≥50 per player + governance.</p></div>
+        <div style="background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:16px 18px;"><div style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--steel);margin-bottom:8px;">Adaptive-trigger device-auth <span style="color:var(--ember);">· NOVEL</span></div><p style="font-family:var(--body);font-size:13px;line-height:1.6;color:var(--bone-dim);margin:0;">No known production prior art: physical-control-response as a device-auth primitive. A real Edge reshapes its force-response under adaptive-trigger resistance; an emulator, Cronus, or XIM renders no such physics — so it fails. The embodied differentiator.</p></div>
+        <div style="background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:16px 18px;"><div style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--steel);margin-bottom:8px;">L9 · Proof of Causal Presence <span style="color:var(--steel);">· BANKED</span></div><p style="font-family:var(--body);font-size:13px;line-height:1.6;color:var(--bone-dim);margin:0;">Input causally drives rendered camera motion at a human reaction lag; the link collapses under a time-shuffle control and is robust to 400–500 ms cloud streams — closing the cloud-gaming-bot stealth gap from the input side.</p></div>
+        <div style="background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:16px 18px;"><div style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--steel);margin-bottom:8px;">BCC · Behavioral Capture Chain <span style="color:var(--ash);">· DORMANT</span></div><p style="font-family:var(--body);font-size:13px;line-height:1.6;color:var(--bone-dim);margin:0;">Casual play grows a provenance-chained corpus, harvesting only causally-PRESENT sessions — self-cleaning, isolated, structurally unable to mutate a proven number. The engine that closes the one open gap: breadth.</p></div>
+      </div>
+
+      <p style="font-family:var(--mono);font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--steel);margin:22px 0 8px;">Still forward · activation · hardening · hardware · aligned to IoTeX IIP-64 (PR #72)</p>
+      <div id="pg-forward" style="display:grid;gap:6px;"></div>
+
+      <p style="font-family:var(--body);font-size:14px;line-height:1.7;font-style:italic;color:var(--bone-dim);max-width:74ch;margin:22px 0 0;padding:12px 0 12px 16px;border-left:2px solid var(--oxblood);"><span style="font-style:normal;color:var(--oxblood);font-family:var(--mono);font-size:10.5px;letter-spacing:0.14em;text-transform:uppercase;display:block;margin-bottom:6px;">Published negative</span>The behavioral-lattice (GCAP) catches more adversaries than even a strong Mahalanobis baseline, but rejects too many real humans (acceptance 0.81 → 0.58): data-limited, not a primitive. We publish what doesn't work, because a trust protocol that hides its negatives isn't one.</p>
+
+      <div style="margin-top:24px;padding:18px 20px;border-left:2px solid var(--ember);background:rgba(224,116,58,.05);border-radius:0 4px 4px 0;">
+        <span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.16em;text-transform:uppercase;color:var(--ember);">The position, plainly</span>
+        <p style="font-family:var(--body);font-size:14.5px;line-height:1.65;color:var(--bone-dim);margin:9px 0 0;">QorTroller is the first protocol to take "humanity proof" out of the identity space and into the <span style="color:var(--bone);font-weight:600;">interaction-physics</span> space — on hardware Sony &amp; Microsoft have already shipped, on a chain architecturally designed for DePIN composability, with primitives born quantum-safe.<br><br><span style="color:var(--ember);font-weight:600;">The wedge is narrow. The narrowness is the strength.</span></p>
+      </div>
+
+      <div style="margin-top:26px;">
+        <a class="pg-stamp" href="https://github.com/ConWan30/QorTroller" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:11px;text-decoration:none;background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:11px 15px;">
+          <span style="width:7px;height:7px;border-radius:1px;transform:rotate(45deg);background:var(--steel);flex:0 0 auto;"></span>
+          <span style="display:flex;flex-direction:column;gap:2px;">
+            <span style="font-family:var(--mono);font-size:12px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--bone);">Verify the proofs&nbsp;&rarr;</span>
+            <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.04em;color:var(--ash);">every claim above is re-derivable from source</span>
+          </span>
+        </a>
+      </div>
+    </section>
+
+    <!-- SHARED KIT · FOOTER -->
+    <footer style="display:flex;flex-wrap:wrap;gap:10px 28px;align-items:center;justify-content:space-between;padding:28px 0 8px;border-top:1px solid var(--void-2);">
+      <span style="font-family:var(--mono);font-size:11.5px;letter-spacing:0.04em;color:var(--bone-dim);">QorTroller — Core Controllers of their gaming data.</span>
+      <span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.06em;color:var(--ash);">QRESCE-0001 v0.5 · <span style="color:var(--steel);">V.A.P.I.</span> reference · IoTeX&nbsp;L1 · <a href="https://github.com/ConWan30/QorTroller" target="_blank" rel="noopener" style="color:var(--steel);text-decoration:none;border-bottom:1px solid var(--void-2);">github.com/ConWan30/QorTroller</a></span>
+    </footer>
+
+  </div>
 </div>
-
-<div class="wrap">
-
-  <!-- HERO -->
-  <header class="hero" data-anim="hero">
-    <canvas class="qt-hash-storm" id="qt-storm" aria-hidden="true"></canvas>
-    <p class="eyebrow">QorTroller · Reference</p>
-    <h1 class="display">Core Controllers<br>of their gaming data.</h1>
-    <p class="tagline">QorTroller — Core Controllers of their gaming data.</p>
-    <p class="cat">
-      The reference implementation of <span class="vapi amber">V.A.P.I.</span> —
-      Verifiable Autonomous Physical Intelligence — a coined Decentralized Physical
-      Infrastructure (DePIN) sub-category for protocols where the physical-input
-      source is also the cryptographic agency-holder over the data those physical
-      interactions generate. In QorTroller's case: gamers and their controllers,
-      producing data, owning that data. Built native to IoTeX's Internet of Trusted
-      Things foundation; composable as a single on-chain call.
-    </p>
-    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:18px;">
-      <span class="chip chip--live">HUMANITY PROVEN</span>
-      <span class="chip chip--amber">GAMER-SOVEREIGN</span>
-      <span class="chip chip--live">ANCHORED ON IoTeX</span>
-    </div>
-  </header>
-
-  <!-- 01 WHAT -->
-  <section id="what" data-anim="reveal">
-    <div class="sec-head"><span class="sec-num">01</span><h2 class="sec">What QorTroller is</h2></div>
-    <p class="lead">
-      A cryptographic anti-cheat protocol for competitive console gaming. Instead of
-      policing players after the fact, QorTroller cryptographically proves a real human
-      is on a real, attested controller — and gives that gamer sovereignty over the data
-      those physical interactions generate.
-    </p>
-    <div class="callout" data-anim="thesis" style="margin-top:18px;">
-      Cheating doesn't need to be punished — it <span class="amber">can't exist</span>
-      when humanity is cryptographically proven and the gamer retains sovereignty.
-    </div>
-    <div class="grid grid-3" style="margin-top:28px;">
-      <div class="panel"><div class="panel__eye">Proven, not surveilled</div><p class="dim" style="margin:0;">The gamer's humanity is honored and proven by physics + math — not by spyware. No keystroke harvesting, no kernel anti-cheat.</p></div>
-      <div class="panel"><div class="panel__eye">Sovereign by design</div><p class="dim" style="margin:0;">The physical-input source holds the keys. Consent is granted and revoked by the gamer's own wallet — the bridge can only observe.</p></div>
-      <div class="panel"><div class="panel__eye">Composable proof</div><p class="dim" style="margin:0;">Eligibility resolves to a single on-chain view call. Other protocols can gate on QorTroller without trusting QorTroller's servers.</p></div>
-    </div>
-  </section>
-
-  <!-- 02 PITL STACK -->
-  <section id="stack" data-anim="reveal">
-    <div class="sec-head"><span class="sec-num">02</span><h2 class="sec">How it functions · the PITL stack</h2></div>
-    <p>Player-In-The-Loop verification runs nine layers of evidence over the controller's
-       physical signal. Structural layers gate integrity; hard-cheat codes block tournament
-       eligibility; advisory layers fingerprint the human without ever blocking on a single signal.</p>
-    <table data-anim="stack-table">
-      <thead><tr><th>Layer</th><th>Code</th><th>Type</th><th>Signal</th></tr></thead>
-      <tbody>
-        <tr><td class="amber">L0</td><td>—</td><td class="dim">Structural</td><td>HID presence</td></tr>
-        <tr><td class="amber">L1</td><td>—</td><td class="dim">Structural</td><td>PoAC chain integrity</td></tr>
-        <tr><td class="amber">L2</td><td class="code">0x28</td><td class="hard">Hard cheat</td><td>IMU gravity + HID/XInput discrepancy</td></tr>
-        <tr><td class="amber">L3</td><td class="code">0x29 / 0x2A</td><td class="hard">Hard cheat</td><td>TinyML behavioral classifier</td></tr>
-        <tr><td class="amber">L2B</td><td class="code">0x31</td><td class="adv">Advisory</td><td>IMU-button causal latency</td></tr>
-        <tr><td class="amber">L2C</td><td class="code">0x32</td><td class="adv">Advisory</td><td>Stick-IMU cross-correlation</td></tr>
-        <tr><td class="amber">L4</td><td class="code">0x30</td><td class="adv">Advisory</td><td>12-feature Mahalanobis biometric fingerprint</td></tr>
-        <tr><td class="amber">L5</td><td class="code">0x2B</td><td class="adv">Advisory</td><td>Temporal rhythm (CV, entropy, quantization)</td></tr>
-        <tr><td class="amber">L6</td><td>—</td><td class="adv">Advisory</td><td>Active haptic challenge-response (off by default)</td></tr>
-      </tbody>
-    </table>
-    <p class="faint" style="margin-top:12px;">Hard codes {0x28, 0x29, 0x2A} block tournament eligibility. Advisory layers compose into a humanity probability — never a single point of failure.</p>
-  </section>
-
-  <!-- 03 PoAC -->
-  <section id="poac" data-anim="reveal">
-    <div class="sec-head"><span class="sec-num">03</span><h2 class="sec">Proof of Autonomous Cognition</h2></div>
-    <p>Every cognition cycle emits a <span class="amber">228-byte PoAC record</span> — a 164-byte
-       signed body plus a 64-byte ECDSA-P256 signature. Records chain by hashing the body only.</p>
-    <div class="byteband qt-specimen" data-anim="poac-bytes" aria-label="228-byte PoAC record layout">
-      <div class="byteband__seg byteband__body"><span class="byteband__n chain">164</span><span class="byteband__l">signed body</span></div>
-      <div class="byteband__seg byteband__sig"><span class="byteband__n amber">64</span><span class="byteband__l">ECDSA-P256 sig</span></div>
-    </div>
-    <div class="formula qt-specimen" data-anim="hash" style="margin-top:14px;">
-      chain_link_hash = <span class="s">SHA-256</span>( raw[<span class="w">0:164</span>] )
-      <span class="hash qt-hash-live" id="qt-sample-hash" style="display:block; font-size:11.5px; margin-top:8px; opacity:0.85;">— computing sample —</span>
-      <span class="faint" style="display:block; font-size:11px; margin-top:6px;">— the 164-byte body only, never the full 228 bytes. Wire format is FROZEN.</span>
-    </div>
-  </section>
-
-  <!-- 04 HUMANITY -->
-  <section id="humanity" data-anim="reveal">
-    <div class="sec-head"><span class="sec-num">04</span><h2 class="sec">Humanity probability</h2></div>
-    <p>Advisory layers fuse into a single probability that a human — not a macro, bot, or
-       translator device — produced the cycle. In the NCAA CFB 26 corpus (dead-zone sticks),
-       L2C resolves to a neutral 0.5 prior.</p>
-    <div class="formula" data-anim="formula">
-      p<sub>human</sub> =
-      <span class="w">0.28</span>·p<sub>L4</sub> +
-      <span class="w">0.27</span>·p<sub>L5</sub> +
-      <span class="w">0.20</span>·p<sub>E4</sub> +
-      <span class="w">0.15</span>·p<sub>L2B</sub> +
-      <span class="w">0.10</span>·p<sub>L2C</sub>
-    </div>
-  </section>
-
-  <!-- 05 GIC -->
-  <section id="gic" data-anim="reveal">
-    <div class="sec-head"><span class="sec-num">05</span><h2 class="sec">Grind Integrity Chain</h2></div>
-    <p>A FROZEN SHA-256 chain over grind sessions makes the calibration corpus tamper-evident.
-       Each link binds the previous hash, the deterministic verdict, the capture-host state, and a
-       monotonic nanosecond timestamp. The headline artifact, <span class="chain">GIC_100</span>, is the
-       final hash after 100 consecutive clean sessions.</p>
-    <div class="ribbon" data-anim="gic-chain" aria-label="grind integrity chain">
-      <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
-      <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
-    </div>
-    <div class="formula" data-anim="gic-formula" style="margin-top:8px;">
-      GIC<sub>N</sub> = <span class="s">SHA-256</span>( <span class="op">prev(32)</span> ‖ <span class="op">commitment(32)</span> ‖ <span class="op">verdict(1)</span> ‖ <span class="op">host(1)</span> ‖ <span class="op">ts_ns_be(8)</span> )
-    </div>
-  </section>
-
-  <!-- 06 FLEET -->
-  <section id="fleet" data-anim="reveal">
-    <div class="sec-head"><span class="sec-num">06</span><h2 class="sec">The autonomous operator fleet</h2></div>
-    <p>Three on-chain agents steward the protocol under an Operator Initiative — the first
-       ≥3-agent fleet in any DePIN gaming protocol. They enforce a cross-agent skill-separation
-       invariant: no single agent holds all authority.</p>
-    <div class="grid grid-3" style="margin:18px 0 24px;">
-      <div class="panel"><div class="panel__eye">Anchor-Sentry</div><p class="dim" style="margin:0;">Provenance attestation — anchors PoAd commitments on-chain.</p></div>
-      <div class="panel"><div class="panel__eye">Guardian</div><p class="dim" style="margin:0;">Operational stewardship + autonomous KMS-HSM signing (off-chain, 0 IOTX). The only autonomous agent by design.</p></div>
-      <div class="panel"><div class="panel__eye">Curator</div><p class="dim" style="margin:0;">Marketplace + data-coherence review. Direct on-chain authority is two-key gated.</p></div>
-    </div>
-    <div class="ladder" data-anim="ladder">
-      <div class="ladder__step ladder__step--done"><b>O0</b><span>Registration</span></div>
-      <div class="ladder__step ladder__step--done"><b>O1 · Shadow</b><span>Cedar bundle anchored</span></div>
-      <div class="ladder__step ladder__step--done"><b>O2 · Suggest</b><span>Advisory drafts</span></div>
-      <div class="ladder__step ladder__step--now"><b>O3 · Acting</b><span>Live authority (gated)</span></div>
-    </div>
-  </section>
-
-  <!-- 07 SOVEREIGNTY -->
-  <section id="consent" data-anim="reveal">
-    <div class="sec-head"><span class="sec-num">07</span><h2 class="sec">Gamer sovereignty</h2></div>
-    <p>The bridge <span class="amber">never</span> grants or revokes consent on behalf of the gamer.
-       On-chain consent is written only by the gamer's own wallet (<span class="mono">msg.sender</span>);
-       the protocol's view calls are read-only. Consent is per-category and time-bound, enforcing
-       GDPR Art. 17 erasure at the cryptographic layer.</p>
-    <div class="grid grid-2" style="margin-top:18px;">
-      <table>
-        <thead><tr><th>Consent category</th><th>Bit</th></tr></thead>
-        <tbody>
-          <tr><td>TOURNAMENT_GATE</td><td class="code">0</td></tr>
-          <tr><td>ANONYMIZED_RESEARCH</td><td class="code">1</td></tr>
-          <tr><td>MANUFACTURER_CERT</td><td class="code">2</td></tr>
-          <tr><td>MARKETPLACE</td><td class="code">3</td></tr>
-        </tbody>
-      </table>
-      <div class="panel panel--soft">
-        <div class="panel__eye">Consent commitment · FROZEN v1</div>
-        <div class="hash" style="font-size:11.5px;">SHA-256( "VAPI-CONSENT-v1" ‖ device_id ‖ category_bitmask ‖ expires_at ‖ ts_ns )</div>
-        <p class="faint" style="margin:12px 0 0; font-size:11px;">Category enum positions are FROZEN and match the on-chain registry bit-for-bit.</p>
-      </div>
-    </div>
-  </section>
-
-  <!-- 08 ON-CHAIN -->
-  <section id="chain" data-anim="reveal">
-    <div class="sec-head"><span class="sec-num">08</span><h2 class="sec">Anchored on IoTeX</h2></div>
-    <p>QorTroller runs on IoTeX (chain ID <span class="amber">4690</span>, testnet) — <span class="amber">55 contracts</span> live as of 2026-06-05.
-       Eligibility is a single composable view: <span class="mono amber">isFullyEligible()</span>.</p>
-    <div class="grid grid-2" style="margin-top:18px;">
-      <div class="panel"><div class="panel__eye">AdjudicationRegistry</div><div class="hash" style="font-size:11px;">0x44CF981f46a52ADE56476Ce894255954a7776fb4</div></div>
-      <div class="panel"><div class="panel__eye">VAPIDualPrimitiveGate</div><div class="hash" style="font-size:11px;">0xd7b1465Aad8F815C67b24681c9c022CED24FB876</div></div>
-      <div class="panel"><div class="panel__eye">VAPIConsentManifestRegistry</div><div class="hash" style="font-size:11px;">0x5F7c8068D0e61818FCD613D47e68a9Ea906a2743</div></div>
-      <div class="panel"><div class="panel__eye">VAPIReplayProofVerifier v1</div><div class="hash" style="font-size:11px;">0x5182372d1D033db0c9230843DFDE606733D5F91B</div></div>
-      <div class="panel"><div class="panel__eye">VAPIBuyerCategoryVerifier <span class="chain" style="margin-left:6px;">NEW · 2026-06-05</span></div><div class="hash" style="font-size:11px;">0x5B1D82AAc2FD662f8850C49e40A94573f624440A</div></div>
-      <div class="panel"><div class="panel__eye">VAPITemporalBeaconRegistry <span class="chain" style="margin-left:6px;">NEW · 2026-06-05</span></div><div class="hash" style="font-size:11px;">0x962440312a995b21d4E203bE6d93021CC22bA051</div></div>
-    </div>
-    <p class="faint" style="margin-top:12px;">Code identifiers stay <span class="mono">VAPI</span> (no periods) under FROZEN-v1 preservation; display copy uses <span class="amber">V.A.P.I.</span></p>
-  </section>
-
-  <!-- 09 FROZEN PRIMITIVES -->
-  <section id="primitives" data-anim="reveal">
-    <div class="sec-head"><span class="sec-num">09</span><h2 class="sec">The FROZEN-v1 primitive family</h2></div>
-    <p>A family of byte-exact commitment primitives (PATTERN-017) — <span class="amber">14 entries</span> in the VAPI namespace + 1 in the QorTroller namespace. Each binds a domain tag and a
-       fixed byte layout so any third party can recompute and verify it independently — months later,
-       without trusting the protocol's servers.</p>
-    <div class="grid grid-3" data-anim="primitives" style="margin-top:18px;">
-      <div class="panel panel--soft"><b class="chain">GIC</b><br><span class="faint">grind integrity chain</span></div>
-      <div class="panel panel--soft"><b class="chain">WEC</b><br><span class="faint">watchdog event chain</span></div>
-      <div class="panel panel--soft"><b class="chain">VAME</b><br><span class="faint">API response binding</span></div>
-      <div class="panel panel--soft"><b class="chain">CORPUS-SNAPSHOT</b><br><span class="faint">corpus provenance</span></div>
-      <div class="panel panel--soft"><b class="chain">CONSENT</b><br><span class="faint">per-category consent</span></div>
-      <div class="panel panel--soft"><b class="chain">BIOMETRIC-SNAPSHOT</b><br><span class="faint">ZK separation proof</span></div>
-      <div class="panel panel--soft"><b class="chain">LISTING</b><br><span class="faint">marketplace tier</span></div>
-      <div class="panel panel--soft"><b class="chain">FRR</b><br><span class="faint">fleet readiness root</span></div>
-      <div class="panel panel--soft"><b class="chain">ZKBA</b><br><span class="faint">zero-knowledge biometric attest</span></div>
-      <div class="panel panel--soft"><b class="chain">AGENT-COMMIT</b><br><span class="faint">on-chain agent action commit</span></div>
-      <div class="panel panel--soft"><b class="chain">O3-SUPERSEDE</b><br><span class="faint">empirical-evidence supersession</span></div>
-      <div class="panel panel--soft"><b class="chain">PHYSICAL-DATA-ATTESTATION</b><br><span class="faint">hardware-rooted data signing</span></div>
-      <div class="panel panel--soft"><b class="chain">TEMPORAL-BEACON</b><br><span class="faint">L1 block-cadence anchoring · PoSR</span></div>
-      <div class="panel panel--soft"><b class="amber">QORTROLLER-IPACT-RENEWAL</b><br><span class="faint">first QorTroller-namespace family</span></div>
-    </div>
-  </section>
-
-  <!-- 09b TECH-STACK PILLARS (new — what the protocol actually does, in tech-stack language) -->
-  <section id="techstack" data-anim="reveal">
-    <div class="sec-head"><span class="sec-num">09b</span><h2 class="sec">Tech-stack pillars · live on testnet</h2></div>
-    <p>What the protocol provides — described as engineering surfaces, not as project phases. Each pillar
-       has an on-chain artifact, a code path, and an in-CI test.</p>
-
-    <div class="grid grid-2" style="margin-top:18px;">
-      <div class="panel"><div class="panel__eye">ZK proofs of human authorship</div><p style="margin:0;">A Groth16 verifier wrapper on IoTeX — <code class="amber">0x5182372d…</code> — accepts per-session zero-knowledge proofs that gameplay came from a real human above a disclosed humanity floor. The public input <code class="mono">sanitizedTraceRoot</code> binds the proof to a sanitized macro-intent matrix (60 Hz, 4-bit quantized) — biometric features are wiped by the <code class="mono">FORBIDDEN_COLUMNS</code> frozenset (INV-VHR-004) before the matrix is hashed.</p></div>
-
-      <div class="panel"><div class="panel__eye">L1 block-hash anchored recency</div><p style="margin:0;">An on-chain registry — <code class="amber">0x96244031…</code>, LIVE 2026-06-05 — binds every session's open + close beacons to real IoTeX L1 block hashes at a FROZEN cadence (<code class="mono">ANCHOR_CADENCE = 64</code>, INV-TBR-002). Stale re-listing, pre-computation drips, and tournament-window backdating are detected at the freshness floor. Honest dormant fallback when keeper unset.</p></div>
-
-      <div class="panel"><div class="panel__eye">W3bstream Wasm compute sandbox</div><p style="margin:0;">A Rust applet under <code class="mono">w3bstream/applet/</code> compiles to <code class="mono">wasm32-unknown-unknown</code>. The sandbox manifest is FROZEN-pinned: <code class="mono">frame_grabbing=false</code>, <code class="mono">optical_capture=false</code>, <code class="mono">blockhash_temporal_rules=true</code>. The applet validates ingestion mechanically (cadence + isolation + non-zero PQ commitment) and pins INV-W3S-001/002/005 enforced fail-closed in CI.</p></div>
-
-      <div class="panel"><div class="panel__eye">Silicon-rooted hardware identity</div><p style="margin:0;">Per-device birth certificates anchored at <code class="amber">VAPIManufacturerDeviceRegistry</code> at manufacture time. <code class="mono">deviceId = keccak256(controller_pubkey)</code> FROZEN across the entire protocol. IoTeX's <code class="mono">P256 precompile at 0x0100</code> verifies the cert in one view-call. <code class="mono">VAPIProtocolLensV2.isFullyEligible_PathA(bytes32)</code> gates tournaments + marketplace + export in a single composable read.</p></div>
-
-      <div class="panel"><div class="panel__eye">Gamer-sovereign consent surface</div><p style="margin:0;">A standalone dApp at <code class="amber">/consent</code> · Wallet signs every grant + revoke · Bridge can READ but NEVER WRITE · contract enforces <code class="mono">msg.sender == gamer</code> · first on-chain manifest write recorded tx <code class="mono">0xd02c051e…20bd</code> block 44354567 with <code class="mono">allowReplayProofs=true</code> · append-only <code class="mono">consent_event_log</code> table records grant → revoke → re-grant as 3 distinct rows · regulator-facing immutable audit trail.</p></div>
-
-      <div class="panel"><div class="panel__eye">Post-quantum sidecar architecture</div><p style="margin:0;">Decoupled Cryptographic Sidecar Pointer pattern · 3,309-byte ML-DSA-65 signature lives off-chain on a DePIN DA node · only a 32-byte commitment hash crosses the wire/on-chain boundary · INV-ARC7-001 enforces the 228-byte PoAC wire format STRICTLY (HardForkDisallowedError if PQ grows the packet) · INV-ARC7-002 + INV-W3S-005 reject null / malformed commitments at EVM + Wasm layers · Thread-C <code class="mono">asyncio.to_thread</code> prevents PQ signing from jittering the 1002 Hz HID loop · forward-compatible with ML-DSA / SLH-DSA / hybrid composites aligned to IoTeX IIP-64.</p></div>
-
-      <div class="panel"><div class="panel__eye">Autonomous operator stewardship</div><p style="margin:0;">Three on-chain agents at O3_ACTING — Sentry · Guardian · Curator — first ≥3-agent fleet at full action authority in any DePIN gaming protocol. Fleet Readiness Root <code class="mono">0x54b4b698…</code> permanently anchored. Cedar v2 lane authority bundles dual-anchored (AgentScope operational + AgentRegistry governance). Guardian fired the first non-human KMS-HSM signature anchored on-chain. Mythos audit fleet (14 variants) continuously monitors protocol integrity — self-auditing.</p></div>
-
-      <div class="panel"><div class="panel__eye">World Model Provenance Lane (WMP)</div><p style="margin:0;">A packaging + export + consumer-verifier layer turning QorTroller's existing proofs into a bundle a world-model research lab can verify cryptographically without trusting QorTroller. Five checks: humanity Groth16 verify · matrix↔root re-hash (canonical home for the Arc 5 off-circuit finding) · L1 beacon recency · consent · scope honesty. Action-channel only · post-φ only · no observation channel · no biometric leakage · grounded in Fei-Fei Li / World Labs <em>A Functional Taxonomy of World Models</em> (June 2026) — QorTroller is a provenance source, not a world model.</p></div>
-    </div>
-  </section>
-
-  <!-- 10 HARDWARE -->
-  <section id="hardware" data-anim="reveal">
-    <div class="sec-head"><span class="sec-num">10</span><h2 class="sec">Hardware &amp; corpus</h2></div>
-    <div class="grid grid-2">
-      <div class="panel"><div class="panel__eye">Certified device</div><p style="margin:0;">Sony <span class="amber">DualShock Edge (CFI-ZCP1)</span> over USB-C at ~1002 Hz polling — the 1 kHz capture floor that makes spectral biometrics possible. Injection margin ≈ 14,000× on accel.</p></div>
-      <div class="panel"><div class="panel__eye">Primary game corpus</div><p style="margin:0;"><span class="amber">NCAA College Football 26</span> (PS5). Dead-zone analog sticks; the certified grind configuration is dual-connection (USB to laptop + Bluetooth to PS5).</p></div>
-    </div>
-  </section>
-
-  <!-- 11 FORWARD -->
-  <section id="forward" data-anim="reveal">
-    <div class="sec-head"><span class="sec-num">11</span><h2 class="sec">How it functions going forward</h2></div>
-    <p>The roadmap deepens the physical-evidence surface and widens composability — every step
-       gated on empirical evidence, never shipped on a calendar. The newest layer — <span class="amber">presence</span> —
-       is a novel inhabitant on the existing foundation: it touches no FROZEN-v1 primitive, no PoAC wire format,
-       no chain, no contract.</p>
-
-    <p class="dim" style="margin:14px 0 6px;font-size:13px;letter-spacing:0.14em;text-transform:uppercase;">
-      <span style="color:#5bd6a3">Validated on the foundation</span> · 2026-05 · on-rig, negative-controlled, Mythos-gated
-    </p>
-    <div class="grid grid-2" style="margin-top:8px;">
-      <div class="panel"><div class="panel__eye">PoEP · Proof of Embodied Presence <span style="color:#5bd6a3">· VALIDATED</span></div><p class="dim" style="margin:0;">Proves a live human on the certified Edge <em>now</em> — the claim the protocol actually needs, distinct from sub-grade identity. Liveness reflex band + adaptive-trigger device-auth + nonce freshness, folded into one born-PQ commitment. Reflex band validated across 5 players; activates only at N≥50 per player + governance.</p></div>
-      <div class="panel"><div class="panel__eye">Adaptive-trigger device-auth <span style="color:#f0a868">· NOVEL</span></div><p class="dim" style="margin:0;">No known production prior art: physical-control-response as a device-auth primitive. A real Edge reshapes its force-response under adaptive-trigger resistance; an emulator, Cronus, or XIM renders no such physics — so it fails. The embodied differentiator, not just "a human is present."</p></div>
-      <div class="panel"><div class="panel__eye">L9 · Proof of Causal Presence <span style="color:#5bd6a3">· BANKED</span></div><p class="dim" style="margin:0;">Input causally drives the rendered camera motion at a human reaction lag; the link collapses under a time-shuffle control and is robust to 400–500 ms cloud streams — closing the cloud-gaming-bot stealth gap from the input side.</p></div>
-      <div class="panel"><div class="panel__eye">BCC · Behavioral Capture Chain <span style="color:#5bd6a3">· DORMANT</span></div><p class="dim" style="margin:0;">Casual play grows a provenance-chained corpus, harvesting only causally-PRESENT sessions — self-cleaning, isolated, structurally unable to mutate a proven number. The engine that closes the one open gap: breadth.</p></div>
-    </div>
-
-    <p class="dim" style="margin:22px 0 6px;font-size:13px;letter-spacing:0.14em;text-transform:uppercase;">
-      <span style="color:#f0a868">Still forward</span> · activation · hardening · hardware · aligned to IoTeX IIP-64 (PR #72)
-    </p>
-    <div class="grid grid-2" style="margin-top:8px;">
-      <div class="panel"><div class="panel__eye">PoEP activation · born-PQ credential</div><p class="dim" style="margin:0;">On-chain commitment registration + a born-PQ device credential aligned to IoTeX <strong>IIP-64</strong> (Draft, PR&nbsp;#72). Per its device-class tiering, the long-lived controller identity targets <strong>SLH-DSA-128s / ML-DSA-44</strong> (§4.6), not consensus-tier ML-DSA-65. The SHA-256 commitment is post-quantum-safe today; the device key rotates at VHP renewal — QorTroller's analog of IIP-64 §4.8.5 <em>iPACT-DePIN</em>. Honest born-PQ, by design.</p></div>
-      <div class="panel"><div class="panel__eye">PoAC-v2 · Groth16 → STARK</div><p class="dim" style="margin:0;">Migrate the zero-knowledge layer Groth16 → a hash-based STARK for a post-quantum verification horizon — aligning with IIP-64's <strong>SP1, STARK-native</strong> choice that avoids the quantum-vulnerable Groth16 recursion step.</p></div>
-      <div class="panel"><div class="panel__eye">Controller-firmware reference</div><p class="dim" style="margin:0;">Root the adaptive-trigger device-auth + born-PQ identity in the controller's secure element, provisioned at manufacture — a reference implementation of IIP-64 <strong>§4.6</strong> (DePIN device provisioning) + <strong>§4.8.5</strong> (iPACT-DePIN). QorTroller as a device standard for IoTeX, not just an app on one.</p></div>
-      <div class="panel"><div class="panel__eye">Token issuance</div><p class="dim" style="margin:0;">Gated, by hard rule, on a per-player separation ratio &gt; 1.0 — economic defensibility before any TGE. Honesty over hype.</p></div>
-    </div>
-
-    <p class="dim" style="margin-top:20px;font-style:italic;">
-      Published negative — the behavioral-lattice (GCAP) catches more adversaries than even a strong Mahalanobis
-      baseline, but rejects too many real humans (acceptance 0.81 → 0.58): data-limited, not a primitive. We
-      publish what doesn't work, because a trust protocol that hides its negatives isn't one.
-    </p>
-  </section>
-
-  <footer>
-    <span>QorTroller — Core Controllers of their gaming data.</span>
-    <span class="faint">QRESCE-0001 v0.5 · <span class="vapi amber">V.A.P.I.</span> reference implementation · IoTeX L1 · github.com/ConWan30/QorTroller</span>
-  </footer>
-
-</div>
-
-
-  <!-- 12 CURRENT FOOTPRINT -->
-  <section id="footprint" data-anim="reveal">
-    <div class="sec-head"><span class="sec-num">12</span><h2 class="sec">Current footprint <span class="faint" style="font-size:13px;letter-spacing:0.14em;text-transform:uppercase;margin-left:10px;">· 2026-06-06</span></h2></div>
-    <p class="lead">
-      Operationally honest. Every load-bearing claim has an in-CI test, an on-chain artifact,
-      or an explicit pending marker. There is no aspirational technology pretending to be shipped.
-    </p>
-
-    <div class="grid grid-2" style="margin-top:18px;">
-      <div class="panel panel--soft">
-        <div class="eyebrow">CONTRACTS · IoTeX 4690</div>
-        <div style="font-family:var(--font-display);font-weight:700;font-size:34px;color:var(--chain);line-height:1;margin:8px 0 4px;">55</div>
-        <div class="faint">deployed · testnet live · Arc 2 + Arc 6 added 2026-06-05</div>
-      </div>
-      <div class="panel panel--soft">
-        <div class="eyebrow">FROZEN · PRIMITIVES</div>
-        <div style="font-family:var(--font-display);font-weight:700;font-size:34px;color:var(--chain);line-height:1;margin:8px 0 4px;">14</div>
-        <div class="faint">PATTERN-017 · VAPI namespace + 1 QORTROLLER</div>
-      </div>
-      <div class="panel panel--soft">
-        <div class="eyebrow">CI · INVARIANTS</div>
-        <div style="font-family:var(--font-display);font-weight:700;font-size:34px;color:var(--chain);line-height:1;margin:8px 0 4px;">174</div>
-        <div class="faint">enforced · vapi_invariant_gate.py</div>
-      </div>
-      <div class="panel panel--soft">
-        <div class="eyebrow">AGENT · ROSTER</div>
-        <div style="font-family:var(--font-display);font-weight:700;font-size:34px;color:var(--accent-amber);line-height:1;margin:8px 0 4px;">38</div>
-        <div class="faint">O3_ACTING · first ≥3-agent fleet in DePIN gaming</div>
-      </div>
-    </div>
-
-    <h3 style="font-family:var(--font-display);font-weight:600;font-size:16px;color:var(--text);margin:22px 0 8px;">Proven · live · demonstrable today</h3>
-    <ul style="list-style:none;padding:0;margin:0;display:grid;gap:6px;">
-      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--chain);font-size:13px;line-height:1.5;"><span class="chain">●</span>&nbsp; Operator Initiative at <b>O3_ACTING</b> · first ≥3-agent fleet · 6 transactions landed cleanly · FRR <code class="amber">0x54b4b698…</code> committed.</li>
-      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--chain);font-size:13px;line-height:1.5;"><span class="chain">●</span>&nbsp; Guardian autonomous KMS-HSM signing · first non-human steward to produce an HSM-rooted signature AND anchor it on IoTeX.</li>
-      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--chain);font-size:13px;line-height:1.5;"><span class="chain">●</span>&nbsp; Path A Arc 1 complete · <code class="amber">VAPIManufacturerDeviceRegistry</code> deployed · <code class="amber">verify_device_cert.py</code> VERDICT VALID against DualShock with <b>637K+</b> PoAC records.</li>
-      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--chain);font-size:13px;line-height:1.5;"><span class="chain">●</span>&nbsp; GamerView <em>Am I Verified?</em> surface live · tri-state · never fabricates green.</li>
-      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--chain);font-size:13px;line-height:1.5;"><span class="chain">●</span>&nbsp; 14th frozen primitive · <code class="amber">VAPI-TEMPORAL-BEACON-v1</code> (Arc 6 PoSR) · registry deployed 2026-06-05 at <code class="amber">0x96244031…</code>.</li>
-      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--chain);font-size:13px;line-height:1.5;"><span class="chain">●</span>&nbsp; Buyer-category ZK gate deployed 2026-06-05 · <code class="amber">VAPIBuyerCategoryVerifier</code> at <code class="amber">0x5B1D82AA…</code> · Groth16 verifier wrapper.</li>
-      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--chain);font-size:13px;line-height:1.5;"><span class="chain">●</span>&nbsp; First gamer-self-sovereign consent manifest on-chain · tx <code class="amber">0xd02c051e…20bd</code> · block 44354567 · <code class="mono">allowReplayProofs=true</code> verified.</li>
-      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--chain);font-size:13px;line-height:1.5;"><span class="chain">●</span>&nbsp; Consent Cockpit dApp at <code class="amber">/consent</code> · first standalone gamer-sovereign surface · five panes (posture · dual-identity · authority matrix · receipt timeline · sovereignty disclosure).</li>
-      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--chain);font-size:13px;line-height:1.5;"><span class="chain">●</span>&nbsp; World Model Provenance Lane (WMP) v1 shipped on fixtures · 29 tests across assembler + exporter + 5-check consumer verifier + flagged greenfield consent registry · closes the Arc 5 off-circuit root finding via canonical matrix↔root re-hash.</li>
-    </ul>
-
-    <h3 style="font-family:var(--font-display);font-weight:600;font-size:16px;color:var(--text);margin:22px 0 8px;">Pending · honestly named</h3>
-    <ul style="list-style:none;padding:0;margin:0;display:grid;gap:6px;">
-      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--accent-amber);font-size:13px;line-height:1.5;"><span class="amber">○</span>&nbsp; AIT separation · <code class="amber">N=37</code> · <code class="amber">separation_ratio=1.199</code> · Stage 1 graduation API call pending.</li>
-      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--accent-amber);font-size:13px;line-height:1.5;"><span class="amber">○</span>&nbsp; PoEP enrollment · <code class="amber">poep_enabled=false</code> · L6B N≥50 gate · current N=0.</li>
-      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--accent-amber);font-size:13px;line-height:1.5;"><span class="amber">○</span>&nbsp; Mainnet TGE · hard-rule <code class="amber">separation_ratio &gt; 1.0</code> cleared 2026-04-18 · Phase 99 deploy + wallet refill gating issuance.</li>
-      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--accent-amber);font-size:13px;line-height:1.5;"><span class="amber">○</span>&nbsp; Curator O1 → O2 graduation · Cedar bundle Merkle <code class="amber">0xeb400a5c…</code> pre-authored · N≥50 reviews under shadow.</li>
-    </ul>
-
-    <h3 style="font-family:var(--font-display);font-weight:600;font-size:16px;color:var(--text);margin:22px 0 8px;">Forward · operator-fired</h3>
-    <ul style="list-style:none;padding:0;margin:0;display:grid;gap:6px;">
-      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--text-faint);font-size:13px;line-height:1.5;"><span class="amber">▸</span>&nbsp; <b>Arc 6 keeper</b> · <code class="mono">VAPITemporalBeaconRegistry.setKeeper(...)</code> + first <code class="mono">anchorBeacon(...)</code> · until set, PoSR binder honestly returns <code class="mono">None</code>; VHR proofs land in v1 behavior without recency upgrade.</li>
-      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--text-faint);font-size:13px;line-height:1.5;"><span class="amber">▸</span>&nbsp; <b>Arc 7 v2 wrapper</b> · operator-interactive snarkjs trusted-setup contribute step required before <code class="mono">VAPIReplayProofVerifier_v2</code> can deploy · sidesteps the v1 verifier byte-for-byte.</li>
-      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--text-faint);font-size:13px;line-height:1.5;"><span class="amber">▸</span>&nbsp; <b>WMP Phase-2</b> · deploy greenfield <code class="amber">VAPIWorldModelConsentRegistry</code> (single <code class="mono">gamer => bool</code> mapping; <code class="mono">msg.sender == gamer</code> enforced) when first paying world-model buyer needs real-data export · solidity + tests live in repo · estimate-only deploy script gated.</li>
-      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--text-faint);font-size:13px;line-height:1.5;"><span class="amber">▸</span>&nbsp; <b>Silicon-rooted devices</b> · ATECC608A + CH341A · first silicon-rooted Path A device birth-certificate ceremony · ~0.05–0.10 IOTX.</li>
-      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--text-faint);font-size:13px;line-height:1.5;"><span class="amber">▸</span>&nbsp; <b>IIP-64 design partner</b> · Xinxin Fan's PR #72 engaged · path from self-signed root CA to standardized PQ device identity at L1.</li>
-      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--text-faint);font-size:13px;line-height:1.5;"><span class="amber">▸</span>&nbsp; <b>Partner manufacturer</b> · spec partner-handoff-ready · 12-step ceremony + deployed bytecode + demonstrated POC.</li>
-      <li style="padding:7px 12px;background:var(--panel-soft);border-left:2px solid var(--text-faint);font-size:13px;line-height:1.5;"><span class="amber">▸</span>&nbsp; <b>Tournament integration</b> · <code class="amber">isFullyEligible_PathA(bytes32)</code> · single eth_call · zero off-chain infra.</li>
-    </ul>
-
-    <div style="margin-top:24px;padding:16px 18px;border-left:2px solid var(--accent-amber);background:rgba(240,168,104,0.05);">
-      <span class="amber" style="font-family:var(--font-mono);font-size:10.5px;letter-spacing:0.18em;text-transform:uppercase;">The position, plainly</span>
-      <p style="margin:8px 0 0;font-size:14px;color:var(--text-dim);line-height:1.6;">
-        QorTroller is the first protocol to take "humanity proof" out of the identity space and into the
-        <b style="color:var(--text);">interaction-physics</b> space — on hardware Sony &amp; Microsoft have already shipped,
-        on a chain architecturally designed for DePIN composability, with primitives born quantum-safe.
-        <br><br>
-        <b class="amber">The wedge is narrow. The narrowness is the strength.</b>
-      </p>
-    </div>
-  </section>
 
 <script>
-/* v2 · item F — wire the data-anim hooks. Three treatments only: section
-   reveals + eyebrow count-ups, the PoAC byteband assembling, and the GIC
-   formula operands settling left→right. No-ops under reduced motion. */
+/* Data-driven lists + seal + scroll — ported from the design's renderVals (data verbatim). */
 (function () {
-  var reduce = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (reduce || typeof IntersectionObserver === 'undefined') return; // show final state
-  document.body.classList.add('qt-anim-on');
+  function set(id, html) { var el = document.getElementById(id); if (el) el.innerHTML = html; }
 
-  function countUp(el) {
-    var target = parseInt(el.textContent, 10);
-    if (isNaN(target)) return;
-    var pad = el.textContent.trim().length; // keep "01" zero-padding
-    var start = performance.now(), dur = 600;
-    function step(now) {
-      var k = Math.min(1, (now - start) / dur);
-      var v = Math.round(target * (k * (2 - k))); // ease-out
-      el.textContent = String(v).padStart(pad, '0');
-      if (k < 1) requestAnimationFrame(step);
-    }
-    requestAnimationFrame(step);
+  var addresses = [
+    { name: 'AdjudicationRegistry',        addr: '0x44CF981f46a52ADE56476Ce894255954a7776fb4' },
+    { name: 'VAPIDualPrimitiveGate',       addr: '0xd7b1465Aad8F815C67b24681c9c022CED24FB876' },
+    { name: 'VAPIConsentManifestRegistry', addr: '0x5F7c8068D0e61818FCD613D47e68a9Ea906a2743' },
+    { name: 'VAPIReplayProofVerifier v1',  addr: '0x5182372d1D033db0c9230843DFDE606733D5F91B' },
+    { name: 'VAPIBuyerCategoryVerifier',   addr: '0x5B1D82AAc2FD662f8850C49e40A94573f624440A', isNew: true },
+    { name: 'VAPITemporalBeaconRegistry',  addr: '0x962440312a995b21d4E203bE6d93021CC22bA051', isNew: true }
+  ];
+  var primDefs = [
+    ['GIC', 'grind integrity chain'], ['WEC', 'watchdog event chain'], ['VAME', 'API response binding'],
+    ['CORPUS-SNAPSHOT', 'corpus provenance'], ['CONSENT', 'per-category consent'], ['BIOMETRIC-SNAPSHOT', 'ZK separation proof'],
+    ['LISTING', 'marketplace tier'], ['FRR', 'fleet readiness root'], ['ZKBA', 'zero-knowledge biometric attest'],
+    ['AGENT-COMMIT', 'on-chain agent action commit'], ['O3-SUPERSEDE', 'empirical-evidence supersession'],
+    ['PHYSICAL-DATA-ATTESTATION', 'hardware-rooted data signing'], ['TEMPORAL-BEACON', 'L1 block-cadence anchoring · PoSR'],
+    ['QORTROLLER-IPACT-RENEWAL', 'first QorTroller-namespace family']
+  ];
+  var stats = [
+    { label: 'CONTRACTS · IoTeX 4690', value: '55',  sub: 'deployed · testnet live · Arc 2 + Arc 6 added 2026-06-05' },
+    { label: 'FROZEN · PRIMITIVES',    value: '14',  sub: 'PATTERN-017 · VAPI namespace + 1 QORTROLLER' },
+    { label: 'CI · INVARIANTS',        value: '174', sub: 'enforced · vapi_invariant_gate.py' },
+    { label: 'AGENT · ROSTER',         value: '38',  sub: 'O3_ACTING · first ≥3-agent fleet in DePIN gaming' }
+  ];
+  var proven = [
+    'Operator Initiative at O3_ACTING · first ≥3-agent fleet · 6 transactions landed cleanly · FRR 0x54b4b698… committed.',
+    'Guardian autonomous KMS-HSM signing · first non-human steward to produce an HSM-rooted signature AND anchor it on IoTeX.',
+    'Path A Arc 1 complete · VAPIManufacturerDeviceRegistry deployed · verify_device_cert.py VERDICT VALID against DualShock with 637K+ PoAC records.',
+    'GamerView "Am I Verified?" surface live · tri-state · never fabricates green.',
+    '14th frozen primitive · VAPI-TEMPORAL-BEACON-v1 (Arc 6 PoSR) · registry deployed 2026-06-05 at 0x96244031….',
+    'Buyer-category ZK gate deployed 2026-06-05 · VAPIBuyerCategoryVerifier at 0x5B1D82AA… · Groth16 verifier wrapper.',
+    'First gamer-self-sovereign consent manifest on-chain · tx 0xd02c051e…20bd · block 44354567 · allowReplayProofs=true verified.',
+    'Consent Cockpit dApp at /consent · first standalone gamer-sovereign surface · five panes.',
+    'World Model Provenance Lane (WMP) v1 shipped on fixtures · 29 tests across assembler + exporter + 5-check consumer verifier · closes the Arc 5 off-circuit root finding via canonical matrix↔root re-hash.'
+  ];
+  var pending = [
+    'AIT separation · N=37 · separation_ratio=1.199 · Stage 1 graduation API call pending.',
+    'PoEP enrollment · poep_enabled=false · L6B N≥50 gate · current N=0.',
+    'Mainnet TGE · hard-rule separation_ratio > 1.0 cleared 2026-04-18 · Phase 99 deploy + wallet refill gating issuance.',
+    'Curator O1 → O2 graduation · Cedar bundle Merkle 0xeb400a5c… pre-authored · N≥50 reviews under shadow.'
+  ];
+  var STEEL = 'var(--steel)', OX = 'var(--oxblood)';
+  var notClaim = [
+    { t: 'Testnet only — IoTeX chain 4690. No mainnet deployment.',                   c: STEEL, mark: '○' },
+    { t: 'Humanity corpus is small — N=3. Not a population-level claim.',              c: STEEL, mark: '○' },
+    { t: 'AIT separation_ratio = 1.199 at N=37 — Stage 1 graduation not yet granted.', c: STEEL, mark: '○' },
+    { t: 'all_pairs_p0_ok still failing — the per-pair separation gate is not green.', c: OX,    mark: '×' },
+    { t: 'Stage A gates open — not yet closed.',                                       c: STEEL, mark: '○' },
+    { t: 'No external Solidity audit has been performed.',                             c: OX,    mark: '×' },
+    { t: 'No fiat. No token launch. Issuance is hard-gated on separation > 1.0.',      c: STEEL, mark: '○' }
+  ];
+  var forwardOps = [
+    'Arc 6 keeper · VAPITemporalBeaconRegistry.setKeeper(...) + first anchorBeacon(...) · until set, PoSR binder honestly returns None.',
+    'Arc 7 v2 wrapper · operator-interactive snarkjs trusted-setup contribute step required before VAPIReplayProofVerifier_v2 can deploy.',
+    'WMP Phase-2 · deploy greenfield VAPIWorldModelConsentRegistry when first paying world-model buyer needs real-data export · estimate-only deploy script gated.',
+    'Silicon-rooted devices · ATECC608A + CH341A · first silicon-rooted Path A device birth-certificate ceremony · ~0.05–0.10 IOTX.',
+    'IIP-64 design partner · Xinxin Fan’s PR #72 engaged · path from self-signed root CA to standardized PQ device identity at L1.',
+    'Partner manufacturer · spec partner-handoff-ready · 12-step ceremony + deployed bytecode + demonstrated POC.',
+    'Tournament integration · isFullyEligible_PathA(bytes32) · single eth_call · zero off-chain infra.'
+  ];
+
+  var rib = '';
+  for (var i = 0; i < 20; i++) { var last = i === 19; rib += '<span style="flex:1;background:var(--struck);opacity:' + (last ? 1 : 0.5) + ';border-radius:1px;box-shadow:' + (last ? '0 0 12px var(--struck)' : 'none') + ';"></span>'; }
+  set('pg-ribbon', rib);
+
+  set('pg-addresses', addresses.map(function (a) {
+    return '<div style="background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:15px 18px;">'
+      + '<div style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--steel);margin-bottom:7px;">' + a.name + (a.isNew ? '<span style="margin-left:7px;color:var(--ember);">NEW · 2026-06-05</span>' : '') + '</div>'
+      + '<div style="font-family:var(--mono);font-size:11.5px;color:var(--struck);font-variant-ligatures:none;word-break:break-all;">' + a.addr + '</div></div>';
+  }).join(''));
+
+  set('pg-primitives', primDefs.map(function (p) {
+    var color = p[0].indexOf('QORTROLLER') === 0 ? 'var(--ember)' : 'var(--struck)';
+    return '<div style="background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:14px 16px;"><b style="font-family:var(--mono);font-size:12.5px;font-weight:600;letter-spacing:0.02em;color:' + color + ';display:block;margin-bottom:3px;">' + p[0] + '</b><span style="font-family:var(--body);font-size:12px;color:var(--ash);">' + p[1] + '</span></div>';
+  }).join(''));
+
+  set('pg-stats', stats.map(function (s) {
+    return '<div style="background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:16px 18px;"><div style="font-family:var(--mono);font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ash);">' + s.label + '</div><div style="font-family:var(--disp);font-stretch:125%;font-weight:900;font-size:34px;line-height:1;color:var(--struck);margin:8px 0 5px;">' + s.value + '</div><div style="font-family:var(--mono);font-size:10px;line-height:1.5;color:var(--ash);">' + s.sub + '</div></div>';
+  }).join(''));
+
+  set('pg-proven', proven.map(function (t) {
+    return '<div style="display:flex;gap:10px;padding:8px 13px;background:var(--void-1);border-left:2px solid var(--struck);"><span style="color:var(--struck);flex:0 0 auto;">●</span><span style="font-family:var(--body);font-size:13.5px;line-height:1.5;color:var(--bone-dim);">' + t + '</span></div>';
+  }).join(''));
+
+  set('pg-pending', pending.map(function (t) {
+    return '<div style="display:flex;gap:10px;padding:8px 13px;background:var(--void-1);border-left:2px solid var(--steel);"><span style="color:var(--steel);flex:0 0 auto;">○</span><span style="font-family:var(--body);font-size:13.5px;line-height:1.5;color:var(--bone-dim);">' + t + '</span></div>';
+  }).join(''));
+
+  set('pg-notclaim', notClaim.map(function (x) {
+    return '<div style="display:flex;gap:10px;padding:8px 13px;background:var(--void-1);border-left:2px solid ' + x.c + ';"><span style="color:' + x.c + ';flex:0 0 auto;font-family:var(--mono);">' + x.mark + '</span><span style="font-family:var(--body);font-size:13px;line-height:1.5;color:var(--bone-dim);">' + x.t + '</span></div>';
+  }).join(''));
+
+  set('pg-forward', forwardOps.map(function (t) {
+    return '<div style="display:flex;gap:10px;padding:8px 13px;background:var(--void-1);border-left:2px solid var(--steel);"><span style="color:var(--steel);flex:0 0 auto;font-family:var(--mono);">▸</span><span style="font-family:var(--body);font-size:13px;line-height:1.5;color:var(--bone-dim);">' + t + '</span></div>';
+  }).join(''));
+
+  var reduced = (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) || false;
+  var canvas = document.getElementById('pg-seal');
+  function drawSeal(t) {
+    if (!canvas || !window.PGSeal) return;
+    var dpr = window.devicePixelRatio || 1, w = canvas.clientWidth, h = canvas.clientHeight; if (!w || !h) return;
+    if (canvas.width !== Math.round(w * dpr)) { canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr); }
+    var ctx = canvas.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+    window.PGSeal.drawStruckSeal(ctx, { cx: w / 2, cy: h / 2, R: Math.min(w, h) * 0.4, color: '#6E8CA8', now: t, motion: !reduced, seed: window.PGSeal.seedInt('0x9f3c2b…a3f8') });
   }
+  function loop(t) { drawSeal(t); requestAnimationFrame(loop); }
+  requestAnimationFrame(loop);
 
-  function settleOps(section) {
-    var ops = section.querySelectorAll('[data-anim="gic-formula"] .op');
-    ops.forEach(function (op, i) {
-      op.style.animation = 'op-settle .4s ease forwards';
-      op.style.animationDelay = (i * 0.12) + 's';
-    });
-  }
-
-  var io = new IntersectionObserver(function (entries) {
-    entries.forEach(function (e) {
-      if (!e.isIntersecting) return;
-      var el = e.target;
-      io.unobserve(el);
-      el.classList.add('in');
-      var num = el.querySelector('.sec-num');
-      if (num) countUp(num);
-      var bb = el.querySelector('[data-anim="poac-bytes"]'); if (bb) bb.classList.add('bb-go');
-      var rb = el.querySelector('[data-anim="gic-chain"]'); if (rb) rb.classList.add('rb-go');
-      var ladder = el.querySelector('.ladder'); if (ladder) ladder.classList.add('in');
-      var tbl = el.querySelector('table[data-anim="stack-table"]'); if (tbl) tbl.classList.add('in');
-      var prim = el.querySelector('[data-anim="primitives"]'); if (prim) prim.classList.add('in');
-      var gauge = el.querySelector('.qt-gauge[data-anim="humanity-gauge"]');
-      if (gauge && !gauge.dataset.fired) {
-        gauge.dataset.fired = '1';
-        gauge.classList.add('in');
-        var target = parseFloat(gauge.dataset.p || '0');
-        var valEl = gauge.querySelector('[data-gauge-val]');
-        var start = performance.now(), dur = 900;
-        (function tick(now) {
-          var k = Math.min(1, (now - start) / dur);
-          var v = target * (k * (2 - k));
-          if (valEl) valEl.textContent = v.toFixed(2);
-          if (k < 1) requestAnimationFrame(tick);
-        })(performance.now());
-      }
-      if (el.querySelector('[data-anim="gic-formula"]')) settleOps(el);
-    });
-  }, { threshold: 0.15 });
-
-  document.querySelectorAll('[data-anim="reveal"]').forEach(function (s) { io.observe(s); });
-
-  var progress = document.getElementById('qt-progress');
-  if (progress) {
-    var lastP = -1;
-    function onScroll() {
-      var max = Math.max(1, document.documentElement.scrollHeight - innerHeight);
-      var p = Math.min(100, Math.max(0, (scrollY / max) * 100));
-      var rounded = Math.round(p * 10) / 10;
-      if (rounded !== lastP) { progress.style.setProperty('--p', rounded + '%'); lastP = rounded; }
-    }
-    document.addEventListener('scroll', onScroll, { passive: true });
-    onScroll();
-  }
-
-  (function buildRail() {
-    var rail = document.getElementById('qt-rail'); if (!rail) return;
-    var sections = document.querySelectorAll('main.wrap > section[id]');
-    sections.forEach(function (s, i) {
-      var a = document.createElement('a');
-      a.href = '#' + s.id;
-      a.textContent = String(i + 1).padStart(2, '0');
-      a.setAttribute('data-target', s.id);
-      rail.appendChild(a);
-    });
-    var ro = new IntersectionObserver(function (entries) {
-      entries.forEach(function (e) {
-        if (!e.isIntersecting) return;
-        var id = e.target.id;
-        rail.querySelectorAll('a').forEach(function (a) {
-          a.classList.toggle('is-active', a.dataset.target === id);
-        });
-      });
-    }, { rootMargin: '-40% 0px -55% 0px', threshold: 0 });
-    sections.forEach(function (s) { ro.observe(s); });
-  })();
-
-  (function hashStorm() {
-    var c = document.getElementById('qt-storm'); if (!c) return;
-    var hero = c.parentElement;
-    var ctx = c.getContext('2d');
-    var dpr = Math.min(2, devicePixelRatio || 1);
-    function fit() {
-      var r = hero.getBoundingClientRect();
-      c.width = Math.max(1, r.width * dpr); c.height = Math.max(1, r.height * dpr);
-      c.style.width = r.width + 'px'; c.style.height = r.height + 'px';
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    }
-    fit(); addEventListener('resize', fit);
-    var hex = '0123456789abcdef';
-    function rand8() { var s=''; for (var i=0;i<8;i++) s += hex[Math.floor(Math.random()*16)]; return s; }
-    var w = c.clientWidth, h = c.clientHeight;
-    var COUNT = Math.max(14, Math.floor((w*h)/22000));
-    var bits = []; for (var i=0;i<COUNT;i++) bits.push({
-      x: Math.random()*w, y: Math.random()*h*1.4,
-      v: 0.4 + Math.random()*0.9, t: rand8(),
-      a: 0.18 + Math.random()*0.36,
-      r: Math.random() < 0.18 ? 'amber' : (Math.random() < 0.35 ? 'chain' : 'dim')
-    });
-    function frame() {
-      if (document.hidden || hero.getBoundingClientRect().bottom < 0) {
-        requestAnimationFrame(frame); return;
-      }
-      var w2 = c.clientWidth, h2 = c.clientHeight;
-      ctx.clearRect(0, 0, w2, h2);
-      ctx.font = '11px "JetBrains Mono", ui-monospace, monospace';
-      ctx.textBaseline = 'top';
-      for (var i = 0; i < bits.length; i++) {
-        var b = bits[i];
-        b.y -= b.v;
-        if (b.y < -16) { b.y = h2 + Math.random()*20; b.x = Math.random()*w2; b.t = rand8(); }
-        var color = b.r === 'amber' ? '240,168,104' : b.r === 'chain' ? '91,214,163' : '138,150,165';
-        ctx.fillStyle = 'rgba(' + color + ',' + b.a + ')';
-        ctx.fillText(b.t, b.x, b.y);
-      }
-      requestAnimationFrame(frame);
-    }
-    requestAnimationFrame(frame);
-  })();
-
-  (async function hashLive() {
-    var el = document.getElementById('qt-sample-hash');
-    if (!el || !(window.crypto && crypto.subtle)) return;
-    var sample = new Uint8Array(164);
-    for (var i = 0; i < 164; i++) sample[i] = (i * 31 + 17) & 0xff;
-    var buf = await crypto.subtle.digest('SHA-256', sample);
-    var hexs = Array.from(new Uint8Array(buf)).map(function (b) { return b.toString(16).padStart(2, '0'); }).join('');
-    var grouped = hexs.match(/.{1,8}/g).join(' ');
-    el.textContent = 'sample · ' + grouped;
-    requestAnimationFrame(function () { el.classList.add('settled'); });
-  })();
-
-  (function citeSections() {
-    var sections = document.querySelectorAll('main.wrap > section[id]');
-    sections.forEach(function (s) {
-      var heading = s.querySelector('h2, h1');
-      if (!heading) return;
-      var btn = document.createElement('button');
-      btn.className = 'qt-cite';
-      btn.type = 'button';
-      btn.setAttribute('aria-label', 'copy section citation');
-      btn.textContent = '¶';
-      btn.addEventListener('click', function (e) {
-        e.preventDefault();
-        var idx = Array.from(sections).indexOf(s) + 1;
-        var pad = String(idx).padStart(2, '0');
-        var title = heading.textContent.replace(/[¶\s]+$/g, '').trim();
-        var d = new Date().toISOString().slice(0, 10);
-        var url = location.origin + location.pathname + '#' + s.id;
-        var block = 'QorTroller Reference · §' + pad + ' ' + title + ' · ' + d + '\nqortroller.io/reference#' + s.id;
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(block);
-        }
-        btn.classList.add('is-copied');
-        setTimeout(function () { btn.classList.remove('is-copied'); }, 1400);
-      });
-      heading.appendChild(btn);
-    });
-  })();
+  var prog = document.getElementById('pg-prog');
+  function onScroll() { if (!prog) return; var max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight); prog.style.width = Math.min(100, Math.max(0, (window.scrollY / max) * 100)) + '%'; }
+  window.addEventListener('scroll', onScroll, { passive: true }); onScroll();
 })();
 </script>
 </body>
