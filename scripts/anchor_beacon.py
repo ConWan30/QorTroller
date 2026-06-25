@@ -59,7 +59,11 @@ RPC_URL = "https://babel-api.testnet.iotex.io"
 CHAIN_ID = 4690
 ANCHOR_CADENCE = 64
 BLOCKHASH_WINDOW = 256
-HARD_CAP_IOTX = 0.005      # per-anchor max spend
+# Per-anchor max spend. Default 0.005 was set on a stale, cheaper-gas
+# assumption; current IoTeX testnet gasPrice (~1e12 wei) puts a real anchor at
+# ~0.077 IOTX. Operator can raise the ceiling explicitly via ANCHOR_HARD_CAP_IOTX
+# for an intentional fire (keeps the conservative default for unattended loops).
+HARD_CAP_IOTX = float(os.environ.get("ANCHOR_HARD_CAP_IOTX", "0.005"))
 GAS_BUFFER = 1.25
 
 REGISTRY_ABI = [
@@ -158,12 +162,15 @@ def anchor_once(*, confirm: bool) -> dict:
         log.info("ANCHOR_BEACON_CONFIRM!=1 — dry-run only")
         return {"outcome": "dry_run", "block": candidate, "buffered_cost_iotx": cost_iotx}
 
-    # Build + send tx (legacy type 0 — IoTeX EIP-1559 reservation quirk per
-    # Arc 5 manifest-write precedent)
+    # Build + send legacy tx. NOTE: do NOT set "type": 0 explicitly — the
+    # installed eth_account (Py3.13) routes any explicit type through
+    # TypedTransaction (knows 1/2/3 only) and raises "Unknown Transaction
+    # type: 0". A legacy tx is produced implicitly by supplying gasPrice with
+    # no maxFeePerGas (mirrors bridge chain.py:1352 tx_overrides exactly).
     nonce = w3.eth.get_transaction_count(account.address)
     tx = registry.functions.anchorBeacon(candidate).build_transaction({
         "from": account.address, "nonce": nonce, "gas": buf_gas,
-        "gasPrice": gas_price, "chainId": CHAIN_ID, "type": 0,
+        "gasPrice": gas_price, "chainId": CHAIN_ID,
     })
     signed = account.sign_transaction(tx)
     tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
