@@ -1,721 +1,373 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>QorTroller — Partner Brief</title>
-
-<!-- Brand foundations — same design system as grant-brief.html (EvidenceOS
-     aesthetic). Local Syne + JetBrains Mono variable fonts at /fonts/ so the
-     deck stays self-contained and sharable; no CDN dependency. -->
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QorTroller — Partner Pitch</title>
+<!--
+  PROVING GROUND — "Partner·Pitch" deck (surface 3). Self-contained production port of the Claude
+  Design artifact "Partner Pitch.dc.html" (round 3). Design-runtime wrapper stripped, PG Tab Strip
+  dropped (the React ViewSelector provides the tab bar above this iframe), PG Footer + PG Stamps
+  inlined, data-driven lists built from the design's exact data, seal via /pg-seal.js. Served at
+  /qortroller-partner-pitch.html (filename unchanged so PartnerPitchView needs no rewire). Figures
+  reconciled "as of 2026-06-25" (66 / 179 / 15 / 38). Hardware-partner audience; FTO discipline preserved.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@125,700;125,800;125,900&family=Hanken+Grotesk:wght@400;500;600;700&family=Martian+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="/pg-seal.js"></script>
 <style>
-@font-face {
-  font-family: 'Syne';
-  src: url('/fonts/Syne-VariableFont_wght.ttf') format('truetype-variations'),
-       url('/fonts/Syne-VariableFont_wght.ttf') format('truetype');
-  font-weight: 400 800;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'JetBrains Mono';
-  src: url('/fonts/JetBrainsMono-VariableFont_wght.ttf') format('truetype-variations'),
-       url('/fonts/JetBrainsMono-VariableFont_wght.ttf') format('truetype');
-  font-weight: 400 800;
-  font-style: normal;
-  font-display: swap;
-}
-
-:root {
-  /* ─── PALETTE ── void-black forensic, NOT cyber-neon ── */
-  --bg:              #04060a;
-  --panel:           #0a0e14;
-  --panel-soft:      #0d1218;
-  --panel-raised:    #11161f;
-  --border:          #1a2230;
-  --border-soft:     #131a24;
-  --border-strong:   #243044;
-
-  /* ─── TEXT ── */
-  --text:            #d4dde8;
-  --text-dim:        #8a96a5;
-  --text-faint:      #5a6675;
-  --text-ghost:      #3a4452;
-
-  /* ─── ACCENTS ── */
-  --accent-amber:    #f0a868;
-  --accent-amber-soft: #f0a86833;
-  --accent-amber-trace: #f0a86811;
-  --gamer-cyan:      #00d4ff;
-  --gamer-cyan-soft: #00d4ff22;
-  --chain:           #5bd6a3;
-  --chain-soft:      #5bd6a322;
-  --derived:         #8a96a5;
-  --predicate:       #f0a868;
-  --ghost-line:      #5a667555;
-
-  /* ─── STATUS (semantic — ALWAYS paired with text label) ─── */
-  --status-live:        #5bd6a3;
-  --status-verified:    #5bd6a3;
-  --status-pending:     #f0a868;
-  --status-blocked:     #d65b78;
-  --status-mock:        #d65b78;
-  --status-killswitch:  #f0a868;
-  --status-dormant:     #5a6675;
-
-  /* ─── TYPOGRAPHY ── */
-  --font-display: 'Syne', system-ui, sans-serif;
-  --font-body:    'Syne', system-ui, sans-serif;
-  --font-mono:    'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
-
-  --t-min:        11px;
-  --t-base:       12px;
-  --t-label:      13px;
-  --t-body:       14px;
-  --t-h3:         16px;
-  --t-h2:         20px;
-  --t-h1:         28px;
-  --t-display:    44px;
-
-  --lh-tight:     1.15;
-  --lh-snug:      1.3;
-  --lh-base:      1.5;
-
-  --ls-eyebrow:   0.14em;
-  --ls-caps:      0.06em;
-  --ls-hash:      0.02em;
-
-  /* ─── LAYOUT ── */
-  --radius:       4px;
-  --radius-sm:    2px;
-  --radius-pill:  999px;
-  --rail-w:       220px;
-  --strip-h:      56px;
-
-  /* ─── SPACING SCALE ── */
-  --s-0: 0;  --s-1: 4px;  --s-2: 8px;  --s-3: 12px; --s-4: 16px;
-  --s-5: 20px; --s-6: 24px; --s-7: 32px; --s-8: 40px; --s-9: 56px; --s-10: 72px;
-
-  /* ─── ELEVATION ── */
-  --shadow-hairline: inset 0 0 0 1px var(--border);
-  --shadow-edge:     0 0 0 1px var(--border), 0 1px 0 0 #0009;
-  --shadow-glow-amber: 0 0 24px -8px var(--accent-amber-soft);
-  --shadow-glow-chain: 0 0 24px -8px var(--chain-soft);
-  --shadow-deep:     0 8px 24px -12px #000c, 0 0 0 1px var(--border);
-
-  /* ─── MOTION ── */
-  --ease-instrument: cubic-bezier(0.2, 0.6, 0.2, 1);
-  --ease-snap:       cubic-bezier(0.4, 0, 0.2, 1);
-  --dur-tick:        120ms;
-  --dur-settle:      280ms;
-  --dur-breath:      2800ms;
-}
-</style>
-
-<style>
-  :root {
-    --slide-w: 1920px;
-    --slide-h: 1080px;
-  }
-
-  deck-stage:not(:defined) { visibility: hidden; }
-
-  html, body {
-    margin: 0; padding: 0;
-    background: #000;
-    font-family: var(--font-body);
-    color: var(--text);
-  }
-
-  /* Each <section> = a slide, sized at 1920×1080. deck-stage scales. */
-  deck-stage > section {
-    width: var(--slide-w);
-    height: var(--slide-h);
-    background: var(--bg);
-    color: var(--text);
-    position: relative;
-    overflow: hidden;
-    background-image:
-      linear-gradient(to right,  #1a223044 1px, transparent 1px),
-      linear-gradient(to bottom, #1a223044 1px, transparent 1px),
-      linear-gradient(to right,  #1a223018 1px, transparent 1px),
-      linear-gradient(to bottom, #1a223018 1px, transparent 1px);
-    background-size: 96px 96px, 96px 96px, 24px 24px, 24px 24px;
-    padding: 72px 96px;
-    box-sizing: border-box;
-    font-family: var(--font-body);
-  }
-
-  /* Slide chrome */
-  .chrome-mark {
-    position: absolute; top: 36px; left: 96px;
-    font-family: var(--font-display); font-weight: 700; font-size: 22px;
-    letter-spacing: -0.02em; color: var(--text); line-height: 1;
-  }
-  .chrome-mark .t { font-weight: 800; color: var(--accent-amber); }
-
-  .chrome-meta {
-    position: absolute; top: 36px; right: 96px;
-    display: flex; gap: 24px;
-    font-family: var(--font-mono); font-size: 13px; color: var(--text-faint);
-    letter-spacing: 0.14em; text-transform: uppercase; line-height: 1;
-  }
-  .chrome-meta .amber { color: var(--accent-amber); }
-
-  .chrome-foot {
-    position: absolute; bottom: 36px; left: 96px; right: 96px;
-    display: flex; justify-content: space-between;
-    font-family: var(--font-mono); font-size: 12px; color: var(--text-faint);
-    letter-spacing: 0.14em; text-transform: uppercase; line-height: 1;
-  }
-  .chrome-foot .amber { color: var(--accent-amber); }
-  .chrome-foot .chain { color: var(--chain); }
-
-  /* Eyebrows + titles */
-  .eyebrow {
-    font-family: var(--font-mono); font-weight: 500; font-size: 14px;
-    letter-spacing: 0.18em; text-transform: uppercase; color: var(--text-faint);
-    line-height: 1; margin: 0 0 22px;
-  }
-  .eyebrow .chain { color: var(--chain); }
-  .eyebrow .amber { color: var(--accent-amber); }
-
-  h1 {
-    font-family: var(--font-display); font-weight: 700; font-size: 96px;
-    line-height: 0.96; letter-spacing: -0.025em; color: var(--text); margin: 0;
-  }
-  h1.giant { font-size: 132px; }
-  h1 .amber { color: var(--accent-amber); font-weight: 800; }
-  h1 .chain { color: var(--chain); }
-
-  h2 {
-    font-family: var(--font-display); font-weight: 700; font-size: 64px;
-    line-height: 1.02; letter-spacing: -0.02em; color: var(--text); margin: 0 0 26px;
-  }
-  h2 .amber { color: var(--accent-amber); font-weight: 800; }
-  h2 .chain { color: var(--chain); }
-
-  h3 {
-    font-family: var(--font-display); font-weight: 700; font-size: 26px;
-    line-height: 1.1; color: var(--text); margin: 0 0 12px;
-  }
-  h3 .amber { color: var(--accent-amber); }
-
-  .lede {
-    font-family: var(--font-body); font-size: 28px; line-height: 1.45;
-    color: var(--text-dim); max-width: 1280px; margin: 0;
-  }
-  .lede .amber { color: var(--accent-amber); }
-  .lede .chain { color: var(--chain); }
-  .lede .text  { color: var(--text); }
-
-  .mono {
-    font-family: var(--font-mono); font-variant-ligatures: none; letter-spacing: 0.02em;
-  }
-
-  .specimen-hash {
-    font-family: var(--font-mono); font-size: 30px; letter-spacing: 0.04em;
-    color: var(--chain); line-height: 1.5; word-break: break-all; font-variant-ligatures: none;
-  }
-
-  /* PANELS */
-  .panel {
-    background: var(--panel); border: 1px solid var(--border);
-    border-radius: 4px; padding: 24px 28px;
-  }
-  .panel--soft { background: var(--panel-soft); }
-  .panel--accent { border-color: var(--accent-amber); box-shadow: 0 0 0 1px #f0a86833; }
-  .panel--chain  { border-color: var(--chain); box-shadow: 0 0 0 1px #5bd6a322; }
-  .panel--secure { border-color: #d95ad9; box-shadow: 0 0 0 1px #d95ad933; }
-
-  .panel__eye {
-    display: flex; justify-content: space-between; align-items: baseline;
-    padding-bottom: 14px; border-bottom: 1px solid var(--border-soft); margin-bottom: 16px;
-  }
-  .panel__eye .lbl {
-    font-family: var(--font-mono); font-size: 13px; color: var(--text-faint);
-    letter-spacing: 0.16em; text-transform: uppercase; line-height: 1;
-  }
-  .panel__eye .meta {
-    font-family: var(--font-mono); font-size: 13px; color: var(--text-dim);
-    letter-spacing: 0.08em; text-transform: uppercase; line-height: 1;
-  }
-
-  /* CHIP */
-  .chip {
-    display: inline-flex; align-items: center; gap: 9px; padding: 6px 12px;
-    font-family: var(--font-mono); font-size: 14px; font-weight: 500;
-    letter-spacing: 0.08em; text-transform: uppercase; border: 1px solid currentColor;
-    border-radius: 2px; line-height: 1; width: fit-content;
-  }
-  .chip::before {
-    content: ""; width: 8px; height: 8px; border-radius: 50%;
-    background: currentColor; box-shadow: 0 0 10px currentColor;
-  }
-  .chip--live    { color: var(--chain); }
-  .chip--pending { color: var(--accent-amber); }
-  .chip--blocked { color: var(--status-blocked); }
-  .chip--secure  { color: #d95ad9; }
-
-  /* Layout helpers */
-  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; }
-  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; }
-  .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; }
-  .stack  { display: grid; gap: 22px; }
-  .stack-sm { display: grid; gap: 12px; }
-
-  .kv {
-    display: grid; grid-template-columns: 300px 1fr; gap: 18px; padding: 13px 0;
-    border-bottom: 1px solid var(--border-soft);
-  }
-  .kv:last-child { border-bottom: 0; }
-  .kv .k {
-    font-family: var(--font-mono); font-size: 14px; color: var(--text-faint);
-    letter-spacing: 0.12em; text-transform: uppercase; line-height: 1.3;
-  }
-  .kv .v {
-    font-family: var(--font-mono); font-size: 17px; color: var(--text);
-    letter-spacing: 0.02em; line-height: 1.35;
-  }
-  .kv .v.amber { color: var(--accent-amber); }
-  .kv .v.chain { color: var(--chain); }
-  .kv .v.err   { color: var(--status-blocked); }
-  .kv .v.dim   { color: var(--text-dim); }
-
-  .hr { height: 1px; background: var(--border); margin: 28px 0; border: 0; }
-  .center { text-align: center; }
-  .right { text-align: right; }
-
-  .cover-wm {
-    font-family: var(--font-display); font-weight: 700; font-size: 240px;
-    line-height: 0.9; letter-spacing: -0.04em; color: var(--text); margin: 0;
-  }
-  .cover-wm .t { font-weight: 800; color: var(--accent-amber); }
-
-  /* ── SUPPLEMENT: trust-chain flow + measured/proposed ───────── */
-  .flow { display: grid; grid-template-columns: 1fr 40px 1fr 40px 1fr 40px 1fr; align-items: stretch; gap: 0; margin-top: 44px; }
-  .flow .node { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 22px 22px; }
-  .flow .node.chain  { border-color: var(--chain); box-shadow: 0 0 0 1px #5bd6a322; }
-  .flow .node.secure { border-color: #d95ad9; box-shadow: 0 0 0 1px #d95ad933; }
-  .flow .node .stp { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--text-faint); margin: 0 0 10px; }
-  .flow .node h3 { font-size: 22px; margin: 0 0 10px; }
-  .flow .node p { font-family: var(--font-mono); font-size: 13px; color: var(--text-dim); line-height: 1.5; margin: 0; }
-  .flow .arrow { display: grid; place-items: center; }
-  .flow .arrow::before {
-    content: ""; width: 100%; height: 2px;
-    background: linear-gradient(90deg, var(--chain) 0%, var(--accent-amber) 100%);
-    position: relative; overflow: visible;
-  }
-  .flow .arrow::after {
-    content: ""; width: 8px; height: 8px; border-top: 2px solid var(--accent-amber);
-    border-right: 2px solid var(--accent-amber); transform: rotate(45deg);
-    margin-left: -10px;
-  }
-  .pulse { position: relative; }
-  .pulse::after {
-    content: ""; position: absolute; left: 0; top: 50%; width: 10px; height: 10px;
-    border-radius: 50%; background: var(--chain); box-shadow: 0 0 14px var(--chain);
-    transform: translateY(-50%);
-    animation: flowpulse 3.2s var(--ease-instrument) infinite;
-  }
-  @keyframes flowpulse {
-    0%   { left: 0%;   opacity: 0; }
-    8%   { opacity: 1; }
-    92%  { opacity: 1; }
-    100% { left: 100%; opacity: 0; }
-  }
-
-  .mp { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 36px; }
-  .mp .col { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 26px 30px; }
-  .mp .col.measured { border-color: var(--chain); box-shadow: 0 0 0 1px #5bd6a322; }
-  .mp .col.proposed { border-color: var(--accent-amber); box-shadow: 0 0 0 1px #f0a86833; }
-  .mp .col h3 { font-size: 22px; margin-bottom: 18px; }
-  .mp .row { display: flex; justify-content: space-between; align-items: baseline; padding: 11px 0; border-bottom: 1px solid var(--border-soft); }
-  .mp .row:last-child { border-bottom: 0; }
-  .mp .row .l { font-family: var(--font-mono); font-size: 15px; color: var(--text-dim); letter-spacing: 0.02em; }
-  .mp .row .n { font-family: var(--font-mono); font-size: 17px; letter-spacing: 0.02em; }
-  .mp .measured .n { color: var(--chain); }
-  .mp .proposed .n { color: var(--accent-amber); }
-
-  /* ranked partner list */
-  .rank { display: grid; grid-template-columns: 64px 1fr; gap: 24px; align-items: center; padding: 18px 24px; border: 1px solid var(--border); border-radius: 4px; background: var(--panel); }
-  .rank.lead { border-color: var(--accent-amber); box-shadow: 0 0 0 1px #f0a86833, var(--shadow-glow-amber); }
-  .rank .no { font-family: var(--font-display); font-weight: 800; font-size: 44px; line-height: 1; color: var(--text-ghost); text-align: center; }
-  .rank.lead .no { color: var(--accent-amber); }
-  .rank .who { font-family: var(--font-display); font-weight: 700; font-size: 22px; color: var(--text); margin: 0 0 4px; }
-  .rank .ask { font-family: var(--font-mono); font-size: 14px; color: var(--text-dim); line-height: 1.45; margin: 0; }
-  .rank .ask .amber { color: var(--accent-amber); }
-
-  /* component tiles */
-  .comp { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 18px 20px; border-left: 3px solid var(--text-ghost); }
-  .comp.pending { border-left-color: var(--accent-amber); }
-  .comp.spec    { border-left-color: var(--gamer-cyan); }
-  .comp.secure  { border-left-color: #d95ad9; }
-  .comp .id { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.14em; color: var(--text-faint); text-transform: uppercase; }
-  .comp .nm { font-family: var(--font-display); font-weight: 700; font-size: 18px; color: var(--text); margin: 6px 0 6px; line-height: 1.1; }
-  .comp .ds { font-family: var(--font-mono); font-size: 12px; color: var(--text-dim); line-height: 1.45; }
+  :root{ --void-0:#060910; --void-1:#0A1120; --void-2:#111B2E; --steel:#6E8CA8; --ember:#E0743A; --struck:#F0C667; --oxblood:#B23A4C; --ash:#4A5260; --bone:#E9E2D2; --bone-dim:#9AA4B2; --disp:'Archivo',sans-serif; --body:'Hanken Grotesk',sans-serif; --mono:'Martian Mono',ui-monospace,monospace; }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:#060910;}
+  :focus-visible{outline:1px solid var(--ember);outline-offset:2px;}
+  ::selection{background:rgba(224,116,58,.3);}
+  a.pg-stamp:hover{border-color:var(--ember)!important;}
+  @keyframes pg-breath{0%,100%{opacity:.82;}50%{opacity:1;}}
+  @media (prefers-reduced-motion: reduce){*{animation:none!important;}}
 </style>
 </head>
 <body>
+<div style="position:relative;min-height:100vh;background:var(--void-0);background-image:linear-gradient(to right,rgba(110,140,168,.045) 1px,transparent 1px),linear-gradient(to bottom,rgba(110,140,168,.045) 1px,transparent 1px),linear-gradient(to right,rgba(110,140,168,.022) 1px,transparent 1px),linear-gradient(to bottom,rgba(110,140,168,.022) 1px,transparent 1px);background-size:96px 96px,96px 96px,24px 24px,24px 24px;color:var(--bone);font-family:var(--body);">
 
-<deck-stage width="1920" height="1080">
+  <div style="position:fixed;top:0;left:0;right:0;height:2px;z-index:60;background:transparent;pointer-events:none;"><div id="pg-prog" style="height:100%;width:0;background:var(--ember);opacity:.85;"></div></div>
 
-<!-- ═══ 01 · COVER ═══ -->
-<section data-screen-label="01 Cover" style="padding: 0; display: grid; place-items: center;">
-  <div style="position: absolute; top: 72px; left: 96px; right: 96px; display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 16px; color: var(--text-faint); letter-spacing: 0.18em; text-transform: uppercase;">
-    <span>PARTNER BRIEF · v0.1 · 2026-06-13</span>
-    <span style="color: var(--chain)">● IoTeX · INTERNET OF TRUSTED THINGS</span>
-  </div>
-  <div style="text-align: center;">
-    <p class="cover-wm">Qor<span class="t">T</span>roller</p>
-    <p style="font-family: var(--font-mono); font-size: 22px; color: var(--accent-amber); letter-spacing: 0.16em; text-transform: uppercase; margin: 36px 0 0;">
-      Core Controllers · of their gaming data
-    </p>
-  </div>
-  <div style="position: absolute; bottom: 72px; left: 96px; right: 96px;">
-    <p style="font-family: var(--font-body); font-size: 28px; color: var(--text-dim); max-width: 1320px; margin: 0 auto; text-align: center; line-height: 1.45;">
-      A purpose-built controller where the <span style="color: var(--accent-amber)">physical input device is also the cryptographic owner of the data it produces</span>. The reference hardware for V.A.P.I. — built native to IoTeX L1.
-    </p>
-  </div>
-</section>
+  <div style="max-width:1140px;margin:0 auto;padding:0 28px 80px;">
 
-<!-- ═══ 02 · THESIS ═══ -->
-<section data-screen-label="02 Thesis">
-  <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
-  <span class="chrome-meta"><span>02 · THESIS</span><span class="amber">V.A.P.I.</span></span>
-
-  <p class="eyebrow"><span class="amber">Why this matters</span></p>
-  <h1 class="giant">Prove the human at<br>the <span class="amber">input layer.</span></h1>
-  <p class="lede" style="margin-top: 48px; max-width: 1420px;">
-    Verify humanity where the signal is born — in the hands on the controller — and the gamer
-    <span class="text">keeps cryptographic ownership of the data their physical interactions generate</span>.
-    Cheating can't be asserted; the gamer is honored, not surveilled.
-  </p>
-
-  <span class="chrome-foot">
-    <span class="amber">VERIFIABLE · AUTONOMOUS · PHYSICAL · INTELLIGENCE</span>
-    <span>HONORED · NOT · SURVEILLED</span>
-  </span>
-</section>
-
-<!-- ═══ 03 · WHY A PARTNER / WHY NOW ═══ -->
-<section data-screen-label="03 Why now">
-  <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
-  <span class="chrome-meta"><span>03 · WHY NOW</span><span class="amber">SOFTWARE DONE · SILICON NEXT</span></span>
-
-  <p class="eyebrow">The software runs today — the hardware is the missing piece</p>
-  <h2>We are not asking you to build a product.<br>We are opening a <span class="amber">design-partner conversation.</span></h2>
-
-  <div class="grid-2" style="margin-top: 44px;">
-    <div class="panel panel--chain">
-      <div class="panel__eye"><span class="lbl">WHAT EXISTS</span><span class="meta">TESTNET · RUNNING</span></div>
-      <p class="mono" style="font-size: 16px; color: var(--text-dim); line-height: 1.6;">
-        A complete, tested protocol stack: a frozen 228-byte cryptographic record per cognition cycle,
-        66 deployed contracts, a 174-check fail-closed CI gate, ~5,766 automated tests. Not vaporware.
-      </p>
-    </div>
-    <div class="panel panel--accent">
-      <div class="panel__eye"><span class="lbl">WHAT'S MISSING</span><span class="meta">PURPOSE-BUILT SILICON</span></div>
-      <p class="mono" style="font-size: 16px; color: var(--text-dim); line-height: 1.6;">
-        Today it runs on a certified third-party device (DualSense Edge). The next step is a reference
-        controller where the protocol's strongest signals are native hardware — and that needs a manufacturing partner.
-      </p>
-    </div>
-  </div>
-
-  <span class="chrome-foot"><span class="amber">DEPIN · INTERNET OF TRUSTED THINGS</span><span>IOTEX · L1</span></span>
-</section>
-
-<!-- ═══ 04 · TRUST CHAIN ═══ -->
-<section data-screen-label="04 Trust chain">
-  <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
-  <span class="chrome-meta"><span>04 · TRUST CHAIN</span><span class="amber">228 BYTES</span></span>
-
-  <p class="eyebrow"><span class="chain">The signal flows through the controller</span></p>
-  <h2>Human input <span class="amber">→</span> signed, tamper-proof, gamer-owned data.</h2>
-
-  <div class="flow">
-    <div class="node">
-      <p class="stp">01 · PHYSICAL INPUT</p>
-      <h3>Sensors</h3>
-      <p>Triggers · sticks · IMU · touchpad capture human biomechanical signal at 1 kHz.</p>
-    </div>
-    <div class="arrow pulse"></div>
-    <div class="node">
-      <p class="stp">02 · COGNITION</p>
-      <h3>C1 · MCU</h3>
-      <p>ESP32-S3-class MCU builds the 228-byte Proof-of-Autonomous-Cognition record.</p>
-    </div>
-    <div class="arrow"></div>
-    <div class="node secure">
-      <p class="stp">03 · ROOT OF TRUST</p>
-      <h3>C2 · Secure Element</h3>
-      <p>On-chip, non-extractable P-256 key signs every record in silicon.</p>
-    </div>
-    <div class="arrow"></div>
-    <div class="node chain">
-      <p class="stp">04 · OUTPUT</p>
-      <h3>Owned Data</h3>
-      <p>Tamper-proof signed record, anchored on IoTeX. The gamer holds the key.</p>
-    </div>
-  </div>
-
-  <p class="mono" style="margin-top: 40px; font-size: 15px; color: var(--text-faint); letter-spacing: 0.04em;">
-    The physical source <span style="color: var(--accent-amber)">is</span> the cryptographic agency-holder. That is the V.A.P.I. category claim — and the reason the device must be purpose-built.
-  </p>
-
-  <span class="chrome-foot"><span class="chain">SENSORS → MCU → SECURE ELEMENT → SIGNED</span><span>228-BYTE · FROZEN · WIRE FORMAT</span></span>
-</section>
-
-<!-- ═══ 05 · WHAT WE NEED (PARTNERS) ═══ -->
-<section data-screen-label="05 Partners">
-  <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
-  <span class="chrome-meta"><span>05 · THE PARTNERS</span><span class="amber">RANKED BY LEVERAGE</span></span>
-
-  <p class="eyebrow">What we need from a partner — ranked by what determines whether QorTroller can exist</p>
-  <div class="stack-sm" style="margin-top: 28px;">
-    <div class="rank lead">
-      <div class="no">1</div>
-      <div>
-        <p class="who">Actuation development partner <span style="color: var(--accent-amber); font-weight:500; font-size: 15px; font-family: var(--font-mono);">· force-feedback R&amp;D</span></p>
-        <p class="ask">Co-develop a <span class="amber">novel, freedom-to-operate-clean</span> programmable-resistance trigger actuator. The strongest signal surface AND the hardest part to build without infringing existing adaptive-trigger IP. Clean-sheet, not a clone.</p>
+    <!-- HERO · HARDWARE HOOK -->
+    <header style="position:relative;padding:60px 0 46px;display:flex;gap:44px;align-items:center;flex-wrap:wrap;">
+      <div style="flex:1 1 460px;min-width:0;">
+        <p style="font-family:var(--mono);font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:var(--steel);margin:0 0 16px;">Partner brief · hardware collaboration · IoTeX-native</p>
+        <h1 style="font-family:var(--disp);font-stretch:125%;font-weight:900;font-size:clamp(32px,5.4vw,58px);line-height:1.02;letter-spacing:0.004em;color:var(--bone);margin:0;">Prove the human in the <span style="color:var(--ember);">controller's physics.</span></h1>
+        <p style="font-family:var(--body);font-size:16px;line-height:1.7;color:var(--bone-dim);max-width:62ch;margin:18px 0 14px;">QorTroller proves a real human from the controller's 1 kHz force-curve and IMU signal — translator hardware physically can't synthesize it. That makes the <span style="color:var(--bone);">device</span> the moat. The protocol runs today on IoTeX testnet; the missing piece is purpose-built silicon.</p>
+        <p style="font-family:var(--body);font-size:16px;line-height:1.7;color:var(--bone-dim);max-width:62ch;margin:0 0 22px;">The <span style="color:var(--bone);">Path A manufacturing spec is partner-handoff-ready</span> — a 12-step provisioning ceremony, deployed bytecode, and a demonstrated POC. We're not asking you to build a product; we're opening a <span style="color:var(--ember);">design-partner conversation.</span></p>
+        <div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:22px;">
+          <span style="display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:10.5px;letter-spacing:0.06em;text-transform:uppercase;color:var(--steel);border:1px solid var(--void-2);border-radius:2px;padding:4px 10px;"><span style="width:6px;height:6px;border-radius:50%;background:var(--steel);"></span>Software live on testnet</span>
+          <span style="display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:10.5px;letter-spacing:0.06em;text-transform:uppercase;color:var(--steel);border:1px solid var(--void-2);border-radius:2px;padding:4px 10px;"><span style="width:6px;height:6px;border-radius:50%;background:var(--steel);"></span>Path A spec handoff-ready</span>
+          <span style="display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:10.5px;letter-spacing:0.06em;text-transform:uppercase;color:var(--steel);border:1px solid var(--void-2);border-radius:2px;padding:4px 10px;"><span style="width:6px;height:6px;border-radius:50%;background:var(--steel);"></span>IoTeX-native</span>
+        </div>
+        <a class="pg-stamp" href="https://github.com/ConWan30/QorTroller" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:11px;text-decoration:none;background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:11px 15px;">
+          <span style="width:7px;height:7px;border-radius:1px;transform:rotate(45deg);background:var(--steel);flex:0 0 auto;"></span>
+          <span style="display:flex;flex-direction:column;gap:2px;">
+            <span style="font-family:var(--mono);font-size:12px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--bone);">Verify the proofs&nbsp;&rarr;</span>
+            <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.04em;color:var(--ash);">the stack is real &amp; re-derivable on testnet 4690</span>
+          </span>
+        </a>
       </div>
-    </div>
-    <div class="rank">
-      <div class="no">2</div>
-      <div>
-        <p class="who">Boréas Technologies <span style="color: var(--text-faint); font-weight:500; font-size: 15px; font-family: var(--font-mono);">· piezo haptic driver</span></p>
-        <p class="ask">The L6 challenge-response haptic-driver path (CapDrive) — microsecond-accurate, silent, localized pulses. Distinct from the trigger actuator above.</p>
+      <div style="flex:0 0 240px;display:flex;flex-direction:column;align-items:center;gap:11px;margin:0 auto;">
+        <canvas id="pg-seal" style="width:240px;height:240px;display:block;"></canvas>
+        <div style="font-family:var(--mono);font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--ash);text-align:center;">THE STRUCK SEAL · <span style="color:var(--steel);">RESTING</span></div>
+        <div style="font-family:var(--mono);font-size:10px;line-height:1.55;letter-spacing:0.02em;color:var(--ash);text-align:center;max-width:230px;">seeded from the device birth cert · keccak256(pubkey). Steel until real silicon strikes it.</div>
       </div>
-    </div>
-    <div class="rank">
-      <div class="no">3</div>
-      <div>
-        <p class="who">Qorvo <span style="color: var(--text-faint); font-weight:500; font-size: 15px; font-family: var(--font-mono);">· RF / power / MEMS</span></p>
-        <p class="ask">Wireless + power-path component alignment. (Qorvo's acoustic-wave strength is BAW/SAW RF filters — we are <span class="amber">not</span> asking them for haptic piezo or the trigger.)</p>
+    </header>
+
+    <!-- THE OPPORTUNITY -->
+    <div style="padding:30px 0 0;display:flex;align-items:center;gap:14px;"><span style="font-family:var(--disp);font-stretch:125%;font-weight:900;font-size:13px;letter-spacing:0.18em;text-transform:uppercase;color:var(--ember);">THE OPPORTUNITY</span><span style="flex:1;height:1px;background:var(--void-2);"></span></div>
+    <section style="padding:22px 0 50px;">
+      <h2 style="font-family:var(--disp);font-stretch:125%;font-weight:800;font-size:clamp(20px,3vw,28px);color:var(--bone);margin:0 0 18px;">The software runs today. The silicon is next.</h2>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+        <div style="background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:18px 20px;border-left:3px solid var(--struck);">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px;"><span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--steel);">What exists</span><span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.06em;text-transform:uppercase;color:var(--struck);border:1px solid var(--struck);border-radius:2px;padding:2px 6px;">TESTNET · RUNNING</span></div>
+          <p style="font-family:var(--body);font-size:13.5px;line-height:1.6;color:var(--bone-dim);margin:0;">A complete, tested protocol stack: a FROZEN 228-byte cryptographic record per cognition cycle, 66 deployed contracts, a 179-check fail-closed CI gate, ~5,766 automated tests. Not vaporware.</p>
+        </div>
+        <div style="background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:18px 20px;border-left:3px solid var(--ember);">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px;"><span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--steel);">What's missing</span><span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ember);border:1px solid var(--ember);border-radius:2px;padding:2px 6px;">PURPOSE-BUILT SILICON</span></div>
+          <p style="font-family:var(--body);font-size:13.5px;line-height:1.6;color:var(--bone-dim);margin:0;">Today it runs on a certified third-party device — the Sony DualShock Edge (CFI-ZCP1). The next step is a reference controller where the protocol's strongest signals are native hardware. That needs a manufacturing partner.</p>
+        </div>
       </div>
-    </div>
-    <div class="rank">
-      <div class="no">4</div>
-      <div>
-        <p class="who">Battle Beaver / mod-house <span style="color: var(--text-faint); font-weight:500; font-size: 15px; font-family: var(--font-mono);">· assembly + sticks</span></p>
-        <p class="ask">Reference dev-kit assembly; Hall/TMR stick-module sourcing + integration expertise.</p>
+    </section>
+
+    <!-- THE MOAT -->
+    <div style="padding:30px 0 0;display:flex;align-items:center;gap:14px;"><span style="font-family:var(--disp);font-stretch:125%;font-weight:900;font-size:13px;letter-spacing:0.18em;text-transform:uppercase;color:var(--ember);">WHY BUILD IT WITH QORTROLLER</span><span style="flex:1;height:1px;background:var(--void-2);"></span></div>
+    <section style="padding:22px 0 50px;">
+      <h2 style="font-family:var(--disp);font-stretch:125%;font-weight:800;font-size:clamp(20px,3vw,28px);color:var(--bone);margin:0 0 8px;">The moat is the <span style="color:var(--ember);">hardware</span> — and it's defensible.</h2>
+      <p style="font-family:var(--body);font-size:15px;line-height:1.65;color:var(--bone-dim);max-width:74ch;margin:0 0 20px;">Two surfaces a translator box can't fake. Foregrounded honestly: the trigger moat is the <span style="color:var(--ember);">novel</span> differentiator, but it is still Stage-A-pending — it raises spoof cost; it is never "impossible."</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+        <div style="background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:18px 20px;">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:9px;"><span style="font-family:var(--mono);font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:var(--bone);">Adaptive-trigger device-auth</span><span style="flex:0 0 auto;font-family:var(--mono);font-size:9.5px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ember);border:1px solid var(--ember);border-radius:2px;padding:2px 6px;">NOVEL · STAGE A</span></div>
+          <p style="font-family:var(--body);font-size:13px;line-height:1.55;color:var(--bone-dim);margin:0 0 9px;">A real Edge reshapes its force-response under adaptive-trigger resistance; the protocol reads a biomechanical 1 kHz force curve and extracts a humanity signal. An emulator, Cronus, or XIM renders no such physics — so it fails. No known production prior art. <span style="color:var(--bone);">The novelty is the signal-extraction, not the actuator.</span></p>
+          <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.02em;color:var(--ember);">Aspirational-primary · Stage A measurement pending · FTO read before any geometry externalizes.</div>
+        </div>
+        <div style="background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:18px 20px;">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:9px;"><span style="font-family:var(--mono);font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:var(--bone);">Silicon-rooted device identity</span><span style="flex:0 0 auto;font-family:var(--mono);font-size:9.5px;letter-spacing:0.06em;text-transform:uppercase;color:var(--struck);border:1px solid var(--struck);border-radius:2px;padding:2px 6px;">LIVE · ARC 1</span></div>
+          <p style="font-family:var(--body);font-size:13px;line-height:1.55;color:var(--bone-dim);margin:0 0 9px;">Per-device birth certificates registered at manufacture time. deviceId = keccak256(controller_pubkey), FROZEN protocol-wide. isFullyEligible_PathA(bytes32) gates tournaments + marketplace + export in one composable read. A Cronus/XIM/reWASD translator can't synthesize a manufacturer-signed birth cert — the certificate is the gate.</p>
+          <div style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.02em;color:var(--struck);font-variant-ligatures:none;">IoTeX P256 precompile @ 0x0100 · verified in one view-call</div>
+        </div>
       </div>
-    </div>
+    </section>
+
+    <!-- THE TRUST CHAIN -->
+    <div style="padding:30px 0 0;display:flex;align-items:center;gap:14px;"><span style="font-family:var(--disp);font-stretch:125%;font-weight:900;font-size:13px;letter-spacing:0.18em;text-transform:uppercase;color:var(--ember);">THE TRUST CHAIN</span><span style="flex:1;height:1px;background:var(--void-2);"></span></div>
+    <section style="padding:22px 0 50px;">
+      <p style="font-family:var(--body);font-size:15px;line-height:1.65;color:var(--bone-dim);max-width:74ch;margin:0 0 18px;">Human input → signed, tamper-proof, gamer-owned data. The physical source <span style="color:var(--bone);">is</span> the cryptographic agency-holder — the V.A.P.I. category claim, and the reason the device must be purpose-built.</p>
+      <div id="pg-chain" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;"></div>
+    </section>
+
+    <!-- FEATURE SURFACES · PARTNER RELEVANCE -->
+    <div style="padding:30px 0 0;display:flex;align-items:center;gap:14px;"><span style="font-family:var(--disp);font-stretch:125%;font-weight:900;font-size:13px;letter-spacing:0.18em;text-transform:uppercase;color:var(--ember);">FEATURE SURFACES · PARTNER RELEVANCE</span><span style="flex:1;height:1px;background:var(--void-2);"></span></div>
+    <section style="padding:22px 0 50px;">
+      <div id="pg-features" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;"></div>
+    </section>
+
+    <!-- THE DEV-KIT BOM -->
+    <div style="padding:30px 0 0;display:flex;align-items:center;gap:14px;"><span style="font-family:var(--disp);font-stretch:125%;font-weight:900;font-size:13px;letter-spacing:0.18em;text-transform:uppercase;color:var(--ember);">THE DEV-KIT BOM</span><span style="flex:1;height:1px;background:var(--void-2);"></span></div>
+    <section style="padding:22px 0 50px;">
+      <p style="font-family:var(--body);font-size:15px;line-height:1.65;color:var(--bone-dim);max-width:74ch;margin:0 0 16px;">Eight critical parts, one cryptographic spine — with honest status coding. Two-supplier discipline before any part goes live-supplied.</p>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:18px;font-family:var(--mono);font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ash);">
+        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="width:7px;height:7px;border-radius:50%;background:var(--ember);"></span>Stage A measurement pending</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="width:7px;height:7px;border-radius:50%;background:var(--steel);"></span>spec known</span>
+        <span style="display:inline-flex;align-items:center;gap:6px;"><span style="width:7px;height:7px;border-radius:50%;background:var(--bone);"></span>cryptographic root</span>
+      </div>
+      <div id="pg-bom" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;"></div>
+      <p style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.02em;color:var(--ash);margin:14px 0 0;">608A is NRND — the spec targets the ATECC608B/608C-class family. No trigger geometry externalizes before a freedom-to-operate read clears.</p>
+    </section>
+
+    <!-- PARTNER ALIGNMENT -->
+    <div style="padding:30px 0 0;display:flex;align-items:center;gap:14px;"><span style="font-family:var(--disp);font-stretch:125%;font-weight:900;font-size:13px;letter-spacing:0.18em;text-transform:uppercase;color:var(--ember);">PARTNER ALIGNMENT</span><span style="flex:1;height:1px;background:var(--void-2);"></span></div>
+    <section style="padding:22px 0 50px;">
+      <div style="border-left:2px solid var(--ember);padding:6px 0 6px 16px;max-width:74ch;font-family:var(--body);font-size:14px;line-height:1.6;color:var(--bone);margin-bottom:22px;">Honest by discipline: <span style="color:var(--ember);">none of these are signed partnerships.</span> Sony hardware is the substrate. Qorvo is outreach, awaiting response. The rest are candidates aligned to the dev-kit BOM and the manufacturing spec.</div>
+      <div id="pg-partners" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;"></div>
+    </section>
+
+    <!-- IoTeX ROOTS -->
+    <div style="padding:30px 0 0;display:flex;align-items:center;gap:14px;"><span style="font-family:var(--disp);font-stretch:125%;font-weight:900;font-size:13px;letter-spacing:0.18em;text-transform:uppercase;color:var(--ember);">IoTeX ROOTS</span><span style="flex:1;height:1px;background:var(--void-2);"></span></div>
+    <section style="padding:22px 0 50px;">
+      <p style="font-family:var(--body);font-size:15px;line-height:1.65;color:var(--bone-dim);max-width:74ch;margin:0 0 18px;">A hardware partner is also adopting an IoTeX-native stack — device trust lives on the chain by design.</p>
+      <div id="pg-iotex" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"></div>
+    </section>
+
+    <!-- HONEST STATUS -->
+    <div style="padding:30px 0 0;display:flex;align-items:center;gap:14px;"><span style="font-family:var(--disp);font-stretch:125%;font-weight:900;font-size:13px;letter-spacing:0.18em;text-transform:uppercase;color:var(--ember);">HONEST STATUS</span><span style="flex:1;height:1px;background:var(--void-2);"></span></div>
+    <section style="padding:22px 0 50px;">
+      <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:14px;flex-wrap:wrap;">
+        <h2 style="font-family:var(--disp);font-stretch:125%;font-weight:800;font-size:clamp(20px,3vw,28px);color:var(--bone);margin:0;">Measured, and proposed</h2>
+        <span style="font-family:var(--mono);font-size:12px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ash);">· as of 2026-06-25 · reconciled against repo source</span>
+      </div>
+      <p style="font-family:var(--body);font-size:16px;line-height:1.65;color:var(--bone);max-width:70ch;margin:0 0 22px;">The part that earns trust: we never claim "unbeatable." Every signal raises spoof cost; every claim has a measurement that must pass first.</p>
+      <div id="pg-stats" style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px;"></div>
+      <div style="font-family:var(--mono);font-size:11.5px;letter-spacing:0.02em;color:var(--steel);background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:11px 16px;margin-bottom:24px;">AIT separation_ratio <span style="color:var(--bone);">1.199</span> at N=37 · humanity corpus N=3 (not population-level) · the adaptive-trigger moat is Stage-A-pending — all reported as such.</div>
+
+      <h3 style="font-family:var(--disp);font-stretch:125%;font-weight:700;font-size:15px;color:var(--bone);margin:0 0 10px;">Measured · shipped · re-derivable</h3>
+      <div id="pg-measured" style="display:grid;gap:6px;margin-bottom:24px;"></div>
+
+      <h3 style="font-family:var(--disp);font-stretch:125%;font-weight:700;font-size:15px;color:var(--bone);margin:0 0 10px;">What QorTroller does <span style="color:var(--oxblood);">not</span> claim</h3>
+      <div id="pg-notclaim" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;"></div>
+    </section>
+
+    <!-- THE ASK -->
+    <div style="padding:30px 0 0;display:flex;align-items:center;gap:14px;"><span style="font-family:var(--disp);font-stretch:125%;font-weight:900;font-size:13px;letter-spacing:0.18em;text-transform:uppercase;color:var(--ember);">THE ASK</span><span style="flex:1;height:1px;background:var(--void-2);"></span></div>
+    <section style="padding:22px 0 40px;">
+      <h2 style="font-family:var(--disp);font-stretch:125%;font-weight:800;font-size:clamp(20px,3vw,28px);color:var(--bone);margin:0 0 8px;">Does the BOM align with your <span style="color:var(--ember);">portfolio?</span></h2>
+      <p style="font-family:var(--body);font-size:15px;line-height:1.65;color:var(--bone-dim);max-width:72ch;margin:0 0 20px;">A 30-minute design-partner conversation. You bring the silicon and the manufacturing reality; we bring —</p>
+      <div id="pg-bring" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:24px;">
+        <span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.06em;text-transform:uppercase;color:var(--bone-dim);border:1px solid var(--void-2);border-radius:2px;padding:5px 11px;">architecture diagram</span>
+        <span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.06em;text-transform:uppercase;color:var(--bone-dim);border:1px solid var(--void-2);border-radius:2px;padding:5px 11px;">dev-kit BOM</span>
+        <span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.06em;text-transform:uppercase;color:var(--bone-dim);border:1px solid var(--void-2);border-radius:2px;padding:5px 11px;">Path A silicon spec</span>
+        <span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.06em;text-transform:uppercase;color:var(--bone-dim);border:1px solid var(--void-2);border-radius:2px;padding:5px 11px;">piezo design note</span>
+        <span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.06em;text-transform:uppercase;color:var(--bone-dim);border:1px solid var(--void-2);border-radius:2px;padding:5px 11px;">CAD STEP model</span>
+      </div>
+      <div style="padding:18px 20px;border-left:2px solid var(--ember);background:rgba(224,116,58,.05);border-radius:0 4px 4px 0;">
+        <span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.16em;text-transform:uppercase;color:var(--ember);">Honored, not surveilled</span>
+        <p style="font-family:var(--body);font-size:14.5px;line-height:1.65;color:var(--bone-dim);margin:9px 0 0;">Testnet only · no token · no external audit yet · N=3 corpus · all claims graded, not marketed. <span style="color:var(--ember);font-weight:600;">The honesty is the design.</span></p>
+      </div>
+      <div style="margin-top:26px;">
+        <a class="pg-stamp" href="https://github.com/ConWan30/QorTroller" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:11px;text-decoration:none;background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:11px 15px;">
+          <span style="width:7px;height:7px;border-radius:1px;transform:rotate(45deg);background:var(--steel);flex:0 0 auto;"></span>
+          <span style="display:flex;flex-direction:column;gap:2px;">
+            <span style="font-family:var(--mono);font-size:12px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--bone);">Verify the proofs&nbsp;&rarr;</span>
+            <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.04em;color:var(--ash);">testnet 4690 · re-derive every measured claim from source</span>
+          </span>
+        </a>
+      </div>
+    </section>
+
+    <!-- SHARED KIT · FOOTER -->
+    <footer style="display:flex;flex-wrap:wrap;gap:10px 28px;align-items:center;justify-content:space-between;padding:28px 0 8px;border-top:1px solid var(--void-2);">
+      <span style="font-family:var(--mono);font-size:11.5px;letter-spacing:0.04em;color:var(--bone-dim);">QorTroller — Core Controllers of their gaming data.</span>
+      <span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.06em;color:var(--ash);">QRESCE-0001 v0.5 · <span style="color:var(--steel);">V.A.P.I.</span> reference · IoTeX&nbsp;L1 · <a href="https://github.com/ConWan30/QorTroller" target="_blank" rel="noopener" style="color:var(--steel);text-decoration:none;border-bottom:1px solid var(--void-2);">github.com/ConWan30/QorTroller</a></span>
+    </footer>
+
   </div>
+</div>
 
-  <span class="chrome-foot"><span class="amber">FREEDOM-TO-OPERATE READ BEFORE ANY GEOMETRY EXTERNALIZES</span><span>NO TRIGGER STEP SHARED PRE-FTO</span></span>
-</section>
+<script>
+/* Data-driven lists + seal + scroll — ported from the design's renderVals (data verbatim). */
+(function () {
+  function set(id, html) { var el = document.getElementById(id); if (el) el.innerHTML = html; }
+  var GOLD = 'var(--struck)', EMBER = 'var(--ember)', STEEL = 'var(--steel)', OX = 'var(--oxblood)', BONE = 'var(--bone)';
+  var sc = { 'LIVE': GOLD, 'LIVE · ARC 1': GOLD, 'LIVE / ARC 2 PENDING': GOLD, 'NOVEL · STAGE A': EMBER, 'PROPOSED': STEEL, 'BUILT · ALIGNED': EMBER };
 
-<!-- ═══ 06 · HONEST STATUS — MEASURED VS PROPOSED ═══ -->
-<section data-screen-label="06 Honest status">
-  <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
-  <span class="chrome-meta"><span>06 · HONEST STATUS</span><span class="amber">MEASURED · VS · PROPOSED</span></span>
+  var chain = [
+    { step: '01 · physical input', name: 'Sensors', desc: 'Triggers · sticks · IMU · touchpad capture the human biomechanical signal at 1 kHz.', bar: STEEL },
+    { step: '02 · cognition', name: 'C1 · MCU', desc: 'An ESP32-S3-class MCU builds the 228-byte Proof-of-Autonomous-Cognition record.', bar: STEEL },
+    { step: '03 · root of trust', name: 'C2 · Secure element', desc: 'An on-chip, non-extractable P-256 key signs every record in silicon.', bar: BONE },
+    { step: '04 · output', name: 'Owned data', desc: 'A tamper-proof signed record, anchored on IoTeX. The gamer holds the key.', bar: GOLD }
+  ];
 
-  <p class="eyebrow">The part that earns trust — we are explicit about what's real</p>
-  <h2>What's <span class="chain">measured</span> · what's <span class="amber">proposed.</span></h2>
+  var features = [
+    { t: 'PoAC', name: '228-byte signed cognition', status: 'LIVE',
+      how: "The MCU builds a 228-byte Proof-of-Autonomous-Cognition record per cycle (164-byte body + 64-byte ECDSA-P256 sig); the secure element signs it in silicon. FROZEN wire format (INV-ARC7-001).",
+      artifact: '228-byte wire format · FROZEN',
+      iotex: 'Anchored on IoTeX L1 — the Internet-of-Trusted-Things atom.',
+      partner: 'C1 MCU (Espressif ESP32-S3 class) builds it; C2 secure element signs it.' },
+    { t: 'L4', name: 'Adaptive-trigger device-auth', status: 'NOVEL · STAGE A',
+      how: "A real Edge reshapes its force-response under adaptive-trigger resistance; the protocol reads a biomechanical 1 kHz force curve and extracts a humanity signal. An emulator, Cronus, or XIM renders no such physics. No known production prior art — the novelty is the signal-extraction, not the actuator.",
+      artifact: null,
+      iotex: 'Feeds the on-chain humanity verdict (isFullyEligible).',
+      partner: 'Rank-1 actuation R&D: co-develop a clean-sheet, FTO-clean programmable-resistance actuator. Boréas piezo (candidate) for the haptic challenge path.',
+      pending: 'Aspirational-primary · Stage A measurement pending · raises spoof cost, never absolute.' },
+    { t: 'Path A', name: 'Silicon-rooted device identity', status: 'LIVE / ARC 2 PENDING',
+      how: "Per-device birth certificates registered at VAPIManufacturerDeviceRegistry at manufacture time. deviceId = keccak256(controller_pubkey), FROZEN protocol-wide. isFullyEligible_PathA(bytes32) gates tournaments + marketplace + export in one composable read.",
+      artifact: 'IoTeX P256 precompile @ 0x0100 · verified in one view-call',
+      iotex: "IoTeX's native P256 precompile (0x0100) verifies the cert on-chain — a capability most chains lack.",
+      partner: 'C2 secure element (Microchip ATECC608B/608C class) holds the non-extractable P-256 key; manufacturing spec handoff-ready.',
+      pending: 'Arc 1 deployed; Arc 2 = real ATECC608x secure-element bring-up (the hardware step).' },
+    { t: 'L8', name: 'Spatial co-presence attestation', status: 'PROPOSED',
+      how: "A UWB ranging witness that a real controller is physically present in space — an additional anti-cloud-bot surface alongside L9 causal presence (which closes the cloud-gaming-bot stealth gap from the input side).",
+      artifact: null,
+      iotex: 'Extends the presence layer; the born-PQ commitment is aligned to IIP-64.',
+      partner: 'Qorvo UWB QM35825 (outreach submitted 2026-06-14); PMIC ACT88760 for the dev-kit power tree.' },
+    { t: 'PQ', name: 'Post-quantum device identity', status: 'BUILT · ALIGNED',
+      how: "The Decoupled Cryptographic Sidecar Pointer keeps the PoAC frame STRICTLY 228 bytes while a 3,309-byte ML-DSA-65 signature lives off-chain; only a 32-byte commitment crosses the boundary. The long-lived controller identity targets IIP-64 device-class PQ.",
+      artifact: null,
+      iotex: 'Forward-compatible with and aligned to IoTeX IIP-64 (PR #72, Xinxin Fan).',
+      partner: 'A born-PQ device credential, provisioned at manufacture — part of the handoff spec.',
+      pending: 'v2 wrapper deploy gated on an operator-interactive trusted-setup contribution.' },
+    { t: 'Fleet', name: 'ioID agent identity', status: 'LIVE',
+      how: "The autonomous operator fleet (Sentry · Guardian · Curator) at O3_ACTING is registered with IoTeX ioID DIDs — DePIN device/agent identity the IoTeX-native way.",
+      artifact: 'O3_ACTING · ioID DIDs · FRR 0x54b4b698… anchored',
+      iotex: 'ioID DIDs + token-bound accounts — IoTeX-native identity.',
+      partner: 'A partner adopting the stack inherits IoTeX-native device + agent identity.' }
+  ].map(function (f) { return Object.assign({}, f, { statusColor: sc[f.status] || STEEL }); });
 
-  <div class="mp">
-    <div class="col measured">
-      <h3 style="color: var(--chain);">Measured / shipped</h3>
-      <div class="row"><span class="l">Deployed contracts (IoTeX testnet)</span><span class="n">66 · 58 active</span></div>
-      <div class="row"><span class="l">PV-CI invariants (fail-closed)</span><span class="n">174 / 174</span></div>
-      <div class="row"><span class="l">Automated tests</span><span class="n">~5,766</span></div>
-      <div class="row"><span class="l">Grind-integrity chain</span><span class="n">GIC_100 reached</span></div>
-      <div class="row"><span class="l">A.I.T. biometric separation</span><span class="n">ratio 1.199 · N=37</span></div>
-    </div>
-    <div class="col proposed">
-      <h3 style="color: var(--accent-amber);">Proposed / pending</h3>
-      <div class="row"><span class="l">Mainnet / token</span><span class="n">none — testnet only</span></div>
-      <div class="row"><span class="l">External Solidity audit</span><span class="n">not yet</span></div>
-      <div class="row"><span class="l">Player corpus breadth</span><span class="n">N=3 — small, disclosed</span></div>
-      <div class="row"><span class="l">Stick / IMU / trigger silicon</span><span class="n">Stage A pending</span></div>
-      <div class="row"><span class="l">Purpose-built controller</span><span class="n">this conversation</span></div>
-    </div>
-  </div>
+  var bom = [
+    { id: 'C1 · MCU', part: 'ESP32-S3', desc: '1 kHz poll · builds the 228-byte record', kind: 'spec' },
+    { id: 'C2 · Secure element', part: 'ATECC608B/C', desc: 'on-chip P-256 · silicon root of trust', kind: 'root' },
+    { id: 'C3 · Left stick', part: 'Hall / TMR', desc: 'contactless · L4 fingerprint surface', kind: 'pending' },
+    { id: 'C4 · Right stick', part: 'same family', desc: 'L/R must match sensing physics', kind: 'pending' },
+    { id: 'C5 · IMU', part: '6-axis', desc: 'gravity-postural biometric · anti-spoof', kind: 'pending' },
+    { id: 'C6 · USB-C', part: 'connector', desc: 'exclusive-capture 1 kHz HID link', kind: 'spec' },
+    { id: 'C7 · Trigger ×2', part: 'adaptive', desc: 'force-curve liveness · aspirational-primary', kind: 'pending' },
+    { id: 'C8 · Touchpad', part: 'capacitive', desc: '12-bit 2-point · co-signal surface', kind: 'spec' }
+  ].map(function (b) { return Object.assign({}, b, { color: b.kind === 'pending' ? EMBER : b.kind === 'root' ? BONE : STEEL }); });
 
-  <p class="mono" style="margin-top: 32px; font-size: 15px; color: var(--text-faint);">
-    We never claim "unbeatable." Every signal <span style="color: var(--text-dim)">raises spoof cost</span>; every claim has a measurement that must pass first.
-  </p>
+  var partners = [
+    { name: 'Sony', status: 'HW SUBSTRATE', color: STEEL, note: 'DualShock Edge (CFI-ZCP1) is the device QorTroller runs on today — the 1 kHz capture floor that makes spectral biometrics possible. Substrate, not a partner.' },
+    { name: 'Qorvo', status: 'OUTREACH · 2026-06-14', color: EMBER, note: 'UWB QM35825 for spatial co-presence attestation (anti-cloud-bot / L8 witness) + PMIC ACT88760 for the dev-kit power tree. First external HW-partner outreach; awaiting response — not a partnership.' },
+    { name: 'Boréas Technologies', status: 'CANDIDATE', color: STEEL, note: 'Piezoelectric haptic drivers (CapDrive) for the adaptive-trigger surface and the L6 reflex challenge channel. Alignment, no engagement claimed.' },
+    { name: 'Microchip', status: 'CANDIDATE', color: STEEL, note: 'ATECC608B/608C-class secure element — C2, the silicon root of trust (Path A Arc 2). 608A is NRND; spec targets the 608B/608C family.' },
+    { name: 'Espressif', status: 'CANDIDATE', color: STEEL, note: 'ESP32-S3-class MCU — C1, which builds the 228-byte record. Must pair with a secure element; ESP32 alone is not a substitute.' },
+    { name: 'Aftermarket stick scene', status: 'CANDIDATES', color: STEEL, note: 'GuliKit / Battle Beaver / MODDEDZONE / K-Silver — Hall/TMR stick modules (C3/C4) + reference dev-kit assembly. Separability measurement-pending.' },
+    { name: 'Controller manufacturer', status: 'HANDOFF-READY', color: STEEL, note: 'The Path A manufacturing spec is partner-handoff-ready: a 12-step provisioning ceremony + deployed bytecode + a demonstrated POC. Spec ready; no manufacturer signed.' }
+  ];
 
-  <span class="chrome-foot"><span class="chain">MEASURED</span><span class="amber">PROPOSED — STAGE A GATES NAMED</span></span>
-</section>
+  var iotexRoots = [
+    { k: 'Birth certs · IoTeX L1', gold: true, v: 'Every device certificate is anchored on chain 4690 at manufacture time.' },
+    { k: 'P256 precompile · 0x0100', gold: true, v: 'Native ECDSA-P256 verify in one view-call — a capability most chains lack.' },
+    { k: 'ioID · device & agent DIDs', gold: true, v: 'IoTeX-native decentralized identity for devices and the operator fleet.' },
+    { k: 'IIP-64 · PQ device identity', gold: false, v: 'Born-PQ controller identity aligned to IIP-64 (PR #72, Xinxin Fan).' }
+  ].map(function (r) { return Object.assign({}, r, { kColor: r.gold ? GOLD : STEEL }); });
 
-<!-- ═══ 07 · C7 — STRONGEST SIGNAL SURFACE ═══ -->
-<section data-screen-label="07 C7 signal">
-  <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
-  <span class="chrome-meta"><span>07 · C7 · ASPIRATIONAL-PRIMARY</span><span class="amber">FORCE-CURVE LIVENESS</span></span>
+  var stats = [
+    { label: 'CONTRACTS · IoTeX 4690', value: '66',  sub: 'deployed on testnet · ≈58 active' },
+    { label: 'CI · INVARIANTS',        value: '179', sub: 'enforced fail-closed · SHA-256-pinned' },
+    { label: 'FROZEN-v1 · PRIMITIVES', value: '15',  sub: 'PATTERN-017 · 14 VAPI + 1 QorTroller' },
+    { label: 'OPERATOR · FLEET',       value: '38',  sub: 'O3_ACTING · first ≥3-agent fleet' }
+  ];
 
-  <p class="eyebrow"><span class="amber">The adaptive trigger</span> · strongest signal surface</p>
-  <h2>The novelty is the <span class="amber">signal</span>, not the actuator.</h2>
+  var measured = [
+    '228-byte PoAC wire format FROZEN (INV-ARC7-001) · the device atomic output.',
+    '66 contracts deployed on IoTeX testnet 4690 · ≈58 active.',
+    '179 fail-closed CI invariants · ~5,766 automated tests.',
+    'Grind Integrity Chain reached GIC_100 · anchored.',
+    'Silicon-rooted Path A Arc 1 deployed · verify_device_cert VERDICT VALID against DualShock with 637K+ PoAC records.',
+    'Operator fleet at O3_ACTING · ioID DIDs · Fleet Readiness Root 0x54b4b698… anchored.'
+  ];
 
-  <div class="grid-2" style="margin-top: 36px;">
-    <div class="panel">
-      <div class="panel__eye"><span class="lbl">THE SIGNAL — THE NOVELTY</span><span class="meta">L4</span></div>
-      <p class="mono" style="font-size: 16px; color: var(--text-dim); line-height: 1.6;">
-        The protocol reads a <span style="color: var(--text)">biomechanical 1 kHz force curve</span> that translator
-        hardware (Cronus / XIM) physically cannot synthesize, and turns it into a humanity signal.
-        <span style="color: var(--accent-amber)">Force-curve liveness extraction</span> — this is the IP.
-      </p>
-    </div>
-    <div class="panel">
-      <div class="panel__eye"><span class="lbl">THE ACTUATOR — PRIOR ART</span><span class="meta">CUSTOM · CLEAN-SHEET</span></div>
-      <p class="mono" style="font-size: 16px; color: var(--text-dim); line-height: 1.6;">
-        Adaptive triggers are patented prior art. We do <span style="color: var(--text)">not</span> clone one —
-        the rank-1 partner co-develops a clean-sheet actuator under a freedom-to-operate read.
-        No trigger geometry externalizes before FTO clears.
-      </p>
-    </div>
-  </div>
+  var doesNotClaim = [
+    { t: 'Testnet only — IoTeX chain 4690. No mainnet deployment.', c: STEEL, mark: '○' },
+    { t: 'Humanity corpus small — N=3. Not a population-level claim.', c: STEEL, mark: '○' },
+    { t: 'all_pairs_p0_ok still failing — the per-pair separation gate is not green.', c: OX, mark: '×' },
+    { t: 'Stage A gates open — the adaptive-trigger moat is not yet measured.', c: STEEL, mark: '○' },
+    { t: 'No external Solidity audit has been performed.', c: OX, mark: '×' },
+    { t: 'No fiat, no token launch — issuance hard-gated on separation_ratio > 1.0.', c: STEEL, mark: '○' }
+  ];
 
-  <div style="display: flex; gap: 18px; margin-top: 32px;">
-    <span class="chip chip--pending">Aspirational-primary</span>
-    <span class="chip chip--pending">FTO gate</span>
-    <span class="chip chip--pending">Stage A measurement</span>
-  </div>
+  var whatWeBring = [
+    { k: 'Tested protocol stack', v: 'Runs today on testnet — not vaporware.' },
+    { k: 'Defined dev-kit BOM', v: 'C1–C8 + advisory, with a two-supplier discipline rail.' },
+    { k: 'Staged measurement plan', v: 'Stage A empirical unknowns — we know what must be proven first.' },
+    { k: 'Digital prototype', v: 'A CAD STEP model + exploded architecture for design alignment.' },
+    { k: 'IoTeX DePIN fit', v: 'Native to IoTeX — a grant co-funding path (Halo) alongside the build.' }
+  ];
 
-  <span class="chrome-foot"><span class="amber">RAISES SPOOF COST — NOT "IMPOSSIBLE"</span><span>EMPIRICAL UNKNOWN #1 · MAHALANOBIS &gt; 1.0</span></span>
-</section>
+  // ── build lists ──
+  set('pg-chain', chain.map(function (c) {
+    return '<div style="background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:15px 16px;border-top:2px solid ' + c.bar + ';"><div style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ash);">' + c.step + '</div><div style="font-family:var(--disp);font-stretch:125%;font-weight:700;font-size:16px;color:var(--bone);margin:7px 0 6px;">' + c.name + '</div><div style="font-family:var(--body);font-size:12px;line-height:1.5;color:var(--bone-dim);">' + c.desc + '</div></div>';
+  }).join(''));
 
-<!-- ═══ 08 · COMPONENTS (BOM) ═══ -->
-<section data-screen-label="08 Components">
-  <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
-  <span class="chrome-meta"><span>08 · THE BOM</span><span class="amber">C1 – C8</span></span>
+  set('pg-features', features.map(function (f) {
+    var artifact = f.artifact ? '<div style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.02em;color:var(--struck);font-variant-ligatures:none;word-break:break-word;">' + f.artifact + '</div>' : '';
+    var pending = f.pending ? '<div style="font-family:var(--mono);font-size:10px;letter-spacing:0.02em;color:var(--ember);">' + f.pending + '</div>' : '';
+    return '<div style="background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:16px 18px;display:flex;flex-direction:column;gap:9px;">'
+      + '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">'
+      + '<span style="font-family:var(--mono);font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:var(--bone);"><span style="color:var(--ash);">' + f.t + ' ·</span> ' + f.name + '</span>'
+      + '<span style="flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:9.5px;letter-spacing:0.06em;text-transform:uppercase;color:' + f.statusColor + ';border:1px solid ' + f.statusColor + ';border-radius:2px;padding:2px 6px;"><span style="width:5px;height:5px;border-radius:50%;background:' + f.statusColor + ';"></span>' + f.status + '</span>'
+      + '</div>'
+      + '<p style="font-family:var(--body);font-size:12.5px;line-height:1.55;color:var(--bone-dim);margin:0;">' + f.how + '</p>'
+      + artifact + pending
+      + '<div style="margin-top:2px;display:flex;flex-direction:column;gap:5px;border-top:1px solid var(--void-2);padding-top:9px;">'
+      + '<div style="font-family:var(--body);font-size:11.5px;line-height:1.45;color:var(--bone-dim);"><span style="color:var(--ember);font-family:var(--mono);font-size:10px;letter-spacing:0.04em;">◈ IoTeX</span> · ' + f.iotex + '</div>'
+      + '<div style="font-family:var(--body);font-size:11.5px;line-height:1.45;color:var(--bone-dim);"><span style="color:var(--steel);font-family:var(--mono);font-size:10px;letter-spacing:0.04em;">⬡ Partner</span> · ' + f.partner + '</div>'
+      + '</div></div>';
+  }).join(''));
 
-  <p class="eyebrow">Dev-kit bill of materials · honest status coding</p>
-  <h2>Eight critical parts <span class="amber">·</span> one cryptographic spine.</h2>
+  set('pg-bom', bom.map(function (b) {
+    return '<div style="background:var(--void-1);border:1px solid var(--void-2);border-left:3px solid ' + b.color + ';border-radius:4px;padding:14px 15px;"><div style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ash);">' + b.id + '</div><div style="font-family:var(--disp);font-stretch:125%;font-weight:700;font-size:16px;color:var(--bone);margin:6px 0 5px;">' + b.part + '</div><div style="font-family:var(--body);font-size:11.5px;line-height:1.45;color:var(--bone-dim);">' + b.desc + '</div></div>';
+  }).join(''));
 
-  <div class="grid-4" style="margin-top: 36px;">
-    <div class="comp spec"><span class="id">C1 · MCU</span><p class="nm">ESP32-S3</p><p class="ds">1 kHz poll · builds the 228-byte record</p></div>
-    <div class="comp secure"><span class="id">C2 · SECURE ELEMENT</span><p class="nm">ATECC608B/C</p><p class="ds">on-chip P-256 · silicon root of trust</p></div>
-    <div class="comp pending"><span class="id">C3 · LEFT STICK</span><p class="nm">Hall / TMR</p><p class="ds">contactless · L4 fingerprint surface</p></div>
-    <div class="comp pending"><span class="id">C4 · RIGHT STICK</span><p class="nm">same family</p><p class="ds">L/R must match sensing physics</p></div>
-    <div class="comp pending"><span class="id">C5 · IMU</span><p class="nm">6-axis</p><p class="ds">gravity-postural biometric · anti-spoof</p></div>
-    <div class="comp spec"><span class="id">C6 · USB-C</span><p class="nm">connector</p><p class="ds">exclusive-capture 1 kHz HID link</p></div>
-    <div class="comp pending"><span class="id">C7 · TRIGGER ×2</span><p class="nm">adaptive</p><p class="ds">force-curve liveness · aspirational-primary</p></div>
-    <div class="comp spec"><span class="id">C8 · TOUCHPAD</span><p class="nm">capacitive</p><p class="ds">12-bit 2-point · co-signal surface</p></div>
-  </div>
+  set('pg-partners', partners.map(function (p) {
+    return '<div style="background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:15px 18px;"><div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px;"><span style="font-family:var(--disp);font-stretch:125%;font-weight:700;font-size:15px;color:var(--bone);">' + p.name + '</span><span style="flex:0 0 auto;font-family:var(--mono);font-size:9.5px;letter-spacing:0.06em;text-transform:uppercase;color:' + p.color + ';border:1px solid ' + p.color + ';border-radius:2px;padding:2px 6px;">' + p.status + '</span></div><p style="font-family:var(--body);font-size:12.5px;line-height:1.55;color:var(--bone-dim);margin:0;">' + p.note + '</p></div>';
+  }).join(''));
 
-  <div style="display: flex; gap: 24px; margin-top: 30px;">
-    <span class="chip chip--pending">Amber · Stage A measurement pending</span>
-    <span class="chip" style="color: var(--gamer-cyan);">Cyan · spec known</span>
-    <span class="chip chip--secure">Magenta · cryptographic root</span>
-  </div>
+  set('pg-iotex', iotexRoots.map(function (r) {
+    return '<div style="display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:baseline;background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:13px 16px;"><span style="font-family:var(--mono);font-size:11px;letter-spacing:0.04em;text-transform:uppercase;color:' + r.kColor + ';white-space:nowrap;">' + r.k + '</span><span style="font-family:var(--body);font-size:12.5px;line-height:1.5;color:var(--bone-dim);">' + r.v + '</span></div>';
+  }).join(''));
 
-  <span class="chrome-foot"><span class="amber">608A IS NRND — 608B/608C-CLASS FAMILY</span><span>TWO-SUPPLIER DISCIPLINE BEFORE LIVE-SUPPLIED</span></span>
-</section>
+  set('pg-stats', stats.map(function (s) {
+    return '<div style="background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:16px 18px;"><div style="font-family:var(--mono);font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ash);">' + s.label + '</div><div style="font-family:var(--disp);font-stretch:125%;font-weight:900;font-size:34px;line-height:1;color:var(--struck);margin:8px 0 5px;">' + s.value + '</div><div style="font-family:var(--mono);font-size:10px;line-height:1.5;color:var(--ash);">' + s.sub + '</div></div>';
+  }).join(''));
 
-<!-- ═══ 09 · PIEZO SURFACES (Sensor Stack v2.2) ═══ -->
-<section data-screen-label="09 Piezo">
-  <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
-  <span class="chrome-meta"><span>09 · PIEZO · v2.2</span><span class="amber">PROPOSAL</span></span>
+  set('pg-measured', measured.map(function (t) {
+    return '<div style="display:flex;gap:10px;padding:8px 13px;background:var(--void-1);border-left:2px solid var(--struck);"><span style="color:var(--struck);flex:0 0 auto;">●</span><span style="font-family:var(--body);font-size:13px;line-height:1.5;color:var(--bone-dim);">' + t + '</span></div>';
+  }).join(''));
 
-  <p class="eyebrow"><span class="amber">Sensor Stack v2.2</span> · design-note proposal — not yet measured</p>
-  <h2>Two piezo surfaces <span class="amber">·</span> each with a named Stage A gate.</h2>
+  set('pg-notclaim', doesNotClaim.map(function (x) {
+    return '<div style="display:flex;gap:10px;padding:8px 13px;background:var(--void-1);border-left:2px solid ' + x.c + ';"><span style="color:' + x.c + ';flex:0 0 auto;font-family:var(--mono);">' + x.mark + '</span><span style="font-family:var(--body);font-size:12.5px;line-height:1.5;color:var(--bone-dim);">' + x.t + '</span></div>';
+  }).join(''));
 
-  <div class="grid-2" style="margin-top: 40px;">
-    <div class="panel">
-      <div class="panel__eye"><span class="lbl">SURFACE 7 · PIEZO-ACOUSTIC</span><span class="meta">L0 / L9 · LIVENESS</span></div>
-      <h3>Grip liveness gate</h3>
-      <p class="mono" style="font-size: 15px; color: var(--text-dim); line-height: 1.55;">
-        An ultrasonic wave through the shell; a human grip damps it tissue-characteristically.
-        A fast held-vs-not pre-gate. <span style="color: var(--accent-amber)">Liveness only — not a per-person identity claim.</span>
-        Gate: Empirical Unknown #5 (confound-robust separability).
-      </p>
-    </div>
-    <div class="panel">
-      <div class="panel__eye"><span class="lbl">SURFACE 8 · PIEZO HAPTIC</span><span class="meta">L6 · CHALLENGE</span></div>
-      <h3>Reflex stimulus channel</h3>
-      <p class="mono" style="font-size: 15px; color: var(--text-dim); line-height: 1.55;">
-        Sub-ms localized taps (Boréas CapDrive) provoke an involuntary reflex in the 80–280 ms window.
-        Cleaner than voice-coil. Gate: Empirical Unknown #6 + the L6B N≥50 corpus.
-      </p>
-    </div>
-  </div>
+  set('pg-bring', whatWeBring.map(function (w) {
+    return '<div style="display:grid;grid-template-columns:200px 1fr;gap:14px;background:var(--void-1);border:1px solid var(--void-2);border-radius:4px;padding:12px 16px;"><span style="font-family:var(--mono);font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:var(--steel);">' + w.k + '</span><span style="font-family:var(--body);font-size:12.5px;line-height:1.5;color:var(--bone-dim);">' + w.v + '</span></div>';
+  }).join(''));
 
-  <p class="mono" style="margin-top: 32px; font-size: 14px; color: var(--text-faint);">
-    Vendor reality check: piezo haptics → <span style="color: var(--text-dim)">Boréas</span> (not Qorvo, whose acoustic-wave is RF BAW/SAW). Verify portfolios before any named commitment.
-  </p>
+  // ── seal (resting steel) + scroll progress ──
+  var reduced = (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) || false;
+  var canvas = document.getElementById('pg-seal');
+  function drawSeal(t) {
+    if (!canvas || !window.PGSeal) return;
+    var dpr = window.devicePixelRatio || 1, w = canvas.clientWidth, h = canvas.clientHeight; if (!w || !h) return;
+    if (canvas.width !== Math.round(w * dpr)) { canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr); }
+    var ctx = canvas.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+    window.PGSeal.drawStruckSeal(ctx, { cx: w / 2, cy: h / 2, R: Math.min(w, h) * 0.4, color: '#6E8CA8', now: t, motion: !reduced, seed: window.PGSeal.seedInt('0x9f3c2b…a3f8') });
+  }
+  function loop(t) { drawSeal(t); requestAnimationFrame(loop); }
+  requestAnimationFrame(loop);
 
-  <span class="chrome-foot"><span class="amber">DESIGN NOTE — NO LIVE CLAIM</span><span>RAISES SPOOF COST · PENDING STAGE A</span></span>
-</section>
-
-<!-- ═══ 10 · WHAT WE BRING ═══ -->
-<section data-screen-label="10 What we bring">
-  <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
-  <span class="chrome-meta"><span>10 · WHAT WE BRING</span><span class="chain">●</span></span>
-
-  <p class="eyebrow">You bring the silicon and manufacturing reality. We bring —</p>
-  <h2>A protocol, a BOM, and a <span class="amber">measurement plan.</span></h2>
-
-  <div class="stack" style="margin-top: 36px; max-width: 1500px;">
-    <div class="kv"><span class="k">Tested protocol stack</span><span class="v chain">Runs today on testnet — not vaporware</span></div>
-    <div class="kv"><span class="k">Defined dev-kit BOM</span><span class="v">C1–C8 + advisory, two-supplier discipline rail</span></div>
-    <div class="kv"><span class="k">Staged measurement plan</span><span class="v">Stage A empirical unknowns — we know what must be proven</span></div>
-    <div class="kv"><span class="k">Digital prototype</span><span class="v">CAD model + exploded architecture for design alignment</span></div>
-    <div class="kv"><span class="k">Ecosystem fit</span><span class="v amber">Native to IoTeX DePIN — grant co-funding path (Halo)</span></div>
-  </div>
-
-  <span class="chrome-foot"><span class="amber">FORENSIC · INSTRUMENT · PANEL</span><span>MEETS · LIVING · CRYPTOGRAPHIC · SPECIMEN</span></span>
-</section>
-
-<!-- ═══ 11 · THE ASK ═══ -->
-<section data-screen-label="11 The ask">
-  <span class="chrome-mark">Qor<span class="t">T</span>roller</span>
-  <span class="chrome-meta"><span>11 · THE ASK</span><span class="amber">30 MINUTES</span></span>
-
-  <p class="eyebrow"><span class="amber">One conversation</span></p>
-  <h1>Does the BOM align with<br>your <span class="amber">portfolio?</span></h1>
-  <p class="lede" style="margin-top: 44px; max-width: 1380px;">
-    A 30-minute design-partner conversation. We bring the protocol, the BOM, and the measurement plan.
-    You bring the silicon and the manufacturing reality. <span class="text">What would a reference dev-kit build look like?</span>
-  </p>
-
-  <div style="display: flex; gap: 16px; margin-top: 44px; flex-wrap: wrap;">
-    <span class="chip" style="color: var(--text-dim);">architecture diagram</span>
-    <span class="chip" style="color: var(--text-dim);">dev-kit BOM</span>
-    <span class="chip" style="color: var(--text-dim);">Path A silicon spec</span>
-    <span class="chip" style="color: var(--text-dim);">piezo design note</span>
-    <span class="chip" style="color: var(--text-dim);">CAD STEP model</span>
-  </div>
-
-  <span class="chrome-foot"><span class="amber">PACKET ATTACHED</span><span>QORTROLLER · CONWAN30/QORTROLLER</span></span>
-</section>
-
-<!-- ═══ 12 · CLOSING / HONESTY ═══ -->
-<section data-screen-label="12 Closing" style="display: grid; place-items: center; text-align: center;">
-  <div>
-    <p class="eyebrow center" style="margin-bottom: 28px;"><span class="chain">●</span> &nbsp;IoTeX · Internet of Trusted Things</p>
-    <p style="font-family: var(--font-display); font-weight: 800; font-size: 88px; line-height: 1.0; letter-spacing: -0.03em; color: var(--text); margin: 0;">
-      Honored, <span style="color: var(--accent-amber);">not surveilled.</span>
-    </p>
-    <p class="mono" style="margin-top: 40px; font-size: 16px; color: var(--text-faint); letter-spacing: 0.08em; max-width: 1100px;">
-      Testnet only · no token · no external audit yet · N=3 corpus · all claims graded, not marketed.
-      The honesty is the design.
-    </p>
-  </div>
-  <span class="chrome-foot"><span class="amber">QorTroller · V.A.P.I. reference controller</span><span>PARTNER BRIEF · v0.1 · 2026-06-13</span></span>
-</section>
-
-</deck-stage>
-
-<script src="/deck-stage.js"></script>
-
-<script type="application/json" id="speaker-notes">
-[
-  "Cover. QorTroller — the V.A.P.I. reference controller. Open with the one line: the input device is the cryptographic owner of the data it produces.",
-  "Thesis. Verify the human where the signal is born, and let the gamer own the data. Cheating can't be asserted. Honored, not surveilled.",
-  "Why now. The software is real and running on testnet. What's missing is purpose-built silicon. We're opening a design-partner conversation, not asking for a finished product.",
-  "Trust chain. Sensors capture at 1 kHz → MCU builds the 228-byte record → secure element signs it in silicon → tamper-proof gamer-owned data on IoTeX. The physical source IS the cryptographic agency-holder.",
-  "Partners ranked by leverage. Rank 1 is an actuation development partner — the trigger is the strongest signal AND the biggest IP risk. Boréas for haptic piezo. Qorvo for RF/power (NOT piezo). Assembly house for sticks. FTO before any geometry externalizes.",
-  "Honest status — measured vs proposed. This is the trust-builder. Real numbers on the left (66/58 contracts, 174 invariants, ~5,766 tests, GIC_100, AIT 1.199). Honest gaps on the right (testnet only, no audit, N=3, Stage A pending). We never say unbeatable.",
-  "C7. The novelty is the force-curve LIVENESS EXTRACTION — the signal — not the actuator (which is patented prior art). We co-develop a clean-sheet actuator under FTO. Aspirational-primary.",
-  "The BOM. C1–C8 with honest color coding: amber = Stage A pending, cyan = spec known, magenta = the crypto root. 608A is NRND — we spec the 608B/608C family.",
-  "Piezo surfaces (Sensor Stack v2.2). Surface 7 acoustic grip-liveness (gate only, not identity). Surface 8 L6 haptic reflex stimulus (Boréas). Design-note proposal, Stage A gated.",
-  "What we bring: tested stack, defined BOM, measurement plan, digital prototype, IoTeX DePIN fit (grant co-funding).",
-  "The ask: a 30-minute conversation. Does the BOM align with your portfolio? Packet attached: diagram, BOM, spec, piezo note, CAD STEP.",
-  "Close. Honored, not surveilled. All claims graded, not marketed — the honesty is the design."
-]
+  var prog = document.getElementById('pg-prog');
+  function onScroll() { if (!prog) return; var max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight); prog.style.width = Math.min(100, Math.max(0, (window.scrollY / max) * 100)) + '%'; }
+  window.addEventListener('scroll', onScroll, { passive: true }); onScroll();
+})();
 </script>
-
 </body>
 </html>
