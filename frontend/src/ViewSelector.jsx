@@ -1,75 +1,65 @@
-import { useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { useHeartbeatStore } from './heartbeat/useHeartbeat'
-import { FONTS, GAMER } from './shared/design/tokens'
-import { RealityDot } from './design/realityHeartbeat'
-import { Wordmark } from './design/Primitives'
+import { useRef, useEffect } from 'react'
 
-// Tab bar curated 2026-06-24 to the 4 external-facing surfaces only (was 8 — too crowded):
-// the product (Gamer) + the three outreach/reference decks (IoTeX grant, partner pitch,
-// reference). Operator + AI-Chat removed from the app; Forensic + VPM de-listed but kept
-// URL-reachable (`/?view=forensic`, `/?view=vpm`) as the "verify it yourself" proof surfaces
-// to link from the decks. The Evidence-OS header link is removed.
+// PROVING GROUND tab strip — ported faithfully from the Claude Design "PG Tab Strip.dc.html"
+// (round 1). Forge palette + Archivo wordmark (ember medial-T) + Martian Mono tabs + the steel
+// Struck Seal chip (window.PGSeal, loaded globally via index.html). Four destinations; ALL live in
+// production — the design's SOON badges on Grant/Partner are a design-preview state (those tabs
+// render their not-yet-reskinned bodies until their reskin rounds). Reference is relabelled About.
+const PAL = {
+  void1: '#0A1120', void2: '#111B2E',
+  steel: '#6E8CA8', ember: '#E0743A', ash: '#4A5260', bone: '#E9E2D2',
+}
+const DISP = "'Archivo', system-ui, sans-serif"
+const MONO = "'Martian Mono', ui-monospace, monospace"
+
+// Same four destinations + ids as App.jsx VIEW_MAP. Reference id retained ('reference'); label = About.
 const VIEWS = [
-  { id: 'gamer',     num: '01', label: 'Gamer',           accent: GAMER.cyan },
-  { id: 'grant',     num: '02', label: 'IoTeX · Grant',   accent: '#f0a868' },
-  { id: 'partner',   num: '03', label: 'Partner · Pitch', accent: '#f0a868' },
-  { id: 'reference', num: '04', label: 'Reference',       accent: '#5bd6a3' },
+  { id: 'gamer',     label: 'Gamer' },
+  { id: 'grant',     label: 'IoTeX · Grant' },
+  { id: 'partner',   label: 'Partner · Pitch' },
+  { id: 'reference', label: 'About' },
 ]
 
+// The shared Struck Seal, rendered small + resting-steel in the strip (one source of truth:
+// window.PGSeal from /pg-seal.js). Mirrors PG Tab Strip's drawChip.
+function SealChip() {
+  const ref = useRef(null)
+  useEffect(() => {
+    let raf
+    const reduced = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+    const loop = (t) => {
+      const c = ref.current
+      if (c && window.PGSeal) {
+        const dpr = window.devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight
+        if (w && h) {
+          if (c.width !== Math.round(w * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr) }
+          const ctx = c.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h)
+          window.PGSeal.drawStruckSeal(ctx, { cx: w / 2, cy: h / 2, R: Math.min(w, h) * 0.34, color: PAL.steel, now: t, motion: !reduced, seed: 0x9f3c2ba3 })
+        }
+      }
+      raf = requestAnimationFrame(loop)
+    }
+    raf = requestAnimationFrame(loop)
+    return () => { if (raf) cancelAnimationFrame(raf) }
+  }, [])
+  return <canvas ref={ref} style={{ width: 26, height: 26, display: 'block' }} />
+}
+
 export function ViewSelector({ activeView, onViewChange }) {
-  const merkleRoot    = useHeartbeatStore((s) => s.merkleRoot)
-  const onChain       = useHeartbeatStore((s) => s.onChainConfirmed)
-
   return (
-    <div style={{
-      display:        'flex',
-      alignItems:     'center',
-      justifyContent: 'space-between',
-      gap:            12,
-      padding:        '6px 16px',
-      borderBottom:   '1px solid rgba(255,255,255,0.06)',
-      background:     'rgba(2,4,8,0.95)',
-      backdropFilter: 'blur(12px)',
-      zIndex:         100,
-      flexShrink:     0,
-      // Bulletproof against horizontal overflow: the bar never widens the
-      // window (html/body is overflow:auto for the public-viewer routes, so a
-      // too-wide header would otherwise produce a side-scrollbar on the SPA).
-      minWidth:       0,
-      maxWidth:       '100vw',
-      overflow:       'hidden',
+    <header style={{
+      display: 'flex', alignItems: 'center', gap: 26, height: 56, padding: '0 28px',
+      background: 'rgba(6,9,16,.92)', borderBottom: `1px solid ${PAL.void2}`,
+      backdropFilter: 'blur(12px)', zIndex: 100, flexShrink: 0,
+      minWidth: 0, maxWidth: '100vw', overflow: 'hidden',
     }}>
-      {/* Left: QorTroller wordmark — V.A.P.I. reference implementation.
-          Path A handoff PR 1: replaced 14 lines of inline-JSX wordmark
-          with the scope-independent <Wordmark> primitive (Primitives.jsx).
-          Eliminates the drift v3 audit flagged ("wordmark duplicated as
-          inline JSX rather than using the shared primitive"). All sub-11px
-          font sizes in this strip bumped to 11px per brand-spec floor. */}
-      <div style={{
-        display: 'flex', alignItems: 'baseline', gap: 10,
-        minWidth: 0, flexShrink: 1, overflow: 'hidden',
-      }}>
-        <Wordmark size={18} />
-        <span style={{
-          fontFamily:    FONTS.mono,
-          fontSize:      11,
-          color:         'rgba(74,158,255,0.55)',
-          letterSpacing: '0.12em',
-          textTransform: 'uppercase',
-          whiteSpace:    'nowrap',
-          overflow:      'hidden',
-          textOverflow:  'ellipsis',
-          flexShrink:    1,
-          minWidth:      0,
-        }}>
-          <span style={{ color: 'rgba(240,168,104,0.65)' }}>V.A.P.I.</span>
-        </span>
-      </div>
+      {/* wordmark — Archivo (expanded), ember medial-T */}
+      <span style={{ fontFamily: DISP, fontStretch: '125%', fontWeight: 800, fontSize: 19, letterSpacing: '-0.01em', color: PAL.bone, whiteSpace: 'nowrap', flexShrink: 0 }}>
+        Qor<span style={{ color: PAL.ember }}>T</span>roller
+      </span>
 
-      {/* Center: view tabs — priority element; never shrinks (the 01–04
-          numbered sequence stays intact + on one line). */}
-      <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
+      {/* tabs — Martian Mono; active = bone + ember underline, inactive = steel */}
+      <nav style={{ display: 'flex', alignItems: 'center', gap: 2, minWidth: 0, overflow: 'hidden' }}>
         {VIEWS.map((v) => {
           const active = v.id === activeView
           return (
@@ -77,74 +67,24 @@ export function ViewSelector({ activeView, onViewChange }) {
               key={v.id}
               onClick={() => onViewChange(v.id)}
               style={{
-                background:    active ? `${v.accent}18` : 'transparent',
-                border:        `1px solid ${active ? v.accent + '55' : 'rgba(255,255,255,0.06)'}`,
-                borderRadius:  4,
-                padding:       '4px 14px',
-                fontFamily:    FONTS.body,
-                fontSize:      13,
-                fontWeight:    active ? 700 : 500,
-                letterSpacing: '0.01em',
-                color:         active ? v.accent : 'rgba(200,216,232,0.50)',
-                cursor:        'pointer',
-                transition:    'all 0.15s ease',
-                // Stacked tab — number above label, per the design's final
-                // iteration ("01 / Gamer"). Number sits on its own line in
-                // amber-on-active; label below. Container stays flexShrink:0
-                // so the 01–04 sequence never wraps or triggers side-scroll.
-                display:        'flex',
-                flexDirection:  'column',
-                alignItems:     'flex-start',
-                gap:            2,
-                lineHeight:     1.1,
-                whiteSpace:     'nowrap',
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                fontFamily: MONO, fontSize: 11, fontWeight: 500, letterSpacing: '0.1em',
+                textTransform: 'uppercase', color: active ? PAL.bone : PAL.steel,
+                background: 'transparent', border: 0,
+                borderBottom: `2px solid ${active ? PAL.ember : 'transparent'}`,
+                padding: '6px 11px', cursor: 'pointer', whiteSpace: 'nowrap',
+                transition: 'color 0.15s ease',
               }}
-            >
-              <span style={{
-                fontFamily:    FONTS.mono,
-                fontSize:      11,
-                fontWeight:    500,
-                color:         active ? v.accent : 'rgba(200,216,232,0.30)',
-                letterSpacing: '0.14em',
-              }}>{v.num}</span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                {v.label}
-                {active && (
-                  <motion.span
-                    layoutId="tab-indicator"
-                    style={{
-                      width:        4,
-                      height:       4,
-                      borderRadius: '50%',
-                      background:   v.accent,
-                      boxShadow:    `0 0 6px ${v.accent}`,
-                    }}
-                  />
-                )}
-              </span>
-            </button>
+            >{v.label}</button>
           )
         })}
-      </div>
+      </nav>
 
-      {/* Right: live merkle / agent status — shrinks/truncates first so it
-          never forces a horizontal scrollbar on narrow viewports. */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 12,
-        fontFamily: FONTS.mono, fontSize: 11,
-        minWidth: 0, flexShrink: 1, overflow: 'hidden', whiteSpace: 'nowrap',
-        justifyContent: 'flex-end',
-      }}>
-        <RealityDot />
-        <span style={{ color: onChain ? '#00ff88' : 'rgba(255,59,92,0.7)' }}>
-          {onChain ? '● ON-CHAIN' : '○ PENDING'}
-        </span>
-        {merkleRoot && (
-          <span style={{ color: 'rgba(74,158,255,0.35)', letterSpacing: '0.04em' }}>
-            {merkleRoot.slice(-12)}
-          </span>
-        )}
+      {/* right — V.A.P.I. · PROVING GROUND + the resting-steel seal chip */}
+      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10, minWidth: 0, flexShrink: 1 }}>
+        <span style={{ fontFamily: MONO, fontSize: 10, letterSpacing: '0.12em', textTransform: 'uppercase', color: PAL.ash, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>V.A.P.I.&nbsp;· PROVING&nbsp;GROUND</span>
+        <SealChip />
       </div>
-    </div>
+    </header>
   )
 }
