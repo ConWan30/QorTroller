@@ -83,10 +83,10 @@ export function GamerView() {
 class Cockpit extends React.Component {
   constructor(props) {
     super(props)
-    this.state = { glow: 0.6, grain: false, dockOpen: false }
+    this.state = { glow: 0.6, grain: false, dockOpen: false, cornerLabels: true, motionStill: false }
     this.sealRef = React.createRef(); this.forceRef = React.createRef()
     this.tremorRef = React.createRef(); this.pulseRef = React.createRef()
-    this._strikeStart = -99999
+    this._strikeStart = -99999; this._wasLive = false
     this.reduced = (typeof window !== 'undefined' && window.matchMedia)
       ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : false
     this._loop = this._loop.bind(this)
@@ -149,14 +149,14 @@ class Cockpit extends React.Component {
   // the Strike: steel → ember → struck (the one earned moment)
   strikeColor(now) {
     const target = this.sealColor()
-    if (this.reduced || !this.isLive() || this.noController()) return this.rgb(target)
+    if (this.calm() || !this.isLive() || this.noController()) return this.rgb(target)
     const dt = now - this._strikeStart
     if (dt < 0 || dt > 600) return this.rgb(target)
     if (dt < 280) return this.lerp(PAL.steel, PAL.ember, dt / 280)
     return this.lerp(PAL.ember, target, (dt - 280) / 320)
   }
   bloom(now) {
-    if (this.reduced || !this.isLive()) return 0
+    if (this.calm() || !this.isLive()) return 0
     const dt = now - this._strikeStart
     if (dt >= 540 && dt < 1140) return 1 - (dt - 540) / 600
     return 0
@@ -172,7 +172,7 @@ class Cockpit extends React.Component {
 
   // the living crest
   drawSeal(ctx, cx, cy, R, rand, col, now, intensity, bloom) {
-    const motion = this.isLive() && !this.reduced && !this.noController()
+    const motion = this.isLive() && !this.calm() && !this.noController()
     const breath = motion ? (0.84 + 0.16 * (0.5 + 0.5 * Math.sin(now * 0.0016))) : 1 // tremor-freq breath
     const flick = motion ? (0.85 + 0.15 * Math.abs(Math.sin(now * 0.013))) : 1        // force-curve flicker
     intensity *= breath
@@ -208,7 +208,7 @@ class Cockpit extends React.Component {
     ctx.beginPath()
     for (let x = 0; x <= w; x += 2) {
       const p = x / w; let y
-      if (active && !this.reduced) { const env = Math.exp(-Math.pow((p - 0.42) * 3.1, 2)); y = (h - 5) - env * (h - 11) * (0.72 + 0.28 * Math.sin(now * 0.004)) }
+      if (active && !this.calm()) { const env = Math.exp(-Math.pow((p - 0.42) * 3.1, 2)); y = (h - 5) - env * (h - 11) * (0.72 + 0.28 * Math.sin(now * 0.004)) }
       else if (active) { const env = Math.exp(-Math.pow((p - 0.42) * 3.1, 2)); y = (h - 5) - env * (h - 11) * 0.9 }
       else { y = h - 5 - 1.4 * Math.sin(p * 8) }
       x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
@@ -222,14 +222,14 @@ class Cockpit extends React.Component {
     const bars = 22, bw = w / bars
     for (let i = 0; i < bars; i++) {
       const base = Math.exp(-Math.pow((i / bars - 0.5) * 3, 2))
-      const amp = (active && !this.reduced) ? (base * (0.4 + 0.6 * Math.abs(Math.sin(now * 0.003 + i * 0.7)))) : (active ? base * 0.85 : base * 0.12)
+      const amp = (active && !this.calm()) ? (base * (0.4 + 0.6 * Math.abs(Math.sin(now * 0.003 + i * 0.7)))) : (active ? base * 0.85 : base * 0.12)
       const bh = Math.max(1, amp * (h - 5))
       ctx.fillStyle = this.rgba(col, active ? 0.8 : 0.32); ctx.fillRect(i * bw + 1, h - bh, bw - 2, bh)
     }
   }
   movePulse(now) {
     const el = this.pulseRef.current; if (!el) return
-    if (this.reduced || !this.isLive()) { el.style.opacity = '0'; return }
+    if (this.calm() || !this.isLive()) { el.style.opacity = '0'; return }
     const dt = now - this._strikeStart
     if (dt < 0 || dt > 1200) { el.style.opacity = '0'; return }
     const prog = dt / 1200
@@ -238,6 +238,8 @@ class Cockpit extends React.Component {
   }
 
   glowI() { return 0.55 + (this.state.glow != null ? this.state.glow : 0.6) * 0.85 }
+  // motionMode tweak — "still" freezes breath/flicker/strike/pulse for streams + screenshots
+  calm() { return this.reduced || this.state.motionStill }
   strike() { this._strikeStart = (typeof performance !== 'undefined') ? performance.now() : 0 }
 
   _loop(t) {
@@ -252,13 +254,14 @@ class Cockpit extends React.Component {
   }
   componentDidMount() {
     if (this.isLive() && !this.noController()) this.strike()
+    this._wasLive = this.isLive() && !this.noController()
     this._raf = requestAnimationFrame(this._loop)
   }
-  componentDidUpdate(prev) {
-    const wasLive = prev.visualState === 'live'
-    const prevCtrl = prev.lanes?.controller
-    const wasNoCtrl = (prevCtrl === 'disconnected' || prevCtrl === 'unknown')
-    if (this.isLive() && !this.noController() && (!wasLive || wasNoCtrl)) this.strike()
+  // Instance-tracked previous live-state (arg-independent) — re-strike on any transition into proven.
+  componentDidUpdate() {
+    const nowLive = this.isLive() && !this.noController()
+    if (nowLive && !this._wasLive) this.strike()
+    this._wasLive = nowLive
   }
   componentWillUnmount() { if (this._raf) cancelAnimationFrame(this._raf) }
 
@@ -372,18 +375,26 @@ class Cockpit extends React.Component {
             <canvas ref={this.sealRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1, pointerEvents: 'none' }} />
 
             {/* z2 · LIVE 3D twin (transparent) — seal aura glows through the empty space */}
-            <div style={{ position: 'absolute', zIndex: 2, left: '50%', top: '44%', transform: 'translate(-50%,-50%)', width: 'min(52%,500px)', aspectRatio: '400 / 240', borderRadius: 4 }}>
+            <div style={{ position: 'absolute', zIndex: 2, left: '50%', top: '44%', transform: 'translate(-50%,-50%)', width: 'min(52%,500px)', aspectRatio: '400 / 240', borderRadius: 4, background: 'rgba(17,27,46,.20)', border: '1px solid rgba(110,140,168,.26)' }}>
               <iframe
                 title="Your controller — live 3D twin"
                 src={`/controller-twin.html?minimal=1&transparent=1${deviceId ? `&device=${encodeURIComponent(deviceId)}` : ''}`}
                 style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none', background: 'transparent' }}
               />
-              <span style={{ position: 'absolute', top: -8, left: -8, width: 16, height: 16, border: `1.5px solid ${frameColor}`, borderRight: 0, borderBottom: 0 }} />
-              <span style={{ position: 'absolute', top: -8, right: -8, width: 16, height: 16, border: `1.5px solid ${frameColor}`, borderLeft: 0, borderBottom: 0 }} />
-              <span style={{ position: 'absolute', bottom: -8, left: -8, width: 16, height: 16, border: `1.5px solid ${frameColor}`, borderRight: 0, borderTop: 0 }} />
-              <span style={{ position: 'absolute', bottom: -8, right: -8, width: 16, height: 16, border: `1.5px solid ${frameColor}`, borderLeft: 0, borderTop: 0 }} />
-              <div style={{ position: 'absolute', top: -22, left: 0, ...mono(10, PAL.ash, '0.12em'), textTransform: 'uppercase', pointerEvents: 'none' }}>3D CONTROLLER TWIN · LIVE</div>
-              <div style={{ position: 'absolute', top: -22, right: 0, ...mono(10, frameColor, '0.1em'), textTransform: 'uppercase', pointerEvents: 'none' }}>{twinConn}</div>
+              {/* corner brackets (decorative — never block the twin) */}
+              <span style={{ position: 'absolute', top: -8, left: -8, width: 16, height: 16, border: `1.5px solid ${frameColor}`, borderRight: 0, borderBottom: 0, pointerEvents: 'none' }} />
+              <span style={{ position: 'absolute', top: -8, right: -8, width: 16, height: 16, border: `1.5px solid ${frameColor}`, borderLeft: 0, borderBottom: 0, pointerEvents: 'none' }} />
+              <span style={{ position: 'absolute', bottom: -8, left: -8, width: 16, height: 16, border: `1.5px solid ${frameColor}`, borderRight: 0, borderTop: 0, pointerEvents: 'none' }} />
+              <span style={{ position: 'absolute', bottom: -8, right: -8, width: 16, height: 16, border: `1.5px solid ${frameColor}`, borderLeft: 0, borderTop: 0, pointerEvents: 'none' }} />
+              {/* labels relocated to the four OUTER corners — center stays clear for the live twin + seal */}
+              {s.cornerLabels && (
+                <>
+                  <div style={{ position: 'absolute', top: -22, left: 2, ...mono(10, PAL.ash, '0.12em'), textTransform: 'uppercase', pointerEvents: 'none' }}>RESERVED RECTANGLE</div>
+                  <div style={{ position: 'absolute', top: -22, right: 2, ...mono(10, frameColor, '0.1em'), textTransform: 'uppercase', pointerEvents: 'none' }}>{twinConn}</div>
+                  <div style={{ position: 'absolute', bottom: -22, left: 2, ...mono(10, 'rgba(154,164,178,.7)', '0.12em'), textTransform: 'uppercase', pointerEvents: 'none' }}>3D CONTROLLER TWIN · LIVE</div>
+                  <div style={{ position: 'absolute', bottom: -22, right: 2, ...mono(10, PAL.ash, '0.1em'), textTransform: 'uppercase', pointerEvents: 'none' }}>HALO-BEHIND · LIVE IFRAME</div>
+                </>
+              )}
             </div>
 
             {/* honesty banner when not live */}
@@ -516,8 +527,14 @@ class Cockpit extends React.Component {
                 <span style={{ ...mono(10, PAL.ash, '0.06em'), textTransform: 'uppercase', width: 60 }}>seal glow</span>
                 <input type="range" min="0" max="1" step="0.05" value={s.glow} onChange={(e) => this.setState({ glow: parseFloat(e.target.value) })} style={{ flex: 1, accentColor: PAL.ember, cursor: 'pointer' }} />
               </div>
-              <button onClick={() => this.setState((p) => ({ grain: !p.grain }))} style={{ width: '100%', ...mono(10.5, s.grain ? PAL.void0 : PAL.boneDim, '0.04em'), textTransform: 'uppercase', background: s.grain ? PAL.ember : '#0c1322', border: `1px solid ${s.grain ? PAL.ember : PAL.void2}`, borderRadius: 2, padding: 6, cursor: 'pointer' }}>SCANLINES · {s.grain ? 'ON' : 'OFF'}</button>
-              <div style={{ ...mono(10, PAL.ash, '0.02em'), lineHeight: 1.55, paddingTop: 2, borderTop: `1px solid ${PAL.void2}` }}>Display only — glow and scanlines are presentation. They never change what the bridge reported. Gold renders only when the bridge reports live + chain connected.</div>
+              {[
+                ['SCANLINES', s.grain, () => this.setState((p) => ({ grain: !p.grain })), s.grain ? 'ON' : 'OFF'],
+                ['CORNER LABELS', !s.cornerLabels, () => this.setState((p) => ({ cornerLabels: !p.cornerLabels })), s.cornerLabels ? 'ON' : 'OFF'],
+                ['MOTION', s.motionStill, () => this.setState((p) => ({ motionStill: !p.motionStill })), s.motionStill ? 'STILL' : 'ALIVE'],
+              ].map(([lbl, engaged, onClick, val]) => (
+                <button key={lbl} onClick={onClick} style={{ width: '100%', ...mono(10.5, engaged ? PAL.void0 : PAL.boneDim, '0.04em'), textTransform: 'uppercase', background: engaged ? PAL.ember : '#0c1322', border: `1px solid ${engaged ? PAL.ember : PAL.void2}`, borderRadius: 2, padding: 6, cursor: 'pointer', textAlign: 'left' }}>{lbl} · {val}</button>
+              ))}
+              <div style={{ ...mono(10, PAL.ash, '0.02em'), lineHeight: 1.55, paddingTop: 2, borderTop: `1px solid ${PAL.void2}` }}>Display only — glow, scanlines, labels and motion are presentation. They never change what the bridge reported. Gold renders only when the bridge reports live + chain connected.</div>
             </div>
           </div>
         ) : (
