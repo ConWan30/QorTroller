@@ -180,6 +180,18 @@ class SessionAdjudicatorValidationAgent:
 
         async def _fire():
             try:
+                # Arc 6/7 Phase 1 — capture the grind session's OPEN beacon once
+                # (idempotent first-touch; the first ruling of the grind wins).
+                # Dormant unless posr_recency_enabled; honest no-op when no beacon
+                # is anchored. The first ruling sees open==close (no recency);
+                # later rulings see close>open and bind recency.
+                if getattr(self._cfg, "posr_recency_enabled", False):
+                    _gsid = str(getattr(self._cfg, "grind_session_id", "") or "")
+                    if _gsid:
+                        try:
+                            await self._curator_loop.on_session_open_vhr(_gsid, device_id="")
+                        except Exception as _exc:
+                            log.debug("PoSR open-capture skip ruling_id=%d: %s", ruling_id, _exc)
                 result = await self._curator_loop.on_session_complete_vhr(
                     session_id=str(ruling_id),
                     gamer_address=gamer_address,
