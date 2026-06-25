@@ -51,6 +51,10 @@ const BRIDGE_URL = params.get('bridge') || '127.0.0.1:8080'
 // panels, footer, status pills) so only the 3D Canvas renders.  Used by
 // GamerView's iframe so the controller has the full viewport.
 const MINIMAL    = params.get('minimal') === '1'
+// `?transparent=1` — render the twin over a transparent background (no VOID_BG fill, no R3F
+// scene background) so an embedding view can place an aura/halo BEHIND the controller and have it
+// glow through. Opt-in: the default and all existing embeds (minimal-only) stay opaque #030507.
+const TRANSPARENT = params.get('transparent') === '1'
 
 // ---------------------------------------------------------------------------
 // useAutoDiscover — resolves device_id from URL param or bridge /api/v1/devices
@@ -2248,7 +2252,7 @@ function ControllerTwinPage() {
     : mode === 'LIVE' ? ['AWAITING', DIM] : ['DEMO', '#ff9500']
 
   return (
-    <div style={{ width: '100vw', height: '100vh', background: VOID_BG,
+    <div style={{ width: '100vw', height: '100vh', background: TRANSPARENT ? 'transparent' : VOID_BG,
                   fontFamily: 'Rajdhani, sans-serif', overflow: 'hidden' }}>
 
       {/* Keyframe animations + font import — dashboard-aligned */}
@@ -2423,9 +2427,9 @@ function ControllerTwinPage() {
           Phase 235-GAMER-REDESIGN: in MINIMAL mode the Canvas takes the
           full viewport (top:0) since the header is suppressed. */}
       <Canvas shadows camera={{ position: [0, 0.3, 7.2], fov: 36 }}
-        gl={{ antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.1 }}
+        gl={{ antialias: true, alpha: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.1 }}
         style={{ position: 'absolute', top: MINIMAL ? 0 : 62, left: 0, right: 0, bottom: 0 }}>
-        <color attach="background" args={[VOID_BG]} />
+        {!TRANSPARENT && <color attach="background" args={[VOID_BG]} />}
         <ambientLight intensity={0.08} />
         <OrbitControls
           enablePan={false}
