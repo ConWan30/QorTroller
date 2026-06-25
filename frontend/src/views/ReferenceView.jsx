@@ -38,6 +38,20 @@ export function ReferenceView() {
         // Claude-Design motion pass (scroll-reveals, byte assembly, etc.).
         sandbox="allow-scripts allow-same-origin"
       />
+      {/* "Verify it yourself" — the Forensic Explorer is de-listed from the bar but
+          kept URL-reachable; this is the credibility link the reference points into. */}
+      <a
+        href="/?view=forensic"
+        title="Open the Forensic Explorer — verify the proofs in your browser"
+        style={{
+          position: 'absolute', right: 14, bottom: 14, zIndex: 5,
+          display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px',
+          borderRadius: 4, textDecoration: 'none', background: 'rgba(10,14,20,0.9)',
+          border: '1px solid rgba(240,168,104,0.5)', color: '#f0a868',
+          fontFamily: "'JetBrains Mono', monospace", fontSize: 11,
+          letterSpacing: '0.08em', textTransform: 'uppercase',
+        }}
+      >Verify the proofs →</a>
     </div>
   )
 }

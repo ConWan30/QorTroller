@@ -64,6 +64,22 @@ export function GrantBriefView() {
         sandbox="allow-scripts allow-same-origin"
       />
 
+      {/* "Verify it yourself" — links into the URL-reachable Forensic Explorer so a grant
+          evaluator can confirm the proofs in-browser (the de-listed-but-reachable credibility
+          surface). Bottom-right, clear of the top-right "?" affordance. */}
+      <a
+        href="/?view=forensic"
+        title="Open the Forensic Explorer — verify the proofs in your browser"
+        style={{
+          position: 'absolute', right: 14, bottom: 14, zIndex: 5,
+          display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px',
+          borderRadius: 4, textDecoration: 'none', background: 'rgba(10,14,20,0.9)',
+          border: '1px solid rgba(240,168,104,0.5)', color: '#f0a868',
+          fontFamily: "'JetBrains Mono', monospace", fontSize: 11,
+          letterSpacing: '0.08em', textTransform: 'uppercase',
+        }}
+      >Verify the proofs →</a>
+
       {/* always-available "?" affordance (top-right) */}
       <button
         type="button"
