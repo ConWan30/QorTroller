@@ -321,10 +321,16 @@ class Cockpit extends React.Component {
             <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', zIndex: 1 }}>
               <canvas ref={this.sigilRef} style={{ width: 'min(54vh,448px)', height: 'min(54vh,448px)', maxWidth: '94%' }} />
             </div>
-            {/* Twin rect (z2, translucent so aura glows through) */}
-            <div style={{ position: 'absolute', inset: 18, zIndex: 2, border: `1px dashed ${C.line2}`, borderRadius: 4, background: 'radial-gradient(ellipse 58% 58% at center, rgba(4,6,10,.86) 0%, rgba(4,6,10,.58) 50%, rgba(4,6,10,.10) 100%)', boxShadow: 'inset 0 0 64px 12px rgba(4,6,10,.55)' }}>
-              <span style={{ position: 'absolute', top: 16, left: 34, ...mono(10, C.faint, '.16em'), textTransform: 'uppercase' }}>3D Controller Twin</span>
-              <span style={{ position: 'absolute', top: 16, right: 34, ...mono(10, twinColor, '.12em'), textTransform: 'uppercase' }}>● {twinWord}</span>
+            {/* Twin rect (z2) — the LIVE 3D controller twin (transparent mode) so the Sigil aura
+                (z1) glows through the controller's empty space; figure in front, halo behind. */}
+            <div style={{ position: 'absolute', inset: 18, zIndex: 2, border: `1px dashed ${C.line2}`, borderRadius: 4, overflow: 'hidden', boxShadow: 'inset 0 0 64px 12px rgba(4,6,10,.45)' }}>
+              <iframe
+                title="Your controller — live 3D twin"
+                src={`/controller-twin.html?minimal=1&transparent=1${deviceId ? `&device=${encodeURIComponent(deviceId)}` : ''}`}
+                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none', background: 'transparent' }}
+              />
+              <span style={{ position: 'absolute', top: 12, left: 14, ...mono(10, C.faint, '.16em'), textTransform: 'uppercase', pointerEvents: 'none' }}>3D Controller Twin · live</span>
+              <span style={{ position: 'absolute', top: 12, right: 14, ...mono(10, twinColor, '.12em'), textTransform: 'uppercase', pointerEvents: 'none' }}>● {twinWord}</span>
             </div>
             {/* honesty flag banner */}
             {notLive && (
