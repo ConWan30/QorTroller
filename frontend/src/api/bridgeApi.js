@@ -87,19 +87,6 @@ export function useSeparationDefensibility() {
   })
 }
 
-// BCRA — Bridge Connectivity Readiness Aggregator (GET /operator/bridge/connectivity).
-// noMock:true (grind/connectivity-critical hard rule): a transient 5xx must never swap in a
-// fabricated "live" connect-state. On failure react-query holds the last real value; a full
-// outage surfaces the explicit MOCK banner via the first-load path, never a fake green.
-export function useBridgeConnectivity() {
-  return useQuery({
-    queryKey: ['bridgeConnectivity'],
-    queryFn: () => get('/bridge/connectivity', 'connectivity', { noMock: true }),
-    refetchInterval: 3000,
-    staleTime: 2000,
-  })
-}
-
 export function useInvariantGateStatus() {
   // noMock:true — invariant gate state is protocol-governance, never
   // fabricate. Per Mythos audit (post-/goal 2026-05-15).
