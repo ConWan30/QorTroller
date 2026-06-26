@@ -496,6 +496,28 @@ class DualShockTransport:
             except Exception as _l6_exc:
                 log.warning("Phase C/L6b: L6TriggerDriver init failed (non-fatal): %s", _l6_exc)
 
+        # VSD Cycle 25 tether (hardened) — placed after L6 init for reuse. The generator is
+        # DECISION-ONLY; the async session loop performs the HID write via asyncio.to_thread +
+        # _emit_tether_pulse_hw (off the event loop) with restore-after-pulse. A/B/A-validated
+        # (cycle-25): keeps the DualShock Edge wireless module anchored to PS5 during dual grind.
+        # Controlled exception to ps5_compat_mode; default-OFF (dual_grind_tether_enabled).
+        self._tether_gen = None
+        self._tether_dur_ms = 35
+        try:
+            if getattr(self._cfg, "dual_grind_tether_enabled", False):
+                from .tether_pulse_generator import TetherPulseGenerator, TetherConfig
+                tcfg = TetherConfig(
+                    enabled=True,
+                    amplitude_max=getattr(self._cfg, "dual_grind_tether_amplitude_max", 12),
+                    min_interval_s=getattr(self._cfg, "dual_grind_tether_duty_s", 1.2),
+                )
+                self._tether_dur_ms = int(tcfg.duration_ms)
+                self._tether_gen = TetherPulseGenerator(tcfg)  # decision-only; HW write off-loop
+                log.info("Cycle25 tether ENABLED (amp_max=%s duty=%.1fs dur=%sms)",
+                         tcfg.amplitude_max, tcfg.min_interval_s, self._tether_dur_ms)
+        except Exception as _t_exc:
+            log.warning("Cycle25 tether init failed (non-fatal): %s", _t_exc)
+
         # Phase 63: L6b Neuromuscular Reflex Layer
         self._l6b_enabled: bool = getattr(self._cfg, "l6b_enabled", False)
         self._l6b_analyzer = None          # L6bReflexAnalyzer, set below if enabled
@@ -1242,6 +1264,28 @@ class DualShockTransport:
         except Exception as _ret_exc:
             log.debug("retina perception hook fail-open: %s", _ret_exc)
 
+    def _emit_tether_pulse_hw(self, amp: int, dur_ms: int) -> None:
+        """Cycle-25 hardened tether emission. Runs ON A WORKER THREAD (called via
+        asyncio.to_thread from the session loop) so the USB write + hold never block the event
+        loop. A transient micro-pulse on R2: set a tiny force, hold ~dur_ms, then RESTORE to zero
+        so no residual resistance accumulates (the prototype left the force set). This is the
+        single controlled exception to ps5_compat_mode — the only HID output the bridge emits
+        during grind, to anchor the PS5 wireless-module state (A/B/A-validated, cycle-25).
+        Fail-open: any error is swallowed (advisory)."""
+        try:
+            rdr = getattr(self, "_reader", None)
+            ds = getattr(rdr, "ds", None) if rdr is not None else None
+            if ds is None:
+                return
+            from pydualsense import TriggerModes
+            rt = ds.triggerR
+            rt.setMode(TriggerModes(0))
+            rt.setForce(0, int(amp))
+            time.sleep(max(0.0, dur_ms / 1000.0))
+            rt.setForce(0, 0)  # restore — transient pulse, no residual force
+        except Exception:
+            pass
+
     # ------------------------------------------------------------------
     # Main session loop
     # ------------------------------------------------------------------
@@ -1339,6 +1383,27 @@ class DualShockTransport:
                     self._pcc_monitor.update_sample(_delta, self._interval, **_spc_kwargs)
                 else:
                     self._pcc_monitor.update_sample(len(frames), self._interval, **_spc_kwargs)
+
+            # VSD Cycle 25 tether prototype tick (after PCC so we know host_state context)
+            # Only active if dual_grind_tether_enabled + typically when grind + EXCLUSIVE_USB.
+            if getattr(self, "_tether_gen", None) is not None:
+                _r_force = 0.0
+                try:
+                    if hasattr(self, "_last_bio_features") and self._last_bio_features:
+                        _r_force = getattr(self._last_bio_features, "r_trigger_force", 0.0) or 0.0
+                except Exception:
+                    _r_force = 0.0
+                _now_t = time.monotonic()
+                self._tether_gen.feed_biomarker(_r_force, _now_t)
+                _tamp = self._tether_gen.due(_now_t)
+                if _tamp > 0:
+                    # hardened: HID write + hold + restore run OFF the event loop
+                    try:
+                        await asyncio.to_thread(
+                            self._emit_tether_pulse_hw, _tamp, self._tether_dur_ms
+                        )
+                    except Exception as _te:
+                        log.debug("tether emit fail-open: %s", _te)
 
             # Phase 53: reset pitl_meta at the start of each iteration so Bridge.on_record()
             # never reads stale values from the previous cycle if an exception fires mid-loop.
