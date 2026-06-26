@@ -1960,6 +1960,13 @@ class Config:
     retina_events_root_verify_on_ingest: bool = field(
         default_factory=lambda: _env_bool("RETINA_EVENTS_ROOT_VERIFY_ON_INGEST", False)
     )
+    # Cycle-30 NQPV capture-time co-capture: when ON, derive the NQPV oracle inputs (cco_tier,
+    # L4/L5/L6-ok proxy, controller-lobe retina; PoEP + full L9/screen ABSTAIN) from per-record PITL
+    # meta and attach them to the meta sidecar (persisted by on_record) for the RETINA-EXCL-2 study
+    # corpus. Default OFF; advisory; honest abstain (no fabrication).
+    nqpv_cocapture_enabled: bool = field(
+        default_factory=lambda: _env_bool("NQPV_COCAPTURE_ENABLED", False)
+    )
 
     # --- Data Economy Arc 5: VAPIReplayProofPipeline (VHR proofs) ---
     replay_proof_pipeline_enabled: bool = field(

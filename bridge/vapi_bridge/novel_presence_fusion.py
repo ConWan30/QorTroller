@@ -79,6 +79,31 @@ def _retina_presence_contribution(retina_verdict: str | None) -> float | None:
     return None  # INACTIVE / unknown -> abstain
 
 
+def cocapture_fields_from_pitl_meta(meta: dict) -> dict:
+    """Capture-time co-capture (cycle-30): derive the NQPV oracle inputs from the live per-record PITL
+    meta sidecar, for the RETINA-EXCL-2 study corpus. HONEST about what is actually live in the session
+    loop (USB capture only):
+      - nqpv_cco_tier: cco_presence_ceiling_candidate (live, from the CCO capability report).
+      - nqpv_l4l5l6_ok: humanity_prob >= 0.5 (PROXY — the humanity formula fuses L4/L5/L6/L2B/L2C).
+      - nqpv_retina_controller_signal: the CONTROLLER-LOBE perception (CONTROLLER_CLEAN / _ANOMALY) --
+        NOT the full L9/PoCP COUPLED_CLEAN nor screen LIVE_COHERENT (those need camera/screen, not live).
+      - nqpv_poep_present: None (ABSTAIN — PoEP is off-by-default; do not fabricate).
+    Pure; the study reads these alongside device_id + record_hash to populate SessionArtifact. A missing
+    input is None (abstain), never a fabricated value."""
+    hp = meta.get("humanity_prob")
+    if meta.get("retina_enabled"):
+        retina_sig = "CONTROLLER_ANOMALY" if meta.get("retina_alert") else "CONTROLLER_CLEAN"
+    else:
+        retina_sig = None
+    return {
+        "nqpv_cocapture": True,
+        "nqpv_cco_tier": meta.get("cco_presence_ceiling_candidate"),
+        "nqpv_l4l5l6_ok": (hp >= 0.5) if isinstance(hp, (int, float)) else None,
+        "nqpv_retina_controller_signal": retina_sig,
+        "nqpv_poep_present": None,  # abstain: PoEP off-by-default; full L9/screen coupling not live here
+    }
+
+
 # --- Core Orchestrator ---
 
 class NovelPresenceFusionOrchestrator:
