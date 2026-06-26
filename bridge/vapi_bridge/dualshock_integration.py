@@ -405,6 +405,23 @@ class DualShockTransport:
                                                             self._session_poep_verdict.get("status")))
             except Exception as _poep_exc:
                 log.debug("PoEP session verdict read skipped (fail-open): %s", _poep_exc)
+        # QorTroller Retina Game Capture (cycle-39): WGC screen-capture of the Remote Play window ->
+        # cv_motion optical flow -> InputOutputCouplingOracle vs the live stick stream -> coupled-retina
+        # verdict, fused into NQPV co-capture meta["retina_coupled_verdict"]. Default-off; the Remote Play
+        # A/B (2026-06-26) confirmed Remote Play yields a live, biometrically-rich stream to couple against.
+        self._retina_game_capture = None
+        if getattr(cfg, "retina_game_capture_enabled", False):
+            try:
+                from .qortroller_retina_capture import RetinaGameCapture
+                _rgc = RetinaGameCapture(getattr(cfg, "retina_game_capture_window", "Remote Play"))
+                if _rgc.start():
+                    self._retina_game_capture = _rgc
+                    log.info("QorTroller Retina Game Capture STARTED (window substr=%r)",
+                             getattr(cfg, "retina_game_capture_window", "Remote Play"))
+                else:
+                    log.warning("QorTroller Retina Game Capture failed to start (window not found?) — abstaining")
+            except Exception as _rgc_exc:
+                log.debug("QorTroller Retina Game Capture init skipped (fail-open): %s", _rgc_exc)
         self._oracle_addr = getattr(cfg, "skill_oracle_address", "")
         self._bounty_cfg  = getattr(cfg, "dualshock_active_bounties", "")
         self._key_dir     = Path(getattr(cfg, "dualshock_key_dir",
@@ -1570,6 +1587,13 @@ class DualShockTransport:
                             "accel_y": float(_rs.accel_y),
                             "accel_z": float(_rs.accel_z),
                         })
+                # QorTroller Retina Game Capture (cycle-39): feed the dense live stick stream to the
+                # coupling oracle (cheap deque append; correlated against WGC screen-pan in the bg thread).
+                if self._retina_game_capture is not None:
+                    _rgc_ms = time.time() * 1000.0
+                    for _rs in frames:
+                        self._retina_game_capture.feed_hid(
+                            _rgc_ms, float(_rs.right_stick_x), float(_rs.right_stick_y))
                 _frame_msg = _json.dumps({"type": "frames", "frames": _out})
                 asyncio.create_task(_fbc(_frame_msg))
                 # Phase 59: also send to per-device twin clients
@@ -2102,6 +2126,15 @@ class DualShockTransport:
                             from .poep_activation import poep_present_signal
                             self._pending_pitl_meta["poep_present"] = poep_present_signal(
                                 self._session_poep_verdict, poep_enabled=_poep_flag)
+                        # QorTroller Retina Game Capture (cycle-39): if the WGC coupled-retina source is
+                        # live, read its latest coupling verdict -> NQPV retina vocab -> meta. None (no
+                        # source / abstain) leaves it unset -> cocapture abstains (unchanged).
+                        if self._retina_game_capture is not None:
+                            from .qortroller_retina_capture import map_l9_to_nqpv_retina
+                            _rc_v = map_l9_to_nqpv_retina(
+                                self._retina_game_capture.latest_coupled_verdict())
+                            if _rc_v is not None:
+                                self._pending_pitl_meta["retina_coupled_verdict"] = _rc_v
                         self._pending_pitl_meta.update(
                             cocapture_fields_from_pitl_meta(self._pending_pitl_meta)
                         )
