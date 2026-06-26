@@ -60,6 +60,10 @@ _LED = {
     "SEPARATION_BREAKTHROUGH": (255, 200,   0),
     "CHAIN_MILESTONE":         (  0, 255, 200),
     "IDLE_RESET":              (  0,   0,  40),
+    # Cycle-38 developer-self-cert presence HUD (novel) — driven by the live NQPV fused proof:
+    "DEVELOPER_SELF_CERT_LIVE": (  0, 230, 120),   # Green: verified human on certified hardware (self-cert)
+    "PRESENCE_DEGRADED":        (255, 140,   0),   # Amber: proof inconsistent / hardware-class fail
+    "PRESENCE_CONTESTED":       (255,  90,   0),   # Orange: capture CONTESTED (USB/Remote-Play interference)
 }
 
 # Haptic durations in ms (0 = no haptic)
@@ -73,6 +77,9 @@ _HAPTIC_MS = {
     "SEPARATION_BREAKTHROUGH": 150,    # 2 pulses
     "CHAIN_MILESTONE":           0,
     "IDLE_RESET":                0,
+    "DEVELOPER_SELF_CERT_LIVE":  90,   # single soft confirm pulse
+    "PRESENCE_DEGRADED":         80,
+    "PRESENCE_CONTESTED":         0,   # visual only (no haptic — capture is already contested)
 }
 
 # ANSI terminal labels
@@ -86,7 +93,27 @@ _ANSI = {
     "SEPARATION_BREAKTHROUGH": "\033[33m[VAPI] separation ratio breakthrough!\033[0m",
     "CHAIN_MILESTONE":         "\033[96m[VAPI] PoAC chain milestone\033[0m",
     "IDLE_RESET":              "\033[90m[VAPI] idle\033[0m",
+    "DEVELOPER_SELF_CERT_LIVE": "\033[92m[VAPI] developer-self-cert LIVE — verified human / certified hardware\033[0m",
+    "PRESENCE_DEGRADED":        "\033[93m[VAPI] presence proof degraded (inconsistent / hardware-class)\033[0m",
+    "PRESENCE_CONTESTED":       "\033[33m[VAPI] capture CONTESTED — USB/Remote-Play interference\033[0m",
 }
+
+
+def devcert_signal_for_verdict(verdict: str, contested: bool = False) -> "str | None":
+    """Map a live NQPV verdict (+ PCC contested flag) to a presence-HUD signal_type, or None (no signal).
+
+    Pure -> testable. contested WINS (capture integrity precedes presence — a contested capture can't be
+    trusted to certify). The two human-side verdicts -> DEVELOPER_SELF_CERT_LIVE; the inconsistent /
+    hardware-class verdicts -> PRESENCE_DEGRADED; INDETERMINATE / UNVERIFIABLE -> None (abstain, no signal).
+    """
+    if contested:
+        return "PRESENCE_CONTESTED"
+    v = (verdict or "").upper()
+    if v in ("CONSISTENT_HUMAN_VERIFIED_HARDWARE", "CONSISTENT_HUMAN"):
+        return "DEVELOPER_SELF_CERT_LIVE"
+    if "INCONSISTENT" in v or v == "HARDWARE_CLASS_FAIL":
+        return "PRESENCE_DEGRADED"
+    return None
 
 
 class LivePresenceSignalingAgent:
@@ -116,6 +143,7 @@ class LivePresenceSignalingAgent:
         self._ds = ds_integration
         self._signal_q: "queue.PriorityQueue[tuple]" = queue.PriorityQueue(maxsize=50)
         self._last_chain_record_count: int = 0
+        self._last_devcert_signal: "str | None" = None   # debounce: only fire on state change
 
     # ------------------------------------------------------------------
     # Bus event → signal_type mapping
@@ -262,6 +290,50 @@ class LivePresenceSignalingAgent:
             log.debug("LivePresenceSignalingAgent._check_chain_milestone: %s", exc)
 
     # ------------------------------------------------------------------
+    # Developer-self-cert presence HUD (polled — cycle-38)
+    # ------------------------------------------------------------------
+
+    def _check_devcert_presence(self) -> None:
+        """Poll the live NQPV proof and fire a presence-HUD signal ON STATE CHANGE.
+
+        Novel QorTroller signaling: turns the developer-self-cert proof (PoEP + L4 + CCO + coupled-retina,
+        fused) into real-time LED/haptic/terminal feedback while playing. No new bus emitter — samples the
+        latest co-capture row + fuses (same path the endpoint runs). Default-gated on
+        developer_self_cert_enabled; abstains (no signal) on INDETERMINATE/UNVERIFIABLE.
+        """
+        if not getattr(self._cfg, "developer_self_cert_enabled", False):
+            return
+        try:
+            rows = self._store.get_nqpv_cocapture_rows(limit=1)
+            if not rows:
+                return
+            r = rows[0]
+            from types import SimpleNamespace
+
+            from .novel_presence_fusion import NovelPresenceFusionOrchestrator
+            coupled = r.get("nqpv_retina_coupled_verdict")
+            proof = NovelPresenceFusionOrchestrator().fuse(
+                cco_report=SimpleNamespace(tier=r.get("nqpv_cco_tier")),
+                retina_report=(SimpleNamespace(verdict=coupled) if coupled else None),
+                poep_present=(bool(r["nqpv_poep_present"]) if r["nqpv_poep_present"] is not None else None),
+                l4_l5_l6_ok=(bool(r["nqpv_l4l5l6_ok"]) if r["nqpv_l4l5l6_ok"] is not None else None),
+                device_id=r.get("device_id", ""), record_hash=r.get("record_hash_hex", ""),
+                developer_self_cert=True,
+            )
+            contested = False
+            try:
+                _ch = self._store.get_capture_health_status()
+                contested = bool((_ch or {}).get("host_state") == "CONTESTED")
+            except Exception:
+                contested = False
+            sig = devcert_signal_for_verdict(proof.verdict.value, contested=contested)
+            if sig and sig != self._last_devcert_signal:
+                self._dispatch_signal("developer_self_cert", sig)
+                self._last_devcert_signal = sig
+        except Exception as exc:
+            log.debug("LivePresenceSignalingAgent._check_devcert_presence: %s", exc)
+
+    # ------------------------------------------------------------------
     # Bus subscription loop
     # ------------------------------------------------------------------
 
@@ -324,10 +396,14 @@ class LivePresenceSignalingAgent:
             _t.set_name(f"LivePresenceSignaling.{_ch}")
             _tasks.append(_t)
 
-        # Poll loop for chain milestones
+        # Poll loop for chain milestones + developer-self-cert presence HUD (cycle-38)
         while True:
             await asyncio.sleep(_POLL_INTERVAL_S)
             try:
                 self._check_chain_milestone()
             except Exception as exc:
                 log.warning("LivePresenceSignalingAgent poll: %s", exc)
+            try:
+                self._check_devcert_presence()
+            except Exception as exc:
+                log.warning("LivePresenceSignalingAgent devcert poll: %s", exc)

@@ -666,6 +666,19 @@ class Bridge:
                 _spawn_named(_dc.run_poll_loop(), "BISECT_B5B_DataCuratorAgent")
             except Exception as _imp_exc:  # noqa: BLE001 — fail-open
                 log.warning("BISECT B5B DataCuratorAgent failed: %s", _imp_exc)
+            # Cycle-38: LivePresenceSignalingAgent (#34) — activate the dev-cert presence HUD
+            # (polls the live NQPV proof -> LED/haptic/terminal). Gated on live_presence_signaling_enabled.
+            try:
+                if getattr(self.cfg, "live_presence_signaling_enabled", False):
+                    from .live_presence_signaling_agent import LivePresenceSignalingAgent
+                    _lpsa = LivePresenceSignalingAgent(
+                        self.store, self.cfg, bus=getattr(self, "_agent_bus", None),
+                        ds_integration=getattr(self, "_ds_transport", None),
+                    )
+                    _spawn_named(_lpsa.run_poll_loop(), "LivePresenceSignalingAgent_34")
+                    log.info("LivePresenceSignalingAgent (#34) ACTIVATED — developer-self-cert presence HUD live")
+            except Exception as _imp_exc:  # noqa: BLE001 — fail-open
+                log.warning("LivePresenceSignalingAgent (#34) spawn failed: %s", _imp_exc)
             try:
                 from .session_adjudicator import SessionAdjudicator
                 _adj = SessionAdjudicator(self.cfg, self.store, bus=None)
