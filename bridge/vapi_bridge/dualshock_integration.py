@@ -66,6 +66,7 @@ from .cco_l6b_wiring import (
 from .config import Config
 from .continuity_prover import FEATURE_KEYS
 from .controller_reconnect_policy import ReconnectPolicy
+from .l4_humanity import p_l4_from_distance
 from .store import Store
 
 log = logging.getLogger(__name__)
@@ -1869,10 +1870,13 @@ class DualShockTransport:
                     asyncio.create_task(self._check_continuity())
 
             # Phase 25 / Phase 17: Bayesian humanity probability fusion — L4 × L5 × E4 × L2B × L2C
-            if _l4_warmed and _l4_distance is not None:
-                _p_l4 = _math.exp(-max(0.0, _l4_distance - 2.0))
-            else:
-                _p_l4 = 0.5
+            # Cycle-36: p_L4 mapping via l4_humanity.p_l4_from_distance — DEFAULT-OFF re-anchor; when
+            # l4_humanity_reanchor_enabled is False this is BYTE-IDENTICAL to the legacy exp(-(d-2)).
+            _p_l4 = p_l4_from_distance(
+                _l4_distance, _l4_warmed,
+                reanchor_enabled=getattr(self._cfg, "l4_humanity_reanchor_enabled", False),
+                anomaly_threshold=getattr(self._cfg, "l4_anomaly_threshold", 7.009),
+            )
             _p_l5 = _l5_rhythm_humanity if _l5_rhythm_humanity is not None else 0.5
             if _e4_cognitive_drift is not None:
                 _p_e4 = _math.exp(-_e4_cognitive_drift / 3.0)

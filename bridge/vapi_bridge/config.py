@@ -650,6 +650,15 @@ class Config:
     l4_continuity_threshold: float = field(
         default_factory=lambda: float(_env("L4_CONTINUITY_THRESHOLD", "5.367"))
     )
+    # Cycle-36: re-anchor the p_L4 humanity component to 0.5**(d/anomaly_threshold) (corpus-validated)
+    # instead of the legacy exp(-(d-2)) which under-credits genuine NOMINAL humans. DEFAULT-OFF: it
+    # RAISES humanity and humanity hard-gates the 0.60 passport, so flipping it on is a security-relevant
+    # loosening of sub-threshold scoring (the L4 anomaly hard-gate is untouched). When False the live
+    # humanity formula is BYTE-IDENTICAL to legacy. Flip to true only after validating on a real N>=50
+    # corpus (human pass-rate rises, adversary pass-rate does NOT). See l4_humanity.py.
+    l4_humanity_reanchor_enabled: bool = field(
+        default_factory=lambda: _env_bool("L4_HUMANITY_REANCHOR_ENABLED", False)
+    )
 
     # --- L5 Calibration: TemporalRhythmOracle thresholds ---
     # CV threshold: bot timing CV < 0.08 (adversarially calibrated; human 10th pct N=54: 0.789 -- 10x margin)
