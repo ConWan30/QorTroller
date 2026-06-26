@@ -1989,6 +1989,14 @@ class Config:
     nqpv_cocapture_enabled: bool = field(
         default_factory=lambda: _env_bool("NQPV_COCAPTURE_ENABLED", False)
     )
+    # Cycle-37 PoEP Track-1: operator TWO-KEY for live PoEP presence. When True (and the L6B model has
+    # N>=50 in-band reactions — the data gate, enforced separately), the session-level PoEP verdict is
+    # carried into the co-capture meta["poep_present"]. DEFAULT-OFF (L6B hard rule: no liveness verdict
+    # until N>=50; this flag is the deliberate operator second key on top of the data gate). When False
+    # poep_present abstains (co-capture unchanged). See poep_activation.py.
+    poep_liveness_enabled: bool = field(
+        default_factory=lambda: _env_bool("POEP_LIVENESS_ENABLED", False)
+    )
 
     # --- Data Economy Arc 5: VAPIReplayProofPipeline (VHR proofs) ---
     replay_proof_pipeline_enabled: bool = field(

@@ -389,6 +389,10 @@ class DualShockTransport:
         self._reconnect_policy = ReconnectPolicy(
             reconnect_after_failures=int(getattr(cfg, "controller_reconnect_after_failures", 5)),
         )
+        # Cycle-37 PoEP Track-1: session-level PoEP verdict (poep_verify() dict), set by a
+        # session-start enrollment flow (gated on the N>=50 L6B campaign — not yet wired). Carried
+        # into co-capture meta["poep_present"] when poep_liveness_enabled. Default None -> abstain.
+        self._session_poep_verdict: Optional[dict] = None
         self._oracle_addr = getattr(cfg, "skill_oracle_address", "")
         self._bounty_cfg  = getattr(cfg, "dualshock_active_bounties", "")
         self._key_dir     = Path(getattr(cfg, "dualshock_key_dir",
@@ -2077,6 +2081,15 @@ class DualShockTransport:
                 if getattr(self._cfg, "nqpv_cocapture_enabled", False) and self._pending_pitl_meta is not None:
                     try:
                         from .novel_presence_fusion import cocapture_fields_from_pitl_meta
+                        # PoEP Track-1 (cycle-37): carry the session-level PoEP verdict into the meta so
+                        # cocapture reads a live poep_present. TWO-KEY: poep_present_signal returns None
+                        # (abstain) unless poep_liveness_enabled AND the data gate (N>=50). Default-off +
+                        # no session verdict -> branch sets nothing -> cocapture abstains (unchanged).
+                        _poep_flag = getattr(self._cfg, "poep_liveness_enabled", False)
+                        if _poep_flag and self._session_poep_verdict:
+                            from .poep_activation import poep_present_signal
+                            self._pending_pitl_meta["poep_present"] = poep_present_signal(
+                                self._session_poep_verdict, poep_enabled=_poep_flag)
                         self._pending_pitl_meta.update(
                             cocapture_fields_from_pitl_meta(self._pending_pitl_meta)
                         )
