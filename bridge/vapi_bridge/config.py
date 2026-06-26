@@ -1547,6 +1547,27 @@ class Config:
     Trade-off: no LED colour or haptic feedback during gameplay.
     PoAC biometric capture is completely unaffected — read-only, zero data impact."""
 
+    # VSD Cycle 25 tether experiment: low-amplitude synchronized pulses on adaptive triggers
+    # to keep the controller's wireless module "attached" state for PS5 BT while USB is
+    # used for high-rate capture (EXCLUSIVE_USB + grind). See s-usb-bt-tether-*.md
+    dual_grind_tether_enabled: bool = field(
+        default_factory=lambda: _env_bool("DUAL_GRIND_TETHER_ENABLED", False)
+    )
+    """Cycle 25 experiment — enable micro tether pulses on trigger during grind+EXCLUSIVE_USB.
+    Default False (safe). When enabled + grind_mode + host==EXCLUSIVE_USB, the
+    TetherPulseGenerator will emit tiny rhythm-synced forces via L6/driver path to
+    prevent 'PS5 module not attached' state flips. Must be << perceptible + duty cycled."""
+
+    dual_grind_tether_amplitude_max: int = field(
+        default_factory=lambda: int(_env("DUAL_GRIND_TETHER_AMP_MAX", "12"))
+    )
+    """Max force LSB (0-255) for tether pulses. Keep very small (default 12 ~5%)."""
+
+    dual_grind_tether_duty_s: float = field(
+        default_factory=lambda: float(_env("DUAL_GRIND_TETHER_DUTY_S", "1.2"))
+    )
+    """Min seconds between tether pulses (default 1.2)."""
+
     chain_submission_paused: bool = field(
         default_factory=lambda: _env("CHAIN_SUBMISSION_PAUSED", "false").lower() == "true"
     )
