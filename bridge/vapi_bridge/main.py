@@ -1379,6 +1379,22 @@ class Bridge:
         except Exception as _dca_exc:
             log.warning("Phase 70: DataCuratorAgent unavailable: %s", _dca_exc)
 
+        # Cycle-38: LivePresenceSignalingAgent (#34) — developer-self-cert presence HUD. Polls the live
+        # NQPV proof -> LED/haptic/terminal on state change. Gated on live_presence_signaling_enabled.
+        try:
+            if getattr(self.cfg, "live_presence_signaling_enabled", False):
+                from .live_presence_signaling_agent import LivePresenceSignalingAgent
+                _lpsa = LivePresenceSignalingAgent(
+                    self.store, self.cfg, bus=getattr(self, "_agent_bus", None), ds_integration=ds,
+                )
+                _t = asyncio.create_task(_lpsa.run_poll_loop())
+                _t.set_name("LivePresenceSignalingAgent_34")
+                _t.add_done_callback(_task_done_handler)
+                self._tasks.append(_t)
+                log.info("LivePresenceSignalingAgent (#34) ACTIVATED — developer-self-cert presence HUD live")
+        except Exception as _lpsa_exc:  # noqa: BLE001 — fail-open
+            log.warning("LivePresenceSignalingAgent (#34) unavailable: %s", _lpsa_exc)
+
         # SessionAdjudicator — guarded by operator_api_key configured
         if getattr(self.cfg, "operator_api_key", ""):
             try:
