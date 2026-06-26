@@ -149,6 +149,23 @@ def evaluate_artifact(a: SessionArtifact,
     # ---- tri-channel fusion ----
     fusion = fuse_screen_retina(cs, nc, dec, coh.verdict, coh.coherence_ratio(), cfg=cont_cfg)
 
+    # Cycle 26 Novel QorTroller Presence Verifier (NQPV) wiring
+    # Seamless extension: feed Retina fusion + available CCO/PoEP context into the central orchestrator.
+    try:
+        from .novel_presence_fusion import NovelPresenceFusionOrchestrator
+        nqpv = NovelPresenceFusionOrchestrator()
+        # cco_report and poep_present would come from higher-level call site (e.g. dualshock or session context)
+        # For now, pass what is available; orchestrator degrades gracefully.
+        nqpv_proof = nqpv.fuse(
+            retina_report=fusion,
+            # cco_report=... (wired via cco_poep_bridge in full integration)
+            device_id=getattr(a, 'device_id', None),
+            record_hash=getattr(a, 'record_hash', None),
+        )
+        # The proof can be attached to evidence / PoAC sidecar.
+    except Exception:
+        nqpv_proof = None  # fail-open for prototype
+
     return PanelReport(
         class_label=a.class_label, provenance=a.provenance,
         coupling_score=cs, coupling_lag_ms=lag, decoupled_energy=dec, negative_control=nc,
