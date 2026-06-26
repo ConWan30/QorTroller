@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import math
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
@@ -109,5 +110,22 @@ def test_no_hud_yields_insufficient_coherence():
                         in_fire=_fire_with_onsets(ts, [1000.0]), hud_texts=[], class_label="HUMAN_CLEAN")
     r = evaluate_artifact(a)
     assert r.coherence is CoherenceVerdict.INSUFFICIENT  # no screen channel
+
+
+def test_nqpv_cocapture_fields_propagate_to_proof():
+    # cycle-30 wiring: a co-captured artifact (device_id + CCO + PoEP + L4/L5/L6) flows through to a
+    # real fused proof on the PanelReport (binding holds, oracles feed the calibrated score).
+    a = replace(_live_artifact(), device_id="dev1", record_hash="rec1", cco_tier="P-T3",
+                poep_present=True, l4_l5_l6_ok=True)  # binding needs BOTH device_id + record_hash
+    r = evaluate_artifact(a)
+    assert r.nqpv_verdict != "UNVERIFIABLE"        # binding holds + oracles fed
+    assert r.nqpv_presence_score > 0.0
+    assert r.to_dict()["nqpv_verdict"] == r.nqpv_verdict
+
+
+def test_nqpv_without_device_id_is_unverifiable():
+    # honest default: no co-capture binding (no device_id) -> UNVERIFIABLE, oracles abstain (no fabrication)
+    r = evaluate_artifact(_live_artifact())  # device_id defaults ""
+    assert r.nqpv_verdict == "UNVERIFIABLE"
     # continuous coupling still proves presence
     assert r.fusion_verdict in (L9FusionVerdict.LIVE_COUPLED, L9FusionVerdict.LIVE_COHERENT)
