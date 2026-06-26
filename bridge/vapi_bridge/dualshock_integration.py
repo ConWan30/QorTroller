@@ -65,6 +65,7 @@ from .cco_l6b_wiring import (
 )
 from .config import Config
 from .continuity_prover import FEATURE_KEYS
+from .controller_reconnect_policy import ReconnectPolicy
 from .store import Store
 
 log = logging.getLogger(__name__)
@@ -379,6 +380,14 @@ class DualShockTransport:
         self._hid_counter_thread    = None
         self._hid_counter_running   = False
         self._hid_counter_restarts  = 0  # Phase 235-CONTENTION: self-healing retry count
+        # Controller hot-plug auto-reconnect (USB unplug/replug recovery without a bridge restart).
+        # The session loop counts consecutive poll failures and, past the policy threshold, re-opens
+        # the reader on a capped backoff (off the event loop). Default-on; disable via cfg.
+        self._consecutive_poll_failures = 0
+        self._reconnect_attempts        = 0
+        self._reconnect_policy = ReconnectPolicy(
+            reconnect_after_failures=int(getattr(cfg, "controller_reconnect_after_failures", 5)),
+        )
         self._oracle_addr = getattr(cfg, "skill_oracle_address", "")
         self._bounty_cfg  = getattr(cfg, "dualshock_active_bounties", "")
         self._key_dir     = Path(getattr(cfg, "dualshock_key_dir",
@@ -1287,6 +1296,72 @@ class DualShockTransport:
             pass
 
     # ------------------------------------------------------------------
+    # Controller hot-plug auto-reconnect
+    # ------------------------------------------------------------------
+    def _reconnect_reader(self) -> bool:
+        """Re-open ONLY the DualSense reader (focused subset of _init_hardware) for hot-plug recovery.
+
+        Closes the stale handle, constructs a fresh DualSenseReader, and reconnects. Identity,
+        classifier, oracles, etc. persist (untouched) — this re-acquires the USB HID device after an
+        unplug/replug. Returns True iff the device reconnected. BLOCKING (HID calls) — the caller MUST
+        invoke this via run_in_executor so it never stalls the event loop (STABILITY discipline). The
+        parallel hid rate-counter self-heals independently (Phase 235-PCC-RATE-FIX), so it is left alone.
+        """
+        if getattr(self, "_reader", None) is not None:
+            try:
+                self._reader.close()
+            except Exception as _close_exc:
+                log.debug("reconnect: stale reader close failed (non-fatal): %s", _close_exc)
+        try:
+            self._reader = DualSenseReader()
+            connected = bool(self._reader.connect())
+        except Exception as _open_exc:
+            log.warning("reconnect: reader re-open failed: %s", _open_exc)
+            self._is_sim_mode = True
+            return False
+        self._is_sim_mode = not connected
+        return connected
+
+    async def _handle_poll_failure(self, reason: str) -> None:
+        """Hot-plug recovery for a failed poll iteration: count the failure and, past the policy
+        threshold, attempt a reader re-open on a capped backoff — replacing the bare sleep(interval)
+        in the poll-failure paths. Reconnect runs in an executor (event-loop-safe). Auto-reconnect is
+        default-on (cfg.controller_auto_reconnect_enabled); when off, behaves like the old sleep path.
+        """
+        self._consecutive_poll_failures += 1
+        if (getattr(self._cfg, "controller_auto_reconnect_enabled", True)
+                and self._reconnect_policy.should_attempt(self._consecutive_poll_failures)):
+            loop = asyncio.get_running_loop()
+            try:
+                ok = await loop.run_in_executor(None, self._reconnect_reader)
+            except Exception as _re_exc:
+                log.warning("controller reconnect attempt errored (non-fatal): %s", _re_exc)
+                ok = False
+            if ok:
+                log.info(
+                    "controller re-acquired after %d consecutive poll failures (reason=%s) "
+                    "— no bridge restart needed",
+                    self._consecutive_poll_failures, reason,
+                )
+                self._consecutive_poll_failures = 0
+                self._reconnect_attempts = 0
+                if self._pcc_monitor is not None:
+                    self._refresh_retina_policy()
+                await asyncio.sleep(self._interval)
+                return
+            self._reconnect_attempts += 1
+            _backoff = self._reconnect_policy.backoff_for_attempt(self._reconnect_attempts)
+            if self._reconnect_attempts == 1 or self._reconnect_attempts % 10 == 0:
+                log.warning(
+                    "controller still absent after %d reconnect attempt(s) (reason=%s); retrying "
+                    "~every %.0fs — unplug/replug the USB cable to recover without a restart",
+                    self._reconnect_attempts, reason, _backoff,
+                )
+            await asyncio.sleep(_backoff)
+            return
+        await asyncio.sleep(self._interval)
+
+    # ------------------------------------------------------------------
     # Main session loop
     # ------------------------------------------------------------------
     async def _session_loop(self, active_bounties: list[int]):
@@ -1336,14 +1411,14 @@ class DualShockTransport:
                 if self._pcc_monitor is not None:  # Phase 234.7 Layer 2
                     self._pcc_monitor.signal_disconnect("hid_timeout")
                 self._refresh_retina_policy()
-                await asyncio.sleep(self._interval)
+                await self._handle_poll_failure("hid_timeout")  # hot-plug auto-reconnect (replaces bare sleep)
                 continue
             except Exception as _poll_exc:
                 log.warning("_poll_frames error (non-fatal, session continues): %s", _poll_exc)
                 if self._pcc_monitor is not None:  # Phase 234.7 Layer 2
                     self._pcc_monitor.signal_disconnect("poll_error")
                 self._refresh_retina_policy()
-                await asyncio.sleep(self._interval)
+                await self._handle_poll_failure("poll_error")  # hot-plug auto-reconnect (replaces bare sleep)
                 continue
 
             # Phase 235-PCC-SPC: read previous-cycle game-context for SPC haptic-tolerance binding.
@@ -1364,8 +1439,14 @@ class DualShockTransport:
                 log.debug("Session loop iter=%d: no frames, sleeping", _loop_iter)
                 if self._pcc_monitor is not None:  # Phase 234.7 Layer 1
                     self._pcc_monitor.update_sample(0, self._interval, **_spc_kwargs)
-                await asyncio.sleep(self._interval)
+                await self._handle_poll_failure("no_frames")  # hot-plug auto-reconnect (replaces bare sleep)
                 continue
+
+            # Frames present => the controller is delivering. Reset the hot-plug failure counters so a
+            # later disconnect starts a fresh failure run / backoff schedule.
+            if self._consecutive_poll_failures or self._reconnect_attempts:
+                self._consecutive_poll_failures = 0
+                self._reconnect_attempts = 0
 
             # Phase 234.7 Layer 1 — report poll rate for PCC.
             # Phase 235-PCC-RATE-FIX: prefer the TRUE USB HID rate from the
