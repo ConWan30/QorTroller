@@ -57,6 +57,14 @@ class SessionArtifact:
     provenance: str = "real"
     record_hash: str = ""
     capture_telemetry: dict = field(default_factory=dict)
+    # --- NQPV oracle co-capture (cycle-30 wiring) — populated at capture time; ""/None = ABSTAIN ---
+    # The retina/L9 verdict is computed by the panel itself (fuse_screen_retina). These carry the
+    # OTHER oracle outputs so the corpus session is a full co-capture; a missing field abstains in the
+    # calibrated model (no fabrication). Populating them is the capture-time step (live session loop).
+    device_id: str = ""
+    cco_tier: str = ""                    # CCO hardware-class tier (e.g. "P-T3"); "FAIL" hard-gates
+    poep_present: Optional[bool] = None
+    l4_l5_l6_ok: Optional[bool] = None
 
 
 @dataclass(frozen=True)
@@ -72,6 +80,10 @@ class PanelReport:
     fusion_verdict: L9FusionVerdict
     n_input_events: int
     n_screen_events: int
+    # NQPV fused presence (cycle-30) — for the defensibility study to read per session
+    nqpv_verdict: str = "UNVERIFIABLE"
+    nqpv_presence_score: float = 0.0
+    nqpv_disagreement_index: float = 0.0
 
     def to_dict(self) -> dict:
         return {
@@ -88,6 +100,9 @@ class PanelReport:
             "fusion_verdict": self.fusion_verdict.value,
             "n_input_events": self.n_input_events,
             "n_screen_events": self.n_screen_events,
+            "nqpv_verdict": self.nqpv_verdict,
+            "nqpv_presence_score": round(self.nqpv_presence_score, 4),
+            "nqpv_disagreement_index": round(self.nqpv_disagreement_index, 4),
         }
 
 
@@ -149,22 +164,25 @@ def evaluate_artifact(a: SessionArtifact,
     # ---- tri-channel fusion ----
     fusion = fuse_screen_retina(cs, nc, dec, coh.verdict, coh.coherence_ratio(), cfg=cont_cfg)
 
-    # Cycle 26 Novel QorTroller Presence Verifier (NQPV) wiring
-    # Seamless extension: feed Retina fusion + available CCO/PoEP context into the central orchestrator.
+    # Cycle 26/30 NQPV wiring — feed the co-captured oracle outputs into the central orchestrator.
+    # retina/L9 verdict = `fusion` (incl. COUPLED_CLEAN, the screen-lobe-free presence input). The
+    # CCO/PoEP/L4-L5-L6 come from the SessionArtifact co-capture fields; a missing field ABSTAINS in
+    # the calibrated model (no fabrication). Advisory / fail-open; not certifying (RETINA-EXCL-2 study).
+    import types as _types
+    nqpv_proof = None
     try:
         from .novel_presence_fusion import NovelPresenceFusionOrchestrator
-        nqpv = NovelPresenceFusionOrchestrator()
-        # cco_report and poep_present would come from higher-level call site (e.g. dualshock or session context)
-        # For now, pass what is available; orchestrator degrades gracefully.
-        nqpv_proof = nqpv.fuse(
+        _cco = _types.SimpleNamespace(tier=a.cco_tier) if getattr(a, "cco_tier", "") else None
+        nqpv_proof = NovelPresenceFusionOrchestrator().fuse(
             retina_report=fusion,
-            # cco_report=... (wired via cco_poep_bridge in full integration)
-            device_id=getattr(a, 'device_id', None),
-            record_hash=getattr(a, 'record_hash', None),
+            cco_report=_cco,
+            poep_present=getattr(a, "poep_present", None),
+            l4_l5_l6_ok=getattr(a, "l4_l5_l6_ok", None),
+            device_id=getattr(a, "device_id", "") or "",
+            record_hash=getattr(a, "record_hash", "") or "",
         )
-        # The proof can be attached to evidence / PoAC sidecar.
     except Exception:
-        nqpv_proof = None  # fail-open for prototype
+        nqpv_proof = None  # fail-open
 
     return PanelReport(
         class_label=a.class_label, provenance=a.provenance,
@@ -172,4 +190,7 @@ def evaluate_artifact(a: SessionArtifact,
         coherence=coh.verdict, coherence_ratio=coh.coherence_ratio(),
         fusion_verdict=fusion.verdict,
         n_input_events=len(input_events), n_screen_events=len(screen_events),
+        nqpv_verdict=(nqpv_proof.verdict.value if nqpv_proof else "UNVERIFIABLE"),
+        nqpv_presence_score=(nqpv_proof.presence_score if nqpv_proof else 0.0),
+        nqpv_disagreement_index=(nqpv_proof.disagreement_index if nqpv_proof else 0.0),
     )
