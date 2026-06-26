@@ -1,0 +1,61 @@
+[
+  {
+    "label": "A_dual_connection",
+    "window_s": 75,
+    "started_at": 1782516124.5700917,
+    "summary": {
+      "integrity": {
+        "n_pcc_samples": 14,
+        "host_state_dist": {
+          "EXCLUSIVE_USB": 14
+        },
+        "capture_state_dist": {
+          "NOMINAL": 14
+        },
+        "poll_rate_mean": 2129.2,
+        "poll_rate_cv": 0.1396,
+        "contested": false
+      },
+      "liveness": {
+        "n_cocapture_samples": 34,
+        "l4l5l6_ok_fraction": 0.265,
+        "humanity_prob_mean": 0.4,
+        "humanity_prob_max": 0.523,
+        "controller_clean_fraction": 0.353,
+        "controller_signal_dist": {
+          "CONTROLLER_ANOMALY": 22,
+          "CONTROLLER_CLEAN": 12
+        }
+      }
+    }
+  },
+  {
+    "label": "B_remote_play",
+    "window_s": 75,
+    "started_at": 1782516358.7131658,
+    "summary": {
+      "integrity": {
+        "n_pcc_samples": 14,
+        "host_state_dist": {
+          "EXCLUSIVE_USB": 14
+        },
+        "capture_state_dist": {
+          "NOMINAL": 14
+        },
+        "poll_rate_mean": 1908.0,
+        "poll_rate_cv": 0.0436,
+        "contested": false
+      },
+      "liveness": {
+        "n_cocapture_samples": 40,
+        "l4l5l6_ok_fraction": 1.0,
+        "humanity_prob_mean": 0.523,
+        "humanity_prob_max": 0.525,
+        "controller_clean_fraction": 1.0,
+        "controller_signal_dist": {
+          "CONTROLLER_CLEAN": 40
+        }
+      }
+    }
+  }
+]
