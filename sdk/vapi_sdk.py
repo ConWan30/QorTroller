@@ -220,11 +220,17 @@ class VAPIPresence:
         self._key = api_key
 
     def get(self, device_id: str) -> VAPIPresenceProof:
-        """GET /player/presence-proof . 10s timeout. Fail-open to UNVERIFIABLE on error."""
+        """GET /operator/player/presence-proof . 10s timeout. Fail-open to UNVERIFIABLE on error.
+
+        Path note: the endpoint lives on the operator sub-app (mounted at /operator), so the route is
+        /operator/player/presence-proof; the bare /player/presence-proof collides with the main-app
+        /player/{device_id} HTML route (422). Auth is the x-api-key HEADER (not a query param).
+        """
         import urllib.request as _ur, json as _j
         try:
-            url = f"{self._base}/player/presence-proof?device_id={device_id}&api_key={self._key}"
-            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+            url = f"{self._base}/operator/player/presence-proof?device_id={device_id}"
+            req = _ur.Request(url, headers={"x-api-key": self._key})
+            with _ur.urlopen(req, timeout=10) as resp:  # noqa: S310
                 body = _j.loads(resp.read())
             return VAPIPresenceProof(
                 device_id=str(body.get("device_id", device_id or "")),

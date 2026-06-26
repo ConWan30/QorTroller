@@ -18,7 +18,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 import time
+
+# repo root on sys.path so `l9_presence` imports regardless of invocation cwd
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from l9_presence.poep import PoEPConfig, PoEPRecorder, load_poep_session
 from l9_presence.poep_calibration import (
