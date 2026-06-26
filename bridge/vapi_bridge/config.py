@@ -121,6 +121,19 @@ class Config:
     signal_disconnect + retries). 10x tolerates real hiccup windows
     without triggering the watchdog zombie cascade."""
 
+    # --- Controller hot-plug auto-reconnect (USB unplug/replug recovery, no bridge restart) ---
+    controller_auto_reconnect_enabled: bool = field(
+        default_factory=lambda: _env_bool("CONTROLLER_AUTO_RECONNECT_ENABLED", True)
+    )
+    """When True (default), the DualShock session loop re-opens the reader after a run of consecutive
+    poll failures (USB unplug) so a replug auto-recovers without restarting the bridge. The blocking
+    re-open runs in an executor (event-loop-safe) on a capped backoff (5/10/30/60s)."""
+    controller_reconnect_after_failures: int = field(
+        default_factory=lambda: _env_int("CONTROLLER_RECONNECT_AFTER_FAILURES", 5)
+    )
+    """Consecutive poll failures (timeout/error/empty) before the first reader re-open attempt.
+    Small enough to recover in a few seconds; large enough to ride out a transient USB hiccup."""
+
     # --- Phase 235.x-STABILITY-2 (2026-05-08): asyncio loop-block instrumentation (WIF-064) ---
     asyncio_debug_enabled: bool = field(
         default_factory=lambda: _env_bool("ASYNCIO_DEBUG_ENABLED", False)
