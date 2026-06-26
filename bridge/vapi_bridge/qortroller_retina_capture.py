@@ -167,5 +167,23 @@ class RetinaGameCapture:
     def latest_coupled_verdict(self) -> Optional[str]:
         return self.core.latest_coupled_verdict()
 
+    @property
+    def frames_seen(self) -> int:
+        """How many WGC frame-pairs have been processed (0 => capture not producing frames = a bug;
+        >0 with a None verdict => honest abstain, e.g. dead-zone right stick in NCAA CFB)."""
+        return self._source.frames_seen
+
+    def status(self) -> dict:
+        """Diagnostic snapshot for 'is every datapoint functioning' checks."""
+        rep = self.core.latest_l9_report()
+        return {
+            "started": self.started,
+            "frames_seen": self._source.frames_seen,
+            "l9_verdict": (rep.verdict.value if rep is not None else None),
+            "nqpv_verdict": (map_l9_to_nqpv_retina(rep.verdict) if rep is not None else None),
+            "abstain_reason": (None if rep is not None else
+                               "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)"),
+        }
+
     def stop(self) -> None:
         self._source.stop()
