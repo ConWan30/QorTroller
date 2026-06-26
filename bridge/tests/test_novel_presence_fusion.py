@@ -10,7 +10,11 @@ from __future__ import annotations
 
 import types
 
-from vapi_bridge.novel_presence_fusion import NQPVVerdict, NovelPresenceFusionOrchestrator
+from vapi_bridge.novel_presence_fusion import (
+    NQPVVerdict,
+    NovelPresenceFusionOrchestrator,
+    cocapture_fields_from_pitl_meta,
+)
 
 
 def _f(**kw):
@@ -95,3 +99,30 @@ def test_injectable_threshold_gates_the_score():
     r = _f(device_id="d", record_hash="r", cco_report=_cco("P-T3"),
            poep_present=True, retina_report="COUPLED_CLEAN", l4_l5_l6_ok=False, threshold=0.99)
     assert r.verdict == NQPVVerdict.INDETERMINATE
+
+
+# --- cycle-30 capture-time co-capture derivation ---
+
+def test_cocapture_derives_live_oracles_and_abstains_honestly():
+    f = cocapture_fields_from_pitl_meta({
+        "cco_presence_ceiling_candidate": "P-T3", "humanity_prob": 0.82,
+        "retina_enabled": True, "retina_alert": False,
+    })
+    assert f["nqpv_cocapture"] is True
+    assert f["nqpv_cco_tier"] == "P-T3"
+    assert f["nqpv_l4l5l6_ok"] is True                       # humanity 0.82 >= 0.5
+    assert f["nqpv_retina_controller_signal"] == "CONTROLLER_CLEAN"
+    assert f["nqpv_poep_present"] is None                    # abstain (not fabricated)
+
+
+def test_cocapture_flags_anomaly_and_low_humanity():
+    f = cocapture_fields_from_pitl_meta({"humanity_prob": 0.3, "retina_enabled": True, "retina_alert": True})
+    assert f["nqpv_cco_tier"] is None                        # missing -> abstain
+    assert f["nqpv_l4l5l6_ok"] is False                      # humanity 0.3 < 0.5
+    assert f["nqpv_retina_controller_signal"] == "CONTROLLER_ANOMALY"
+
+
+def test_cocapture_abstains_when_inputs_absent():
+    f = cocapture_fields_from_pitl_meta({"cco_presence_ceiling_candidate": "P-T3"})  # no humanity/retina
+    assert f["nqpv_l4l5l6_ok"] is None
+    assert f["nqpv_retina_controller_signal"] is None

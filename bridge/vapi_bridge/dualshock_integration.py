@@ -1985,6 +1985,19 @@ class DualShockTransport:
                 if self._retina_perception_active():
                     await self._run_retina_perception_hook(_record_hash_hex)
 
+                # Cycle-30 NQPV capture-time co-capture: derive + attach the NQPV oracle inputs to the
+                # PITL meta sidecar (persisted by on_record) for the RETINA-EXCL-2 study corpus. The
+                # meta already carries CCO tier + humanity + the controller-lobe retina by here.
+                # Default-off; fail-open; honest abstain on PoEP + full L9/screen (not live).
+                if getattr(self._cfg, "nqpv_cocapture_enabled", False) and self._pending_pitl_meta is not None:
+                    try:
+                        from .novel_presence_fusion import cocapture_fields_from_pitl_meta
+                        self._pending_pitl_meta.update(
+                            cocapture_fields_from_pitl_meta(self._pending_pitl_meta)
+                        )
+                    except Exception as _nq_exc:
+                        log.debug("nqpv co-capture skipped (fail-open): %s", _nq_exc)
+
                 await self._dispatch(raw)
                 self._last_raw = raw
 
