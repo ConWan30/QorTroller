@@ -432,6 +432,22 @@ class TestVAPIPresenceProof(unittest.TestCase):
         self.assertEqual(p.retina_controller_signal, "CONTROLLER_CLEAN")
         self.assertIn("retina_controller_signal", p.to_dict())
 
+    def test_cert_scope_default_advisory_not_developer_self(self):
+        p = VAPIPresenceProof(device_id="d", record_hash="r", verdict="CONSISTENT_HUMAN")
+        self.assertEqual(p.cert_scope, "advisory")
+        self.assertFalse(p.is_developer_self_certified())
+        self.assertFalse(p.population_certified)
+
+    def test_developer_self_cert_scope(self):
+        # developer-self cert: scoped certified (advisory off), but NEVER population-certified
+        p = VAPIPresenceProof(
+            device_id="d", record_hash="r", verdict="CONSISTENT_HUMAN_VERIFIED_HARDWARE",
+            cert_scope="developer_self", advisory=False,
+        )
+        self.assertTrue(p.is_developer_self_certified())
+        self.assertFalse(p.population_certified)     # the honesty rail: not a population claim
+        self.assertIn("cert_scope", p.to_dict())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -53,6 +53,12 @@ class FusedGamerPresenceProof:
     timestamp_ns: int = 0
     commitments: dict[str, str] = field(default_factory=dict)  # e.g. {"retina": "...", "pda": "..."}
     notes: str = ""
+    # cycle-38 developer-self-cert (d-developer-self-cert): the CERTIFICATION SCOPE of this proof.
+    # "advisory" (default) = uncertified signal; "developer_self" = certified for the developer's own
+    # single-subject scope (NOT population/tournament). population_certified stays False until a
+    # population corpus + real adversaries pass the study. The verdict is the result WITHIN the scope.
+    cert_scope: str = "advisory"
+    population_certified: bool = False
 
 
 # --- Calibrated model (cycle-29) — PROVISIONAL operating point ---
@@ -147,6 +153,7 @@ class NovelPresenceFusionOrchestrator:
         timestamp_ns: int = 0,
         weights: dict[str, float] | None = None,
         threshold: float | None = None,
+        developer_self_cert: bool = False,
     ) -> FusedGamerPresenceProof:
         """
         Perform the fusion.
@@ -232,6 +239,13 @@ class NovelPresenceFusionOrchestrator:
         if cco_report:
             commitments["cco"] = getattr(cco_report, "commitment", "") or ""
 
+        # cycle-38 developer-self-cert: cert_scope describes the certification REGIME (not the verdict).
+        # developer_self when the operator's dev-cert mode is on; else advisory. population_certified
+        # stays False until a population corpus + real adversaries pass the study (d-developer-self-cert).
+        cert_scope = "developer_self" if developer_self_cert else "advisory"
+        _scope_note = ("developer-self cert scope (single-subject; population_certified=False)"
+                       if developer_self_cert
+                       else "advisory; not certifying until RETINA-EXCL-2 study")
         return FusedGamerPresenceProof(
             verdict=verdict,
             device_id=device_id,
@@ -245,8 +259,10 @@ class NovelPresenceFusionOrchestrator:
             binding_ok=binding_ok,
             timestamp_ns=timestamp_ns,
             commitments=commitments,
-            notes=(f"calibrated-v1 (PROVISIONAL, advisory); score={presence_score:.2f} "
-                   f"disagreement={disagreement_index:.2f}; not certifying until RETINA-EXCL-2 study")
+            cert_scope=cert_scope,
+            population_certified=False,
+            notes=(f"calibrated-v1; score={presence_score:.2f} "
+                   f"disagreement={disagreement_index:.2f}; {_scope_note}")
         )
 
 # --- Helper to wire into existing PoAC / GIC (stub for implementation) ---

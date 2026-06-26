@@ -163,7 +163,16 @@ class VAPIPresenceProof:
     notes: str = ""
     proof_version: str = "nqpv-v1"
     advisory: bool = True       # machine-readable: this is NOT a certified eligibility verdict
-    certified: bool = False     # flips True only after the RETINA-EXCL-2 study + operator promotion
+    certified: bool = False     # never population/tournament-certified on the presence-proof endpoint
+    # cycle-38 developer-self-cert: certification SCOPE. "developer_self" = certified for the developer's
+    # own single-subject scope (advisory off within scope); "advisory" otherwise. population_certified is
+    # the population/tournament claim — only True after breadth + real adversaries + the study pass.
+    cert_scope: str = "advisory"
+    population_certified: bool = False
+
+    def is_developer_self_certified(self) -> bool:
+        """True iff this is a developer-self-scoped cert (single-subject; NOT a population claim)."""
+        return self.cert_scope == "developer_self" and not self.advisory
 
     def is_consistent_human(self) -> bool:
         """True for the two positive human verdicts."""
@@ -191,6 +200,8 @@ class VAPIPresenceProof:
             "proof_version": self.proof_version,
             "advisory": self.advisory,
             "certified": self.certified,
+            "cert_scope": self.cert_scope,
+            "population_certified": self.population_certified,
         }
 
 
@@ -234,6 +245,8 @@ class VAPIPresence:
                 # fail-safe: absent advisory/certified => treat as advisory + uncertified
                 advisory=bool(body.get("advisory", True)),
                 certified=bool(body.get("certified", False)),
+                cert_scope=str(body.get("cert_scope", "advisory")),
+                population_certified=bool(body.get("population_certified", False)),
             )
         except Exception as exc:
             return VAPIPresenceProof(

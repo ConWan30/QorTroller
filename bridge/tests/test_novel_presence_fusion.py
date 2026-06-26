@@ -144,3 +144,28 @@ def test_cocapture_carries_live_coupled_retina_when_present():
     })
     assert f["nqpv_retina_coupled_verdict"] == "COUPLED_CLEAN"
     assert f["nqpv_retina_controller_signal"] == "CONTROLLER_CLEAN"  # controller lobe still separate
+
+
+# --- cycle-38 developer-self-cert: cert_scope labeling ---
+
+def test_cert_scope_defaults_advisory():
+    r = _f(device_id="d", record_hash="r", cco_report=_cco("P-T3"),
+           poep_present=True, retina_report="COUPLED_CLEAN")
+    assert r.cert_scope == "advisory"            # default: not a cert regime
+    assert r.population_certified is False
+
+
+def test_cert_scope_developer_self_when_enabled():
+    r = _f(device_id="d", record_hash="r", cco_report=_cco("P-T3"),
+           poep_present=True, retina_report="COUPLED_CLEAN", developer_self_cert=True)
+    assert r.cert_scope == "developer_self"      # developer-scoped cert regime
+    assert r.population_certified is False        # NEVER a population claim (the honesty rail)
+    assert r.verdict == NQPVVerdict.CONSISTENT_HUMAN_VERIFIED_HARDWARE
+
+
+def test_cert_scope_stays_advisory_without_binding_even_if_dev_cert():
+    # no binding -> UNVERIFIABLE -> cert_scope stays advisory regardless of the dev-cert flag
+    r = _f(device_id=None, record_hash="r", developer_self_cert=True)
+    assert r.verdict == NQPVVerdict.UNVERIFIABLE
+    assert r.cert_scope == "advisory"
+    assert r.population_certified is False
