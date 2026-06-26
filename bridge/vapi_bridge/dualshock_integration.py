@@ -1172,6 +1172,76 @@ class DualShockTransport:
         except Exception:
             return bool(getattr(self._cfg, "retina_perception_enabled", False))
 
+    async def _run_retina_perception_hook(self, record_hash_hex: str) -> None:
+        """Advisory Trio-Retina controller-lobe perception over the trailing HID window.
+
+        Phase 0 event-loop discipline (Phase 235-EVENTLOOP): the numpy embed +
+        state-commitment (``run_controller_perception``) and the SQLite/provenance
+        writes (``persist_retina_result``) are CPU/IO-heavy and MUST NOT run inline
+        on the async session loop. Both are offloaded via ``asyncio.to_thread``; only
+        the lightweight PITL-meta attach stays on the loop, after the await. Fail-open:
+        any error is swallowed so the advisory layer never breaks ingestion. Behavior
+        is byte-identical to the prior inline hook except for the threading boundary.
+        """
+        try:
+            from .retina_depin_policy import get_runtime_policy_state
+            from .retina_events_root import (
+                EVENTS_ROOT_SCHEME_POSEIDON_V1,
+                EVENTS_ROOT_SCHEME_SHA256_V1,
+            )
+            from .retina_perception import (
+                persist_retina_result,
+                run_controller_perception,
+            )
+
+            _src = getattr(self, "_device_id_hex", None) or (
+                self._device_id.hex() if self._device_id is not None else "unknown"
+            )
+            _scheme = (
+                EVENTS_ROOT_SCHEME_POSEIDON_V1
+                if bool(getattr(self._cfg, "retina_events_root_poseidon_enabled", False))
+                else EVENTS_ROOT_SCHEME_SHA256_V1
+            )
+            _rp = await asyncio.to_thread(
+                run_controller_perception,
+                list(self._retina_snap_ring),
+                enabled=True,
+                source_id=_src,
+                window=int(getattr(self._cfg, "retina_perception_window", 120)),
+                dynamics_horizon=int(getattr(self._cfg, "retina_dynamics_horizon", 5)),
+                record_hash_hex=record_hash_hex,
+                events_root_scheme=_scheme,
+            )
+            if self._pending_pitl_meta is not None:
+                _pol = get_runtime_policy_state()
+                self._pending_pitl_meta["retina_enabled"] = _rp.enabled
+                self._pending_pitl_meta["retina_event_count"] = _rp.event_count
+                self._pending_pitl_meta["retina_trajectory_anomalies"] = (
+                    _rp.trajectory_anomalies
+                )
+                self._pending_pitl_meta["retina_record_hash"] = _rp.record_hash_hex
+                self._pending_pitl_meta["retina_state_commitment"] = (
+                    _rp.state_commitment_hex
+                )
+                self._pending_pitl_meta["retina_alert"] = _rp.trajectory_anomalies > 0
+                self._pending_pitl_meta["retina_policy_armed"] = bool(
+                    _pol.armed if _pol else False
+                )
+                self._pending_pitl_meta["retina_policy_arm_source"] = (
+                    _pol.arm_source if _pol else "unarmed"
+                )
+                self._pending_pitl_meta["retina_source"] = "hid"
+            await asyncio.to_thread(
+                persist_retina_result,
+                self._store,
+                _src,
+                _rp,
+                source="hid",
+                cfg=self._cfg,
+            )
+        except Exception as _ret_exc:
+            log.debug("retina perception hook fail-open: %s", _ret_exc)
+
     # ------------------------------------------------------------------
     # Main session loop
     # ------------------------------------------------------------------
@@ -1848,67 +1918,7 @@ class DualShockTransport:
                     pass
 
                 if self._retina_perception_active():
-                    try:
-                        from .retina_depin_policy import get_runtime_policy_state
-                        from .retina_perception import (
-                            persist_retina_result,
-                            run_controller_perception,
-                        )
-                        _src = getattr(self, "_device_id_hex", None) or (
-                            self._device_id.hex() if self._device_id is not None else "unknown"
-                        )
-                        from .retina_events_root import (
-                            EVENTS_ROOT_SCHEME_POSEIDON_V1,
-                            EVENTS_ROOT_SCHEME_SHA256_V1,
-                        )
-                        _scheme = (
-                            EVENTS_ROOT_SCHEME_POSEIDON_V1
-                            if bool(
-                                getattr(
-                                    self._cfg,
-                                    "retina_events_root_poseidon_enabled",
-                                    False,
-                                )
-                            )
-                            else EVENTS_ROOT_SCHEME_SHA256_V1
-                        )
-                        _rp = run_controller_perception(
-                            list(self._retina_snap_ring),
-                            enabled=True,
-                            source_id=_src,
-                            window=int(getattr(self._cfg, "retina_perception_window", 120)),
-                            dynamics_horizon=int(
-                                getattr(self._cfg, "retina_dynamics_horizon", 5)
-                            ),
-                            record_hash_hex=_record_hash_hex,
-                            events_root_scheme=_scheme,
-                        )
-                        if self._pending_pitl_meta is not None:
-                            _pol = get_runtime_policy_state()
-                            self._pending_pitl_meta["retina_enabled"] = _rp.enabled
-                            self._pending_pitl_meta["retina_event_count"] = _rp.event_count
-                            self._pending_pitl_meta["retina_trajectory_anomalies"] = (
-                                _rp.trajectory_anomalies
-                            )
-                            self._pending_pitl_meta["retina_record_hash"] = _rp.record_hash_hex
-                            self._pending_pitl_meta["retina_state_commitment"] = (
-                                _rp.state_commitment_hex
-                            )
-                            self._pending_pitl_meta["retina_alert"] = (
-                                _rp.trajectory_anomalies > 0
-                            )
-                            self._pending_pitl_meta["retina_policy_armed"] = bool(
-                                _pol.armed if _pol else False
-                            )
-                            self._pending_pitl_meta["retina_policy_arm_source"] = (
-                                _pol.arm_source if _pol else "unarmed"
-                            )
-                            self._pending_pitl_meta["retina_source"] = "hid"
-                        persist_retina_result(
-                            self._store, _src, _rp, source="hid", cfg=self._cfg
-                        )
-                    except Exception as _ret_exc:
-                        log.debug("retina perception hook fail-open: %s", _ret_exc)
+                    await self._run_retina_perception_hook(_record_hash_hex)
 
                 await self._dispatch(raw)
                 self._last_raw = raw
