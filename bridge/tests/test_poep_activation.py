@@ -70,3 +70,54 @@ def test_status_activated_only_with_both_keys():
     s = poep_activation_status(r, poep_enabled=True)
     assert s["status"] == "ACTIVATED"
     assert s["activated"] is True
+
+
+# --- Stage 2: session verdict file read (fresh/stale gate) ---
+
+def test_read_verdict_missing_file_abstains(tmp_path):
+    from vapi_bridge.poep_activation import read_session_poep_verdict
+    assert read_session_poep_verdict(str(tmp_path / "nope.json")) is None
+
+
+def test_read_verdict_fresh_returns_it(tmp_path):
+    import json as _j, time as _t
+    from vapi_bridge.poep_activation import read_session_poep_verdict
+    p = tmp_path / "v.json"
+    p.write_text(_j.dumps({"verdict": "PRESENT", "ts_ns": _t.time_ns(), "cert_scope": "developer_self"}))
+    v = read_session_poep_verdict(str(p), max_age_s=7200)
+    assert v is not None and v["verdict"] == "PRESENT"
+
+
+def test_read_verdict_stale_abstains(tmp_path):
+    import json as _j, time as _t
+    from vapi_bridge.poep_activation import read_session_poep_verdict
+    p = tmp_path / "v.json"
+    old = _t.time_ns() - 10_000 * 1_000_000_000   # 10000s old
+    p.write_text(_j.dumps({"verdict": "PRESENT", "ts_ns": old}))
+    assert read_session_poep_verdict(str(p), max_age_s=7200) is None
+
+
+def test_read_verdict_future_dated_abstains(tmp_path):
+    import json as _j, time as _t
+    from vapi_bridge.poep_activation import read_session_poep_verdict
+    p = tmp_path / "v.json"
+    p.write_text(_j.dumps({"verdict": "PRESENT", "ts_ns": _t.time_ns() + 3600 * 1_000_000_000}))
+    assert read_session_poep_verdict(str(p), max_age_s=7200) is None
+
+
+def test_read_verdict_malformed_abstains(tmp_path):
+    from vapi_bridge.poep_activation import read_session_poep_verdict
+    p = tmp_path / "v.json"
+    p.write_text("{not json")
+    assert read_session_poep_verdict(str(p)) is None
+
+
+def test_read_verdict_feeds_present_signal_end_to_end(tmp_path):
+    # the verdict file -> read -> poep_present_signal (two-key) -> True
+    import json as _j, time as _t
+    from vapi_bridge.poep_activation import read_session_poep_verdict, poep_present_signal
+    p = tmp_path / "v.json"
+    p.write_text(_j.dumps({"verdict": "PRESENT", "ts_ns": _t.time_ns()}))
+    v = read_session_poep_verdict(str(p))
+    assert poep_present_signal(v, poep_enabled=True) is True
+    assert poep_present_signal(v, poep_enabled=False) is None   # operator key still required

@@ -89,6 +89,46 @@ def poep_readiness(corpus_dir: str = "poep_l9", min_n: int = _MIN_N) -> dict:
     }
 
 
+def single_subject_reflex_model(corpus_dir: str, player: str, min_n: int = 30) -> dict:
+    """Developer-self (SINGLE-SUBJECT) reflex band: population_reflex_model restricted to ONE player.
+
+    The developer-self calibration basis (d-developer-self-cert) — the developer's OWN band, NOT a
+    population band. min_n defaults to the developer-scoped gate (30), not the population N>=50.
+    """
+    sessions = [s for s in load_enrollment_sessions(corpus_dir) if s.player == player]
+    m = population_reflex_model(sessions, min_n)
+    m["single_subject"] = True
+    m["player"] = player
+    return m
+
+
+def developer_self_liveness_verdict(
+    reactions: list, model: dict, *, min_in_band_fraction: float = 0.5,
+) -> dict:
+    """LIVENESS-ONLY session verdict for developer-self cert (device-auth deferred — see DEV_01/02
+    slope=0 finding). Aggregates a fresh enrollment session's reactions against the single-subject
+    band: PRESENT iff calibration_complete (L6B gate) AND the in-band fraction of REACTED challenges
+    >= min_in_band_fraction. Returns a poep_verify-shaped dict (verdict PRESENT/REJECT/
+    calibration_incomplete) consumable by poep_activation.poep_present_signal. channel='liveness_only'
+    is explicit so a future device-auth re-add is a deliberate upgrade, not a silent assumption.
+    """
+    if not model.get("calibration_complete"):
+        return {"status": "calibration_incomplete",
+                "n_reactions": model.get("n_reactions", 0), "min_n": model.get("min_n", _MIN_N)}
+    lo, hi = model.get("band_lo_ms"), model.get("band_hi_ms")
+    reacted = [r for r in reactions
+               if r.get("reacted") and r.get("reaction_latency_ms") is not None]
+    if not reacted or lo is None:
+        return {"verdict": "REJECT", "liveness_pass": False, "reason": "no_reactions_or_no_band",
+                "in_band_fraction": 0.0, "n_reacted": len(reacted), "channel": "liveness_only"}
+    in_band = sum(1 for r in reacted if lo <= r["reaction_latency_ms"] <= hi)
+    frac = in_band / len(reacted)
+    present = frac >= min_in_band_fraction
+    return {"verdict": "PRESENT" if present else "REJECT", "liveness_pass": present,
+            "in_band_fraction": round(frac, 3), "n_reacted": len(reacted), "n_in_band": in_band,
+            "band": [lo, hi], "channel": "liveness_only"}
+
+
 def liveness_score(features: dict, model: dict, device_id: str = None) -> dict:
     """Score one reaction against the calibrated model. Honors the L6B gate: returns
     calibration_incomplete until the model has N>=min_n reactions. Population latency band

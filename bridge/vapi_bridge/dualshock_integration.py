@@ -389,10 +389,22 @@ class DualShockTransport:
         self._reconnect_policy = ReconnectPolicy(
             reconnect_after_failures=int(getattr(cfg, "controller_reconnect_after_failures", 5)),
         )
-        # Cycle-37 PoEP Track-1: session-level PoEP verdict (poep_verify() dict), set by a
-        # session-start enrollment flow (gated on the N>=50 L6B campaign — not yet wired). Carried
-        # into co-capture meta["poep_present"] when poep_liveness_enabled. Default None -> abstain.
+        # Cycle-37/38 PoEP Track-1/Stage-2: session-level PoEP verdict (developer_self_liveness_verdict
+        # dict), produced by scripts/poep_session_enroll.py at session start and read here at startup
+        # when developer_self_cert + poep_liveness are enabled. Carried into co-capture
+        # meta["poep_present"] via poep_present_signal. Default None -> abstain (fresh/stale-checked read).
         self._session_poep_verdict: Optional[dict] = None
+        if (getattr(cfg, "developer_self_cert_enabled", False)
+                and getattr(cfg, "poep_liveness_enabled", False)):
+            try:
+                from .poep_activation import read_session_poep_verdict
+                self._session_poep_verdict = read_session_poep_verdict()
+                if self._session_poep_verdict is not None:
+                    log.info("PoEP session verdict loaded: %s",
+                             self._session_poep_verdict.get("verdict",
+                                                            self._session_poep_verdict.get("status")))
+            except Exception as _poep_exc:
+                log.debug("PoEP session verdict read skipped (fail-open): %s", _poep_exc)
         self._oracle_addr = getattr(cfg, "skill_oracle_address", "")
         self._bounty_cfg  = getattr(cfg, "dualshock_active_bounties", "")
         self._key_dir     = Path(getattr(cfg, "dualshock_key_dir",
