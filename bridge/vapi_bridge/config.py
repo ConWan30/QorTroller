@@ -2009,6 +2009,16 @@ class Config:
     developer_self_cert_min_reflex_n: int = field(
         default_factory=lambda: _env_int("DEVELOPER_SELF_CERT_MIN_REFLEX_N", 30)
     )
+    # Cycle-38 QorTroller Retina Game Capture (Track-2 live producer): bring the coupled-retina screen
+    # lobe LIVE via Windows Graphics Capture of the Remote Play / game window (digital screen-grab, no
+    # camera) -> cv_motion -> coupling -> fuse -> meta["retina_coupled_verdict"]. DEFAULT-OFF. The window
+    # substring matches the Remote Play window title. NCAA auto-camera caps it at COUPLED_CLEAN.
+    retina_game_capture_enabled: bool = field(
+        default_factory=lambda: _env_bool("RETINA_GAME_CAPTURE_ENABLED", False)
+    )
+    retina_game_capture_window: str = field(
+        default_factory=lambda: os.environ.get("RETINA_GAME_CAPTURE_WINDOW", "Remote Play")
+    )
 
     # --- Data Economy Arc 5: VAPIReplayProofPipeline (VHR proofs) ---
     replay_proof_pipeline_enabled: bool = field(
