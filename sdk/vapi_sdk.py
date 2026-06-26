@@ -112,6 +112,139 @@ CHEAT_CODES: frozenset[int] = frozenset({
 
 
 # ---------------------------------------------------------------------------
+# VAPIPresenceProof — public NQPV fused presence proof (public surface for "real person playing")
+# ---------------------------------------------------------------------------
+
+@dataclass(slots=True)
+class VAPIPresenceProof:
+    """Clean, public, auditable proof that a real person on certified hardware
+    is causally driving the game.
+
+    This is the consumer-facing equivalent of the internal FusedGamerPresenceProof
+    produced by NovelPresenceFusionOrchestrator (NQPV).
+
+    Key differences from internal (by design):
+    - verdict is str (no internal enum dependency)
+    - flat structure, easy to serialize/audit
+    - includes proof_version and is_consistent_human() helper
+    - commitments and notes for traceability without leaking internals
+    - presence_score + disagreement_index for calibrated defensibility
+
+    Typical use (ADVISORY — guard on the `advisory` flag):
+        proof = sdk.get_presence_proof(device_id)
+        # NQPV is advisory/uncertified until the RETINA-EXCL-2 study certifies an operating point
+        # AND the operator promotes it. Do NOT gate eligibility on it yet — surface it as a signal
+        # ALONGSIDE the certified gates. `advisory` is the machine-readable guard.
+        if not proof.advisory and proof.is_consistent_human() and proof.presence_score > 0.75:
+            allow_tournament_entry()
+
+    The proof links to a specific PoAC record (record_hash) and reflects
+    the multi-oracle fusion at that moment (CCO + PoEP + L9/PoCP + L4/L5/L6).
+
+    `advisory` / `certified`: until full oracle liveness + study-calibrated weights, advisory is
+    True and certified is False — the proof is a SIGNAL, not a certified eligibility verdict. It is
+    also currently computed from the live 120 Hz co-capture (sub-grade for spectral biometrics; the
+    1000 Hz corpus path is separate). See the NQPV study harness for the defensibility envelope.
+    """
+
+    device_id: str
+    record_hash: str
+    verdict: str
+    presence_score: float = 0.0
+    disagreement_index: float = 0.0
+    cco_tier: str | None = None
+    poep_present: bool | None = None
+    retina_verdict: str | None = None            # screen/coupled lobe ONLY (COUPLED_CLEAN/LIVE_COHERENT/...)
+    retina_controller_signal: str | None = None  # controller lobe (CONTROLLER_CLEAN/_ANOMALY) — metadata, NOT presence
+    l4_l5_l6_consistent: bool | None = None
+    binding_ok: bool = False
+    timestamp_ns: int = 0
+    commitments: dict[str, str] = field(default_factory=dict)
+    notes: str = ""
+    proof_version: str = "nqpv-v1"
+    advisory: bool = True       # machine-readable: this is NOT a certified eligibility verdict
+    certified: bool = False     # flips True only after the RETINA-EXCL-2 study + operator promotion
+
+    def is_consistent_human(self) -> bool:
+        """True for the two positive human verdicts."""
+        return self.verdict in {
+            "CONSISTENT_HUMAN",
+            "CONSISTENT_HUMAN_VERIFIED_HARDWARE",
+        }
+
+    def to_dict(self) -> dict:
+        return {
+            "device_id": self.device_id,
+            "record_hash": self.record_hash,
+            "verdict": self.verdict,
+            "presence_score": self.presence_score,
+            "disagreement_index": self.disagreement_index,
+            "cco_tier": self.cco_tier,
+            "poep_present": self.poep_present,
+            "retina_verdict": self.retina_verdict,
+            "retina_controller_signal": self.retina_controller_signal,
+            "l4_l5_l6_consistent": self.l4_l5_l6_consistent,
+            "binding_ok": self.binding_ok,
+            "timestamp_ns": self.timestamp_ns,
+            "commitments": self.commitments,
+            "notes": self.notes,
+            "proof_version": self.proof_version,
+            "advisory": self.advisory,
+            "certified": self.certified,
+        }
+
+
+class VAPIPresence:
+    """Lightweight SDK client for the NQPV presence proof endpoint.
+
+    Usage:
+        p = VAPIPresence(base_url, api_key)
+        proof = p.get("device-xxx")
+        if proof.is_consistent_human():
+            ...
+    """
+
+    def __init__(self, base_url: str, api_key: str) -> None:
+        self._base = base_url.rstrip("/")
+        self._key = api_key
+
+    def get(self, device_id: str) -> VAPIPresenceProof:
+        """GET /player/presence-proof . 10s timeout. Fail-open to UNVERIFIABLE on error."""
+        import urllib.request as _ur, json as _j
+        try:
+            url = f"{self._base}/player/presence-proof?device_id={device_id}&api_key={self._key}"
+            with _ur.urlopen(url, timeout=10) as resp:  # noqa: S310
+                body = _j.loads(resp.read())
+            return VAPIPresenceProof(
+                device_id=str(body.get("device_id", device_id or "")),
+                record_hash=str(body.get("record_hash", "")),
+                verdict=str(body.get("verdict", "UNVERIFIABLE")),
+                presence_score=float(body.get("presence_score", 0.0)),
+                disagreement_index=float(body.get("disagreement_index", 0.0)),
+                cco_tier=body.get("cco_tier"),
+                poep_present=body.get("poep_present"),
+                retina_verdict=body.get("retina_verdict"),
+                retina_controller_signal=body.get("retina_controller_signal"),
+                l4_l5_l6_consistent=body.get("l4_l5_l6_consistent"),
+                binding_ok=bool(body.get("binding_ok", False)),
+                timestamp_ns=int(body.get("timestamp_ns", 0)),
+                commitments=dict(body.get("commitments", {})),
+                notes=str(body.get("notes", "")),
+                proof_version=str(body.get("proof_version", "nqpv-v1")),
+                # fail-safe: absent advisory/certified => treat as advisory + uncertified
+                advisory=bool(body.get("advisory", True)),
+                certified=bool(body.get("certified", False)),
+            )
+        except Exception as exc:
+            return VAPIPresenceProof(
+                device_id=device_id or "",
+                record_hash="",
+                verdict="UNVERIFIABLE",
+                notes=f"fetch error: {exc}",
+            )
+
+
+# ---------------------------------------------------------------------------
 # VAPIRecord — PoAC wire format parser
 # ---------------------------------------------------------------------------
 

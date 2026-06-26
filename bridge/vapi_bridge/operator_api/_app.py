@@ -29,6 +29,7 @@ import json as _json
 import logging
 import os
 import time
+from types import SimpleNamespace
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
@@ -37,6 +38,7 @@ from pydantic import BaseModel
 # Phase O0 Stream 4-prep Session 2 — agent token authentication.
 from ..agent_auth import AgentIdentity, make_check_agent_token
 from ..hmac_middleware import NonceDedupTracker
+from ..novel_presence_fusion import NovelPresenceFusionOrchestrator
 from ..oauth_issuer import OAuthIssuer
 
 log = logging.getLogger(__name__)
@@ -1208,6 +1210,102 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                 ).get_runtime_policy_state()
             ),
             "timestamp": _now,
+        }
+
+
+    # NQPV public presence proof (step 2 of goal) — GET /player/presence-proof
+    # ------------------------------------------------------------------
+    # Read-only endpoint exposing the latest fused NQPV presence proof for a device.
+    # Leverages nqpv_cocapture_log (populated when nqpv_cocapture_enabled or via co-capture).
+    # Re-fuses using the orchestrator on the stored inputs for the proof.
+    # Returns a structure compatible with SDK VAPIPresenceProof.
+    # Fail-open / advisory semantics preserved.
+    @app.get("/player/presence-proof")
+    async def player_presence_proof(
+        device_id: str = Query(..., description="Target device_id"),
+        x_api_key: str = Header(default=""),
+    ):
+        _check_read_key(x_api_key)
+        if not device_id:
+            return {
+                "device_id": "",
+                "record_hash": "",
+                "verdict": "UNVERIFIABLE",
+                "presence_score": 0.0,
+                "disagreement_index": 0.0,
+                "notes": "device_id required",
+                "timestamp_ns": 0,
+                "advisory": True,
+                "certified": False,
+            }
+
+        rows = await asyncio.to_thread(
+            store.get_nqpv_cocapture_rows, 1, device_id
+        )
+        if not rows:
+            return {
+                "device_id": device_id,
+                "record_hash": "",
+                "verdict": "UNVERIFIABLE",
+                "presence_score": 0.0,
+                "disagreement_index": 0.0,
+                "notes": "no nqpv cocapture data (enable nqpv_cocapture or capture sessions with inputs)",
+                "timestamp_ns": 0,
+                "advisory": True,
+                "certified": False,
+            }
+
+        row = rows[0]
+        orchestrator = NovelPresenceFusionOrchestrator()
+
+        # Build minimal report objects for the orchestrator (it uses getattr .tier / .verdict)
+        cco_report = SimpleNamespace(tier=row.get("nqpv_cco_tier"))
+        # Screen/coupled lobe ONLY feeds the fusion retina_report (presence). The controller-lobe
+        # signal (CONTROLLER_CLEAN/_ANOMALY) is metadata — NEVER fed as a presence verdict: it
+        # abstains in fuse() anyway and feeding it would mislabel the output. Surfaced separately.
+        coupled_verdict = row.get("nqpv_retina_coupled_verdict")
+        controller_signal = row.get("nqpv_retina_controller_signal")
+        retina_report = SimpleNamespace(verdict=coupled_verdict) if coupled_verdict else None
+
+        poep = row.get("nqpv_poep_present")
+        poep_present = bool(poep) if poep is not None else None
+
+        l4 = row.get("nqpv_l4l5l6_ok")
+        l4_ok = bool(l4) if l4 is not None else None
+
+        rec_hash = row.get("record_hash_hex", "")
+
+        proof = orchestrator.fuse(
+            cco_report=cco_report,
+            retina_report=retina_report,
+            poep_present=poep_present,
+            l4_l5_l6_ok=l4_ok,
+            device_id=device_id,
+            record_hash=rec_hash,
+        )
+
+        # Return public shape (matches VAPIPresenceProof in SDK)
+        return {
+            "device_id": proof.device_id,
+            "record_hash": proof.record_hash,
+            "verdict": str(proof.verdict.value if hasattr(proof.verdict, "value") else proof.verdict),
+            "presence_score": round(getattr(proof, "presence_score", 0.0), 4),
+            "disagreement_index": round(getattr(proof, "disagreement_index", 0.0), 4),
+            "cco_tier": getattr(proof, "cco_tier", None),
+            "poep_present": getattr(proof, "poep_present", None),
+            "retina_verdict": getattr(proof, "retina_verdict", None),      # coupled/screen lobe only
+            "retina_controller_signal": controller_signal,                 # controller lobe — metadata, NOT presence
+            "l4_l5_l6_consistent": getattr(proof, "l4_l5_l6_consistent", None),
+            "binding_ok": getattr(proof, "binding_ok", False),
+            "timestamp_ns": getattr(proof, "timestamp_ns", 0),
+            "commitments": getattr(proof, "commitments", {}),
+            "notes": getattr(proof, "notes", ""),
+            "proof_version": "nqpv-v1",
+            # NQPV is advisory/uncertified (default-off; study not yet passed; computed from the live
+            # 120 Hz co-capture which is sub-grade for spectral biometrics). Machine-readable guard so
+            # consumers do NOT gate eligibility on it. Flip when the study certifies + operator promotes.
+            "advisory": True,
+            "certified": False,
         }
 
 

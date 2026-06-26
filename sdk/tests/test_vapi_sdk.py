@@ -26,7 +26,7 @@ if _sdk_dir not in sys.path:
 from vapi_sdk import (
     CHEAT_CODES, INFERENCE_NAMES, POAC_BODY_SIZE, POAC_RECORD_SIZE,
     SDK_VERSION, SDKAttestation, VAPIDevice, VAPIEnrollment,
-    VAPIRecord, VAPISession, VAPIVerifier, VAPIZKProof,
+    VAPIPresenceProof, VAPIRecord, VAPISession, VAPIVerifier, VAPIZKProof,
 )
 
 
@@ -380,6 +380,57 @@ class TestVAPIZKProof(unittest.TestCase):
         self.assertEqual(inputs[2], d["inference_code"])
         self.assertEqual(inputs[3], d["nullifier_hash"])
         self.assertEqual(inputs[4], d["epoch"])
+
+
+# ---------------------------------------------------------------------------
+# Group 8: VAPIPresenceProof (NQPV public surface)
+# ---------------------------------------------------------------------------
+
+class TestVAPIPresenceProof(unittest.TestCase):
+
+    def test_dataclass_basic(self):
+        p = VAPIPresenceProof(
+            device_id="dev123",
+            record_hash="abcd" * 8,
+            verdict="CONSISTENT_HUMAN",
+            presence_score=0.82,
+            disagreement_index=0.15,
+            poep_present=True,
+            retina_verdict="COUPLED_CLEAN",
+        )
+        self.assertEqual(p.device_id, "dev123")
+        self.assertTrue(p.is_consistent_human())
+        self.assertEqual(p.proof_version, "nqpv-v1")
+        d = p.to_dict()
+        self.assertIn("presence_score", d)
+        self.assertEqual(d["verdict"], "CONSISTENT_HUMAN")
+
+    def test_non_human_verdict(self):
+        p = VAPIPresenceProof(
+            device_id="dev123",
+            record_hash="abcd" * 8,
+            verdict="INCONSISTENT_TRAJECTORY_WITHOUT_PRESENCE",
+        )
+        self.assertFalse(p.is_consistent_human())
+
+    def test_advisory_default_and_certified_false(self):
+        # NQPV is advisory/uncertified by default -> machine-readable guard against overclaim
+        p = VAPIPresenceProof(device_id="d", record_hash="r", verdict="CONSISTENT_HUMAN")
+        self.assertTrue(p.advisory)
+        self.assertFalse(p.certified)
+        d = p.to_dict()
+        self.assertTrue(d["advisory"])
+        self.assertFalse(d["certified"])
+
+    def test_retina_lobes_are_distinct_fields(self):
+        # the controller lobe (metadata) must NOT be conflated with the screen/coupled verdict
+        p = VAPIPresenceProof(
+            device_id="d", record_hash="r", verdict="CONSISTENT_HUMAN",
+            retina_verdict="COUPLED_CLEAN", retina_controller_signal="CONTROLLER_CLEAN",
+        )
+        self.assertEqual(p.retina_verdict, "COUPLED_CLEAN")
+        self.assertEqual(p.retina_controller_signal, "CONTROLLER_CLEAN")
+        self.assertIn("retina_controller_signal", p.to_dict())
 
 
 if __name__ == "__main__":
