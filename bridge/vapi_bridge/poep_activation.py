@@ -18,7 +18,14 @@ into the per-record co-capture meta, never a mid-game per-record challenge.
 """
 from __future__ import annotations
 
+import json
+import os
+import time
 from typing import Optional
+
+# Session verdict written by scripts/poep_session_enroll.py (developer-self cert, Stage 2). The bridge
+# reads it at startup when developer_self_cert_enabled + poep_liveness_enabled, sets _session_poep_verdict.
+DEFAULT_SESSION_VERDICT_PATH = os.path.expanduser("~/.vapi/poep_session_verdict.json")
 
 
 def poep_present_signal(poep_verdict: Optional[dict], *, poep_enabled: bool) -> Optional[bool]:
@@ -42,6 +49,28 @@ def poep_present_signal(poep_verdict: Optional[dict], *, poep_enabled: bool) -> 
     if "liveness_pass" in poep_verdict:
         return bool(poep_verdict["liveness_pass"])
     return None                                       # unrecognized shape -> abstain (never fabricate)
+
+
+def read_session_poep_verdict(
+    path: str = DEFAULT_SESSION_VERDICT_PATH, *, max_age_s: Optional[float] = 7200.0,
+) -> Optional[dict]:
+    """Read the session PoEP verdict (poep_session_enroll output) for the live loop's
+    _session_poep_verdict. Returns the verdict dict iff it exists AND is fresh (within max_age_s);
+    else None (ABSTAIN). Fail-open: any error / missing file / stale / future-dated -> None.
+    """
+    try:
+        if not os.path.exists(path):
+            return None
+        with open(path, encoding="utf-8") as fh:
+            v = json.load(fh)
+        ts_ns = v.get("ts_ns")
+        if max_age_s is not None and isinstance(ts_ns, (int, float)):
+            age_s = (time.time_ns() - int(ts_ns)) / 1e9
+            if age_s > max_age_s or age_s < -60.0:   # stale, or clock-skew future-dated -> abstain
+                return None
+        return v if isinstance(v, dict) else None
+    except Exception:
+        return None
 
 
 def poep_activation_status(readiness: Optional[dict], *, poep_enabled: bool) -> dict:
