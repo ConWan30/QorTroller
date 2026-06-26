@@ -3,7 +3,7 @@
   "label_version": "0.1.0",
   "vpm_id": "QR-VSD-SIC-v1",
   "audience": "methodology auditors",
-  "sic_head_hex": "2af2b4d29330a4560d8a0e17d85be936254963377455c514d42006d9831c00bc",
+  "sic_head_hex": "70be608474fb781ed2175a690b4a5b557999bcd8be5372dbf0e1463e6e60e2b1",
   "inputs": {
     "harness_pass": true,
     "pv_ci_pass": true,
@@ -42,6 +42,6 @@
     "forecast": "clean-projected",
     "basis": "linear trend over SIC ledger; advisory only, not a predictive model"
   },
-  "ts_ns": 1782488385347169700,
-  "label_hash": "50c5bc5bc2480840fae6c05512dcbe6b9ac0d4b9fc42ee739801316f00dc047e"
+  "ts_ns": 1782489374055296800,
+  "label_hash": "2ab96ac51ac40bb667ce2f12911cebc3f9aa116ef0a2698c9e125a8b3ea0978d"
 }
