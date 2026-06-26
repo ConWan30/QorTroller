@@ -2019,6 +2019,14 @@ class Config:
     retina_game_capture_window: str = field(
         default_factory=lambda: os.environ.get("RETINA_GAME_CAPTURE_WINDOW", "Remote Play")
     )
+    # Inject NEGATIVE coupled-retina verdicts (IMPLAUSIBLE) into the NQPV proof. Default False: in a
+    # dead-zone / auto-camera game (NCAA CFB), the right-stick->screen coupling is structurally absent, so
+    # a low-coupling IMPLAUSIBLE is a FALSE NEGATIVE (the auto-camera pans on its own, not an aimbot), NOT
+    # evidence — abstain instead. Set True only for an AIM-based game (manual camera) where absence of
+    # coupling is genuinely adversarial. Positive coupling (COUPLED_CLEAN/LIVE_COHERENT) injects either way.
+    retina_coupled_negative_enabled: bool = field(
+        default_factory=lambda: _env_bool("RETINA_COUPLED_NEGATIVE_ENABLED", False)
+    )
 
     # --- Data Economy Arc 5: VAPIReplayProofPipeline (VHR proofs) ---
     replay_proof_pipeline_enabled: bool = field(

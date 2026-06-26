@@ -2130,10 +2130,15 @@ class DualShockTransport:
                         # live, read its latest coupling verdict -> NQPV retina vocab -> meta. None (no
                         # source / abstain) leaves it unset -> cocapture abstains (unchanged).
                         if self._retina_game_capture is not None:
-                            from .qortroller_retina_capture import map_l9_to_nqpv_retina
-                            _rc_v = map_l9_to_nqpv_retina(
-                                self._retina_game_capture.latest_coupled_verdict())
-                            if _rc_v is not None:
+                            _rc_v = self._retina_game_capture.latest_coupled_verdict()  # already NQPV vocab
+                            self._rgc_diag_n = getattr(self, "_rgc_diag_n", 0) + 1
+                            if self._rgc_diag_n % 25 == 1:
+                                log.info("RGC diag: %s", self._retina_game_capture.status())
+                            # Positive coupling always injects; IMPLAUSIBLE only when negative-detection is
+                            # enabled (aim-games). In a dead-zone/auto-camera game (NCAA) IMPLAUSIBLE is a
+                            # FALSE negative (auto-camera decoupling, not an aimbot) -> abstain, never degrade.
+                            _neg_ok = getattr(self._cfg, "retina_coupled_negative_enabled", False)
+                            if _rc_v is not None and (_rc_v != "IMPLAUSIBLE" or _neg_ok):
                                 self._pending_pitl_meta["retina_coupled_verdict"] = _rc_v
                         self._pending_pitl_meta.update(
                             cocapture_fields_from_pitl_meta(self._pending_pitl_meta)
