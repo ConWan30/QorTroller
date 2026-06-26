@@ -1997,6 +1997,18 @@ class Config:
     poep_liveness_enabled: bool = field(
         default_factory=lambda: _env_bool("POEP_LIVENESS_ENABLED", False)
     )
+    # Cycle-38 developer self-cert (d-developer-self-cert): the operator's MASTER flag for
+    # developer-scoped certification. When True, the presence proof's cert_scope="developer_self"
+    # (certified for the developer's own single-subject scope; population_certified stays False —
+    # NOT a population/tournament claim). DEFAULT-OFF; reversible; activates the software-gated stack
+    # for the developer's profile. developer_self_cert_min_reflex_n is the developer-scoped PoEP data
+    # gate (own N>=30 in-band reflexes), replacing the N>=50-across-humans rule for developer-self scope.
+    developer_self_cert_enabled: bool = field(
+        default_factory=lambda: _env_bool("DEVELOPER_SELF_CERT_ENABLED", False)
+    )
+    developer_self_cert_min_reflex_n: int = field(
+        default_factory=lambda: _env_int("DEVELOPER_SELF_CERT_MIN_REFLEX_N", 30)
+    )
 
     # --- Data Economy Arc 5: VAPIReplayProofPipeline (VHR proofs) ---
     replay_proof_pipeline_enabled: bool = field(

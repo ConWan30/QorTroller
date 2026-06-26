@@ -1235,6 +1235,8 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                 "disagreement_index": 0.0,
                 "notes": "device_id required",
                 "timestamp_ns": 0,
+                "cert_scope": "advisory",
+                "population_certified": False,
                 "advisory": True,
                 "certified": False,
             }
@@ -1251,6 +1253,8 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
                 "disagreement_index": 0.0,
                 "notes": "no nqpv cocapture data (enable nqpv_cocapture or capture sessions with inputs)",
                 "timestamp_ns": 0,
+                "cert_scope": "advisory",
+                "population_certified": False,
                 "advisory": True,
                 "certified": False,
             }
@@ -1282,7 +1286,14 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             l4_l5_l6_ok=l4_ok,
             device_id=device_id,
             record_hash=rec_hash,
+            # cycle-38 developer-self-cert: operator master flag -> cert_scope="developer_self"
+            developer_self_cert=getattr(cfg, "developer_self_cert_enabled", False),
         )
+
+        # cert_scope drives the honesty fields: developer_self -> certified-for-developer (advisory off,
+        # population_certified stays False); advisory otherwise. NEVER population/tournament certified here.
+        _cert_scope = getattr(proof, "cert_scope", "advisory")
+        _dev_self = _cert_scope == "developer_self"
 
         # Return public shape (matches VAPIPresenceProof in SDK)
         return {
@@ -1301,11 +1312,13 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "commitments": getattr(proof, "commitments", {}),
             "notes": getattr(proof, "notes", ""),
             "proof_version": "nqpv-v1",
-            # NQPV is advisory/uncertified (default-off; study not yet passed; computed from the live
-            # 120 Hz co-capture which is sub-grade for spectral biometrics). Machine-readable guard so
-            # consumers do NOT gate eligibility on it. Flip when the study certifies + operator promotes.
-            "advisory": True,
-            "certified": False,
+            # cert_scope: "developer_self" (operator dev-cert mode) = certified for the developer's own
+            # single-subject scope; "advisory" otherwise. population_certified is ALWAYS False here (a
+            # population/tournament claim needs breadth + real adversaries + the study, none on this path).
+            "cert_scope": _cert_scope,
+            "population_certified": bool(getattr(proof, "population_certified", False)),
+            "advisory": not _dev_self,        # advisory unless inside the developer_self cert scope
+            "certified": False,               # never population/tournament-certified on this endpoint
         }
 
 
