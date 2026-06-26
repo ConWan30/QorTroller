@@ -47,10 +47,37 @@ class FusedGamerPresenceProof:
     retina_verdict: str | None = None
     poep_present: bool | None = None
     l4_l5_l6_consistent: bool | None = None
+    presence_score: float = 0.0          # cycle-29 calibrated weighted score in [0,1]
+    disagreement_index: float = 0.0      # cycle-29 SEPARATE anti-cheat signal (oracle spread)
     binding_ok: bool = False
     timestamp_ns: int = 0
     commitments: dict[str, str] = field(default_factory=dict)  # e.g. {"retina": "...", "pda": "..."}
     notes: str = ""
+
+
+# --- Calibrated model (cycle-29) — PROVISIONAL operating point ---
+# These weights + threshold are ADVISORY placeholders so the seam runs; the QUALIFYING operating point
+# comes from the RETINA-EXCL-2 study (measured human-TAR/adversary-FAR ROC + the anti-GCAP rail).
+# fuse() accepts overrides so the study can inject calibrated values without a code change.
+_PROVISIONAL_WEIGHTS: dict[str, float] = {"retina": 0.35, "poep": 0.30, "l4l5l6": 0.20, "cco": 0.15}
+_PROVISIONAL_THRESHOLD: float = 0.60
+
+
+def _retina_presence_contribution(retina_verdict: str | None) -> float | None:
+    """Retina verdict -> presence contribution in [0,1], or None to ABSTAIN (absent/inactive/unknown).
+    Abstain (not 0.0) is the anti-GCAP rule: a missing/inactive oracle must NOT penalize a real human.
+    IMPLAUSIBLE is matched before PLAUSIBLE (it is a superstring)."""
+    if not retina_verdict:
+        return None
+    v = str(retina_verdict).upper()
+    if "COUPLED_CLEAN" in v or "LIVE_COHERENT" in v:
+        return 1.0
+    if "IMPLAUSIBLE" in v or "INJECTION" in v:
+        return 0.0
+    if "PLAUSIBLE" in v:
+        return 0.5
+    return None  # INACTIVE / unknown -> abstain
+
 
 # --- Core Orchestrator ---
 
@@ -86,6 +113,8 @@ class NovelPresenceFusionOrchestrator:
         record_hash: str | None = None,
         consent_ok: bool | None = None,
         timestamp_ns: int = 0,
+        weights: dict[str, float] | None = None,
+        threshold: float | None = None,
     ) -> FusedGamerPresenceProof:
         """
         Perform the fusion.
@@ -115,36 +144,55 @@ class NovelPresenceFusionOrchestrator:
         # Basic binding check (device + record + time assumed by caller)
         binding_ok = bool(device_id and record_hash)
 
-        # Decision logic (multi-oracle disagreement).
-        # SHARPENING (kept as-is): this seam dissolves the screen-lobe gate (RETINA-EXCL-1) by
-        # accepting COUPLED_CLEAN (L9/PoCP, no screen) as a presence input alongside LIVE_COHERENT.
-        # NOT YET DEFENSIBILITY-VALIDATED (RETINA-EXCL-2): the verdict below is a PROTOTYPE string-match
-        # decision tree, advisory only. It is NOT a qualifying presence proof until the conjunctive
-        # logic is replaced by a calibrated/weighted disagreement model with a measured human-TAR +
-        # adversary-FAR envelope (banked L9/GCAP caution: naive conjunctive fusion collapses human TAR).
-        # That replacement is the VSD cycle-29 synthesis target; do not promote this verdict to
-        # certifying without it.
-        if cco_tier and "FAIL" in str(cco_tier).upper():
-            verdict = NQPVVerdict.HARDWARE_CLASS_FAIL
-        elif poep_present is False and (retina_verdict and "INACTIVE" in str(retina_verdict).upper()):
-            verdict = NQPVVerdict.CONSISTENT_INACTIVE
-        elif poep_present and retina_verdict and (
-            "COUPLED_CLEAN" in str(retina_verdict).upper()
-            or "LIVE_COHERENT" in str(retina_verdict).upper()
-        ):
-            # NOTE: parenthesized — the human-presence verdict REQUIRES poep_present AND a coupling/
-            # coherence verdict. (The prototype omitted the parens, so `or LIVE_COHERENT` fired
-            # regardless of presence — contrary to the seam's own intent. Fixed on incorporation.)
-            verdict = NQPVVerdict.CONSISTENT_HUMAN_VERIFIED_HARDWARE if cco_tier else NQPVVerdict.CONSISTENT_HUMAN
-        elif poep_present and retina_verdict and ("IMPLAUSIBLE" in str(retina_verdict).upper() or "INJECTION" in str(retina_verdict).upper()):
-            verdict = NQPVVerdict.INCONSISTENT_PRESENCE_WITHOUT_TRAJECTORY
-        elif (not poep_present) and retina_verdict and "PLAUSIBLE" in str(retina_verdict).upper():
-            verdict = NQPVVerdict.INCONSISTENT_TRAJECTORY_WITHOUT_PRESENCE
-        else:
-            verdict = NQPVVerdict.INDETERMINATE
+        # --- Calibrated split-output model (cycle-29; replaces the conjunctive string-match tree) ---
+        # SHARPENING KEPT: COUPLED_CLEAN (L9/PoCP, no screen) is still an accepted presence input, so
+        # RETINA-EXCL-1 stays dissolved. CHANGED: presence is a GRADED weighted score (a single
+        # sub-grade oracle's miss is OUTVOTED, not fatal; a missing oracle ABSTAINS) -> defuses the
+        # GCAP human-reject trap. Disagreement is a SEPARATE signal. ADVISORY / default-off until the
+        # RETINA-EXCL-2 study sets the certified weights+threshold (the literals here are provisional).
+        _w = weights or _PROVISIONAL_WEIGHTS
+        _thr = threshold if threshold is not None else _PROVISIONAL_THRESHOLD
+        _ru = str(retina_verdict).upper() if retina_verdict else ""
 
-        if consent_ok is False:
-            verdict = NQPVVerdict.UNVERIFIABLE
+        if cco_tier and "FAIL" in str(cco_tier).upper():
+            # HARD GATE — categorical integrity, not graded presence evidence
+            verdict, presence_score, disagreement_index = NQPVVerdict.HARDWARE_CLASS_FAIL, 0.0, 0.0
+        elif consent_ok is False:
+            # HARD GATE — sovereignty: no valid proof without consent
+            verdict, presence_score, disagreement_index = NQPVVerdict.UNVERIFIABLE, 0.0, 0.0
+        else:
+            # Per-oracle presence contributions in [0,1]; an ABSENT oracle is OMITTED (abstains).
+            contribs: dict[str, float] = {}
+            _rc = _retina_presence_contribution(retina_verdict)
+            if _rc is not None:
+                contribs["retina"] = _rc
+            if poep_present is not None:
+                contribs["poep"] = 1.0 if poep_present else 0.0
+            if l4_l5_l6_ok is not None:
+                contribs["l4l5l6"] = 1.0 if l4_l5_l6_ok else 0.0
+            if cco_tier:
+                contribs["cco"] = 1.0  # present + not FAIL (FAIL hard-gated above)
+
+            if contribs:
+                _wsum = sum(_w.get(k, 0.0) for k in contribs) or 1.0
+                presence_score = sum(_w.get(k, 0.0) * v for k, v in contribs.items()) / _wsum
+                _vals = list(contribs.values())
+                disagreement_index = (max(_vals) - min(_vals)) if len(_vals) > 1 else 0.0
+            else:
+                presence_score, disagreement_index = 0.0, 0.0
+
+            if poep_present is False and "INACTIVE" in _ru:
+                verdict = NQPVVerdict.CONSISTENT_INACTIVE
+            elif poep_present and ("IMPLAUSIBLE" in _ru or "INJECTION" in _ru):
+                # explicit disagreement pattern: live human, output not causal (relay/aim-assist)
+                verdict = NQPVVerdict.INCONSISTENT_PRESENCE_WITHOUT_TRAJECTORY
+            elif poep_present is False and _rc is not None and _rc >= 0.5:
+                # explicit disagreement pattern: plausible output, no live human (replay)
+                verdict = NQPVVerdict.INCONSISTENT_TRAJECTORY_WITHOUT_PRESENCE
+            elif presence_score >= _thr:
+                verdict = NQPVVerdict.CONSISTENT_HUMAN_VERIFIED_HARDWARE if cco_tier else NQPVVerdict.CONSISTENT_HUMAN
+            else:
+                verdict = NQPVVerdict.INDETERMINATE
 
         commitments = {}
         if retina_report:
@@ -160,10 +208,13 @@ class NovelPresenceFusionOrchestrator:
             retina_verdict=retina_verdict,
             poep_present=poep_present,
             l4_l5_l6_consistent=l4_l5_l6_ok,
+            presence_score=round(presence_score, 4),
+            disagreement_index=round(disagreement_index, 4),
             binding_ok=binding_ok,
             timestamp_ns=timestamp_ns,
             commitments=commitments,
-            notes=f"Fused at {timestamp_ns}"
+            notes=(f"calibrated-v1 (PROVISIONAL, advisory); score={presence_score:.2f} "
+                   f"disagreement={disagreement_index:.2f}; not certifying until RETINA-EXCL-2 study")
         )
 
 # --- Helper to wire into existing PoAC / GIC (stub for implementation) ---
