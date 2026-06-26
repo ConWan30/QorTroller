@@ -322,8 +322,14 @@ class LivePresenceSignalingAgent:
             )
             contested = False
             try:
-                _ch = self._store.get_capture_health_status()
-                contested = bool((_ch or {}).get("host_state") == "CONTESTED")
+                _ch = self._store.get_capture_health_status() or {}
+                from .bt_contention_intelligence import assess_contention
+                _assess = assess_contention(
+                    host_state=_ch.get("host_state"),
+                    poll_rate_cv=_ch.get("poll_rate_cv"),
+                    streaming_source_active=bool(getattr(self._cfg, "retina_game_capture_enabled", False)),
+                )
+                contested = _assess.contested  # BT-contention v1: FLAPPING / CONTESTED-BENIGN / -SUSPECT all gate
             except Exception:
                 contested = False
             sig = devcert_signal_for_verdict(proof.verdict.value, contested=contested)
