@@ -87,7 +87,13 @@ def cocapture_fields_from_pitl_meta(meta: dict) -> dict:
       - nqpv_l4l5l6_ok: humanity_prob >= 0.5 (PROXY — the humanity formula fuses L4/L5/L6/L2B/L2C).
       - nqpv_retina_controller_signal: the CONTROLLER-LOBE perception (CONTROLLER_CLEAN / _ANOMALY) --
         NOT the full L9/PoCP COUPLED_CLEAN nor screen LIVE_COHERENT (those need camera/screen, not live).
-      - nqpv_poep_present: None (ABSTAIN — PoEP is off-by-default; do not fabricate).
+      - nqpv_poep_present / nqpv_retina_coupled_verdict (cycle-33 (b) forward-compat plumbing): carry a
+        LIVE presence-oracle signal IF one was written into the meta, else None (ABSTAIN). Today both
+        abstain -- PoEP is off-by-default behind its L6B N>=50 gate, and the coupled-retina screen
+        verdict needs a camera witness (hardware-gated). When those go live they populate
+        meta["poep_present"] / meta["retina_coupled_verdict"] and flow through here with NO code change
+        (the "the harness re-runs cleanly once they land" promise). The controller-lobe signal is NEVER
+        promoted to the coupled verdict -- different lobe, different vocabulary.
     Pure; the study reads these alongside device_id + record_hash to populate SessionArtifact. A missing
     input is None (abstain), never a fabricated value."""
     hp = meta.get("humanity_prob")
@@ -100,7 +106,8 @@ def cocapture_fields_from_pitl_meta(meta: dict) -> dict:
         "nqpv_cco_tier": meta.get("cco_presence_ceiling_candidate"),
         "nqpv_l4l5l6_ok": (hp >= 0.5) if isinstance(hp, (int, float)) else None,
         "nqpv_retina_controller_signal": retina_sig,
-        "nqpv_poep_present": None,  # abstain: PoEP off-by-default; full L9/screen coupling not live here
+        "nqpv_poep_present": meta.get("poep_present"),                      # live if present, else abstain
+        "nqpv_retina_coupled_verdict": meta.get("retina_coupled_verdict"),  # live (camera) if present, else abstain
     }
 
 

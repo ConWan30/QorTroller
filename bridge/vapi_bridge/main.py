@@ -241,6 +241,7 @@ class Bridge:
         if pubkey_bytes:
             device_id = compute_device_id(pubkey_bytes)
             record.device_id = device_id
+            device_id_hex = device_id.hex()
 
             # ECDSA-P256 verify — empirically the heaviest single sync call
             if not verify_signature(record, pubkey_bytes):
@@ -261,6 +262,7 @@ class Bridge:
         else:
             # No pubkey — accept unverified (will be flagged for review)
             record.device_id = record.record_hash
+            device_id_hex = record.record_hash_hex
             log.warning(
                 "No pubkey for record counter=%d — accepted unverified from %s",
                 record.monotonic_ctr, source,
@@ -268,7 +270,30 @@ class Bridge:
             self.store.upsert_device(record.record_hash_hex, "unknown")
             self.store.update_device_state(record.record_hash_hex, record)
 
-        return self.store.insert_record(record, raw_data)
+        is_new = self.store.insert_record(record, raw_data)
+
+        # NQPV cycle-33 (Option B): persist the co-capture sidecar to the dedicated study table.
+        # Default-off (nqpv_cocapture_enabled); fires only when the live loop attached the nqpv_*
+        # fields (cocapture_fields_from_pitl_meta) to pitl_meta. Best-effort: a persist failure must
+        # never break ingestion (mirrors the retina_*_log logging-grade discipline).
+        if (is_new and source == "dualshock" and pitl_meta
+                and getattr(self.cfg, "nqpv_cocapture_enabled", False)
+                and pitl_meta.get("nqpv_cocapture")):
+            try:
+                self.store.insert_nqpv_cocapture(
+                    device_id=device_id_hex,
+                    record_hash_hex=record.record_hash_hex,
+                    nqpv_cco_tier=pitl_meta.get("nqpv_cco_tier"),
+                    nqpv_l4l5l6_ok=pitl_meta.get("nqpv_l4l5l6_ok"),
+                    nqpv_poep_present=pitl_meta.get("nqpv_poep_present"),
+                    nqpv_retina_controller_signal=pitl_meta.get("nqpv_retina_controller_signal"),
+                    nqpv_retina_coupled_verdict=pitl_meta.get("nqpv_retina_coupled_verdict"),
+                    humanity_prob=pitl_meta.get("humanity_prob"),
+                )
+            except Exception as e:  # noqa: BLE001 — co-capture is advisory, never fatal
+                log.debug("nqpv co-capture persist skipped: %s", e)
+
+        return is_new
 
     async def _resolve_pubkey(
         self, record: PoACRecord, source: str

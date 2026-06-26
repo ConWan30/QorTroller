@@ -126,3 +126,21 @@ def test_cocapture_abstains_when_inputs_absent():
     f = cocapture_fields_from_pitl_meta({"cco_presence_ceiling_candidate": "P-T3"})  # no humanity/retina
     assert f["nqpv_l4l5l6_ok"] is None
     assert f["nqpv_retina_controller_signal"] is None
+    assert f["nqpv_poep_present"] is None                    # abstain (no live PoEP)
+    assert f["nqpv_retina_coupled_verdict"] is None          # abstain (no camera witness)
+
+
+# --- cycle-33 (b) forward-compat plumbing: live presence oracles flow through when present ---
+
+def test_cocapture_carries_live_poep_when_present():
+    f = cocapture_fields_from_pitl_meta({"humanity_prob": 0.7, "poep_present": True})
+    assert f["nqpv_poep_present"] is True                    # live PoEP signal carried, not hardcoded None
+
+
+def test_cocapture_carries_live_coupled_retina_when_present():
+    f = cocapture_fields_from_pitl_meta({
+        "retina_enabled": True, "retina_alert": False,
+        "retina_coupled_verdict": "COUPLED_CLEAN",          # camera witness landed
+    })
+    assert f["nqpv_retina_coupled_verdict"] == "COUPLED_CLEAN"
+    assert f["nqpv_retina_controller_signal"] == "CONTROLLER_CLEAN"  # controller lobe still separate

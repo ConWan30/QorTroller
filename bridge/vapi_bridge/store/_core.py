@@ -296,6 +296,30 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
         "CREATE INDEX IF NOT EXISTS idx_retina_da_witness_created ON retina_da_witness_log(created_at DESC)",
     ]
 
+    # NQPV cycle-33 Option B: dedicated co-capture log for the RETINA-EXCL-2 defensibility study.
+    # Mirrors the retina_*_log precedent (autoincrement id + record_hash_hex + created_at index) so the
+    # 5.4GB/925k-row records hot table stays byte-identical. Tri-state bools are INTEGER (NULL=ABSTAIN,
+    # round-trips through nqpv_corpus_loader._as_bool). One row per co-captured record, written only when
+    # nqpv_cocapture_enabled. The study loader already consumes this shape -> no loader change.
+    _NQPV_MIGRATIONS = [
+        """
+        CREATE TABLE IF NOT EXISTS nqpv_cocapture_log (
+            id                            INTEGER PRIMARY KEY AUTOINCREMENT,
+            device_id                     TEXT NOT NULL DEFAULT '',
+            record_hash_hex               TEXT NOT NULL DEFAULT '',
+            nqpv_cco_tier                 TEXT,
+            nqpv_l4l5l6_ok                INTEGER,
+            nqpv_poep_present             INTEGER,
+            nqpv_retina_controller_signal TEXT,
+            nqpv_retina_coupled_verdict   TEXT,
+            humanity_prob                 REAL,
+            created_at                    REAL NOT NULL
+        )
+        """,
+        "CREATE INDEX IF NOT EXISTS idx_nqpv_cocapture_created ON nqpv_cocapture_log(created_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_nqpv_cocapture_device ON nqpv_cocapture_log(device_id, created_at DESC)",
+    ]
+
     def _init_schema(self):
         with self._conn() as conn:
             conn.executescript("""
@@ -624,6 +648,11 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                 "ON retina_event_log(record_hash_hex, created_at DESC)"
             )
             for sql in self._RETINA_MIGRATIONS:
+                try:
+                    conn.execute(sql)
+                except sqlite3.OperationalError:
+                    log.debug("schema migration already applied: %.80s", sql)
+            for sql in self._NQPV_MIGRATIONS:
                 try:
                     conn.execute(sql)
                 except sqlite3.OperationalError:
@@ -4808,6 +4837,64 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     ORDER BY r.created_at DESC
                     LIMIT ?
                 """, (limit,)).fetchall()
+            return [dict(r) for r in rows]
+
+    def insert_nqpv_cocapture(
+        self,
+        *,
+        device_id: str,
+        record_hash_hex: str,
+        nqpv_cco_tier: str | None = None,
+        nqpv_l4l5l6_ok: bool | None = None,
+        nqpv_poep_present: bool | None = None,
+        nqpv_retina_controller_signal: str | None = None,
+        nqpv_retina_coupled_verdict: str | None = None,
+        humanity_prob: float | None = None,
+        created_at: float | None = None,
+    ) -> None:
+        """NQPV cycle-33 (Option B): persist one co-capture row for the RETINA-EXCL-2 study corpus.
+
+        Tri-state bools store as INTEGER (NULL = ABSTAIN; round-trips through the loader's _as_bool).
+        Written only when nqpv_cocapture_enabled. Best-effort/logging-grade like the retina_*_log
+        inserts -- never raises into the ingestion path.
+        """
+        ts = created_at if created_at is not None else time.time()
+        with self._conn() as conn:
+            conn.execute(
+                """
+                INSERT INTO nqpv_cocapture_log (
+                    device_id, record_hash_hex, nqpv_cco_tier, nqpv_l4l5l6_ok, nqpv_poep_present,
+                    nqpv_retina_controller_signal, nqpv_retina_coupled_verdict, humanity_prob, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    device_id or "",
+                    record_hash_hex or "",
+                    nqpv_cco_tier,
+                    None if nqpv_l4l5l6_ok is None else int(bool(nqpv_l4l5l6_ok)),
+                    None if nqpv_poep_present is None else int(bool(nqpv_poep_present)),
+                    nqpv_retina_controller_signal,
+                    nqpv_retina_coupled_verdict,
+                    humanity_prob,
+                    ts,
+                ),
+            )
+
+    def get_nqpv_cocapture_rows(self, limit: int = 500, device_id: str | None = None) -> list[dict]:
+        """NQPV cycle-33: read co-capture rows newest-first for the study loader (load_from_rows
+        consumes these directly -- the column names are the nqpv_* keys it normalizes)."""
+        with self._conn() as conn:
+            if device_id:
+                rows = conn.execute(
+                    "SELECT * FROM nqpv_cocapture_log WHERE device_id = ? "
+                    "ORDER BY created_at DESC LIMIT ?",
+                    (device_id, limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM nqpv_cocapture_log ORDER BY created_at DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
             return [dict(r) for r in rows]
 
     def count_records(self, device_id: str | None = None) -> int:
