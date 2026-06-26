@@ -239,8 +239,37 @@ def fetch_human_rows(store: Any, *, limit: int = 500, device_id: Optional[str] =
 def load_human_corpus_from_store(
     store: Any, *, limit: int = 500, device_id: Optional[str] = None
 ) -> list[NqpvCorpusRecord]:
-    """End-to-end convenience: fetch human rows from the store and normalize them, labeled human."""
+    """End-to-end convenience: fetch human rows from the store and normalize them, labeled human.
+
+    PILOT-regime source (records table): the only live oracle is l4_l5_l6_ok (from pitl_humanity_prob).
+    For the richer co-capture source once NQPV_COCAPTURE_ENABLED has been on, use
+    ``load_human_corpus_from_cocapture`` instead.
+    """
     return load_from_rows(
         fetch_human_rows(store, limit=limit, device_id=device_id),
+        default_label=LABEL_HUMAN,
+    )
+
+
+def fetch_cocapture_rows(store: Any, *, limit: int = 500, device_id: Optional[str] = None) -> list[dict]:
+    """Pull persisted NQPV co-capture rows (nqpv_cocapture_log, cycle-33 Option B). These carry the
+    full oracle set the live loop captured (cco + l4l5l6 live; poep/coupled-retina abstain until
+    those go live). Returns [] gracefully if the table/method is absent (older store)."""
+    getter = getattr(store, "get_nqpv_cocapture_rows", None)
+    if getter is None:
+        return []
+    return getter(limit=limit, device_id=device_id)
+
+
+def load_human_corpus_from_cocapture(
+    store: Any, *, limit: int = 500, device_id: Optional[str] = None
+) -> list[NqpvCorpusRecord]:
+    """End-to-end convenience: fetch persisted co-capture rows and normalize them, labeled human.
+
+    These are real consented captures -> labeled LABEL_HUMAN. The record_hash_hex column normalizes
+    to record_hash via _normalize_row's fallback; tri-state INTEGER bools round-trip through _as_bool.
+    """
+    return load_from_rows(
+        fetch_cocapture_rows(store, limit=limit, device_id=device_id),
         default_label=LABEL_HUMAN,
     )
