@@ -102,6 +102,12 @@ class WgcFrameSource:
         self._running = False
         self.frames_seen = 0
         self._frame_ts: deque = deque(maxlen=240)   # recent WGC frame arrival times (ms) for the governor
+        self._last_frame_wall: Optional[float] = None   # wall-clock (s) of last frame -> stall detection
+        self._last_reacquire_wall: float = 0.0          # cooldown gate for re-acquire
+        self._reacquires: int = 0
+        self._frame_err_n: int = 0
+        self._lum_scale: Optional[float] = None         # EMA luminance scale for HDR-float normalization
+        self.frame_format: str = "unknown"              # observed WGC buffer format (SDR uint8 vs HDR wider)
 
     def start(self) -> bool:
         try:
@@ -115,9 +121,15 @@ class WgcFrameSource:
 
             @cap.event
             def on_frame_arrived(frame, capture_control):  # noqa: ANN001
+                self._last_frame_wall = time.time()        # mark arrival even if processing fails (stall clock)
                 try:
-                    buf = frame.frame_buffer            # HxWx4 BGRA
-                    gray = to_gray_small(buf[:, :, :3], self._downscale)
+                    buf = frame.frame_buffer               # HxWx4; 8-bit BGRA (SDR) or wider under HDR
+                    if self.frame_format == "unknown":
+                        self.frame_format = f"{getattr(buf, 'dtype', '?')}{tuple(getattr(buf, 'shape', ()))}"
+                        log.info("RetinaGameCapture: first WGC frame format=%s (HDR-aware normalization active)",
+                                 self.frame_format)
+                    bgr = self._to_u8_bgr(buf)             # HDR-aware: uint16 / scRGB-float -> 8-bit BGR
+                    gray = to_gray_small(bgr, self._downscale)
                     now = time.time() * 1000.0
                     if self._prev_gray is not None and self._prev_ts is not None:
                         dt = (now - self._prev_ts) / 1000.0
@@ -127,8 +139,10 @@ class WgcFrameSource:
                             self.frames_seen += 1
                             self._frame_ts.append(now)
                     self._prev_gray, self._prev_ts = gray, now
-                except Exception:  # noqa: BLE001 — a bad frame must never kill the capture thread
-                    pass
+                except Exception as _fx:  # noqa: BLE001 — a bad frame must never kill the capture thread
+                    if self._frame_err_n == 0:
+                        log.warning("RetinaGameCapture: frame processing error (HDR format?): %s", _fx)
+                    self._frame_err_n += 1
 
             @cap.event
             def on_closed():  # noqa: ANN202
@@ -137,6 +151,7 @@ class WgcFrameSource:
             self._cap = cap
             cap.start_free_threaded()                  # background thread; non-blocking
             self._running = True
+            self._last_frame_wall = time.time()        # fresh clock so stall detection waits for real frames
             log.info("RetinaGameCapture: WGC capturing window ~'%s' (digital screen-grab, no camera)",
                      self._window)
             return True
@@ -147,6 +162,44 @@ class WgcFrameSource:
     def recent_frame_ts(self) -> list:
         """Recent WGC frame arrival times (ms, wall-clock) for the adaptive governor's fps telemetry."""
         return list(self._frame_ts)
+
+    def _to_u8_bgr(self, buf):
+        """HDR-aware normalize. WGC delivers 8-bit BGRA under SDR, but a WIDER buffer under HDR (uint16, or
+        scRGB float16/32 where 1.0 = SDR white and highlights exceed 1.0). Return an 8-bit 3-channel array so
+        cv_motion (optical flow) works regardless of HDR state. uint16 -> deterministic >>8; float ->
+        EMA-smoothed scale (per-frame max alone would flicker brightness and inject false optical flow)."""
+        import numpy as np
+        a = buf
+        if getattr(a, "ndim", 0) == 3 and a.shape[2] >= 3:
+            a = a[:, :, :3]
+        if a.dtype == np.uint8:
+            return np.ascontiguousarray(a)
+        if a.dtype == np.uint16:
+            return np.ascontiguousarray((a >> 8).astype(np.uint8))
+        a = a.astype(np.float32)
+        m = float(a.max()) if a.size else 1.0
+        if m <= 0:
+            m = 1.0
+        self._lum_scale = m if self._lum_scale is None else 0.9 * self._lum_scale + 0.1 * m
+        return np.ascontiguousarray(np.clip(a / self._lum_scale * 255.0, 0, 255).astype(np.uint8))
+
+    def restart_if_stalled(self, stall_s: float = 4.0, cooldown_s: float = 8.0) -> bool:
+        """Re-acquire the window if frames stopped arriving. Remote Play recreates/fullscreens its window when
+        a game stream starts, invalidating the WGC handle captured at start() (frames freeze). Cooldown-gated
+        to avoid thrash. Returns True if a re-acquire happened."""
+        if not self._running or self._last_frame_wall is None:
+            return False
+        now = time.time()
+        if (now - self._last_frame_wall) <= stall_s or (now - self._last_reacquire_wall) <= cooldown_s:
+            return False
+        log.warning("RetinaGameCapture: WGC stalled %.1fs (frames_seen=%d, fmt=%s) — re-acquiring window '%s'",
+                    now - self._last_frame_wall, self.frames_seen, self.frame_format, self._window)
+        self._last_reacquire_wall = now
+        self._reacquires += 1
+        self.stop()
+        self._prev_gray = None
+        self._prev_ts = None
+        return self.start()
 
     def stop(self) -> None:
         self._running = False
@@ -185,6 +238,7 @@ class RetinaGameCapture:
         widens the oracle's causal-lag search window (lag_max_ms) when the measured Remote Play lag nears
         the ceiling, and tunes resample-rate/downscale for estimator validity + steady frames. Returns the
         decision dict, or None if too few WGC frames yet. The governor is EMA-smoothed + cooldown-gated."""
+        self._source.restart_if_stalled()   # HDR/Remote-Play: re-acquire if the window handle went stale
         fts = self._source.recent_frame_ts()
         if len(fts) < 4:
             return None
@@ -218,6 +272,11 @@ class RetinaGameCapture:
             "lag_ms": (round(feats.lag_ms, 1) if feats is not None else None),   # meticulously-adjusted causal lag
             "lag_window_ms": round(self.core._oracle.lag_max_ms, 1),             # current adaptive search ceiling
             "resample_hz": round(self.core._oracle.common_rate_hz, 1),
+            "frame_format": self._source.frame_format,       # SDR uint8 vs HDR (uint16/float) — HDR-aware
+            "frame_errs": self._source._frame_err_n,
+            "reacquires": self._source._reacquires,
+            "frame_stall_s": (round(time.time() - self._source._last_frame_wall, 1)
+                              if self._source._last_frame_wall else None),
             "governor": self._governor.telemetry_summary(),
             "abstain_reason": (None if rep is not None else
                                "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)"),
