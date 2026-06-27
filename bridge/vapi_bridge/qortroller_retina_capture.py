@@ -283,15 +283,22 @@ class RetinaGameCapture:
         return self._source.frames_seen
 
     def status(self) -> dict:
-        """Diagnostic snapshot for 'is every datapoint functioning' checks."""
+        """Diagnostic snapshot for 'is every datapoint functioning' checks. Also surfaces the
+        coupling-threshold CALIBRATION features (coupling_score = real |causal r|, negative_control =
+        time-shuffled chance null, decoupled_energy, grid_samples) so every session logs the data a
+        calibration run separates with a measured FAR (s-coupling-threshold-calibration)."""
         rep = self.core.latest_l9_report()
         feats = self.core._last_feats
+        nc = self.core._oracle.negative_control()    # shuffle null (chance coupling) — the FAR baseline
         return {
             "started": self.started,
             "frames_seen": self._source.frames_seen,
             "l9_verdict": (rep.verdict.value if rep is not None else None),
             "nqpv_verdict": (map_l9_to_nqpv_retina(rep.verdict) if rep is not None else None),
             "coupling_score": (round(feats.coupling_score, 3) if feats is not None else None),
+            "negative_control": (round(nc, 3) if nc is not None else None),   # time-shuffled = chance null (FAR)
+            "decoupled_energy": (round(feats.decoupled_energy, 3) if feats is not None else None),
+            "grid_samples": (feats.grid_samples if feats is not None else 0),
             "lag_ms": (round(feats.lag_ms, 1) if feats is not None else None),   # meticulously-adjusted causal lag
             "lag_window_ms": round(self.core._oracle.lag_max_ms, 1),             # current adaptive search ceiling
             "resample_hz": round(self.core._oracle.common_rate_hz, 1),
