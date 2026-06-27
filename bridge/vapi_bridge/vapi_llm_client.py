@@ -13,10 +13,15 @@ class QorTrollerAI:
         root_env_path = os.path.abspath(os.path.join(current_dir, "..", "..", ".env"))
         load_dotenv(root_env_path)
 
-        # Load API key, fallback to provided key if not set
+        # Load API key from the environment. Never ship a hardcoded credential
+        # fallback — this is a PUBLIC repo, so any baked-in key is world-readable
+        # and must be rotated. Fail closed when the env var is unset.
         self.api_key = os.environ.get("QUICKSILVER_API_KEY")
         if not self.api_key:
-            self.api_key = "sk-el_TumeRtoQdi-lY-YQmTQ"
+            raise RuntimeError(
+                "QUICKSILVER_API_KEY is not set. Configure it in bridge/.env "
+                "(do not commit it). No default credential is provided."
+            )
 
     def _post_completion(self, system_prompt, user_content):
         url = "https://api.quicksilverpro.io/v1/chat/completions"
