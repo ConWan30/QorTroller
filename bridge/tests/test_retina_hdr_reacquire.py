@@ -78,3 +78,18 @@ def test_retina_game_capture_passes_monitor_through():
     from vapi_bridge.qortroller_retina_capture import RetinaGameCapture
     rgc = RetinaGameCapture("Remote Play", monitor_index=2)
     assert rgc._source._monitor_index == 2
+
+
+def test_downscale_change_yields_different_gray_shape():
+    """Regression: the governor changes downscale live; to_gray_small then yields a DIFFERENT-sized image,
+    which Farneback optical flow cannot diff against the previous frame (prev.size()==next.size() assert).
+    The capture loop must shape-guard + re-baseline prev_gray, never throw (the bug that froze the screen-
+    lobe at frames_seen=22 / frame_errs=550). This documents the trigger; the fix is the shape guard."""
+    import pytest
+    try:
+        import cv2  # noqa: F401
+        from l9_presence.cv_motion import to_gray_small
+    except Exception:
+        pytest.skip("opencv not available")
+    frame = (np.random.rand(480, 640, 3) * 255).astype(np.uint8)
+    assert to_gray_small(frame, 4).shape != to_gray_small(frame, 8).shape
