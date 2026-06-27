@@ -63,6 +63,44 @@ def _clean(xs: Sequence[Optional[float]]) -> "np.ndarray":
     return np.asarray([float(x) for x in xs if x is not None], dtype=np.float64)
 
 
+@dataclass(frozen=True)
+class GateResult:
+    """Outcome of the decoupled-energy gate (the input-activity refinement)."""
+    coupling_kept: list                  # coupling_score of the windows that passed the gate
+    cutoff: Optional[float]              # the decoupled_energy cut (relative quantile within the corpus)
+    n_kept: int
+    n_total: int
+    keep_quantile: float
+
+    def to_dict(self) -> dict:
+        return {"n_kept": self.n_kept, "n_total": self.n_total, "cutoff": self.cutoff,
+                "keep_quantile": self.keep_quantile}
+
+
+def gate_coupled_by_decoupled_energy(
+    windows: Sequence["tuple[Optional[float], Optional[float]]"], *, keep_quantile: float = 0.5,
+) -> GateResult:
+    """Decoupled-energy gate — keep the windows whose on-screen motion is MOST right-stick-driven (the
+    genuine-aim windows), dropping walking/world-scroll-diluted windows that merely cleared the right-stick
+    activity gate. `windows` = (coupling_score, decoupled_energy) per computed window.
+
+    decoupled_energy = the fraction of on-screen motion the input did NOT cause. Walking scrolls the whole
+    world (high decoupled_energy) without the right stick driving the pan, which DILUTES the coupling
+    correlation. Empirically (campaign 2026-06-27, N=52): low-DE windows coupling mean 0.183 vs high-DE 0.066
+    (~3x dilution); gating took the calibration from TPR 0.85 -> 1.00 at the same null.
+
+    The cut is RELATIVE (a quantile within the corpus), NOT an absolute DE threshold: decoupled_energy runs
+    high (~0.97-0.99) in busy game scenes, so an absolute cut is scene/stream/game-fragile. For a LIVE oracle
+    the honest form is to rank windows WITHIN a burst and keep the lowest-DE fraction. Deterministic."""
+    pairs = [(float(c), float(d)) for c, d in windows if c is not None and d is not None]
+    n_total = len(pairs)
+    if n_total == 0:
+        return GateResult([], None, 0, 0, keep_quantile)
+    cutoff = float(np.quantile([d for _, d in pairs], keep_quantile))
+    kept = [c for c, d in pairs if d <= cutoff]
+    return GateResult(kept, round(cutoff, 6), len(kept), n_total, keep_quantile)
+
+
 def calibrate(coupled: Sequence[Optional[float]], null: Sequence[Optional[float]], *,
               structured_null: bool = False, far_cap: float = FAR_CAP,
               tpr_floor: float = TPR_FLOOR, n_floor: int = N_FLOOR) -> CalibrationResult:

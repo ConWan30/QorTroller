@@ -65,6 +65,7 @@ class RetinaGameCaptureCore:
         self._oracle = InputOutputCouplingOracle()
         self._cfg: ContinuousConfig = NCAA_CONTINUOUS_CONFIG if ncaa_profile else ContinuousConfig()
         self._last_feats = None   # last CouplingFeatures (exposes coupling_score + best-lag_ms for diag)
+        self._feats_history = []  # (coupling_score, decoupled_energy) per computed window, for the P1 burst gate
 
     def feed_hid(self, ts_ms: float, right_stick_x: float, right_stick_y: float) -> None:
         self._oracle.push_input(ts_ms, right_stick_x, right_stick_y)
@@ -77,6 +78,10 @@ class RetinaGameCaptureCore:
         self._last_feats = feats         # stash for diagnostics (coupling_score + best causal lag_ms)
         if feats is None:                # not enough aim activity / data -> no verdict
             return None
+        # P1 burst gate: record this computed window so a burst can rank by decoupled_energy at proof time
+        self._feats_history.append((feats.coupling_score, feats.decoupled_energy))
+        if len(self._feats_history) > 256:
+            self._feats_history = self._feats_history[-256:]
         nc = self._oracle.negative_control()
         return fuse_screen_retina(feats.coupling_score, nc, feats.decoupled_energy,
                                   coherence=_NO_COHERENCE, cfg=self._cfg)
@@ -85,6 +90,16 @@ class RetinaGameCaptureCore:
         """The NQPV-vocabulary coupled-retina verdict (or None=abstain) for meta['retina_coupled_verdict']."""
         rep = self.latest_l9_report()
         return None if rep is None else map_l9_to_nqpv_retina(rep.verdict)
+
+    def reset_burst_history(self) -> None:
+        """Clear the per-burst window history (call at burst start so the gate scopes to THIS burst)."""
+        self._feats_history = []
+
+    def burst_gated_summary(self, keep_quantile: float = 0.5):
+        """Apply the P1 decoupled-energy gate over the accumulated burst windows -> GatedBurstSummary
+        (median coupling of the lowest-DE genuine-aim windows vs COUPLING_THRESHOLD). Pure delegate."""
+        from l9_presence.coupling import gate_features_by_decoupled_energy
+        return gate_features_by_decoupled_energy(list(self._feats_history), keep_quantile=keep_quantile)
 
 
 class WgcFrameSource:
@@ -267,6 +282,14 @@ class RetinaGameCapture:
 
     def latest_coupled_verdict(self) -> Optional[str]:
         return self.core.latest_coupled_verdict()
+
+    def reset_burst_history(self) -> None:
+        """P1 burst gate: clear per-burst window history (call at burst start)."""
+        self.core.reset_burst_history()
+
+    def burst_gated_summary(self, keep_quantile: float = 0.5):
+        """P1 burst gate: decoupled-energy-gated burst verdict over the accumulated windows."""
+        return self.core.burst_gated_summary(keep_quantile)
 
     def tune(self) -> Optional[dict]:
         """Observe capture telemetry + APPLY the governor's controls live. The meticulous lag adjustment:

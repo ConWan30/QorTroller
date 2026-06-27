@@ -13,6 +13,7 @@ from vapi_bridge.coupling_threshold_calibration import (
     CURRENT_THRESHOLD,
     N_FLOOR,
     calibrate,
+    gate_coupled_by_decoupled_energy,
 )
 
 
@@ -83,3 +84,33 @@ def test_to_dict_roundtrip():
     d = res.to_dict()
     assert d["verdict"] == res.verdict and d["current_threshold"] == CURRENT_THRESHOLD
     assert "caveats" in d and isinstance(d["caveats"], list)
+
+
+# --- decoupled-energy gate (input-activity refinement; campaign 2026-06-27) -----------------------------
+
+def test_gate_keeps_lowest_decoupled_energy_windows():
+    # 2 genuine-aim (low DE, high coupling) + 2 walking (high DE, low coupling)
+    windows = [(0.30, 0.80), (0.25, 0.82), (0.05, 0.99), (0.04, 0.995)]
+    g = gate_coupled_by_decoupled_energy(windows, keep_quantile=0.5)
+    assert g.n_total == 4 and g.n_kept == 2
+    assert sorted(g.coupling_kept) == [0.25, 0.30]   # the right-stick-driven (aim) windows survive
+
+
+def test_gate_lifts_tpr_by_dropping_diluted_windows():
+    # the empirical campaign shape: genuine-aim coupling concentrated in low-DE windows; walking dilutes
+    aim = [(0.18, 0.97)] * 15            # right-stick-driven
+    walk = [(0.02, 0.999)] * 15          # world-scroll, near-null coupling
+    null = [0.025] * 15 + [0.035] * 15
+    res_u = calibrate([c for c, _ in aim + walk], null, structured_null=True)
+    g = gate_coupled_by_decoupled_energy(aim + walk, keep_quantile=0.5)
+    res_g = calibrate(g.coupling_kept, null, structured_null=True)
+    assert g.n_kept == 15                              # only the aim windows survive the gate
+    assert res_g.tpr_at_threshold >= res_u.tpr_at_threshold   # gate never hurts TPR; here lifts 0.5 -> 1.0
+    assert res_g.separation >= res_u.separation
+
+
+def test_gate_empty_and_none_safe():
+    g0 = gate_coupled_by_decoupled_energy([], keep_quantile=0.5)
+    assert g0.n_total == 0 and g0.n_kept == 0 and g0.cutoff is None and g0.coupling_kept == []
+    g1 = gate_coupled_by_decoupled_energy([(0.3, 0.8), (None, 0.9), (0.2, None), (0.1, 0.99)])
+    assert g1.n_total == 2                             # only fully-present (coupling, DE) pairs counted

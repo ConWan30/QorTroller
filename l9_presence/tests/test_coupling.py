@@ -136,3 +136,27 @@ def test_separation_human_vs_aimbot():
     assert hf is not None and af is not None
     assert hf.coupling_score > af.coupling_score + 0.4
     assert af.decoupled_energy > hf.decoupled_energy + 0.3
+
+
+# --- P1 decoupled-energy burst gate (campaign 2026-06-27) -----------------------------------------------
+
+def test_gate_features_keeps_low_decoupled_windows():
+    # genuine-aim (low DE, high coupling) + walking/world-scroll (high DE, low coupling)
+    pairs = [(0.20, 0.97), (0.18, 0.98), (0.05, 0.999), (0.04, 0.999)]
+    g = C.gate_features_by_decoupled_energy(pairs, keep_quantile=0.5, threshold=0.06)
+    assert g.n_total == 4 and g.n_kept == 2          # lowest-DE half survives
+    assert g.coupled is True                          # median{0.20,0.18}=0.19 >= 0.06
+    assert abs(g.representative_coupling - 0.19) < 1e-6
+
+
+def test_gate_features_median_below_threshold_not_coupled():
+    pairs = [(0.05, 0.97), (0.04, 0.98), (0.03, 0.999), (0.02, 0.999)]
+    g = C.gate_features_by_decoupled_energy(pairs, keep_quantile=0.5, threshold=0.10)
+    assert g.coupled is False                          # gated median ~0.045 < 0.10
+
+
+def test_gate_features_empty_and_none_safe():
+    g0 = C.gate_features_by_decoupled_energy([], threshold=0.06)
+    assert g0.n_total == 0 and g0.n_kept == 0 and g0.coupled is False and g0.representative_coupling is None
+    g1 = C.gate_features_by_decoupled_energy([(0.2, 0.9), (None, 0.9), (0.1, None)], threshold=0.06)
+    assert g1.n_total == 1                             # only fully-present (coupling, DE) pairs counted

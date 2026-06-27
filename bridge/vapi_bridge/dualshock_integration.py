@@ -428,8 +428,11 @@ class DualShockTransport:
                     _bs = float(getattr(cfg, "retina_burst_duration_s", 6.0))
                     _bp = float(getattr(cfg, "retina_burst_period_s", 60.0))
                     _tp = str(getattr(cfg, "retina_burst_trigger_path", "") or "")
+                    _dg = bool(getattr(cfg, "retina_burst_de_gate_enabled", False))
+                    _dq = float(getattr(cfg, "retina_burst_de_keep_quantile", 0.5))
                     self._presence_burst = PresenceBurstController(_rgc, burst_s=_bs, period_s=_bp,
-                                                                   trigger_path=_tp, log=log)
+                                                                   trigger_path=_tp, log=log,
+                                                                   de_gate=_dg, de_keep_quantile=_dq)
                     log.info("QorTroller Retina presence-burst mode — %s (burst=%.1fs%s)",
                              ("ON-DEMAND (no capture until trigger %r)" % _tp) if _bp <= 0
                              else "periodic duty-cycle, capture OFF between bursts",

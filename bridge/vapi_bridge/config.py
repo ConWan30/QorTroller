@@ -1962,6 +1962,16 @@ class Config:
         default_factory=lambda: os.environ.get("RETINA_BURST_TRIGGER_PATH",
                                                os.path.expanduser("~/.vapi/presence_trigger"))
     )
+    # P1 decoupled-energy gate (default-off): when on, a burst SAMPLES coupling windows across its duration,
+    # ranks them by decoupled_energy, and bases the verdict on the median coupling of the genuine-aim
+    # (lowest-DE) windows — dropping walking/world-scroll-diluted windows so the proof reflects real aim, not
+    # incidental world-scroll. RELATIVE rank (calibration 2026-06-27); off -> single-read verdict (legacy).
+    retina_burst_de_gate_enabled: bool = field(
+        default_factory=lambda: _env_bool("RETINA_BURST_DE_GATE_ENABLED", False)
+    )
+    retina_burst_de_keep_quantile: float = field(
+        default_factory=lambda: _env_float("RETINA_BURST_DE_KEEP_QUANTILE", 0.5)
+    )
     # Lean presence mode — run ONLY DualShock + retina/coupling + duty-cycle for live-play presence capture
     # over Remote Play; gate off the ~30-agent fleet + grind + PCC + chain reconcilers (the measured ~38% CPU
     # that lags the stream; bridge-down = perfect). Default-off = full bridge. Pair with GRIND_MODE=false +
