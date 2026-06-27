@@ -140,3 +140,59 @@ def test_run_on_demand_no_trigger_no_capture(tmp_path):
 
     asyncio.run(drive())
     assert rgc.started == 0                        # zero capture during normal play (no trigger)
+
+
+# --- P1 decoupled-energy gate (default-off) -------------------------------------------------------------
+
+class GatedMockRGC(MockRGC):
+    """MockRGC + the P1 burst-gate surface (reset_burst_history / burst_gated_summary)."""
+
+    def __init__(self, *, summary=None, **kw):
+        super().__init__(**kw)
+        self.reset_called = 0
+        self.status_calls = 0
+        self._summary = summary
+
+    def status(self):
+        self.status_calls += 1
+        return super().status()
+
+    def reset_burst_history(self):
+        self.reset_called += 1
+
+    def burst_gated_summary(self, keep_quantile=0.5):
+        return self._summary
+
+
+def test_de_gate_reads_summary_maps_verdict_and_stops():
+    from types import SimpleNamespace
+    summ = SimpleNamespace(coupled=True, representative_coupling=0.19, n_kept=2, n_total=4)
+    rgc = GatedMockRGC(summary=summ)
+    c = PresenceBurstController(rgc, burst_s=0.05, period_s=0, de_gate=True, sample_interval_s=0.01)
+    p = _run(c.fire_once())
+    assert p["ok"] is True and p.get("de_gated") is True
+    assert p["verdict"] == "COUPLED_CLEAN"                 # gated median >= threshold
+    assert p["coupling_score"] == 0.19 and p["n_kept"] == 2 and p["n_total"] == 4
+    assert rgc.reset_called == 1                           # history reset at burst start
+    assert rgc.status_calls >= 1                           # sampled during the burst (accumulates windows)
+    assert rgc.stopped == 1                                # GPU released
+
+
+def test_de_gate_below_threshold_is_implausible():
+    from types import SimpleNamespace
+    summ = SimpleNamespace(coupled=False, representative_coupling=0.03, n_kept=2, n_total=4)
+    rgc = GatedMockRGC(summary=summ)
+    c = PresenceBurstController(rgc, burst_s=0.03, period_s=0, de_gate=True, sample_interval_s=0.01)
+    p = _run(c.fire_once())
+    assert p["verdict"] == "IMPLAUSIBLE" and p["de_gated"] is True
+    assert rgc.stopped == 1
+
+
+def test_de_gate_no_windows_is_abstain_none():
+    from types import SimpleNamespace
+    summ = SimpleNamespace(coupled=False, representative_coupling=None, n_kept=0, n_total=0)
+    rgc = GatedMockRGC(summary=summ)
+    c = PresenceBurstController(rgc, burst_s=0.03, period_s=0, de_gate=True, sample_interval_s=0.01)
+    p = _run(c.fire_once())
+    assert p["verdict"] is None and p["de_gated"] is True  # no windows -> honest abstain
+    assert rgc.stopped == 1

@@ -26,12 +26,19 @@ class PresenceBurstController:
     start() -> bool, stop() -> None, status() -> dict (with nqpv_verdict / coupling_score / ...)."""
 
     def __init__(self, rgc: Any, *, burst_s: float = 6.0, period_s: float = 60.0,
-                 trigger_path: str = "", log: Any = None) -> None:
+                 trigger_path: str = "", log: Any = None, de_gate: bool = False,
+                 de_keep_quantile: float = 0.5, sample_interval_s: float = 1.0) -> None:
         self._rgc = rgc
         self._burst_s = max(1.0, float(burst_s))
         self._period_s = max(0.0, float(period_s))   # <=0 -> ON-DEMAND only (no periodic capture)
         self._trigger_path = trigger_path or ""
         self._log = log
+        # P1 decoupled-energy gate (default-off): when on, the burst SAMPLES coupling windows across burst_s,
+        # ranks them by decoupled_energy, and bases the verdict on the median coupling of the genuine-aim
+        # (lowest-DE) windows — dropping walking/world-scroll-diluted windows. Off -> path is byte-identical.
+        self._de_gate = bool(de_gate)
+        self._de_keep_quantile = float(de_keep_quantile)
+        self._sample_interval_s = max(0.2, float(sample_interval_s))
         self._lock = asyncio.Lock()                  # single-flight: never two overlapping bursts
         self._running = False
         self.last_proof: Optional[dict] = None
@@ -50,6 +57,8 @@ class PresenceBurstController:
             if not started:
                 return self._record(False, None, None, None, None, time.time() - t0, "capture_start_failed")
             try:
+                if self._de_gate:
+                    return await self._fire_gated(t0)
                 await asyncio.sleep(self._burst_s)
                 try:
                     st = self._rgc.status() or {}
@@ -63,6 +72,41 @@ class PresenceBurstController:
                     self._rgc.stop()      # release the GPU -> smooth gameplay between bursts
                 except Exception:  # noqa: BLE001
                     pass
+
+    async def _fire_gated(self, t0: float) -> dict:
+        """P1 gated burst: reset the window history, SAMPLE status across burst_s (each sample populates a
+        coupling window in the RGC), then base the verdict on the decoupled-energy-gated median coupling of
+        the genuine-aim windows. Fail-open; the caller's finally still STOPS the capture."""
+        try:
+            rh = getattr(self._rgc, "reset_burst_history", None)
+            if rh:
+                rh()
+        except Exception:  # noqa: BLE001
+            pass
+        end = time.time() + self._burst_s
+        while time.time() < end:
+            await asyncio.sleep(min(self._sample_interval_s, max(0.0, end - time.time())))
+            try:
+                self._rgc.status()        # populates the burst window history via latest_l9_report
+            except Exception:  # noqa: BLE001
+                pass
+        try:
+            st = self._rgc.status() or {}
+        except Exception:  # noqa: BLE001
+            st = {}
+        coupled, rep, n_kept, n_total = False, None, 0, 0
+        try:
+            g = self._rgc.burst_gated_summary(self._de_keep_quantile)
+            coupled, rep, n_kept, n_total = bool(g.coupled), g.representative_coupling, g.n_kept, g.n_total
+        except Exception:  # noqa: BLE001
+            pass
+        verdict = "COUPLED_CLEAN" if coupled else ("IMPLAUSIBLE" if n_total else None)
+        proof = self._record(True, verdict, rep, st.get("negative_control"), st.get("grid_samples"),
+                             time.time() - t0, None)
+        proof["de_gated"] = True
+        proof["n_kept"] = n_kept
+        proof["n_total"] = n_total
+        return proof
 
     def _record(self, ok: bool, verdict, coupling, null, grid, elapsed_s: float,
                 reason: Optional[str]) -> dict:
