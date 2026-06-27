@@ -170,6 +170,15 @@ class VAPIPresenceProof:
     cert_scope: str = "advisory"
     population_certified: bool = False
 
+    # PoVCA (Cycle 42 integration, renamed PoSCA -> PoVCA per critique to avoid "skill" over-claim):
+    # Per discrete game-action: verified device + causal input authorship + L4/L5 structure.
+    # Composes as oracle into NQPV presence_score. Always advisory until live co-capture + study.
+    posca_verdict: str = "UNVERIFIABLE"
+    posca_commitment: str = ""
+    posca_structure_ok: Optional[bool] = None
+    posca_coupling_score: Optional[float] = None
+    posca_action_count: int = 0
+
     def is_developer_self_certified(self) -> bool:
         """True iff this is a developer-self-scoped cert (single-subject; NOT a population claim)."""
         return self.cert_scope == "developer_self" and not self.advisory
@@ -202,6 +211,12 @@ class VAPIPresenceProof:
             "certified": self.certified,
             "cert_scope": self.cert_scope,
             "population_certified": self.population_certified,
+            # PoVCA fields (Cycle 42)
+            "posca_verdict": self.posca_verdict,
+            "posca_commitment": self.posca_commitment,
+            "posca_structure_ok": self.posca_structure_ok,
+            "posca_coupling_score": self.posca_coupling_score,
+            "posca_action_count": self.posca_action_count,
         }
 
 
@@ -253,6 +268,12 @@ class VAPIPresence:
                 certified=bool(body.get("certified", False)),
                 cert_scope=str(body.get("cert_scope", "advisory")),
                 population_certified=bool(body.get("population_certified", False)),
+                # PoVCA (Cycle 42)
+                posca_verdict=str(body.get("posca_verdict", "UNVERIFIABLE")),
+                posca_commitment=str(body.get("posca_commitment", "")),
+                posca_structure_ok=body.get("posca_structure_ok"),
+                posca_coupling_score=body.get("posca_coupling_score"),
+                posca_action_count=int(body.get("posca_action_count", 0)),
             )
         except Exception as exc:
             return VAPIPresenceProof(

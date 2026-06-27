@@ -2156,6 +2156,41 @@ class DualShockTransport:
                             _neg_ok = getattr(self._cfg, "retina_coupled_negative_enabled", False)
                             if _rc_v is not None and (_rc_v != "IMPLAUSIBLE" or _neg_ok):
                                 self._pending_pitl_meta["retina_coupled_verdict"] = _rc_v
+
+                        # Cycle-42 PoVCA (Proof of Verified Causal Authorship) slice — minimal integration.
+                        # Reuses existing ScreenEvent/coherence/input events when available in live hook.
+                        # Computes per-action authorship (provenance + L9 causal + L4 structure).
+                        # Feeds NQPV as oracle (composes; abstains if not live co-capture or emulated).
+                        # Honesty rails: "authorship + structure_ok (NOT skill rank)"; emulated gate; advisory.
+                        try:
+                            from .posca_action_provenance import detect_author_actions, posca_verdict_from
+                            # Live discrete authorship is DORMANT until screen_events + input_events are
+                            # co-captured live (the capture-rate fix). Until then _scr/_inp are empty and
+                            # this whole block no-ops -> posca abstains (honest, never fabricates).
+                            _scr = self._pending_pitl_meta.get("screen_events") or []
+                            _inp = self._pending_pitl_meta.get("input_events") or []
+                            if _scr and _inp:
+                                _l4 = {"l4_distance": (self._pending_pitl_meta.get("l4_distance")
+                                                       or self._pending_pitl_meta.get("pitl_l4_distance"))}
+                                _dev = self._pending_pitl_meta.get("device_id") or ""
+                                _rh = (self._pending_pitl_meta.get("record_hash_hex")
+                                       or self._pending_pitl_meta.get("record_hash") or "")
+                                _posca_acts = detect_author_actions(
+                                    _scr, _inp, l4_features=_l4, device_id=_dev, poac_record_hash=_rh)
+                                if _posca_acts:
+                                    _first = _posca_acts[0]
+                                    _cco = self._pending_pitl_meta.get("cco_presence_ceiling_candidate")
+                                    # structure_ok is TRI-STATE (may be None = abstain); the verdict helper
+                                    # maps None/emulated -> UNVERIFIABLE (never AUTHENTIC without L4 evidence).
+                                    self._pending_pitl_meta["posca_structure_ok"] = _first.get("structure_ok")
+                                    self._pending_pitl_meta["posca_coupling_score"] = _first.get("coupling")
+                                    self._pending_pitl_meta["posca_action_count"] = len(_posca_acts)
+                                    self._pending_pitl_meta["posca_commitment"] = _first.get("commitment", "")
+                                    self._pending_pitl_meta["posca_verdict"] = posca_verdict_from(
+                                        _first.get("structure_ok"), _first.get("coupling"), _cco)
+                        except Exception as _posca_exc:
+                            log.debug("posca slice skipped (fail-open): %s", _posca_exc)
+
                         self._pending_pitl_meta.update(
                             cocapture_fields_from_pitl_meta(self._pending_pitl_meta)
                         )

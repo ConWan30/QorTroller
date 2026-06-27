@@ -194,6 +194,29 @@ def demo_presence_proof():
     print(f"  to_dict keys            : {list(proof.to_dict().keys())}")
 
 
+def demo_posca_povca():
+    print("\n=== 8. PoVCA (Cycle 42) — Proof of Verified Causal Authorship (renamed from PoSCA)")
+    # Cleaner name per plan: PoVCA (avoids "skill" over-claim; authorship + structure).
+    # Minimal demo (real from /player/presence-proof + fuse).
+    proof = VAPIPresenceProof(
+        device_id="edge-abc123",
+        record_hash="feedface" * 8,
+        verdict="CONSISTENT_HUMAN",
+        presence_score=0.91,
+        posca_verdict="AUTHENTIC",
+        posca_commitment="povca:deadbeef:AUTHENTIC:0.42",
+        posca_structure_ok=True,
+        posca_coupling_score=0.37,
+        posca_action_count=3,
+        notes="demo; per-action authorship (provenance+L9 causal+L4 structure) — NOT skill rank",
+    )
+    print(f"  posca_verdict (authorship): {proof.posca_verdict}")
+    print(f"  posca_structure_ok (L4)  : {proof.posca_structure_ok}")
+    print(f"  posca_action_count       : {proof.posca_action_count}")
+    print(f"  honesty rail in notes    : {'not skill rank' in proof.notes}")
+    print("  (Composes into NQPV score; advisory until live co-capture + study)")
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
@@ -209,5 +232,6 @@ if __name__ == "__main__":
     demo_self_verify()
     asyncio.run(demo_async())
     demo_presence_proof()
+    demo_posca_povca()
 
     print("\nAll demos complete.")
