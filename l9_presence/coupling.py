@@ -204,7 +204,15 @@ class InputOutputCouplingOracle:
         nc    = oracle.negative_control()  # must collapse vs feats.coupling_score
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, lag_min_ms=None, lag_max_ms=None,
+                 common_rate_hz=None, min_grid_samples=None) -> None:
+        # Runtime-tunable estimator knobs (the AdaptiveCaptureGovernor adjusts lag_max_ms/common_rate_hz
+        # to track Remote Play latency). Sentinel-None defaults read the MODULE constant at construction
+        # time (preserves env-override + every existing InputOutputCouplingOracle() call byte-identically).
+        self.lag_min_ms: float = LAG_MIN_MS if lag_min_ms is None else float(lag_min_ms)
+        self.lag_max_ms: float = LAG_MAX_MS if lag_max_ms is None else float(lag_max_ms)
+        self.common_rate_hz: float = COMMON_RATE_HZ if common_rate_hz is None else float(common_rate_hz)
+        self.min_grid_samples: int = MIN_GRID_SAMPLES if min_grid_samples is None else int(min_grid_samples)
         self._in_ts: deque = deque(maxlen=_BUFFER_MAXLEN)
         self._in_sx: deque = deque(maxlen=_BUFFER_MAXLEN)
         self._in_sy: deque = deque(maxlen=_BUFFER_MAXLEN)
@@ -228,9 +236,9 @@ class InputOutputCouplingOracle:
             return None
         t0 = max(self._in_ts[0], self._mo_ts[0])
         t1 = min(self._in_ts[-1], self._mo_ts[-1])
-        if t1 - t0 < (MIN_GRID_SAMPLES / COMMON_RATE_HZ) * 1000.0:
+        if t1 - t0 < (self.min_grid_samples / self.common_rate_hz) * 1000.0:
             return None
-        step = 1000.0 / COMMON_RATE_HZ
+        step = 1000.0 / self.common_rate_hz
         return np.arange(t0, t1, step)
 
     def _axis(self, grid: np.ndarray, sx_arr, mo_arr, shuffle: bool) -> Tuple[float, float, int, float]:
@@ -246,15 +254,15 @@ class InputOutputCouplingOracle:
             rng = np.random.default_rng(1729)
             pred_g = pred_g.copy()
             rng.shuffle(pred_g)                     # destroy temporal alignment
-        lag_min = int(round(LAG_MIN_MS / 1000.0 * COMMON_RATE_HZ))
-        lag_max = int(round(LAG_MAX_MS / 1000.0 * COMMON_RATE_HZ))
+        lag_min = int(round(self.lag_min_ms / 1000.0 * self.common_rate_hz))
+        lag_max = int(round(self.lag_max_ms / 1000.0 * self.common_rate_hz))
         r, lag = lagged_xcorr(pred_g, meas_g, lag_min, lag_max)
         dec = decoupled_energy_fraction(pred_g, meas_g, lag)
         return abs(r), r, lag, dec
 
     def extract_features(self) -> Optional[CouplingFeatures]:
         grid = self._grid()
-        if grid is None or grid.size < MIN_GRID_SAMPLES:
+        if grid is None or grid.size < self.min_grid_samples:
             return None
         # activity gate: require the player to actually be aiming on some axis
         sx = np.asarray(self._in_sx, dtype=np.float64); sx -= np.median(sx)
@@ -271,7 +279,7 @@ class InputOutputCouplingOracle:
         return CouplingFeatures(
             coupling_score=absr,
             coupling_signed=r,
-            lag_ms=lag * 1000.0 / COMMON_RATE_HZ,
+            lag_ms=lag * 1000.0 / self.common_rate_hz,
             decoupled_energy=dec,
             dominant_axis=axis,
             grid_samples=int(grid.size),
@@ -282,7 +290,7 @@ class InputOutputCouplingOracle:
         """Coupling with time-shuffled input. MUST be << extract_features().coupling_score.
         Returns the shuffled coupling score, or None if insufficient data."""
         grid = self._grid()
-        if grid is None or grid.size < MIN_GRID_SAMPLES:
+        if grid is None or grid.size < self.min_grid_samples:
             return None
         ay = self._axis(grid, self._in_sx, self._mo_yaw, shuffle=True)
         ap = self._axis(grid, self._in_sy, self._mo_pitch, shuffle=True)

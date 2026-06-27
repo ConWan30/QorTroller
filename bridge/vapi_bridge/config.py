@@ -2027,6 +2027,12 @@ class Config:
     retina_coupled_negative_enabled: bool = field(
         default_factory=lambda: _env_bool("RETINA_COUPLED_NEGATIVE_ENABLED", False)
     )
+    # Adaptive lag/FPS governor — meticulously widens the coupling oracle's causal-lag search window to
+    # track the live Remote Play latency (and tunes resample-rate/downscale). Default True: when the retina
+    # capture runs at all, the lag estimate should self-tune. Set False to pin the fixed 500ms window.
+    retina_adaptive_lag_enabled: bool = field(
+        default_factory=lambda: _env_bool("RETINA_ADAPTIVE_LAG_ENABLED", True)
+    )
 
     # --- Data Economy Arc 5: VAPIReplayProofPipeline (VHR proofs) ---
     replay_proof_pipeline_enabled: bool = field(

@@ -1588,12 +1588,20 @@ class DualShockTransport:
                             "accel_z": float(_rs.accel_z),
                         })
                 # QorTroller Retina Game Capture (cycle-39): feed the dense live stick stream to the
-                # coupling oracle (cheap deque append; correlated against WGC screen-pan in the bg thread).
-                if self._retina_game_capture is not None:
-                    _rgc_ms = time.time() * 1000.0
+                # coupling oracle. CRITICAL for the causal-lag search (lagged_xcorr 0-500ms = the Remote
+                # Play latency window): each frame needs its OWN wall-clock timestamp on the SAME clock as
+                # the WGC frame-motion (time.time()*1000), else the lag search can't resolve the streaming
+                # lag. Anchor the latest frame to wall-clock now; backdate earlier frames by their TRUE
+                # device-timestamp delta (relative spacing is accurate even if device-ts is a counter).
+                if self._retina_game_capture is not None and frames:
+                    _now_ms = time.time() * 1000.0
+                    _last_dev = float(getattr(frames[-1], "timestamp_ms", 0) or 0)
                     for _rs in frames:
+                        _dev = float(getattr(_rs, "timestamp_ms", 0) or 0)
+                        _delta = _last_dev - _dev
+                        _ts = _now_ms - _delta if (0.0 <= _delta <= 1000.0) else _now_ms
                         self._retina_game_capture.feed_hid(
-                            _rgc_ms, float(_rs.right_stick_x), float(_rs.right_stick_y))
+                            _ts, float(_rs.right_stick_x), float(_rs.right_stick_y))
                 _frame_msg = _json.dumps({"type": "frames", "frames": _out})
                 asyncio.create_task(_fbc(_frame_msg))
                 # Phase 59: also send to per-device twin clients
@@ -2130,6 +2138,11 @@ class DualShockTransport:
                         # live, read its latest coupling verdict -> NQPV retina vocab -> meta. None (no
                         # source / abstain) leaves it unset -> cocapture abstains (unchanged).
                         if self._retina_game_capture is not None:
+                            # Meticulous lag adjustment: let the adaptive governor observe live telemetry and
+                            # widen/shrink the oracle's causal-lag search window to track Remote Play latency
+                            # (EMA-smoothed + cooldown-gated inside; safe to call per record). Gated on flag.
+                            if getattr(self._cfg, "retina_adaptive_lag_enabled", True):
+                                self._retina_game_capture.tune()
                             _rc_v = self._retina_game_capture.latest_coupled_verdict()  # already NQPV vocab
                             self._rgc_diag_n = getattr(self, "_rgc_diag_n", 0) + 1
                             if self._rgc_diag_n % 25 == 1:

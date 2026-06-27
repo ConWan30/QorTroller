@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections import deque
 from typing import Optional
 
 from .screen_retina_fusion import (
@@ -63,6 +64,7 @@ class RetinaGameCaptureCore:
         from l9_presence.coupling import InputOutputCouplingOracle
         self._oracle = InputOutputCouplingOracle()
         self._cfg: ContinuousConfig = NCAA_CONTINUOUS_CONFIG if ncaa_profile else ContinuousConfig()
+        self._last_feats = None   # last CouplingFeatures (exposes coupling_score + best-lag_ms for diag)
 
     def feed_hid(self, ts_ms: float, right_stick_x: float, right_stick_y: float) -> None:
         self._oracle.push_input(ts_ms, right_stick_x, right_stick_y)
@@ -72,6 +74,7 @@ class RetinaGameCaptureCore:
 
     def latest_l9_report(self):
         feats = self._oracle.extract_features()
+        self._last_feats = feats         # stash for diagnostics (coupling_score + best causal lag_ms)
         if feats is None:                # not enough aim activity / data -> no verdict
             return None
         nc = self._oracle.negative_control()
@@ -98,6 +101,7 @@ class WgcFrameSource:
         self._prev_ts: Optional[float] = None
         self._running = False
         self.frames_seen = 0
+        self._frame_ts: deque = deque(maxlen=240)   # recent WGC frame arrival times (ms) for the governor
 
     def start(self) -> bool:
         try:
@@ -121,6 +125,7 @@ class WgcFrameSource:
                             fm = frames_to_motion(self._prev_gray, gray, dt)
                             self._core.feed_frame_motion(now, fm.yaw_rate, fm.pitch_rate)
                             self.frames_seen += 1
+                            self._frame_ts.append(now)
                     self._prev_gray, self._prev_ts = gray, now
                 except Exception:  # noqa: BLE001 — a bad frame must never kill the capture thread
                     pass
@@ -139,6 +144,10 @@ class WgcFrameSource:
             log.warning("RetinaGameCapture: WGC start failed (lobe abstains): %s", exc)
             return False
 
+    def recent_frame_ts(self) -> list:
+        """Recent WGC frame arrival times (ms, wall-clock) for the adaptive governor's fps telemetry."""
+        return list(self._frame_ts)
+
     def stop(self) -> None:
         self._running = False
         try:
@@ -156,6 +165,10 @@ class RetinaGameCapture:
         self.core = RetinaGameCaptureCore(ncaa_profile=ncaa_profile)
         self._source = WgcFrameSource(self.core, window_substr, downscale=downscale)
         self.started = False
+        # Adaptive lag/FPS governor — meticulously widens the oracle's causal-lag search window to track
+        # the live Remote Play latency (and tunes resample-rate/downscale for estimator validity).
+        from l9_presence.adaptive_capture import AdaptiveCaptureGovernor, CaptureControls
+        self._governor = AdaptiveCaptureGovernor(CaptureControls(downscale=downscale))
 
     def start(self) -> bool:
         self.started = self._source.start()
@@ -167,6 +180,25 @@ class RetinaGameCapture:
     def latest_coupled_verdict(self) -> Optional[str]:
         return self.core.latest_coupled_verdict()
 
+    def tune(self) -> Optional[dict]:
+        """Observe capture telemetry + APPLY the governor's controls live. The meticulous lag adjustment:
+        widens the oracle's causal-lag search window (lag_max_ms) when the measured Remote Play lag nears
+        the ceiling, and tunes resample-rate/downscale for estimator validity + steady frames. Returns the
+        decision dict, or None if too few WGC frames yet. The governor is EMA-smoothed + cooldown-gated."""
+        fts = self._source.recent_frame_ts()
+        if len(fts) < 4:
+            return None
+        feats = self.core._last_feats
+        lag = feats.lag_ms if feats is not None else None
+        grid = feats.grid_samples if feats is not None else 0
+        d = self._governor.observe(fts, coupling_lag_ms=lag, grid_samples=grid, now_ms=time.time() * 1000.0)
+        if d.changed:
+            ctl = self._governor.controls
+            self.core._oracle.lag_max_ms = float(ctl.lag_window_ms)     # widen/shrink causal-lag search
+            self.core._oracle.common_rate_hz = float(ctl.resample_hz)   # estimator resample rate
+            self._source._downscale = int(ctl.downscale)               # optical-flow cost (applied live)
+        return d.to_dict()
+
     @property
     def frames_seen(self) -> int:
         """How many WGC frame-pairs have been processed (0 => capture not producing frames = a bug;
@@ -176,11 +208,17 @@ class RetinaGameCapture:
     def status(self) -> dict:
         """Diagnostic snapshot for 'is every datapoint functioning' checks."""
         rep = self.core.latest_l9_report()
+        feats = self.core._last_feats
         return {
             "started": self.started,
             "frames_seen": self._source.frames_seen,
             "l9_verdict": (rep.verdict.value if rep is not None else None),
             "nqpv_verdict": (map_l9_to_nqpv_retina(rep.verdict) if rep is not None else None),
+            "coupling_score": (round(feats.coupling_score, 3) if feats is not None else None),
+            "lag_ms": (round(feats.lag_ms, 1) if feats is not None else None),   # meticulously-adjusted causal lag
+            "lag_window_ms": round(self.core._oracle.lag_max_ms, 1),             # current adaptive search ceiling
+            "resample_hz": round(self.core._oracle.common_rate_hz, 1),
+            "governor": self._governor.telemetry_summary(),
             "abstain_reason": (None if rep is not None else
                                "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)"),
         }
