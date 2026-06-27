@@ -137,8 +137,16 @@ class WgcFrameSource:
                         self.frame_format = f"{getattr(buf, 'dtype', '?')}{tuple(getattr(buf, 'shape', ()))}"
                         log.info("RetinaGameCapture: first WGC frame format=%s (HDR-aware normalization active)",
                                  self.frame_format)
-                    bgr = self._to_u8_bgr(buf)             # HDR-aware: uint16 / scRGB-float -> 8-bit BGR
-                    gray = to_gray_small(bgr, self._downscale)
+                    # Downscale AT SOURCE: stride-slice the raw HxWx4 view by the live downscale BEFORE the
+                    # expensive convert, so _to_u8_bgr (the 6 MB ascontiguousarray / HDR float-normalize) +
+                    # grayscale run on ~1/d**2 the pixels instead of full 1080p (the 39fps-raw -> 7fps-processed
+                    # gap was this wasted work on 16x more pixels than we use). Read _downscale ONCE — tune()
+                    # mutates it on the bridge thread; splitting it mid-frame would desync the shape guard. The
+                    # stride already applies the downscale, so to_gray_small gets downscale=1 (no double-down).
+                    d = max(1, int(self._downscale))
+                    buf_small = buf[::d, ::d]              # strided view (cheap); ceil(H/d) x ceil(W/d) x 4
+                    bgr = self._to_u8_bgr(buf_small)       # HDR-aware: uint16 / scRGB-float -> 8-bit BGR
+                    gray = to_gray_small(bgr, 1)           # cvtColor only — stride already downscaled
                     now = time.time() * 1000.0
                     # Shape guard: the governor changes downscale live, which changes the gray image size.
                     # Optical flow REQUIRES prev.size()==next.size(); a mismatch must SKIP motion (re-baseline),
