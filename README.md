@@ -8,7 +8,7 @@
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18966169.svg)](https://doi.org/10.5281/zenodo.18966169) (v3 — historical; v4 DOI pending release)
 
-**Author:** Contravious Battle (Independent Researcher) · **Network:** IoTeX testnet (chain ID 4690) · **Phase:** PATH A ARC 1 + DATA ECONOMY ARC 2 + ARC 4 + ARC 5 + ARC 6 **DEPLOYED**; ARC 7 PQ SIDECAR BUILT (v2 wrapper ceremony-gated) — **public repo, mainnet-ready** · **Date:** 2026-06-05
+**Author:** Contravious Battle (Independent Researcher) · **Network:** IoTeX testnet (chain ID 4690) · **Phase:** PATH A ARC 1 + DATA ECONOMY ARC 2 + ARC 4 + ARC 5 + ARC 6 **DEPLOYED**; ARC 7 PQ SIDECAR BUILT (v2 wrapper ceremony-gated); Trio-Retina + CCO×PoEP Fusion + L9 coupled-retina presence BUILT (advisory, default-OFF) — **public repo, mainnet-ready** · **Date:** 2026-06-27
 
 | Surface | Status |
 |---|---|
@@ -16,7 +16,7 @@
 | **SDK tests** | 604 passing |
 | **Hardhat contract tests** | **760 passing** (13 pre-existing unrelated failures, see baseline) |
 | **Frontend Vitest** | **155 passing** (Consent Cockpit + VHR Proof Panel additions, 2026-06-04/05) |
-| **PV-CI invariant gate** | **179 / 179 pinned**, governance-ceremony-locked; CI-enforced on every PR (+INV-W3S-006, INV-RETINA-001/002 added Trio-Retina Phase 2; live gate verified `PASS — 179` 2026-06-21) |
+| **PV-CI invariant gate** | **182 / 182 pinned**, governance-ceremony-locked; CI-enforced on every PR (179→182: +3 PoSR-phase1 novel-assurance invariants merged to main; 174→179: +INV-W3S-006, INV-RETINA-001/002 Trio-Retina Phase 2; live gate verified `PASS — 182` 2026-06-27) |
 | **FSCA contradiction rules** | 28 active |
 | **Contracts LIVE on IoTeX testnet** | **66 deployed, 58 currently-active** (chain 4690; per the 2026-06-13 contract-status audit `audits/contract-status-cycle-15-2026-06-13.md` — 58 ACTIVE / 3 explicitly SUPERSEDED / 5 deprecated-by-versioning; supersession is a classification overlay, all 66 remain on-chain and callable). See `contracts/deployed-addresses.json`. Recent deploys: **Arc 2 `VAPIBuyerCategoryVerifier` `0x5B1D82AA…` (block 44355501, 2026-06-05)**; **Arc 6 `VAPITemporalBeaconRegistry` `0x96244031…` (block 44355513, 2026-06-05)**; Arc 5 v1 `VAPIReplayProofVerifier` `0x5182372d…` (block 44053167, 2026-05-30); Arc 4 `VAPIConsentManifestRegistry` `0x5F7c8068…` (block 44053171, 2026-05-30) |
 | **Gamer-facing dApps** | **Consent Cockpit at `/consent`** — first standalone gamer-sovereign consent surface in the protocol (Cockpit F1–F5 shipped 2026-06-05); `BRIDGE NEVER GRANTS OR REVOKES CONSENT` invariant displayed as headline UX, signing always `msg.sender == gamer` |
@@ -29,7 +29,7 @@
 | **GIC_100 cognitive chain head** | Permanently anchored 2026-05-06 (block 43348052) |
 | **World Model Provenance Lane (WMP)** | **Architectural blueprint published 2026-06-05** — additive packaging + export + consumer-verifier lane over Arc 5 (VHR) + Arc 6 (PoSR) + Arc 4 (Consent). Honest POMDP placement (provenance source, NOT a world model); action-channel-only; post-φ sanitized data only; consumer-side Poseidon matrix↔root re-hash closes the long-open Arc 5 off-circuit finding. W1-D operator decision: fixtures-first ship, deferred-export guard, minimal `VAPIWorldModelConsentRegistry` as flagged Phase-2 promote. |
 | **Daemon Brain** | **30-tool persistent cognitive layer** (`qortroller_daemon.py`) — hive-mind architecture with CLI + TUI rendering clients; QuickSilver API (`claude-sonnet-4-6`, switched from deepseek-v4-flash 2026-06-16); **Tier 1–3 governance fences** (`verify_artifact` anti-fabrication, `extract_with_diff` deterministic reconstruction, `propose_edit`/`finalize_plan` propose-only, health monitor); drove the DECON-2 monolith decomposition under fences; SQLite shared memory across sessions; QorTroller-native tools: GIC chain visualizer, live IoTeX on-chain queries, Mythos audit runner, GIC cryptographic replay, calibration status |
-| **CI matrix** | GitHub Actions: Python 3.10/3.11/3.12 × Node 18/20 + Rust stable + WASM target enforcing the 179-invariant gate on every PR. Governance gates (PV-CI, Mythos, Path Scope) green; full integration matrix has tracked pre-existing toolchain debt (hardhat-ABI ordering) under repair — branch-protection draft proposes making the governance gates blocking |
+| **CI matrix** | GitHub Actions: Python 3.10/3.11/3.12 × Node 18/20 + Rust stable + WASM target enforcing the 182-invariant gate on every PR. Governance gates (PV-CI, Mythos, Path Scope) green; full integration matrix has tracked pre-existing toolchain debt (hardhat-ABI ordering) under repair — branch-protection draft proposes making the governance gates blocking |
 | **Trio-Retina (advisory perception oracle)** | **BUILT through Phase 3, default-OFF** — controller-embed → perception → `retina_state_commitment` → Poseidon `events_root` (off-chain ZK-prep) → on-chain PDA attestation; W3bstream `retina_state_commitment` validation + DA bulk/witness sidecar (same decoupled-pointer pattern as Arc 7 PQ). Wired read-only into `session_adjudicator` as a second forensic oracle; **does NOT touch the 228-byte PoAC wire** (`RETINA_PERCEPTION_ENABLED`/`RETINA_DA_WITNESS_ENABLED` default false) |
 | **CCO × PoEP Fusion (two-axis: identity × presence)** | **Phases A–F shipped** — `CapabilityOracle` + `ChallengeVerifier` (Edge `adaptive_force` + measured DualSense `rumble_imu`) + identity×presence grid + off-chain composability on `GET /player/session-status`. **Phase G measurement VALIDATED + operator-attested:** PREMIUM_EDGE `sony_dualshock_edge_v1` N=210, MID_TIER `sony_dualsense_v1` N=130 (HUMAN N=50, FRR proxy 0.0); MINIMAL_PAD deferred (no hardware). Live PoEP `PRESENT` verdict remains **operator-gated** (default-OFF, N≥50 corpus + env flip) |
 | **Wallet posture** | `CHAIN_SUBMISSION_PAUSED=true` held; zero-trust sandbox compliant; every chain-write path operator-fired |
@@ -249,7 +249,7 @@ The daemon has **30 tools** organized across three tiers:
 | `gic_replay(n?, session_id?)` | Cryptographic replay of last N GIC links — recomputes each SHA-256 hash and flags tamper or corruption. Works without the bridge. |
 | `calibration_status()` | Full enrollment readiness: live L4 thresholds from `calibration_profile_live.json`, AIT separation ratio, GIC progress bar, all P0 tournament gate conditions. |
 | `run_mythos(variant)` | Run any of the 17 Mythos audit variants on demand. Findings sorted CRITICAL → HIGH → MEDIUM → LOW. Fast variants (16=`path_a_spec_impl_parity`, 14=`doc_number_consistency`, 5=`crypto_drift`) need no DB. |
-| `run_invariant_gate()` | Full PV-CI gate (176 invariants) from the chat prompt. |
+| `run_invariant_gate()` | Full PV-CI gate (182 invariants) from the chat prompt. |
 | `poac_status()` | Single-call protocol status snapshot: GIC, PCC, contract count, git HEAD. |
 
 **On-chain truth (no bridge required)**
@@ -305,7 +305,7 @@ vapi-pebble-prototype/
 │   ├── vpm_audit.py         6-section VPM compiler/registry audit harness
 │   ├── layer7_coverage_audit.py    Wallet-free Layer 7 7-of-7 audit
 │   ├── zkba_post_ceremony_audit.py Cedar v2 lane authority audit
-│   ├── vapi_invariant_gate.py      PV-CI 77-invariant gate
+│   ├── vapi_invariant_gate.py      PV-CI 182-invariant gate
 │   └── parallel_*_anchor.py        Triple-gate ceremony scripts (operator-runtime)
 ├── sdk/                     Python SDK (562 tests) — VAPIZKBA, VAPIFleetReadinessRoot, etc.
 ├── frontend/                Vite + React Operator Console
@@ -330,7 +330,7 @@ vapi-pebble-prototype/
 ├── agent_memory.db          Persistent conversation memory (gitignored; created at first run)
 ├── CLAUDE.md                Operator-authoritative state file (single source of truth)
 ├── contracts/deployed-addresses.json   Authoritative on-chain registry
-└── .github/INVARIANTS_ALLOWLIST.json   176-entry PV-CI digest pin file
+└── .github/INVARIANTS_ALLOWLIST.json   182-entry PV-CI digest pin file
 ```
 
 ---
@@ -349,7 +349,7 @@ The following rules are **FROZEN**. Changing any of them requires a `--confirm-g
 - **No token launch before separation_ratio > 1.0 AND all_pairs_above_1=True** — empirically confirmed AND all-pairs above. Currently cleared for the AIT separation gate in the current corpus (1.199, N=37); touchpad_corners (0.728) remains the actual tournament BLOCK enforcement blocker.
 - **Stable EMA track updates on NOMINAL sessions only** — security invariant; never override.
 - **Per-player L4 thresholds tighten, never loosen** — enforced via `min()` operator.
-- **PV-CI invariant gate** runs on every PR — currently 176 invariants. Modifying a frozen region without a `--confirm-governance` ceremony fails CI.
+- **PV-CI invariant gate** runs on every PR — currently 182 invariants. Modifying a frozen region without a `--confirm-governance` ceremony fails CI.
 - **CHAIN_SUBMISSION_PAUSED kill-switch** held in `bridge/.env` — every chain-write path is gated; operator three-factor authorization (env var + env var + `--confirm` CLI flag) required to lift.
 
 Complete invariant list: `scripts/vapi_invariant_gate.py` + `.github/INVARIANTS_ALLOWLIST.json`.
