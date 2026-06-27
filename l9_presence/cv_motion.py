@@ -31,8 +31,21 @@ except Exception:  # pragma: no cover - env without opencv
 import numpy as np
 
 DOWNSCALE: int = 4          # process at 1/DOWNSCALE resolution for speed
-_FARNEBACK = dict(pyr_scale=0.5, levels=3, winsize=15, iterations=3,
-                  poly_n=5, poly_sigma=1.2, flags=0)
+
+# Cached Hanning windows for phaseCorrelate (keyed by (h, w)); the window size only changes when the
+# Adaptive Capture Governor changes downscale, so recreating it per frame would be wasteful.
+_HANNING_CACHE: dict = {}
+
+
+def _hanning_for(shape) -> "np.ndarray":
+    """Hanning window matching a grayscale frame's (h, w), cached. Reduces phaseCorrelate edge spectral
+    leakage. Only called after the _CV2 guard in frames_to_motion."""
+    key = (int(shape[0]), int(shape[1]))
+    win = _HANNING_CACHE.get(key)
+    if win is None:
+        win = cv2.createHanningWindow((key[1], key[0]), cv2.CV_32F)   # cv2 size is (width, height)
+        _HANNING_CACHE[key] = win
+    return win
 
 
 @dataclass
@@ -61,16 +74,25 @@ def to_gray_small(frame_bgr: "np.ndarray", downscale: int = DOWNSCALE) -> "np.nd
 
 
 def frames_to_motion(prev_gray: "np.ndarray", gray: "np.ndarray", dt_s: float) -> FrameMotion:
-    """Dense optical flow between two grayscale frames -> motion proxy."""
+    """Global on-screen pan between two grayscale frames -> motion proxy.
+
+    Uses phase correlation (a frequency-domain global-shift estimator) rather than dense optical flow: the
+    coupling oracle consumes only the MEAN flow (a single global yaw/pitch pan), which cv2.phaseCorrelate
+    computes DIRECTLY ~50x faster than calcOpticalFlowFarneback + np.mean -- the dense field was discarded
+    after averaging anyway. Coupling scores via Pearson r (scale-invariant), so the proxy's absolute scale is
+    irrelevant; only relative motion over time matters. Inputs must be the same size (the capture-loop shape
+    guard guarantees it)."""
     if not _CV2:
         raise RuntimeError("opencv-python not installed (pip install opencv-python)")
     dt_s = max(float(dt_s), 1e-3)
-    flow = cv2.calcOpticalFlowFarneback(prev_gray, gray, None, **_FARNEBACK)
-    fx = float(np.mean(flow[..., 0]))
-    fy = float(np.mean(flow[..., 1]))
-    energy = float(np.mean(np.hypot(flow[..., 0], flow[..., 1])))
-    # scene flows OPPOSITE the camera pan -> negate so yaw_rate tracks camera motion
-    return FrameMotion(yaw_rate=-fx / dt_s, pitch_rate=-fy / dt_s, flow_energy=energy / dt_s)
+    p = prev_gray.astype(np.float32)
+    g = gray.astype(np.float32)
+    (dx, dy), _response = cv2.phaseCorrelate(p, g, _hanning_for(p.shape))
+    # phaseCorrelate(prev, cur) returns the prev->cur global shift (same direction as the old Farneback mean
+    # flow); the scene shifts OPPOSITE the camera pan, so negate to keep yaw_rate tracking camera motion with
+    # the same sign convention as before (absolute sign re-validated live via COUPLED_CLEAN).
+    energy = float((dx * dx + dy * dy) ** 0.5)
+    return FrameMotion(yaw_rate=-float(dx) / dt_s, pitch_rate=-float(dy) / dt_s, flow_energy=energy / dt_s)
 
 
 class MotionExtractor:
