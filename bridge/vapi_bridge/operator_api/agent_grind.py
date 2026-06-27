@@ -455,6 +455,76 @@ def register_agent_grind_routes(
         except Exception as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
+    # BCRA — GET /bridge/connectivity
+    # ------------------------------------------------------------------
+    # Read-only Bridge Connectivity Readiness Aggregator: composes the four
+    # already-computed subsystem statuses (CONTROLLER / AGENTS / CHAIN /
+    # OPERATIONAL) into ONE honest readiness view + a VPM honesty label, so the
+    # dashboard shows a single coherent "is the bridge fully connected + loaded"
+    # signal instead of the operator AND-ing ~5 endpoints. Honest by design: the
+    # CHAIN kill-switch (CHAIN_SUBMISSION_PAUSED) renders DEGRADED not green; any
+    # degraded/unknown lane keeps the overall view off `live`. Event-loop safe:
+    # store scans run on worker threads; the RPC reachability probe is bounded.
+    @app.get("/bridge/connectivity")
+    async def get_bridge_connectivity(
+        x_api_key: str = Header(default=""),
+    ):
+        """Aggregated bridge connectivity readiness (BCRA).
+
+        Returns the ConnectivityAttestation dict: schema, verdict, visual_state,
+        per-lane {state, evidence}, vpm_label, ts_ns, attestation_hash.
+        """
+        check_read_key(x_api_key)
+        import time as _tbcra
+        from dataclasses import asdict as _asdict
+        from ..bridge_connectivity_aggregator import assemble_connectivity
+
+        # CONTROLLER — live PCC monitor if wired (same source as /bridge/capture-health)
+        _controller = None
+        _mon = getattr(app, "_pcc_monitor", None)
+        if _mon is not None:
+            try:
+                _live = _mon.get_status()
+                _controller = {"capture_state": _live.get("capture_state"),
+                               "host_state": _live.get("host_state"),
+                               "poll_rate_hz": _live.get("poll_rate_hz")}
+            except Exception:
+                _controller = None
+
+        # AGENTS — fleet liveness wiring deferred to a fleet-status source; honest
+        # UNKNOWN until then (the aggregator handles None without overclaiming).
+        _agents = None
+
+        # CHAIN — kill-switch from cfg (cheap, authoritative) + bounded RPC reach probe
+        _paused = bool(getattr(cfg, "chain_submission_paused", True))
+        _rpc_ok = None
+        _w3 = getattr(chain, "_sync_w3", None)
+        if _w3 is not None:
+            try:
+                await asyncio.wait_for(
+                    asyncio.to_thread(lambda: _w3.eth.block_number), timeout=3.0)
+                _rpc_ok = True
+            except Exception:
+                _rpc_ok = False
+        _chain = {"rpc_reachable": _rpc_ok, "submission_paused": _paused}
+
+        # OPERATIONAL — watchdog + GIC chain intactness + restart rate (worker thread)
+        _operational = None
+        try:
+            _grind_sid = getattr(cfg, "grind_session_id", "")
+            _wd = await asyncio.to_thread(
+                store.get_watchdog_event_chain_status, _grind_sid, 200)
+            _gic = await asyncio.to_thread(store.get_grind_chain_status, _grind_sid, cfg)
+            _operational = {"watchdog_chain_intact": bool(_wd.get("chain_intact")),
+                            "gic_chain_intact": bool(_gic.get("chain_intact")),
+                            "restarts_last_hour": int(_wd.get("restarts_last_hour") or 0)}
+        except Exception:
+            _operational = None
+
+        att = assemble_connectivity(_controller, _agents, _chain, _operational,
+                                    ts_ns=time.time_ns())
+        return {**_asdict(att), "timestamp": _tbcra.time()}
+
     # Phase B backlog #8 — POST /operator/ipact-challenge
     # ------------------------------------------------------------------
     # Issue a fresh iPACT re-attestation challenge (bridge-issued 32-byte CSPRNG

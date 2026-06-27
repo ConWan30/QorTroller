@@ -65,6 +65,8 @@ from .cco_l6b_wiring import (
 )
 from .config import Config
 from .continuity_prover import FEATURE_KEYS
+from .controller_reconnect_policy import ReconnectPolicy
+from .l4_humanity import p_l4_from_distance
 from .store import Store
 
 log = logging.getLogger(__name__)
@@ -379,6 +381,70 @@ class DualShockTransport:
         self._hid_counter_thread    = None
         self._hid_counter_running   = False
         self._hid_counter_restarts  = 0  # Phase 235-CONTENTION: self-healing retry count
+        # Controller hot-plug auto-reconnect (USB unplug/replug recovery without a bridge restart).
+        # The session loop counts consecutive poll failures and, past the policy threshold, re-opens
+        # the reader on a capped backoff (off the event loop). Default-on; disable via cfg.
+        self._consecutive_poll_failures = 0
+        self._reconnect_attempts        = 0
+        self._reconnect_policy = ReconnectPolicy(
+            reconnect_after_failures=int(getattr(cfg, "controller_reconnect_after_failures", 5)),
+        )
+        # Cycle-37/38 PoEP Track-1/Stage-2: session-level PoEP verdict (developer_self_liveness_verdict
+        # dict), produced by scripts/poep_session_enroll.py at session start and read here at startup
+        # when developer_self_cert + poep_liveness are enabled. Carried into co-capture
+        # meta["poep_present"] via poep_present_signal. Default None -> abstain (fresh/stale-checked read).
+        self._session_poep_verdict: Optional[dict] = None
+        if (getattr(cfg, "developer_self_cert_enabled", False)
+                and getattr(cfg, "poep_liveness_enabled", False)):
+            try:
+                from .poep_activation import read_session_poep_verdict
+                self._session_poep_verdict = read_session_poep_verdict()
+                if self._session_poep_verdict is not None:
+                    log.info("PoEP session verdict loaded: %s",
+                             self._session_poep_verdict.get("verdict",
+                                                            self._session_poep_verdict.get("status")))
+            except Exception as _poep_exc:
+                log.debug("PoEP session verdict read skipped (fail-open): %s", _poep_exc)
+        # QorTroller Retina Game Capture (cycle-39): WGC screen-capture of the Remote Play window ->
+        # cv_motion optical flow -> InputOutputCouplingOracle vs the live stick stream -> coupled-retina
+        # verdict, fused into NQPV co-capture meta["retina_coupled_verdict"]. Default-off; the Remote Play
+        # A/B (2026-06-26) confirmed Remote Play yields a live, biometrically-rich stream to couple against.
+        self._retina_game_capture = None
+        self._presence_burst = None
+        if getattr(cfg, "retina_game_capture_enabled", False):
+            try:
+                from .qortroller_retina_capture import RetinaGameCapture
+                _rgc = RetinaGameCapture(
+                    getattr(cfg, "retina_game_capture_window", "Remote Play"),
+                    monitor_index=int(getattr(cfg, "retina_game_capture_monitor", 0)),
+                    min_update_interval_ms=int(getattr(cfg, "retina_capture_min_interval_ms", 0)),
+                )
+                if getattr(cfg, "retina_capture_burst_enabled", False):
+                    # Duty-cycle: do NOT capture continuously (WGC lags the Remote Play GPU decoder — observer
+                    # effect). A burst controller toggles capture briefly for periodic presence proofs and stops
+                    # between (GPU free -> smooth gameplay). HID keeps flowing via the session loop regardless.
+                    from .presence_burst import PresenceBurstController
+                    self._retina_game_capture = _rgc
+                    _bs = float(getattr(cfg, "retina_burst_duration_s", 6.0))
+                    _bp = float(getattr(cfg, "retina_burst_period_s", 60.0))
+                    _tp = str(getattr(cfg, "retina_burst_trigger_path", "") or "")
+                    _dg = bool(getattr(cfg, "retina_burst_de_gate_enabled", False))
+                    _dq = float(getattr(cfg, "retina_burst_de_keep_quantile", 0.5))
+                    self._presence_burst = PresenceBurstController(_rgc, burst_s=_bs, period_s=_bp,
+                                                                   trigger_path=_tp, log=log,
+                                                                   de_gate=_dg, de_keep_quantile=_dq)
+                    log.info("QorTroller Retina presence-burst mode — %s (burst=%.1fs%s)",
+                             ("ON-DEMAND (no capture until trigger %r)" % _tp) if _bp <= 0
+                             else "periodic duty-cycle, capture OFF between bursts",
+                             _bs, ("" if _bp <= 0 else (" period=%.1fs" % _bp)))
+                elif _rgc.start():
+                    self._retina_game_capture = _rgc
+                    log.info("QorTroller Retina Game Capture STARTED (window substr=%r)",
+                             getattr(cfg, "retina_game_capture_window", "Remote Play"))
+                else:
+                    log.warning("QorTroller Retina Game Capture failed to start (window not found?) — abstaining")
+            except Exception as _rgc_exc:
+                log.debug("QorTroller Retina Game Capture init skipped (fail-open): %s", _rgc_exc)
         self._oracle_addr = getattr(cfg, "skill_oracle_address", "")
         self._bounty_cfg  = getattr(cfg, "dualshock_active_bounties", "")
         self._key_dir     = Path(getattr(cfg, "dualshock_key_dir",
@@ -495,6 +561,28 @@ class DualShockTransport:
                     )
             except Exception as _l6_exc:
                 log.warning("Phase C/L6b: L6TriggerDriver init failed (non-fatal): %s", _l6_exc)
+
+        # VSD Cycle 25 tether (hardened) — placed after L6 init for reuse. The generator is
+        # DECISION-ONLY; the async session loop performs the HID write via asyncio.to_thread +
+        # _emit_tether_pulse_hw (off the event loop) with restore-after-pulse. A/B/A-validated
+        # (cycle-25): keeps the DualShock Edge wireless module anchored to PS5 during dual grind.
+        # Controlled exception to ps5_compat_mode; default-OFF (dual_grind_tether_enabled).
+        self._tether_gen = None
+        self._tether_dur_ms = 35
+        try:
+            if getattr(self._cfg, "dual_grind_tether_enabled", False):
+                from .tether_pulse_generator import TetherPulseGenerator, TetherConfig
+                tcfg = TetherConfig(
+                    enabled=True,
+                    amplitude_max=getattr(self._cfg, "dual_grind_tether_amplitude_max", 12),
+                    min_interval_s=getattr(self._cfg, "dual_grind_tether_duty_s", 1.2),
+                )
+                self._tether_dur_ms = int(tcfg.duration_ms)
+                self._tether_gen = TetherPulseGenerator(tcfg)  # decision-only; HW write off-loop
+                log.info("Cycle25 tether ENABLED (amp_max=%s duty=%.1fs dur=%sms)",
+                         tcfg.amplitude_max, tcfg.min_interval_s, self._tether_dur_ms)
+        except Exception as _t_exc:
+            log.warning("Cycle25 tether init failed (non-fatal): %s", _t_exc)
 
         # Phase 63: L6b Neuromuscular Reflex Layer
         self._l6b_enabled: bool = getattr(self._cfg, "l6b_enabled", False)
@@ -675,6 +763,13 @@ class DualShockTransport:
         # Pre-register device in the bridge's SQLite store so on_record()
         # can resolve the pubkey for signature verification from the first record.
         self._register_device()
+
+        # Presence-burst (duty-cycle) capture loop — toggles WGC in brief bursts so screen-capture doesn't
+        # continuously lag the Remote Play GPU decoder (observer effect). No-op unless retina_capture_burst_enabled
+        # (and period>0); on-demand-only when period<=0.
+        if getattr(self, "_presence_burst", None) is not None:
+            asyncio.create_task(self._presence_burst.run())
+            log.info("QorTroller Retina presence-burst loop spawned")
 
         # On-chain device registration — idempotent, runs once per identity.
         # Skipped on subsequent startups when is_chain_registered is True.
@@ -1172,6 +1267,164 @@ class DualShockTransport:
         except Exception:
             return bool(getattr(self._cfg, "retina_perception_enabled", False))
 
+    async def _run_retina_perception_hook(self, record_hash_hex: str) -> None:
+        """Advisory Trio-Retina controller-lobe perception over the trailing HID window.
+
+        Phase 0 event-loop discipline (Phase 235-EVENTLOOP): the numpy embed +
+        state-commitment (``run_controller_perception``) and the SQLite/provenance
+        writes (``persist_retina_result``) are CPU/IO-heavy and MUST NOT run inline
+        on the async session loop. Both are offloaded via ``asyncio.to_thread``; only
+        the lightweight PITL-meta attach stays on the loop, after the await. Fail-open:
+        any error is swallowed so the advisory layer never breaks ingestion. Behavior
+        is byte-identical to the prior inline hook except for the threading boundary.
+        """
+        try:
+            from .retina_depin_policy import get_runtime_policy_state
+            from .retina_events_root import (
+                EVENTS_ROOT_SCHEME_POSEIDON_V1,
+                EVENTS_ROOT_SCHEME_SHA256_V1,
+            )
+            from .retina_perception import (
+                persist_retina_result,
+                run_controller_perception,
+            )
+
+            _src = getattr(self, "_device_id_hex", None) or (
+                self._device_id.hex() if self._device_id is not None else "unknown"
+            )
+            _scheme = (
+                EVENTS_ROOT_SCHEME_POSEIDON_V1
+                if bool(getattr(self._cfg, "retina_events_root_poseidon_enabled", False))
+                else EVENTS_ROOT_SCHEME_SHA256_V1
+            )
+            _rp = await asyncio.to_thread(
+                run_controller_perception,
+                list(self._retina_snap_ring),
+                enabled=True,
+                source_id=_src,
+                window=int(getattr(self._cfg, "retina_perception_window", 120)),
+                dynamics_horizon=int(getattr(self._cfg, "retina_dynamics_horizon", 5)),
+                record_hash_hex=record_hash_hex,
+                events_root_scheme=_scheme,
+            )
+            if self._pending_pitl_meta is not None:
+                _pol = get_runtime_policy_state()
+                self._pending_pitl_meta["retina_enabled"] = _rp.enabled
+                self._pending_pitl_meta["retina_event_count"] = _rp.event_count
+                self._pending_pitl_meta["retina_trajectory_anomalies"] = (
+                    _rp.trajectory_anomalies
+                )
+                self._pending_pitl_meta["retina_record_hash"] = _rp.record_hash_hex
+                self._pending_pitl_meta["retina_state_commitment"] = (
+                    _rp.state_commitment_hex
+                )
+                self._pending_pitl_meta["retina_alert"] = _rp.trajectory_anomalies > 0
+                self._pending_pitl_meta["retina_policy_armed"] = bool(
+                    _pol.armed if _pol else False
+                )
+                self._pending_pitl_meta["retina_policy_arm_source"] = (
+                    _pol.arm_source if _pol else "unarmed"
+                )
+                self._pending_pitl_meta["retina_source"] = "hid"
+            await asyncio.to_thread(
+                persist_retina_result,
+                self._store,
+                _src,
+                _rp,
+                source="hid",
+                cfg=self._cfg,
+            )
+        except Exception as _ret_exc:
+            log.debug("retina perception hook fail-open: %s", _ret_exc)
+
+    def _emit_tether_pulse_hw(self, amp: int, dur_ms: int) -> None:
+        """Cycle-25 hardened tether emission. Runs ON A WORKER THREAD (called via
+        asyncio.to_thread from the session loop) so the USB write + hold never block the event
+        loop. A transient micro-pulse on R2: set a tiny force, hold ~dur_ms, then RESTORE to zero
+        so no residual resistance accumulates (the prototype left the force set). This is the
+        single controlled exception to ps5_compat_mode — the only HID output the bridge emits
+        during grind, to anchor the PS5 wireless-module state (A/B/A-validated, cycle-25).
+        Fail-open: any error is swallowed (advisory)."""
+        try:
+            rdr = getattr(self, "_reader", None)
+            ds = getattr(rdr, "ds", None) if rdr is not None else None
+            if ds is None:
+                return
+            from pydualsense import TriggerModes
+            rt = ds.triggerR
+            rt.setMode(TriggerModes(0))
+            rt.setForce(0, int(amp))
+            time.sleep(max(0.0, dur_ms / 1000.0))
+            rt.setForce(0, 0)  # restore — transient pulse, no residual force
+        except Exception:
+            pass
+
+    # ------------------------------------------------------------------
+    # Controller hot-plug auto-reconnect
+    # ------------------------------------------------------------------
+    def _reconnect_reader(self) -> bool:
+        """Re-open ONLY the DualSense reader (focused subset of _init_hardware) for hot-plug recovery.
+
+        Closes the stale handle, constructs a fresh DualSenseReader, and reconnects. Identity,
+        classifier, oracles, etc. persist (untouched) — this re-acquires the USB HID device after an
+        unplug/replug. Returns True iff the device reconnected. BLOCKING (HID calls) — the caller MUST
+        invoke this via run_in_executor so it never stalls the event loop (STABILITY discipline). The
+        parallel hid rate-counter self-heals independently (Phase 235-PCC-RATE-FIX), so it is left alone.
+        """
+        if getattr(self, "_reader", None) is not None:
+            try:
+                self._reader.close()
+            except Exception as _close_exc:
+                log.debug("reconnect: stale reader close failed (non-fatal): %s", _close_exc)
+        try:
+            self._reader = DualSenseReader()
+            connected = bool(self._reader.connect())
+        except Exception as _open_exc:
+            log.warning("reconnect: reader re-open failed: %s", _open_exc)
+            self._is_sim_mode = True
+            return False
+        self._is_sim_mode = not connected
+        return connected
+
+    async def _handle_poll_failure(self, reason: str) -> None:
+        """Hot-plug recovery for a failed poll iteration: count the failure and, past the policy
+        threshold, attempt a reader re-open on a capped backoff — replacing the bare sleep(interval)
+        in the poll-failure paths. Reconnect runs in an executor (event-loop-safe). Auto-reconnect is
+        default-on (cfg.controller_auto_reconnect_enabled); when off, behaves like the old sleep path.
+        """
+        self._consecutive_poll_failures += 1
+        if (getattr(self._cfg, "controller_auto_reconnect_enabled", True)
+                and self._reconnect_policy.should_attempt(self._consecutive_poll_failures)):
+            loop = asyncio.get_running_loop()
+            try:
+                ok = await loop.run_in_executor(None, self._reconnect_reader)
+            except Exception as _re_exc:
+                log.warning("controller reconnect attempt errored (non-fatal): %s", _re_exc)
+                ok = False
+            if ok:
+                log.info(
+                    "controller re-acquired after %d consecutive poll failures (reason=%s) "
+                    "— no bridge restart needed",
+                    self._consecutive_poll_failures, reason,
+                )
+                self._consecutive_poll_failures = 0
+                self._reconnect_attempts = 0
+                if self._pcc_monitor is not None:
+                    self._refresh_retina_policy()
+                await asyncio.sleep(self._interval)
+                return
+            self._reconnect_attempts += 1
+            _backoff = self._reconnect_policy.backoff_for_attempt(self._reconnect_attempts)
+            if self._reconnect_attempts == 1 or self._reconnect_attempts % 10 == 0:
+                log.warning(
+                    "controller still absent after %d reconnect attempt(s) (reason=%s); retrying "
+                    "~every %.0fs — unplug/replug the USB cable to recover without a restart",
+                    self._reconnect_attempts, reason, _backoff,
+                )
+            await asyncio.sleep(_backoff)
+            return
+        await asyncio.sleep(self._interval)
+
     # ------------------------------------------------------------------
     # Main session loop
     # ------------------------------------------------------------------
@@ -1222,14 +1475,14 @@ class DualShockTransport:
                 if self._pcc_monitor is not None:  # Phase 234.7 Layer 2
                     self._pcc_monitor.signal_disconnect("hid_timeout")
                 self._refresh_retina_policy()
-                await asyncio.sleep(self._interval)
+                await self._handle_poll_failure("hid_timeout")  # hot-plug auto-reconnect (replaces bare sleep)
                 continue
             except Exception as _poll_exc:
                 log.warning("_poll_frames error (non-fatal, session continues): %s", _poll_exc)
                 if self._pcc_monitor is not None:  # Phase 234.7 Layer 2
                     self._pcc_monitor.signal_disconnect("poll_error")
                 self._refresh_retina_policy()
-                await asyncio.sleep(self._interval)
+                await self._handle_poll_failure("poll_error")  # hot-plug auto-reconnect (replaces bare sleep)
                 continue
 
             # Phase 235-PCC-SPC: read previous-cycle game-context for SPC haptic-tolerance binding.
@@ -1250,8 +1503,14 @@ class DualShockTransport:
                 log.debug("Session loop iter=%d: no frames, sleeping", _loop_iter)
                 if self._pcc_monitor is not None:  # Phase 234.7 Layer 1
                     self._pcc_monitor.update_sample(0, self._interval, **_spc_kwargs)
-                await asyncio.sleep(self._interval)
+                await self._handle_poll_failure("no_frames")  # hot-plug auto-reconnect (replaces bare sleep)
                 continue
+
+            # Frames present => the controller is delivering. Reset the hot-plug failure counters so a
+            # later disconnect starts a fresh failure run / backoff schedule.
+            if self._consecutive_poll_failures or self._reconnect_attempts:
+                self._consecutive_poll_failures = 0
+                self._reconnect_attempts = 0
 
             # Phase 234.7 Layer 1 — report poll rate for PCC.
             # Phase 235-PCC-RATE-FIX: prefer the TRUE USB HID rate from the
@@ -1269,6 +1528,27 @@ class DualShockTransport:
                     self._pcc_monitor.update_sample(_delta, self._interval, **_spc_kwargs)
                 else:
                     self._pcc_monitor.update_sample(len(frames), self._interval, **_spc_kwargs)
+
+            # VSD Cycle 25 tether prototype tick (after PCC so we know host_state context)
+            # Only active if dual_grind_tether_enabled + typically when grind + EXCLUSIVE_USB.
+            if getattr(self, "_tether_gen", None) is not None:
+                _r_force = 0.0
+                try:
+                    if hasattr(self, "_last_bio_features") and self._last_bio_features:
+                        _r_force = getattr(self._last_bio_features, "r_trigger_force", 0.0) or 0.0
+                except Exception:
+                    _r_force = 0.0
+                _now_t = time.monotonic()
+                self._tether_gen.feed_biomarker(_r_force, _now_t)
+                _tamp = self._tether_gen.due(_now_t)
+                if _tamp > 0:
+                    # hardened: HID write + hold + restore run OFF the event loop
+                    try:
+                        await asyncio.to_thread(
+                            self._emit_tether_pulse_hw, _tamp, self._tether_dur_ms
+                        )
+                    except Exception as _te:
+                        log.debug("tether emit fail-open: %s", _te)
 
             # Phase 53: reset pitl_meta at the start of each iteration so Bridge.on_record()
             # never reads stale values from the previous cycle if an exception fires mid-loop.
@@ -1337,6 +1617,21 @@ class DualShockTransport:
                             "accel_y": float(_rs.accel_y),
                             "accel_z": float(_rs.accel_z),
                         })
+                # QorTroller Retina Game Capture (cycle-39): feed the dense live stick stream to the
+                # coupling oracle. CRITICAL for the causal-lag search (lagged_xcorr 0-500ms = the Remote
+                # Play latency window): each frame needs its OWN wall-clock timestamp on the SAME clock as
+                # the WGC frame-motion (time.time()*1000), else the lag search can't resolve the streaming
+                # lag. Anchor the latest frame to wall-clock now; backdate earlier frames by their TRUE
+                # device-timestamp delta (relative spacing is accurate even if device-ts is a counter).
+                if self._retina_game_capture is not None and frames:
+                    _now_ms = time.time() * 1000.0
+                    _last_dev = float(getattr(frames[-1], "timestamp_ms", 0) or 0)
+                    for _rs in frames:
+                        _dev = float(getattr(_rs, "timestamp_ms", 0) or 0)
+                        _delta = _last_dev - _dev
+                        _ts = _now_ms - _delta if (0.0 <= _delta <= 1000.0) else _now_ms
+                        self._retina_game_capture.feed_hid(
+                            _ts, float(_rs.right_stick_x), float(_rs.right_stick_y))
                 _frame_msg = _json.dumps({"type": "frames", "frames": _out})
                 asyncio.create_task(_fbc(_frame_msg))
                 # Phase 59: also send to per-device twin clients
@@ -1653,10 +1948,13 @@ class DualShockTransport:
                     asyncio.create_task(self._check_continuity())
 
             # Phase 25 / Phase 17: Bayesian humanity probability fusion — L4 × L5 × E4 × L2B × L2C
-            if _l4_warmed and _l4_distance is not None:
-                _p_l4 = _math.exp(-max(0.0, _l4_distance - 2.0))
-            else:
-                _p_l4 = 0.5
+            # Cycle-36: p_L4 mapping via l4_humanity.p_l4_from_distance — DEFAULT-OFF re-anchor; when
+            # l4_humanity_reanchor_enabled is False this is BYTE-IDENTICAL to the legacy exp(-(d-2)).
+            _p_l4 = p_l4_from_distance(
+                _l4_distance, _l4_warmed,
+                reanchor_enabled=getattr(self._cfg, "l4_humanity_reanchor_enabled", False),
+                anomaly_threshold=getattr(self._cfg, "l4_anomaly_threshold", 7.009),
+            )
             _p_l5 = _l5_rhythm_humanity if _l5_rhythm_humanity is not None else 0.5
             if _e4_cognitive_drift is not None:
                 _p_e4 = _math.exp(-_e4_cognitive_drift / 3.0)
@@ -1848,67 +2146,83 @@ class DualShockTransport:
                     pass
 
                 if self._retina_perception_active():
+                    await self._run_retina_perception_hook(_record_hash_hex)
+
+                # Cycle-30 NQPV capture-time co-capture: derive + attach the NQPV oracle inputs to the
+                # PITL meta sidecar (persisted by on_record) for the RETINA-EXCL-2 study corpus. The
+                # meta already carries CCO tier + humanity + the controller-lobe retina by here.
+                # Default-off; fail-open; honest abstain on PoEP + full L9/screen (not live).
+                if getattr(self._cfg, "nqpv_cocapture_enabled", False) and self._pending_pitl_meta is not None:
                     try:
-                        from .retina_depin_policy import get_runtime_policy_state
-                        from .retina_perception import (
-                            persist_retina_result,
-                            run_controller_perception,
+                        from .novel_presence_fusion import cocapture_fields_from_pitl_meta
+                        # PoEP Track-1 (cycle-37): carry the session-level PoEP verdict into the meta so
+                        # cocapture reads a live poep_present. TWO-KEY: poep_present_signal returns None
+                        # (abstain) unless poep_liveness_enabled AND the data gate (N>=50). Default-off +
+                        # no session verdict -> branch sets nothing -> cocapture abstains (unchanged).
+                        _poep_flag = getattr(self._cfg, "poep_liveness_enabled", False)
+                        if _poep_flag and self._session_poep_verdict:
+                            from .poep_activation import poep_present_signal
+                            self._pending_pitl_meta["poep_present"] = poep_present_signal(
+                                self._session_poep_verdict, poep_enabled=_poep_flag)
+                        # QorTroller Retina Game Capture (cycle-39): if the WGC coupled-retina source is
+                        # live, read its latest coupling verdict -> NQPV retina vocab -> meta. None (no
+                        # source / abstain) leaves it unset -> cocapture abstains (unchanged).
+                        if self._retina_game_capture is not None:
+                            # Meticulous lag adjustment: let the adaptive governor observe live telemetry and
+                            # widen/shrink the oracle's causal-lag search window to track Remote Play latency
+                            # (EMA-smoothed + cooldown-gated inside; safe to call per record). Gated on flag.
+                            if getattr(self._cfg, "retina_adaptive_lag_enabled", True):
+                                self._retina_game_capture.tune()
+                            _rc_v = self._retina_game_capture.latest_coupled_verdict()  # already NQPV vocab
+                            self._rgc_diag_n = getattr(self, "_rgc_diag_n", 0) + 1
+                            if self._rgc_diag_n % 25 == 1:
+                                log.info("RGC diag: %s", self._retina_game_capture.status())
+                            # Positive coupling always injects; IMPLAUSIBLE only when negative-detection is
+                            # enabled (aim-games). In a dead-zone/auto-camera game (NCAA) IMPLAUSIBLE is a
+                            # FALSE negative (auto-camera decoupling, not an aimbot) -> abstain, never degrade.
+                            _neg_ok = getattr(self._cfg, "retina_coupled_negative_enabled", False)
+                            if _rc_v is not None and (_rc_v != "IMPLAUSIBLE" or _neg_ok):
+                                self._pending_pitl_meta["retina_coupled_verdict"] = _rc_v
+
+                        # Cycle-42 PoVCA (Proof of Verified Causal Authorship) slice — minimal integration.
+                        # Reuses existing ScreenEvent/coherence/input events when available in live hook.
+                        # Computes per-action authorship (provenance + L9 causal + L4 structure).
+                        # Feeds NQPV as oracle (composes; abstains if not live co-capture or emulated).
+                        # Honesty rails: "authorship + structure_ok (NOT skill rank)"; emulated gate; advisory.
+                        try:
+                            from .posca_action_provenance import detect_author_actions, posca_verdict_from
+                            # Live discrete authorship is DORMANT until screen_events + input_events are
+                            # co-captured live (the capture-rate fix). Until then _scr/_inp are empty and
+                            # this whole block no-ops -> posca abstains (honest, never fabricates).
+                            _scr = self._pending_pitl_meta.get("screen_events") or []
+                            _inp = self._pending_pitl_meta.get("input_events") or []
+                            if _scr and _inp:
+                                _l4 = {"l4_distance": (self._pending_pitl_meta.get("l4_distance")
+                                                       or self._pending_pitl_meta.get("pitl_l4_distance"))}
+                                _dev = self._pending_pitl_meta.get("device_id") or ""
+                                _rh = (self._pending_pitl_meta.get("record_hash_hex")
+                                       or self._pending_pitl_meta.get("record_hash") or "")
+                                _posca_acts = detect_author_actions(
+                                    _scr, _inp, l4_features=_l4, device_id=_dev, poac_record_hash=_rh)
+                                if _posca_acts:
+                                    _first = _posca_acts[0]
+                                    _cco = self._pending_pitl_meta.get("cco_presence_ceiling_candidate")
+                                    # structure_ok is TRI-STATE (may be None = abstain); the verdict helper
+                                    # maps None/emulated -> UNVERIFIABLE (never AUTHENTIC without L4 evidence).
+                                    self._pending_pitl_meta["posca_structure_ok"] = _first.get("structure_ok")
+                                    self._pending_pitl_meta["posca_coupling_score"] = _first.get("coupling")
+                                    self._pending_pitl_meta["posca_action_count"] = len(_posca_acts)
+                                    self._pending_pitl_meta["posca_commitment"] = _first.get("commitment", "")
+                                    self._pending_pitl_meta["posca_verdict"] = posca_verdict_from(
+                                        _first.get("structure_ok"), _first.get("coupling"), _cco)
+                        except Exception as _posca_exc:
+                            log.debug("posca slice skipped (fail-open): %s", _posca_exc)
+
+                        self._pending_pitl_meta.update(
+                            cocapture_fields_from_pitl_meta(self._pending_pitl_meta)
                         )
-                        _src = getattr(self, "_device_id_hex", None) or (
-                            self._device_id.hex() if self._device_id is not None else "unknown"
-                        )
-                        from .retina_events_root import (
-                            EVENTS_ROOT_SCHEME_POSEIDON_V1,
-                            EVENTS_ROOT_SCHEME_SHA256_V1,
-                        )
-                        _scheme = (
-                            EVENTS_ROOT_SCHEME_POSEIDON_V1
-                            if bool(
-                                getattr(
-                                    self._cfg,
-                                    "retina_events_root_poseidon_enabled",
-                                    False,
-                                )
-                            )
-                            else EVENTS_ROOT_SCHEME_SHA256_V1
-                        )
-                        _rp = run_controller_perception(
-                            list(self._retina_snap_ring),
-                            enabled=True,
-                            source_id=_src,
-                            window=int(getattr(self._cfg, "retina_perception_window", 120)),
-                            dynamics_horizon=int(
-                                getattr(self._cfg, "retina_dynamics_horizon", 5)
-                            ),
-                            record_hash_hex=_record_hash_hex,
-                            events_root_scheme=_scheme,
-                        )
-                        if self._pending_pitl_meta is not None:
-                            _pol = get_runtime_policy_state()
-                            self._pending_pitl_meta["retina_enabled"] = _rp.enabled
-                            self._pending_pitl_meta["retina_event_count"] = _rp.event_count
-                            self._pending_pitl_meta["retina_trajectory_anomalies"] = (
-                                _rp.trajectory_anomalies
-                            )
-                            self._pending_pitl_meta["retina_record_hash"] = _rp.record_hash_hex
-                            self._pending_pitl_meta["retina_state_commitment"] = (
-                                _rp.state_commitment_hex
-                            )
-                            self._pending_pitl_meta["retina_alert"] = (
-                                _rp.trajectory_anomalies > 0
-                            )
-                            self._pending_pitl_meta["retina_policy_armed"] = bool(
-                                _pol.armed if _pol else False
-                            )
-                            self._pending_pitl_meta["retina_policy_arm_source"] = (
-                                _pol.arm_source if _pol else "unarmed"
-                            )
-                            self._pending_pitl_meta["retina_source"] = "hid"
-                        persist_retina_result(
-                            self._store, _src, _rp, source="hid", cfg=self._cfg
-                        )
-                    except Exception as _ret_exc:
-                        log.debug("retina perception hook fail-open: %s", _ret_exc)
+                    except Exception as _nq_exc:
+                        log.debug("nqpv co-capture skipped (fail-open): %s", _nq_exc)
 
                 await self._dispatch(raw)
                 self._last_raw = raw
@@ -2758,8 +3072,11 @@ class DualShockTransport:
             except Exception as exc:
                 log.warning("Phase 27: PITL session proof failed (non-fatal): %s", exc)
 
-        # Reset LED to idle blue
-        if self._reader:
+        # Reset LED to idle blue — SUPPRESSED under ps5_compat_mode. This is the only controller WRITE on the
+        # gameplay path; it's harmless to aim (just the lightbar colour, never input/camera), but ps5_compat
+        # means fully-passive capture (zero writes -> no PS5 BT-reconnect popups, nothing for an anti-cheat to
+        # see as input manipulation). Honors the same discipline as agent #34's _fire_controller.
+        if self._reader and not getattr(self._cfg, "ps5_compat_mode", False):
             try:
                 self._reader.set_led(0, 0, 255)
             except Exception:

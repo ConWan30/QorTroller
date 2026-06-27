@@ -71,7 +71,9 @@ class SessionData:
 def record_session(out_path: str, duration_s: float = 60.0, label: str = "human",
                    region: Optional[Region] = None,
                    stick_parser: Optional[StickParser] = None,
-                   backend: str = "mss", fire_offset: int = 6, player: str = "") -> str:
+                   backend: str = "mss", fire_offset: int = 6, player: str = "",
+                   governor: object = None, governor_every: int = 30,
+                   hud_region: Optional[tuple] = None, hud_every: int = 30) -> str:
     """Record one labeled probe session to .npz. Hardware + Remote Play required.
 
     backend defaults to "mss": on Python 3.13 the DXGI backends (dxcam/bettercam)
@@ -92,6 +94,7 @@ def record_session(out_path: str, duration_s: float = 60.0, label: str = "human"
 
     in_ts, in_sx, in_sy, in_fire = [], [], [], []
     mo_ts, mo_yaw, mo_pitch = [], [], []
+    hud_texts: list[tuple[float, str]] = []
     t0 = time.time()
     try:
         while time.time() - t0 < duration_s:
@@ -108,14 +111,46 @@ def record_session(out_path: str, duration_s: float = 60.0, label: str = "human"
                 if out is not None:
                     _, m = out
                     mo_ts.append(now_ms); mo_yaw.append(m.yaw_rate); mo_pitch.append(m.pitch_rate)
+                    # ADAPTIVE CAPTURE GOVERNOR (real-time): every N frames, observe the recent
+                    # frame cadence and apply the recommended downscale to keep video steady.
+                    if governor is not None and len(mo_ts) % max(1, governor_every) == 0:
+                        try:
+                            governor.observe(mo_ts[-governor_every:])
+                            mx.set_downscale(int(governor.controls.downscale))
+                        except Exception:
+                            pass  # never let the governor break a live capture
+                    # HUD OCR PASS: every N frames, OCR the HUD region into hud_texts (the
+                    # discrete-coherence channel). Off unless hud_region is set; pytesseract-
+                    # guarded (ocr_frame returns None when absent) so it never breaks capture.
+                    if hud_region is not None and len(mo_ts) % max(1, hud_every) == 0:
+                        try:
+                            from .hud_ocr import ocr_frame
+                            txt = ocr_frame(frame, hud_region)
+                            if txt:
+                                hud_texts.append((now_ms, txt))
+                        except Exception:
+                            pass
     finally:
         dev.close(); cap.close()
 
-    np.savez(out_path,
-             in_ts=np.array(in_ts), in_sx=np.array(in_sx), in_sy=np.array(in_sy),
-             in_fire=np.array(in_fire),
-             mo_ts=np.array(mo_ts), mo_yaw=np.array(mo_yaw), mo_pitch=np.array(mo_pitch),
-             label=label, player=player)
+    save_kw = dict(
+        in_ts=np.array(in_ts), in_sx=np.array(in_sx), in_sy=np.array(in_sy),
+        in_fire=np.array(in_fire),
+        mo_ts=np.array(mo_ts), mo_yaw=np.array(mo_yaw), mo_pitch=np.array(mo_pitch),
+        label=label, player=player)
+    if governor is not None:
+        try:
+            import json as _json
+            save_kw["capture_governor"] = _json.dumps(governor.telemetry_summary(), default=str)
+        except Exception:
+            pass
+    if hud_texts:
+        try:
+            from .hud_ocr import dumps_hud_texts
+            save_kw["hud_json"] = dumps_hud_texts(hud_texts)
+        except Exception:
+            pass
+    np.savez(out_path, **save_kw)
     return out_path
 
 

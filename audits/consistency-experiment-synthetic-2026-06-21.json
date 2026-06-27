@@ -1,0 +1,99 @@
+{
+  "schema": "vapi-consistency-experiment-v1",
+  "provenance": "synthetic",
+  "provisional": true,
+  "params": {
+    "retina_tpr_cheat": 0.85,
+    "retina_fpr_proskill": 0.15,
+    "retina_fpr_clean": 0.03,
+    "bot_implausible_rate": 0.9,
+    "relay_presence_rate": 0.4,
+    "human_presence_pass": 0.97
+  },
+  "n_windows": {
+    "HUMAN_CLEAN": 400,
+    "BOT_FULL": 400,
+    "HUMAN_INPUT_MACRO": 400,
+    "HUMAN_RELAY": 400,
+    "PRO_SKILL": 400
+  },
+  "confusion": {
+    "HUMAN_CLEAN": {
+      "CONSISTENT_HUMAN": 376,
+      "CONSISTENT_INACTIVE": 0,
+      "INCONSISTENT_PRESENCE_WITHOUT_AUTHENTIC_TRAJECTORY": 15,
+      "INCONSISTENT_AUTHENTIC_TRAJECTORY_WITHOUT_PRESENCE": 9,
+      "INDETERMINATE": 0,
+      "UNVERIFIABLE": 0
+    },
+    "BOT_FULL": {
+      "CONSISTENT_HUMAN": 0,
+      "CONSISTENT_INACTIVE": 363,
+      "INCONSISTENT_PRESENCE_WITHOUT_AUTHENTIC_TRAJECTORY": 0,
+      "INCONSISTENT_AUTHENTIC_TRAJECTORY_WITHOUT_PRESENCE": 37,
+      "INDETERMINATE": 0,
+      "UNVERIFIABLE": 0
+    },
+    "HUMAN_INPUT_MACRO": {
+      "CONSISTENT_HUMAN": 60,
+      "CONSISTENT_INACTIVE": 8,
+      "INCONSISTENT_PRESENCE_WITHOUT_AUTHENTIC_TRAJECTORY": 331,
+      "INCONSISTENT_AUTHENTIC_TRAJECTORY_WITHOUT_PRESENCE": 1,
+      "INDETERMINATE": 0,
+      "UNVERIFIABLE": 0
+    },
+    "HUMAN_RELAY": {
+      "CONSISTENT_HUMAN": 13,
+      "CONSISTENT_INACTIVE": 0,
+      "INCONSISTENT_PRESENCE_WITHOUT_AUTHENTIC_TRAJECTORY": 162,
+      "INCONSISTENT_AUTHENTIC_TRAJECTORY_WITHOUT_PRESENCE": 0,
+      "INDETERMINATE": 225,
+      "UNVERIFIABLE": 0
+    },
+    "PRO_SKILL": {
+      "CONSISTENT_HUMAN": 333,
+      "CONSISTENT_INACTIVE": 2,
+      "INCONSISTENT_PRESENCE_WITHOUT_AUTHENTIC_TRAJECTORY": 53,
+      "INCONSISTENT_AUTHENTIC_TRAJECTORY_WITHOUT_PRESENCE": 12,
+      "INDETERMINATE": 0,
+      "UNVERIFIABLE": 0
+    }
+  },
+  "metrics": {
+    "machine_assist_catch_rate": 0.8275,
+    "false_accusation_rate": {
+      "HUMAN_CLEAN": 0.06,
+      "PRO_SKILL": 0.1625
+    },
+    "contextual_security_rate": {
+      "HUMAN_CLEAN": {
+        "fusion": 0.06,
+        "retina_alone": 0.0375,
+        "presence_alone": 0.0225
+      },
+      "BOT_FULL": {
+        "fusion": 0.0925,
+        "retina_alone": 0.9075,
+        "presence_alone": 1.0
+      },
+      "HUMAN_INPUT_MACRO": {
+        "fusion": 0.83,
+        "retina_alone": 0.8475,
+        "presence_alone": 0.0225
+      },
+      "HUMAN_RELAY": {
+        "fusion": 0.405,
+        "retina_alone": 0.92,
+        "presence_alone": 0.5625
+      },
+      "PRO_SKILL": {
+        "fusion": 0.1625,
+        "retina_alone": 0.1375,
+        "presence_alone": 0.035
+      }
+    }
+  },
+  "seed": 0,
+  "n_per_class": 50,
+  "windows_per_session": 8
+}

@@ -26,6 +26,7 @@ from typing import Optional, Tuple
 import numpy as np
 
 from . import pocp
+from .adaptive_capture import AdaptiveCaptureGovernor, CaptureControls
 from .biometric_features import _SEP_FEATURES, extract_feature_vector
 from .session_recorder import (
     SessionData, analyze_session_data, load_session, make_stick_parser, record_session,
@@ -54,6 +55,15 @@ class WitnessConfig:
     out_dir: str = "sessions_l9"
     poll_idle_s: float = 10.0
     coupling_floor: float = 0.2
+    # Adaptive Capture Governor (Fusion v2): real-time lag/FPS self-tuning during capture +
+    # post-hoc telemetry collection into the manifest. ON by default (advisory; never anchors).
+    adaptive_capture_enabled: bool = True
+    collect_telemetry: bool = True
+    # HUD OCR pass (discrete-coherence channel): (x, y, w, h) region to OCR for down/distance/
+    # play-clock/score. Off (None) by default; needs pytesseract + the game visible. Setting it
+    # makes recorded sessions carry hud_texts so the oracle panel reads LIVE_COHERENT not just COUPLED.
+    hud_region: Optional[Tuple[int, int, int, int]] = None
+    hud_every: int = 30
     # governed seams — ALL default OFF (dry-run). Flip only after gate-2 + governance.
     sentry_anchor_enabled: bool = False
     guardian_sign_enabled: bool = False
@@ -188,6 +198,30 @@ def _handoff(name: str, enabled: bool, payload: dict) -> dict:
     }
 
 
+def capture_telemetry_from_session(s, lag_ms: float, *, window: int = 30,
+                                   live_summary: Optional[str] = None) -> dict:
+    """Replay a recorded session's frame cadence through the Adaptive Capture Governor to
+    produce the optimizable telemetry dataset (fps-stability + the adjustments that WOULD
+    have stabilized it), even when the live governor wasn't running. If a `live_summary`
+    (JSON from a real-time governed capture) is present, return that instead — it is the
+    authoritative record of what actually happened. Pure post-hoc; hardware-free."""
+    if live_summary:
+        try:
+            return json.loads(live_summary)
+        except Exception:
+            pass
+    mo_ts = [float(t) for t in np.asarray(s.mo_ts).tolist()]
+    gov = AdaptiveCaptureGovernor(CaptureControls())
+    if len(mo_ts) <= window:
+        gov.observe(mo_ts, coupling_lag_ms=lag_ms, grid_samples=len(mo_ts))
+    else:
+        for i in range(window, len(mo_ts) + 1, window):
+            gov.observe(mo_ts[i - window:i], coupling_lag_ms=lag_ms, grid_samples=i)
+    summary = gov.telemetry_summary()
+    summary["source"] = "post_hoc_replay"
+    return summary
+
+
 def process_session(path: str, cfg: Optional[WitnessConfig] = None) -> dict:
     """Analyze one recorded session -> PoCP commitment + HTML card + manifest.
     The hardware-free core; safe to unit-test on any .npz. Writes the card and a
@@ -246,6 +280,20 @@ def process_session(path: str, cfg: Optional[WitnessConfig] = None) -> dict:
         },
     }
     manifest["bcc"] = _maybe_harvest_bcc(cfg, manifest, bvec)
+    if cfg.collect_telemetry:
+        # the optimizable dataset the operator asked for: live governor record if present,
+        # else a post-hoc replay of the frame cadence through the governor.
+        live = None
+        try:
+            d = np.load(path, allow_pickle=True)
+            if "capture_governor" in d.files:
+                live = str(d["capture_governor"])
+        except Exception:
+            live = None
+        try:
+            manifest["capture_telemetry"] = capture_telemetry_from_session(s, lag_ms, live_summary=live)
+        except Exception as exc:
+            manifest["capture_telemetry"] = {"error": str(exc)[:200]}
     with open(base + ".manifest.json", "w", encoding="utf-8") as fh:
         json.dump(manifest, fh, indent=2, default=str)
     return manifest
@@ -318,11 +366,15 @@ class WitnessAgent:
             return {"harvested": False, "reason": f"error:{exc}"}
 
     def run_once(self) -> dict:
-        """Capture one live session and process it (hardware required)."""
+        """Capture one live session and process it (hardware required). When
+        adaptive_capture_enabled, a governor self-tunes downscale in real time to keep the
+        video steady; its record is saved into the session and surfaced in the manifest."""
         out = self._next_path()
+        governor = AdaptiveCaptureGovernor(CaptureControls()) if self.cfg.adaptive_capture_enabled else None
         record_session(out, duration_s=self.cfg.duration_s, label=self.cfg.label,
                        region=self.cfg.region, stick_parser=make_stick_parser(self.cfg.rx, self.cfg.ry),
-                       backend=self.cfg.backend, fire_offset=self.cfg.fire_offset, player=self.cfg.player)
+                       backend=self.cfg.backend, fire_offset=self.cfg.fire_offset, player=self.cfg.player,
+                       governor=governor, hud_region=self.cfg.hud_region, hud_every=self.cfg.hud_every)
         return process_session(out, self.cfg)
 
     def run(self, max_sessions: int = 0) -> None:
@@ -361,6 +413,9 @@ def _cli() -> int:
     pr.add_argument("--duration", type=float, default=60.0)
     pr.add_argument("--region", nargs=4, type=int, metavar=("L", "T", "R", "B"),
                     default=[640, 360, 1280, 720])
+    pr.add_argument("--hud-region", nargs=4, type=int, metavar=("X", "Y", "W", "H"),
+                    default=None, help="screen region to OCR for down/distance/clock (needs "
+                                       "tesseract); enables the discrete-coherence channel")
     pr.add_argument("--once", action="store_true", help="capture a single session and exit")
 
     hm = sub.add_parser("harvest-menu",
@@ -382,7 +437,8 @@ def _cli() -> int:
                          indent=2, default=str))
         return 0
     if a.cmd == "run":
-        cfg = WitnessConfig(player=a.player, duration_s=a.duration, region=tuple(a.region))
+        cfg = WitnessConfig(player=a.player, duration_s=a.duration, region=tuple(a.region),
+                            hud_region=(tuple(a.hud_region) if a.hud_region else None))
         agent = WitnessAgent(cfg)
         if a.once:
             print(json.dumps({k: v for k, v in agent.run_once().items()

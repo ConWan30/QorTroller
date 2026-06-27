@@ -296,6 +296,43 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
         "CREATE INDEX IF NOT EXISTS idx_retina_da_witness_created ON retina_da_witness_log(created_at DESC)",
     ]
 
+    # NQPV cycle-33 Option B: dedicated co-capture log for the RETINA-EXCL-2 defensibility study.
+    # Mirrors the retina_*_log precedent (autoincrement id + record_hash_hex + created_at index) so the
+    # 5.4GB/925k-row records hot table stays byte-identical. Tri-state bools are INTEGER (NULL=ABSTAIN,
+    # round-trips through nqpv_corpus_loader._as_bool). One row per co-captured record, written only when
+    # nqpv_cocapture_enabled. The study loader already consumes this shape -> no loader change.
+    _NQPV_MIGRATIONS = [
+        """
+        CREATE TABLE IF NOT EXISTS nqpv_cocapture_log (
+            id                            INTEGER PRIMARY KEY AUTOINCREMENT,
+            device_id                     TEXT NOT NULL DEFAULT '',
+            record_hash_hex               TEXT NOT NULL DEFAULT '',
+            nqpv_cco_tier                 TEXT,
+            nqpv_l4l5l6_ok                INTEGER,
+            nqpv_poep_present             INTEGER,
+            nqpv_retina_controller_signal TEXT,
+            nqpv_retina_coupled_verdict   TEXT,
+            humanity_prob                 REAL,
+            created_at                    REAL NOT NULL,
+            posca_verdict                 TEXT,
+            posca_commitment              TEXT,
+            posca_structure_ok            INTEGER,
+            posca_coupling_score          REAL,
+            posca_action_count            INTEGER
+        )
+        """,
+        # Cycle-42 PoVCA columns for pre-existing nqpv_cocapture_log tables (cycle-33 created the table
+        # without them). Idempotent: the migration loop swallows "duplicate column name", so a fresh DB
+        # (columns already in the CREATE above) and an existing DB converge to the same schema.
+        "ALTER TABLE nqpv_cocapture_log ADD COLUMN posca_verdict TEXT",
+        "ALTER TABLE nqpv_cocapture_log ADD COLUMN posca_commitment TEXT",
+        "ALTER TABLE nqpv_cocapture_log ADD COLUMN posca_structure_ok INTEGER",
+        "ALTER TABLE nqpv_cocapture_log ADD COLUMN posca_coupling_score REAL",
+        "ALTER TABLE nqpv_cocapture_log ADD COLUMN posca_action_count INTEGER",
+        "CREATE INDEX IF NOT EXISTS idx_nqpv_cocapture_created ON nqpv_cocapture_log(created_at DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_nqpv_cocapture_device ON nqpv_cocapture_log(device_id, created_at DESC)",
+    ]
+
     def _init_schema(self):
         with self._conn() as conn:
             conn.executescript("""
@@ -628,6 +665,11 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     conn.execute(sql)
                 except sqlite3.OperationalError:
                     log.debug("schema migration already applied: %.80s", sql)
+            for sql in self._NQPV_MIGRATIONS:
+                try:
+                    conn.execute(sql)
+                except sqlite3.OperationalError:
+                    log.debug("schema migration already applied: %.80s", sql)
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS threshold_history (
                     id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -781,6 +823,9 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                 ("cco_profile_id", "TEXT"),
                 ("policy_ref", "TEXT"),
                 ("trigger_r2_at_probe", "INTEGER"),
+                # L9 binding: PoAC anchor of the gameplay record this presence proof was
+                # bound to, so a proof ties to a record cryptographically (not by timestamp).
+                ("record_hash", "TEXT"),
             ):
                 try:
                     conn.execute(f"ALTER TABLE l6b_probe_log ADD COLUMN {_col} {_typ}")
@@ -4805,6 +4850,82 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     ORDER BY r.created_at DESC
                     LIMIT ?
                 """, (limit,)).fetchall()
+            return [dict(r) for r in rows]
+
+    def insert_nqpv_cocapture(
+        self,
+        *,
+        device_id: str,
+        record_hash_hex: str,
+        nqpv_cco_tier: str | None = None,
+        nqpv_l4l5l6_ok: bool | None = None,
+        nqpv_poep_present: bool | None = None,
+        nqpv_retina_controller_signal: str | None = None,
+        nqpv_retina_coupled_verdict: str | None = None,
+        humanity_prob: float | None = None,
+        created_at: float | None = None,
+        # Cycle-42 PoVCA extension (composes into NQPV): per-action authorship oracle.
+        # posca_verdict: AUTHENTIC / ORPHAN_OR_WEAK / UNVERIFIABLE (authorship+structure, not skill rank).
+        # posca_commitment: recomputable (device+action+structure+coupling+ts+poac).
+        posca_verdict: str | None = None,
+        posca_commitment: str | None = None,
+        posca_structure_ok: bool | None = None,
+        posca_coupling_score: float | None = None,
+        posca_action_count: int | None = None,
+    ) -> None:
+        """NQPV cycle-33 (Option B): persist one co-capture row for the RETINA-EXCL-2 study corpus.
+
+        Tri-state bools store as INTEGER (NULL = ABSTAIN; round-trips through the loader's _as_bool).
+        Written only when nqpv_cocapture_enabled. Best-effort/logging-grade like the retina_*_log
+        inserts -- never raises into the ingestion path.
+
+        PoVCA (Cycle 42) columns added for input-grounded authorship per game-action.
+        Reuses existing table shape; new columns nullable for backward compat.
+        """
+        ts = created_at if created_at is not None else time.time()
+        with self._conn() as conn:
+            conn.execute(
+                """
+                INSERT INTO nqpv_cocapture_log (
+                    device_id, record_hash_hex, nqpv_cco_tier, nqpv_l4l5l6_ok, nqpv_poep_present,
+                    nqpv_retina_controller_signal, nqpv_retina_coupled_verdict, humanity_prob, created_at,
+                    posca_verdict, posca_commitment, posca_structure_ok, posca_coupling_score, posca_action_count
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    device_id or "",
+                    record_hash_hex or "",
+                    nqpv_cco_tier,
+                    None if nqpv_l4l5l6_ok is None else int(bool(nqpv_l4l5l6_ok)),
+                    None if nqpv_poep_present is None else int(bool(nqpv_poep_present)),
+                    nqpv_retina_controller_signal,
+                    nqpv_retina_coupled_verdict,
+                    humanity_prob,
+                    ts,
+                    posca_verdict,
+                    posca_commitment,
+                    None if posca_structure_ok is None else int(bool(posca_structure_ok)),
+                    posca_coupling_score,
+                    posca_action_count,
+                ),
+            )
+
+    def get_nqpv_cocapture_rows(self, limit: int = 500, device_id: str | None = None) -> list[dict]:
+        """NQPV cycle-33: read co-capture rows newest-first for the study loader (load_from_rows
+        consumes these directly -- the column names are the nqpv_* keys it normalizes).
+        PoVCA (Cycle 42) columns included when present (nullable; ABSTAIN if missing -> NQPV abstains)."""
+        with self._conn() as conn:
+            if device_id:
+                rows = conn.execute(
+                    "SELECT * FROM nqpv_cocapture_log WHERE device_id = ? "
+                    "ORDER BY created_at DESC LIMIT ?",
+                    (device_id, limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM nqpv_cocapture_log ORDER BY created_at DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
             return [dict(r) for r in rows]
 
     def count_records(self, device_id: str | None = None) -> int:

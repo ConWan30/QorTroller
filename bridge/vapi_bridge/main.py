@@ -241,6 +241,7 @@ class Bridge:
         if pubkey_bytes:
             device_id = compute_device_id(pubkey_bytes)
             record.device_id = device_id
+            device_id_hex = device_id.hex()
 
             # ECDSA-P256 verify — empirically the heaviest single sync call
             if not verify_signature(record, pubkey_bytes):
@@ -261,6 +262,7 @@ class Bridge:
         else:
             # No pubkey — accept unverified (will be flagged for review)
             record.device_id = record.record_hash
+            device_id_hex = record.record_hash_hex
             log.warning(
                 "No pubkey for record counter=%d — accepted unverified from %s",
                 record.monotonic_ctr, source,
@@ -268,7 +270,36 @@ class Bridge:
             self.store.upsert_device(record.record_hash_hex, "unknown")
             self.store.update_device_state(record.record_hash_hex, record)
 
-        return self.store.insert_record(record, raw_data)
+        is_new = self.store.insert_record(record, raw_data)
+
+        # NQPV cycle-33 (Option B): persist the co-capture sidecar to the dedicated study table.
+        # Default-off (nqpv_cocapture_enabled); fires only when the live loop attached the nqpv_*
+        # fields (cocapture_fields_from_pitl_meta) to pitl_meta. Best-effort: a persist failure must
+        # never break ingestion (mirrors the retina_*_log logging-grade discipline).
+        if (is_new and source == "dualshock" and pitl_meta
+                and getattr(self.cfg, "nqpv_cocapture_enabled", False)
+                and pitl_meta.get("nqpv_cocapture")):
+            try:
+                self.store.insert_nqpv_cocapture(
+                    device_id=device_id_hex,
+                    record_hash_hex=record.record_hash_hex,
+                    nqpv_cco_tier=pitl_meta.get("nqpv_cco_tier"),
+                    nqpv_l4l5l6_ok=pitl_meta.get("nqpv_l4l5l6_ok"),
+                    nqpv_poep_present=pitl_meta.get("nqpv_poep_present"),
+                    nqpv_retina_controller_signal=pitl_meta.get("nqpv_retina_controller_signal"),
+                    nqpv_retina_coupled_verdict=pitl_meta.get("nqpv_retina_coupled_verdict"),
+                    humanity_prob=pitl_meta.get("humanity_prob"),
+                    # Cycle-42 PoVCA: pass through if computed in co-capture hook (posca_action_provenance)
+                    posca_verdict=pitl_meta.get("posca_verdict"),
+                    posca_commitment=pitl_meta.get("posca_commitment"),
+                    posca_structure_ok=pitl_meta.get("posca_structure_ok"),
+                    posca_coupling_score=pitl_meta.get("posca_coupling_score"),
+                    posca_action_count=pitl_meta.get("posca_action_count"),
+                )
+            except Exception as e:  # noqa: BLE001 — co-capture is advisory, never fatal
+                log.debug("nqpv co-capture persist skipped: %s", e)
+
+        return is_new
 
     async def _resolve_pubkey(
         self, record: PoACRecord, source: str
@@ -641,6 +672,19 @@ class Bridge:
                 _spawn_named(_dc.run_poll_loop(), "BISECT_B5B_DataCuratorAgent")
             except Exception as _imp_exc:  # noqa: BLE001 — fail-open
                 log.warning("BISECT B5B DataCuratorAgent failed: %s", _imp_exc)
+            # Cycle-38: LivePresenceSignalingAgent (#34) — activate the dev-cert presence HUD
+            # (polls the live NQPV proof -> LED/haptic/terminal). Gated on live_presence_signaling_enabled.
+            try:
+                if getattr(self.cfg, "live_presence_signaling_enabled", False):
+                    from .live_presence_signaling_agent import LivePresenceSignalingAgent
+                    _lpsa = LivePresenceSignalingAgent(
+                        self.store, self.cfg, bus=getattr(self, "_agent_bus", None),
+                        ds_integration=getattr(self, "_ds_transport", None),
+                    )
+                    _spawn_named(_lpsa.run_poll_loop(), "LivePresenceSignalingAgent_34")
+                    log.info("LivePresenceSignalingAgent (#34) ACTIVATED — developer-self-cert presence HUD live")
+            except Exception as _imp_exc:  # noqa: BLE001 — fail-open
+                log.warning("LivePresenceSignalingAgent (#34) spawn failed: %s", _imp_exc)
             try:
                 from .session_adjudicator import SessionAdjudicator
                 _adj = SessionAdjudicator(self.cfg, self.store, bus=None)
@@ -1194,6 +1238,22 @@ class Bridge:
             self._tasks.append(_t)
             log.info("DualShock Edge transport enabled (interval=%.1fs)",
                      self.cfg.dualshock_record_interval_s)
+
+            # PRESENCE_LEAN_MODE — the live-play presence-capture path. Skip the ~30-agent fleet + grind + chain
+            # reconcilers + PCC + heavy provenance below (the MEASURED ~38% system-CPU driver that lags Remote
+            # Play; bridge-down = perfect gameplay) and keep ONLY DualShock + retina/coupling + the duty-cycle
+            # burst (which run inside the dualshock task spawned above). The full protocol/attestation runs in a
+            # separate non-lean session. Keep-alive mirrors run()'s tail: await gather over self._tasks
+            # (loop_health_monitor + the dualshock transport at this point).
+            if getattr(self.cfg, "presence_lean_mode", False):
+                log.info("PRESENCE_LEAN_MODE active — agent fleet + grind + PCC + heavy provenance SKIPPED "
+                         "(DualShock + retina + duty-cycle presence only). Bridge operational (LEAN).")
+                try:
+                    await asyncio.gather(*self._tasks)
+                except asyncio.CancelledError:
+                    pass
+                return
+
             if getattr(self.cfg, "pcc_enabled", True):
                 _pcc_task = asyncio.create_task(
                     run_pcc_persistence_loop(self.store, self._pcc_monitor, self.cfg)
@@ -1340,6 +1400,22 @@ class Bridge:
             log.info("Phase 70: DataCuratorAgent started (5-min poll, 7-class taxonomy)")
         except Exception as _dca_exc:
             log.warning("Phase 70: DataCuratorAgent unavailable: %s", _dca_exc)
+
+        # Cycle-38: LivePresenceSignalingAgent (#34) — developer-self-cert presence HUD. Polls the live
+        # NQPV proof -> LED/haptic/terminal on state change. Gated on live_presence_signaling_enabled.
+        try:
+            if getattr(self.cfg, "live_presence_signaling_enabled", False):
+                from .live_presence_signaling_agent import LivePresenceSignalingAgent
+                _lpsa = LivePresenceSignalingAgent(
+                    self.store, self.cfg, bus=getattr(self, "_agent_bus", None), ds_integration=ds,
+                )
+                _t = asyncio.create_task(_lpsa.run_poll_loop())
+                _t.set_name("LivePresenceSignalingAgent_34")
+                _t.add_done_callback(_task_done_handler)
+                self._tasks.append(_t)
+                log.info("LivePresenceSignalingAgent (#34) ACTIVATED — developer-self-cert presence HUD live")
+        except Exception as _lpsa_exc:  # noqa: BLE001 — fail-open
+            log.warning("LivePresenceSignalingAgent (#34) unavailable: %s", _lpsa_exc)
 
         # SessionAdjudicator — guarded by operator_api_key configured
         if getattr(self.cfg, "operator_api_key", ""):

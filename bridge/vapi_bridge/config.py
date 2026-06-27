@@ -121,6 +121,19 @@ class Config:
     signal_disconnect + retries). 10x tolerates real hiccup windows
     without triggering the watchdog zombie cascade."""
 
+    # --- Controller hot-plug auto-reconnect (USB unplug/replug recovery, no bridge restart) ---
+    controller_auto_reconnect_enabled: bool = field(
+        default_factory=lambda: _env_bool("CONTROLLER_AUTO_RECONNECT_ENABLED", True)
+    )
+    """When True (default), the DualShock session loop re-opens the reader after a run of consecutive
+    poll failures (USB unplug) so a replug auto-recovers without restarting the bridge. The blocking
+    re-open runs in an executor (event-loop-safe) on a capped backoff (5/10/30/60s)."""
+    controller_reconnect_after_failures: int = field(
+        default_factory=lambda: _env_int("CONTROLLER_RECONNECT_AFTER_FAILURES", 5)
+    )
+    """Consecutive poll failures (timeout/error/empty) before the first reader re-open attempt.
+    Small enough to recover in a few seconds; large enough to ride out a transient USB hiccup."""
+
     # --- Phase 235.x-STABILITY-2 (2026-05-08): asyncio loop-block instrumentation (WIF-064) ---
     asyncio_debug_enabled: bool = field(
         default_factory=lambda: _env_bool("ASYNCIO_DEBUG_ENABLED", False)
@@ -636,6 +649,15 @@ class Config:
     )
     l4_continuity_threshold: float = field(
         default_factory=lambda: float(_env("L4_CONTINUITY_THRESHOLD", "5.367"))
+    )
+    # Cycle-36: re-anchor the p_L4 humanity component to 0.5**(d/anomaly_threshold) (corpus-validated)
+    # instead of the legacy exp(-(d-2)) which under-credits genuine NOMINAL humans. DEFAULT-OFF: it
+    # RAISES humanity and humanity hard-gates the 0.60 passport, so flipping it on is a security-relevant
+    # loosening of sub-threshold scoring (the L4 anomaly hard-gate is untouched). When False the live
+    # humanity formula is BYTE-IDENTICAL to legacy. Flip to true only after validating on a real N>=50
+    # corpus (human pass-rate rises, adversary pass-rate does NOT). See l4_humanity.py.
+    l4_humanity_reanchor_enabled: bool = field(
+        default_factory=lambda: _env_bool("L4_HUMANITY_REANCHOR_ENABLED", False)
     )
 
     # --- L5 Calibration: TemporalRhythmOracle thresholds ---
@@ -1547,6 +1569,27 @@ class Config:
     Trade-off: no LED colour or haptic feedback during gameplay.
     PoAC biometric capture is completely unaffected — read-only, zero data impact."""
 
+    # VSD Cycle 25 tether experiment: low-amplitude synchronized pulses on adaptive triggers
+    # to keep the controller's wireless module "attached" state for PS5 BT while USB is
+    # used for high-rate capture (EXCLUSIVE_USB + grind). See s-usb-bt-tether-*.md
+    dual_grind_tether_enabled: bool = field(
+        default_factory=lambda: _env_bool("DUAL_GRIND_TETHER_ENABLED", False)
+    )
+    """Cycle 25 experiment — enable micro tether pulses on trigger during grind+EXCLUSIVE_USB.
+    Default False (safe). When enabled + grind_mode + host==EXCLUSIVE_USB, the
+    TetherPulseGenerator will emit tiny rhythm-synced forces via L6/driver path to
+    prevent 'PS5 module not attached' state flips. Must be << perceptible + duty cycled."""
+
+    dual_grind_tether_amplitude_max: int = field(
+        default_factory=lambda: int(_env("DUAL_GRIND_TETHER_AMP_MAX", "12"))
+    )
+    """Max force LSB (0-255) for tether pulses. Keep very small (default 12 ~5%)."""
+
+    dual_grind_tether_duty_s: float = field(
+        default_factory=lambda: float(_env("DUAL_GRIND_TETHER_DUTY_S", "1.2"))
+    )
+    """Min seconds between tether pulses (default 1.2)."""
+
     chain_submission_paused: bool = field(
         default_factory=lambda: _env("CHAIN_SUBMISSION_PAUSED", "false").lower() == "true"
     )
@@ -1894,6 +1937,48 @@ class Config:
     retina_perception_window: int = field(
         default_factory=lambda: _env_int("RETINA_PERCEPTION_WINDOW", 120)
     )
+    # GPU-competition relief (observer effect): cap WGC capture at the DWM level so screen-grab doesn't
+    # starve the Remote Play decoder (capturing the screen lags the very game it observes). 0 = uncapped;
+    # ~90ms (~11fps) keeps COUPLED_CLEAN (proven live at 13.6fps) while freeing the GPU for the stream.
+    retina_capture_min_interval_ms: int = field(
+        default_factory=lambda: _env_int("RETINA_CAPTURE_MIN_INTERVAL_MS", 0)
+    )
+    # Presence-burst (duty-cycle) capture — coexist with the Remote Play stream. WGC capture lags the GPU
+    # decoder (observer effect, confirmed live), so capture in brief BURSTS for periodic/on-demand presence
+    # proofs and stay off (smooth) between. Default-off = continuous capture (legacy). period<=0 -> on-demand.
+    retina_capture_burst_enabled: bool = field(
+        default_factory=lambda: _env_bool("RETINA_CAPTURE_BURST_ENABLED", False)
+    )
+    retina_burst_duration_s: float = field(
+        default_factory=lambda: _env_float("RETINA_BURST_DURATION_S", 6.0)
+    )
+    retina_burst_period_s: float = field(
+        default_factory=lambda: _env_float("RETINA_BURST_PERIOD_S", 60.0)
+    )
+    # On-demand trigger file: with retina_burst_period_s<=0 the burst fires ONLY when this file appears (then
+    # deletes it) — zero capture/lag during play, a proof on request (`touch <path>`). The competitive-play
+    # posture: smooth normal play, a deliberate ~burst only when a presence proof is wanted.
+    retina_burst_trigger_path: str = field(
+        default_factory=lambda: os.environ.get("RETINA_BURST_TRIGGER_PATH",
+                                               os.path.expanduser("~/.vapi/presence_trigger"))
+    )
+    # P1 decoupled-energy gate (default-off): when on, a burst SAMPLES coupling windows across its duration,
+    # ranks them by decoupled_energy, and bases the verdict on the median coupling of the genuine-aim
+    # (lowest-DE) windows — dropping walking/world-scroll-diluted windows so the proof reflects real aim, not
+    # incidental world-scroll. RELATIVE rank (calibration 2026-06-27); off -> single-read verdict (legacy).
+    retina_burst_de_gate_enabled: bool = field(
+        default_factory=lambda: _env_bool("RETINA_BURST_DE_GATE_ENABLED", False)
+    )
+    retina_burst_de_keep_quantile: float = field(
+        default_factory=lambda: _env_float("RETINA_BURST_DE_KEEP_QUANTILE", 0.5)
+    )
+    # Lean presence mode — run ONLY DualShock + retina/coupling + duty-cycle for live-play presence capture
+    # over Remote Play; gate off the ~30-agent fleet + grind + PCC + chain reconcilers (the measured ~38% CPU
+    # that lags the stream; bridge-down = perfect). Default-off = full bridge. Pair with GRIND_MODE=false +
+    # provenance off (+ ideally a fresh small DB) for max leanness.
+    presence_lean_mode: bool = field(
+        default_factory=lambda: _env_bool("PRESENCE_LEAN_MODE", False)
+    )
     retina_dynamics_horizon: int = field(
         default_factory=lambda: _env_int("RETINA_DYNAMICS_HORIZON", 5)
     )
@@ -1938,6 +2023,64 @@ class Config:
     )
     retina_events_root_verify_on_ingest: bool = field(
         default_factory=lambda: _env_bool("RETINA_EVENTS_ROOT_VERIFY_ON_INGEST", False)
+    )
+    # Cycle-30 NQPV capture-time co-capture: when ON, derive the NQPV oracle inputs (cco_tier,
+    # L4/L5/L6-ok proxy, controller-lobe retina; PoEP + full L9/screen ABSTAIN) from per-record PITL
+    # meta and attach them to the meta sidecar (persisted by on_record) for the RETINA-EXCL-2 study
+    # corpus. Default OFF; advisory; honest abstain (no fabrication).
+    nqpv_cocapture_enabled: bool = field(
+        default_factory=lambda: _env_bool("NQPV_COCAPTURE_ENABLED", False)
+    )
+    # Cycle-37 PoEP Track-1: operator TWO-KEY for live PoEP presence. When True (and the L6B model has
+    # N>=50 in-band reactions — the data gate, enforced separately), the session-level PoEP verdict is
+    # carried into the co-capture meta["poep_present"]. DEFAULT-OFF (L6B hard rule: no liveness verdict
+    # until N>=50; this flag is the deliberate operator second key on top of the data gate). When False
+    # poep_present abstains (co-capture unchanged). See poep_activation.py.
+    poep_liveness_enabled: bool = field(
+        default_factory=lambda: _env_bool("POEP_LIVENESS_ENABLED", False)
+    )
+    # Cycle-38 developer self-cert (d-developer-self-cert): the operator's MASTER flag for
+    # developer-scoped certification. When True, the presence proof's cert_scope="developer_self"
+    # (certified for the developer's own single-subject scope; population_certified stays False —
+    # NOT a population/tournament claim). DEFAULT-OFF; reversible; activates the software-gated stack
+    # for the developer's profile. developer_self_cert_min_reflex_n is the developer-scoped PoEP data
+    # gate (own N>=30 in-band reflexes), replacing the N>=50-across-humans rule for developer-self scope.
+    developer_self_cert_enabled: bool = field(
+        default_factory=lambda: _env_bool("DEVELOPER_SELF_CERT_ENABLED", False)
+    )
+    developer_self_cert_min_reflex_n: int = field(
+        default_factory=lambda: _env_int("DEVELOPER_SELF_CERT_MIN_REFLEX_N", 30)
+    )
+    # Cycle-38 QorTroller Retina Game Capture (Track-2 live producer): bring the coupled-retina screen
+    # lobe LIVE via Windows Graphics Capture of the Remote Play / game window (digital screen-grab, no
+    # camera) -> cv_motion -> coupling -> fuse -> meta["retina_coupled_verdict"]. DEFAULT-OFF. The window
+    # substring matches the Remote Play window title. NCAA auto-camera caps it at COUPLED_CLEAN.
+    retina_game_capture_enabled: bool = field(
+        default_factory=lambda: _env_bool("RETINA_GAME_CAPTURE_ENABLED", False)
+    )
+    retina_game_capture_window: str = field(
+        default_factory=lambda: os.environ.get("RETINA_GAME_CAPTURE_WINDOW", "Remote Play")
+    )
+    # Capture the whole MONITOR (display) instead of a window handle. 0 = window-capture (default); >=1 = that
+    # 1-based monitor index. Monitor-capture grabs the display at full refresh (~60fps), immune to window-
+    # handle staleness AND Windows throttling capture of fullscreen/non-foreground windows — the right mode
+    # for FULLSCREEN Remote Play (set to the laptop's display, usually 1). Captures all of that monitor.
+    retina_game_capture_monitor: int = field(
+        default_factory=lambda: int(os.environ.get("RETINA_GAME_CAPTURE_MONITOR", "0") or 0)
+    )
+    # Inject NEGATIVE coupled-retina verdicts (IMPLAUSIBLE) into the NQPV proof. Default False: in a
+    # dead-zone / auto-camera game (NCAA CFB), the right-stick->screen coupling is structurally absent, so
+    # a low-coupling IMPLAUSIBLE is a FALSE NEGATIVE (the auto-camera pans on its own, not an aimbot), NOT
+    # evidence — abstain instead. Set True only for an AIM-based game (manual camera) where absence of
+    # coupling is genuinely adversarial. Positive coupling (COUPLED_CLEAN/LIVE_COHERENT) injects either way.
+    retina_coupled_negative_enabled: bool = field(
+        default_factory=lambda: _env_bool("RETINA_COUPLED_NEGATIVE_ENABLED", False)
+    )
+    # Adaptive lag/FPS governor — meticulously widens the coupling oracle's causal-lag search window to
+    # track the live Remote Play latency (and tunes resample-rate/downscale). Default True: when the retina
+    # capture runs at all, the lag estimate should self-tune. Set False to pin the fixed 500ms window.
+    retina_adaptive_lag_enabled: bool = field(
+        default_factory=lambda: _env_bool("RETINA_ADAPTIVE_LAG_ENABLED", True)
     )
 
     # --- Data Economy Arc 5: VAPIReplayProofPipeline (VHR proofs) ---

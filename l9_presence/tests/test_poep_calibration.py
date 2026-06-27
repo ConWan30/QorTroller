@@ -53,6 +53,55 @@ def test_liveness_gated_until_calibrated():
     assert liveness_score({"reaction_latency_ms": 290}, incomplete)["status"] == "calibration_incomplete"
 
 
+# --- Stage 2: developer-self single-subject band + liveness-only verdict ---
+
+from l9_presence.poep_calibration import (  # noqa: E402
+    developer_self_liveness_verdict, single_subject_reflex_model,
+)
+
+
+def test_single_subject_band_filters_to_one_player(tmp_path):
+    save_poep_session(str(tmp_path / "DEV_01.poep.json"), _session(player="DEV", k=20, seed=1))
+    save_poep_session(str(tmp_path / "DEV_02.poep.json"), _session(player="DEV", k=20, seed=2))
+    save_poep_session(str(tmp_path / "P9_01.poep.json"), _session(player="P9", k=20, seed=3))
+    m = single_subject_reflex_model(str(tmp_path), "DEV", min_n=30)
+    assert m["single_subject"] is True and m["player"] == "DEV"
+    assert m["n_reactions"] == 40                 # only DEV's 2x20, NOT the other player
+    assert m["calibration_complete"] is True       # 40 >= 30 (developer-scoped gate)
+    assert set(m["per_player"]) == {"DEV"}
+
+
+def _complete_dev_model():
+    return population_reflex_model([_session(player="DEV", k=30, seed=1),
+                                    _session(player="DEV", k=30, seed=2)], min_n=30)
+
+
+def test_dev_liveness_verdict_gated_until_calibrated():
+    incomplete = population_reflex_model([_session(k=5)], min_n=30)
+    v = developer_self_liveness_verdict([{"reacted": True, "reaction_latency_ms": 290}], incomplete)
+    assert v["status"] == "calibration_incomplete"
+
+
+def test_dev_liveness_present_when_in_band():
+    v = developer_self_liveness_verdict(
+        [{"reacted": True, "reaction_latency_ms": 290} for _ in range(8)], _complete_dev_model())
+    assert v["verdict"] == "PRESENT" and v["liveness_pass"] is True
+    assert v["channel"] == "liveness_only"          # device-auth deferred (explicit)
+    assert v["in_band_fraction"] == 1.0
+
+
+def test_dev_liveness_reject_when_out_of_band():
+    v = developer_self_liveness_verdict(
+        [{"reacted": True, "reaction_latency_ms": 1500} for _ in range(8)], _complete_dev_model())
+    assert v["verdict"] == "REJECT" and v["liveness_pass"] is False
+
+
+def test_dev_liveness_reject_no_reactions():
+    v = developer_self_liveness_verdict(
+        [{"reacted": False, "reaction_latency_ms": None}], _complete_dev_model())
+    assert v["verdict"] == "REJECT" and v["n_reacted"] == 0
+
+
 def test_liveness_pass_and_fail_when_calibrated():
     m = population_reflex_model([_session(k=60)], min_n=50)
     assert m["calibration_complete"] is True

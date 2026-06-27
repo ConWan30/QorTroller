@@ -241,7 +241,15 @@ def embed_controller_window(
                 )
             )
         if i >= dynamics_horizon:
-            frame_violations = _check_dynamics(snaps[: i + 1], i, t, dynamics_horizon)
+            # Phase 0.1 R1: _check_dynamics only consumes the last (horizon+1) samples
+            # (_predict_linear uses series[:-1][-horizon:]; actual=series[-1]). Pass the
+            # bounded slice instead of the growing snaps[:i+1] so per-frame cost is O(horizon),
+            # not O(i) -> the embed drops from O(window^2) to O(window). Behavior-preserving:
+            # i >= dynamics_horizon here, so i-dynamics_horizon >= 0 and the last horizon+1
+            # samples are identical to the full-slice tail (see test_retina_phase0_1_dynamics_window).
+            frame_violations = _check_dynamics(
+                snaps[i - dynamics_horizon : i + 1], i, t, dynamics_horizon
+            )
             for v in frame_violations:
                 if not any(
                     e.type == EVT_TRAJECTORY_ANOMALOUS
