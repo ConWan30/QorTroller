@@ -3010,8 +3010,11 @@ class DualShockTransport:
             except Exception as exc:
                 log.warning("Phase 27: PITL session proof failed (non-fatal): %s", exc)
 
-        # Reset LED to idle blue
-        if self._reader:
+        # Reset LED to idle blue — SUPPRESSED under ps5_compat_mode. This is the only controller WRITE on the
+        # gameplay path; it's harmless to aim (just the lightbar colour, never input/camera), but ps5_compat
+        # means fully-passive capture (zero writes -> no PS5 BT-reconnect popups, nothing for an anti-cheat to
+        # see as input manipulation). Honors the same discipline as agent #34's _fire_controller.
+        if self._reader and not getattr(self._cfg, "ps5_compat_mode", False):
             try:
                 self._reader.set_led(0, 0, 255)
             except Exception:
