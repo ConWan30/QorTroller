@@ -410,14 +410,31 @@ class DualShockTransport:
         # verdict, fused into NQPV co-capture meta["retina_coupled_verdict"]. Default-off; the Remote Play
         # A/B (2026-06-26) confirmed Remote Play yields a live, biometrically-rich stream to couple against.
         self._retina_game_capture = None
+        self._presence_burst = None
         if getattr(cfg, "retina_game_capture_enabled", False):
             try:
                 from .qortroller_retina_capture import RetinaGameCapture
                 _rgc = RetinaGameCapture(
                     getattr(cfg, "retina_game_capture_window", "Remote Play"),
                     monitor_index=int(getattr(cfg, "retina_game_capture_monitor", 0)),
+                    min_update_interval_ms=int(getattr(cfg, "retina_capture_min_interval_ms", 0)),
                 )
-                if _rgc.start():
+                if getattr(cfg, "retina_capture_burst_enabled", False):
+                    # Duty-cycle: do NOT capture continuously (WGC lags the Remote Play GPU decoder — observer
+                    # effect). A burst controller toggles capture briefly for periodic presence proofs and stops
+                    # between (GPU free -> smooth gameplay). HID keeps flowing via the session loop regardless.
+                    from .presence_burst import PresenceBurstController
+                    self._retina_game_capture = _rgc
+                    _bs = float(getattr(cfg, "retina_burst_duration_s", 6.0))
+                    _bp = float(getattr(cfg, "retina_burst_period_s", 60.0))
+                    _tp = str(getattr(cfg, "retina_burst_trigger_path", "") or "")
+                    self._presence_burst = PresenceBurstController(_rgc, burst_s=_bs, period_s=_bp,
+                                                                   trigger_path=_tp, log=log)
+                    log.info("QorTroller Retina presence-burst mode — %s (burst=%.1fs%s)",
+                             ("ON-DEMAND (no capture until trigger %r)" % _tp) if _bp <= 0
+                             else "periodic duty-cycle, capture OFF between bursts",
+                             _bs, ("" if _bp <= 0 else (" period=%.1fs" % _bp)))
+                elif _rgc.start():
                     self._retina_game_capture = _rgc
                     log.info("QorTroller Retina Game Capture STARTED (window substr=%r)",
                              getattr(cfg, "retina_game_capture_window", "Remote Play"))
@@ -743,6 +760,13 @@ class DualShockTransport:
         # Pre-register device in the bridge's SQLite store so on_record()
         # can resolve the pubkey for signature verification from the first record.
         self._register_device()
+
+        # Presence-burst (duty-cycle) capture loop — toggles WGC in brief bursts so screen-capture doesn't
+        # continuously lag the Remote Play GPU decoder (observer effect). No-op unless retina_capture_burst_enabled
+        # (and period>0); on-demand-only when period<=0.
+        if getattr(self, "_presence_burst", None) is not None:
+            asyncio.create_task(self._presence_burst.run())
+            log.info("QorTroller Retina presence-burst loop spawned")
 
         # On-chain device registration — idempotent, runs once per identity.
         # Skipped on subsequent startups when is_chain_registered is True.

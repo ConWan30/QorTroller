@@ -1238,6 +1238,22 @@ class Bridge:
             self._tasks.append(_t)
             log.info("DualShock Edge transport enabled (interval=%.1fs)",
                      self.cfg.dualshock_record_interval_s)
+
+            # PRESENCE_LEAN_MODE — the live-play presence-capture path. Skip the ~30-agent fleet + grind + chain
+            # reconcilers + PCC + heavy provenance below (the MEASURED ~38% system-CPU driver that lags Remote
+            # Play; bridge-down = perfect gameplay) and keep ONLY DualShock + retina/coupling + the duty-cycle
+            # burst (which run inside the dualshock task spawned above). The full protocol/attestation runs in a
+            # separate non-lean session. Keep-alive mirrors run()'s tail: await gather over self._tasks
+            # (loop_health_monitor + the dualshock transport at this point).
+            if getattr(self.cfg, "presence_lean_mode", False):
+                log.info("PRESENCE_LEAN_MODE active — agent fleet + grind + PCC + heavy provenance SKIPPED "
+                         "(DualShock + retina + duty-cycle presence only). Bridge operational (LEAN).")
+                try:
+                    await asyncio.gather(*self._tasks)
+                except asyncio.CancelledError:
+                    pass
+                return
+
             if getattr(self.cfg, "pcc_enabled", True):
                 _pcc_task = asyncio.create_task(
                     run_pcc_persistence_loop(self.store, self._pcc_monitor, self.cfg)
