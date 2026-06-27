@@ -92,9 +92,13 @@ class WgcFrameSource:
     frame pair, and feeds on-screen pan into the core. Import-guarded; failure is non-fatal (the lobe
     just abstains). Captures DIGITAL frames of the Remote Play / game window (no camera)."""
 
-    def __init__(self, core: RetinaGameCaptureCore, window_substr: str, *, downscale: int = 4) -> None:
+    def __init__(self, core: RetinaGameCaptureCore, window_substr: str, *, downscale: int = 4,
+                 monitor_index: int = 0) -> None:
         self._core = core
         self._window = window_substr
+        self._monitor_index = int(monitor_index)   # >=1 -> capture that monitor instead of the window
+        self._target_desc = (f"monitor #{monitor_index}" if int(monitor_index) >= 1
+                             else f"window ~'{window_substr}'")
         self._downscale = downscale
         self._cap = None
         self._prev_gray = None
@@ -117,7 +121,12 @@ class WgcFrameSource:
             log.warning("RetinaGameCapture: WGC/cv_motion unavailable (lobe abstains): %s", exc)
             return False
         try:
-            cap = WindowsCapture(window_name=self._window)
+            if self._monitor_index >= 1:
+                cap = WindowsCapture(monitor_index=self._monitor_index)
+                self._target_desc = f"monitor #{self._monitor_index}"
+            else:
+                cap = WindowsCapture(window_name=self._window)
+                self._target_desc = f"window ~'{self._window}'"
 
             @cap.event
             def on_frame_arrived(frame, capture_control):  # noqa: ANN001
@@ -152,8 +161,8 @@ class WgcFrameSource:
             cap.start_free_threaded()                  # background thread; non-blocking
             self._running = True
             self._last_frame_wall = time.time()        # fresh clock so stall detection waits for real frames
-            log.info("RetinaGameCapture: WGC capturing window ~'%s' (digital screen-grab, no camera)",
-                     self._window)
+            log.info("RetinaGameCapture: WGC capturing %s (digital screen-grab, no camera)",
+                     self._target_desc)
             return True
         except Exception as exc:  # noqa: BLE001
             log.warning("RetinaGameCapture: WGC start failed (lobe abstains): %s", exc)
@@ -192,8 +201,8 @@ class WgcFrameSource:
         now = time.time()
         if (now - self._last_frame_wall) <= stall_s or (now - self._last_reacquire_wall) <= cooldown_s:
             return False
-        log.warning("RetinaGameCapture: WGC stalled %.1fs (frames_seen=%d, fmt=%s) — re-acquiring window '%s'",
-                    now - self._last_frame_wall, self.frames_seen, self.frame_format, self._window)
+        log.warning("RetinaGameCapture: WGC stalled %.1fs (frames_seen=%d, fmt=%s) — re-acquiring %s",
+                    now - self._last_frame_wall, self.frames_seen, self.frame_format, self._target_desc)
         self._last_reacquire_wall = now
         self._reacquires += 1
         self.stop()
@@ -214,9 +223,11 @@ class RetinaGameCapture:
     """Tie: WGC frame source -> core. feed_hid() from the bridge loop (right-stick);
     latest_coupled_verdict() read by the co-capture hook -> meta['retina_coupled_verdict']."""
 
-    def __init__(self, window_substr: str, *, ncaa_profile: bool = True, downscale: int = 4) -> None:
+    def __init__(self, window_substr: str, *, ncaa_profile: bool = True, downscale: int = 4,
+                 monitor_index: int = 0) -> None:
         self.core = RetinaGameCaptureCore(ncaa_profile=ncaa_profile)
-        self._source = WgcFrameSource(self.core, window_substr, downscale=downscale)
+        self._source = WgcFrameSource(self.core, window_substr, downscale=downscale,
+                                      monitor_index=monitor_index)
         self.started = False
         # Adaptive lag/FPS governor — meticulously widens the oracle's causal-lag search window to track
         # the live Remote Play latency (and tunes resample-rate/downscale for estimator validity).

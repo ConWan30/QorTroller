@@ -2019,6 +2019,13 @@ class Config:
     retina_game_capture_window: str = field(
         default_factory=lambda: os.environ.get("RETINA_GAME_CAPTURE_WINDOW", "Remote Play")
     )
+    # Capture the whole MONITOR (display) instead of a window handle. 0 = window-capture (default); >=1 = that
+    # 1-based monitor index. Monitor-capture grabs the display at full refresh (~60fps), immune to window-
+    # handle staleness AND Windows throttling capture of fullscreen/non-foreground windows — the right mode
+    # for FULLSCREEN Remote Play (set to the laptop's display, usually 1). Captures all of that monitor.
+    retina_game_capture_monitor: int = field(
+        default_factory=lambda: int(os.environ.get("RETINA_GAME_CAPTURE_MONITOR", "0") or 0)
+    )
     # Inject NEGATIVE coupled-retina verdicts (IMPLAUSIBLE) into the NQPV proof. Default False: in a
     # dead-zone / auto-camera game (NCAA CFB), the right-stick->screen coupling is structurally absent, so
     # a low-coupling IMPLAUSIBLE is a FALSE NEGATIVE (the auto-camera pans on its own, not an aimbot), NOT
