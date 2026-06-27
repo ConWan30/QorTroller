@@ -313,9 +313,22 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
             nqpv_retina_controller_signal TEXT,
             nqpv_retina_coupled_verdict   TEXT,
             humanity_prob                 REAL,
-            created_at                    REAL NOT NULL
+            created_at                    REAL NOT NULL,
+            posca_verdict                 TEXT,
+            posca_commitment              TEXT,
+            posca_structure_ok            INTEGER,
+            posca_coupling_score          REAL,
+            posca_action_count            INTEGER
         )
         """,
+        # Cycle-42 PoVCA columns for pre-existing nqpv_cocapture_log tables (cycle-33 created the table
+        # without them). Idempotent: the migration loop swallows "duplicate column name", so a fresh DB
+        # (columns already in the CREATE above) and an existing DB converge to the same schema.
+        "ALTER TABLE nqpv_cocapture_log ADD COLUMN posca_verdict TEXT",
+        "ALTER TABLE nqpv_cocapture_log ADD COLUMN posca_commitment TEXT",
+        "ALTER TABLE nqpv_cocapture_log ADD COLUMN posca_structure_ok INTEGER",
+        "ALTER TABLE nqpv_cocapture_log ADD COLUMN posca_coupling_score REAL",
+        "ALTER TABLE nqpv_cocapture_log ADD COLUMN posca_action_count INTEGER",
         "CREATE INDEX IF NOT EXISTS idx_nqpv_cocapture_created ON nqpv_cocapture_log(created_at DESC)",
         "CREATE INDEX IF NOT EXISTS idx_nqpv_cocapture_device ON nqpv_cocapture_log(device_id, created_at DESC)",
     ]
@@ -4851,12 +4864,23 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
         nqpv_retina_coupled_verdict: str | None = None,
         humanity_prob: float | None = None,
         created_at: float | None = None,
+        # Cycle-42 PoVCA extension (composes into NQPV): per-action authorship oracle.
+        # posca_verdict: AUTHENTIC / ORPHAN_OR_WEAK / UNVERIFIABLE (authorship+structure, not skill rank).
+        # posca_commitment: recomputable (device+action+structure+coupling+ts+poac).
+        posca_verdict: str | None = None,
+        posca_commitment: str | None = None,
+        posca_structure_ok: bool | None = None,
+        posca_coupling_score: float | None = None,
+        posca_action_count: int | None = None,
     ) -> None:
         """NQPV cycle-33 (Option B): persist one co-capture row for the RETINA-EXCL-2 study corpus.
 
         Tri-state bools store as INTEGER (NULL = ABSTAIN; round-trips through the loader's _as_bool).
         Written only when nqpv_cocapture_enabled. Best-effort/logging-grade like the retina_*_log
         inserts -- never raises into the ingestion path.
+
+        PoVCA (Cycle 42) columns added for input-grounded authorship per game-action.
+        Reuses existing table shape; new columns nullable for backward compat.
         """
         ts = created_at if created_at is not None else time.time()
         with self._conn() as conn:
@@ -4864,8 +4888,9 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                 """
                 INSERT INTO nqpv_cocapture_log (
                     device_id, record_hash_hex, nqpv_cco_tier, nqpv_l4l5l6_ok, nqpv_poep_present,
-                    nqpv_retina_controller_signal, nqpv_retina_coupled_verdict, humanity_prob, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    nqpv_retina_controller_signal, nqpv_retina_coupled_verdict, humanity_prob, created_at,
+                    posca_verdict, posca_commitment, posca_structure_ok, posca_coupling_score, posca_action_count
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     device_id or "",
@@ -4877,12 +4902,18 @@ class Store(ZkbaVpmMixin, MarketplaceMixin, ConsentMixin, SnapshotsGrindMixin, I
                     nqpv_retina_coupled_verdict,
                     humanity_prob,
                     ts,
+                    posca_verdict,
+                    posca_commitment,
+                    None if posca_structure_ok is None else int(bool(posca_structure_ok)),
+                    posca_coupling_score,
+                    posca_action_count,
                 ),
             )
 
     def get_nqpv_cocapture_rows(self, limit: int = 500, device_id: str | None = None) -> list[dict]:
         """NQPV cycle-33: read co-capture rows newest-first for the study loader (load_from_rows
-        consumes these directly -- the column names are the nqpv_* keys it normalizes)."""
+        consumes these directly -- the column names are the nqpv_* keys it normalizes).
+        PoVCA (Cycle 42) columns included when present (nullable; ABSTAIN if missing -> NQPV abstains)."""
         with self._conn() as conn:
             if device_id:
                 rows = conn.execute(

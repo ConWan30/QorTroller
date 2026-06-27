@@ -449,5 +449,24 @@ class TestVAPIPresenceProof(unittest.TestCase):
         self.assertIn("cert_scope", p.to_dict())
 
 
+class TestPoVCA_Cycle42(unittest.TestCase):
+    """Cycle-42 PoVCA (renamed; critiques addressed: authorship+structure, compose into NQPV, rails)."""
+
+    def test_povca_fields(self):
+        p = VAPIPresenceProof(
+            device_id="d", record_hash="r", verdict="CONSISTENT_HUMAN",
+            posca_verdict="AUTHENTIC", posca_structure_ok=True, posca_action_count=1,
+            notes="authorship + structure (NOT skill rank per cycle-42 rails)",
+        )
+        self.assertEqual(p.posca_verdict, "AUTHENTIC")
+        self.assertTrue(p.posca_structure_ok)
+        self.assertIn("NOT skill rank", p.notes)
+
+    def test_povca_abstain_default(self):
+        p = VAPIPresenceProof(device_id="d", record_hash="r", verdict="UNVERIFIABLE")
+        self.assertEqual(p.posca_verdict, "UNVERIFIABLE")
+        self.assertEqual(p.posca_action_count, 0)
+
+
 if __name__ == "__main__":
     unittest.main()

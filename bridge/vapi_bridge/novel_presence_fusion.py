@@ -8,8 +8,11 @@ This module provides the central, interoperable fusion of:
 - L4/L5/L6 (human physics input oracles)
 - PoAC / GIC / PoSR (cryptographic binding, continuity, recency)
 - Consent / VHP / PDA (sovereignty + attestation)
+- PoVCA (Proof of Verified Causal Authorship — Cycle 42: input-grounded screen authorship per game-action; composes as oracle into NQPV)
 
 Purpose: Create a single, seamless "gamer presence" proof that a verified human on certified hardware is generating real physics-based inputs that causally drive the game (not a bot or modified cheat hardware).
+
+PoVCA enhancement (from cycle-42): per discrete on-screen game-action, prove authorship by verified controller input (provenance + L9 causal coupling + L4/L5 structure). Reuses existing primitives for interoperability. Honesty rails baked: "authorship + structure, NOT skill rank"; always advisory until study; abstain on emulated/non-live; compose into NQPV (not parallel).
 
 Basis: All components are designed as orthogonal (different axes, timescales, physics vs crypto). Their fusion on disagreement + cryptographic binding is the evolutionary anti-cheat + presence verifier.
 
@@ -59,6 +62,17 @@ class FusedGamerPresenceProof:
     # population corpus + real adversaries pass the study. The verdict is the result WITHIN the scope.
     cert_scope: str = "advisory"
     population_certified: bool = False
+
+    # Cycle-42 PoVCA (Proof of Verified Causal Authorship): input-grounded per-action authorship
+    # (provenance + L9 causal + L4/L5 structure). Composes as oracle into NQPV (abstains if missing).
+    # name chosen to avoid "skill" over-claim (authorship + structure_ok, not rank).
+    # See posca_action_provenance.py for detector/binder (reuses ScreenEvent + assess_coherence + L4).
+    # Rails: always advisory until measured study + live co-capture; hard gate emulated via CCO.
+    posca_verdict: str = "UNVERIFIABLE"
+    posca_commitment: str = ""
+    posca_structure_ok: Optional[bool] = None
+    posca_coupling_score: Optional[float] = None
+    posca_action_count: int = 0
 
 
 # --- Calibrated model (cycle-29) — PROVISIONAL operating point ---
@@ -114,6 +128,13 @@ def cocapture_fields_from_pitl_meta(meta: dict) -> dict:
         "nqpv_retina_controller_signal": retina_sig,
         "nqpv_poep_present": meta.get("poep_present"),                      # live if present, else abstain
         "nqpv_retina_coupled_verdict": meta.get("retina_coupled_verdict"),  # live (camera) if present, else abstain
+        # PoVCA (Cycle 42): forward if attached in live co-capture (posca_action_provenance slice).
+        # Absent -> NQPV fuse abstains (per design: only live oracles separate).
+        "posca_verdict": meta.get("posca_verdict"),
+        "posca_commitment": meta.get("posca_commitment"),
+        "posca_structure_ok": meta.get("posca_structure_ok"),
+        "posca_coupling_score": meta.get("posca_coupling_score"),
+        "posca_action_count": meta.get("posca_action_count"),
     }
 
 
@@ -154,6 +175,14 @@ class NovelPresenceFusionOrchestrator:
         weights: dict[str, float] | None = None,
         threshold: float | None = None,
         developer_self_cert: bool = False,
+        # PoVCA (Cycle 42): optional ADVISORY oracle inputs from co-capture / action provenance.
+        # Surfaced as posca_verdict on the proof; does NOT move presence_score (posca is absent from
+        # _PROVISIONAL_WEIGHTS) until a measured RETINA-EXCL-2 study sets a calibrated weight under the
+        # anti-GCAP rail. Absent/None structure -> abstain (UNVERIFIABLE); emulated device -> UNVERIFIABLE.
+        posca_structure_ok: Optional[bool] = None,
+        posca_coupling_score: Optional[float] = None,
+        posca_action_count: int = 0,
+        posca_commitment: str = "",
     ) -> FusedGamerPresenceProof:
         """
         Perform the fusion.
@@ -212,6 +241,13 @@ class NovelPresenceFusionOrchestrator:
             if cco_tier:
                 contribs["cco"] = 1.0  # present + not FAIL (FAIL hard-gated above)
 
+            # PoVCA (cycle-42) is deliberately NOT a scoring contrib. It is an ADVISORY oracle FIELD
+            # surfaced on the proof (posca_verdict below); it is absent from _PROVISIONAL_WEIGHTS and so
+            # MUST NOT move presence_score until a measured RETINA-EXCL-2 study sets a calibrated weight
+            # under the anti-GCAP rail (fused TAR >= best single oracle). Folding it into the score now —
+            # on the uncalibrated, abstain-by-default structure signal — is exactly the overclaim the
+            # cycle-42 honesty rails forbid.
+
             if contribs:
                 _wsum = sum(_w.get(k, 0.0) for k in contribs) or 1.0
                 presence_score = sum(_w.get(k, 0.0) * v for k, v in contribs.items()) / _wsum
@@ -246,6 +282,14 @@ class NovelPresenceFusionOrchestrator:
         _scope_note = ("developer-self cert scope (single-subject; population_certified=False)"
                        if developer_self_cert
                        else "advisory; not certifying until RETINA-EXCL-2 study")
+        # PoVCA verdict (authorship + structure, NOT skill rank). Single source of truth honoring the
+        # tri-state structure signal (None = abstain -> UNVERIFIABLE, never AUTHENTIC without L4 evidence)
+        # and the emulated gate. The commitment is the recomputable one minted at action-detection time
+        # (passed through here) — never a fabricated string.
+        from .posca_action_provenance import posca_verdict_from
+        posca_v = posca_verdict_from(posca_structure_ok, posca_coupling_score, cco_tier)
+        posca_commit = posca_commitment or ""
+
         return FusedGamerPresenceProof(
             verdict=verdict,
             device_id=device_id,
@@ -261,8 +305,14 @@ class NovelPresenceFusionOrchestrator:
             commitments=commitments,
             cert_scope=cert_scope,
             population_certified=False,
+            posca_verdict=posca_v,
+            posca_commitment=posca_commit,
+            posca_structure_ok=posca_structure_ok,
+            posca_coupling_score=posca_coupling_score,
+            posca_action_count=posca_action_count,
             notes=(f"calibrated-v1; score={presence_score:.2f} "
-                   f"disagreement={disagreement_index:.2f}; {_scope_note}")
+                   f"disagreement={disagreement_index:.2f}; {_scope_note}; "
+                   f"posca={posca_v} (advisory authorship field; NOT skill rank; not scored until study)")
         )
 
 # --- Helper to wire into existing PoAC / GIC (stub for implementation) ---

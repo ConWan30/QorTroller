@@ -1288,6 +1288,11 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             record_hash=rec_hash,
             # cycle-38 developer-self-cert: operator master flag -> cert_scope="developer_self"
             developer_self_cert=getattr(cfg, "developer_self_cert_enabled", False),
+            # PoVCA (Cycle 42): pass if stored in co-capture row (from live posca slice in dualshock).
+            posca_structure_ok=bool(row.get("posca_structure_ok")) if row.get("posca_structure_ok") is not None else None,
+            posca_coupling_score=row.get("posca_coupling_score"),
+            posca_action_count=int(row.get("posca_action_count") or 0),
+            posca_commitment=row.get("posca_commitment") or "",
         )
 
         # cert_scope drives the honesty fields: developer_self -> certified-for-developer (advisory off,
@@ -1319,6 +1324,13 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "population_certified": bool(getattr(proof, "population_certified", False)),
             "advisory": not _dev_self,        # advisory unless inside the developer_self cert scope
             "certified": False,               # never population/tournament-certified on this endpoint
+            # PoVCA (Cycle 42): input-grounded per-action authorship (provenance + causal + structure).
+            # Composes into NQPV; advisory + honesty rails until live co-capture (non-blind) + study.
+            "posca_verdict": getattr(proof, "posca_verdict", "UNVERIFIABLE"),
+            "posca_commitment": getattr(proof, "posca_commitment", ""),
+            "posca_structure_ok": getattr(proof, "posca_structure_ok", None),
+            "posca_coupling_score": getattr(proof, "posca_coupling_score", None),
+            "posca_action_count": getattr(proof, "posca_action_count", 0),
         }
 
 

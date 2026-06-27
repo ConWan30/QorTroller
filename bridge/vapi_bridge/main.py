@@ -289,6 +289,12 @@ class Bridge:
                     nqpv_retina_controller_signal=pitl_meta.get("nqpv_retina_controller_signal"),
                     nqpv_retina_coupled_verdict=pitl_meta.get("nqpv_retina_coupled_verdict"),
                     humanity_prob=pitl_meta.get("humanity_prob"),
+                    # Cycle-42 PoVCA: pass through if computed in co-capture hook (posca_action_provenance)
+                    posca_verdict=pitl_meta.get("posca_verdict"),
+                    posca_commitment=pitl_meta.get("posca_commitment"),
+                    posca_structure_ok=pitl_meta.get("posca_structure_ok"),
+                    posca_coupling_score=pitl_meta.get("posca_coupling_score"),
+                    posca_action_count=pitl_meta.get("posca_action_count"),
                 )
             except Exception as e:  # noqa: BLE001 — co-capture is advisory, never fatal
                 log.debug("nqpv co-capture persist skipped: %s", e)
