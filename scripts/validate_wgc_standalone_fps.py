@@ -1,14 +1,18 @@
-"""Phase 0 validation for s-retina-wgc-process-isolation-scope (cycle-40).
+"""Standalone WGC processed-fps probe (READ-ONLY screen capture; no controller writes).
 
-Measures STANDALONE WGC frame rate ALONGSIDE the running bridge, to test the in-bridge-contention hypothesis
-behind the ~2fps screen-lobe:
-  * full-rate here (~>=20fps) while the bridge sees ~2fps -> the ~2fps IS in-bridge contention -> Phase 1
-    (process-isolate WGC+cv_motion into a subprocess) is the correct fix.
-  * ALSO ~2fps here -> the capture ITSELF is the limit (Remote Play protected surface / monitor present-rate)
-    -> process isolation will NOT help -> re-scope (DXGI Desktop Duplication / accept low-rate witness).
+Measures `rgc.frames_seen / sec` = the POST-PROCESSING throughput of the coupled-retina callback, alongside the
+running bridge. Originally written for s-retina-wgc-process-isolation-scope (cycle-40) to test an
+in-bridge-contention hypothesis; that framing was SUPERSEDED (see s-wgc-fps-processing-wall-resolved, cycle-43):
+the ~7fps was the per-frame CALLBACK (full-res copy + dense Farneback), NOT the capture surface. Raw WGC
+delivery is ~39fps (a no-op-callback probe proves it). The fix (slice-at-source `cab15fdc` + phaseCorrelate
+`eb9eec27`) dropped the callback to ~3-4ms, so this probe now reads ~delivery-bound (~32fps SDR, 2026-06-27).
 
-Run while the operator plays Remote Play FULLSCREEN. READ-ONLY: captures the screen (WGC) only; no controller
-writes, no input, nothing the anti-cheat could see as manipulation. Default monitor 1 (laptop display).
+Interpreting the number NOW: the binding ceiling is WGC DELIVERY (~39fps), not the callback. To disambiguate a
+LOW reading, run a no-op-callback raw-arrival probe (low raw => stream/present-rate limited; high raw + low
+here => callback contended by the ambient floor). To EXCEED ~39fps (e.g. 60fps HDR), raise DELIVERY (the Remote
+Play stream fps / HDR present path), not the callback -- see the 60fps-HDR scope note.
+
+Run while the operator plays Remote Play FULLSCREEN. Default monitor 1 (laptop display).
 """
 from __future__ import annotations
 
@@ -53,17 +57,19 @@ def main() -> None:
     except Exception:
         pass
     fps = fs / el if el else 0.0
-    print(f"\nRESULT: {fs} frames / {el:.0f}s = ~{fps:.1f} fps standalone (fmt={rgc._source.frame_format})", flush=True)
-    if fps >= 20:
-        print("VERDICT (a): FULL-RATE standalone -> the bridge's ~2fps IS in-bridge contention "
-              "-> Phase 1 process isolation is the correct fix.", flush=True)
-    elif fps >= 5:
-        print("VERDICT (mixed): partial rate -> inconclusive; re-run, ensure Remote Play is the only "
-              "fullscreen content on this monitor.", flush=True)
+    print(f"\nRESULT: {fs} frames / {el:.0f}s = ~{fps:.1f} fps PROCESSED (fmt={rgc._source.frame_format})", flush=True)
+    if fps >= 30:
+        print("VERDICT: DELIVERY-BOUND -> the slice+phaseCorrelate callback fix is working (processed ~= raw "
+              "WGC delivery ~39fps). The ceiling is now DELIVERY, not the callback. To go higher (e.g. 60fps "
+              "HDR) raise the Remote Play stream / HDR present rate, not the callback.", flush=True)
+    elif fps >= 10:
+        print("VERDICT: PARTIAL -> either raw WGC delivery is low (Remote Play stream / present rate) OR the "
+              "callback is contended by the ambient floor. Disambiguate with a no-op-callback raw-arrival probe "
+              "(high raw + low here => contention; low raw => stream-limited) + per-stage timing.", flush=True)
     else:
-        print("VERDICT (b): ALSO ~2fps standalone -> the CAPTURE ITSELF is the limit (Remote Play "
-              "protected surface / monitor present-rate). Process isolation will NOT help -> re-scope "
-              "(DXGI Desktop Duplication, or treat the screen-lobe as a low-rate witness only).", flush=True)
+        print("VERDICT: LOW -> investigate before blaming the surface. Run the no-op raw-arrival probe: if raw "
+              "is also low it's the stream / present rate (HDR? network?); if raw is ~39 the callback is the "
+              "bottleneck (contention, or a regression in the slice / phaseCorrelate path).", flush=True)
 
 
 if __name__ == "__main__":
