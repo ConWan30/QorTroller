@@ -140,14 +140,18 @@ class WgcFrameSource:
                     bgr = self._to_u8_bgr(buf)             # HDR-aware: uint16 / scRGB-float -> 8-bit BGR
                     gray = to_gray_small(bgr, self._downscale)
                     now = time.time() * 1000.0
-                    if self._prev_gray is not None and self._prev_ts is not None:
+                    # Shape guard: the governor changes downscale live, which changes the gray image size.
+                    # Optical flow REQUIRES prev.size()==next.size(); a mismatch must SKIP motion (re-baseline),
+                    # never throw — else prev_gray never updates and every later frame fails forever.
+                    if (self._prev_gray is not None and self._prev_ts is not None
+                            and self._prev_gray.shape == gray.shape):
                         dt = (now - self._prev_ts) / 1000.0
                         if dt > 0:
                             fm = frames_to_motion(self._prev_gray, gray, dt)
                             self._core.feed_frame_motion(now, fm.yaw_rate, fm.pitch_rate)
                             self.frames_seen += 1
                             self._frame_ts.append(now)
-                    self._prev_gray, self._prev_ts = gray, now
+                    self._prev_gray, self._prev_ts = gray, now   # ALWAYS update -> re-baseline on size change
                 except Exception as _fx:  # noqa: BLE001 — a bad frame must never kill the capture thread
                     if self._frame_err_n == 0:
                         log.warning("RetinaGameCapture: frame processing error (HDR format?): %s", _fx)
