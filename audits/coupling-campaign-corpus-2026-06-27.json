@@ -1,0 +1,1986 @@
+{
+  "source": "bridge_lean.log campaign 2026-06-27",
+  "diag": [
+    {
+      "ts": "2026-06-27 12:40:22",
+      "coupling": null,
+      "null": null,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 0
+    },
+    {
+      "ts": "2026-06-27 12:41:01",
+      "coupling": 0.016,
+      "null": 0.05,
+      "decoupled_energy": 1.0,
+      "grid": 1824,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 0.0,
+      "frames": 212
+    },
+    {
+      "ts": "2026-06-27 12:41:48",
+      "coupling": 0.031,
+      "null": 0.02,
+      "decoupled_energy": 0.999,
+      "grid": 7101,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 366.7,
+      "frames": 437
+    },
+    {
+      "ts": "2026-06-27 12:42:32",
+      "coupling": 0.144,
+      "null": 0.032,
+      "decoupled_energy": 0.979,
+      "grid": 7861,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 225.0,
+      "frames": 663
+    },
+    {
+      "ts": "2026-06-27 12:43:20",
+      "coupling": 0.16,
+      "null": 0.023,
+      "decoupled_energy": 0.975,
+      "grid": 7332,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 225.0,
+      "frames": 847
+    },
+    {
+      "ts": "2026-06-27 12:44:00",
+      "coupling": 0.079,
+      "null": 0.038,
+      "decoupled_energy": 0.994,
+      "grid": 7428,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 75.0,
+      "frames": 1086
+    },
+    {
+      "ts": "2026-06-27 12:44:39",
+      "coupling": 0.045,
+      "null": 0.038,
+      "decoupled_energy": 0.998,
+      "grid": 6615,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 58.3,
+      "frames": 1216
+    },
+    {
+      "ts": "2026-06-27 12:45:16",
+      "coupling": 0.186,
+      "null": 0.055,
+      "decoupled_energy": 0.965,
+      "grid": 2848,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 33.3,
+      "frames": 1334
+    },
+    {
+      "ts": "2026-06-27 12:45:51",
+      "coupling": 0.113,
+      "null": 0.038,
+      "decoupled_energy": 0.987,
+      "grid": 3678,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 500.0,
+      "frames": 1636
+    },
+    {
+      "ts": "2026-06-27 12:46:28",
+      "coupling": 0.831,
+      "null": 0.011,
+      "decoupled_energy": 0.309,
+      "grid": 4794,
+      "abstain": null,
+      "nqpv": "COUPLED_CLEAN",
+      "lag_ms": 0.0,
+      "frames": 1923
+    },
+    {
+      "ts": "2026-06-27 12:47:06",
+      "coupling": 0.077,
+      "null": 0.031,
+      "decoupled_energy": 0.994,
+      "grid": 6160,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 500.0,
+      "frames": 2265
+    },
+    {
+      "ts": "2026-06-27 12:47:41",
+      "coupling": 0.114,
+      "null": 0.035,
+      "decoupled_energy": 0.987,
+      "grid": 5938,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 475.0,
+      "frames": 2385
+    },
+    {
+      "ts": "2026-06-27 12:48:19",
+      "coupling": 0.183,
+      "null": 0.051,
+      "decoupled_energy": 0.967,
+      "grid": 2775,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 0.0,
+      "frames": 2545
+    },
+    {
+      "ts": "2026-06-27 12:48:58",
+      "coupling": 0.022,
+      "null": 0.051,
+      "decoupled_energy": 1.0,
+      "grid": 3715,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 500.0,
+      "frames": 2823
+    },
+    {
+      "ts": "2026-06-27 12:49:37",
+      "coupling": 0.14,
+      "null": 0.031,
+      "decoupled_energy": 0.98,
+      "grid": 4449,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 0.0,
+      "frames": 3119
+    },
+    {
+      "ts": "2026-06-27 12:50:16",
+      "coupling": 0.26,
+      "null": 0.029,
+      "decoupled_energy": 0.932,
+      "grid": 5430,
+      "abstain": null,
+      "nqpv": "COUPLED_CLEAN",
+      "lag_ms": 250.0,
+      "frames": 3376
+    },
+    {
+      "ts": "2026-06-27 12:50:54",
+      "coupling": 0.115,
+      "null": 0.023,
+      "decoupled_energy": 0.987,
+      "grid": 6223,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 100.0,
+      "frames": 3656
+    },
+    {
+      "ts": "2026-06-27 12:51:32",
+      "coupling": 0.053,
+      "null": 0.033,
+      "decoupled_energy": 0.997,
+      "grid": 6259,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 100.0,
+      "frames": 3852
+    },
+    {
+      "ts": "2026-06-27 12:52:13",
+      "coupling": 0.075,
+      "null": 0.036,
+      "decoupled_energy": 0.994,
+      "grid": 6677,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 400.0,
+      "frames": 4003
+    },
+    {
+      "ts": "2026-06-27 12:52:51",
+      "coupling": 0.101,
+      "null": 0.02,
+      "decoupled_energy": 0.99,
+      "grid": 3227,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 158.3,
+      "frames": 4158
+    },
+    {
+      "ts": "2026-06-27 12:53:32",
+      "coupling": 0.094,
+      "null": 0.051,
+      "decoupled_energy": 0.991,
+      "grid": 3741,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 383.3,
+      "frames": 4434
+    },
+    {
+      "ts": "2026-06-27 12:54:13",
+      "coupling": 0.11,
+      "null": 0.02,
+      "decoupled_energy": 0.988,
+      "grid": 4726,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 108.3,
+      "frames": 4666
+    },
+    {
+      "ts": "2026-06-27 12:54:55",
+      "coupling": 0.071,
+      "null": 0.03,
+      "decoupled_energy": 0.995,
+      "grid": 4903,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 0.0,
+      "frames": 5377
+    },
+    {
+      "ts": "2026-06-27 12:55:36",
+      "coupling": 0.009,
+      "null": 0.042,
+      "decoupled_energy": 1.0,
+      "grid": 5403,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 0.0,
+      "frames": 6105
+    },
+    {
+      "ts": "2026-06-27 12:56:13",
+      "coupling": 0.004,
+      "null": 0.049,
+      "decoupled_energy": 1.0,
+      "grid": 6102,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 0.0,
+      "frames": 6885
+    },
+    {
+      "ts": "2026-06-27 12:56:52",
+      "coupling": 0.061,
+      "null": 0.031,
+      "decoupled_energy": 0.996,
+      "grid": 6561,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 500.0,
+      "frames": 7456
+    },
+    {
+      "ts": "2026-06-27 12:57:32",
+      "coupling": 0.131,
+      "null": 0.029,
+      "decoupled_energy": 0.983,
+      "grid": 6665,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 0.0,
+      "frames": 7827
+    },
+    {
+      "ts": "2026-06-27 12:58:12",
+      "coupling": 0.169,
+      "null": 0.044,
+      "decoupled_energy": 0.971,
+      "grid": 3209,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 500.0,
+      "frames": 8347
+    },
+    {
+      "ts": "2026-06-27 12:58:55",
+      "coupling": 0.082,
+      "null": 0.042,
+      "decoupled_energy": 0.993,
+      "grid": 3656,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 325.0,
+      "frames": 8992
+    },
+    {
+      "ts": "2026-06-27 12:59:36",
+      "coupling": 0.133,
+      "null": 0.045,
+      "decoupled_energy": 0.982,
+      "grid": 4170,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 0.0,
+      "frames": 9664
+    },
+    {
+      "ts": "2026-06-27 13:00:15",
+      "coupling": 0.168,
+      "null": 0.047,
+      "decoupled_energy": 0.972,
+      "grid": 4467,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 33.3,
+      "frames": 10410
+    },
+    {
+      "ts": "2026-06-27 13:00:52",
+      "coupling": 0.0,
+      "null": 0.0,
+      "decoupled_energy": 1.0,
+      "grid": 5264,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 0.0,
+      "frames": 11216
+    },
+    {
+      "ts": "2026-06-27 13:01:27",
+      "coupling": 0.021,
+      "null": 0.026,
+      "decoupled_energy": 1.0,
+      "grid": 6045,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 0.0,
+      "frames": 11866
+    },
+    {
+      "ts": "2026-06-27 13:02:05",
+      "coupling": 0.143,
+      "null": 0.04,
+      "decoupled_energy": 0.979,
+      "grid": 6128,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 500.0,
+      "frames": 12210
+    },
+    {
+      "ts": "2026-06-27 13:02:44",
+      "coupling": 0.162,
+      "null": 0.04,
+      "decoupled_energy": 0.974,
+      "grid": 2995,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 175.0,
+      "frames": 12739
+    },
+    {
+      "ts": "2026-06-27 13:03:26",
+      "coupling": 0.144,
+      "null": 0.049,
+      "decoupled_energy": 0.979,
+      "grid": 3916,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 266.7,
+      "frames": 13372
+    },
+    {
+      "ts": "2026-06-27 13:04:09",
+      "coupling": 0.249,
+      "null": 0.048,
+      "decoupled_energy": 0.938,
+      "grid": 4458,
+      "abstain": null,
+      "nqpv": "COUPLED_CLEAN",
+      "lag_ms": 83.3,
+      "frames": 14045
+    },
+    {
+      "ts": "2026-06-27 13:04:52",
+      "coupling": 0.142,
+      "null": 0.038,
+      "decoupled_energy": 0.98,
+      "grid": 4858,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 0.0,
+      "frames": 14660
+    },
+    {
+      "ts": "2026-06-27 13:05:33",
+      "coupling": 0.114,
+      "null": 0.042,
+      "decoupled_energy": 0.987,
+      "grid": 5022,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 0.0,
+      "frames": 15281
+    },
+    {
+      "ts": "2026-06-27 13:06:14",
+      "coupling": 0.101,
+      "null": 0.033,
+      "decoupled_energy": 0.99,
+      "grid": 5462,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 141.7,
+      "frames": 16013
+    },
+    {
+      "ts": "2026-06-27 13:06:55",
+      "coupling": 0.123,
+      "null": 0.036,
+      "decoupled_energy": 0.985,
+      "grid": 6092,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 0.0,
+      "frames": 16708
+    },
+    {
+      "ts": "2026-06-27 13:07:36",
+      "coupling": 0.116,
+      "null": 0.041,
+      "decoupled_energy": 0.987,
+      "grid": 6679,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 0.0,
+      "frames": 17448
+    },
+    {
+      "ts": "2026-06-27 13:08:16",
+      "coupling": 0.052,
+      "null": 0.039,
+      "decoupled_energy": 0.997,
+      "grid": 6854,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 500.0,
+      "frames": 17823
+    },
+    {
+      "ts": "2026-06-27 13:08:57",
+      "coupling": 0.137,
+      "null": 0.04,
+      "decoupled_energy": 0.981,
+      "grid": 6921,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 491.7,
+      "frames": 18267
+    },
+    {
+      "ts": "2026-06-27 13:09:37",
+      "coupling": 0.13,
+      "null": 0.036,
+      "decoupled_energy": 0.983,
+      "grid": 6787,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 175.0,
+      "frames": 18778
+    },
+    {
+      "ts": "2026-06-27 13:10:17",
+      "coupling": 0.213,
+      "null": 0.038,
+      "decoupled_energy": 0.955,
+      "grid": 3725,
+      "abstain": null,
+      "nqpv": "COUPLED_CLEAN",
+      "lag_ms": 208.3,
+      "frames": 19506
+    },
+    {
+      "ts": "2026-06-27 13:10:58",
+      "coupling": 0.125,
+      "null": 0.031,
+      "decoupled_energy": 0.984,
+      "grid": 4093,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 0.0,
+      "frames": 20220
+    },
+    {
+      "ts": "2026-06-27 13:11:38",
+      "coupling": 0.158,
+      "null": 0.036,
+      "decoupled_energy": 0.975,
+      "grid": 4690,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 100.0,
+      "frames": 21009
+    },
+    {
+      "ts": "2026-06-27 13:12:18",
+      "coupling": 0.111,
+      "null": 0.038,
+      "decoupled_energy": 0.988,
+      "grid": 5410,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 400.0,
+      "frames": 21789
+    },
+    {
+      "ts": "2026-06-27 13:12:58",
+      "coupling": 0.152,
+      "null": 0.034,
+      "decoupled_energy": 0.977,
+      "grid": 6189,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 500.0,
+      "frames": 22542
+    },
+    {
+      "ts": "2026-06-27 13:13:38",
+      "coupling": 0.155,
+      "null": 0.029,
+      "decoupled_energy": 0.976,
+      "grid": 6857,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 500.0,
+      "frames": 23132
+    },
+    {
+      "ts": "2026-06-27 13:14:19",
+      "coupling": 0.067,
+      "null": 0.026,
+      "decoupled_energy": 0.996,
+      "grid": 6877,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 500.0,
+      "frames": 23644
+    },
+    {
+      "ts": "2026-06-27 13:14:57",
+      "coupling": 0.085,
+      "null": 0.034,
+      "decoupled_energy": 0.993,
+      "grid": 6594,
+      "abstain": null,
+      "nqpv": "IMPLAUSIBLE",
+      "lag_ms": 500.0,
+      "frames": 24010
+    },
+    {
+      "ts": "2026-06-27 13:15:32",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 24761
+    },
+    {
+      "ts": "2026-06-27 13:16:04",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 25558
+    },
+    {
+      "ts": "2026-06-27 13:16:36",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 26004
+    },
+    {
+      "ts": "2026-06-27 13:17:08",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 26307
+    },
+    {
+      "ts": "2026-06-27 13:17:40",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 27110
+    },
+    {
+      "ts": "2026-06-27 13:18:12",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 27859
+    },
+    {
+      "ts": "2026-06-27 13:18:44",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 27954
+    },
+    {
+      "ts": "2026-06-27 13:19:19",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 28482
+    },
+    {
+      "ts": "2026-06-27 13:19:51",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 29232
+    },
+    {
+      "ts": "2026-06-27 13:20:24",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 29801
+    },
+    {
+      "ts": "2026-06-27 13:20:56",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 30043
+    },
+    {
+      "ts": "2026-06-27 13:21:37",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 30787
+    },
+    {
+      "ts": "2026-06-27 13:22:06",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 31556
+    },
+    {
+      "ts": "2026-06-27 13:22:36",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 31871
+    },
+    {
+      "ts": "2026-06-27 13:23:05",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 32299
+    },
+    {
+      "ts": "2026-06-27 13:23:34",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 33060
+    },
+    {
+      "ts": "2026-06-27 13:24:03",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 33261
+    },
+    {
+      "ts": "2026-06-27 13:24:33",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 33725
+    },
+    {
+      "ts": "2026-06-27 13:25:03",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 34518
+    },
+    {
+      "ts": "2026-06-27 13:25:32",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 34610
+    },
+    {
+      "ts": "2026-06-27 13:26:04",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 35213
+    },
+    {
+      "ts": "2026-06-27 13:26:36",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 35985
+    },
+    {
+      "ts": "2026-06-27 13:27:07",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 36299
+    },
+    {
+      "ts": "2026-06-27 13:27:38",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 36731
+    },
+    {
+      "ts": "2026-06-27 13:28:10",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 37485
+    },
+    {
+      "ts": "2026-06-27 13:28:41",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 37952
+    },
+    {
+      "ts": "2026-06-27 13:29:13",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 38204
+    },
+    {
+      "ts": "2026-06-27 13:29:44",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 38957
+    },
+    {
+      "ts": "2026-06-27 13:30:16",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 39673
+    },
+    {
+      "ts": "2026-06-27 13:30:47",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 39738
+    },
+    {
+      "ts": "2026-06-27 13:31:19",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 40480
+    },
+    {
+      "ts": "2026-06-27 13:31:50",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 41231
+    },
+    {
+      "ts": "2026-06-27 13:32:22",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 41438
+    },
+    {
+      "ts": "2026-06-27 13:32:53",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 41971
+    },
+    {
+      "ts": "2026-06-27 13:33:24",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 42739
+    },
+    {
+      "ts": "2026-06-27 13:33:56",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 43138
+    },
+    {
+      "ts": "2026-06-27 13:34:27",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 43475
+    },
+    {
+      "ts": "2026-06-27 13:34:59",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 44235
+    },
+    {
+      "ts": "2026-06-27 13:35:30",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 44257
+    },
+    {
+      "ts": "2026-06-27 13:36:02",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 44263
+    },
+    {
+      "ts": "2026-06-27 13:36:34",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 44293
+    },
+    {
+      "ts": "2026-06-27 13:37:06",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 44321
+    },
+    {
+      "ts": "2026-06-27 13:37:38",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 44329
+    },
+    {
+      "ts": "2026-06-27 13:38:10",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 44349
+    },
+    {
+      "ts": "2026-06-27 13:38:42",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 44378
+    },
+    {
+      "ts": "2026-06-27 13:39:14",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 44397
+    },
+    {
+      "ts": "2026-06-27 13:39:46",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 44412
+    },
+    {
+      "ts": "2026-06-27 13:40:18",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 44440
+    },
+    {
+      "ts": "2026-06-27 13:40:50",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 44467
+    },
+    {
+      "ts": "2026-06-27 13:41:22",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 44470
+    },
+    {
+      "ts": "2026-06-27 13:41:54",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 44496
+    },
+    {
+      "ts": "2026-06-27 13:42:26",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 44524
+    },
+    {
+      "ts": "2026-06-27 13:42:58",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 44536
+    },
+    {
+      "ts": "2026-06-27 13:43:29",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 44554
+    },
+    {
+      "ts": "2026-06-27 13:44:02",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 44582
+    },
+    {
+      "ts": "2026-06-27 13:44:33",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 44603
+    },
+    {
+      "ts": "2026-06-27 13:45:05",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 44610
+    },
+    {
+      "ts": "2026-06-27 13:45:33",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 44665
+    },
+    {
+      "ts": "2026-06-27 13:46:00",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 44692
+    },
+    {
+      "ts": "2026-06-27 13:46:27",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 44722
+    },
+    {
+      "ts": "2026-06-27 13:46:54",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 44780
+    },
+    {
+      "ts": "2026-06-27 13:47:21",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 44780
+    },
+    {
+      "ts": "2026-06-27 13:47:49",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 44837
+    },
+    {
+      "ts": "2026-06-27 13:48:16",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 44851
+    },
+    {
+      "ts": "2026-06-27 13:48:43",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 44864
+    },
+    {
+      "ts": "2026-06-27 13:49:10",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 44893
+    },
+    {
+      "ts": "2026-06-27 13:49:37",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 44893
+    },
+    {
+      "ts": "2026-06-27 13:50:05",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 44921
+    },
+    {
+      "ts": "2026-06-27 13:50:32",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 44937
+    },
+    {
+      "ts": "2026-06-27 13:50:59",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 44949
+    },
+    {
+      "ts": "2026-06-27 13:51:26",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 44977
+    },
+    {
+      "ts": "2026-06-27 13:51:53",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 44977
+    },
+    {
+      "ts": "2026-06-27 13:52:20",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 45217
+    },
+    {
+      "ts": "2026-06-27 13:52:48",
+      "coupling": null,
+      "null": 0.0,
+      "decoupled_energy": null,
+      "grid": 0,
+      "abstain": "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)",
+      "nqpv": null,
+      "lag_ms": null,
+      "frames": 45375
+    }
+  ],
+  "proofs": [
+    {
+      "ts": "2026-06-27 12:40:57",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.009,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 12:41:44",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.023,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 12:42:30",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.14,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 12:43:15",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.164,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 12:44:01",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.079,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 12:44:47",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.079,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 12:45:32",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.193,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 12:46:18",
+      "verdict": "COUPLED_CLEAN",
+      "coupling": 0.684,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 12:47:04",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.07,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 12:47:49",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.092,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 12:48:35",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.035,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 12:49:20",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.089,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 12:50:06",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.198,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 12:50:51",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.131,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 12:51:37",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.086,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 12:52:23",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.111,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 12:53:08",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.073,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 12:53:54",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.086,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 12:54:39",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.097,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 12:55:25",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.02,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 12:56:11",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.003,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 12:56:56",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.059,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 12:57:42",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.118,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 12:58:28",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.082,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 12:59:13",
+      "verdict": "COUPLED_CLEAN",
+      "coupling": 0.205,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 12:59:59",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.09,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:00:45",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.008,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:01:30",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.021,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:02:16",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.054,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:03:01",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.084,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:03:47",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.195,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:04:33",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.177,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:05:18",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.093,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:06:04",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.081,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:06:49",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.103,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:07:35",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.116,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:08:21",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.057,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:09:06",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.126,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:09:52",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.19,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:10:38",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.136,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:11:23",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.121,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:12:09",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.078,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:12:54",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.153,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:13:40",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.153,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:14:26",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.073,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:15:11",
+      "verdict": "IMPLAUSIBLE",
+      "coupling": 0.136,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:15:57",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:16:42",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:17:27",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:18:12",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:18:58",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:19:43",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:20:28",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:21:14",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:21:59",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:22:44",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:23:29",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:24:15",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:25:00",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:25:45",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:26:30",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:27:16",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:28:01",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:28:46",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:29:31",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:30:17",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:31:02",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:31:47",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:32:33",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:33:18",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:34:03",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:34:48",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:35:34",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:36:19",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:37:04",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:37:50",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:38:35",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:39:20",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:40:06",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:40:51",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:41:36",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:42:22",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:43:07",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:43:52",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:44:38",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:45:23",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:46:08",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:46:53",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:47:38",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:48:23",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:49:08",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:49:53",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:50:39",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:51:24",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:52:09",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    },
+    {
+      "ts": "2026-06-27 13:52:54",
+      "verdict": "None",
+      "coupling": null,
+      "ok": true
+    }
+  ],
+  "summary": {
+    "diag_total": 127,
+    "computed": 52,
+    "abstained": 75,
+    "proofs": 96
+  }
+}
