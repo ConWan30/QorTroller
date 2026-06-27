@@ -60,3 +60,21 @@ def test_restart_within_cooldown_suppressed():
     before = s._reacquires
     assert s.restart_if_stalled(stall_s=4.0, cooldown_s=8.0) is False
     assert s._reacquires == before
+
+
+def test_monitor_mode_targets_display():
+    s = WgcFrameSource(RetinaGameCaptureCore(ncaa_profile=False), "Remote Play", monitor_index=1)
+    assert s._monitor_index == 1
+    assert "monitor #1" in s._target_desc
+
+
+def test_window_mode_is_default():
+    s = WgcFrameSource(RetinaGameCaptureCore(ncaa_profile=False), "Remote Play")
+    assert s._monitor_index == 0
+    assert "Remote Play" in s._target_desc
+
+
+def test_retina_game_capture_passes_monitor_through():
+    from vapi_bridge.qortroller_retina_capture import RetinaGameCapture
+    rgc = RetinaGameCapture("Remote Play", monitor_index=2)
+    assert rgc._source._monitor_index == 2

@@ -413,7 +413,10 @@ class DualShockTransport:
         if getattr(cfg, "retina_game_capture_enabled", False):
             try:
                 from .qortroller_retina_capture import RetinaGameCapture
-                _rgc = RetinaGameCapture(getattr(cfg, "retina_game_capture_window", "Remote Play"))
+                _rgc = RetinaGameCapture(
+                    getattr(cfg, "retina_game_capture_window", "Remote Play"),
+                    monitor_index=int(getattr(cfg, "retina_game_capture_monitor", 0)),
+                )
                 if _rgc.start():
                     self._retina_game_capture = _rgc
                     log.info("QorTroller Retina Game Capture STARTED (window substr=%r)",
