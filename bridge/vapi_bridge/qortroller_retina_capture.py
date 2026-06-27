@@ -93,14 +93,16 @@ class WgcFrameSource:
     just abstains). Captures DIGITAL frames of the Remote Play / game window (no camera)."""
 
     def __init__(self, core: RetinaGameCaptureCore, window_substr: str, *, downscale: int = 4,
-                 monitor_index: int = 0) -> None:
+                 monitor_index: int = 0, min_update_interval_ms: int = 0) -> None:
         self._core = core
         self._window = window_substr
         self._monitor_index = int(monitor_index)   # >=1 -> capture that monitor instead of the window
+        self._min_update_interval_ms = max(0, int(min_update_interval_ms))  # WGC/DWM-level rate cap (GPU relief)
         self._target_desc = (f"monitor #{monitor_index}" if int(monitor_index) >= 1
                              else f"window ~'{window_substr}'")
         self._downscale = downscale
         self._cap = None
+        self._control = None        # CaptureControl from start_free_threaded() — the REAL stop() handle (GPU release)
         self._prev_gray = None
         self._prev_ts: Optional[float] = None
         self._running = False
@@ -121,11 +123,15 @@ class WgcFrameSource:
             log.warning("RetinaGameCapture: WGC/cv_motion unavailable (lobe abstains): %s", exc)
             return False
         try:
+            # GPU-competition relief: minimum_update_interval throttles WGC at the DWM level (fewer GPU
+            # frame-copies + readbacks) so screen capture doesn't starve the Remote Play decoder. 0 = uncapped.
+            _wc_kwargs = ({"minimum_update_interval": self._min_update_interval_ms}
+                          if self._min_update_interval_ms > 0 else {})
             if self._monitor_index >= 1:
-                cap = WindowsCapture(monitor_index=self._monitor_index)
+                cap = WindowsCapture(monitor_index=self._monitor_index, **_wc_kwargs)
                 self._target_desc = f"monitor #{self._monitor_index}"
             else:
-                cap = WindowsCapture(window_name=self._window)
+                cap = WindowsCapture(window_name=self._window, **_wc_kwargs)
                 self._target_desc = f"window ~'{self._window}'"
 
             @cap.event
@@ -170,7 +176,7 @@ class WgcFrameSource:
                 self._running = False
 
             self._cap = cap
-            cap.start_free_threaded()                  # background thread; non-blocking
+            self._control = cap.start_free_threaded()   # store the CaptureControl (WindowsCapture has no stop())
             self._running = True
             self._last_frame_wall = time.time()        # fresh clock so stall detection waits for real frames
             log.info("RetinaGameCapture: WGC capturing %s (digital screen-grab, no camera)",
@@ -225,10 +231,15 @@ class WgcFrameSource:
     def stop(self) -> None:
         self._running = False
         try:
-            if self._cap is not None and hasattr(self._cap, "stop"):
-                self._cap.stop()
+            # WindowsCapture has no stop(); only the CaptureControl from start_free_threaded() does. The prior
+            # self._cap.stop() was a silent no-op (hasattr False) -> the WGC session never actually halted, so
+            # the GPU was never released until the process died. Use the control so stop() truly stops capture.
+            if self._control is not None:
+                self._control.stop()
         except Exception:  # noqa: BLE001
             pass
+        finally:
+            self._control = None
 
 
 class RetinaGameCapture:
@@ -236,10 +247,11 @@ class RetinaGameCapture:
     latest_coupled_verdict() read by the co-capture hook -> meta['retina_coupled_verdict']."""
 
     def __init__(self, window_substr: str, *, ncaa_profile: bool = True, downscale: int = 4,
-                 monitor_index: int = 0) -> None:
+                 monitor_index: int = 0, min_update_interval_ms: int = 0) -> None:
         self.core = RetinaGameCaptureCore(ncaa_profile=ncaa_profile)
         self._source = WgcFrameSource(self.core, window_substr, downscale=downscale,
-                                      monitor_index=monitor_index)
+                                      monitor_index=monitor_index,
+                                      min_update_interval_ms=min_update_interval_ms)
         self.started = False
         # Adaptive lag/FPS governor — meticulously widens the oracle's causal-lag search window to track
         # the live Remote Play latency (and tunes resample-rate/downscale for estimator validity).

@@ -1937,6 +1937,38 @@ class Config:
     retina_perception_window: int = field(
         default_factory=lambda: _env_int("RETINA_PERCEPTION_WINDOW", 120)
     )
+    # GPU-competition relief (observer effect): cap WGC capture at the DWM level so screen-grab doesn't
+    # starve the Remote Play decoder (capturing the screen lags the very game it observes). 0 = uncapped;
+    # ~90ms (~11fps) keeps COUPLED_CLEAN (proven live at 13.6fps) while freeing the GPU for the stream.
+    retina_capture_min_interval_ms: int = field(
+        default_factory=lambda: _env_int("RETINA_CAPTURE_MIN_INTERVAL_MS", 0)
+    )
+    # Presence-burst (duty-cycle) capture — coexist with the Remote Play stream. WGC capture lags the GPU
+    # decoder (observer effect, confirmed live), so capture in brief BURSTS for periodic/on-demand presence
+    # proofs and stay off (smooth) between. Default-off = continuous capture (legacy). period<=0 -> on-demand.
+    retina_capture_burst_enabled: bool = field(
+        default_factory=lambda: _env_bool("RETINA_CAPTURE_BURST_ENABLED", False)
+    )
+    retina_burst_duration_s: float = field(
+        default_factory=lambda: _env_float("RETINA_BURST_DURATION_S", 6.0)
+    )
+    retina_burst_period_s: float = field(
+        default_factory=lambda: _env_float("RETINA_BURST_PERIOD_S", 60.0)
+    )
+    # On-demand trigger file: with retina_burst_period_s<=0 the burst fires ONLY when this file appears (then
+    # deletes it) — zero capture/lag during play, a proof on request (`touch <path>`). The competitive-play
+    # posture: smooth normal play, a deliberate ~burst only when a presence proof is wanted.
+    retina_burst_trigger_path: str = field(
+        default_factory=lambda: os.environ.get("RETINA_BURST_TRIGGER_PATH",
+                                               os.path.expanduser("~/.vapi/presence_trigger"))
+    )
+    # Lean presence mode — run ONLY DualShock + retina/coupling + duty-cycle for live-play presence capture
+    # over Remote Play; gate off the ~30-agent fleet + grind + PCC + chain reconcilers (the measured ~38% CPU
+    # that lags the stream; bridge-down = perfect). Default-off = full bridge. Pair with GRIND_MODE=false +
+    # provenance off (+ ideally a fresh small DB) for max leanness.
+    presence_lean_mode: bool = field(
+        default_factory=lambda: _env_bool("PRESENCE_LEAN_MODE", False)
+    )
     retina_dynamics_horizon: int = field(
         default_factory=lambda: _env_int("RETINA_DYNAMICS_HORIZON", 5)
     )
