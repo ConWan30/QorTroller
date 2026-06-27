@@ -188,6 +188,42 @@ class CouplingFeatures:
     coupled: bool                  # coupling_score >= COUPLING_THRESHOLD
 
 
+@dataclass(frozen=True)
+class GatedBurstSummary:
+    """Outcome of the LIVE per-burst decoupled-energy gate (P1; runtime analog of the calibration-time
+    coupling_threshold_calibration.gate_coupled_by_decoupled_energy)."""
+    coupled: bool
+    representative_coupling: Optional[float]   # median coupling of the kept genuine-aim windows
+    decoupled_cutoff: Optional[float]
+    n_kept: int
+    n_total: int
+
+
+def gate_features_by_decoupled_energy(pairs, *, keep_quantile: float = 0.5,
+                                      threshold: Optional[float] = None) -> "GatedBurstSummary":
+    """LIVE per-burst decoupled-energy gate: rank a burst's computed windows by decoupled_energy, keep the
+    lowest-DE (most right-stick-driven = genuine-aim) fraction, and base the burst verdict on the MEDIAN
+    coupling of the kept windows. `pairs` = (coupling_score, decoupled_energy) per computed window.
+
+    Rationale (campaign 2026-06-27): walking/world-scroll windows carry high decoupled_energy and dilute the
+    coupling correlation; a window can clear a low threshold (e.g. 0.06) on walking dilution alone, falsely
+    reading COUPLED. Gating those windows out keeps the verdict on genuine aim. The cut is RELATIVE (a quantile
+    within the burst), NOT an absolute DE threshold — decoupled_energy runs ~0.97-0.99 in busy scenes, so an
+    absolute cut is scene/stream/game-fragile. Returns a GatedBurstSummary; coupled iff the kept-window median
+    coupling >= threshold (default COUPLING_THRESHOLD). Pure + deterministic."""
+    thr = COUPLING_THRESHOLD if threshold is None else float(threshold)
+    clean = [(float(c), float(d)) for c, d in pairs if c is not None and d is not None]
+    n_total = len(clean)
+    if n_total == 0:
+        return GatedBurstSummary(False, None, None, 0, 0)
+    cutoff = float(np.quantile([d for _, d in clean], keep_quantile))
+    kept = [c for c, d in clean if d <= cutoff]
+    if not kept:
+        return GatedBurstSummary(False, None, round(cutoff, 6), 0, n_total)
+    rep = float(np.median(kept))
+    return GatedBurstSummary(rep >= thr, round(rep, 6), round(cutoff, 6), len(kept), n_total)
+
+
 # ---------------------------------------------------------------------------
 # Oracle (same shape as L2C's StickImuCorrelationOracle)
 # ---------------------------------------------------------------------------
