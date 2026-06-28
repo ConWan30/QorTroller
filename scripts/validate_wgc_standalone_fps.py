@@ -33,6 +33,8 @@ def main() -> None:
     ap.add_argument("--seconds", type=int, default=30)
     args = ap.parse_args()
 
+    import logging
+    logging.basicConfig(level=logging.INFO, format="%(message)s")  # surface the WGC timestamp units log
     from vapi_bridge.qortroller_retina_capture import RetinaGameCapture
     rgc = RetinaGameCapture(args.window, monitor_index=args.monitor)
     if not rgc.start():
@@ -47,7 +49,10 @@ def main() -> None:
         time.sleep(5.0)
         fs = rgc.frames_seen
         el = time.time() - t0
-        print(f"  t={el:4.0f}s  frames_seen={fs}  (~{fs/el:.1f} fps avg, +{fs-last} in last 5s)", flush=True)
+        st = rgc.status()
+        print(f"  t={el:4.0f}s  frames_seen={fs}  (~{fs/el:.1f} fps avg, +{fs-last} in last 5s)  "
+              f"ts_source={st.get('ts_source')} ts_offset_ms={st.get('ts_offset_ms')} "
+              f"fmt={st.get('frame_format')}", flush=True)
         last = fs
 
     fs = rgc.frames_seen
