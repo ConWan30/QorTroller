@@ -66,6 +66,14 @@ class RetinaGameCaptureCore:
         self._cfg: ContinuousConfig = NCAA_CONTINUOUS_CONFIG if ncaa_profile else ContinuousConfig()
         self._last_feats = None   # last CouplingFeatures (exposes coupling_score + best-lag_ms for diag)
         self._feats_history = []  # (coupling_score, decoupled_energy) per computed window, for the P1 burst gate
+        # Channel B1 (trigger->HUD): R2 trigger (from feed_hid loop) vs center-ROI flash response (from frames).
+        # Fail-open: if the channel module can't load, the geometric channel still works.
+        try:
+            from l9_presence.trigger_hud_coupling import TriggerHudCouplingOracle
+            self._th_oracle = TriggerHudCouplingOracle()
+        except Exception:  # noqa: BLE001
+            self._th_oracle = None
+        self._last_th = None      # last TriggerHudFeatures, for diag
 
     def feed_hid(self, ts_ms: float, right_stick_x: float, right_stick_y: float) -> None:
         self._oracle.push_input(ts_ms, right_stick_x, right_stick_y)
@@ -100,6 +108,27 @@ class RetinaGameCaptureCore:
         (median coupling of the lowest-DE genuine-aim windows vs COUPLING_THRESHOLD). Pure delegate."""
         from l9_presence.coupling import gate_features_by_decoupled_energy
         return gate_features_by_decoupled_energy(list(self._feats_history), keep_quantile=keep_quantile)
+
+    # --- Channel B1: trigger->HUD (R2 trigger vs center-ROI flash response) -----------------------------
+    def feed_trigger(self, ts_ms: float, r2_value: float) -> None:
+        """R2 trigger position (0..255) from the HID loop into the trigger->HUD oracle."""
+        if self._th_oracle is not None:
+            self._th_oracle.push_trigger(ts_ms, r2_value)
+
+    def feed_roi(self, ts_ms: float, roi_value: float) -> None:
+        """Center-ROI luminance (muzzle flash / reticle bloom spikes it) from the retina frames."""
+        if self._th_oracle is not None:
+            self._th_oracle.push_roi(ts_ms, roi_value)
+
+    def latest_trigger_hud(self):
+        """Channel B1 report -> (TriggerHudFeatures, negative_control) or None (abstain: not firing / no data)."""
+        if self._th_oracle is None:
+            return None
+        f = self._th_oracle.extract_features()
+        self._last_th = f
+        if f is None:
+            return None
+        return f, self._th_oracle.negative_control()
 
 
 class WgcFrameSource:
@@ -169,6 +198,15 @@ class WgcFrameSource:
                     bgr = self._to_u8_bgr(buf_small)       # HDR-aware: uint16 / scRGB-float -> 8-bit BGR
                     gray = to_gray_small(bgr, 1)           # cvtColor only — stride already downscaled
                     now = time.time() * 1000.0
+                    # Channel B1: center-ROI mean luminance (muzzle flash / reticle bloom spikes it) ->
+                    # the trigger->HUD oracle. Best-effort; a bad ROI never kills the capture thread.
+                    try:
+                        _gh, _gw = gray.shape[:2]
+                        _roi = gray[int(_gh * 0.35):int(_gh * 0.65), int(_gw * 0.35):int(_gw * 0.65)]
+                        if _roi.size:
+                            self._core.feed_roi(now, float(_roi.mean()))
+                    except Exception:  # noqa: BLE001
+                        pass
                     # Shape guard: the governor changes downscale live, which changes the gray image size.
                     # Optical flow REQUIRES prev.size()==next.size(); a mismatch must SKIP motion (re-baseline),
                     # never throw — else prev_gray never updates and every later frame fails forever.
@@ -280,6 +318,10 @@ class RetinaGameCapture:
     def feed_hid(self, ts_ms: float, right_stick_x: float, right_stick_y: float) -> None:
         self.core.feed_hid(ts_ms, right_stick_x, right_stick_y)
 
+    def feed_trigger(self, ts_ms: float, r2_value: float) -> None:
+        """Channel B1: R2 trigger (from the HID loop) into the trigger->HUD oracle."""
+        self.core.feed_trigger(ts_ms, r2_value)
+
     def latest_coupled_verdict(self) -> Optional[str]:
         return self.core.latest_coupled_verdict()
 
@@ -325,6 +367,7 @@ class RetinaGameCapture:
         rep = self.core.latest_l9_report()
         feats = self.core._last_feats
         nc = self.core._oracle.negative_control()    # shuffle null (chance coupling) — the FAR baseline
+        th = self.core.latest_trigger_hud()          # Channel B1 (trigger->HUD): (features, null) or None
         return {
             "started": self.started,
             "frames_seen": self._source.frames_seen,
@@ -345,6 +388,12 @@ class RetinaGameCapture:
             "governor": self._governor.telemetry_summary(),
             "abstain_reason": (None if rep is not None else
                                "extract_features None (right-stick aim activity < MIN_STICK_STD or < MIN_GRID_SAMPLES)"),
+            # Channel B1 (trigger->HUD; live-wired P2) — R2 trigger vs center-ROI flash coupling + shuffle null
+            "th_coupling": (round(th[0].coupling_score, 3) if th else None),
+            "th_null": (round(th[1], 3) if (th and th[1] is not None) else None),
+            "th_lag_ms": (round(th[0].lag_ms, 1) if th else None),
+            "th_coupled": (th[0].coupled if th else None),
+            "th_fires": (th[0].fire_events if th else None),
         }
 
     def stop(self) -> None:
