@@ -1650,6 +1650,12 @@ class DualShockTransport:
                             self._last_combat_burst_ts = time.time()
                             asyncio.create_task(self._presence_burst.fire_once())
                             log.info("Retina combat-trigger: R2 fire -> auto presence burst")
+                        if _r2 > 10 and self._prev_r2_combat <= 10:   # R2 PROBE (capture-session diag)
+                            log.info("R2 PROBE: pull r2=%d thr=%d active=%s cooldown_left=%.1fs", _r2,
+                                     int(getattr(self._cfg, "retina_combat_r2_threshold", 40)),
+                                     self._presence_burst.is_active,
+                                     max(0.0, float(getattr(self._cfg, "retina_combat_cooldown_s", 18.0))
+                                         - (time.time() - self._last_combat_burst_ts)))
                         self._prev_r2_combat = _r2
                 _frame_msg = _json.dumps({"type": "frames", "frames": _out})
                 asyncio.create_task(_fbc(_frame_msg))

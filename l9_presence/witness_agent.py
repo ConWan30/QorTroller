@@ -416,6 +416,9 @@ def _cli() -> int:
     pr.add_argument("--hud-region", nargs=4, type=int, metavar=("X", "Y", "W", "H"),
                     default=None, help="screen region to OCR for down/distance/clock (needs "
                                        "tesseract); enables the discrete-coherence channel")
+    pr.add_argument("--backend", default="mss",
+                    choices=("auto", "wgc", "bettercam", "dxcam", "mss"),
+                    help="capture backend; 'wgc' is 60fps + overlay-capable (recommended)")
     pr.add_argument("--once", action="store_true", help="capture a single session and exit")
 
     hm = sub.add_parser("harvest-menu",
@@ -438,6 +441,7 @@ def _cli() -> int:
         return 0
     if a.cmd == "run":
         cfg = WitnessConfig(player=a.player, duration_s=a.duration, region=tuple(a.region),
+                            backend=a.backend,
                             hud_region=(tuple(a.hud_region) if a.hud_region else None))
         agent = WitnessAgent(cfg)
         if a.once:

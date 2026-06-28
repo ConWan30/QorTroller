@@ -106,6 +106,18 @@ class PresenceBurstController:
         proof["de_gated"] = True
         proof["n_kept"] = n_kept
         proof["n_total"] = n_total
+        # trigger->HUD diagnostic (capture-session corpus aid): B1 flash + B2 RED hitmarker per burst.
+        for _k in ("th_coupling", "th_null", "th_coupled", "th_fires",
+                   "th2_coupling", "th2_null", "th2_coupled"):
+            proof[_k] = st.get(_k)
+        if self._log is not None:
+            try:
+                self._log.info("trigger-hud burst: th2_coupling=%s th2_null=%s th2_coupled=%s "
+                               "th_coupling=%s th_fires=%s",
+                               st.get("th2_coupling"), st.get("th2_null"), st.get("th2_coupled"),
+                               st.get("th_coupling"), st.get("th_fires"))
+            except Exception:  # noqa: BLE001
+                pass
         return proof
 
     def _record(self, ok: bool, verdict, coupling, null, grid, elapsed_s: float,
