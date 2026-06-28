@@ -433,6 +433,8 @@ class DualShockTransport:
                     self._presence_burst = PresenceBurstController(_rgc, burst_s=_bs, period_s=_bp,
                                                                    trigger_path=_tp, log=log,
                                                                    de_gate=_dg, de_keep_quantile=_dq)
+                    self._prev_r2_combat = 0          # R2 edge state for the combat-triggered burst
+                    self._last_combat_burst_ts = 0.0
                     log.info("QorTroller Retina presence-burst mode — %s (burst=%.1fs%s)",
                              ("ON-DEMAND (no capture until trigger %r)" % _tp) if _bp <= 0
                              else "periodic duty-cycle, capture OFF between bursts",
@@ -1633,6 +1635,22 @@ class DualShockTransport:
                         self._retina_game_capture.feed_hid(
                             _ts, float(_rs.right_stick_x), float(_rs.right_stick_y))
                         self._retina_game_capture.feed_trigger(_ts, float(_rs.r2_trigger))  # Channel B1: trigger->HUD
+                    # Combat-triggered burst: R2 crossing the fire threshold auto-fires a presence burst so the
+                    # trigger->HUD window is captured hands-free. Default-off; cooldown + single-flight prevent
+                    # stacking. Honest cost: capturing briefly lags the gunfight (WGC observer effect).
+                    if (self._presence_burst is not None
+                            and getattr(self._cfg, "retina_burst_combat_trigger_enabled", False)):
+                        from .presence_burst import should_combat_fire
+                        _r2 = int(getattr(frames[-1], "r2_trigger", 0) or 0)
+                        if should_combat_fire(_r2, self._prev_r2_combat,
+                                              int(getattr(self._cfg, "retina_combat_r2_threshold", 40)),
+                                              self._last_combat_burst_ts, time.time(),
+                                              float(getattr(self._cfg, "retina_combat_cooldown_s", 18.0)),
+                                              self._presence_burst.is_active):
+                            self._last_combat_burst_ts = time.time()
+                            asyncio.create_task(self._presence_burst.fire_once())
+                            log.info("Retina combat-trigger: R2 fire -> auto presence burst")
+                        self._prev_r2_combat = _r2
                 _frame_msg = _json.dumps({"type": "frames", "frames": _out})
                 asyncio.create_task(_fbc(_frame_msg))
                 # Phase 59: also send to per-device twin clients

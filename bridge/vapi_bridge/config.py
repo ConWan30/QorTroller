@@ -1972,6 +1972,19 @@ class Config:
     retina_burst_de_keep_quantile: float = field(
         default_factory=lambda: _env_float("RETINA_BURST_DE_KEEP_QUANTILE", 0.5)
     )
+    # Combat-triggered burst (default-off): auto-fire a presence burst the moment R2 crosses the fire
+    # threshold (you start shooting) — captures the trigger->HUD window hands-free, no manual signal.
+    # HONEST COST: capturing during a gunfight briefly lags it (WGC observer effect); the sidecar DEVICE is
+    # the lag-free production answer. Cooldown + single-flight stop it stacking bursts during sustained fire.
+    retina_burst_combat_trigger_enabled: bool = field(
+        default_factory=lambda: _env_bool("RETINA_BURST_COMBAT_TRIGGER_ENABLED", False)
+    )
+    retina_combat_r2_threshold: int = field(
+        default_factory=lambda: _env_int("RETINA_COMBAT_R2_THRESHOLD", 40)   # ~15% of 255 = a real pull
+    )
+    retina_combat_cooldown_s: float = field(
+        default_factory=lambda: _env_float("RETINA_COMBAT_COOLDOWN_S", 18.0)  # > burst (15s) -> no overlap
+    )
     # Lean presence mode — run ONLY DualShock + retina/coupling + duty-cycle for live-play presence capture
     # over Remote Play; gate off the ~30-agent fleet + grind + PCC + chain reconcilers (the measured ~38% CPU
     # that lags the stream; bridge-down = perfect). Default-off = full bridge. Pair with GRIND_MODE=false +
