@@ -1,0 +1,11 @@
+# VSD synthesis vault — line-ending policy (load-bearing for the immutable harness).
+#
+# Notes under vsd-vault/notes/ are Ed25519-signed against their EXACT bytes — the harness
+# (vsd-vault/.vsd/vsd_provenance.py::note_canonical_hash) hashes raw note bytes with NO
+# line-ending normalization. The vault's committed signing form is CRLF, and the Synthesis
+# Integrity Chain commits to the CRLF-signed PBSA manifests. Force CRLF on checkout so every
+# signature verifies on every platform regardless of core.autocrlf — otherwise autocrlf smudges
+# the LF-normalized blobs to CRLF (and a Linux checkout leaves them LF), the bytes change, and the
+# harness fails closed on a hash mismatch (this is what stranded cycle 49 before 2026-06-28).
+# See vsd-vault/orchestrator/SYNTHESIS_LOOP.md.
+vsd-vault/notes/**/*.md text eol=crlf

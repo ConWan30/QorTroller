@@ -6,7 +6,7 @@ created: 2026-06-27T19:35:00Z
 modified: 2026-06-27T19:35:00Z
 phase: VSD-LOOP
 status: draft
-confidence: plausible
+confidence: possible
 effort: 70
 deployer: 0x0Cf36dB57fc4680bcdfC65D1Aff96993C57a4692
 refs: []
