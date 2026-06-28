@@ -1632,6 +1632,7 @@ class DualShockTransport:
                         _ts = _now_ms - _delta if (0.0 <= _delta <= 1000.0) else _now_ms
                         self._retina_game_capture.feed_hid(
                             _ts, float(_rs.right_stick_x), float(_rs.right_stick_y))
+                        self._retina_game_capture.feed_trigger(_ts, float(_rs.r2_trigger))  # Channel B1: trigger->HUD
                 _frame_msg = _json.dumps({"type": "frames", "frames": _out})
                 asyncio.create_task(_fbc(_frame_msg))
                 # Phase 59: also send to per-device twin clients
