@@ -122,3 +122,12 @@ def test_center_luminance_tracks_brightness():
     assert TH.center_roi_luminance(gray_bright) > 200.0
     assert TH.center_roi_luminance(gray_dark) < 10.0
     assert TH.center_roi_luminance(np.zeros((0, 0))) == 0.0   # empty ROI -> 0.0, never throws
+
+
+def test_b1_roi_defaults_to_lower_region_for_muzzle_flash():
+    """B1's luminance box defaults LOWER-center (the muzzle flash is below the crosshair): a frame bright
+    only in the lower third reads HIGH from the default B1 box but LOW from a forced centered box."""
+    gray = np.zeros((100, 100), dtype=np.float64)
+    gray[66:100, :] = 255.0                                  # bright lower third = the muzzle zone
+    assert TH.center_roi_luminance(gray) > 110.0             # default (v_center=0.66) sits in the bright zone
+    assert TH.center_roi_luminance(gray, v_center=0.5) < 60.0  # a centered box would mostly miss it

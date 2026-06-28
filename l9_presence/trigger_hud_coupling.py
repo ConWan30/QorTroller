@@ -54,6 +54,13 @@ MIN_FIRE_STD: float = float(_os.getenv("L9_MIN_FIRE_STD", "0.02"))
 """If R2 trigger activity is below this (player not firing), coupling is undefined → return None
 (neutral), exactly as the geometric oracle abstains in the dead-zone."""
 
+# B1 (flash) ROI — the muzzle flash sits BELOW the crosshair (gun barrel is bottom-center), so the B1
+# luminance box defaults LOWER-center + LARGER than B2's centered hitmarker box. Live-validation 2026-06-27
+# showed the old centered 0.30 box undersampled the flash (B1 median 0.085). Env-tunable per game/gun.
+B1_ROI_FRAC: float = float(_os.getenv("L9_B1_ROI_FRAC", "0.45"))
+B1_ROI_VCENTER: float = float(_os.getenv("L9_B1_ROI_VCENTER", "0.66"))   # 0.5=center, >0.5=lower
+B1_ROI_HCENTER: float = float(_os.getenv("L9_B1_ROI_HCENTER", "0.5"))
+
 _BUFFER_MAXLEN: int = 4096
 
 
@@ -171,23 +178,30 @@ class TriggerHudCouplingOracle:
 # Center-ROI signal extractors (the per-frame scalars the channels correlate against the trigger)
 # ---------------------------------------------------------------------------
 
-def center_roi_luminance(gray, frac: float = 0.30) -> float:
-    """B1 signal — mean luminance of the central `frac` box. A muzzle flash / reticle bloom spikes it.
-    `gray` = HxW grayscale frame. Returns 0.0 on an empty ROI."""
-    h, w = gray.shape[:2]
+def _roi_box(arr, frac: float, v_center: float, h_center: float):
+    """Sub-array of `arr` (HxW[xC]) for a box of size `frac` centered at (v_center, h_center), each in [0,1]."""
+    h, w = arr.shape[:2]
     m = frac / 2.0
-    roi = gray[int(h * (0.5 - m)):int(h * (0.5 + m)), int(w * (0.5 - m)):int(w * (0.5 + m))]
+    y0 = int(h * max(0.0, v_center - m)); y1 = int(h * min(1.0, v_center + m))
+    x0 = int(w * max(0.0, h_center - m)); x1 = int(w * min(1.0, h_center + m))
+    return arr[y0:y1, x0:x1]
+
+
+def center_roi_luminance(gray, frac: float = B1_ROI_FRAC,
+                         v_center: float = B1_ROI_VCENTER, h_center: float = B1_ROI_HCENTER) -> float:
+    """B1 signal — mean luminance of a box centered at (v_center, h_center) of size `frac`. Defaults to a
+    LOWER-center + larger box (the muzzle flash sits below the crosshair); env-tunable via L9_B1_ROI_*.
+    `gray` = HxW grayscale frame. Returns 0.0 on an empty ROI."""
+    roi = _roi_box(gray, frac, v_center, h_center)
     return float(roi.mean()) if roi.size else 0.0
 
 
-def center_roi_redness(bgr, frac: float = 0.30) -> float:
-    """B2 signal — red-DOMINANCE of the central box: mean of clamp(R - max(G, B), 0). `bgr` = HxWx3(+)
-    in OpenCV B,G,R order. A RED hitmarker / enemy-lock reticle spikes it; a WHITE muzzle flash
-    (R≈G≈B) does NOT — that separation is exactly why B2 is hit-specific and B1 is flash-generic.
-    Returns 0.0 on an empty / non-color ROI."""
-    h, w = bgr.shape[:2]
-    m = frac / 2.0
-    roi = bgr[int(h * (0.5 - m)):int(h * (0.5 + m)), int(w * (0.5 - m)):int(w * (0.5 + m))]
+def center_roi_redness(bgr, frac: float = 0.30, v_center: float = 0.5, h_center: float = 0.5) -> float:
+    """B2 signal — red-DOMINANCE of the (default CENTERED — the hitmarker is AT the crosshair) box: mean of
+    clamp(R - max(G, B), 0). `bgr` = HxWx3(+) in OpenCV B,G,R order. A RED hitmarker / enemy-lock reticle
+    spikes it; a WHITE muzzle flash (R≈G≈B) does NOT — that separation is why B2 is hit-specific and B1 is
+    flash-generic. Returns 0.0 on an empty / non-color ROI."""
+    roi = _roi_box(bgr, frac, v_center, h_center)
     if roi.size == 0 or roi.shape[-1] < 3:
         return 0.0
     r = roi[..., 2].astype(np.float64)
