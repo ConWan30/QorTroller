@@ -9,7 +9,7 @@ harness — the synthesis-domain twin of the autoresearch loop and the GIC-stamp
 3. **Decide** — sign routine notes with the architect Ed25519 key; leave decision notes operator-pending (split-signing).
 4. **Act + verify (the deterministic checker)** — run, in order:
    - `vsd_eval_harness.py` (synthesis invariants over `notes/`)
-   - `scripts/vapi_invariant_gate.py` (PV-CI, must stay 179 — never edited)
+   - `scripts/vapi_invariant_gate.py` (PV-CI, must stay 182 — never edited)
    - best-effort `mythos_methodology_drift` + `mythos_frozen_drift`
 5. **Commit provenance** — on PASS: `compute_sic(...)` stamps the Synthesis Integrity Chain, append `eval/synthesis_ledger.jsonl`, regenerate `corpus/` from passing notes only.
 
@@ -21,7 +21,7 @@ python vsd-vault/.vsd/vsd_eval_harness.py --report      # the checker, standalon
 ```
 
 ## /goal stop condition (verifiable)
-harness exit 0 · PV-CI exit 0 (179) · mythos drift 0 · required seeds present + verifying ·
+harness exit 0 · PV-CI exit 0 (182) · mythos drift 0 · required seeds present + verifying ·
 decision note `signed:false/pending:operator` · SIC chain re-verifies · ledger has ≥1 cycle.
 
 See `BOUNDARIES.md` for what this orchestrator must never touch.
