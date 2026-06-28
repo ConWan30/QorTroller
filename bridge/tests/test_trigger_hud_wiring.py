@@ -59,3 +59,24 @@ def test_live_wired_no_fire_abstains():
     for t in np.arange(0.0, 4000.0, 1000.0 / 60.0):
         core.feed_roi(float(t), 20.0)
     assert core.latest_trigger_hud() is None                       # abstain (neutral, not a false accusation)
+
+
+def test_live_wired_b2_hit_couples_independently_of_b1():
+    """B2 (trigger->RED hitmarker) runs on its own oracle: feed_trigger feeds both, feed_roi_red drives
+    B2 only. Genuine hits -> red spikes synced to your trigger -> B2 couples; B1 (no luminance fed) abstains."""
+    core = RetinaGameCaptureCore()
+    assert core._th2_oracle is not None
+    rng = np.random.default_rng(3)
+    tr_ts = np.arange(0.0, 4000.0, 1.0)
+    fires = np.sort(rng.uniform(250.0, 3750.0, 14))
+    for t, v in zip(tr_ts, _pulses(tr_ts, fires)):
+        core.feed_trigger(float(t), float(v))                      # feeds BOTH B1 + B2 oracles
+    roi_ts = np.arange(0.0, 4000.0, 1000.0 / 60.0)
+    red = _pulses(roi_ts, fires + 120.0) + 5.0 + 4.0 * rng.standard_normal(roi_ts.size)  # red hitmarkers follow hits
+    for t, v in zip(roi_ts, red):
+        core.feed_roi_red(float(t), float(v))                      # B2 channel only
+    rep = core.latest_hit_hud()
+    assert rep is not None
+    f, nc = rep
+    assert f.coupled is True and f.coupling_score > 0.6 and f.coupling_score - nc > 0.3
+    assert core.latest_trigger_hud() is None                       # B1 got no luminance feed -> abstains
