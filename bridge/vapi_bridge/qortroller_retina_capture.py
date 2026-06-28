@@ -153,6 +153,82 @@ class RetinaGameCaptureCore:
         return f, self._th2_oracle.negative_control()
 
 
+# --- Frame timestamp + ROI-crop helpers (pure; unit-tested without WGC) -------------------------------
+# WGC Direct3D11CaptureFrame.SystemRelativeTime is a QPC TimeSpan in 100 ns ticks; windows_capture passes
+# it through as frame.timespan. /1e4 -> ms. BUILD-TIME VERIFY: log raw frame.timespan deltas vs wall-clock
+# deltas on the first live frames and confirm this scale before trusting absolute lag.
+_TIMESPAN_TICKS_PER_MS: float = 10_000.0
+
+
+def align_timespan_ms(timespan_raw, wall_ms: float, state: dict):
+    """Map a WGC frame.timespan to the HID wall-clock EPOCH with QPC presentation precision — removes
+    callback-scheduling jitter from the screen-side coupling timestamps (-> tighter lag_ms -> sharper
+    cross-channel latency invariant). Pure: threads `state` ({'offset_ms','last_ts_ms'}). FAIL-OPEN:
+    missing / zero / non-monotonic timespan -> wall_ms with offset untouched. Returns
+    (screen_ts_ms, state, source) with source in {'timespan','wall_fallback'}."""
+    if timespan_raw is None:
+        return wall_ms, state, "wall_fallback"
+    try:
+        ts_ms = float(timespan_raw) / _TIMESPAN_TICKS_PER_MS
+    except (TypeError, ValueError):
+        return wall_ms, state, "wall_fallback"
+    if not (ts_ms > 0.0):
+        return wall_ms, state, "wall_fallback"
+    last = state.get("last_ts_ms")
+    if last is not None and ts_ms < last:           # presentation time must be monotonic
+        return wall_ms, state, "wall_fallback"
+    if state.get("offset_ms") is None:
+        state["offset_ms"] = wall_ms - ts_ms        # one-time epoch anchor to the HID clock
+    state["last_ts_ms"] = ts_ms
+    return ts_ms + state["offset_ms"], state, "timespan"
+
+
+def _u8_from_scale(a, lum_scale):
+    """Normalize a raw WGC (sub-)array (BGRA/BGR; uint8/uint16/float) to contiguous uint8 BGR using a
+    PRECOMPUTED float lum_scale (ignored for integer dtypes). Pure."""
+    import numpy as np
+    if getattr(a, "ndim", 0) == 3 and a.shape[2] >= 3:
+        a = a[:, :, :3]
+    if a.dtype == np.uint8:
+        return np.ascontiguousarray(a)
+    if a.dtype == np.uint16:
+        return np.ascontiguousarray((a >> 8).astype(np.uint8))
+    a = a.astype(np.float32)
+    s = lum_scale if (lum_scale and lum_scale > 0) else 1.0
+    return np.ascontiguousarray(np.clip(a / s * 255.0, 0, 255).astype(np.uint8))
+
+
+def convert_for_channels(buf_small, lum_scale, *, b2_frac: float = 0.30,
+                         b2_vc: float = 0.5, b2_hc: float = 0.5):
+    """CPU ROI-crop convert -> (gray_full, b2_roi_bgr, lum_scale) WITHOUT materializing a full-frame BGR
+    image. gray_full is a direct numpy luma (cv2 BGR2GRAY weights) of the strided buffer — it feeds the
+    geometric channel + B1 luminance (which crops it for free); only the small B2 center-ROI is converted
+    to BGR for redness. The HDR float lum_scale is updated ONCE over the full frame and reused for both
+    outputs (recomputing it from the small ROI would inject false optical-flow / redness drift). Pure."""
+    import numpy as np
+    from l9_presence.trigger_hud_coupling import _roi_box
+    a = buf_small
+    if a.dtype.kind == "f":                          # HDR float: update shared EMA scale once
+        m = float(a.max()) if a.size else 1.0
+        if m <= 0:
+            m = 1.0
+        lum_scale = m if lum_scale is None else 0.9 * lum_scale + 0.1 * m
+    # gray via direct luma — no full-frame BGR allocation (the #2 win)
+    b = a[:, :, 0].astype(np.float32)
+    g = a[:, :, 1].astype(np.float32)
+    r = a[:, :, 2].astype(np.float32)
+    luma = 0.114 * b + 0.587 * g + 0.299 * r
+    if a.dtype == np.uint16:
+        luma = luma / 256.0
+    elif a.dtype.kind == "f":
+        s = lum_scale if (lum_scale and lum_scale > 0) else 1.0
+        luma = luma / s * 255.0
+    gray_full = np.ascontiguousarray(np.clip(luma + 0.5, 0, 255).astype(np.uint8))
+    # B2 center ROI -> BGR only (small); _roi_box returns the sub-array slice
+    roi_bgr = _u8_from_scale(_roi_box(a, b2_frac, b2_vc, b2_hc), lum_scale)
+    return gray_full, roi_bgr, lum_scale
+
+
 class WgcFrameSource:
     """Windows Graphics Capture source: captures a window in the background, runs cv_motion on each
     frame pair, and feeds on-screen pan into the core. Import-guarded; failure is non-fatal (the lobe
@@ -180,6 +256,9 @@ class WgcFrameSource:
         self._frame_err_n: int = 0
         self._lum_scale: Optional[float] = None         # EMA luminance scale for HDR-float normalization
         self.frame_format: str = "unknown"              # observed WGC buffer format (SDR uint8 vs HDR wider)
+        self._ts_state: dict = {"offset_ms": None, "last_ts_ms": None}  # presentation-clock epoch align (#1)
+        self._ts_source: str = "wall_fallback"          # last screen-ts source: 'timespan' / 'wall_fallback'
+        self._ts_logged: bool = False                   # one-time units-verification log on first timespan frame
 
     def start(self) -> bool:
         try:
@@ -203,29 +282,41 @@ class WgcFrameSource:
             @cap.event
             def on_frame_arrived(frame, capture_control):  # noqa: ANN001
                 self._last_frame_wall = time.time()        # mark arrival even if processing fails (stall clock)
+                wall_ms = self._last_frame_wall * 1000.0
                 try:
                     buf = frame.frame_buffer               # HxWx4; 8-bit BGRA (SDR) or wider under HDR
                     if self.frame_format == "unknown":
                         self.frame_format = f"{getattr(buf, 'dtype', '?')}{tuple(getattr(buf, 'shape', ()))}"
                         log.info("RetinaGameCapture: first WGC frame format=%s (HDR-aware normalization active)",
                                  self.frame_format)
+                    # #1 Presentation timestamp: use the WGC frame's own presentation time (frame.timespan),
+                    # epoch-aligned to the HID wall-clock, for the coupling feeds — removes callback jitter
+                    # so HID<->screen lag_ms is tighter. Fail-open to wall_ms if timespan is absent/zero.
+                    screen_ts, self._ts_state, self._ts_source = align_timespan_ms(
+                        getattr(frame, "timespan", None), wall_ms, self._ts_state)
+                    if self._ts_source == "timespan" and not self._ts_logged:
+                        self._ts_logged = True            # BUILD-TIME VERIFY: raw->ms scale + epoch offset
+                        log.info("RetinaGameCapture: WGC presentation timestamp ACTIVE — raw timespan=%s "
+                                 "-> %.1f ms; epoch offset=%.1f ms. Verify /%g scale: subsequent timespan "
+                                 "deltas should track frame cadence, not callback jitter.",
+                                 getattr(frame, "timespan", None),
+                                 float(getattr(frame, "timespan", 0)) / _TIMESPAN_TICKS_PER_MS,
+                                 self._ts_state.get("offset_ms") or 0.0, _TIMESPAN_TICKS_PER_MS)
                     # Downscale AT SOURCE: stride-slice the raw HxWx4 view by the live downscale BEFORE the
-                    # expensive convert, so _to_u8_bgr (the 6 MB ascontiguousarray / HDR float-normalize) +
-                    # grayscale run on ~1/d**2 the pixels instead of full 1080p (the 39fps-raw -> 7fps-processed
-                    # gap was this wasted work on 16x more pixels than we use). Read _downscale ONCE — tune()
-                    # mutates it on the bridge thread; splitting it mid-frame would desync the shape guard. The
-                    # stride already applies the downscale, so to_gray_small gets downscale=1 (no double-down).
+                    # expensive convert. Read _downscale ONCE — tune() mutates it on the bridge thread;
+                    # splitting it mid-frame would desync the shape guard.
                     d = max(1, int(self._downscale))
                     buf_small = buf[::d, ::d]              # strided view (cheap); ceil(H/d) x ceil(W/d) x 4
-                    bgr = self._to_u8_bgr(buf_small)       # HDR-aware: uint16 / scRGB-float -> 8-bit BGR
-                    gray = to_gray_small(bgr, 1)           # cvtColor only — stride already downscaled
-                    now = time.time() * 1000.0
-                    # Channels B1 (center-ROI flash luminance) + B2 (center-ROI RED hitmarker) signals ->
-                    # the trigger->HUD oracles. Best-effort; a bad ROI never kills the capture thread.
+                    # #2 CPU ROI-crop convert: full-frame GRAY (geometric + B1) + B2 center-ROI BGR only —
+                    # no full-frame BGR materialization. Shares the HDR lum_scale across both outputs.
+                    gray, b2_bgr, self._lum_scale = convert_for_channels(buf_small, self._lum_scale)
+                    # Channels B1 (center-ROI flash luminance, on full gray) + B2 (RED hitmarker, on its ROI)
+                    # -> the trigger->HUD oracles. Best-effort; a bad ROI never kills the capture thread.
                     try:
                         from l9_presence.trigger_hud_coupling import center_roi_luminance, center_roi_redness
-                        self._core.feed_roi(now, center_roi_luminance(gray))     # B1: flash
-                        self._core.feed_roi_red(now, center_roi_redness(bgr))    # B2: red hitmarker
+                        self._core.feed_roi(screen_ts, center_roi_luminance(gray))     # B1: flash (full gray)
+                        self._core.feed_roi_red(                                       # B2: red (pre-cropped ROI)
+                            screen_ts, center_roi_redness(b2_bgr, frac=1.0, v_center=0.5, h_center=0.5))
                     except Exception:  # noqa: BLE001
                         pass
                     # Shape guard: the governor changes downscale live, which changes the gray image size.
@@ -233,13 +324,13 @@ class WgcFrameSource:
                     # never throw — else prev_gray never updates and every later frame fails forever.
                     if (self._prev_gray is not None and self._prev_ts is not None
                             and self._prev_gray.shape == gray.shape):
-                        dt = (now - self._prev_ts) / 1000.0
+                        dt = (screen_ts - self._prev_ts) / 1000.0
                         if dt > 0:
                             fm = frames_to_motion(self._prev_gray, gray, dt)
-                            self._core.feed_frame_motion(now, fm.yaw_rate, fm.pitch_rate)
+                            self._core.feed_frame_motion(screen_ts, fm.yaw_rate, fm.pitch_rate)
                             self.frames_seen += 1
-                            self._frame_ts.append(now)
-                    self._prev_gray, self._prev_ts = gray, now   # ALWAYS update -> re-baseline on size change
+                            self._frame_ts.append(wall_ms)   # governor fps/stall stays on wall-clock arrival
+                    self._prev_gray, self._prev_ts = gray, screen_ts  # ALWAYS update -> re-baseline on size change
                 except Exception as _fx:  # noqa: BLE001 — a bad frame must never kill the capture thread
                     if self._frame_err_n == 0:
                         log.warning("RetinaGameCapture: frame processing error (HDR format?): %s", _fx)
@@ -265,24 +356,22 @@ class WgcFrameSource:
         return list(self._frame_ts)
 
     def _to_u8_bgr(self, buf):
-        """HDR-aware normalize. WGC delivers 8-bit BGRA under SDR, but a WIDER buffer under HDR (uint16, or
-        scRGB float16/32 where 1.0 = SDR white and highlights exceed 1.0). Return an 8-bit 3-channel array so
-        cv_motion (optical flow) works regardless of HDR state. uint16 -> deterministic >>8; float ->
-        EMA-smoothed scale (per-frame max alone would flicker brightness and inject false optical flow)."""
+        """HDR-aware normalize to 8-bit 3-channel BGR (kept for direct callers / tests; on_frame_arrived
+        now uses convert_for_channels). WGC delivers 8-bit BGRA under SDR, a WIDER buffer under HDR
+        (uint16, or scRGB float where 1.0 = SDR white). uint16 -> deterministic >>8; float -> EMA-smoothed
+        scale (per-frame max alone would flicker brightness and inject false optical flow). Updates the
+        shared float EMA scale, then delegates the pixel work to _u8_from_scale."""
         import numpy as np
         a = buf
         if getattr(a, "ndim", 0) == 3 and a.shape[2] >= 3:
             a = a[:, :, :3]
-        if a.dtype == np.uint8:
-            return np.ascontiguousarray(a)
-        if a.dtype == np.uint16:
-            return np.ascontiguousarray((a >> 8).astype(np.uint8))
-        a = a.astype(np.float32)
-        m = float(a.max()) if a.size else 1.0
-        if m <= 0:
-            m = 1.0
-        self._lum_scale = m if self._lum_scale is None else 0.9 * self._lum_scale + 0.1 * m
-        return np.ascontiguousarray(np.clip(a / self._lum_scale * 255.0, 0, 255).astype(np.uint8))
+        if a.dtype.kind == "f":
+            a32 = a.astype(np.float32)
+            m = float(a32.max()) if a32.size else 1.0
+            if m <= 0:
+                m = 1.0
+            self._lum_scale = m if self._lum_scale is None else 0.9 * self._lum_scale + 0.1 * m
+        return _u8_from_scale(buf, self._lum_scale)
 
     def restart_if_stalled(self, stall_s: float = 4.0, cooldown_s: float = 8.0) -> bool:
         """Re-acquire the window if frames stopped arriving. Remote Play recreates/fullscreens its window when
@@ -403,6 +492,9 @@ class RetinaGameCapture:
             "lag_window_ms": round(self.core._oracle.lag_max_ms, 1),             # current adaptive search ceiling
             "resample_hz": round(self.core._oracle.common_rate_hz, 1),
             "frame_format": self._source.frame_format,       # SDR uint8 vs HDR (uint16/float) — HDR-aware
+            "ts_source": self._source._ts_source,             # 'timespan' (WGC presentation) / 'wall_fallback'
+            "ts_offset_ms": (round(self._source._ts_state.get("offset_ms"), 1)
+                             if self._source._ts_state.get("offset_ms") is not None else None),
             "frame_errs": self._source._frame_err_n,
             "reacquires": self._source._reacquires,
             "frame_stall_s": (round(time.time() - self._source._last_frame_wall, 1)
