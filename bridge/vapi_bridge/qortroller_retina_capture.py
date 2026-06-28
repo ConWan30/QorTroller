@@ -511,6 +511,7 @@ class RetinaGameCapture:
             # Channel B2 (trigger->RED hitmarker; live-wired) — strongest anti-spoof (game-state-driven red)
             "th2_coupling": (round(th2[0].coupling_score, 3) if th2 else None),
             "th2_null": (round(th2[1], 3) if (th2 and th2[1] is not None) else None),
+            "th2_lag_ms": (round(th2[0].lag_ms, 1) if th2 else None),   # B2 lag — 3rd channel for the latency invariant
             "th2_coupled": (th2[0].coupled if th2 else None),
         }
 
