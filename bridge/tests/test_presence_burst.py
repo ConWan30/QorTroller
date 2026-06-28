@@ -6,7 +6,7 @@ does not auto-loop.
 """
 import asyncio
 
-from vapi_bridge.presence_burst import PresenceBurstController
+from vapi_bridge.presence_burst import PresenceBurstController, should_combat_fire
 
 
 class MockRGC:
@@ -196,3 +196,22 @@ def test_de_gate_no_windows_is_abstain_none():
     p = _run(c.fire_once())
     assert p["verdict"] is None and p["de_gated"] is True  # no windows -> honest abstain
     assert rgc.stopped == 1
+
+
+# --- combat-triggered burst decision (auto-fire on R2 fire-press) ---------------------------------------
+
+def test_combat_fire_on_rising_edge_when_idle_and_cooled():
+    assert should_combat_fire(r2_now=200, r2_prev=0, threshold=40,
+                              last_burst_ts=0.0, now_ts=100.0, cooldown_s=18.0, is_active=False) is True
+
+def test_combat_no_fire_when_trigger_already_held():
+    assert should_combat_fire(200, 200, 40, 0.0, 100.0, 18.0, False) is False   # not a rising edge
+
+def test_combat_no_fire_below_threshold():
+    assert should_combat_fire(30, 0, 40, 0.0, 100.0, 18.0, False) is False       # a light touch, not a fire
+
+def test_combat_no_fire_within_cooldown():
+    assert should_combat_fire(200, 0, 40, 95.0, 100.0, 18.0, False) is False      # only 5s since last burst
+
+def test_combat_no_fire_while_burst_active():
+    assert should_combat_fire(200, 0, 40, 0.0, 100.0, 18.0, True) is False         # a burst is capturing
