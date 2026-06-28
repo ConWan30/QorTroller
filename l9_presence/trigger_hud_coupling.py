@@ -165,3 +165,32 @@ class TriggerHudCouplingOracle:
     def reset(self) -> None:
         for d in (self._tr_ts, self._tr_v, self._roi_ts, self._roi_v):
             d.clear()
+
+
+# ---------------------------------------------------------------------------
+# Center-ROI signal extractors (the per-frame scalars the channels correlate against the trigger)
+# ---------------------------------------------------------------------------
+
+def center_roi_luminance(gray, frac: float = 0.30) -> float:
+    """B1 signal — mean luminance of the central `frac` box. A muzzle flash / reticle bloom spikes it.
+    `gray` = HxW grayscale frame. Returns 0.0 on an empty ROI."""
+    h, w = gray.shape[:2]
+    m = frac / 2.0
+    roi = gray[int(h * (0.5 - m)):int(h * (0.5 + m)), int(w * (0.5 - m)):int(w * (0.5 + m))]
+    return float(roi.mean()) if roi.size else 0.0
+
+
+def center_roi_redness(bgr, frac: float = 0.30) -> float:
+    """B2 signal — red-DOMINANCE of the central box: mean of clamp(R - max(G, B), 0). `bgr` = HxWx3(+)
+    in OpenCV B,G,R order. A RED hitmarker / enemy-lock reticle spikes it; a WHITE muzzle flash
+    (R≈G≈B) does NOT — that separation is exactly why B2 is hit-specific and B1 is flash-generic.
+    Returns 0.0 on an empty / non-color ROI."""
+    h, w = bgr.shape[:2]
+    m = frac / 2.0
+    roi = bgr[int(h * (0.5 - m)):int(h * (0.5 + m)), int(w * (0.5 - m)):int(w * (0.5 + m))]
+    if roi.size == 0 or roi.shape[-1] < 3:
+        return 0.0
+    r = roi[..., 2].astype(np.float64)
+    g = roi[..., 1].astype(np.float64)
+    b = roi[..., 0].astype(np.float64)
+    return float(np.clip(r - np.maximum(g, b), 0.0, None).mean())

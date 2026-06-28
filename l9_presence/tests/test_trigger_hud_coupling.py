@@ -102,3 +102,23 @@ def test_no_trigger_activity_abstains():
     assert o.extract_features() is None        # no firing -> undefined (neutral, not a false accusation)
     nc = o.negative_control()                  # diagnostic only; the shuffled null collapses on a flat trigger
     assert nc is None or nc < 0.1
+
+
+# --- B2 signal extractors: redness (hitmarker) vs luminance (flash) -------------------------------------
+
+def test_center_redness_isolates_red_from_white_flash():
+    """The load-bearing B2 distinction: a RED hitmarker spikes redness; a WHITE muzzle flash does NOT
+    (R≈G≈B → redness≈0). That is why B2 is hit-specific where B1 is flash-generic."""
+    red = np.zeros((40, 40, 3), dtype=np.uint8)
+    red[15:25, 15:25, 2] = 255                 # B,G,R order -> a pure-red center patch
+    white = np.full((40, 40, 3), 255, dtype=np.uint8)   # a white flash
+    assert TH.center_roi_redness(red) > 50.0    # red hitmarker -> high redness
+    assert TH.center_roi_redness(white) < 1.0   # white flash -> ~zero redness (B2 correctly ignores it)
+
+
+def test_center_luminance_tracks_brightness():
+    gray_bright = np.full((40, 40), 255.0)
+    gray_dark = np.full((40, 40), 5.0)
+    assert TH.center_roi_luminance(gray_bright) > 200.0
+    assert TH.center_roi_luminance(gray_dark) < 10.0
+    assert TH.center_roi_luminance(np.zeros((0, 0))) == 0.0   # empty ROI -> 0.0, never throws
