@@ -68,6 +68,8 @@ def cmd_start(a) -> int:
     env.update({
         "RETINA_GAME_CAPTURE_ENABLED": "true",
         "RETINA_GAME_CAPTURE_MONITOR": str(a.monitor),   # monitor capture (works for fullscreen Remote Play)
+        "RETINA_CAPTURE_BURST_ENABLED": "false",         # CONTINUOUS capture (start() called) — guaranteed
+        "RETINA_CAPTURE_MIN_INTERVAL_MS": str(a.min_interval_ms),  # throttle (~30fps) to limit observer-effect lag
         "RETINA_DIAG_EVERY": str(a.diag_every),          # dense sampling -> enough calibration samples
         "DEVELOPER_SELF_CERT_ENABLED": "true",
         "PRESENCE_LEAN_MODE": "true",
@@ -183,6 +185,8 @@ def main() -> int:
     s = sub.add_parser("start"); s.set_defaults(fn=cmd_start)
     s.add_argument("--label", default="genuine"); s.add_argument("--monitor", type=int, default=1)
     s.add_argument("--diag-every", type=int, default=4, help="emit RGC diag every N records (dense=lower)")
+    s.add_argument("--min-interval-ms", type=int, default=33, help="WGC capture rate cap (ms); 33=~30fps, "
+                   "limits the observer-effect lag of continuous capture")
     s.add_argument("--port", type=int, default=8080); s.add_argument("--health-timeout", type=int, default=180)
     st = sub.add_parser("status"); st.set_defaults(fn=cmd_status)
     sp = sub.add_parser("stop"); sp.set_defaults(fn=cmd_stop); sp.add_argument("--label", default=None)
