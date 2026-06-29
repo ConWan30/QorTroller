@@ -2200,7 +2200,11 @@ class DualShockTransport:
                                 self._retina_game_capture.tune()
                             _rc_v = self._retina_game_capture.latest_coupled_verdict()  # already NQPV vocab
                             self._rgc_diag_n = getattr(self, "_rgc_diag_n", 0) + 1
-                            if self._rgc_diag_n % 25 == 1:
+                            # Emit the RGC diag (calibration sample) every retina_diag_every records — lower
+                            # it (RETINA_DIAG_EVERY=4) for a dense latency-calibration session. (n-1)%e==0 so
+                            # e=1 logs every record (the naive %e==1 never fires for e=1).
+                            _diag_every = max(1, int(getattr(self._cfg, "retina_diag_every", 25)))
+                            if (self._rgc_diag_n - 1) % _diag_every == 0:
                                 log.info("RGC diag: %s", self._retina_game_capture.status())
                             # Positive coupling always injects; IMPLAUSIBLE only when negative-detection is
                             # enabled (aim-games). In a dead-zone/auto-camera game (NCAA) IMPLAUSIBLE is a
