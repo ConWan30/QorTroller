@@ -2081,6 +2081,12 @@ class Config:
     retina_game_capture_monitor: int = field(
         default_factory=lambda: int(os.environ.get("RETINA_GAME_CAPTURE_MONITOR", "0") or 0)
     )
+    # How often (every N co-capture records) to emit the `RGC diag:` status line — the calibration
+    # sample feed. Default 25 keeps the log quiet; lower it (e.g. 4) for a dense latency-calibration
+    # session so a few minutes of play yields ~10x the cross-channel samples (high-rate sampler).
+    retina_diag_every: int = field(
+        default_factory=lambda: max(1, int(os.environ.get("RETINA_DIAG_EVERY", "25") or 25))
+    )
     # Inject NEGATIVE coupled-retina verdicts (IMPLAUSIBLE) into the NQPV proof. Default False: in a
     # dead-zone / auto-camera game (NCAA CFB), the right-stick->screen coupling is structurally absent, so
     # a low-coupling IMPLAUSIBLE is a FALSE NEGATIVE (the auto-camera pans on its own, not an aimbot), NOT
