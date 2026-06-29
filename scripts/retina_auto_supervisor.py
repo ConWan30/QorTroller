@@ -17,6 +17,7 @@ import time
 from pathlib import Path
 
 _DAEMON = Path(__file__).resolve().parent / "retina_capture_daemon.py"
+_NO_WINDOW = 0x08000000 if sys.platform == "win32" else 0   # CREATE_NO_WINDOW — never pop a console window
 
 
 def decide(running: bool, capturing: bool, idle_elapsed_s: float, idle_grace_s: float) -> str:
@@ -33,14 +34,15 @@ def remoteplay_running() -> bool:
     """True iff PS Remote Play (RemotePlay.exe) is running. Windows tasklist; fail-safe to False."""
     try:
         out = subprocess.run(["tasklist", "/FI", "IMAGENAME eq RemotePlay.exe", "/NH"],
-                             capture_output=True, text=True, timeout=10).stdout
+                             capture_output=True, text=True, timeout=10, creationflags=_NO_WINDOW).stdout
         return "RemotePlay" in out
     except Exception:
         return False
 
 
 def _run_daemon(*daemon_args) -> str:
-    r = subprocess.run([sys.executable, str(_DAEMON), *daemon_args], capture_output=True, text=True)
+    r = subprocess.run([sys.executable, str(_DAEMON), *daemon_args], capture_output=True, text=True,
+                       creationflags=_NO_WINDOW)
     return (r.stdout or "") + (("\n" + r.stderr) if r.stderr else "")
 
 
@@ -81,9 +83,10 @@ def main() -> int:
 
         if action == "start":
             print("[auto] Remote Play DETECTED -> starting capture", flush=True)
-            print(_run_daemon("start", "--label", a.label, "--monitor", str(a.monitor),
-                              "--diag-every", str(a.diag_every)).strip(), flush=True)
-            capturing = True
+            out = _run_daemon("start", "--label", a.label, "--monitor", str(a.monitor),
+                              "--diag-every", str(a.diag_every))
+            print(out.strip(), flush=True)
+            capturing = "CAPTURE LIVE" in out   # only mark capturing on a confirmed start (no re-spawn loop)
         elif action == "stop":
             print("[auto] Remote Play CLOSED -> stopping + harvesting", flush=True)
             stop_out = _run_daemon("stop", "--label", a.label)

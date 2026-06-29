@@ -28,6 +28,7 @@ sys.path.insert(0, str(_REPO))
 sys.path.insert(0, str(_REPO / "bridge"))
 sys.path.insert(0, str(_REPO / "scripts"))
 _STATE = _REPO / "retina_daemon.state.json"
+_NO_WINDOW = 0x08000000 if sys.platform == "win32" else 0   # CREATE_NO_WINDOW — never pop a console window
 
 
 def _health_ok(port: int, timeout: int = 3) -> bool:
@@ -48,7 +49,8 @@ def _ready_port(cand_ports, timeout: int = 2):
 def _kill_tree(pid: int) -> None:
     try:
         if sys.platform == "win32":
-            subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True)
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)], capture_output=True,
+                           creationflags=_NO_WINDOW)
         else:
             os.kill(pid, 15)
     except Exception:
@@ -81,7 +83,7 @@ def cmd_start(a) -> int:
     lf = open(log_path, "w", encoding="utf-8")
     # DETACHED so the bridge survives this process exiting AND the remote-access drop.
     if sys.platform == "win32":
-        flags = 0x00000008 | 0x00000200                 # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+        flags = 0x00000200 | _NO_WINDOW                 # CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW (no popup)
         proc = subprocess.Popen([sys.executable, "-m", "bridge.vapi_bridge.main"], cwd=str(_REPO), env=env,
                                 stdout=lf, stderr=subprocess.STDOUT, creationflags=flags, close_fds=True)
     else:
