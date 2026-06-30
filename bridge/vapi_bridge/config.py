@@ -2114,6 +2114,23 @@ class Config:
     retina_killfeed_every: int = field(
         default_factory=lambda: max(1, int(os.environ.get("RETINA_KILLFEED_EVERY", "20") or 20))
     )
+    # Dense feed+roster crop capture (CALIBRATION CORPUS). The killfeed authorship detector is built FROM a
+    # dense offline-reviewed crop corpus (it cannot be calibrated on 2 frames); this saves the left HUD panel
+    # (kill-feed + squad roster, where the own-handle anchor lives) as a bounded ring of PNGs during a match.
+    # Default-OFF; advisory. NOTE: retina_killfeed_roi default (top-right) is WRONG for Warzone — its feed is
+    # LEFT-middle under the minimap; retina_capture_panel_roi covers the correct left panel for the corpus.
+    retina_killfeed_capture_enabled: bool = field(
+        default_factory=lambda: _env_bool("RETINA_KILLFEED_CAPTURE_ENABLED", False)
+    )
+    retina_killfeed_capture_dir: str = field(
+        default_factory=lambda: os.environ.get("RETINA_KILLFEED_CAPTURE_DIR", "retina_kf_crops")
+    )
+    retina_killfeed_capture_max: int = field(
+        default_factory=lambda: max(0, int(os.environ.get("RETINA_KILLFEED_CAPTURE_MAX", "600") or 600))
+    )
+    retina_capture_panel_roi: str = field(
+        default_factory=lambda: os.environ.get("RETINA_CAPTURE_PANEL_ROI", "0.0,0.28,0.32,0.67")
+    )
     # Inject NEGATIVE coupled-retina verdicts (IMPLAUSIBLE) into the NQPV proof. Default False: in a
     # dead-zone / auto-camera game (NCAA CFB), the right-stick->screen coupling is structurally absent, so
     # a low-coupling IMPLAUSIBLE is a FALSE NEGATIVE (the auto-camera pans on its own, not an aimbot), NOT

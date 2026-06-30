@@ -285,7 +285,7 @@ class WgcFrameSource:
 
     def __init__(self, core: RetinaGameCaptureCore, window_substr: str, *, downscale: int = 4,
                  monitor_index: int = 0, min_update_interval_ms: int = 0,
-                 killfeed_roi: str = "", killfeed_every: int = 20) -> None:
+                 killfeed_roi: str = "", killfeed_every: int = 20, panel_roi: str = "") -> None:
         self._core = core
         self._window = window_substr
         self._monitor_index = int(monitor_index)   # >=1 -> capture that monitor instead of the window
@@ -314,6 +314,8 @@ class WgcFrameSource:
         self._kf_bgr = None                             # latest kill-feed ROI (contiguous BGR) for the OCR tick
         self._kf_ts = None
         self._kf_frame_n = 0
+        self._panel_roi = _parse_roi(panel_roi)         # left HUD panel (feed+roster) for dense corpus capture
+        self._panel_bgr = None                          # latest panel ROI (contiguous BGR) for the crop saver
 
     def start(self) -> bool:
         try:
@@ -376,13 +378,19 @@ class WgcFrameSource:
                         pass
                     # Kill-feed authorship ROI: stash a contiguous BGR crop of the feed region every N frames
                     # (cheap); the OCR itself runs on the throttled tune() tick, never on this frame callback.
-                    if self._kf_roi is not None:
+                    if self._kf_roi is not None or self._panel_roi is not None:
                         self._kf_frame_n += 1
                         if self._kf_frame_n % self._kf_every == 0:
                             try:
-                                _y0, _y1, _x0, _x1 = _roi_px(buf_small.shape, self._kf_roi)
-                                self._kf_bgr = _u8_from_scale(buf_small[_y0:_y1, _x0:_x1], self._lum_scale)
-                                self._kf_ts = screen_ts
+                                if self._kf_roi is not None:
+                                    _y0, _y1, _x0, _x1 = _roi_px(buf_small.shape, self._kf_roi)
+                                    self._kf_bgr = _u8_from_scale(buf_small[_y0:_y1, _x0:_x1], self._lum_scale)
+                                    self._kf_ts = screen_ts
+                                # Dense corpus: stash the left HUD panel (feed+roster) crop for the saver tick.
+                                if self._panel_roi is not None:
+                                    _py0, _py1, _px0, _px1 = _roi_px(buf_small.shape, self._panel_roi)
+                                    self._panel_bgr = _u8_from_scale(
+                                        buf_small[_py0:_py1, _px0:_px1], self._lum_scale)
                             except Exception:  # noqa: BLE001
                                 pass
                     # Shape guard: the governor changes downscale live, which changes the gray image size.
@@ -477,15 +485,23 @@ class RetinaGameCapture:
 
     def __init__(self, window_substr: str, *, ncaa_profile: bool = True, downscale: int = 4,
                  monitor_index: int = 0, min_update_interval_ms: int = 0,
-                 killfeed_enabled: bool = False, killfeed_roi: str = "", killfeed_every: int = 20) -> None:
+                 killfeed_enabled: bool = False, killfeed_roi: str = "", killfeed_every: int = 20,
+                 capture_enabled: bool = False, capture_dir: str = "retina_kf_crops",
+                 capture_max: int = 600, panel_roi: str = "") -> None:
         self.core = RetinaGameCaptureCore(ncaa_profile=ncaa_profile)
+        self._capture_enabled = bool(capture_enabled)
         self._source = WgcFrameSource(self.core, window_substr, downscale=downscale,
                                       monitor_index=monitor_index,
                                       min_update_interval_ms=min_update_interval_ms,
                                       killfeed_roi=(killfeed_roi if killfeed_enabled else ""),
-                                      killfeed_every=killfeed_every)
+                                      killfeed_every=killfeed_every,
+                                      panel_roi=(panel_roi if self._capture_enabled else ""))
         self._killfeed_enabled = bool(killfeed_enabled)
         self._kf_logged = False
+        self._capture_dir = str(capture_dir)
+        self._capture_max = int(capture_max)
+        self._capture_n = 0
+        self._capture_logged = False
         self.started = False
         # Adaptive lag/FPS governor — meticulously widens the oracle's causal-lag search window to track
         # the live Remote Play latency (and tunes resample-rate/downscale for estimator validity).
@@ -528,6 +544,28 @@ class RetinaGameCapture:
         except Exception:  # noqa: BLE001 — OCR must never break capture
             pass
 
+    def save_capture_crops(self) -> Optional[str]:
+        """Dense corpus capture: if enabled, write the latest stashed left-panel crop (kill-feed + roster)
+        to a bounded ring of PNGs for offline review/anchor-extraction. Called from the throttled tune()
+        tick (file I/O off the WGC frame callback). Fail-open: cv2/dir issues -> no-op. Returns the path
+        written, or None. This produces the corpus the killfeed authorship detector must be calibrated on."""
+        if not self._capture_enabled:
+            return None
+        bgr = getattr(self._source, "_panel_bgr", None)
+        if bgr is None:
+            return None
+        try:
+            from l9_presence.killfeed_cv import save_crop_bounded
+            path = save_crop_bounded(self._capture_dir, "panel", bgr, max_files=self._capture_max)
+            self._capture_n += 1 if path else 0
+            if path and not self._capture_logged:
+                self._capture_logged = True
+                log.info("RetinaGameCapture: dense panel-crop capture ON -> %s (ring max=%d)",
+                         self._capture_dir, self._capture_max)
+            return path
+        except Exception:  # noqa: BLE001 — capture must never break the loop
+            return None
+
     def latest_coupled_verdict(self) -> Optional[str]:
         return self.core.latest_coupled_verdict()
 
@@ -546,6 +584,7 @@ class RetinaGameCapture:
         decision dict, or None if too few WGC frames yet. The governor is EMA-smoothed + cooldown-gated."""
         self._source.restart_if_stalled()   # HDR/Remote-Play: re-acquire if the window handle went stale
         self.ocr_killfeed_tick()             # throttled kill-feed OCR -> authorship (off the frame callback)
+        self.save_capture_crops()            # throttled dense panel-crop capture -> offline calibration corpus
         fts = self._source.recent_frame_ts()
         if len(fts) < 4:
             return None
