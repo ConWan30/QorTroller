@@ -166,3 +166,23 @@ def test_killfeed_authorship_wired_spectated(monkeypatch):
     core.feed_trigger(500.0, 80)                             # you spammed R2 while spectating
     core.feed_killfeed_text(800.0, "TeammateBob killed EnemyA")   # someone else's kill -> SPECTATED
     assert core.latest_killfeed_authorship().verdict is AuthorshipVerdict.SPECTATED_NOT_AUTHORED
+
+
+# --- Dense panel-crop capture (calibration corpus) — gating + bounded write ---
+def test_save_capture_crops_enabled_writes(tmp_path):
+    from vapi_bridge.qortroller_retina_capture import RetinaGameCapture
+    rgc = RetinaGameCapture("Remote Play", capture_enabled=True, capture_dir=str(tmp_path),
+                            capture_max=10, panel_roi="0.0,0.28,0.32,0.67")
+    rgc._source._panel_bgr = np.zeros((20, 30, 3), np.uint8)   # stand-in for a stashed panel crop
+    path = rgc.save_capture_crops()
+    assert path is not None and path.endswith(".png")
+    assert len(list(tmp_path.glob("panel_*.png"))) == 1
+
+
+def test_save_capture_crops_disabled_is_noop(tmp_path):
+    from vapi_bridge.qortroller_retina_capture import RetinaGameCapture
+    rgc = RetinaGameCapture("Remote Play", capture_enabled=False, capture_dir=str(tmp_path),
+                            panel_roi="0.0,0.28,0.32,0.67")
+    rgc._source._panel_bgr = np.zeros((20, 30, 3), np.uint8)
+    assert rgc.save_capture_crops() is None                   # disabled -> no write
+    assert list(tmp_path.glob("panel_*.png")) == []

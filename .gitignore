@@ -253,3 +253,6 @@ docs/disaster-recovery-runbook.private.md
 # defensive layer.
 backups/
 bridge-*.db
+
+# Dense kill-feed panel-crop calibration corpus (gameplay-derived; operator-local)
+retina_kf_crops/

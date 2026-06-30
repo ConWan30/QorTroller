@@ -421,6 +421,10 @@ class DualShockTransport:
                     killfeed_enabled=bool(getattr(cfg, "retina_killfeed_enabled", False)),
                     killfeed_roi=str(getattr(cfg, "retina_killfeed_roi", "")),
                     killfeed_every=int(getattr(cfg, "retina_killfeed_every", 20)),
+                    capture_enabled=bool(getattr(cfg, "retina_killfeed_capture_enabled", False)),
+                    capture_dir=str(getattr(cfg, "retina_killfeed_capture_dir", "retina_kf_crops")),
+                    capture_max=int(getattr(cfg, "retina_killfeed_capture_max", 600)),
+                    panel_roi=str(getattr(cfg, "retina_capture_panel_roi", "")),
                 )
                 if getattr(cfg, "retina_capture_burst_enabled", False):
                     # Duty-cycle: do NOT capture continuously (WGC lags the Remote Play GPU decoder — observer

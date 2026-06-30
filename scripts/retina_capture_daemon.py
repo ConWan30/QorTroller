@@ -84,6 +84,10 @@ def cmd_start(a) -> int:
         env["RETINA_KILLFEED_ENABLED"] = "true"
         if a.killfeed_roi:
             env["RETINA_KILLFEED_ROI"] = a.killfeed_roi
+    if getattr(a, "capture", False):                     # dense left-panel crop capture (calibration corpus)
+        env["RETINA_KILLFEED_CAPTURE_ENABLED"] = "true"
+        if getattr(a, "capture_dir", ""):
+            env["RETINA_KILLFEED_CAPTURE_DIR"] = a.capture_dir
     lf = open(log_path, "w", encoding="utf-8")
     # DETACHED so the bridge survives this process exiting AND the remote-access drop.
     if sys.platform == "win32":
@@ -195,6 +199,9 @@ def main() -> int:
                    "limits the observer-effect lag of continuous capture")
     s.add_argument("--killfeed", action="store_true", help="enable kill-feed authorship OCR (needs tesseract)")
     s.add_argument("--killfeed-roi", default="", help="fractional 'fx,fy,fw,fh' kill-feed ROI (default top-right)")
+    s.add_argument("--capture", action="store_true",
+                   help="dense left-panel (feed+roster) crop capture -> calibration corpus")
+    s.add_argument("--capture-dir", default="", help="dir for dense panel crops (default retina_kf_crops)")
     s.add_argument("--port", type=int, default=8080); s.add_argument("--health-timeout", type=int, default=180)
     st = sub.add_parser("status"); st.set_defaults(fn=cmd_status)
     sp = sub.add_parser("stop"); sp.set_defaults(fn=cmd_stop); sp.add_argument("--label", default=None)

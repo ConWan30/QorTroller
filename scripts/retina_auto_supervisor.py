@@ -66,6 +66,10 @@ def main() -> int:
     ap.add_argument("--poll", type=float, default=5.0, help="poll seconds")
     ap.add_argument("--idle-grace", type=float, default=30.0, help="s Remote Play must be gone before stopping")
     ap.add_argument("--once", action="store_true", help="exit after the first session completes")
+    ap.add_argument("--killfeed", action="store_true", help="forward kill-feed authorship OCR to the daemon")
+    ap.add_argument("--capture", action="store_true",
+                    help="forward dense left-panel (feed+roster) crop capture to the daemon (calibration corpus)")
+    ap.add_argument("--capture-dir", default="", help="dir for dense panel crops (default retina_kf_crops)")
     a = ap.parse_args()
 
     capturing = False
@@ -83,8 +87,15 @@ def main() -> int:
 
         if action == "start":
             print("[auto] Remote Play DETECTED -> starting capture", flush=True)
+            _extra = []
+            if a.killfeed:
+                _extra.append("--killfeed")
+            if a.capture:                       # dense panel-crop capture -> calibration corpus
+                _extra += ["--capture"]
+                if a.capture_dir:
+                    _extra += ["--capture-dir", a.capture_dir]
             out = _run_daemon("start", "--label", a.label, "--monitor", str(a.monitor),
-                              "--diag-every", str(a.diag_every))
+                              "--diag-every", str(a.diag_every), *_extra)
             print(out.strip(), flush=True)
             capturing = "CAPTURE LIVE" in out   # only mark capturing on a confirmed start (no re-spawn loop)
         elif action == "stop":
