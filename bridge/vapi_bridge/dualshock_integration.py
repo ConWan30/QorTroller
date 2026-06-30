@@ -418,6 +418,9 @@ class DualShockTransport:
                     getattr(cfg, "retina_game_capture_window", "Remote Play"),
                     monitor_index=int(getattr(cfg, "retina_game_capture_monitor", 0)),
                     min_update_interval_ms=int(getattr(cfg, "retina_capture_min_interval_ms", 0)),
+                    killfeed_enabled=bool(getattr(cfg, "retina_killfeed_enabled", False)),
+                    killfeed_roi=str(getattr(cfg, "retina_killfeed_roi", "")),
+                    killfeed_every=int(getattr(cfg, "retina_killfeed_every", 20)),
                 )
                 if getattr(cfg, "retina_capture_burst_enabled", False):
                     # Duty-cycle: do NOT capture continuously (WGC lags the Remote Play GPU decoder — observer

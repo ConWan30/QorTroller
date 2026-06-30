@@ -80,6 +80,10 @@ def cmd_start(a) -> int:
         "CHAIN_SUBMISSION_PAUSED": "true",               # kill-switch ON
         "HTTP_PORT": str(a.port),
     })
+    if getattr(a, "killfeed", False):                    # kill-feed authorship (anti-spectate differentiator)
+        env["RETINA_KILLFEED_ENABLED"] = "true"
+        if a.killfeed_roi:
+            env["RETINA_KILLFEED_ROI"] = a.killfeed_roi
     lf = open(log_path, "w", encoding="utf-8")
     # DETACHED so the bridge survives this process exiting AND the remote-access drop.
     if sys.platform == "win32":
@@ -189,6 +193,8 @@ def main() -> int:
     s.add_argument("--diag-every", type=int, default=4, help="emit RGC diag every N records (dense=lower)")
     s.add_argument("--min-interval-ms", type=int, default=33, help="WGC capture rate cap (ms); 33=~30fps, "
                    "limits the observer-effect lag of continuous capture")
+    s.add_argument("--killfeed", action="store_true", help="enable kill-feed authorship OCR (needs tesseract)")
+    s.add_argument("--killfeed-roi", default="", help="fractional 'fx,fy,fw,fh' kill-feed ROI (default top-right)")
     s.add_argument("--port", type=int, default=8080); s.add_argument("--health-timeout", type=int, default=180)
     st = sub.add_parser("status"); st.set_defaults(fn=cmd_status)
     sp = sub.add_parser("stop"); sp.set_defaults(fn=cmd_stop); sp.add_argument("--label", default=None)
