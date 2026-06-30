@@ -2087,6 +2087,18 @@ class Config:
     retina_diag_every: int = field(
         default_factory=lambda: max(1, int(os.environ.get("RETINA_DIAG_EVERY", "25") or 25))
     )
+    # Kill-feed authorship (anti-spectate differentiator; default-off, fail-open w/o tesseract). OCR the
+    # kill-feed ROI -> own-handle kill rows bound to YOUR R2 onset = AUTHORED; others' kills = SPECTATED.
+    # ROI is fractional "fx,fy,fw,fh" (0..1) of the captured frame (Warzone feed is top-right).
+    retina_killfeed_enabled: bool = field(
+        default_factory=lambda: _env_bool("RETINA_KILLFEED_ENABLED", False)
+    )
+    retina_killfeed_roi: str = field(
+        default_factory=lambda: os.environ.get("RETINA_KILLFEED_ROI", "0.62,0.10,0.36,0.22")
+    )
+    retina_killfeed_every: int = field(
+        default_factory=lambda: max(1, int(os.environ.get("RETINA_KILLFEED_EVERY", "20") or 20))
+    )
     # Inject NEGATIVE coupled-retina verdicts (IMPLAUSIBLE) into the NQPV proof. Default False: in a
     # dead-zone / auto-camera game (NCAA CFB), the right-stick->screen coupling is structurally absent, so
     # a low-coupling IMPLAUSIBLE is a FALSE NEGATIVE (the auto-camera pans on its own, not an aimbot), NOT

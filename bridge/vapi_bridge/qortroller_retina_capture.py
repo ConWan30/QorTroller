@@ -77,6 +77,15 @@ class RetinaGameCaptureCore:
             self._th2_oracle = None
         self._last_th = None       # last B1 TriggerHudFeatures, for diag
         self._last_th2 = None      # last B2 TriggerHudFeatures, for diag
+        # Kill-feed authorship (anti-spectate differentiator; fail-open). Own-handle kill bound to YOUR R2
+        # onset -> AUTHORED; others' kills -> SPECTATED. Correlation can't separate these (cycle-56); this can.
+        self._kf_oracle = None
+        self._kf_prev_r2 = 0
+        try:
+            from l9_presence.killfeed_authorship import KillfeedAuthorshipOracle
+            self._kf_oracle = KillfeedAuthorshipOracle()   # handle from env QORTROLLER_HANDLE (QorTrola30)
+        except Exception:  # noqa: BLE001
+            self._kf_oracle = None
 
     def feed_hid(self, ts_ms: float, right_stick_x: float, right_stick_y: float) -> None:
         self._oracle.push_input(ts_ms, right_stick_x, right_stick_y)
@@ -119,6 +128,26 @@ class RetinaGameCaptureCore:
             self._th_oracle.push_trigger(ts_ms, r2_value)
         if self._th2_oracle is not None:
             self._th2_oracle.push_trigger(ts_ms, r2_value)
+        # Kill-feed authorship: register the R2 fire ONSET (rising edge over ~40/255) as a trigger event the
+        # own-handle kill must causally follow within the render+OCR window.
+        if self._kf_oracle is not None:
+            _r2 = int(r2_value)
+            if _r2 >= 40 and self._kf_prev_r2 < 40:
+                self._kf_oracle.push_trigger(ts_ms)
+            self._kf_prev_r2 = _r2
+
+    def feed_killfeed_text(self, ts_ms: float, text: Optional[str]) -> None:
+        """OCR'd kill-feed text (one or more lines) -> the authorship oracle, one row per line."""
+        if self._kf_oracle is None or not text:
+            return
+        for line in str(text).splitlines():
+            line = line.strip()
+            if line:
+                self._kf_oracle.push_killfeed_line(ts_ms, line)
+
+    def latest_killfeed_authorship(self):
+        """AuthorshipResult or None (oracle absent)."""
+        return self._kf_oracle.verdict() if self._kf_oracle is not None else None
 
     def feed_roi(self, ts_ms: float, roi_value: float) -> None:
         """B1: center-ROI luminance (muzzle flash / reticle bloom spikes it) from the retina frames."""
@@ -229,13 +258,34 @@ def convert_for_channels(buf_small, lum_scale, *, b2_frac: float = 0.30,
     return gray_full, roi_bgr, lum_scale
 
 
+def _parse_roi(s: str):
+    """Parse 'fx,fy,fw,fh' (0..1 fractions) -> tuple or None (kill-feed ROI; Warzone feed is top-right)."""
+    try:
+        parts = [float(x) for x in str(s).split(",")]
+        if len(parts) == 4 and all(0.0 <= p <= 1.0 for p in parts):
+            return tuple(parts)
+    except (TypeError, ValueError):
+        pass
+    return None
+
+
+def _roi_px(shape, roi):
+    """Fractional (fx,fy,fw,fh) -> integer (y0,y1,x0,x1) pixel box on an HxW[xC] array."""
+    h, w = shape[:2]
+    fx, fy, fw, fh = roi
+    x0 = int(w * fx); x1 = int(w * min(1.0, fx + fw))
+    y0 = int(h * fy); y1 = int(h * min(1.0, fy + fh))
+    return y0, y1, x0, x1
+
+
 class WgcFrameSource:
     """Windows Graphics Capture source: captures a window in the background, runs cv_motion on each
     frame pair, and feeds on-screen pan into the core. Import-guarded; failure is non-fatal (the lobe
     just abstains). Captures DIGITAL frames of the Remote Play / game window (no camera)."""
 
     def __init__(self, core: RetinaGameCaptureCore, window_substr: str, *, downscale: int = 4,
-                 monitor_index: int = 0, min_update_interval_ms: int = 0) -> None:
+                 monitor_index: int = 0, min_update_interval_ms: int = 0,
+                 killfeed_roi: str = "", killfeed_every: int = 20) -> None:
         self._core = core
         self._window = window_substr
         self._monitor_index = int(monitor_index)   # >=1 -> capture that monitor instead of the window
@@ -256,9 +306,14 @@ class WgcFrameSource:
         self._frame_err_n: int = 0
         self._lum_scale: Optional[float] = None         # EMA luminance scale for HDR-float normalization
         self.frame_format: str = "unknown"              # observed WGC buffer format (SDR uint8 vs HDR wider)
-        self._ts_state: dict = {"offset_ms": None, "last_ts_ms": None}  # presentation-clock epoch align (#1)
+        self._ts_state: dict = {"offset_ms": None, "last_ts_ms": None}  # presence-clock epoch align (#1)
         self._ts_source: str = "wall_fallback"          # last screen-ts source: 'timespan' / 'wall_fallback'
         self._ts_logged: bool = False                   # one-time units-verification log on first timespan frame
+        self._kf_roi = _parse_roi(killfeed_roi)         # kill-feed ROI (fractions) or None — authorship OCR
+        self._kf_every = max(1, int(killfeed_every))    # stash the feed ROI every N frames (OCR is throttled)
+        self._kf_bgr = None                             # latest kill-feed ROI (contiguous BGR) for the OCR tick
+        self._kf_ts = None
+        self._kf_frame_n = 0
 
     def start(self) -> bool:
         try:
@@ -319,6 +374,17 @@ class WgcFrameSource:
                             screen_ts, center_roi_redness(b2_bgr, frac=1.0, v_center=0.5, h_center=0.5))
                     except Exception:  # noqa: BLE001
                         pass
+                    # Kill-feed authorship ROI: stash a contiguous BGR crop of the feed region every N frames
+                    # (cheap); the OCR itself runs on the throttled tune() tick, never on this frame callback.
+                    if self._kf_roi is not None:
+                        self._kf_frame_n += 1
+                        if self._kf_frame_n % self._kf_every == 0:
+                            try:
+                                _y0, _y1, _x0, _x1 = _roi_px(buf_small.shape, self._kf_roi)
+                                self._kf_bgr = _u8_from_scale(buf_small[_y0:_y1, _x0:_x1], self._lum_scale)
+                                self._kf_ts = screen_ts
+                            except Exception:  # noqa: BLE001
+                                pass
                     # Shape guard: the governor changes downscale live, which changes the gray image size.
                     # Optical flow REQUIRES prev.size()==next.size(); a mismatch must SKIP motion (re-baseline),
                     # never throw — else prev_gray never updates and every later frame fails forever.
@@ -410,11 +476,16 @@ class RetinaGameCapture:
     latest_coupled_verdict() read by the co-capture hook -> meta['retina_coupled_verdict']."""
 
     def __init__(self, window_substr: str, *, ncaa_profile: bool = True, downscale: int = 4,
-                 monitor_index: int = 0, min_update_interval_ms: int = 0) -> None:
+                 monitor_index: int = 0, min_update_interval_ms: int = 0,
+                 killfeed_enabled: bool = False, killfeed_roi: str = "", killfeed_every: int = 20) -> None:
         self.core = RetinaGameCaptureCore(ncaa_profile=ncaa_profile)
         self._source = WgcFrameSource(self.core, window_substr, downscale=downscale,
                                       monitor_index=monitor_index,
-                                      min_update_interval_ms=min_update_interval_ms)
+                                      min_update_interval_ms=min_update_interval_ms,
+                                      killfeed_roi=(killfeed_roi if killfeed_enabled else ""),
+                                      killfeed_every=killfeed_every)
+        self._killfeed_enabled = bool(killfeed_enabled)
+        self._kf_logged = False
         self.started = False
         # Adaptive lag/FPS governor — meticulously widens the oracle's causal-lag search window to track
         # the live Remote Play latency (and tunes resample-rate/downscale for estimator validity).
@@ -431,6 +502,30 @@ class RetinaGameCapture:
     def feed_trigger(self, ts_ms: float, r2_value: float) -> None:
         """Channel B1: R2 trigger (from the HID loop) into the trigger->HUD oracle."""
         self.core.feed_trigger(ts_ms, r2_value)
+
+    def ocr_killfeed_tick(self) -> None:
+        """If kill-feed authorship is enabled + tesseract resolves, OCR the latest stashed feed ROI and feed
+        the lines to the authorship oracle. Fail-open: absent tesseract / ROI / frame -> no-op (oracle stays
+        UNVERIFIABLE). Called from the throttled tune() loop, never the per-frame WGC callback."""
+        if not getattr(self, "_killfeed_enabled", False):
+            return
+        bgr = getattr(self._source, "_kf_bgr", None)
+        if bgr is None:
+            return
+        try:
+            from l9_presence import hud_ocr
+            if not getattr(self, "_kf_logged", False):
+                self._kf_logged = True
+                log.info("RetinaGameCapture: kill-feed authorship ON (tesseract=%s, roi=%s, handle=%s)",
+                         hud_ocr.ocr_available(), getattr(self._source, "_kf_roi", None),
+                         getattr(self.core._kf_oracle, "own_canon", None))
+            if not hud_ocr.ocr_available():
+                return
+            text = hud_ocr.ocr_frame(bgr)
+            if text:
+                self.core.feed_killfeed_text(getattr(self._source, "_kf_ts", None) or 0.0, text)
+        except Exception:  # noqa: BLE001 — OCR must never break capture
+            pass
 
     def latest_coupled_verdict(self) -> Optional[str]:
         return self.core.latest_coupled_verdict()
@@ -449,6 +544,7 @@ class RetinaGameCapture:
         the ceiling, and tunes resample-rate/downscale for estimator validity + steady frames. Returns the
         decision dict, or None if too few WGC frames yet. The governor is EMA-smoothed + cooldown-gated."""
         self._source.restart_if_stalled()   # HDR/Remote-Play: re-acquire if the window handle went stale
+        self.ocr_killfeed_tick()             # throttled kill-feed OCR -> authorship (off the frame callback)
         fts = self._source.recent_frame_ts()
         if len(fts) < 4:
             return None
@@ -479,6 +575,7 @@ class RetinaGameCapture:
         nc = self.core._oracle.negative_control()    # shuffle null (chance coupling) — the FAR baseline
         th = self.core.latest_trigger_hud()          # Channel B1 (trigger->flash): (features, null) or None
         th2 = self.core.latest_hit_hud()             # Channel B2 (trigger->RED hitmarker): (features, null) or None
+        kf = self.core.latest_killfeed_authorship()  # Kill-feed authorship (anti-spectate differentiator) or None
         return {
             "started": self.started,
             "frames_seen": self._source.frames_seen,
@@ -513,6 +610,11 @@ class RetinaGameCapture:
             "th2_null": (round(th2[1], 3) if (th2 and th2[1] is not None) else None),
             "th2_lag_ms": (round(th2[0].lag_ms, 1) if th2 else None),   # B2 lag — 3rd channel for the latency invariant
             "th2_coupled": (th2[0].coupled if th2 else None),
+            # Kill-feed authorship — the anti-spectate differentiator converging alongside the coupling channels
+            "kf_verdict": (kf.verdict.value if kf else None),
+            "kf_own_kills": (kf.own_kills if kf else None),
+            "kf_other_kills": (kf.other_kills if kf else None),
+            "kf_bound_kills": (kf.bound_kills if kf else None),
         }
 
     def stop(self) -> None:

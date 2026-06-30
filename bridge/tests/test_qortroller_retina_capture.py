@@ -146,3 +146,23 @@ def test_convert_no_full_bgr_for_integer_paths():
     gray, b2_bgr, _ = convert_for_channels(buf, None)
     assert gray.ndim == 2                                    # gray is single-channel (no full BGR)
     assert b2_bgr.ndim == 3 and b2_bgr.size < gray.size * 3  # only the ROI is 3-channel
+
+
+# --- kill-feed authorship wired into the live capture core (the anti-spectate differentiator) ---
+
+def test_killfeed_authorship_wired_authored(monkeypatch):
+    monkeypatch.setenv("QORTROLLER_HANDLE", "QorTrola30")
+    from l9_presence.killfeed_authorship import AuthorshipVerdict
+    core = RetinaGameCaptureCore(ncaa_profile=False)
+    core.feed_trigger(1000.0, 80)                            # R2 fire ONSET (rising 0->80) registers a trigger
+    core.feed_killfeed_text(1300.0, "QorTrola30 [AR] EnemyDude")  # own kill 300ms later -> AUTHORED
+    assert core.latest_killfeed_authorship().verdict is AuthorshipVerdict.AUTHORED_PRESENT
+
+
+def test_killfeed_authorship_wired_spectated(monkeypatch):
+    monkeypatch.setenv("QORTROLLER_HANDLE", "QorTrola30")
+    from l9_presence.killfeed_authorship import AuthorshipVerdict
+    core = RetinaGameCaptureCore(ncaa_profile=False)
+    core.feed_trigger(500.0, 80)                             # you spammed R2 while spectating
+    core.feed_killfeed_text(800.0, "TeammateBob killed EnemyA")   # someone else's kill -> SPECTATED
+    assert core.latest_killfeed_authorship().verdict is AuthorshipVerdict.SPECTATED_NOT_AUTHORED
