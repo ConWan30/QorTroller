@@ -41,6 +41,14 @@ def _env_float(key: str, default: float = 0.0) -> float:
     return float(os.environ.get(key, str(default)))
 
 
+# L6B human-reflex MAX band ceilings — enforced by Config.__post_init__ (see l6b_human_max_ms /
+# l6b_desk_posture_enabled). The production ceiling is the calibrated human voluntary-reaction
+# upper bound; the desk-posture ceiling is the explicit opt-in widen for still-controller
+# enrollment sessions. A larger L6B_HUMAN_MAX_MS env value is clamped, never honored silently.
+_L6B_HUMAN_MAX_PRODUCTION_CEILING_MS = 280.0
+_L6B_DESK_POSTURE_MAX_MS = 350.0
+
+
 @dataclass(frozen=True)
 class Config:
     """Immutable bridge configuration, loaded once at startup."""
@@ -831,7 +839,14 @@ class Config:
     l6b_human_max_ms: float = field(
         default_factory=lambda: float(_env("L6B_HUMAN_MAX_MS", "280.0"))
     )
-    """Maximum latency (ms) to classify as HUMAN reflex (cortical loop upper bound)."""
+    """Maximum latency (ms) to classify as HUMAN reflex (cortical loop upper bound). Clamped to
+    the production ceiling (280 ms) by __post_init__ unless l6b_desk_posture_enabled opt-in."""
+    l6b_desk_posture_enabled: bool = field(
+        default_factory=lambda: _env_bool("L6B_DESK_POSTURE_ENABLED", False)
+    )
+    """Explicit opt-in (L6B_DESK_POSTURE_ENABLED=true) to allow the wider desk-posture reflex
+    ceiling (350 ms) for legitimate still-controller enrollment sessions. Default False -> the
+    production 280 ms ceiling clamps l6b_human_max_ms in __post_init__. Never a silent widen."""
     l6b_r2_quiet_threshold: int = field(
         default_factory=lambda: int(_env("L6B_R2_QUIET_THRESHOLD", "15"))
     )
@@ -3544,6 +3559,19 @@ class Config:
     )
     """Phase 193 — Publish to alert bus channel on MEDIUM coherence failures. Default False
     (advisory only — reduce noise; MEDIUM contradictions logged to wiki but not alerted)."""
+
+    def __post_init__(self) -> None:
+        # L6B human-reflex MAX band clamp (frozen dataclass -> object.__setattr__). Production
+        # ceiling is 280 ms (calibrated human voluntary-reaction upper bound). A wider
+        # L6B_HUMAN_MAX_MS silently weakens liveness, so it is clamped back to the ceiling UNLESS
+        # the operator explicitly opts into desk-posture mode (L6B_DESK_POSTURE_ENABLED=true) for
+        # legitimate still-controller enrollment, where reflex timing can run slightly longer
+        # (capped at 350 ms). Tightening only: this never widens a value already <= the ceiling,
+        # and the opt-in is explicit, never a silent default-widen.
+        ceiling = (_L6B_DESK_POSTURE_MAX_MS if self.l6b_desk_posture_enabled
+                   else _L6B_HUMAN_MAX_PRODUCTION_CEILING_MS)
+        if self.l6b_human_max_ms > ceiling:
+            object.__setattr__(self, "l6b_human_max_ms", float(ceiling))
 
     def get_oauth_clients(
         self,
