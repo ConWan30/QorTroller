@@ -523,6 +523,7 @@ class RetinaGameCapture:
                 return
             text = hud_ocr.ocr_frame(bgr)
             if text:
+                log.info("kf OCR: %r", text.replace("\n", " | ")[:200])   # diagnostic: what the ROI reads
                 self.core.feed_killfeed_text(getattr(self._source, "_kf_ts", None) or 0.0, text)
         except Exception:  # noqa: BLE001 — OCR must never break capture
             pass

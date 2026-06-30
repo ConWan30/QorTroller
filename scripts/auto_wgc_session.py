@@ -35,8 +35,10 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="automated dev-cert WGC capture session")
     ap.add_argument("--label", default="genuine", help="genuine | forged (spectate)")
     ap.add_argument("--minutes", type=float, default=8.0, help="play/capture window length")
-    ap.add_argument("--health-timeout", type=int, default=120, help="max s to wait for bridge /health")
-    ap.add_argument("--port", type=int, default=8000)
+    ap.add_argument("--health-timeout", type=int, default=180, help="max s to wait for bridge /health")
+    ap.add_argument("--port", type=int, default=8080, help="HTTP_PORT to bind + health-check (config default 8080)")
+    ap.add_argument("--monitor", type=int, default=1, help="display index for WGC capture (1=laptop; monitor "
+                    "mode is what works — window 'Remote Play' is usually not a real window title)")
     a = ap.parse_args()
 
     stamp = int(time.time())
@@ -47,26 +49,33 @@ def main() -> int:
     env["PYTHONPATH"] = os.pathsep.join([str(_REPO / "bridge"), str(_REPO), env.get("PYTHONPATH", "")])
     env.update({
         "RETINA_GAME_CAPTURE_ENABLED": "true",
-        "RETINA_GAME_CAPTURE_WINDOW": "Remote Play",
-        "RETINA_BURST_COMBAT_TRIGGER_ENABLED": "true",   # bursts auto-fire on R2 (hands-free)
+        "RETINA_GAME_CAPTURE_MONITOR": str(a.monitor),   # MONITOR capture (continuous start()) — window mode
+        "RETINA_GAME_CAPTURE_WINDOW": "Remote Play",     #   fails ('Remote Play' is not a real window title)
         "DEVELOPER_SELF_CERT_ENABLED": "true",
         "PRESENCE_LEAN_MODE": "true",                     # gate the agent fleet -> less CPU/observer-effect
         "NQPV_COCAPTURE_ENABLED": "true",                # REQUIRED with lean mode, else coupling=None
         "GRIND_MODE": "false",
         "CHAIN_SUBMISSION_PAUSED": "true",               # kill-switch ON — nothing goes on-chain
+        "HTTP_PORT": str(a.port),                        # bind the port we health-check (avoid 8000/8080 skew)
     })
 
     print(f"[auto] starting bridge (dev-cert/lean) -> {log_path.name}", flush=True)
     lf = open(log_path, "w", encoding="utf-8")
     proc = subprocess.Popen([sys.executable, "-m", "bridge.vapi_bridge.main"],
                             cwd=str(_REPO), env=env, stdout=lf, stderr=subprocess.STDOUT)
-    url = f"http://localhost:{a.port}/health"
+    # probe the bound port first, with 8080/8000 fallbacks in case .env forces a different one
+    seen: set = set()
+    cand_ports = [p for p in (a.port, 8080, 8000) if not (p in seen or seen.add(p))]
     try:
         t0 = time.time()
         ready = False
         while time.time() - t0 < a.health_timeout:
-            if _health_ok(url):
-                ready = True
+            for p in cand_ports:
+                if _health_ok(f"http://localhost:{p}/health"):
+                    ready = True
+                    a.port = p
+                    break
+            if ready:
                 break
             if proc.poll() is not None:
                 print("[auto] FAIL: bridge exited during startup — see log", flush=True)
