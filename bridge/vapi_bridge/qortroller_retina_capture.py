@@ -498,6 +498,7 @@ class RetinaGameCapture:
                  capture_enabled: bool = False, capture_dir: str = "retina_kf_crops",
                  capture_max: int = 600, panel_roi: str = "",
                  inline_enabled: bool = False, anchor_path: str = "", near_log_path: str = "",
+                 composite_log_path: str = "",
                  r2_threshold: int = 40,
                  death_window_enabled: bool = False, death_window_ms: float = 4000.0,
                  death_noise_floor: float = 2.5, death_log_path: str = "") -> None:
@@ -525,14 +526,23 @@ class RetinaGameCapture:
         self._inline_monitor = None
         self._anchor = None
         self._near_log_path = str(near_log_path or "retina_kf_near_boundary.jsonl")
+        self._composite_log_path = str(composite_log_path or "retina_kf_composite.jsonl")
         self._r2_threshold = int(r2_threshold)
         self._inline_logged = False
         if self._inline_enabled:
             try:
-                from l9_presence.killfeed_cv import DEFAULT_MATCH_FLOOR, load_anchor
+                from l9_presence.killfeed_cv import (
+                    DEFAULT_MATCH_FLOOR,
+                    FEED_REGION_MAX_YFRAC,
+                    KILLER_MAX_FRAC_PANEL,
+                    load_anchor,
+                )
                 from l9_presence.killfeed_inline import InlineAuthorshipMonitor
                 self._anchor = load_anchor(anchor_path or "l9_presence/assets/own_handle_anchor.png")
-                self._inline_monitor = InlineAuthorshipMonitor(match_floor=DEFAULT_MATCH_FLOOR)
+                # Phase 1 composite reads (never redefines) the SAME frozen killfeed_cv constants.
+                self._inline_monitor = InlineAuthorshipMonitor(
+                    match_floor=DEFAULT_MATCH_FLOOR, killer_max_frac=KILLER_MAX_FRAC_PANEL,
+                    feed_region_max_yfrac=FEED_REGION_MAX_YFRAC)
             except Exception:  # noqa: BLE001 — inline is advisory; never block capture on its setup
                 self._inline_monitor = None
                 self._anchor = None
@@ -619,9 +629,29 @@ class RetinaGameCapture:
     # --- Trigger-gated INLINE authorship classification (consumption side; off the event loop) ----------
     def mark_r2_onset(self, now_ms: float) -> None:
         """R2 fire onset from the per-record consumption loop: open/extend the classification window. Cheap
-        (no classify here) — safe to call inline. No-op if inline is not active."""
-        if self._inline_monitor is not None:
-            self._inline_monitor.mark_onset(float(now_ms))
+        (no classify here) — safe to call inline. If this onset starts a genuinely NEW window, the PRIOR
+        window's Phase-1 max-over-window composite resolves here — log + persist it. No-op if inline off."""
+        if self._inline_monitor is None:
+            return
+        composite = self._inline_monitor.mark_onset(float(now_ms))
+        self._log_composite(composite)
+
+    def _log_composite(self, composite: Optional[dict]) -> None:
+        if composite is None:
+            return
+        from l9_presence.killfeed_inline import append_near_boundary_jsonl
+        append_near_boundary_jsonl(self._composite_log_path, composite)
+        if composite.get("verdict") == "AUTHORED_PRESENT":
+            log.info("inline COMPOSITE authorship: AUTHORED_PRESENT score=%.3f (%d window members)",
+                     composite.get("composite_score", 0.0), composite.get("window_members", 0))
+
+    def flush_stale_inline_window(self, now_ms: float) -> None:
+        """Resolve a window that has quietly expired (no further R2 onset extended it) so combat that stops
+        firing still gets its composite logged promptly, not only on the next re-engagement. Cheap; call
+        once per consumption tick regardless of R2 state. No-op if inline is not active."""
+        if self._inline_monitor is None:
+            return
+        self._log_composite(self._inline_monitor.flush_if_expired(float(now_ms)))
 
     def maybe_classify_in_window(self, now_ms: float) -> None:
         """If inside an active R2 window and not already classifying, schedule ONE off-thread classify of the
@@ -668,6 +698,11 @@ class RetinaGameCapture:
             log.info("inline authorship: AUTHORED_PRESENT score=%.3f x_frac=%s", res.score, ev.get("x_frac"))
         if near is not None:
             append_near_boundary_jsonl(self._near_log_path, near)
+        # Phase 1 — fold this sample's raw score + position into the CURRENT window's running max,
+        # regardless of whether THIS single sample's own verdict cleared the floor (x_frac/y_frac are
+        # always present in evidence, even below-floor). The composite resolves on the NEXT mark_onset
+        # (new window) or flush_stale_inline_window (window goes cold) — not here.
+        self._inline_monitor.observe_window(res.score, ev.get("x_frac"), ev.get("y_frac"), now_ms)
         # LOOP 2 — sibling consumer of THIS SAME result's victim-slot branch (own-death). No second
         # classify call; just a new consequence of the classification already done. Opens/restarts the
         # post-death stick-activity window; a restart returns the truncated prior record to append.

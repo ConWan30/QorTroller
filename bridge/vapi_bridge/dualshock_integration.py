@@ -428,6 +428,7 @@ class DualShockTransport:
                     inline_enabled=bool(getattr(cfg, "retina_killfeed_inline_enabled", False)),
                     anchor_path=str(getattr(cfg, "retina_killfeed_anchor_path", "")),
                     near_log_path=str(getattr(cfg, "retina_killfeed_near_log", "")),
+                    composite_log_path=str(getattr(cfg, "retina_killfeed_composite_log", "")),
                     r2_threshold=int(getattr(cfg, "retina_combat_r2_threshold", 40)),
                     death_window_enabled=bool(getattr(cfg, "retina_death_window_enabled", False)),
                     death_window_ms=float(getattr(cfg, "retina_death_window_ms", 4000.0)),
@@ -1671,6 +1672,9 @@ class DualShockTransport:
                         if _r2i >= int(getattr(self._cfg, "retina_combat_r2_threshold", 40)):
                             self._retina_game_capture.mark_r2_onset(_now_ms)
                         self._retina_game_capture.maybe_classify_in_window(_now_ms)
+                        # Phase 1: resolve a window that quietly went cold (no further R2 onset) so combat
+                        # that stops firing still gets its max-over-window composite logged promptly.
+                        self._retina_game_capture.flush_stale_inline_window(_now_ms)
                     # Combat-triggered burst: R2 crossing the fire threshold auto-fires a presence burst so the
                     # trigger->HUD window is captured hands-free. Default-off; cooldown + single-flight prevent
                     # stacking. Honest cost: capturing briefly lags the gunfight (WGC observer effect).

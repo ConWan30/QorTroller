@@ -2146,6 +2146,12 @@ class Config:
     retina_killfeed_near_log: str = field(
         default_factory=lambda: os.environ.get("RETINA_KILLFEED_NEAR_LOG", "retina_kf_near_boundary.jsonl")
     )
+    # Phase 1 (floor-transfer diagnostic fix, docs/floor-transfer-diagnostic-2026-07-01.md): max-over-window
+    # composite verdicts (one per R2 window, resolved from the window's BEST killer/victim score rather than
+    # a single sample). Additive to inline_authored, not a replacement.
+    retina_killfeed_composite_log: str = field(
+        default_factory=lambda: os.environ.get("RETINA_KILLFEED_COMPOSITE_LOG", "retina_kf_composite.jsonl")
+    )
     # LOOP 2 — Death-Window Reactive Presence (oracle-in-training; corpus-only, NO verdict). Consumes loop
     # 1's discarded victim-slot branch (own-death) and measures whether stick activity continues through the
     # post-death window (live human) vs the silence of an idle controller. Default-OFF; does NOT modify loop
