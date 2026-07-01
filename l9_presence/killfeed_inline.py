@@ -168,6 +168,7 @@ class InlineAuthorshipMonitor:
     # --- Phase 1 max-over-window composite state ---
     _win_best_killer: float = field(default=-1.0, init=False)
     _win_best_victim: float = field(default=-1.0, init=False)
+    _win_victim_first_ms: float = field(default=-1.0, init=False)   # ts the victim row FIRST appeared this window
     _win_members: int = field(default=0, init=False)
     _win_resolved: bool = field(default=True, init=False)      # True = nothing pending (no open window yet)
     _composite_authored: int = field(default=0, init=False)
@@ -256,6 +257,8 @@ class InlineAuthorshipMonitor:
             self._win_best_killer = max(self._win_best_killer, float(score))
         elif region == "feed" and slot == "victim":
             self._win_best_victim = max(self._win_best_victim, float(score))
+            if self._win_victim_first_ms < 0.0:            # anchor the death-row APPEARANCE (first victim obs)
+                self._win_victim_first_ms = float(now_ms)  # confirmation lag = resolve ts - this; see mark_death
         return self.flush_if_expired(now_ms)
 
     def flush_if_expired(self, now_ms: float) -> Optional[dict]:
@@ -271,8 +274,15 @@ class InlineAuthorshipMonitor:
 
     def _resolve_window(self, now_ms: float) -> Optional[dict]:
         """Composite verdict for the (about-to-close) window: AUTHORED_PRESENT iff the window's BEST killer-
-        position score cleared match_floor at any point; else OWN_KILL_UNBOUND if the best VICTIM-position
-        score cleared it; else UNVERIFIABLE. None if the window had no members (nothing to resolve)."""
+        position score cleared match_floor at any point; else OWN_DEATH if the best VICTIM-position score
+        cleared it; else UNVERIFIABLE. None if the window had no members (nothing to resolve).
+
+        NAMING NOTE: this victim-position resolution is deliberately named OWN_DEATH — own handle in the
+        VICTIM slot means YOU died. The per-crop path (classify_panel / AuthorshipVerdict) still labels the
+        same event OWN_KILL_UNBOUND, a token conflated at the enum level with the OCR oracle's genuine
+        'own-kill not lag-bound' meaning (killfeed_authorship.py:43). That broader enum rename touches
+        loop 1's classify API + the OCR oracle's distinct kill-meaning and is a flagged follow-up; here we
+        only rename the string this composite owns, so the loop-2 death trigger reads honestly."""
         if self._win_members == 0:
             return None
         self._composite_windows += 1
@@ -280,17 +290,22 @@ class InlineAuthorshipMonitor:
             verdict, score = "AUTHORED_PRESENT", self._win_best_killer
             self._composite_authored += 1
         elif self._win_best_victim >= self.match_floor:
-            verdict, score = "OWN_KILL_UNBOUND", self._win_best_victim
+            verdict, score = "OWN_DEATH", self._win_best_victim
         else:
             verdict, score = "UNVERIFIABLE", max(self._win_best_killer, self._win_best_victim, 0.0)
         return {"ts_ms": round(now_ms, 1), "verdict": verdict, "composite_score": round(float(score), 4),
                 "window_members": self._win_members,
                 "window_gate_ms": round(self._window_gate_ms, 1),
-                "window_end_ms": round(self._window_end_ms, 1)}
+                "window_end_ms": round(self._window_end_ms, 1),
+                # death-row appearance anchor (None if no victim obs) — lets loop 2 record the confirmation
+                # lag so a confirmation-gated settle_ts_ms is normalizable to the death instant offline.
+                "victim_first_ms": (round(self._win_victim_first_ms, 1)
+                                    if self._win_victim_first_ms >= 0.0 else None)}
 
     def _reset_window(self) -> None:
         self._win_best_killer = -1.0
         self._win_best_victim = -1.0
+        self._win_victim_first_ms = -1.0
         self._win_members = 0
         self._win_resolved = True
 
@@ -379,6 +394,7 @@ class DeathWindowMonitor:
     _win_end_ms: float = field(default=0.0, init=False)
     _samples: list = field(default_factory=list, init=False)
     _crop_ref: Optional[str] = field(default=None, init=False)
+    _death_anchor_ms: Optional[float] = field(default=None, init=False)   # victim-row first-seen ts (raw)
     _events: int = field(default=0, init=False)
     _last_settle_ts: Optional[float] = field(default=None, init=False)
     _last_truncated: bool = field(default=False, init=False)
@@ -412,18 +428,25 @@ class DeathWindowMonitor:
             "noise_floor": self.noise_floor,
             "truncated": truncated,               # True = a second death cut this window short
             "source_crop_ref": self._crop_ref,
+            # RAW death-row-first-seen ts (None if unknown). The window OPENS at confirmation (composite
+            # resolve = ts_ms), which is ~lag AFTER the death instant; confirmation lag = ts_ms -
+            # death_anchor_ms, so a confirmation-gated settle_ts_ms is normalizable to the death instant.
+            "death_anchor_ms": self._death_anchor_ms,
         }
 
-    def mark_death(self, now_ms: float, crop_ref: Optional[str] = None) -> Optional[dict]:
+    def mark_death(self, now_ms: float, crop_ref: Optional[str] = None,
+                   death_anchor_ms: Optional[float] = None) -> Optional[dict]:
         """Own-death detected (victim-slot). RESTART semantics: if a window is open, close it early
         (truncated) and RETURN its record; then open a fresh window. Caller JSONL-appends any returned
-        record."""
+        record. death_anchor_ms = the death-row-first-seen ts (set AFTER _close so the truncated prior
+        record keeps ITS own anchor); recorded raw so the confirmation lag stays recoverable offline."""
         truncated_rec = self._close(now_ms, truncated=True) if self._active else None
         self._active = True
         self._win_start_ms = float(now_ms)
         self._win_end_ms = float(now_ms) + self.window_ms
         self._samples = []
         self._crop_ref = crop_ref
+        self._death_anchor_ms = (float(death_anchor_ms) if death_anchor_ms is not None else None)
         return truncated_rec
 
     def feed_stick(self, now_ms: float, rx: float, ry: float) -> Optional[dict]:

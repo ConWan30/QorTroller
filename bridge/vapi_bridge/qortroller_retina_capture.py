@@ -547,8 +547,9 @@ class RetinaGameCapture:
                 self._inline_monitor = None
                 self._anchor = None
         # LOOP 2 — Death-Window Reactive Presence (oracle-in-training; corpus-only). Consumes loop 1's
-        # victim-slot branch (own-death) -> measures post-death stick activity. PURE monitor; a lock guards
-        # the mark_death (classify worker thread) vs feed_stick (session-loop thread) boundary. Default-off.
+        # COMPOSITE OWN_DEATH resolution (window-max victim, not raw per-crop) -> measures post-death stick
+        # activity. PURE monitor; a lock guards the mark_death (fired from _log_composite on the consumption
+        # side) vs feed_stick (session-loop side) boundary — same-side now, lock kept for safety. Default-off.
         self._death_enabled = bool(death_window_enabled)
         self._death_monitor = None
         self._death_log_path = str(death_log_path or "retina_death_window.jsonl")
@@ -644,6 +645,26 @@ class RetinaGameCapture:
         if composite.get("verdict") == "AUTHORED_PRESENT":
             log.info("inline COMPOSITE authorship: AUTHORED_PRESENT score=%.3f (%d window members)",
                      composite.get("composite_score", 0.0), composite.get("window_members", 0))
+        # LOOP 2 (composite-driven, the SOLE death trigger): an OWN_DEATH composite means the window's BEST
+        # victim-position score cleared the floor — a death the raw per-crop branch could have single-sample-
+        # MISSED (the 97b86b3c fix, applied to the death side). This resolves at R2-window close, so the
+        # post-death stick window is CONFIRMATION-GATED (opens ~lag after the death instant, not at it) —
+        # honest tradeoff for detection reliability; consistent enough for an oracle-in-training corpus.
+        # Precise death-cam timing (open-early-confirm-late / rolling stick buffer) is the flagged upgrade.
+        elif composite.get("verdict") == "OWN_DEATH" and self._death_monitor is not None and self._death_lock:
+            from l9_presence.killfeed_inline import append_near_boundary_jsonl as _append
+            now_ms = float(composite.get("ts_ms", 0.0))
+            crop_ref = "%s/panel_%d.png" % (self._capture_dir, int(now_ms))
+            anchor_ms = composite.get("victim_first_ms")                   # death-row-first-seen (raw; may be None)
+            with self._death_lock:
+                trunc = self._death_monitor.mark_death(now_ms, crop_ref, anchor_ms)  # RESTART semantics unchanged
+            if not self._death_logged:
+                self._death_logged = True
+                log.info("RetinaGameCapture: death-window monitor ON — first composite OWN_DEATH at %.0fms "
+                         "(score=%.3f, %d window members)", now_ms,
+                         composite.get("composite_score", 0.0), composite.get("window_members", 0))
+            if trunc is not None:
+                _append(self._death_log_path, trunc)   # a second death cut a prior window short
 
     def flush_stale_inline_window(self, now_ms: float) -> None:
         """Resolve a window that has quietly expired (no further R2 onset extended it) so combat that stops
@@ -703,18 +724,11 @@ class RetinaGameCapture:
         # always present in evidence, even below-floor). The composite resolves on the NEXT mark_onset
         # (new window) or flush_stale_inline_window (window goes cold) — not here.
         self._inline_monitor.observe_window(res.score, ev.get("x_frac"), ev.get("y_frac"), now_ms)
-        # LOOP 2 — sibling consumer of THIS SAME result's victim-slot branch (own-death). No second
-        # classify call; just a new consequence of the classification already done. Opens/restarts the
-        # post-death stick-activity window; a restart returns the truncated prior record to append.
-        if self._death_monitor is not None and ev.get("region") == "feed" and ev.get("slot") == "victim":
-            crop_ref = "%s/panel_%d.png" % (self._capture_dir, int(now_ms))
-            with self._death_lock:
-                trunc = self._death_monitor.mark_death(now_ms, crop_ref)
-            if not self._death_logged:
-                self._death_logged = True
-                log.info("RetinaGameCapture: death-window monitor ON — first own-death at %.0fms", now_ms)
-            if trunc is not None:
-                append_near_boundary_jsonl(self._death_log_path, trunc)   # reuse the JSONL sink pattern
+        # LOOP 2 — RETIRED the raw per-crop victim-slot mark_death that used to fire here. It only fired when a
+        # SINGLE crop cleared the floor at victim position (the same single-sample-miss bug loop 1 had) AND,
+        # kept alongside the composite trigger, would DOUBLE-FIRE mark_death for one death -> phantom restart-
+        # truncations. mark_death is now driven solely from _log_composite on an OWN_DEATH composite (window-
+        # max over the whole R2 window). feed_death_stick still accumulates the post-death sticks unchanged.
         # Persist the classified crop via the existing saver (grows the SAME corpus; bounded ring).
         save_crop_bounded(self._capture_dir, "panel", bgr, max_files=self._capture_max)
 

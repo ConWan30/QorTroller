@@ -196,3 +196,57 @@ def test_save_capture_crops_disabled_is_noop(tmp_path):
     rgc._source._panel_bgr = np.zeros((20, 30, 3), np.uint8)
     assert rgc.save_capture_crops() is None                   # disabled -> no write
     assert list(tmp_path.glob("panel_*.png")) == []
+
+
+# --- LOOP 2 composite-driven death trigger (the 97b86b3c sibling fix; wired in _log_composite) ---
+
+def _mk_death_capture(tmp_path):
+    """A capture with the death monitor live but inline OFF (so no anchor-load needed) — we drive the
+    composite path directly, which is exactly what mark_r2_onset / flush_stale_inline_window do live."""
+    from vapi_bridge.qortroller_retina_capture import RetinaGameCapture
+    import threading
+    from l9_presence.killfeed_inline import DeathWindowMonitor
+    rgc = RetinaGameCapture("Remote Play", capture_dir=str(tmp_path),
+                            composite_log_path=str(tmp_path / "comp.jsonl"),
+                            death_log_path=str(tmp_path / "death.jsonl"))
+    # Stand the death monitor up directly (constructor default-off; we don't need inline's anchor here).
+    rgc._death_monitor = DeathWindowMonitor(window_ms=4000.0, noise_floor=2.5)
+    rgc._death_lock = threading.Lock()
+    return rgc
+
+
+def test_composite_own_death_fires_mark_death(tmp_path):
+    rgc = _mk_death_capture(tmp_path)
+    assert rgc._death_monitor._active is False
+    rgc._log_composite({"ts_ms": 5000.0, "verdict": "OWN_DEATH", "composite_score": 0.79,
+                        "window_members": 6, "window_gate_ms": 40.0, "window_end_ms": 4900.0,
+                        "victim_first_ms": 4300.0})
+    assert rgc._death_monitor._active is True                 # composite OWN_DEATH opened the death window
+    assert rgc._death_monitor._win_start_ms == 5000.0         # window anchored at the confirmation ts
+    assert rgc._death_monitor._death_anchor_ms == 4300.0      # death-row-first-seen propagated (lag recoverable)
+
+
+def test_composite_authored_does_not_fire_mark_death(tmp_path):
+    rgc = _mk_death_capture(tmp_path)
+    rgc._log_composite({"ts_ms": 5000.0, "verdict": "AUTHORED_PRESENT", "composite_score": 0.72,
+                        "window_members": 4, "window_gate_ms": 40.0, "window_end_ms": 4900.0})
+    assert rgc._death_monitor._active is False                # a kill is NOT a death — no trigger
+
+
+def test_composite_unverifiable_does_not_fire_mark_death(tmp_path):
+    rgc = _mk_death_capture(tmp_path)
+    rgc._log_composite({"ts_ms": 5000.0, "verdict": "UNVERIFIABLE", "composite_score": 0.5,
+                        "window_members": 3, "window_gate_ms": 40.0, "window_end_ms": 4900.0})
+    assert rgc._death_monitor._active is False
+
+
+def test_worker_no_longer_fires_mark_death_directly(tmp_path):
+    """Regression guard for the retired raw per-crop branch: the ONLY mark_death trigger in the capture
+    file is now inside _log_composite (composite-driven). Two triggers would double-fire -> phantom
+    restart-truncations. Assert the worker body no longer calls mark_death."""
+    import inspect
+    from vapi_bridge.qortroller_retina_capture import RetinaGameCapture
+    worker_src = inspect.getsource(RetinaGameCapture._inline_classify_worker)
+    assert ".mark_death(" not in worker_src                   # no CALL in the worker (comment may name it)
+    log_src = inspect.getsource(RetinaGameCapture._log_composite)
+    assert ".mark_death(" in log_src                          # sole trigger call lives here now
