@@ -179,6 +179,16 @@ def test_save_capture_crops_enabled_writes(tmp_path):
     assert len(list(tmp_path.glob("panel_*.png"))) == 1
 
 
+def test_panel_crop_is_full_res_not_downscaled():
+    # Regression: the offline-review panel crop MUST come from the full-res frame, not the governor's
+    # downscaled optical-flow buffer (which shrinks the ~600px panel to ~76px -> handle unreadable).
+    from vapi_bridge.qortroller_retina_capture import _panel_roi_crop
+    buf = np.zeros((1080, 1920, 4), np.uint8)                 # full-res BGRA frame
+    crop = _panel_roi_crop(buf, (0.0, 0.28, 0.32, 0.67), None)
+    assert crop.shape[1] >= 500 and crop.shape[0] >= 600      # full-res panel (~614x724), NOT ~76px
+    assert crop.shape[2] == 3                                 # normalized to BGR
+
+
 def test_save_capture_crops_disabled_is_noop(tmp_path):
     from vapi_bridge.qortroller_retina_capture import RetinaGameCapture
     rgc = RetinaGameCapture("Remote Play", capture_enabled=False, capture_dir=str(tmp_path),
