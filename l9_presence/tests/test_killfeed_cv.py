@@ -106,6 +106,47 @@ def test_classify_below_floor_unverifiable():
     assert r.score < 0.95
 
 
+def _panel_with_pattern(pattern, W=614, H=724, x=0, y=0):
+    """A BGR left-panel crop (black) with the handle pattern pasted at (x, y)."""
+    panel = np.zeros((H, W, 3), np.uint8)
+    ph, pw = pattern.shape
+    panel[y:y + ph, x:x + pw, :] = pattern[:, :, None]
+    return panel
+
+
+# T-KFCV-P1 — calibrated panel classifier: feed KILLER slot -> AUTHORED (thresholds from the 243-crop corpus)
+def test_classify_panel_killer_feed_authored():
+    pat = _glyph_pattern()
+    panel = _panel_with_pattern(pat, x=int(614 * 0.15), y=int(724 * 0.31))   # feed region, killer-left
+    r = kc.classify_panel(panel, pat)
+    assert r.verdict == AuthorshipVerdict.AUTHORED_PRESENT
+    assert r.evidence.get("region") == "feed" and r.evidence.get("slot") == "killer"
+
+
+# T-KFCV-P2 — feed VICTIM slot (your death) -> NOT authored (the 0.5-vs-0.28 boundary fix)
+def test_classify_panel_victim_feed_not_authored():
+    pat = _glyph_pattern()
+    panel = _panel_with_pattern(pat, x=int(614 * 0.42), y=int(724 * 0.35))   # feed region, victim-right
+    r = kc.classify_panel(panel, pat)
+    assert r.verdict != AuthorshipVerdict.AUTHORED_PRESENT
+    assert r.evidence.get("slot") == "victim"
+
+
+# T-KFCV-P3 — ROSTER region (persistent presence) -> not a kill, even in the killer x-band
+def test_classify_panel_roster_not_a_kill():
+    pat = _glyph_pattern()
+    panel = _panel_with_pattern(pat, x=int(614 * 0.20), y=int(724 * 0.96))   # roster region (bottom)
+    r = kc.classify_panel(panel, pat)
+    assert r.verdict == AuthorshipVerdict.UNVERIFIABLE
+    assert r.evidence.get("region") == "roster"
+
+
+# T-KFCV-P4 — panel classifier is fail-closed without an anchor
+def test_classify_panel_no_anchor_fail_closed():
+    r = kc.classify_panel(_panel_with_pattern(_glyph_pattern(), x=90, y=220), None)
+    assert r.verdict == AuthorshipVerdict.UNVERIFIABLE
+
+
 # T-KFCV-7 — HONEST N=2 ground-truth result (documents the calibration gap). Skips if the operator's local
 # frames / committed anchor asset are absent (CI has no Warzone frames). At the default (uncalibrated) floor
 # the scaffold ABSTAINS on both the positive (kf_kill1) and negative (kf_kill2) frames — fail-closed-correct,
