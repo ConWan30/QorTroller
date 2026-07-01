@@ -425,6 +425,10 @@ class DualShockTransport:
                     capture_dir=str(getattr(cfg, "retina_killfeed_capture_dir", "retina_kf_crops")),
                     capture_max=int(getattr(cfg, "retina_killfeed_capture_max", 600)),
                     panel_roi=str(getattr(cfg, "retina_capture_panel_roi", "")),
+                    inline_enabled=bool(getattr(cfg, "retina_killfeed_inline_enabled", False)),
+                    anchor_path=str(getattr(cfg, "retina_killfeed_anchor_path", "")),
+                    near_log_path=str(getattr(cfg, "retina_killfeed_near_log", "")),
+                    r2_threshold=int(getattr(cfg, "retina_combat_r2_threshold", 40)),
                 )
                 if getattr(cfg, "retina_capture_burst_enabled", False):
                     # Duty-cycle: do NOT capture continuously (WGC lags the Remote Play GPU decoder — observer
@@ -442,6 +446,7 @@ class DualShockTransport:
                                                                    de_gate=_dg, de_keep_quantile=_dq)
                     self._prev_r2_combat = 0          # R2 edge state for the combat-triggered burst
                     self._last_combat_burst_ts = 0.0
+                    self._prev_r2_inline = 0          # R2 edge state for inline authorship classification
                     log.info("QorTroller Retina presence-burst mode — %s (burst=%.1fs%s)",
                              ("ON-DEMAND (no capture until trigger %r)" % _tp) if _bp <= 0
                              else "periodic duty-cycle, capture OFF between bursts",
@@ -1642,6 +1647,20 @@ class DualShockTransport:
                         self._retina_game_capture.feed_hid(
                             _ts, float(_rs.right_stick_x), float(_rs.right_stick_y))
                         self._retina_game_capture.feed_trigger(_ts, float(_rs.r2_trigger))  # Channel B1: trigger->HUD
+                    # Trigger-gated INLINE authorship: on R2 fire onset, open the classification window; each
+                    # cycle, schedule ONE off-event-loop classify inside the window (single-flight). This is
+                    # classification scheduling, NOT capture bursting — capture stays continuous, and nothing
+                    # is added to the WGC frame callback. Default-off (retina_killfeed_inline_enabled).
+                    if getattr(self._cfg, "retina_killfeed_inline_enabled", False):
+                        # ANY active R2 fire (max across the batch >= threshold) keeps the classification
+                        # window open — NOT a rising edge: sustained/held fire only edges once, so an edge
+                        # gate fires a single classify per trigger-hold (the segment-2 bug). mark_onset
+                        # extends the window; maybe_classify throttles (single-flight + min-gap) so combat is
+                        # sampled continuously and idle closes the window after ~5s.
+                        _r2i = max((int(getattr(_f, "r2_trigger", 0) or 0) for _f in frames), default=0)
+                        if _r2i >= int(getattr(self._cfg, "retina_combat_r2_threshold", 40)):
+                            self._retina_game_capture.mark_r2_onset(_now_ms)
+                        self._retina_game_capture.maybe_classify_in_window(_now_ms)
                     # Combat-triggered burst: R2 crossing the fire threshold auto-fires a presence burst so the
                     # trigger->HUD window is captured hands-free. Default-off; cooldown + single-flight prevent
                     # stacking. Honest cost: capturing briefly lags the gunfight (WGC observer effect).

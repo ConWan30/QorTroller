@@ -2131,6 +2131,21 @@ class Config:
     retina_capture_panel_roi: str = field(
         default_factory=lambda: os.environ.get("RETINA_CAPTURE_PANEL_ROI", "0.0,0.28,0.32,0.67")
     )
+    # Trigger-gated INLINE authorship classification. On R2 fire onset (>= retina_combat_r2_threshold), the
+    # calibrated killfeed_cv.classify_panel runs LIVE on the already-arriving panel crop (off the event loop,
+    # single-flight) so the labelled corpus grows in real time and near-margin scores surface as they happen.
+    # Classification-scheduling only — capture stays continuous; NOTHING added to the WGC frame callback.
+    # Default-OFF, advisory; does NOT touch the cert verdict or any threshold (match_floor stays 0.66).
+    retina_killfeed_inline_enabled: bool = field(
+        default_factory=lambda: _env_bool("RETINA_KILLFEED_INLINE_ENABLED", False)
+    )
+    retina_killfeed_anchor_path: str = field(
+        default_factory=lambda: os.environ.get("RETINA_KILLFEED_ANCHOR_PATH",
+                                               "l9_presence/assets/own_handle_anchor.png")
+    )
+    retina_killfeed_near_log: str = field(
+        default_factory=lambda: os.environ.get("RETINA_KILLFEED_NEAR_LOG", "retina_kf_near_boundary.jsonl")
+    )
     # Inject NEGATIVE coupled-retina verdicts (IMPLAUSIBLE) into the NQPV proof. Default False: in a
     # dead-zone / auto-camera game (NCAA CFB), the right-stick->screen coupling is structurally absent, so
     # a low-coupling IMPLAUSIBLE is a FALSE NEGATIVE (the auto-camera pans on its own, not an aimbot), NOT

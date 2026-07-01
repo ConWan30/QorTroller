@@ -256,3 +256,7 @@ bridge-*.db
 
 # Dense kill-feed panel-crop calibration corpus (gameplay-derived; operator-local)
 retina_kf_crops/
+
+# Archived gameplay crop corpora (per-session; gameplay-derived)
+retina_kf_archive/
+retina_kf_near_boundary.jsonl
