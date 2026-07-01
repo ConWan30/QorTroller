@@ -263,3 +263,7 @@ retina_kf_near_boundary.jsonl
 retina_death_window.jsonl
 retina_kf_composite.jsonl
 retina_kf_composite_offline_relabel_*.jsonl
+adv_splice_*.jsonl
+retina_kf_adv_splice*/
+adv_splice_shown_*.jsonl
+retina_daemon_adv_splice_*.log
