@@ -148,6 +148,33 @@ def test_death_window_restart_truncates_first():
     assert m.status_dict()["death_window_active"] is True   # a fresh window is open (not dropped)
 
 
+def test_death_window_records_raw_anchor_and_lag_is_derivable():
+    """The window opens at CONFIRMATION (win_start=ts_ms); death_anchor_ms carries the earlier death-row
+    appearance. Both raw in the record -> confirmation lag = ts_ms - death_anchor_ms recoverable offline."""
+    m = ki.DeathWindowMonitor(window_ms=1000.0, noise_floor=2.5)
+    m.mark_death(5000.0, "c", death_anchor_ms=4200.0)          # confirmed at 5000, row first seen at 4200
+    rec = _feed_until_close(m, 5000.0, 6100.0, rx_fn=lambda rel: 128.0, ry_fn=lambda rel: 128.0)
+    assert rec["death_anchor_ms"] == 4200.0
+    assert rec["ts_ms"] == 5000.0
+    assert rec["ts_ms"] - rec["death_anchor_ms"] == 800.0      # the confirmation lag, offline-derivable
+
+
+def test_death_window_anchor_survives_restart_per_window():
+    """On restart the truncated prior record must keep ITS OWN anchor (set before the new one overwrites)."""
+    m = ki.DeathWindowMonitor(window_ms=4000.0, noise_floor=2.5)
+    m.mark_death(1000.0, "crop1", death_anchor_ms=700.0)
+    trunc = m.mark_death(2000.0, "crop2", death_anchor_ms=1800.0)   # restart -> closes window 1
+    assert trunc["death_anchor_ms"] == 700.0                   # window 1 kept its own anchor
+    assert m._death_anchor_ms == 1800.0                        # window 2 holds the new anchor
+
+
+def test_death_window_anchor_defaults_none():
+    m = ki.DeathWindowMonitor(window_ms=1000.0, noise_floor=2.5)
+    m.mark_death(0.0, "c")                                     # legacy 2-arg call -> anchor unknown
+    rec = _feed_until_close(m, 0.0, 1100.0, rx_fn=lambda rel: 128.0, ry_fn=lambda rel: 128.0)
+    assert rec["death_anchor_ms"] is None
+
+
 def test_death_window_no_verdict_anywhere():
     m = ki.DeathWindowMonitor(window_ms=1000.0, noise_floor=2.5)
     m.mark_death(0.0, "c")
@@ -195,14 +222,46 @@ def test_composite_works_on_below_floor_evidence_without_region_slot():
     assert rec is not None and rec["verdict"] == "UNVERIFIABLE"      # never cleared the floor -> honest abstain
 
 
-def test_composite_victim_resolves_own_kill_unbound_not_authored():
+def test_composite_victim_resolves_own_death_not_authored():
     m = _mk_composite_monitor()
     m.mark_onset(0.0)
     m.observe_window(0.80, 0.40, 0.35, 100.0)      # victim position (xf>=killer_max_frac), clears floor
     rec = m.mark_onset(5000.0)
     assert rec is not None
-    assert rec["verdict"] == "OWN_KILL_UNBOUND"                      # your death, NEVER authored
+    assert rec["verdict"] == "OWN_DEATH"                             # own handle at victim = your death, NEVER authored
     assert m.status_dict()["inline_composite_authored"] == 0
+
+
+def test_composite_records_victim_first_seen_anchor():
+    """The death-row appearance anchor is the FIRST victim obs, not the peak — so a confirmation-gated
+    settle_ts_ms is normalizable to the death instant offline (lag = resolve ts - victim_first_ms)."""
+    m = _mk_composite_monitor()
+    m.mark_onset(0.0)
+    m.observe_window(0.55, 0.40, 0.35, 120.0)      # first victim obs (below floor) -> anchors appearance
+    m.observe_window(0.82, 0.40, 0.35, 900.0)      # later, stronger victim obs -> raises the max, NOT the anchor
+    rec = m.mark_onset(5000.0)
+    assert rec["verdict"] == "OWN_DEATH"                             # window-max 0.82 cleared floor
+    assert rec["victim_first_ms"] == 120.0                          # anchor = FIRST appearance, not the 900ms peak
+    assert rec["ts_ms"] > rec["victim_first_ms"]                    # confirmation lag is positive + recoverable
+
+
+def test_composite_no_victim_anchor_is_none():
+    m = _mk_composite_monitor()
+    m.mark_onset(0.0)
+    m.observe_window(0.90, 0.18, 0.35, 100.0)      # killer only, no victim obs
+    rec = m.mark_onset(5000.0)
+    assert rec["victim_first_ms"] is None                           # no death row seen -> anchor is None
+
+
+def test_composite_below_floor_victim_never_resolves_own_death():
+    """Loop-2 detection rail: a victim-position sample that never clears the floor must NOT resolve OWN_DEATH
+    (would fire a phantom mark_death). Only the window-MAX clearing the floor counts."""
+    m = _mk_composite_monitor()
+    m.mark_onset(0.0)
+    m.observe_window(0.50, 0.40, 0.35, 100.0)      # victim position but below floor
+    m.observe_window(0.61, 0.40, 0.35, 200.0)      # still below floor; window-max victim = 0.61 < 0.66
+    rec = m.mark_onset(5000.0)
+    assert rec["verdict"] == "UNVERIFIABLE"                          # no OWN_DEATH -> no death trigger
 
 
 def test_composite_killer_wins_over_victim_when_both_present():
