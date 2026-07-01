@@ -27,13 +27,20 @@ from typing import Optional
 
 from .killfeed_authorship import AuthorshipVerdict, default_handle
 
-# Conservative match floor. Set deliberately HIGH so the un-calibrated scaffold abstains rather than guesses
-# — on the N=2 frames the genuine feed match scored ~0.39, well under this, so it correctly fails closed to
-# UNVERIFIABLE. A dense-corpus calibration cycle lowers/justifies this with a measured FAR-safe threshold.
-DEFAULT_MATCH_FLOOR = float(os.getenv("KILLFEED_CV_MATCH_FLOOR", "0.62"))
-# killer occupies the LEFT of a feed row (verified); a confident match whose centre is left of this fraction
-# is the killer slot -> authorship-eligible. Right of it = victim (your death) -> neutral, never authored.
+# Match floor — CALIBRATED on a 243-crop full-res Warzone corpus (2026-06-30): background scores p95=0.658,
+# genuine own-handle matches 0.682-0.856 -> a 0.66 floor cleanly separates present from absent (no false
+# AUTHORED across 243 crops). The prior 0.62 was a pre-corpus placeholder. Env-overridable.
+DEFAULT_MATCH_FLOOR = float(os.getenv("KILLFEED_CV_MATCH_FLOOR", "0.66"))
+# killer occupies the LEFT of a feed row (verified). For a PRE-CROPPED tight feed strip, killer is the left
+# half (classify_feed default). For the full LEFT-PANEL crop (classify_panel), the feed row occupies only the
+# left portion, so the killer/victim boundary is CALIBRATED to frac 0.28 (measured natural gap: killers
+# cluster at x-frac 0.18, victims at 0.38-0.55 -> a 0.20-wide gap centred at 0.279).
 KILLER_MAX_FRAC = float(os.getenv("KILLFEED_CV_KILLER_MAX_FRAC", "0.5"))
+KILLER_MAX_FRAC_PANEL = float(os.getenv("KILLFEED_CV_KILLER_MAX_FRAC_PANEL", "0.28"))
+# In the panel crop, feed rows sit in the upper region (y-frac 0.31-0.47) and the persistent squad roster in
+# the lower region (y-frac ~0.97). A match ABOVE this y-frac is a feed event; below it is roster presence
+# (persistent, NOT a kill) -> neutral. CALIBRATED on the same corpus.
+FEED_REGION_MAX_YFRAC = float(os.getenv("KILLFEED_CV_FEED_MAX_YFRAC", "0.42"))
 _SCALES = (0.6, 0.7, 0.85, 1.0, 1.15, 1.3, 1.5, 1.7)
 
 
@@ -170,3 +177,55 @@ def classify_feed(feed_bgr, anchor_bw, *, handle: Optional[str] = None,
                                   "own handle matched in KILLER (left) slot — authored", ev)
     return CvAuthorshipResult(AuthorshipVerdict.OWN_KILL_UNBOUND, score, x_frac, False, h,
                               "own handle matched in VICTIM (right) slot — your death, neutral", ev)
+
+
+def classify_panel(panel_bgr, anchor_bw, *, handle: Optional[str] = None,
+                   match_floor: float = DEFAULT_MATCH_FLOOR,
+                   killer_max_frac: float = KILLER_MAX_FRAC_PANEL,
+                   feed_region_max_yfrac: float = FEED_REGION_MAX_YFRAC) -> CvAuthorshipResult:
+    """Calibrated authorship classifier over the DENSE-CAPTURE LEFT PANEL crop (feed + roster), FAIL-CLOSED.
+
+    Thresholds measured on a 243-crop full-res Warzone corpus (2026-06-30), validated against labelled
+    ground truth (own-kill -> AUTHORED; own-death + roster-presence + background -> not authored; ZERO false
+    AUTHORED). Two calibrated geometry gates on top of the match floor:
+      * feed vs roster: a match ABOVE feed_region_max_yfrac (upper region) is a live feed event; below it is
+        the persistent squad-roster entry (presence, not a kill) -> UNVERIFIABLE-for-authorship.
+      * killer vs victim: within the feed, own handle left of killer_max_frac is the KILLER slot -> AUTHORED;
+        right of it is the VICTIM slot (your death) -> neutral. The panel boundary (0.28) is TIGHTER than a
+        tight-strip 0.5 because the feed row occupies only the left portion of the wider panel — using 0.5
+        here would misclassify a death as a kill (the false-positive that corrupts the labeller).
+
+    Verdicts: AUTHORED_PRESENT (own kill) | OWN_KILL_UNBOUND (own death, neutral — evidence.region='feed',
+    slot='victim') | UNVERIFIABLE (roster presence, or below floor). evidence carries region/slot/score so
+    the offline labeller can bucket own-kill vs own-death vs neither.
+    """
+    h = handle or default_handle()
+    if anchor_bw is None:
+        return CvAuthorshipResult(AuthorshipVerdict.UNVERIFIABLE, 0.0, None, None, h,
+                                  "no anchor template (fail-closed)")
+    target = binarize_glyphs(panel_bgr)
+    if target is None:
+        return CvAuthorshipResult(AuthorshipVerdict.UNVERIFIABLE, 0.0, None, None, h,
+                                  "panel crop unreadable (fail-closed)")
+    score, cx, cy, scale = multiscale_match(anchor_bw, target)
+    ph, pw = target.shape[:2]
+    x_frac = (cx / pw) if (cx is not None and pw) else None
+    y_frac = (cy / ph) if (cy is not None and ph) else None
+    ev = {"match_floor": match_floor, "scale": scale, "x_frac": x_frac, "y_frac": y_frac,
+          "killer_max_frac": killer_max_frac, "feed_region_max_yfrac": feed_region_max_yfrac}
+    if score < match_floor:
+        return CvAuthorshipResult(AuthorshipVerdict.UNVERIFIABLE, score, x_frac, None, h,
+                                  f"match {score:.3f} < floor {match_floor:.2f} — no confident handle", ev)
+    if y_frac is None or y_frac >= feed_region_max_yfrac:
+        ev["region"] = "roster"
+        return CvAuthorshipResult(AuthorshipVerdict.UNVERIFIABLE, score, x_frac, None, h,
+                                  "own handle in ROSTER region — persistent presence, not a kill", ev)
+    ev["region"] = "feed"
+    killer_slot = x_frac is not None and x_frac < killer_max_frac
+    if killer_slot:
+        ev["slot"] = "killer"
+        return CvAuthorshipResult(AuthorshipVerdict.AUTHORED_PRESENT, score, x_frac, True, h,
+                                  "own handle in feed KILLER (left) slot — authored kill", ev)
+    ev["slot"] = "victim"
+    return CvAuthorshipResult(AuthorshipVerdict.OWN_KILL_UNBOUND, score, x_frac, False, h,
+                              "own handle in feed VICTIM (right) slot — your death, neutral", ev)
