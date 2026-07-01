@@ -134,11 +134,25 @@ class BackgroundScoreTracker:
 @dataclass
 class InlineAuthorshipMonitor:
     """PURE state machine for R2-gated inline classification: holds the active window, single-flight flag,
-    min-gap throttle, the background-score tracker, and the counters status() surfaces. No async / cv2 / I/O
-    — the caller injects classify results via record_result and performs the actual classify + persist."""
+    min-gap throttle, the background-score tracker, the counters status() surfaces, AND the Phase-1
+    max-over-window composite (see WindowComposite below). No async / cv2 / I/O — the caller injects
+    classify results via record_result/observe_window and performs the actual classify + persist.
+
+    PHASE 1 (2026-07-01, floor-transfer diagnostic D-FLOOR-1=branch-b, docs/floor-transfer-diagnostic-
+    2026-07-01.md): the archive-confirmed cause of AUTHORED=0 was a SINGLE-SAMPLE MISS, not a floor/
+    capture-condition problem (real kills peaked 0.70-0.84 above match_floor=0.66; a single per-classify
+    sample sometimes landed off-peak). The fix composites the MAX score seen at killer/victim position
+    ACROSS an R2 window and resolves ONE verdict when the window closes, instead of trusting any single
+    sample's already-thresholded verdict. This lives ENTIRELY in the scheduling layer (here) — it reads
+    match_floor/killer_max_frac/feed_region_max_yfrac from the caller (sourced from killfeed_cv's frozen
+    constants) but never redefines them. record_result's existing per-sample telemetry (near-boundary log,
+    background tracker, per-crop _authored/_deaths/_roster) is UNCHANGED — the composite is an ADDITIVE
+    signal (status_dict's composite_* fields), not a replacement of the existing counters."""
     window_ms: tuple = R2_WINDOW_MS
     min_gap_ms: float = DEFAULT_MIN_GAP_MS
     match_floor: float = 0.66            # mirror of killfeed_cv.DEFAULT_MATCH_FLOOR (monitor does NOT set it)
+    killer_max_frac: float = 0.28        # mirror of killfeed_cv.KILLER_MAX_FRAC_PANEL (read-only mirror)
+    feed_region_max_yfrac: float = 0.42  # mirror of killfeed_cv.FEED_REGION_MAX_YFRAC (read-only mirror)
     near_epsilon: float = DEFAULT_NEAR_EPSILON
     refresh_k: int = DEFAULT_BG_REFRESH_K
     _window_gate_ms: float = field(default=0.0, init=False)   # earliest classify time (onset + lag_min)
@@ -151,17 +165,31 @@ class InlineAuthorshipMonitor:
     _roster: int = field(default=0, init=False)
     _near_boundary: int = field(default=0, init=False)
     _last_verdict: Optional[str] = field(default=None, init=False)
+    # --- Phase 1 max-over-window composite state ---
+    _win_best_killer: float = field(default=-1.0, init=False)
+    _win_best_victim: float = field(default=-1.0, init=False)
+    _win_members: int = field(default=0, init=False)
+    _win_resolved: bool = field(default=True, init=False)      # True = nothing pending (no open window yet)
+    _composite_authored: int = field(default=0, init=False)
+    _composite_windows: int = field(default=0, init=False)
 
     def __post_init__(self) -> None:
         self._tracker = BackgroundScoreTracker(self.refresh_k)
 
-    def mark_onset(self, now_ms: float) -> None:
+    def mark_onset(self, now_ms: float) -> Optional[dict]:
         """R2 rising-edge onset at now_ms: open/extend the classification window [now+lag_min, now+lag_max].
-        Sustained fire keeps the window open so combat is sampled continuously (min-gap bounded)."""
+        Sustained fire keeps the window open so combat is sampled continuously (min-gap bounded). If this
+        onset starts a genuinely NEW window (the prior one had already ended), the prior window's composite
+        is resolved FIRST and returned (restart semantics — mirrors DeathWindowMonitor.mark_death) so the
+        caller can log it before the new window's state resets."""
         lo, hi = self.window_ms
-        if now_ms > self._window_end_ms:          # not currently active -> reset the gate
+        resolved = None
+        if now_ms > self._window_end_ms:          # not currently active -> reset the gate (NEW window)
+            resolved = self._resolve_window(now_ms)
             self._window_gate_ms = now_ms + lo
+            self._reset_window()
         self._window_end_ms = now_ms + hi         # extend the end on every onset
+        return resolved
 
     def should_classify(self, now_ms: float) -> bool:
         """PURE decision: are we inside an active window, not already classifying, and past the min gap?"""
@@ -182,7 +210,8 @@ class InlineAuthorshipMonitor:
                       now_ms: float) -> Optional[dict]:
         """Fold one classify result into the live telemetry. Returns a near-boundary event dict (for the
         caller to JSONL-append) iff the score is within epsilon of the floor, else None. BACKGROUND/neutral
-        scores feed the tracker; AUTHORED does not (it's the signal, not the noise floor)."""
+        scores feed the tracker; AUTHORED does not (it's the signal, not the noise floor). UNCHANGED by
+        Phase 1 — this is the existing per-sample accounting; see observe_window for the composite."""
         self._classifications += 1
         self._last_verdict = verdict
         if verdict == "AUTHORED_PRESENT":
@@ -201,6 +230,70 @@ class InlineAuthorshipMonitor:
                     "region": region, "slot": slot, "floor": self.match_floor}
         return None
 
+    # --- Phase 1: max-over-window composite ---------------------------------------------------------
+    def _classify_position(self, x_frac: Optional[float], y_frac: Optional[float]):
+        """Derive the would-be region/slot from x_frac/y_frac using the SAME frozen thresholds
+        classify_panel uses. Works even on BELOW-FLOOR samples — classify_panel omits region/slot from its
+        evidence dict when score<match_floor, but x_frac/y_frac are always present, so the composite can see
+        'this sample would have been killer-position' even when the single-sample verdict was UNVERIFIABLE."""
+        if x_frac is None or y_frac is None:
+            return None, None
+        if y_frac >= self.feed_region_max_yfrac:
+            return "roster", None
+        return "feed", ("killer" if x_frac < self.killer_max_frac else "victim")
+
+    def observe_window(self, score: float, x_frac: Optional[float], y_frac: Optional[float],
+                       now_ms: float) -> Optional[dict]:
+        """Fold ONE classify's raw score + position into the CURRENT window's running max — regardless of
+        whether this single sample's own verdict cleared the floor. Call once per classify, after
+        record_result. Returns a resolved composite record only if THIS call's timestamp is already past
+        the window end (the window quietly expired without a following onset — see flush_if_expired for the
+        no-further-classify case); normally returns None (composite resolves on the NEXT mark_onset)."""
+        region, slot = self._classify_position(x_frac, y_frac)
+        self._win_members += 1
+        self._win_resolved = False
+        if region == "feed" and slot == "killer":
+            self._win_best_killer = max(self._win_best_killer, float(score))
+        elif region == "feed" and slot == "victim":
+            self._win_best_victim = max(self._win_best_victim, float(score))
+        return self.flush_if_expired(now_ms)
+
+    def flush_if_expired(self, now_ms: float) -> Optional[dict]:
+        """Resolve + return the current window's composite if it has members, hasn't been resolved yet, and
+        now_ms is past the window end (no further onset extended it). Call once per consumption tick
+        (independent of whether a classify happened) so a window that goes cold still resolves promptly
+        instead of waiting indefinitely for the next R2 onset."""
+        if self._win_members > 0 and not self._win_resolved and now_ms > self._window_end_ms:
+            rec = self._resolve_window(now_ms)
+            self._win_resolved = True
+            return rec
+        return None
+
+    def _resolve_window(self, now_ms: float) -> Optional[dict]:
+        """Composite verdict for the (about-to-close) window: AUTHORED_PRESENT iff the window's BEST killer-
+        position score cleared match_floor at any point; else OWN_KILL_UNBOUND if the best VICTIM-position
+        score cleared it; else UNVERIFIABLE. None if the window had no members (nothing to resolve)."""
+        if self._win_members == 0:
+            return None
+        self._composite_windows += 1
+        if self._win_best_killer >= self.match_floor:
+            verdict, score = "AUTHORED_PRESENT", self._win_best_killer
+            self._composite_authored += 1
+        elif self._win_best_victim >= self.match_floor:
+            verdict, score = "OWN_KILL_UNBOUND", self._win_best_victim
+        else:
+            verdict, score = "UNVERIFIABLE", max(self._win_best_killer, self._win_best_victim, 0.0)
+        return {"ts_ms": round(now_ms, 1), "verdict": verdict, "composite_score": round(float(score), 4),
+                "window_members": self._win_members,
+                "window_gate_ms": round(self._window_gate_ms, 1),
+                "window_end_ms": round(self._window_end_ms, 1)}
+
+    def _reset_window(self) -> None:
+        self._win_best_killer = -1.0
+        self._win_best_victim = -1.0
+        self._win_members = 0
+        self._win_resolved = True
+
     def status_dict(self) -> dict:
         """Read-only inline telemetry for status() (alongside kf_verdict/kf_own_kills/kf_other_kills)."""
         return {
@@ -216,6 +309,9 @@ class InlineAuthorshipMonitor:
             "inline_bg_max": (round(self._tracker.max(), 4)
                               if self._tracker.max() is not None else None),
             "inline_bg_n": self._tracker.n,
+            # Phase 1 — max-over-window composite (additive; does not replace inline_authored above)
+            "inline_composite_authored": self._composite_authored,
+            "inline_composite_windows": self._composite_windows,
         }
 
 

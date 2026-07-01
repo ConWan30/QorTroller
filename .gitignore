@@ -261,3 +261,5 @@ retina_kf_crops/
 retina_kf_archive/
 retina_kf_near_boundary.jsonl
 retina_death_window.jsonl
+retina_kf_composite.jsonl
+retina_kf_composite_offline_relabel_*.jsonl

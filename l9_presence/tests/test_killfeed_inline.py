@@ -155,3 +155,108 @@ def test_death_window_no_verdict_anywhere():
     # corpus record carries only raw measurements — never a PRESENT/ABSENT/AUTHORED verdict
     for banned in ("verdict", "present", "absent", "authored"):
         assert not any(banned in k.lower() for k in rec)
+
+
+# ============================================================================================
+# PHASE 1 — max-over-window composite (floor-transfer diagnostic fix, D-FLOOR-1=branch-b)
+# ============================================================================================
+
+def _mk_composite_monitor(**kw):
+    kw.setdefault("window_ms", (50.0, 900.0))
+    kw.setdefault("min_gap_ms", 200.0)
+    kw.setdefault("match_floor", 0.66)
+    kw.setdefault("killer_max_frac", 0.28)
+    kw.setdefault("feed_region_max_yfrac", 0.42)
+    return ki.InlineAuthorshipMonitor(**kw)
+
+
+def test_composite_below_floor_single_sample_but_window_max_authors():
+    # THE archive-confirmed bug this fixes: no single sample clears the floor, but the window's MAX does.
+    m = _mk_composite_monitor()
+    m.mark_onset(1000.0)                                            # window [1050, 1900]
+    m.observe_window(0.50, 0.18, 0.35, 1100.0)                      # killer-position, below floor
+    m.observe_window(0.702, 0.18, 0.35, 1300.0)                     # killer-position, CLEARS floor
+    m.observe_window(0.45, 0.18, 0.35, 1500.0)                      # killer-position, below floor again
+    rec = m.mark_onset(3000.0)                                      # a NEW window (past the old end) resolves the old one
+    assert rec is not None
+    assert rec["verdict"] == "AUTHORED_PRESENT"
+    assert abs(rec["composite_score"] - 0.702) < 1e-6               # the MAX, not the last/first sample
+    assert rec["window_members"] == 3
+    assert m.status_dict()["inline_composite_authored"] == 1
+
+
+def test_composite_works_on_below_floor_evidence_without_region_slot():
+    # classify_panel omits region/slot from evidence when score<floor -- observe_window must still work
+    # from x_frac/y_frac alone (the one thing always present), which is exactly what it's designed for.
+    m = _mk_composite_monitor()
+    m.mark_onset(0.0)
+    m.observe_window(0.30, 0.18, 0.35, 100.0)     # would-be killer, below floor -- no region/slot needed
+    rec = m.mark_onset(5000.0)
+    assert rec is not None and rec["verdict"] == "UNVERIFIABLE"      # never cleared the floor -> honest abstain
+
+
+def test_composite_victim_resolves_own_kill_unbound_not_authored():
+    m = _mk_composite_monitor()
+    m.mark_onset(0.0)
+    m.observe_window(0.80, 0.40, 0.35, 100.0)      # victim position (xf>=killer_max_frac), clears floor
+    rec = m.mark_onset(5000.0)
+    assert rec is not None
+    assert rec["verdict"] == "OWN_KILL_UNBOUND"                      # your death, NEVER authored
+    assert m.status_dict()["inline_composite_authored"] == 0
+
+
+def test_composite_killer_wins_over_victim_when_both_present():
+    m = _mk_composite_monitor()
+    m.mark_onset(0.0)
+    m.observe_window(0.90, 0.40, 0.35, 100.0)      # victim, high
+    m.observe_window(0.70, 0.18, 0.35, 200.0)      # killer, also clears floor
+    rec = m.mark_onset(5000.0)
+    assert rec["verdict"] == "AUTHORED_PRESENT"                      # killer-clearing wins the resolution
+
+
+def test_composite_roster_position_never_authors():
+    m = _mk_composite_monitor()
+    m.mark_onset(0.0)
+    m.observe_window(0.95, 0.18, 0.80, 100.0)      # roster region (yf>=0.42) even though xf looks killer-ish
+    rec = m.mark_onset(5000.0)
+    assert rec["verdict"] == "UNVERIFIABLE"                          # roster is persistent presence, not a kill
+
+
+def test_composite_empty_window_resolves_to_none():
+    m = _mk_composite_monitor()
+    m.mark_onset(0.0)                              # window opens, but nothing ever observed in it
+    rec = m.mark_onset(5000.0)
+    assert rec is None                                                # nothing to resolve -> no spurious record
+
+
+def test_flush_stale_window_resolves_without_a_new_onset():
+    # combat stops firing entirely -- no NEW onset ever comes; flush_if_expired must still resolve it.
+    m = _mk_composite_monitor()
+    m.mark_onset(1000.0)                            # window [1050, 1900]
+    m.observe_window(0.843, 0.18, 0.35, 1200.0)      # clears floor
+    assert m.flush_if_expired(1500.0) is None        # still inside the window -> not expired yet
+    rec = m.flush_if_expired(2000.0)                 # past window end, no further onset -> resolves now
+    assert rec is not None and rec["verdict"] == "AUTHORED_PRESENT"
+    assert m.flush_if_expired(2500.0) is None         # already resolved -> no double-emit
+
+
+def test_sustained_fire_composites_across_the_whole_extended_window():
+    # re-onset within an OPEN window extends it and must NOT reset the running max (a real combat burst
+    # composites across the whole engagement, not just the segment since the last re-press).
+    m = _mk_composite_monitor()
+    m.mark_onset(0.0)                                # window [50, 900]
+    m.observe_window(0.70, 0.18, 0.35, 100.0)         # clears floor early in the burst
+    assert m.mark_onset(500.0) is None                # re-onset INSIDE the window -> extends, does NOT resolve
+    m.observe_window(0.30, 0.18, 0.35, 600.0)         # a later, lower sample in the SAME extended window
+    rec = m.mark_onset(3000.0)                        # now past the extended end -> resolves
+    assert rec is not None and rec["verdict"] == "AUTHORED_PRESENT"
+    assert abs(rec["composite_score"] - 0.70) < 1e-6  # the max survives the extension, isn't reset by re-onset
+
+
+def test_composite_never_touches_frozen_thresholds():
+    # the composite mirror fields must equal killfeed_cv's frozen constants when constructed by the real path
+    from l9_presence import killfeed_cv as kc
+    m = ki.InlineAuthorshipMonitor(match_floor=kc.DEFAULT_MATCH_FLOOR,
+                                   killer_max_frac=kc.KILLER_MAX_FRAC_PANEL,
+                                   feed_region_max_yfrac=kc.FEED_REGION_MAX_YFRAC)
+    assert m.match_floor == 0.66 and m.killer_max_frac == 0.28 and m.feed_region_max_yfrac == 0.42
