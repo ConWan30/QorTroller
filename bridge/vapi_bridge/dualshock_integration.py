@@ -429,6 +429,10 @@ class DualShockTransport:
                     anchor_path=str(getattr(cfg, "retina_killfeed_anchor_path", "")),
                     near_log_path=str(getattr(cfg, "retina_killfeed_near_log", "")),
                     r2_threshold=int(getattr(cfg, "retina_combat_r2_threshold", 40)),
+                    death_window_enabled=bool(getattr(cfg, "retina_death_window_enabled", False)),
+                    death_window_ms=float(getattr(cfg, "retina_death_window_ms", 4000.0)),
+                    death_noise_floor=float(getattr(cfg, "retina_death_stick_noise_floor", 2.5)),
+                    death_log_path=str(getattr(cfg, "retina_death_window_log", "")),
                 )
                 if getattr(cfg, "retina_capture_burst_enabled", False):
                     # Duty-cycle: do NOT capture continuously (WGC lags the Remote Play GPU decoder — observer
@@ -1640,6 +1644,7 @@ class DualShockTransport:
                 if self._retina_game_capture is not None and frames:
                     _now_ms = time.time() * 1000.0
                     _last_dev = float(getattr(frames[-1], "timestamp_ms", 0) or 0)
+                    _death_on = getattr(self._cfg, "retina_death_window_enabled", False)
                     for _rs in frames:
                         _dev = float(getattr(_rs, "timestamp_ms", 0) or 0)
                         _delta = _last_dev - _dev
@@ -1647,6 +1652,11 @@ class DualShockTransport:
                         self._retina_game_capture.feed_hid(
                             _ts, float(_rs.right_stick_x), float(_rs.right_stick_y))
                         self._retina_game_capture.feed_trigger(_ts, float(_rs.r2_trigger))  # Channel B1: trigger->HUD
+                        # LOOP 2: feed each frame's stick into the post-death window (if open). Consumes the
+                        # SAME rx/ry loop 1 reads; the window is opened by loop 1's victim-slot branch.
+                        if _death_on:
+                            self._retina_game_capture.feed_death_stick(
+                                _ts, float(_rs.right_stick_x), float(_rs.right_stick_y))
                     # Trigger-gated INLINE authorship: on R2 fire onset, open the classification window; each
                     # cycle, schedule ONE off-event-loop classify inside the window (single-flight). This is
                     # classification scheduling, NOT capture bursting — capture stays continuous, and nothing

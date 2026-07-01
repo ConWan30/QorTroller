@@ -106,3 +106,52 @@ def test_monitor_record_result_folding():
     assert m.status_dict()["inline_classifications"] == 3
     assert m.status_dict()["inline_enabled"] is True
 
+# ============================================================================================
+# LOOP 2 — DeathWindowMonitor (post-death stick-activity; corpus-only, NO verdict)
+# ============================================================================================
+
+def test_death_window_settle_detected():
+    m = ki.DeathWindowMonitor(window_ms=3000.0, noise_floor=2.5)
+    m.mark_death(1000.0, "crop_a")
+    # active (big stick swings) for the first ~1000ms, then idle (stick at 128) for the remainder
+    rec = _feed_until_close(m, 1000.0, 3100.0,
+                            rx_fn=lambda rel: 128.0 + (30.0 * math.sin(rel / 60.0) if rel < 1000 else 0.0),
+                            ry_fn=lambda rel: 128.0)
+    assert rec is not None
+    assert rec["truncated"] is False
+    assert rec["settle_ts_ms"] is not None and 0.0 < rec["settle_ts_ms"] < 3000.0   # settled mid-window
+    assert rec["rx_var"] is not None and rec["rx_range"] is not None                 # raw fields present
+    assert "verdict" not in rec                                                       # NO verdict field
+
+
+def test_death_window_never_settles_is_null():
+    m = ki.DeathWindowMonitor(window_ms=2000.0, noise_floor=2.5)
+    m.mark_death(0.0, "crop_b")
+    rec = _feed_until_close(m, 0.0, 2100.0,
+                            rx_fn=lambda rel: 128.0 + 30.0 * math.sin(rel / 50.0),   # active throughout
+                            ry_fn=lambda rel: 128.0 + 30.0 * math.cos(rel / 50.0))
+    assert rec is not None
+    assert rec["settle_ts_ms"] is None            # NEVER settled -> null (distinct from settling at end)
+
+
+def test_death_window_restart_truncates_first():
+    m = ki.DeathWindowMonitor(window_ms=4000.0, noise_floor=2.5)
+    assert m.mark_death(1000.0, "crop1") is None      # first death -> nothing to close
+    m.feed_stick(1100.0, 140.0, 120.0)
+    m.feed_stick(1200.0, 130.0, 128.0)
+    trunc = m.mark_death(2000.0, "crop2")             # second death INSIDE the window -> truncate the first
+    assert trunc is not None
+    assert trunc["truncated"] is True
+    assert trunc["window_ms"] < 4000.0                # truncated shorter than the nominal window
+    assert trunc["source_crop_ref"] == "crop1"
+    assert m.status_dict()["death_events"] == 1       # exactly one window closed
+    assert m.status_dict()["death_window_active"] is True   # a fresh window is open (not dropped)
+
+
+def test_death_window_no_verdict_anywhere():
+    m = ki.DeathWindowMonitor(window_ms=1000.0, noise_floor=2.5)
+    m.mark_death(0.0, "c")
+    rec = _feed_until_close(m, 0.0, 1100.0, rx_fn=lambda rel: 128.0, ry_fn=lambda rel: 128.0)
+    # corpus record carries only raw measurements — never a PRESENT/ABSENT/AUTHORED verdict
+    for banned in ("verdict", "present", "absent", "authored"):
+        assert not any(banned in k.lower() for k in rec)

@@ -221,3 +221,130 @@ class InlineAuthorshipMonitor:
 
 def now_ms() -> float:
     return time.time() * 1000.0
+
+
+# ============================================================================================
+# LOOP 2 — Death-Window Reactive Presence (oracle-in-training; corpus-only, NO verdict)
+# ============================================================================================
+# Consumes loop 1's DISCARDED victim-slot branch (own-handle in the feed VICTIM slot = "you died",
+# structurally unambiguous — same own-handle anchor as the killer/AUTHORED case). On that trigger it
+# measures whether natural controller (stick) activity CONTINUES through the death-cam/respawn window
+# (a live human keeps fidgeting/navigating) vs the silence an idle controller in front of a replay
+# would show — the INVERSE causal direction (screen -> input) from every input->screen channel.
+#
+# HONESTY: this is an oracle-in-training. It logs RAW measurements only (variance, range, settle-point).
+# NO PRESENT/ABSENT/verdict field — calibration is future work, pending a real corpus (N=few tonight).
+
+# Idle-stick std noise floor for settle detection. Grounded in the DualSense 8-bit stick's idle ADC
+# noise (still stick ~128 +/- 1-2 LSB), env-overridable, and re-derivable offline from the raw
+# variance/range this also logs. NOT a cold guess: measured live from the baseline segment refines it.
+DEFAULT_STICK_NOISE_FLOOR = float(os.getenv("RETINA_DEATH_STICK_NOISE_FLOOR", "2.5"))   # LSB std
+DEFAULT_DEATH_WINDOW_MS = float(os.getenv("RETINA_DEATH_WINDOW_MS", "4000"))
+_SETTLE_SUBWIN_MS = 300.0     # rolling sub-window for the "activity" estimate used by settle detection
+
+
+def _stick_settle_ts(samples, win_start_ms: float, noise_floor: float,
+                     subwin_ms: float = _SETTLE_SUBWIN_MS):
+    """Relative timestamp (ms from window start) where rx/ry activity FIRST drops below the noise floor
+    AND stays below for the remainder of the window. Activity = rolling std of rx and ry over subwin_ms.
+    Returns None if it never settles (distinct from settling at the window end). Pure."""
+    if len(samples) < 3:
+        return None
+    import numpy as np
+    ts = np.array([s[0] for s in samples], float)
+    rx = np.array([s[1] for s in samples], float)
+    ry = np.array([s[2] for s in samples], float)
+    settle_rel = None
+    for i in range(len(samples)):
+        lo = ts[i] - subwin_ms
+        m = ts <= ts[i]
+        m &= ts >= lo
+        if m.sum() < 2:
+            continue
+        active = max(float(rx[m].std()), float(ry[m].std()))
+        if active < noise_floor:
+            if settle_rel is None:
+                settle_rel = ts[i] - win_start_ms      # candidate first-below
+        else:
+            settle_rel = None                          # rose back above -> not sustained; reset
+    return None if settle_rel is None else round(float(settle_rel), 1)
+
+
+@dataclass
+class DeathWindowMonitor:
+    """PURE state machine for the post-death stick-activity window. mark_death opens/RESTARTS a window
+    (a second death inside an open window closes the first early with truncated=True, then opens fresh —
+    never extend/merge, never drop); feed_stick accumulates rx/ry; a window closing (expiry or restart)
+    RETURNS a raw corpus record for the caller to JSONL-append. No async / I/O / verdict."""
+    window_ms: float = DEFAULT_DEATH_WINDOW_MS
+    noise_floor: float = DEFAULT_STICK_NOISE_FLOOR
+    _active: bool = field(default=False, init=False)
+    _win_start_ms: float = field(default=0.0, init=False)
+    _win_end_ms: float = field(default=0.0, init=False)
+    _samples: list = field(default_factory=list, init=False)
+    _crop_ref: Optional[str] = field(default=None, init=False)
+    _events: int = field(default=0, init=False)
+    _last_settle_ts: Optional[float] = field(default=None, init=False)
+    _last_truncated: bool = field(default=False, init=False)
+
+    def _close(self, now_ms: float, truncated: bool) -> Optional[dict]:
+        if not self._active:
+            return None
+        rec = self._build_record(now_ms, truncated)
+        self._active = False
+        self._samples = []
+        self._events += 1
+        self._last_settle_ts = rec.get("settle_ts_ms")
+        self._last_truncated = truncated
+        return rec
+
+    def _build_record(self, now_ms: float, truncated: bool) -> dict:
+        import numpy as np
+        rx = np.array([s[1] for s in self._samples], float) if self._samples else np.array([])
+        ry = np.array([s[2] for s in self._samples], float) if self._samples else np.array([])
+        settle = _stick_settle_ts(self._samples, self._win_start_ms, self.noise_floor)
+        return {
+            "ts_ms": round(self._win_start_ms, 1),
+            "window_ms": round(now_ms - self._win_start_ms, 1),        # actual (truncated windows < nominal)
+            "nominal_window_ms": self.window_ms,
+            "n_stick_samples": len(self._samples),
+            "rx_var": (round(float(rx.var()), 3) if rx.size else None),
+            "ry_var": (round(float(ry.var()), 3) if ry.size else None),
+            "rx_range": (round(float(rx.max() - rx.min()), 1) if rx.size else None),
+            "ry_range": (round(float(ry.max() - ry.min()), 1) if ry.size else None),
+            "settle_ts_ms": settle,               # relative to window start; None = NEVER settled (!= end)
+            "noise_floor": self.noise_floor,
+            "truncated": truncated,               # True = a second death cut this window short
+            "source_crop_ref": self._crop_ref,
+        }
+
+    def mark_death(self, now_ms: float, crop_ref: Optional[str] = None) -> Optional[dict]:
+        """Own-death detected (victim-slot). RESTART semantics: if a window is open, close it early
+        (truncated) and RETURN its record; then open a fresh window. Caller JSONL-appends any returned
+        record."""
+        truncated_rec = self._close(now_ms, truncated=True) if self._active else None
+        self._active = True
+        self._win_start_ms = float(now_ms)
+        self._win_end_ms = float(now_ms) + self.window_ms
+        self._samples = []
+        self._crop_ref = crop_ref
+        return truncated_rec
+
+    def feed_stick(self, now_ms: float, rx: float, ry: float) -> Optional[dict]:
+        """Feed one rx/ry sample. If the window has expired, close it and RETURN its record (caller
+        appends). No-op (returns None) when no window is active."""
+        if not self._active:
+            return None
+        if now_ms >= self._win_end_ms:
+            return self._close(now_ms, truncated=False)
+        self._samples.append((float(now_ms), float(rx), float(ry)))
+        return None
+
+    def status_dict(self) -> dict:
+        return {
+            "death_window_enabled": True,
+            "death_events": self._events,
+            "death_window_active": self._active,
+            "death_last_settle_ts_ms": self._last_settle_ts,
+            "death_last_truncated": self._last_truncated,
+        }

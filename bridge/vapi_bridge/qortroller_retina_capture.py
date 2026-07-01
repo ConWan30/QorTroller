@@ -498,7 +498,9 @@ class RetinaGameCapture:
                  capture_enabled: bool = False, capture_dir: str = "retina_kf_crops",
                  capture_max: int = 600, panel_roi: str = "",
                  inline_enabled: bool = False, anchor_path: str = "", near_log_path: str = "",
-                 r2_threshold: int = 40) -> None:
+                 r2_threshold: int = 40,
+                 death_window_enabled: bool = False, death_window_ms: float = 4000.0,
+                 death_noise_floor: float = 2.5, death_log_path: str = "") -> None:
         self.core = RetinaGameCaptureCore(ncaa_profile=ncaa_profile)
         self._capture_enabled = bool(capture_enabled)
         self._inline_enabled = bool(inline_enabled)
@@ -534,6 +536,23 @@ class RetinaGameCapture:
             except Exception:  # noqa: BLE001 — inline is advisory; never block capture on its setup
                 self._inline_monitor = None
                 self._anchor = None
+        # LOOP 2 — Death-Window Reactive Presence (oracle-in-training; corpus-only). Consumes loop 1's
+        # victim-slot branch (own-death) -> measures post-death stick activity. PURE monitor; a lock guards
+        # the mark_death (classify worker thread) vs feed_stick (session-loop thread) boundary. Default-off.
+        self._death_enabled = bool(death_window_enabled)
+        self._death_monitor = None
+        self._death_log_path = str(death_log_path or "retina_death_window.jsonl")
+        self._death_lock = None
+        self._death_logged = False
+        if self._death_enabled:
+            try:
+                import threading
+                from l9_presence.killfeed_inline import DeathWindowMonitor
+                self._death_monitor = DeathWindowMonitor(window_ms=float(death_window_ms),
+                                                         noise_floor=float(death_noise_floor))
+                self._death_lock = threading.Lock()
+            except Exception:  # noqa: BLE001 — advisory; never block capture on its setup
+                self._death_monitor = None
         # Adaptive lag/FPS governor — meticulously widens the oracle's causal-lag search window to track
         # the live Remote Play latency (and tunes resample-rate/downscale for estimator validity).
         from l9_presence.adaptive_capture import AdaptiveCaptureGovernor, CaptureControls
@@ -649,8 +668,35 @@ class RetinaGameCapture:
             log.info("inline authorship: AUTHORED_PRESENT score=%.3f x_frac=%s", res.score, ev.get("x_frac"))
         if near is not None:
             append_near_boundary_jsonl(self._near_log_path, near)
+        # LOOP 2 — sibling consumer of THIS SAME result's victim-slot branch (own-death). No second
+        # classify call; just a new consequence of the classification already done. Opens/restarts the
+        # post-death stick-activity window; a restart returns the truncated prior record to append.
+        if self._death_monitor is not None and ev.get("region") == "feed" and ev.get("slot") == "victim":
+            crop_ref = "%s/panel_%d.png" % (self._capture_dir, int(now_ms))
+            with self._death_lock:
+                trunc = self._death_monitor.mark_death(now_ms, crop_ref)
+            if not self._death_logged:
+                self._death_logged = True
+                log.info("RetinaGameCapture: death-window monitor ON — first own-death at %.0fms", now_ms)
+            if trunc is not None:
+                append_near_boundary_jsonl(self._death_log_path, trunc)   # reuse the JSONL sink pattern
         # Persist the classified crop via the existing saver (grows the SAME corpus; bounded ring).
         save_crop_bounded(self._capture_dir, "panel", bgr, max_files=self._capture_max)
+
+    def feed_death_stick(self, now_ms: float, rx: float, ry: float) -> None:
+        """LOOP 2: feed one rx/ry sample from the consumption loop into the death window (if open). Cheap +
+        non-blocking; a window closing on expiry returns a corpus record we JSONL-append. No-op if loop 2
+        is off. Called per HID record from _session_loop — same discipline as loop 1's stick read."""
+        if self._death_monitor is None:
+            return
+        try:
+            with self._death_lock:
+                rec = self._death_monitor.feed_stick(float(now_ms), float(rx), float(ry))
+            if rec is not None:
+                from l9_presence.killfeed_inline import append_near_boundary_jsonl
+                append_near_boundary_jsonl(self._death_log_path, rec)
+        except Exception:  # noqa: BLE001 — advisory corpus; never break the loop
+            pass
 
     def latest_coupled_verdict(self) -> Optional[str]:
         return self.core.latest_coupled_verdict()
@@ -744,6 +790,9 @@ class RetinaGameCapture:
             # Trigger-gated INLINE authorship telemetry (read-only; NOT a threshold input)
             **(self._inline_monitor.status_dict() if self._inline_monitor is not None
                else {"inline_enabled": False}),
+            # LOOP 2 — death-window reactive-presence corpus telemetry (read-only; NO verdict)
+            **(self._death_monitor.status_dict() if self._death_monitor is not None
+               else {"death_window_enabled": False}),
         }
 
     def stop(self) -> None:

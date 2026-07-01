@@ -2146,6 +2146,23 @@ class Config:
     retina_killfeed_near_log: str = field(
         default_factory=lambda: os.environ.get("RETINA_KILLFEED_NEAR_LOG", "retina_kf_near_boundary.jsonl")
     )
+    # LOOP 2 — Death-Window Reactive Presence (oracle-in-training; corpus-only, NO verdict). Consumes loop
+    # 1's discarded victim-slot branch (own-death) and measures whether stick activity continues through the
+    # post-death window (live human) vs the silence of an idle controller. Default-OFF; does NOT modify loop
+    # 1, emit a verdict, or touch the cert. noise floor is grounded in the DualSense idle-stick ADC noise +
+    # measured live from the baseline segment; raw variance/range are logged so settle_ts is re-derivable.
+    retina_death_window_enabled: bool = field(
+        default_factory=lambda: _env_bool("RETINA_DEATH_WINDOW_ENABLED", False)
+    )
+    retina_death_window_ms: float = field(
+        default_factory=lambda: float(os.environ.get("RETINA_DEATH_WINDOW_MS", "4000"))
+    )
+    retina_death_stick_noise_floor: float = field(
+        default_factory=lambda: float(os.environ.get("RETINA_DEATH_STICK_NOISE_FLOOR", "2.5"))
+    )
+    retina_death_window_log: str = field(
+        default_factory=lambda: os.environ.get("RETINA_DEATH_WINDOW_LOG", "retina_death_window.jsonl")
+    )
     # Inject NEGATIVE coupled-retina verdicts (IMPLAUSIBLE) into the NQPV proof. Default False: in a
     # dead-zone / auto-camera game (NCAA CFB), the right-stick->screen coupling is structurally absent, so
     # a low-coupling IMPLAUSIBLE is a FALSE NEGATIVE (the auto-camera pans on its own, not an aimbot), NOT
