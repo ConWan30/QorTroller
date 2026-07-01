@@ -496,15 +496,20 @@ class RetinaGameCapture:
                  monitor_index: int = 0, min_update_interval_ms: int = 0,
                  killfeed_enabled: bool = False, killfeed_roi: str = "", killfeed_every: int = 20,
                  capture_enabled: bool = False, capture_dir: str = "retina_kf_crops",
-                 capture_max: int = 600, panel_roi: str = "") -> None:
+                 capture_max: int = 600, panel_roi: str = "",
+                 inline_enabled: bool = False, anchor_path: str = "", near_log_path: str = "",
+                 r2_threshold: int = 40) -> None:
         self.core = RetinaGameCaptureCore(ncaa_profile=ncaa_profile)
         self._capture_enabled = bool(capture_enabled)
+        self._inline_enabled = bool(inline_enabled)
+        # Inline authorship classification needs the panel crop stashed even if crop-saving is off.
+        _need_panel = self._capture_enabled or self._inline_enabled
         self._source = WgcFrameSource(self.core, window_substr, downscale=downscale,
                                       monitor_index=monitor_index,
                                       min_update_interval_ms=min_update_interval_ms,
                                       killfeed_roi=(killfeed_roi if killfeed_enabled else ""),
                                       killfeed_every=killfeed_every,
-                                      panel_roi=(panel_roi if self._capture_enabled else ""))
+                                      panel_roi=(panel_roi if _need_panel else ""))
         self._killfeed_enabled = bool(killfeed_enabled)
         self._kf_logged = False
         self._capture_dir = str(capture_dir)
@@ -512,6 +517,23 @@ class RetinaGameCapture:
         self._capture_n = 0
         self._capture_logged = False
         self.started = False
+        # Trigger-gated INLINE authorship (advisory; default-off). PURE monitor holds the R2-window +
+        # single-flight decision; the anchor + classify + persist happen off the event loop (see
+        # maybe_classify_in_window). Fail-open: no anchor -> inline abstains, capture is unaffected.
+        self._inline_monitor = None
+        self._anchor = None
+        self._near_log_path = str(near_log_path or "retina_kf_near_boundary.jsonl")
+        self._r2_threshold = int(r2_threshold)
+        self._inline_logged = False
+        if self._inline_enabled:
+            try:
+                from l9_presence.killfeed_cv import DEFAULT_MATCH_FLOOR, load_anchor
+                from l9_presence.killfeed_inline import InlineAuthorshipMonitor
+                self._anchor = load_anchor(anchor_path or "l9_presence/assets/own_handle_anchor.png")
+                self._inline_monitor = InlineAuthorshipMonitor(match_floor=DEFAULT_MATCH_FLOOR)
+            except Exception:  # noqa: BLE001 — inline is advisory; never block capture on its setup
+                self._inline_monitor = None
+                self._anchor = None
         # Adaptive lag/FPS governor — meticulously widens the oracle's causal-lag search window to track
         # the live Remote Play latency (and tunes resample-rate/downscale for estimator validity).
         from l9_presence.adaptive_capture import AdaptiveCaptureGovernor, CaptureControls
@@ -574,6 +596,61 @@ class RetinaGameCapture:
             return path
         except Exception:  # noqa: BLE001 — capture must never break the loop
             return None
+
+    # --- Trigger-gated INLINE authorship classification (consumption side; off the event loop) ----------
+    def mark_r2_onset(self, now_ms: float) -> None:
+        """R2 fire onset from the per-record consumption loop: open/extend the classification window. Cheap
+        (no classify here) — safe to call inline. No-op if inline is not active."""
+        if self._inline_monitor is not None:
+            self._inline_monitor.mark_onset(float(now_ms))
+
+    def maybe_classify_in_window(self, now_ms: float) -> None:
+        """If inside an active R2 window and not already classifying, schedule ONE off-thread classify of the
+        latest panel crop. Non-blocking: the ~100ms classify_panel runs via asyncio.to_thread, single-flight
+        + min-gap bounded. Called per consumption cycle. No work is added to the WGC frame callback."""
+        if self._inline_monitor is None or self._anchor is None:
+            return
+        if not self._inline_monitor.should_classify(float(now_ms)):
+            return
+        bgr = getattr(self._source, "_panel_bgr", None)
+        if bgr is None:
+            return
+        try:
+            import asyncio
+            self._inline_monitor.begin(float(now_ms))
+            asyncio.create_task(self._inline_classify(bgr, float(now_ms)))
+        except RuntimeError:                       # no running loop (non-async caller) -> abstain, unblock
+            self._inline_monitor.end()
+
+    async def _inline_classify(self, bgr, now_ms: float) -> None:
+        import asyncio
+        try:
+            await asyncio.to_thread(self._inline_classify_worker, bgr, now_ms)
+        except Exception:  # noqa: BLE001 — inline classify must never break the loop
+            pass
+        finally:
+            if self._inline_monitor is not None:
+                self._inline_monitor.end()
+
+    def _inline_classify_worker(self, bgr, now_ms: float) -> None:
+        """Off-event-loop worker: classify the panel crop, fold into live telemetry, log near-boundary, and
+        persist the classified crop via the SAME bounded-ring saver (reuse, no second storage path)."""
+        from l9_presence.killfeed_cv import classify_panel, save_crop_bounded
+        from l9_presence.killfeed_inline import append_near_boundary_jsonl
+        res = classify_panel(bgr, self._anchor)
+        ev = res.evidence or {}
+        near = self._inline_monitor.record_result(
+            res.verdict.value, res.score, ev.get("region"), ev.get("slot"), now_ms)
+        if not self._inline_logged:
+            self._inline_logged = True
+            log.info("RetinaGameCapture: inline authorship ON (floor=%.2f, handle=%s) — first classify %s",
+                     self._inline_monitor.match_floor, res.handle, res.verdict.value)
+        if res.verdict.value == "AUTHORED_PRESENT":
+            log.info("inline authorship: AUTHORED_PRESENT score=%.3f x_frac=%s", res.score, ev.get("x_frac"))
+        if near is not None:
+            append_near_boundary_jsonl(self._near_log_path, near)
+        # Persist the classified crop via the existing saver (grows the SAME corpus; bounded ring).
+        save_crop_bounded(self._capture_dir, "panel", bgr, max_files=self._capture_max)
 
     def latest_coupled_verdict(self) -> Optional[str]:
         return self.core.latest_coupled_verdict()
@@ -664,6 +741,9 @@ class RetinaGameCapture:
             "kf_own_kills": (kf.own_kills if kf else None),
             "kf_other_kills": (kf.other_kills if kf else None),
             "kf_bound_kills": (kf.bound_kills if kf else None),
+            # Trigger-gated INLINE authorship telemetry (read-only; NOT a threshold input)
+            **(self._inline_monitor.status_dict() if self._inline_monitor is not None
+               else {"inline_enabled": False}),
         }
 
     def stop(self) -> None:

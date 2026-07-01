@@ -88,6 +88,8 @@ def cmd_start(a) -> int:
         env["RETINA_KILLFEED_CAPTURE_ENABLED"] = "true"
         if getattr(a, "capture_dir", ""):
             env["RETINA_KILLFEED_CAPTURE_DIR"] = a.capture_dir
+    if getattr(a, "killfeed_inline", False):             # R2-gated INLINE authorship classification (live)
+        env["RETINA_KILLFEED_INLINE_ENABLED"] = "true"
     lf = open(log_path, "w", encoding="utf-8")
     # DETACHED so the bridge survives this process exiting AND the remote-access drop.
     if sys.platform == "win32":
@@ -202,6 +204,8 @@ def main() -> int:
     s.add_argument("--capture", action="store_true",
                    help="dense left-panel (feed+roster) crop capture -> calibration corpus")
     s.add_argument("--capture-dir", default="", help="dir for dense panel crops (default retina_kf_crops)")
+    s.add_argument("--killfeed-inline", action="store_true",
+                   help="R2-gated INLINE authorship classification (live classify_panel + near-margin log)")
     s.add_argument("--port", type=int, default=8080); s.add_argument("--health-timeout", type=int, default=180)
     st = sub.add_parser("status"); st.set_defaults(fn=cmd_status)
     sp = sub.add_parser("stop"); sp.set_defaults(fn=cmd_stop); sp.add_argument("--label", default=None)
