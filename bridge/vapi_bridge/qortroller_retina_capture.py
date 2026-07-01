@@ -278,6 +278,15 @@ def _roi_px(shape, roi):
     return y0, y1, x0, x1
 
 
+def _panel_roi_crop(buf, roi, lum_scale):
+    """Crop the HUD panel ROI from the FULL-RES frame buffer + normalize to uint8 BGR. MUST take the raw
+    `buf` (full frame), NOT `buf_small` — the governor downscales buf_small up to 8x under Remote Play GPU
+    pressure, which crushes the ~600px panel to ~76px (unreadable for the offline handle detector). The
+    offline-review corpus crop stays full resolution regardless of the live coupling downscale. Pure."""
+    y0, y1, x0, x1 = _roi_px(buf.shape, roi)
+    return _u8_from_scale(buf[y0:y1, x0:x1], lum_scale)
+
+
 class WgcFrameSource:
     """Windows Graphics Capture source: captures a window in the background, runs cv_motion on each
     frame pair, and feeds on-screen pan into the core. Import-guarded; failure is non-fatal (the lobe
@@ -386,11 +395,11 @@ class WgcFrameSource:
                                     _y0, _y1, _x0, _x1 = _roi_px(buf_small.shape, self._kf_roi)
                                     self._kf_bgr = _u8_from_scale(buf_small[_y0:_y1, _x0:_x1], self._lum_scale)
                                     self._kf_ts = screen_ts
-                                # Dense corpus: stash the left HUD panel (feed+roster) crop for the saver tick.
+                                # Dense corpus: stash the left HUD panel (feed+roster) crop for the saver
+                                # tick — from the FULL-RES buf (see _panel_roi_crop; buf_small would be
+                                # ~76px under GPU-pressure downscale = unreadable for the handle detector).
                                 if self._panel_roi is not None:
-                                    _py0, _py1, _px0, _px1 = _roi_px(buf_small.shape, self._panel_roi)
-                                    self._panel_bgr = _u8_from_scale(
-                                        buf_small[_py0:_py1, _px0:_px1], self._lum_scale)
+                                    self._panel_bgr = _panel_roi_crop(buf, self._panel_roi, self._lum_scale)
                             except Exception:  # noqa: BLE001
                                 pass
                     # Shape guard: the governor changes downscale live, which changes the gray image size.
