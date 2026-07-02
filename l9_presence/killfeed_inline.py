@@ -55,14 +55,18 @@ class TriggerChannel:
     enabled: bool
 
 
-# R2 is the ONLY enabled channel. The other three are documented-not-built (comment/doc only) so the
-# extensibility shape is explicit; each is its own future decision block, never implemented here.
+# R2 is the ONLY enabled channel. l2_ads is now SCAFFOLDED (l9_presence/ads_coupling.py) but stays
+# enabled=False until calibrated on real center-ROI ADS data AND adversarially splice-paired; the other two
+# remain documented-not-built. Each channel is its own decision block, never a rewrite of this mechanism.
 CHANNEL_REGISTRY = (
     TriggerChannel("r2_onset", "r2_trigger >= 40 (rising edge)", "panel: feed+roster",
                    "AUTHORED_PRESENT", R2_WINDOW_MS, True),
-    # --- documented, enabled=False, NOT implemented ---
+    # --- l2_ads: SCAFFOLDED in ads_coupling.py (AdsCouplingMonitor); enabled=False, detector ABSTAINS until
+    #     calibrated + splice-paired. Second anti-splice channel — binds live L2 to a live scoped transition
+    #     the replay can't supply; tight (0,300)ms window is the parametric lever (vs R2's 5000ms). ---
     TriggerChannel("l2_ads", "l2_trigger >= 40 (rising edge)", "scope-overlay / center-ROI",
-                   "ADS_PRESENT", (0.0, 300.0), False),        # second anti-splice channel
+                   "ADS_TRANSITION_BOUND", (0.0, 300.0), False),   # narrow claim (a bound transition), NOT presence
+    # --- documented, enabled=False, NOT implemented ---
     TriggerChannel("weapon_switch", "L1/R1 or buttons-bitmask press", "weapon-switch / ammo-counter HUD",
                    "SWITCH_PRESENT", (0.0, 500.0), False),
     TriggerChannel("r2_release", "r2_trigger < 40 (falling edge)", "panel: feed",
