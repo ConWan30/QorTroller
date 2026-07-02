@@ -46,6 +46,7 @@ import hashlib
 import json
 import logging
 import math as _math
+import os
 import struct
 import sys
 import time
@@ -750,6 +751,9 @@ class DualShockTransport:
                     # feed_ads gets device-precise L2 edge timing. Gated on ads-enabled + capture present.
                     _push_l2 = (getattr(self._cfg, "retina_ads_coupling_enabled", False)
                                 and self._retina_game_capture is not None)
+                    _rpdiag = os.environ.get("RETINA_ADS_RP_DIAG", "") == "true"
+                    _rpdiag_n = 0
+                    _rpdiag_max = 30000       # ~30s @ ~1kHz — long enough for several RP ADS holds
                     while self._hid_counter_running:
                         data = handle.read(128, timeout_ms=200)
                         if data:
@@ -759,6 +763,19 @@ class DualShockTransport:
                                 _ts32 = data[28] | (data[29] << 8) | (data[30] << 16) | (data[31] << 24)
                                 self._retina_game_capture.push_l2_raw(
                                     time.time() * 1000.0, _ts32, data[5])
+                            # RP-config diagnostic (RETINA_ADS_RP_DIAG): dump the RAW report bytes DURING
+                            # Remote Play so an offline scan finds which offset tracks the true L2 under RP
+                            # (offset 5 sticks high on release under RP — 2026-07-02 finding) and whether
+                            # reports are stale (device ts @28 repeats) or merely lagged. Paired with the
+                            # pydualsense-L2 dump in the consumption loop for direct raw-vs-parsed correlation.
+                            if _rpdiag and _rpdiag_n < _rpdiag_max:
+                                try:
+                                    with open("retina_rp_rawdump.jsonl", "a", encoding="utf-8") as _fh:
+                                        _fh.write('{"wall_ms": %.3f, "hex": "%s"}\n' % (
+                                            time.time() * 1000.0, bytes(data).hex()))
+                                    _rpdiag_n += 1
+                                except Exception:
+                                    pass
                 except Exception as exc:
                     log.warning("Phase 235-PCC-RATE-FIX: rate counter reconnecting "
                                 "(%s)", exc)
@@ -1703,6 +1720,19 @@ class DualShockTransport:
                         self._retina_game_capture.crosscheck_l2(
                             max((int(getattr(_f, "l2_trigger", 0) or 0) for _f in frames), default=0),
                             _now_ms)
+                        # RP-config diagnostic: pydualsense-L2 side of the dual dump (paired with the raw dump
+                        # in the hidapi thread). Per consumption tick — enough to mark release edges (pyds
+                        # drops to 0) at tick resolution so the offline scan can find which RAW offset tracks
+                        # pyds under Remote Play. wall_ms is the same time.time() clock as the raw dump.
+                        if os.environ.get("RETINA_ADS_RP_DIAG", "") == "true":
+                            try:
+                                with open("retina_rp_pyds.jsonl", "a", encoding="utf-8") as _pf:
+                                    _pf.write('{"wall_ms": %.3f, "pyds_l2_max": %d, "pyds_l2_last": %d}\n' % (
+                                        _now_ms,
+                                        max((int(getattr(_f, "l2_trigger", 0) or 0) for _f in frames), default=0),
+                                        int(getattr(frames[-1], "l2_trigger", 0) or 0)))
+                            except Exception:  # noqa: BLE001
+                                pass
                     # Combat-triggered burst: R2 crossing the fire threshold auto-fires a presence burst so the
                     # trigger->HUD window is captured hands-free. Default-off; cooldown + single-flight prevent
                     # stacking. Honest cost: capturing briefly lags the gunfight (WGC observer effect).
