@@ -33,6 +33,10 @@ from l9_presence.poep_calibration import (
 # D-CERT-8: mint the reflex-band commitment via the shared BIOMETRIC-SNAPSHOT-v1 adapter
 # (repo root is on sys.path above, so the bridge package resolves).
 from bridge.vapi_bridge.reflex_band_commitment import reflex_band_commitment
+# D-CERT-6: single-source the developer N-gate. config.developer_self_cert_min_reflex_n
+# (env DEVELOPER_SELF_CERT_MIN_REFLEX_N) is THE source; enroll reads it so it cannot drift from
+# the bridge's canonical value.
+from bridge.vapi_bridge.config import Config
 
 DEFAULT_VERDICT_PATH = os.path.expanduser("~/.vapi/poep_session_verdict.json")
 # D-CERT-8: operator-held raw-band disclosure (mu, sigma, salt) — the audit basis for the commitment
@@ -107,17 +111,39 @@ def compute_evidence_base(
     return verdict_fields, disclosure
 
 
+def resolve_min_n(cli_min_n: int | None, config_min_n: int) -> tuple[int, str | None]:
+    """D-CERT-6 single-source: config.developer_self_cert_min_reflex_n is THE source for the
+    developer N-gate. An explicit CLI --min-n still wins (operator intent) but is flagged when it
+    diverges, so a one-off override can never silently become an uncoordinated fourth literal.
+    Returns (resolved_min_n, divergence_note_or_None)."""
+    if cli_min_n is None:
+        return config_min_n, None
+    if cli_min_n != config_min_n:
+        return cli_min_n, (f"[min-n] CLI --min-n={cli_min_n} OVERRIDES config "
+                           f"developer_self_cert_min_reflex_n={config_min_n} (explicit intent honored).")
+    return cli_min_n, None
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="PoEP session-start enrollment (developer-self cert)")
     ap.add_argument("--player", default="DEV", help="developer profile (single-subject band)")
     ap.add_argument("--challenges", type=int, default=10, help="reflex challenges this session")
     ap.add_argument("--corpus-dir", default="poep_l9")
-    ap.add_argument("--min-n", type=int, default=30, help="developer-scoped data gate")
+    ap.add_argument("--min-n", type=int, default=None,
+                    help="developer-scoped data gate (default: config.developer_self_cert_min_reflex_n; "
+                         "an explicit value overrides config and is logged)")
     ap.add_argument("--min-in-band-fraction", type=float, default=0.5)
     ap.add_argument("--out", default=DEFAULT_VERDICT_PATH)
     ap.add_argument("--disclosure-out", default=DEFAULT_DISCLOSURE_PATH,
                     help="operator-held raw-band disclosure record (audit basis; never emitted outward)")
     a = ap.parse_args()
+
+    # D-CERT-6: single-source the developer N-gate from config (not a hardcoded literal). Explicit
+    # CLI --min-n wins and is logged on divergence; the emitted governing_model then embeds the
+    # config-sourced value by construction, so any future mismatch is instantly visible on the artifact.
+    a.min_n, _min_n_note = resolve_min_n(a.min_n, Config().developer_self_cert_min_reflex_n)
+    if _min_n_note:
+        print(_min_n_note)
 
     # 1. Build the DEV band from EXISTING sessions (scored-against band excludes the fresh session).
     model = single_subject_reflex_model(a.corpus_dir, a.player, a.min_n)
