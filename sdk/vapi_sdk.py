@@ -182,6 +182,11 @@ class VAPIPresenceProof:
     calibration_band_commitment: Optional[str] = None
     calibration_n: Optional[int] = None
     calibration_player_scope: Optional[str] = None
+    # cycle-59 D-CERT-1: the active-oracles manifest (per-oracle outcome: contributed / abstained /
+    # absent / abstained_or_absent). Under one-scope manifest-differentiation this is the LOAD-BEARING
+    # comparability field — an SDK consumer that cannot read it is back in the F-CERT-005 world (two
+    # verdicts on different evidence sets, indistinguishable). None on pre-cycle-59 records.
+    active_oracles: Optional[dict] = None
 
     # PoVCA (Cycle 42 integration, renamed PoSCA -> PoVCA per critique to avoid "skill" over-claim):
     # Per discrete game-action: verified device + causal input authorship + L4/L5 structure.
@@ -251,6 +256,7 @@ class VAPIPresenceProof:
             "calibration_band_commitment": self.calibration_band_commitment,
             "calibration_n": self.calibration_n,
             "calibration_player_scope": self.calibration_player_scope,
+            "active_oracles": self.active_oracles,   # cycle-59 D-CERT-1 comparability manifest
             # PoVCA fields (Cycle 42)
             "posca_verdict": self.posca_verdict,
             "posca_commitment": self.posca_commitment,
@@ -316,6 +322,8 @@ class VAPIPresence:
                 calibration_band_commitment=body.get("calibration_band_commitment"),
                 calibration_n=body.get("calibration_n"),
                 calibration_player_scope=body.get("calibration_player_scope"),
+                # cycle-59 D-CERT-1: the comparability manifest (absent on old records -> None).
+                active_oracles=body.get("active_oracles"),
                 # PoVCA (Cycle 42)
                 posca_verdict=str(body.get("posca_verdict", "UNVERIFIABLE")),
                 posca_commitment=str(body.get("posca_commitment", "")),

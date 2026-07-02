@@ -1346,6 +1346,10 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "calibration_band_commitment": getattr(proof, "calibration_band_commitment", None),
             "calibration_n": getattr(proof, "calibration_n", None),
             "calibration_player_scope": getattr(proof, "calibration_player_scope", None),
+            # cycle-59 D-CERT-1: active-oracles manifest (per-oracle outcome: contributed / abstained /
+            # absent / abstained_or_absent) so two verdicts on different evidence sets are
+            # distinguishable (F-CERT-005). None on old records (never inferred retroactively).
+            "active_oracles": getattr(proof, "active_oracles", None),
             # PoVCA (Cycle 42): input-grounded per-action authorship (provenance + causal + structure).
             # Composes into NQPV; advisory + honesty rails until live co-capture (non-blind) + study.
             "posca_verdict": getattr(proof, "posca_verdict", "UNVERIFIABLE"),

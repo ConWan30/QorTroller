@@ -56,6 +56,14 @@ class FusedGamerPresenceProof:
     timestamp_ns: int = 0
     commitments: dict[str, str] = field(default_factory=dict)  # e.g. {"retina": "...", "pda": "..."}
     notes: str = ""
+    # ---- D-CERT-1 (a) INVARIANT — three orthogonal questions, three fields, none doing another's job:
+    #     cert_scope            answers "WHO vouches" (the certification regime);
+    #     verifier_independence answers "is the voucher INDEPENDENT of the subject";
+    #     active_oracles        answers "WHAT evidence backed this verdict" (per-oracle outcome).
+    #   Comparability (F-CERT-005) is solved by DECLARATION in active_oracles, NOT by multiplying
+    #   cert_scope strings. When a new oracle joins the fusion it is declared in the manifest — do NOT
+    #   mint a new scope string for it (that would reintroduce the uncoordinated-literal drift D-CERT-6
+    #   closed, at the scope layer). Retina/authorship joining the fusion stays a D-CERT-5 question. ----
     # cycle-38 developer-self-cert (d-developer-self-cert): the CERTIFICATION SCOPE of this proof.
     # "advisory" (default) = uncertified signal; "developer_self" = certified for the developer's own
     # single-subject scope (NOT population/tournament). population_certified stays False until a
@@ -96,6 +104,15 @@ class FusedGamerPresenceProof:
     calibration_n: int | None = None
     calibration_player_scope: str | None = None
 
+    # cycle-59 D-CERT-1: the active-oracles manifest — per-oracle OUTCOME (contributed / abstained /
+    # absent / abstained_or_absent) for THIS proof, so two verdicts resting on DIFFERENT evidence sets
+    # are distinguishable (closes F-CERT-005 comparability, incl. the same-set-different-abstention
+    # variant). Derived inside fuse() from the same oracle checks it scores -> cannot disagree with the
+    # verdict. Null-safe: None on old records / the abstain path (NEVER inferred retroactively; the
+    # honest answer for an unrecorded fusion is "unrecorded"). See _oracle_manifest for the honest
+    # abstained-vs-absent conflation on the Optional[bool] oracles (poep / l4l5l6).
+    active_oracles: dict[str, str] | None = None
+
 
 # --- Calibrated model (cycle-29) — PROVISIONAL operating point ---
 # These weights + threshold are ADVISORY placeholders so the seam runs; the QUALIFYING operating point
@@ -119,6 +136,39 @@ def _retina_presence_contribution(retina_verdict: str | None) -> float | None:
     if "PLAUSIBLE" in v:
         return 0.5
     return None  # INACTIVE / unknown -> abstain
+
+
+def _oracle_manifest(
+    retina_report, retina_contribution, cco_report, cco_tier, poep_present, l4_l5_l6_ok,
+) -> dict[str, str]:
+    """D-CERT-1 active-oracles manifest: per-oracle OUTCOME for THIS proof, derived from the SAME
+    oracle inputs the fusion scores (so the manifest can NEVER disagree with the verdict). Closes
+    F-CERT-005 comparability: two verdicts resting on different evidence sets become distinguishable.
+
+    Outcomes:
+      "contributed"         -> the oracle moved presence_score;
+      "abstained"           -> consulted (input present) but produced no usable signal;
+      "absent"              -> not wired (input missing);
+      "abstained_or_absent" -> poep / l4l5l6 ONLY. They are passed as Optional[bool], so their
+                               non-contributed state CANNOT distinguish consulted-and-abstained from
+                               not-wired (the F-CERT-005 comparability gap surviving in miniature).
+                               Distinguishing them would require passing those oracles as a richer
+                               input type (a report object, or a (wired, value) pair) — a schema change
+                               deferred; the manifest NAMES the conflation rather than papering over it.
+    """
+    manifest: dict[str, str] = {}
+    # retina + cco are report-object inputs -> full 3-way (absent = report is None; abstained = report
+    # present but no usable signal; contributed = a value that moved the score).
+    manifest["retina"] = ("absent" if retina_report is None
+                          else "abstained" if retina_contribution is None
+                          else "contributed")
+    manifest["cco"] = ("absent" if cco_report is None
+                       else "abstained" if not cco_tier
+                       else "contributed")
+    # poep + l4l5l6 are Optional[bool] -> only contributed vs the honest conflation.
+    manifest["poep"] = "contributed" if poep_present is not None else "abstained_or_absent"
+    manifest["l4l5l6"] = "contributed" if l4_l5_l6_ok is not None else "abstained_or_absent"
+    return manifest
 
 
 def cocapture_fields_from_pitl_meta(meta: dict) -> dict:
@@ -241,6 +291,14 @@ class NovelPresenceFusionOrchestrator:
         # Basic binding check (device + record + time assumed by caller)
         binding_ok = bool(device_id and record_hash)
 
+        # D-CERT-1: hoist the retina contribution (both the score and the manifest use it) + build the
+        # active-oracles manifest from the SAME oracle inputs the fusion scores, BEFORE the verdict
+        # branching, so it is recorded on every path (hard-gate + scoring) and cannot disagree with the
+        # verdict it accompanies.
+        _rc = _retina_presence_contribution(retina_verdict)
+        active_oracles = _oracle_manifest(retina_report, _rc, cco_report, cco_tier,
+                                          poep_present, l4_l5_l6_ok)
+
         # --- Calibrated split-output model (cycle-29; replaces the conjunctive string-match tree) ---
         # SHARPENING KEPT: COUPLED_CLEAN (L9/PoCP, no screen) is still an accepted presence input, so
         # RETINA-EXCL-1 stays dissolved. CHANGED: presence is a GRADED weighted score (a single
@@ -260,8 +318,7 @@ class NovelPresenceFusionOrchestrator:
         else:
             # Per-oracle presence contributions in [0,1]; an ABSENT oracle is OMITTED (abstains).
             contribs: dict[str, float] = {}
-            _rc = _retina_presence_contribution(retina_verdict)
-            if _rc is not None:
+            if _rc is not None:                       # _rc hoisted above (D-CERT-1 manifest reuse)
                 contribs["retina"] = _rc
             if poep_present is not None:
                 contribs["poep"] = 1.0 if poep_present else 0.0
@@ -335,6 +392,7 @@ class NovelPresenceFusionOrchestrator:
             binding_ok=binding_ok,
             timestamp_ns=timestamp_ns,
             commitments=commitments,
+            active_oracles=active_oracles,
             cert_scope=cert_scope,
             population_certified=False,
             verifier_independence=verifier_independence,
