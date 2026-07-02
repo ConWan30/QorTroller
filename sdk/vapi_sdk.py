@@ -173,6 +173,15 @@ class VAPIPresenceProof:
     # None = advisory (N/A); False = self-certified (developer_self: verifier == subject; do NOT
     # launder into third-party trust); True = independent verifier (population/tournament; not today).
     verifier_independence: Optional[bool] = None
+    # cycle-58 D-CERT-8: the calibration evidence base, carried on the SDK proof so it is
+    # self-describing too — an external auditor reading via the SDK needs NO filesystem/poep_l9
+    # access (closes the F-CERT-008 recomputability gap one layer up, for exactly the audience the
+    # fix was aimed at). calibration_band_commitment is a COMMITMENT (never raw band values). All
+    # null-safe: None when no developer-self band governs the proof (advisory) or on old records.
+    governing_model: Optional[str] = None
+    calibration_band_commitment: Optional[str] = None
+    calibration_n: Optional[int] = None
+    calibration_player_scope: Optional[str] = None
 
     # PoVCA (Cycle 42 integration, renamed PoSCA -> PoVCA per critique to avoid "skill" over-claim):
     # Per discrete game-action: verified device + causal input authorship + L4/L5 structure.
@@ -195,6 +204,18 @@ class VAPIPresenceProof:
         (population/tournament); not reachable today. A consumer gating on independent
         verification passes ONLY on True (None and False both fail closed)."""
         return self.verifier_independence
+
+    def evidence_base(self) -> dict:
+        """The D-CERT-8 calibration evidence base as a first-class dict — the basis that authorized
+        this proof, so an SDK auditor reads it WITHOUT filesystem/poep_l9 access (closes F-CERT-008
+        one layer up). calibration_band_commitment is a COMMITMENT, never raw band values. Fields
+        are None when no developer-self band governs the proof (advisory) or on pre-cycle-58 records."""
+        return {
+            "governing_model": self.governing_model,
+            "calibration_band_commitment": self.calibration_band_commitment,
+            "calibration_n": self.calibration_n,
+            "calibration_player_scope": self.calibration_player_scope,
+        }
 
     def is_consistent_human(self) -> bool:
         """True for the two positive human verdicts."""
@@ -225,6 +246,11 @@ class VAPIPresenceProof:
             "cert_scope": self.cert_scope,
             "population_certified": self.population_certified,
             "verifier_independence": self.verifier_independence,   # cycle-59 D-CERT-7 independence rail
+            # cycle-58 D-CERT-8 evidence base (commitment only; None when advisory/absent)
+            "governing_model": self.governing_model,
+            "calibration_band_commitment": self.calibration_band_commitment,
+            "calibration_n": self.calibration_n,
+            "calibration_player_scope": self.calibration_player_scope,
             # PoVCA fields (Cycle 42)
             "posca_verdict": self.posca_verdict,
             "posca_commitment": self.posca_commitment,
@@ -284,6 +310,12 @@ class VAPIPresence:
                 population_certified=bool(body.get("population_certified", False)),
                 # cycle-59 D-CERT-7: absent (old records) -> None (N/A), never coerced to False.
                 verifier_independence=body.get("verifier_independence"),
+                # cycle-58 D-CERT-8 evidence base: absent on old records -> None (self-describing
+                # via the SDK; calibration_band_commitment is a commitment, never raw band values).
+                governing_model=body.get("governing_model"),
+                calibration_band_commitment=body.get("calibration_band_commitment"),
+                calibration_n=body.get("calibration_n"),
+                calibration_player_scope=body.get("calibration_player_scope"),
                 # PoVCA (Cycle 42)
                 posca_verdict=str(body.get("posca_verdict", "UNVERIFIABLE")),
                 posca_commitment=str(body.get("posca_commitment", "")),
