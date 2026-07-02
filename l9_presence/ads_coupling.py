@@ -38,6 +38,8 @@ This module is pure: no I/O, no capture, no cert wiring; the center-ROI scalar i
 """
 from __future__ import annotations
 
+import threading
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -51,6 +53,71 @@ DEFAULT_ADS_WINDOW_MS = (0.0, 300.0)      # tight onset transition window per CH
 DEFAULT_EXIT_WINDOW_MS = 500.0            # post-release window to observe the scope exit
 DEFAULT_MAX_HOLD_MS = 8000.0             # cap event latency/size for long scoped holds (emit + truncate)
 DEFAULT_MAX_SEQ = 400                     # cap stored raw samples per phase (bounds JSONL row size)
+
+# Device clock (DualSense sensor timestamp @ raw report offset 28): uint32 LE @ ~3 MHz (0.333 us/tick),
+# empirically confirmed 2026-07-01 (12000-report capture: monotonic 11999/11999, span/wall 3000.1 units/ms).
+DEVICE_TICKS_PER_MS = 3000.0
+_U32 = 1 << 32                            # sensor timestamp wraps every 2^32 ticks (~1430 s / ~24 min)
+
+
+class DeviceClockL2Source:
+    """Device-timestamped L2 stream — increment one of the ingestion-layer timing fix
+    (docs/hid-timing-resolution-2026-07-01.md). The RAW hidapi reader (one report per read at ~1 kHz)
+    pushes (wall_ms_at_read, sensor_ts_u32, l2) per report; l2_ads DRAINS device-clock-anchored (wall_ms,
+    l2) events. The controller stamps the sensor timestamp at report generation, so it SURVIVES the
+    burst-drain that collapses the pydualsense path's per-frame timing to the ~1.2 s consumption tick.
+
+    Rider 2 — MONOTONIC UNWRAP from day one: the uint32 wraps ~every 24 min (< a normal session), so the
+    raw stamp is unwrapped to a 64-bit monotonic tick count on ingest.
+    Rider 3 — DEVICE->WALL ANCHOR: device ticks map to the wall/ROI clock via a fixed rate (3000/ms) + an
+    offset that a SLOW EMA nudges toward observed wall (tracks crystal drift) while IGNORING large wall
+    excursions (a delayed/backed-up read) — so l2_ads timing rides the true device clock through read
+    jitter, landing on the same clock as the WGC ROI series and now_ms.
+    Single-producer (raw thread) / single-consumer (feed_ads); a lock guards the handoff deque."""
+
+    def __init__(self, maxlen: int = 6000, anchor_tol_ms: float = 50.0, anchor_ema: float = 0.01) -> None:
+        self._buf: deque = deque(maxlen=maxlen)     # (wall_corrected_ms, l2)
+        self._lock = threading.Lock()
+        self._prev_u32: Optional[int] = None
+        self._unwrapped = 0                          # 64-bit monotonic accumulator (added to the u32)
+        self._anchor_wall: Optional[float] = None    # wall ms at the anchor tick
+        self._anchor_ticks: Optional[int] = None     # 64-bit device ticks at the anchor
+        self._tol = float(anchor_tol_ms)
+        self._ema = float(anchor_ema)
+        self._pushed = 0
+        self._wraps = 0
+
+    def push_raw(self, wall_ms: float, ts_u32: int, l2: int) -> None:
+        """Ingest one raw report. Unwraps the sensor timestamp, maps it to the wall/ROI clock via the drift-
+        tracked anchor, and appends a device-precise (wall_corrected_ms, l2) event. Never raises."""
+        ts_u32 = int(ts_u32) & 0xFFFFFFFF
+        if self._prev_u32 is not None and ts_u32 < self._prev_u32:
+            self._unwrapped += _U32                  # rider 2: uint32 wrapped -> carry
+            self._wraps += 1
+        self._prev_u32 = ts_u32
+        ticks = self._unwrapped + ts_u32
+        if self._anchor_wall is None:                # first report anchors the epoch
+            self._anchor_wall, self._anchor_ticks = float(wall_ms), ticks
+        # rider 3: predict wall from device ticks; nudge the anchor only on RELIABLE wall samples
+        predicted = self._anchor_wall + (ticks - self._anchor_ticks) / DEVICE_TICKS_PER_MS
+        err = float(wall_ms) - predicted
+        if abs(err) < self._tol:                     # small err = trustworthy wall -> track slow drift
+            self._anchor_wall += self._ema * err
+        wall_corrected = self._anchor_wall + (ticks - self._anchor_ticks) / DEVICE_TICKS_PER_MS
+        with self._lock:
+            self._buf.append((round(wall_corrected, 3), int(l2)))
+            self._pushed += 1
+
+    def drain(self) -> list:
+        """Consumer side: pop all buffered (wall_corrected_ms, l2) events, oldest-first. Cheap; GIL-safe."""
+        with self._lock:
+            out = list(self._buf)
+            self._buf.clear()
+        return out
+
+    def stats(self) -> dict:
+        return {"pushed": self._pushed, "wraps": self._wraps, "buffered": len(self._buf),
+                "anchored": self._anchor_wall is not None}
 
 
 @dataclass
@@ -137,6 +204,20 @@ class AdsCouplingMonitor:
 
         self._l2_prev = l2
         return rec
+
+    def flush(self, now_ms: float) -> Optional[dict]:
+        """Close + emit a window whose DEADLINE passed before now_ms, WITHOUT adding a sample. Mirrors loop
+        1's flush_stale_inline_window: the consumption tick replays a batch of events, then calls this at the
+        tick's now_ms so a window whose events stopped mid-flight (onset expired / hold too long / exit
+        window elapsed) resolves promptly instead of waiting for the next tick's first event. Returns a
+        record or None."""
+        if self._phase == "ONSET" and now_ms > self._onset_end:
+            self._phase = "HELD"                             # onset closed; hold continues (no emit yet)
+        if self._phase == "HELD" and now_ms - self._onset_ts >= self.max_hold_ms:
+            return self._emit(now_ms, hold_truncated=True)
+        if self._phase == "EXIT" and now_ms > self._exit_end:
+            return self._emit(now_ms)
+        return None
 
     def _start(self, now_ms: float, s: Optional[float]) -> None:
         lo, hi = self.window_ms

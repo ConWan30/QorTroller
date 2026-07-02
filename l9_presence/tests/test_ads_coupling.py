@@ -116,3 +116,84 @@ def test_default_window_is_tight_300ms_regression_pin():
     m = ac.AdsCouplingMonitor()
     assert m.window_ms == (0.0, 300.0)                          # the parametric anti-splice lever vs R2's 5000
     assert m.l2_threshold == ac.DEFAULT_L2_THRESHOLD == 40
+
+
+# --- flush(): close a window whose deadline passed mid-tick (loop-1 flush_stale parity) ---
+
+def test_flush_closes_exit_window_past_deadline():
+    """A tick's replayed samples can stop before exit_end; flush at a later now_ms emits the event."""
+    m = _cal(30.0)
+    m.feed(200, 5.0, 1000.0)                                   # rising, baseline 5.0
+    m.feed(200, 80.0, 1100.0)                                  # onset sample IN window (1000-1300) -> transition
+    m.feed(200, 78.0, 1400.0)                                  # onset closed -> HELD (boundary sample)
+    m.feed(0, 78.0, 1500.0)                                    # falling -> EXIT (exit_end = 2000)
+    m.feed(0, 6.0, 1550.0)                                     # one exit sample, then samples stop
+    assert m._phase == "EXIT"                                  # stuck without a feed past 2000
+    rec = m.flush(2100.0)                                      # now_ms past exit_end -> resolve
+    assert rec is not None and rec["verdict"] == ac.ADS_TRANSITION_BOUND
+    assert m._phase == "IDLE"
+
+
+def test_flush_truncates_overlong_hold():
+    m = _cal(30.0, max_hold_ms=200.0)
+    m.feed(200, 5.0, 1000.0)                                   # rising
+    m.feed(200, 70.0, 1400.0)                                  # HELD
+    rec = m.flush(1500.0)                                      # now-onset (500) >= max_hold (200) -> truncate
+    assert rec is not None and rec["hold_truncated"] is True and rec["release_ts_ms"] is None
+
+
+def test_flush_advances_onset_to_held_without_emitting():
+    m = _cal(30.0)
+    m.feed(200, 5.0, 1000.0)                                   # ONSET (onset_end 1300)
+    rec = m.flush(1350.0)                                      # past onset_end but hold is young
+    assert rec is None and m._phase == "HELD"                  # advanced, not emitted
+
+
+def test_flush_noop_when_idle_or_deadline_not_passed():
+    m = _cal(30.0)
+    assert m.flush(1000.0) is None                             # IDLE -> nothing
+    m.feed(200, 5.0, 1000.0)                                   # ONSET, onset_end 1300
+    assert m.flush(1200.0) is None                             # still inside onset window -> no spurious emit
+
+
+# --- DeviceClockL2Source: ingestion-layer timing fix (unwrap + device->wall anchor) ---
+
+def test_device_clock_unwraps_uint32_wrap_boundary():
+    """Rider 2 regression: the sensor timestamp is uint32 @ 3MHz and wraps ~every 24min. Crossing the wrap
+    must stay monotonic with continuous spacing — NOT a ~1430s phantom jump."""
+    src = ac.DeviceClockL2Source()
+    ts = (1 << 32) - 5 * 3000                                  # 5ms of ticks before the wrap
+    for i in range(20):                                        # ~1ms/report across the boundary
+        src.push_raw(1000.0 + i * 1.0, ts % (1 << 32), 200)
+        ts += 3000                                             # +1ms in device ticks
+    xs = [w for w, _ in src.drain()]
+    assert all(xs[i + 1] > xs[i] for i in range(len(xs) - 1))  # monotonic across the wrap
+    assert max(xs) - min(xs) < 100.0                           # ~20ms span, not a missed-wrap 1.4e6ms jump
+    assert src.stats()["wraps"] == 1
+
+
+def test_device_clock_timing_rides_device_not_jittered_wall():
+    """Rider 3: device deltas drive the corrected timeline; a small wall error nudges the anchor slowly."""
+    src = ac.DeviceClockL2Source()
+    src.push_raw(1000.0, 0, 0)                                 # anchor
+    src.push_raw(1005.0, 30000, 200)                           # device +10ms; wall says +5ms (jitter)
+    ev = src.drain()
+    assert abs(ev[1][0] - 1010.0) < 0.5                        # corrected uses device +10ms, not wall +5ms
+
+
+def test_device_clock_ignores_read_jitter_spike():
+    """A delayed/backed-up read spikes wall; the anchor ignores it (err > tol) and rides the device clock."""
+    src = ac.DeviceClockL2Source(anchor_tol_ms=50.0)
+    src.push_raw(1000.0, 0, 0)
+    src.push_raw(1500.0, 9000, 200)                            # wall +500ms spike, device only +3ms
+    ev = src.drain()
+    assert abs(ev[1][0] - 1003.0) < 1.0                        # rides device (+3ms), not the 500ms spike
+
+
+def test_device_clock_drain_clears_and_ordered():
+    src = ac.DeviceClockL2Source()
+    for i in range(5):
+        src.push_raw(1000.0 + i, i * 3000, 200)
+    ev = src.drain()
+    assert len(ev) == 5 and src.drain() == []                  # drained + cleared
+    assert all(ev[i + 1][0] >= ev[i][0] for i in range(4))     # oldest-first
