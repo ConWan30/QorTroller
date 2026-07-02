@@ -85,3 +85,39 @@ Until increment one lands, the coarse-resolution statement above holds for all d
 date. **The record now pairs the disclosure with the recovery path** — the loop-2 timing fields are coarser
 than their names imply *and* the fix is found and scoped; disclosed-and-being-fixed is a stronger record
 than either half alone. This section gets a follow-up when the ingestion fix ships.
+
+## Follow-up 2026-07-02 — increment one landed (`75a9654f`); range session surfaces an RP-specific L2 finding
+
+Increment one shipped: `DeviceClockL2Source` + `push_l2_raw` + `feed_ads` on the device clock, **desktop-
+validated** (5 firm L2 holds → 5 clean single events, `held_n` 77–188, split GONE). The device-clock
+**timing** mechanism is sound. **But that validation was on the DESKTOP config (controller USB'd, no Remote
+Play).** The firing-range session (Remote Play running Warzone) surfaced a distinct, config-specific
+problem the rider-1 crosscheck caught immediately:
+
+**During Remote Play, the raw interface-3 L2 (report offset 5) sticks HIGH on release.** All 113 crosscheck
+disagreements were one-directional — raw path `L2=255` (held) while pydualsense `L2=0` (released) — i.e. the
+raw read lags/goes stale on the release edge under Remote Play (controller-ownership contention). Symptom:
+every range ADS event resolved with `held_n=1` (the hold's real duration was lost), so the L2 edge timing
+the 300 ms binding depends on is corrupt in this config. The device *timestamp* (offset 28) kept advancing
+(~627k pushed, anchored) and the split stayed fixed (0 splits) — it is specifically the L2 *value* on
+interface 3 that is Remote-Play-unreliable, not the device clock.
+
+**Consequences:** (a) the desktop split-fix claim for `75a9654f` stands, but l2_ads is NOT yet validated in
+the Remote-Play gameplay config it must run in; (b) the 8× kill-check is **inconclusive** — the center-ROI
+ADS luminance shift looked detectable (magnitude median ~22 vs background std ~2.3) but the corrupt L2
+timing means those magnitudes can't be trusted as ADS-onset-aligned; (c) the calibration is blocked until a
+Remote-Play-reliable L2 source is established. **(d) MIGRATION GATE — loops 1/2 do NOT migrate onto the
+device clock until this same RP-reliable-source finding is resolved AND validated in the Remote-Play
+config.** The consumer-by-consumer migration destination stands, but promoting loop 1 (R2 window placement)
+or loop 2 (`settle_ts_ms` / `death_anchor_ms`) onto the raw interface-3 path while its input value is
+Remote-Play-unreliable would corrupt THEIR timing too — trading the honestly-coarse drain clock for a
+silently-wrong one. The gate on all three (l2_ads calibration, loop-1 migration, loop-2 migration) is the
+same: a demonstrated Remote-Play-reliable L2 source. The rider-1 crosscheck (built before it was needed, at
+operator insistence) did exactly its job — caught the bad ingestion before it produced a garbage corpus.
+
+**Next (needs one Remote-Play session):** diagnose the raw report *during Remote Play* — is offset 5 wrong
+under RP, are reports stale/lagged, or does RP change the report mode? — then establish a
+Remote-Play-reliable L2 value source (candidates: a different offset/interface under RP; the device
+timestamp from interface 3 paired with a reliable L2 value; or a pydualsense-L2 + device-timestamp anchor).
+Preparatory (non-gaming) work can build the RP-config raw-byte + dual-L2 diagnostic so that session is
+one-shot.

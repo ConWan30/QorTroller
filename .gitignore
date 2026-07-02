@@ -272,3 +272,5 @@ retina_ads_label.txt
 retina_daemon_ads_*.log
 retina_ads_l2debug.jsonl
 retina_hid_rawdump.jsonl
+retina_rp_rawdump.jsonl
+retina_rp_pyds.jsonl
