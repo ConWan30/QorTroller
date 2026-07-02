@@ -16,6 +16,7 @@ contention). LIVENESS-ONLY: cert_scope stays developer_self; population_certifie
 from __future__ import annotations
 
 import argparse
+import glob
 import json
 import os
 import secrets
@@ -124,6 +125,59 @@ def resolve_min_n(cli_min_n: int | None, config_min_n: int) -> tuple[int, str | 
     return cli_min_n, None
 
 
+# D-CERT-9 detection≠prevention: the nonce makes accidental cross-subject pooling POST-HOC
+# DETECTABLE, not prevented. Prevention (label->device binding) needs a per-unit identity that is
+# not reachable at this call site today — DEVICE_ID_CANON_v1 is secure-element-rooted + Arc-2-gated;
+# fresh.device_id here is only the model string. This guard closes the SILENT path; it does not bind
+# identity. Label->device binding is increment one's completion when Arc 2 lands, NOT a rejected
+# alternative (degrading to an unverified HID serial would be a precision-looking-but-unproven bind).
+_COLLISION_GUARD_NOTE = (
+    "D-CERT-9 collision guard: enrollment_nonce identifies THIS enrollment instance so accidental "
+    "cross-subject pooling under one label is POST-HOC DETECTABLE (compare nonces / extended_existing "
+    "across a label's records) — it is NOT prevented. No per-unit identity binds the subject here; "
+    "DEVICE_ID_CANON_v1 label->device binding (the prevention form) is Arc-2-gated (secure-element-"
+    "rooted). extended_existing=True means an operator deliberately extended a pre-existing label "
+    "corpus via --extend-existing."
+)
+
+
+def label_corpus_status(corpus_dir: str, player: str) -> tuple[str, int]:
+    """D-CERT-9 collision guard: classify whether `player`'s label already has a corpus.
+
+    FAIL CLOSED — 'fresh' is returned ONLY when we can PROVE no session under this label exists
+    (every corpus file read cleanly and none matched). Any unreadable/corrupt file that could hide a
+    matching session -> 'ambiguous' (treated as existing): an unreadable corpus is indistinguishable
+    from an existing one, and the guard's whole value is that the silent path does not exist. A
+    confirmed readable match takes precedence over unreadable files (we KNOW it exists).
+
+    Returns ('fresh', 0) | ('existing', n_matched) | ('ambiguous', n_unreadable).
+    """
+    matched = 0
+    unreadable = 0
+    for path in sorted(glob.glob(os.path.join(corpus_dir, "*.poep.json"))):
+        try:
+            with open(path, encoding="utf-8") as fh:
+                d = json.load(fh)
+        except Exception:
+            unreadable += 1
+            continue
+        if isinstance(d, dict) and d.get("player") == player:
+            matched += 1
+    if matched > 0:
+        return "existing", matched
+    if unreadable > 0:
+        return "ambiguous", unreadable
+    return "fresh", 0
+
+
+def collision_verdict(status: str, extend_existing: bool) -> tuple[bool, bool]:
+    """D-CERT-9 decision matrix: (refuse, extended). Refuse iff the label is not fresh AND
+    --extend-existing was not passed — the silent path is closed; deliberate extension is allowed
+    but recorded. `extended` is True iff a not-fresh label is being deliberately extended."""
+    not_fresh = status in ("existing", "ambiguous")
+    return (not_fresh and not extend_existing), (extend_existing and not_fresh)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="PoEP session-start enrollment (developer-self cert)")
     ap.add_argument("--player", default="DEV", help="developer profile (single-subject band)")
@@ -136,6 +190,10 @@ def main() -> int:
     ap.add_argument("--out", default=DEFAULT_VERDICT_PATH)
     ap.add_argument("--disclosure-out", default=DEFAULT_DISCLOSURE_PATH,
                     help="operator-held raw-band disclosure record (audit basis; never emitted outward)")
+    ap.add_argument("--extend-existing", action="store_true",
+                    help="deliberately extend an existing label's corpus (D-CERT-9 collision guard). "
+                         "Required to enroll under a label that already has sessions; the choice is "
+                         "recorded on the verdict + disclosure.")
     a = ap.parse_args()
 
     # D-CERT-6: single-source the developer N-gate from config (not a hardcoded literal). Explicit
@@ -145,12 +203,37 @@ def main() -> int:
     if _min_n_note:
         print(_min_n_note)
 
+    # D-CERT-9 collision guard: the player LABEL is the sole scope boundary on the developer-self band
+    # (Fact A: no per-unit identity is reachable here today). A second subject enrolling under an
+    # existing label would SILENTLY pool into one band. Close the silent path: extending an existing
+    # (or unreadable -> fail-closed) label corpus REQUIRES --extend-existing, and the choice is recorded.
+    _enrollment_nonce = secrets.token_hex(16)
+    _label_status, _label_detail = label_corpus_status(a.corpus_dir, a.player)
+    _refuse, _extended = collision_verdict(_label_status, a.extend_existing)
+    if _refuse:
+        _why = (f"{_label_detail} prior session(s)" if _label_status == "existing"
+                else f"{_label_detail} unreadable corpus file(s) — cannot prove the label is unused")
+        print(f"REFUSED: label '{a.player}' is not fresh ({_label_status}: {_why}). Enrolling under an "
+              f"existing label pools into ONE band with no per-unit identity to separate subjects "
+              f"(DEVICE_ID_CANON_v1 label->device binding is Arc-2-gated). Re-run with --extend-existing "
+              f"to DELIBERATELY extend this label (logged to the record), or use a distinct --player.")
+        return 2
+    if _extended:
+        print(f"[extend-existing] deliberately extending label '{a.player}' "
+              f"({_label_status}: {_label_detail}); recorded on the verdict + disclosure.")
+    _collision_meta = {
+        "enrollment_nonce": _enrollment_nonce,
+        "extended_existing": _extended,
+        "label_status_at_enroll": _label_status,          # fresh | existing | ambiguous
+        "label_corpus_count_at_enroll": _label_detail,    # matched (existing) / unreadable (ambiguous) / 0 (fresh)
+    }
+
     # 1. Build the DEV band from EXISTING sessions (scored-against band excludes the fresh session).
     model = single_subject_reflex_model(a.corpus_dir, a.player, a.min_n)
     if not model.get("calibration_complete"):
         verdict = {"status": "calibration_incomplete", "player": a.player,
                    "n_reactions": model.get("n_reactions", 0), "min_n": a.min_n,
-                   "ts_ns": time.time_ns(), "channel": "liveness_only"}
+                   "ts_ns": time.time_ns(), "channel": "liveness_only", **_collision_meta}
         _write_verdict(a.out, verdict)
         print(f"DEV band NOT calibrated (N={verdict['n_reactions']} < {a.min_n}). "
               f"Run the campaign (l9_presence.poep enroll --player {a.player}) first. "
@@ -172,6 +255,7 @@ def main() -> int:
     _enroll_ts = time.time_ns()
     v.update({"player": a.player, "device_id": fresh.device_id, "ts_ns": _enroll_ts,
               "session_path": summary["path"], "cert_scope": "developer_self"})
+    v.update(_collision_meta)   # D-CERT-9: enrollment-instance nonce + extend-existing audit trail
 
     # 3.5 D-CERT-8: mint the self-describing evidence base from the governing band. The COMMITMENT
     # (+ non-sensitive fields) rides the outward verdict; the raw (mu, sigma, salt) goes ONLY to the
@@ -180,6 +264,8 @@ def main() -> int:
     _verdict_fields, _disclosure = compute_evidence_base(model, a.player, a.min_n, enrollment_ts_ns=_enroll_ts)
     v.update(_verdict_fields)
     if _disclosure is not None:
+        _disclosure.update(_collision_meta)                       # D-CERT-9 audit trail (operator-held)
+        _disclosure["_collision_guard_note"] = _COLLISION_GUARD_NOTE   # detection != prevention, stated
         _write_disclosure(a.disclosure_out, _disclosure)
 
     # 4. Write the session verdict for the bridge to read at startup.
