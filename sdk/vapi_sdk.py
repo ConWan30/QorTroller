@@ -169,6 +169,10 @@ class VAPIPresenceProof:
     # the population/tournament claim — only True after breadth + real adversaries + the study pass.
     cert_scope: str = "advisory"
     population_certified: bool = False
+    # cycle-59 D-CERT-7: explicit verifier-independence rail (was implicit in population_certified).
+    # None = advisory (N/A); False = self-certified (developer_self: verifier == subject; do NOT
+    # launder into third-party trust); True = independent verifier (population/tournament; not today).
+    verifier_independence: Optional[bool] = None
 
     # PoVCA (Cycle 42 integration, renamed PoSCA -> PoVCA per critique to avoid "skill" over-claim):
     # Per discrete game-action: verified device + causal input authorship + L4/L5 structure.
@@ -182,6 +186,15 @@ class VAPIPresenceProof:
     def is_developer_self_certified(self) -> bool:
         """True iff this is a developer-self-scoped cert (single-subject; NOT a population claim)."""
         return self.cert_scope == "developer_self" and not self.advisory
+
+    def verifier_is_independent(self) -> Optional[bool]:
+        """The independence rail as a FIRST-CLASS signal — read this, do not infer from
+        population_certified. None -> no cert scope (advisory), the question is N/A. False ->
+        self-certified (developer_self): verifier == subject; MUST NOT be laundered into
+        independent/third-party trust. True -> an independent verifier certified this
+        (population/tournament); not reachable today. A consumer gating on independent
+        verification passes ONLY on True (None and False both fail closed)."""
+        return self.verifier_independence
 
     def is_consistent_human(self) -> bool:
         """True for the two positive human verdicts."""
@@ -211,6 +224,7 @@ class VAPIPresenceProof:
             "certified": self.certified,
             "cert_scope": self.cert_scope,
             "population_certified": self.population_certified,
+            "verifier_independence": self.verifier_independence,   # cycle-59 D-CERT-7 independence rail
             # PoVCA fields (Cycle 42)
             "posca_verdict": self.posca_verdict,
             "posca_commitment": self.posca_commitment,
@@ -268,6 +282,8 @@ class VAPIPresence:
                 certified=bool(body.get("certified", False)),
                 cert_scope=str(body.get("cert_scope", "advisory")),
                 population_certified=bool(body.get("population_certified", False)),
+                # cycle-59 D-CERT-7: absent (old records) -> None (N/A), never coerced to False.
+                verifier_independence=body.get("verifier_independence"),
                 # PoVCA (Cycle 42)
                 posca_verdict=str(body.get("posca_verdict", "UNVERIFIABLE")),
                 posca_commitment=str(body.get("posca_commitment", "")),

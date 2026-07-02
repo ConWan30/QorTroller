@@ -62,6 +62,14 @@ class FusedGamerPresenceProof:
     # population corpus + real adversaries pass the study. The verdict is the result WITHIN the scope.
     cert_scope: str = "advisory"
     population_certified: bool = False
+    # cycle-59 D-CERT-7: the verifier-independence rail, made EXPLICIT (was implicit in
+    # population_certified=False). A structural fact of the cert scope, NOT enrollment data:
+    #   None  -> no cert scope applies (advisory) -> the question is N/A;
+    #   False -> self-certified (developer_self: verifier == subject) -> MUST NOT be laundered
+    #            into independent/third-party trust;
+    #   True  -> an independent verifier certified this (population/tournament) -> not reachable today.
+    # Consumers read this directly instead of inferring independence from population_certified.
+    verifier_independence: bool | None = None
 
     # Cycle-42 PoVCA (Proof of Verified Causal Authorship): input-grounded per-action authorship
     # (provenance + L9 causal + L4/L5 structure). Composes as oracle into NQPV (abstains if missing).
@@ -303,6 +311,9 @@ class NovelPresenceFusionOrchestrator:
         _scope_note = ("developer-self cert scope (single-subject; population_certified=False)"
                        if developer_self_cert
                        else "advisory; not certifying until RETINA-EXCL-2 study")
+        # D-CERT-7: independence rail derived from the scope (structural fact, not enrollment data).
+        # developer_self -> False (verifier == subject; do not launder); advisory -> None (N/A).
+        verifier_independence = False if cert_scope == "developer_self" else None
         # PoVCA verdict (authorship + structure, NOT skill rank). Single source of truth honoring the
         # tri-state structure signal (None = abstain -> UNVERIFIABLE, never AUTHENTIC without L4 evidence)
         # and the emulated gate. The commitment is the recomputable one minted at action-detection time
@@ -326,6 +337,7 @@ class NovelPresenceFusionOrchestrator:
             commitments=commitments,
             cert_scope=cert_scope,
             population_certified=False,
+            verifier_independence=verifier_independence,
             posca_verdict=posca_v,
             posca_commitment=posca_commit,
             posca_structure_ok=posca_structure_ok,
