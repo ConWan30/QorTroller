@@ -73,6 +73,31 @@ def read_session_poep_verdict(
         return None
 
 
+# cycle-58 D-CERT-8: the developer-self-cert evidence base carried on the FusedGamerPresenceProof.
+# COMMITMENT-ONLY — raw reflex-band values (mu, sigma, salt) are NEVER surfaced here; they stay in the
+# operator-held disclosure record written by scripts/poep_session_enroll.py.
+_EVIDENCE_BASE_KEYS = (
+    "governing_model",
+    "calibration_band_commitment",
+    "calibration_n",
+    "calibration_player_scope",
+)
+
+
+def read_session_evidence_base(
+    path: str = DEFAULT_SESSION_VERDICT_PATH, *, max_age_s: Optional[float] = 7200.0,
+) -> dict:
+    """Return the D-CERT-8 evidence base (governing_model, calibration_band_commitment,
+    calibration_n, calibration_player_scope) from the live session verdict, or {} if the verdict
+    is missing / stale / lacks the fields. Rides the same fresh/stale-checked read as poep_present,
+    so a stale verdict abstains (empty -> proof fields stay None). Commitment only; NEVER raw band."""
+    v = read_session_poep_verdict(path, max_age_s=max_age_s)
+    if not v:
+        return {}
+    eb = {k: v.get(k) for k in _EVIDENCE_BASE_KEYS if v.get(k) is not None}
+    return eb
+
+
 def poep_activation_status(readiness: Optional[dict], *, poep_enabled: bool) -> dict:
     """Combine poep_readiness() + the operator two-key into a single clear activation status.
 

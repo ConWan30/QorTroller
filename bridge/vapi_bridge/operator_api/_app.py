@@ -1279,6 +1279,12 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
 
         rec_hash = row.get("record_hash_hex", "")
 
+        _dev_self_cert = getattr(cfg, "developer_self_cert_enabled", False)
+        # cycle-58 D-CERT-8: pull the calibration evidence base from the live verdict (COMMITMENT
+        # only — never raw band) so the proof stream is self-describing. Empty {} on advisory / stale
+        # verdict -> the proof fields stay None (abstain).
+        from ..poep_activation import read_session_evidence_base
+        _eb = read_session_evidence_base() if _dev_self_cert else {}
         proof = orchestrator.fuse(
             cco_report=cco_report,
             retina_report=retina_report,
@@ -1287,12 +1293,17 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             device_id=device_id,
             record_hash=rec_hash,
             # cycle-38 developer-self-cert: operator master flag -> cert_scope="developer_self"
-            developer_self_cert=getattr(cfg, "developer_self_cert_enabled", False),
+            developer_self_cert=_dev_self_cert,
             # PoVCA (Cycle 42): pass if stored in co-capture row (from live posca slice in dualshock).
             posca_structure_ok=bool(row.get("posca_structure_ok")) if row.get("posca_structure_ok") is not None else None,
             posca_coupling_score=row.get("posca_coupling_score"),
             posca_action_count=int(row.get("posca_action_count") or 0),
             posca_commitment=row.get("posca_commitment") or "",
+            # cycle-58 D-CERT-8 evidence base (commitment only)
+            governing_model=_eb.get("governing_model"),
+            calibration_band_commitment=_eb.get("calibration_band_commitment"),
+            calibration_n=_eb.get("calibration_n"),
+            calibration_player_scope=_eb.get("calibration_player_scope"),
         )
 
         # cert_scope drives the honesty fields: developer_self -> certified-for-developer (advisory off,
@@ -1324,6 +1335,13 @@ def create_operator_app(cfg, store, _agent=None, _calib_agent=None, chain=None, 
             "population_certified": bool(getattr(proof, "population_certified", False)),
             "advisory": not _dev_self,        # advisory unless inside the developer_self cert scope
             "certified": False,               # never population/tournament-certified on this endpoint
+            # cycle-58 D-CERT-8: the calibration evidence base makes the proof self-describing.
+            # calibration_band_commitment is a COMMITMENT (never raw band values). All None on
+            # advisory / stale-verdict paths. Self-describing != certified (population_certified stays False).
+            "governing_model": getattr(proof, "governing_model", None),
+            "calibration_band_commitment": getattr(proof, "calibration_band_commitment", None),
+            "calibration_n": getattr(proof, "calibration_n", None),
+            "calibration_player_scope": getattr(proof, "calibration_player_scope", None),
             # PoVCA (Cycle 42): input-grounded per-action authorship (provenance + causal + structure).
             # Composes into NQPV; advisory + honesty rails until live co-capture (non-blind) + study.
             "posca_verdict": getattr(proof, "posca_verdict", "UNVERIFIABLE"),
