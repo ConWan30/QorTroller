@@ -159,6 +159,16 @@ class RetinaGameCaptureCore:
         if self._th2_oracle is not None:
             self._th2_oracle.push_roi(ts_ms, red_value)
 
+    def latest_center_roi_lum(self):
+        """Latest B1 center-ROI luminance (or None) — l2_ads reads this at the consumption hook to reuse the
+        value on_frame_arrived already computed, adding NOTHING to the WGC callback."""
+        return self._th_oracle.latest_roi() if self._th_oracle is not None else None
+
+    def center_roi_series_since(self, ts_ms: float) -> list:
+        """Timestamped B1 center-ROI samples newer than ts_ms ([(t, v)...]) — l2_ads retro-fill source (the
+        WGC-rate history the oracle already buffers; nothing added to the WGC callback)."""
+        return self._th_oracle.roi_since(ts_ms) if self._th_oracle is not None else []
+
     def latest_trigger_hud(self):
         """Channel B1 report -> (TriggerHudFeatures, negative_control) or None (abstain: not firing / no data)."""
         if self._th_oracle is None:
@@ -501,7 +511,9 @@ class RetinaGameCapture:
                  composite_log_path: str = "",
                  r2_threshold: int = 40,
                  death_window_enabled: bool = False, death_window_ms: float = 4000.0,
-                 death_noise_floor: float = 2.5, death_log_path: str = "") -> None:
+                 death_noise_floor: float = 2.5, death_log_path: str = "",
+                 ads_enabled: bool = False, ads_log_path: str = "",
+                 ads_label_file: str = "", ads_bg_sample_every: int = 30) -> None:
         self.core = RetinaGameCaptureCore(ncaa_profile=ncaa_profile)
         self._capture_enabled = bool(capture_enabled)
         self._inline_enabled = bool(inline_enabled)
@@ -564,6 +576,43 @@ class RetinaGameCapture:
                 self._death_lock = threading.Lock()
             except Exception:  # noqa: BLE001 — advisory; never block capture on its setup
                 self._death_monitor = None
+        # l2_ads — ADS coupling channel (second anti-splice channel). PURE AdsCouplingMonitor consumes the
+        # center-ROI luminance on_frame_arrived ALREADY computes for B1 (latest_center_roi_lum) + the L2
+        # trigger — ZERO WGC-callback work. Detector UNCALIBRATED -> every record ABSTAINS + logs raw.
+        # Default-OFF; captures the calibration corpus. Does NOT touch loop 1/2, match_floor, or the cert.
+        self._ads_enabled = bool(ads_enabled)
+        self._ads_monitor = None
+        self._ads_log_path = str(ads_log_path or "retina_ads_coupling.jsonl")
+        self._ads_label_file = str(ads_label_file or "retina_ads_label.txt")
+        self._ads_bg_every = max(1, int(ads_bg_sample_every))
+        self._ads_bg_tick = 0
+        self._ads_logged = False
+        # retro-fill replay state: the consumption tick (~1.2s measured) is far coarser than the 300ms onset
+        # window, so feed_ads replays the true timeline each tick from buffered history (see feed_ads).
+        self._ads_roi_cursor = 0.0       # last ROI timestamp already replayed (no re-feed)
+        self._ads_prev_l2 = 0            # L2 value at the end of the previous batch (cross-tick edges)
+        self._ads_last_roi_val = None    # last ROI value replayed (scalar for L2-edge feeds + background)
+        self._ads_primed = False         # first tick primes cursors instead of replaying stale history
+        # INCREMENT ONE (device-clock timing fix, docs/hid-timing-resolution-2026-07-01.md): the L2 stream
+        # comes from the RAW hidapi path via push_l2_raw() carrying the DEVICE sensor timestamp (survives the
+        # burst-drain that collapses the pydualsense per-frame timing to the ~1.2s tick), not the consumption
+        # loop. feed_ads drains this device-timestamped source instead of a passed-in per-frame series.
+        self._device_clock_l2 = None
+        self._last_raw_l2 = 0            # latest L2 from the raw path (rider-1 cross-check vs pydualsense)
+        self._ads_l2_agree = 0
+        self._ads_l2_disagree = 0
+        # session-scoped per-tick crosscheck sink: each raw-vs-pydualsense disagreement is logged with its
+        # ts + both L2 values so the range session confirms every disagreement hugs an L2 transition
+        # (edge-skew) rather than a persistent wrong-offset — verification built before it's needed.
+        self._ads_crosscheck_log = self._ads_log_path.rsplit(".jsonl", 1)[0] + "_crosscheck.jsonl"
+        if self._ads_enabled:
+            try:
+                from l9_presence.ads_coupling import AdsCouplingMonitor, DeviceClockL2Source
+                self._ads_monitor = AdsCouplingMonitor()   # threshold=None -> abstain until calibrated
+                self._device_clock_l2 = DeviceClockL2Source()
+            except Exception:  # noqa: BLE001 — advisory; never block capture on its setup
+                self._ads_monitor = None
+                self._device_clock_l2 = None
         # Adaptive lag/FPS governor — meticulously widens the oracle's causal-lag search window to track
         # the live Remote Play latency (and tunes resample-rate/downscale for estimator validity).
         from l9_presence.adaptive_capture import AdaptiveCaptureGovernor, CaptureControls
@@ -747,6 +796,131 @@ class RetinaGameCapture:
         except Exception:  # noqa: BLE001 — advisory corpus; never break the loop
             pass
 
+    def push_l2_raw(self, wall_ms: float, ts_u32: int, l2: int) -> None:
+        """Called by the RAW hidapi reader (one report per read) with the DEVICE sensor timestamp (offset 28)
+        + L2 (offset 5). Feeds the device-clock source, which unwraps + anchors to wall. This is the
+        ingestion point that survives the burst-drain — increment one of the timing fix. No-op if ads off."""
+        if self._device_clock_l2 is not None:
+            self._device_clock_l2.push_raw(wall_ms, ts_u32, l2)
+            self._last_raw_l2 = int(l2)
+
+    def crosscheck_l2(self, pyds_l2: int, now_ms: float) -> None:
+        """Rider 1: confirm the RAW path's L2 (report offset 5) agrees with pydualsense's L2 (parsed via its
+        own layout) in the threshold-crossing sense, before the raw path is authoritative for anything.
+        Threshold-sense, not byte-exact — the two paths sample at different instants, so a disagreement AT an
+        L2 transition is expected edge-skew; a PERSISTENT one (away from a transition) is a parsing finding
+        (wrong offset). Every disagreement is logged with its ts + both L2 values, so the range session's
+        per-tick data distinguishes edge-skew from a persistent miss instead of leaving 'very likely' to a
+        follow-up. No-op if ads off."""
+        if self._device_clock_l2 is None:
+            return
+        thr = self._ads_monitor.l2_threshold if self._ads_monitor is not None else 40
+        if (int(pyds_l2) >= thr) == (int(self._last_raw_l2) >= thr):
+            self._ads_l2_agree += 1
+        else:
+            self._ads_l2_disagree += 1
+            try:
+                from l9_presence.killfeed_inline import append_near_boundary_jsonl
+                append_near_boundary_jsonl(self._ads_crosscheck_log, {
+                    "ts_ms": round(float(now_ms), 1), "pyds_l2": int(pyds_l2),
+                    "raw_l2": int(self._last_raw_l2), "thr": thr,
+                    "n_agree": self._ads_l2_agree, "n_disagree": self._ads_l2_disagree})
+            except Exception:  # noqa: BLE001 — integrity log; never break the loop
+                pass
+
+    def feed_ads(self, now_ms: float) -> None:
+        """l2_ads consumption-side tick — RETROACTIVE MERGED REPLAY on the DEVICE clock. The consumption loop
+        ticks ~1.2s apart, far coarser than the 300ms onset window, and the pydualsense per-frame timing
+        COLLAPSES to the tick (burst-drain, docs/hid-timing-resolution-2026-07-01.md). So the L2 stream comes
+        instead from the RAW hidapi path via push_l2_raw() -> the device-clock source (uint32 @ 3MHz sensor
+        timestamp, unwrapped + anchored to wall), giving TRUE per-report L2 edge timing. Each tick this
+        drains that device-timestamped L2 and merges it in time order with the B1 oracle's WGC-rate ROI
+        history (both now on the wall/ROI clock) — so onset/held/exit land at device precision including the
+        genuinely PRE-press baseline. Zero WGC-callback work. Background NEGATIVE sampling when L2 idle.
+        Never raises."""
+        if self._ads_monitor is None:
+            return
+        try:
+            roi = self.core.center_roi_series_since(self._ads_roi_cursor)
+            if roi:
+                self._ads_roi_cursor = roi[-1][0]
+            # device-clock-timestamped L2 events from the raw path (survives burst-drain), oldest-first
+            series = sorted(self._device_clock_l2.drain()) if self._device_clock_l2 is not None else []
+            if not self._ads_primed:                        # first tick: prime cursors, don't replay history
+                self._ads_primed = True
+                if series:
+                    self._ads_prev_l2 = int(series[-1][1])
+                if roi:
+                    self._ads_last_roi_val = float(roi[-1][1])
+                return
+            thr = self._ads_monitor.l2_threshold
+            # L2 threshold-crossing events only (between crossings the held value persists in the monitor);
+            # ROI samples carry the screen signal. Merged walk feeds each event at its true timestamp.
+            start_l2 = int(self._ads_prev_l2)               # L2 state at the end of the PREVIOUS tick
+            events = [(t, 1, float(v)) for t, v in roi]     # kind 1 = roi sample
+            prev = start_l2
+            for t, l2 in series:
+                l2 = int(l2)
+                if (prev < thr) != (l2 < thr):              # crossed the threshold in either direction
+                    events.append((float(t), 0, float(l2)))  # kind 0 = l2 edge (sorts before roi at same t)
+                prev = l2
+            self._ads_prev_l2 = prev
+            events.sort()
+            cur_l2 = start_l2
+            cur_roi = self._ads_last_roi_val
+            for t, kind, v in events:
+                if kind == 0:
+                    cur_l2 = int(v)
+                else:
+                    cur_roi = float(v)
+                rec = self._ads_monitor.feed(cur_l2, cur_roi, t)
+                if rec is not None:
+                    self._log_ads(rec, "ads_event")
+                    if not self._ads_logged:
+                        self._ads_logged = True
+                        log.info("RetinaGameCapture: l2_ads channel ON (ABSTAIN until calibrated) — first "
+                                 "event %s", rec.get("verdict"))
+            self._ads_last_roi_val = cur_roi
+            # flush at the tick's now_ms so a window whose events stopped mid-flight (onset/exit deadline
+            # passed) resolves promptly — parity with loop 1's flush_stale_inline_window; no stale sample.
+            frec = self._ads_monitor.flush(float(now_ms))
+            if frec is not None:
+                self._log_ads(frec, "ads_event")
+            # passive background NEGATIVE sample (screen-transitions-without-L2), cadence-throttled; only
+            # when L2 was idle all tick AND no event is mid-flight (avoid double-counting exit samples).
+            idle = (not series or max(v for _, v in series) < thr)
+            if idle and getattr(self._ads_monitor, "_phase", "IDLE") == "IDLE":
+                self._ads_bg_tick += 1
+                if self._ads_bg_tick >= self._ads_bg_every:
+                    self._ads_bg_tick = 0
+                    if cur_roi is not None:
+                        self._log_ads({"ts_ms": round(float(now_ms), 1),
+                                       "center_roi": round(float(cur_roi), 4), "verdict": None}, "background")
+        except Exception:  # noqa: BLE001 — advisory corpus; never break the loop
+            pass
+
+    def _log_ads(self, rec: dict, trigger_context: str) -> None:
+        """Enrich an ADS record with capture context (raw, per the scaffold's raw-first principle) and log.
+        downscale is the governor state so calibration can stratify/exclude degraded samples; label is the
+        operator-set segment; trigger_context distinguishes ads_event vs background negative samples."""
+        from l9_presence.killfeed_inline import append_near_boundary_jsonl
+        rec = dict(rec)
+        rec["trigger_context"] = trigger_context
+        rec["downscale"] = int(getattr(self._source, "_downscale", 0) or 0)
+        rec["label"] = self._read_ads_label()
+        # rider 4: label the clock during the 3-clock migration window — l2_ads L2 timing is now the DEVICE
+        # sensor clock (raw path), distinct from loops 1/2's drain clock and the WGC ROI clock.
+        rec["ts_source"] = "device"
+        append_near_boundary_jsonl(self._ads_log_path, rec)
+
+    def _read_ads_label(self) -> str:
+        """Operator-set segment label (read per-emit — rare, not per-tick). 'unknown' if absent; never raises."""
+        try:
+            with open(self._ads_label_file, "r", encoding="utf-8") as fh:
+                return fh.read().strip() or "unknown"
+        except Exception:  # noqa: BLE001
+            return "unknown"
+
     def latest_coupled_verdict(self) -> Optional[str]:
         return self.core.latest_coupled_verdict()
 
@@ -842,6 +1016,15 @@ class RetinaGameCapture:
             # LOOP 2 — death-window reactive-presence corpus telemetry (read-only; NO verdict)
             **(self._death_monitor.status_dict() if self._death_monitor is not None
                else {"death_window_enabled": False}),
+            # l2_ads — ADS coupling channel telemetry (read-only; ABSTAIN until calibrated)
+            **(self._ads_monitor.status_dict() if self._ads_monitor is not None
+               else {"ads_channel_enabled": False}),
+            # device-clock L2 feed stats (raw hidapi path) — confirms the ingestion source is feeding
+            **({"ads_devclock_" + k: v for k, v in self._device_clock_l2.stats().items()}
+               if self._device_clock_l2 is not None else {}),
+            # rider-1 raw-vs-pydualsense L2 agreement (0 disagreements = offset 5 confirmed)
+            **({"ads_l2_raw_agree": self._ads_l2_agree, "ads_l2_raw_disagree": self._ads_l2_disagree}
+               if self._device_clock_l2 is not None else {}),
         }
 
     def stop(self) -> None:

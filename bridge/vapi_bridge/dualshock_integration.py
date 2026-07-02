@@ -434,6 +434,10 @@ class DualShockTransport:
                     death_window_ms=float(getattr(cfg, "retina_death_window_ms", 4000.0)),
                     death_noise_floor=float(getattr(cfg, "retina_death_stick_noise_floor", 2.5)),
                     death_log_path=str(getattr(cfg, "retina_death_window_log", "")),
+                    ads_enabled=bool(getattr(cfg, "retina_ads_coupling_enabled", False)),
+                    ads_log_path=str(getattr(cfg, "retina_ads_coupling_log", "")),
+                    ads_label_file=str(getattr(cfg, "retina_ads_label_file", "")),
+                    ads_bg_sample_every=int(getattr(cfg, "retina_ads_bg_sample_every", 30)),
                 )
                 if getattr(cfg, "retina_capture_burst_enabled", False):
                     # Duty-cycle: do NOT capture continuously (WGC lags the Remote Play GPU decoder — observer
@@ -740,11 +744,21 @@ class DualShockTransport:
                     handle.set_nonblocking(False)
                     log.info("Phase 235-PCC-RATE-FIX: hidapi rate counter live "
                              "on interface %s", _tgt.get("interface_number"))
+                    # l2_ads increment one: this raw reader (one report per read, ~1kHz — NOT burst-drained
+                    # like the pydualsense consumption loop) is the timing-authoritative L2 source. Push the
+                    # device sensor timestamp (offset 28, uint32 LE @ 3MHz) + L2 (offset 5) per report so
+                    # feed_ads gets device-precise L2 edge timing. Gated on ads-enabled + capture present.
+                    _push_l2 = (getattr(self._cfg, "retina_ads_coupling_enabled", False)
+                                and self._retina_game_capture is not None)
                     while self._hid_counter_running:
                         data = handle.read(128, timeout_ms=200)
                         if data:
                             # CPython GIL makes single-producer safe without lock.
                             self._hid_report_total += 1
+                            if _push_l2 and len(data) > 31:
+                                _ts32 = data[28] | (data[29] << 8) | (data[30] << 16) | (data[31] << 24)
+                                self._retina_game_capture.push_l2_raw(
+                                    time.time() * 1000.0, _ts32, data[5])
                 except Exception as exc:
                     log.warning("Phase 235-PCC-RATE-FIX: rate counter reconnecting "
                                 "(%s)", exc)
@@ -1646,6 +1660,7 @@ class DualShockTransport:
                     _now_ms = time.time() * 1000.0
                     _last_dev = float(getattr(frames[-1], "timestamp_ms", 0) or 0)
                     _death_on = getattr(self._cfg, "retina_death_window_enabled", False)
+                    _ads_on = getattr(self._cfg, "retina_ads_coupling_enabled", False)
                     for _rs in frames:
                         _dev = float(getattr(_rs, "timestamp_ms", 0) or 0)
                         _delta = _last_dev - _dev
@@ -1675,6 +1690,19 @@ class DualShockTransport:
                         # Phase 1: resolve a window that quietly went cold (no further R2 onset) so combat
                         # that stops firing still gets its max-over-window composite logged promptly.
                         self._retina_game_capture.flush_stale_inline_window(_now_ms)
+                    # l2_ads — ADS coupling channel (second anti-splice). The L2 stream is NOT taken from
+                    # these pydualsense frames (their per-frame timing collapses to the ~1.2s tick under the
+                    # burst-drain, docs/hid-timing-resolution-2026-07-01.md); it comes from the RAW hidapi
+                    # reader via push_l2_raw() carrying the DEVICE sensor timestamp. feed_ads drains that
+                    # device-clock source + merges it with the WGC ROI history — device-precise L2 timing.
+                    if _ads_on:
+                        self._retina_game_capture.feed_ads(_now_ms)
+                        # rider 1: cross-check the raw-path L2 (offset 5) against pydualsense's L2 (its own
+                        # parse) in the threshold sense — a disagreement is a parsing finding to catch before
+                        # the raw path is authoritative.
+                        self._retina_game_capture.crosscheck_l2(
+                            max((int(getattr(_f, "l2_trigger", 0) or 0) for _f in frames), default=0),
+                            _now_ms)
                     # Combat-triggered burst: R2 crossing the fire threshold auto-fires a presence burst so the
                     # trigger->HUD window is captured hands-free. Default-off; cooldown + single-flight prevent
                     # stacking. Honest cost: capturing briefly lags the gunfight (WGC observer effect).

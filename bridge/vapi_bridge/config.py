@@ -2169,6 +2169,27 @@ class Config:
     retina_death_window_log: str = field(
         default_factory=lambda: os.environ.get("RETINA_DEATH_WINDOW_LOG", "retina_death_window.jsonl")
     )
+    # l2_ads — ADS coupling channel (second anti-splice channel; l9_presence/ads_coupling.py). SCAFFOLD:
+    # the detector is UNCALIBRATED so every record logs raw + ADS_ABSTAIN_UNCALIBRATED (never a fabricated
+    # verdict). Default-OFF. Captures the calibration corpus (onset/held/exit center-ROI scalar sequences).
+    retina_ads_coupling_enabled: bool = field(
+        default_factory=lambda: _env_bool("RETINA_ADS_COUPLING_ENABLED", False)
+    )
+    retina_ads_coupling_log: str = field(
+        default_factory=lambda: os.environ.get("RETINA_ADS_COUPLING_LOG", "retina_ads_coupling.jsonl")
+    )
+    # Operator-set segment label, read per-record-emit (rare, not per-tick). The operator announces each
+    # firing-range segment live and the label file is updated (e.g. high_8x / mid_3x / iron_1x /
+    # negative_l2 / negative_transition); "unknown" outside a labeled segment.
+    retina_ads_label_file: str = field(
+        default_factory=lambda: os.environ.get("RETINA_ADS_LABEL_FILE", "retina_ads_label.txt")
+    )
+    # Background negative sampling cadence (consumption ticks between passive center-ROI samples OUTSIDE L2
+    # windows) — captures the screen-transitions-without-L2 negative distribution. Piggybacks the consumption
+    # loop; NO new thread.
+    retina_ads_bg_sample_every: int = field(
+        default_factory=lambda: int(os.environ.get("RETINA_ADS_BG_SAMPLE_EVERY", "30"))
+    )
     # Inject NEGATIVE coupled-retina verdicts (IMPLAUSIBLE) into the NQPV proof. Default False: in a
     # dead-zone / auto-camera game (NCAA CFB), the right-stick->screen coupling is structurally absent, so
     # a low-coupling IMPLAUSIBLE is a FALSE NEGATIVE (the auto-camera pans on its own, not an aimbot), NOT

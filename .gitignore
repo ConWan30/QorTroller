@@ -267,3 +267,8 @@ adv_splice_*.jsonl
 retina_kf_adv_splice*/
 adv_splice_shown_*.jsonl
 retina_daemon_adv_splice_*.log
+retina_ads_*.jsonl
+retina_ads_label.txt
+retina_daemon_ads_*.log
+retina_ads_l2debug.jsonl
+retina_hid_rawdump.jsonl

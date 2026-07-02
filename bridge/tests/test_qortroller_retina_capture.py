@@ -250,3 +250,120 @@ def test_worker_no_longer_fires_mark_death_directly(tmp_path):
     assert ".mark_death(" not in worker_src                   # no CALL in the worker (comment may name it)
     log_src = inspect.getsource(RetinaGameCapture._log_composite)
     assert ".mark_death(" in log_src                          # sole trigger call lives here now
+
+
+# --- l2_ads ADS coupling channel wiring (second anti-splice channel; scaffold, abstains until calibrated) ---
+
+def _mk_ads(tmp_path, bg_every=30):
+    from vapi_bridge.qortroller_retina_capture import RetinaGameCapture
+    rgc = RetinaGameCapture("Remote Play", ads_enabled=True,
+                            ads_log_path=str(tmp_path / "ads.jsonl"),
+                            ads_label_file=str(tmp_path / "label.txt"),
+                            ads_bg_sample_every=bg_every)
+    rgc._source._downscale = 4
+    # stub the B1 ROI history the merged-replay reads (list of (ts, lum), oldest-first, ts > cursor)
+    rgc._roi_hist = []
+    rgc.core.center_roi_series_since = lambda cur: [(t, v) for t, v in rgc._roi_hist if t > cur]
+    return rgc
+
+
+def _tick(rgc, roi_pairs, l2_pairs, now_ms):
+    """One consumption tick: publish this tick's WGC-rate ROI history, push the L2 events onto the device-
+    clock source (as the raw reader would — here their wall stamp IS the intended timeline), then feed.
+    l2_pairs are (wall_ms, l2); we push them so the device-clock source carries them through unchanged."""
+    rgc._roi_hist = list(roi_pairs)                          # cursor advances past these after the tick
+    for wall, l2 in l2_pairs:                                # device ticks proportional to wall (3000/ms)
+        rgc.push_l2_raw(wall, int(wall * 3000.0) & 0xFFFFFFFF, l2)
+    rgc.feed_ads(now_ms)
+
+
+def _read_jsonl(path):
+    import json
+    return [json.loads(ln) for ln in open(path, encoding="utf-8") if ln.strip()]
+
+
+def test_ads_merged_replay_event_abstains_and_carries_context(tmp_path):
+    rgc = _mk_ads(tmp_path)
+    (tmp_path / "label.txt").write_text("high_8x", encoding="utf-8")
+    # tick 0 primes cursors (no replay of stale history)
+    _tick(rgc, [(900.0, 5.0)], [(900.0, 0)], 1000.0)
+    # tick 1: a full press replayed at true WGC timing — baseline low, transition high, held, release, exit
+    roi = [(1000.0, 5.0), (1025.0, 6.0), (1050.0, 80.0), (1075.0, 82.0),   # onset window (0,300 from 1050 edge)
+           (1400.0, 81.0), (1600.0, 80.0), (1650.0, 7.0), (1700.0, 5.0)]   # held then exit after release
+    l2 = [(1000.0, 0), (1050.0, 200), (1600.0, 200), (1650.0, 0)]          # rise at 1050, fall at 1650
+    _tick(rgc, roi, l2, 2800.0)
+    ev = [r for r in _read_jsonl(tmp_path / "ads.jsonl") if r.get("trigger_context") == "ads_event"]
+    assert len(ev) == 1
+    r = ev[0]
+    assert r["verdict"] == "ADS_ABSTAIN_UNCALIBRATED"        # uncalibrated -> never fabricated
+    assert r["baseline"] == 6.0                              # ROI at the 1050 edge instant (1025 sample) —
+    assert r["baseline"] < 40.0                              # PRE-press, NOT the post-transition 80 (retro-fill)
+    assert r["downscale"] == 4                               # governor state carried
+    assert r["label"] == "high_8x"
+    assert len(r["held_seq"]) >= 1 and "exit_seq" in r        # raw-first corpus intact
+
+
+def test_ads_baseline_is_pre_press_not_post_transition(tmp_path):
+    """The reason for merged replay: a naive per-tick feed reads the baseline a whole tick (~1.7s) after the
+    press = post-transition = magnitude ~0. Merged replay captures the true PRE-press baseline."""
+    rgc = _mk_ads(tmp_path)
+    _tick(rgc, [(900.0, 4.0)], [(900.0, 0)], 1000.0)          # prime
+    roi = [(1010.0, 4.0), (1040.0, 90.0), (1300.0, 88.0), (1350.0, 5.0)]  # flat, jump, hold, exit
+    l2 = [(1020.0, 200), (1330.0, 0)]                        # rise 1020 (baseline 4.0 precedes), fall 1330
+    _tick(rgc, roi, l2, 2700.0)
+    r = [x for x in _read_jsonl(tmp_path / "ads.jsonl") if x.get("trigger_context") == "ads_event"][0]
+    assert r["baseline"] == 4.0                              # NOT 90 — the pre-press value was captured
+
+
+def test_ads_held_press_across_ticks_is_one_event(tmp_path):
+    """Held-press regression at the wiring level: L2 stays down across MULTIPLE consumption ticks -> the
+    monitor collapses it to ONE event (emitted on release), not one per tick."""
+    rgc = _mk_ads(tmp_path)
+    _tick(rgc, [(900.0, 5.0)], [(900.0, 0)], 1000.0)          # prime
+    _tick(rgc, [(1000.0, 5.0), (1050.0, 80.0)], [(1000.0, 0), (1050.0, 200)], 2000.0)   # press, still held
+    _tick(rgc, [(2100.0, 82.0), (2200.0, 81.0)], [(2100.0, 200)], 3000.0)               # STILL held, no edge
+    _tick(rgc, [(3100.0, 80.0), (3200.0, 6.0)], [(3100.0, 200), (3150.0, 0)], 4000.0)   # release + exit
+    ev = [r for r in _read_jsonl(tmp_path / "ads.jsonl") if r.get("trigger_context") == "ads_event"]
+    assert len(ev) == 1                                       # ONE event across 3 held ticks
+
+
+def test_ads_background_negative_sampling(tmp_path):
+    rgc = _mk_ads(tmp_path, bg_every=3)
+    _tick(rgc, [(900.0, 50.0)], [(900.0, 0)], 1000.0)         # prime
+    for i in range(9):                                        # L2 idle throughout -> background samples
+        _tick(rgc, [(1000.0 + i * 100, 50.0)], [(1000.0 + i * 100, 0)], 2000.0 + i * 100)
+    bg = [r for r in _read_jsonl(tmp_path / "ads.jsonl") if r.get("trigger_context") == "background"]
+    assert len(bg) == 3                                       # 9 idle ticks / every-3 -> 3 samples
+    assert bg[0]["center_roi"] == 50.0 and bg[0]["verdict"] is None and bg[0]["downscale"] == 4
+
+
+def test_ads_disabled_is_noop(tmp_path):
+    from vapi_bridge.qortroller_retina_capture import RetinaGameCapture
+    rgc = RetinaGameCapture("Remote Play", ads_enabled=False, ads_log_path=str(tmp_path / "ads.jsonl"))
+    rgc.push_l2_raw(1000.0, 3_000_000, 200)                  # no source -> noop
+    rgc.feed_ads(1000.0)                                      # no monitor -> noop
+    assert not (tmp_path / "ads.jsonl").exists()
+
+
+def test_ads_record_carries_device_ts_source(tmp_path):
+    rgc = _mk_ads(tmp_path)
+    _tick(rgc, [(900.0, 5.0)], [(900.0, 0)], 1000.0)          # prime
+    roi = [(1000.0, 5.0), (1050.0, 80.0), (1400.0, 78.0), (1650.0, 6.0)]
+    l2 = [(1000.0, 0), (1050.0, 200), (1600.0, 200), (1650.0, 0)]
+    _tick(rgc, roi, l2, 2800.0)
+    ev = [r for r in _read_jsonl(tmp_path / "ads.jsonl") if r.get("trigger_context") == "ads_event"]
+    assert ev and ev[0]["ts_source"] == "device"             # rider 4: clock labeled on every record
+
+
+def test_ads_crosscheck_logs_each_disagreement_with_both_values(tmp_path):
+    """Rider 1 verification-built-before-needed: a raw-vs-pydualsense L2 disagreement logs its ts + both
+    values (so the range session distinguishes edge-skew from a persistent wrong-offset); an agreement does
+    not log."""
+    rgc = _mk_ads(tmp_path)
+    rgc.push_l2_raw(1000.0, 3_000_000, 5)                    # raw L2 low (5 < 40)
+    rgc.crosscheck_l2(200, 1000.0)                           # pyds L2 high -> DISAGREE (logged)
+    rgc.crosscheck_l2(0, 1010.0)                             # both low -> AGREE (not logged)
+    cc = _read_jsonl(tmp_path / "ads_crosscheck.jsonl")
+    assert len(cc) == 1                                       # only the disagreement logged
+    assert cc[0]["pyds_l2"] == 200 and cc[0]["raw_l2"] == 5 and cc[0]["ts_ms"] == 1000.0
+    assert rgc._ads_l2_agree == 1 and rgc._ads_l2_disagree == 1
