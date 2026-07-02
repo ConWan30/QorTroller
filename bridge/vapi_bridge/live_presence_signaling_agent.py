@@ -311,7 +311,11 @@ class LivePresenceSignalingAgent:
             from types import SimpleNamespace
 
             from .novel_presence_fusion import NovelPresenceFusionOrchestrator
+            from .poep_activation import read_session_evidence_base
             coupled = r.get("nqpv_retina_coupled_verdict")
+            # cycle-58 D-CERT-8: self-describing evidence base (commitment only); dev-cert scope
+            # already gated at method entry. Empty {} on stale verdict -> fields stay None.
+            _eb = read_session_evidence_base()
             proof = NovelPresenceFusionOrchestrator().fuse(
                 cco_report=SimpleNamespace(tier=r.get("nqpv_cco_tier")),
                 retina_report=(SimpleNamespace(verdict=coupled) if coupled else None),
@@ -319,6 +323,10 @@ class LivePresenceSignalingAgent:
                 l4_l5_l6_ok=(bool(r["nqpv_l4l5l6_ok"]) if r["nqpv_l4l5l6_ok"] is not None else None),
                 device_id=r.get("device_id", ""), record_hash=r.get("record_hash_hex", ""),
                 developer_self_cert=True,
+                governing_model=_eb.get("governing_model"),
+                calibration_band_commitment=_eb.get("calibration_band_commitment"),
+                calibration_n=_eb.get("calibration_n"),
+                calibration_player_scope=_eb.get("calibration_player_scope"),
             )
             contested = False
             try:

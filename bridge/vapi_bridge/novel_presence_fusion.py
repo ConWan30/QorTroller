@@ -74,6 +74,20 @@ class FusedGamerPresenceProof:
     posca_coupling_score: Optional[float] = None
     posca_action_count: int = 0
 
+    # cycle-58 D-CERT-8 (d-cert8-emit-evidence-base): the calibration EVIDENCE BASE that
+    # authorized this proof, emitted inline so the proof STREAM ALONE is self-describing
+    # (closes F-CERT-008 — an auditor of the stream no longer needs poep_l9/ to reconstruct
+    # the basis). All null-safe: None = no developer-self band governing this proof (advisory).
+    # `calibration_band_commitment` is a BIOMETRIC-SNAPSHOT-v1 COMMITMENT (reflex_band_commitment),
+    # NEVER raw band values — the raw (mu, sigma, salt) stays operator-held for audit disclosure
+    # per VAPI_BIOMETRIC_PRIVACY.md. Self-describing != more-certified: population_certified stays
+    # False; this closes an AUDITABILITY gap, not a certification gap. The commitment also pins the
+    # authorizing band per proof, incidentally closing the F-CERT-007 band-drift anomaly.
+    governing_model: str | None = None
+    calibration_band_commitment: str | None = None
+    calibration_n: int | None = None
+    calibration_player_scope: str | None = None
+
 
 # --- Calibrated model (cycle-29) — PROVISIONAL operating point ---
 # These weights + threshold are ADVISORY placeholders so the seam runs; the QUALIFYING operating point
@@ -183,6 +197,13 @@ class NovelPresenceFusionOrchestrator:
         posca_coupling_score: Optional[float] = None,
         posca_action_count: int = 0,
         posca_commitment: str = "",
+        # cycle-58 D-CERT-8: the calibration evidence base (from the live developer-self verdict),
+        # carried onto the proof so the stream is self-describing. All None-default -> absent on
+        # advisory proofs. `calibration_band_commitment` is a commitment (never raw band values).
+        governing_model: str | None = None,
+        calibration_band_commitment: str | None = None,
+        calibration_n: int | None = None,
+        calibration_player_scope: str | None = None,
     ) -> FusedGamerPresenceProof:
         """
         Perform the fusion.
@@ -310,6 +331,10 @@ class NovelPresenceFusionOrchestrator:
             posca_structure_ok=posca_structure_ok,
             posca_coupling_score=posca_coupling_score,
             posca_action_count=posca_action_count,
+            governing_model=governing_model,
+            calibration_band_commitment=calibration_band_commitment,
+            calibration_n=calibration_n,
+            calibration_player_scope=calibration_player_scope,
             notes=(f"calibrated-v1; score={presence_score:.2f} "
                    f"disagreement={disagreement_index:.2f}; {_scope_note}; "
                    f"posca={posca_v} (advisory authorship field; NOT skill rank; not scored until study)")
